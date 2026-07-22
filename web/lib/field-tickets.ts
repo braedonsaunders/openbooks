@@ -40,7 +40,7 @@ export interface FieldTicketCustom {
   periodEnd: string
   foremanPartyId: string | null
   signatures?: { foreman?: TicketSignature; customer?: TicketSignature }
-  send?: { sentAt: string; expiresAt: string; message?: string | null; respondedAt?: string | null }
+  send?: { to?: string | null; sentAt: string; expiresAt: string; message?: string | null; respondedAt?: string | null }
   /** The project_charge materialized at approval (item lines → job cost + billing). */
   chargeDocumentId?: string | null
 }

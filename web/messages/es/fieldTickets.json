@@ -57,6 +57,20 @@
     "po": "OC del cliente",
     "foreman": "Capataz",
     "workDescription": "Descripción del trabajo",
+    "details": {
+      "title": "Detalles del parte",
+      "hint": "Proyecto, cliente, fecha del parte y responsable en campo."
+    },
+    "work": {
+      "title": "Resumen del trabajo",
+      "hint": "Referencia del cliente y una descripción clara del trabajo realizado."
+    },
+    "form": {
+      "label": "Formulario del registro",
+      "setPreferred": "Establecer como preferido",
+      "preferredSaved": "Formulario preferido guardado",
+      "preferredFailed": "No se pudo guardar el formulario preferido"
+    },
     "crew": {
       "title": "Horas de la cuadrilla",
       "hint": "Una fila por persona (opcionalmente por clase). R / O / D = iniciales de los tipos de hora.",
@@ -98,12 +112,23 @@
     },
     "signatures": {
       "title": "Firmas",
+      "hint": "Envíe el parte aprobado al cliente para revisión y firma.",
       "customer": "Cliente",
       "signedBy": "Firmado — {name}",
+      "signedAt": "Firmado {date}",
       "waiting": "Esperando firma",
-      "notSent": "Sin enviar"
+      "notSent": "Sin enviar",
+      "ready": "Listo para enviar",
+      "notReady": "No está listo",
+      "draftHelp": "Envíe y apruebe este parte antes de solicitar la firma del cliente.",
+      "pendingHelp": "Este parte se puede enviar para firma una vez aprobado.",
+      "sentTo": "Enviado a",
+      "sentAt": "Enviado",
+      "expiresAt": "El enlace caduca",
+      "deliveryHelp": "El cliente recibe una copia PDF y un enlace seguro de firma válido durante 14 días."
     },
     "sendSignature": "Enviar para firma",
+    "resendSignature": "Reenviar solicitud de firma",
     "sendTo": "Enviar a",
     "sendMessage": "Mensaje (opcional)",
     "send": "Enviar",

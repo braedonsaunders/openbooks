@@ -1,13 +1,14 @@
 'use client'
 
 import { useMoney } from '@/components/money-provider'
-import { useEffect, useMemo, useState } from 'react'
+import Link from 'next/link'
+import { Fragment, useEffect, useMemo, useState } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { useTranslations } from 'next-intl'
 import { toast } from 'sonner'
-import { Check, Mail, Plus, Send, Trash2, X } from 'lucide-react'
+import { Check, ClipboardList, Mail, Plus, Send, Trash2, X } from 'lucide-react'
 import { Badge, Button, Input, Label, SearchSelect, Select, Textarea, cn } from '@openbooks/ui'
-import type { FormLayoutConfig, HeaderFieldPlacement } from '@openbooks/customization'
+import { defaultFormLayout, type FormLayoutConfig, type HeaderFieldPlacement } from '@openbooks/customization'
 import { TransactionDrawer } from '../../../components/transaction-drawer'
 import { HeaderFields } from '../../../components/transaction-form/header-fields'
 import { PdfButton } from '../../../components/pdf-button'
@@ -96,7 +97,7 @@ export interface TicketPayload {
     foremanPartyId: string | null
     rejectionReason?: string
     signatures?: { customer?: { name: string; at: string; image?: string | null } }
-    send?: { sentAt: string; respondedAt?: string | null }
+    send?: { to?: string | null; sentAt: string; expiresAt?: string | null; respondedAt?: string | null }
   }
   entries: EntryRow[]
   lines: LineRow[]
@@ -167,6 +168,9 @@ export function FieldTicketDrawer(props: {
   equipmentUnits: EquipmentOpt[]
   equipmentEnabled: boolean
   layout?: FormLayoutConfig
+  availableLayouts?: { id: string; name: string }[]
+  currentLayoutId?: string | null
+  canCustomize?: boolean
   canApprove: boolean
   canManage: boolean
 }) {
@@ -211,6 +215,8 @@ export function FieldTicketDrawer(props: {
   const [lineRateSource, setLineRateSource] = useState<'rate_book' | 'item_default' | ''>('')
   const [lineComponents, setLineComponents] = useState<{ unitName: string; quantity: string; rate: string; amount: string }[]>([])
 
+  const effectiveLayout = props.layout ?? defaultFormLayout('field_ticket')
+  const actionLayout = effectiveLayout.actions
   const canEditStatus = ticket.status === 'draft' && props.canManage
   const editable = mode === 'edit' && canEditStatus
   const gridHasHours = grid.some((row) => Object.values(row.cells).some((value) => Number(value) > 0))
@@ -296,6 +302,7 @@ export function FieldTicketDrawer(props: {
     setMemo(j.memo ?? '')
     setPeriod(j.fieldTicket.period)
     setForeman(j.fieldTicket.foremanPartyId ?? '')
+    setSendTo(j.fieldTicket.send?.to ?? j.customerEmail ?? '')
     setHeaderDirty(false)
   }
 
@@ -488,7 +495,13 @@ export function FieldTicketDrawer(props: {
         return (
           <>
             <Label>{label || tCommon('labels.customer')}</Label>
-            <p className="text-sm">{customerName || '—'}</p>
+            {isEditable ? (
+              <div className="flex min-h-10 items-center rounded-md border border-slate-200 bg-slate-50 px-3 text-sm text-slate-700 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200">
+                {customerName || '—'}
+              </div>
+            ) : (
+              <p className="text-sm text-slate-900 dark:text-slate-100">{customerName || '—'}</p>
+            )}
           </>
         )
       case 'document_date':
@@ -513,6 +526,42 @@ export function FieldTicketDrawer(props: {
             )}
           </>
         )
+      case 'period':
+        return (
+          <>
+            <Label>{label || t('list.period')}</Label>
+            {isEditable ? (
+              <Select
+                value={period}
+                disabled={gridHasHours}
+                title={gridHasHours ? t('editor.periodLocked') : undefined}
+                onChange={(e) => markHeader(setPeriod)(e.target.value)}
+              >
+                <option value="shift">{t('period.shift')}</option>
+                <option value="daily">{t('period.daily')}</option>
+                <option value="weekly">{t('period.weekly')}</option>
+              </Select>
+            ) : (
+              <p className="text-sm text-slate-900 dark:text-slate-100">{t(`period.${ticket.fieldTicket.period}`)}</p>
+            )}
+          </>
+        )
+      case 'foreman_party_id':
+        return (
+          <>
+            <Label>{label || t('editor.foreman')}</Label>
+            {isEditable ? (
+              <SearchSelect
+                options={[{ value: '', label: '—' }, ...props.employees.map((e) => ({ value: e.id, label: e.name }))]}
+                value={foreman}
+                onChange={markHeader((v: string) => setForeman(v ?? ''))}
+                placeholder="—"
+              />
+            ) : (
+              <p className="text-sm text-slate-900 dark:text-slate-100">{ticket.foremanName || '—'}</p>
+            )}
+          </>
+        )
       case 'memo':
         return (
           <>
@@ -524,6 +573,53 @@ export function FieldTicketDrawer(props: {
             )}
           </>
         )
+      default:
+        return null
+    }
+  }
+
+  async function setPreferredForm(layoutId: string | null) {
+    const response = await fetch('/api/customization/form-preferences', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ recordType: 'field_ticket', layoutId }),
+    })
+    if (response.ok) toast.success(t('editor.form.preferredSaved'))
+    else toast.error((await response.json()).error ?? t('editor.form.preferredFailed'))
+  }
+
+  const showFormPicker = mode === 'view' && !!props.availableLayouts?.length
+  const customizeHref = props.canCustomize
+    ? `/admin/customization?recordType=field_ticket&tab=forms${props.currentLayoutId ? `&form=${props.currentLayoutId}` : ''}`
+    : null
+
+  const renderFormAction = (key: string) => {
+    switch (key) {
+      case 'customize':
+        return customizeHref ? <Button variant="ghost" asChild><Link href={customizeHref}>{tCommon('actions.customize')}</Link></Button> : null
+      case 'pdf':
+        return <PdfButton recordType="field_ticket" recordId={ticket.id} />
+      case 'approval':
+        return ticket.status === 'pending_approval' && props.canApprove ? (
+          <>
+            <Button disabled={busy} onClick={async () => (await call('POST', { action: 'approve' })) && toast.success(t('editor.approved'))}>
+              <Check size={14} /> {t('editor.approve')}
+            </Button>
+            <Button variant="outline" disabled={busy} onClick={() => setRejecting(true)}>
+              <X size={14} /> {t('editor.reject')}
+            </Button>
+          </>
+        ) : null
+      case 'submit':
+        return ticket.status === 'draft' && props.canManage ? (
+          <Button disabled={busy} onClick={submit}><Send size={14} /> {t('editor.submit')}</Button>
+        ) : null
+      case 'workflow':
+        return ticket.status === 'approved' && props.canManage && !sig?.customer ? (
+          <Button disabled={busy} onClick={() => setSending(true)}>
+            <Mail size={14} /> {ticket.fieldTicket.send?.sentAt ? t('editor.resendSignature') : t('editor.sendSignature')}
+          </Button>
+        ) : null
       default:
         return null
     }
@@ -560,7 +656,7 @@ export function FieldTicketDrawer(props: {
           : ticket.fieldTicket.periodStart
       }
       primaryAction={
-        canEditStatus ? (
+        canEditStatus && actionLayout.find((action) => action.key === 'edit')?.visible !== false ? (
           <Button
             variant="outline"
             size="sm"
@@ -572,6 +668,34 @@ export function FieldTicketDrawer(props: {
           </Button>
         ) : null
       }
+      actionsMenuHeader={showFormPicker && !sending ? (
+        <div className="mb-1.5 space-y-1.5 border-b border-slate-100 px-1 pb-2 dark:border-slate-800">
+          <span className="block text-[11px] font-semibold uppercase tracking-wide text-slate-400 dark:text-slate-500">{t('editor.form.label')}</span>
+          <Select
+            value={props.currentLayoutId ?? ''}
+            onChange={(event) => {
+              const next = new URLSearchParams(searchParams.toString())
+              next.set('form', event.target.value)
+              router.push(`/field-tickets?${next.toString()}`)
+            }}
+            aria-label={t('editor.form.label')}
+            triggerClassName="!h-8 !min-h-0 !px-2 !py-0 !text-xs"
+          >
+            {props.availableLayouts!.map((availableLayout) => (
+              <option key={availableLayout.id} value={availableLayout.id}>{availableLayout.name}</option>
+            ))}
+          </Select>
+          <Button
+            variant="ghost"
+            size="sm"
+            className="!h-8 w-full !justify-start !px-2 !text-xs"
+            onClick={() => void setPreferredForm(props.currentLayoutId ?? null)}
+            disabled={!props.currentLayoutId}
+          >
+            {t('editor.form.setPreferred')}
+          </Button>
+        </div>
+      ) : null}
       detailTabs={[
         { key: 'time', label: t('editor.tabs.time') },
         { key: 'items', label: t('editor.tabs.items') },
@@ -581,6 +705,7 @@ export function FieldTicketDrawer(props: {
         <>
           {mode === 'edit' ? (
             <>
+              {actionLayout.find((action) => action.key === 'customize')?.visible ? renderFormAction('customize') : null}
               <Button disabled={busy} onClick={async () => {
                 if (await saveAll()) setMode('view')
               }}>
@@ -588,29 +713,38 @@ export function FieldTicketDrawer(props: {
               </Button>
             </>
           ) : (
-            <>
-              {ticket.status === 'draft' && props.canManage ? (
-                <Button disabled={busy} onClick={submit}>
-                  <Send size={14} /> {t('editor.submit')}
+            sending ? (
+              <div className="space-y-2.5 px-1 py-1">
+                <div className="space-y-1">
+                  <Label htmlFor="ft-send-to" className="text-xs">{t('editor.sendTo')}</Label>
+                  <Input id="ft-send-to" type="email" value={sendTo} onChange={(event) => setSendTo(event.target.value)} />
+                </div>
+                <div className="space-y-1">
+                  <Label htmlFor="ft-send-msg" className="text-xs">{t('editor.sendMessage')}</Label>
+                  <Textarea id="ft-send-msg" rows={3} value={sendMessage} onChange={(event) => setSendMessage(event.target.value)} />
+                </div>
+                <p className="px-1 text-[11px] leading-4 text-slate-500 dark:text-slate-400">{t('editor.signatures.deliveryHelp')}</p>
+                <Button
+                  disabled={busy || !sendTo.trim()}
+                  onClick={async () => {
+                    if (await call('POST', { action: 'send-signature', to: sendTo, message: sendMessage || null })) {
+                      setSending(false)
+                      setSendMessage('')
+                      toast.success(t('editor.signatureSent', { to: sendTo }))
+                    }
+                  }}
+                >
+                  <Send size={14} /> {t('editor.send')}
                 </Button>
-              ) : null}
-              {ticket.status === 'pending_approval' && props.canApprove ? (
-                <>
-                  <Button disabled={busy} onClick={async () => (await call('POST', { action: 'approve' })) && toast.success(t('editor.approved'))}>
-                    <Check size={14} /> {t('editor.approve')}
-                  </Button>
-                  <Button variant="outline" disabled={busy} onClick={() => setRejecting(true)}>
-                    <X size={14} /> {t('editor.reject')}
-                  </Button>
-                </>
-              ) : null}
-              {ticket.status === 'approved' && props.canManage && !sig?.customer ? (
-                <Button disabled={busy} onClick={() => setSending(true)}>
-                  <Mail size={14} /> {t('editor.sendSignature')}
-                </Button>
-              ) : null}
-              <PdfButton recordType="field_ticket" recordId={ticket.id} />
-            </>
+                <Button variant="ghost" disabled={busy} onClick={() => setSending(false)}>{t('editor.cancel')}</Button>
+              </div>
+            ) : (
+              <>
+                {actionLayout.filter((action) => action.visible && action.key !== 'edit').map((action) => (
+                  <Fragment key={action.key}>{renderFormAction(action.key)}</Fragment>
+                ))}
+              </>
+            )
           )}
         </>
       }
@@ -658,79 +792,18 @@ export function FieldTicketDrawer(props: {
           </div>
         )}
 
-        {sending && (
-          <div className="flex flex-wrap items-end gap-2 rounded-lg border border-slate-200 p-3 dark:border-slate-700">
-            <div className="min-w-64">
-              <Label htmlFor="ft-send-to">{t('editor.sendTo')}</Label>
-              <Input id="ft-send-to" type="email" value={sendTo} onChange={(e) => setSendTo(e.target.value)} />
-            </div>
-            <div className="min-w-72 flex-1">
-              <Label htmlFor="ft-send-msg">{t('editor.sendMessage')}</Label>
-              <Input id="ft-send-msg" value={sendMessage} onChange={(e) => setSendMessage(e.target.value)} />
-            </div>
-            <Button
-              size="sm"
-              disabled={busy || !sendTo.trim()}
-              onClick={async () => {
-                if (await call('POST', { action: 'send-signature', to: sendTo, message: sendMessage || null })) {
-                  setSending(false)
-                  toast.success(t('editor.signatureSent', { to: sendTo }))
-                }
-              }}
-            >
-              <Send size={14} /> {t('editor.send')}
-            </Button>
-            <Button size="sm" variant="ghost" onClick={() => setSending(false)}>{t('editor.cancel')}</Button>
-          </div>
-        )}
-
-        {/* Standard configurable header form + the period control. */}
-        <div className="space-y-3">
-          {props.layout ? (
-            <HeaderFields layout={props.layout} editable={editable} renderField={renderHeaderField} />
-          ) : (
-            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-              {(['project_id', 'party_id', 'document_date', 'reference_number'] as const).map((key) => (
-                <div key={key} className="space-y-1.5">{renderHeaderField({ key } as HeaderFieldPlacement, editable)}</div>
-              ))}
-              <div className="space-y-1.5 sm:col-span-2 lg:col-span-4">
-                {renderHeaderField({ key: 'memo' } as HeaderFieldPlacement, editable)}
-              </div>
-            </div>
-          )}
-          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-            <div className="space-y-1.5">
-              <Label>{t('list.period')}</Label>
-              {editable ? (
-                <Select
-                  value={period}
-                  disabled={gridHasHours}
-                  title={gridHasHours ? t('editor.periodLocked') : undefined}
-                  onChange={(e) => markHeader(setPeriod)(e.target.value)}
-                >
-                  <option value="shift">{t('period.shift')}</option>
-                  <option value="daily">{t('period.daily')}</option>
-                  <option value="weekly">{t('period.weekly')}</option>
-                </Select>
-              ) : (
-                <p className="text-sm">{t(`period.${ticket.fieldTicket.period}`)}</p>
-              )}
-            </div>
-            <div className="space-y-1.5">
-              <Label>{t('editor.foreman')}</Label>
-              {editable ? (
-                <SearchSelect
-                  options={[{ value: '', label: '—' }, ...props.employees.map((e) => ({ value: e.id, label: e.name }))]}
-                  value={foreman}
-                  onChange={markHeader((v: string) => setForeman(v ?? ''))}
-                  placeholder="—"
-                />
-              ) : (
-                <p className="text-sm">{ticket.foremanName || '—'}</p>
-              )}
+        <section className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm dark:border-slate-800 dark:bg-slate-950">
+          <div className="flex items-start gap-3 border-b border-slate-100 px-4 py-3 dark:border-slate-800">
+            <span className="mt-0.5 rounded-lg bg-slate-100 p-2 text-slate-600 dark:bg-slate-900 dark:text-slate-300"><ClipboardList size={16} /></span>
+            <div>
+              <h3 className="text-sm font-semibold text-slate-900 dark:text-slate-100">{t('editor.details.title')}</h3>
+              <p className="text-xs text-slate-500 dark:text-slate-400">{t('editor.details.hint')}</p>
             </div>
           </div>
-        </div>
+          <div className="p-4">
+            <HeaderFields layout={effectiveLayout} editable={editable} renderField={renderHeaderField} />
+          </div>
+        </section>
         </> : null}
 
         {/* ---- crew hours ---- */}
@@ -1062,26 +1135,6 @@ export function FieldTicketDrawer(props: {
           </section>
         ) : null}
 
-        {/* ---- signature state ---- */}
-        {activeSection === 'details' ? <section>
-          <h3 className="text-sm font-semibold text-slate-900 dark:text-slate-100">{t('editor.signatures.title')}</h3>
-          <div className="mt-2 flex items-center justify-between text-sm">
-            <span className="text-slate-500 dark:text-slate-400">{t('editor.signatures.customer')}</span>
-            {sig?.customer ? (
-              <Badge variant="success">{t('editor.signatures.signedBy', { name: sig.customer.name })}</Badge>
-            ) : ticket.fieldTicket.send?.sentAt ? (
-              <Badge variant="warning">{t('editor.signatures.waiting')}</Badge>
-            ) : (
-              <span className="text-xs text-slate-400">{t('editor.signatures.notSent')}</span>
-            )}
-          </div>
-          {sig?.customer?.image && (
-            <div className="mt-2 inline-block rounded-md border border-slate-100 bg-white p-2 dark:border-slate-800 dark:bg-slate-100">
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img src={sig.customer.image} alt={t('editor.signatures.customer')} className="max-h-14" />
-            </div>
-          )}
-        </section> : null}
       </div>
     </TransactionDrawer>
   )

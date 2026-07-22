@@ -57,6 +57,20 @@
     "po": "BC du client",
     "foreman": "Contremaître",
     "workDescription": "Description des travaux",
+    "details": {
+      "title": "Détails du bon",
+      "hint": "Projet, client, date du bon et responsable sur le terrain."
+    },
+    "work": {
+      "title": "Résumé des travaux",
+      "hint": "Référence client et description claire des travaux réalisés."
+    },
+    "form": {
+      "label": "Formulaire de la fiche",
+      "setPreferred": "Définir comme préféré",
+      "preferredSaved": "Formulaire préféré enregistré",
+      "preferredFailed": "Impossible d’enregistrer le formulaire préféré"
+    },
     "crew": {
       "title": "Heures de l'équipe",
       "hint": "Une ligne par personne (optionnellement par classe). R / O / D = initiales des types d'heures.",
@@ -98,12 +112,23 @@
     },
     "signatures": {
       "title": "Signatures",
+      "hint": "Envoyez le bon approuvé au client pour révision et signature.",
       "customer": "Client",
       "signedBy": "Signé — {name}",
+      "signedAt": "Signé {date}",
       "waiting": "Signature en attente",
-      "notSent": "Pas encore envoyé"
+      "notSent": "Pas encore envoyé",
+      "ready": "Prêt à envoyer",
+      "notReady": "Non prêt",
+      "draftHelp": "Soumettez et approuvez ce bon avant de l'envoyer au client pour signature.",
+      "pendingHelp": "Ce bon pourra être envoyé pour signature une fois approuvé.",
+      "sentTo": "Envoyé à",
+      "sentAt": "Envoyé",
+      "expiresAt": "Expiration du lien",
+      "deliveryHelp": "Le client reçoit une copie PDF et un lien de signature sécurisé valable 14 jours."
     },
     "sendSignature": "Envoyer pour signature",
+    "resendSignature": "Renvoyer la demande de signature",
     "sendTo": "Envoyer à",
     "sendMessage": "Message (optionnel)",
     "send": "Envoyer",

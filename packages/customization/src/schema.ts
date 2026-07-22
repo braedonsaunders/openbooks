@@ -351,6 +351,15 @@ const HEADER_SPAN_BY_TYPE: Record<string, Record<string, number>> = {
     description: 4,
     subsidiary_id: 2,
   },
+  field_ticket: {
+    project_id: 1,
+    party_id: 2,
+    document_date: 1,
+    period: 1,
+    foreman_party_id: 2,
+    reference_number: 1,
+    memo: 3,
+  },
 }
 
 /**

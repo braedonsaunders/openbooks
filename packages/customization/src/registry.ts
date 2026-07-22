@@ -711,6 +711,8 @@ const FIELD_TICKET: RecordTypeMeta = {
     { key: "project_id", labelKey: "common.labels.project", level: "header", kind: "dimension", required: true },
     { key: "party_id", labelKey: "common.labels.customer", level: "header", kind: "entity_ref" },
     { key: "document_date", labelKey: "common.labels.date", level: "header", kind: "date" },
+    { key: "period", labelKey: "fieldTickets.list.period", level: "header", kind: "select" },
+    { key: "foreman_party_id", labelKey: "fieldTickets.editor.foreman", level: "header", kind: "entity_ref" },
     { key: "reference_number", labelKey: "fieldTickets.editor.po", level: "header", kind: "text" },
     { key: "memo", labelKey: "fieldTickets.editor.workDescription", level: "header", kind: "long_text" },
   ],

@@ -94,6 +94,7 @@ export async function sendTicketForSignature(args: {
 
   await patchTicketCustom(args.orgId, args.ticketId, {
     send: {
+      to,
       sentAt: new Date().toISOString(),
       expiresAt: new Date(Date.now() + 14 * 24 * 60 * 60 * 1000).toISOString(),
       message: args.message ?? null,
