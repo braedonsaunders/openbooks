@@ -57,10 +57,16 @@
       "appliedToDate": "適用済み累計",
       "open": "未消込",
       "appliedOn": "適用日",
-      "applied": "適用額"
+      "applied": "適用額",
+      "rateEvidence": "レート証憑"
     },
+    "targetAmount": "消込額（{currency}）",
+    "sourceAmount": "支払額（{currency}）",
+    "settlementRate": "レート：{source} あたり {target}",
+    "rateReferencePlaceholder": "銀行通知または契約参照…",
+    "rateSource": { "manual": "手動レート", "contractual": "契約レート", "provider": "テナント為替レート" },
     "applyAriaLabel": "{document} に適用",
-    "invalidAllocation": "適用額はそれぞれ 0 より大きく、項目の未消込残高以下である必要があります。",
+    "invalidAllocation": "金額は正数で未消込残高以内とし、証憑付き決済レートで正確に一致する必要があります。",
     "appliedTo": "適用先",
     "voidedNote": "この支払は取り消され、記帳が逆仕訳されました。",
     "noLiveApplications": "有効な適用はありません。",

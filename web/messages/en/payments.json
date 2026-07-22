@@ -57,10 +57,16 @@
       "appliedToDate": "Applied to date",
       "open": "Open",
       "appliedOn": "Applied on",
-      "applied": "Applied"
+      "applied": "Applied",
+      "rateEvidence": "Rate evidence"
     },
+    "targetAmount": "Apply ({currency})",
+    "sourceAmount": "Payment amount ({currency})",
+    "settlementRate": "Rate: {target} per {source}",
+    "rateReferencePlaceholder": "Bank advice or contract reference…",
+    "rateSource": { "manual": "Manual rate", "contractual": "Contractual rate", "provider": "Tenant FX rate" },
     "applyAriaLabel": "Apply to {document}",
-    "invalidAllocation": "Each applied amount must be greater than zero and no more than the item’s open balance.",
+    "invalidAllocation": "Amounts must be positive, within the open balance, and cross-foot exactly through the evidenced settlement rate.",
     "appliedTo": "Applied to",
     "voidedNote": "This payment was voided; its posting was reversed.",
     "noLiveApplications": "No live applications.",

@@ -57,10 +57,16 @@
       "appliedToDate": "累计已核销",
       "open": "未结",
       "appliedOn": "核销日期",
-      "applied": "已核销"
+      "applied": "已核销",
+      "rateEvidence": "汇率凭证"
     },
+    "targetAmount": "核销金额（{currency}）",
+    "sourceAmount": "付款金额（{currency}）",
+    "settlementRate": "汇率：每 {source} 兑换 {target}",
+    "rateReferencePlaceholder": "银行通知或合同参考…",
+    "rateSource": { "manual": "手工汇率", "contractual": "合同汇率", "provider": "租户汇率" },
     "applyAriaLabel": "核销至 {document}",
-    "invalidAllocation": "每笔核销金额必须大于零且不超过该项的未结余额。",
+    "invalidAllocation": "金额必须为正数、不超过未结余额，并按有凭证的结算汇率精确勾稽。",
     "appliedTo": "已核销至",
     "voidedNote": "此付款已作废；其过账已冲回。",
     "noLiveApplications": "无有效核销。",

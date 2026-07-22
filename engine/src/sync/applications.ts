@@ -188,12 +188,21 @@ export async function reconcileApplications(
       const params: unknown[] = [orgId];
       for (const row of chunk) {
         const b = params.length;
-        params.push(row[0], row[1], fromUnits(row[2]), fromUnits(row[2]), row[4], row[5], row[3]);
-        values.push(`($1, $${b + 1}, $${b + 2}, $${b + 3}, $${b + 4}, $${b + 5}, $${b + 6}, $${b + 7})`);
+        params.push(
+          row[0], row[1], fromUnits(row[2]), fromUnits(row[2]),
+          row[4], row[5], row[4], row[5], "1", "same_currency",
+          `source application ${refKey}`, row[3],
+        );
+        values.push(`($1, $${b + 1}, $${b + 2}, $${b + 3}, $${b + 4}, $${b + 5}, $${b + 6}, $${b + 7}, $${b + 8}, $${b + 9}, $${b + 10}, $${b + 11}, $${b + 12})`);
         insertedUnits += row[2];
       }
       await client.query(
-        `insert into applications (org_id, from_line_id, to_line_id, amount, source_amount, transaction_amount, transaction_currency, applied_on) values ${values.join(",")}`,
+        `insert into applications
+          (org_id, from_line_id, to_line_id, amount, source_amount,
+           source_transaction_amount, source_transaction_currency,
+           target_transaction_amount, target_transaction_currency,
+           settlement_rate, settlement_rate_source, settlement_rate_reference, applied_on)
+         values ${values.join(",")}`,
         params,
       );
       inserted += chunk.length;

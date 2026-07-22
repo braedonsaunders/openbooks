@@ -24,6 +24,16 @@ alter table applications
   add foreign key (from_line_id) references journal_lines(id),
   add foreign key (to_line_id) references journal_lines(id),
   add foreign key (fx_gain_loss_entry_id) references journal_entries(id);
+do $$ begin
+  if not exists (
+    select 1 from pg_constraint
+     where conrelid = 'applications'::regclass
+       and conname = 'applications_settlement_fx_rate_fk'
+  ) then
+    alter table applications add constraint applications_settlement_fx_rate_fk
+      foreign key (settlement_fx_rate_id) references fx_rates(id) on delete restrict;
+  end if;
+end $$;
 alter table document_line_tax_components
   add foreign key (org_id) references orgs(id) on delete cascade,
   add foreign key (document_line_id) references document_lines(id) on delete cascade,
@@ -40,6 +50,7 @@ create index if not exists obligations_document_line on performance_obligations 
 create index if not exists time_entries_invoiced_line on time_entries (invoiced_by_line_id);
 create index if not exists allocation_runs_journal_entry on allocation_runs (journal_entry_id);
 create index if not exists applications_fx_journal_entry on applications (fx_gain_loss_entry_id);
+create index if not exists applications_settlement_fx_rate on applications (settlement_fx_rate_id);
 create index if not exists asset_events_journal_entry on asset_events (journal_entry_id);
 create index if not exists depreciation_lines_journal_entry on depreciation_schedule_lines (journal_entry_id);
 create index if not exists documents_posted_entry on documents (posted_entry_id);

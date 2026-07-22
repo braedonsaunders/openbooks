@@ -12,6 +12,7 @@ export async function POST(req: Request) {
     partyId?: string
     amount?: string | number
     side?: string
+    currency?: string
     reference?: string | null
   }
   const side = body.side
@@ -27,8 +28,14 @@ export async function POST(req: Request) {
   if (amount === '' || Number.isNaN(Number(amount))) {
     return NextResponse.json({ error: 'a numeric amount is required' }, { status: 400 })
   }
+  if (!body.currency || !/^[A-Z]{3}$/.test(body.currency)) {
+    return NextResponse.json({ error: 'currency is required' }, { status: 400 })
+  }
   try {
-    const suggestion = await suggestApplications(body.partyId, amount, side, { reference: body.reference ?? null })
+    const suggestion = await suggestApplications(body.partyId, amount, side, {
+      reference: body.reference ?? null,
+      sourceCurrency: body.currency,
+    })
     return NextResponse.json(suggestion)
   } catch (e) {
     return paymentErrorResponse(e)

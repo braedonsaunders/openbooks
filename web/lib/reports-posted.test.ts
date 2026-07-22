@@ -98,10 +98,10 @@ test("financial statements exclude draft and other unposted journals", { skip: !
           const aging = await agingByParty(side, new Date().toISOString().slice(0, 10));
           const detail = await agingDetail(side, new Date().toISOString().slice(0, 10));
           const open = await db.execute(sql\`
-            select coalesce(sum(
+            select round(coalesce(sum(
                      (case when kind = \${creditKind} then -1 else 1 end)
                      * open_balance * fx_rate
-                   ), 0)::text as total
+                   ), 0), 4)::text as total
               from documents
              where org_id = \${org.id} and status = 'posted'
                and kind in (\${positiveKind}, \${creditKind}) and open_balance > 0.005

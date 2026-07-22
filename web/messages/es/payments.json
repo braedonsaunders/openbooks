@@ -57,10 +57,16 @@
       "appliedToDate": "Aplicado a la fecha",
       "open": "Pendiente",
       "appliedOn": "Aplicado el",
-      "applied": "Aplicado"
+      "applied": "Aplicado",
+      "rateEvidence": "Evidencia del tipo"
     },
+    "targetAmount": "Importe aplicado ({currency})",
+    "sourceAmount": "Importe del pago ({currency})",
+    "settlementRate": "Tipo: {target} por {source}",
+    "rateReferencePlaceholder": "Aviso bancario o referencia contractual…",
+    "rateSource": { "manual": "Tipo manual", "contractual": "Tipo contractual", "provider": "Tipo de cambio del inquilino" },
     "applyAriaLabel": "Aplicar a {document}",
-    "invalidAllocation": "Cada importe aplicado debe ser mayor que cero y no superar el saldo pendiente de la partida.",
+    "invalidAllocation": "Los importes deben ser positivos, respetar el saldo pendiente y cuadrar exactamente con el tipo de liquidación documentado.",
     "appliedTo": "Aplicado a",
     "voidedNote": "Este pago fue anulado; su contabilización se revirtió.",
     "noLiveApplications": "No hay aplicaciones vigentes.",

@@ -380,6 +380,7 @@ language plpgsql as $$
 declare
   v_from journal_lines%rowtype;
   v_to journal_lines%rowtype;
+  v_fx fx_rates%rowtype;
   v_status_count integer;
 begin
   -- Deterministic row locks serialize competing applications to either line.
@@ -395,6 +396,7 @@ begin
      or v_from.org_id <> v_to.org_id then
     raise exception 'application endpoints must belong to the application tenant' using errcode = '23514';
   end if;
+  if new.unapplied_at is not null then return new; end if;
   if not v_from.is_open_item or not v_to.is_open_item then
     raise exception 'applications require open-item journal lines' using errcode = '23514';
   end if;
@@ -406,8 +408,35 @@ begin
   if sign(v_from.amount) = sign(v_to.amount) then
     raise exception 'application endpoints must have opposite debit/credit signs' using errcode = '23514';
   end if;
-  if v_from.currency <> new.transaction_currency or v_to.currency <> new.transaction_currency then
-    raise exception 'application transaction currency must match both journal lines' using errcode = '23514';
+  if v_from.currency <> new.source_transaction_currency
+     or v_to.currency <> new.target_transaction_currency then
+    raise exception 'application source and target currencies must match their journal lines' using errcode = '23514';
+  end if;
+  if abs(new.target_transaction_amount - round(new.source_transaction_amount * new.settlement_rate, 4)) > 0.0001 then
+    raise exception 'application settlement rate does not cross-foot source and target transaction amounts' using errcode = '23514';
+  end if;
+  if new.source_transaction_currency = new.target_transaction_currency then
+    if new.source_transaction_amount <> new.target_transaction_amount
+       or new.settlement_rate <> 1
+       or new.settlement_rate_source <> 'same_currency' then
+      raise exception 'same-currency applications require equal transaction amounts and a rate of one' using errcode = '23514';
+    end if;
+  elsif new.settlement_rate_source = 'same_currency' then
+    raise exception 'cross-currency applications require explicit settlement-rate evidence' using errcode = '23514';
+  end if;
+  if new.settlement_rate_source = 'provider' and new.settlement_fx_rate_id is null then
+    raise exception 'provider settlement evidence requires an FX rate observation' using errcode = '23514';
+  end if;
+  if new.settlement_fx_rate_id is not null then
+    select * into v_fx from fx_rates where id = new.settlement_fx_rate_id;
+    if v_fx.id is null
+       or v_fx.org_id <> new.org_id
+       or v_fx.from_currency <> new.source_transaction_currency
+       or v_fx.to_currency <> new.target_transaction_currency
+       or v_fx.rate <> new.settlement_rate
+       or v_fx.as_of > new.applied_on then
+      raise exception 'settlement FX observation does not match the application evidence' using errcode = '23514';
+    end if;
   end if;
   select count(*) into v_status_count from journal_entries
    where id in (v_from.entry_id, v_to.entry_id) and status = 'posted';
@@ -440,9 +469,9 @@ begin
   end if;
 
   select abs(txn_amount) into v_line from journal_lines where id = new.to_line_id;
-  select coalesce(sum(transaction_amount), 0) into v_transaction from applications
+  select coalesce(sum(target_transaction_amount), 0) into v_transaction from applications
    where to_line_id = new.to_line_id and unapplied_at is null and id <> new.id;
-  if v_transaction + new.transaction_amount > v_line then
+  if v_transaction + new.target_transaction_amount > v_line then
     raise exception 'application exceeds transaction amount on target line %', new.to_line_id using errcode = '23514';
   end if;
 
@@ -455,9 +484,9 @@ begin
     raise exception 'application exceeds available amount on source line %', new.from_line_id using errcode = '23514';
   end if;
   select abs(txn_amount) into v_line from journal_lines where id = new.from_line_id;
-  select coalesce(sum(transaction_amount), 0) into v_transaction from applications
+  select coalesce(sum(source_transaction_amount), 0) into v_transaction from applications
    where from_line_id = new.from_line_id and unapplied_at is null and id <> new.id;
-  if v_transaction + new.transaction_amount > v_line then
+  if v_transaction + new.source_transaction_amount > v_line then
     raise exception 'application exceeds transaction amount on source line %', new.from_line_id using errcode = '23514';
   end if;
   return new;
@@ -480,8 +509,14 @@ begin
      or new.to_line_id is distinct from old.to_line_id
      or new.amount is distinct from old.amount
      or new.source_amount is distinct from old.source_amount
-     or new.transaction_amount is distinct from old.transaction_amount
-     or new.transaction_currency is distinct from old.transaction_currency
+     or new.source_transaction_amount is distinct from old.source_transaction_amount
+     or new.source_transaction_currency is distinct from old.source_transaction_currency
+     or new.target_transaction_amount is distinct from old.target_transaction_amount
+     or new.target_transaction_currency is distinct from old.target_transaction_currency
+     or new.settlement_rate is distinct from old.settlement_rate
+     or new.settlement_rate_source is distinct from old.settlement_rate_source
+     or new.settlement_rate_reference is distinct from old.settlement_rate_reference
+     or new.settlement_fx_rate_id is distinct from old.settlement_fx_rate_id
      or new.applied_on is distinct from old.applied_on
      or new.fx_gain_loss_entry_id is distinct from old.fx_gain_loss_entry_id
      or old.unapplied_at is not null
