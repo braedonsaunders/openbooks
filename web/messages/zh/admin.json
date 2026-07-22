@@ -1134,6 +1134,43 @@
       "confirmReset": "将{name}重置为受维护的库默认值吗？这会替换其已配置的申报框。",
       "usNotice": "美国没有联邦销售税申报。此工作底稿必须为每个州和地方申报辖区进行定制。"
     },
+    "assetDepreciationSetup": {
+      "navTitle": "Book Depreciation",
+      "title": "Book Depreciation",
+      "description": "Configure reusable depreciation methods and the method, life and convention each accounting book applies to an asset category.",
+      "tabsAria": "Book depreciation setup sections",
+      "tabs": { "methods": "Methods", "books": "Book policies" }
+    },
+    "taxDepreciationSetup": {
+      "navTitle": "Tax Depreciation",
+      "title": "Tax Depreciation",
+      "description": "Install country tax-depreciation packs and configure class assignments, regimes, classes, conventions and first-year rules. This is separate from sales-tax, VAT and nexus setup.",
+      "tabsAria": "Fixed asset setup sections",
+      "tabs": { "overview": "Overview", "categories": "Asset categories", "regimes": "Tax regimes", "classes": "Tax classes", "firstYear": "First-year rules", "methods": "Methods", "books": "Book policies" },
+      "packsTitle": "Country depreciation packs",
+      "packsDescription": "Installing a pack creates editable tenant configuration. Existing overrides are never replaced.",
+      "recommended": "Company country",
+      "installed": "Installed",
+      "install": "Install pack",
+      "installing": "Installing…",
+      "installFailed": "Could not install the depreciation pack",
+      "installedToast": "Installed {count} depreciation classes",
+      "assignmentFailed": "Could not save the tax class assignment",
+      "assignmentsTitle": "Asset-category class assignments",
+      "assignmentsDescription": "Choose the default tax class for each asset category.",
+      "assetCategory": "Asset category",
+      "notAssigned": "Not assigned",
+      "classCount": "{count, plural, one {# class} other {# classes}}",
+      "models": { "pool": "Class pool", "macrs": "Per-asset MACRS" },
+      "customizeTitle": "Customize",
+      "customizeDescription": "Country packs are starting points; seeded values remain editable.",
+      "links": {
+        "regimes": { "title": "Regimes", "description": "Country, calculation model and asset class attribute." },
+        "classes": { "title": "Classes and methods", "description": "Rates, recovery periods, methods and conventions." },
+        "firstYear": { "title": "First-year rules", "description": "Effective-dated acceleration and eligibility." },
+        "assignments": { "title": "Asset-category assignments", "description": "Assign categories to regime classes in Tax attributes." }
+      }
+    },
     "taxOfficial": {
       "title": "官方申报表单",
       "description": "仅当辖区接受或要求该表单时，才上传官方可填写 PDF。在“纳税申报框”下映射其字段。",
@@ -1190,7 +1227,8 @@
       "primaryRequired": "在取消此账簿的主账簿状态前，请先选择另一个会计账簿作为主账簿。",
       "primaryActiveRequired": "主会计账簿必须保持启用。",
       "archiveOnly": "会计账簿为保留总账历史而留存，只能归档。",
-      "invalidUrl": "请输入有效的 http:// 或 https:// 政府申报 URL。"
+      "invalidUrl": "请输入有效的 http:// 或 https:// 政府申报 URL。",
+      "invalidDepreciationFormula": "请使用文档中的变量和运算符输入有效的折旧公式。"
     },
     "groups": {
       "company": "公司",
@@ -1605,6 +1643,24 @@
       }
     },
     "fields": {
+      "classAttribute": "Asset class attribute",
+      "countryCode": "Country",
+      "calculationModel": "Calculation model",
+      "regime": "Regime",
+      "classCode": "Class code",
+      "rate": "Rate",
+      "method": "Method",
+      "firstYearFraction": "First-year fraction",
+      "allowRecapture": "Allow recapture",
+      "allowTerminalLoss": "Allow terminal loss",
+      "costCap": "Cost cap",
+      "depreciationSystem": "Depreciation system",
+      "macrsMethod": "MACRS method",
+      "recoveryPeriodYears": "Recovery period (years)",
+      "taxAttributes": "Tax attributes (JSON)",
+      "enhancedMultiplier": "Enhanced multiplier",
+      "acquiredFrom": "Acquired from",
+      "acquiredTo": "Acquired to",
       "code": "代码",
       "name": "名称",
       "appliesTo": "适用于",
@@ -1734,6 +1790,11 @@
       "isDefault": "默认"
     },
     "options": {
+      "taxDepreciationModel": { "pool": "Class pool", "macrs": "Per-asset MACRS" },
+      "macrsSystem": { "gds": "GDS", "ads": "ADS" },
+      "macrsMethod": { "200db": "200% declining balance", "150db": "150% declining balance", "straightLine": "Straight line" },
+      "taxDepreciationConvention": { "halfYear": "Half-year", "midQuarter": "Mid-quarter", "midMonth": "Mid-month" },
+      "poolMethod": { "declining": "Declining balance", "straightLine": "Straight line" },
       "appliesTo": {
         "sales": "销售",
         "purchases": "采购",

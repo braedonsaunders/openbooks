@@ -1,8 +1,8 @@
 'use client'
 
+import { useMoney } from '@/components/money-provider'
 import { useTranslations } from 'next-intl'
 import { Badge, Table, TableBody, TableCell, TableHead, TableHeader, TableRow, UrlDrawer } from '@openbooks/ui'
-import { money } from '../../../lib/format'
 import { RunRecognitionButton } from './RunRecognitionButton'
 import type { ContractPayload } from './_lib'
 
@@ -22,6 +22,7 @@ const STATUS_VARIANT: Record<string, 'success' | 'secondary' | 'warning' | 'outl
  * action, so this surface reads rather than edits.
  */
 export function ContractDrawer({ payload, canRun }: { payload: ContractPayload; canRun: boolean }) {
+  const { money } = useMoney()
   const t = useTranslations('revenue')
   const tCommon = useTranslations('common')
   const c = payload.contract

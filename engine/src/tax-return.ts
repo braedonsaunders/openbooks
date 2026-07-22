@@ -61,7 +61,11 @@ export function evalFormula(
   values: Map<string, string>,
   boxCodes: ReadonlySet<string>,
 ): string {
-  const tokens = expr.match(/[A-Za-z_][A-Za-z0-9_]*|\d+(?:\.\d+)?|[(),+\-]/g);
+  // A token is an alphanumeric run (box code OR number literal) or an operator.
+  // Box codes are frequently digit-leading with letters ("5a", "4C", "3.1A"),
+  // so a token may start with a digit yet still be a reference; parseTerm below
+  // classifies it (box code wins over numeric literal).
+  const tokens = expr.match(/[A-Za-z0-9_][\w.]*|[(),+\-]/g);
   if (!tokens || tokens.join("").replace(/\s/g, "") !== expr.replace(/\s/g, "")) {
     throw new TaxReturnError(`invalid formula "${expr}"`);
   }
@@ -109,7 +113,7 @@ export function evalFormula(
     // Box code wins over numeric-literal reading, so "105 - 108" references
     // boxes 105 and 108 rather than the numbers.
     if (boxCodes.has(tok)) return boxRef(tok);
-    if (/^\d/.test(tok)) return fromUnits(toUnits(tok));
+    if (/^\d+(?:\.\d+)?$/.test(tok)) return fromUnits(toUnits(tok));
     return boxRef(tok);
   };
 

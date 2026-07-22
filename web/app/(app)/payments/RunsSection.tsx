@@ -1,3 +1,4 @@
+import { getMoneyFormatter } from '@/lib/money-server'
 import Link from 'next/link'
 import { getTranslations } from 'next-intl/server'
 import { sql } from 'drizzle-orm'
@@ -8,7 +9,7 @@ import { SearchInput } from '../../../components/search-input'
 import { FilterChips } from '../../../components/filter-bar'
 import { Pagination } from '../../../components/pagination'
 import { isUuid, parsePrefixedListParams, pickString } from '../../../lib/list-params'
-import { money, dateTime } from '../../../lib/format'
+import { dateTime } from '../../../lib/format'
 import { SortTh } from '../../../components/sortable-th'
 import { RunBuilder, type RunBill } from './RunBuilder'
 import { RunDrawer, type RunBlockerClient } from './RunDrawer'
@@ -66,6 +67,7 @@ export async function RunsSection({
   direction?: 'outbound' | 'inbound'
   basePath?: '/payments' | '/receipts'
 }) {
+  const { money } = await getMoneyFormatter()
   const t = await getTranslations('payments')
   const tCommon = await getTranslations('common')
   const building = pickString(sp.newRun) === '1'
@@ -105,7 +107,7 @@ export async function RunsSection({
     : sql``
   const runStatusWhere = runStatus ? sql` and r.status = ${runStatus}` : sql``
   const openBillsCte = collections ? sql`
-    select d.id, d.document_number, d.document_date, d.due_date, d.reference_number,
+    select d.id, d.document_number, d.document_date, d.due_date, d.reference_number, d.currency,
            p.display_name as vendor,
            abs(jl.amount) - coalesce((select sum(a.amount) from applications a where a.to_line_id = jl.id and a.unapplied_at is null), 0) as open,
            exists (select 1 from payment_mandates m where m.org_id = d.org_id and m.party_id = d.party_id and m.status = 'active' and (m.valid_from is null or m.valid_from <= current_date) and (m.expires_on is null or m.expires_on >= current_date)) as has_bank
@@ -114,7 +116,7 @@ export async function RunsSection({
       join journal_entries je on je.id = d.posted_entry_id and je.status = 'posted'
       join journal_lines jl on jl.entry_id = je.id and jl.is_open_item and jl.amount > 0
      where d.org_id = ${orgId} and d.kind = 'customer_invoice' and d.status = 'posted'` : sql`
-    select d.id, d.document_number, d.document_date, d.due_date, d.reference_number,
+    select d.id, d.document_number, d.document_date, d.due_date, d.reference_number, d.currency,
            p.display_name as vendor,
            abs(jl.amount) - coalesce((
              select sum(a.amount) from applications a
@@ -142,7 +144,7 @@ export async function RunsSection({
       select count(*) as n from open_bills where open > 0 ${billWhere}
     `) as any : Promise.resolve({ rows: [{ n: 0 }] }),
     db.execute(sql`
-      select r.id, r.run_number, r.method, r.status, r.scheduled_for, r.exported_at, r.created_at,
+      select r.id, r.run_number, r.method, r.status, r.currency, r.scheduled_for, r.exported_at, r.created_at,
              a.number as bank_number, a.name as bank_name,
              count(i.id) filter (where i.status <> 'cancelled') as instruction_count,
              coalesce(sum(i.amount) filter (where i.status <> 'cancelled'), 0) as total
@@ -350,7 +352,7 @@ export async function RunsSection({
                     </TableCell>
                     <TableCell className="text-slate-600 dark:text-slate-300">{r.scheduled_for ?? '—'}</TableCell>
                     <TableCell className="text-right tabular-nums">{r.instruction_count}</TableCell>
-                    <TableCell className="text-right tabular-nums">{money(r.total)}</TableCell>
+                    <TableCell className="text-right tabular-nums">{money(r.total, { currency: r.currency ?? undefined })}</TableCell>
                     <TableCell>
                       <Badge variant={RUN_VARIANT[r.status] ?? 'secondary'}>
                         {runStatusLabel(String(r.status))}

@@ -27,6 +27,40 @@ test("NetSuite exposes posting account-month home-currency activity", async () =
   ]);
 });
 
+test("NetSuite item import carries simple cost and base price", async () => {
+  const source = new NetSuiteSource({
+    account: "test",
+    host: "https://example.invalid",
+    consumerKey: "test",
+    consumerSecret: "test",
+    tokenKey: "test",
+    tokenSecret: "test",
+  });
+  (source as unknown as { q: (query: string) => Promise<Record<string, string>[]> }).q = async (query) => {
+    if (/FROM pricing/i.test(query)) {
+      assert.match(query, /quantity = 1/i);
+      return [{ item: "2119", unitprice: "17.16" }];
+    }
+    assert.match(query, /cost, averagecost/i);
+    return [{
+      id: "2119", itemid: "PLUG", displayname: "Plug Stone", itemtype: "NonInvtPart",
+      isinactive: "F", cost: "15.60", saleunit: "Each",
+    }];
+  };
+
+  const records = await (source as unknown as { items: (since: Date | null) => Promise<Array<{ fields: Record<string, unknown> }>> }).items(null);
+  assert.deepEqual(records[0]?.fields, {
+    code: "PLUG",
+    name: "Plug Stone",
+    kind: "non_inventory",
+    category: null,
+    defaultCost: "15.6000",
+    defaultRate: "17.1600",
+    unit: "Each",
+    isActive: true,
+  });
+});
+
 test("Odoo exposes posted account-month home-currency activity", async () => {
   const source = new OdooSource({ url: "https://example.invalid", database: "test", username: "test", apiKey: "test" });
   (source as unknown as { client: { searchReadAll: (...args: unknown[]) => Promise<unknown[]> } }).client = {

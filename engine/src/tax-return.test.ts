@@ -9,6 +9,14 @@ test("evalFormula treats numeric line codes as box references, not literals", ()
   assert.equal(evalFormula("105 - 108", values, codes("105", "108")), "9000.0000");
 });
 
+test("evalFormula keeps digit-leading alphanumeric box codes whole (5a, 4C, 3.1A)", () => {
+  const values = new Map([["5a", "2100.0000"], ["5b", "800.0000"], ["4A5", "300.0000"], ["4C", "300.0000"], ["OUT", "500.0000"]]);
+  const boxes = codes("5a", "5b", "4A5", "4C", "OUT");
+  assert.equal(evalFormula("5a - 5b", values, boxes), "1300.0000");
+  assert.equal(evalFormula("4A5", values, boxes), "300.0000");
+  assert.equal(evalFormula("OUT - 4C", values, boxes), "200.0000");
+});
+
 test("evalFormula handles parentheses, unary minus, and true numeric literals", () => {
   const values = new Map([["105", "9000.0000"], ["108", "4000.0000"]]);
   assert.equal(evalFormula("(105 - 108) + 100", values, codes("105", "108")), "5100.0000");

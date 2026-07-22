@@ -1,4 +1,7 @@
 import { NextResponse } from 'next/server'
+import { sql } from 'drizzle-orm'
+import { db } from '@openbooks/engine/src/db.ts'
+import type { ReportRuleGroup } from '@openbooks/reports'
 import { getTranslations } from 'next-intl/server'
 import { resolveDefinitionToExportData } from '../../../../../lib/report-run'
 import { exportDataToPdf, exportDataToXlsx, orgBranding, resolveLayout, type Translator } from '../../../../../lib/report-pdf'
@@ -38,7 +41,23 @@ export async function GET(req: Request) {
       customTo: p.get('to') ?? undefined,
       orgId,
     })
-    const data = await resolveDefinitionToExportData(orgId, definitionId, p, { orgId, t, period, query: q })
+    const runId = p.get('runId')
+    let extraFilters: ReportRuleGroup | null = null
+    if (runId) {
+      const run = (await db.execute(sql`
+        select filters from report_runs
+         where id=${runId} and org_id=${orgId} and definition_id=${definitionId} and trigger='scheduled'
+      `)) as unknown as { rows: { filters: ReportRuleGroup | null }[] }
+      if (!run.rows[0]) return NextResponse.json({ error: 'scheduled report run not found' }, { status: 404 })
+      extraFilters = run.rows[0].filters
+    }
+    const data = await resolveDefinitionToExportData(
+      orgId,
+      definitionId,
+      p,
+      { orgId, t, period, query: q },
+      { extraFilters },
+    )
     if (p.get('format') === 'xlsx') {
       const xlsx = await exportDataToXlsx(data, { reportName: data.title, dateRangeLabel: data.dateRangeLabel })
       return new NextResponse(new Uint8Array(xlsx), {

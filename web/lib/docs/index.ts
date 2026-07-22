@@ -9,15 +9,20 @@ import { overheadCosting } from './articles/overhead-costing'
 import { laborCosting } from './articles/labor-costing'
 import { laborPricing } from './articles/labor-pricing'
 import { taxConfiguration } from './articles/tax-configuration'
+import { taxJurisdictionsAndNexus, taxReturnsAndBoxes } from './articles/taxes'
 import { fieldTickets } from './articles/field-tickets'
 import { itemRates } from './articles/item-rates'
 import { fixedAssetsDepreciation } from './articles/fixed-assets-depreciation'
 import { revenueRecognition } from './articles/revenue-recognition'
 import { apps } from './articles/apps'
+import { appBuilder } from './articles/app-builder'
+import { scriptingEngine, scriptingApiReference } from './articles/scripting'
 import { quickBooksDesktopConnector } from './articles/quickbooks-desktop-connector'
 import { netSuiteBridge } from './articles/netsuite-bridge'
 import { auditLog } from './articles/audit-log'
 import { recordCustomization } from './articles/record-customization'
+import { customizationArticles } from './articles/customization'
+import { platformArticles } from './articles/platform'
 import { quickStart, navigationAndRecords, glossary } from './articles/getting-started'
 import {
   accountingModel,
@@ -34,7 +39,9 @@ import {
 } from './articles/daily-workflows'
 import { financialReports, analyticsAndSavedViews, periodClose } from './articles/reporting-close'
 import { migrationAndCutover, reconciliationBeforeCutover } from './articles/migration'
+import { migrateWithAConnector } from './articles/migrate-with-a-connector'
 import { companySettings, rolesAndPermissions, dataImports } from './articles/administration-basics'
+import { companySetupGroupArticles } from './articles/company-setup'
 import { switchingArticles } from './articles/switching'
 
 export type { DocArticle, DocCategory, DocSection } from './types'
@@ -129,8 +136,13 @@ export const DOC_SECTIONS: DocSection[] = [
   { key: 'reporting-guides', title: 'Reports & Insights', category: 'reporting', order: 1 },
   { key: 'integrations-migration', title: 'Migration & Cutover', category: 'integrations', order: 1 },
   { key: 'integrations-connections', title: 'Source Connections', category: 'integrations', order: 2 },
+  { key: 'apps-build', title: 'Apps & Scripts', category: 'apps', order: 1 },
+  { key: 'apps-automation', title: 'Automation & Integration', category: 'apps', order: 2 },
   { key: 'administration-organization', title: 'Organization & Access', category: 'administration', order: 1 },
-  { key: 'administration-data', title: 'Data & Evidence', category: 'administration', order: 2 },
+  { key: 'administration-company-setup', title: 'Company Setup', category: 'administration', order: 2 },
+  { key: 'administration-customize', title: 'Customization', category: 'administration', order: 3 },
+  { key: 'administration-taxes', title: 'Taxes', category: 'administration', order: 4 },
+  { key: 'administration-data', title: 'Data & Evidence', category: 'administration', order: 5 },
 ]
 
 const ARTICLE_SECTION_BY_SLUG: Record<string, string> = {
@@ -151,17 +163,42 @@ const ARTICLE_SECTION_BY_SLUG: Record<string, string> = {
   'payments-and-applications': 'transactions-daily',
   'financial-reports': 'reporting-guides',
   'analytics-and-saved-views': 'reporting-guides',
+  'migrate-with-a-connector': 'integrations-migration',
   'migration-and-cutover': 'integrations-migration',
   'reconciliation-before-cutover': 'integrations-migration',
   'quickbooks-desktop-connector': 'integrations-connections',
   'netsuite-extraction-bridge': 'integrations-connections',
-  'company-settings': 'administration-organization',
-  'tax-configuration': 'administration-organization',
+  'company-settings': 'administration-company-setup',
+  'setup-company-group': 'administration-company-setup',
+  'setup-accounting-group': 'administration-company-setup',
+  'setup-taxes-group': 'administration-company-setup',
+  'setup-dimensions-group': 'administration-company-setup',
+  'setup-billing-group': 'administration-company-setup',
+  'setup-revenue-group': 'administration-company-setup',
+  'setup-workforce-group': 'administration-company-setup',
+  'setup-assets-group': 'administration-company-setup',
+  'setup-currency-group': 'administration-company-setup',
+  'setup-projects-group': 'administration-company-setup',
+  'tax-jurisdictions-and-nexus': 'administration-taxes',
+  'tax-configuration': 'administration-taxes',
+  'tax-returns-and-boxes': 'administration-taxes',
   'roles-and-permissions': 'administration-organization',
   'data-imports': 'administration-data',
   'audit-log': 'administration-data',
   'file-cabinet': 'administration-data',
-  'record-customization': 'administration-organization',
+  'record-customization': 'administration-customize',
+  'custom-records': 'administration-customize',
+  'custom-fields': 'administration-customize',
+  'pdf-templates': 'administration-customize',
+  'navigation-customization': 'administration-customize',
+  apps: 'apps-build',
+  'app-builder': 'apps-build',
+  'scripting-engine': 'apps-build',
+  'scripting-api-reference': 'apps-build',
+  flows: 'apps-automation',
+  'query-console': 'apps-automation',
+  'rest-api': 'apps-automation',
+  sandboxes: 'apps-automation',
 }
 
 const RAW_DOC_ARTICLES: DocArticle[] = [
@@ -185,15 +222,24 @@ const RAW_DOC_ARTICLES: DocArticle[] = [
   itemRates,
   financialReports,
   analyticsAndSavedViews,
+  migrateWithAConnector,
   migrationAndCutover,
   reconciliationBeforeCutover,
   quickBooksDesktopConnector,
   netSuiteBridge,
   apps,
+  appBuilder,
+  scriptingEngine,
+  scriptingApiReference,
+  ...platformArticles,
   companySettings,
+  ...companySetupGroupArticles,
+  taxJurisdictionsAndNexus,
   taxConfiguration,
+  taxReturnsAndBoxes,
   rolesAndPermissions,
   recordCustomization,
+  ...customizationArticles,
   dataImports,
   auditLog,
   fileCabinet,

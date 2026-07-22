@@ -7,7 +7,7 @@ export const netSuiteBridge: DocArticle = {
   order: 3,
   summary:
     'Install and operate the pull-based extraction bridge for exact migrations, daily mirrors, and proof-gated reconciliation.',
-  updated: '2026-07-19',
+  updated: '2026-07-20',
   keywords: ['NetSuite', 'RESTlet', 'Map Reduce', 'SuiteCloud', 'SuiteQL', 'migration', 'mirror', 'trial balance'],
   related: ['migration-and-cutover', 'reconciliation-before-cutover', 'switching-from-enterprise-systems'],
   body: `# NetSuite Extraction Bridge
@@ -40,6 +40,11 @@ Lists** for payment terms, and **Deleted Records** for tombstones.
 
 The bridge never writes business transactions. Its only writes are temporary
 export request and result files in its private workspace.
+
+Vendor-bill and expense-report evidence is read through the same authenticated
+bridge. Large PDFs and images are transferred in bounded chunks, allowing the
+connector to preserve source files that exceed NetSuite's single-response
+limit without making them public or adding account-specific scripts.
 
 ## Account field mappings
 

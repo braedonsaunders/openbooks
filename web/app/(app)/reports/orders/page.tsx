@@ -1,10 +1,10 @@
+import { getMoneyFormatter } from '@/lib/money-server'
 import { sql } from 'drizzle-orm'
 import { getTranslations } from 'next-intl/server'
 import { db } from '@openbooks/engine/src/db.ts'
 import { PageHeader } from '@openbooks/ui'
 import { ListPageLayout } from '../../../../components/page-layout'
 import { requirePermission } from '../../../../lib/authz'
-import { money } from '../../../../lib/format'
 import { orgInfo } from '../../../../lib/data'
 import { ReportPaper } from '../ReportPaper'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '../ReportTable'
@@ -23,6 +23,7 @@ const KINDS = ['quote', 'sales_order', 'purchase_order'] as const
  * derived from document_links (from order → downstream invoice/bill).
  */
 export default async function OrdersReport() {
+  const { money } = await getMoneyFormatter()
   const authz = await requirePermission('reports.read')
   const t = await getTranslations('reports.orders')
   const tr = await getTranslations('reports')

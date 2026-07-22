@@ -38,6 +38,8 @@
     "createFailed": "No se pudo crear el parte"
   },
   "editor": {
+    "tabs": { "time": "Tiempo", "items": "Artículos", "tasks": "Tareas" },
+    "periodLocked": "Elimine las horas ingresadas antes de cambiar el período.",
     "back": "Partes de obra",
     "submit": "Enviar",
     "approve": "Aprobar",
@@ -60,6 +62,7 @@
       "hint": "Una fila por persona (opcionalmente por clase). R / O / D = iniciales de los tipos de hora.",
       "employee": "Empleado",
       "laborItem": "Clase de trabajo",
+      "task": "Tarea del proyecto",
       "addRow": "Agregar persona",
       "removeRow": "Quitar fila",
       "rowTotal": "Total",
@@ -67,19 +70,24 @@
       "total": "{hours} h en total"
     },
     "lines": {
-      "title": "Equipos, consumibles y materiales",
-      "hint": "Líneas estilo pedido de venta facturadas con el parte. Las tarifas se precargan del artículo y siguen editables.",
+      "title": "Artículos y equipo",
+      "hint": "Seleccione artículos facturables o equipo vinculado. Los precios respetan los libros de tarifas y sus niveles.",
       "item": "Artículo",
       "pickItem": "Elija un artículo…",
       "description": "Descripción",
       "quantity": "Cant.",
+      "rateUnit": "Unidad de tarifa",
       "rate": "Tarifa",
       "amount": "Importe",
+      "equipment": "Unidad de equipo",
+      "pooledItem": "Sin unidad específica",
+      "rateSource": { "rate_book": "Resuelto desde el libro de tarifas", "item_default": "Tarifa predeterminada del artículo" },
       "add": "Agregar línea",
       "remove": "Quitar línea",
       "empty": "Aún no hay líneas.",
       "itemRequired": "Elija un artículo"
     },
+    "tasks": { "title": "Tareas del proyecto", "hint": "Tareas WBS disponibles para imputar las horas.", "code": "Código", "task": "Tarea", "estimatedHours": "Horas estimadas" },
     "totals": {
       "title": "Totales del parte",
       "labor": "Mano de obra",

@@ -3,6 +3,7 @@ import { sql } from "drizzle-orm";
 import { db } from "@openbooks/engine/src/db.ts";
 import { financialHealth, type FinancialHealth, type HealthBenchmarks } from "./financial-health";
 import { analyticsConfig } from "./config";
+import { getMoneyFormatter } from '../money-server'
 
 /**
  * Full data payload for the Financial Health dashboard — everything the 10
@@ -376,7 +377,7 @@ function buildMarginFlow(f: FinancialHealth["figures"]): MarginStage[] {
 }
 
 /** Derive Issues / Recommendations / Anomalies from ratios + trend. */
-function buildInsights(base: FinancialHealth, monthly: MonthPoint[], benchmarks: HealthBenchmarks): Insight[] {
+function buildInsights(base: FinancialHealth, monthly: MonthPoint[], benchmarks: HealthBenchmarks, money: (value: number) => string): Insight[] {
   const out: Insight[] = [];
   const f = base.figures;
   const gm = f.revenue > 0 ? f.grossProfit / f.revenue : 0;
@@ -386,13 +387,13 @@ function buildInsights(base: FinancialHealth, monthly: MonthPoint[], benchmarks:
   // benchmarks: critical at 50% of target, warning at 75%.
   const GM_TARGET = benchmarks.grossMargin;
   const OP_TARGET = benchmarks.operatingMargin;
-  if (f.operatingIncome < 0) out.push({ severity: "issue", title: "Operating loss", detail: `Operating income is -$${Math.abs(Math.round(f.operatingIncome)).toLocaleString()} — the business loses money before other items.` });
+  if (f.operatingIncome < 0) out.push({ severity: "issue", title: "Operating loss", detail: `Operating income is ${money(f.operatingIncome)} — the business loses money before other items.` });
   if (gm < GM_TARGET * 0.5) out.push({ severity: "issue", title: "Gross margin critically low", detail: `Gross margin is ${(gm * 100).toFixed(1)}% — less than half the ${Math.round(GM_TARGET * 100)}% target.` });
   else if (gm < GM_TARGET * 0.75) out.push({ severity: "issue", title: "Gross margin well below target", detail: `Gross margin is ${(gm * 100).toFixed(1)}% vs the ${Math.round(GM_TARGET * 100)}% target.` });
   else if (gm < GM_TARGET) out.push({ severity: "issue", title: "Gross margin below target", detail: `Gross margin is ${(gm * 100).toFixed(1)}% vs a ${Math.round(GM_TARGET * 100)}% benchmark.` });
   if (opm >= 0 && opm < OP_TARGET * 0.5) out.push({ severity: "issue", title: "Operating margin critically low", detail: `Operating margin is ${(opm * 100).toFixed(1)}% — less than half the ${Math.round(OP_TARGET * 100)}% target.` });
   else if (opm >= 0 && opm < OP_TARGET) out.push({ severity: "issue", title: "Operating margin below target", detail: `Operating margin is ${(opm * 100).toFixed(1)}% vs a ${Math.round(OP_TARGET * 100)}% benchmark.` });
-  if (f.netIncome < 0) out.push({ severity: "issue", title: "Net loss for the period", detail: `Net income is ${f.netIncome < 0 ? "-" : ""}$${Math.abs(f.netIncome).toLocaleString()}.` });
+  if (f.netIncome < 0) out.push({ severity: "issue", title: "Net loss for the period", detail: `Net income is ${money(f.netIncome)}.` });
   if (f.revenueGrowth < -0.15) out.push({ severity: "issue", title: "Revenue falling sharply year-over-year", detail: `Revenue is down ${(Math.abs(f.revenueGrowth) * 100).toFixed(1)}% vs the prior year.` });
   else if (f.revenueGrowth < 0) out.push({ severity: "issue", title: "Revenue declined year-over-year", detail: `Revenue is down ${(Math.abs(f.revenueGrowth) * 100).toFixed(1)}% vs the prior year.` });
   // Trend rules over the trailing months: revenue slope and margin compression.
@@ -408,7 +409,7 @@ function buildInsights(base: FinancialHealth, monthly: MonthPoint[], benchmarks:
   if (f.breakevenMonthly !== null && monthly.length > 0) {
     const avgMonthlyRev = f.revenue / Math.max(1, monthly.filter((m) => m.revenue > 0).length);
     const safety = avgMonthlyRev > 0 ? (avgMonthlyRev - f.breakevenMonthly) / avgMonthlyRev : 0;
-    if (safety < 0) out.push({ severity: "issue", title: "Below breakeven", detail: `Average monthly revenue is under the ~$${Math.round(f.breakevenMonthly).toLocaleString()} breakeven.` });
+    if (safety < 0) out.push({ severity: "issue", title: "Below breakeven", detail: `Average monthly revenue is under the approximately ${money(f.breakevenMonthly)} breakeven.` });
     else if (safety < 0.1) out.push({ severity: "issue", title: "Thin safety margin", detail: `Only ${(safety * 100).toFixed(0)}% of monthly revenue separates you from breakeven.` });
   }
   if (f.revenue > 0 && f.opex / f.revenue > 0.4)
@@ -435,7 +436,7 @@ function buildInsights(base: FinancialHealth, monthly: MonthPoint[], benchmarks:
     const rSd = Math.sqrt(revs.reduce((a, x) => a + (x - rMean) ** 2, 0) / revs.length);
     for (const m of withRev) {
       if (rSd > 0 && Math.abs(m.revenue - rMean) > 2 * rSd) {
-        out.push({ severity: "anomaly", title: `Revenue spike/dip in ${m.label}`, detail: `Revenue $${Math.round(m.revenue).toLocaleString()} vs $${Math.round(rMean).toLocaleString()} average.` });
+        out.push({ severity: "anomaly", title: `Revenue spike/dip in ${m.label}`, detail: `Revenue ${money(m.revenue)} vs ${money(rMean)} average.` });
       }
     }
   }
@@ -443,6 +444,8 @@ function buildInsights(base: FinancialHealth, monthly: MonthPoint[], benchmarks:
 }
 
 export async function healthData(period: { from: string; to: string; label: string }, orgId: string): Promise<HealthData> {
+  const { money: formatMoney } = await getMoneyFormatter(orgId)
+  const money = (value: number) => formatMoney(value, { maximumFractionDigits: 0 })
   const { from, to } = period;
   const pFrom = priorYear(from);
   const pTo = priorYear(to);
@@ -482,7 +485,7 @@ export async function healthData(period: { from: string; to: string; label: stri
     drivers: drv,
     items,
     budget,
-    insights: buildInsights(base, monthly, benchmarks),
+    insights: buildInsights(base, monthly, benchmarks, money),
     benchmarks,
   };
 }

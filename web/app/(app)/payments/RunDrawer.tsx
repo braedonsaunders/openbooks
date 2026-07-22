@@ -1,5 +1,6 @@
 'use client'
 
+import { useMoney } from '@/components/money-provider'
 import { useState } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
@@ -8,8 +9,6 @@ import { toast } from 'sonner'
 import { Check, Download, FileCheck2, RotateCcw, Send, X } from 'lucide-react'
 import { Alert, AlertDescription, AlertTitle, Badge, Button, Drawer, Input, Label, Select, Textarea, UrlDrawer } from '@openbooks/ui'
 import { confirmDialog } from '../../../lib/confirm'
-import { money } from '../../../lib/format'
-
 /**
  * Payment-run flyout: instructions, EFT readiness, and the two explicit
  * actions — CPA-005 file download (draft → exported) and posting the run's
@@ -82,6 +81,7 @@ export function RunDrawer({
   closeHref?: string
   paymentBasePath?: '/payments' | '/receipts'
 }) {
+  const { money } = useMoney()
   const t = useTranslations('payments')
   const tCommon = useTranslations('common')
   const router = useRouter()
@@ -309,9 +309,9 @@ export function RunDrawer({
           </Alert>
         ) : null}
 
-        {files.length ? <section className="space-y-2"><h3 className="text-sm font-semibold text-slate-900 dark:text-slate-100">{t('runDrawer.filesTitle')}</h3><div className="grid gap-2">{files.map((file) => <div key={file.id} className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-slate-200 px-3 py-2 dark:border-slate-800"><div><p className="text-sm font-medium">{file.filename}</p><p className="font-mono text-[11px] text-slate-500">{String(file.content_hash).slice(0, 16)}… · v{file.sequence_number}</p></div><div className="flex items-center gap-2"><span className="text-xs tabular-nums text-slate-500">{file.payment_count} · {money(file.total_amount)} {file.currency}</span><Badge variant={file.status === 'approved' || file.status === 'delivered' ? 'success' : file.status === 'rejected' ? 'destructive' : 'secondary'}>{t(`runDrawer.fileStatus.${file.status}`)}</Badge></div></div>)}</div></section> : null}
+        {files.length ? <section className="space-y-2"><h3 className="text-sm font-semibold text-slate-900 dark:text-slate-100">{t('runDrawer.filesTitle')}</h3><div className="grid gap-2">{files.map((file) => <div key={file.id} className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-slate-200 px-3 py-2 dark:border-slate-800"><div><p className="text-sm font-medium">{file.filename}</p><p className="font-mono text-[11px] text-slate-500">{String(file.content_hash).slice(0, 16)}… · v{file.sequence_number}</p></div><div className="flex items-center gap-2"><span className="text-xs tabular-nums text-slate-500">{file.payment_count} · {money(file.total_amount, { currency: file.currency })}</span><Badge variant={file.status === 'approved' || file.status === 'delivered' ? 'success' : file.status === 'rejected' ? 'destructive' : 'secondary'}>{t(`runDrawer.fileStatus.${file.status}`)}</Badge></div></div>)}</div></section> : null}
 
-        {items.length ? <section className="space-y-2"><h3 className="text-sm font-semibold text-slate-900 dark:text-slate-100">{t('runDrawer.sourcesTitle')}</h3><div className="grid gap-2 sm:grid-cols-2">{items.map((item) => <div key={item.id} className="rounded-lg border border-slate-200 p-3 text-sm dark:border-slate-800"><div className="flex justify-between gap-3"><span className="font-mono text-xs font-semibold">{item.document_number}</span><span className="tabular-nums">{money(item.payment_amount)} {item.currency}</span></div><p className="mt-1 text-xs text-slate-500">{item.party_name}</p>{Number(item.discount_amount) || Number(item.credit_amount) ? <p className="mt-1 text-xs text-slate-500">{t('runDrawer.adjustments', { discount: money(item.discount_amount), credit: money(item.credit_amount) })}</p> : null}</div>)}</div></section> : null}
+        {items.length ? <section className="space-y-2"><h3 className="text-sm font-semibold text-slate-900 dark:text-slate-100">{t('runDrawer.sourcesTitle')}</h3><div className="grid gap-2 sm:grid-cols-2">{items.map((item) => <div key={item.id} className="rounded-lg border border-slate-200 p-3 text-sm dark:border-slate-800"><div className="flex justify-between gap-3"><span className="font-mono text-xs font-semibold">{item.document_number}</span><span className="tabular-nums">{money(item.payment_amount, { currency: item.currency })}</span></div><p className="mt-1 text-xs text-slate-500">{item.party_name}</p>{Number(item.discount_amount) || Number(item.credit_amount) ? <p className="mt-1 text-xs text-slate-500">{t('runDrawer.adjustments', { discount: money(item.discount_amount, { currency: item.currency }), credit: money(item.credit_amount, { currency: item.currency }) })}</p> : null}</div>)}</div></section> : null}
 
         <div className="flex items-center justify-between gap-3"><h3 className="text-sm font-semibold text-slate-900 dark:text-slate-100">{t('runDrawer.instructionsTitle')}</h3><Input value={instructionQ} onChange={(e) => { setInstructionQ(e.target.value); setInstructionPage(1) }} placeholder={t('runDrawer.searchInstructions')} className="max-w-64" /></div>
         <div className="overflow-x-auto rounded-md border border-slate-200 dark:border-slate-800">

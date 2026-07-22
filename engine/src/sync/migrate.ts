@@ -500,10 +500,16 @@ async function upsert(resource: string, ctx: Ctx, rec: SourceEntity, s: Resource
 
   if (resource === "items") {
     const name = String(f.name ?? `Item ${rec.sourceRef}`);
+    const defaultCost = typeof f.defaultCost === "string" ? f.defaultCost : null;
+    const defaultRate = typeof f.defaultRate === "string" ? f.defaultRate : null;
+    const unit = str(f.unit);
     const id = await findByRef("items", orgId, refKey, rec.sourceRef);
-    if (id) { await db.execute(sql`update items set name=${name}, kind=${String(f.kind ?? "service")}::text, category=${str(f.category)}, is_active=${f.isActive !== false} where id=${id}`); s.updated++; return id; }
-    const ins = (await db.execute(sql`insert into items (org_id, kind, code, name, category, is_active, custom)
-      values (${orgId}, ${String(f.kind ?? "service")}::text, ${(f.code as string) ?? null}, ${name}, ${str(f.category)}, ${f.isActive !== false}, ${custom}::jsonb) returning id`)) as { rows: { id: string }[] };
+    if (id) { await db.execute(sql`update items set name=${name}, kind=${String(f.kind ?? "service")}::text, category=${str(f.category)},
+      default_cost=coalesce(${defaultCost}, default_cost), default_rate=coalesce(${defaultRate}, default_rate),
+      unit=coalesce(${unit}, unit), is_active=${f.isActive !== false} where id=${id}`); s.updated++; return id; }
+    const ins = (await db.execute(sql`insert into items (org_id, kind, code, name, category, default_cost, default_rate, unit, is_active, custom)
+      values (${orgId}, ${String(f.kind ?? "service")}::text, ${(f.code as string) ?? null}, ${name}, ${str(f.category)},
+              ${defaultCost}, ${defaultRate}, ${unit}, ${f.isActive !== false}, ${custom}::jsonb) returning id`)) as { rows: { id: string }[] };
     s.created++; return ins.rows[0]?.id ?? null;
   }
 

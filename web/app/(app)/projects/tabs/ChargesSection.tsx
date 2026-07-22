@@ -1,5 +1,6 @@
 'use client'
 
+import { useMoney } from '@/components/money-provider'
 import { useMemo, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { useTranslations } from 'next-intl'
@@ -7,8 +8,6 @@ import { toast } from 'sonner'
 import { Badge, Button, Card, CardContent, Input, Label, SearchSelect } from '@openbooks/ui'
 import { KpiStrip } from '../../../../components/kpi-strip'
 import { PagedTable } from '../../../../components/paged-table'
-import { money } from '../../../../lib/format'
-
 export interface ChargeItemOption {
   id: string
   name: string
@@ -48,6 +47,7 @@ export function ChargesSection({
   formOpen: boolean
   onFormOpenChange: (open: boolean) => void
 }) {
+  const { money } = useMoney()
   const t = useTranslations('projects.charges')
   const tCommon = useTranslations('common')
   const router = useRouter()

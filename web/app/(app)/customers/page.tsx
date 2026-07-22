@@ -13,7 +13,7 @@ import { resolveNav } from '../../../lib/nav/resolve'
 import { reportSubsidiaryView } from '../../../lib/consolidation'
 import { resolveAsOf } from '../../../lib/cash/core'
 import { customersHome, type CustomerExposureRow } from '../../../lib/module-home/customers'
-import { moneyCompact } from '../../../lib/format'
+import { getMoneyFormatter } from '@/lib/money-server'
 import { RelationshipsTable } from './RelationshipsTable'
 
 export const dynamic = 'force-dynamic'
@@ -36,6 +36,7 @@ export default async function CustomersHomePage({
 }: {
   searchParams: Promise<Record<string, string | undefined>>
 }) {
+  const { moneyCompact } = await getMoneyFormatter()
   const authz = await getAuthz()
   if (!authz) redirect('/login')
   // The workspace spans CRM + AR + records — any of the group's read
@@ -92,7 +93,7 @@ export default async function CustomersHomePage({
     .filter((i) => i.href !== '/customers' && i.href !== '/ar')
     .map((i) => ({ href: i.href, label: i.label, iconKey: i.iconKey, badge: badgeFor(i.href) }))
 
-  const attention = needsAttention(data.topExposure, t)
+  const attention = needsAttention(data.topExposure, t, moneyCompact)
   const trendLabels = data.trend.map((w) => weekLabel(w.weekStart))
 
   return (
@@ -257,7 +258,7 @@ export default async function CustomersHomePage({
 
 type T = Awaited<ReturnType<typeof getTranslations<'customers'>>>
 
-function needsAttention(exposure: CustomerExposureRow[], t: T) {
+function needsAttention(exposure: CustomerExposureRow[], t: T, moneyCompact: (value: number) => string) {
   const items: { tone: 'negative' | 'warning'; text: string; href: string }[] = []
   for (const r of exposure) {
     if (r.overdue > 0) {

@@ -3,6 +3,7 @@ import {
   ConsolidationError,
   deriveConsolidatedRates,
   runAutoElimination,
+  runOwnershipConsolidation,
 } from '@openbooks/engine/src/consolidation.ts'
 import { guardPermission } from '../../../lib/authz'
 import { isUuid } from '../../../lib/list-params'
@@ -25,9 +26,9 @@ export async function POST(req: Request) {
     action?: string
     periodId?: string
   }
-  if (!periodId || !isUuid(periodId) || !['derive-rates', 'eliminate'].includes(action ?? '')) {
+  if (!periodId || !isUuid(periodId) || !['derive-rates', 'ownership', 'eliminate', 'consolidate'].includes(action ?? '')) {
     return NextResponse.json(
-      { error: 'periodId and action (derive-rates|eliminate) required' },
+      { error: 'periodId and action (derive-rates|ownership|eliminate|consolidate) required' },
       { status: 400 },
     )
   }
@@ -36,6 +37,16 @@ export async function POST(req: Request) {
     if (action === 'derive-rates') {
       const written = await deriveConsolidatedRates(user.orgId, periodId)
       return NextResponse.json({ ok: true, written })
+    }
+    if (action === 'ownership') {
+      const result = await runOwnershipConsolidation(user.orgId, periodId, user.id)
+      return NextResponse.json({ ok: true, ...result })
+    }
+    if (action === 'consolidate') {
+      const ratesWritten = await deriveConsolidatedRates(user.orgId, periodId)
+      const ownership = await runOwnershipConsolidation(user.orgId, periodId, user.id)
+      const elimination = await runAutoElimination(user.orgId, periodId, user.id)
+      return NextResponse.json({ ok: true, ratesWritten, ownership, elimination })
     }
     const { entryId, lineCount } = await runAutoElimination(user.orgId, periodId, user.id)
     return NextResponse.json({ ok: true, entryId, lineCount })

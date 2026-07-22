@@ -1,3 +1,4 @@
+import { getMoneyFormatter } from '@/lib/money-server'
 import Link from 'next/link'
 import { getTranslations } from 'next-intl/server'
 import { sql } from 'drizzle-orm'
@@ -20,7 +21,6 @@ import { Pagination } from '../../../components/pagination'
 import { SortTh } from '../../../components/sortable-th'
 import { can, requirePermission } from '../../../lib/authz'
 import { isUuid, parseListParams, pickString } from '../../../lib/list-params'
-import { money } from '../../../lib/format'
 import { RunRecognitionButton } from './RunRecognitionButton'
 import { ContractDrawer } from './ContractDrawer'
 import { loadContract } from './_lib'
@@ -47,6 +47,7 @@ export default async function Revenue({
 }: {
   searchParams: Promise<Record<string, string | string[] | undefined>>
 }) {
+  const { money } = await getMoneyFormatter()
   const [t, tCommon] = await Promise.all([getTranslations('revenue'), getTranslations('common')])
 
   const authz = await requirePermission('ar.read')

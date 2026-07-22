@@ -1,6 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import {
+  canonicalCustomerPartyId,
   deterministicUuid,
   resolveCustomerReference,
   translateAdjustments,
@@ -13,6 +14,24 @@ test("deterministic source identities are stable and resource-separated", () => 
   assert.match(
     deterministicUuid("rate", 42),
     /^[0-9a-f]{8}-[0-9a-f]{4}-5[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/,
+  );
+});
+
+test("customer import reuses the NetSuite party identity", () => {
+  const existingId = "019f5ea3-697a-737e-9a70-07afebf35bc3";
+  assert.equal(
+    canonicalCustomerPartyId(
+      { id: 1, NetsuiteID: 2110, Name: "365 Industrial Solutions Inc" },
+      new Map([["2110", existingId]]),
+    ),
+    existingId,
+  );
+  assert.equal(
+    canonicalCustomerPartyId(
+      { id: 1, NetsuiteID: 2110, Name: "365 Industrial Solutions Inc" },
+      new Map(),
+    ),
+    deterministicUuid("customer", 1),
   );
 });
 

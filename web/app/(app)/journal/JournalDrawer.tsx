@@ -1,5 +1,6 @@
 'use client'
 
+import { useMoney } from '@/components/money-provider'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
@@ -13,7 +14,6 @@ import { CustomFieldInput } from '../../../components/custom-field-input'
 import { HeaderFields } from '../../../components/transaction-form/header-fields'
 import { DocTypeBadge, docTypeMeta } from '../../../components/doc-type-badge'
 import { PdfButton } from '../../../components/pdf-button'
-import { money } from '../../../lib/format'
 import { confirmDialog } from '../../../lib/confirm'
 import {
   customFieldDefKey,
@@ -130,6 +130,7 @@ export function JournalDrawer({
   lineDefs: CustomFieldDefClient[]
   layout?: FormLayoutConfig
 }) {
+  const { money } = useMoney()
   const t = useTranslations('journal.drawer')
   const tc = useTranslations('common')
   const router = useRouter()
@@ -433,9 +434,9 @@ export function JournalDrawer({
       }
       description={mode === 'edit' ? tc('feedback.editingHint') : (doc.party_name ?? undefined)}
       primaryAction={
-        mode === 'view' && canEditStatus ? (
-          <Button variant="outline" size="sm" className="h-8 px-2.5 text-xs" onClick={() => setMode('edit')}>
-            {tc('actions.edit')}
+        canEditStatus ? (
+          <Button variant="outline" size="sm" className="h-8 px-2.5 text-xs" disabled={busy} onClick={() => mode === 'edit' ? cancel() : setMode('edit')}>
+            {mode === 'edit' ? tc('actions.cancel') : tc('actions.edit')}
           </Button>
         ) : null
       }
@@ -445,9 +446,6 @@ export function JournalDrawer({
             <>
               <Button disabled={busy} onClick={save}>
                 {busy ? tc('actions.saving') : tc('actions.save')}
-              </Button>
-              <Button variant="outline" disabled={busy} onClick={cancel}>
-                {tc('actions.cancel')}
               </Button>
             </>
           ) : (

@@ -55,6 +55,7 @@ const DOCUMENT_WRITE_PERMS = ['documents.manage', 'ap.create', 'ar.create', 'exp
 export function canMutateFiles(authz: Authz, targetTable?: string): boolean {
   if (can(authz, 'documents.manage')) return true
   if (targetTable === 'item_rate_versions') return can(authz, 'admin.setup.manage')
+  if (targetTable === 'fixed_assets') return can(authz, 'assets.manage')
   if (targetTable !== 'documents') return false
   return DOCUMENT_WRITE_PERMS.some((p) => can(authz, p))
 }

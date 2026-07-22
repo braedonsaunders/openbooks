@@ -3,7 +3,7 @@
 import Link from 'next/link'
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { useTranslations } from 'next-intl'
+import { useLocale, useTranslations } from 'next-intl'
 import { toast } from 'sonner'
 import { Plus, Trash2 } from 'lucide-react'
 import { Badge, Button, Input, Label, SearchSelect, Select, Table, TableBody, TableCell, TableHead, TableHeader, TableRow, Textarea, UrlDrawer, cn } from '@openbooks/ui'
@@ -61,9 +61,9 @@ function rateState(row: RateRow): 'current' | 'scheduled' | 'ended' {
   return 'current'
 }
 
-function formatRate(value: string, currency: string): string {
+function formatRate(value: string, currency: string, locale: string): string {
   try {
-    return new Intl.NumberFormat(undefined, {
+    return new Intl.NumberFormat(locale, {
       style: 'currency',
       currency,
       currencyDisplay: 'code',
@@ -121,6 +121,7 @@ export function LaborCostingWorkspace(props: {
   payrollVariance: string | null
   coverage: { employees: number; covered: number; hasOrgDefault: boolean }
 }) {
+  const locale = useLocale()
   const t = useTranslations('admin.setup.laborCosting')
   const router = useRouter()
   const [busy, setBusy] = useState(false)
@@ -263,7 +264,7 @@ export function LaborCostingWorkspace(props: {
       if (!res.ok) throw new Error(j.error ?? 'failed')
       toast.success(
         t('reconciliation.variancePosted', {
-          amount: formatRate(String(j.variance), reconciliationCurrency),
+          amount: formatRate(String(j.variance), reconciliationCurrency, locale),
         }),
       )
       await loadReconciliation()
@@ -464,7 +465,7 @@ export function LaborCostingWorkspace(props: {
                         </Link>
                       </TableCell>
                       <TableCell className="text-right tabular-nums">
-                        {formatRate(row.rate, row.currency)}
+                        {formatRate(row.rate, row.currency, locale)}
                         <span className="ml-1 text-xs text-slate-400">/{row.basis === 'year' ? t('rates.yr') : t('rates.hr')}</span>
                       </TableCell>
                       <TableCell className="tabular-nums">{row.effective_from}</TableCell>
@@ -654,13 +655,13 @@ export function LaborCostingWorkspace(props: {
               {t('components.example', { wage: exampleWage.toFixed(2) })}
               <div className="mt-1 flex gap-4 font-medium tabular-nums text-slate-900 dark:text-slate-100">
                 <span>
-                  {t('components.exampleReg')}: {formatRate(String(previewRate(exampleWage, 1, live)), props.orgCurrency)}/h
+                  {t('components.exampleReg')}: {formatRate(String(previewRate(exampleWage, 1, live)), props.orgCurrency, locale)}/h
                 </span>
                 <span>
-                  {t('components.exampleOt')}: {formatRate(String(previewRate(exampleWage, 1.5, live)), props.orgCurrency)}/h
+                  {t('components.exampleOt')}: {formatRate(String(previewRate(exampleWage, 1.5, live)), props.orgCurrency, locale)}/h
                 </span>
                 <span>
-                  {t('components.exampleDt')}: {formatRate(String(previewRate(exampleWage, 2, live)), props.orgCurrency)}/h
+                  {t('components.exampleDt')}: {formatRate(String(previewRate(exampleWage, 2, live)), props.orgCurrency, locale)}/h
                 </span>
               </div>
             </div>
@@ -777,7 +778,7 @@ export function LaborCostingWorkspace(props: {
                   <div key={k} className="rounded-md bg-slate-50 p-2.5 dark:bg-slate-800/60">
                     <div className="text-xs text-slate-500 dark:text-slate-400">{t(`reconciliation.${k}`)}</div>
                     <div className={cn('text-sm font-semibold tabular-nums', k !== 'standardPosted' && k !== 'payrollPosted' && Number(v) !== 0 ? 'text-amber-600 dark:text-amber-400' : 'text-slate-900 dark:text-slate-100')}>
-                      {formatRate(v, rec.currency)}
+                      {formatRate(v, rec.currency, locale)}
                     </div>
                   </div>
                 ))}
@@ -798,7 +799,7 @@ export function LaborCostingWorkspace(props: {
                     {
                       key: 'standard',
                       header: t('reconciliation.standardCost'),
-                      cell: (r) => <span className="tabular-nums">{formatRate(r.standard, rec.currency)}</span>,
+                      cell: (r) => <span className="tabular-nums">{formatRate(r.standard, rec.currency, locale)}</span>,
                     },
                   ]}
                 />
@@ -847,6 +848,7 @@ function RateDrawer({
   orgCurrency: string
   closeHref: string
 }) {
+  const locale = useLocale()
   const t = useTranslations('admin.setup.laborCosting')
   const tc = useTranslations('common')
   const router = useRouter()
@@ -1058,7 +1060,7 @@ function RateDrawer({
             {rate ? (
               <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
                 {t('rates.hourlyEquivalent', {
-                  amount: formatRate(String(Number(rate) / (Number(annualHours) || defaultAnnualHours)), currency),
+                  amount: formatRate(String(Number(rate) / (Number(annualHours) || defaultAnnualHours)), currency, locale),
                 })}
               </p>
             ) : null}

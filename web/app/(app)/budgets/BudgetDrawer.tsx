@@ -1,5 +1,6 @@
 'use client'
 
+import { useMoney } from '@/components/money-provider'
 import Link from 'next/link'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { usePathname, useRouter } from 'next/navigation'
@@ -11,7 +12,6 @@ import { FlowManualButtons } from '../../../components/flow-manual-buttons'
 import { ApprovalActions } from '../../../components/approval-actions'
 import { SearchInput } from '../../../components/search-input'
 import { Pagination } from '../../../components/pagination'
-import { money } from '../../../lib/format'
 import { mergeHref } from '../../../lib/list-params'
 import { budgetFromUnits, budgetToUnits, spreadBudgetTotal, upliftBudgetAmount } from '../../../lib/budget-math'
 import type { BudgetDimensions, BudgetStatus, BudgetWorkspace } from '../../../lib/budgets'
@@ -46,6 +46,7 @@ export function BudgetDrawer({
   canApprove: boolean
   canExport: boolean
 }) {
+  const { money } = useMoney()
   const t = useTranslations('budgets')
   const router = useRouter()
   const pathname = usePathname()

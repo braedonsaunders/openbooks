@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server'
 import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/db.ts'
 import { guardPermission } from '../../../../../lib/authz'
-import { FEATURE_BY_KEY } from '../../../../../lib/features'
+import { FEATURE_BY_KEY, featureDisableBlocked } from '../../../../../lib/features'
 
 export const dynamic = 'force-dynamic'
 
@@ -22,6 +22,15 @@ export async function PUT(req: Request) {
   for (const [key, value] of Object.entries(input)) {
     if (FEATURE_BY_KEY.has(key) && typeof value === 'boolean') clean[key] = value
   }
+
+  // A feature whose disable-check is hard-blocked can't be turned off — its data
+  // is structurally load-bearing (e.g. the ledger is partitioned per subsidiary).
+  for (const [key, value] of Object.entries(clean)) {
+    if (value === false && (await featureDisableBlocked(orgId, key))) {
+      return NextResponse.json({ error: 'feature-blocked', key }, { status: 409 })
+    }
+  }
+
   await db.execute(sql`
     update orgs set settings = jsonb_set(coalesce(settings, '{}'::jsonb), '{features}',
       coalesce(settings->'features', '{}'::jsonb) || ${JSON.stringify(clean)}::jsonb)

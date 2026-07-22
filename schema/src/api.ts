@@ -58,6 +58,15 @@ export const apiKeys = pgTable(
      * closest to source platform's role-bound token).
      */
     scopes: jsonb("scopes").$type<PermissionKey[]>().notNull().default([]),
+    /**
+     * Max requests per minute for this key (fixed-window). NULL = unlimited.
+     * Defaults to 120; existing keys backfill to 120 via the 0049 migration.
+     */
+    rateLimitPerMin: integer("rate_limit_per_min").default(120),
+    /** Start of the current 1-minute window (truncated to the minute). */
+    rateWindowStart: timestamp("rate_window_start", { withTimezone: true }),
+    /** Requests counted in the current window. */
+    rateWindowCount: integer("rate_window_count").notNull().default(0),
     isActive: boolean("is_active").notNull().default(true),
     /** Null = no expiry. Set for rotation policies. */
     expiresAt: timestamp("expires_at", { withTimezone: true }),

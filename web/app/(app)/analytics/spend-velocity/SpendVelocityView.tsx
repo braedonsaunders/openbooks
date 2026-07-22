@@ -15,7 +15,7 @@ import { Donut, Chart, TrendChart } from '../_ui/charts'
 import { DrillDrawer } from '../_ui/DrillDrawer'
 import { ConfigEditor } from '../_ui/ConfigEditor'
 import { exportCsv } from '../_ui/exportCsv'
-import { fmtMoney } from '../_ui/format'
+import { useAnalyticsMoney } from '../_ui/format'
 
 /* ------------------------------------------------------------------ helpers */
 
@@ -26,9 +26,6 @@ const TAB_LABEL: Record<Tab, string> = {
   overview: 'Overview', velocity: 'Velocity', detectors: 'Detectors', accounts: 'Accounts',
   trends: 'Trends', config: 'Configuration',
 }
-
-const money = (n: number) => fmtMoney(n, { compact: true })
-const money0 = (n: number) => fmtMoney(n)
 const pct1 = (v: number, d = 1) => `${v.toFixed(d)}%`
 
 /** Gantry velocity pill colouring: hot >15, warm >5, cold <−5, else cool. */
@@ -106,6 +103,8 @@ type Drill = { kind: 'account' | 'vendor'; id: string; name: string } | null
 /* ------------------------------------------------------------------- shell */
 
 export function SpendVelocityView({ data }: { data: SpendVelocityData }) {
+  const fmtMoney = useAnalyticsMoney()
+  const money = (n: number) => fmtMoney(n, { compact: true })
   const [tab, setTab] = useState<Tab>('overview')
   const [drill, setDrill] = useState<Drill>(null)
   const s = data.summary
@@ -154,6 +153,9 @@ export function SpendVelocityView({ data }: { data: SpendVelocityData }) {
 /* ---------------------------------------------------------------- Overview */
 
 function OverviewTab({ data, onDrill }: { data: SpendVelocityData; onDrill: (d: Drill) => void }) {
+  const fmtMoney = useAnalyticsMoney()
+  const money = (n: number) => fmtMoney(n, { compact: true })
+  const money0 = (n: number) => fmtMoney(n)
   const accounts = data.accountVelocity
   const byVelocity = [...accounts].sort((a, b) => b.velocity - a.velocity).slice(0, 6)
   const top10 = accounts.slice(0, 10)
@@ -264,6 +266,8 @@ function OverviewTab({ data, onDrill }: { data: SpendVelocityData; onDrill: (d: 
 /* ---------------------------------------------------- detector grid (shared) */
 
 function DetectorGrid({ data, compact, selected, onSelect }: { data: SpendVelocityData; compact?: boolean; selected?: string; onSelect?: (k: string) => void }) {
+  const fmtMoney = useAnalyticsMoney()
+  const money = (n: number) => fmtMoney(n, { compact: true })
   const cliff = data.commitmentCliff.summary
   const tiles: { key: string; label: string; icon: typeof Bug; tone: string; count: string; active: boolean; metric: string; sub: string; desc: string }[] = [
     { key: 'frog', label: 'Boiling Frog', icon: Bug, tone: 'text-violet-500', count: String(data.boilingFrog.summary.count), active: data.boilingFrog.summary.count > 0, metric: money(data.boilingFrog.summary.totalAnnualizedCreep), sub: 'annual impact', desc: 'Silent cost creep' },
@@ -323,6 +327,8 @@ function DetectorGrid({ data, compact, selected, onSelect }: { data: SpendVeloci
 /* ---------------------------------------------------------------- Velocity */
 
 function VelocityTab({ data, onDrill }: { data: SpendVelocityData; onDrill: (d: Drill) => void }) {
+  const fmtMoney = useAnalyticsMoney()
+  const money0 = (n: number) => fmtMoney(n)
   return (
     <div className="grid grid-cols-1 gap-5 lg:grid-cols-12">
       <div className="lg:col-span-7">
@@ -403,6 +409,8 @@ interface Alert {
 }
 
 function DetectorsTab({ data, onDrill }: { data: SpendVelocityData; onDrill: (d: Drill) => void }) {
+  const fmtMoney = useAnalyticsMoney()
+  const money0 = (n: number) => fmtMoney(n)
   const [selected, setSelected] = useState('all')
 
   const alerts = useMemo(() => {
@@ -478,6 +486,9 @@ function DetectorsTab({ data, onDrill }: { data: SpendVelocityData; onDrill: (d:
 type AcctFilter = 'all' | 'increases' | 'decreases' | 'highvel' | 'new'
 
 function AccountsTab({ data, onDrill }: { data: SpendVelocityData; onDrill: (d: Drill) => void }) {
+  const fmtMoney = useAnalyticsMoney()
+  const money = (n: number) => fmtMoney(n, { compact: true })
+  const money0 = (n: number) => fmtMoney(n)
   const cmp = data.periodComparison
   const [filter, setFilter] = useState<AcctFilter>('all')
   const [search, setSearch] = useState('')
@@ -586,6 +597,9 @@ function AccountsTab({ data, onDrill }: { data: SpendVelocityData; onDrill: (d: 
 /* ------------------------------------------------------------------ Trends */
 
 function TrendsTab({ data }: { data: SpendVelocityData }) {
+  const fmtMoney = useAnalyticsMoney()
+  const money = (n: number) => fmtMoney(n, { compact: true })
+  const money0 = (n: number) => fmtMoney(n)
   const t = data.monthlyTrends
   return (
     <div className="space-y-5">
@@ -678,14 +692,15 @@ function TrendsTab({ data }: { data: SpendVelocityData }) {
 /* ----------------------------------------------------------- Configuration */
 
 function ConfigTab({ data }: { data: SpendVelocityData }) {
+  const fmtMoney = useAnalyticsMoney()
   const c = data.config
   const items = [
     { label: 'Velocity thresholds', value: `${c.velocityMediumThreshold}% / ${c.velocityHighThreshold}%`, note: 'Rising / high monthly CAGR cutoffs' },
     { label: 'Anomaly threshold', value: `${c.anomalyStdDevThreshold}σ`, note: 'Z-score for statistical outliers (critical at 3σ)' },
     { label: 'Boiling frog', value: `${c.boilingFrogMonths} months`, note: 'Minimum months of small (<10%) monotonic increases' },
     { label: 'Zombie window', value: `${c.zombieMinMonths} months`, note: 'Identical recurring vendor totals (<1% deviation)' },
-    { label: 'Fragmentation', value: `>${c.fragmentationMinTxns}/mo & <$${c.fragmentationMaxAvgSize}`, note: 'Transactions per month / avg transaction size' },
-    { label: 'Velocity engine', value: 'Monthly CAGR', note: `(end/start)^(1/periods) − 1 with $${c.minBaseAmount} minimum base` },
+    { label: 'Fragmentation', value: `>${c.fragmentationMinTxns}/mo & <${fmtMoney(c.fragmentationMaxAvgSize)}`, note: 'Transactions per month / avg transaction size' },
+    { label: 'Velocity engine', value: 'Monthly CAGR', note: `(end/start)^(1/periods) − 1 with ${fmtMoney(c.minBaseAmount)} minimum base` },
   ]
   return (
     <div className="grid grid-cols-1 gap-5 lg:grid-cols-2">
@@ -699,7 +714,7 @@ function ConfigTab({ data }: { data: SpendVelocityData }) {
             { key: 'boilingFrogMonths', label: 'Boiling frog months', help: 'Minimum months of sustained small increases', min: 3, max: 24, step: 1 },
             { key: 'zombieMinMonths', label: 'Zombie months', help: 'Identical monthly vendor totals for at least this many months', min: 3, max: 24, step: 1 },
             { key: 'fragmentationMinTxns', label: 'Fragmentation txns/mo', help: 'Monthly transaction count above this (below the size cap) flags fragmentation', min: 5, max: 500, step: 5 },
-            { key: 'fragmentationMaxAvgSize', label: 'Fragmentation avg size ($)', help: 'Average transaction size cap for the fragmentation detector', min: 50, max: 10_000, step: 50 },
+            { key: 'fragmentationMaxAvgSize', label: 'Fragmentation average size', help: 'Average transaction size cap for the fragmentation detector', min: 50, max: 10_000, step: 50 },
           ]}
           values={c as unknown as Record<string, number>}
           defaults={{ velocityHighThreshold: 15, velocityMediumThreshold: 5, anomalyStdDevThreshold: 2.5, boilingFrogMonths: 6, zombieMinMonths: 6, fragmentationMinTxns: 20, fragmentationMaxAvgSize: 500 }}

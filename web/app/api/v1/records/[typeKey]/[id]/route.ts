@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { sql } from "drizzle-orm";
 import { db } from "@openbooks/engine/src/db.ts";
-import { canApi, logKeyEvent, resolveApiKeyAuth, type ApiKeyAuth } from "../../../../../../lib/api-auth";
+import { canApi, enforceRateLimit, logKeyEvent, resolveApiKeyAuth, type ApiKeyAuth } from "../../../../../../lib/api-auth";
 import { loadApiSchema, resolveApiType } from "../../../../../../lib/api/schema-registry";
 import { deleteRecord, updateRecord } from "../../../../../../lib/api/writers";
 import { isUuid } from "../../../../../../lib/list-params";
@@ -18,6 +18,8 @@ export async function GET(
 
   const auth = await resolveApiKeyAuth(req);
   if (!auth) return NextResponse.json({ error: "invalid or missing API key" }, { status: 401 });
+  const limited = await enforceRateLimit(auth, req, start);
+  if (limited) return limited;
   if (!isUuid(id)) return NextResponse.json({ error: "invalid id" }, { status: 400 });
 
   const resolved = await resolveApiType(auth.user.orgId, typeKey);
@@ -53,6 +55,8 @@ export async function PATCH(
 
   const auth = await resolveApiKeyAuth(req);
   if (!auth) return NextResponse.json({ error: "invalid or missing API key" }, { status: 401 });
+  const limited = await enforceRateLimit(auth, req, start);
+  if (limited) return limited;
   if (!isUuid(id)) return NextResponse.json({ error: "invalid id" }, { status: 400 });
 
   const gate = await guardWrite(auth, typeKey, "update", req, start);
@@ -86,6 +90,8 @@ export async function DELETE(
 
   const auth = await resolveApiKeyAuth(req);
   if (!auth) return NextResponse.json({ error: "invalid or missing API key" }, { status: 401 });
+  const limited = await enforceRateLimit(auth, req, start);
+  if (limited) return limited;
   if (!isUuid(id)) return NextResponse.json({ error: "invalid id" }, { status: 400 });
 
   const gate = await guardWrite(auth, typeKey, "delete", req, start);

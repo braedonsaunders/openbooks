@@ -14,7 +14,7 @@ import { Panel } from '../_ui/Panel'
 import { Donut, Chart } from '../_ui/charts'
 import { ConfigEditor } from '../_ui/ConfigEditor'
 import { useSort } from '../_ui/useSort'
-import { fmtMoney } from '../_ui/format'
+import { useAnalyticsMoney } from '../_ui/format'
 
 /* ------------------------------------------------------------------ helpers */
 
@@ -24,9 +24,6 @@ const TAB_LABEL: Record<Tab, string> = {
   overview: 'Overview', intelligence: 'Intelligence', departments: 'Departments',
   items: 'Items', titles: 'Titles', employees: 'Employees', config: 'Configuration',
 }
-
-const money = (n: number) => fmtMoney(n, { compact: true })
-const money0 = (n: number) => fmtMoney(n)
 const pct1 = (v: number | null | undefined, d = 1) => (v == null || isNaN(v) ? '—' : `${Number(v).toFixed(d)}%`)
 const hrs0 = (n: number) => `${Math.round(n).toLocaleString('en-US')}`
 
@@ -39,6 +36,8 @@ function statusTone(pct: number, target: number) {
 
 /** Trend chip: delta in pp, $ or plain hours — green when moving the good way. */
 function TrendDelta({ delta, goodIfUp, unit = 'pp', digits = 1 }: { delta: number; goodIfUp: boolean; unit?: 'pp' | 'money' | 'hours'; digits?: number }) {
+  const fmtMoney = useAnalyticsMoney()
+  const money = (n: number) => fmtMoney(n, { compact: true })
   if (!delta || Math.abs(delta) < (unit === 'pp' ? 0.05 : 0.5)) return <span className="text-xs text-slate-400 dark:text-slate-500">—</span>
   const good = goodIfUp ? delta > 0 : delta < 0
   const Icon = delta > 0 ? TrendingUp : TrendingDown
@@ -117,6 +116,8 @@ interface Entry {
 function EntriesDrawer({ kind, id, name, sub, peer, from, to, onClose }: {
   kind: 'employee' | 'item'; id: string; name: string; sub?: string; peer?: { title: string; empPct: number; peerAvg: number; peerCount: number }; from: string; to: string; onClose: () => void
 }) {
+  const fmtMoney = useAnalyticsMoney()
+  const money0 = (n: number) => fmtMoney(n)
   const [entries, setEntries] = useState<Entry[] | null>(null)
   const [error, setError] = useState(false)
   const [view, setView] = useState<'entries' | 'byItem' | 'byCustomer'>('entries')
@@ -239,6 +240,8 @@ type Flyout = { kind: 'employee' | 'item'; id: string; name: string; sub?: strin
 /* ------------------------------------------------------------------- shell */
 
 export function UtilizationView({ data }: { data: UtilizationData }) {
+  const fmtMoney = useAnalyticsMoney()
+  const money = (n: number) => fmtMoney(n, { compact: true })
   const [tab, setTab] = useState<Tab>('overview')
   const [flyout, setFlyout] = useState<Flyout>(null)
   const target = data.config.target
@@ -294,6 +297,9 @@ function intelligenceScope(data: UtilizationData) {
 /* ---------------------------------------------------------------- Overview */
 
 function OverviewTab({ data }: { data: UtilizationData }) {
+  const fmtMoney = useAnalyticsMoney()
+  const money = (n: number) => fmtMoney(n, { compact: true })
+  const money0 = (n: number) => fmtMoney(n)
   const target = data.config.target
   const c = data.company.range
   const p = data.company.prior
@@ -505,6 +511,8 @@ function useForecasts(data: UtilizationData) {
 }
 
 function ForecastingSub({ data }: { data: UtilizationData }) {
+  const fmtMoney = useAnalyticsMoney()
+  const money = (n: number) => fmtMoney(n, { compact: true })
   const target = data.config.target
   const f = useForecasts(data)
   const labels = [...data.history.periods.map((p) => p.label).reverse(), 'Current', 'Projected']
@@ -804,6 +812,9 @@ function useWhatIf(data: UtilizationData) {
 }
 
 function WhatIfSub({ data }: { data: UtilizationData }) {
+  const fmtMoney = useAnalyticsMoney()
+  const money = (n: number) => fmtMoney(n, { compact: true })
+  const money0 = (n: number) => fmtMoney(n)
   const target = data.config.target
   const w = useWhatIf(data)
   const be = w.be
@@ -824,7 +835,7 @@ function WhatIfSub({ data }: { data: UtilizationData }) {
 
       <div className="grid grid-cols-1 gap-5 lg:grid-cols-12">
         <div className="lg:col-span-7">
-          <Panel title="Improvement Opportunities" icon={Lightbulb} hint="“If we improved [Title X] by 5%, we'd save $Y”" bodyClassName="p-0">
+          <Panel title="Improvement Opportunities" icon={Lightbulb} hint="Estimated savings from a five-point utilization improvement" bodyClassName="p-0">
             {w.improvements.length ? (
               <ul className="max-h-80 divide-y divide-slate-50 overflow-y-auto dark:divide-slate-800/60">
                 {w.improvements.slice(0, 8).map((s, i) => (
@@ -993,6 +1004,8 @@ function TreemapSub({ data }: { data: UtilizationData }) {
 /* ------------------------------------------------------------- Departments */
 
 function DepartmentsTab({ data }: { data: UtilizationData }) {
+  const fmtMoney = useAnalyticsMoney()
+  const money = (n: number) => fmtMoney(n, { compact: true })
   const target = data.config.target
   const [view, setView] = useState<'cards' | 'table'>('cards')
   // Sparkline: history % billed per dept, oldest → newest, then current.
@@ -1069,6 +1082,8 @@ function DepartmentsTab({ data }: { data: UtilizationData }) {
 type SortKey = 'name' | 'percentBilled' | 'delta' | 'nonBillableCost' | 'hours'
 
 function GroupTable({ rows, target, kind, onDrill }: { rows: UGroupRow[]; target: number; kind: 'department' | 'item' | 'employee'; onDrill?: (r: UGroupRow) => void }) {
+  const fmtMoney = useAnalyticsMoney()
+  const money0 = (n: number) => fmtMoney(n)
   const [sortKey, setSortKey] = useState<SortKey>(kind === 'employee' ? 'percentBilled' : 'nonBillableCost')
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>(kind === 'employee' ? 'asc' : 'desc')
 
@@ -1136,6 +1151,8 @@ function GroupTable({ rows, target, kind, onDrill }: { rows: UGroupRow[]; target
 /* ------------------------------------------------------------------- Items */
 
 function ItemsTab({ data, onDrill }: { data: UtilizationData; onDrill: (f: Flyout) => void }) {
+  const fmtMoney = useAnalyticsMoney()
+  const money = (n: number) => fmtMoney(n, { compact: true })
   const target = data.config.target
   const [search, setSearch] = useState('')
   const items = useMemo(
@@ -1183,6 +1200,9 @@ interface TitleGroup {
 }
 
 function TitlesTab({ data }: { data: UtilizationData }) {
+  const fmtMoney = useAnalyticsMoney()
+  const money = (n: number) => fmtMoney(n, { compact: true })
+  const money0 = (n: number) => fmtMoney(n)
   const target = data.config.target
   const [open, setOpen] = useState<TitleGroup | null>(null)
 
@@ -1279,6 +1299,8 @@ function TitlesTab({ data }: { data: UtilizationData }) {
 /* --------------------------------------------------------------- Employees */
 
 function EmployeesTab({ data, onDrill }: { data: UtilizationData; onDrill: (f: Flyout) => void }) {
+  const fmtMoney = useAnalyticsMoney()
+  const money = (n: number) => fmtMoney(n, { compact: true })
   const target = data.config.target
   const minHours = data.config.minHours
   const [dept, setDept] = useState('__ALL__')

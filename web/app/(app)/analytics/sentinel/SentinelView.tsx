@@ -15,7 +15,7 @@ import { ConfigEditor } from '../_ui/ConfigEditor'
 import { exportCsv } from '../_ui/exportCsv'
 import { useSort } from '../_ui/useSort'
 import { TxnLink } from '../../reports/TxnLink'
-import { fmtMoney } from '../_ui/format'
+import { useAnalyticsMoney } from '../_ui/format'
 
 /* ------------------------------------------------------------------ helpers */
 
@@ -25,9 +25,6 @@ const TAB_LABEL: Record<Tab, string> = {
   overview: 'Overview', benford: 'Benford', analysis: 'Analysis', detection: 'Detection',
   vendors: 'Vendors', audit: 'Audit Trail', config: 'Configuration',
 }
-
-const money = (n: number) => fmtMoney(n, { compact: true })
-const money0 = (n: number) => fmtMoney(n)
 const num = (n: number) => n.toLocaleString('en-US')
 
 function riskTone(score: number) {
@@ -86,6 +83,8 @@ const FLAG_BADGE: Record<FlaggedDoc['flagType'], { label: string; cls: string }>
 }
 
 function FlaggedTable({ items, showReason = true }: { items: FlaggedDoc[]; showReason?: boolean }) {
+  const fmtMoney = useAnalyticsMoney()
+  const money0 = (n: number) => fmtMoney(n)
   return (
     <div className="max-h-128 overflow-y-auto">
       <table className="w-full text-sm">
@@ -136,6 +135,8 @@ function SubPills<T extends string>({ value, onChange, options }: { value: T; on
 /* ------------------------------------------------------------------- shell */
 
 export function SentinelView({ data }: { data: SentinelData }) {
+  const fmtMoney = useAnalyticsMoney()
+  const money = (n: number) => fmtMoney(n, { compact: true })
   const [tab, setTab] = useState<Tab>('overview')
   const [drill, setDrill] = useState<DrillTarget | null>(null)
   const s = data.summary
@@ -259,6 +260,8 @@ function OverviewTab({ data }: { data: SentinelData }) {
 /* ----------------------------------------------------------------- Benford */
 
 function BenfordTab({ data }: { data: SentinelData }) {
+  const fmtMoney = useAnalyticsMoney()
+  const money = (n: number) => fmtMoney(n, { compact: true })
   const [sub, setSub] = useState<'1d' | '2d' | 'trap'>('1d')
   const [drill, setDrill] = useState<{ digit: number; dim: '1d' | '2d' } | null>(null)
   const b1 = data.benford1D
@@ -388,7 +391,7 @@ function BenfordTab({ data }: { data: SentinelData }) {
           </div>
           <p className="flex items-start gap-2 rounded-lg bg-sky-50 p-3 text-xs leading-relaxed text-sky-800 dark:bg-sky-950/30 dark:text-sky-300">
             <Info size={14} className="mt-0.5 shrink-0" />
-            <span>Amounts just below round thresholds ($x99, $x999, $x9999) can indicate purchases engineered to stay under an approval limit. Recurrent traps from the same requester or vendor warrant review.</span>
+            <span>Amounts just below round thresholds (ending in 99, 999, or 9999) can indicate purchases engineered to stay under an approval limit. Recurrent traps from the same requester or vendor warrant review.</span>
           </p>
           <Panel title="Threshold-Trap Documents" icon={FileWarning} bodyClassName="p-0">
             <FlaggedTable items={trap.items} showReason={false} />
@@ -401,6 +404,8 @@ function BenfordTab({ data }: { data: SentinelData }) {
 
 /** Benford digit → transactions drill (Gantry openBenford1DDigitFlyout). */
 function BenfordDrill({ digit, dim, from, to, onClose }: { digit: number; dim: '1d' | '2d'; from: string; to: string; onClose: () => void }) {
+  const fmtMoney = useAnalyticsMoney()
+  const money = (n: number) => fmtMoney(n, { compact: true })
   const [data, setData] = useState<any>(null)
   const [error, setError] = useState(false)
   useEffect(() => {
@@ -452,6 +457,9 @@ function BenfordDrill({ digit, dim, from, to, onClose }: { digit: number; dim: '
 /* ---------------------------------------------------------------- Analysis */
 
 function AnalysisTab({ data }: { data: SentinelData }) {
+  const fmtMoney = useAnalyticsMoney()
+  const money = (n: number) => fmtMoney(n, { compact: true })
+  const money0 = (n: number) => fmtMoney(n)
   const [sub, setSub] = useState<'rsf' | 'zscore' | 'calendar'>('rsf')
 
   const calendarOption = useMemo(() => {
@@ -574,6 +582,9 @@ function AnalysisTab({ data }: { data: SentinelData }) {
 /* --------------------------------------------------------------- Detection */
 
 function DetectionTab({ data }: { data: SentinelData }) {
+  const fmtMoney = useAnalyticsMoney()
+  const money = (n: number) => fmtMoney(n, { compact: true })
+  const money0 = (n: number) => fmtMoney(n)
   const [sub, setSub] = useState<'flagged' | 'duplicates' | 'weekend' | 'sequential' | 'ghost'>('flagged')
   const s = data.summary
   return (
@@ -610,7 +621,7 @@ function DetectionTab({ data }: { data: SentinelData }) {
           <div className="grid grid-cols-2 gap-3 lg:grid-cols-3">
             <KpiCard icon={Copy} accent="red" label="Duplicate Pairs" value={num(data.duplicates.total)} sub="all matching pairs" tone="negative" />
             <KpiCard icon={Scale} accent="amber" label="Value at Risk" value={money(s.totalDuplicateAmount)} sub="sum of pair amounts" />
-            <KpiCard icon={Info} accent="slate" label="Rule" value="≤14 days" sub="same vendor + kind + amount, ≥$100" />
+            <KpiCard icon={Info} accent="slate" label="Rule" value="≤14 days" sub={`same vendor + kind + amount, ≥${money(100)}`} />
           </div>
           <Panel title="Potential Duplicate Pairs" icon={Copy} hint="Both documents open in their native module" bodyClassName="p-0">
             <div className="max-h-128 overflow-y-auto">
@@ -732,6 +743,8 @@ function DetectionTab({ data }: { data: SentinelData }) {
 /* ------------------------------------------------------------------ Vendors */
 
 function VendorsTab({ data, onDrill }: { data: SentinelData; onDrill: (t: DrillTarget) => void }) {
+  const fmtMoney = useAnalyticsMoney()
+  const money0 = (n: number) => fmtMoney(n)
   const { sorted, SortTh } = useSort(data.vendorRisk, { key: 'compositeScore', dir: 'desc' })
   return (
     <Panel title="Vendor Risk Roll-Up" icon={ShieldAlert} hint="Parties ranked by flag severity across all detectors · click a row for that party's transactions" bodyClassName="p-0">
@@ -821,12 +834,14 @@ function AuditTab({ data }: { data: SentinelData }) {
 /* ----------------------------------------------------------- Configuration */
 
 function ConfigTab({ data }: { data: SentinelData }) {
+  const fmtMoney = useAnalyticsMoney()
+  const money = (n: number) => fmtMoney(n, { compact: true })
   const c = data.config
   const items = [
-    { label: 'Duplicates', value: `≤${c.duplicateDays}d · ≥$${c.duplicateMinAmount}`, note: 'Same vendor + document kind + amount; credits excluded; confidence by memo/date proximity' },
+    { label: 'Duplicates', value: `≤${c.duplicateDays}d · ≥${money(c.duplicateMinAmount)}`, note: 'Same vendor + document kind + amount; credits excluded; confidence by memo/date proximity' },
     { label: 'Benford conformity', value: 'MAD (Nigrini)', note: '1D bands 0.006/0.012/0.015 · 2D bands 0.0012/0.0022/0.0033' },
-    { label: 'RSF', value: '≥10×', note: 'Amount ÷ vendor 2nd-largest over a 36-month baseline ($100 baseline floor)' },
-    { label: 'Z-score', value: '|z| ≥ 3', note: 'Per-vendor mean/σ baseline, ≥5 transactions and σ > $10' },
+    { label: 'RSF', value: '≥10×', note: `Amount ÷ vendor 2nd-largest over a 36-month baseline (${money(100)} baseline floor)` },
+    { label: 'Z-score', value: '|z| ≥ 3', note: `Per-vendor mean/σ baseline, ≥5 transactions and σ > ${money(10)}` },
     { label: 'Sequential runs', value: `≥${c.sequentialMinCount} refs · ≥${c.sequentialMinDays} days`, note: 'Gap-free vendor reference numbers; 30+ day spans rank high risk' },
     { label: 'Threshold trap', value: '99 / 999 / 9999', note: 'Whole-dollar endings (.00 or .99 cents) just under round limits' },
     { label: 'Weekend', value: 'Sat / Sun', note: 'Accounting document date (migrated data carries import timestamps, so system created-time is not meaningful here)' },

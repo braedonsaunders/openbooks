@@ -1,5 +1,6 @@
 'use client'
 
+import { useMoney } from '@/components/money-provider'
 import { useMemo, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { useTranslations } from 'next-intl'
@@ -10,8 +11,6 @@ import { ConditionBuilder } from '../../../../components/conditions/ConditionBui
 import { SplitLinesEditor, type AllocationLine, type CodingConfig } from '../../../../components/allocations/SplitLinesEditor'
 import { LivePreview } from '../../../../components/live-preview/LivePreview'
 import type { ConditionGroup, FieldDef } from '../../../../lib/conditions'
-import { money } from '../../../../lib/format'
-
 interface Opt {
   value: string
   label: string
@@ -136,6 +135,7 @@ export function RuleDrawer({
   parties: Opt[]
   seedFromLine?: { description?: string | null; amount?: string | null } | null
 }) {
+  const { money } = useMoney()
   const t = useTranslations('banking.rules')
   const tCommon = useTranslations('common')
   const router = useRouter()

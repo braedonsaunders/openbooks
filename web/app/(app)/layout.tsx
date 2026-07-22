@@ -10,18 +10,22 @@ import { resolveNav } from '../../lib/nav/resolve'
 import { shellEnvironments } from '../../lib/environments'
 import { userLocalePreference } from '../../lib/locale'
 import { resolveNavMode, userNavModePreference } from '../../lib/nav-mode-resolve'
+import { orgInfo } from '../../lib/data'
+import { MoneyProvider } from '../../components/money-provider'
 
 export const dynamic = 'force-dynamic'
 
 export default async function AppLayout({ children }: { children: React.ReactNode }) {
   const authz = await getAuthz()
   if (!authz) redirect('/login')
-  const [localePreference, navMode, navModePreference, environments] = await Promise.all([
+  const [localePreference, navMode, navModePreference, environments, org] = await Promise.all([
     userLocalePreference(),
     resolveNavMode(authz.user.id, authz.user.orgId),
     userNavModePreference(authz.user.id, authz.user.orgId),
     shellEnvironments(authz),
+    orgInfo(authz.user.orgId),
   ])
+  if (!org?.base_currency) throw new Error('Organization base currency is not configured')
   const jar = await cookies()
   const defaultCollapsed = jar.get('sidebar_collapsed')?.value === '1'
 
@@ -42,9 +46,10 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   )
 
   return (
-    <ThemeProvider>
-      <NavigationProvider>
-        <AppShell
+    <MoneyProvider currency={org.base_currency}>
+      <ThemeProvider>
+        <NavigationProvider>
+          <AppShell
           account={{
             name: authz.user.name,
             email: authz.user.email,
@@ -72,13 +77,14 @@ export default async function AppLayout({ children }: { children: React.ReactNod
           canManageParties={can(authz, 'parties.manage')}
           canReadActivities={can(authz, 'crm.activities.read')}
           canManageWages={can(authz, 'admin.setup.manage')}
-        >
-          {authz.user.envKind !== 'production' && (
-            <SandboxBanner name={authz.user.sandboxName} />
-          )}
-          {children}
-        </AppShell>
-      </NavigationProvider>
-    </ThemeProvider>
+          >
+            {authz.user.envKind !== 'production' && (
+              <SandboxBanner name={authz.user.sandboxName} />
+            )}
+            {children}
+          </AppShell>
+        </NavigationProvider>
+      </ThemeProvider>
+    </MoneyProvider>
   )
 }

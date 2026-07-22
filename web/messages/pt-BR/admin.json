@@ -1134,6 +1134,43 @@
       "confirmReset": "Restaurar {name} para os padrões mantidos da biblioteca? Isso substitui as caixas de declaração configuradas.",
       "usNotice": "Os Estados Unidos não têm declaração federal de imposto sobre vendas. Este papel de trabalho deve ser personalizado para cada jurisdição estadual e local de apuração."
     },
+    "assetDepreciationSetup": {
+      "navTitle": "Book Depreciation",
+      "title": "Book Depreciation",
+      "description": "Configure reusable depreciation methods and the method, life and convention each accounting book applies to an asset category.",
+      "tabsAria": "Book depreciation setup sections",
+      "tabs": { "methods": "Methods", "books": "Book policies" }
+    },
+    "taxDepreciationSetup": {
+      "navTitle": "Tax Depreciation",
+      "title": "Tax Depreciation",
+      "description": "Install country tax-depreciation packs and configure class assignments, regimes, classes, conventions and first-year rules. This is separate from sales-tax, VAT and nexus setup.",
+      "tabsAria": "Fixed asset setup sections",
+      "tabs": { "overview": "Overview", "categories": "Asset categories", "regimes": "Tax regimes", "classes": "Tax classes", "firstYear": "First-year rules", "methods": "Methods", "books": "Book policies" },
+      "packsTitle": "Country depreciation packs",
+      "packsDescription": "Installing a pack creates editable tenant configuration. Existing overrides are never replaced.",
+      "recommended": "Company country",
+      "installed": "Installed",
+      "install": "Install pack",
+      "installing": "Installing…",
+      "installFailed": "Could not install the depreciation pack",
+      "installedToast": "Installed {count} depreciation classes",
+      "assignmentFailed": "Could not save the tax class assignment",
+      "assignmentsTitle": "Asset-category class assignments",
+      "assignmentsDescription": "Choose the default tax class for each asset category.",
+      "assetCategory": "Asset category",
+      "notAssigned": "Not assigned",
+      "classCount": "{count, plural, one {# class} other {# classes}}",
+      "models": { "pool": "Class pool", "macrs": "Per-asset MACRS" },
+      "customizeTitle": "Customize",
+      "customizeDescription": "Country packs are starting points; seeded values remain editable.",
+      "links": {
+        "regimes": { "title": "Regimes", "description": "Country, calculation model and asset class attribute." },
+        "classes": { "title": "Classes and methods", "description": "Rates, recovery periods, methods and conventions." },
+        "firstYear": { "title": "First-year rules", "description": "Effective-dated acceleration and eligibility." },
+        "assignments": { "title": "Asset-category assignments", "description": "Assign categories to regime classes in Tax attributes." }
+      }
+    },
     "taxOfficial": {
       "title": "Formulário oficial de apuração",
       "description": "Envie um PDF oficial preenchível somente quando a jurisdição aceitar ou exigir esse formulário. Mapeie seus campos em Caixas da Declaração Fiscal.",
@@ -1190,7 +1227,8 @@
       "primaryRequired": "Escolha outro livro contábil como principal antes de remover o status de principal deste.",
       "primaryActiveRequired": "O livro contábil principal deve permanecer ativo.",
       "archiveOnly": "Os livros contábeis são mantidos para o histórico do razão e só podem ser arquivados.",
-      "invalidUrl": "Informe uma URL de apuração governamental http:// ou https:// válida."
+      "invalidUrl": "Informe uma URL de apuração governamental http:// ou https:// válida.",
+      "invalidDepreciationFormula": "Informe uma fórmula de depreciação válida com as variáveis e os operadores documentados."
     },
     "groups": {
       "company": "Empresa",
@@ -1605,6 +1643,24 @@
       }
     },
     "fields": {
+      "classAttribute": "Asset class attribute",
+      "countryCode": "Country",
+      "calculationModel": "Calculation model",
+      "regime": "Regime",
+      "classCode": "Class code",
+      "rate": "Rate",
+      "method": "Method",
+      "firstYearFraction": "First-year fraction",
+      "allowRecapture": "Allow recapture",
+      "allowTerminalLoss": "Allow terminal loss",
+      "costCap": "Cost cap",
+      "depreciationSystem": "Depreciation system",
+      "macrsMethod": "MACRS method",
+      "recoveryPeriodYears": "Recovery period (years)",
+      "taxAttributes": "Tax attributes (JSON)",
+      "enhancedMultiplier": "Enhanced multiplier",
+      "acquiredFrom": "Acquired from",
+      "acquiredTo": "Acquired to",
       "code": "Código",
       "name": "Nome",
       "appliesTo": "Aplica-se a",
@@ -1734,6 +1790,11 @@
       "isDefault": "Padrão"
     },
     "options": {
+      "taxDepreciationModel": { "pool": "Class pool", "macrs": "Per-asset MACRS" },
+      "macrsSystem": { "gds": "GDS", "ads": "ADS" },
+      "macrsMethod": { "200db": "200% declining balance", "150db": "150% declining balance", "straightLine": "Straight line" },
+      "taxDepreciationConvention": { "halfYear": "Half-year", "midQuarter": "Mid-quarter", "midMonth": "Mid-month" },
+      "poolMethod": { "declining": "Declining balance", "straightLine": "Straight line" },
       "appliesTo": {
         "sales": "Vendas",
         "purchases": "Compras",

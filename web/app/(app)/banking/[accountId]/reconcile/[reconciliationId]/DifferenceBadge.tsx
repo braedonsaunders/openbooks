@@ -1,10 +1,13 @@
+'use client'
+
+import { useMoney } from '@/components/money-provider'
 import { cn } from '@openbooks/ui'
-import { money } from '../../../../../../lib/format'
 
 export const isZeroAmount = (v: string) => /^-?0(\.0+)?$/.test(v.trim())
 
 /** The workspace's headline number: green only at exactly 0.00. */
 export function DifferenceBadge({ difference, className }: { difference: string; className?: string }) {
+  const { money } = useMoney()
   const zero = isZeroAmount(difference)
   return (
     <span

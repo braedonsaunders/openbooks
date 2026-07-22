@@ -9,6 +9,7 @@ import {
 import { guardPermission } from '../../../../../lib/authz'
 import { isUuid } from '../../../../../lib/list-params'
 import { bankingErrorResponse } from '../../util'
+import { canonicalDecimal } from '../../../../../lib/exact-decimal'
 
 export const runtime = 'nodejs'
 
@@ -49,7 +50,7 @@ export async function PATCH(req: Request, { params }: Params) {
     if (body.throughDate !== undefined && !/^\d{4}-\d{2}-\d{2}$/.test(body.throughDate)) {
       throw new BankingError('Through date must be YYYY-MM-DD')
     }
-    if (body.statementBalance !== undefined && Number.isNaN(Number(body.statementBalance))) {
+    if (body.statementBalance !== undefined && canonicalDecimal(body.statementBalance, 4) === null) {
       throw new BankingError('Statement balance must be a number')
     }
     const updated = (await db.execute(sql`

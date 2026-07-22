@@ -4,7 +4,7 @@ export const recordCustomization: DocArticle = {
   slug: 'record-customization',
   title: 'Record Forms and Views',
   category: 'administration',
-  order: 4,
+  order: 1,
   summary: 'Customize tenant-wide record forms and searchable list views for transactions, customers, vendors, employees, projects, and operational records.',
   updated: '2026-07-21',
   keywords: ['custom form', 'customer form', 'vendor form', 'employee form', 'saved view', 'field layout', 'record customization'],

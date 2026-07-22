@@ -3,10 +3,13 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { useTranslations } from 'next-intl'
+import { ChevronDown } from 'lucide-react'
 import { toast } from 'sonner'
-import { Badge, Button, Input, Label, SearchSelect, Select, UrlDrawer } from '@openbooks/ui'
+import { Badge, Button, Input, Label, Popover, SearchSelect, Select, UrlDrawer } from '@openbooks/ui'
 import { CustomFieldInputs, type CustomFieldDefClient } from '../../../components/custom-field-inputs'
 import { ItemRatesEditor } from './ItemRatesEditor'
+import { ItemCostingEditor } from './ItemCostingEditor'
+import { FairValuePricesEditor } from './FairValuePricesEditor'
 
 interface AccountOpt {
   id: string
@@ -109,10 +112,11 @@ export function ItemDrawer({
   const [saveState, setSaveState] = useState<'saved' | 'saving' | 'dirty' | 'error'>('saved')
   const [busy, setBusy] = useState(false)
 
-  // Shared record model: the flyout ALWAYS opens READ-ONLY (view mode)
+  // source platform-style record model: the flyout ALWAYS opens READ-ONLY (view mode)
   // — even for drafts — with an Edit button in the header. Save is EXPLICIT —
   // one Save button, no per-field autosave.
   const [mode, setMode] = useState<'view' | 'edit'>('view')
+  const [actionsOpen, setActionsOpen] = useState(false)
   const editable = mode === 'edit' && canManage
 
   const nameValid = name.trim().length > 0 && name.trim() !== 'New item'
@@ -250,33 +254,25 @@ export function ItemDrawer({
         <>
           {mode === 'edit' ? (
             <>
-              <Button disabled={busy} onClick={save}>
-                {busy ? tCommon('actions.saving') : tCommon('actions.save')}
-              </Button>
               <Button variant="outline" disabled={busy} onClick={cancel}>
                 {tCommon('actions.cancel')}
               </Button>
+              <Button disabled={busy} onClick={save}>
+                {busy ? tCommon('actions.saving') : tCommon('actions.save')}
+              </Button>
             </>
           ) : canManage ? (
-            <>
+            <div className="flex items-center gap-1.5">
               <Button variant="outline" onClick={() => setMode('edit')}>
                 {tCommon('actions.edit')}
               </Button>
-              {isActive ? (
-                <Button variant="outline" disabled={busy} onClick={() => setActiveState(false)}>
-                  {t('drawer.deactivate')}
-                </Button>
-              ) : (
-                <>
-                  {!nameValid ? (
-                    <span className="text-xs text-slate-500 dark:text-slate-400">{t('drawer.nameToActivate')}</span>
-                  ) : null}
-                  <Button disabled={busy || !nameValid} onClick={() => setActiveState(true)}>
-                    {t('drawer.activate')}
-                  </Button>
-                </>
-              )}
-            </>
+              <Popover open={actionsOpen} onOpenChange={setActionsOpen} align="end" className="w-52 p-1.5" trigger={<Button variant="outline" onClick={() => setActionsOpen((open) => !open)}>{tCommon('labels.actions')}<ChevronDown className="ml-1 h-3.5 w-3.5" /></Button>}>
+                <div className="space-y-0.5 [&_button]:w-full [&_button]:justify-start">
+                  {isActive ? <Button variant="ghost" disabled={busy} onClick={() => { setActionsOpen(false); void setActiveState(false) }}>{t('drawer.deactivate')}</Button> : <Button variant="ghost" disabled={busy || !nameValid} onClick={() => { setActionsOpen(false); void setActiveState(true) }}>{t('drawer.activate')}</Button>}
+                  {!isActive && !nameValid ? <p className="px-2 py-1 text-xs text-slate-500 dark:text-slate-400">{t('drawer.nameToActivate')}</p> : null}
+                </div>
+              </Popover>
+            </div>
           ) : null}
         </>
       }
@@ -388,7 +384,14 @@ export function ItemDrawer({
           </div>
         </section>
 
-        <ItemRatesEditor itemId={String(it.id)} canManage={canManage} />
+        <ItemRatesEditor
+          itemId={String(it.id)}
+          itemPrice={defaultRate}
+          itemCost={defaultCost}
+          canManage={canManage}
+        />
+
+        <ItemCostingEditor itemId={String(it.id)} kind={kind} accounts={accounts} canManage={canManage} />
 
         {/* -- accounting ---------------------------------------------- */}
         <section className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
@@ -539,6 +542,8 @@ export function ItemDrawer({
             </div>
           </div>
         </section>
+
+        <FairValuePricesEditor itemId={String(it.id)} canManage={canManage} />
 
         <CustomFieldInputs defs={fieldDefs} values={customValues} onChange={setCustomValues} readOnly={ro} />
 

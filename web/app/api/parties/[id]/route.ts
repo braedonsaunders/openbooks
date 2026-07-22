@@ -6,6 +6,7 @@ import { loadFieldDefs, validateCustomValues } from '../../../../lib/custom-fiel
 import { isUuid } from '../../../../lib/list-params'
 import { normalizeCountryCode } from '../../../../lib/countries'
 import { loadParty } from '../_lib'
+import { canonicalDecimal, compareDecimal, fixedDecimal } from '../../../../lib/exact-decimal'
 
 export const runtime = 'nodejs'
 
@@ -288,10 +289,11 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
       if (!await orgRefExists('salesRep', salesRepId, user.orgId)) return bad('Invalid sales representative')
       if (!await orgRefExists('tax', taxCodeId, user.orgId)) return bad('Invalid customer tax code')
       const creditLimitRaw = strOrNull(c.creditLimit)
-      if (creditLimitRaw !== null && (Number.isNaN(Number(creditLimitRaw)) || Number(creditLimitRaw) < 0)) {
+      const creditLimitExact = creditLimitRaw === null ? null : canonicalDecimal(creditLimitRaw, 4)
+      if (creditLimitRaw !== null && (creditLimitExact === null || compareDecimal(creditLimitExact, '0') < 0)) {
         return bad('Credit limit must be a non-negative number')
       }
-      const creditLimit = creditLimitRaw === null ? null : Number(creditLimitRaw).toFixed(4)
+      const creditLimit = creditLimitExact === null ? null : fixedDecimal(creditLimitExact, 4)
       const currency = strOrNull(c.currency)?.toUpperCase() ?? null
       if (currency && !CURRENCY_RE.test(currency)) return bad('Customer currency must be a 3-letter code')
       await db.execute(sql`

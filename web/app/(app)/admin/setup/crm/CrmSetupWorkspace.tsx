@@ -1,5 +1,6 @@
 "use client";
 
+import { useMoney } from '@/components/money-provider'
 import { useState } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
@@ -25,7 +26,6 @@ import {
 } from "@openbooks/ui";
 import { SearchInput } from "../../../../../components/search-input";
 import { Pagination } from "../../../../../components/pagination";
-import { money } from "../../../../../lib/format";
 
 export type CrmSetupTab =
   | "accountStatuses"
@@ -179,6 +179,7 @@ function SetupRows({
   rows: Record<string, any>[];
   closeHref: string;
 }) {
+  const { money } = useMoney()
   const t = useTranslations("crm");
   const router = useRouter();
   const columns = COLUMNS[tab];
@@ -226,10 +227,10 @@ function SetupRows({
                       className="font-medium text-teal-700 hover:underline dark:text-teal-300"
                       onClick={(event) => event.stopPropagation()}
                     >
-                      {renderCell(column, row, t)}
+                      {renderCell(column, row, t, money)}
                     </Link>
                   ) : (
-                    renderCell(column, row, t)
+                    renderCell(column, row, t, money)
                   )}
                 </TableCell>
               ))}
@@ -241,7 +242,7 @@ function SetupRows({
   );
 }
 
-function renderCell(column: string, row: Record<string, any>, t: any) {
+function renderCell(column: string, row: Record<string, any>, t: any, money: ReturnType<typeof useMoney>['money']) {
   const value = row[column];
   if (column === "is_active")
     return (
@@ -258,7 +259,7 @@ function renderCell(column: string, row: Record<string, any>, t: any) {
     return t("setup.percent", { value: Number(value) });
   if (column === "member_count")
     return t("setup.memberCount", { count: Number(value) });
-  if (column === "amount") return money(value, "");
+  if (column === "amount") return money(value, { currency: row.currency });
   return value == null || value === "" ? "—" : String(value);
 }
 

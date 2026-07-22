@@ -20,6 +20,8 @@
     "done": "{kind} — {delta}"
   },
   "taxPools": {
+    "configure": "Configure",
+    "regime": "Tax regime",
     "title": "Steuerliche Abschreibung (CCA)",
     "description": "Berechnen Sie die Kapitalkostenzulage nach Klassenpool für ein Steuerjahr.",
     "taxYear": "Steuerjahr",
@@ -80,8 +82,9 @@
   "depreciationInput": {
     "recordUsage": "Produktionsnutzung erfassen", "recordManual": "Manuelle Abschreibung erfassen",
     "effectiveDate": "Wirksamkeitsdatum", "productionUnits": "Produktionseinheiten", "manualAmount": "Abschreibungsbetrag",
-    "memo": "Buchungsvermerk", "memoPlaceholder": "Grund und Berechnungskontext", "evidenceReference": "Belegreferenz",
-    "evidencePlaceholder": "Zählerstand, Arbeitsauftrag oder Dateireferenz", "replacementNotice": "Ein ungebuchter Eintrag ersetzt den vorherigen Beleg. Korrigieren Sie einen gebuchten Betrag mit einem negativen Eintrag und separatem Nachweis.",
+    "memo": "Buchungsvermerk", "memoPlaceholder": "Grund und Berechnungskontext", "book": "Abschreibungsbuch",
+    "evidenceFile": "Belegdatei", "selectEvidenceFile": "Angehängte Datei auswählen", "loadingEvidence": "Angehängte Dateien werden geladen…",
+    "attachEvidenceFirst": "Hängen Sie vor der Abschreibung eine Belegdatei im Reiter Dateien an.", "evidenceLoadFailed": "Angehängte Belegdateien konnten nicht geladen werden", "replacementNotice": "Ein ungebuchter Eintrag ersetzt den vorherigen Beleg. Korrigieren Sie einen gebuchten Betrag mit einem negativen Eintrag und separatem Nachweis.",
     "save": "Beleg erfassen", "saving": "Wird erfasst…", "saved": "{amount} für {period} erfasst", "failed": "Abschreibungsbeleg konnte nicht erfasst werden"
   },
   "status": {
@@ -96,6 +99,14 @@
     "noAvailableSubsidiary": "Ihrer Rolle steht keine aktive Tochtergesellschaft für diese Anlage zur Verfügung."
   },
   "drawer": {
+    "taxDepreciation": "Tax depreciation",
+    "taxCategoryDefault": "Category default: {value}",
+    "notAssigned": "Not assigned",
+    "taxClass": "Tax class",
+    "useCategoryDefault": "Use category default",
+    "businessUsePercent": "Business use (%)",
+    "section179": "Section 179 election",
+    "bonusPercent": "Bonus depreciation (%)",
     "tabsAria": "Bereiche des Anlagensatzes",
     "customForm": "Datensatzformular",
     "newAsset": "Neue Anlage",
@@ -104,6 +115,10 @@
     "depreciation": "Abschreibung",
     "accounts": "Hauptbuchkonten",
     "schedule": "Abschreibungsplan",
+    "unknownFormula": "Formel nicht verfügbar",
+    "formulaMethod": "Formel: {name}",
+    "runForBook": "Abschreibung ausführen — {book}",
+    "searchSchedule": "Perioden, Bücher oder Quellen suchen…",
     "scheduleEmpty": "Noch kein Plan — legen Sie Anschaffungskosten, Inbetriebnahmedatum, Methode und Nutzungsdauer fest und speichern Sie dann.",
     "period": "Periode",
     "planned": "Geplant",
@@ -163,6 +178,8 @@
   },
   "run": {
     "asOf": "Stichtag",
+    "book": "Abschreibungsbuch",
+    "postBook": "{book} buchen",
     "posted": "{count} Buchungen in Höhe von {amount} gebucht",
     "nothingDue": "Nichts zur Abschreibung fällig",
     "someSkipped": "{count} übersprungen"

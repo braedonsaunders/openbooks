@@ -54,6 +54,7 @@ interface PatchBody {
   inServiceOn?: string | null
   serialNumber?: string | null
   method?: Method
+  depreciationMethodId?: string | null
   lifeMonths?: number | string | null
   ratePercent?: number | string | null
   unitsTotal?: number | string | null
@@ -62,15 +63,23 @@ interface PatchBody {
   accumulatedDepreciationAccountId?: string | null
   depreciationExpenseAccountId?: string | null
   custom?: Record<string, unknown>
+  taxDepreciation?: Record<string, Record<string, unknown>>
   status?: string
 }
 
-export async function GET(_req: Request, { params }: { params: Promise<{ id: string }> }) {
+export async function GET(req: Request, { params }: { params: Promise<{ id: string }> }) {
   const gate = await guardPermission('assets.read')
   if (gate instanceof NextResponse) return gate
   const { id } = await params
   if (!isUuid(id)) return NextResponse.json({ error: 'not found' }, { status: 404 })
-  const payload = await loadAsset(id, gate.user.orgId)
+  const search = new URL(req.url).searchParams
+  const page = Number.parseInt(search.get('page') ?? '1', 10)
+  const payload = await loadAsset(id, gate.user.orgId, {
+    bookId: search.get('bookId'),
+    query: search.get('q') ?? '',
+    page: Number.isInteger(page) && page > 0 ? page : 1,
+    perPage: 25,
+  })
   if (!payload || (gate.allowedSubsidiaryIds && !gate.allowedSubsidiaryIds.has(String(payload.asset.subsidiary_id)))) {
     return NextResponse.json({ error: 'not found' }, { status: 404 })
   }
@@ -93,7 +102,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
 
   const existRes = (await db.execute(sql`
     select id, status, custom, acquisition_cost, salvage_value, in_service_on,
-           depreciation_method, useful_life_months,
+           depreciation_method, depreciation_method_id, useful_life_months,
            depreciation_rate_percent, depreciation_units_total, depreciation_convention
       from fixed_assets where id = ${id} and org_id = ${user.orgId}
       ${gate.allowedSubsidiaryIds ? sql`and subsidiary_id = any(${`{${[...gate.allowedSubsidiaryIds].join(',')}}`}::uuid[])` : sql``}
@@ -105,6 +114,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     salvage_value: string
     in_service_on: string | null
     depreciation_method: Method | null
+    depreciation_method_id: string | null
     useful_life_months: number | null
     depreciation_rate_percent: string | null
     depreciation_units_total: string | null
@@ -154,33 +164,20 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     salvage = v ?? '0'
   }
 
-  // -- GL account overrides (legacy custom shape) --------------------------
+  // -- native GL account overrides -----------------------------------------
   const custom: Record<string, any> = { ...(existing.custom ?? {}) }
-  const accounts: Record<string, string> = { ...(custom.accounts ?? {}) }
-
-  async function setAcct(key: 'asset' | 'accumulated' | 'expense', v: unknown) {
+  async function accountOverride(v: unknown): Promise<string | null | 'invalid'> {
     const s = strOrNull(v)
-    if (s === null) {
-      delete accounts[key]
-      return true
-    }
-    if (!isUuid(s) || !(await acctExists(s, user.orgId))) return false
-    accounts[key] = s
-    return true
+    if (s === null) return null
+    if (!isUuid(s) || !(await acctExists(s, user.orgId))) return 'invalid'
+    return s
   }
-  if (body.assetAccountId !== undefined && !(await setAcct('asset', body.assetAccountId)))
-    return bad('Invalid asset account')
-  if (
-    body.accumulatedDepreciationAccountId !== undefined &&
-    !(await setAcct('accumulated', body.accumulatedDepreciationAccountId))
-  )
-    return bad('Invalid accumulated depreciation account')
-  if (
-    body.depreciationExpenseAccountId !== undefined &&
-    !(await setAcct('expense', body.depreciationExpenseAccountId))
-  )
-    return bad('Invalid depreciation expense account')
-  custom.accounts = accounts
+  const assetAccountId = body.assetAccountId === undefined ? undefined : await accountOverride(body.assetAccountId)
+  const accumulatedAccountId = body.accumulatedDepreciationAccountId === undefined ? undefined : await accountOverride(body.accumulatedDepreciationAccountId)
+  const expenseAccountId = body.depreciationExpenseAccountId === undefined ? undefined : await accountOverride(body.depreciationExpenseAccountId)
+  if (assetAccountId === 'invalid') return bad('Invalid asset account')
+  if (accumulatedAccountId === 'invalid') return bad('Invalid accumulated depreciation account')
+  if (expenseAccountId === 'invalid') return bad('Invalid depreciation expense account')
 
   if (body.custom !== undefined) {
     const defs = await loadFieldDefs('fixed_assets')
@@ -194,10 +191,53 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     Object.assign(custom, validated.cleaned)
   }
 
+  if (body.taxDepreciation !== undefined) {
+    if (!body.taxDepreciation || typeof body.taxDepreciation !== 'object' || Array.isArray(body.taxDepreciation)) {
+      return bad('Invalid tax depreciation elections')
+    }
+    const clean: Record<string, Record<string, unknown>> = {}
+    for (const [regime, raw] of Object.entries(body.taxDepreciation)) {
+      if (!/^[a-z][a-z0-9_]{0,62}$/.test(regime) || !raw || typeof raw !== 'object' || Array.isArray(raw)) {
+        return bad('Invalid tax depreciation elections')
+      }
+      const businessUsePercent = moneyOrNull(raw.businessUsePercent ?? '100')
+      const bonusPercent = moneyOrNull(raw.bonusPercent ?? '0')
+      const section179 = moneyOrNull(raw.section179 ?? 0)
+      if (businessUsePercent === 'invalid' || businessUsePercent === null || cmp(businessUsePercent, '0') < 0 || cmp(businessUsePercent, '100') > 0) {
+        return bad('Business use must be between 0 and 100 percent')
+      }
+      if (bonusPercent === 'invalid' || bonusPercent === null || cmp(bonusPercent, '0') < 0 || cmp(bonusPercent, '100') > 0) {
+        return bad('Bonus depreciation must be between 0 and 100 percent')
+      }
+      if (section179 === 'invalid' || (section179 && cmp(section179, '0') < 0)) return bad('Section 179 must be non-negative')
+      const classCode = strOrNull(raw.classCode)
+      if (classCode) {
+        const valid = (await db.execute(sql`
+          select 1 from tax_pool_classes
+           where org_id=${user.orgId} and regime=${regime} and class_code=${classCode} and is_active`)) as unknown as { rows: unknown[] }
+        if (!valid.rows[0]) return bad('Invalid tax depreciation class')
+      }
+      clean[regime] = { classCode, businessUsePercent, bonusPercent, section179: section179 ?? '0' }
+    }
+    custom.taxDepreciation = clean
+  }
+
   let method: Method | null | undefined
   if (body.method !== undefined) {
     if (!METHODS.includes(body.method)) return bad('Invalid depreciation method')
     method = body.method
+  }
+  let depreciationMethodId: string | null | undefined
+  if (body.depreciationMethodId !== undefined) {
+    const candidate = strOrNull(body.depreciationMethodId)
+    if (candidate !== null) {
+      if (!isUuid(candidate)) return bad('Invalid depreciation formula')
+      const formula = (await db.execute(sql`
+        select 1 from depreciation_methods
+         where id = ${candidate} and org_id = ${user.orgId} and is_active`)) as unknown as { rows: unknown[] }
+      if (!formula.rows[0]) return bad('Depreciation formula not found or inactive')
+    }
+    depreciationMethodId = candidate
   }
   let lifeMonths: number | null | undefined
   if (body.lifeMonths !== undefined) {
@@ -242,13 +282,14 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
           : ((await db.execute(sql`select in_service_on from fixed_assets where id = ${id} and org_id = ${user.orgId}`)) as any).rows[0]
               ?.in_service_on
       const effMethod = method !== undefined ? method : existing.depreciation_method
+      const effFormula = depreciationMethodId !== undefined ? depreciationMethodId : existing.depreciation_method_id
       const effLife = lifeMonths !== undefined ? lifeMonths : existing.useful_life_months
       const effUnits = unitsTotal !== undefined ? unitsTotal : existing.depreciation_units_total
       if (!effInService) return bad('Set an in-service date before placing the asset in service')
-      if (effMethod !== 'manual' && effMethod !== 'units_of_production' && (!effLife || effLife <= 0)) {
+      if ((effFormula || (effMethod !== 'manual' && effMethod !== 'units_of_production')) && (!effLife || effLife <= 0)) {
         return bad('Set a useful life before placing the asset in service')
       }
-      if (effMethod === 'units_of_production' && (!effUnits || cmp(effUnits, '0') <= 0)) {
+      if (!effFormula && effMethod === 'units_of_production' && (!effUnits || cmp(effUnits, '0') <= 0)) {
         return bad('Set expected lifetime units before placing the asset in service')
       }
     }
@@ -257,6 +298,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
 
   const effectiveStatus = status ?? existing.status
   const effectiveMethod = method !== undefined ? method : existing.depreciation_method
+  const effectiveFormula = depreciationMethodId !== undefined ? depreciationMethodId : existing.depreciation_method_id
   const effectiveLife = lifeMonths !== undefined ? lifeMonths : existing.useful_life_months
   const effectiveUnits = unitsTotal !== undefined ? unitsTotal : existing.depreciation_units_total
   const effectiveInService = body.inServiceOn !== undefined ? strOrNull(body.inServiceOn) : existing.in_service_on
@@ -265,14 +307,14 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
   if (cmp(effectiveSalvage, effectiveCost) > 0) return bad('Salvage value cannot exceed acquisition cost')
   if (effectiveStatus === 'in_service') {
     if (!effectiveInService) return bad('Set an in-service date before placing the asset in service')
-    if (effectiveMethod !== 'manual' && effectiveMethod !== 'units_of_production' && (!effectiveLife || effectiveLife <= 0)) {
+    if ((effectiveFormula || (effectiveMethod !== 'manual' && effectiveMethod !== 'units_of_production')) && (!effectiveLife || effectiveLife <= 0)) {
       return bad('Set a useful life before placing the asset in service')
     }
-    if (effectiveMethod === 'units_of_production' && (!effectiveUnits || cmp(effectiveUnits, '0') <= 0)) {
+    if (!effectiveFormula && effectiveMethod === 'units_of_production' && (!effectiveUnits || cmp(effectiveUnits, '0') <= 0)) {
       return bad('Set expected lifetime units before placing the asset in service')
     }
   }
-  if (method !== undefined && method !== existing.depreciation_method) {
+  if ((method !== undefined && method !== existing.depreciation_method) || (depreciationMethodId !== undefined && depreciationMethodId !== existing.depreciation_method_id)) {
     const inputEvidence = (await db.execute(sql`
       select 1 from depreciation_schedules s
       join depreciation_schedule_lines l on l.schedule_id = s.id
@@ -296,10 +338,14 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
       in_service_on = ${body.inServiceOn !== undefined ? strOrNull(body.inServiceOn) : sql`in_service_on`},
       serial_number = ${body.serialNumber !== undefined ? strOrNull(body.serialNumber) : sql`serial_number`},
       depreciation_method = ${method !== undefined ? method : sql`depreciation_method`},
+      depreciation_method_id = ${depreciationMethodId !== undefined ? depreciationMethodId : sql`depreciation_method_id`},
       useful_life_months = ${lifeMonths !== undefined ? lifeMonths : sql`useful_life_months`},
       depreciation_rate_percent = ${ratePercent !== undefined ? ratePercent : sql`depreciation_rate_percent`},
       depreciation_units_total = ${unitsTotal !== undefined ? unitsTotal : sql`depreciation_units_total`},
       depreciation_convention = ${convention !== undefined ? convention : sql`depreciation_convention`},
+      asset_account_id = ${assetAccountId !== undefined ? assetAccountId : sql`asset_account_id`},
+      accumulated_depreciation_account_id = ${accumulatedAccountId !== undefined ? accumulatedAccountId : sql`accumulated_depreciation_account_id`},
+      depreciation_expense_account_id = ${expenseAccountId !== undefined ? expenseAccountId : sql`depreciation_expense_account_id`},
       custom = ${JSON.stringify(custom)}::jsonb,
       status = ${status !== undefined ? status : sql`status`},
       updated_at = now(), updated_by = ${user.id}

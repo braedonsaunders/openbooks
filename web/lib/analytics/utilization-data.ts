@@ -2,6 +2,7 @@ import "server-only";
 import { sql } from "drizzle-orm";
 import { db } from "@openbooks/engine/src/db.ts";
 import { analyticsConfig } from "./config";
+import { getMoneyFormatter } from '../money-server'
 
 /**
  * Utilization (Billable IQ) — a faithful port of Gantry's Time dashboard
@@ -208,6 +209,7 @@ function buildGroup(curr: StatRow[], prior: StatRow[], key: Key, titleByEmp: Map
 }
 
 export async function utilizationData(orgId: string, period: { from: string; to: string; label: string }): Promise<UtilizationData> {
+  const { money } = await getMoneyFormatter(orgId)
   const cfg = await analyticsConfig(orgId, "utilization");
   const rangeStart = new Date(period.from + "T00:00:00Z");
   const rangeEnd = new Date(period.to + "T00:00:00Z");
@@ -290,7 +292,7 @@ export async function utilizationData(orgId: string, period: { from: string; to:
   if (cCompany.nonBillableCost - pCompany.nonBillableCost > cfg.costSpikeThreshold)
     alerts.push({
       type: "danger",
-      message: `Non-billable cost spiked by $${Math.round(cCompany.nonBillableCost - pCompany.nonBillableCost).toLocaleString("en-US")}`,
+      message: `Non-billable cost spiked by ${money(cCompany.nonBillableCost - pCompany.nonBillableCost, { maximumFractionDigits: 0 })}`,
     });
 
   // Rolling history: company % (excl. noBill depts) + per-dept % (all depts).

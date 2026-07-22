@@ -1,3 +1,4 @@
+import { getMoneyFormatter } from '@/lib/money-server'
 import Link from 'next/link'
 import { getTranslations } from 'next-intl/server'
 import { sql } from 'drizzle-orm'
@@ -10,7 +11,6 @@ import { Pagination } from '../../../../components/pagination'
 import { SortTh } from '../../../../components/sortable-th'
 import { parseListParams, pickString } from '../../../../lib/list-params'
 import { can, requirePermission } from '../../../../lib/authz'
-import { money } from '../../../../lib/format'
 import { ExpenseActions } from '../ExpenseActions'
 import { ExpenseDrawer } from '../ExpenseDrawer'
 import { NewExpenseButton } from '../NewExpenseButton'
@@ -54,6 +54,7 @@ export default async function Expenses({
 }: {
   searchParams: Promise<Record<string, string | string[] | undefined>>
 }) {
+  const { money } = await getMoneyFormatter()
   const t = await getTranslations('expenses')
   const tCommon = await getTranslations('common')
   const statusLabel = (s: string) => {

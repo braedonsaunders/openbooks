@@ -278,7 +278,15 @@ export async function dropScratchOrg(orgId: string): Promise<void> {
     // demote them first so the delete can proceed.
     await tx.execute(sql`update inventory_movements set status = 'pending' where org_id = ${orgId}`);
     await tx.execute(sql`delete from tax_group_members where tax_group_id in (select id from tax_groups where org_id = ${orgId})`);
+    await tx.execute(sql`delete from file_blobs where version_id in (select v.id from file_versions v join files f on f.id=v.file_id where f.org_id=${orgId})`);
+    await tx.execute(sql`delete from file_versions where file_id in (select id from files where org_id=${orgId})`);
     const tables = [
+      "report_delivery_outbox",
+      "report_run_artifacts",
+      "report_runs",
+      "report_schedules",
+      "report_definitions",
+      "email_log",
       "flow_run_effects",
       "flow_gates",
       "flow_runs",
@@ -288,6 +296,8 @@ export async function dropScratchOrg(orgId: string): Promise<void> {
       "role_assignments",
       "app_roles",
       "cost_layer_consumptions",
+      "inventory_provisional_settlements",
+      "inventory_provisional_costs",
       "landed_cost_allocations",
       "cost_layers",
       "inventory_movements",
@@ -309,11 +319,17 @@ export async function dropScratchOrg(orgId: string): Promise<void> {
       "fixed_assets",
       "asset_categories",
       "depreciation_methods",
+      "file_attachments",
+      "files",
+      "folders",
       "tax_rates",
       "tax_groups",
       "tax_codes",
       "journal_lines",
+      "ownership_consolidation_entries",
       "journal_entries",
+      "ownership_consolidation_runs",
+      "subsidiary_ownership_interests",
       "equipment_units",
       "labor_rate_adjustment_targets",
       "labor_rate_adjustments",

@@ -1,3 +1,4 @@
+import { getMoneyFormatter } from '@/lib/money-server'
 import { getTranslations } from 'next-intl/server'
 import { Badge, PageHeader } from '@openbooks/ui'
 import { ListPageLayout } from '../../../../components/page-layout'
@@ -7,7 +8,6 @@ import { reportSubsidiaryView } from '../../../../lib/consolidation'
 import { balanceSheetView } from '../../../../lib/statement-matrix'
 import { resolvePeriod } from '../../../../lib/periods'
 import { parseReportQuery, scaleFactor } from '../../../../lib/report-filters'
-import { money } from '../../../../lib/format'
 import { StatementMatrixTable } from '../StatementMatrixTable'
 import { ReportPaper } from '../ReportPaper'
 import { ExportMenu } from '../ExportMenu'
@@ -21,6 +21,7 @@ export default async function BalanceSheet({
 }: {
   searchParams: Promise<Record<string, string | undefined>>
 }) {
+  const { money } = await getMoneyFormatter()
   const t = await getTranslations('reports')
   const sp = await searchParams
   const q = parseReportQuery(sp)

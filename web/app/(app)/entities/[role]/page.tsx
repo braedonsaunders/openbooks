@@ -19,6 +19,7 @@ import { NewPartyButton } from '../../parties/NewPartyButton'
 import { NewPartyRedirect } from '../../parties/NewPartyRedirect'
 import { PartyDrawer, type PartyTab } from '../../parties/PartyDrawer'
 import { RelatedTransactionDrawer } from '../../../../components/related-transaction-drawer'
+import { EntityListView } from '../../../../components/entity-list-view'
 
 export const dynamic = 'force-dynamic'
 
@@ -64,34 +65,6 @@ export default async function EntityRole({
     || requestedPartyTab === 'addresses' || requestedPartyTab === 'accounting' || requestedPartyTab === 'wages'
     ? requestedPartyTab
     : 'overview'
-  const listParams = parseListParams(sp, { sort: 'name', dir: 'asc', perPage: 25, allowedSorts: ['name', 'code'] as const })
-  const showInactive = pickString(sp.showInactive) === 'true'
-
-  const where = sql`p.org_id = ${orgId} and ${ROLE_CONDITION(role)}
-    ${listParams.q ? sql` and (p.display_name ilike ${'%' + listParams.q + '%'} or p.short_code ilike ${'%' + listParams.q + '%'} or p.email ilike ${'%' + listParams.q + '%'})` : sql``}
-    ${showInactive ? sql`` : sql` and p.is_active`}`
-
-  const [parties, counts] = await Promise.all([
-    db.execute(sql`
-      select p.id, p.display_name, p.short_code, p.email, p.phone, p.is_active
-        from parties p where ${where}
-       order by ${SORT_COLUMNS[listParams.sort]} ${listParams.dir === 'asc' ? sql`asc` : sql`desc`} nulls last
-       limit ${listParams.perPage} offset ${(listParams.page - 1) * listParams.perPage}
-    `) as any,
-    db.execute(sql`
-      select count(*) as total,
-             count(*) filter (where p.is_active) as active,
-             count(*) filter (where not p.is_active) as inactive
-        from parties p where p.org_id = ${orgId} and ${ROLE_CONDITION(role)} ${showInactive ? sql`` : sql`and p.is_active`}
-    `) as any,
-  ])
-  const c = counts.rows[0]
-  const total = Number(c.total)
-  const filteredTotal =
-    listParams.q
-      ? Number(((await db.execute(sql`select count(*) as n from parties p where ${where}`)) as any).rows[0].n)
-      : total
-
   const [openParty, pickers] = await Promise.all([
     partyId && partyId !== 'new' && isUuid(partyId) ? loadParty(partyId, orgId) : null,
     partyId
@@ -119,6 +92,95 @@ export default async function EntityRole({
         explicitLayoutId: pickString(sp.partyForm),
       })
     : null
+
+  const partyDrawers = (
+    <>
+      {partyId === 'new' && canManage ? <NewPartyRedirect basePath={basePath} role={role} /> : null}
+      {openParty && pickers ? (
+        <PartyDrawer
+          key={String(openParty.party.id)}
+          payload={openParty as any}
+          canManage={canManage}
+          canReadActivities={can(authz, 'crm.activities.read')}
+          canManageWages={can(authz, 'admin.setup.manage')}
+          role={role}
+          initialTab={partyTab}
+          basePath={basePath}
+          paymentTerms={pickers[0].rows}
+          departments={pickers[1].rows}
+          trades={pickers[2].rows}
+          workerCompGroups={pickers[8].rows}
+          fieldDefs={pickers[3] as any}
+          subsidiaries={pickers[4]}
+          accounts={pickers[5].rows}
+          taxCodes={pickers[6].rows}
+          salesReps={pickers[7].rows}
+          layout={resolvedPartyForm?.layout}
+          forms={resolvedPartyForm?.available ?? []}
+          currentFormId={resolvedPartyForm?.row?.id ?? null}
+          recordType={role}
+          canCustomize={can(authz, 'admin.customization.manage')}
+        />
+      ) : null}
+      {openParty && partyTransactionId && isUuid(partyTransactionId) && partyTransactionKind ? (
+        <RelatedTransactionDrawer
+          id={partyTransactionId}
+          kind={partyTransactionKind}
+          partyId={String(openParty.party.id)}
+          authz={authz}
+          formLayoutId={pickString(sp.form)}
+        />
+      ) : null}
+    </>
+  )
+
+  if (role === 'customer') {
+    return (
+      <ListPageLayout
+        header={
+          <PageHeader
+            title={t(`roles.${slug}.title`)}
+            description={t(`roles.${slug}.description`)}
+            actions={canManage ? <NewPartyButton basePath={basePath} role={role} label={newLabel} /> : undefined}
+          />
+        }
+      >
+        <EntityListView
+          recordType="customer"
+          orgId={orgId}
+          userId={authz.user.id}
+          canManage={canManage}
+          sp={sp}
+          emptyAction={canManage ? <NewPartyButton basePath={basePath} role={role} label={newLabel} /> : undefined}
+          drawer={partyDrawers}
+        />
+      </ListPageLayout>
+    )
+  }
+
+  const listParams = parseListParams(sp, { sort: 'name', dir: 'asc', perPage: 25, allowedSorts: ['name', 'code'] as const })
+  const showInactive = pickString(sp.showInactive) === 'true'
+  const where = sql`p.org_id = ${orgId} and ${ROLE_CONDITION(role)}
+    ${listParams.q ? sql` and (p.display_name ilike ${'%' + listParams.q + '%'} or p.short_code ilike ${'%' + listParams.q + '%'} or p.email ilike ${'%' + listParams.q + '%'})` : sql``}
+    ${showInactive ? sql`` : sql` and p.is_active`}`
+  const [parties, counts] = await Promise.all([
+    db.execute(sql`
+      select p.id, p.display_name, p.short_code, p.email, p.phone, p.is_active
+        from parties p where ${where}
+       order by ${SORT_COLUMNS[listParams.sort]} ${listParams.dir === 'asc' ? sql`asc` : sql`desc`} nulls last
+       limit ${listParams.perPage} offset ${(listParams.page - 1) * listParams.perPage}
+    `) as any,
+    db.execute(sql`
+      select count(*) as total,
+             count(*) filter (where p.is_active) as active,
+             count(*) filter (where not p.is_active) as inactive
+        from parties p where p.org_id = ${orgId} and ${ROLE_CONDITION(role)} ${showInactive ? sql`` : sql`and p.is_active`}
+    `) as any,
+  ])
+  const total = Number(counts.rows[0].total)
+  const filteredTotal = listParams.q
+    ? Number(((await db.execute(sql`select count(*) as n from parties p where ${where}`)) as any).rows[0].n)
+    : total
 
   return (
     <ListPageLayout
@@ -178,42 +240,7 @@ export default async function EntityRole({
         </>
       )}
 
-      {partyId === 'new' && canManage ? <NewPartyRedirect basePath={basePath} role={role} /> : null}
-      {openParty && pickers ? (
-        <PartyDrawer
-          key={String(openParty.party.id)}
-          payload={openParty as any}
-          canManage={canManage}
-          canReadActivities={can(authz, 'crm.activities.read')}
-          canManageWages={can(authz, 'admin.setup.manage')}
-          role={role}
-          initialTab={partyTab}
-          basePath={basePath}
-          paymentTerms={pickers[0].rows}
-          departments={pickers[1].rows}
-          trades={pickers[2].rows}
-          workerCompGroups={pickers[8].rows}
-          fieldDefs={pickers[3] as any}
-          subsidiaries={pickers[4]}
-          accounts={pickers[5].rows}
-          taxCodes={pickers[6].rows}
-          salesReps={pickers[7].rows}
-          layout={resolvedPartyForm?.layout}
-          forms={resolvedPartyForm?.available ?? []}
-          currentFormId={resolvedPartyForm?.row?.id ?? null}
-          recordType={role}
-          canCustomize={can(authz, 'admin.customization.manage')}
-        />
-      ) : null}
-      {openParty && partyTransactionId && isUuid(partyTransactionId) && partyTransactionKind ? (
-        <RelatedTransactionDrawer
-          id={partyTransactionId}
-          kind={partyTransactionKind}
-          partyId={String(openParty.party.id)}
-          authz={authz}
-          formLayoutId={pickString(sp.form)}
-        />
-      ) : null}
+      {partyDrawers}
     </ListPageLayout>
   )
 }

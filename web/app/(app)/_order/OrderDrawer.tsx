@@ -1,5 +1,6 @@
 'use client'
 
+import { useMoney } from '@/components/money-provider'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
@@ -12,7 +13,6 @@ import { DocTypeBadge, docTypeMeta } from '../../../components/doc-type-badge'
 import { PdfButton } from '../../../components/pdf-button'
 import { SendButton } from '../../../components/send-button'
 import { confirmDialog } from '../../../lib/confirm'
-import { money } from '../../../lib/format'
 import { CONVERSION_TARGETS, type OrderKind } from '../../../lib/order-kinds'
 import { HeaderFields } from '../../../components/transaction-form/header-fields'
 import type { FormLayoutConfig, HeaderFieldPlacement } from '@openbooks/customization'
@@ -173,6 +173,7 @@ export function OrderDrawer({
   canManage: boolean
   layout?: FormLayoutConfig
 }) {
+  const { money } = useMoney()
   const t = useTranslations('purchaseOrders.shared')
   const tCommon = useTranslations('common')
   const statusLabel = (status: string) => {
@@ -477,7 +478,7 @@ export function OrderDrawer({
         align: 'right',
         render: (row) => {
           const a = lineAmount(row)
-          return a ? money(a) : ''
+          return a ? money(a, { currency: doc.currency }) : ''
         },
       },
       tax_amount: {
@@ -488,7 +489,7 @@ export function OrderDrawer({
         align: 'right',
         render: (row) => {
           const t = lineTax(row)
-          return t ? money(t) : ''
+          return t ? money(t, { currency: doc.currency }) : ''
         },
       },
       }
@@ -566,9 +567,9 @@ export function OrderDrawer({
       }
       description={mode === 'edit' ? tCommon('feedback.editingHint') : (doc.party_name ?? undefined)}
       primaryAction={
-        mode === 'view' && canManage && canEditStatus ? (
-          <Button variant="outline" size="sm" className="h-8 px-2.5 text-xs" onClick={() => setMode('edit')}>
-            {tCommon('actions.edit')}
+        canManage && canEditStatus ? (
+          <Button variant="outline" size="sm" className="h-8 px-2.5 text-xs" disabled={busy} onClick={() => mode === 'edit' ? cancel() : setMode('edit')}>
+            {mode === 'edit' ? tCommon('actions.cancel') : tCommon('actions.edit')}
           </Button>
         ) : null
       }
@@ -577,9 +578,6 @@ export function OrderDrawer({
           <>
             <Button disabled={busy} onClick={save}>
               {busy ? tCommon('actions.saving') : tCommon('actions.save')}
-            </Button>
-            <Button variant="outline" disabled={busy} onClick={cancel}>
-              {tCommon('actions.cancel')}
             </Button>
           </>
         ) : canManage ? (
@@ -635,10 +633,10 @@ export function OrderDrawer({
           </span>
           <span className="flex-1" />
           <span className="text-sm text-slate-600 tabular-nums dark:text-slate-300">
-            {t('totals.subtotal', { amount: money(totals.subtotal) })} ·{' '}
-            {t('totals.tax', { amount: money(totals.taxTotal) })} ·{' '}
+            {t('totals.subtotal', { amount: money(totals.subtotal, { currency: doc.currency }) })} ·{' '}
+            {t('totals.tax', { amount: money(totals.taxTotal, { currency: doc.currency }) })} ·{' '}
             <strong className="text-slate-900 dark:text-slate-100">
-              {t('totals.total', { amount: money(totals.total) })}
+              {t('totals.total', { amount: money(totals.total, { currency: doc.currency }) })}
             </strong>
           </span>
         </div>

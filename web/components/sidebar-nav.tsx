@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from 'react'
 import Link from 'next/link'
-import { usePathname } from 'next/navigation'
+import { usePathname, useSearchParams } from 'next/navigation'
 import {
   Activity,
   AlertTriangle,
@@ -167,7 +167,9 @@ const EXPANDED_STORAGE_KEY = 'openbooks.nav.expanded-workspaces'
  */
 export function SidebarNav({ groups, collapsed = false }: { groups: SidebarNavGroup[]; collapsed?: boolean }) {
   const pathname = usePathname() ?? ''
-  const activeHref = findActiveNavHref(pathname, groups)
+  const searchParams = useSearchParams()
+  const query = searchParams.toString()
+  const activeHref = findActiveNavHref(query ? `${pathname}?${query}` : pathname, groups)
   const activeGroupId = groups.find((group) => groupContainsActiveHref(group, activeHref))?.id ?? null
   const navRef = useRef<HTMLElement>(null)
   const [openGroupIds, setOpenGroupIds] = useState<Set<string>>(

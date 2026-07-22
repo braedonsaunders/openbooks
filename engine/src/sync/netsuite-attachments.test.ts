@@ -4,6 +4,7 @@ import {
   decodeBridgeAttachment,
   detectContentType,
   expenseReportFileIds,
+  normalizeAttachmentBytes,
   safeFilename,
 } from "./netsuite-attachments.ts";
 
@@ -20,6 +21,16 @@ test("detectContentType recognizes source receipt signatures", () => {
 test("detectContentType rejects unsupported content instead of mis-serving it", () => {
   assert.throws(() => detectContentType(Buffer.from("not an image"), "payload.exe"), /unsupported attachment/);
   assert.throws(() => detectContentType(Buffer.from("not an image"), "spoofed.pdf"), /unsupported attachment/);
+});
+
+test("normalizeAttachmentBytes removes the bounded CPOW envelope from legacy PDFs", () => {
+  const wrapped = Buffer.from("%PDFfileName=R42565_IN.PDF\r\n%[EndCPOW]\r\n%PDF-1.3\nbody");
+  const normalized = normalizeAttachmentBytes(wrapped);
+  assert.equal(normalized.toString(), "%PDF-1.3\nbody");
+  assert.equal(detectContentType(normalized, "invoice.pdf"), "application/pdf");
+  const ordinary = Buffer.from("%PDF-1.7\nbody");
+  assert.strictEqual(normalizeAttachmentBytes(ordinary), ordinary);
+  assert.equal(normalizeAttachmentBytes(Buffer.from("%PDFfileName=missing-real-header")).toString(), "%PDFfileName=missing-real-header");
 });
 
 test("safeFilename strips paths and control characters", () => {

@@ -1,5 +1,6 @@
 'use client'
 
+import { useMoney } from '@/components/money-provider'
 import Link from 'next/link'
 import { useMemo, useState } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
@@ -21,7 +22,6 @@ import {
 } from 'lucide-react'
 import { Button, cn } from '@openbooks/ui'
 import type { PageLayoutPrefs } from '@openbooks/schema'
-import { money, moneyCompact } from '../../../../lib/format'
 import type { CashPosition } from '../../../../lib/cash/cash-position'
 import { LayoutMenu } from '../../../../components/page-layout/LayoutMenu'
 import { usePageLayout } from '../../../../components/page-layout/use-page-layout'
@@ -61,6 +61,7 @@ export function CashCockpit({
   canPayRun: boolean
   canCollectionRun: boolean
 }) {
+  const { money, moneyCompact } = useMoney()
   const t = useTranslations('banking.cash')
   const router = useRouter()
   const searchParams = useSearchParams()
@@ -85,10 +86,10 @@ export function CashCockpit({
   const scheduling = data.apSettings.weeklyCap > 0 || data.apSettings.restrictToSafe
   const runwayTone = data.runwayStatus === 'critical' ? 'negative' : data.runwayStatus === 'caution' ? 'warning' : 'positive'
   const bridge = useMemo(
-    () => cashBridgeOption(data.startingCash, data.totalInflows, data.totalOutflows, data.projectedEnd),
-    [data.startingCash, data.totalInflows, data.totalOutflows, data.projectedEnd],
+    () => cashBridgeOption(data.startingCash, data.totalInflows, data.totalOutflows, data.projectedEnd, moneyCompact),
+    [data.startingCash, data.totalInflows, data.totalOutflows, data.projectedEnd, moneyCompact],
   )
-  const forecast = useMemo(() => cashForecastOption(data.weeks), [data.weeks])
+  const forecast = useMemo(() => cashForecastOption(data.weeks, moneyCompact), [data.weeks, moneyCompact])
 
   // Distinct menu labels — the timeline table and forecast chart share a
   // panel title on the page, which would be ambiguous in the layout list.

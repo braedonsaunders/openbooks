@@ -7,7 +7,7 @@
 // hides behind it; safe-area padding clears the iOS home indicator.
 
 import Link from 'next/link'
-import { usePathname } from 'next/navigation'
+import { usePathname, useSearchParams } from 'next/navigation'
 import { useTranslations } from 'next-intl'
 import { Menu } from 'lucide-react'
 import { cn } from '@openbooks/ui'
@@ -30,11 +30,13 @@ const tabClass = (active: boolean) =>
 export function MobileTabBar({ groups }: { groups: SidebarNavGroup[] }) {
   const t = useTranslations('shell.mobileNav')
   const pathname = usePathname()
+  const searchParams = useSearchParams()
   const { setOpen } = useMobileNav()
   const navGroups = useNavGroups(groups)
 
   const tabs = selectMobileTabs(navGroups, TAB_COUNT)
-  const activeHref = findActiveNavHref(pathname, [{ items: tabs }])
+  const query = searchParams.toString()
+  const activeHref = findActiveNavHref(query ? `${pathname}?${query}` : pathname, [{ items: tabs }])
 
   if (tabs.length === 0) return null
 

@@ -1,3 +1,4 @@
+import { getMoneyFormatter } from '@/lib/money-server'
 import Link from 'next/link'
 import { getTranslations } from 'next-intl/server'
 import { sql } from 'drizzle-orm'
@@ -10,8 +11,6 @@ import { Pagination } from '../../../../components/pagination'
 import { SortTh } from '../../../../components/sortable-th'
 import { requirePermission } from '../../../../lib/authz'
 import { parseListParams, pickString } from '../../../../lib/list-params'
-import { money } from '../../../../lib/format'
-
 export const dynamic = 'force-dynamic'
 
 export async function generateMetadata() {
@@ -39,6 +38,7 @@ export default async function BankingReconciliations({
 }: {
   searchParams: Promise<Record<string, string | string[] | undefined>>
 }) {
+  const { money } = await getMoneyFormatter()
   const authz = await requirePermission('banking.reconcile')
   const t = await getTranslations('banking')
   const tCommon = await getTranslations('common')

@@ -5,7 +5,7 @@ import { Search } from 'lucide-react'
 import { cn, Drawer, Input } from '@openbooks/ui'
 import { TxnLink } from '../../reports/TxnLink'
 import { GroupedBar } from './charts'
-import { fmtMoney } from './format'
+import { useAnalyticsMoney } from './format'
 
 /**
  * Shared analytics drill-down drawer — the openbooks port of Gantry's
@@ -43,7 +43,6 @@ interface DrillData {
 }
 
 const PAGE = 50
-const money = (n: number) => fmtMoney(n, { compact: true })
 const KIND_LABEL: Record<string, string> = {
   vendor_bill: 'Bill',
   vendor_credit: 'Vendor Credit',
@@ -64,6 +63,8 @@ const KIND_LABEL: Record<string, string> = {
 const kindLabel = (k: string | null) => (k ? (KIND_LABEL[k] ?? k.replace(/_/g, ' ')) : 'Journal')
 
 export function DrillDrawer({ target, from, to, onClose }: { target: DrillTarget | null; from: string; to: string; onClose: () => void }) {
+  const fmtMoney = useAnalyticsMoney()
+  const money = (n: number) => fmtMoney(n, { compact: true })
   const [data, setData] = useState<DrillData | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [view, setView] = useState<'txns' | 'breakdown' | 'trend'>('txns')

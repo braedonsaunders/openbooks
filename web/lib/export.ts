@@ -25,6 +25,18 @@ export function xlsxResponse(xlsx: Buffer, filename: string): NextResponse {
   })
 }
 
+/** Stream a JSON document as an attachment (structured tax-return export etc.). */
+export function jsonResponse(json: string, filename: string): NextResponse {
+  return new NextResponse(new TextEncoder().encode(json), {
+    status: 200,
+    headers: {
+      'Content-Type': 'application/json; charset=utf-8',
+      'Content-Disposition': contentDisposition('attachment', filename, 'json'),
+      'Cache-Control': 'no-store',
+    },
+  })
+}
+
 /** Stream CSV (UTF-8, with BOM for Excel) as an attachment. */
 export function csvResponse(csv: string, filename: string): NextResponse {
   const body = new TextEncoder().encode(`\uFEFF${csv}`)

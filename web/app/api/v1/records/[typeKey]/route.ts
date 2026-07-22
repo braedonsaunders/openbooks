@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { sql, type SQL } from "drizzle-orm";
 import { db } from "@openbooks/engine/src/db.ts";
-import { canApi, logKeyEvent, resolveApiKeyAuth, type ApiKeyAuth } from "../../../../../lib/api-auth";
+import { canApi, enforceRateLimit, logKeyEvent, resolveApiKeyAuth, type ApiKeyAuth } from "../../../../../lib/api-auth";
 import { loadApiSchema, resolveApiType, type ResolvedApiType } from "../../../../../lib/api/schema-registry";
 import { createRecord } from "../../../../../lib/api/writers";
 import { clamp } from "../../../../../lib/list-params";
@@ -23,6 +23,8 @@ export async function GET(
   if (!auth) {
     return NextResponse.json({ error: "invalid or missing API key" }, { status: 401 });
   }
+  const limited = await enforceRateLimit(auth, req, start);
+  if (limited) return limited;
 
   const resolved = await resolveApiType(auth.user.orgId, typeKey);
   if (!resolved) {
@@ -66,6 +68,8 @@ export async function POST(
 
   const auth = await resolveApiKeyAuth(req);
   if (!auth) return NextResponse.json({ error: "invalid or missing API key" }, { status: 401 });
+  const limited = await enforceRateLimit(auth, req, start);
+  if (limited) return limited;
 
   const resolved = await resolveApiType(auth.user.orgId, typeKey);
   if (!resolved) {
@@ -101,7 +105,7 @@ export async function POST(
 }
 
 /** Build the org-scoped WHERE for a list query (tenant + kind/type + search). */
-export function listWhere(resolved: ResolvedApiType, orgId: string, q?: string): SQL {
+function listWhere(resolved: ResolvedApiType, orgId: string, q?: string): SQL {
   const conditions: SQL[] = [sql`org_id = ${orgId}`];
   if (resolved.writer.kind === "document") conditions.push(sql`kind = ${resolved.writer.docKind}`);
   if (resolved.dynamic) conditions.push(sql`type_key = ${resolved.key}`);

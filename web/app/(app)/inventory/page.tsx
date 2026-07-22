@@ -1,3 +1,4 @@
+import { getMoneyFormatter } from '@/lib/money-server'
 import { getTranslations } from 'next-intl/server'
 import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/db.ts'
@@ -14,11 +15,12 @@ import {
 } from '@openbooks/ui'
 import { ListPageLayout } from '../../../components/page-layout'
 import { SearchInput } from '../../../components/search-input'
-import { FilterChips } from '../../../components/filter-bar'
+import { ModuleHomeTabs } from '../../../components/module-home/ui'
 import { Pagination } from '../../../components/pagination'
 import { can, requirePermission } from '../../../lib/authz'
 import { parseListParams, pickString } from '../../../lib/list-params'
-import { money } from '../../../lib/format'
+import { SETUP_ENTITY_BY_KEY } from '../../../lib/setup/registry'
+import { SetupEntitySection } from '../admin/setup/[entity]/SetupEntitySection'
 import { NewMovementButton } from './NewMovementButton'
 import { InventoryActionDrawer } from './InventoryActionDrawer'
 
@@ -39,20 +41,34 @@ export default async function Inventory({
 }: {
   searchParams: Promise<Record<string, string | string[] | undefined>>
 }) {
+  const { money } = await getMoneyFormatter()
   const [t, tCommon] = await Promise.all([getTranslations('inventory'), getTranslations('common')])
 
   const authz = await requirePermission('items.read')
   const canManage = can(authz, 'items.manage')
+  // Stock Locations & Bill of Materials are configuration re-homed here from the
+  // Setup workspace — managing them keeps the same admin.setup.manage gate.
+  const canSetup = can(authz, 'admin.setup.manage')
   const orgId = authz.user.orgId
 
   const sp = await searchParams
-  const view = pickString(sp.view) === 'movements' ? 'movements' : 'onhand'
+  const rawView = pickString(sp.view)
+  const view = rawView && ['onhand', 'movements', 'locations', 'bom'].includes(rawView) ? rawView : 'onhand'
+  // Configuration tabs render the shared registry section instead of ledger data.
+  const setupEntityKey = view === 'locations' ? 'stock-locations' : view === 'bom' ? 'bom-components' : null
+  const setupEntity = canSetup && setupEntityKey ? SETUP_ENTITY_BY_KEY.get(setupEntityKey) ?? null : null
   const showDrawer = pickString(sp.movement) === 'new'
   const params = parseListParams(sp, { sort: 'name', dir: 'asc', perPage: 25, allowedSorts: ['name'] as const })
 
-  const viewOptions = [
-    { value: 'onhand', label: t('view.onhand'), count: 0 },
-    { value: 'movements', label: t('view.movements'), count: 0 },
+  const viewTabs = [
+    { href: '/inventory?view=onhand', label: t('view.onhand'), active: view === 'onhand' },
+    { href: '/inventory?view=movements', label: t('view.movements'), active: view === 'movements' },
+    ...(canSetup
+      ? [
+          { href: '/inventory?view=locations', label: t('view.locations'), active: view === 'locations' },
+          { href: '/inventory?view=bom', label: t('view.bom'), active: view === 'bom' },
+        ]
+      : []),
   ]
 
   // -- on-hand valuation ----------------------------------------------------
@@ -61,7 +77,9 @@ export default async function Inventory({
   let movements: any = { rows: [] }
   let movementsTotal = 0
 
-  if (view === 'onhand') {
+  if (setupEntity) {
+    // no ledger queries — the configuration section loads its own data
+  } else if (view === 'onhand') {
     const where = sql`cl.org_id = ${orgId} and cl.remaining_quantity > 0
       ${params.q ? sql` and (it.name ilike ${'%' + params.q + '%'} or it.code ilike ${'%' + params.q + '%'} or sl.code ilike ${'%' + params.q + '%'})` : sql``}`
     const [rows, count] = await Promise.all([
@@ -136,16 +154,30 @@ export default async function Inventory({
           <PageHeader
             title={t('list.title')}
             description={t('list.description')}
-            actions={canManage ? <NewMovementButton /> : undefined}
+            actions={
+              <div className="flex items-center gap-3">
+                <ModuleHomeTabs tabs={viewTabs} />
+                {!setupEntity && canManage ? <NewMovementButton /> : null}
+              </div>
+            }
           />
-          <div className="flex flex-wrap items-center gap-2">
-            <SearchInput placeholder={t('list.searchPlaceholder')} />
-            <FilterChips basePath="/inventory" currentParams={sp} paramKey="view" label={t('list.view')} options={viewOptions} />
-          </div>
+          {setupEntity ? null : (
+            <div className="flex flex-wrap items-center gap-2">
+              <SearchInput placeholder={t('list.searchPlaceholder')} />
+            </div>
+          )}
         </>
       }
     >
-      {total === 0 ? (
+      {setupEntity ? (
+        <SetupEntitySection
+          entity={setupEntity}
+          orgId={orgId}
+          searchParams={sp}
+          basePath="/inventory"
+          canManage={canSetup}
+        />
+      ) : total === 0 ? (
         <EmptyState title={t('list.emptyTitle')} description={t('list.emptyDescription')} />
       ) : view === 'onhand' ? (
         <>

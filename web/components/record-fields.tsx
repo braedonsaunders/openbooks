@@ -24,6 +24,7 @@ import {
   splitRecordData,
   withComputedFormulas,
 } from '../lib/record-schema'
+import { useMoney } from './money-provider'
 
 // --- /api/forms/options cache ------------------------------------------------
 
@@ -516,6 +517,7 @@ function FieldInput({
   disabled: boolean
   invalid: boolean
 }) {
+  const display = useMoney()
   const tCommon = useTranslations('common.labels')
   const invalidClass = invalid ? 'border-red-400 dark:border-red-700' : undefined
   switch (field.type) {
@@ -672,7 +674,7 @@ function FieldInput({
       return <RatingInput value={value} max={max} onCommit={onCommit} disabled={disabled} />
     }
     case 'formula': {
-      const text = formatFieldValue(field, value)
+      const text = formatFieldValue(field, value, {}, display)
       const numeric =
         typeof field.config?.format !== 'string' || field.config.format !== 'text'
       return (

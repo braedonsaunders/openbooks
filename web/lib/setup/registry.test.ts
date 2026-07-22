@@ -10,7 +10,7 @@ test('tax rates and return boxes are nested under their owning records', () => {
   assert.equal(taxRates.nestedUnder, 'tax-codes')
   assert.equal(taxBoxes.nestedUnder, 'tax-return-forms')
   assert.equal(taxRates.docSlug, 'tax-configuration')
-  assert.equal(taxBoxes.docSlug, 'tax-configuration')
+  assert.equal(taxBoxes.docSlug, 'tax-returns-and-boxes')
 
   const visibleTaxKeys = setupEntitiesByGroup().get('taxes')?.map((entity) => entity.key)
   assert.ok(visibleTaxKeys?.includes('tax-codes'))
@@ -27,6 +27,11 @@ test('re-homed entities stay in the CRUD registry but leave the setup rail', () 
     'item-rate-books',
     'item-rate-book-assignments',
     'fair-value-prices',
+    'tax-regimes',
+    'tax-pool-classes',
+    'tax-first-year-rules',
+    'depreciation-methods',
+    'depreciation-book-policies',
   ]
   const byGroup = setupEntitiesByGroup()
   const allVisible = [...byGroup.values()].flat().map((entity) => entity.key)
@@ -39,4 +44,12 @@ test('re-homed entities stay in the CRUD registry but leave the setup rail', () 
 
   // The Inventory setup group is now empty — all three moved to the module.
   assert.equal(byGroup.get('inventory')?.length, 0)
+  assert.deepEqual(byGroup.get('assets')?.map((entity) => entity.key), ['asset-categories'])
+})
+
+test('time types independently control field-ticket visibility', () => {
+  const timeTypes = SETUP_ENTITY_BY_KEY.get('time-types')
+  assert.ok(timeTypes)
+  assert.ok(timeTypes.fields.some((field) => field.key === 'showOnFieldTicket' && field.kind === 'boolean'))
+  assert.ok(timeTypes.columns.some((column) => column.key === 'showOnFieldTicket' && column.kind === 'boolean'))
 })

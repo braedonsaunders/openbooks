@@ -1,9 +1,9 @@
 'use client'
 
+import { useMoney } from '@/components/money-provider'
 import { useState } from 'react'
 import { useTranslations } from 'next-intl'
 import { EntityDrawer } from '../analytics/_ui/EntityDrawer'
-import { money, moneyCompact } from '../../../lib/format'
 import type { CustomerExposureRow } from '../../../lib/module-home/customers'
 
 /**
@@ -13,6 +13,7 @@ import type { CustomerExposureRow } from '../../../lib/module-home/customers'
  * use, so the drill feels identical everywhere.
  */
 export function RelationshipsTable({ rows }: { rows: CustomerExposureRow[] }) {
+  const { money, moneyCompact } = useMoney()
   const t = useTranslations('customers')
   const [entity, setEntity] = useState<{ id: string; name: string } | null>(null)
 

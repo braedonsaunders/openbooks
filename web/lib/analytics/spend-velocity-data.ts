@@ -2,6 +2,7 @@ import "server-only";
 import { sql } from "drizzle-orm";
 import { db } from "@openbooks/engine/src/db.ts";
 import { analyticsConfig } from "./config";
+import { getMoneyFormatter } from '../money-server'
 
 /**
  * Spend Velocity — a faithful port of Gantry's SpendVelocity dashboard
@@ -209,6 +210,7 @@ const r1 = (n: number) => Math.round(n * 10) / 10;
 // ---- main -------------------------------------------------------------------
 
 export async function spendVelocityData(orgId: string, period: { from: string; to: string; label: string }): Promise<SpendVelocityData> {
+  const { money } = await getMoneyFormatter(orgId)
   const { from, to } = period;
   const C = { ...CFG, ...(await analyticsConfig(orgId, "spendVelocity")) };
 
@@ -777,7 +779,7 @@ export async function spendVelocityData(orgId: string, period: { from: string; t
 
   // ---- insights (verbatim conditions) ---------------------------------------------------------------------------------
   const insights: SVInsight[] = [];
-  const fmtK = (n: number) => `$${Math.round(n).toLocaleString("en-US")}`;
+  const fmtK = (n: number) => money(n, { maximumFractionDigits: 0 });
   const highVel20 = accountVelocity.filter((a) => a.velocity > 20);
   if (highVel20.length) insights.push({ type: "alert", title: "High Growth Expense Categories", message: `${highVel20.length} expense account(s) growing >20%/month`, action: "Review spending policies for these categories" });
   if (Math.abs(billsVelocity - expensesVelocity) > 20) {

@@ -1,3 +1,4 @@
+import { getMoneyFormatter } from '@/lib/money-server'
 import Link from 'next/link'
 import { getTranslations } from 'next-intl/server'
 import { sql } from 'drizzle-orm'
@@ -12,21 +13,26 @@ import {
   TableHead,
   TableHeader,
   TableRow,
+  cn,
 } from '@openbooks/ui'
+import { listTaxRegimes } from '@openbooks/engine/src/tax-pool-run.ts'
+import { fromUnits, toUnits } from '@openbooks/engine/src/money.ts'
 import { ListPageLayout } from '../../../components/page-layout'
+import { TaxPoolsView } from './tax-pools/TaxPoolsView'
 import { SearchInput } from '../../../components/search-input'
 import { FilterChips } from '../../../components/filter-bar'
 import { Pagination } from '../../../components/pagination'
 import { SortTh } from '../../../components/sortable-th'
 import { can, requirePermission } from '../../../lib/authz'
 import { isUuid, parseListParams, pickString } from '../../../lib/list-params'
-import { money } from '../../../lib/format'
 import { loadAsset } from '../../api/assets/_lib'
 import { NewAssetButton } from './NewAssetButton'
 import { NewAssetRedirect } from './NewAssetRedirect'
 import { RunDepreciationButton } from './RunDepreciationButton'
 import { AssetDrawer } from './AssetDrawer'
 import { isMultiSubsidiary, subsidiaryOptions } from '../../../lib/subsidiaries'
+import { resolveFormLayout } from '../../../lib/customization/resolve'
+import { loadFieldDefs } from '../../../lib/custom-fields'
 
 export const dynamic = 'force-dynamic'
 
@@ -51,12 +57,64 @@ export default async function Assets({
 }: {
   searchParams: Promise<Record<string, string | string[] | undefined>>
 }) {
+  const { money } = await getMoneyFormatter()
   const [t, tCommon] = await Promise.all([getTranslations('assets'), getTranslations('common')])
 
   const authz = await requirePermission('assets.read')
   const canManage = can(authz, 'assets.manage')
+  const canSetupTaxDepreciation = can(authz, 'admin.setup.manage')
+  const canCustomize = can(authz, 'admin.customization.manage')
   const orgId = authz.user.orgId
-  const [multiSub, allSubsidiaries] = await Promise.all([isMultiSubsidiary(), subsidiaryOptions()])
+  const sp = await searchParams
+
+  // Fixed Assets cockpit: the register and pooled tax depreciation are tabs of
+  // one module, not separate nav destinations.
+  const tab = pickString(sp.tab) === 'tax-depreciation' ? 'tax-depreciation' : 'register'
+  const tabs = [
+    { key: 'register', label: t('tabs.register'), href: '/assets' },
+    { key: 'tax-depreciation', label: t('tabs.taxDepreciation'), href: '/assets?tab=tax-depreciation' },
+  ] as const
+  const tabsNav = (
+    <nav className="flex items-center gap-1 border-b border-slate-200 dark:border-slate-800">
+      {tabs.map((item) => (
+        <Link
+          key={item.key}
+          href={item.href as never}
+          aria-current={tab === item.key ? 'page' : undefined}
+          className={cn(
+            '-mb-px border-b-2 px-3 py-2 text-sm font-medium transition-colors',
+            tab === item.key
+              ? 'border-teal-600 text-teal-700 dark:border-teal-400 dark:text-teal-300'
+              : 'border-transparent text-slate-600 hover:text-slate-900 dark:text-slate-300 dark:hover:text-slate-100',
+          )}
+        >
+          {item.label}
+        </Link>
+      ))}
+    </nav>
+  )
+
+  if (tab === 'tax-depreciation') {
+    const regimes = await listTaxRegimes(orgId)
+    return (
+      <ListPageLayout
+        header={
+          <>
+            <PageHeader title={t('list.title')} description={t('list.description')} />
+            {tabsNav}
+          </>
+        }
+      >
+        <TaxPoolsView canRun={canManage} canConfigure={canSetupTaxDepreciation} regimes={regimes} />
+      </ListPageLayout>
+    )
+  }
+
+  const [multiSub, allSubsidiaries, depreciationBooks] = await Promise.all([
+    isMultiSubsidiary(),
+    subsidiaryOptions(),
+    db.execute(sql`select id, name, is_primary from accounting_books where org_id=${orgId} and is_active and posts_gl order by is_primary desc, code`) as any,
+  ])
   const subsidiaries = authz.allowedSubsidiaryIds
     ? allSubsidiaries.filter((subsidiary) => authz.allowedSubsidiaryIds!.has(subsidiary.id))
     : allSubsidiaries
@@ -64,7 +122,6 @@ export default async function Assets({
     ? sql`and a.subsidiary_id = any(${`{${[...authz.allowedSubsidiaryIds].join(',')}}`}::uuid[])`
     : sql``
 
-  const sp = await searchParams
   const assetId = typeof sp.asset === 'string' ? sp.asset : undefined
   const params = parseListParams(sp, {
     sort: 'number',
@@ -119,16 +176,44 @@ export default async function Assets({
       : total
 
   const [openAsset, pickers] = await Promise.all([
-    assetId && assetId !== 'new' && isUuid(assetId) ? loadAsset(assetId, orgId) : null,
+    assetId && assetId !== 'new' && isUuid(assetId) ? loadAsset(assetId, orgId, {
+      bookId: pickString(sp.deprbook),
+      query: pickString(sp.deprq) ?? '',
+      page: Math.max(1, Number.parseInt(pickString(sp.deprpage) ?? '1', 10) || 1),
+      perPage: 25,
+    }) : null,
     assetId
       ? Promise.all([
           db.execute(sql`select id, name from asset_categories where org_id = ${orgId} and is_active order by name`) as any,
           db.execute(
             sql`select id, number, name from accounts where org_id = ${orgId} and is_active and not is_summary order by number nulls last`,
           ) as any,
+          db.execute(sql`
+            select r.code, r.name, r.class_attribute,
+                   coalesce(jsonb_agg(jsonb_build_object('code', c.class_code, 'name', c.name) order by c.class_code)
+                     filter (where c.class_code is not null), '[]'::jsonb) as classes
+              from tax_regimes r
+              left join tax_pool_classes c on c.org_id=r.org_id and c.regime=r.code and c.is_active
+             where r.org_id=${orgId} and r.is_active
+             group by r.code,r.name,r.class_attribute order by r.name`) as any,
+          db.execute(sql`
+            select id, code, name from depreciation_methods
+             where org_id=${orgId} and is_active order by name`) as any,
         ])
       : null,
   ])
+  const fieldDefs = openAsset ? await loadFieldDefs('fixed_assets') : []
+  const resolvedForm = openAsset
+    ? await resolveFormLayout({
+        orgId,
+        userId: authz.user.id,
+        recordType: 'fixed_asset',
+        userRoles: [authz.user.role],
+        headerDefs: fieldDefs,
+        lineDefs: [],
+        explicitLayoutId: pickString(sp.form),
+      })
+    : null
 
   const statusOptions = (STATUS_VALUES as readonly string[]).map((s) => ({
     value: s,
@@ -148,15 +233,14 @@ export default async function Assets({
                 <Link href="/docs/fixed-assets-depreciation" className="text-sm text-teal-700 hover:underline dark:text-teal-300">
                   {t('equipment.documentation')}
                 </Link>
-                {canManage ? (
-                  <>
-                  <RunDepreciationButton />
+                {canManage ? <>
+                  <RunDepreciationButton books={depreciationBooks.rows} />
                   <NewAssetButton />
-                  </>
-                ) : null}
+                </> : null}
               </div>
             }
           />
+          {tabsNav}
           <div className="flex flex-wrap items-center gap-2">
             <Link href="/assets/equipment" className="text-sm text-teal-700 hover:underline dark:text-teal-300">
               {t('equipment.title')}
@@ -195,7 +279,7 @@ export default async function Assets({
             </TableHeader>
             <TableBody>
               {assets.rows.map((a: any) => {
-                const nbv = Number(a.acquisition_cost ?? 0) - Number(a.accumulated ?? 0)
+                const nbv = fromUnits(toUnits(String(a.acquisition_cost ?? '0')) - toUnits(String(a.accumulated ?? '0')))
                 return (
                   <TableRow key={a.id}>
                     <TableCell className="font-mono text-[13px]">{a.asset_number}</TableCell>
@@ -228,8 +312,15 @@ export default async function Assets({
           payload={openAsset}
           categories={pickers[0].rows}
           accounts={pickers[1].rows}
+          taxConfigurations={pickers[2].rows}
+          depreciationMethods={pickers[3].rows}
           subsidiaries={multiSub ? subsidiaries : []}
           canManage={canManage}
+          canCustomize={canCustomize}
+          layout={resolvedForm?.layout}
+          forms={resolvedForm?.available ?? []}
+          currentFormId={resolvedForm?.row?.id ?? null}
+          fieldDefs={fieldDefs as any}
         />
       ) : null}
     </ListPageLayout>

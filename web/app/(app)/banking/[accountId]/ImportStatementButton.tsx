@@ -1,13 +1,12 @@
 'use client'
 
+import { useMoney } from '@/components/money-provider'
 import { useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { useTranslations } from 'next-intl'
 import { FileUp, Upload } from 'lucide-react'
 import { toast } from 'sonner'
 import { Badge, Button, Drawer, Input, Label, Select, Textarea } from '@openbooks/ui'
-import { money } from '../../../../lib/format'
-
 interface PreviewLine {
   postedOn: string
   amount: string
@@ -61,6 +60,7 @@ const PREVIEW_CAP = 100
  * preview the parsed + deduped lines, then import.
  */
 export function ImportStatementButton({ accountId }: { accountId: string }) {
+  const { money } = useMoney()
   const t = useTranslations('banking.import')
   const tBanking = useTranslations('banking')
   const tCommon = useTranslations('common')

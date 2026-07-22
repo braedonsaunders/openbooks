@@ -1,5 +1,6 @@
 'use client'
 
+import { useMoney } from '@/components/money-provider'
 // Confirm card for a drafted (proposed) write, ported from beaconhs. The
 // draft tool returns a signed proposal in its output; this renders the
 // journal preview + Apply/Discard. The real mutation happens only in
@@ -11,8 +12,6 @@ import Link from 'next/link'
 import { useTranslations } from 'next-intl'
 import { Check, ExternalLink, FileWarning, Sparkles } from 'lucide-react'
 import { Button } from '@openbooks/ui'
-import { money } from '../../lib/format'
-
 type ProposalData = {
   kind: string
   preview: {
@@ -42,6 +41,7 @@ export function proposalFromOutput(output: unknown): ProposalData | null {
 }
 
 export function ProposalCard({ proposal }: { proposal: ProposalData }) {
+  const { money } = useMoney()
   const t = useTranslations('assistant')
   const [state, setState] = useState<'idle' | 'done' | 'discarded' | 'error'>('idle')
   const [result, setResult] = useState<{ documentNumber: string; href: string } | null>(null)

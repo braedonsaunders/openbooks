@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { sql } from "drizzle-orm";
 import { db } from "@openbooks/engine/src/db.ts";
-import { sum } from "@openbooks/engine/src/money.ts";
+import { fromUnits, sum, toUnits } from "@openbooks/engine/src/money.ts";
 import { can, guardPermission } from "../../../../lib/authz";
 import { verifyProposal, type JournalPreview } from "../../../../lib/assistant/proposals";
 import { createDraftJournal } from "../../../../lib/journals";
@@ -48,14 +48,19 @@ export async function POST(req: Request) {
   const p = body.preview;
   // Defense in depth: the HMAC already covers a balanced preview, but a
   // balanced check here keeps a signing bug from ever writing a lopsided draft.
-  const cents = p.lines.reduce((acc, l) => acc + Math.round(Number(l.amount) * 100), 0);
-  if (!Number.isFinite(cents) || cents !== 0 || p.lines.length < 2) {
+  let balance = 0n;
+  try {
+    balance = p.lines.reduce((acc, line) => acc + toUnits(line.amount), 0n);
+  } catch {
+    return NextResponse.json({ error: "draft lines contain an invalid monetary amount" }, { status: 422 });
+  }
+  if (balance !== 0n || p.lines.length < 2) {
     return NextResponse.json({ error: "draft lines do not balance" }, { status: 422 });
   }
 
   const user = authz.user;
   const doc = await createDraftJournal(user.orgId, user.id);
-  const totalDebits = sum(p.lines.map((l) => (Number(l.amount) > 0 ? l.amount : "0")));
+  const totalDebits = sum(p.lines.map((line) => (toUnits(line.amount) > 0n ? fromUnits(toUnits(line.amount)) : "0")));
   await db.transaction(async (tx) => {
     for (let i = 0; i < p.lines.length; i++) {
       const l = p.lines[i]!;

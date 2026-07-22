@@ -1,12 +1,11 @@
 'use client'
 
+import { useMoney } from '@/components/money-provider'
 import { useMemo, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { useTranslations } from 'next-intl'
 import { ArrowRight, ShieldCheck, Gauge, TriangleAlert } from 'lucide-react'
 import { Badge, Button, cn } from '@openbooks/ui'
-import { money } from '../../../../lib/format'
-import { compactMoney } from '../../../../components/cockpit/ui'
 
 export interface PlannerEntry {
   id: string
@@ -37,6 +36,7 @@ const fmtDate = (d: string) => new Date(d + 'T00:00:00Z').toLocaleDateString('en
  * the cockpit's forecast-config flyout — see the gear on this panel.
  */
 export function PayRunPlanner(props: PayRunPlannerProps) {
+  const { money, moneyCompact } = useMoney()
   const t = useTranslations('ap.cockpit.payRun')
   const router = useRouter()
   const payable = useMemo(() => props.recommended.filter((e) => e.docId), [props.recommended])
@@ -83,7 +83,7 @@ export function PayRunPlanner(props: PayRunPlannerProps) {
           {overCap ? (
             <span className="flex items-center gap-1 font-medium text-red-600 dark:text-red-400"><TriangleAlert size={11} />{t('overCap')}</span>
           ) : props.deferredThisWeek > 0 ? (
-            <span className="text-amber-600 dark:text-amber-400">{t('deferred', { amount: compactMoney(props.deferredThisWeek) })}</span>
+            <span className="text-amber-600 dark:text-amber-400">{t('deferred', { amount: moneyCompact(props.deferredThisWeek) })}</span>
           ) : null}
         </div>
       </div>

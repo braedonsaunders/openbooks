@@ -157,8 +157,8 @@ export function AccountDrawer({
       headerActions={
         mode === 'edit' ? (
           <>
-            <Button disabled={busy} onClick={save}>{busy ? tc('actions.saving') : tc('actions.save')}</Button>
             <Button variant="outline" disabled={busy} onClick={cancel}>{tc('actions.cancel')}</Button>
+            <Button disabled={busy} onClick={save}>{busy ? tc('actions.saving') : tc('actions.save')}</Button>
           </>
         ) : canManage ? (
           <Button variant="outline" onClick={() => setMode('edit')}>{tc('actions.edit')}</Button>

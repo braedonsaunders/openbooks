@@ -53,7 +53,39 @@ export async function resolveSubsidiaryView(
   const nonElim = members.filter((s) => !s.isElimination);
   const consolidated = nonElim.length > 1;
   // Standalone leaf: just that entity. Consolidated: subtree + eliminations.
-  const inView = consolidated ? members : [node];
+  let inView = consolidated ? members : [node];
+  let weights: StatementSubsidiaryContext["weights"];
+  if (consolidated) {
+    const ownership = (await db.execute(sql`
+      with recursive ownership_scope as (
+        select s.id, 1::numeric as factor
+          from subsidiaries s where s.id=${node.id}
+        union all
+        select child.id,
+               parent.factor * case
+                 when interest.method='equity' then 0::numeric
+                 when interest.method='proportionate' then interest.ownership_percent / 100::numeric
+                 else 1::numeric
+               end
+          from ownership_scope parent
+          join subsidiaries child on child.parent_id=parent.id and child.is_active
+          left join lateral (
+            select method,ownership_percent
+              from subsidiary_ownership_interests policy
+             where policy.subsidiary_id=child.id and policy.parent_subsidiary_id=parent.id
+               and policy.is_active and policy.effective_from<=${periodTo}
+               and (policy.effective_to is null or policy.effective_to>=${periodTo})
+             order by policy.effective_from desc limit 1
+          ) interest on true
+      )
+      select id,factor::text from ownership_scope
+    `)) as unknown as { rows: { id: string; factor: string }[] };
+    const factorById = new Map(ownership.rows.map((row) => [row.id, row.factor]));
+    inView = inView.filter((member) => factorById.get(member.id) !== "0");
+    weights = inView
+      .map((member) => ({ subsidiaryId: member.id, factor: factorById.get(member.id) ?? "1" }))
+      .filter((weight) => weight.factor !== "1");
+  }
 
   const foreign = [...new Set(inView.filter((s) => s.baseCurrency !== node.baseCurrency).map((s) => s.baseCurrency))];
   let rates: StatementSubsidiaryContext["rates"];
@@ -80,15 +112,15 @@ export async function resolveSubsidiaryView(
         const x = byCcy.get(s.baseCurrency)!;
         return {
           subsidiaryId: s.id,
-          averageRate: Number(x.avg),
-          currentRate: Number(x.cur),
-          historicalRate: Number(x.hist),
+          averageRate: x.avg,
+          currentRate: x.cur,
+          historicalRate: x.hist,
         };
       });
   }
 
   return {
-    subsidiary: { ids: inView.map((s) => s.id), rates },
+    subsidiary: { ids: inView.map((s) => s.id), rates, weights },
     currency: node.baseCurrency,
     label: consolidated ? `${node.name} (consolidated)` : node.name,
     consolidated,

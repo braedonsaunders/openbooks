@@ -20,6 +20,11 @@ signed tickets — every invoice line traceable to a signed artifact.
 
 Enable it in **Setup → Features → Field Tickets** (off by default).
 
+Choose the hour categories shown in the crew grid with **Show on field tickets**
+on each record under **Setup → Workforce → Time Types**. This controls only the
+ticket grid; hidden types remain available to timesheets, pricing, imports, and
+labor costing. A typical tenant enables Regular, Overtime, and Double time.
+
 ## Ticket period
 
 Shift, daily, or weekly — resolved most-specific-wins:

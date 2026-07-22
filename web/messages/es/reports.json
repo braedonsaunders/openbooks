@@ -350,7 +350,8 @@
       "columns": {
         "trigger": "Disparador",
         "rows": "Filas",
-        "finished": "Finalizada"
+        "finished": "Finalizada",
+        "delivery": "Entrega"
       },
       "status": {
         "succeeded": "Correcta",
@@ -362,6 +363,8 @@
         "manual": "Manual",
         "scheduled": "Programada"
       },
+      "deliveryEvidence": "{sent}/{total} enviados · {failed} fallidos · {suppressed} bloqueados",
+      "pdf": "Evidencia PDF",
       "csv": "CSV"
     }
   },

@@ -9,7 +9,9 @@ import type { TaxReturnResult } from '@openbooks/engine/src/tax-return.ts'
  * the jurisdiction's not-for-filing notice where the law requires one.
  */
 export function taxReturnExportData(result: TaxReturnResult, t: Translator): ExportData {
-  const netBox = result.boxes.find((b) => b.lineCode === '113') ?? result.boxes.find((b) => b.lineCode === '109')
+  const netBox =
+    result.boxes.find((b) => b.lineCode === '113C') ??
+    result.boxes.find((b) => b.lineCode === '109')
   const summary = [] as ExportData['summary']
   if (netBox) summary.push({ label: netBox.label, value: Number(netBox.value) })
   if (result.watermark) summary.push({ label: t('notice'), value: result.watermark })

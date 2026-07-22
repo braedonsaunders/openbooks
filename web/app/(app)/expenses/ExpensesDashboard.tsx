@@ -1,5 +1,6 @@
 'use client'
 
+import { useAnalyticsMoney } from '../analytics/_ui/format'
 import { useState } from 'react'
 import Link from 'next/link'
 import { useTranslations } from 'next-intl'
@@ -13,10 +14,6 @@ import { KpiCard } from '../analytics/_ui/KpiCard'
 import { Panel } from '../analytics/_ui/Panel'
 import { Donut, Chart } from '../analytics/_ui/charts'
 import { DrillDrawer, type DrillTarget } from '../analytics/_ui/DrillDrawer'
-import { fmtMoney } from '../analytics/_ui/format'
-
-const money = (n: number) => fmtMoney(n, { compact: true })
-const money0 = (n: number) => fmtMoney(n)
 const pct1 = (n: number) => `${Math.round(n * 10) / 10}%`
 
 const STATUS_VARIANT: Record<string, 'success' | 'secondary' | 'warning'> = {
@@ -33,6 +30,9 @@ const STATUS_VARIANT: Record<string, 'success' | 'secondary' | 'warning'> = {
  * this month. Queue rows open the report's native flyout on the list route.
  */
 export function ExpensesDashboard({ data }: { data: ExpensesDashboardData }) {
+  const fmtMoney = useAnalyticsMoney()
+  const money = (n: number) => fmtMoney(n, { compact: true })
+  const money0 = (n: number) => fmtMoney(n)
   const t = useTranslations('expenses.dashboard')
   const [drill, setDrill] = useState<DrillTarget | null>(null)
   const topCats = data.categories.slice(0, 8)

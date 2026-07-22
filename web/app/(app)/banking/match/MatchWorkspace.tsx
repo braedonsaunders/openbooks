@@ -1,5 +1,6 @@
 'use client'
 
+import { useMoney } from '@/components/money-provider'
 import { useEffect, useMemo, useState } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
@@ -13,8 +14,6 @@ import {
 import { SearchInput } from '../../../../components/search-input'
 import { Pagination } from '../../../../components/pagination'
 import { confirmDialog } from '../../../../lib/confirm'
-import { money } from '../../../../lib/format'
-
 type Search = Record<string, string | string[] | undefined>
 interface Opt { id: string; label: string; unmatched?: number }
 interface Account { id: string; label: string }
@@ -34,6 +33,7 @@ export function MatchWorkspace({
   currentParams: Search
   tab: 'match' | 'review' | 'excluded'
 }) {
+  const { money } = useMoney()
   const t = useTranslations('banking.match')
   const tW = useTranslations('banking.workspace')
   const tCommon = useTranslations('common')

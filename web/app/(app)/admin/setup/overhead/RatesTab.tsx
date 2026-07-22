@@ -5,6 +5,7 @@ import { db } from '@openbooks/engine/src/db.ts'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@openbooks/ui'
 import { SETUP_ENTITY_BY_KEY, OVERHEAD_RATE_KINDS } from '../../../../../lib/setup/registry'
 import { NewSetupButton, SetupDrawer } from '../[entity]/SetupDrawer'
+import { getMoneyFormatter } from '@/lib/money-server'
 
 /**
  * Overhead Rates — the published, effective-dated department rate card, hosted
@@ -29,6 +30,7 @@ type Row = {
 }
 
 export async function RatesTab({ orgId, rowParam }: { orgId: string; rowParam: string | null }) {
+  const { money, locale } = await getMoneyFormatter(orgId)
   const t = await getTranslations('admin.setup')
   const entity = SETUP_ENTITY_BY_KEY.get('overhead-rates')!
 
@@ -63,8 +65,8 @@ export async function RatesTab({ orgId, rowParam }: { orgId: string; rowParam: s
   const fmtRate = (r: Row) => {
     const v = Number(r.rate_percent ?? 0)
     return r.rate_kind === 'percent'
-      ? `${v.toLocaleString(undefined, { maximumFractionDigits: 2 })}%`
-      : `$${v.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}/hr`
+      ? new Intl.NumberFormat(locale, { style: 'percent', maximumFractionDigits: 2 }).format(v / 100)
+      : `${money(v)}/hr`
   }
   const kindLabel = (k: string | null) => {
     const opt = OVERHEAD_RATE_KINDS.find((o) => o.value === k)

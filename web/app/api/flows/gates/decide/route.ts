@@ -21,6 +21,7 @@ export async function POST(req: Request) {
     gateId?: string
     decision?: 'approved' | 'rejected'
     comment?: string
+    signature?: string
   }
   if (!body.gateId || !isUuid(body.gateId) || !['approved', 'rejected'].includes(body.decision ?? '')) {
     return NextResponse.json({ error: 'gateId and decision required' }, { status: 400 })
@@ -38,6 +39,7 @@ export async function POST(req: Request) {
       decision: body.decision!,
       userId: authz.user.id,
       comment: body.comment,
+      signature: body.signature,
     })
     return NextResponse.json(res)
   } catch (e) {

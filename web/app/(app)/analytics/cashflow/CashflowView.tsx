@@ -24,7 +24,7 @@ import type { CashflowData, SideSummary } from '../../../../lib/analytics/cashfl
 import { Panel } from '../_ui/Panel'
 import { TrendChart, Chart, cashBridgeOption } from '../_ui/charts'
 import { Vital } from '../_ui/Vital'
-import { fmtMoney } from '../_ui/format'
+import { useAnalyticsMoney } from '../_ui/format'
 
 // Analysis only — the interactive surfaces this view used to carry moved to
 // their operational homes at full fidelity: the weekly timeline + forecast
@@ -32,11 +32,11 @@ import { fmtMoney } from '../_ui/format'
 const TABS = ['overview', 'category'] as const
 type Tab = (typeof TABS)[number]
 const TAB_LABEL: Record<Tab, string> = { overview: 'Overview', category: 'Category Analysis' }
-
-const money = (n: number) => fmtMoney(n, { compact: true })
 const BUCKET_COLORS: Record<string, string> = { Current: '#10b981', '1-30': '#14b8a6', '31-60': '#0ea5e9', '61-90': '#f59e0b', '90+': '#ef4444' }
 
 export function CashflowView({ data }: { data: CashflowData }) {
+  const fmtMoney = useAnalyticsMoney()
+  const money = (n: number) => fmtMoney(n, { compact: true })
   const [tab, setTab] = useState<Tab>('overview')
   const s = data.summary
 
@@ -83,8 +83,10 @@ export function CashflowView({ data }: { data: CashflowData }) {
 
 /* ---------------------------------------------------------------- Overview */
 function OverviewTab({ data }: { data: CashflowData }) {
+  const fmtMoney = useAnalyticsMoney()
+  const money = (n: number) => fmtMoney(n, { compact: true })
   const s = data.summary
-  const bridgeOption = useMemo(() => cashBridgeOption(s.startingCash, s.totalInflows, s.totalOutflows, s.projectedEnd), [s])
+  const bridgeOption = useMemo(() => cashBridgeOption(s.startingCash, s.totalInflows, s.totalOutflows, s.projectedEnd, money), [s, money])
 
   return (
     <div className="space-y-5">
@@ -115,6 +117,8 @@ function OverviewTab({ data }: { data: CashflowData }) {
 }
 
 function AgingPanel({ title, side, accent }: { title: string; side: SideSummary; accent: string }) {
+  const fmtMoney = useAnalyticsMoney()
+  const money = (n: number) => fmtMoney(n, { compact: true })
   const total = side.outstanding || 1
   return (
     <Panel title={title} icon={ListOrdered} hint={`${money(side.outstanding)} · ${side.pctCurrent.toFixed(0)}% current`}>
@@ -140,6 +144,8 @@ function AgingPanel({ title, side, accent }: { title: string; side: SideSummary;
 
 /* --------------------------------------------------------- Category Analysis */
 function CategoryTab({ data }: { data: CashflowData }) {
+  const fmtMoney = useAnalyticsMoney()
+  const money = (n: number) => fmtMoney(n, { compact: true })
   const [side, setSide] = useState<'ar' | 'ap'>('ap')
   const entries = useMemo(() => {
     const all = data.weeks.flatMap((w) => (side === 'ar' ? w.arEntries : w.apEntries))

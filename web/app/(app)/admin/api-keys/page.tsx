@@ -31,7 +31,7 @@ export default async function ApiKeysPage({
   const [keys, totalRow] = await Promise.all([
     db.execute(sql`
       select k.id, k.name, k.description, k.key_prefix, k.key_preview, k.scopes,
-             k.is_active, k.expires_at, k.last_used_at, k.created_at,
+             k.rate_limit_per_min, k.is_active, k.expires_at, k.last_used_at, k.created_at,
              u.name as owner_name, u.email as owner_email
         from api_keys k
         join users u on u.id = k.user_id
@@ -50,7 +50,7 @@ export default async function ApiKeysPage({
   const open = keyId && keyId !== 'new' && isUuid(keyId)
     ? (await db.execute(sql`
         select k.id, k.name, k.description, k.key_prefix, k.key_preview, k.scopes,
-               k.is_active, k.expires_at, k.last_used_at, k.created_at,
+               k.rate_limit_per_min, k.is_active, k.expires_at, k.last_used_at, k.created_at,
                u.name as owner_name, u.email as owner_email
           from api_keys k
           join users u on u.id = k.user_id

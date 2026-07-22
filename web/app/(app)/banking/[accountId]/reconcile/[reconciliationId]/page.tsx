@@ -1,3 +1,4 @@
+import { getMoneyFormatter } from '@/lib/money-server'
 import { notFound } from 'next/navigation'
 import { getTranslations } from 'next-intl/server'
 import { sql } from 'drizzle-orm'
@@ -7,7 +8,6 @@ import { Badge, PageHeader } from '@openbooks/ui'
 import { ListPageLayout } from '../../../../../../components/page-layout'
 import { requirePermission, can } from '../../../../../../lib/authz'
 import { isUuid, parsePrefixedListParams } from '../../../../../../lib/list-params'
-import { money } from '../../../../../../lib/format'
 import { ReconcileWorkspace } from './ReconcileWorkspace'
 import { DifferenceBadge } from './DifferenceBadge'
 
@@ -42,6 +42,7 @@ export default async function ReconcilePage({
   params: Promise<{ accountId: string; reconciliationId: string }>
   searchParams: Promise<Record<string, string | string[] | undefined>>
 }) {
+  const { money } = await getMoneyFormatter()
   const authz = await requirePermission('banking.read')
   const canReconcile = can(authz, 'banking.reconcile')
   const t = await getTranslations('banking')

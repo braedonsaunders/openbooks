@@ -2,16 +2,21 @@ import 'server-only'
 import { sql, type SQL } from 'drizzle-orm'
 import type { ListViewConfig } from '@openbooks/customization'
 import {
+  CUSTOMER_BASE_JOINS,
+  CUSTOMER_BUILT_IN_EXPR,
+  CUSTOMER_SORTS,
+  CUSTOMER_STATUS_EXPR,
   PROJECT_BASE_JOINS,
   PROJECT_BUILT_IN_EXPR,
   PROJECT_SORTS,
+  customerWhere,
   projectWhere,
   type EntityAdhoc,
 } from '../customization/entity-list-query'
 
 /**
  * Entity-list data sources — the SQL half of the universal list for plain
- * (non-`documents`) tables such as `projects`. Parallels lib/list/sources.ts
+ * (non-`documents`) tables such as `parties` and `projects`. Parallels lib/list/sources.ts
  * (documents-backed). components/entity-list-view.tsx renders any of these with
  * the same toolbar/table/view machinery; this registry is the ONLY place their
  * queries differ: which table/alias, joins, built-in column expressions, sort
@@ -33,6 +38,10 @@ export interface EntityListSource {
   sorts: Record<string, SQL>
   /** Fallback ORDER BY when the requested sort key isn't in `sorts`. */
   defaultSort: SQL
+  /** Expression grouped for the status filter/counts (defaults to alias.status). */
+  statusExpr?: SQL
+  /** Status used when the URL does not explicitly choose one or `all`. */
+  defaultStatus?: string
   /** WHERE builder. */
   where: (
     view: ListViewConfig,
@@ -53,6 +62,23 @@ export interface EntityListSource {
 }
 
 const SOURCES: Record<string, EntityListSource> = {
+  customer: {
+    recordType: 'customer',
+    table: 'parties',
+    alias: 'p',
+    customFieldTable: 'parties',
+    baseJoins: CUSTOMER_BASE_JOINS,
+    builtInExpr: CUSTOMER_BUILT_IN_EXPR,
+    sorts: CUSTOMER_SORTS,
+    defaultSort: sql`p.display_name`,
+    statusExpr: CUSTOMER_STATUS_EXPR,
+    defaultStatus: 'customer',
+    where: customerWhere,
+    drawerParam: 'party',
+    basePath: '/entities/customers',
+    hasInactive: true,
+    extraSelect: sql`p.is_active`,
+  },
   project: {
     recordType: 'project',
     table: 'projects',

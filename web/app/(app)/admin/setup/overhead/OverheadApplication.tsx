@@ -6,6 +6,7 @@ import { useTranslations } from 'next-intl'
 import { toast } from 'sonner'
 import { Button, Label, Select, cn } from '@openbooks/ui'
 import { PagedTable } from '../../../../../components/paged-table'
+import { useMoney } from '@/components/money-provider'
 
 export interface ApplicationRow {
   id: string
@@ -29,6 +30,7 @@ export function OverheadApplication(props: {
   applications: ApplicationRow[]
   unapplied: { entries: number; hours: string }
 }) {
+  const { money } = useMoney()
   const t = useTranslations('admin.setup.entities.overhead-model.application')
   const router = useRouter()
   const [busy, setBusy] = useState(false)
@@ -133,7 +135,7 @@ export function OverheadApplication(props: {
                   { key: 'entry', header: t('entry'), cell: (a) => <span className="font-mono text-xs">{a.entry_number}</span> },
                   { key: 'date', header: t('date'), cell: (a) => <span className="tabular-nums">{a.posting_date}</span> },
                   { key: 'projects', header: t('projects'), cell: (a) => <span className="tabular-nums">{a.projects}</span> },
-                  { key: 'total', header: t('total'), cell: (a) => <span className="tabular-nums">${Number(a.applied_total).toFixed(2)}</span> },
+                  { key: 'total', header: t('total'), cell: (a) => <span className="tabular-nums">{money(a.applied_total)}</span> },
                   { key: 'status', header: t('status'), cell: (a) => a.status },
                 ]}
               />

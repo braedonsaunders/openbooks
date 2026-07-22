@@ -1,3 +1,4 @@
+import { getMoneyFormatter } from '@/lib/money-server'
 import { inArray, sql } from 'drizzle-orm'
 import Link from 'next/link'
 import { getTranslations } from 'next-intl/server'
@@ -20,7 +21,6 @@ import { CheckCircle2, Send } from 'lucide-react'
 import { ListPageLayout } from '../../../components/page-layout'
 import { getAuthz, can } from '../../../lib/authz'
 import { mergeHref, pickString } from '../../../lib/list-params'
-import { money } from '../../../lib/format'
 import { approvalRecordHref } from '../../../lib/approvals-links'
 import { ApprovalsTable, type ApprovalRow } from './ApprovalsTable'
 import { DelegationBanner, OutOfOfficeButton } from './DelegationControls'
@@ -74,6 +74,7 @@ export default async function Approvals({
 }: {
   searchParams: Promise<Record<string, string | string[] | undefined>>
 }) {
+  const { money } = await getMoneyFormatter()
   const t = await getTranslations('approvals')
   const tc = await getTranslations('common')
   const authz = await getAuthz()
@@ -125,6 +126,7 @@ export default async function Approvals({
       assignee,
       canDelegate: isAdmin || g.assigneeUserId === user.id,
       quorumAll: g.quorum === 'all',
+      signatureRequired: g.signatureRequired,
     }
   }
 
@@ -138,6 +140,7 @@ export default async function Approvals({
   if (tab === 'all' && canSeeAll) {
     const gatesRes = (await db.execute(sql`
       select g.id, g.flow_id as "flowId", g.title, g.quorum, g.created_at as "createdAt",
+             g.signature_required as "signatureRequired",
              g.subject_kind as "subjectKind", g.subject_id as "subjectId",
              g.assignee_user_id as "assigneeUserId", g.assignee_role as "assigneeRole",
              u.name as "assigneeName", f.name as "flowName",
@@ -176,6 +179,7 @@ export default async function Approvals({
           assignee: g.assigneeName ?? g.assigneeRole ?? null,
           canDelegate: isAdmin,
           quorumAll: g.quorum === 'all',
+          signatureRequired: !!g.signatureRequired,
         }
       })
       .sort((a, b) => a.requestedAt.localeCompare(b.requestedAt))

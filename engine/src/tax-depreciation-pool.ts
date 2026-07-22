@@ -24,16 +24,18 @@
  * Accelerated Investment Incentive).
  */
 
-import { add, cmp, formatMoney, mulDecimal, mulDecimalFactors, neg, normalizeMoney, roundMoney } from "./money.ts";
+import { add, cmp, formatMoney, fromUnits, mulDecimal, mulDecimalFactors, mulPercent, neg, normalizeMoney, roundDiv, roundMoney, sum, toUnits } from "./money.ts";
+
+type ExactDecimal = string | number;
 
 export interface PoolClassDef {
   /** Regime class code — CA "8"/"10.1", UK "main"/"special". */
   code: string;
-  rate: number;
+  rate: ExactDecimal;
   method: "declining" | "straight_line";
   /** Fraction of net additions eligible in the acquisition year: 1 = full,
    *  0.5 = Canada's half-year rule. */
-  firstYearFraction: number;
+  firstYearFraction: ExactDecimal;
   /** Disposal can push the pool negative into taxable income (Canada recapture,
    *  UK balancing charge). */
   allowRecapture: boolean;
@@ -41,13 +43,21 @@ export interface PoolClassDef {
    *  terminal loss, UK balancing allowance). */
   allowTerminalLoss: boolean;
   /** Per-item capital-cost ceiling (e.g. Canada Class 10.1 / 54 vehicles). */
-  costCap?: number;
+  costCap?: ExactDecimal;
+  /** Per-asset MACRS configuration; omitted for pooled regimes. */
+  depreciationSystem?: "gds" | "ads";
+  macrsMethod?: "200_db" | "150_db" | "straight_line";
+  recoveryPeriodYears?: ExactDecimal;
+  convention?: "half_year" | "mid_quarter" | "mid_month";
   name: string;
 }
 
 export interface TaxDepreciationRegime {
   code: string;
   name: string;
+  countryCode: string;
+  calculationModel: "pool" | "macrs";
+  classAttribute: string;
   classes: Record<string, PoolClassDef>;
 }
 
@@ -56,6 +66,9 @@ export const TAX_DEPRECIATION_REGIMES: Record<string, TaxDepreciationRegime> = {
   ca_cca: {
     code: "ca_cca",
     name: "Canada — Capital Cost Allowance",
+    countryCode: "CA",
+    calculationModel: "pool",
+    classAttribute: "ca_cca_class",
     classes: caClass({
       "1": [0.04, "Buildings (post-1987)"],
       "3": [0.05, "Buildings (pre-1988)"],
@@ -80,6 +93,9 @@ export const TAX_DEPRECIATION_REGIMES: Record<string, TaxDepreciationRegime> = {
   uk_wda: {
     code: "uk_wda",
     name: "United Kingdom — Writing-Down Allowances",
+    countryCode: "GB",
+    calculationModel: "pool",
+    classAttribute: "tax_pool_class",
     classes: {
       main: fullYear("main", 0.18, "Main rate pool"),
       special: fullYear("special", 0.06, "Special rate pool"),
@@ -89,6 +105,9 @@ export const TAX_DEPRECIATION_REGIMES: Record<string, TaxDepreciationRegime> = {
   au_pool: {
     code: "au_pool",
     name: "Australia — Depreciation Pools",
+    countryCode: "AU",
+    calculationModel: "pool",
+    classAttribute: "tax_pool_class",
     classes: {
       // Diminishing-value pools: half the pool rate in the year of allocation.
       sbp: { code: "sbp", rate: 0.3, method: "declining", firstYearFraction: 0.5, allowRecapture: true, allowTerminalLoss: true, name: "Small business pool (15% then 30%)" },
@@ -98,22 +117,69 @@ export const TAX_DEPRECIATION_REGIMES: Record<string, TaxDepreciationRegime> = {
   nz_pool: {
     code: "nz_pool",
     name: "New Zealand — Pool method",
+    countryCode: "NZ",
+    calculationModel: "pool",
+    classAttribute: "tax_pool_class",
     classes: {
       // The pool depreciates at the lowest DV rate of its assets; a maintained
       // default the tenant tunes per pool (see Tax Setup → pool classes).
       pool: fullYear("pool", 0.1, "Pooled assets (diminishing value)"),
     },
   },
+  us_macrs: {
+    code: "us_macrs",
+    name: "United States — MACRS",
+    countryCode: "US",
+    calculationModel: "macrs",
+    classAttribute: "us_macrs_class",
+    classes: {
+      gds_3: macrs("gds_3", 3, "200_db", "half_year", "3-year property"),
+      gds_5: macrs("gds_5", 5, "200_db", "half_year", "5-year property"),
+      gds_7: macrs("gds_7", 7, "200_db", "half_year", "7-year property"),
+      gds_10: macrs("gds_10", 10, "200_db", "half_year", "10-year property"),
+      gds_15: macrs("gds_15", 15, "150_db", "half_year", "15-year property"),
+      gds_20: macrs("gds_20", 20, "150_db", "half_year", "20-year property"),
+      residential_rental: macrs("residential_rental", 27.5, "straight_line", "mid_month", "Residential rental property"),
+      nonresidential_real: macrs("nonresidential_real", 39, "straight_line", "mid_month", "Nonresidential real property"),
+      ads_5: macrs("ads_5", 5, "straight_line", "half_year", "ADS 5-year property", "ads"),
+      ads_10: macrs("ads_10", 10, "straight_line", "half_year", "ADS 10-year property", "ads"),
+      ads_12: macrs("ads_12", 12, "straight_line", "half_year", "ADS 12-year property", "ads"),
+      ads_15: macrs("ads_15", 15, "straight_line", "half_year", "ADS 15-year property", "ads"),
+      ads_20: macrs("ads_20", 20, "straight_line", "half_year", "ADS 20-year property", "ads"),
+      ads_25: macrs("ads_25", 25, "straight_line", "half_year", "ADS 25-year property", "ads"),
+      ads_30_real: macrs("ads_30_real", 30, "straight_line", "mid_month", "ADS residential rental property", "ads"),
+      ads_40_real: macrs("ads_40_real", 40, "straight_line", "mid_month", "ADS nonresidential real property", "ads"),
+    },
+  },
 };
 
+function macrs(
+  code: string,
+  recoveryPeriodYears: ExactDecimal,
+  macrsMethod: "200_db" | "150_db" | "straight_line",
+  convention: "half_year" | "mid_quarter" | "mid_month",
+  name: string,
+  depreciationSystem: "gds" | "ads" = "gds",
+): PoolClassDef {
+  return {
+    // MACRS uses the method + recovery period below; this display/config rate
+    // is deliberately not calculated with a JavaScript binary float.
+    code, name, rate: exactRatio(macrsMethod === "200_db" ? 2n : macrsMethod === "150_db" ? 3n : 1n, macrsMethod === "150_db" ? 2n : 1n, recoveryPeriodYears),
+    method: macrsMethod === "straight_line" ? "straight_line" : "declining",
+    firstYearFraction: convention === "half_year" ? 0.5 : 1,
+    allowRecapture: false, allowTerminalLoss: false,
+    depreciationSystem, macrsMethod, recoveryPeriodYears, convention,
+  };
+}
+
 /** A full-year regime class (no half-year rule): first-year fraction 1. */
-function fullYear(code: string, rate: number, name: string): PoolClassDef {
+function fullYear(code: string, rate: ExactDecimal, name: string): PoolClassDef {
   return { code, rate, method: "declining", firstYearFraction: 1, allowRecapture: true, allowTerminalLoss: true, name };
 }
 
 /** Build Canada class defs with the half-year rule as the default first-year fraction. */
 function caClass(
-  spec: Record<string, [number, string] | [number, string, Partial<PoolClassDef>]>,
+  spec: Record<string, [ExactDecimal, string] | [ExactDecimal, string, Partial<PoolClassDef>]>,
 ): Record<string, PoolClassDef> {
   const out: Record<string, PoolClassDef> = {};
   for (const [code, v] of Object.entries(spec)) {
@@ -136,21 +202,167 @@ export function resolvePoolClass(regime: string, code: string): PoolClassDef | n
   return TAX_DEPRECIATION_REGIMES[regime]?.classes[code] ?? null;
 }
 
+export interface MacrsYearInput {
+  basis: string;
+  placedInServiceOn: string;
+  taxYear: number;
+  recoveryPeriodYears: ExactDecimal;
+  method: "200_db" | "150_db" | "straight_line";
+  convention: "half_year" | "mid_quarter" | "mid_month";
+  disposedOn?: string | null;
+  section179?: string;
+  bonusPercent?: ExactDecimal;
+  businessUsePercent?: ExactDecimal;
+}
+
+export interface MacrsYearResult {
+  section179: string;
+  bonus: string;
+  macrs: string;
+  allowance: string;
+  remainingBasis: string;
+}
+
+/**
+ * Compute one calendar tax year for an asset under MACRS without relying on a
+ * hard-coded percentage table. DB methods switch to straight line when that
+ * produces an equal or larger deduction; the applicable averaging convention
+ * determines the first/disposal/final-year fraction.
+ */
+export function computeMacrsYear(input: MacrsYearInput): MacrsYearResult {
+  const placed = parseIsoDate(input.placedInServiceOn);
+  const disposed = input.disposedOn ? parseIsoDate(input.disposedOn) : null;
+  if (!placed || input.taxYear < placed.year) return zeroMacrs("0");
+  if (disposed && input.taxYear > disposed.year) return zeroMacrs("0");
+
+  const percent = (value: ExactDecimal | undefined, fallback: string): string => {
+    const normalized = normalizeMoney(value ?? fallback);
+    if (cmp(normalized, "0") < 0) return "0.0000";
+    return cmp(normalized, "100") > 0 ? "100.0000" : normalized;
+  };
+  const originalBasis = mulPercent(normalizeMoney(input.basis), percent(input.businessUsePercent, "100"));
+  const section179Cap = minMoney(originalBasis, nonnegative(normalizeMoney(input.section179 ?? "0")));
+  const elected179 = placed.year === input.taxYear ? section179Cap : "0.0000";
+  const after179 = add(originalBasis, neg(section179Cap));
+  const bonus = placed.year === input.taxYear ? mulPercent(after179, percent(input.bonusPercent, "0")) : "0.0000";
+  const macrsBasis = add(after179, neg(mulPercent(after179, percent(input.bonusPercent, "0"))));
+
+  const schedule = macrsSchedule({
+    basis: macrsBasis,
+    placed,
+    disposed,
+    recoveryPeriodYears: input.recoveryPeriodYears,
+    method: input.method,
+    convention: input.convention,
+  });
+  const macrs = schedule.get(input.taxYear) ?? "0.0000";
+  const priorMacrs = sum([...schedule.entries()].filter(([year]) => year <= input.taxYear).map(([, amount]) => amount));
+  const used179 = input.taxYear >= placed.year ? section179Cap : "0.0000";
+  const usedBonus = input.taxYear >= placed.year ? mulPercent(after179, percent(input.bonusPercent, "0")) : "0.0000";
+  return {
+    section179: formatMoney(elected179, 2), bonus: formatMoney(bonus, 2), macrs: formatMoney(macrs, 2),
+    allowance: formatMoney(sum([elected179, bonus, macrs]), 2),
+    remainingBasis: disposed?.year === input.taxYear
+      ? "0.00"
+      : formatMoney(nonnegative(sum([originalBasis, neg(used179), neg(usedBonus), neg(priorMacrs)])), 2),
+  };
+}
+
+function macrsSchedule(args: {
+  basis: string;
+  placed: { year: number; month: number };
+  disposed: { year: number; month: number } | null;
+  recoveryPeriodYears: ExactDecimal;
+  method: "200_db" | "150_db" | "straight_line";
+  convention: "half_year" | "mid_quarter" | "mid_month";
+}): Map<number, string> {
+  const out = new Map<number, string>();
+  let remaining = toUnits(args.basis);
+  const originalBasis = remaining;
+  const recoveryPeriods = exactPeriods(args.recoveryPeriodYears);
+  let elapsedPeriods = 0n;
+  const first = conventionFraction(args.convention, args.placed.month, "placed");
+  const yearsAfterPlacement = (recoveryPeriods - first + 23n) / 24n;
+  const lastRecoveryYear = args.placed.year + Number(yearsAfterPlacement);
+  const lastYear = args.disposed ? Math.min(lastRecoveryYear, args.disposed.year) : lastRecoveryYear;
+  const factorNumerator = args.method === "200_db" ? 2n : args.method === "150_db" ? 3n : 1n;
+  const factorDenominator = args.method === "150_db" ? 2n : 1n;
+
+  for (let year = args.placed.year; year <= lastYear && remaining > 0n; year++) {
+    let fraction = year === args.placed.year ? first : year === lastRecoveryYear ? maxBigInt(0n, recoveryPeriods - elapsedPeriods) : 24n;
+    if (args.disposed?.year === year) fraction = minBigInt(fraction, conventionFraction(args.convention, args.disposed.month, "disposed"));
+    const lifeRemaining = maxBigInt(1n, recoveryPeriods - elapsedPeriods);
+    const straight = args.method === "straight_line"
+      ? { numerator: originalBasis * 24n, denominator: recoveryPeriods }
+      : { numerator: remaining * 24n, denominator: lifeRemaining };
+    const declining = {
+      numerator: remaining * factorNumerator * 24n,
+      denominator: factorDenominator * recoveryPeriods,
+    };
+    const annual = args.method === "straight_line" || compareRational(straight, declining) >= 0 ? straight : declining;
+    const amount = minBigInt(remaining, roundDiv(annual.numerator * fraction, annual.denominator * 24n));
+    out.set(year, fromUnits(amount));
+    remaining -= amount;
+    elapsedPeriods += fraction;
+  }
+  return out;
+}
+
+function conventionFraction(convention: MacrsYearInput["convention"], month: number, kind: "placed" | "disposed"): bigint {
+  if (convention === "half_year") return 12n;
+  if (convention === "mid_month") return BigInt(kind === "placed" ? 25 - month * 2 : month * 2 - 1);
+  const quarter = Math.ceil(month / 3);
+  return BigInt(kind === "placed" ? 27 - quarter * 6 : quarter * 6 - 3);
+}
+
+function parseIsoDate(value: string): { year: number; month: number } | null {
+  const match = /^(\d{4})-(\d{2})-\d{2}$/.exec(value);
+  return match ? { year: Number(match[1]), month: Number(match[2]) } : null;
+}
+
+function zeroMacrs(basis: string): MacrsYearResult {
+  return { section179: "0.00", bonus: "0.00", macrs: "0.00", allowance: "0.00", remainingBasis: formatMoney(basis, 2) };
+}
+
+function exactPeriods(years: ExactDecimal): bigint {
+  const periods = toUnits(String(years)) * 24n;
+  if (periods <= 0n || periods % 10_000n !== 0n) throw new Error("recovery period must resolve to complete half-month periods");
+  return periods / 10_000n;
+}
+
+function exactRatio(numerator: bigint, denominator: bigint, divisor: ExactDecimal): string {
+  const divisorUnits = toUnits(String(divisor));
+  if (divisorUnits <= 0n) throw new Error("ratio divisor must be positive");
+  const scale = 10_000_000_000n;
+  const units = roundDiv(numerator * scale * 10_000n, denominator * divisorUnits);
+  const whole = units / scale;
+  const fraction = (units % scale).toString().padStart(10, "0").replace(/0+$/, "");
+  return fraction ? `${whole}.${fraction}` : `${whole}`;
+}
+
+function compareRational(left: { numerator: bigint; denominator: bigint }, right: { numerator: bigint; denominator: bigint }): number {
+  const delta = left.numerator * right.denominator - right.numerator * left.denominator;
+  return delta < 0n ? -1 : delta > 0n ? 1 : 0;
+}
+
+const minBigInt = (left: bigint, right: bigint) => left < right ? left : right;
+const maxBigInt = (left: bigint, right: bigint) => left > right ? left : right;
+
 export interface PoolYearInput {
   /** Opening written-down value of the pool (decimal string). */
   openingBalance: string;
   additions: string;
   dispositions: string;
-  rate: number;
+  rate: ExactDecimal;
   /** Fraction of net additions in the year-1 base (1 = full, 0.5 = half-year). Default 1. */
-  firstYearFraction?: number;
+  firstYearFraction?: ExactDecimal;
   /** Enhanced first-year multiplier (> 1 suspends the fraction and boosts the
    *  base by (m−1)×net additions — e.g. Canada AII). From dated config. */
-  enhancedFirstYearMultiplier?: number;
+  enhancedFirstYearMultiplier?: ExactDecimal;
   /** Immediate-expensing amount fully deducted before the rate (decimal string). */
   immediateExpense?: string;
   /** Short fiscal year proration = days/365. Default 1. */
-  shortYearFactor?: number;
+  shortYearFactor?: ExactDecimal;
   /** True if the pool still holds assets at year-end (governs terminal loss). */
   poolHasAssetsAtYearEnd?: boolean;
   /** Discretionary cap on the allowance claimed (decimal string). Default: max. */

@@ -1,5 +1,6 @@
 'use client'
 
+import { useMoney } from '@/components/money-provider'
 import { useState } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
@@ -7,8 +8,6 @@ import { useTranslations } from 'next-intl'
 import { Play, Scale } from 'lucide-react'
 import { toast } from 'sonner'
 import { Button, Drawer, Input, Label } from '@openbooks/ui'
-import { money } from '../../../../lib/format'
-
 /**
  * Start a reconciliation session (through date + bank statement balance),
  * or resume the account's open one — one open session per account.
@@ -22,6 +21,7 @@ export function StartReconciliationButton({
   openReconciliationId: string | null
   glBalance: string
 }) {
+  const { money } = useMoney()
   const t = useTranslations('banking.start')
   const tBanking = useTranslations('banking')
   const tCommon = useTranslations('common')

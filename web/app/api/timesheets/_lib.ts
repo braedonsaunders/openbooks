@@ -1,6 +1,7 @@
 import 'server-only'
 import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/db.ts'
+import { add } from '@openbooks/engine/src/money.ts'
 
 /**
  * Weekly-timesheet server helpers. A "timesheet" is not a table — it's the set
@@ -163,8 +164,7 @@ export async function loadWeek(
     }
     const idx = dayIndex.get(r.worked_on)
     if (idx != null) {
-      const existing = row.hours[idx] === '' ? 0 : Number(row.hours[idx])
-      row.hours[idx] = (existing + Number(r.hours)).toString()
+      row.hours[idx] = add(row.hours[idx] === '' ? '0' : row.hours[idx], String(r.hours))
     }
     row.entryStatuses.push(r.status)
   }

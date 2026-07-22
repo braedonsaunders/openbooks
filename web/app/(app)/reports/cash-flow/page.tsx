@@ -1,3 +1,4 @@
+import { getMoneyFormatter } from '@/lib/money-server'
 import { getTranslations } from 'next-intl/server'
 import { Badge, PageHeader, cn } from '@openbooks/ui'
 import { ListPageLayout } from '../../../../components/page-layout'
@@ -5,8 +6,6 @@ import { cashFlow, dimensionOptions, type CashFlowSection } from '../../../../li
 import { orgInfo } from '../../../../lib/data'
 import { resolvePeriod } from '../../../../lib/periods'
 import { parseReportQuery } from '../../../../lib/report-filters'
-import { currencySymbol } from '../../../../lib/statement-format'
-import { money } from '../../../../lib/format'
 import { ReportFilterBar } from '../ReportFilterBar'
 import { ExportMenu } from '../ExportMenu'
 import { SaveViewButton } from '../SaveViewButton'
@@ -24,6 +23,7 @@ export default async function CashFlow({
 }: {
   searchParams: Promise<Record<string, string | undefined>>
 }) {
+  const { money } = await getMoneyFormatter()
   const t = await getTranslations('reports.cashFlow')
   const tr = await getTranslations('reports')
   const sp = await searchParams
@@ -33,8 +33,7 @@ export default async function CashFlow({
   const to = period.to
   const dims = q.dims
   const [cf, opts, org] = await Promise.all([cashFlow(from, to, dims), dimensionOptions(), orgInfo()])
-  const sym = currencySymbol(org?.base_currency)
-  const m = (v: number) => money(v, sym)
+  const m = (v: number) => money(v, { currency: org?.base_currency })
   const openingTo = new Date(`${from}T00:00:00Z`)
   openingTo.setUTCDate(openingTo.getUTCDate() - 1)
   const openingDate = openingTo.toISOString().slice(0, 10)

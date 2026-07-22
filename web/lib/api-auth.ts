@@ -65,6 +65,8 @@ export interface ApiKeyAuth {
   keyId: string;
   /** Effective scoped permissions (key scopes ∩ owner effective perms). */
   permissions: Set<string>;
+  /** Requests-per-minute ceiling for this key; null = unlimited. */
+  rateLimitPerMin: number | null;
 }
 
 /**
@@ -98,6 +100,7 @@ export async function resolveApiKeyAuth(req: Request): Promise<ApiKeyAuth | null
       (
         (await db.execute(sql`
       select k.id, k.org_id, k.user_id, k.scopes, k.is_active, k.expires_at,
+             k.rate_limit_per_min,
              u.email, u.name, u.role, u.is_active as user_active
         from api_keys k
         join users u on u.id = k.user_id
@@ -166,7 +169,53 @@ export async function resolveApiKeyAuth(req: Request): Promise<ApiKeyAuth | null
     .execute(sql`update api_keys set last_used_at = now() where id = ${keyRow.id}`)
     .catch(() => {});
 
-  return { user, keyId: keyRow.id, permissions: scopedSet };
+  return {
+    user,
+    keyId: keyRow.id,
+    permissions: scopedSet,
+    rateLimitPerMin: keyRow.rate_limit_per_min == null ? null : Number(keyRow.rate_limit_per_min),
+  };
+}
+
+/**
+ * Fixed-window per-minute rate limit for an authenticated key. One atomic
+ * UPDATE on the key row rolls the window and increments the counter (the row
+ * lock serializes concurrent requests for the same key), so no extra table or
+ * external store is needed. Returns a 429 response to return directly when the
+ * key is over its ceiling, or null to proceed. A null ceiling means unlimited.
+ */
+export async function enforceRateLimit(
+  auth: ApiKeyAuth,
+  req: Request,
+  start: number,
+): Promise<NextResponse | null> {
+  if (auth.rateLimitPerMin == null) return null;
+  const r = (await db.execute(sql`
+    update api_keys
+       set rate_window_count = case
+             when rate_window_start = date_trunc('minute', now()) then rate_window_count + 1
+             else 1 end,
+           rate_window_start = date_trunc('minute', now())
+     where id = ${auth.keyId}
+     returning rate_window_count as count`)) as any;
+  const count = Number(r.rows[0]?.count ?? 1);
+  if (count <= auth.rateLimitPerMin) return null;
+
+  const retryAfter = Math.max(1, 60 - new Date().getSeconds());
+  logKeyEvent({
+    orgId: auth.user.orgId,
+    keyId: auth.keyId,
+    method: req.method,
+    path: new URL(req.url).pathname,
+    statusCode: 429,
+    durationMs: Date.now() - start,
+    req,
+    error: "rate limit exceeded",
+  });
+  return NextResponse.json(
+    { error: `rate limit exceeded (${auth.rateLimitPerMin}/min)` },
+    { status: 429, headers: { "Retry-After": String(retryAfter) } },
+  );
 }
 
 /** Wildcard-aware check on the scoped API key permission set. */
@@ -189,6 +238,8 @@ export async function guardApiKey(
   if (!auth) {
     return NextResponse.json({ error: "invalid or missing API key" }, { status: 401 });
   }
+  const limited = await enforceRateLimit(auth, req, Date.now());
+  if (limited) return limited;
   if (!canApi(auth, perm)) {
     return NextResponse.json({ error: `missing permission: ${perm}` }, { status: 403 });
   }

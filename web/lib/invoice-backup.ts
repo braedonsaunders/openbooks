@@ -8,6 +8,8 @@ import { listAttachments, uploadAndAttach } from './file-cabinet'
 import { resolvePdfTemplate } from './pdf-templates/store'
 import { loadPdfRecordValues } from './pdf-templates/values'
 import { mergeAndPrintPdf } from './pdf-templates/render'
+import { getMoneyFormatter } from './money-server'
+import type { MoneyFormatter } from './money-format'
 
 /**
  * Invoice backup PDF package — the native reimplementation of adminapp2's
@@ -53,7 +55,6 @@ export interface AssembleResult {
   manifest: BackupManifestEntry[]
 }
 
-const money = (v: unknown) => `$${Number(v ?? 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
 const esc = (s: unknown) => String(s ?? '').replace(/[&<>]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[c]!))
 
 /** Read a stored file's bytes (db blob or S3), by file id. */
@@ -96,7 +97,8 @@ async function addImagePage(out: PDFDocument, bytes: Buffer, contentType: string
 }
 
 /** Render the costed-timesheet page (billed time with cost + bill columns). */
-async function costedTimesheetPdf(orgId: string, documentId: string, invoiceNumber: string, projectName: string, title: string): Promise<Buffer | null> {
+async function costedTimesheetPdf(orgId: string, documentId: string, invoiceNumber: string, projectName: string, title: string, format: MoneyFormatter): Promise<Buffer | null> {
+  const { money } = format
   const rows = (await db.execute(sql`
     select te.worked_on, coalesce(pty.display_name, '') as employee, te.hours,
            te.cost_rate, te.bill_rate,
@@ -119,7 +121,7 @@ async function costedTimesheetPdf(orgId: string, documentId: string, invoiceNumb
     .map(
       (r) => `<tr>
       <td>${esc(r.worked_on)}</td><td>${esc(r.employee)}</td><td>${esc(r.item)}</td>
-      <td class="n">${Number(r.hours ?? 0).toFixed(2)}</td>
+      <td class="n">${new Intl.NumberFormat(format.locale, { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(Number(r.hours ?? 0))}</td>
       <td class="n">${money(r.cost_rate)}</td><td class="n">${money(r.cost_amount)}</td>
       <td class="n">${money(r.bill_rate)}</td><td class="n">${money(r.bill_amount)}</td></tr>`,
     )
@@ -141,7 +143,7 @@ async function costedTimesheetPdf(orgId: string, documentId: string, invoiceNumb
       <thead><tr><th>Date</th><th>Employee</th><th>Service</th><th class="n">Hours</th>
         <th class="n">Cost rate</th><th class="n">Cost</th><th class="n">Bill rate</th><th class="n">Amount</th></tr></thead>
       <tbody>${body}</tbody>
-      <tfoot><tr><td colspan="3">Total</td><td class="n">${totals.hours.toFixed(2)}</td><td></td>
+      <tfoot><tr><td colspan="3">Total</td><td class="n">${new Intl.NumberFormat(format.locale, { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(totals.hours)}</td><td></td>
         <td class="n">${money(totals.cost)}</td><td></td><td class="n">${money(totals.bill)}</td></tr></tfoot>
     </table>`
   return renderHtmlDocumentPdf({ bodyHtml: html, paperSize: 'letter', orientation: 'landscape', marginMm: 12, headerHtml: null, footerHtml: null })
@@ -159,12 +161,13 @@ export async function assembleInvoiceBackup(
   backupType: BackupType = 'costed_timesheets',
 ): Promise<AssembleResult> {
   const invRes = (await db.execute(sql`
-    select d.document_number, coalesce(p.name, '') as project_name
+    select d.document_number, d.currency, coalesce(p.name, '') as project_name
       from documents d left join projects p on p.id = d.project_id
      where d.id = ${documentId} and d.org_id = ${orgId} and d.kind = 'customer_invoice'
-  `)) as unknown as { rows: { document_number: string; project_name: string }[] }
+  `)) as unknown as { rows: { document_number: string; currency: string; project_name: string }[] }
   const inv = invRes.rows[0]
   if (!inv) throw new Error('Invoice not found')
+  const format = await getMoneyFormatter(orgId, inv.currency)
 
   const recipe = BACKUP_RECIPES[backupType] ?? BACKUP_RECIPES.costed_timesheets
   const out = await PDFDocument.create()
@@ -181,7 +184,7 @@ export async function assembleInvoiceBackup(
       }
     } else if (kind === 'costed_timesheets' || kind === 'shop_time') {
       const title = kind === 'shop_time' ? 'Shop Labour Backup' : 'Costed Timesheet'
-      const buf = await costedTimesheetPdf(orgId, documentId, inv.document_number, inv.project_name, title)
+      const buf = await costedTimesheetPdf(orgId, documentId, inv.document_number, inv.project_name, title, format)
       if (buf) {
         const pages = await mergePdfInto(out, buf)
         manifest.push({ kind, pages })

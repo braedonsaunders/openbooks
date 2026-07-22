@@ -1,3 +1,4 @@
+import { getMoneyFormatter } from '@/lib/money-server'
 import Link from 'next/link'
 import { getTranslations } from 'next-intl/server'
 import { Badge, PageHeader, Table, TableBody, TableCell, TableHead, TableHeader, TableRow, cn } from '@openbooks/ui'
@@ -8,7 +9,6 @@ import { ShowInactivesToggle } from '../../../components/show-inactives-toggle'
 import { Pagination } from '../../../components/pagination'
 import { isUuid, mergeHref, parseListParams, pickString } from '../../../lib/list-params'
 import { accountsWithBalances } from '../../../lib/data'
-import { money } from '../../../lib/format'
 import { can, requirePermission } from '../../../lib/authz'
 import { loadFieldDefs } from '../../../lib/custom-fields'
 import { loadAccount } from '../../api/accounts/_lib'
@@ -55,6 +55,7 @@ export default async function Accounts({
 }: {
   searchParams: Promise<Record<string, string | string[] | undefined>>
 }) {
+  const { money } = await getMoneyFormatter()
   const authz = await requirePermission('gl.read')
   const t = await getTranslations('accounts')
   const tc = await getTranslations('common')

@@ -5,6 +5,7 @@ import { guardPermission } from '../../../../lib/authz'
 import { loadFieldDefs, validateCustomValues } from '../../../../lib/custom-fields'
 import { isUuid } from '../../../../lib/list-params'
 import { loadItem } from '../_lib'
+import { canonicalDecimal, compareDecimal, fixedDecimal } from '../../../../lib/exact-decimal'
 
 export const runtime = 'nodejs'
 
@@ -115,9 +116,9 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     const raw = strOrNull(body.defaultRate)
     if (raw === null) defaultRate = null
     else {
-      const n = Number(raw)
-      if (Number.isNaN(n)) return bad('Default rate must be a number')
-      defaultRate = n.toFixed(4)
+      const exact = canonicalDecimal(raw, 4)
+      if (exact === null) return bad('Default rate must be a number with no more than four decimal places')
+      defaultRate = fixedDecimal(exact, 4)
     }
   }
 
@@ -126,9 +127,9 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     const raw = strOrNull(body.defaultCost)
     if (raw === null) defaultCost = null
     else {
-      const n = Number(raw)
-      if (Number.isNaN(n) || n < 0) return bad('Default cost must be a non-negative number')
-      defaultCost = n.toFixed(4)
+      const exact = canonicalDecimal(raw, 4)
+      if (exact === null || compareDecimal(exact, '0') < 0) return bad('Default cost must be a non-negative number')
+      defaultCost = fixedDecimal(exact, 4)
     }
   }
 
@@ -225,9 +226,9 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     const raw = strOrNull(body.standaloneSellingPrice)
     if (raw === null) standaloneSellingPrice = null
     else {
-      const n = Number(raw)
-      if (Number.isNaN(n)) return bad('Standalone selling price must be a number')
-      standaloneSellingPrice = n.toFixed(4)
+      const exact = canonicalDecimal(raw, 4)
+      if (exact === null) return bad('Standalone selling price must be a number with no more than four decimal places')
+      standaloneSellingPrice = fixedDecimal(exact, 4)
     }
   }
 

@@ -1,5 +1,8 @@
+import { sql } from "drizzle-orm";
 import {
   boolean,
+  check,
+  customType,
   index,
   integer,
   jsonb,
@@ -10,6 +13,10 @@ import {
   uuid,
 } from "drizzle-orm/pg-core";
 import { auditColumns, id, orgRef } from "./helpers";
+
+const bytea = customType<{ data: Uint8Array; driverData: Uint8Array }>({
+  dataType: () => "bytea",
+});
 
 /**
  * Custom reporting — the report studio's persistence layer. Mirrors the query
@@ -142,12 +149,79 @@ export const reportRuns = pgTable(
     /** The shaped ReportRunResult serialised as CSV (reportResultToCsv), for
      *  download and audit. Null while queued/running or when a run failed. */
     resultCsv: text("result_csv"),
+    /** Exact cadence occurrence and immutable delivery inputs for scheduled runs. */
+    scheduledFor: timestamp("scheduled_for", { withTimezone: true }),
+    recipientEmails: jsonb("recipient_emails").$type<string[]>().notNull().default([]),
+    filters: jsonb("filters").$type<Record<string, unknown>>(),
+    attemptCount: integer("attempt_count").notNull().default(0),
+    dispatchCount: integer("dispatch_count").notNull().default(0),
+    nextAttemptAt: timestamp("next_attempt_at", { withTimezone: true }),
+    lockedAt: timestamp("locked_at", { withTimezone: true }),
     ...auditColumns,
   },
   (t) => [
     index("report_runs_definition").on(t.definitionId, t.createdAt),
     index("report_runs_schedule").on(t.scheduleId),
     index("report_runs_org_status").on(t.orgId, t.status),
+    uniqueIndex("report_runs_schedule_occurrence")
+      .on(t.scheduleId, t.scheduledFor)
+      .where(sql`${t.scheduleId} is not null and ${t.scheduledFor} is not null`),
+    check("report_runs_nonnegative_delivery_counts", sql`${t.attemptCount} >= 0 and ${t.dispatchCount} >= 0`),
+  ],
+);
+
+/** Immutable rendered output retained as evidence independently of email. */
+export const reportRunArtifacts = pgTable(
+  "report_run_artifacts",
+  {
+    id: id(),
+    orgId: orgRef(),
+    runId: uuid("run_id").notNull(),
+    filename: text("filename").notNull(),
+    contentType: text("content_type").notNull(),
+    sizeBytes: integer("size_bytes").notNull(),
+    contentHash: text("content_hash").notNull(),
+    bytes: bytea("bytes").notNull(),
+    ...auditColumns,
+  },
+  (t) => [
+    uniqueIndex("report_run_artifacts_run").on(t.runId),
+    index("report_run_artifacts_org").on(t.orgId, t.createdAt),
+    check("report_run_artifacts_positive_size", sql`${t.sizeBytes} > 0`),
+    check("report_run_artifacts_sha256", sql`${t.contentHash} ~ '^[0-9a-f]{64}$'`),
+    check("report_run_artifacts_pdf", sql`${t.contentType} = 'application/pdf'`),
+  ],
+);
+
+export const REPORT_DELIVERY_STATUSES = ["pending", "enqueued", "sending", "sent", "failed", "suppressed"] as const;
+
+/** Transactional per-recipient delivery outbox and final provider evidence. */
+export const reportDeliveryOutbox = pgTable(
+  "report_delivery_outbox",
+  {
+    id: id(),
+    orgId: orgRef(),
+    runId: uuid("run_id").notNull(),
+    recipient: text("recipient").notNull(),
+    status: text("status", { enum: REPORT_DELIVERY_STATUSES }).notNull().default("pending"),
+    dispatchCount: integer("dispatch_count").notNull().default(0),
+    attemptCount: integer("attempt_count").notNull().default(0),
+    nextAttemptAt: timestamp("next_attempt_at", { withTimezone: true }).notNull().defaultNow(),
+    lastAttemptAt: timestamp("last_attempt_at", { withTimezone: true }),
+    sentAt: timestamp("sent_at", { withTimezone: true }),
+    queueJobId: text("queue_job_id"),
+    emailLogId: uuid("email_log_id"),
+    providerMessageId: text("provider_message_id"),
+    error: text("error"),
+    ...auditColumns,
+  },
+  (t) => [
+    uniqueIndex("report_delivery_outbox_run_recipient").on(t.runId, t.recipient),
+    index("report_delivery_outbox_due").on(t.status, t.nextAttemptAt),
+    index("report_delivery_outbox_org").on(t.orgId, t.createdAt),
+    check("report_delivery_outbox_status", sql`${t.status} in ('pending','enqueued','sending','sent','failed','suppressed')`),
+    check("report_delivery_outbox_nonnegative_counts", sql`${t.dispatchCount} >= 0 and ${t.attemptCount} >= 0`),
+    check("report_delivery_outbox_recipient", sql`length(btrim(${t.recipient})) > 3`),
   ],
 );
 

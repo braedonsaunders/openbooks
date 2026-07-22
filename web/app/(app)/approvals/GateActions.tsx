@@ -21,11 +21,14 @@ export function GateActions({
   gateId,
   canDelegate,
   users,
+  signatureRequired,
 }: {
   gateId: string
   /** Current assignee or admin — shows the delegate picker. */
   canDelegate: boolean
   users: DelegateOption[]
+  /** Gate demands a typed e-signature to approve. */
+  signatureRequired?: boolean
 }) {
   const t = useTranslations('approvals')
   const tc = useTranslations('common')
@@ -35,6 +38,7 @@ export function GateActions({
 
   async function decide(decision: 'approved' | 'rejected') {
     let comment: string | undefined
+    let signature: string | undefined
     if (decision === 'rejected') {
       const reason = await promptDialog({
         title: t('gates.rejectTitle'),
@@ -43,12 +47,20 @@ export function GateActions({
       })
       if (!reason) return
       comment = reason
+    } else if (signatureRequired) {
+      const signed = await promptDialog({
+        title: t('gates.signTitle'),
+        label: t('gates.signLabel'),
+        confirmLabel: tc('actions.approve'),
+      })
+      if (!signed?.trim()) return
+      signature = signed.trim()
     }
     setBusy(true)
     const res = await fetch('/api/flows/gates/decide', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ gateId, decision, comment }),
+      body: JSON.stringify({ gateId, decision, comment, signature }),
     })
     const data = await res.json().catch(() => ({}))
     if (!res.ok) {

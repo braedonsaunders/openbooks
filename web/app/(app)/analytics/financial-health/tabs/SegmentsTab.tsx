@@ -7,7 +7,7 @@ import type { HealthData, SegmentRow } from '../../../../../lib/analytics/health
 import { Panel, SegToggle } from '../../_ui/Panel'
 import { KpiCard } from '../../_ui/KpiCard'
 import { Donut, GroupedBar } from '../../_ui/charts'
-import { fmtMoney, fmtPct } from '../../_ui/format'
+import { useAnalyticsMoney, fmtPct } from '../../_ui/format'
 
 type Dim = 'department' | 'class' | 'location'
 
@@ -18,6 +18,7 @@ const HEALTH_DOT: Record<SegmentRow['health'], string> = {
 }
 
 export function SegmentsTab({ data }: { data: HealthData }) {
+  const fmtMoney = useAnalyticsMoney()
   const [dim, setDim] = useState<Dim>('department')
   const rows = data.segments[dim]
 

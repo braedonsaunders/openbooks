@@ -1,5 +1,6 @@
 "use client";
 
+import { useMoney } from '@/components/money-provider'
 import { useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { useTranslations } from "next-intl";
@@ -14,7 +15,7 @@ import {
   ListChecks,
   SlidersHorizontal,
 } from "lucide-react";
-import { money, moneyCompact } from "../../../../lib/format";
+
 import type { ArPosition } from "../../../../lib/cash/ar-position";
 import {
   StatTile,
@@ -46,6 +47,7 @@ export function ArCockpit({
   data: ArPosition;
   canCollect: boolean;
 }) {
+  const { money, moneyCompact } = useMoney()
   const t = useTranslations("ar.cockpit");
   const search = useSearchParams();
   const currentParams = Object.fromEntries(search.entries());

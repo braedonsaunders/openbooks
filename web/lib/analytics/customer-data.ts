@@ -1,4 +1,5 @@
 import "server-only";
+import { getMoneyFormatter } from '../money-server'
 import { sql } from "drizzle-orm";
 import { db } from "@openbooks/engine/src/db.ts";
 import { analyticsConfig } from "./config";
@@ -359,6 +360,7 @@ function priorYearIso(iso: string): string {
 
 /* ------------------------------------------------------------------- main */
 export async function customerData(period: { from: string; to: string; label: string }, orgId: string): Promise<CustomerData> {
+  const { moneyCompact } = await getMoneyFormatter(orgId)
   const { from, to } = period;
   const pFrom = priorYearIso(from);
   const pTo = priorYearIso(to);
@@ -852,7 +854,7 @@ export async function customerData(period: { from: string; to: string; label: st
   const topCustomerShare = byRevenue[0] ? shareMap.get(byRevenue[0].c.id)!.sharePct : 0;
 
   const insights: Insight[] = [];
-  const fmtM = (n: number) => `$${n >= 1_000_000 ? `${(n / 1_000_000).toFixed(1)}M` : n >= 1_000 ? `${Math.round(n / 1_000)}K` : Math.round(n)}`;
+  const fmtM = (n: number) => moneyCompact(n);
   if (totalProjectedClv > 0)
     insights.push({ type: "info", category: "lifetime-value", title: "Projected Customer Value", message: `${fmtM(totalProjectedClv)} projected CLV over ${clvYears} years from ${rows.length} customers`, impact: "high" });
   if (atRisk.length > 0)

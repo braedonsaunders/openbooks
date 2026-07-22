@@ -1,11 +1,10 @@
+import { getMoneyFormatter } from '@/lib/money-server'
 import { getTranslations } from 'next-intl/server'
 import { Badge, Table, TableBody, TableCell, TableHead, TableHeader, TableRow, UrlDrawer } from '@openbooks/ui'
 import { SearchInput } from '../../../../components/search-input'
 import { Pagination } from '../../../../components/pagination'
 import { SortableTh } from '../../../../components/sortable-th'
 import { mergeHref } from '../../../../lib/list-params'
-import { money } from '../../../../lib/format'
-
 const MATCH_VARIANT: Record<string, 'success' | 'secondary' | 'outline'> = {
   matched: 'success',
   unmatched: 'secondary',
@@ -55,6 +54,7 @@ export async function StatementDrawer({
   sort: string
   dir: 'asc' | 'desc'
 }) {
+  const { money } = await getMoneyFormatter()
   const t = await getTranslations('banking')
   const tCommon = await getTranslations('common')
   const closeHref = mergeHref(basePath, currentParams, {

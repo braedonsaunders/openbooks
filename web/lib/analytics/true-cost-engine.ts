@@ -32,10 +32,10 @@ export type CategoryType = "expense" | "time" | "manual" | "derived" | "formula"
 export const ALLOCATION_BASES: Record<AllocationBase, { label: string; unit: string; format: "number" | "currency" }> = {
   billed_hours: { label: "Billed Hours", unit: "hrs", format: "number" },
   total_hours: { label: "Total Hours", unit: "hrs", format: "number" },
-  labor_dollars: { label: "Labor Dollars", unit: "$", format: "currency" },
+  labor_dollars: { label: "Labor Cost", unit: "currency", format: "currency" },
   headcount: { label: "Headcount", unit: "FTE", format: "number" },
-  revenue: { label: "Revenue", unit: "$", format: "currency" },
-  direct_cost: { label: "Direct Cost", unit: "$", format: "currency" },
+  revenue: { label: "Revenue", unit: "currency", format: "currency" },
+  direct_cost: { label: "Direct Cost", unit: "currency", format: "currency" },
   square_feet: { label: "Square Feet", unit: "sqft", format: "number" },
   units: { label: "Units Produced", unit: "units", format: "number" },
   custom: { label: "Custom Metric", unit: "custom", format: "number" },
@@ -48,11 +48,11 @@ export const ALLOCATION_METHODS: Record<AllocationMethod, { label: string; descr
 };
 
 export const RATE_FORMATS: Record<RateFormat, { label: string; suffix: string; prefix: string; decimals: number }> = {
-  per_hour: { label: "$/Hour", suffix: "/hr", prefix: "$", decimals: 2 },
+  per_hour: { label: "Currency/Hour", suffix: "/hr", prefix: "", decimals: 2 },
   percent_labor: { label: "% of Labor", suffix: "%", prefix: "", decimals: 1 },
   percent_cost: { label: "% of Cost", suffix: "%", prefix: "", decimals: 1 },
-  per_fte: { label: "$/FTE", suffix: "/FTE", prefix: "$", decimals: 0 },
-  per_unit: { label: "$/Unit", suffix: "/unit", prefix: "$", decimals: 2 },
+  per_fte: { label: "Currency/FTE", suffix: "/FTE", prefix: "", decimals: 0 },
+  per_unit: { label: "Currency/Unit", suffix: "/unit", prefix: "", decimals: 2 },
 };
 
 export const COMPOSITE_METHODS: Record<CompositeMethod, { label: string; description: string }> = {
@@ -189,10 +189,10 @@ export interface FormattedRate {
   rawRate: number;
 }
 
-const fmtNum = (num: number, decimals = 0) => {
-  if (num >= 1_000_000) return (num / 1_000_000).toFixed(1) + "M";
-  if (num >= 1000) return (num / 1000).toFixed(1) + "K";
-  return num.toFixed(decimals);
+type RateMoneyOptions = {
+  notation?: 'standard' | 'compact';
+  minimumFractionDigits?: number;
+  maximumFractionDigits?: number;
 };
 
 /** Gantry formatRate — verbatim, 5 output formats. */
@@ -201,6 +201,7 @@ export function formatRate(
   format: RateFormat | undefined,
   periodData: { laborDollars?: { total: number } | number; directCost?: { total: number } | number; units?: { total: number }; monthCount?: number },
   category: { totalExpense?: number; expenseOverall?: number },
+  money: (value: number, options?: RateMoneyOptions) => string,
 ): FormattedRate {
   const rateFormat = format || "per_hour";
   const def = RATE_FORMATS[rateFormat] || RATE_FORMATS.per_hour;
@@ -208,7 +209,7 @@ export function formatRate(
 
   switch (rateFormat) {
     case "per_hour":
-      return { value: rawRate, display: `$${rawRate.toFixed(def.decimals)}/hr`, unit: "hour", rawRate };
+      return { value: rawRate, display: `${money(rawRate, { minimumFractionDigits: def.decimals, maximumFractionDigits: def.decimals })}/hr`, unit: "hour", rawRate };
 
     case "percent_labor": {
       const laborBase = (typeof periodData.laborDollars === "object" ? periodData.laborDollars.total : periodData.laborDollars) || 1;
@@ -226,17 +227,17 @@ export function formatRate(
       const monthCount = periodData.monthCount || 1;
       const annualizationFactor = 12 / monthCount;
       const fteRate = rawRate * (2080 / 12) * monthCount * annualizationFactor;
-      return { value: fteRate, display: `$${fmtNum(fteRate, 0)}/FTE`, unit: "fte", rawRate };
+      return { value: fteRate, display: `${money(fteRate, { notation: 'compact', maximumFractionDigits: 1 })}/FTE`, unit: "fte", rawRate };
     }
 
     case "per_unit": {
       const unitCount = periodData.units?.total || 1;
       const unitRate = safeDiv(totalExpense, unitCount);
-      return { value: unitRate, display: `$${unitRate.toFixed(def.decimals)}/unit`, unit: "unit", rawRate };
+      return { value: unitRate, display: `${money(unitRate, { minimumFractionDigits: def.decimals, maximumFractionDigits: def.decimals })}/unit`, unit: "unit", rawRate };
     }
 
     default:
-      return { value: rawRate, display: `$${rawRate.toFixed(2)}/hr`, unit: "hour", rawRate };
+      return { value: rawRate, display: `${money(rawRate, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}/hr`, unit: "hour", rawRate };
   }
 }
 
@@ -527,7 +528,11 @@ export interface ScenarioImpact {
 const round2 = (n: number) => Math.round(n * 100) / 100;
 
 /** Gantry calculateScenario — verbatim (6 scenario types, 2080 hrs/yr, fringe). */
-export function calculateScenario(input: ScenarioInput, cur: ScenarioCurrent): ScenarioImpact {
+export function calculateScenario(
+  input: ScenarioInput,
+  cur: ScenarioCurrent,
+  formatCurrency: (value: number) => string = (value) => `${round2(value)} currency units`,
+): ScenarioImpact {
   const { currentRate, currentExpense, currentHours, currentUtilization, fringeRate } = cur;
   let projectedRate = 0;
   let insight = "";
@@ -556,7 +561,7 @@ export function calculateScenario(input: ScenarioInput, cur: ScenarioCurrent): S
       const savings = (count * salary * fringeRate) / 12;
       const projectedExpense = currentExpense - savings;
       projectedRate = safeDiv(projectedExpense, projectedHours);
-      insight = `Reducing ${count} employee(s) saves $${round2(savings)} in overhead but loses ${round2(lostHours)} billable hours.`;
+      insight = `Reducing ${count} employee(s) saves ${formatCurrency(savings)} in overhead but loses ${round2(lostHours)} billable hours.`;
       breakdown = { hoursChange: -lostHours, expenseChange: -savings, projectedHours, projectedExpense };
       break;
     }
@@ -580,7 +585,7 @@ export function calculateScenario(input: ScenarioInput, cur: ScenarioCurrent): S
       const delta = input.changeType === "decrease" ? -(input.amount || 0) : input.amount || 0;
       const projectedExpense = currentExpense + delta;
       projectedRate = safeDiv(projectedExpense, currentHours);
-      insight = `${input.changeType === "decrease" ? "Reducing" : "Adding"} $${round2(Math.abs(delta))} in overhead costs.`;
+      insight = `${input.changeType === "decrease" ? "Reducing" : "Adding"} ${formatCurrency(Math.abs(delta))} in overhead costs.`;
       breakdown = { expenseChange: delta, projectedExpense };
       break;
     }

@@ -77,6 +77,9 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     )
   }
   const active = body.active !== undefined ? body.active : existing.active
+  if (active && recipients.length === 0) {
+    return NextResponse.json({ error: 'At least one recipient is required for an active schedule' }, { status: 422 })
+  }
   const nextRunAt = computeNextRunAt(cadence)
 
   const updated = (await db.execute(sql`
@@ -104,22 +107,3 @@ export async function DELETE(_req: Request, { params }: { params: Promise<{ id: 
   await db.execute(sql`delete from report_schedules where id = ${id} and org_id = ${user.orgId}`)
   return NextResponse.json({ ok: true })
 }
-
-/*
- * WORKER SEAM — scheduled delivery is NOT implemented yet.
- *
- * A background worker (cron/queue) should, on each tick:
- *   1. SELECT * FROM report_schedules
- *        WHERE active AND next_run_at <= now()   -- uses report_schedules_due
- *      FOR UPDATE SKIP LOCKED;
- *   2. For each: load its definition, mergeReportFilters(def.query, schedule.filters),
- *      then recordReportRun({ trigger: 'scheduled', scheduleId, ... }) from
- *      web/lib/custom-reports.ts (same executor the UI uses);
- *   3. Email the resulting CSV to schedule.recipient_emails (no mail transport
- *      is wired in openbooks yet — this is the only missing piece);
- *   4. Advance next_run_at = computeNextRunAt(cadence, new Date()).
- *
- * Everything except steps 3 (email transport) and the worker loop itself is
- * already built and reused here — recordReportRun persists the run + CSV, and
- * computeNextRunAt/validateCadenceInput live in @openbooks/reports.
- */

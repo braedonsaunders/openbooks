@@ -63,6 +63,67 @@ async function adoptCompleteLegacyMigration(filename: string, content: string): 
         and to_regclass('public.files_source_identity') is not null as complete
     `)) as unknown as { rows: { complete: boolean }[] };
     complete = check.rows[0]?.complete === true;
+  } else if (filename === "generated/0041_accounting_correctness.sql") {
+    const check = (await db.execute(sql`
+      select
+        exists(select 1 from information_schema.columns where table_schema='public' and table_name='projects' and column_name='contract_value')
+        and to_regclass('public.document_line_tax_components') is not null
+        and exists(select 1 from information_schema.columns where table_schema='public' and table_name='tax_codes' and column_name='calculation_type')
+        and exists(select 1 from pg_trigger where tgname='je_posted_balanced' and not tgisinternal)
+        and (
+          exists(select 1 from information_schema.columns where table_schema='public' and table_name='applications' and column_name='source_amount')
+          or exists(select 1 from information_schema.columns where table_schema='public' and table_name='applications' and column_name='source_transaction_amount')
+        ) as complete
+    `)) as unknown as { rows: { complete: boolean }[] };
+    complete = check.rows[0]?.complete === true;
+  } else if (filename === "generated/0043_tax_pool_config.sql") {
+    const check = (await db.execute(sql`
+      select to_regclass('public.tax_regimes') is not null
+        and to_regclass('public.tax_pool_classes') is not null
+        and (select count(*) from pg_policies where schemaname='public' and tablename in ('tax_regimes','tax_pool_classes') and policyname='org_isolation')=2 as complete
+    `)) as unknown as { rows: { complete: boolean }[] };
+    complete = check.rows[0]?.complete === true;
+  } else if (filename === "generated/0050_cross_currency_settlement.sql") {
+    const check = (await db.execute(sql`
+      select
+        exists(select 1 from information_schema.columns where table_schema='public' and table_name='applications' and column_name='source_transaction_amount')
+        and exists(select 1 from information_schema.columns where table_schema='public' and table_name='applications' and column_name='settlement_rate_reference')
+        and not exists(select 1 from information_schema.columns where table_schema='public' and table_name='applications' and column_name='transaction_amount')
+        and exists(select 1 from pg_trigger where tgname='app_validate_endpoints' and not tgisinternal) as complete
+    `)) as unknown as { rows: { complete: boolean }[] };
+    complete = check.rows[0]?.complete === true;
+  } else if (filename === "generated/0052_asset_operating_controls.sql") {
+    const check = (await db.execute(sql`
+      select
+        exists(select 1 from information_schema.columns where table_schema='public' and table_name='fixed_assets' and column_name='depreciation_method_id')
+        and exists(select 1 from information_schema.columns where table_schema='public' and table_name='depreciation_inputs' and column_name='evidence_file_id')
+        and not exists(select 1 from information_schema.columns where table_schema='public' and table_name='depreciation_inputs' and column_name='evidence_reference')
+        and exists(select 1 from pg_trigger where tgname='depreciation_input_file_guard' and not tgisinternal) as complete
+    `)) as unknown as { rows: { complete: boolean }[] };
+    complete = check.rows[0]?.complete === true;
+  } else if (filename === "generated/0053_report_delivery_outbox.sql") {
+    const check = (await db.execute(sql`
+      select to_regclass('public.report_run_artifacts') is not null
+        and to_regclass('public.report_delivery_outbox') is not null
+        and exists(select 1 from information_schema.columns where table_schema='public' and table_name='report_runs' and column_name='scheduled_for') as complete
+    `)) as unknown as { rows: { complete: boolean }[] };
+    complete = check.rows[0]?.complete === true;
+  } else if (filename === "generated/0054_ownership_consolidation.sql") {
+    const check = (await db.execute(sql`
+      select to_regclass('public.subsidiary_ownership_interests') is not null
+        and to_regclass('public.ownership_consolidation_runs') is not null
+        and to_regclass('public.ownership_consolidation_entries') is not null
+        and exists(select 1 from pg_trigger where tgname='ownership_interest_guard' and not tgisinternal) as complete
+    `)) as unknown as { rows: { complete: boolean }[] };
+    complete = check.rows[0]?.complete === true;
+  } else if (filename === "generated/0055_negative_inventory_costing.sql") {
+    const check = (await db.execute(sql`
+      select to_regclass('public.inventory_provisional_costs') is not null
+        and to_regclass('public.inventory_provisional_settlements') is not null
+        and exists(select 1 from information_schema.columns where table_schema='public' and table_name='item_inventory_profiles' and column_name='allow_negative_inventory')
+        and exists(select 1 from pg_trigger where tgname='inventory_provisional_settlement_immutable' and not tgisinternal) as complete
+    `)) as unknown as { rows: { complete: boolean }[] };
+    complete = check.rows[0]?.complete === true;
   }
   if (!complete) return;
   const inserted = (await db.execute(sql`

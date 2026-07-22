@@ -20,7 +20,8 @@
     "vendor": "Vendor",
     "employee": "Employee",
     "project": "Project",
-    "field_ticket": "Field ticket"
+    "field_ticket": "Field ticket",
+    "fixed_asset": "Fixed asset"
   },
   "views": {
     "defaultName": "Default view",

@@ -22,6 +22,33 @@ focused on capitalization and depreciation.
 
 ---
 
+## Choose the pricing model
+
+Most consumables, materials, services, and other ordinary items need only two
+values on the item record:
+
+- **Price** — the amount charged to the customer per unit; and
+- **Cost** — the internal job cost per unit.
+
+These simple values do not need an effective date or rate-book assignment.
+Field tickets, project charges, and other transaction lines use them directly.
+
+Configure **Advanced rate pricing** only when an item needs dated prices,
+customer or project overrides, multiple currencies, or package units such as
+day/week/month. When advanced pricing is enabled, OpenBooks tries the matching
+rate books first and retains the item Price and Cost as the final fallback.
+
+The rate names have distinct purposes:
+
+- **Cost rate** is internal job cost.
+- **Bill rate** is the customer-facing transaction price.
+- **Time-type rates** apply only to labor premiums such as overtime and double
+  time; otherwise the time type's multiplier derives the rate.
+- **Fair-value prices** are used for revenue-allocation testing and never select
+  the price placed on a field ticket or ordinary transaction line.
+
+---
+
 ## Configure an equipment charge item
 
 Create or open an item under **Items & Services** and choose **Equipment charge**.

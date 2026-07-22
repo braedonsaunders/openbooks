@@ -5,9 +5,7 @@ import { ListOrdered } from 'lucide-react'
 import { cn } from '@openbooks/ui'
 import type { CategoryWeekly, WeekRow } from '../../../../lib/cash/core'
 import { CashWeekFlyout } from './CashWeekFlyout'
-import { fmtMoney } from './format'
-
-const money = (n: number) => fmtMoney(n, { compact: true })
+import { useAnalyticsMoney } from './format'
 
 /**
  * The weekly cash timeline — the cash cockpit's centerpiece. One click on a
@@ -34,6 +32,8 @@ export function CashTimeline({
   canPayRun?: boolean
   canCollectionRun?: boolean
 }) {
+  const fmtMoney = useAnalyticsMoney()
+  const money = (n: number) => fmtMoney(n, { compact: true })
   const [flyout, setFlyout] = useState<{ week: WeekRow; side: 'ar' | 'ap' } | null>(null)
   const hasCats = categories.length > 0
   const scheduling = weeklyCap > 0 || restrictToSafe

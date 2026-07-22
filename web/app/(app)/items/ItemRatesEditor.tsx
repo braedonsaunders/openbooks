@@ -1,13 +1,12 @@
 'use client'
 
+import { useMoney } from '@/components/money-provider'
 import { useEffect, useState } from 'react'
 import { useTranslations } from 'next-intl'
 import Link from 'next/link'
 import { toast } from 'sonner'
 import { Badge, Button, Card, CardContent, Input, Label, Select } from '@openbooks/ui'
 import { PagedTable } from '../../../components/paged-table'
-import { money } from '../../../lib/format'
-
 interface Tier { unitCode: string; unitName: string; baseQuantity: string; costRate: string; billRate: string; timeTypeBillRates: Record<string, string> }
 interface RateData {
   books: { id: string; code: string; name: string; currency: string; is_default: boolean }[]
@@ -16,7 +15,18 @@ interface RateData {
   timeTypes: { id: string; name: string; bill_multiplier: string }[]
 }
 
-export function ItemRatesEditor({ itemId, canManage }: { itemId: string; canManage: boolean }) {
+export function ItemRatesEditor({
+  itemId,
+  itemPrice,
+  itemCost,
+  canManage,
+}: {
+  itemId: string
+  itemPrice: string
+  itemCost: string
+  canManage: boolean
+}) {
+  const { money } = useMoney()
   const t = useTranslations('items.rates')
   const common = useTranslations('common')
   const [data, setData] = useState<RateData | null>(null)
@@ -63,6 +73,8 @@ export function ItemRatesEditor({ itemId, canManage }: { itemId: string; canMana
 
   // Time-type tiers only make sense on hourly/labor lines.
   const tierTypes = (data?.timeTypes ?? []).filter((x) => Number(x.bill_multiplier) !== 1)
+  const advancedPricing = data?.profile != null
+  const simpleValue = (value: string) => value === '' ? t('notSet') : money(value)
 
   async function save() {
     setBusy(true)
@@ -82,6 +94,51 @@ export function ItemRatesEditor({ itemId, canManage }: { itemId: string; canMana
 
   return (
     <section className="space-y-3">
+      {data ? (
+        <Card>
+          <CardContent className="space-y-4 p-4">
+            <div className="flex flex-wrap items-start justify-between gap-3">
+              <div>
+                <h3 className="text-sm font-semibold text-slate-900 dark:text-slate-100">{t('guide.title')}</h3>
+                <p className="mt-0.5 text-xs text-slate-500 dark:text-slate-400">
+                  {advancedPricing ? t('guide.advancedDescription') : t('guide.simpleDescription')}
+                </p>
+              </div>
+              <Badge variant={advancedPricing ? 'success' : 'secondary'}>
+                {advancedPricing ? t('guide.advancedMode') : t('guide.simpleMode')}
+              </Badge>
+            </div>
+
+            <div className="grid gap-3 sm:grid-cols-3">
+              <div className="rounded-lg border border-slate-200 p-3 dark:border-slate-700">
+                <p className="text-xs font-medium text-slate-500 dark:text-slate-400">{t('guide.price')}</p>
+                <p className="mt-1 text-base font-semibold tabular-nums text-slate-900 dark:text-slate-100">{simpleValue(itemPrice)}</p>
+                <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">{t('guide.priceHelp')}</p>
+              </div>
+              <div className="rounded-lg border border-slate-200 p-3 dark:border-slate-700">
+                <p className="text-xs font-medium text-slate-500 dark:text-slate-400">{t('guide.cost')}</p>
+                <p className="mt-1 text-base font-semibold tabular-nums text-slate-900 dark:text-slate-100">{simpleValue(itemCost)}</p>
+                <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">{t('guide.costHelp')}</p>
+              </div>
+              <div className="rounded-lg border border-slate-200 p-3 dark:border-slate-700">
+                <p className="text-xs font-medium text-slate-500 dark:text-slate-400">{t('guide.advanced')}</p>
+                <p className="mt-1 text-base font-semibold text-slate-900 dark:text-slate-100">
+                  {advancedPricing ? t('guide.configured', { unit: data.profile?.base_unit ?? '—' }) : t('guide.notConfigured')}
+                </p>
+                <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
+                  {advancedPricing ? t('guide.advancedHelp') : t('guide.simpleHelp')}
+                </p>
+              </div>
+            </div>
+
+            <div className="rounded-lg bg-slate-50 p-3 text-xs text-slate-600 dark:bg-slate-900 dark:text-slate-300">
+              <p className="font-medium text-slate-800 dark:text-slate-100">{t('guide.resolutionTitle')}</p>
+              <p className="mt-1">{advancedPricing ? t('guide.advancedResolution') : t('guide.simpleResolution')}</p>
+              <p className="mt-2">{t('guide.rateTypes')}</p>
+            </div>
+          </CardContent>
+        </Card>
+      ) : null}
       <div className="flex items-center justify-between gap-3">
         <div>
           <h3 className="text-sm font-semibold text-slate-900 dark:text-slate-100">{t('title')}</h3>
@@ -89,7 +146,7 @@ export function ItemRatesEditor({ itemId, canManage }: { itemId: string; canMana
         </div>
         <div className="flex items-center gap-2">
           <Link href="/docs/item-rates" className="text-xs font-medium text-teal-700 hover:underline dark:text-teal-300">{t('documentation')}</Link>
-          {canManage && !editing ? <Button variant="outline" size="sm" onClick={() => setEditing(true)}>{t('newVersion')}</Button> : null}
+          {canManage && !editing ? <Button variant="outline" size="sm" onClick={() => setEditing(true)}>{advancedPricing ? t('newVersion') : t('configure')}</Button> : null}
         </div>
       </div>
       {editing ? (

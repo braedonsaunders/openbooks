@@ -1,3 +1,4 @@
+import { getMoneyFormatter } from '@/lib/money-server'
 import Link from 'next/link'
 import { notFound } from 'next/navigation'
 import { getTranslations } from 'next-intl/server'
@@ -11,7 +12,6 @@ import { Pagination } from '../../../../components/pagination'
 import { SortTh } from '../../../../components/sortable-th'
 import { requirePermission, can } from '../../../../lib/authz'
 import { isUuid, parsePrefixedListParams, pickString } from '../../../../lib/list-params'
-import { money } from '../../../../lib/format'
 import { ImportStatementButton } from './ImportStatementButton'
 import { StartReconciliationButton } from './StartReconciliationButton'
 import { StatementDrawer } from './StatementDrawer'
@@ -50,6 +50,7 @@ export default async function BankingAccount({
   params: Promise<{ accountId: string }>
   searchParams: Promise<Record<string, string | string[] | undefined>>
 }) {
+  const { money } = await getMoneyFormatter()
   const authz = await requirePermission('banking.read')
   const canReconcile = can(authz, 'banking.reconcile')
   const t = await getTranslations('banking')

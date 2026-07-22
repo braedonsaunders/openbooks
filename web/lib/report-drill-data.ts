@@ -8,7 +8,7 @@ import type { Authz } from './authz'
 import { executeReport, loadReportDefinition } from './custom-reports'
 import { loadView } from './views'
 import { agingDetail, transactionDetail } from './reports'
-import { money } from './format'
+import { getMoneyFormatter } from './money-server'
 import type { ReportDrillResponse, ReportDrillTarget } from './report-drill'
 import type { StatementDimFilter } from './statement-matrix'
 
@@ -28,6 +28,7 @@ function paginate<T>(rows: T[], page: number): T[] {
 }
 
 async function ledgerData(target: Extract<ReportDrillTarget, { kind: 'ledger' }>, authz: Authz, page: number): Promise<ReportDrillResponse> {
+  const { money } = await getMoneyFormatter(authz.user.orgId)
   const [tc, tr, result] = await Promise.all([
     getTranslations('common'),
     getTranslations('reports'),
@@ -86,6 +87,7 @@ async function ledgerData(target: Extract<ReportDrillTarget, { kind: 'ledger' }>
 }
 
 async function agingData(target: Extract<ReportDrillTarget, { kind: 'aging' }>, authz: Authz, page: number): Promise<ReportDrillResponse> {
+  const { money } = await getMoneyFormatter(authz.user.orgId)
   const [tc, tr, result] = await Promise.all([
     getTranslations('common'),
     getTranslations('reports'),
@@ -117,6 +119,7 @@ async function agingData(target: Extract<ReportDrillTarget, { kind: 'aging' }>, 
 }
 
 async function orderData(target: Extract<ReportDrillTarget, { kind: 'orders' }>, authz: Authz, page: number): Promise<ReportDrillResponse> {
+  const { money } = await getMoneyFormatter(authz.user.orgId)
   const [tc, tr] = await Promise.all([getTranslations('common'), getTranslations('reports')])
   const scope = target.scope
   const predicate = scope === 'voided'
@@ -284,6 +287,7 @@ async function customData(target: Extract<ReportDrillTarget, { kind: 'custom' }>
 }
 
 async function budgetData(target: Extract<ReportDrillTarget, { kind: 'budget' }>, authz: Authz, page: number): Promise<ReportDrillResponse> {
+  const { money } = await getMoneyFormatter(authz.user.orgId)
   const scenario = (await db.execute(sql`
     select bs.book_id, min(ap.starts_on)::text as from_date, max(ap.ends_on)::text as to_date
       from budget_scenarios bs

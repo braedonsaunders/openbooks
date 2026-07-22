@@ -16,7 +16,8 @@
     "quote": "Angebot",
     "sales_order": "Kundenauftrag",
     "purchase_order": "Bestellung",
-    "project": "Projekt"
+    "project": "Projekt",
+    "fixed_asset": "Anlagevermögen"
   },
   "views": {
     "defaultName": "Standardansicht",

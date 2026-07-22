@@ -38,6 +38,8 @@
     "createFailed": "Could not create the ticket"
   },
   "editor": {
+    "tabs": { "time": "Time", "items": "Items", "tasks": "Tasks" },
+    "periodLocked": "Remove entered hours before changing the ticket period.",
     "back": "Field tickets",
     "submit": "Submit",
     "approve": "Approve",
@@ -60,6 +62,7 @@
       "hint": "One row per person (optionally per labor class). R / O / D = the time types' first letters.",
       "employee": "Employee",
       "laborItem": "Labor class",
+      "task": "Project task",
       "addRow": "Add crew member",
       "removeRow": "Remove row",
       "rowTotal": "Total",
@@ -67,19 +70,24 @@
       "total": "{hours} h total"
     },
     "lines": {
-      "title": "Equipment, consumables & materials",
-      "hint": "Sales-order-style lines billed with the ticket. Rates prefill from the item and stay editable.",
+      "title": "Items & equipment",
+      "hint": "Select billable items or linked equipment. Pricing follows the project's customer, equipment, and organization rate books, including package tiers.",
       "item": "Item",
       "pickItem": "Pick an item…",
       "description": "Description",
       "quantity": "Qty",
+      "rateUnit": "Rate unit",
       "rate": "Rate",
       "amount": "Amount",
+      "equipment": "Equipment unit",
+      "pooledItem": "No specific unit",
+      "rateSource": { "rate_book": "Resolved from rate book", "item_default": "Using item default rate" },
       "add": "Add line",
       "remove": "Remove line",
       "empty": "No lines yet.",
       "itemRequired": "Pick an item"
     },
+    "tasks": { "title": "Project tasks", "hint": "WBS tasks available for coding crew hours on this project.", "code": "Code", "task": "Task", "estimatedHours": "Estimated hours" },
     "totals": {
       "title": "Ticket totals",
       "labor": "Labor",

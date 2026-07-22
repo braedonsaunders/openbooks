@@ -40,8 +40,11 @@ function present(value: unknown): boolean {
 
 function numberOrNull(value: unknown): string | null {
   if (!present(value)) return null;
-  const parsed = Number(value);
-  return Number.isFinite(parsed) ? String(value) : null;
+  try {
+    return normalizeMoney(String(value));
+  } catch {
+    return null;
+  }
 }
 
 export interface GenericAdjustment {
@@ -694,6 +697,7 @@ export async function importAdminApp2LaborRates(options: {
         "Regular",
         "1",
         "1",
+        true,
       ],
       [
         deterministicUuid("time-type", `${orgId}:overtime`),
@@ -701,6 +705,7 @@ export async function importAdminApp2LaborRates(options: {
         "Overtime",
         "1.5",
         "1.5",
+        true,
       ],
       [
         deterministicUuid("time-type", `${orgId}:double-time`),
@@ -708,12 +713,13 @@ export async function importAdminApp2LaborRates(options: {
         "Double time",
         "2",
         "2",
+        true,
       ],
     ];
     await bulkInsert(
       client,
       "time_types",
-      ["id", "org_id", "name", "cost_multiplier", "bill_multiplier"],
+      ["id", "org_id", "name", "cost_multiplier", "bill_multiplier", "show_on_field_ticket"],
       timeTypes,
       `on conflict (id) do update set name=excluded.name,cost_multiplier=excluded.cost_multiplier,bill_multiplier=excluded.bill_multiplier`,
     );

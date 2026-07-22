@@ -55,6 +55,8 @@ create index if not exists asset_events_journal_entry on asset_events (journal_e
 create index if not exists depreciation_lines_journal_entry on depreciation_schedule_lines (journal_entry_id);
 create index if not exists documents_posted_entry on documents (posted_entry_id);
 create index if not exists inventory_movements_journal_entry on inventory_movements (journal_entry_id);
+create index if not exists inventory_provisional_issue on inventory_provisional_costs (issue_movement_id);
+create index if not exists inventory_provisional_settlement_entry on inventory_provisional_settlements (correction_journal_entry_id);
 create index if not exists journal_entries_reverses on journal_entries (reverses_entry_id);
 create index if not exists landed_cost_journal_entry on landed_cost_allocations (journal_entry_id);
 create index if not exists payment_settlements_reversal_entry on payment_settlements (reversal_entry_id);
@@ -90,6 +92,9 @@ create index if not exists project_types_org on project_types (org_id);
 create index if not exists projects_project_type on projects (project_type_id);
 -- intercompany_pairs FKs live in generated/0028_subsidiaries.sql (the table
 -- was rebuilt there from org refs to subsidiary refs, with its FK set).
+alter table subsidiary_ownership_interests add foreign key (org_id) references orgs(id), add foreign key (parent_subsidiary_id) references subsidiaries(id), add foreign key (subsidiary_id) references subsidiaries(id), add foreign key (investment_account_id) references accounts(id), add foreign key (equity_income_account_id) references accounts(id), add foreign key (distribution_account_id) references accounts(id), add foreign key (distribution_income_account_id) references accounts(id), add foreign key (nci_equity_account_id) references accounts(id), add foreign key (nci_income_account_id) references accounts(id), add foreign key (goodwill_account_id) references accounts(id), add foreign key (fair_value_adjustment_account_id) references accounts(id);
+alter table ownership_consolidation_runs add foreign key (org_id) references orgs(id), add foreign key (period_id) references accounting_periods(id);
+alter table ownership_consolidation_entries add foreign key (org_id) references orgs(id), add foreign key (run_id) references ownership_consolidation_runs(id) on delete cascade, add foreign key (interest_id) references subsidiary_ownership_interests(id), add foreign key (journal_entry_id) references journal_entries(id);
 alter table fx_provider_configs
   add foreign key (org_id) references orgs(id) on delete cascade,
   add foreign key (base_currency) references currencies(code) on delete restrict,
@@ -192,7 +197,8 @@ alter table tax_pool_classes
 alter table depreciation_methods add foreign key (org_id) references orgs(id);
 alter table depreciation_book_policies
   add foreign key (org_id) references orgs(id),
-  add foreign key (book_id) references accounting_books(id);
+  add foreign key (book_id) references accounting_books(id),
+  add foreign key (depreciation_method_id) references depreciation_methods(id);
 alter table tax_return_forms add foreign key (official_pdf_file_id) references files(id);
 alter table tax_filings add foreign key (org_id) references orgs(id);
 
@@ -262,6 +268,14 @@ alter table cost_layers
 alter table cost_layer_consumptions
   add foreign key (cost_layer_id) references cost_layers(id),
   add foreign key (issue_movement_id) references inventory_movements(id);
+alter table inventory_provisional_costs
+  add foreign key (item_id) references items(id),
+  add foreign key (stock_location_id) references stock_locations(id),
+  add foreign key (issue_movement_id) references inventory_movements(id);
+alter table inventory_provisional_settlements
+  add foreign key (provisional_cost_id) references inventory_provisional_costs(id),
+  add foreign key (receipt_movement_id) references inventory_movements(id),
+  add foreign key (correction_journal_entry_id) references journal_entries(id);
 alter table stock_counts
   add foreign key (location_id) references locations(id),
   add foreign key (posted_entry_id) references journal_entries(id);
@@ -307,15 +321,21 @@ alter table fixed_assets
   add foreign key (department_id) references departments(id),
   add foreign key (project_id) references projects(id),
   add foreign key (location_id) references locations(id),
-  add foreign key (custodian_party_id) references parties(id);
+  add foreign key (custodian_party_id) references parties(id),
+  add foreign key (depreciation_method_id) references depreciation_methods(id),
+  add foreign key (asset_account_id) references accounts(id),
+  add foreign key (accumulated_depreciation_account_id) references accounts(id),
+  add foreign key (depreciation_expense_account_id) references accounts(id);
 alter table asset_categories
   add foreign key (asset_account_id) references accounts(id),
   add foreign key (accumulated_depreciation_account_id) references accounts(id),
   add foreign key (depreciation_expense_account_id) references accounts(id),
-  add foreign key (gain_loss_account_id) references accounts(id);
+  add foreign key (gain_loss_account_id) references accounts(id),
+  add foreign key (default_depreciation_method_id) references depreciation_methods(id);
 alter table depreciation_schedules
   add foreign key (asset_id) references fixed_assets(id),
-  add foreign key (book_id) references accounting_books(id);
+  add foreign key (book_id) references accounting_books(id),
+  add foreign key (depreciation_method_id) references depreciation_methods(id);
 alter table depreciation_schedule_lines
   add foreign key (schedule_id) references depreciation_schedules(id),
   add foreign key (period_id) references accounting_periods(id),
@@ -329,6 +349,7 @@ alter table depreciation_inputs
   add foreign key (voided_by) references users(id),
   add foreign key (created_by) references users(id),
   add foreign key (updated_by) references users(id);
+alter table depreciation_inputs add foreign key (evidence_file_id) references files(id);
 alter table asset_events
   add foreign key (asset_id) references fixed_assets(id),
   add foreign key (journal_entry_id) references journal_entries(id);
@@ -516,6 +537,8 @@ alter table custom_records add foreign key (type_id) references custom_record_ty
 alter table report_definitions add foreign key (org_id) references orgs(id);
 alter table report_schedules add foreign key (org_id) references orgs(id), add foreign key (definition_id) references report_definitions(id) on delete cascade;
 alter table report_runs add foreign key (org_id) references orgs(id), add foreign key (schedule_id) references report_schedules(id) on delete set null, add foreign key (definition_id) references report_definitions(id) on delete cascade;
+alter table report_run_artifacts add foreign key (org_id) references orgs(id), add foreign key (run_id) references report_runs(id) on delete cascade;
+alter table report_delivery_outbox add foreign key (org_id) references orgs(id), add foreign key (run_id) references report_runs(id) on delete cascade, add foreign key (email_log_id) references email_log(id) on delete set null;
 
 -- insights
 alter table insight_cards add foreign key (org_id) references orgs(id);

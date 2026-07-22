@@ -18,11 +18,22 @@ export const migrationAndCutover: DocArticle = {
     'mapping',
     'delta',
   ],
-  related: ['quick-start', 'reconciliation-before-cutover', 'data-imports'],
+  related: ['migrate-with-a-connector', 'quick-start', 'reconciliation-before-cutover', 'data-imports'],
   body: `# Migration and Cutover
 
 A migration is complete only when users can perform their work and the new books
 are proven. Loading rows is one step in a controlled cutover.
+
+## Start with a connector
+
+If OpenBooks has a connector for your current system, use it. A connector
+migrates your history and then mirrors the source on a schedule so you can run
+both systems in parallel and reconcile on real activity before cutover, with no
+spreadsheets or hand-mapping. See **Migrate with a Connector**.
+
+The rest of this guide covers the controlled cutover that applies to every
+migration — connector-based or manual — and the file-based path for systems
+without a connector.
 
 ## Choose the history strategy
 

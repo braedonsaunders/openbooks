@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server'
 import { suggestApplications } from '@openbooks/engine/src/payments.ts'
+import { fromUnits, toUnits } from '@openbooks/engine/src/money.ts'
 import { guardPermission } from '../../../../lib/authz'
 import { isUuid } from '../../../../lib/list-params'
 import { paymentErrorResponse } from '../lib'
@@ -24,8 +25,10 @@ export async function POST(req: Request) {
   if (!body.partyId || !isUuid(body.partyId)) {
     return NextResponse.json({ error: 'partyId is required' }, { status: 400 })
   }
-  const amount = String(body.amount ?? '')
-  if (amount === '' || Number.isNaN(Number(amount))) {
+  let amount: string
+  try {
+    amount = fromUnits(toUnits(String(body.amount ?? '')))
+  } catch {
     return NextResponse.json({ error: 'a numeric amount is required' }, { status: 400 })
   }
   if (!body.currency || !/^[A-Z]{3}$/.test(body.currency)) {

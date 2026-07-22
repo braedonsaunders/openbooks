@@ -29,6 +29,19 @@ function normalizeScopes(input: unknown): string[] | null {
   return PERMISSION_CATALOGUE.filter((p) => set.has(p));
 }
 
+/**
+ * Parse a requests-per-minute value. Returns a positive integer, `null`
+ * (unlimited), `undefined` (not specified — keep the default/current), or
+ * `false` (invalid → 400).
+ */
+function parseRate(input: unknown): number | null | undefined | false {
+  if (input === undefined) return undefined;
+  if (input === null || input === "") return null;
+  const n = Number(input);
+  if (!Number.isInteger(n) || n < 1 || n > 100_000) return false;
+  return n;
+}
+
 async function audit(args: {
   orgId: string;
   rowId: string;
@@ -49,7 +62,7 @@ export async function GET() {
 
   const r = (await db.execute(sql`
     select k.id, k.name, k.description, k.key_prefix, k.key_preview, k.scopes,
-           k.is_active, k.expires_at, k.last_used_at, k.created_at,
+           k.rate_limit_per_min, k.is_active, k.expires_at, k.last_used_at, k.created_at,
            u.name as owner_name, u.email as owner_email
       from api_keys k
       join users u on u.id = k.user_id
@@ -70,6 +83,7 @@ export async function POST(req: Request) {
     description?: string;
     scopes?: unknown;
     expiresAt?: string | null;
+    rateLimitPerMin?: number | null;
   };
   const name = body.name?.trim();
   if (!name) return NextResponse.json({ error: "name required" }, { status: 400 });
@@ -78,6 +92,13 @@ export async function POST(req: Request) {
   if (!scopes) {
     return NextResponse.json({ error: "scopes must be known catalogue keys" }, { status: 400 });
   }
+
+  const rate = parseRate(body.rateLimitPerMin);
+  if (rate === false) {
+    return NextResponse.json({ error: "rateLimitPerMin must be a positive integer or blank" }, { status: 400 });
+  }
+  // Default to 120/min when unspecified; null = unlimited.
+  const rateValue = rate === undefined ? 120 : rate;
 
   let expiresAt: string | null = null;
   if (body.expiresAt) {
@@ -91,10 +112,10 @@ export async function POST(req: Request) {
   const gen = generateApiKey();
   const inserted = (await db.execute(sql`
     insert into api_keys (org_id, user_id, name, description, key_prefix, key_hash,
-                          key_preview, scopes, is_active, expires_at, created_by, updated_by)
+                          key_preview, scopes, rate_limit_per_min, is_active, expires_at, created_by, updated_by)
     values (${actor.orgId}, ${actor.id}, ${name}, ${body.description?.trim() || null},
             ${gen.keyPrefix}, ${gen.keyHash}, ${gen.keyPreview},
-            ${JSON.stringify(scopes)}, true, ${expiresAt}, ${actor.id}, ${actor.id})
+            ${JSON.stringify(scopes)}, ${rateValue}, true, ${expiresAt}, ${actor.id}, ${actor.id})
     returning id`)) as any;
 
   await audit({
@@ -118,13 +139,14 @@ export async function PATCH(req: Request) {
     description?: string;
     scopes?: unknown;
     isActive?: boolean;
+    rateLimitPerMin?: number | null;
   };
   if (!body.id || !isUuid(body.id)) {
     return NextResponse.json({ error: "id required" }, { status: 400 });
   }
 
   const existing = (await db.execute(sql`
-    select id, name, description, scopes, is_active
+    select id, name, description, scopes, rate_limit_per_min, is_active
       from api_keys where id = ${body.id} and org_id = ${actor.orgId}`)) as any;
   const key = existing.rows[0];
   if (!key) return NextResponse.json({ error: "key not found" }, { status: 404 });
@@ -154,6 +176,14 @@ export async function PATCH(req: Request) {
   if (body.isActive !== undefined) {
     sets.push(sql`is_active = ${body.isActive}`);
     changes.is_active = [key.is_active, body.isActive];
+  }
+  if (body.rateLimitPerMin !== undefined) {
+    const rate = parseRate(body.rateLimitPerMin);
+    if (rate === false) {
+      return NextResponse.json({ error: "rateLimitPerMin must be a positive integer or blank" }, { status: 400 });
+    }
+    sets.push(sql`rate_limit_per_min = ${rate}`);
+    changes.rate_limit_per_min = [key.rate_limit_per_min, rate];
   }
   if (sets.length === 0) {
     return NextResponse.json({ error: "nothing to update" }, { status: 400 });

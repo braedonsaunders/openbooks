@@ -1,6 +1,8 @@
 'use client'
 
 import Link from 'next/link'
+import { useFormatter } from 'next-intl'
+import { useMoney } from '@/components/money-provider'
 import { cn } from '@openbooks/ui'
 import { ReportPaper } from './ReportPaper'
 import { ReportDrillLink } from './ReportDrillLink'
@@ -64,20 +66,6 @@ function isNumericCell(v: PaperCell): boolean {
   return /^-?[$(]?-?[\d,]+(\.\d+)?\)?%?$/.test(v.trim())
 }
 
-function fmtMoney(n: number, currency: string): string {
-  const s = Math.abs(n).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })
-  return n < 0 ? `(${currency}${s})` : `${currency}${s}`
-}
-
-function fmt(v: PaperCell, isMoney: boolean, currency: string): string {
-  if (v === null || v === undefined || v === '') return ''
-  if (typeof v === 'number') {
-    if (isMoney) return fmtMoney(v, currency)
-    return v.toLocaleString(undefined, { maximumFractionDigits: 2 })
-  }
-  return v
-}
-
 export function PaperView({
   company,
   data,
@@ -89,6 +77,15 @@ export function PaperView({
   emptyLabel: string
   currency?: string
 }) {
+  const format = useFormatter()
+  const { money } = useMoney()
+  const fmt = (value: PaperCell, isMoney: boolean): string => {
+    if (value === null || value === undefined || value === '') return ''
+    if (typeof value !== 'number') return value
+    return isMoney
+      ? money(value, { currency: currency || undefined, accounting: true })
+      : format.number(value, { maximumFractionDigits: 2 })
+  }
   const wide = data.groups.some((group) => group.columns.length > 5)
   return (
     <ReportPaper company={company} title={data.title} periodPhrase={data.periodPhrase} note={data.note} wide={wide}>
@@ -100,9 +97,9 @@ export function PaperView({
               <div className="truncate font-semibold tabular-nums">
                 {data.defaultDrillTarget && isNumericCell(item.value) ? (
                   <ReportDrillLink target={data.defaultDrillTarget} className="hover:text-teal-700 hover:underline dark:hover:text-teal-300">
-                    {fmt(item.value, false, currency)}
+                    {fmt(item.value, false)}
                   </ReportDrillLink>
-                ) : fmt(item.value, false, currency)}
+                ) : fmt(item.value, false)}
               </div>
             </div>
           ))}
@@ -154,7 +151,7 @@ export function PaperView({
                             const href = group.links?.[ri]?.[ci]
                             const drill = group.drills?.[ri]?.[ci]
                               ?? (isNumericCell(cell) ? data.defaultDrillTarget : undefined)
-                            const text = fmt(cell, isMoney, currency)
+                            const text = fmt(cell, isMoney)
                             return (
                               <TableCell
                                 key={ci}

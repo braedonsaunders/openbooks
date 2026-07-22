@@ -13,10 +13,12 @@ import {
   type Translator,
 } from '../../../../../../lib/report-pdf'
 import { taxReturnExportData } from '../../../../../../lib/tax-filing'
+import { renderTaxFormFacsimilePdf } from '../../../../../../lib/tax-form-facsimile'
+import { taxReturnToJsonString } from '../../../../../../lib/tax-return-structured'
 import { fillOfficialTaxPdf } from '../../../../../../lib/tax-official-pdf'
 import { getFileBlob } from '../../../../../../lib/file-cabinet'
-import { csvResponse, pdfResponse, safeName, xlsxResponse } from '../../../../../../lib/export'
-import { parseAdjustments } from '../route'
+import { csvResponse, jsonResponse, pdfResponse, safeName, xlsxResponse } from '../../../../../../lib/export'
+import { parseAdjustments } from '../tax-return-params'
 
 export const runtime = 'nodejs'
 
@@ -34,7 +36,7 @@ export async function GET(req: Request, { params }: { params: Promise<{ code: st
   if (!from || !to || !DATE_RE.test(from) || !DATE_RE.test(to)) {
     return NextResponse.json({ error: 'from and to dates (YYYY-MM-DD) are required' }, { status: 422 })
   }
-  if (!['pdf', 'xlsx', 'csv', 'official'].includes(format)) {
+  if (!['pdf', 'facsimile', 'json', 'xlsx', 'csv', 'official'].includes(format)) {
     return NextResponse.json({ error: 'invalid format' }, { status: 422 })
   }
 
@@ -56,6 +58,22 @@ export async function GET(req: Request, { params }: { params: Promise<{ code: st
       if (!blob) return NextResponse.json({ error: 'official PDF not found' }, { status: 404 })
       const { bytes } = await fillOfficialTaxPdf(new Uint8Array(blob.bytes), result.boxes)
       return pdfResponse(Buffer.from(bytes), `${filename}-official`)
+    }
+
+    // Form-faithful facsimile: our own HTML replica of the government form,
+    // printed to PDF — looks like the real return, works for every jurisdiction.
+    if (format === 'facsimile') {
+      const branding = await orgBranding()
+      return pdfResponse(
+        await renderTaxFormFacsimilePdf(result, { orgName: branding.orgName, primaryColor: branding.primaryColor }),
+        `${filename}-facsimile`,
+      )
+    }
+
+    // Structured export: the return's boxes as machine-readable JSON, grouped by
+    // section — the deliverable for portal/JSON-filed returns (e.g. India GSTR).
+    if (format === 'json') {
+      return jsonResponse(taxReturnToJsonString(result), `${filename}-return`)
     }
 
     const data = taxReturnExportData(result, t)

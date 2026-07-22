@@ -20,6 +20,8 @@
     "done": "{kind} — {delta}"
   },
   "taxPools": {
+    "configure": "Configure",
+    "regime": "Tax regime",
     "title": "税務減価償却 (CCA)",
     "description": "税務年度のクラスプールごとに資本的支出控除を計算します。",
     "taxYear": "税務年度",
@@ -80,8 +82,9 @@
   "depreciationInput": {
     "recordUsage": "生産使用量を記録", "recordManual": "手動減価償却を記録",
     "effectiveDate": "適用日", "productionUnits": "生産量", "manualAmount": "減価償却額",
-    "memo": "会計メモ", "memoPlaceholder": "理由と計算根拠", "evidenceReference": "証憑参照",
-    "evidencePlaceholder": "メーター値、作業指示、ファイル参照", "replacementNotice": "未記帳の入力は以前の証憑を差し替えます。記帳済み金額は、別の証憑を付けたマイナス入力で訂正してください。",
+    "memo": "会計メモ", "memoPlaceholder": "理由と計算根拠", "book": "減価償却台帳",
+    "evidenceFile": "証憑ファイル", "selectEvidenceFile": "添付ファイルを選択", "loadingEvidence": "添付ファイルを読み込み中…",
+    "attachEvidenceFirst": "減価償却を記録する前に、ファイルタブで証憑ファイルを添付してください。", "evidenceLoadFailed": "添付された証憑ファイルを読み込めませんでした", "replacementNotice": "未記帳の入力は以前の証憑を差し替えます。記帳済み金額は、別の証憑を付けたマイナス入力で訂正してください。",
     "save": "証憑を記録", "saving": "記録中…", "saved": "{period} に {amount} を記録しました", "failed": "減価償却証憑を記録できませんでした"
   },
   "status": {
@@ -96,6 +99,14 @@
     "noAvailableSubsidiary": "この資産に利用できる有効な子会社が、あなたのロールにはありません。"
   },
   "drawer": {
+    "taxDepreciation": "Tax depreciation",
+    "taxCategoryDefault": "Category default: {value}",
+    "notAssigned": "Not assigned",
+    "taxClass": "Tax class",
+    "useCategoryDefault": "Use category default",
+    "businessUsePercent": "Business use (%)",
+    "section179": "Section 179 election",
+    "bonusPercent": "Bonus depreciation (%)",
     "tabsAria": "固定資産レコードのセクション",
     "customForm": "レコードフォーム",
     "newAsset": "新規資産",
@@ -104,6 +115,10 @@
     "depreciation": "減価償却",
     "accounts": "GL勘定",
     "schedule": "減価償却スケジュール",
+    "unknownFormula": "利用できない計算式",
+    "formulaMethod": "計算式: {name}",
+    "runForBook": "減価償却を実行 — {book}",
+    "searchSchedule": "期間、台帳、またはソースを検索…",
     "scheduleEmpty": "スケジュールはまだありません — 取得原価、使用開始日、方法、耐用年数を設定してから保存してください。",
     "period": "期間",
     "planned": "計画",
@@ -163,6 +178,8 @@
   },
   "run": {
     "asOf": "基準日",
+    "book": "減価償却台帳",
+    "postBook": "{book}を記帳",
     "posted": "{count} 件の仕訳を記帳しました（合計 {amount}）",
     "nothingDue": "減価償却の対象はありません",
     "someSkipped": "{count} 件スキップしました"

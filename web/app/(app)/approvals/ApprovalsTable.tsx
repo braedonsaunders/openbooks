@@ -45,6 +45,8 @@ export interface ApprovalRow {
   assignee: string | null
   canDelegate: boolean
   quorumAll: boolean
+  /** Gate demands a typed e-signature to approve (blocks bulk approve). */
+  signatureRequired?: boolean
 }
 
 const DAY_MS = 86_400_000
@@ -106,6 +108,12 @@ export function ApprovalsTable({
   async function runBulk(decision: 'approved' | 'rejected') {
     const chosen = rows.filter((r) => visibleSelected.has(r.key))
     if (chosen.length === 0) return
+    // A signature-required gate must be approved individually (each needs its
+    // own typed attestation) — bulk approve can't collect one.
+    if (decision === 'approved' && chosen.some((r) => r.signatureRequired)) {
+      toast.error(t('bulk.signatureBlocked'))
+      return
+    }
     let comment: string | undefined
     if (decision === 'rejected') {
       const reason = await promptDialog({
@@ -234,6 +242,11 @@ export function ApprovalsTable({
                         {t('gates.badges.quorumAll')}
                       </Badge>
                     ) : null}
+                    {r.signatureRequired ? (
+                      <Badge variant="outline" className="ml-2 align-middle">
+                        {t('gates.badges.signature')}
+                      </Badge>
+                    ) : null}
                   </span>
                   <span className="text-xs text-slate-500 dark:text-slate-400">{r.engineName}</span>
                 </span>
@@ -252,7 +265,12 @@ export function ApprovalsTable({
               ) : null}
               {actionsEnabled ? (
                 <TableCell>
-                  <GateActions gateId={r.gateId} canDelegate={r.canDelegate} users={users} />
+                  <GateActions
+                    gateId={r.gateId}
+                    canDelegate={r.canDelegate}
+                    users={users}
+                    signatureRequired={r.signatureRequired}
+                  />
                 </TableCell>
               ) : null}
             </TableRow>

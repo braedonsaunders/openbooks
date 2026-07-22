@@ -1,6 +1,5 @@
-import { getTranslations } from 'next-intl/server'
 import { requirePermission } from '../../../../../lib/authz'
-import { FEATURES, orgFeatureState, featureEnabled } from '../../../../../lib/features'
+import { FEATURES, resolvedFeatureState, featureEnabled, featureDisableStatuses } from '../../../../../lib/features'
 import { FeaturesWorkspace } from './FeaturesWorkspace'
 
 export const dynamic = 'force-dynamic'
@@ -12,18 +11,14 @@ export const dynamic = 'force-dynamic'
  */
 export default async function FeaturesSetup() {
   const authz = await requirePermission('admin.setup.manage')
-  const t = await getTranslations('admin')
-  const state = await orgFeatureState(authz.user.orgId)
+  const state = await resolvedFeatureState(authz.user.orgId)
 
-  return (
-    <div className="space-y-4">
-      <div>
-        <h2 className="text-base font-semibold text-slate-900 dark:text-slate-100">{t('setup.features.title')}</h2>
-        <p className="text-sm text-slate-500 dark:text-slate-400">{t('setup.features.description')}</p>
-      </div>
-      <FeaturesWorkspace
-        features={FEATURES.map((f) => ({ key: f.key, category: f.category, enabled: featureEnabled(state, f.key) }))}
-      />
-    </div>
+  const features = FEATURES.map((f) => ({ key: f.key, category: f.category, enabled: featureEnabled(state, f.key) }))
+  // What turning each ENABLED feature off would affect (impacts + hard blocks).
+  const disableStatus = await featureDisableStatuses(
+    authz.user.orgId,
+    features.filter((f) => f.enabled).map((f) => f.key),
   )
+
+  return <FeaturesWorkspace features={features} disableStatus={disableStatus} />
 }

@@ -20,6 +20,8 @@
     "done": "{kind} — {delta}"
   },
   "taxPools": {
+    "configure": "Configure",
+    "regime": "Tax regime",
     "title": "Depreciación fiscal (CCA)",
     "description": "Calcule la deducción por costo de capital por grupo de clase para un año fiscal.",
     "taxYear": "Año fiscal",
@@ -80,8 +82,9 @@
   "depreciationInput": {
     "recordUsage": "Registrar uso de producción", "recordManual": "Registrar depreciación manual",
     "effectiveDate": "Fecha efectiva", "productionUnits": "Unidades de producción", "manualAmount": "Importe de depreciación",
-    "memo": "Nota contable", "memoPlaceholder": "Motivo y contexto del cálculo", "evidenceReference": "Referencia de evidencia",
-    "evidencePlaceholder": "Lectura de contador, orden de trabajo o archivo", "replacementNotice": "Una entrada no contabilizada reemplaza la evidencia anterior. Use una entrada negativa con evidencia separada para corregir un importe contabilizado.",
+    "memo": "Nota contable", "memoPlaceholder": "Motivo y contexto del cálculo", "book": "Libro de depreciación",
+    "evidenceFile": "Archivo de evidencia", "selectEvidenceFile": "Seleccionar un archivo adjunto", "loadingEvidence": "Cargando archivos adjuntos…",
+    "attachEvidenceFirst": "Adjunte un archivo de evidencia en la pestaña Archivos antes de registrar la depreciación.", "evidenceLoadFailed": "No se pudieron cargar los archivos de evidencia adjuntos", "replacementNotice": "Una entrada no contabilizada reemplaza la evidencia anterior. Use una entrada negativa con evidencia separada para corregir un importe contabilizado.",
     "save": "Registrar evidencia", "saving": "Registrando…", "saved": "Se registró {amount} para {period}", "failed": "No se pudo registrar la evidencia de depreciación"
   },
   "status": {
@@ -96,6 +99,14 @@
     "noAvailableSubsidiary": "Su rol no tiene ninguna subsidiaria activa disponible para este activo."
   },
   "drawer": {
+    "taxDepreciation": "Tax depreciation",
+    "taxCategoryDefault": "Category default: {value}",
+    "notAssigned": "Not assigned",
+    "taxClass": "Tax class",
+    "useCategoryDefault": "Use category default",
+    "businessUsePercent": "Business use (%)",
+    "section179": "Section 179 election",
+    "bonusPercent": "Bonus depreciation (%)",
     "tabsAria": "Secciones del activo",
     "customForm": "Formulario del registro",
     "newAsset": "Nuevo activo",
@@ -104,6 +115,10 @@
     "depreciation": "Depreciación",
     "accounts": "Cuentas del libro mayor",
     "schedule": "Cronograma de depreciación",
+    "unknownFormula": "Fórmula no disponible",
+    "formulaMethod": "Fórmula: {name}",
+    "runForBook": "Ejecutar depreciación — {book}",
+    "searchSchedule": "Buscar períodos, libros o fuentes…",
     "scheduleEmpty": "Aún no hay cronograma — defina costo, fecha de servicio, método y vida útil, luego guarde.",
     "period": "Período",
     "planned": "Planificado",
@@ -163,6 +178,8 @@
   },
   "run": {
     "asOf": "Al",
+    "book": "Libro de depreciación",
+    "postBook": "Contabilizar {book}",
     "posted": "Se contabilizaron {count, plural, one {# asiento} other {# asientos}} por un total de {amount}",
     "nothingDue": "Nada que depreciar",
     "someSkipped": "{count, plural, one {# omitido} other {# omitidos}}"

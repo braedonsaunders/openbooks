@@ -10,13 +10,11 @@ import { Panel } from '../_ui/Panel'
 import { DivergingBar, Donut, TrendChart, Chart } from '../_ui/charts'
 import { DrillDrawer, type DrillTarget } from '../_ui/DrillDrawer'
 import { exportCsv } from '../_ui/exportCsv'
-import { fmtMoney, fmtPct } from '../_ui/format'
+import { useAnalyticsMoney, fmtPct } from '../_ui/format'
 
 const TABS = ['overview', 'payment', 'scorecard', 'matrix', 'vendors'] as const
 type Tab = (typeof TABS)[number]
 const TAB_LABEL: Record<Tab, string> = { overview: 'Overview', payment: 'Payment Behavior', scorecard: 'Scorecard', matrix: 'Leverage Matrix', vendors: 'Vendors' }
-
-const money = (n: number) => fmtMoney(n, { compact: true })
 
 const TIER_LABEL: Record<SpendTier, string> = { strategic: 'Strategic', core: 'Core', tactical: 'Tactical', tail: 'Tail' }
 const TIER_STYLE: Record<SpendTier, string> = {
@@ -40,6 +38,8 @@ const QUADRANT: Record<Quadrant, { label: string; color: string; desc: string }>
 }
 
 export function VendorView({ data }: { data: VendorData }) {
+  const fmtMoney = useAnalyticsMoney()
+  const money = (n: number) => fmtMoney(n, { compact: true })
   const [tab, setTab] = useState<Tab>('overview')
   const [drill, setDrill] = useState<DrillTarget | null>(null)
   const t = data.totals
@@ -83,6 +83,8 @@ export function VendorView({ data }: { data: VendorData }) {
 
 /* ---------------------------------------------------------------- Overview */
 function OverviewTab({ data }: { data: VendorData }) {
+  const fmtMoney = useAnalyticsMoney()
+  const money = (n: number) => fmtMoney(n, { compact: true })
   const t = data.totals
   const top = data.rows.slice(0, 10)
   return (
@@ -121,6 +123,8 @@ function OverviewTab({ data }: { data: VendorData }) {
 
 /* --------------------------------------------------------- Payment Behavior */
 function PaymentTab({ data, onDrill }: { data: VendorData; onDrill: (r: VendorRow) => void }) {
+  const fmtMoney = useAnalyticsMoney()
+  const money = (n: number) => fmtMoney(n, { compact: true })
   const [sort, setSort] = useState<'spend' | 'avgDaysToPay' | 'onTimePct' | 'lateSpend'>('lateSpend')
   const t = data.totals
   const paid = data.rows.filter((r) => r.paidBills > 0)
@@ -185,6 +189,8 @@ function PaymentTab({ data, onDrill }: { data: VendorData; onDrill: (r: VendorRo
 
 /* -------------------------------------------------------------- Scorecard */
 function ScorecardTab({ data, onDrill }: { data: VendorData; onDrill: (r: VendorRow) => void }) {
+  const fmtMoney = useAnalyticsMoney()
+  const money = (n: number) => fmtMoney(n, { compact: true })
   const rows = [...data.rows].sort((a, b) => b.score - a.score)
   return (
     <div className="space-y-5">
@@ -235,7 +241,9 @@ function ScorecardTab({ data, onDrill }: { data: VendorData; onDrill: (r: Vendor
 
 /* ---------------------------------------------------------- Leverage Matrix */
 function MatrixTab({ data }: { data: VendorData }) {
-  const option = useMemo(() => matrixOption(data.rows), [data])
+  const fmtMoney = useAnalyticsMoney()
+  const money = (n: number) => fmtMoney(n, { compact: true })
+  const option = useMemo(() => matrixOption(data.rows, money), [data, fmtMoney])
   return (
     <div className="space-y-5">
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
@@ -257,7 +265,7 @@ function MatrixTab({ data }: { data: VendorData }) {
   )
 }
 
-function matrixOption(rows: VendorRow[]): Record<string, unknown> {
+function matrixOption(rows: VendorRow[], money: (value: number) => string): Record<string, unknown> {
   const maxSpend = Math.max(1, ...rows.map((r) => r.spend))
   const byQuad = (q: Quadrant) =>
     rows.filter((r) => r.quadrant === q).map((r) => ({
@@ -266,7 +274,6 @@ function matrixOption(rows: VendorRow[]): Record<string, unknown> {
       symbolSize: 8 + 34 * Math.sqrt(r.spend / maxSpend),
       itemStyle: { color: QUADRANT[q].color, opacity: 0.75 },
     }))
-  const money = (n: number) => (n >= 1e6 ? `$${(n / 1e6).toFixed(1)}M` : n >= 1e3 ? `$${(n / 1e3).toFixed(0)}K` : `$${n.toFixed(0)}`)
   return {
     grid: { left: 8, right: 16, top: 16, bottom: 28, containLabel: true },
     tooltip: { backgroundColor: 'rgba(15,23,42,0.92)', borderWidth: 0, textStyle: { color: '#f1f5f9', fontSize: 12 }, formatter: (p: any) => `${p.data.name}<br/>Spend: ${money(p.data.value[2])}<br/>On-time: ${p.data.value[1].toFixed(0)}%` },
@@ -284,6 +291,8 @@ function matrixOption(rows: VendorRow[]): Record<string, unknown> {
 
 /* ------------------------------------------------------------ Vendors table */
 function VendorsTab({ data, onDrill }: { data: VendorData; onDrill: (r: VendorRow) => void }) {
+  const fmtMoney = useAnalyticsMoney()
+  const money = (n: number) => fmtMoney(n, { compact: true })
   const [sort, setSort] = useState<keyof Pick<VendorRow, 'spend' | 'bills' | 'avgBill' | 'recencyDays' | 'score'>>('spend')
   const rows = [...data.rows].sort((a, b) => {
     const av = a[sort] ?? -1

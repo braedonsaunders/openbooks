@@ -1,5 +1,6 @@
 'use client'
 
+import { useMoney } from '@/components/money-provider'
 import { useState } from 'react'
 import { useTranslations } from 'next-intl'
 import {
@@ -13,7 +14,6 @@ import {
   ListChecks,
   SlidersHorizontal,
 } from 'lucide-react'
-import { money, moneyCompact } from '../../../../lib/format'
 import type { ApPosition } from '../../../../lib/cash/ap-position'
 import { StatTile, CockpitPanel, AgingBars, ScheduleBars } from '../../../../components/cockpit/ui'
 import { CashWeekFlyout } from '../../analytics/_ui/CashWeekFlyout'
@@ -29,6 +29,7 @@ import { PayRunPlanner } from './PayRunPlanner'
  * flyout. All off the shared cash engine, so numbers agree with the forecast.
  */
 export function ApCockpit({ data, canConfigure, canPay }: { data: ApPosition; canConfigure: boolean; canPay: boolean }) {
+  const { money, moneyCompact } = useMoney()
   const t = useTranslations('ap.cockpit')
   const [showConfig, setShowConfig] = useState(false)
   const [drillWeek, setDrillWeek] = useState<number | null>(null)

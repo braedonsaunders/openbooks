@@ -1,3 +1,4 @@
+import { getMoneyFormatter } from '@/lib/money-server'
 import type { ReactNode } from 'react'
 import Link from 'next/link'
 import { Eye } from 'lucide-react'
@@ -13,7 +14,6 @@ import { Pagination } from './pagination'
 import { SortTh } from './sortable-th'
 import { ViewsMenu } from './views-menu'
 import { parseListParams, pickString, mergeHref } from '../lib/list-params'
-import { money } from '../lib/format'
 import { allowedSubsidiaryIds } from '../lib/subsidiaries'
 import { loadFieldDefs } from '../lib/custom-fields'
 import { resolveListView } from '../lib/customization/resolve'
@@ -22,7 +22,7 @@ import { entityListSource } from '../lib/list/entity-sources'
 
 /**
  * The universal ENTITY list — the non-`documents` twin of RecordListView. Renders
- * any plain-table list registered in lib/list/entity-sources (currently projects)
+ * any plain-table list registered in lib/list/entity-sources (customers, projects)
  * with the same machinery: search + status/billing filter chips + saved-view
  * switcher, a sortable table whose cells are typed from the customization
  * registry, and pagination. Column set, order, labels, filters and sort come
@@ -32,6 +32,8 @@ import { entityListSource } from '../lib/list/entity-sources'
  */
 
 const STATUS_VARIANT: Record<string, 'default' | 'success' | 'secondary' | 'warning' | 'outline' | 'destructive'> = {
+  customer: 'success',
+  prospect: 'warning',
   quoted: 'secondary',
   awarded: 'warning',
   active: 'success',
@@ -57,6 +59,7 @@ export async function EntityListView({
   drawer?: ReactNode
   emptyAction?: ReactNode
 }) {
+  const { money } = await getMoneyFormatter()
   const source = entityListSource(recordType)
   const meta = getRecordType(recordType)
   if (!source || !meta) throw new Error(`no entity list source registered for record type "${recordType}"`)
@@ -98,7 +101,10 @@ export async function EntityListView({
     allowedSorts,
   })
 
-  const status = pickString(sp.status)
+  const requestedStatus = pickString(sp.status)
+  const viewOwnsStatus = view.filters.some((filter) => filter.key === 'status')
+  const defaultStatus = viewOwnsStatus ? undefined : source.defaultStatus
+  const status = requestedStatus === 'all' ? undefined : (requestedStatus ?? defaultStatus)
   const billing = pickString(sp.billing)
   const showInactive = pickString(sp.showInactive) === 'true'
 
@@ -113,9 +119,14 @@ export async function EntityListView({
   const allowedSubs = await allowedSubsidiaryIds(userId)
   const adhoc = { q: params.q, status, billing, showInactive }
   const where = source.where(view, adhoc, orgId, allowedSubs)
+  // Counts ignore the ad-hoc status selection so every status remains visible
+  // in the picker, while retaining saved-view scope and entity de-duplication.
+  const countView = { ...view, filters: view.filters.filter((filter) => filter.key !== 'status') }
+  const countWhere = source.where(countView, { showInactive }, orgId, allowedSubs)
   const orderExpr = source.sorts[params.sort] ?? source.defaultSort
   const aliasSql = sql.raw(source.alias)
   const tableSql = sql.raw(`${source.table} ${source.alias}`)
+  const statusExpr = source.statusExpr ?? sql`${aliasSql}.status`
 
   const [rowsRes, statusCounts, totalRow] = await Promise.all([
     db.execute(sql`
@@ -127,9 +138,10 @@ export async function EntityListView({
        limit ${params.perPage} offset ${(params.page - 1) * params.perPage}
     `) as any,
     db.execute(sql`
-      select ${aliasSql}.status, count(*) as n from ${tableSql}
-       where ${aliasSql}.org_id = ${orgId} ${showInactive ? sql`` : sql`and ${aliasSql}.is_active`}
-       group by ${aliasSql}.status`) as any,
+      select ${statusExpr} as status, count(*) as n from ${tableSql}
+        ${source.baseJoins}
+       where ${countWhere}
+       group by ${statusExpr}`) as any,
     db.execute(sql`
       select count(*) as n from ${tableSql}
         ${source.baseJoins}
@@ -239,7 +251,14 @@ export async function EntityListView({
       <div className="flex flex-wrap items-center gap-2">
         <SearchInput placeholder={tCommon('actions.search')} />
         {statusOptions.length ? (
-          <FilterChips basePath={basePath} currentParams={sp} paramKey="status" label={tCommon('labels.status')} options={statusOptions} />
+          <FilterChips
+            basePath={basePath}
+            currentParams={sp}
+            paramKey="status"
+            label={tCommon('labels.status')}
+            options={statusOptions}
+            defaultValue={defaultStatus}
+          />
         ) : null}
         {billingOptions.length ? (
           <FilterChips basePath={basePath} currentParams={sp} paramKey="billing" label={billingFilterMeta ? label(billingFilterMeta.labelKey) : ''} options={billingOptions} />

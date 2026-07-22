@@ -1,19 +1,17 @@
 /** Client-side formatters for analytics screens. */
 
-export function fmtMoney(n: number, { compact = false }: { compact?: boolean } = {}): string {
-  if (compact) {
-    const abs = Math.abs(n)
-    const sign = n < 0 ? '-' : ''
-    if (abs >= 1e9) return `${sign}$${(abs / 1e9).toFixed(1)}B`
-    if (abs >= 1e6) return `${sign}$${(abs / 1e6).toFixed(1)}M`
-    if (abs >= 1e3) return `${sign}$${(abs / 1e3).toFixed(1)}K`
-    return `${sign}$${abs.toFixed(0)}`
-  }
-  return new Intl.NumberFormat('en-US', {
-    style: 'currency',
-    currency: 'USD',
-    maximumFractionDigits: 0,
-  }).format(n)
+'use client'
+
+import { useCallback } from 'react'
+import { useMoney } from '@/components/money-provider'
+
+export function useAnalyticsMoney(): (n: number, options?: { compact?: boolean }) => string {
+  const { money, moneyCompact } = useMoney()
+  return useCallback(
+    (n: number, { compact = false }: { compact?: boolean } = {}) =>
+      compact ? moneyCompact(n) : money(n, { maximumFractionDigits: 0 }),
+    [money, moneyCompact],
+  )
 }
 
 export function fmtPct(n: number, decimals = 1): string {
@@ -26,18 +24,21 @@ export function fmtNum(n: number, suffix = 'x'): string {
 
 export type ValueFormat = 'pct' | 'money' | 'num' | 'raw'
 
-export function fmtValue(value: number | null, format: ValueFormat, compact = true): string {
-  if (value === null || !isFinite(value)) return 'N/A'
-  switch (format) {
-    case 'pct':
-      return fmtPct(value)
-    case 'money':
-      return fmtMoney(value, { compact })
-    case 'num':
-      return fmtNum(value)
-    case 'raw':
-      return value.toFixed(1)
-  }
+export function useAnalyticsValue(): (value: number | null, format: ValueFormat, compact?: boolean) => string {
+  const fmtMoney = useAnalyticsMoney()
+  return useCallback((value: number | null, format: ValueFormat, compact = true): string => {
+    if (value === null || !isFinite(value)) return 'N/A'
+    switch (format) {
+      case 'pct':
+        return fmtPct(value)
+      case 'money':
+        return fmtMoney(value, { compact })
+      case 'num':
+        return fmtNum(value)
+      case 'raw':
+        return value.toFixed(1)
+    }
+  }, [fmtMoney])
 }
 
 /** Semantic colour for a health score / sub-score, 0–100. */

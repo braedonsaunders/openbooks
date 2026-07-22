@@ -3,7 +3,7 @@
 import { useState } from 'react'
 import { Info } from 'lucide-react'
 import { Popover, cn } from '@openbooks/ui'
-import { fmtValue, GRADE_STYLE, GRADE_TINT, type ValueFormat } from './format'
+import { useAnalyticsValue, GRADE_STYLE, GRADE_TINT, type ValueFormat } from './format'
 
 export interface RatioCardData {
   id: string
@@ -31,6 +31,7 @@ export interface RatioDef {
  * ratio for details" affordance.
  */
 export function RatioCard({ data, def }: { data: RatioCardData; def: RatioDef }) {
+  const fmtValue = useAnalyticsValue()
   const [open, setOpen] = useState(false)
   const unavailable = data.noData || data.value === null
   const displayValue = unavailable ? 'N/A' : fmtValue(data.value, data.format)

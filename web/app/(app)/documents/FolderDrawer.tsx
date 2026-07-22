@@ -4,8 +4,8 @@ import { useState } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { useTranslations } from 'next-intl'
 import { toast } from 'sonner'
-import { Download, Loader2, Trash2 } from 'lucide-react'
-import { Button, Input, Label, Select, UrlDrawer } from '@openbooks/ui'
+import { ChevronDown, Download, Loader2, Trash2 } from 'lucide-react'
+import { Button, Input, Label, Popover, Select, UrlDrawer } from '@openbooks/ui'
 import { confirmDialog } from '../../../lib/confirm'
 import { SharePanel } from './SharePanel'
 import { ActivityLog } from './ActivityLog'
@@ -60,6 +60,7 @@ export function FolderDrawer({
   const [isPrivate, setIsPrivate] = useState(folder?.isPrivate ?? false)
   const [saving, setSaving] = useState(false)
   const [deleting, setDeleting] = useState(false)
+  const [actionsOpen, setActionsOpen] = useState(false)
 
   // Subtabs (existing folders only) — Details / Sharing / Activity.
   const tabs: DrawerTab[] = [
@@ -194,12 +195,12 @@ export function FolderDrawer({
         mode === 'edit' ? (
           editing ? (
             <div className="flex items-center gap-2">
+              <Button variant="outline" disabled={saving} onClick={cancelEdit}>
+                {tc('actions.cancel')}
+              </Button>
               <Button disabled={saving || !name.trim()} onClick={handleSave}>
                 {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
                 {tc('actions.save')}
-              </Button>
-              <Button variant="outline" disabled={saving} onClick={cancelEdit}>
-                {tc('actions.cancel')}
               </Button>
             </div>
           ) : canManage && !isSystem ? (
@@ -213,9 +214,11 @@ export function FolderDrawer({
               >
                 {tc('actions.edit')}
               </Button>
-              <Button variant="ghost" size="icon" disabled={deleting} onClick={handleDelete}>
-                {deleting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />}
-              </Button>
+              <Popover open={actionsOpen} onOpenChange={setActionsOpen} align="end" className="w-48 p-1.5" trigger={<Button variant="outline" onClick={() => setActionsOpen((open) => !open)}>{tc('labels.actions')}<ChevronDown className="ml-1 h-3.5 w-3.5" /></Button>}>
+                <Button variant="ghost" className="w-full justify-start text-red-600" disabled={deleting} onClick={() => { setActionsOpen(false); void handleDelete() }}>
+                  {deleting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />}{tc('actions.delete')}
+                </Button>
+              </Popover>
             </div>
           ) : null
         ) : null

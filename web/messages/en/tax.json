@@ -2,6 +2,7 @@
   "title": "Tax Filings",
   "description": "Prepare government tax returns from the ledger and preserve what was filed.",
   "setup": "Tax filing setup",
+  "tabs": { "prepare": "Prepare a return", "history": "Previous filings" },
   "notice": "Notice",
   "period": "{from} to {to}",
   "form": "Return",
@@ -18,7 +19,7 @@
     "description": "Import a jurisdiction pack or create a return in Setup → Taxes.",
     "openSetup": "Open tax filing setup"
   },
-  "export": { "label": "Working-copy export", "pdf": "Working-copy PDF", "csv": "Working-copy CSV", "xlsx": "Working-copy Excel" },
+  "export": { "label": "Working-copy export", "menu": "Export", "groupForm": "Filing form", "groupData": "Working-copy data", "facsimile": "Form PDF", "pdf": "Working-copy PDF", "csv": "Working-copy CSV", "xlsx": "Working-copy Excel", "json": "Structured JSON" },
   "official": { "download": "Filled official form" },
   "submission": {
     "title": "How to file this return",

@@ -1,11 +1,11 @@
 'use client'
 
+import { useMoney } from '@/components/money-provider'
 import Link from 'next/link'
 import { useTranslations } from 'next-intl'
 import { cn } from '@openbooks/ui'
 import type { PageLayoutPrefs } from '@openbooks/schema'
 import type { BankingAccountRow } from '../../../lib/module-home/banking'
-import { money } from '../../../lib/format'
 import { HomePanel } from '../../../components/module-home/client'
 import { Sparkline } from '../../../components/module-home/ui'
 import { LayoutMenu } from '../../../components/page-layout/LayoutMenu'
@@ -119,6 +119,7 @@ function RosterSection({
   totalLabel: string
   total: number
 }) {
+  const { money } = useMoney()
   const t = useTranslations('banking')
   return (
     <div>

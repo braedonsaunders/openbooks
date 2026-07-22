@@ -4,13 +4,15 @@
     "description": "On-hand valuation and stock movements — costed FIFO, moving-average, or standard.",
     "searchPlaceholder": "Search items or locations…",
     "emptyTitle": "No inventory yet",
-    "emptyDescription": "Configure an item's costing profile in Setup, then receive stock.",
+    "emptyDescription": "Set an item's costing profile on its record, then receive stock.",
     "newButton": "New movement",
     "view": "View"
   },
   "view": {
     "onhand": "On hand",
-    "movements": "Movements"
+    "movements": "Movements",
+    "locations": "Stock locations",
+    "bom": "Bill of materials"
   },
   "labels": {
     "item": "Item",

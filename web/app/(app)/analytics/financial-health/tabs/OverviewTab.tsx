@@ -6,9 +6,10 @@ import { Sparkline, cn } from '@openbooks/ui'
 import type { HealthData, Insight } from '../../../../../lib/analytics/health-data'
 import { Panel, SegToggle } from '../../_ui/Panel'
 import { TrendChart } from '../../_ui/charts'
-import { fmtMoney, fmtPct } from '../../_ui/format'
+import { useAnalyticsMoney, fmtPct } from '../../_ui/format'
 
 export function OverviewTab({ data }: { data: HealthData }) {
+  const fmtMoney = useAnalyticsMoney()
   const [view, setView] = useState<'revenue' | 'margin'>('revenue')
   const m = data.monthly
   const labels = m.map((p) => p.label)

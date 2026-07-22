@@ -59,6 +59,7 @@
     "backToPeriods": "Zurück zu Perioden",
     "revalidate": "Erneut validieren",
     "runRevaluation": "Fremdwährungsbewertung durchführen",
+    "runConsolidation": "Konsolidierung ausführen",
     "startTask": "Starten",
     "complete": "Abschließen",
     "submitReview": "Zur Prüfung einreichen",
@@ -82,6 +83,7 @@
     "publish": "Abschlusspaket veröffentlicht",
     "taskUpdated": "Aufgabe aktualisiert",
     "revaluationPosted": "Fremdwährungssalden neu bewertet",
+    "consolidationPosted": "Beteiligungsbuchungen, Kurse und Eliminierungen gebucht",
     "evidenceAdded": "Nachweis angehängt",
     "automationComplete": "Abschlussautomatisierung abgeschlossen"
   },

@@ -1,5 +1,6 @@
 "use client";
 
+import { useMoney } from '@/components/money-provider'
 import Link from "next/link";
 import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
@@ -132,19 +133,6 @@ const TEXT_TARGETS = new Set([
   "job_title",
   "other",
 ]);
-
-function amount(value: string | null, currency: string): string {
-  if (value == null || value === "") return "—";
-  try {
-    return new Intl.NumberFormat(undefined, {
-      style: "currency",
-      currency,
-      currencyDisplay: "code",
-    }).format(Number(value));
-  } catch {
-    return `${currency} ${value}`;
-  }
-}
 
 function cloneCard(card: BillCardDetail): BillCardDetail {
   return JSON.parse(JSON.stringify(card)) as BillCardDetail;
@@ -802,6 +790,7 @@ function LineSection({
   layout: FormLayoutConfig;
   t: ReturnType<typeof useTranslations>;
 }) {
+  const { money } = useMoney()
   const extras = timeTypes.filter((x) => Number(x.bill_multiplier) !== 1);
   const visible = new Set(
     layout.lines.columns.filter((x) => x.visible).map((x) => x.key),
@@ -875,7 +864,7 @@ function LineSection({
                         }
                       />
                     ) : (
-                      amount(line.regular, draft.currency)
+                      money(line.regular, { currency: draft.currency, currencyDisplay: 'code' })
                     )}
                   </TableCell>
                 ) : null}
@@ -896,9 +885,9 @@ function LineSection({
                         }
                       />
                     ) : (
-                      amount(
+                      money(
                         line.timeTypeRates?.[tt.id] ?? null,
-                        draft.currency,
+                        { currency: draft.currency, currencyDisplay: 'code' },
                       )
                     )}
                   </TableCell>

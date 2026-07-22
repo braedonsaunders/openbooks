@@ -176,6 +176,16 @@ export function SetupNav({
                     iconKey: e.iconKey,
                   })),
                 ]
+              : group.key === 'assets'
+              ? [
+                  ...(byGroup.get(group.key) ?? []).map((e) => ({
+                    href: `/admin/setup/${e.key}`,
+                    label: t(`entities.${e.key}.title`),
+                    iconKey: e.iconKey,
+                  })),
+                  { href: '/admin/setup/depreciation', label: t('assetDepreciationSetup.navTitle'), iconKey: 'percent' },
+                  { href: '/admin/setup/tax-depreciation', label: t('taxDepreciationSetup.navTitle'), iconKey: 'landmark' },
+                ]
               : (byGroup.get(group.key) ?? []).map((e) => ({
                   href: `/admin/setup/${e.key}`,
                   label: t(`entities.${e.key}.title`),

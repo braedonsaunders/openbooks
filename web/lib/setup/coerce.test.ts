@@ -10,3 +10,13 @@ test('setup country fields normalize and validate against the ISO country list',
   assert.deepEqual(coerceField(countryField, ''), { column: 'country', value: null })
   assert.deepEqual(coerceField(countryField, 'AA'), { error: 'country must be a valid ISO country code' })
 })
+
+test('setup JSON fields parse objects without accepting malformed input', () => {
+  const field: SetupField = { key: 'taxAttributes', kind: 'json' }
+  assert.deepEqual(coerceField(field, '{"us_macrs_class":"gds_5"}'), {
+    column: 'tax_attributes',
+    value: { us_macrs_class: 'gds_5' },
+  })
+  assert.deepEqual(coerceField(field, '{broken'), { error: 'taxAttributes must be valid JSON' })
+  assert.deepEqual(coerceField(field, 'hello'), { error: 'taxAttributes must be valid JSON' })
+})

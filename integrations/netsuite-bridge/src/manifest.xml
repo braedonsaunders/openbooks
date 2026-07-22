@@ -4,6 +4,22 @@
   <dependencies>
     <features>
       <feature required="true">SERVERSIDESCRIPTING</feature>
+      <feature required="false">SUBSIDIARIES</feature>
+      <feature required="false">WEBSERVICES</feature>
+      <feature required="false">CREATESUITEBUNDLES</feature>
     </features>
+    <objects>
+      <object>customrecord_ns_ibe_migration_bundle</object>
+      <object>customrecord_ncfar_asset</object>
+      <object>customrecord_ncfar_altmethods</object>
+      <object>customrecord_assetlifetimes</object>
+      <object>customrecord_ncfar_altdeprdef</object>
+      <object>customrecord_fam_assetvalues</object>
+      <object>customrecord_ncfar_deprhistory</object>
+      <object>customrecord_ncfar_deprmethod</object>
+      <object>customrecord_ncfar_altdepreciation</object>
+      <object>customrecord_ncfar_assettype</object>
+      <object>customrecord_bit_time_type</object>
+    </objects>
   </dependencies>
 </manifest>

@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { sql } from "drizzle-orm";
 import { db } from "./db.ts";
-import { toUnits } from "./money.ts";
+import { fromUnits, toUnits } from "./money.ts";
 import {
   adjustInventory,
   allocateLandedCost,
@@ -28,7 +28,8 @@ async function glBalance(orgId: string, accountId: string): Promise<string> {
 /** Σ (remaining_quantity × unit_cost) across every cost layer in the org. */
 async function totalLayerValue(orgId: string): Promise<string> {
   const r = (await db.execute(sql`
-    select coalesce(sum(round(remaining_quantity * unit_cost, 4)), 0) as v from cost_layers where org_id = ${orgId}`)) as unknown as {
+    select (coalesce((select sum(round(remaining_quantity * unit_cost,4)) from cost_layers where org_id=${orgId}),0)
+            - coalesce((select sum(round(remaining_quantity * provisional_unit_cost,4)) from inventory_provisional_costs where org_id=${orgId}),0))::text as v`)) as unknown as {
     rows: { v: string }[];
   };
   return r.rows[0].v;
@@ -154,6 +155,37 @@ test("inventory subledger posts, costs, and keeps GL = Σ layer value", { skip: 
     assert.equal(toUnits(asmOnHand.quantity), toUnits("10"));
     assert.equal(toUnits(asmOnHand.value), toUnits("20"));
     assert.equal(toUnits((await getOnHand(org.orgId, org.items.component, loc)).quantity), toUnits("80"));
+    await assertInvariant(org);
+
+    // -- Opt-in negative inventory: provisional cost then receipt true-up ----
+    await db.execute(sql`
+      update item_inventory_profiles set allow_negative_inventory=true,
+             negative_cost_basis='configured', provisional_unit_cost='2.5000'
+       where org_id=${org.orgId} and item_id=${org.items.fifo}
+    `);
+    const available = await getOnHand(org.orgId, org.items.fifo, loc);
+    const overIssueQty = (toUnits(available.quantity) + toUnits("10"));
+    await issueInventory(org.orgId, null, {
+      itemId: org.items.fifo, stockLocationId: loc, quantity: fromUnits(overIssueQty),
+      subsidiaryId: sub, date: org.date,
+    });
+    let negative = await getOnHand(org.orgId, org.items.fifo, loc);
+    assert.equal(toUnits(negative.quantity), toUnits("-10"));
+    assert.equal(toUnits(negative.value), toUnits("-25"));
+    await assertInvariant(org);
+    await receiveInventory(org.orgId, null, {
+      itemId: org.items.fifo, stockLocationId: loc, quantity: "10", unitCost: "3.00",
+      subsidiaryId: sub, offsetAccountId: org.accounts.clearing, date: org.date,
+    });
+    negative = await getOnHand(org.orgId, org.items.fifo, loc);
+    assert.equal(toUnits(negative.quantity), 0n);
+    assert.equal(toUnits(negative.value), 0n);
+    const evidence = (await db.execute(sql`
+      select quantity,provisional_unit_cost,receipt_unit_cost,correction_amount
+        from inventory_provisional_settlements where org_id=${org.orgId}
+    `)) as unknown as { rows: { quantity: string; provisional_unit_cost: string; receipt_unit_cost: string; correction_amount: string }[] };
+    assert.equal(evidence.rows.length, 1);
+    assert.equal(toUnits(evidence.rows[0]!.correction_amount), toUnits("5"));
     await assertInvariant(org);
   } finally {
     await dropScratchOrg(org.orgId);

@@ -15,7 +15,8 @@ import { Panel } from '../_ui/Panel'
 import { Donut, Chart } from '../_ui/charts'
 import { DrillDrawer, type DrillTarget } from '../_ui/DrillDrawer'
 import { exportCsv } from '../_ui/exportCsv'
-import { fmtMoney } from '../_ui/format'
+import { useAnalyticsMoney } from '../_ui/format'
+import { useMoney } from '@/components/money-provider'
 
 /* ------------------------------------------------------------------ helpers */
 
@@ -37,10 +38,10 @@ const MODE_TABS: Record<TrueCostMode, readonly Tab[]> = {
   analytics: ['overview', 'absorption', 'selling', 'trends'],
   setup: ['categories', 'matrix', 'config'],
 }
-
-const money = (n: number) => fmtMoney(n, { compact: true })
-const money0 = (n: number) => fmtMoney(n)
-const rate = (n: number) => `$${n.toFixed(2)}/hr`
+const useRate = () => {
+  const { money } = useMoney()
+  return (value: number) => `${money(value, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}/hr`
+}
 const hrs0 = (n: number) => Math.round(n).toLocaleString('en-US')
 const FALLBACK = '#94a3b8'
 
@@ -105,6 +106,9 @@ async function switchProfile(activeProfileId: string): Promise<boolean> {
 type CellRef = { catId: string; deptId: string }
 
 export function TrueCostView({ data, mode = 'analytics' }: { data: TrueCostData; mode?: TrueCostMode }) {
+  const rate = useRate()
+  const fmtMoney = useAnalyticsMoney()
+  const money = (n: number) => fmtMoney(n, { compact: true })
   const t = useTranslations('analytics.trueCost')
   const router = useRouter()
   const tabs = MODE_TABS[mode]
@@ -175,6 +179,10 @@ export function TrueCostView({ data, mode = 'analytics' }: { data: TrueCostData;
 /* ---------------------------------------------------------------- Overview */
 
 function OverviewTab({ data, goTo, openCat, openDept }: { data: TrueCostData; goTo: (t: Tab) => void; openCat: (id: string) => void; openDept: (id: string) => void }) {
+  const rate = useRate()
+  const fmtMoney = useAnalyticsMoney()
+  const money = (n: number) => fmtMoney(n, { compact: true })
+  const money0 = (n: number) => fmtMoney(n)
   const k = data.kpis
   const cats = data.categories
 
@@ -294,6 +302,11 @@ function MiniDonut({ color, slices }: { color: string; slices: number[] }) {
 /* --------------------------------------------------------- Category flyout */
 
 function CategoryFlyout({ catId, data, onClose, onDrillAccount }: { catId: string; data: TrueCostData; onClose: () => void; onDrillAccount: (t: DrillTarget) => void }) {
+  const rate = useRate()
+  const { currency } = useMoney()
+  const fmtMoney = useAnalyticsMoney()
+  const money = (n: number) => fmtMoney(n, { compact: true })
+  const money0 = (n: number) => fmtMoney(n)
   const router = useRouter()
   const cat = data.categories.find((c) => c.id === catId)
   const [busy, setBusy] = useState(false)
@@ -376,11 +389,11 @@ function CategoryFlyout({ catId, data, onClose, onDrillAccount }: { catId: strin
           <label className="text-[11px] text-slate-500 dark:text-slate-400">
             Rate format
             <Select value={cat.rateFormat} disabled={busy} onChange={(e) => setAllocation({ rateFormat: e.target.value })} className="mt-0.5 w-full" triggerClassName="h-7 text-xs">
-              <option value="per_hour">$/Hour</option>
+              <option value="per_hour">{currency}/Hour</option>
               <option value="percent_labor">% of Labor</option>
               <option value="percent_cost">% of Cost</option>
-              <option value="per_fte">$/FTE</option>
-              <option value="per_unit">$/Unit</option>
+              <option value="per_fte">{currency}/FTE</option>
+              <option value="per_unit">{currency}/Unit</option>
             </Select>
           </label>
           <label className="flex items-end gap-1.5 pb-1 text-[11px] text-slate-500 dark:text-slate-400">
@@ -475,6 +488,9 @@ function CategoryFlyout({ catId, data, onClose, onDrillAccount }: { catId: strin
 /* ------------------------------------------------------ Dept + cell drills */
 
 function DeptFlyout({ deptId, data, onClose }: { deptId: string; data: TrueCostData; onClose: () => void }) {
+  const rate = useRate()
+  const fmtMoney = useAnalyticsMoney()
+  const money0 = (n: number) => fmtMoney(n)
   const dept = data.departments.find((d) => d.id === deptId)
   if (!dept) return null
   const rows = data.categories
@@ -516,6 +532,9 @@ function DeptFlyout({ deptId, data, onClose }: { deptId: string; data: TrueCostD
 }
 
 function CellFlyout({ cell, data, onClose }: { cell: CellRef; data: TrueCostData; onClose: () => void }) {
+  const rate = useRate()
+  const fmtMoney = useAnalyticsMoney()
+  const money0 = (n: number) => fmtMoney(n)
   const cat = data.categories.find((c) => c.id === cell.catId)
   const dept = data.departments.find((d) => d.id === cell.deptId)
   if (!cat || !dept) return null
@@ -559,7 +578,7 @@ function CellFlyout({ cell, data, onClose }: { cell: CellRef; data: TrueCostData
                 <th className="px-4 py-2 text-right font-medium">Dept-tagged</th>
                 <th className="px-4 py-2 text-right font-medium">Allocated</th>
                 <th className="px-4 py-2 text-right font-medium">Total</th>
-                <th className="px-4 py-2 text-right font-medium">$/hr</th>
+                <th className="px-4 py-2 text-right font-medium">Rate / hr</th>
               </tr>
             </thead>
             <tbody>
@@ -569,7 +588,7 @@ function CellFlyout({ cell, data, onClose }: { cell: CellRef; data: TrueCostData
                   <td className="px-4 py-2 text-right tabular-nums text-slate-600 dark:text-slate-300">{tagged ? money0(tagged) : '—'}</td>
                   <td className="px-4 py-2 text-right tabular-nums text-slate-400">{allocated ? money0(allocated) : '—'}</td>
                   <td className="px-4 py-2 text-right font-semibold tabular-nums text-slate-800 dark:text-slate-200">{money0(total)}</td>
-                  <td className="px-4 py-2 text-right tabular-nums text-slate-500 dark:text-slate-400">${dept.billedHours > 0 ? (total / dept.billedHours).toFixed(2) : '0.00'}</td>
+                  <td className="px-4 py-2 text-right tabular-nums text-slate-500 dark:text-slate-400">{rate(dept.billedHours > 0 ? total / dept.billedHours : 0)}</td>
                 </tr>
               ))}
             </tbody>
@@ -589,6 +608,9 @@ function CellFlyout({ cell, data, onClose }: { cell: CellRef; data: TrueCostData
 /* -------------------------------------------------------------- Categories */
 
 function CategoriesTab({ data, openCat }: { data: TrueCostData; openCat: (id: string) => void }) {
+  const rate = useRate()
+  const fmtMoney = useAnalyticsMoney()
+  const money0 = (n: number) => fmtMoney(n)
   const router = useRouter()
   const [busy, setBusy] = useState(false)
   const assign = async (groupId: string, accountId: string) => {
@@ -688,6 +710,8 @@ function CategoriesTab({ data, openCat }: { data: TrueCostData; openCat: (id: st
 /* ------------------------------------------------------------------ Matrix */
 
 function MatrixTab({ data, onDrill }: { data: TrueCostData; onDrill: (c: CellRef) => void }) {
+  const rate = useRate()
+  const { currency } = useMoney()
   const rates = data.categories.map((c) => c.rate).filter((r) => r > 0)
   const avg = rates.length ? rates.reduce((s, v) => s + v, 0) / rates.length : 0
   const cellTone = (r: number) => {
@@ -707,7 +731,7 @@ function MatrixTab({ data, onDrill }: { data: TrueCostData; onDrill: (c: CellRef
           <span className="flex items-center gap-1"><span className="h-2 w-2 rounded-sm bg-rose-500" />Above avg</span>
           <button
             type="button"
-            onClick={() => exportCsv('burden-rate-matrix', ['Category', 'Base', ...data.departments.map((d) => `${d.name} ($/hr)`), 'Overall ($/hr)'], [
+            onClick={() => exportCsv('burden-rate-matrix', ['Category', 'Base', ...data.departments.map((d) => `${d.name} (${currency}/hr)`), `Overall (${currency}/hr)`], [
               ...data.categories.map((c) => [c.name, 'Hours', ...data.departments.map((d) => (c.byDept[d.id]?.rate ?? 0).toFixed(2)), c.rate.toFixed(2)]),
               ['Total Burden', 'Hours', ...data.departments.map((d) => d.composite.toFixed(2)), data.kpis.compositeRate.toFixed(2)],
             ])}
@@ -751,7 +775,7 @@ function MatrixTab({ data, onDrill }: { data: TrueCostData; onDrill: (c: CellRef
                         className={cn('w-full px-3 py-2 text-right tabular-nums transition-colors hover:bg-teal-50 dark:hover:bg-teal-950/40', cellTone(r))}
                         title={`${c.name} × ${d.name} — click for the math`}
                       >
-                        ${r.toFixed(2)}
+                        {rate(r)}
                       </button>
                     </td>
                   )
@@ -763,7 +787,7 @@ function MatrixTab({ data, onDrill }: { data: TrueCostData; onDrill: (c: CellRef
               <td className="px-4 py-2.5 text-slate-900 dark:text-slate-100">Total Burden</td>
               <td />
               {data.departments.map((d) => (
-                <td key={d.id} className="px-3 py-2.5 text-right tabular-nums text-slate-900 dark:text-slate-100">${(data.totals.byDept[d.id] ?? 0).toFixed(2)}</td>
+                <td key={d.id} className="px-3 py-2.5 text-right tabular-nums text-slate-900 dark:text-slate-100">{rate(data.totals.byDept[d.id] ?? 0)}</td>
               ))}
               <td className="px-4 py-2.5 text-right tabular-nums text-slate-900 dark:text-slate-100">{rate(data.totals.overall)}</td>
             </tr>
@@ -789,6 +813,9 @@ const PRESETS: { key: string; label: string; set: { rate: number; hours: number;
 ]
 
 function AbsorptionTab({ data }: { data: TrueCostData }) {
+  const rate = useRate()
+  const fmtMoney = useAnalyticsMoney()
+  const money = (n: number) => fmtMoney(n, { compact: true })
   const k = data.kpis
   const gap = Math.abs(Math.min(0, k.gap)) // the shortfall to recover
   const [rateAdj, setRateAdj] = useState(0)
@@ -830,7 +857,7 @@ function AbsorptionTab({ data }: { data: TrueCostData }) {
         <KpiCard icon={GaugeIcon} accent="sky" label="Avg Charged Rate" value={rate(chargedRate)} sub={`Break-even: ${rate(k.compositeRate)}`} />
         <KpiCard icon={Percent} accent="violet" label="Absorption" value={`${k.absorptionPct.toFixed(1)}%`} sub={under ? 'Under-absorbed' : 'Over-absorbed'} tone={under ? 'negative' : 'positive'} />
         <KpiCard icon={under ? AlertTriangle : CheckCircle2} accent={under ? 'red' : 'emerald'} label="The Gap" value={`${k.gap >= 0 ? '+' : '−'}${money(Math.abs(k.gap))}`} sub={`${hrs0(k.billedHours)} hrs × ${data.departments.length} depts`} tone={under ? 'negative' : 'positive'} />
-        <KpiCard icon={under ? TrendingDown : TrendingUp} accent={under ? 'red' : 'emerald'} label="Gap / Hour" value={`${k.gapPerHour >= 0 ? '+' : '−'}$${Math.abs(k.gapPerHour).toFixed(2)}`} sub="per billed hour" tone={under ? 'negative' : 'positive'} />
+        <KpiCard icon={under ? TrendingDown : TrendingUp} accent={under ? 'red' : 'emerald'} label="Gap / Hour" value={`${k.gapPerHour >= 0 ? '+' : '−'}${rate(Math.abs(k.gapPerHour))}`} sub="per billed hour" tone={under ? 'negative' : 'positive'} />
       </div>
 
       {!under ? (
@@ -874,7 +901,7 @@ function AbsorptionTab({ data }: { data: TrueCostData }) {
                 { label: 'Recovered', value: money(model.recovered) },
                 { label: 'Remaining Gap', value: `${model.newGap >= 0 ? '+' : '−'}${money(Math.abs(model.newGap))}` },
                 { label: 'New Absorption', value: `${model.newAbsorption.toFixed(1)}%` },
-                { label: 'Rate Surcharge', value: `+$${model.rateBump.toFixed(2)}/hr` },
+                { label: 'Rate Surcharge', value: `+${rate(model.rateBump)}` },
                 { label: 'Extra Billable Hrs', value: hrs0(model.extraHours) },
               ].map((s) => (
                 <div key={s.label} className="bg-white p-3.5 text-center dark:bg-slate-900">
@@ -891,7 +918,7 @@ function AbsorptionTab({ data }: { data: TrueCostData }) {
               <div className="h-3 overflow-hidden rounded-full bg-slate-100 dark:bg-slate-800">
                 <div className={cn('h-full rounded-full transition-all', model.coverage >= 100 ? 'bg-emerald-500' : model.coverage >= 60 ? 'bg-teal-500' : 'bg-amber-500')} style={{ width: `${Math.min(100, model.coverage)}%` }} />
               </div>
-              <div className="mt-1 flex justify-between text-[10px] text-slate-400 dark:text-slate-500"><span>$0</span><span>{money(gap)} gap</span></div>
+              <div className="mt-1 flex justify-between text-[10px] text-slate-400 dark:text-slate-500"><span>{money(0)}</span><span>{money(gap)} gap</span></div>
             </div>
             <div className="border-t border-slate-100 p-4 dark:border-slate-800">
               <div className="mb-3 flex items-center justify-between">
@@ -951,6 +978,10 @@ function AbsorptionTab({ data }: { data: TrueCostData }) {
 interface CostRow { name: string; type: 'percent_labor' | 'percent_subtotal' | 'flat'; value: number }
 
 function SellingTab({ data }: { data: TrueCostData }) {
+  const rate = useRate()
+  const { currency } = useMoney()
+  const fmtMoney = useAnalyticsMoney()
+  const money = (n: number) => fmtMoney(n, { compact: true })
   const k = data.kpis
   const emp = data.labor
 
@@ -1023,7 +1054,7 @@ function SellingTab({ data }: { data: TrueCostData }) {
                 <div className="min-w-0 flex-1">
                   <p className="text-sm font-semibold text-slate-800 dark:text-slate-200">Direct Labor</p>
                   <p className="text-xs text-slate-400 dark:text-slate-500">
-                    {laborSource === 'manual' ? 'Manual entry' : laborPool.length ? `Weighted from ${laborPool.length} employees ($${Math.round(laborMin)}–$${Math.round(laborMax)})` : 'No matching employees'}
+                    {laborSource === 'manual' ? 'Manual entry' : laborPool.length ? `Weighted from ${laborPool.length} employees (${rate(laborMin)}–${rate(laborMax)})` : 'No matching employees'}
                   </p>
                 </div>
                 <p className="text-base font-bold tabular-nums text-slate-900 dark:text-slate-100">{rate(laborRate)}</p>
@@ -1060,7 +1091,7 @@ function SellingTab({ data }: { data: TrueCostData }) {
                   </>
                 ) : (
                   <span className="flex items-center gap-1 text-xs text-slate-500">
-                    $<input type="number" value={laborManual} step={0.5} onChange={(e) => setLaborManual(Number(e.target.value) || 0)} className="h-7 w-20 rounded-md border border-slate-200 bg-white px-2 text-right text-xs tabular-nums dark:border-slate-700 dark:bg-slate-950 dark:text-slate-200" />/hr
+                    <span>{currency}</span><input type="number" value={laborManual} step={0.5} onChange={(e) => setLaborManual(Number(e.target.value) || 0)} className="h-7 w-20 rounded-md border border-slate-200 bg-white px-2 text-right text-xs tabular-nums dark:border-slate-700 dark:bg-slate-950 dark:text-slate-200" /><span>/hr</span>
                   </span>
                 )}
               </div>
@@ -1079,14 +1110,14 @@ function SellingTab({ data }: { data: TrueCostData }) {
               <div className="mt-2 flex flex-wrap items-center gap-1.5 pl-11">
                 <FilterPill icon={Building2}>
                   <Select value={burdenSource} onChange={(e) => setBurdenSource(e.target.value)} className="w-60" triggerClassName={PILL_TRIGGER} aria-label="Overhead source">
-                    <option value="all">All Departments (${k.compositeRate.toFixed(2)})</option>
-                    {data.departments.map((d) => (<option key={d.id} value={d.id}>{d.name} (${(data.totals.byDept[d.id] ?? 0).toFixed(2)})</option>))}
+                    <option value="all">All Departments ({rate(k.compositeRate)})</option>
+                    {data.departments.map((d) => (<option key={d.id} value={d.id}>{d.name} ({rate(data.totals.byDept[d.id] ?? 0)})</option>))}
                     <option value="manual">Manual Entry</option>
                   </Select>
                 </FilterPill>
                 {burdenSource === 'manual' ? (
                   <span className="flex items-center gap-1 text-xs text-slate-500">
-                    $<input type="number" value={burdenManual.toFixed(2)} step={0.5} onChange={(e) => setBurdenManual(Number(e.target.value) || 0)} className="h-7 w-20 rounded-md border border-slate-200 bg-white px-2 text-right text-xs tabular-nums dark:border-slate-700 dark:bg-slate-950 dark:text-slate-200" />/hr
+                    <span>{currency}</span><input type="number" value={burdenManual.toFixed(2)} step={0.5} onChange={(e) => setBurdenManual(Number(e.target.value) || 0)} className="h-7 w-20 rounded-md border border-slate-200 bg-white px-2 text-right text-xs tabular-nums dark:border-slate-700 dark:bg-slate-950 dark:text-slate-200" /><span>/hr</span>
                   </span>
                 ) : null}
               </div>
@@ -1109,7 +1140,7 @@ function SellingTab({ data }: { data: TrueCostData }) {
                     <Select value={c.type} onChange={(e) => setCost(i, { type: e.target.value as CostRow['type'] })} className="w-32" triggerClassName="h-7 text-xs" aria-label="Cost basis">
                       <option value="percent_labor">% of Labor</option>
                       <option value="percent_subtotal">% of Subtotal</option>
-                      <option value="flat">$/hr</option>
+                      <option value="flat">{currency}/hr</option>
                     </Select>
                     <input type="number" value={c.value} step={0.5} onChange={(e) => setCost(i, { value: Number(e.target.value) || 0 })} className="h-7 w-16 rounded-md border border-slate-200 bg-white px-2 text-right text-xs tabular-nums dark:border-slate-700 dark:bg-slate-950 dark:text-slate-200" />
                     <span className="flex-1 text-right text-xs font-medium tabular-nums text-slate-500 dark:text-slate-400">{rate(costAmount(c))}</span>
@@ -1233,6 +1264,7 @@ function SellingTab({ data }: { data: TrueCostData }) {
 type TrendMode = 'composite' | 'category' | 'department'
 
 function TrendsTab({ data }: { data: TrueCostData }) {
+  const rate = useRate()
   const [mode, setMode] = useState<TrendMode>('composite')
   const active = data.monthly.filter((m) => m.billedHours > 0)
   const current = active.length ? active[active.length - 1].rate : 0
@@ -1247,9 +1279,9 @@ function TrendsTab({ data }: { data: TrueCostData }) {
     const base = {
       grid: { top: 28, bottom: 26, left: 52, right: 14 },
       legend: { top: 0, type: 'scroll' as const },
-      tooltip: { trigger: 'axis' as const, valueFormatter: (v: unknown) => (v == null ? '—' : `$${Number(v).toFixed(2)}/hr`) },
+      tooltip: { trigger: 'axis' as const, valueFormatter: (v: unknown) => (v == null ? '—' : rate(Number(v))) },
       xAxis: { type: 'category' as const, data: labels },
-      yAxis: { type: 'value' as const, axisLabel: { formatter: (v: number) => `$${v.toFixed(0)}` } },
+      yAxis: { type: 'value' as const, axisLabel: { formatter: (v: number) => rate(v) } },
     }
     if (mode === 'composite') {
       return {
@@ -1278,7 +1310,7 @@ function TrendsTab({ data }: { data: TrueCostData }) {
         lineStyle: { width: 1.5 }, symbolSize: 4,
       })),
     }
-  }, [mode, data, labels])
+  }, [mode, data, labels, rate])
 
   const movers = useMemo(() => {
     if (active.length < 2) return []
@@ -1306,7 +1338,7 @@ function TrendsTab({ data }: { data: TrueCostData }) {
         <KpiCard icon={GaugeIcon} accent="sky" label="Current Rate" value={rate(current)} sub="latest month" />
         <KpiCard icon={change > 0 ? TrendingUp : TrendingDown} accent={change > 0 ? 'red' : 'emerald'} label="Month Change" value={`${change > 0 ? '+' : ''}${change.toFixed(1)}%`} sub="vs prior month" tone={change > 0 ? 'negative' : 'positive'} />
         <KpiCard icon={Scale} accent="violet" label="Period Average" value={rate(avg)} sub={`${active.length} months`} />
-        <KpiCard icon={ChartArea} accent="amber" label="Range" value={`$${min.toFixed(0)}–$${max.toFixed(0)}`} sub="monthly composite" />
+        <KpiCard icon={ChartArea} accent="amber" label="Range" value={`${rate(min)}–${rate(max)}`} sub="monthly composite" />
       </div>
 
       <Panel
@@ -1367,6 +1399,7 @@ function TrendsTab({ data }: { data: TrueCostData }) {
 
 /** Composite method + active-profile switcher (Gantry calculateCompositeRate + getActiveProfile). */
 function CompositePanel({ data }: { data: TrueCostData }) {
+  const rate = useRate()
   const router = useRouter()
   const [busy, setBusy] = useState(false)
   const run = async (fn: () => Promise<boolean>) => { setBusy(true); await fn(); router.refresh(); setBusy(false) }
@@ -1415,6 +1448,7 @@ function CompositePanel({ data }: { data: TrueCostData }) {
 }
 
 function ConfigTab({ data }: { data: TrueCostData }) {
+  const rate = useRate()
   const items = [
     { label: 'Composite method', value: data.config.compositeMethod, note: 'How category rates blend into the headline rate (sum / weighted / cascading)' },
     { label: 'Overhead categories', value: String(data.categories.length), note: 'Account Groups (`burden` dimension) + the native Non-Billable Time category + any custom manual/derived/formula categories' },
@@ -1423,7 +1457,7 @@ function ConfigTab({ data }: { data: TrueCostData }) {
     { label: 'Non-billable time', value: 'Included', note: 'Labour cost of non-billable hours (Σ hours × cost rate) is a native burden category, recovered on billed hours' },
     { label: 'Direct labour', value: 'Excluded', note: 'Billable wage/salary cost (cost_pool dimension) is direct, never burden; COGS is direct cost' },
     { label: 'Absorption model', value: data.hasBurdenGL ? 'GL applied' : 'Utilization', note: data.hasBurdenGL ? 'From the Overhead Burden GL account postings' : 'GL account 5200 "Overhead Burden" exists but carries no postings — applied = overhead × utilization until it is used' },
-    { label: 'Labour rates', value: `${data.labor.count} employees`, note: `Per-entry cost rates, $${Math.round(data.labor.min)}–$${Math.round(data.labor.max)}, weighted ${rate(data.labor.weighted)}` },
+    { label: 'Labour rates', value: `${data.labor.count} employees`, note: `Per-entry cost rates, ${rate(data.labor.min)}–${rate(data.labor.max)}, weighted ${rate(data.labor.weighted)}` },
   ]
   return (
     <div className="space-y-5">

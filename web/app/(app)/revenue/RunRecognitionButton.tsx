@@ -1,19 +1,19 @@
 'use client'
 
+import { useMoney } from '@/components/money-provider'
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { useTranslations } from 'next-intl'
 import { Play } from 'lucide-react'
 import { toast } from 'sonner'
 import { Button } from '@openbooks/ui'
-import { money } from '../../../lib/format'
-
 /**
  * "Run recognition" — posts all due, unposted recognition schedule lines
  * through the kernel (ar.post). Idempotent, so a repeat click that finds
  * nothing due simply reports zero.
  */
 export function RunRecognitionButton({ obligationId }: { obligationId?: string } = {}) {
+  const { money } = useMoney()
   const t = useTranslations('revenue')
   const router = useRouter()
   const [busy, setBusy] = useState(false)

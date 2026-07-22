@@ -350,7 +350,8 @@
       "columns": {
         "trigger": "Gatilho",
         "rows": "Linhas",
-        "finished": "Concluído em"
+        "finished": "Concluído em",
+        "delivery": "Entrega"
       },
       "status": {
         "succeeded": "Concluído com sucesso",
@@ -362,6 +363,8 @@
         "manual": "Manual",
         "scheduled": "Agendado"
       },
+      "deliveryEvidence": "{sent}/{total} enviados · {failed} com falha · {suppressed} suprimidos",
+      "pdf": "Evidência em PDF",
       "csv": "CSV"
     }
   },

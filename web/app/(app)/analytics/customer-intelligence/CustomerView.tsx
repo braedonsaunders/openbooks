@@ -49,7 +49,7 @@ import { DivergingBar, Donut, GroupedBar } from '../_ui/charts'
 import { DrillDrawer, type DrillTarget } from '../_ui/DrillDrawer'
 import { ConfigEditor } from '../_ui/ConfigEditor'
 import { exportCsv } from '../_ui/exportCsv'
-import { fmtMoney, fmtPct } from '../_ui/format'
+import { useAnalyticsMoney, fmtPct } from '../_ui/format'
 
 const TABS = ['overview', 'health', 'segmentation', 'lifetime', 'churn', 'growth', 'profitability', 'configuration'] as const
 type Tab = (typeof TABS)[number]
@@ -194,10 +194,10 @@ function RetentionBadge({ v }: { v: number }) {
   return <span className={cn('font-semibold tabular-nums', cls)}>{v}%</span>
 }
 
-const money = (n: number) => fmtMoney(n, { compact: true })
-
 /* -------------------------------------------------------------------- view */
 export function CustomerView({ data, profitability }: { data: CustomerData; profitability: Profitability }) {
+  const fmtMoney = useAnalyticsMoney()
+  const money = (n: number) => fmtMoney(n, { compact: true })
   const [tab, setTab] = useState<Tab>('overview')
   const [drill, setDrill] = useState<DrillTarget | null>(null)
   const k = data.kpis
@@ -262,6 +262,8 @@ const INSIGHT_ICON: Record<Insight['type'], { icon: typeof Info; cls: string }> 
 }
 
 function OverviewTab({ data }: { data: CustomerData }) {
+  const fmtMoney = useAnalyticsMoney()
+  const money = (n: number) => fmtMoney(n, { compact: true })
   const k = data.kpis
   const top = [...data.rows].sort((a, b) => b.revenue - a.revenue).slice(0, 10)
   const maxSegRevenue = Math.max(1, ...data.segments.map((s) => s.totalRevenue))
@@ -352,6 +354,8 @@ type GroupBy = 'none' | 'segment' | 'tier' | 'churn' | 'grade'
 const HEALTH_PAGE = 25
 
 function HealthTab({ data, onDrill }: { data: CustomerData; onDrill: (r: CustomerRow) => void }) {
+  const fmtMoney = useAnalyticsMoney()
+  const money = (n: number) => fmtMoney(n, { compact: true })
   const [groupBy, setGroupBy] = useState<GroupBy>('none')
   const [page, setPage] = useState(1)
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set())
@@ -503,6 +507,8 @@ function Pager({ page, totalPages, total, pageSize, onPage, noun }: { page: numb
 
 /* ----------------------------------------------------------- Segmentation */
 function SegmentationTab({ data }: { data: CustomerData }) {
+  const fmtMoney = useAnalyticsMoney()
+  const money = (n: number) => fmtMoney(n, { compact: true })
   const [segment, setSegment] = useState<Segment | 'all'>('all')
   const [page, setPage] = useState(1)
   const totalRevenue = data.kpis.totalRevenue || 1
@@ -619,6 +625,8 @@ function SegmentationTab({ data }: { data: CustomerData }) {
 
 /* --------------------------------------------------------- Lifetime Value */
 function LifetimeTab({ data, profitability }: { data: CustomerData; profitability: Profitability }) {
+  const fmtMoney = useAnalyticsMoney()
+  const money = (n: number) => fmtMoney(n, { compact: true })
   const [page, setPage] = useState(1)
   const k = data.kpis
   const byClv = [...data.rows].sort((a, b) => b.clv - a.clv)
@@ -707,6 +715,8 @@ function LifetimeTab({ data, profitability }: { data: CustomerData; profitabilit
 
 /* --------------------------------------------------------------- Churn */
 function ChurnTab({ data }: { data: CustomerData }) {
+  const fmtMoney = useAnalyticsMoney()
+  const money = (n: number) => fmtMoney(n, { compact: true })
   const [page, setPage] = useState(1)
   const k = data.kpis
   // Gantry lists critical + high + medium in the at-risk table.
@@ -841,6 +851,8 @@ function ChurnTab({ data }: { data: CustomerData }) {
 
 /* --------------------------------------------------------------- Growth */
 function GrowthTab({ data }: { data: CustomerData }) {
+  const fmtMoney = useAnalyticsMoney()
+  const money = (n: number) => fmtMoney(n, { compact: true })
   const g = data.growth
   const k = data.kpis
   const growthCls = (v: number | null) => (v === null ? 'text-slate-400 dark:text-slate-500' : v > 0 ? 'text-emerald-600 dark:text-emerald-400' : v < 0 ? 'text-red-600 dark:text-red-400' : 'text-slate-500 dark:text-slate-400')
@@ -936,6 +948,8 @@ type ProfitSort = 'customerName' | 'totalRevenue' | 'totalCost' | 'grossProfit' 
 const PAGE_SIZE = 20
 
 function ProfitabilityTab({ p }: { p: Profitability }) {
+  const fmtMoney = useAnalyticsMoney()
+  const money = (n: number) => fmtMoney(n, { compact: true })
   const s = p.summary
   const [expanded, setExpanded] = useState<Set<string>>(new Set())
   const [sortCol, setSortCol] = useState<ProfitSort>('totalRevenue')
@@ -990,7 +1004,7 @@ function ProfitabilityTab({ p }: { p: Profitability }) {
           <p className="py-8 text-center text-sm text-slate-400">No project-tagged profitability for this period.</p>
         </Panel>
       ) : (
-        <Panel title="Customer Profitability" icon={Users} hint="Click a customer to expand jobs · ⚠️ marks profit leaks (>$100K revenue, <15% margin)" bodyClassName="p-0">
+        <Panel title="Customer Profitability" icon={Users} hint={`Click a customer to expand jobs · ⚠️ marks profit leaks (>${money(100_000)} revenue, <15% margin)`} bodyClassName="p-0">
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
               <thead>

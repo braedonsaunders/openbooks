@@ -164,3 +164,19 @@ export function priceItemRate(
     ? priceLowestCost(baseQuantity, tiers, role)
     : priceCappedLadder(baseQuantity, tiers, role);
 }
+
+/** Price an explicitly selected package unit. Unlike the automatic ladder,
+ * this never promotes or decomposes the user's choice: 2 Weeks remains two
+ * weekly packages even when a monthly package would be cheaper. */
+export function priceSelectedRateUnit(
+  quantity: string,
+  tier: RateTier,
+  role: RateRole,
+): RatePrice {
+  const quantityUnits = toUnits(quantity);
+  if (quantityUnits <= 0n) throw new Error("Rate-unit quantity must be positive");
+  if (toUnits(tier.baseQuantity) <= 0n) throw new Error("Rate tier quantities must be positive");
+  if (rateFor(tier, role) == null) throw new Error(`No ${role} rate is configured for ${tier.unitName}`);
+  const selected = component(tier, role, quantityUnits);
+  return { amount: selected.amount, components: [selected] };
+}

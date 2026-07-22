@@ -1,6 +1,8 @@
 'use client'
 
 import { useEffect, useMemo, useState } from 'react'
+import { useFormatter } from 'next-intl'
+import { useMoney } from '@/components/money-provider'
 import Link from 'next/link'
 import { useTranslations } from 'next-intl'
 import { ChevronDown, ChevronRight } from 'lucide-react'
@@ -8,7 +10,7 @@ import { cn } from '@openbooks/ui'
 import type { StatementView } from '../../../lib/statement-matrix'
 import type { StatementBasis, StatementDimFilter } from '../../../lib/statement-matrix'
 import { buildDrillTarget, type ReportScale } from '../../../lib/report-filters'
-import { currencySymbol, formatCell, isNegative } from '../../../lib/statement-format'
+import { isNegative, scaleDivisor } from '../../../lib/statement-format'
 import { ReportDrillLink } from './ReportDrillLink'
 import { REPORT_SECTION_VISIBILITY_EVENT, type ReportSectionVisibility } from './report-section-events'
 
@@ -50,9 +52,22 @@ export function StatementMatrixTable({
   drill?: { dims: StatementDimFilter; basis: StatementBasis; subsidiaryId?: string; budgetScenarioId?: string }
 }) {
   const t = useTranslations('reports.filterBar')
+  const format = useFormatter()
+  const { money } = useMoney()
   const cols = view.columns
-  const sym = currencySymbol(currency)
   const lines = view.lines
+  const valueText = (value: number, kind: StatementView['columns'][number]['kind']): string => {
+    if (kind === 'variance_pct') return format.number(value / 100, { style: 'percent', minimumFractionDigits: 1, maximumFractionDigits: 1 })
+    const scaled = value / scaleDivisor(scale)
+    const digits = scale === 'actual' ? undefined : 0
+    if (Math.abs(scaled) < (digits === 0 ? 0.5 : 0.005)) return '–'
+    return money(scaled, {
+      currency,
+      accounting: true,
+      minimumFractionDigits: digits,
+      maximumFractionDigits: digits,
+    })
+  }
 
   // Merged group headings (e.g. one per department) when breakout is combined
   // with a compare — consecutive columns sharing a `group` span one heading.
@@ -232,7 +247,7 @@ export function StatementMatrixTable({
                         })
                       : null
                   const neg = v !== undefined && isNegative(v, c.kind)
-                  const text = v === undefined ? '' : formatCell(v, c.kind, scale, c.kind === 'amount' ? sym : '')
+                  const text = v === undefined ? '' : valueText(v, c.kind)
                   return (
                     <td
                       key={c.key}

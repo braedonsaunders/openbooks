@@ -20,7 +20,8 @@
     "vendor": "Proveedor",
     "employee": "Empleado",
     "project": "Proyecto",
-    "field_ticket": "Parte de obra"
+    "field_ticket": "Parte de obra",
+    "fixed_asset": "Activo fijo"
   },
   "views": {
     "defaultName": "Vista predeterminada",

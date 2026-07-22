@@ -1,3 +1,4 @@
+import { getMoneyFormatter } from '@/lib/money-server'
 import Link from 'next/link'
 import { getTranslations } from 'next-intl/server'
 import { PageHeader, cn } from '@openbooks/ui'
@@ -6,8 +7,6 @@ import { agingByParty, agingDetail, dimensionOptions, type AgingSide } from '../
 import { orgInfo } from '../../../../lib/data'
 import { resolvePeriod } from '../../../../lib/periods'
 import { parseReportQuery } from '../../../../lib/report-filters'
-import { currencySymbol } from '../../../../lib/statement-format'
-import { money } from '../../../../lib/format'
 import { ReportFilterBar } from '../ReportFilterBar'
 import { ExportMenu } from '../ExportMenu'
 import { SaveViewButton } from '../SaveViewButton'
@@ -25,6 +24,7 @@ export default async function Aging({
 }: {
   searchParams: Promise<Record<string, string | undefined>>
 }) {
+  const { money } = await getMoneyFormatter()
   const t = await getTranslations('reports.aging')
   const tr = await getTranslations('reports')
   const tc = await getTranslations('common')
@@ -42,8 +42,7 @@ export default async function Aging({
     dimensionOptions(),
     orgInfo(),
   ])
-  const sym = currencySymbol(org?.base_currency)
-  const m = (v: number) => money(v, sym)
+  const m = (v: number) => money(v, { currency: org?.base_currency })
 
   const title = `${side === 'ap' ? t('payablesTitle') : t('receivablesTitle')} · ${detail ? t('detail') : t('summary')}`
 
