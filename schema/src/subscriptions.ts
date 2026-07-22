@@ -57,6 +57,8 @@ export const subscriptions = pgTable(
       .default("active"),
     startOn: date("start_on").notNull(),
     nextBillOn: date("next_bill_on").notNull(),
+    /** Start of the period next_bill_on closes — for mid-period proration. */
+    currentPeriodStart: date("current_period_start"),
     canceledOn: date("canceled_on"),
     /** Auto-post the generated invoice vs leave it as a draft. */
     autoPost: boolean("auto_post").notNull().default(false),

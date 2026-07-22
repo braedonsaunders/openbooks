@@ -93,7 +93,9 @@ function SubscriptionsPanel({ customers, incomeAccounts }: { customers: Opt[]; i
   const [msg, setMsg] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [planForm, setPlanForm] = useState({ name: "", amount: "", interval: "monthly", intervalCount: "1", incomeAccountId: "" });
-  const [subForm, setSubForm] = useState({ customerId: "", planId: "", quantity: "1", priceOverride: "", startOn: "", autoPost: false });
+  const [subForm, setSubForm] = useState({ customerId: "", planId: "", quantity: "1", priceOverride: "", startOn: "", firstBillOn: "", prorateFirstPeriod: false, autoPost: false });
+  const [changing, setChanging] = useState<string | null>(null);
+  const [changeQty, setChangeQty] = useState("");
 
   const load = async () => {
     const r = await fetch("/api/subscriptions");
@@ -172,13 +174,24 @@ function SubscriptionsPanel({ customers, incomeAccounts }: { customers: Opt[]; i
                   <td>{s.nextBillOn}{s.lastError && <span className="ml-1 text-red-600" title={s.lastError}>⚠</span>}</td>
                   <td><Badge variant={s.status === "active" ? "default" : "secondary"}>{s.status}</Badge></td>
                   <td className="whitespace-nowrap text-right">
-                    <Button size="sm" variant="ghost" onClick={async () => { const r = await post({ action: "billNow", id: s.id }); if (r?.invoiceId) setMsg(`Billed ${r.documentNumber}`); }}>Bill now</Button>
-                    {s.status === "active"
-                      ? <Button size="sm" variant="ghost" onClick={() => post({ action: "updateSubscription", id: s.id, status: "paused" })}>Pause</Button>
-                      : s.status === "paused"
-                        ? <Button size="sm" variant="ghost" onClick={() => post({ action: "updateSubscription", id: s.id, status: "active" })}>Resume</Button>
-                        : null}
-                    {s.status !== "canceled" && <Button size="sm" variant="ghost" onClick={() => post({ action: "updateSubscription", id: s.id, status: "canceled" })}>Cancel</Button>}
+                    {s.status === "active" && changing === s.id ? (
+                      <span className="inline-flex items-center gap-1">
+                        <Input type="number" value={changeQty} onChange={(e) => setChangeQty(e.target.value)} className="h-7 w-16" />
+                        <Button size="sm" onClick={async () => { const r = await post({ action: "changeSubscription", id: s.id, quantity: changeQty }); if (r) setMsg(r.documentNumber ? `Proration ${money(r.adjustment)} → ${r.documentNumber}` : "Quantity updated (no proration due)"); setChanging(null); }}>Apply</Button>
+                        <Button size="sm" variant="ghost" onClick={() => setChanging(null)}>×</Button>
+                      </span>
+                    ) : (
+                      <>
+                        <Button size="sm" variant="ghost" onClick={async () => { const r = await post({ action: "billNow", id: s.id }); if (r?.invoiceId) setMsg(`Billed ${r.documentNumber}`); }}>Bill now</Button>
+                        {s.status === "active" && <Button size="sm" variant="ghost" onClick={() => { setChanging(s.id); setChangeQty(s.quantity); }}>Change qty</Button>}
+                        {s.status === "active"
+                          ? <Button size="sm" variant="ghost" onClick={() => post({ action: "updateSubscription", id: s.id, status: "paused" })}>Pause</Button>
+                          : s.status === "paused"
+                            ? <Button size="sm" variant="ghost" onClick={() => post({ action: "updateSubscription", id: s.id, status: "active" })}>Resume</Button>
+                            : null}
+                        {s.status !== "canceled" && <Button size="sm" variant="ghost" onClick={() => post({ action: "updateSubscription", id: s.id, status: "canceled" })}>Cancel</Button>}
+                      </>
+                    )}
                   </td>
                 </tr>
               ))}
@@ -200,9 +213,12 @@ function SubscriptionsPanel({ customers, incomeAccounts }: { customers: Opt[]; i
         </div>
         <div className="mt-2 flex flex-wrap items-center gap-3">
           <Input placeholder="Price override (optional)" type="number" value={subForm.priceOverride} onChange={(e) => setSubForm({ ...subForm, priceOverride: e.target.value })} className="max-w-48" />
+          <label className="flex items-center gap-1 text-sm">First full bill <Input type="date" value={subForm.firstBillOn} onChange={(e) => setSubForm({ ...subForm, firstBillOn: e.target.value })} className="h-8" /></label>
+          <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={subForm.prorateFirstPeriod} onChange={(e) => setSubForm({ ...subForm, prorateFirstPeriod: e.target.checked })} /> Prorate first period</label>
           <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={subForm.autoPost} onChange={(e) => setSubForm({ ...subForm, autoPost: e.target.checked })} /> Auto-post invoices</label>
-          <Button size="sm" disabled={!subForm.customerId || !subForm.planId} onClick={async () => { await post({ action: "addSubscription", ...subForm, priceOverride: subForm.priceOverride || null }); setSubForm({ customerId: "", planId: "", quantity: "1", priceOverride: "", startOn: "", autoPost: false }); }}>Add subscription</Button>
+          <Button size="sm" disabled={!subForm.customerId || !subForm.planId} onClick={async () => { const r = await post({ action: "addSubscription", ...subForm, priceOverride: subForm.priceOverride || null }); if ((r as any)?.proration?.documentNumber) setMsg(`Prorated first invoice ${(r as any).proration.documentNumber} for ${money((r as any).proration.amount)}`); setSubForm({ customerId: "", planId: "", quantity: "1", priceOverride: "", startOn: "", firstBillOn: "", prorateFirstPeriod: false, autoPost: false }); }}>Add subscription</Button>
         </div>
+        <p className="mt-1 text-xs text-muted-foreground">Set a first-bill date after the start and tick “prorate” to bill only the partial first period now.</p>
       </Card>
     </div>
   );
