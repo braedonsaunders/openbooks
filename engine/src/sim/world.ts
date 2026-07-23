@@ -219,8 +219,70 @@ export async function provisionOrg(profile: Profile, window: { startDate: string
   });
 }
 
-/** Tear a SIM org down completely (bypasses posted-entry immutability). Refuses untagged orgs. */
+/**
+ * Completely wipe an org's rows across every table, order-independently. Unlike
+ * dropScratchOrg's fixed list (which predates period-close tables), this covers
+ * ANY sim org — including ones that have been through monthly/year-end closes
+ * (close_runs, period_locks, blueprints, reporting packages). It defers the
+ * deferrable circular FKs and, for the 152 non-deferrable FKs, retries deletes to
+ * a fixpoint with per-table savepoints so ordering never has to be hand-computed.
+ *
+ * UNGUARDED — callers must ensure the org is disposable. resetOrg is the guarded
+ * entry point.
+ */
+export async function wipeSimOrg(orgId: string): Promise<void> {
+  await withBypass(async () => {
+    await db.execute(sql`set local openbooks.amend = 'on'`);
+    await db.execute(sql`set local openbooks.sandbox_wipe = 'on'`);
+    await db.execute(sql`set constraints all deferred`);
+    await db.execute(sql`update orgs set env_kind = 'sandbox' where id = ${orgId}`);
+    // Posted inventory movements are guarded even under amend; demote first.
+    await db.execute(sql`update inventory_movements set status = 'pending' where org_id = ${orgId}`);
+    // Child tables without an org_id column (reached via their parent).
+    await db.execute(sql`delete from tax_group_members where tax_group_id in (select id from tax_groups where org_id = ${orgId})`);
+    await db.execute(sql`delete from file_blobs where version_id in (select v.id from file_versions v join files f on f.id = v.file_id where f.org_id = ${orgId})`);
+    await db.execute(sql`delete from file_versions where file_id in (select id from files where org_id = ${orgId})`);
+
+    // Exclude append-only tables (audit_log, *_events, close_signoffs, dunning_log,
+    // ap_capture_*): a BEFORE DELETE guard hard-blocks their removal by design.
+    // Their rows are immutable history and orphan harmlessly (no inbound FKs;
+    // their own FKs are deferrable). An org with close/payment history therefore
+    // cannot be hard-wiped — which is correct — but debris orgs have no such rows.
+    const tbls = (await db.execute(sql`
+      select c.table_name from information_schema.columns c
+       where c.table_schema = 'public' and c.column_name = 'org_id' and c.table_name <> 'orgs'
+         and c.table_name not in (
+           select distinct cl.relname
+             from pg_trigger tg
+             join pg_class cl on cl.oid = tg.tgrelid
+             join pg_proc pr on pr.oid = tg.tgfoid
+            where not tg.tgisinternal and pg_get_functiondef(pr.oid) ilike '%append-only%'
+         )`)) as unknown as {
+      rows: { table_name: string }[];
+    };
+    let remaining = tbls.rows.map((r) => r.table_name);
+    for (let pass = 0; pass < 15 && remaining.length > 0; pass++) {
+      const stillBlocked: string[] = [];
+      for (const t of remaining) {
+        await db.execute(sql`savepoint sp`);
+        try {
+          await db.execute(sql`delete from ${sql.raw(`"${t}"`)} where org_id = ${orgId}`);
+          await db.execute(sql`release savepoint sp`);
+        } catch {
+          await db.execute(sql`rollback to savepoint sp`);
+          stillBlocked.push(t);
+        }
+      }
+      if (stillBlocked.length === remaining.length) { remaining = stillBlocked; break; } // no progress
+      remaining = stillBlocked;
+    }
+    if (remaining.length > 0) throw new Error(`wipeSimOrg: could not clear tables: ${remaining.join(", ")}`);
+    await db.execute(sql`delete from orgs where id = ${orgId}`);
+  });
+}
+
+/** Tear a SIM org down completely (guarded — refuses untagged orgs). */
 export async function resetOrg(orgId: string): Promise<void> {
   await assertSimOrg(orgId);
-  await dropScratchOrg(orgId);
+  await wipeSimOrg(orgId);
 }
