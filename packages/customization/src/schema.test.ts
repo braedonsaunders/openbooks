@@ -19,7 +19,6 @@ test('the default project form composes complete four-column rows', () => {
     'project_type_id',
     'customer_id',
     'status',
-    'billing_method',
     'contract_value',
     'customer_po_number',
     'foreman_id',
@@ -142,9 +141,9 @@ test('the baseline form upgrade refreshes built-in placement without losing fiel
   primary.fields = primary.fields.filter((field) => field.key !== 'project_type_id')
   const name = primary.fields.find((field) => field.key === 'name')!
   name.colSpan = 2
-  const billing = primary.fields.find((field) => field.key === 'billing_method')!
-  billing.visible = false
-  billing.labelOverride = 'Billing basis'
+  const poNumber = primary.fields.find((field) => field.key === 'customer_po_number')!
+  poNumber.visible = false
+  poNumber.labelOverride = 'PO reference'
   primary.fields.push({ key: 'cf_permit_number', visible: true, colSpan: 2 })
 
   refreshDefaultFormLayout(legacy)
@@ -158,8 +157,8 @@ test('the baseline form upgrade refreshes built-in placement without losing fiel
     'customer_id',
   ])
   assert.equal(fields.find((field) => field.key === 'name')!.colSpan, 3)
-  assert.equal(fields.find((field) => field.key === 'billing_method')!.visible, false)
-  assert.equal(fields.find((field) => field.key === 'billing_method')!.labelOverride, 'Billing basis')
+  assert.equal(fields.find((field) => field.key === 'customer_po_number')!.visible, false)
+  assert.equal(fields.find((field) => field.key === 'customer_po_number')!.labelOverride, 'PO reference')
   assert.equal(fields.at(-1)!.key, 'cf_permit_number')
   assert.deepEqual(lintFormLayout(legacy), [])
 })

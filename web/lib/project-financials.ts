@@ -22,7 +22,7 @@ export interface ProjectFinancials {
   costByCategory: { category: string; amount: string }[]
   costByAccount: { accountId: string; number: string | null; name: string; amount: string }[]
   documents: { id: string; kind: string; documentNumber: string; documentDate: string; status: string; partyName: string | null; amount: string }[]
-  billingMethod: string | null
+  projectType: string | null
   contractValue: string
 }
 
@@ -88,13 +88,13 @@ export async function resolveProjectFinancials(
   const projRow = (await db.execute(sql`
     select coalesce(p.contract_value, 0) as contract_value,
            coalesce((p.custom->>'markupPercent')::numeric, 0) as markup_percent,
-           coalesce(pt.billing_method, 'time_and_materials') as billing_method,
+           coalesce(pt.key, 'time_and_materials') as project_type,
            coalesce((select sum(t.estimated_cost) from project_tasks t where t.project_id = p.id), 0) as cost_budget
       from projects p
       left join project_types pt on pt.id = p.project_type_id and pt.org_id = p.org_id
      where p.id = ${projectId} and p.org_id = ${orgId}
-  `)) as unknown as { rows: { contract_value: string; markup_percent: string; billing_method: string | null; cost_budget: string }[] }
-  const proj = projRow.rows[0] ?? { contract_value: '0', markup_percent: '0', billing_method: null, cost_budget: '0' }
+  `)) as unknown as { rows: { contract_value: string; markup_percent: string; project_type: string | null; cost_budget: string }[] }
+  const proj = projRow.rows[0] ?? { contract_value: '0', markup_percent: '0', project_type: null, cost_budget: '0' }
   const contractValue = amount(proj.contract_value)
   const projectMarkupPercent = amount(proj.markup_percent)
   const costBudget = profile.costBudget.source === 'wbs_estimates' ? amount(proj.cost_budget) : '0.0000'
@@ -285,7 +285,7 @@ export async function resolveProjectFinancials(
     costByCategory: [...costByCategory].map(([category, amount]) => ({ category, amount })),
     costByAccount: byAccountRes.rows.map((r) => ({ accountId: r.account_id, number: r.number, name: r.name, amount: amount(r.amount) })),
     documents: docRes.rows.map((r) => ({ id: r.id, kind: r.kind, documentNumber: r.documentNumber, documentDate: r.documentDate, status: r.status, partyName: r.partyName, amount: amount(r.amount) })),
-    billingMethod: proj.billing_method,
+    projectType: proj.project_type,
     contractValue,
   }
 }

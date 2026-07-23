@@ -19,7 +19,7 @@ export interface FinancialsData {
   layout: PnlLine[]
   costByCategory: CategoryRow[]
   costByAccount: AccountRow[]
-  billingMethod: string | null
+  projectType: string | null
 }
 
 /** Measures that read better as "good when positive, bad when negative". */

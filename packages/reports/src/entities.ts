@@ -273,7 +273,7 @@ export const REPORT_ENTITIES: ReportEntity[] = [
     key: 'projects',
     label: 'Projects',
     category: 'catalog',
-    description: 'Projects / jobs — status, customer, billing method, schedule and PO number.',
+    description: 'Projects / jobs — status, customer, project type, schedule and PO number.',
     from: `projects prj
       LEFT JOIN parties cust ON cust.id = prj.customer_id
       LEFT JOIN parties mgr ON mgr.id = prj.manager_id`,
@@ -284,7 +284,7 @@ export const REPORT_ENTITIES: ReportEntity[] = [
       { key: 'status', label: 'Status', kind: 'enum', expr: 'prj.status', options: ['quoted', 'awarded', 'active', 'substantially_complete', 'closed', 'cancelled'] },
       { key: 'customer_name', label: 'Customer', kind: 'text', expr: 'cust.display_name' },
       { key: 'manager_name', label: 'Manager', kind: 'text', expr: 'mgr.display_name' },
-      { key: 'billing_method', label: 'Billing method', kind: 'enum', expr: 'prj.billing_method', options: ['time_and_materials', 'fixed_price', 'cost_plus'] },
+      { key: 'project_type', label: 'Project type', kind: 'enum', expr: "COALESCE((SELECT pt.key FROM project_types pt WHERE pt.id = prj.project_type_id AND pt.org_id = prj.org_id), 'time_and_materials')", options: ['time_and_materials', 'fixed_price', 'cost_plus', 'not_to_exceed', 'schedule_of_values'] },
       { key: 'customer_po_number', label: 'Customer PO #', kind: 'text', expr: 'prj.customer_po_number' },
       { key: 'starts_on', label: 'Starts on', kind: 'date', expr: 'prj.starts_on' },
       { key: 'ends_on', label: 'Ends on', kind: 'date', expr: 'prj.ends_on' },

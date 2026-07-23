@@ -110,7 +110,7 @@ export const PROJECT_BUILT_IN_EXPR: Record<string, SQL> = {
   name: sql`p.name`,
   customer: sql`cust.display_name`,
   status: sql`p.status`,
-  billing_method: sql`coalesce((select pt.billing_method from project_types pt where pt.id = p.project_type_id and pt.org_id = p.org_id), 'time_and_materials')`,
+  project_type: sql`coalesce((select pt.key from project_types pt where pt.id = p.project_type_id and pt.org_id = p.org_id), 'time_and_materials')`,
   contract: CONTRACT_EXPR,
   actual: sql`actual.cost`,
   created: sql`to_char(p.created_at, 'YYYY-MM-DD')`,
@@ -143,11 +143,11 @@ function projectFilterPredicate(clause: FilterClause): SQL | null {
       if (operator === "ne") return sql`p.status <> ${single(value)}`
       if (operator === "in" || operator === "not_in") return inList(sql`p.status`)
       return null
-    case "billing_method": {
-      const bmExpr = sql`coalesce((select pt.billing_method from project_types pt where pt.id = p.project_type_id and pt.org_id = p.org_id), 'time_and_materials')`
-      if (operator === "eq") return sql`${bmExpr} = ${single(value)}`
-      if (operator === "ne") return sql`${bmExpr} <> ${single(value)}`
-      if (operator === "in" || operator === "not_in") return inList(bmExpr)
+    case "project_type": {
+      const typeExpr = sql`coalesce((select pt.key from project_types pt where pt.id = p.project_type_id and pt.org_id = p.org_id), 'time_and_materials')`
+      if (operator === "eq") return sql`${typeExpr} = ${single(value)}`
+      if (operator === "ne") return sql`${typeExpr} <> ${single(value)}`
+      if (operator === "in" || operator === "not_in") return inList(typeExpr)
       return null
     }
     case "customer_id":
@@ -181,7 +181,7 @@ export function projectWhere(
     if (p) parts.push(sql`and ${p}`)
   }
   if (adhoc.status) parts.push(sql`and p.status = ${adhoc.status}`)
-  if (adhoc.billing) parts.push(sql`and coalesce((select pt.billing_method from project_types pt where pt.id = p.project_type_id and pt.org_id = p.org_id), 'time_and_materials') = ${adhoc.billing}`)
+  if (adhoc.billing) parts.push(sql`and coalesce((select pt.key from project_types pt where pt.id = p.project_type_id and pt.org_id = p.org_id), 'time_and_materials') = ${adhoc.billing}`)
   if (adhoc.q)
     parts.push(
       sql`and (p.name ilike ${"%" + adhoc.q + "%"} or p.code ilike ${"%" + adhoc.q + "%"} or cust.display_name ilike ${"%" + adhoc.q + "%"})`,

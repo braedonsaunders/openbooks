@@ -595,7 +595,6 @@ const PROJECT: RecordTypeMeta = {
     { key: "project_type_id", labelKey: "projects.drawer.projectType", level: "header", kind: "entity_ref" },
     { key: "customer_id", labelKey: "common.labels.customer", level: "header", kind: "entity_ref" },
     { key: "status", labelKey: "common.labels.status", level: "header", kind: "select" },
-    { key: "billing_method", labelKey: "projects.labels.billingMethod", level: "header", kind: "select" },
     { key: "contract_value", labelKey: "projects.labels.contractValue", level: "header", kind: "currency" },
     { key: "customer_po_number", labelKey: "projects.labels.customerPo", level: "header", kind: "text" },
     { key: "foreman_id", labelKey: "projects.labels.foreman", level: "header", kind: "entity_ref" },
@@ -611,7 +610,7 @@ const PROJECT: RecordTypeMeta = {
     { key: "code", labelKey: "projects.labels.code", kind: "text", sortable: true, sortKey: "code", defaultHidden: true },
     { key: "customer", labelKey: "common.labels.customer", kind: "text", sortable: true, sortKey: "customer" },
     { key: "status", labelKey: "common.labels.status", kind: "status", sortable: true, sortKey: "status", defaultWidth: 120 },
-    { key: "billing_method", labelKey: "projects.labels.billing", kind: "text" },
+    { key: "project_type", labelKey: "projects.drawer.projectType", kind: "text" },
     { key: "contract", labelKey: "projects.labels.contractValue", kind: "amount", sortable: true, sortKey: "contract", defaultWidth: 130 },
     { key: "actual", labelKey: "projects.labels.actualCost", kind: "amount", sortable: true, sortKey: "actual", defaultWidth: 130 },
     { key: "created", labelKey: "common.labels.created", kind: "date", sortable: true, sortKey: "created", defaultWidth: 120 },
@@ -620,8 +619,8 @@ const PROJECT: RecordTypeMeta = {
   listFilters: [
     { key: "status", labelKey: "common.labels.status", kind: "select", operators: OPERATORS_BY_KIND.select, options: PROJECT_STATUS_OPTIONS },
     {
-      key: "billing_method",
-      labelKey: "projects.labels.billingMethod",
+      key: "project_type",
+      labelKey: "projects.drawer.projectType",
       kind: "select",
       operators: OPERATORS_BY_KIND.select,
       options: [

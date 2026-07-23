@@ -85,7 +85,7 @@ export async function loadProjectCockpit(orgId: string, projectId: string): Prom
       layout: projectType.financialProfile.layout,
       costByCategory: financials.costByCategory,
       costByAccount: financials.costByAccount,
-      billingMethod: financials.billingMethod,
+      projectType: financials.projectType,
     },
     projectType: { key: projectType.key, name: projectType.name },
     time,
