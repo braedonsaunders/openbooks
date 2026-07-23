@@ -387,6 +387,10 @@ async function seedAdmin(orgId: string): Promise<void> {
 
 async function main(): Promise<void> {
   console.log("[bootstrap] starting");
+  // Some migrations grant privileges to openbooks_read, so a fresh database
+  // must establish the role before applying them. Run the same idempotent
+  // routine again afterward to grant access to the newly created tables.
+  await ensureReadRole();
   await migrate();
   await ensureReadRole();
   const orgId = await ensureOrg();
