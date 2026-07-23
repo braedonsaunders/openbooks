@@ -12,8 +12,23 @@ export const professionalServices: Profile = {
   baseCurrency: "USD",
   country: "US",
   // A consulting firm: labor is the dominant cost (delivery consultants), leaving
-  // a realistic ~20-25% net margin after overhead.
+  // a realistic ~20-25% net margin after overhead. `economics` is only the
+  // fallback peg; with a workforce + engagements below, revenue runs FULLY
+  // BOTTOM-UP (billed consultant time − labor cost − overhead).
   economics: { laborPctOfRevenue: "0.55", cogsPctOfRevenue: "0.06" },
+  // Fully-loaded hourly cost and standard bill rate per consultant.
+  workforce: [
+    { name: "Dana Okafor (Managing Partner)", costRate: "165.00", billRate: "450.00" },
+    { name: "Liam Chen (Principal)", costRate: "135.00", billRate: "375.00" },
+    { name: "Ava Romano (Senior Manager)", costRate: "115.00", billRate: "325.00" },
+    { name: "Noah Kline (Manager)", costRate: "98.00", billRate: "275.00" },
+    { name: "Ivy Sarabia (Manager)", costRate: "96.00", billRate: "270.00" },
+    { name: "Owen Frey (Consultant)", costRate: "78.00", billRate: "225.00" },
+    { name: "Zoe Adeyemi (Consultant)", costRate: "76.00", billRate: "220.00" },
+    { name: "Kai Watanabe (Analyst)", costRate: "62.00", billRate: "185.00" },
+  ],
+  engagementsPerCustomer: 2,
+  utilization: 0.78,
   vendors: [
     { name: "WeWork Downtown", termDays: 30, expenseCategories: ["rent"], billMin: 8000, billMax: 12000 },
     { name: "Adobe Creative Cloud", termDays: 30, expenseCategories: ["office"], billMin: 600, billMax: 2400 },

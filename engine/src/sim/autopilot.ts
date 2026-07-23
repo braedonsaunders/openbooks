@@ -1,6 +1,7 @@
-import { addDays, dayOfMonth, recordCoverage } from "./manifest.ts";
+import { addDays, dayOfMonth, isMonthEnd, recordCoverage } from "./manifest.ts";
 import * as observe from "./observe.ts";
 import * as ops from "./ops.ts";
+import * as opsTm from "./ops-tm.ts";
 import type { SimOrg } from "./world.ts";
 import type { RunManifest } from "./manifest.ts";
 import type { Profile } from "./profiles/index.ts";
@@ -68,6 +69,14 @@ export async function autopilotDay(profile: Profile, world: SimOrg, manifest: Ru
     await ops.applyReceipt(world, r.id, alloc, world.actors.arClerk);
     recordCoverage(manifest, "customer_payment");
     summary.receiptsApplied++;
+  }
+
+  // --- Bottom-up: bill each engagement's accumulated billable time at month-end ----
+  if (isMonthEnd(today) && world.engagements.length > 0) {
+    for (const eng of world.engagements) {
+      const res = await opsTm.billTimeAndMaterials(world, eng.id, today);
+      if (res) { recordCoverage(manifest, "customer_invoice"); summary.invoicesIssued++; }
+    }
   }
 
   // --- Controller: close the prior month on the close day ----------------

@@ -6,6 +6,7 @@ import { add, cmp, mulDecimal, neg, sum } from "../money.ts";
 import { addDays, isWeekend, isMonthEnd } from "./manifest.ts";
 import { mark, nextNumber, type SimContext } from "./context.ts";
 import { createDraftDocument, collectibleOpenItems } from "./activities/documents.ts";
+import { isBottomUp, logDailyBillableTime, monthEndLaborAndPayroll } from "./bottomup.ts";
 import type { Rng } from "./rng.ts";
 import type { SimCustomer } from "./world.ts";
 
@@ -77,32 +78,38 @@ export async function generateDay(ctx: SimContext): Promise<DayEvents> {
   }
   if (events.billsArrived > 0) mark(ctx, "bill_arrived");
 
-  // 2. Billable work prepared → AR inbox (draft customer_invoice with behavior baked in).
-  const invCount = sampleCount(rng, ctx.profile.cadence.invoicesPerDay, weekend);
-  for (let i = 0; i < invCount; i++) {
-    const r = rng.stream(`inv:${i}`);
-    const customer = r.pick(ctx.world.customers);
-    const category = r.pick(customer.revenueCategories);
-    const accountId = ctx.world.accounts[category] ?? ctx.world.accounts.revenueService!;
-    const dueDate = addDays(ctx.simDate, customer.termDays);
-    const { behavior, delayDays, payFraction } = drawBehavior(r, customer);
-    const expectedPayDate = delayDays === null ? null : addDays(dueDate, delayDays);
-    await createDraftDocument(ctx.world, {
-      kind: "customer_invoice",
-      documentNumber: nextNumber(ctx, "INV"),
-      partyId: customer.id,
-      documentDate: ctx.simDate,
-      dueDate,
-      expectedPayDate,
-      createdBy: ctx.world.actors.arClerk,
-      currency: ctx.world.currency,
-      memo: `Work for ${customer.name}`,
-      custom: { sim: { source: "generator", behavior, payFraction } },
-      lines: [{ accountId, description: `${category} work`, amount: r.money(customer.invoiceMin, customer.invoiceMax) }],
-    });
-    events.invoicesPrepared++;
+  // 2. Revenue driver. Bottom-up companies (workforce + engagements) log billable
+  // TIME each day — revenue emerges when that time is billed. Others prepare draft
+  // invoices directly.
+  if (isBottomUp(ctx)) {
+    await logDailyBillableTime(ctx);
+  } else {
+    const invCount = sampleCount(rng, ctx.profile.cadence.invoicesPerDay, weekend);
+    for (let i = 0; i < invCount; i++) {
+      const r = rng.stream(`inv:${i}`);
+      const customer = r.pick(ctx.world.customers);
+      const category = r.pick(customer.revenueCategories);
+      const accountId = ctx.world.accounts[category] ?? ctx.world.accounts.revenueService!;
+      const dueDate = addDays(ctx.simDate, customer.termDays);
+      const { behavior, delayDays, payFraction } = drawBehavior(r, customer);
+      const expectedPayDate = delayDays === null ? null : addDays(dueDate, delayDays);
+      await createDraftDocument(ctx.world, {
+        kind: "customer_invoice",
+        documentNumber: nextNumber(ctx, "INV"),
+        partyId: customer.id,
+        documentDate: ctx.simDate,
+        dueDate,
+        expectedPayDate,
+        createdBy: ctx.world.actors.arClerk,
+        currency: ctx.world.currency,
+        memo: `Work for ${customer.name}`,
+        custom: { sim: { source: "generator", behavior, payFraction } },
+        lines: [{ accountId, description: `${category} work`, amount: r.money(customer.invoiceMin, customer.invoiceMax) }],
+      });
+      events.invoicesPrepared++;
+    }
+    if (events.invoicesPrepared > 0) mark(ctx, "invoice_prepared");
   }
-  if (events.invoicesPrepared > 0) mark(ctx, "invoice_prepared");
 
   // 3. Customer money arrives for issued invoices now due → AR cash-application inbox.
   for (const customer of ctx.world.customers) {
@@ -148,9 +155,12 @@ export async function generateDay(ctx: SimContext): Promise<DayEvents> {
   }
   if (events.paymentsArrived > 0) mark(ctx, "payment_arrived");
 
-  // 4. Month-end payroll + delivery cost, sized to delivered revenue → a coherent P&L.
-  if (isMonthEnd(ctx.simDate) && ctx.profile.economics) {
-    await postMonthlyLaborAndCogs(ctx);
+  // 4. Month-end costs. Bottom-up: cost the month's billable labor + run payroll
+  // actuals (washes clearing, bench labor to overhead). Otherwise: the top-down
+  // revenue-pegged delivery cost.
+  if (isMonthEnd(ctx.simDate)) {
+    if (isBottomUp(ctx)) await monthEndLaborAndPayroll(ctx);
+    else if (ctx.profile.economics) await postMonthlyLaborAndCogs(ctx);
   }
 
   return events;

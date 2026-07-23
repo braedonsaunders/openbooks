@@ -81,6 +81,19 @@ export interface Profile {
     /** Direct delivery cost (COGS not otherwise billed via AP) as a fraction of revenue. */
     cogsPctOfRevenue: string;
   };
+  /**
+   * The billable workforce (consultants / crew), each with an hourly cost rate
+   * and bill rate. When present (and the chart wires laborWip/laborClearing), the
+   * company runs FULLY BOTTOM-UP: workers log billable time against engagements,
+   * labor cost flows through the ledger, work is billed at the bill rate, and
+   * payroll actuals wash the clearing — so margin emerges from rates × utilization
+   * − overhead, not a top-down peg. Defaults to a generic crew if omitted.
+   */
+  workforce?: { name: string; costRate: string; billRate: string }[];
+  /** How many active engagements/jobs to open per customer (bottom-up billing). */
+  engagementsPerCustomer?: number;
+  /** Target billable utilization (0-1): fraction of an 8h day a worker bills. */
+  utilization?: number;
   /** ISO 4217-ish description only; the CoA is fixed but categories vary by use. */
   vendors: VendorSpec[];
   customers: CustomerSpec[];
