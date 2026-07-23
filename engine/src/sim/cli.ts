@@ -1,7 +1,7 @@
 import { join } from "node:path";
 import { pool, withOrgContext } from "../db.ts";
 import { withSimClock } from "../clock.ts";
-import { assertSimEnabled } from "./db-guard.ts";
+import { assertSimEnabled, assertDedicatedSimDatabase } from "./db-guard.ts";
 import { listProfiles } from "./profiles/index.ts";
 import { provisionRun, dayStart, dayEnd, verify, loadRun } from "./runner.ts";
 import { writeManifest } from "./manifest.ts";
@@ -10,6 +10,9 @@ import { autopilotDay } from "./autopilot.ts";
 import { getProfile } from "./profiles/index.ts";
 import * as observe from "./observe.ts";
 import * as ops from "./ops.ts";
+import * as opsLifecycle from "./ops-lifecycle.ts";
+import * as opsPeriodic from "./ops-periodic.ts";
+import * as opsConstruction from "./ops-construction.ts";
 import type { ScriptJournalLine } from "../journal-writes.ts";
 
 /**
@@ -166,6 +169,7 @@ async function main(): Promise<number> {
           case "ar-aging": return observe.arAging(world, f.asOf ?? manifest.simDate);
           case "trial-balance": return observe.trialBalance(world, f.asOf ?? manifest.simDate);
           case "period-status": return observe.periodStatus(world);
+          case "projects": return observe.projects(world);
           default: throw new Error(`unknown observe screen "${screen}"`);
         }
       });
@@ -207,6 +211,62 @@ async function main(): Promise<number> {
             if (!period) throw new Error(`unknown period "${f.period}"`);
             return ops.closeMonth(world, period.id, world.actors.controller, f.reason ?? "month-end close");
           }
+          // --- Phase 7: adversarial lifecycle ---
+          case "void-doc":
+            return opsLifecycle.voidDocument(world, f.doc!, world.actors.controller, f.reason ?? "voided");
+          case "reverse-entry":
+            return opsLifecycle.reverseEntry(world, f.entry!, world.actors.controller);
+          case "write-off":
+            return opsLifecycle.writeOffReceivable(world, {
+              customerId: f.customer!,
+              amount: f.amount!,
+              reason: f.reason ?? "uncollectible",
+              actorId: world.actors.controller,
+              documentDate: manifest.simDate,
+            });
+          // --- Phase 6: period-driven engines ---
+          case "run-depreciation":
+            return opsPeriodic.runDepreciationForDate(world, f.asOf ?? manifest.simDate, world.actors.controller);
+          case "run-recurring":
+            assertDedicatedSimDatabase("run-recurring");
+            return opsPeriodic.runRecurringForDate(f.asOf ?? manifest.simDate);
+          case "run-dunning":
+            assertDedicatedSimDatabase("run-dunning");
+            return opsPeriodic.runDunningForDate(f.asOf ?? manifest.simDate);
+          case "prepare-tax":
+            return opsPeriodic.prepareTaxReturn(world, f.form!, f.from!, f.to!);
+          case "run-fx-reval": {
+            const period = world.periods.find((p) => p.name === f.period || p.id === f.period);
+            if (!period) throw new Error(`unknown period "${f.period}"`);
+            return opsPeriodic.runFxRevaluationForPeriod(world, period.id, world.actors.controller);
+          }
+          case "run-consolidation": {
+            const period = world.periods.find((p) => p.name === f.period || p.id === f.period);
+            if (!period) throw new Error(`unknown period "${f.period}"`);
+            return opsPeriodic.runConsolidationForPeriod(world, period.id, world.actors.controller);
+          }
+          // --- Phase 6: construction AIA progress billing ---
+          case "setup-project": {
+            const lines = (f.lines ?? "").split(",").filter(Boolean).map((s, i) => {
+              const [description, scheduledValue] = s.split(":");
+              return { description: description || `SOV ${i + 1}`, scheduledValue: scheduledValue ?? "0" };
+            });
+            return opsConstruction.setupProject(world, {
+              name: f.name ?? "Project",
+              code: f.code ?? `PRJ-${Date.now()}`,
+              customerId: f.customer ?? world.customers[0]!.id,
+              startsOn: f.startsOn ?? manifest.simDate,
+              endsOn: f.endsOn ?? manifest.endDate,
+              lines,
+            });
+          }
+          case "progress-bill":
+            return opsConstruction.runProgressBilling(
+              world, f.project!, f.period ?? manifest.simDate, f.fraction ?? "0.1",
+              world.actors.arClerk, world.actors.controller,
+            );
+          case "release-retainage":
+            return opsConstruction.releaseProjectRetainage(world, f.project!, f.period ?? manifest.simDate, f.amount!, world.actors.controller);
           default:
             throw new Error(`unknown act "${action}"`);
         }

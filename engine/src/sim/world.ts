@@ -63,6 +63,7 @@ export interface SimOrg {
 const COA: [string, string, string, string][] = [
   ["bank", "1000", "Operating Cash", "asset_bank"],
   ["ar", "1100", "Accounts Receivable", "asset_receivable"],
+  ["retainageReceivable", "1150", "Retainage Receivable", "asset_receivable"],
   ["prepaid", "1200", "Prepaid Expenses", "asset_current_other"],
   ["taxInput", "1250", "Recoverable Tax", "asset_current_other"],
   ["inventory", "1300", "Inventory Asset", "asset_current_other"],
@@ -166,7 +167,13 @@ export async function provisionOrg(profile: Profile, window: { startDate: string
       update orgs set settings = ${JSON.stringify({
         simHarness: true,
         simProfile: profile.id,
-        controlAccounts: { ar: accounts.ar, ap: accounts.ap, bank: accounts.bank, employeePayable: accounts.employeePayable },
+        controlAccounts: {
+          ar: accounts.ar,
+          ap: accounts.ap,
+          bank: accounts.bank,
+          employeePayable: accounts.employeePayable,
+          retainageReceivable: accounts.retainageReceivable,
+        },
       })}::jsonb
        where id = ${orgId}`);
 
