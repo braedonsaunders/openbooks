@@ -1,3 +1,5 @@
+import { sql } from "drizzle-orm";
+import { db } from "../db.ts";
 import { addDays, dayOfMonth, isMonthEnd, recordCoverage } from "./manifest.ts";
 import * as observe from "./observe.ts";
 import * as ops from "./ops.ts";
@@ -32,6 +34,13 @@ export async function autopilotDay(profile: Profile, world: SimOrg, manifest: Ru
   const inbox = (await observe.apInbox(world)) as { id: string; dispute: string | null }[];
   for (const bill of inbox) {
     if (bill.dispute) continue;
+    // A bill left in the inbox past its period is posted as a catch-up in the
+    // current open period, not rejected into a locked month.
+    await db.execute(sql`
+      update documents
+         set document_date = ${today},
+             due_date = case when due_date is null or due_date < ${today} then ${addDays(today, 30)} else due_date end
+       where id = ${bill.id} and org_id = ${world.orgId} and status = 'draft' and document_date < ${today}`);
     await ops.postBill(world, bill.id);
     recordCoverage(manifest, "vendor_bill");
     summary.billsPosted++;
@@ -58,6 +67,15 @@ export async function autopilotDay(profile: Profile, world: SimOrg, manifest: Ru
   // --- AR: issue prepared invoices, apply the suggested receipts ---------
   const arIn = (await observe.arInbox(world)) as { id: string }[];
   for (const inv of arIn) {
+    // An invoice is dated when it's issued: re-stamp a draft that's still sitting
+    // in the inbox to today (and push its terms forward), so a draft prepared in a
+    // now-closed period isn't rejected for posting into a locked month.
+    await db.execute(sql`
+      update documents
+         set document_date = ${today},
+             due_date = case when due_date is null or due_date < ${today} then ${addDays(today, 30)} else due_date end,
+             expected_pay_date = case when expected_pay_date is null or expected_pay_date < ${today} then ${addDays(today, 38)} else expected_pay_date end
+       where id = ${inv.id} and org_id = ${world.orgId} and status = 'draft' and document_date < ${today}`);
     await ops.issueInvoice(world, inv.id);
     recordCoverage(manifest, "customer_invoice");
     summary.invoicesIssued++;
