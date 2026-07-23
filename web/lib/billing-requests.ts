@@ -39,7 +39,10 @@ export async function nextBillingRequestNumber(orgId: string): Promise<string> {
 export async function createBillingRequest(orgId: string, userId: string, input: BillingRequestInput) {
   if (!(await isFeatureEnabled(orgId, 'projects'))) throw new Error('Projects feature is disabled')
   const proj = (await db.execute(sql`
-    select id, billing_method, customer_po_number from projects where id = ${input.projectId} and org_id = ${orgId}
+    select p.id, coalesce(pt.billing_method, 'time_and_materials') as billing_method, p.customer_po_number
+      from projects p
+      left join project_types pt on pt.id = p.project_type_id and pt.org_id = p.org_id
+     where p.id = ${input.projectId} and p.org_id = ${orgId}
   `)) as unknown as { rows: { id: string; billing_method: string | null; customer_po_number: string | null }[] }
   if (!proj.rows[0]) throw new Error('Project not found')
 

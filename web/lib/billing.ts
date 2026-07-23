@@ -55,9 +55,11 @@ export async function generateInvoiceFromBillingRequest(
     if (req.status !== 'open') throw new BillingError('This billing request has already been invoiced')
 
     const projRes = (await tx.execute(sql`
-      select p.id, p.customer_id, p.billing_method, p.customer_po_number, p.subsidiary_id, p.custom,
+      select p.id, p.customer_id, coalesce(pt.billing_method, 'time_and_materials') as billing_method,
+             p.customer_po_number, p.subsidiary_id, p.custom,
              coalesce(s.base_currency,o.base_currency) as billing_currency
         from projects p join orgs o on o.id=p.org_id left join subsidiaries s on s.id=p.subsidiary_id
+        left join project_types pt on pt.id = p.project_type_id and pt.org_id = p.org_id
        where p.id = ${req.project_id} and p.org_id = ${orgId}
     `)) as unknown as { rows: any[] }
     const project = projRes.rows[0]

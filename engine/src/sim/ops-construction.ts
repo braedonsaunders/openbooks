@@ -67,16 +67,16 @@ export async function setupProject(
   // only the coarse back-compat classifier (time_and_materials|fixed_price|
   // cost_plus) and is derived from the resolved type.
   const typeRow = (await db.execute(sql`
-    select id, billing_method from project_types
+    select id from project_types
      where org_id = ${world.orgId} and key = ${method} and is_active limit 1`)) as unknown as {
-    rows: { id: string; billing_method: string }[];
+    rows: { id: string }[];
   };
   const type = typeRow.rows[0];
   if (!type) throw new Error(`no project_type "${method}" — run seedProjectTypes`);
 
   await db.execute(sql`
-    insert into projects (id, org_id, name, code, status, project_type_id, billing_method, customer_id, contract_value, starts_on, ends_on)
-    values (${projectId}, ${world.orgId}, ${opts.name}, ${opts.code}, 'active', ${type.id}, ${type.billing_method},
+    insert into projects (id, org_id, name, code, status, project_type_id, customer_id, contract_value, starts_on, ends_on)
+    values (${projectId}, ${world.orgId}, ${opts.name}, ${opts.code}, 'active', ${type.id},
             ${opts.customerId}, ${contractValue}, ${opts.startsOn}, ${opts.endsOn})`);
 
   const sovLines: { id: string; scheduledValue: string }[] = [];

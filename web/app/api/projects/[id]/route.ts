@@ -11,7 +11,6 @@ import { guardProjectsFeature } from '../../../../lib/projects-gate'
 export const runtime = 'nodejs'
 
 const STATUSES = ['quoted', 'awarded', 'active', 'substantially_complete', 'closed', 'cancelled'] as const
-const BILLING_METHODS = ['time_and_materials', 'fixed_price', 'cost_plus'] as const
 const TASK_STATUSES = ['open', 'complete', 'cancelled'] as const
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/
 
@@ -59,7 +58,6 @@ interface PatchBody {
   foremanId?: string | null
   managerId?: string | null
   status?: string
-  billingMethod?: string | null
   projectTypeId?: string | null
   invoicingPreference?: Record<string, unknown> | null
   customerPoNumber?: string | null
@@ -119,13 +117,6 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
   // -- enums ---------------------------------------------------------------
   if (body.status !== undefined && !STATUSES.includes(body.status as (typeof STATUSES)[number])) {
     return bad('Invalid status')
-  }
-  if (
-    body.billingMethod !== undefined &&
-    body.billingMethod !== null &&
-    !BILLING_METHODS.includes(body.billingMethod as (typeof BILLING_METHODS)[number])
-  ) {
-    return bad('Invalid billing method')
   }
 
   // -- name / activation ---------------------------------------------------
@@ -236,18 +227,16 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     }
   }
 
-  // Project type: assigning one also derives the coarse billing_method so the
-  // back-compat classifier stays consistent with the type.
+  // Project type governs the billing classifier (its own billing_method column);
+  // the project only stores the type reference.
   let projectTypeId: string | null | undefined
-  let derivedBilling: string | null | undefined
   if (body.projectTypeId !== undefined) {
     const v = uuidOrNull(body.projectTypeId)
     if (v === 'invalid') return bad('Invalid project type')
     projectTypeId = v
     if (v) {
-      const pt = (await db.execute(sql`select billing_method from project_types where id = ${v} and org_id = ${user.orgId} and is_active`)) as unknown as { rows: { billing_method: string | null }[] }
+      const pt = (await db.execute(sql`select 1 from project_types where id = ${v} and org_id = ${user.orgId} and is_active`)) as unknown as { rows: unknown[] }
       if (pt.rows.length === 0) return bad('Unknown project type')
-      derivedBilling = pt.rows[0].billing_method ?? undefined
     }
   }
 
@@ -263,7 +252,6 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
       subsidiary_id = ${subsidiaryId !== undefined ? subsidiaryId : sql`subsidiary_id`},
       subsidiary_include_children = ${body.subsidiaryIncludeChildren !== undefined ? body.subsidiaryIncludeChildren : sql`subsidiary_include_children`},
       status = coalesce(${body.status ?? null}, status),
-      billing_method = ${derivedBilling !== undefined ? derivedBilling : (body.billingMethod !== undefined ? body.billingMethod : sql`billing_method`)},
       customer_po_number = ${body.customerPoNumber !== undefined ? strOrNull(body.customerPoNumber) : sql`customer_po_number`},
       contract_value = ${contractValue !== undefined ? contractValue : sql`contract_value`},
       starts_on = ${startsOn !== undefined ? startsOn : sql`starts_on`},

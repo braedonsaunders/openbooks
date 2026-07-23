@@ -113,7 +113,7 @@ export async function syncProjectRevenueContracts(
       left join project_types pt on pt.id = p.project_type_id and pt.org_id = p.org_id
      where p.org_id = ${orgId} and p.is_active
        and coalesce(pt.invoicing_profile->>'recognition',
-                    case when p.billing_method = 'fixed_price' then 'percent_complete_cost' end) = 'percent_complete_cost'
+                    case when pt.billing_method = 'fixed_price' then 'percent_complete_cost' end) = 'percent_complete_cost'
        ${projectId ? sql`and p.id = ${projectId}` : sql``}
      order by p.code`)) as unknown as {
     rows: {

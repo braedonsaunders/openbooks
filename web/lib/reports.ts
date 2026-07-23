@@ -1233,12 +1233,14 @@ export async function projectProfitability(
          and worked_on >= ${from} and worked_on <= ${to}
        group by project_id
     )
-    select p.id, p.name, p.customer_id, cu.display_name as customer, p.status, p.billing_method,
+    select p.id, p.name, p.customer_id, cu.display_name as customer, p.status,
+           coalesce(pt.billing_method, 'time_and_materials') as billing_method,
            coalesce(pl.revenue, 0) as revenue, coalesce(pl.cogs, 0) as cogs,
            coalesce(pl.expenses, 0) as expenses, coalesce(hrs.hours, 0) as hours
       from projects p
       left join pl on pl.project_id = p.id
       left join hrs on hrs.project_id = p.id
+      left join project_types pt on pt.id = p.project_type_id and pt.org_id = p.org_id
       left join parties cu on cu.id = p.customer_id and cu.org_id = p.org_id
      where p.org_id = ${orgId}
        and (pl.project_id is not null or hrs.project_id is not null)

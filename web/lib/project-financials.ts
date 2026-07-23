@@ -88,9 +88,11 @@ export async function resolveProjectFinancials(
   const projRow = (await db.execute(sql`
     select coalesce(p.contract_value, 0) as contract_value,
            coalesce((p.custom->>'markupPercent')::numeric, 0) as markup_percent,
-           p.billing_method,
+           coalesce(pt.billing_method, 'time_and_materials') as billing_method,
            coalesce((select sum(t.estimated_cost) from project_tasks t where t.project_id = p.id), 0) as cost_budget
-      from projects p where p.id = ${projectId} and p.org_id = ${orgId}
+      from projects p
+      left join project_types pt on pt.id = p.project_type_id and pt.org_id = p.org_id
+     where p.id = ${projectId} and p.org_id = ${orgId}
   `)) as unknown as { rows: { contract_value: string; markup_percent: string; billing_method: string | null; cost_budget: string }[] }
   const proj = projRow.rows[0] ?? { contract_value: '0', markup_percent: '0', billing_method: null, cost_budget: '0' }
   const contractValue = amount(proj.contract_value)
