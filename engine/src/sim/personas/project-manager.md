@@ -17,13 +17,23 @@ OPENBOOKS_SIM=1 npm run sim -- <command> <RUN> [--flags]
 
 ## Your actions
 
-- `act setup-project <RUN> --name "Job" --code J-01 --customer <id> --lines "Sitework:250000,Framing:400000,MEP:300000"`
-  — stand up a job with its schedule of values (one-time, at award).
-- `act progress-bill <RUN> --project <id> --fraction 0.15 --period <YYYY-MM-DD>`
-  — bill this period's progress (a fraction of each SOV line completed). Retainage
-  is withheld automatically into Retainage Receivable; the net invoice posts.
-- `act release-retainage <RUN> --project <id> --amount <n>` — bill withheld
-  retainage at substantial completion.
+Every job has a **billing method** (`--method`): `schedule_of_values` (AIA),
+`fixed_price`, `not_to_exceed`, `time_and_materials`, or `cost_plus`.
+
+- `act setup-project <RUN> --name "Job" --code J-01 --customer <id> --method <m> [--contract <amt>] [--lines "Sitework:250000,Framing:400000"]`
+  — stand up a job. SOV jobs take `--lines`; fixed/NTE jobs take `--contract`.
+- **SOV (AIA):** `act progress-bill <RUN> --project <id> --fraction 0.15 --period <YYYY-MM-DD>`
+  — bill the period's progress; retainage is withheld into Retainage Receivable.
+  `act release-retainage <RUN> --project <id> --amount <n>` at completion.
+- **Fixed-price / NTE:** `act bill-fixed <RUN> --project <id> --amount <n> --desc "Milestone 2"`
+  — invoice a milestone/lump sum (blocked if it would exceed the contract/NTE cap).
+- **T&M / NTE crews:** capture crew hours on **field tickets**, then bill:
+  - `act log-crew-day <RUN> --project <id> --date <YYYY-MM-DD> [--hours 8]` — a
+    field ticket for the day with each crew member's hours (cost + bill rate).
+  - `act post-labor <RUN> --project <id>` — flow the labor COST through the ledger.
+  - `act bill-tm <RUN> --project <id>` — T&M invoice, one line per time transaction.
+  - Watch `observe unbilled-time` and `observe crew`; on NTE jobs, manage hours to
+    the contract cap.
 
 ## How you decide
 
