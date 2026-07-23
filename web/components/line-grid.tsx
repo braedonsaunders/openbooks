@@ -19,7 +19,7 @@
 import { useCallback, useRef, useState } from 'react'
 import { ArrowDown, ArrowUp, Copy, GripVertical, Plus, RotateCcw, Trash2 } from 'lucide-react'
 import { useTranslations } from 'next-intl'
-import { Button, Popover, SearchSelect, Select, cn } from '@openbooks/ui'
+import { Button, FieldLabel, Popover, SearchSelect, Select, cn } from '@openbooks/ui'
 import { cmp, normalizeMoney } from '@openbooks/engine/src/money.ts'
 
 export interface LineGridOption {
@@ -30,6 +30,8 @@ export interface LineGridOption {
 export interface LineGridColumn<Row extends Record<string, unknown>> {
   key: string
   label: string
+  /** Optional explanation shown from the column heading. */
+  help?: React.ReactNode
   /** CSS grid track, e.g. 'minmax(180px,2fr)' or '110px'. */
   width: string
   type: 'text' | 'amount' | 'select' | 'search-select' | 'readonly' | 'tax'
@@ -198,8 +200,14 @@ export function LineGrid<Row extends Record<string, unknown>>({
                 c.align === 'right' && 'text-right',
               )}
             >
-              {c.label}
-              {c.required && !readOnly ? <span className="text-red-500"> *</span> : null}
+              <FieldLabel
+                help={c.help}
+                fieldName={c.label}
+                className="text-[11px] font-semibold tracking-wide text-slate-500 uppercase dark:text-slate-400"
+              >
+                {c.label}
+                {c.required && !readOnly ? <span className="text-red-500"> *</span> : null}
+              </FieldLabel>
             </div>
           ))}
 

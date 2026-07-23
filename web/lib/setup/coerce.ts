@@ -81,7 +81,8 @@ export function coerceField(field: SetupField, raw: unknown): Coerced | { error:
       // Refs to natural-key entities (e.g. currencies, keyed by code) carry the
       // key itself, not a uuid.
       const target = field.ref ? SETUP_ENTITY_BY_KEY.get(field.ref) : undefined
-      const naturalKeyed = target != null && (target.idColumn ?? 'id') !== 'id'
+      const naturalKeyed = field.ref === 'number-sequence-kinds'
+        || (target != null && (target.idColumn ?? 'id') !== 'id')
       if (!naturalKeyed && !UUID_RE.test(s)) return { error: `${field.key} must reference a valid record` }
       return { column, value: s }
     }

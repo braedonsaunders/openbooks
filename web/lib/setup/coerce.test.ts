@@ -20,3 +20,20 @@ test('setup JSON fields parse objects without accepting malformed input', () => 
   assert.deepEqual(coerceField(field, '{broken'), { error: 'taxAttributes must be valid JSON' })
   assert.deepEqual(coerceField(field, 'hello'), { error: 'taxAttributes must be valid JSON' })
 })
+
+test('number-sequence record choices store stable kind tokens without requiring UUIDs', () => {
+  const field: SetupField = {
+    key: 'documentKind',
+    kind: 'ref',
+    ref: 'number-sequence-kinds',
+    required: true,
+  }
+  assert.deepEqual(coerceField(field, 'customer_invoice'), {
+    column: 'document_kind',
+    value: 'customer_invoice',
+  })
+  assert.deepEqual(coerceField(field, 'custrec:sales-order-test'), {
+    column: 'document_kind',
+    value: 'custrec:sales-order-test',
+  })
+})

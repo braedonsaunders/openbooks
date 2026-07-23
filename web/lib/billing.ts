@@ -41,6 +41,11 @@ export async function generateInvoiceFromBillingRequest(
   requestId: string,
 ): Promise<GenerateResult> {
   return db.transaction(async (tx) => {
+    const projectGate = (await tx.execute(sql`
+      select coalesce((settings->'features'->>'projects')::boolean, true) as enabled
+        from orgs where id = ${orgId}
+    `)) as unknown as { rows: { enabled: boolean }[] }
+    if (!projectGate.rows[0]?.enabled) throw new BillingError('Projects feature is disabled')
     // Lock the request; only an open request can be invoiced.
     const reqRes = (await tx.execute(sql`
       select * from billing_requests where id = ${requestId} and org_id = ${orgId} for update
@@ -65,6 +70,9 @@ export async function generateInvoiceFromBillingRequest(
     // account. Built-in types reproduce the legacy billing_method behaviour.
     const ptype = await loadProjectType(orgId, project.id)
     const invoicing = ptype.invoicingProfile
+    if (invoicing.billingProcedure === 'application_for_payment') {
+      throw new BillingError('This project bills through applications for payment')
+    }
 
     const currency = project.billing_currency
     if (!currency) throw new BillingError('The project subsidiary has no functional currency')

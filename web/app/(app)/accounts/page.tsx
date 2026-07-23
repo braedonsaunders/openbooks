@@ -16,6 +16,7 @@ import { AccountDrawer } from './AccountDrawer'
 import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/db.ts'
 import { segmentRegistry } from '../../../lib/segments'
+import { subsidiaryFeatureEnabled } from '../../../lib/features'
 
 export const dynamic = 'force-dynamic'
 
@@ -96,7 +97,7 @@ export default async function Accounts({
     }, {}),
   ).map(([value, count]) => ({ value, label: CLASS_KEYS[value] ? t(`classes.${CLASS_KEYS[value]}`) : value, count }))
 
-  const [openAccount, drawerOptions] = await Promise.all([
+  const [openAccount, drawerOptions, subsidiaryUiEnabled] = await Promise.all([
     accountId && isUuid(accountId) ? loadAccount(accountId, authz.user.orgId) : null,
     accountId
       ? Promise.all([
@@ -115,6 +116,7 @@ export default async function Accounts({
           segmentRegistry(authz.user.orgId),
         ])
       : null,
+    subsidiaryFeatureEnabled(authz.user.orgId),
   ])
   const closeHref = mergeHref('/accounts', sp, { account: undefined })
   const drawer = openAccount && drawerOptions ? (
@@ -125,7 +127,7 @@ export default async function Accounts({
         .filter((option: any) => option.id !== openAccount.account.id)
         .map((option: any) => ({ value: option.id, label: `${option.number ?? ''} ${option.name}`.trim() }))}
       currencies={drawerOptions[1].rows.map((option: any) => ({ value: option.code, label: `${option.code} · ${option.name}` }))}
-      subsidiaries={drawerOptions[2].rows.map((option: any) => ({ value: option.id, label: option.name }))}
+      subsidiaries={(subsidiaryUiEnabled ? drawerOptions[2].rows : []).map((option: any) => ({ value: option.id, label: option.name }))}
       fieldDefs={drawerOptions[3] as any}
       segments={(drawerOptions[4] as Awaited<ReturnType<typeof segmentRegistry>>)
         .filter((segment) => segment.allowAccountRequirement)

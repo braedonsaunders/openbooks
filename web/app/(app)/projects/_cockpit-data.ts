@@ -92,6 +92,7 @@ export async function loadProjectCockpit(orgId: string, projectId: string): Prom
     unbilled,
     billingRequests: billingRequests as ProjectCockpitData['billingRequests'],
     invoicing: {
+      billingProcedure: invoicing.billingProcedure,
       allowedBases: invoicing.allowedBases,
       defaultBasis: invoicing.defaultBasis,
       backupRequired: invoicing.backupRequired,

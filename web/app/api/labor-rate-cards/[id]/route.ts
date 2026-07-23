@@ -3,6 +3,7 @@ import { sql } from "drizzle-orm";
 import { db } from "@openbooks/engine/src/db.ts";
 import { cmp } from "@openbooks/engine/src/money.ts";
 import { guardPermission } from "../../../../lib/authz";
+import { guardProjectsFeature } from "../../../../lib/projects-gate";
 import { isUuid } from "../../../../lib/list-params";
 import {
   loadFieldDefs,
@@ -143,6 +144,8 @@ export async function PUT(
 ) {
   const gate = await guardPermission("admin.setup.manage");
   if (gate instanceof NextResponse) return gate;
+  const projectsGate = await guardProjectsFeature(gate.user.orgId);
+  if (projectsGate) return projectsGate;
   const { id } = await params;
   if (!isUuid(id)) return error("notFound", 404);
   const body = (await req.json()) as CardInput;

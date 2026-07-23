@@ -38,7 +38,7 @@
     "requestFailed": "No se pudo crear la solicitud",
     "invoiceCreated": "Factura {number} creada",
     "invoiceFailed": "No se pudo crear la factura",
-    "invoiceType": "Tipo",
+    "invoiceType": "Etapa de factura",
     "basis": "Base",
     "drawAmount": "Monto de anticipo",
     "startDate": "Fecha inicio",

@@ -38,7 +38,7 @@
     "requestFailed": "Abrechnungsanforderung konnte nicht erstellt werden",
     "invoiceCreated": "Ausgangsrechnung {number} erstellt",
     "invoiceFailed": "Ausgangsrechnung konnte nicht erstellt werden",
-    "invoiceType": "Typ",
+    "invoiceType": "Rechnungsphase",
     "basis": "Grundlage",
     "drawAmount": "Abrufbetrag",
     "startDate": "Startdatum",

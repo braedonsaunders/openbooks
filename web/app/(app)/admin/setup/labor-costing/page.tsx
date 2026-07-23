@@ -8,6 +8,8 @@ import { laborCostingSettings } from '@openbooks/engine/src/labor-costing.ts'
 import { requirePermission } from '../../../../../lib/authz'
 import { isUuid, mergeHref, parseListParams, pickString } from '../../../../../lib/list-params'
 import { LaborCostingWorkspace, type RateRow } from './LaborCostingWorkspace'
+import { subsidiaryFeatureEnabled } from '../../../../../lib/features'
+import { requireProjectsFeature } from '../../../../../lib/projects-gate'
 
 export const dynamic = 'force-dynamic'
 
@@ -30,6 +32,8 @@ type RateScope = (typeof RATE_SCOPES)[number]
 export default async function LaborCostingSetup({ searchParams }: { searchParams: Promise<Record<string, string | string[] | undefined>> }) {
   const authz = await requirePermission('admin.setup.manage')
   const orgId = authz.user.orgId
+  await requireProjectsFeature(orgId)
+  const subsidiaryUiEnabled = await subsidiaryFeatureEnabled(orgId)
   const t = await getTranslations('admin')
   const sp = await searchParams
   const rawView = pickString(sp.view) ?? ''
@@ -66,6 +70,7 @@ export default async function LaborCostingSetup({ searchParams }: { searchParams
   const searchFilter = list.q ? sql`and (coalesce(r.job_title, '') ilike ${`%${list.q}%`} or coalesce(tr.name, '') ilike ${`%${list.q}%`} or coalesce(dep.name, '') ilike ${`%${list.q}%`} or coalesce(sub.name, '') ilike ${`%${list.q}%`} or cast(r.rate as text) ilike ${`%${list.q}%`} or r.currency ilike ${`%${list.q}%`} or coalesce(r.notes, '') ilike ${`%${list.q}%`})` : sql``
   const rateFilter = sql`
     where r.org_id = ${orgId} and r.is_active and r.employee_party_id is null
+      ${subsidiaryUiEnabled ? sql`` : sql`and r.subsidiary_id is null`}
       ${statusFilter} ${scopeFilter} ${searchFilter}`
   const rateSelect = sql`
     select r.id, r.employee_party_id, r.job_title, r.trade_id, r.department_id, r.subsidiary_id,
@@ -88,6 +93,7 @@ export default async function LaborCostingSetup({ searchParams }: { searchParams
     rateParam && rateParam !== 'new' && isUuid(rateParam)
       ? db.execute(sql`${rateSelect}
           where r.org_id = ${orgId} and r.id = ${rateParam} and r.is_active and r.employee_party_id is null
+            ${subsidiaryUiEnabled ? sql`` : sql`and r.subsidiary_id is null`}
           limit 1`)
       : Promise.resolve({ rows: [] }),
     db.execute(sql`select id, name from trades where org_id = ${orgId} and is_active order by name`),
@@ -140,11 +146,12 @@ export default async function LaborCostingSetup({ searchParams }: { searchParams
     id: String(r.id),
     name: String(r.name ?? ''),
   })
-  const subsidiaryOptions = (subsidiariesRes as unknown as { rows: Record<string, unknown>[] }).rows.map((row) => ({
+  const allSubsidiaryOptions = (subsidiariesRes as unknown as { rows: Record<string, unknown>[] }).rows.map((row) => ({
     id: String(row.id),
     name: String(row.name),
     currency: String(row.currency),
   }))
+  const subsidiaryOptions = subsidiaryUiEnabled ? allSubsidiaryOptions : []
   const currencies = Array.from(new Set([org.base_currency, ...subsidiaryOptions.map((row) => row.currency)])).sort()
   const basePath = '/admin/setup/labor-costing'
   const guideHref = mergeHref(basePath, sp, {
@@ -204,6 +211,7 @@ export default async function LaborCostingSetup({ searchParams }: { searchParams
         trades={(tradesRes as unknown as { rows: Record<string, unknown>[] }).rows.map(opt)}
         departments={(departmentsRes as unknown as { rows: Record<string, unknown>[] }).rows.map(opt)}
         subsidiaries={subsidiaryOptions}
+        defaultSubsidiary={allSubsidiaryOptions[0] ?? null}
         jobTitles={(jobTitlesRes as unknown as { rows: { name: string }[] }).rows.map((row) => row.name)}
         accounts={(accountsRes as unknown as { rows: Record<string, unknown>[] }).rows.map((r) => ({
           id: String(r.id),

@@ -22,7 +22,7 @@ const API = '/api/field-tickets'
 /**
  * Field tickets — the universal RecordListView (same filters/views/columns as
  * every other list) + the standard instant-create button and transaction
- * flyout. Feature-gated (Setup → Features → Field Tickets).
+ * flyout. Subordinate to the authoritative Company Settings → Projects gate.
  */
 export default async function FieldTicketsPage({
   searchParams,

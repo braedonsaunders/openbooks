@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db, schema } from '@openbooks/engine/src/db.ts'
 import { guardPermission } from '../../../../lib/authz'
+import { guardProjectsFeature } from '../../../../lib/projects-gate'
 
 export const runtime = 'nodejs'
 
@@ -12,6 +13,8 @@ export async function POST(_req: NextRequest) {
   const gate = await guardPermission('projects.manage')
   if (gate instanceof NextResponse) return gate
   const user = gate.user
+  const feature = await guardProjectsFeature(user.orgId)
+  if (feature) return feature
 
   const [project] = await db
     .insert(schema.projects)

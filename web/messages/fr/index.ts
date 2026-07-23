@@ -54,6 +54,7 @@ import tax from './tax.json'
 import fieldTickets from './fieldTickets.json'
 import timesheets from './timesheets.json'
 import laborPricing from './labor-pricing.json'
+import applications from './applications.json'
 
 export default {
   common,
@@ -109,4 +110,5 @@ export default {
   tax,
   fieldTickets,
   timesheets,
+  applications,
 } as const

@@ -67,7 +67,7 @@ export function customFieldColumns<Row extends Record<string, unknown>>(
   return defs
     .filter((d) => d.config.displayMode !== 'hidden')
     .map((def) => {
-      const base = { key: `cf_${def.key}`, label: def.label, required: def.isRequired }
+      const base = { key: `cf_${def.key}`, label: def.label, help: def.config.helpText, required: def.isRequired }
       switch (def.fieldType) {
         case 'select':
           return {

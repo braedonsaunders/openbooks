@@ -106,7 +106,7 @@ export function ProjectDrawer({
   /** Cockpit data for the financial/time/charges/billing/transactions tabs. */
   cockpit: ProjectCockpitData
   /** Configurable project types (Setup → Project Types) for the selector. */
-  projectTypes?: { id: string; name: string }[]
+  projectTypes?: { id: string; name: string; billingMethod: string | null; billingProcedure: string }[]
 }) {
   const { currency } = useMoney()
   const t = useTranslations('projects')
@@ -202,7 +202,7 @@ export function ProjectDrawer({
       foremanId: foremanId || null,
       managerId: managerId || null,
       status,
-      billingMethod: billingMethod || null,
+      ...(projectTypeId ? {} : { billingMethod: billingMethod || null }),
       projectTypeId: projectTypeId || null,
       invoicingPreference: invoicingPref,
       customerPoNumber: customerPoNumber || null,
@@ -211,8 +211,8 @@ export function ProjectDrawer({
       contractValue: contractValue || null,
       notes: notes || null,
       custom,
-      subsidiaryId: subsidiaries.length > 1 ? subsidiaryId || null : undefined,
-      subsidiaryIncludeChildren: subsidiaries.length > 1 ? subsidiaryIncludeChildren : undefined,
+      subsidiaryId: subsidiaries.length > 0 ? subsidiaryId || null : undefined,
+      subsidiaryIncludeChildren: subsidiaries.length > 0 ? subsidiaryIncludeChildren : undefined,
       tasks: tasks
         .filter((task) => task.name.trim().length > 0)
         .map((task) => ({
@@ -340,7 +340,12 @@ export function ProjectDrawer({
         return (
           <>
             <Label>{lbl || t('drawer.projectType')}</Label>
-            <Select value={projectTypeId} onChange={(e) => setProjectTypeId(e.target.value)} disabled={ro}>
+            <Select value={projectTypeId} onChange={(e) => {
+              const next = e.target.value
+              setProjectTypeId(next)
+              const selectedType = projectTypes.find((type) => type.id === next)
+              if (selectedType) setBillingMethod(selectedType.billingMethod ?? '')
+            }} disabled={ro}>
               <option value="">—</option>
               {projectTypes.map((projectType) => <option key={projectType.id} value={projectType.id}>{projectType.name}</option>)}
             </Select>
@@ -363,6 +368,9 @@ export function ProjectDrawer({
           </>
         )
       case 'billing_method':
+        // Project type is authoritative. The coarse billing_method remains only
+        // for untyped legacy/imported projects and is derived by the API.
+        if (projectTypeId) return null
         return (
           <>
             <Label>{lbl || t('labels.billingMethod')}</Label>
@@ -418,7 +426,7 @@ export function ProjectDrawer({
           </>
         )
       case 'subsidiary_id':
-        if (subsidiaries.length <= 1) return null
+        if (subsidiaries.length === 0) return null
         return (
           <>
             <Label>{lbl || t('drawer.subsidiaryRestriction')}</Label>
@@ -542,7 +550,9 @@ export function ProjectDrawer({
           >
             <div className="space-y-0.5">
               {menuItem(<Plus className="h-3.5 w-3.5" aria-hidden />, t('charges.addTitle'), () => { setTab('charges'); setChargeFormOpen(true) })}
-              {menuItem(<Receipt className="h-3.5 w-3.5" aria-hidden />, t('billing.requestBilling'), () => { setTab('billing'); setBillingFormOpen(true) })}
+              {cockpit.invoicing.billingProcedure === 'application_for_payment'
+                ? menuItem(<Receipt className="h-3.5 w-3.5" aria-hidden />, 'Applications for payment', () => { setTab('billing'); setBillingFormOpen(false) })
+                : menuItem(<Receipt className="h-3.5 w-3.5" aria-hidden />, t('billing.requestBilling'), () => { setTab('billing'); setBillingFormOpen(true) })}
               {billingMethod === 'fixed_price'
                 ? menuItem(<TrendingUp className="h-3.5 w-3.5" aria-hidden />, t('cockpit.recognizeRevenue'), () => setTab('financials'))
                 : null}

@@ -1,0 +1,19 @@
+{
+  "title": "Zahlungsanträge",
+  "description": "Projektabrechnung über Leistungsverzeichnisse, kumulierte Anträge, Nachträge und Einbehalte.",
+  "project": "Projekt",
+  "loading": "Kontrollierte Abrechnungsdaten werden geladen…",
+  "errors": { "load": "Zahlungsanträge konnten nicht geladen werden", "action": "Aktion fehlgeschlagen" },
+  "empty": { "title": "Keine geeigneten Projekte", "description": "Aktivieren Sie einen Projekttyp mit Zahlungsanträgen und weisen Sie ihn einem Projekt zu.", "manageProjectTypes": "Projekttypen verwalten" },
+  "summary": { "contractSum": "Auftragssumme", "retainageHeld": "Einbehalt", "committedCost": "Gebundene Kosten (offene Bestellungen)" },
+  "sov": {
+    "title": "Leistungsverzeichnis", "item": "Position", "itemPlaceholder": "Positionsnr.", "description": "Beschreibung", "scheduledValue": "Vertragswert", "retainagePercent": "Einbehalt %", "default": "Standard", "delete": "Löschen", "deleteConfirm": "Position „{description}“ löschen?", "empty": "Noch keine Positionen.", "defaultIncomeAccount": "Standarderlöskonto", "addLine": "Position hinzufügen"
+  },
+  "changeOrders": {
+    "title": "Nachträge", "number": "Nachtragsnr.", "description": "Beschreibung", "amount": "Betrag", "applyTo": "Anwenden auf", "newScheduleLine": "Neue Position (Erhöhung)", "deductiveHint": "Mindernde Nachträge müssen eine bestehende Position reduzieren.", "additiveHint": "Wählen Sie eine zu ändernde Position oder erstellen Sie eine neue.", "adjusts": "Ändert {description}", "approve": "Genehmigen", "void": "Stornieren", "voidConfirm": "Nachtrag {number} stornieren? Der Prüfpfad bleibt erhalten.", "add": "Nachtrag hinzufügen", "empty": "Keine Nachträge.", "status": { "draft": "Entwurf", "approved": "Genehmigt", "void": "Storniert" }
+  },
+  "payApplications": {
+    "title": "Zahlungsanträge", "applicationNumber": "Antrag Nr. {number}", "retainage": "Einbehalt", "enterDraws": "Leistung erfassen", "hideDraws": "Leistung ausblenden", "approve": "Genehmigen", "createInvoice": "Rechnung erstellen", "void": "Stornieren", "voidConfirm": "Antrag Nr. {number} stornieren? Leistungs- und Prüfdaten bleiben erhalten.", "item": "Position", "description": "Beschreibung", "workThisPeriod": "Leistung dieser Periode", "materialsStored": "Gelagerte Materialien", "submit": "Zur Genehmigung einreichen", "submittedMessage": "Antrag zur unabhängigen Genehmigung eingereicht", "billedMessage": "Rechnung {number} — aktuell fällig {currentDue}, Einbehalt {retainage}", "empty": "Keine Anträge.", "periodEnding": "Periodenende", "newApplication": "Neuer Antrag", "status": { "draft": "Entwurf", "submitted": "Eingereicht", "approved": "Genehmigt", "invoiced": "Fakturiert", "posted": "Fakturiert", "void": "Storniert" }
+  },
+  "retainage": { "notConfigured": "Kein Forderungskonto für Einbehalte konfiguriert. Abrechnung mit Einbehalt bleibt bis zur Einrichtung in den Kontrollkonten gesperrt.", "title": "Einbehalt freigeben", "description": "Überführt den Einbehalt in eine einziehbare Forderung. Gehalten: {held}", "amount": "Betrag", "release": "Freigeben", "createdMessage": "Freigaberechnung {number} über {amount} erstellt" }
+}

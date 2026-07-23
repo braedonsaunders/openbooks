@@ -13,6 +13,7 @@ import { NewOrderRedirect } from '../_order/NewOrderRedirect'
 import { resolveFormLayout } from '../../../lib/customization/resolve'
 import { customSegmentOptions } from '../../../lib/segments'
 import { taxCodeOptions, taxGroupOptions } from '../../../lib/documents'
+import { subsidiaryUiOptions } from '../../../lib/subsidiaries'
 
 export const dynamic = 'force-dynamic'
 
@@ -49,6 +50,7 @@ export default async function PurchaseOrders({
           db.execute(sql`select id, name from departments where org_id = ${authz.user.orgId} and is_active order by name`) as any,
           db.execute(sql`select id, name from projects where org_id = ${authz.user.orgId} and is_active order by name limit 2000`) as any,
           customSegmentOptions(authz.user.orgId),
+          subsidiaryUiOptions(authz.user.orgId),
         ])
       : null,
   ])
@@ -78,6 +80,9 @@ export default async function PurchaseOrders({
           departments={pickers[5].rows}
           projects={pickers[6].rows}
           segments={pickers[7]}
+          subsidiaries={pickers[8]
+            .filter((subsidiary) => !authz.allowedSubsidiaryIds || authz.allowedSubsidiaryIds.has(subsidiary.id))
+            .map((subsidiary) => ({ id: subsidiary.id, name: `${'  '.repeat(subsidiary.depth)}${subsidiary.name}` }))}
           canManage={canManage}
           layout={resolvedForm?.layout}
         />

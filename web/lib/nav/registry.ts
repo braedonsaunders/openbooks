@@ -461,12 +461,12 @@ export const NAV_MODULES: NavModule[] = [
   {
     key: 'construction-billing',
     href: '/construction',
-    label: 'Progress Billing',
+    label: 'Applications for Payment',
     iconKey: 'clipboard-check',
     group: 'operations',
     subgroup: 'delivery',
     requiredPermission: 'ar.read',
-    featureKey: 'constructionBilling',
+    featureKey: 'projects',
   },
   {
     key: 'employees',

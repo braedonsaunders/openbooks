@@ -17,6 +17,7 @@ import { truncateText, type AssistantToolDef, type ToolResult } from "./types";
 import { readableContinuousCloseAgents } from "../continuous-close";
 import { budgetScenarioOptions, budgetVsActualView } from "../budget-report";
 import { projectCostSummary } from "../project-costing";
+import { isFeatureEnabled } from "../features";
 
 /**
  * Read/search tools for the agentic assistant — the openbooks replacement for
@@ -864,6 +865,7 @@ const projectProfitability: AssistantToolDef = {
     limit: z.number().int().min(1).max(50).optional(),
   }),
   execute: async (raw, authz): Promise<ToolResult> => {
+    if (!(await isFeatureEnabled(authz.user.orgId, "projects"))) return { ok: false, error: "projects_feature_disabled" };
     const a = raw as { projectId?: string; query?: string; limit?: number };
     if (a.projectId) {
       const exists = (await db.execute(sql`

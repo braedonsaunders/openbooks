@@ -4,6 +4,7 @@ import { db } from '@openbooks/engine/src/db.ts'
 import { moduleDrawerHref } from './txn-links'
 import type { Authz } from './authz'
 import { can } from './authz'
+import { isFeatureEnabled } from './features'
 
 /**
  * Global search — one query fans out across every primary entity (contacts,
@@ -85,7 +86,7 @@ export async function globalSearch(authz: Authz, rawQ: string): Promise<SearchRe
   const canContacts = can(authz, 'parties.read')
   const canAccounts = can(authz, 'gl.read')
   const canItems = can(authz, 'items.read')
-  const canProjects = can(authz, 'projects.read')
+  const canProjects = can(authz, 'projects.read') && await isFeatureEnabled(orgId, 'projects')
 
   const [contacts, txns, accounts, items, projects] = await Promise.all([
     canContacts ? searchContacts(orgId, q, like) : empty(),

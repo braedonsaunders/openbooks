@@ -1,0 +1,92 @@
+{
+  "title": "Applications for Payment",
+  "description": "Project billing through schedules of values, cumulative applications, change orders, and retainage.",
+  "project": "Project",
+  "loading": "Loading controlled billing data…",
+  "errors": {
+    "load": "Could not load applications for payment",
+    "action": "Action failed"
+  },
+  "empty": {
+    "title": "No eligible projects",
+    "description": "Activate a project type that uses Applications for Payment, then assign it to a project.",
+    "manageProjectTypes": "Manage project types"
+  },
+  "summary": {
+    "contractSum": "Contract sum",
+    "retainageHeld": "Retainage held",
+    "committedCost": "Committed cost (open POs)"
+  },
+  "sov": {
+    "title": "Schedule of Values",
+    "item": "Item",
+    "itemPlaceholder": "Item #",
+    "description": "Description",
+    "scheduledValue": "Scheduled value",
+    "retainagePercent": "Retainage %",
+    "default": "default",
+    "delete": "Delete",
+    "deleteConfirm": "Delete schedule line “{description}”?",
+    "empty": "No schedule-of-values lines yet.",
+    "defaultIncomeAccount": "Default income account",
+    "addLine": "Add line"
+  },
+  "changeOrders": {
+    "title": "Change orders",
+    "number": "CO number",
+    "description": "Description",
+    "amount": "Amount",
+    "applyTo": "Apply to",
+    "newScheduleLine": "New schedule line (additive change)",
+    "deductiveHint": "Deductive changes must reduce an existing schedule line.",
+    "additiveHint": "Choose a line to revise it, or create a new additive line.",
+    "adjusts": "Adjusts {description}",
+    "approve": "Approve",
+    "void": "Void",
+    "voidConfirm": "Void change order {number}? Its audit history will be retained.",
+    "add": "Add change order",
+    "empty": "No change orders.",
+    "status": {
+      "draft": "Draft",
+      "approved": "Approved",
+      "void": "Void"
+    }
+  },
+  "payApplications": {
+    "title": "Applications for Payment",
+    "applicationNumber": "App #{number}",
+    "retainage": "Retainage",
+    "enterDraws": "Enter draws",
+    "hideDraws": "Hide draws",
+    "approve": "Approve",
+    "createInvoice": "Create invoice",
+    "void": "Void",
+    "voidConfirm": "Void application #{number}? Its draw and audit history will be retained.",
+    "item": "Item",
+    "description": "Description",
+    "workThisPeriod": "Work this period",
+    "materialsStored": "Materials stored",
+    "submit": "Submit for approval",
+    "submittedMessage": "Application submitted for independent approval",
+    "billedMessage": "Billed {number} — current due {currentDue}, retainage {retainage}",
+    "empty": "No applications yet.",
+    "periodEnding": "Period ending",
+    "newApplication": "New application",
+    "status": {
+      "draft": "Draft",
+      "submitted": "Submitted",
+      "approved": "Approved",
+      "invoiced": "Invoiced",
+      "posted": "Invoiced",
+      "void": "Void"
+    }
+  },
+  "retainage": {
+    "notConfigured": "No Retainage Receivable control account is configured — billing an application with retainage will be blocked until one is set in Company control accounts.",
+    "title": "Release retainage",
+    "description": "Bills held retainage into collectible AR. Held: {held}",
+    "amount": "Amount",
+    "release": "Release",
+    "createdMessage": "Retainage release invoice {number} for {amount} created"
+  }
+}

@@ -38,7 +38,7 @@
     "requestFailed": "請求依頼を作成できませんでした",
     "invoiceCreated": "請求書 {number} を作成しました",
     "invoiceFailed": "請求書を作成できませんでした",
-    "invoiceType": "タイプ",
+    "invoiceType": "請求段階",
     "basis": "基準",
     "drawAmount": "出来高請求額",
     "startDate": "開始日",

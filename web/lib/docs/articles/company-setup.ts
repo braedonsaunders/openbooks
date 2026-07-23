@@ -54,11 +54,14 @@ realized adjustment is refused until the realized account is set.
 
 ## Features
 
-**Features** switches optional modules on or off for the whole organization.
-Turning a feature off hides it everywhere but never deletes its data — the data
-returns if you re-enable it. A feature whose data is load-bearing for the ledger
-(for example, subsidiaries that already carry posted transactions) cannot be
-turned off until that dependency is gone.
+**Features** switches cross-company optional modules on or off. A domain with
+material subordinate policies owns its authoritative gate on its dedicated
+Company Settings page; for example, Projects and Field Tickets are governed in
+**Company Settings → Projects**, not duplicated on the generic switchboard.
+Turning a feature off hides operational surfaces but never deletes its data —
+the data returns if you re-enable it. A feature whose data is load-bearing for
+the ledger or an open operational obligation cannot be turned off until that
+dependency is resolved.
 
 ## Subsidiaries and Intercompany Pairs
 
@@ -433,15 +436,23 @@ export const setupProjectsGroup: DocArticle = {
   related: ['project-types', 'overhead-costing', 'labor-costing', 'labor-pricing'],
   body: `# Setup: Projects
 
-The **Projects** group (shown when the Projects feature is enabled) configures
-how jobs cost, absorb overhead, and bill. Each menu item has its own detailed
-article; this page orients you to the sequence.
+The **Projects** group owns the authoritative organization-level Projects gate
+and every subordinate project-accounting policy. The Projects landing page is
+always available to administrators; the remaining workspaces appear after the
+parent gate is enabled. No project API or background operation remains available
+when the parent gate is off, and disabling it never deletes history.
 
 ## The menu items
 
+- **Projects** — enable or disable the complete Projects domain and review the
+  active billing models, applications-for-payment procedures, and costing
+  workspaces. Open operational or financial obligations block disablement.
 - **Project Types** — per-type profiles for profitability, invoicing, and invoice
-  backup. The profile drives which P&L measures resolve for a job. See
-  **Project Types**.
+  backup. A type also selects the billing procedure: standard project billing
+  requests or Schedule-of-Values applications for payment. See **Project Types**.
+- **Applications for Payment** — cumulative Schedule-of-Values billing, change
+  orders, retainage, and retainage release. This is a Projects billing procedure,
+  not an independent feature or module.
 - **Overhead Model** — the department-composite-rate engine that spreads overhead
   onto projects. Overhead is kept net-zero to the company P&L: it is report-only
   or posted as a job-tagged debit against an untagged credit, never as a one-sided

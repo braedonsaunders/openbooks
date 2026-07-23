@@ -1,6 +1,7 @@
 import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/db.ts'
 import { SETUP_ENTITY_BY_KEY, toSnake, type SetupEntity, type SetupRefSource } from './registry'
+import { loadNumberSequenceKindOptions } from './number-sequence-kinds'
 
 export type RefOption = { value: string; label: string }
 
@@ -26,6 +27,7 @@ export async function loadAccounts(orgId: string): Promise<RefOption[]> {
 
 /** Options for a setup-entity ref source (id + code/name label). */
 export async function loadEntityOptions(source: string, orgId: string): Promise<RefOption[]> {
+  if (source === 'number-sequence-kinds') return loadNumberSequenceKindOptions(orgId)
   if (source === 'accounting-periods') {
     const periods = (await db.execute(sql`
       select id as value, name as label from accounting_periods

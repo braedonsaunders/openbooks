@@ -79,6 +79,13 @@ test('default mobile navigation pins exactly four high-frequency destinations', 
   assert.deepEqual(pinned, ['dashboard', 'approvals', 'ar', 'ap'])
 })
 
+test('applications for payment is governed by the Projects parent feature', () => {
+  const module = NAV_MODULES.find((candidate) => candidate.key === 'construction-billing')
+  assert.ok(module)
+  assert.equal(module.featureKey, 'projects')
+  assert.equal(module.label, 'Applications for Payment')
+})
+
 test('every module belongs to a declared workspace and has a unique stable key', () => {
   const groupKeys = new Set(NAV_GROUPS.map((group) => group.key))
   const moduleKeys = NAV_MODULES.map((module) => module.key)

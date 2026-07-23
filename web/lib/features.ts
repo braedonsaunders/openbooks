@@ -20,6 +20,12 @@ export interface FeatureDef {
   navModules?: string[]
   /** Grouping on the Features page. */
   category: 'sales' | 'operations' | 'accounting' | 'platform'
+  /** False when the authoritative switch lives on a module-specific Company
+   *  Settings page rather than the generic Features switchboard. */
+  showInSwitchboard?: boolean
+  /** Optional authoritative parent module. A child can never resolve enabled
+   *  while its parent is disabled, regardless of stale stored overrides. */
+  parentKey?: string
 }
 
 /** The full feature switchboard:
@@ -35,13 +41,11 @@ export const FEATURES: FeatureDef[] = [
   // schedules + dunning work without it; this adds the plan/subscription model.
   { key: 'subscriptionBilling', defaultEnabled: false, category: 'sales' },
   // Operations
-  { key: 'projects', defaultEnabled: true, category: 'operations', navModules: ['projects'] },
-  // Construction progress billing (AIA G702/G703): schedule of values,
-  // applications for payment, retainage. Off by default; complements the
-  // project-type billing profiles for contractors.
-  { key: 'constructionBilling', defaultEnabled: false, category: 'operations', navModules: ['construction-billing'] },
+  // Projects is governed from Company Settings → Projects. Schedule-of-values
+  // billing is a project-type billing procedure, not an independent module.
+  { key: 'projects', defaultEnabled: true, category: 'operations', navModules: ['projects', 'construction-billing', 'field-tickets'], showInSwitchboard: false },
   { key: 'timeTracking', defaultEnabled: true, category: 'operations', navModules: ['timesheets'] },
-  { key: 'fieldTickets', defaultEnabled: false, category: 'operations', navModules: ['field-tickets'] },
+  { key: 'fieldTickets', defaultEnabled: false, category: 'operations', navModules: ['field-tickets'], showInSwitchboard: false, parentKey: 'projects' },
   { key: 'inventory', defaultEnabled: true, category: 'operations', navModules: ['inventory'] },
   { key: 'equipment', defaultEnabled: true, category: 'operations', navModules: ['equipment'] },
   { key: 'expenses', defaultEnabled: true, category: 'operations', navModules: ['expenses'] },
@@ -74,6 +78,7 @@ export type FeatureState = Record<string, boolean>
 export function featureEnabled(state: FeatureState | null | undefined, key: string): boolean {
   const def = FEATURE_BY_KEY.get(key)
   if (!def) return false
+  if (def.parentKey && !featureEnabled(state, def.parentKey)) return false
   const v = state?.[key]
   return typeof v === 'boolean' ? v : def.defaultEnabled
 }
@@ -204,8 +209,61 @@ const FEATURE_DISABLE_CHECKS: Record<string, (orgId: string) => Promise<FeatureD
     return { blocked: false, impacts: n ? [{ labelKey: 'inventoryMovements', count: n }] : [] }
   },
   projects: async (orgId) => {
-    const n = await countRows(sql`select count(*)::int as n from projects where org_id = ${orgId}`)
-    return { blocked: false, impacts: n ? [{ labelKey: 'projects', count: n }] : [] }
+    const [all, active, billingRequests, payApplications, retainage, fieldTickets, projectDocuments, projectTime, changeOrders] = await Promise.all([
+      countRows(sql`select count(*)::int as n from projects where org_id = ${orgId}`),
+      countRows(sql`
+        select count(*)::int as n from projects
+         where org_id = ${orgId} and is_active
+           and status not in ('closed', 'cancelled')`),
+      countRows(sql`
+        select count(*)::int as n from billing_requests
+         where org_id = ${orgId} and status = 'open'`),
+      countRows(sql`
+        select count(*)::int as n from pay_applications
+         where org_id = ${orgId} and status in ('draft', 'submitted', 'approved')`),
+      countRows(sql`
+        select count(*)::int as n
+          from journal_lines jl
+          join orgs o on o.id = jl.org_id
+         where jl.org_id = ${orgId}
+           and jl.account_id = nullif(o.settings->'controlAccounts'->>'retainageReceivable', '')::uuid
+         group by jl.org_id
+        having coalesce(sum(jl.amount), 0) <> 0`),
+      countRows(sql`
+        select count(*)::int as n from documents
+         where org_id = ${orgId} and kind = 'field_ticket'
+           and status in ('draft', 'pending_approval')`),
+      countRows(sql`
+        select count(*)::int as n from documents
+         where org_id = ${orgId} and project_id is not null
+           and kind <> 'field_ticket'
+           and status in ('draft', 'pending_approval', 'approved')`),
+      countRows(sql`
+        select count(*)::int as n from time_entries
+         where org_id = ${orgId} and project_id is not null
+           and status in ('draft', 'submitted')`),
+      countRows(sql`
+        select count(*)::int as n from change_orders
+         where org_id = ${orgId} and status = 'draft'`),
+    ])
+    const impacts: FeatureImpact[] = []
+    if (all) impacts.push({ labelKey: 'projects', count: all })
+    if (active) impacts.push({ labelKey: 'activeProjects', count: active })
+    if (billingRequests) impacts.push({ labelKey: 'openProjectBillingRequests', count: billingRequests })
+    if (payApplications) impacts.push({ labelKey: 'openPayApplications', count: payApplications })
+    if (retainage) impacts.push({ labelKey: 'outstandingRetainage', count: retainage })
+    if (fieldTickets) impacts.push({ labelKey: 'openFieldTickets', count: fieldTickets })
+    if (projectDocuments) impacts.push({ labelKey: 'openProjectDocuments', count: projectDocuments })
+    if (projectTime) impacts.push({ labelKey: 'openProjectTimeEntries', count: projectTime })
+    if (changeOrders) impacts.push({ labelKey: 'openChangeOrders', count: changeOrders })
+    return { blocked: active + billingRequests + payApplications + retainage + fieldTickets + projectDocuments + projectTime + changeOrders > 0, impacts }
+  },
+  fieldTickets: async (orgId) => {
+    const n = await countRows(sql`
+      select count(*)::int as n from documents
+       where org_id = ${orgId} and kind = 'field_ticket'
+         and status in ('draft', 'pending_approval')`)
+    return { blocked: n > 0, impacts: n ? [{ labelKey: 'openFieldTickets', count: n }] : [] }
   },
   revenueRecognition: async (orgId) => {
     // Real usage = obligations on a NON-immediate rule (point_in_time recognizes
@@ -227,14 +285,13 @@ const FEATURE_DISABLE_CHECKS: Record<string, (orgId: string) => Promise<FeatureD
 export async function featureDisableBlocked(orgId: string, key: string): Promise<boolean> {
   const check = FEATURE_DISABLE_CHECKS[key]
   if (!check) return false
-  try {
-    return (await check(orgId)).blocked
-  } catch {
-    return false // never let a probe error wall the user out
-  }
+  // Fail closed. A failed integrity probe must never be interpreted as proof
+  // that a financial module is safe to disable.
+  return (await check(orgId)).blocked
 }
 
-/** Disable status for each given (enabled) feature key; fail-open per feature. */
+/** Disable status for each given (enabled) feature key; fail closed when an
+ * integrity probe is unavailable. */
 export async function featureDisableStatuses(
   orgId: string,
   keys: string[],
@@ -246,7 +303,7 @@ export async function featureDisableStatuses(
         try {
           return [k, await FEATURE_DISABLE_CHECKS[k](orgId)] as const
         } catch {
-          return [k, { blocked: false, impacts: [] }] as const
+          return [k, { blocked: true, impacts: [{ labelKey: 'controlCheckUnavailable', count: 1 }] }] as const
         }
       }),
   )

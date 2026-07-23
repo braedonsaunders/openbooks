@@ -523,8 +523,10 @@
       "description": "この会社がアプリ全体でどのように識別されるか。",
       "displayName": "表示名",
       "displayNamePlaceholder": "Acme Manufacturing",
+      "displayNameHint": "OpenBooks 全体に表示される会社名です。登記上の正式名称と一致している必要はありません。",
       "legalName": "正式名称",
       "legalNamePlaceholder": "Acme Manufacturing Inc.",
+      "legalNameHint": "正式な記録、レポート、文書に使用する会社の登記名称です。",
       "country": "国",
       "countryPlaceholder": "国を選択…",
       "countryHint": "2文字のISOコード（例: CA、US、GB）。",
@@ -1551,7 +1553,7 @@
       },
       "number-sequences": {
         "title": "番号シーケンス",
-        "description": "ドキュメント採番のプレフィックスとカウンター。"
+        "description": "各ドキュメントまたはカスタムレコードのプレフィックス、次の番号、桁数を管理します。カスタムレコードの採番ルールは、最初の番号を生成するときに自動作成されます。"
       },
       "time-types": {
         "title": "工数タイプ",
@@ -1788,6 +1790,9 @@
       "customerId": "顧客",
       "projectId": "プロジェクト",
       "isDefault": "既定"
+    },
+    "fieldHelp": {
+      "gapless": "欠番なしとは、連番のすべての番号が記録され、番号が飛ばないことを意味します。法令または監査要件で途切れない採番が必要な場合にのみ有効にしてください。"
     },
     "options": {
       "taxDepreciationModel": { "pool": "Class pool", "macrs": "Per-asset MACRS" },
@@ -2164,10 +2169,6 @@
     "subscriptionBilling": {
       "title": "Subscription Billing",
       "description": "Plans and subscriptions that auto-generate recurring invoices (SaaS / retainer)."
-    },
-    "constructionBilling": {
-      "title": "Construction Progress Billing",
-      "description": "AIA schedule of values, applications for payment, and retainage for contractors."
     }
   }
 }

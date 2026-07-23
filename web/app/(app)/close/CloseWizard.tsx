@@ -55,6 +55,7 @@ type Props = {
   canApprove: boolean;
   canReopen: boolean;
   canManageFlows: boolean;
+  subsidiaryEnabled: boolean;
 };
 
 const STAGES = [
@@ -307,14 +308,16 @@ function ScopeStage(props: Props) {
             label={t("scope.target")}
             value={props.run.target_close_date}
           />
-          <Detail
-            label={t("scope.entities")}
-            value={
-              subsidiaryIds.length
-                ? t("scope.selectedEntities", { count: subsidiaryIds.length })
-                : t("scope.allEntities")
-            }
-          />
+          {props.subsidiaryEnabled ? (
+            <Detail
+              label={t("scope.entities")}
+              value={
+                subsidiaryIds.length
+                  ? t("scope.selectedEntities", { count: subsidiaryIds.length })
+                  : t("scope.allEntities")
+              }
+            />
+          ) : null}
           <Detail
             label={t("scope.package")}
             value={taskText(t, props.run.package_name) || t("scope.noPackage")}

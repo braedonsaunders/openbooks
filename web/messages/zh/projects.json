@@ -38,7 +38,7 @@
     "requestFailed": "无法创建开票请求",
     "invoiceCreated": "发票 {number} 已创建",
     "invoiceFailed": "无法创建发票",
-    "invoiceType": "类型",
+    "invoiceType": "发票阶段",
     "basis": "依据",
     "drawAmount": "支取金额",
     "startDate": "开始日期",

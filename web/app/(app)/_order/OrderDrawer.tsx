@@ -6,7 +6,7 @@ import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { useTranslations } from 'next-intl'
 import { toast } from 'sonner'
-import { Badge, Button, Input, Label, SearchSelect } from '@openbooks/ui'
+import { Badge, Button, FieldLabel, Input, Label, SearchSelect } from '@openbooks/ui'
 import { LineGrid, type LineGridColumn } from '../../../components/line-grid'
 import { TransactionDrawer } from '../../../components/transaction-drawer'
 import { DocTypeBadge, docTypeMeta } from '../../../components/doc-type-badge'
@@ -156,6 +156,7 @@ export function OrderDrawer({
   taxGroups,
   departments,
   projects,
+  subsidiaries,
   segments,
   canManage,
   layout,
@@ -169,6 +170,7 @@ export function OrderDrawer({
   taxGroups: Opt[]
   departments: Opt[]
   projects: Opt[]
+  subsidiaries: Opt[]
   segments: SegmentOption[]
   canManage: boolean
   layout?: FormLayoutConfig
@@ -199,6 +201,7 @@ export function OrderDrawer({
   const [memo, setMemo] = useState<string>(doc.memo ?? '')
   const [departmentId, setDepartmentId] = useState<string>(doc.department_id ?? '')
   const [projectId, setProjectId] = useState<string>(doc.project_id ?? '')
+  const [subsidiaryId, setSubsidiaryId] = useState<string>(doc.subsidiary_id ?? '')
   const [extraDims, setExtraDims] = useState<Record<string, string>>(doc.extra_dims ?? {})
   const [rows, setRows] = useState<LineRow[]>(
     order.lines.length > 0 ? order.lines.map((line) => toRow(line, segments)) : [emptyLine(segments)],
@@ -270,6 +273,7 @@ export function OrderDrawer({
       memo,
       departmentId: departmentId || null,
       projectId: projectId || null,
+      ...(subsidiaries.length > 0 ? { subsidiaryId: subsidiaryId || null } : {}),
       extraDims,
       lines: rows
         .filter((r) => {
@@ -294,7 +298,7 @@ export function OrderDrawer({
           ),
         })),
     }),
-    [partyId, documentDate, dueDate, memo, departmentId, projectId, extraDims, rows, segments],
+    [partyId, documentDate, dueDate, memo, departmentId, projectId, subsidiaryId, subsidiaries.length, extraDims, rows, segments],
   )
   // Track unsaved edits (no autosave — Save is an explicit button).
   const [dirty, setDirty] = useState(false)
@@ -316,6 +320,7 @@ export function OrderDrawer({
     setMemo(doc.memo ?? '')
     setDepartmentId(doc.department_id ?? '')
     setProjectId(doc.project_id ?? '')
+    setSubsidiaryId(doc.subsidiary_id ?? '')
     setExtraDims(doc.extra_dims ?? {})
     setRows(order.lines.length > 0 ? order.lines.map((line) => toRow(line, segments)) : [emptyLine(segments)])
     setTotals({ subtotal: doc.subtotal, taxTotal: doc.tax_total, total: doc.total })
@@ -520,17 +525,20 @@ export function OrderDrawer({
     const label = placement.labelOverride?.trim()
     switch (placement.key) {
       case 'party_id':
-        return <><Label>{label || t('partyLabel', { kind })}{isEditable ? <span className="text-red-500"> *</span> : null}</Label>{isEditable ? <SearchSelect options={parties.map((party) => ({ value: party.id, label: party.display_name ?? '' }))} value={partyId} onChange={(value) => setPartyId(value ?? '')} placeholder={t('selectPartyPlaceholder', { kind })} /> : <p className="text-sm">{doc.party_name ?? '—'}</p>}</>
+        return <><FieldLabel fieldName={label || t('partyLabel', { kind })}>{label || t('partyLabel', { kind })}{isEditable ? <span className="text-red-500"> *</span> : null}</FieldLabel>{isEditable ? <SearchSelect options={parties.map((party) => ({ value: party.id, label: party.display_name ?? '' }))} value={partyId} onChange={(value) => setPartyId(value ?? '')} placeholder={t('selectPartyPlaceholder', { kind })} /> : <p className="text-sm">{doc.party_name ?? '—'}</p>}</>
       case 'document_date':
-        return <><Label>{label || t('dateLabel', { kind })}</Label>{isEditable ? <Input type="date" value={documentDate} onChange={(event) => setDocumentDate(event.target.value)} /> : <p className="text-sm">{doc.document_date}</p>}</>
+        return <><FieldLabel fieldName={label || t('dateLabel', { kind })}>{label || t('dateLabel', { kind })}</FieldLabel>{isEditable ? <Input type="date" value={documentDate} onChange={(event) => setDocumentDate(event.target.value)} /> : <p className="text-sm">{doc.document_date}</p>}</>
       case 'due_date':
-        return <><Label>{label || t('expiryLabel', { kind })}</Label>{isEditable ? <Input type="date" value={dueDate} onChange={(event) => setDueDate(event.target.value)} /> : <p className="text-sm">{doc.due_date ?? '—'}</p>}</>
+        return <><FieldLabel fieldName={label || t('expiryLabel', { kind })}>{label || t('expiryLabel', { kind })}</FieldLabel>{isEditable ? <Input type="date" value={dueDate} onChange={(event) => setDueDate(event.target.value)} /> : <p className="text-sm">{doc.due_date ?? '—'}</p>}</>
       case 'department_id':
-        return <><Label>{label || tCommon('labels.department')}</Label>{isEditable ? <SearchSelect options={[{ value: '', label: '—' }, ...departments.map((department) => ({ value: department.id, label: department.name ?? '' }))]} value={departmentId} onChange={(value) => setDepartmentId(value ?? '')} placeholder="—" /> : <p className="text-sm">{departments.find((department) => department.id === doc.department_id)?.name ?? '—'}</p>}</>
+        return <><FieldLabel fieldName={label || tCommon('labels.department')}>{label || tCommon('labels.department')}</FieldLabel>{isEditable ? <SearchSelect options={[{ value: '', label: '—' }, ...departments.map((department) => ({ value: department.id, label: department.name ?? '' }))]} value={departmentId} onChange={(value) => setDepartmentId(value ?? '')} placeholder="—" /> : <p className="text-sm">{departments.find((department) => department.id === doc.department_id)?.name ?? '—'}</p>}</>
       case 'project_id':
-        return <><Label>{label || tCommon('labels.project')}</Label>{isEditable ? <SearchSelect options={[{ value: '', label: '—' }, ...projects.map((project) => ({ value: project.id, label: project.name ?? '' }))]} value={projectId} onChange={(value) => setProjectId(value ?? '')} placeholder="—" /> : <p className="text-sm">{projects.find((project) => project.id === doc.project_id)?.name ?? '—'}</p>}</>
+        return <><FieldLabel fieldName={label || tCommon('labels.project')}>{label || tCommon('labels.project')}</FieldLabel>{isEditable ? <SearchSelect options={[{ value: '', label: '—' }, ...projects.map((project) => ({ value: project.id, label: project.name ?? '' }))]} value={projectId} onChange={(value) => setProjectId(value ?? '')} placeholder="—" /> : <p className="text-sm">{projects.find((project) => project.id === doc.project_id)?.name ?? '—'}</p>}</>
+      case 'subsidiary_id':
+        if (subsidiaries.length === 0) return null
+        return <><FieldLabel fieldName={label || tCommon('labels.subsidiary')}>{label || tCommon('labels.subsidiary')}</FieldLabel>{isEditable ? <SearchSelect options={subsidiaries.map((subsidiary) => ({ value: subsidiary.id, label: subsidiary.name ?? '' }))} value={subsidiaryId} onChange={(value) => setSubsidiaryId(value ?? '')} placeholder="—" clearable /> : <p className="text-sm">{subsidiaries.find((subsidiary) => subsidiary.id === doc.subsidiary_id)?.name ?? '—'}</p>}</>
       case 'memo':
-        return <><Label>{label || tCommon('labels.memo')}</Label>{isEditable ? <Input value={memo} onChange={(event) => setMemo(event.target.value)} /> : <p className="text-sm">{doc.memo ?? '—'}</p>}</>
+        return <><FieldLabel fieldName={label || tCommon('labels.memo')}>{label || tCommon('labels.memo')}</FieldLabel>{isEditable ? <Input value={memo} onChange={(event) => setMemo(event.target.value)} /> : <p className="text-sm">{doc.memo ?? '—'}</p>}</>
       default:
         return null
     }
@@ -702,6 +710,22 @@ export function OrderDrawer({
               <p className="text-sm">{projects.find((p) => p.id === doc.project_id)?.name ?? '—'}</p>
             )}
           </div>
+          {subsidiaries.length > 0 ? (
+            <div className={field}>
+              <Label>{tCommon('labels.subsidiary')}</Label>
+              {editable ? (
+                <SearchSelect
+                  options={subsidiaries.map((subsidiary) => ({ value: subsidiary.id, label: subsidiary.name ?? '' }))}
+                  value={subsidiaryId}
+                  onChange={(value) => setSubsidiaryId(value ?? '')}
+                  placeholder="—"
+                  clearable
+                />
+              ) : (
+                <p className="text-sm">{subsidiaries.find((subsidiary) => subsidiary.id === doc.subsidiary_id)?.name ?? '—'}</p>
+              )}
+            </div>
+          ) : null}
           <div className={`${field} lg:col-span-2`}>
             <Label>{tCommon('labels.memo')}</Label>
             {editable ? (

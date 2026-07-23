@@ -4,7 +4,7 @@ import { db } from '@openbooks/engine/src/db.ts'
 import { toUnits } from '@openbooks/engine/src/money.ts'
 import { compileFormula } from '@openbooks/engine/src/depreciation-formula.ts'
 import { guardPermission } from '../../../../../lib/authz'
-import { SETUP_ENTITY_BY_KEY, toSnake, type SetupEntity } from '../../../../../lib/setup/registry'
+import { SETUP_ENTITY_BY_KEY, setupEntityForFeatureState, toSnake, type SetupEntity } from '../../../../../lib/setup/registry'
 import {
   buildRow,
   coerceBoolean,
@@ -14,6 +14,8 @@ import {
   UUID_RE,
 } from '../../../../../lib/setup/coerce'
 import { normalizeTaxReturnFormInput } from '../../../../../lib/setup/tax-return-form'
+import { featureEnabled, resolvedFeatureState, subsidiaryFeatureEnabled } from '../../../../../lib/features'
+import { loadNumberSequenceKindOptions } from '../../../../../lib/setup/number-sequence-kinds'
 
 export const runtime = 'nodejs'
 
@@ -62,6 +64,11 @@ function resolveEntity(entityKey: string): SetupEntity | null {
   return SETUP_ENTITY_BY_KEY.get(entityKey) ?? null
 }
 
+async function setupEntityEnabled(entity: SetupEntity, orgId: string): Promise<boolean> {
+  if (!entity.featureKey) return true
+  return featureEnabled(await resolvedFeatureState(orgId), entity.featureKey)
+}
+
 /** Domain checks that cannot be expressed by the generic field coercer. */
 async function validateEntityIntegrity(
   entity: SetupEntity,
@@ -69,6 +76,34 @@ async function validateEntityIntegrity(
   orgId: string,
   rowId?: string,
 ): Promise<string | null> {
+  const submittedSubsidiaryScope = entity.fields
+    .filter((field) => field.ref === 'subsidiaries')
+    .some((field) => Boolean(body[field.key]))
+  if (submittedSubsidiaryScope && !(await subsidiaryFeatureEnabled(orgId))) {
+    return 'Subsidiaries are not enabled for this organization'
+  }
+  if (entity.key === 'number-sequences') {
+    const current = rowId
+      ? ((await db.execute(sql`
+          select document_kind, subsidiary_id from number_sequences
+           where id = ${rowId} and org_id = ${orgId}`)) as any).rows[0]
+      : null
+    if (rowId && !current) return 'not found'
+    const documentKind = String(body.documentKind ?? current?.document_kind ?? '')
+    const allowedKinds = new Set((await loadNumberSequenceKindOptions(orgId)).map((option) => option.value))
+    if (!allowedKinds.has(documentKind)) return 'Choose a valid document or custom record type'
+
+    const submittedSubsidiaryId = body.subsidiaryId || null
+    if (submittedSubsidiaryId) {
+      if (!(await subsidiaryFeatureEnabled(orgId))) return 'Subsidiaries are not enabled for this organization'
+      if (!UUID_RE.test(String(submittedSubsidiaryId))) return 'Choose a valid subsidiary'
+      const subsidiary = (await db.execute(sql`
+        select 1 from subsidiaries
+         where id = ${String(submittedSubsidiaryId)} and org_id = ${orgId}
+           and is_active and not is_elimination`)) as any
+      if (!subsidiary.rows.length) return 'Choose an active subsidiary from this organization'
+    }
+  }
   if (entity.key === 'depreciation-methods') {
     const current = rowId
       ? ((await db.execute(sql`select formula from depreciation_methods where id=${rowId} and org_id=${orgId}`)) as any).rows[0]
@@ -406,12 +441,16 @@ export async function POST(req: Request, { params }: { params: Promise<{ entity:
   const { orgId, id: actorId } = gate.user
   const entity = resolveEntity((await params).entity)
   if (!entity) return NextResponse.json({ error: 'unknown setup entity' }, { status: 404 })
+  if (!(await setupEntityEnabled(entity, orgId))) return NextResponse.json({ error: 'unknown setup entity' }, { status: 404 })
 
   const body = normalizeTaxReturnFormInput(
     entity.key,
     (await req.json().catch(() => ({}))) as Record<string, unknown>,
   )
-  const built = buildRow(entity, body, { forCreate: true })
+  const writableEntity = setupEntityForFeatureState(entity, {
+    multiSubsidiary: await subsidiaryFeatureEnabled(orgId),
+  })
+  const built = buildRow(writableEntity, body, { forCreate: true })
   if ('error' in built) return NextResponse.json({ error: built.error }, { status: 400 })
   const integrityError = await validateEntityIntegrity(entity, body, orgId)
   if (integrityError) return NextResponse.json({ error: integrityError }, { status: 400 })
@@ -556,6 +595,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ entity
   const { orgId, id: actorId } = gate.user
   const entity = resolveEntity((await params).entity)
   if (!entity) return NextResponse.json({ error: 'unknown setup entity' }, { status: 404 })
+  if (!(await setupEntityEnabled(entity, orgId))) return NextResponse.json({ error: 'unknown setup entity' }, { status: 404 })
 
   const body = normalizeTaxReturnFormInput(
     entity.key,
@@ -564,7 +604,10 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ entity
   const id = String(body.id ?? '')
   if (!id) return NextResponse.json({ error: 'id required' }, { status: 400 })
 
-  const built = buildRow(entity, body, { forCreate: false })
+  const writableEntity = setupEntityForFeatureState(entity, {
+    multiSubsidiary: await subsidiaryFeatureEnabled(orgId),
+  })
+  const built = buildRow(writableEntity, body, { forCreate: false })
   if ('error' in built) return NextResponse.json({ error: built.error }, { status: 400 })
   const integrityError = await validateEntityIntegrity(entity, body, orgId, id)
   if (integrityError) return NextResponse.json({ error: integrityError }, { status: integrityError === 'not found' ? 404 : 400 })
@@ -716,6 +759,7 @@ export async function DELETE(req: Request, { params }: { params: Promise<{ entit
   const { orgId, id: actorId } = gate.user
   const entity = resolveEntity((await params).entity)
   if (!entity) return NextResponse.json({ error: 'unknown setup entity' }, { status: 404 })
+  if (!(await setupEntityEnabled(entity, orgId))) return NextResponse.json({ error: 'unknown setup entity' }, { status: 404 })
   if (entity.key === 'accounting-books') {
     return NextResponse.json({ error: 'archive-only' }, { status: 405 })
   }

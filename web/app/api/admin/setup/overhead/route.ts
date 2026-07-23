@@ -6,6 +6,7 @@ import { backfillOverhead } from '@openbooks/engine/src/overhead-apply.ts'
 import { isUuid } from '../../../../../lib/list-params'
 import { guardPermission } from '../../../../../lib/authz'
 import { publishOverheadRates } from '../../../../../lib/overhead-publish'
+import { guardProjectsFeature } from '../../../../../lib/projects-gate'
 
 export const dynamic = 'force-dynamic'
 
@@ -25,6 +26,8 @@ export async function POST(req: Request) {
   const gate = await guardPermission('admin.setup.manage')
   if (gate instanceof NextResponse) return gate
   const orgId = gate.user.orgId
+  const feature = await guardProjectsFeature(orgId)
+  if (feature) return feature
   const body = await req.json().catch(() => ({}))
 
   if (body.action === 'publish') {

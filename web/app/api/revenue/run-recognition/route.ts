@@ -3,6 +3,7 @@ import { runRevenueRecognition } from '@openbooks/engine/src/revenue-recognition
 import { syncProjectRevenueContracts } from '@openbooks/engine/src/project-revenue.ts'
 import { guardPermission } from '../../../../lib/authz'
 import { isUuid } from '../../../../lib/list-params'
+import { isFeatureEnabled } from '../../../../lib/features'
 
 export const runtime = 'nodejs'
 
@@ -33,7 +34,10 @@ export async function POST(req: Request) {
   try {
     // Refresh fixed-price project contracts first (percent complete → catch-up
     // schedule lines), so the run below posts current project progress too.
-    const projectSync = await syncProjectRevenueContracts(user.orgId, user.id, asOfDate)
+    const projectsEnabled = await isFeatureEnabled(user.orgId, 'projects')
+    const projectSync = projectsEnabled
+      ? await syncProjectRevenueContracts(user.orgId, user.id, asOfDate)
+      : { problems: [] }
     const result = await runRevenueRecognition(
       user.orgId,
       asOfDate,

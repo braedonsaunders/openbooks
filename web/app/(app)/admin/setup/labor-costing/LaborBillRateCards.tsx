@@ -134,6 +134,10 @@ const TEXT_TARGETS = new Set([
   "other",
 ]);
 
+function subsidiaryAwareTypes<T extends readonly string[]>(types: T, options: OptionMap): string[] {
+  return options.subsidiary?.length ? [...types] : types.filter((type) => type !== "subsidiary");
+}
+
 function cloneCard(card: BillCardDetail): BillCardDetail {
   return JSON.parse(JSON.stringify(card)) as BillCardDetail;
 }
@@ -221,7 +225,7 @@ export function LaborBillRateCards(props: {
         >
           <option value="all">{t("filters.allDimensions")}</option>
           <option value="unscoped">{t("filters.unscoped")}</option>
-          {SCOPE_TYPES.map((type) => <option key={type} value={type}>{t(`scopeTypes.${type}`)}</option>)}
+          {subsidiaryAwareTypes(SCOPE_TYPES, props.options).map((type) => <option key={type} value={type}>{t(`scopeTypes.${type}`)}</option>)}
         </Select>
         <Button
           size="sm"
@@ -676,7 +680,7 @@ function ScopeSection({
                           })
                         }
                       >
-                        {SCOPE_TYPES.map((x) => (
+                        {subsidiaryAwareTypes(SCOPE_TYPES, options).map((x) => (
                           <option key={x} value={x}>
                             {t(`scopeTypes.${x}`)}
                           </option>
@@ -1261,7 +1265,7 @@ function TargetEditor({
           })
         }
       >
-        {TARGET_TYPES.map((x) => (
+        {subsidiaryAwareTypes(TARGET_TYPES, options).map((x) => (
           <option key={x} value={x}>
             {t(`targetTypes.${x}`)}
           </option>

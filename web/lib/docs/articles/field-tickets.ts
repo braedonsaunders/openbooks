@@ -18,7 +18,9 @@ equipment, consumables, and materials used on a job for a shift, day, or week;
 the customer's representative **signs it**; and invoices are assembled from the
 signed tickets — every invoice line traceable to a signed artifact.
 
-Enable it in **Setup → Features → Field Tickets** (off by default).
+Enable it in **Company Settings → Projects → Field Tickets** (off by default).
+It is subordinate to the Projects parent gate and cannot operate when Projects
+is disabled.
 
 Choose the hour categories shown in the crew grid with **Show on field tickets**
 on each record under **Setup → Workforce → Time Types**. This controls only the

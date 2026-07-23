@@ -15,8 +15,9 @@ import { ShowInactivesToggle } from '../../../../../components/show-inactives-to
 import { SearchInput } from '../../../../../components/search-input'
 import { Pagination } from '../../../../../components/pagination'
 import { mergeHref, parseListParams, pickString } from '../../../../../lib/list-params'
-import { toSnake, type SetupColumn, type SetupEntity } from '../../../../../lib/setup/registry'
+import { setupEntityForFeatureState, toSnake, type SetupColumn, type SetupEntity } from '../../../../../lib/setup/registry'
 import { loadRefOptions, orderExpr } from '../../../../../lib/setup/ref-options'
+import { subsidiaryFeatureEnabled } from '../../../../../lib/features'
 import { NewSetupButton, SetupDrawer } from './SetupDrawer'
 
 /**
@@ -76,7 +77,7 @@ export function renderCell(
 }
 
 export async function SetupEntitySection({
-  entity,
+  entity: baseEntity,
   orgId,
   searchParams: sp,
   basePath,
@@ -88,6 +89,9 @@ export async function SetupEntitySection({
   basePath: string
   canManage: boolean
 }) {
+  const entity = setupEntityForFeatureState(baseEntity, {
+    multiSubsidiary: await subsidiaryFeatureEnabled(orgId),
+  })
   const t = await getTranslations('admin.setup')
   const rowParam = typeof sp.row === 'string' ? sp.row : undefined
   const showInactive = pickString(sp.showInactive) === 'true'

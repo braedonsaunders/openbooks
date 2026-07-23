@@ -130,6 +130,11 @@ export interface PnlLine {
 }
 
 export interface InvoicingProfile {
+  /** Operational procedure used to prepare project invoices. Standard billing
+   *  uses billing requests; application_for_payment uses an SOV, cumulative
+   *  applications, change orders, and retainage. Missing on legacy profiles
+   *  means standard. */
+  billingProcedure?: "standard" | "application_for_payment";
   /** Billing bases the request form offers for this type. */
   allowedBases: string[]; // date_range | draw_amount | time_selection | milestone
   defaultBasis: string;
@@ -248,6 +253,7 @@ export const BUILTIN_PROJECT_TYPES: BuiltInProjectType[] = [
       layout: standardLayout(),
     },
     invoicingProfile: {
+      billingProcedure: "standard",
       allowedBases: ["time_selection", "date_range", "draw_amount"],
       defaultBasis: "time_selection",
       lineBuilder: "tm_actual",
@@ -276,6 +282,7 @@ export const BUILTIN_PROJECT_TYPES: BuiltInProjectType[] = [
       layout: standardLayout(),
     },
     invoicingProfile: {
+      billingProcedure: "standard",
       allowedBases: ["milestone", "draw_amount", "date_range"],
       defaultBasis: "milestone",
       lineBuilder: "milestone",
@@ -304,6 +311,7 @@ export const BUILTIN_PROJECT_TYPES: BuiltInProjectType[] = [
       layout: standardLayout(),
     },
     invoicingProfile: {
+      billingProcedure: "standard",
       allowedBases: ["time_selection", "date_range"],
       defaultBasis: "time_selection",
       lineBuilder: "cost_plus",
@@ -332,6 +340,7 @@ export const BUILTIN_PROJECT_TYPES: BuiltInProjectType[] = [
       layout: standardLayout(),
     },
     invoicingProfile: {
+      billingProcedure: "standard",
       allowedBases: ["time_selection", "date_range"],
       defaultBasis: "time_selection",
       lineBuilder: "tm_actual",
@@ -339,5 +348,34 @@ export const BUILTIN_PROJECT_TYPES: BuiltInProjectType[] = [
       recognition: "as_invoiced",
     },
     backupProfile: { required: true, defaultBackupType: "costed_timesheets", allowedBackupTypes: ["costed_timesheets", "timesheets_purchases", "purchases", "none"] },
+  },
+  {
+    key: "schedule_of_values",
+    name: "Schedule of Values",
+    description: "Bill a fixed-price contract through cumulative applications for payment, change orders, and retainage.",
+    billingMethod: "fixed_price",
+    sortOrder: 50,
+    financialProfile: {
+      invoicedToDate: STANDARD_INVOICED,
+      actualCost: STANDARD_COST,
+      laborCost: { source: "in_actual_cost" },
+      overhead: { method: "none" },
+      committedCost: STANDARD_COMMITTED,
+      billableValue: { includeUnbilledTime: true, includeUnbilledCostLines: true, timeRate: "bill_rate" },
+      costBudget: STANDARD_BUDGET,
+      totalPrice: { method: "contract_field" },
+      couldBeInvoiced: { formula: "price_minus_invoiced" },
+      totalCost: { components: ["actual_cost", "committed_cost"] },
+      layout: standardLayout(),
+    },
+    invoicingProfile: {
+      billingProcedure: "application_for_payment",
+      allowedBases: ["draw_amount"],
+      defaultBasis: "draw_amount",
+      lineBuilder: "draw",
+      revenueAccount: "item_income",
+      recognition: "as_invoiced",
+    },
+    backupProfile: { required: false, defaultBackupType: "none", allowedBackupTypes: ["none", "quote_only"] },
   },
 ];

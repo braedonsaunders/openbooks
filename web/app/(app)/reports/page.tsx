@@ -4,6 +4,7 @@ import { db } from '@openbooks/engine/src/db.ts'
 import { PageContainer } from '../../../components/page-layout'
 import { getAuthz, can } from '../../../lib/authz'
 import { ReportsHub, type HubGroup } from './ReportsHub'
+import { isFeatureEnabled } from '../../../lib/features'
 
 export const dynamic = 'force-dynamic'
 
@@ -12,7 +13,7 @@ export default async function Reports() {
   const authz = await getAuthz()
   const canCreate = !!authz && (can(authz, 'reports.create') || can(authz, '*'))
 
-  const [saved, custom] = await Promise.all([
+  const [saved, custom, projectsEnabled] = await Promise.all([
     db.execute(sql`select id, name, path, params from saved_reports order by created_at desc limit 12`) as Promise<{
       rows: { id: string; name: string; path: string; params: Record<string, string> }[]
     }>,
@@ -21,6 +22,7 @@ export default async function Reports() {
     ) as Promise<{
       rows: { id: string; name: string; kind: string }[]
     }>,
+    authz ? isFeatureEnabled(authz.user.orgId, 'projects') : Promise.resolve(false),
   ])
 
   const card = (key: string, href: string, icon: string) => ({
@@ -82,25 +84,25 @@ export default async function Reports() {
       accent: 'amber',
       cards: [card('budget', '/reports/budget', 'Target')],
     },
-    {
+    ...(projectsEnabled ? [{
       key: 'projects',
       label: t('hub.groups.projects'),
       accent: 'sky',
       cards: [card('projectProfitability', '/reports/project-profitability', 'Coins')],
-    },
+    } satisfies HubGroup] : []),
     {
       key: 'custom',
       label: t('hub.groups.custom'),
       accent: 'slate',
       cards: [
         { href: '/reports/custom', title: t('hub.customStudio.title'), desc: t('hub.customStudio.description'), icon: 'Sparkles' },
-        ...custom.rows.map((c) => ({
+        ...custom.rows.filter((c) => projectsEnabled || c.kind !== 'project-profitability').map((c) => ({
           href: `/reports/custom/run/${c.id}`,
           title: c.name,
           desc: c.kind === 'built_in' ? t('custom.kind.builtIn') : t('custom.kind.custom'),
           icon: 'Coins',
         })),
-        ...saved.rows.map((s) => {
+        ...saved.rows.filter((s) => projectsEnabled || !s.path.startsWith('/reports/project-profitability')).map((s) => {
           const qs = new URLSearchParams(s.params ?? {}).toString()
           return { href: `${s.path}${qs ? `?${qs}` : ''}`, title: s.name, desc: t('hub.savedViews'), icon: 'Bookmark' }
         }),

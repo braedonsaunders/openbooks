@@ -1,6 +1,11 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { computeApplication, type AppLineInput } from "./construction-billing.ts";
+import {
+  ConstructionBillingError,
+  computeApplication,
+  revisedScheduleValue,
+  type AppLineInput,
+} from "./construction-billing.ts";
 
 const line = (over: Partial<AppLineInput>): AppLineInput => ({
   sovLineId: "l",
@@ -51,4 +56,29 @@ test("totals sum exactly across mixed lines (no drift)", () => {
   assert.equal(r.grossThisPeriod, "10000.0000");
   assert.equal(r.retainageThisPeriod, "499.9995");
   assert.equal(r.currentDue, "9500.0005");
+});
+
+test("rejects overbilling beyond the schedule of values", () => {
+  assert.throws(
+    () => computeApplication([line({ scheduledValue: "10000", previousCompleted: "9000", thisPeriodCompleted: "1001" })]),
+    /exceeds the scheduled value/,
+  );
+});
+
+test("rejects negative application amounts and invalid retainage", () => {
+  assert.throws(() => computeApplication([line({ thisPeriodCompleted: "-1" })]), /cannot be negative/);
+  assert.throws(() => computeApplication([line({ thisPeriodCompleted: "1", retainagePercent: "101" })]), /between 0 and 100/);
+});
+
+test("change orders revise an SOV line exactly without binary rounding", () => {
+  assert.equal(revisedScheduleValue("100000.1000", "1250.2555", "40000.0000"), "101250.3555");
+  assert.equal(revisedScheduleValue("100000.1000", "-1250.2555", "40000.0000"), "98749.8445");
+});
+
+test("deductive change orders cannot reduce below already-billed work", () => {
+  assert.throws(
+    () => revisedScheduleValue("100000.0000", "-60000.0001", "40000.0000"),
+    ConstructionBillingError,
+  );
+  assert.equal(revisedScheduleValue("100000.0000", "-60000.0000", "40000.0000"), "40000.0000");
 });

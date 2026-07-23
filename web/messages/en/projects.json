@@ -38,7 +38,7 @@
     "requestFailed": "Could not create billing request",
     "invoiceCreated": "Invoice {number} created",
     "invoiceFailed": "Could not create invoice",
-    "invoiceType": "Type",
+    "invoiceType": "Invoice stage",
     "basis": "Basis",
     "drawAmount": "Draw amount",
     "startDate": "Start date",

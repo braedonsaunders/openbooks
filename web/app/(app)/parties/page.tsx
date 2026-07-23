@@ -13,7 +13,7 @@ import { can, requirePermission } from '../../../lib/authz'
 import { isUuid, parseListParams, pickString } from '../../../lib/list-params'
 import { loadFieldDefs } from '../../../lib/custom-fields'
 import { loadParty } from '../../api/parties/_lib'
-import { subsidiaryOptions } from '../../../lib/subsidiaries'
+import { subsidiaryUiOptions } from '../../../lib/subsidiaries'
 import { resolveFormLayout } from '../../../lib/customization/resolve'
 import { NewPartyButton } from './NewPartyButton'
 import { NewPartyRedirect } from './NewPartyRedirect'
@@ -111,7 +111,7 @@ export default async function Parties({
           db.execute(sql`select id, name from departments where org_id = ${orgId} and is_active order by name`) as any,
           db.execute(sql`select id, name from trades where org_id = ${orgId} and is_active order by name`) as any,
           loadFieldDefs('parties'),
-          subsidiaryOptions(),
+          subsidiaryUiOptions(orgId),
           db.execute(sql`select id, name, type, concat_ws(' · ', number, name) as label from accounts where org_id = ${orgId} and is_active and not is_summary order by number nulls last, name`) as any,
           db.execute(sql`select id, name, concat_ws(' · ', code, name) as label from tax_codes where org_id = ${orgId} and is_active order by code`) as any,
           db.execute(sql`select p.id, p.display_name as name from parties p join employee_roles er on er.party_id = p.id and er.is_active where p.org_id = ${orgId} and p.is_active order by p.display_name`) as any,

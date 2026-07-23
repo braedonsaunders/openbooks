@@ -1,6 +1,6 @@
 /**
  * Seed the built-in project types (Time & Materials, Fixed Price, Cost-Plus,
- * Not-to-Exceed) for an org and backfill existing projects' `project_type_id`
+ * Not-to-Exceed, and Schedule of Values) for an org and backfill existing projects' `project_type_id`
  * from their legacy `billing_method`. Idempotent: existing types are preserved
  * (tenant edits win) — only missing built-ins are inserted.
  */

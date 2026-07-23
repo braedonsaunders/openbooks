@@ -9,6 +9,7 @@ import { cmp } from '@openbooks/engine/src/money.ts'
 import { persistLineTaxComponents } from '../../../lib/bills'
 import { segmentRegistry, validateExtraDims } from '../../../lib/segments'
 import { promoteCrmAccount } from '@openbooks/engine/src/crm.ts'
+import { subsidiaryFeatureEnabled } from '../../../lib/features'
 
 /**
  * Shared GET / PATCH / convert handlers for the three order-cycle modules.
@@ -43,6 +44,7 @@ interface OrderPatchBody {
   memo?: string | null
   departmentId?: string | null
   projectId?: string | null
+  subsidiaryId?: string | null
   extraDims?: Record<string, string | null>
   lines?: OrderLineInput[]
   status?: 'approved' | 'voided'
@@ -67,6 +69,23 @@ export function makePATCH(cfg: OrderHandlerConfig) {
     const status = existing.rows[0].status
 
     const body = (await req.json()) as OrderPatchBody
+
+    if (body.subsidiaryId !== undefined && body.subsidiaryId !== null) {
+      if (!(await subsidiaryFeatureEnabled(user.orgId))) {
+        return NextResponse.json({ error: 'Subsidiaries are not enabled' }, { status: 422 })
+      }
+      if (gate.allowedSubsidiaryIds && !gate.allowedSubsidiaryIds.has(body.subsidiaryId)) {
+        return NextResponse.json({ error: 'Subsidiary is not available' }, { status: 422 })
+      }
+      const subsidiary = (await db.execute(sql`
+        select 1 from subsidiaries
+         where id = ${body.subsidiaryId} and org_id = ${user.orgId}
+           and is_active and not is_elimination
+      `)) as unknown as { rows: unknown[] }
+      if (!subsidiary.rows[0]) {
+        return NextResponse.json({ error: 'Subsidiary is not available' }, { status: 422 })
+      }
+    }
 
     // --- status transitions ------------------------------------------------
     if (body.status) {
@@ -167,6 +186,7 @@ export function makePATCH(cfg: OrderHandlerConfig) {
           memo = ${body.memo !== undefined ? body.memo : sql`memo`},
           department_id = ${body.departmentId !== undefined ? body.departmentId : sql`department_id`},
           project_id = ${body.projectId !== undefined ? body.projectId : sql`project_id`},
+          subsidiary_id = ${body.subsidiaryId !== undefined ? body.subsidiaryId : sql`subsidiary_id`},
           extra_dims = ${headerDims ? JSON.stringify(headerDims.cleaned) : sql`extra_dims`}::jsonb,
           subtotal = coalesce(${totals?.subtotal ?? null}, subtotal),
           tax_total = coalesce(${totals?.taxTotal ?? null}, tax_total),

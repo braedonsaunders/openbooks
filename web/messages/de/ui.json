@@ -16,6 +16,10 @@
   "confirm": {
     "defaultTitle": "Bestätigen"
   },
+  "fieldHelp": {
+    "open": "Dieses Feld erklären",
+    "generic": "Legt den Wert für {field} in diesem Datensatz oder Vorgang fest."
+  },
   "select": {
     "placeholder": "Auswählen…",
     "searchPlaceholder": "Suchen…",

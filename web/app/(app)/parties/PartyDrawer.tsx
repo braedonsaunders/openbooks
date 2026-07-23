@@ -203,7 +203,9 @@ export function PartyDrawer({
   const [website, setWebsite] = useState<string>(p.website ?? '')
   const [customValues, setCustomValues] = useState<Record<string, unknown>>(p.custom ?? {})
   const [isActive, setIsActive] = useState<boolean>(p.is_active === true)
-  const multiSubsidiary = subsidiaries.filter((s) => !s.isElimination).length > 1
+  // The server sends [] when the feature is disabled and the full picker when
+  // enabled, even before a second subsidiary has been added.
+  const multiSubsidiary = subsidiaries.some((s) => !s.isElimination)
   const rootSubsidiaryId = subsidiaries.find((s) => s.parentId === null)?.id ?? ''
   const [subsidiaryId, setSubsidiaryId] = useState<string>(p.subsidiary_id ?? rootSubsidiaryId)
   const [additionalSubsidiaryIds, setAdditionalSubsidiaryIds] = useState<Set<string>>(

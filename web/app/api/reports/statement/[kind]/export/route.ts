@@ -19,6 +19,7 @@ import { resolvePeriod } from '../../../../../../lib/periods'
 import { parseReportQuery } from '../../../../../../lib/report-filters'
 import { reportCsvOptions } from '../../../../../../lib/report-labels'
 import { csvResponse, pdfResponse, safeName, xlsxResponse } from '../../../../../../lib/export'
+import { guardProjectsFeature } from '../../../../../../lib/projects-gate'
 
 export const runtime = 'nodejs'
 
@@ -28,6 +29,10 @@ export async function GET(req: Request, { params }: { params: Promise<{ kind: st
   const { kind } = await params
   if (!isReportKind(kind)) {
     return NextResponse.json({ error: 'unknown statement' }, { status: 422 })
+  }
+  if (kind === 'project-profitability') {
+    const feature = await guardProjectsFeature(gate.user.orgId)
+    if (feature) return feature
   }
 
   const url = new URL(req.url)

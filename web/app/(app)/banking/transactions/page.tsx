@@ -178,7 +178,7 @@ export default async function BankingTransactions({
         loadFieldDefs('documents', openKind!),
         loadFieldDefs('document_lines', openKind!),
         // Multi-subsidiary orgs only — null keeps ALL subsidiary UI hidden.
-        isMultiSubsidiary().then(async (multi) => {
+        isMultiSubsidiary(authz.user.orgId).then(async (multi) => {
           if (!multi) return null
           const options = await subsidiaryOptions()
           return authz.allowedSubsidiaryIds
