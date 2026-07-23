@@ -2,6 +2,7 @@ import { addDays, dayOfMonth, isMonthEnd, recordCoverage } from "./manifest.ts";
 import * as observe from "./observe.ts";
 import * as ops from "./ops.ts";
 import * as opsTm from "./ops-tm.ts";
+import { autopilotConstruction } from "./construction-autopilot.ts";
 import type { SimOrg } from "./world.ts";
 import type { RunManifest } from "./manifest.ts";
 import type { Profile } from "./profiles/index.ts";
@@ -70,6 +71,10 @@ export async function autopilotDay(profile: Profile, world: SimOrg, manifest: Ru
     recordCoverage(manifest, "customer_payment");
     summary.receiptsApplied++;
   }
+
+  // --- Construction PM: drive the job portfolio (all billing methods) mid-month ----
+  const con = await autopilotConstruction(world, today);
+  if (con.actions > 0) recordCoverage(manifest, "construction_billing");
 
   // --- Bottom-up: bill each engagement's accumulated billable time at month-end ----
   if (isMonthEnd(today) && world.engagements.length > 0) {
