@@ -93,12 +93,14 @@ export async function trialBalance(world: SimOrg, asOf: string) {
 /** Active projects with billing method, contract value, and billed-to-date. */
 export async function projects(world: SimOrg) {
   return rows(sql`
-    select p.id, p.name, p.code, p.status, p.billing_method, p.contract_value::text as contract_value,
+    select p.id, p.name, p.code, p.status,
+           coalesce(pt.key, p.billing_method) as project_type, p.billing_method,
+           p.contract_value::text as contract_value,
            coalesce((select sum(s.scheduled_value) from sov_lines s where s.project_id = p.id), 0)::text as sov_total,
            coalesce((select sum(d.total) from documents d
                       where d.org_id = p.org_id and d.kind = 'customer_invoice' and d.status = 'posted'
                         and d.custom->'sim'->>'projectId' = p.id::text), 0)::text as billed_to_date
-      from projects p
+      from projects p left join project_types pt on pt.id = p.project_type_id
      where p.org_id = ${world.orgId}
      order by p.created_at`);
 }

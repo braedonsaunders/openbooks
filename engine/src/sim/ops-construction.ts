@@ -61,9 +61,22 @@ export async function setupProject(
   const lines = opts.lines ?? [];
   const method = opts.billingMethod ?? "schedule_of_values";
   const contractValue = opts.contractValue ?? sum(lines.map((line) => line.scheduledValue));
+
+  // Classify the project by the GOVERNED project_types FK (which carries the
+  // profitability/invoicing/backup profiles), not free text. billing_method is
+  // only the coarse back-compat classifier (time_and_materials|fixed_price|
+  // cost_plus) and is derived from the resolved type.
+  const typeRow = (await db.execute(sql`
+    select id, billing_method from project_types
+     where org_id = ${world.orgId} and key = ${method} and is_active limit 1`)) as unknown as {
+    rows: { id: string; billing_method: string }[];
+  };
+  const type = typeRow.rows[0];
+  if (!type) throw new Error(`no project_type "${method}" — run seedProjectTypes`);
+
   await db.execute(sql`
-    insert into projects (id, org_id, name, code, status, billing_method, customer_id, contract_value, starts_on, ends_on)
-    values (${projectId}, ${world.orgId}, ${opts.name}, ${opts.code}, 'active', ${method},
+    insert into projects (id, org_id, name, code, status, project_type_id, billing_method, customer_id, contract_value, starts_on, ends_on)
+    values (${projectId}, ${world.orgId}, ${opts.name}, ${opts.code}, 'active', ${type.id}, ${type.billing_method},
             ${opts.customerId}, ${contractValue}, ${opts.startsOn}, ${opts.endsOn})`);
 
   const sovLines: { id: string; scheduledValue: string }[] = [];
@@ -121,15 +134,15 @@ export async function billFixedPrice(
   description = "Milestone billing",
 ): Promise<{ invoiceId: string; documentNumber: string; amount: string; billedToDate: string; contractValue: string }> {
   const proj = (await db.execute(sql`
-    select customer_id, name, code, billing_method, contract_value::text as contract
-      from projects
-     where id = ${projectId} and org_id = ${world.orgId}`)) as unknown as {
-    rows: { customer_id: string | null; name: string; code: string; billing_method: string; contract: string }[];
+    select p.customer_id, p.name, p.code, pt.key as type_key, p.contract_value::text as contract
+      from projects p left join project_types pt on pt.id = p.project_type_id
+     where p.id = ${projectId} and p.org_id = ${world.orgId}`)) as unknown as {
+    rows: { customer_id: string | null; name: string; code: string; type_key: string | null; contract: string }[];
   };
   const p = proj.rows[0];
   if (!p?.customer_id) throw new Error(`project ${projectId} has no customer to bill`);
-  if (p.billing_method !== "fixed_price" && p.billing_method !== "not_to_exceed") {
-    throw new Error(`project ${projectId} uses ${p.billing_method}, not fixed-price billing`);
+  if (p.type_key !== "fixed_price" && p.type_key !== "not_to_exceed") {
+    throw new Error(`project ${projectId} is a ${p.type_key ?? "?"} job, not fixed-price/NTE`);
   }
   if (cmp(amount, "0") <= 0) throw new Error("fixed-price billing amount must be greater than zero");
   const priorRow = (await db.execute(sql`
