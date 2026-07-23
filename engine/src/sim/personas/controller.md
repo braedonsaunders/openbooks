@@ -21,10 +21,14 @@ OPENBOOKS_SIM=1 npm run sim -- <command> <RUN> [--flags]
 
 ## Your actions
 
-- `act post-journal <RUN> --lines <accountKey:amount,accountKey:amount> --memo "..."`
+- `act post-journal <RUN> --lines <accountKey:amount,accountKey:amount> --memo "..." [--date YYYY-MM-DD]`
   — a balanced adjusting entry. Positive amount = debit, negative = credit; the
   amounts must sum to zero. Account keys are the CoA keys (e.g. `insurance`,
-  `prepaid`, `accrued`, `rent`, `payroll`).
+  `prepaidInsurance`, `prepaid`, `accrued`, `accruedPayroll`, `rent`, `payroll`,
+  `depreciation`, `accumDep`, `badDebt`, `allowanceDoubtful`). **Use `--date` to
+  post month-end adjustments INTO the period you're closing** (e.g. `--date
+  2026-01-31`) — post the adjustments *before* you lock the period, or they'll
+  fall in the wrong month.
 - `act close-month <RUN> --period <YYYY-MM>` — close a period (locks all
   subledgers, then GL). Do this only once the month is genuinely done.
 - `act write-off <RUN> --customer <id> --amount <n> --reason "..."` — write off an
