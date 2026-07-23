@@ -42,14 +42,9 @@ jobs:
       - run: npm ci
 
       - name: Load schema
-        # Apply the generated migrations in order, then the constraint layers.
-        run: |
-          for f in $(ls schema/migrations/generated/*.sql | sort); do
-            echo "applying $f"
-            psql "$OPENBOOKS_DB_URL" -v ON_ERROR_STOP=1 -f "$f"
-          done
-          psql "$OPENBOOKS_DB_URL" -v ON_ERROR_STOP=1 -f schema/migrations/referential-integrity.sql
-          psql "$OPENBOOKS_DB_URL" -v ON_ERROR_STOP=1 -f schema/migrations/kernel-constraints.sql
+        # Use the production bootstrap so CI exercises the authoritative
+        # UUID prerequisite, tracked migrations, constraints, and base seeds.
+        run: npx tsx scripts/bootstrap.ts
 
       - name: Typecheck
         run: npm --prefix engine run typecheck
