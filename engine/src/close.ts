@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto";
 import { sql } from "drizzle-orm";
-import { db, withOrg } from "./db.ts";
+import { db, withOrg, inDbTransaction } from "./db.ts";
 
 export class CloseError extends Error {}
 
@@ -520,7 +520,11 @@ export async function ensureCloseDefaults(
   blueprintId: string;
   reportingPackageId: string;
 }> {
-  return db.transaction(async (tx) => {
+  // inDbTransaction (not db.transaction): when called inside a withOrg/withBypass
+  // pinned transaction (e.g. org provisioning), a nested db.transaction() issues a
+  // fresh BEGIN/COMMIT on the same client and prematurely commits the outer
+  // transaction — clearing its SET LOCAL RLS GUCs and breaking later inserts.
+  return inDbTransaction(async (tx) => {
     const org = (await tx.execute(sql`
       select coalesce((settings->>'fiscalYearStartMonth')::integer, 1) as start_month,
              coalesce(settings->>'timeZone', 'UTC') as time_zone
