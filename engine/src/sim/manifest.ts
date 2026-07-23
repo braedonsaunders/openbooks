@@ -1,5 +1,6 @@
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
+import type { SimOrg } from "./world.ts";
 
 /**
  * The resumable run state. Written after every committed simulated day so a run
@@ -27,9 +28,20 @@ export interface RunManifest {
   coverage: string[];
   /** Summary of the most recent per-period invariant checkpoint. */
   lastCheckpoint: { simDate: string; pass: boolean; file: string } | null;
+  /** Period names whose closed-period immutability has already been proven. */
+  provenClosed: string[];
   /** Defects surfaced (and whether the run halted on them). */
   defects: { simDate: string; invariant: string; dir: string }[];
   status: "running" | "paused" | "halted" | "completed";
+}
+
+/** The provisioned org handle, persisted so a run can be resumed without re-deriving it. */
+export function writeWorld(runDir: string, world: SimOrg): void {
+  mkdirSync(runDir, { recursive: true });
+  writeFileSync(join(runDir, "world.json"), JSON.stringify(world, null, 2));
+}
+export function readWorld(runDir: string): SimOrg {
+  return JSON.parse(readFileSync(join(runDir, "world.json"), "utf8")) as SimOrg;
 }
 
 function manifestPath(runDir: string): string {
@@ -75,6 +87,7 @@ export function newManifest(args: {
     counters: {},
     coverage: [],
     lastCheckpoint: null,
+    provenClosed: [],
     defects: [],
     status: "running",
   };

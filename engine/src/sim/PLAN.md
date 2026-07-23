@@ -380,3 +380,56 @@ coverage until every capability is proven.
    unmatched lines) before it stops being useful signal — start light, tune per profile.
 4. **Volume targets.** Transactions/day per profile and how long a "2-year" run takes; sets
    the CI budget.
+
+---
+
+## 12. Architecture update — LLM team operates the environment (adopted)
+
+The harness is **not** a pure deterministic script. Per direction, an LLM operates it *like
+a team of humans*. Two decisions were locked:
+
+- **Driver: Claude Code subagents.** The environment is the `npm run sim` CLI; each persona is
+  a subagent Claude Code spawns, operating the business via `observe`/`act` commands over Bash.
+- **Autonomy: hybrid.** A **seeded generator** injects each day's raw economic reality (bills
+  arriving, work becoming billable, customer money landing); **LLM personas** make the judgment
+  calls (approve/dispute/prioritize/apply-cash/close). Realism comes from their judgment; the
+  environment stays deterministic and logged.
+
+This splits the system into three layers:
+
+1. **Environment (deterministic):** `world.ts` (provisioning), `generator.ts` (seeded daily
+   events), `ops.ts` (the action surface — every capability routes through the real engine),
+   `observe.ts` (read-only screens), `invariants/` (the oracle), `runner.ts` (day loop),
+   `cli.ts` (the surface), `autopilot.ts` (a non-LLM persona stand-in for CI/dev).
+2. **Team (LLM):** `personas/*.md` — AP clerk, AR specialist, controller, CFO. Each reads its
+   screens and acts, and is instructed to surface anything that looks like a product defect.
+3. **Operator (Claude Code):** `OPERATOR.md` — drives the daily loop, dispatches persona
+   subagents, and on any invariant break or persona-reported bug **stops, fixes the product,
+   and resumes**.
+
+## 13. Implementation status
+
+**Built and typechecking clean (`engine` `tsc --noEmit`, 0 errors):**
+
+- Substrate: injectable `clock.ts`, seeded splittable `rng.ts`, resumable `manifest.ts`,
+  sim-DB `db-guard.ts`.
+- Profiles: `general-contractor`, `professional-services` (config-driven; add more freely).
+- Environment: provisioning, seeded generator, ops (post/dispute/pay/issue/apply/journal/close),
+  observation screens, the day loop with manifest checkpoints + resume, and the CLI.
+- Oracle: cheap per-action checks + the full golden suite (`harness/scenario.ts`) + closed-
+  period immutability probe + defect-bundle emitter that halts the run.
+- Autopilot (deterministic CI/dev driver) + `run` convenience loop.
+- Operator runbook, persona playbooks, README, throwaway `docker-compose.yml`, and a
+  `sim-smoke` CI workflow.
+
+**Deferred (framework is ready; these are additive):**
+
+- The surgical `now()` swaps inside the engine hot path (`postedAt`, the `asOf` defaults). The
+  clock is wired at the sim boundary (`withSimClock`); engine-side swaps are optional and were
+  left out to keep the posting path untouched. Not required for the financial checkpoint.
+- Breadth activities (Phase 6): AIA/retainage pay applications, field tickets, inventory,
+  depreciation, recurring/dunning, tax returns, FX/consolidation — each becomes a new `ops`
+  capability + generator hook + persona.
+- Adversarial depth (Phase 7): voids, write-offs, reopen requests, volume stress.
+- A live end-to-end run: requires a sim Postgres with the schema loaded (docker was unavailable
+  in the build session). The CI `sim-smoke` job performs exactly this.

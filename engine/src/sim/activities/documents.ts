@@ -39,12 +39,9 @@ export function postingDeps(world: SimOrg): PostingDeps {
   return { control: { ar: world.accounts.ar!, ap: world.accounts.ap!, bank: world.accounts.bank! } };
 }
 
-export async function createAndPostDocument(
-  world: SimOrg,
-  input: CreateDocInput,
-): Promise<{ documentId: string; entryId: string; total: string }> {
+/** Insert a document header + lines as a DRAFT (not posted). Returns its id. */
+export async function createDraftDocument(world: SimOrg, input: CreateDocInput): Promise<{ documentId: string; total: string }> {
   const total = sum(input.lines.map((l) => l.amount));
-
   const [doc] = await db
     .insert(schema.documents)
     .values({
@@ -79,9 +76,22 @@ export async function createAndPostDocument(
       projectId: l.projectId ?? null,
     })),
   );
+  return { documentId: doc!.id, total };
+}
 
-  const entryId = await postDocument(doc!.id, postingDeps(world));
-  return { documentId: doc!.id, entryId, total };
+/** Post an existing draft document through the real posting kernel. */
+export async function postDraftDocument(world: SimOrg, documentId: string): Promise<string> {
+  return postDocument(documentId, postingDeps(world));
+}
+
+/** Convenience: create a draft and immediately post it (used for JEs / credits). */
+export async function createAndPostDocument(
+  world: SimOrg,
+  input: CreateDocInput,
+): Promise<{ documentId: string; entryId: string; total: string }> {
+  const { documentId, total } = await createDraftDocument(world, input);
+  const entryId = await postDraftDocument(world, documentId);
+  return { documentId, entryId, total };
 }
 
 /**
