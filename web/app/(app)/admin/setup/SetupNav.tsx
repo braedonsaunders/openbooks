@@ -87,7 +87,6 @@ export function SetupNav({
   bankFeedsEnabled?: boolean
 }) {
   const t = useTranslations('admin.setup')
-  const tAdmin = useTranslations('admin')
   const tClose = useTranslations('close.setup')
   const td = useTranslations('data')
   const tCrm = useTranslations('crm')
@@ -152,22 +151,23 @@ export function SetupNav({
                 ]
               : group.key === 'projects'
               ? [
-                  { href: '/admin/setup/projects', label: tAdmin('features.projects.title'), iconKey: 'briefcase' },
-                  ...(projectsEnabled ? [
-                  { href: '/admin/setup/project-types', label: tProjectTypes('title'), iconKey: 'briefcase' },
-                  { href: '/admin/setup/overhead', label: t('entities.overhead-model.title'), iconKey: 'gauge' },
-                  { href: '/admin/setup/labor-costing', label: t('laborCosting.navTitle'), iconKey: 'coins' },
-                  { href: '/admin/setup/labor-pricing', label: tLaborPricing('navTitle'), iconKey: 'tag' },
-                  // Overhead rates live as a subtab of the Overhead workspace, not
-                  // a standalone rail entry — filter it out of the generic group.
-                  ...(byGroup.get(group.key) ?? [])
-                    .filter((e) => e.key !== 'overhead-rates')
-                    .map((e) => ({
-                      href: `/admin/setup/${e.key}`,
-                      label: t(`entities.${e.key}.title`),
-                      iconKey: e.iconKey,
-                    })),
-                  ] : []),
+                  ...(projectsEnabled
+                    ? [
+                        { href: '/admin/setup/project-types', label: tProjectTypes('title'), iconKey: 'briefcase' },
+                        { href: '/admin/setup/overhead', label: t('entities.overhead-model.title'), iconKey: 'gauge' },
+                        { href: '/admin/setup/labor-costing', label: t('laborCosting.navTitle'), iconKey: 'coins' },
+                        { href: '/admin/setup/labor-pricing', label: tLaborPricing('navTitle'), iconKey: 'tag' },
+                        // Overhead rates live as a subtab of the Overhead workspace, not
+                        // a standalone rail entry — filter it out of the generic group.
+                        ...(byGroup.get(group.key) ?? [])
+                          .filter((e) => e.key !== 'overhead-rates')
+                          .map((e) => ({
+                            href: `/admin/setup/${e.key}`,
+                            label: t(`entities.${e.key}.title`),
+                            iconKey: e.iconKey,
+                          })),
+                      ]
+                    : []),
                 ]
               : group.key === 'billing'
               ? [

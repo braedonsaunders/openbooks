@@ -88,9 +88,11 @@ export function InvoicingSettingsWorkspace({
                 <Button asChild variant="outline" size="sm">
                   <Link href="/admin/setup/features">Manage feature gate</Link>
                 </Button>
-                <Button asChild variant="outline" size="sm">
-                  <Link href="/admin/setup/projects">Project settings</Link>
-                </Button>
+                {projectsEnabled ? (
+                  <Button asChild variant="outline" size="sm">
+                    <Link href="/admin/setup/project-types">Configure project types</Link>
+                  </Button>
+                ) : null}
               </div>
             }
             control={<ArrowRight size={16} className="text-slate-400" aria-hidden />}
@@ -136,7 +138,9 @@ export function InvoicingSettingsWorkspace({
 
             <div className="flex flex-wrap gap-2">
               <Button asChild size="sm">
-                <Link href={projectsEnabled ? '/admin/setup/project-types' : '/admin/setup/projects'}>{projectsEnabled ? 'Configure project types' : 'Enable Projects first'}</Link>
+                <Link href={projectsEnabled ? '/admin/setup/project-types' : '/admin/setup/features'}>
+                  {projectsEnabled ? 'Configure project types' : 'Enable Projects in Features'}
+                </Link>
               </Button>
               {projectsEnabled && applicationProjectTypes > 0 ? (
                 <Button asChild variant="outline" size="sm">
