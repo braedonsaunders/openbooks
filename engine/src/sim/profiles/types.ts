@@ -67,6 +67,20 @@ export interface Profile {
   coa?: CoaEntry[];
   /** Opening-balance scale (1 = mid-size services firm; larger = bigger company). */
   openingScale?: number;
+  /**
+   * The company's cost structure, so the P&L is enterprise-realistic instead of
+   * revenue-with-token-costs. Each month the environment books a payroll run and
+   * a delivery-cost accrual sized to the month's delivered revenue, giving a
+   * coherent gross/net margin. Labor that already flows through T&M time entries
+   * (construction field crews) is EXCLUDED via `laborPctOfRevenue` being the
+   * *non-T&M* labor only.
+   */
+  economics?: {
+    /** Payroll (salaries+benefits+tax) as a fraction of monthly revenue. */
+    laborPctOfRevenue: string;
+    /** Direct delivery cost (COGS not otherwise billed via AP) as a fraction of revenue. */
+    cogsPctOfRevenue: string;
+  };
   /** ISO 4217-ish description only; the CoA is fixed but categories vary by use. */
   vendors: VendorSpec[];
   customers: CustomerSpec[];
