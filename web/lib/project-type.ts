@@ -3,10 +3,19 @@ import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/db.ts'
 import { BUILTIN_PROJECT_TYPES, type FinancialProfile, type InvoicingProfile, type BackupProfile } from '@openbooks/schema'
 
+/**
+ * The single resolver for a project's classification. A project is classified by
+ * its `project_type_id` (→ project_types) and nothing else; an unconfigured
+ * project defaults to the built-in Time & Materials type. This is the ONE place
+ * that default lives — callers read the resolved type's profiles/key, never a
+ * coarse billing-method string re-derived inline.
+ */
 export interface ResolvedProjectType {
   id: string | null
   key: string
   name: string
+  /** Coarse classifier carried by the type (for snapshots/labels), derived here. */
+  billingMethod: 'time_and_materials' | 'fixed_price' | 'cost_plus' | null
   financialProfile: FinancialProfile
   invoicingProfile: InvoicingProfile
   backupProfile: BackupProfile
@@ -18,28 +27,28 @@ function normalizedInvoicingProfile(profile: InvoicingProfile): InvoicingProfile
   return { ...profile, billingProcedure: profile.billingProcedure ?? 'standard' }
 }
 
-const DEFAULTS = BUILTIN_PROJECT_TYPES
-const byKey = new Map(DEFAULTS.map((t) => [t.key, t]))
-const byMethod = new Map(DEFAULTS.map((t) => [t.billingMethod, t]))
+const byKey = new Map(BUILTIN_PROJECT_TYPES.map((t) => [t.key, t]))
 
-function fallback(billingMethod: string | null): ResolvedProjectType {
-  const t = (billingMethod && byMethod.get(billingMethod as any)) || byKey.get('time_and_materials')!
-  return { id: null, key: t.key, name: t.name, financialProfile: t.financialProfile, invoicingProfile: normalizedInvoicingProfile(t.invoicingProfile), backupProfile: t.backupProfile }
+/** The coarse billing method a project type maps to (from its built-in definition). */
+export function coarseBillingMethod(key: string | null | undefined): ResolvedProjectType['billingMethod'] {
+  return (key && byKey.get(key)?.billingMethod) || 'time_and_materials'
 }
 
-/** Resolve the profiles governing a project: its assigned type, else the
- *  built-in matching its billing_method, else Time & Materials. */
+function timeAndMaterials(): ResolvedProjectType {
+  const t = byKey.get('time_and_materials')!
+  return { id: null, key: t.key, name: t.name, billingMethod: t.billingMethod, financialProfile: t.financialProfile, invoicingProfile: normalizedInvoicingProfile(t.invoicingProfile), backupProfile: t.backupProfile }
+}
+
 export async function loadProjectType(orgId: string, projectId: string): Promise<ResolvedProjectType> {
   const r = (await db.execute(sql`
-    select pt.id, pt.key, pt.name, pt.financial_profile as fp, pt.invoicing_profile as ip, pt.backup_profile as bp
+    select pt.id, pt.key, pt.name, pt.billing_method as bm, pt.financial_profile as fp, pt.invoicing_profile as ip, pt.backup_profile as bp
       from projects p
       left join project_types pt on pt.id = p.project_type_id and pt.org_id = p.org_id
      where p.id = ${projectId} and p.org_id = ${orgId}
-  `)) as unknown as { rows: { id: string | null; key: string | null; name: string | null; fp: FinancialProfile | null; ip: InvoicingProfile | null; bp: BackupProfile | null }[] }
+  `)) as unknown as { rows: { id: string | null; key: string | null; name: string | null; bm: ResolvedProjectType['billingMethod'] | null; fp: FinancialProfile | null; ip: InvoicingProfile | null; bp: BackupProfile | null }[] }
   const row = r.rows[0]
-  if (!row) return fallback(null)
-  if (row.id && row.fp && row.ip && row.bp) {
-    return { id: row.id, key: row.key!, name: row.name!, financialProfile: row.fp, invoicingProfile: normalizedInvoicingProfile(row.ip), backupProfile: row.bp }
+  if (row?.id && row.fp && row.ip && row.bp) {
+    return { id: row.id, key: row.key!, name: row.name!, billingMethod: row.bm ?? coarseBillingMethod(row.key), financialProfile: row.fp, invoicingProfile: normalizedInvoicingProfile(row.ip), backupProfile: row.bp }
   }
-  return fallback(null)
+  return timeAndMaterials()
 }

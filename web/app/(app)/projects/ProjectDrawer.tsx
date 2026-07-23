@@ -358,10 +358,6 @@ export function ProjectDrawer({
             </Select>
           </>
         )
-      case 'billing_method':
-        // The project type is the authoritative billing classifier; there is no
-        // longer a separate coarse billing-method field on the project.
-        return null
       case 'contract_value':
         return (
           <>

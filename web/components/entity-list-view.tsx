@@ -152,7 +152,7 @@ export async function EntityListView({
   const filteredTotal = Number(totalRow.rows[0].n)
 
   // Enum value → display label, resolved from any list filter that carries an
-  // option set (status, billing_method…). Lets both the chips and the table
+  // option set (status, project_type…). Lets both the chips and the table
   // cells show localized labels instead of raw codes.
   const optionLabel = (colKey: string, value: string): string => {
     const f = meta.listFilters.find((flt) => flt.key === colKey)
@@ -168,7 +168,7 @@ export async function EntityListView({
     label: o.labelKey ? label(o.labelKey) : o.value,
     count: Number(statusCountByValue.get(o.value) ?? 0),
   }))
-  const billingFilterMeta = meta.listFilters.find((f) => f.key === 'billing_method')
+  const billingFilterMeta = meta.listFilters.find((f) => f.key === 'project_type')
   const billingOptions = (billingFilterMeta?.options ?? []).map((o) => ({
     value: o.value,
     label: o.labelKey ? label(o.labelKey) : o.value,

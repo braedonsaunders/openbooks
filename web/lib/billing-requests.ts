@@ -2,6 +2,7 @@ import 'server-only'
 import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/db.ts'
 import { resolveInvoicingPreference } from './invoicing-preference.ts'
+import { loadProjectType } from './project-type'
 import { isFeatureEnabled } from './features'
 
 /** CRUD for project billing requests + milestone schedules. */
@@ -39,12 +40,13 @@ export async function nextBillingRequestNumber(orgId: string): Promise<string> {
 export async function createBillingRequest(orgId: string, userId: string, input: BillingRequestInput) {
   if (!(await isFeatureEnabled(orgId, 'projects'))) throw new Error('Projects feature is disabled')
   const proj = (await db.execute(sql`
-    select p.id, coalesce(pt.billing_method, 'time_and_materials') as billing_method, p.customer_po_number
-      from projects p
-      left join project_types pt on pt.id = p.project_type_id and pt.org_id = p.org_id
-     where p.id = ${input.projectId} and p.org_id = ${orgId}
-  `)) as unknown as { rows: { id: string; billing_method: string | null; customer_po_number: string | null }[] }
+    select id, customer_po_number from projects where id = ${input.projectId} and org_id = ${orgId}
+  `)) as unknown as { rows: { id: string; customer_po_number: string | null }[] }
   if (!proj.rows[0]) throw new Error('Project not found')
+
+  // The project type is the authoritative classifier; snapshot its coarse
+  // billing method onto the request so historical invoices stay reproducible.
+  const projectType = await loadProjectType(orgId, input.projectId)
 
   // Defaults come from the resolved invoicing preference cascade
   // (project type ← customer ← project) unless the request overrides them.
@@ -71,7 +73,7 @@ export async function createBillingRequest(orgId: string, userId: string, input:
       ${orgId}, ${input.projectId}, ${requestNumber}, ${input.invoiceType ?? 'progress'}, ${basis},
       ${input.drawAmount ?? null}, ${input.startDate ?? null}, ${input.cutoffDate ?? null},
       ${input.invoiceDescription ?? null}, ${input.customerPo ?? proj.rows[0].customer_po_number},
-      ${proj.rows[0].billing_method}, ${backupRequired}, ${backupType},
+      ${projectType.billingMethod}, ${backupRequired}, ${backupType},
       ${input.selectedTimeEntryIds ? JSON.stringify(input.selectedTimeEntryIds) : null},
       ${input.notes ?? null}, 'open', ${userId}, ${userId})
     returning id, request_number

@@ -55,23 +55,21 @@ export async function generateInvoiceFromBillingRequest(
     if (req.status !== 'open') throw new BillingError('This billing request has already been invoiced')
 
     const projRes = (await tx.execute(sql`
-      select p.id, p.customer_id, coalesce(pt.billing_method, 'time_and_materials') as billing_method,
-             p.customer_po_number, p.subsidiary_id, p.custom,
+      select p.id, p.customer_id, p.customer_po_number, p.subsidiary_id, p.custom,
              coalesce(s.base_currency,o.base_currency) as billing_currency
         from projects p join orgs o on o.id=p.org_id left join subsidiaries s on s.id=p.subsidiary_id
-        left join project_types pt on pt.id = p.project_type_id and pt.org_id = p.org_id
        where p.id = ${req.project_id} and p.org_id = ${orgId}
     `)) as unknown as { rows: any[] }
     const project = projRes.rows[0]
     if (!project) throw new BillingError('Project not found')
     if (!project.customer_id) throw new BillingError('The project has no customer to invoice')
 
-    const billingMethod: string = req.billing_method_snapshot ?? project.billing_method ?? 'time_and_materials'
     const markup = markupMultiplier((project.custom ?? {}).markupPercent)
-    // The project type's invoicing profile governs line building + the credit
-    // account. Built-in types reproduce the legacy billing_method behaviour.
+    // The project type governs line building, the credit account, and the coarse
+    // billing-method label snapshotted onto the invoice document.
     const ptype = await loadProjectType(orgId, project.id)
     const invoicing = ptype.invoicingProfile
+    const billingMethod: string = req.billing_method_snapshot ?? ptype.billingMethod ?? 'time_and_materials'
     if (invoicing.billingProcedure === 'application_for_payment') {
       throw new BillingError('This project bills through applications for payment')
     }
@@ -115,7 +113,7 @@ export async function generateInvoiceFromBillingRequest(
     }
     const built: BuiltLine[] = []
 
-    if (billingMethod === 'draw_amount' || req.basis === 'draw_amount') {
+    if (req.basis === 'draw_amount') {
       const amt = String(req.draw_amount ?? '0')
       if (!amt || isZero(amt)) throw new BillingError('Enter a draw amount to bill')
       if (!fixedPriceCreditAcct) throw new BillingError('No income account is configured to post the draw to')

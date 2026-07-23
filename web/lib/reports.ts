@@ -1130,7 +1130,7 @@ export interface ProjectProfitRow {
   customerId: string | null
   customerName: string | null
   status: string | null
-  billingMethod: string | null
+  projectType: string | null
   revenue: number
   cogs: number
   grossProfit: number
@@ -1234,7 +1234,7 @@ export async function projectProfitability(
        group by project_id
     )
     select p.id, p.name, p.customer_id, cu.display_name as customer, p.status,
-           coalesce(pt.billing_method, 'time_and_materials') as billing_method,
+           coalesce(pt.key, 'time_and_materials') as project_type,
            coalesce(pl.revenue, 0) as revenue, coalesce(pl.cogs, 0) as cogs,
            coalesce(pl.expenses, 0) as expenses, coalesce(hrs.hours, 0) as hours
       from projects p
@@ -1249,7 +1249,7 @@ export async function projectProfitability(
      order by (coalesce(pl.revenue, 0) - coalesce(pl.cogs, 0) - coalesce(pl.expenses, 0)) desc, p.name
   `)) as unknown as {
     rows: {
-      id: string; name: string; customer_id: string | null; customer: string | null; status: string | null; billing_method: string | null
+      id: string; name: string; customer_id: string | null; customer: string | null; status: string | null; project_type: string | null
       revenue: string; cogs: string; expenses: string; hours: string
     }[]
   }
@@ -1265,7 +1265,7 @@ export async function projectProfitability(
       customerId: x.customer_id,
       customerName: x.customer,
       status: x.status,
-      billingMethod: x.billing_method,
+      projectType: x.project_type,
       revenue, cogs, grossProfit, expenses, net,
       margin: Math.abs(revenue) >= 0.005 ? net / revenue : null,
       hours: Number(x.hours),
