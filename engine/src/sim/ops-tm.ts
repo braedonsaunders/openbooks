@@ -4,6 +4,7 @@ import { db } from "../db.ts";
 import { postDocument } from "../posting.ts";
 import { postProjectLaborCost } from "../project-recognition.ts";
 import { mul, sum as sumMoney } from "../money.ts";
+import { addDays } from "./manifest.ts";
 import { postingDeps } from "./activities/documents.ts";
 import type { SimOrg } from "./world.ts";
 
@@ -124,12 +125,18 @@ export async function billTimeAndMaterials(
 
   const docId = randomUUID();
   const documentNumber = `TM-${proj.rows[0]!.code}-${invoiceDate.replace(/-/g, "")}`;
+  // Net-30 terms with a modest collection lag, so the environment's collection
+  // step remits against this invoice (otherwise billed T&M never gets paid).
+  const dueDate = addDays(invoiceDate, 30);
+  const expectedPayDate = addDays(invoiceDate, 38);
   await db.execute(sql`
     insert into documents
-      (id, org_id, kind, status, document_number, party_id, document_date, currency, subtotal, tax_total, total, created_by, memo, custom)
+      (id, org_id, kind, status, document_number, party_id, document_date, due_date, expected_pay_date,
+       currency, subtotal, tax_total, total, created_by, memo, custom)
     values (${docId}, ${world.orgId}, 'customer_invoice', 'draft', ${documentNumber}, ${customerId}, ${invoiceDate},
-            ${world.currency}, ${total}, '0.00', ${total}, ${world.actors.arClerk},
-            ${`T&M billing — ${proj.rows[0]!.name}`}, ${JSON.stringify({ sim: { tm: true, projectId } })}::jsonb)`);
+            ${dueDate}, ${expectedPayDate}, ${world.currency}, ${total}, '0.00', ${total}, ${world.actors.arClerk},
+            ${`T&M billing — ${proj.rows[0]!.name}`},
+            ${JSON.stringify({ sim: { tm: true, projectId, payFraction: "1" } })}::jsonb)`);
 
   const lineIds: { lineId: string; timeEntryId: string }[] = [];
   for (let i = 0; i < time.rows.length; i++) {
