@@ -30,7 +30,7 @@ import {
 } from 'lucide-react'
 import { cn } from '@openbooks/ui'
 
-type Feature = { key: string; category: string; enabled: boolean }
+type Feature = { key: string; category: string; enabled: boolean; parentKey?: string }
 type Impact = { labelKey: string; count: number }
 type DisableStatus = { blocked: boolean; impacts: Impact[] }
 
@@ -140,7 +140,7 @@ export function FeaturesWorkspace({
 
       {categories.map((cat) => {
         const rows = features.filter((f) => f.category === cat)
-        const on = rows.filter((f) => state[f.key]).length
+        const on = rows.filter((f) => state[f.key] && (!f.parentKey || state[f.parentKey])).length
         return (
           <section key={cat} className="space-y-2.5">
             <div className="flex items-baseline justify-between px-1">
@@ -154,7 +154,9 @@ export function FeaturesWorkspace({
             <div className="divide-y divide-slate-100 overflow-hidden rounded-xl border border-slate-200 bg-white dark:divide-slate-800 dark:border-slate-800 dark:bg-slate-900">
               {rows.map((f) => {
                 const status = disableStatus[f.key]
-                const isOn = Boolean(state[f.key])
+                const parentEnabled = !f.parentKey || Boolean(state[f.parentKey])
+                const dependencyLocked = Boolean(f.parentKey && !parentEnabled)
+                const isOn = Boolean(state[f.key]) && parentEnabled
                 const blocked = isOn && Boolean(status?.blocked)
                 const impacts = status?.impacts ?? []
                 return (
@@ -166,15 +168,17 @@ export function FeaturesWorkspace({
                     on={isOn}
                     blocked={blocked}
                     reason={
-                      blocked
+                      dependencyLocked
+                        ? `Requires ${t(`features.${f.parentKey}.title`)}.`
+                        : blocked
                         ? t('setup.features.blockedReason', { items: impactText(impacts) })
                         : isOn && impacts.length > 0
                           ? t('setup.features.affectsNote', { items: impactText(impacts) })
                           : undefined
                     }
-                    reasonTone={blocked ? 'block' : 'info'}
+                    reasonTone={blocked || dependencyLocked ? 'block' : 'info'}
                     busy={pending === f.key}
-                    disabled={pending !== null && pending !== f.key}
+                    disabled={dependencyLocked || (pending !== null && pending !== f.key)}
                     onToggle={() => toggle(f.key)}
                   />
                 )

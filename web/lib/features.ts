@@ -20,9 +20,6 @@ export interface FeatureDef {
   navModules?: string[]
   /** Grouping on the Features page. */
   category: 'sales' | 'operations' | 'accounting' | 'platform'
-  /** False when the authoritative switch lives on a module-specific Company
-   *  Settings page rather than the generic Features switchboard. */
-  showInSwitchboard?: boolean
   /** Optional authoritative parent module. A child can never resolve enabled
    *  while its parent is disabled, regardless of stale stored overrides. */
   parentKey?: string
@@ -39,14 +36,13 @@ export const FEATURES: FeatureDef[] = [
   // Subscription billing: plans + subscriptions that auto-generate recurring
   // invoices (SaaS/retainer style). Off by default — recurring document
   // schedules + dunning work without it; this adds the plan/subscription model.
-  // Invoicing owns this switch so billing policy has one authoritative home.
-  { key: 'subscriptionBilling', defaultEnabled: false, category: 'sales', showInSwitchboard: false },
+  { key: 'subscriptionBilling', defaultEnabled: false, category: 'sales' },
   // Operations
-  // Projects is governed from Company Settings → Projects. Schedule-of-values
-  // billing is a project-type billing procedure, not an independent module.
-  { key: 'projects', defaultEnabled: true, category: 'operations', navModules: ['projects', 'construction-billing', 'field-tickets'], showInSwitchboard: false },
+  // Projects is a parent gate on the centralized Features page.
+  // Schedule-of-values billing remains a project-type procedure, not a gate.
+  { key: 'projects', defaultEnabled: true, category: 'operations', navModules: ['projects', 'construction-billing', 'field-tickets'] },
   { key: 'timeTracking', defaultEnabled: true, category: 'operations', navModules: ['timesheets'] },
-  { key: 'fieldTickets', defaultEnabled: false, category: 'operations', navModules: ['field-tickets'], showInSwitchboard: false, parentKey: 'projects' },
+  { key: 'fieldTickets', defaultEnabled: false, category: 'operations', navModules: ['field-tickets'], parentKey: 'projects' },
   { key: 'inventory', defaultEnabled: true, category: 'operations', navModules: ['inventory'] },
   { key: 'equipment', defaultEnabled: true, category: 'operations', navModules: ['equipment'] },
   { key: 'expenses', defaultEnabled: true, category: 'operations', navModules: ['expenses'] },

@@ -2,13 +2,13 @@ import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/db.ts'
 import { seedProjectTypes } from '@openbooks/engine/src/seed-project-types.ts'
 import { requirePermission } from '../../../../../lib/authz'
-import { featureDisableStatuses, isFeatureEnabled } from '../../../../../lib/features'
+import { isFeatureEnabled } from '../../../../../lib/features'
 import { ProjectsSettingsWorkspace } from './ProjectsSettingsWorkspace'
 
 export const dynamic = 'force-dynamic'
 
-/** Authoritative organization policy for the Projects domain. This page is
- * always reachable so an administrator can enable the parent module. */
+/** Projects configuration hub. The authoritative module gate is centralized on
+ * Company Settings → Features; this page is always reachable to show status. */
 export default async function ProjectsSettingsPage() {
   const authz = await requirePermission('admin.setup.manage')
   const orgId = authz.user.orgId
@@ -21,7 +21,7 @@ export default async function ProjectsSettingsPage() {
   // The seed is idempotent and never overwrites tenant edits.
   if (enabled) await seedProjectTypes(orgId, authz.user.id)
 
-  const [typeCounts, sovCount, disable] = await Promise.all([
+  const [typeCounts, sovCount] = await Promise.all([
     db.execute(sql`
       select count(*)::int as total,
              count(*) filter (where is_active)::int as active
@@ -30,10 +30,6 @@ export default async function ProjectsSettingsPage() {
       select count(*)::int as n from project_types
        where org_id = ${orgId} and is_active
          and coalesce(invoicing_profile->>'billingProcedure', 'standard') = 'application_for_payment'`) as unknown as Promise<{ rows: { n: number }[] }>,
-    featureDisableStatuses(orgId, [
-      ...(enabled ? ['projects'] : []),
-      ...(fieldTicketsEnabled ? ['fieldTickets'] : []),
-    ]),
   ])
 
   return (
@@ -43,8 +39,6 @@ export default async function ProjectsSettingsPage() {
       activeTypeCount={Number(typeCounts.rows[0]?.active ?? 0)}
       applicationTypeCount={Number(sovCount.rows[0]?.n ?? 0)}
       fieldTicketsEnabled={fieldTicketsEnabled}
-      fieldTicketsDisableStatus={disable.fieldTickets ?? { blocked: false, impacts: [] }}
-      disableStatus={disable.projects ?? { blocked: false, impacts: [] }}
     />
   )
 }
