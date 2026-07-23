@@ -1,7 +1,7 @@
 import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/db.ts'
 import { requirePermission } from '../../../../../lib/authz'
-import { featureDisableStatuses, isFeatureEnabled } from '../../../../../lib/features'
+import { isFeatureEnabled } from '../../../../../lib/features'
 import { InvoicingSettingsWorkspace } from './InvoicingSettingsWorkspace'
 
 export const dynamic = 'force-dynamic'
@@ -39,14 +39,12 @@ export default async function InvoicingSettingsPage() {
       rows: { active: number; paused: number }[]
     }>,
   ])
-  const disableStatus = subscriptionBillingEnabled ? (await featureDisableStatuses(orgId, ['subscriptionBilling'])).subscriptionBilling : undefined
   const typeCounts = projectTypes.rows[0]
   const subscriptions = subscriptionCounts.rows[0]
 
   return (
     <InvoicingSettingsWorkspace
       subscriptionBillingEnabled={subscriptionBillingEnabled}
-      subscriptionDisableStatus={disableStatus ?? { blocked: false, impacts: [] }}
       activeSubscriptions={Number(subscriptions?.active ?? 0)}
       pausedSubscriptions={Number(subscriptions?.paused ?? 0)}
       projectsEnabled={projectsEnabled}

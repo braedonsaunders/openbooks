@@ -13,9 +13,12 @@ export default async function FeaturesSetup() {
   const authz = await requirePermission('admin.setup.manage')
   const state = await resolvedFeatureState(authz.user.orgId)
 
-  const features = FEATURES
-    .filter((f) => f.showInSwitchboard !== false)
-    .map((f) => ({ key: f.key, category: f.category, enabled: featureEnabled(state, f.key) }))
+  const features = FEATURES.map((f) => ({
+    key: f.key,
+    category: f.category,
+    parentKey: f.parentKey,
+    enabled: featureEnabled(state, f.key),
+  }))
   // What turning each ENABLED feature off would affect (impacts + hard blocks).
   const disableStatus = await featureDisableStatuses(
     authz.user.orgId,

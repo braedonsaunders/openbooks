@@ -55,9 +55,10 @@ realized adjustment is refused until the realized account is set.
 ## Features
 
 **Features** switches cross-company optional modules on or off. A domain with
-material subordinate policies owns its authoritative gate on its dedicated
-Company Settings page; for example, Projects and Field Tickets are governed in
-**Company Settings → Projects**, not duplicated on the generic switchboard.
+material subordinate policies still keeps every feature gate on this single
+authoritative switchboard. Projects, Field Tickets, Subscription Billing, and
+all other optional capabilities are governed in **Company Settings → Features**;
+module settings pages show status and configuration but never duplicate a switch.
 Turning a feature off hides operational surfaces but never deletes its data —
 the data returns if you re-enable it. A feature whose data is load-bearing for
 the ledger or an open operational obligation cannot be turned off until that
@@ -236,15 +237,16 @@ records carry.
 workflows:
 
 - standard one-time invoicing is a core capability and remains available;
-- subscription billing can be enabled for plan-and-schedule based recurring
-  invoices, but cannot be disabled while active subscriptions would stop
-  billing; and
+- subscription billing is gated on **Company Settings → Features** for
+  plan-and-schedule based recurring invoices, and cannot be disabled while
+  active subscriptions would stop billing; and
 - project invoicing reflects the authoritative **Projects** parent gate. Its
   procedures are assigned by project type. Progress and final are invoice
   stages, not independent modules or parallel billing engines.
 
 Project configuration stays in **Company Settings → Projects** and **Project
-Types** so billing policy never has two competing sources of truth.
+Types**, while the gate stays on **Features**, so policy never has two competing
+sources of truth.
 
 ## Payment Terms
 
@@ -453,17 +455,19 @@ export const setupProjectsGroup: DocArticle = {
   related: ['project-types', 'overhead-costing', 'labor-costing', 'labor-pricing'],
   body: `# Setup: Projects
 
-The **Projects** group owns the authoritative organization-level Projects gate
-and every subordinate project-accounting policy. The Projects landing page is
-always available to administrators; the remaining workspaces appear after the
-parent gate is enabled. No project API or background operation remains available
-when the parent gate is off, and disabling it never deletes history.
+The **Projects** group owns project-accounting configuration. The authoritative
+Projects and Field Tickets gates live on **Company Settings → Features**. The
+Projects landing page is always available to administrators and shows effective
+status; the remaining workspaces appear after the parent gate is enabled. No
+project API or background operation remains available when the parent gate is
+off, and disabling it never deletes history.
 
 ## The menu items
 
-- **Projects** — enable or disable the complete Projects domain and review the
-  active billing models, applications-for-payment procedures, and costing
-  workspaces. Open operational or financial obligations block disablement.
+- **Projects** — review effective gate status, active billing models,
+  applications-for-payment procedures, and costing workspaces. Enable or
+  disable Projects only on **Company Settings → Features**; open operational or
+  financial obligations block disablement.
 - **Project Types** — per-type profiles for profitability, invoicing, and invoice
   backup. A type also selects the billing procedure: standard project billing
   requests or Schedule-of-Values applications for payment. See **Project Types**.

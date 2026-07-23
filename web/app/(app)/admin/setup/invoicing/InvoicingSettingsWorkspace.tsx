@@ -1,18 +1,12 @@
 'use client'
 
 import Link from 'next/link'
-import { useState, type ReactNode } from 'react'
-import { useRouter } from 'next/navigation'
+import type { ReactNode } from 'react'
 import { ArrowRight, BriefcaseBusiness, CalendarClock, FileCheck2, FileText, Hash, Layers3, LockKeyhole, ReceiptText, Repeat2 } from 'lucide-react'
 import { Badge, Button, Card, CardContent, cn } from '@openbooks/ui'
-import { toast } from 'sonner'
-
-type Impact = { labelKey: string; count: number }
-type DisableStatus = { blocked: boolean; impacts: Impact[] }
 
 export function InvoicingSettingsWorkspace({
-  subscriptionBillingEnabled: initialSubscriptionBillingEnabled,
-  subscriptionDisableStatus,
+  subscriptionBillingEnabled,
   activeSubscriptions,
   pausedSubscriptions,
   projectsEnabled,
@@ -21,7 +15,6 @@ export function InvoicingSettingsWorkspace({
   applicationProjectTypes,
 }: {
   subscriptionBillingEnabled: boolean
-  subscriptionDisableStatus: DisableStatus
   activeSubscriptions: number
   pausedSubscriptions: number
   projectsEnabled: boolean
@@ -29,42 +22,12 @@ export function InvoicingSettingsWorkspace({
   standardProjectTypes: number
   applicationProjectTypes: number
 }) {
-  const router = useRouter()
-  const [subscriptionBillingEnabled, setSubscriptionBillingEnabled] = useState(initialSubscriptionBillingEnabled)
-  const [busy, setBusy] = useState(false)
-
-  async function toggleSubscriptionBilling() {
-    if (busy || (subscriptionBillingEnabled && subscriptionDisableStatus.blocked)) return
-    const next = !subscriptionBillingEnabled
-    setBusy(true)
-    try {
-      const res = await fetch('/api/admin/setup/features', {
-        method: 'PUT',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ features: { subscriptionBilling: next } }),
-      })
-      if (!res.ok) {
-        const body = await res.json().catch(() => ({}))
-        throw new Error(
-          body.error === 'feature-blocked' ? 'Pause or cancel every active subscription before turning subscription billing off.' : (body.error ?? 'The invoicing policy could not be updated.'),
-        )
-      }
-      setSubscriptionBillingEnabled(next)
-      toast.success(next ? 'Subscription billing enabled' : 'Subscription billing disabled')
-      router.refresh()
-    } catch (error) {
-      toast.error((error as Error).message)
-    } finally {
-      setBusy(false)
-    }
-  }
-
   return (
     <div className="space-y-7">
       <div>
         <h2 className="text-lg font-semibold text-slate-900 dark:text-slate-100">Invoicing</h2>
         <p className="mt-1 max-w-3xl text-sm leading-6 text-slate-500 dark:text-slate-400">
-          Control which customer-invoice workflows your company offers. Contract economics stay with the originating module, while every workflow produces the same controlled customer invoice.
+          Review the customer-invoice workflows your company offers. All feature gates are managed centrally on the Features page; every enabled workflow produces the same controlled customer invoice.
         </p>
       </div>
 
@@ -72,7 +35,7 @@ export function InvoicingSettingsWorkspace({
         <div>
           <h3 className="text-sm font-semibold text-slate-900 dark:text-slate-100">Available invoice workflows</h3>
           <p className="mt-0.5 text-xs leading-5 text-slate-500 dark:text-slate-400">
-            Enable business workflows—not document labels. Progress and final are lifecycle stages within project invoicing.
+            Feature gates live on the Features page. Progress and final are lifecycle stages within project invoicing, not independent gates.
           </p>
         </div>
         <div className="divide-y divide-slate-100 overflow-hidden rounded-xl border border-slate-200 bg-white dark:divide-slate-800 dark:border-slate-800 dark:bg-slate-900">
@@ -97,34 +60,38 @@ export function InvoicingSettingsWorkspace({
                 ) : null}
               </div>
             }
-            note={subscriptionBillingEnabled && subscriptionDisableStatus.blocked ? 'Pause or cancel active subscriptions before disabling; scheduled invoices must never stop silently.' : undefined}
+            note="The authoritative Subscription Billing gate lives in Company Settings → Features."
+            noteTone="info"
             action={
-              subscriptionBillingEnabled ? (
+              <div className="flex flex-wrap gap-2">
                 <Button asChild variant="outline" size="sm">
-                  <Link href="/collections">Open subscriptions</Link>
+                  <Link href="/admin/setup/features">Manage feature gate</Link>
                 </Button>
-              ) : undefined
+                {subscriptionBillingEnabled ? (
+                  <Button asChild variant="outline" size="sm">
+                    <Link href="/collections">Open subscriptions</Link>
+                  </Button>
+                ) : null}
+              </div>
             }
-            control={
-              <Switch
-                label="Enable subscription billing"
-                on={subscriptionBillingEnabled}
-                disabled={busy || (subscriptionBillingEnabled && subscriptionDisableStatus.blocked)}
-                onToggle={toggleSubscriptionBilling}
-              />
-            }
+            control={<ArrowRight size={16} className="text-slate-400" aria-hidden />}
           />
           <WorkflowRow
             icon={BriefcaseBusiness}
             title="Project invoicing"
             description="Bill project work using the procedure and economic model assigned by each project type."
             status={<Badge variant={projectsEnabled ? 'success' : 'secondary'}>{projectsEnabled ? 'Enabled' : 'Disabled'}</Badge>}
-            note="The authoritative Projects parent gate lives in Company Settings → Projects."
+            note="The authoritative Projects parent gate lives in Company Settings → Features."
             noteTone="info"
             action={
-              <Button asChild variant="outline" size="sm">
-                <Link href="/admin/setup/projects">Manage Projects</Link>
-              </Button>
+              <div className="flex flex-wrap gap-2">
+                <Button asChild variant="outline" size="sm">
+                  <Link href="/admin/setup/features">Manage feature gate</Link>
+                </Button>
+                <Button asChild variant="outline" size="sm">
+                  <Link href="/admin/setup/projects">Project settings</Link>
+                </Button>
+              </div>
             }
             control={<ArrowRight size={16} className="text-slate-400" aria-hidden />}
           />
@@ -233,26 +200,6 @@ function WorkflowRow({
       </div>
       <div className="shrink-0 pt-1">{control}</div>
     </div>
-  )
-}
-
-function Switch({ label, on, disabled, onToggle }: { label: string; on: boolean; disabled: boolean; onToggle: () => void }) {
-  return (
-    <button
-      type="button"
-      role="switch"
-      aria-checked={on}
-      aria-label={label}
-      disabled={disabled}
-      onClick={onToggle}
-      className={cn(
-        'relative inline-flex h-6 w-10 items-center rounded-full transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-500 focus-visible:ring-offset-2',
-        on ? 'bg-teal-600' : 'bg-slate-200 dark:bg-slate-700',
-        disabled ? 'cursor-not-allowed opacity-60' : 'cursor-pointer',
-      )}
-    >
-      <span className={cn('inline-block h-5 w-5 rounded-full bg-white shadow-sm transition-transform', on ? 'translate-x-[18px]' : 'translate-x-0.5')} />
-    </button>
   )
 }
 
