@@ -2410,6 +2410,7 @@
         "bankStatements": "{count, plural, one {# bank statement} other {# bank statements}}",
         "assets": "{count, plural, one {# fixed asset} other {# fixed assets}}",
         "inventoryMovements": "{count, plural, one {# inventory movement} other {# inventory movements}}",
+        "activeSubscriptions": "{count, plural, one {# active subscription} other {# active subscriptions}}",
         "projects": "{count, plural, one {# project} other {# projects}}",
         "revenueSchedules": "{count, plural, one {# deferred-revenue schedule} other {# deferred-revenue schedules}}",
         "controlCheckUnavailable": "an integrity check that could not be completed"
@@ -2423,6 +2424,9 @@
         "accounting": "Accounting",
         "platform": "Platform"
       }
+    },
+    "invoicing": {
+      "navTitle": "Invoicing"
     },
     "bankFeeds": {
       "navTitle": "Bank Feeds"

@@ -169,6 +169,15 @@ export function SetupNav({
                     })),
                   ] : []),
                 ]
+              : group.key === 'billing'
+              ? [
+                  { href: '/admin/setup/invoicing', label: t('invoicing.navTitle'), iconKey: 'receipt' },
+                  ...(byGroup.get(group.key) ?? []).map((e) => ({
+                    href: `/admin/setup/${e.key}`,
+                    label: t(`entities.${e.key}.title`),
+                    iconKey: e.iconKey,
+                  })),
+                ]
               : group.key === 'taxes'
               ? [
                   { href: '/admin/setup/tax-setup', label: t('taxSetup.navTitle'), iconKey: 'landmark' },

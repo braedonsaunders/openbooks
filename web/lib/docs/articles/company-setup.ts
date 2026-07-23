@@ -226,8 +226,25 @@ export const setupBillingGroup: DocArticle = {
   related: ['item-rates', 'sales-workflow', 'company-settings'],
   body: `# Setup: Billing & Numbering
 
-The **Billing & numbering** group controls the terms offered to counterparties
-and the document numbers your records carry.
+The **Billing & numbering** group controls the invoice workflows offered by the
+company, the terms offered to counterparties, and the document numbers your
+records carry.
+
+## Invoicing
+
+**Invoicing** is the authoritative company policy for customer-invoice
+workflows:
+
+- standard one-time invoicing is a core capability and remains available;
+- subscription billing can be enabled for plan-and-schedule based recurring
+  invoices, but cannot be disabled while active subscriptions would stop
+  billing; and
+- project invoicing reflects the authoritative **Projects** parent gate. Its
+  procedures are assigned by project type. Progress and final are invoice
+  stages, not independent modules or parallel billing engines.
+
+Project configuration stays in **Company Settings → Projects** and **Project
+Types** so billing policy never has two competing sources of truth.
 
 ## Payment Terms
 
