@@ -6,7 +6,7 @@ import { add, cmp, mulDecimal, neg, sum } from "../money.ts";
 import { addDays, isWeekend, isMonthEnd } from "./manifest.ts";
 import { mark, nextNumber, type SimContext } from "./context.ts";
 import { createDraftDocument, collectibleOpenItems } from "./activities/documents.ts";
-import { isBottomUp, logDailyBillableTime, monthEndLaborAndPayroll } from "./bottomup.ts";
+import { isBottomUp, isLaborBased, logDailyBillableTime, monthEndLaborAndPayroll } from "./bottomup.ts";
 import type { Rng } from "./rng.ts";
 import type { SimCustomer } from "./world.ts";
 
@@ -159,7 +159,7 @@ export async function generateDay(ctx: SimContext): Promise<DayEvents> {
   // actuals (washes clearing, bench labor to overhead). Otherwise: the top-down
   // revenue-pegged delivery cost.
   if (isMonthEnd(ctx.simDate)) {
-    if (isBottomUp(ctx)) await monthEndLaborAndPayroll(ctx);
+    if (isLaborBased(ctx)) await monthEndLaborAndPayroll(ctx);
     else if (ctx.profile.economics) await postMonthlyLaborAndCogs(ctx);
   }
 

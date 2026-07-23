@@ -22,9 +22,19 @@ import { isWeekend } from "./manifest.ts";
 
 const HOURS_PER_MONTH = 173.33; // 2080 / 12
 
-/** Is this company running the bottom-up model (has a workforce + engagements)? */
+/** Is this company AUTO-driving revenue from billable time (workforce + engagements)? */
 export function isBottomUp(ctx: SimContext): boolean {
   return ctx.world.engagements.length > 0 && ctx.world.employees.length > 0 && !!ctx.world.accounts.laborClearing;
+}
+
+/**
+ * Does this company carry its labor through the crew/payroll engine? True for any
+ * company with a workforce + labor clearing — including construction, whose crews
+ * are put on jobs by the PM (not auto-engagements) but whose payroll is still
+ * ACTUALS (clearing wash + bench overhead), never random vendor bills.
+ */
+export function isLaborBased(ctx: SimContext): boolean {
+  return ctx.world.employees.length > 0 && !!ctx.world.accounts.laborClearing;
 }
 
 /** Each business day: workers log billable time against engagements. */
