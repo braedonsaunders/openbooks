@@ -90,6 +90,16 @@ export async function trialBalance(world: SimOrg, asOf: string) {
      order by a.number`);
 }
 
+/** Active projects with their schedule-of-values contract value. */
+export async function projects(world: SimOrg) {
+  return rows(sql`
+    select p.id, p.name, p.code, p.status, p.contract_value,
+           coalesce((select sum(s.scheduled_value) from sov_lines s where s.project_id = p.id), 0)::text as sov_total
+      from projects p
+     where p.org_id = ${world.orgId}
+     order by p.created_at`);
+}
+
 /** Period lock status (GL module) across the calendar. */
 export async function periodStatus(world: SimOrg) {
   return rows(sql`

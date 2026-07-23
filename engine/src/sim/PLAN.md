@@ -422,14 +422,34 @@ This splits the system into three layers:
 - Operator runbook, persona playbooks, README, throwaway `docker-compose.yml`, and a
   `sim-smoke` CI workflow.
 
-**Deferred (framework is ready; these are additive):**
+**Phase 6 breadth — wired (typed engine functions; pending live validation):**
+
+- Construction AIA/retainage: `ops-construction.ts` (`setupProject`, `runProgressBilling`,
+  `releaseProjectRetainage`) + `observe projects` + PM persona + CLI `setup-project` /
+  `progress-bill` / `release-retainage`. Retainage Receivable control account added.
+- Period-driven engines: `ops-periodic.ts` wraps `runDepreciation`, `runDueRecurringSchedules`,
+  `runDunning`, `computeTaxReturn`, `runRevaluation`, consolidation — as controller month-end ops.
+
+**Phase 7 adversarial — wired:** `ops-lifecycle.ts` — `voidDocument` (document-delete),
+`reverseEntry` (GL reversal), `writeOffReceivable` (bad-debt credit memo); CLI `void-doc` /
+`reverse-entry` / `write-off`.
+
+**LLM-callability:** `.claude/skills/run-simulation/SKILL.md` — told "run a simulation," an LLM
+becomes the operator with the full loop, persona dispatch, and stop-and-fix protocol.
+
+**Safety on the shared cluster:** the sim runs as its own **tagged tenant** inside the
+`openbooks` DB (no separate DB; the role lacks CREATEDB). `db-guard.ts` gates: `OPENBOOKS_SIM=1`
+required; destructive ops refuse non-`simHarness` orgs; org-less engines (`run-recurring`,
+`run-dunning`) refuse unless the DB is a dedicated sim database.
+
+**Deferred (additive):**
 
 - The surgical `now()` swaps inside the engine hot path (`postedAt`, the `asOf` defaults). The
-  clock is wired at the sim boundary (`withSimClock`); engine-side swaps are optional and were
-  left out to keep the posting path untouched. Not required for the financial checkpoint.
-- Breadth activities (Phase 6): AIA/retainage pay applications, field tickets, inventory,
-  depreciation, recurring/dunning, tax returns, FX/consolidation — each becomes a new `ops`
-  capability + generator hook + persona.
-- Adversarial depth (Phase 7): voids, write-offs, reopen requests, volume stress.
-- A live end-to-end run: requires a sim Postgres with the schema loaded (docker was unavailable
-  in the build session). The CI `sim-smoke` job performs exactly this.
+  clock is wired at the sim boundary (`withSimClock`); engine-side swaps left out to keep the
+  posting path untouched. Not required for the financial checkpoint.
+- Inventory activities, expense reports (needs an employee-party model), a multi-entity profile
+  (to exercise FX/consolidation), field tickets.
+- **Live validation:** not yet run. A first live attempt surfaced a real finding — `project_types`
+  rejects INSERT under RLS bypass during provisioning; provisioning uses `withBypass`, so that
+  RLS policy is a product defect to fix (not a harness workaround). Everything typechecks
+  (`engine tsc --noEmit`: 0 errors) but has not executed against the DB.

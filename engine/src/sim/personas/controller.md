@@ -27,6 +27,17 @@ OPENBOOKS_SIM=1 npm run sim -- <command> <RUN> [--flags]
   `prepaid`, `accrued`, `rent`, `payroll`).
 - `act close-month <RUN> --period <YYYY-MM>` — close a period (locks all
   subledgers, then GL). Do this only once the month is genuinely done.
+- `act write-off <RUN> --customer <id> --amount <n> --reason "..."` — write off an
+  uncollectible receivable (DR Bad Debt / CR AR) for a customer stuck in 90+.
+- `act void-doc <RUN> --doc <id> --reason "..."` — void a wrongly-posted document
+  in an open period (refused if the period is closed or it's been paid — correct).
+- `act reverse-entry <RUN> --entry <id>` — post a reversing entry for a bad JE.
+- `act run-depreciation <RUN>` — post the period's depreciation (if any assets).
+- `act prepare-tax <RUN> --form <code> --from <YYYY-MM-DD> --to <YYYY-MM-DD>` —
+  compute a filing-period tax return (read-only).
+
+> Note: `run-recurring` / `run-dunning` scan every org and are disabled on the
+> shared database; only use them on a dedicated sim DB.
 
 ## How you decide
 

@@ -28,6 +28,27 @@ function databaseName(url: string): string {
   return afterSlash.split("?")[0]!.toLowerCase();
 }
 
+/**
+ * True only when the DB is a DEDICATED sim database (name carries a marker).
+ * Some engine runners are org-less — they scan EVERY org (e.g. runDunning,
+ * runDueRecurringSchedules). Those must never run on a shared cluster, or they
+ * would touch real tenants. Gate such ops on this.
+ */
+export function isDedicatedSimDatabase(): boolean {
+  const name = databaseName(env.OPENBOOKS_DB_URL ?? "");
+  return NAME_MARKERS.some((m) => name.includes(m));
+}
+
+export function assertDedicatedSimDatabase(op: string): void {
+  if (!isDedicatedSimDatabase()) {
+    throw new Error(
+      `refusing "${op}": it is an ORG-LESS engine runner that scans every org, so it must only ` +
+        `run against a DEDICATED sim database (name containing sim/test/sandbox/scratch). ` +
+        `The current DB is shared; skip this op or point OPENBOOKS_DB_URL at an isolated DB.`,
+    );
+  }
+}
+
 /** Gate every run: OPENBOOKS_SIM must be explicitly set. */
 export function assertSimEnabled(): void {
   if (env.OPENBOOKS_SIM !== "1") {

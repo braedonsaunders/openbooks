@@ -67,7 +67,6 @@ export const professionalServices: Profile = {
     "customer_invoice",
     "customer_credit",
     "customer_payment",
-    "expense_report",
     "journal",
     "period_close",
     "period_immutability",
