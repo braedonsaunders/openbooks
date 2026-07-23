@@ -126,21 +126,12 @@ export function ProjectDrawer({
     ],
     [t, tCommon],
   )
-  const billingOptions = useMemo(
-    () => [
-      { value: 'time_and_materials', label: t('billing.time_and_materials') },
-      { value: 'fixed_price', label: t('billing.fixed_price') },
-      { value: 'cost_plus', label: t('billing.cost_plus') },
-    ],
-    [t],
-  )
   const [name, setName] = useState<string>(isPlaceholderName ? '' : (pr.name ?? ''))
   const [code, setCode] = useState<string>(pr.code ?? '')
   const [customerId, setCustomerId] = useState<string>(pr.customer_id ?? '')
   const [foremanId, setForemanId] = useState<string>(pr.foreman_id ?? '')
   const [managerId, setManagerId] = useState<string>(pr.manager_id ?? '')
   const [status, setStatus] = useState<string>(pr.status ?? 'active')
-  const [billingMethod, setBillingMethod] = useState<string>(pr.billing_method ?? '')
   const [projectTypeId, setProjectTypeId] = useState<string>(pr.project_type_id ?? '')
   const [invoicingPref, setInvoicingPref] = useState<InvoicingPref>((pr.invoicing_preference as InvoicingPref) ?? {})
   const [customerPoNumber, setCustomerPoNumber] = useState<string>(pr.customer_po_number ?? '')
@@ -190,6 +181,13 @@ export function ProjectDrawer({
     [parties],
   )
 
+  // The assigned project type is the authoritative billing classifier; untyped
+  // projects default to time & materials.
+  const selectedProjectType = useMemo(
+    () => projectTypes.find((pt) => pt.id === projectTypeId) ?? null,
+    [projectTypes, projectTypeId],
+  )
+
   function setTask(task: TaskRow, patch: Partial<TaskRow>) {
     setTasks((rows) => rows.map((row) => (row === task ? { ...row, ...patch } : row)))
   }
@@ -202,7 +200,6 @@ export function ProjectDrawer({
       foremanId: foremanId || null,
       managerId: managerId || null,
       status,
-      ...(projectTypeId ? {} : { billingMethod: billingMethod || null }),
       projectTypeId: projectTypeId || null,
       invoicingPreference: invoicingPref,
       customerPoNumber: customerPoNumber || null,
@@ -224,7 +221,7 @@ export function ProjectDrawer({
           estimatedCost: task.estimatedCost || null,
         })),
     }),
-    [name, code, customerId, foremanId, managerId, status, billingMethod, projectTypeId, invoicingPref, customerPoNumber, startsOn, endsOn, contractValue, notes, custom, subsidiaryId, subsidiaryIncludeChildren, subsidiaries.length, tasks, isActive],
+    [name, code, customerId, foremanId, managerId, status, projectTypeId, invoicingPref, customerPoNumber, startsOn, endsOn, contractValue, notes, custom, subsidiaryId, subsidiaryIncludeChildren, subsidiaries.length, tasks, isActive],
   )
   const [dirty, setDirty] = useState(false)
   const first = useRef(true)
@@ -244,7 +241,6 @@ export function ProjectDrawer({
     setForemanId(pr.foreman_id ?? '')
     setManagerId(pr.manager_id ?? '')
     setStatus(pr.status ?? 'active')
-    setBillingMethod(pr.billing_method ?? '')
     setProjectTypeId(pr.project_type_id ?? '')
     setInvoicingPref((pr.invoicing_preference as InvoicingPref) ?? {})
     setCustomerPoNumber(pr.customer_po_number ?? '')
@@ -340,12 +336,7 @@ export function ProjectDrawer({
         return (
           <>
             <Label>{lbl || t('drawer.projectType')}</Label>
-            <Select value={projectTypeId} onChange={(e) => {
-              const next = e.target.value
-              setProjectTypeId(next)
-              const selectedType = projectTypes.find((type) => type.id === next)
-              if (selectedType) setBillingMethod(selectedType.billingMethod ?? '')
-            }} disabled={ro}>
+            <Select value={projectTypeId} onChange={(e) => setProjectTypeId(e.target.value)} disabled={ro}>
               <option value="">—</option>
               {projectTypes.map((projectType) => <option key={projectType.id} value={projectType.id}>{projectType.name}</option>)}
             </Select>
@@ -368,18 +359,9 @@ export function ProjectDrawer({
           </>
         )
       case 'billing_method':
-        // Project type is authoritative. The coarse billing_method remains only
-        // for untyped legacy/imported projects and is derived by the API.
-        if (projectTypeId) return null
-        return (
-          <>
-            <Label>{lbl || t('labels.billingMethod')}</Label>
-            <Select value={billingMethod} onChange={(e) => setBillingMethod(e.target.value)} disabled={ro}>
-              <option value="">—</option>
-              {billingOptions.map((o) => (<option key={o.value} value={o.value}>{o.label}</option>))}
-            </Select>
-          </>
-        )
+        // The project type is the authoritative billing classifier; there is no
+        // longer a separate coarse billing-method field on the project.
+        return null
       case 'contract_value':
         return (
           <>
@@ -553,7 +535,7 @@ export function ProjectDrawer({
               {cockpit.invoicing.billingProcedure === 'application_for_payment'
                 ? menuItem(<Receipt className="h-3.5 w-3.5" aria-hidden />, 'Applications for payment', () => { setTab('billing'); setBillingFormOpen(false) })
                 : menuItem(<Receipt className="h-3.5 w-3.5" aria-hidden />, t('billing.requestBilling'), () => { setTab('billing'); setBillingFormOpen(true) })}
-              {billingMethod === 'fixed_price'
+              {selectedProjectType?.billingMethod === 'fixed_price'
                 ? menuItem(<TrendingUp className="h-3.5 w-3.5" aria-hidden />, t('cockpit.recognizeRevenue'), () => setTab('financials'))
                 : null}
               <div className="my-1 border-t border-slate-200 dark:border-slate-800" />
@@ -617,7 +599,6 @@ export function ProjectDrawer({
         <FinancialsTab
           data={cockpit.financials}
           projectId={pr.id}
-          billingMethod={billingMethod || null}
           recognition={cockpit.recognition}
           canManage={canManage}
         />

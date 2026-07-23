@@ -31,16 +31,15 @@ function fallback(billingMethod: string | null): ResolvedProjectType {
  *  built-in matching its billing_method, else Time & Materials. */
 export async function loadProjectType(orgId: string, projectId: string): Promise<ResolvedProjectType> {
   const r = (await db.execute(sql`
-    select p.billing_method,
-           pt.id, pt.key, pt.name, pt.financial_profile as fp, pt.invoicing_profile as ip, pt.backup_profile as bp
+    select pt.id, pt.key, pt.name, pt.financial_profile as fp, pt.invoicing_profile as ip, pt.backup_profile as bp
       from projects p
       left join project_types pt on pt.id = p.project_type_id and pt.org_id = p.org_id
      where p.id = ${projectId} and p.org_id = ${orgId}
-  `)) as unknown as { rows: { billing_method: string | null; id: string | null; key: string | null; name: string | null; fp: FinancialProfile | null; ip: InvoicingProfile | null; bp: BackupProfile | null }[] }
+  `)) as unknown as { rows: { id: string | null; key: string | null; name: string | null; fp: FinancialProfile | null; ip: InvoicingProfile | null; bp: BackupProfile | null }[] }
   const row = r.rows[0]
   if (!row) return fallback(null)
   if (row.id && row.fp && row.ip && row.bp) {
     return { id: row.id, key: row.key!, name: row.name!, financialProfile: row.fp, invoicingProfile: normalizedInvoicingProfile(row.ip), backupProfile: row.bp }
   }
-  return fallback(row.billing_method)
+  return fallback(null)
 }

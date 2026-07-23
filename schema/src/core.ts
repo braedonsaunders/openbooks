@@ -209,11 +209,10 @@ export const projects = pgTable(
     })
       .notNull()
       .default("active"),
-    billingMethod: text("billing_method", {
-      enum: ["time_and_materials", "fixed_price", "cost_plus"],
-    }),
-    // The configurable project type carrying the profitability/invoicing/backup
-    // profiles. `billing_method` stays as a back-compat coarse classifier.
+    // The configurable project type is the single source of truth for a project's
+    // classification (carries the profitability/invoicing/backup profiles). Any
+    // coarse "billing method" is derived from the type (project_types.billing_method),
+    // defaulting to time_and_materials for an unconfigured project.
     projectTypeId: uuid("project_type_id"), // → project_types
     // Native invoicing/backup override for this project (cascades over the type
     // and customer). A first-class capability, not a user custom field.

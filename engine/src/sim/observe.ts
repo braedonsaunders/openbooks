@@ -94,7 +94,8 @@ export async function trialBalance(world: SimOrg, asOf: string) {
 export async function projects(world: SimOrg) {
   return rows(sql`
     select p.id, p.name, p.code, p.status,
-           coalesce(pt.key, p.billing_method) as project_type, p.billing_method,
+           coalesce(pt.key, 'time_and_materials') as project_type,
+           coalesce(pt.billing_method, 'time_and_materials') as billing_method,
            p.contract_value::text as contract_value,
            coalesce((select sum(s.scheduled_value) from sov_lines s where s.project_id = p.id), 0)::text as sov_total,
            coalesce((select sum(d.total) from documents d

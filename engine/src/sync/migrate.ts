@@ -525,13 +525,14 @@ async function upsert(resource: string, ctx: Ctx, rec: SourceEntity, s: Resource
     const id = await findByRef("projects", orgId, refKey, rec.sourceRef);
     if (id) {
       await db.execute(sql`update projects set name=${name}, code=${vals.code}, status=${vals.status}::text,
-        billing_method=${vals.billing}, customer_id=${vals.customer}, foreman_id=${vals.foreman}, manager_id=${vals.manager},
+        project_type_id=coalesce((select id from project_types pt where pt.org_id=${orgId} and pt.key=${vals.billing} limit 1), project_type_id),
+        customer_id=${vals.customer}, foreman_id=${vals.foreman}, manager_id=${vals.manager},
         customer_po_number=${vals.po}, contract_value=coalesce(${contractValue}, contract_value),
         starts_on=${vals.starts}, ends_on=${vals.ends}, is_active=${vals.isActive} where id=${id}`);
       s.updated++; return id;
     }
-    const ins = (await db.execute(sql`insert into projects (org_id, name, code, status, billing_method, customer_id, foreman_id, manager_id, customer_po_number, contract_value, starts_on, ends_on, is_active, custom)
-      values (${orgId}, ${name}, ${vals.code}, ${vals.status}::text, ${vals.billing}, ${vals.customer}, ${vals.foreman}, ${vals.manager}, ${vals.po}, ${contractValue}, ${vals.starts}, ${vals.ends}, ${vals.isActive}, ${custom}::jsonb) returning id`)) as { rows: { id: string }[] };
+    const ins = (await db.execute(sql`insert into projects (org_id, name, code, status, project_type_id, customer_id, foreman_id, manager_id, customer_po_number, contract_value, starts_on, ends_on, is_active, custom)
+      values (${orgId}, ${name}, ${vals.code}, ${vals.status}::text, (select id from project_types pt where pt.org_id=${orgId} and pt.key=${vals.billing} limit 1), ${vals.customer}, ${vals.foreman}, ${vals.manager}, ${vals.po}, ${contractValue}, ${vals.starts}, ${vals.ends}, ${vals.isActive}, ${custom}::jsonb) returning id`)) as { rows: { id: string }[] };
     s.created++; return ins.rows[0]?.id ?? null;
   }
 

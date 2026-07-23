@@ -337,8 +337,8 @@ export async function provisionOrg(profile: Profile, window: { startDate: string
     const perCustomer = profile.engagementsPerCustomer ?? 0;
     if (accounts.laborWip && accounts.laborClearing && perCustomer > 0) {
       const tmTypeRow = (await db.execute(sql`
-        select id, billing_method from project_types where org_id = ${orgId} and key = 'time_and_materials' and is_active limit 1`)) as unknown as {
-        rows: { id: string; billing_method: string }[];
+        select id from project_types where org_id = ${orgId} and key = 'time_and_materials' and is_active limit 1`)) as unknown as {
+        rows: { id: string }[];
       };
       const tmType = tmTypeRow.rows[0];
       let n = 0;
@@ -349,8 +349,8 @@ export async function provisionOrg(profile: Profile, window: { startDate: string
             const code = `ENG-${String(++n).padStart(3, "0")}`;
             const name = `${c.name} — Engagement ${i + 1}`;
             await db.execute(sql`
-              insert into projects (id, org_id, name, code, status, project_type_id, billing_method, customer_id, starts_on)
-              values (${id}, ${orgId}, ${name}, ${code}, 'active', ${tmType.id}, ${tmType.billing_method}, ${c.id}, ${window.startDate})`);
+              insert into projects (id, org_id, name, code, status, project_type_id, customer_id, starts_on)
+              values (${id}, ${orgId}, ${name}, ${code}, 'active', ${tmType.id}, ${c.id}, ${window.startDate})`);
             engagements.push({ id, customerId: c.id, code, name });
           }
         }

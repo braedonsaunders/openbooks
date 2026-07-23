@@ -25,18 +25,8 @@ export async function seedProjectTypes(orgId: string, actorId?: string | null): 
     `);
   }
 
-  // Backfill projects: the built-in type key matches the billing_method enum
-  // value (not_to_exceed is opt-in, so it never auto-assigns).
-  await db.execute(sql`
-    update projects p
-       set project_type_id = pt.id, updated_at = now()
-      from project_types pt
-     where pt.org_id = p.org_id
-       and pt.key = p.billing_method
-       and p.org_id = ${orgId}
-       and p.project_type_id is null
-       and p.billing_method is not null
-  `);
+  // (Projects are classified by project_type_id at creation; the one-time backfill
+  // from the legacy coarse billing_method now lives in migration 0061.)
 }
 
 async function main() {

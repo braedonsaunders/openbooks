@@ -641,6 +641,10 @@ export async function importAdminApp2LaborRates(options: {
         .filter((j) => j.CustomerID != null && j.RateID != null)
         .map((j) => `${j.CustomerID}:${j.RateID}`),
     );
+    // Classify by the governed project_type_id: the coarse billing method the
+    // source reports (time_and_materials/fixed_price/cost_plus) is a project_type key.
+    const ptRes = await client.query(`select id, key from project_types where org_id = $1`, [orgId]);
+    const typeIdByKey = new Map<string, string>((ptRes.rows as { id: string; key: string }[]).map((r) => [r.key, r.id]));
     await bulkInsert(
       client,
       "projects",
@@ -652,7 +656,7 @@ export async function importAdminApp2LaborRates(options: {
         "customer_id",
         "subsidiary_id",
         "status",
-        "billing_method",
+        "project_type_id",
         "starts_on",
         "ends_on",
         "notes",
@@ -672,7 +676,7 @@ export async function importAdminApp2LaborRates(options: {
           customer ? customerPartyIdByLocal.get(Number(customer.id)) : null,
           rootSubsidiaryId,
           j.IsInactive === true ? "closed" : "active",
-          billingMethod(j.BillingType),
+          typeIdByKey.get(billingMethod(j.BillingType) ?? "") ?? null,
           dateOnly(j.StartDate),
           dateOnly(j.ShipDate),
           j.Notes ?? null,
@@ -687,7 +691,7 @@ export async function importAdminApp2LaborRates(options: {
           }),
         ];
       }),
-      `on conflict (id) do update set name=excluded.name,customer_id=excluded.customer_id,status=excluded.status,billing_method=excluded.billing_method,starts_on=excluded.starts_on,ends_on=excluded.ends_on,notes=excluded.notes,is_active=excluded.is_active,custom=excluded.custom,updated_at=now()`,
+      `on conflict (id) do update set name=excluded.name,customer_id=excluded.customer_id,status=excluded.status,project_type_id=excluded.project_type_id,starts_on=excluded.starts_on,ends_on=excluded.ends_on,notes=excluded.notes,is_active=excluded.is_active,custom=excluded.custom,updated_at=now()`,
     );
 
     const timeTypes = [

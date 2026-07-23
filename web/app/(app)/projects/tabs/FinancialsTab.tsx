@@ -47,10 +47,9 @@ function Line({ label, hint, value, variant, tone }: {
   )
 }
 
-export function FinancialsTab({ data, projectId, billingMethod, recognition, canManage }: {
+export function FinancialsTab({ data, projectId, recognition, canManage }: {
   data: FinancialsData
   projectId: string
-  billingMethod: string | null
   recognition: RecognitionStatus | null
   canManage: boolean
 }) {
