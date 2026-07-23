@@ -57,6 +57,19 @@ export function writeManifest(runDir: string, manifest: RunManifest): void {
   writeFileSync(manifestPath(runDir), JSON.stringify(manifest, null, 2));
 }
 
+/** Record a successfully exercised capability in the durable run manifest. */
+export function recordCoverage(
+  manifest: RunManifest,
+  capability: string,
+  count = 1,
+): void {
+  if (!manifest.coverage.includes(capability)) {
+    manifest.coverage.push(capability);
+    manifest.coverage.sort();
+  }
+  manifest.counters[capability] = (manifest.counters[capability] ?? 0) + count;
+}
+
 export function readManifest(runDir: string): RunManifest {
   const raw = readFileSync(manifestPath(runDir), "utf8");
   const m = JSON.parse(raw) as RunManifest;

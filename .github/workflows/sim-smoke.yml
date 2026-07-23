@@ -56,7 +56,8 @@ jobs:
             | node -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>console.log(JSON.parse(s).runDir))')
           echo "run dir: $RUN"
           npm --prefix engine run --silent sim -- run "$RUN"
-          npm --prefix engine run --silent sim -- coverage "$RUN"
+          npm --prefix engine run --silent sim -- coverage "$RUN" \
+            --require vendor_bill,vendor_payment,customer_invoice,customer_payment,period_close,period_immutability
 
       - name: Upload defect bundles (if any)
         if: failure()

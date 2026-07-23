@@ -4,6 +4,7 @@ import { withSimClock } from "../clock.ts";
 import { assertSimEnabled } from "./db-guard.ts";
 import { listProfiles } from "./profiles/index.ts";
 import { provisionRun, dayStart, dayEnd, verify, loadRun } from "./runner.ts";
+import { writeManifest } from "./manifest.ts";
 import { resetOrg } from "./world.ts";
 import { autopilotDay } from "./autopilot.ts";
 import { getProfile } from "./profiles/index.ts";
@@ -48,7 +49,12 @@ function print(x: unknown): void {
 /** Run a function scoped to the run's org and pinned to its simulated day. */
 async function inRun<T>(runDir: string, fn: (ctx: { world: ReturnType<typeof loadRun>["world"]; manifest: ReturnType<typeof loadRun>["manifest"] }) => Promise<T>): Promise<T> {
   const { world, manifest } = loadRun(runDir);
-  return withSimClock(manifest.simDate, () => withOrgContext(manifest.orgId, () => fn({ world, manifest })));
+  const result = await withSimClock(
+    manifest.simDate,
+    () => withOrgContext(manifest.orgId, () => fn({ world, manifest })),
+  );
+  writeManifest(runDir, manifest);
+  return result;
 }
 
 async function main(): Promise<number> {
@@ -131,8 +137,12 @@ async function main(): Promise<number> {
       const { manifest } = loadRun(argv[1]!);
       const { getProfile } = await import("./profiles/index.ts");
       const profile = getProfile(manifest.profileId);
-      const missing = profile.expectedCapabilities.filter((c) => !manifest.coverage.includes(c));
-      print({ covered: manifest.coverage, missing, counters: manifest.counters, complete: missing.length === 0 });
+      const flags = parseFlags(argv.slice(2));
+      const required = flags.require
+        ? flags.require.split(",").map((item) => item.trim()).filter(Boolean)
+        : profile.expectedCapabilities;
+      const missing = required.filter((c) => !manifest.coverage.includes(c));
+      print({ covered: manifest.coverage, required, missing, counters: manifest.counters, complete: missing.length === 0 });
       return missing.length === 0 ? 0 : 1;
     }
 

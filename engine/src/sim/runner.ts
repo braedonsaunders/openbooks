@@ -17,6 +17,7 @@ import {
   runDirFor,
   addDays,
   isMonthEnd,
+  recordCoverage,
   type RunManifest,
 } from "./manifest.ts";
 import type { SimContext } from "./context.ts";
@@ -187,6 +188,7 @@ export async function dayEnd(runDir: string): Promise<DayEndResult> {
       return { simDate, ranFull: false, pass: false, halted: { phase: "day-end", dir, failures: probe.failures } };
     }
     manifest.provenClosed.push(p.name);
+    recordCoverage(manifest, "period_immutability");
   }
 
   let ranFull = false;
