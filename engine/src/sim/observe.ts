@@ -100,6 +100,26 @@ export async function projects(world: SimOrg) {
      order by p.created_at`);
 }
 
+/** Field crew and their cost/bill rates (T&M). */
+export function crew(world: SimOrg) {
+  return world.employees.map((e) => ({ id: e.id, name: e.name, costRate: e.costRate, billRate: e.billRate }));
+}
+
+/** Unbilled billable time by project (hours, bill value, cost) — the T&M billing queue. */
+export async function unbilledTime(world: SimOrg) {
+  return rows(sql`
+    select p.id as project_id, p.name as project, p.code,
+           count(*) as entries,
+           sum(t.hours)::text as hours,
+           sum(t.hours * t.bill_rate)::text as bill_value,
+           sum(t.hours * t.cost_rate)::text as labor_cost,
+           bool_or(t.cost_journal_entry_id is null) as has_uncosted
+      from time_entries t join projects p on p.id = t.project_id
+     where t.org_id = ${world.orgId} and t.status = 'approved' and t.is_billable and t.invoiced_by_line_id is null
+     group by p.id, p.name, p.code
+     order by p.code`);
+}
+
 /** Period lock status (GL module) across the calendar. */
 export async function periodStatus(world: SimOrg) {
   return rows(sql`
