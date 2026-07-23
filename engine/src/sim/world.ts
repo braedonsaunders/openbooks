@@ -63,6 +63,8 @@ export interface SimOrg {
   /** Time type + labor service item for time-entry logging (T&M). */
   timeTypeId: string | null;
   laborItemId: string | null;
+  /** Active client engagements/jobs that billable work is logged against (bottom-up). */
+  engagements: { id: string; customerId: string; code: string; name: string }[];
 }
 
 /**
@@ -125,8 +127,11 @@ const COA: [string, string, string, string][] = [
   ["materials", "5100", "Materials & Supplies", "cogs"],
   ["subcontractor", "5200", "Subcontractor Costs", "cogs"],
   ["directLabor", "5300", "Direct Labor", "cogs"],
+  ["laborWip", "5350", "Billable Labor Cost", "cogs"],
   ["equipmentRental", "5400", "Equipment Rental", "cogs"],
+  ["laborClearing", "2135", "Labor Clearing", "liability_current_other"],
   // ---- Operating expenses ----
+  ["payrollOverhead", "6005", "Non-Billable / Bench Labor", "expense"],
   ["payroll", "6000", "Salaries & Wages", "expense"],
   ["benefits", "6010", "Employee Benefits", "expense"],
   ["payrollTaxExpense", "6020", "Payroll Tax Expense", "expense"],
@@ -297,19 +302,19 @@ export async function provisionOrg(profile: Profile, window: { startDate: string
     let timeTypeId: string | null = null;
     let laborItemId: string | null = null;
     if (accounts.laborWip && accounts.laborClearing) {
-      const crew: [string, string, string][] = [
-        ["Miguel Torres (Foreman)", "72.00", "165.00"],
-        ["Dwayne Ellis (Journeyman)", "58.00", "135.00"],
-        ["Priya Nair (Journeyman)", "56.00", "130.00"],
-        ["Sam Whitaker (Apprentice)", "38.00", "95.00"],
-        ["Rosa Delgado (Equip. Operator)", "64.00", "150.00"],
+      const roster = profile.workforce ?? [
+        { name: "Miguel Torres (Foreman)", costRate: "72.00", billRate: "165.00" },
+        { name: "Dwayne Ellis (Journeyman)", costRate: "58.00", billRate: "135.00" },
+        { name: "Priya Nair (Journeyman)", costRate: "56.00", billRate: "130.00" },
+        { name: "Sam Whitaker (Apprentice)", costRate: "38.00", billRate: "95.00" },
+        { name: "Rosa Delgado (Equip. Operator)", costRate: "64.00", billRate: "150.00" },
       ];
-      for (const [name, costRate, billRate] of crew) {
+      for (const w of roster) {
         const id = randomUUID();
         await db.execute(sql`
           insert into parties (id, org_id, kind, display_name, is_active, custom)
-          values (${id}, ${orgId}, 'employee', ${name}, true, '{}'::jsonb)`);
-        employees.push({ id, name, costRate, billRate });
+          values (${id}, ${orgId}, 'employee', ${w.name}, true, '{}'::jsonb)`);
+        employees.push({ id, name: w.name, costRate: w.costRate, billRate: w.billRate });
       }
       timeTypeId = randomUUID();
       await db.execute(sql`
@@ -324,9 +329,37 @@ export async function provisionOrg(profile: Profile, window: { startDate: string
     // Built-in configuration a fresh org needs.
     await ensureCloseDefaults(orgId, actors.admin);
     await seedProjectTypes(orgId, actors.admin);
+
+    // Client engagements for bottom-up billing (workers log billable time against
+    // these). Governed T&M project type. Only for profiles that opt in via
+    // engagementsPerCustomer (construction opens its own jobs explicitly).
+    const engagements: SimOrg["engagements"] = [];
+    const perCustomer = profile.engagementsPerCustomer ?? 0;
+    if (accounts.laborWip && accounts.laborClearing && perCustomer > 0) {
+      const tmTypeRow = (await db.execute(sql`
+        select id, billing_method from project_types where org_id = ${orgId} and key = 'time_and_materials' and is_active limit 1`)) as unknown as {
+        rows: { id: string; billing_method: string }[];
+      };
+      const tmType = tmTypeRow.rows[0];
+      let n = 0;
+      if (tmType) {
+        for (const c of customers) {
+          for (let i = 0; i < perCustomer; i++) {
+            const id = randomUUID();
+            const code = `ENG-${String(++n).padStart(3, "0")}`;
+            const name = `${c.name} — Engagement ${i + 1}`;
+            await db.execute(sql`
+              insert into projects (id, org_id, name, code, status, project_type_id, billing_method, customer_id, starts_on)
+              values (${id}, ${orgId}, ${name}, ${code}, 'active', ${tmType.id}, ${tmType.billing_method}, ${c.id}, ${window.startDate})`);
+            engagements.push({ id, customerId: c.id, code, name });
+          }
+        }
+      }
+    }
+
     await ensureReportDefinitions(orgId);
 
-    return { orgId, bookId, subsidiaryId, fiscalCalendarId, currency: cur, accounts, vendors, customers, actors, periods, employees, timeTypeId, laborItemId };
+    return { orgId, bookId, subsidiaryId, fiscalCalendarId, currency: cur, accounts, vendors, customers, actors, periods, employees, timeTypeId, laborItemId, engagements };
   });
 
   // Opening balances — posted OUTSIDE the provisioning bypass block (createScriptJournal
