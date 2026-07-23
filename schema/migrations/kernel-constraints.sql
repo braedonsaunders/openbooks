@@ -27,6 +27,7 @@ begin
   return null;
 end $$;
 
+drop trigger if exists jl_balanced on journal_lines;
 create constraint trigger jl_balanced
   after insert or update or delete on journal_lines
   deferrable initially deferred
@@ -215,6 +216,7 @@ begin
   return new;
 end $$;
 
+drop trigger if exists je_guard on journal_entries;
 create trigger je_guard before update or delete on journal_entries
   for each row execute function je_guard();
 
@@ -260,6 +262,7 @@ begin
   return coalesce(new, old);
 end $$;
 
+drop trigger if exists jl_guard on journal_lines;
 create trigger jl_guard before insert or update or delete on journal_lines
   for each row execute function jl_guard();
 
@@ -335,6 +338,7 @@ begin
   return new;
 end $$;
 
+drop trigger if exists jl_check_account on journal_lines;
 create trigger jl_check_account before insert or update on journal_lines
   for each row execute function jl_check_account();
 
@@ -492,6 +496,7 @@ begin
   return new;
 end $$;
 
+drop trigger if exists app_check_open on applications;
 create constraint trigger app_check_open
   after insert or update on applications
   deferrable initially deferred
@@ -590,6 +595,7 @@ begin
   raise exception 'payment events are append-only';
 end $$;
 
+drop trigger if exists payment_event_immutable on payment_events;
 create trigger payment_event_immutable before update or delete on payment_events
   for each row execute function payment_event_immutable();
 
@@ -616,6 +622,7 @@ begin
   return new;
 end $$;
 
+drop trigger if exists payment_file_artifact_immutable on payment_files;
 create trigger payment_file_artifact_immutable before update on payment_files
   for each row execute function payment_file_artifact_immutable();
 
@@ -645,6 +652,7 @@ begin
   return coalesce(new, old);
 end $$;
 
+drop trigger if exists payment_run_item_guard on payment_run_items;
 create trigger payment_run_item_guard before update or delete on payment_run_items
   for each row execute function payment_run_item_guard();
 -- Manual and production-usage depreciation evidence is append-preserved.
