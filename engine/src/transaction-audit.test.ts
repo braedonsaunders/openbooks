@@ -34,6 +34,39 @@ test("posted amendment evidence retains complete before and after snapshots", ()
   );
 });
 
+test("draft edits use the general record-update audit mode", () => {
+  assert.deepEqual(
+    buildTransactionAuditChanges({
+      mode: "record_update",
+      source: "ui",
+      before: {
+        ...before,
+        document: { ...before.document, status: "draft" },
+      },
+      after: {
+        ...before,
+        document: { ...before.document, status: "draft", memo: "Updated memo" },
+      },
+    }).mode,
+    "record_update",
+  );
+});
+
+test("posting evidence has an explicit lifecycle mode", () => {
+  assert.equal(
+    buildTransactionAuditChanges({
+      mode: "record_post",
+      source: "ui",
+      before,
+      after: {
+        ...before,
+        document: { ...before.document, status: "posted" },
+      },
+    }).mode,
+    "record_post",
+  );
+});
+
 test("transaction deletion evidence is a tombstone with a reason", () => {
   assert.deepEqual(
     buildTransactionAuditChanges({

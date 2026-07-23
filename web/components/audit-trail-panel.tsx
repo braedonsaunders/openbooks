@@ -2,9 +2,14 @@
 
 import { useEffect, useState } from 'react'
 import { useTranslations } from 'next-intl'
-import { History, Search } from 'lucide-react'
+import { ChevronRight, History, Search } from 'lucide-react'
 import { Badge, Button, EmptyState, Input, Select, Skeleton, Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@openbooks/ui'
 import { dateTime } from '../lib/format'
+import {
+  AuditEventDrawer,
+  auditEventDiffs,
+  type AuditEvent,
+} from '../app/(app)/admin/audit/AuditEventDrawer'
 
 type AuditRow = {
   id: string
@@ -12,6 +17,7 @@ type AuditRow = {
   changes: Record<string, unknown>
   at: string
   actor_name: string | null
+  request_id: string | null
 }
 
 type AuditResponse = {
@@ -20,6 +26,7 @@ type AuditResponse = {
   page: number
   perPage: number
   actions: string[]
+  recordType: string
 }
 
 const ACTION_VARIANT: Record<string, 'success' | 'secondary' | 'warning' | 'destructive'> = {
@@ -34,13 +41,12 @@ const ACTION_VARIANT: Record<string, 'success' | 'secondary' | 'warning' | 'dest
 const KNOWN_ACTIONS = new Set(['insert', 'update', 'delete', 'post', 'void', 'approve', 'reject'])
 
 function changeCount(changes: Record<string, unknown>): number {
-  if (changes.source === 'record_metadata') return 0
-  if (changes.before && changes.after) return 1
-  return Object.keys(changes).filter((key) => !['source', 'mode', 'reason'].includes(key)).length
+  return auditEventDiffs(changes).length
 }
 
 export function AuditTrailPanel({ table, recordId }: { table: 'documents' | 'parties' | 'item_rate_versions'; recordId: string }) {
   const t = useTranslations('common.auditTrail')
+  const ta = useTranslations('admin.audit')
   const [q, setQ] = useState('')
   const [action, setAction] = useState('')
   const [page, setPage] = useState(1)
@@ -48,6 +54,7 @@ export function AuditTrailPanel({ table, recordId }: { table: 'documents' | 'par
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(false)
   const [reloadKey, setReloadKey] = useState(0)
+  const [selected, setSelected] = useState<AuditRow | null>(null)
 
   useEffect(() => {
     const controller = new AbortController()
@@ -121,23 +128,31 @@ export function AuditTrailPanel({ table, recordId }: { table: 'documents' | 'par
               {data.rows.map((row) => {
                 const count = changeCount(row.changes)
                 return (
-                  <TableRow key={row.id}>
+                  <TableRow
+                    key={row.id}
+                    role="button"
+                    tabIndex={0}
+                    aria-label={ta('openEventAria', {
+                      action: actionLabel(row.action),
+                      recordType: data.recordType.replaceAll('_', ' '),
+                      when: dateTime(row.at),
+                    })}
+                    onClick={() => setSelected(row)}
+                    onKeyDown={(event) => {
+                      if (event.key !== 'Enter' && event.key !== ' ') return
+                      event.preventDefault()
+                      setSelected(row)
+                    }}
+                    className="cursor-pointer outline-none hover:bg-teal-50/50 focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-teal-500 dark:hover:bg-teal-950/20"
+                  >
                     <TableCell className="whitespace-nowrap text-xs">{dateTime(row.at)}</TableCell>
                     <TableCell>{row.actor_name ?? <span className="text-slate-400">{t('systemActor')}</span>}</TableCell>
                     <TableCell><Badge variant={ACTION_VARIANT[row.action] ?? 'secondary'}>{actionLabel(row.action)}</Badge></TableCell>
                     <TableCell className="max-w-sm">
-                      {row.changes.source === 'record_metadata' ? (
-                        <span className="text-sm text-slate-500 dark:text-slate-400">{t('metadata')}</span>
-                      ) : (
-                        <details>
-                          <summary className="cursor-pointer text-sm text-teal-700 dark:text-teal-300">
-                            {count > 0 ? t('changeCount', { count }) : t('viewChanges')}
-                          </summary>
-                          <pre className="mt-2 max-h-72 overflow-auto rounded bg-slate-100 p-2 font-mono text-[11px] whitespace-pre-wrap text-slate-600 dark:bg-slate-900 dark:text-slate-300">
-                            {JSON.stringify(row.changes, null, 2)}
-                          </pre>
-                        </details>
-                      )}
+                      <span className="flex items-center justify-between gap-2 text-sm font-medium text-teal-700 dark:text-teal-300">
+                        <span>{count > 0 ? t('changeCount', { count }) : t('viewChanges')}</span>
+                        <ChevronRight size={15} aria-hidden />
+                      </span>
                     </TableCell>
                   </TableRow>
                 )
@@ -155,6 +170,23 @@ export function AuditTrailPanel({ table, recordId }: { table: 'documents' | 'par
       ) : (
         <EmptyState icon={<History />} title={t('emptyTitle')} description={t('emptyDescription')} />
       )}
+      {selected && data ? (
+        <AuditEventDrawer
+          key={selected.id}
+          event={{
+            id: selected.id,
+            rowId: recordId,
+            at: selected.at,
+            actorName: selected.actor_name,
+            action: selected.action,
+            recordType: data.recordType,
+            requestId: selected.request_id,
+            changes: selected.changes,
+          } satisfies AuditEvent}
+          onClose={() => setSelected(null)}
+          stacked
+        />
+      ) : null}
     </section>
   )
 }

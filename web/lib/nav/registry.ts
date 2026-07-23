@@ -679,6 +679,7 @@ export const ADMIN_HUB_PERMISSIONS = [
   'admin.audit.read',
   'admin.ai.manage',
   'admin.sandboxes.manage',
+  'admin.customization.manage',
   'sync.run',
 ] as const
 

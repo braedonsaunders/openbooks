@@ -2,8 +2,11 @@
 
 import { useMemo, useState } from 'react'
 import { useFormatter, useTranslations } from 'next-intl'
-import { Badge, UrlDrawer, cn } from '@openbooks/ui'
+import { Badge, Drawer, UrlDrawer, cn } from '@openbooks/ui'
 import { Braces, Clock3, Database, Fingerprint, History, UserRound } from 'lucide-react'
+import { auditEventDiffs, type AuditDiffRow } from '../../../../lib/audit-diff'
+
+export { auditEventDiffs } from '../../../../lib/audit-diff'
 
 export type AuditEvent = {
   id: string
@@ -18,7 +21,6 @@ export type AuditEvent = {
 
 type JsonObject = Record<string, unknown>
 type DrawerTab = 'changes' | 'before' | 'after'
-type DiffRow = { path: string; before: unknown; after: unknown }
 
 const ACTION_VARIANT: Record<string, 'success' | 'secondary' | 'warning' | 'destructive' | 'outline'> = {
   insert: 'success',
@@ -49,22 +51,6 @@ function humanize(value: string): string {
 
 function formatPath(path: string): string {
   return path.split('.').map(humanize).join(' › ')
-}
-
-function sameValue(left: unknown, right: unknown): boolean {
-  return JSON.stringify(left) === JSON.stringify(right)
-}
-
-function collectDiffs(before: unknown, after: unknown, path = ''): DiffRow[] {
-  if (sameValue(before, after)) return []
-  if (Array.isArray(before) || Array.isArray(after)) return [{ path, before, after }]
-  if (isObject(before) || isObject(after)) {
-    const left = isObject(before) ? before : {}
-    const right = isObject(after) ? after : {}
-    const keys = [...new Set([...Object.keys(left), ...Object.keys(right)])].sort()
-    return keys.flatMap((key) => collectDiffs(left[key], right[key], path ? `${path}.${key}` : key))
-  }
-  return [{ path, before, after }]
 }
 
 function itemTitle(value: unknown, index: number, fallback: string, lineLabel: (line: string) => string): string {
@@ -149,7 +135,7 @@ function JsonValue({ value, depth = 0 }: { value: unknown; depth?: number }) {
   )
 }
 
-function DiffList({ rows }: { rows: DiffRow[] }) {
+function DiffList({ rows }: { rows: AuditDiffRow[] }) {
   const t = useTranslations('admin.audit.drawer')
   if (rows.length === 0) {
     return (
@@ -159,7 +145,7 @@ function DiffList({ rows }: { rows: DiffRow[] }) {
     )
   }
 
-  const grouped = new Map<string, DiffRow[]>()
+  const grouped = new Map<string, AuditDiffRow[]>()
   for (const row of rows) {
     const group = row.path.split('.')[0] || 'event'
     const groupRows = grouped.get(group)
@@ -213,7 +199,12 @@ function MetadataCard({ icon, label, children }: { icon: React.ReactNode; label:
   )
 }
 
-export function AuditEventDrawer({ event, closeHref }: { event: AuditEvent; closeHref: string }) {
+type AuditEventDrawerProps =
+  | { event: AuditEvent; closeHref: string; onClose?: never; stacked?: never }
+  | { event: AuditEvent; onClose: () => void; stacked?: boolean; closeHref?: never }
+
+export function AuditEventDrawer(props: AuditEventDrawerProps) {
+  const { event } = props
   const t = useTranslations('admin.audit')
   const format = useFormatter()
   const changes = isObject(event.changes) ? event.changes : {}
@@ -226,14 +217,7 @@ export function AuditEventDrawer({ event, closeHref }: { event: AuditEvent; clos
   const actor = event.actorName ?? t('systemActor')
   const context = Object.fromEntries(Object.entries(changes).filter(([key]) => CONTEXT_KEYS.has(key)))
 
-  const diffs = useMemo(() => {
-    if (hasBefore || hasAfter) return collectDiffs(changes.before, changes.after)
-    return Object.entries(changes)
-      .filter(([key]) => !CONTEXT_KEYS.has(key))
-      .flatMap(([key, value]) => Array.isArray(value) && value.length === 2
-        ? [{ path: key, before: value[0], after: value[1] }]
-        : [])
-  }, [changes, hasAfter, hasBefore])
+  const diffs = useMemo(() => auditEventDiffs(changes), [changes])
 
   const details = Object.fromEntries(Object.entries(changes).filter(([key, value]) => (
     !CONTEXT_KEYS.has(key)
@@ -242,40 +226,34 @@ export function AuditEventDrawer({ event, closeHref }: { event: AuditEvent; clos
     && !(Array.isArray(value) && value.length === 2)
   )))
 
-  return (
-    <UrlDrawer
-      open
-      closeHref={closeHref}
-      size="2xl"
-      title={
-        <span className="flex flex-wrap items-center gap-2.5">
-          <span>{humanize(event.recordType)}</span>
-          <Badge variant={ACTION_VARIANT[event.action] ?? 'secondary'}>{actionLabel}</Badge>
-        </span>
-      }
-      description={t('drawer.description', { actor, when })}
-      subtabs={
-        <nav className="-mb-px flex gap-1 overflow-x-auto" aria-label={t('drawer.tabsAria')}>
-          {tabs.map((tab) => (
-            <button
-              key={tab}
-              type="button"
-              role="tab"
-              aria-selected={activeTab === tab}
-              onClick={() => setActiveTab(tab)}
-              className={cn(
-                'shrink-0 border-b-2 px-3 py-3 text-sm font-medium transition-colors',
-                activeTab === tab
-                  ? 'border-teal-600 text-teal-700 dark:border-teal-400 dark:text-teal-300'
-                  : 'border-transparent text-slate-500 hover:border-slate-300 hover:text-slate-800 dark:text-slate-400 dark:hover:border-slate-700 dark:hover:text-slate-200',
-              )}
-            >
-              {t(`drawer.tabs.${tab}`)}
-            </button>
-          ))}
-        </nav>
-      }
-    >
+  const title = (
+    <span className="flex flex-wrap items-center gap-2.5">
+      <span>{humanize(event.recordType)}</span>
+      <Badge variant={ACTION_VARIANT[event.action] ?? 'secondary'}>{actionLabel}</Badge>
+    </span>
+  )
+  const subtabs = (
+    <nav className="-mb-px flex gap-1 overflow-x-auto" aria-label={t('drawer.tabsAria')}>
+      {tabs.map((tab) => (
+        <button
+          key={tab}
+          type="button"
+          role="tab"
+          aria-selected={activeTab === tab}
+          onClick={() => setActiveTab(tab)}
+          className={cn(
+            'shrink-0 border-b-2 px-3 py-3 text-sm font-medium transition-colors',
+            activeTab === tab
+              ? 'border-teal-600 text-teal-700 dark:border-teal-400 dark:text-teal-300'
+              : 'border-transparent text-slate-500 hover:border-slate-300 hover:text-slate-800 dark:text-slate-400 dark:hover:border-slate-700 dark:hover:text-slate-200',
+          )}
+        >
+          {t(`drawer.tabs.${tab}`)}
+        </button>
+      ))}
+    </nav>
+  )
+  const content = (
       <div className="space-y-6 pb-2">
         <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
           <MetadataCard icon={<Clock3 size={14} aria-hidden />} label={t('drawer.when')}>{when}</MetadataCard>
@@ -332,6 +310,34 @@ export function AuditEventDrawer({ event, closeHref }: { event: AuditEvent; clos
           </section>
         ) : null}
       </div>
-    </UrlDrawer>
+  )
+
+  if (typeof props.closeHref === 'string') {
+    return (
+      <UrlDrawer
+        open
+        closeHref={props.closeHref}
+        size="2xl"
+        title={title}
+        description={t('drawer.description', { actor, when })}
+        subtabs={subtabs}
+      >
+        {content}
+      </UrlDrawer>
+    )
+  }
+
+  return (
+    <Drawer
+      open
+      onClose={props.onClose}
+      stacked={props.stacked}
+      size="2xl"
+      title={title}
+      description={t('drawer.description', { actor, when })}
+      subtabs={subtabs}
+    >
+      {content}
+    </Drawer>
   )
 }

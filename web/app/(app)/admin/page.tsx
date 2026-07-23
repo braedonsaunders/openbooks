@@ -61,10 +61,10 @@ type Group = { key: string; labelKey: string; accent: Accent; cards: Card[] }
 // the whole page is gated by holding at least one of them. Navigation is
 // client-side (<Link>) — never a full reload. Copy lives in the `admin.hub`
 // message namespace; this module-level constant stores only message keys.
-// The authoring tools (Custom Records, custom fields, forms & views, PDF
-// templates, scripts, apps, API keys/docs) live in the sidebar's
-// Settings → Build sub-menu, not here — keep ADMIN_HUB_PERMISSIONS in the nav
-// registry in sync with the cards below.
+// Most authoring tools live in the sidebar's Settings → Build sub-menu.
+// PDF Templates is also surfaced here because it is a common company-output
+// control, while still linking to the one authoritative template workspace.
+// Keep ADMIN_HUB_PERMISSIONS in the nav registry in sync with these cards.
 const GROUPS: Group[] = [
   {
     key: 'people',
@@ -107,6 +107,12 @@ const GROUPS: Group[] = [
         icon: <Mail size={18} />,
         cardKey: 'email',
         permission: 'admin.users.manage',
+      },
+      {
+        href: '/admin/pdf-templates',
+        icon: <ScrollText size={18} />,
+        cardKey: 'pdfTemplates',
+        permission: 'admin.customization.manage',
       },
     ],
   },

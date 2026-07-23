@@ -35,7 +35,11 @@ export async function POST(req: Request) {
         if (!owned.rows[0]) return NextResponse.json({ error: 'not found' }, { status: 404 })
 
         // postDocument enforces balance (kernel + rule check) and throws on failure
-        const entryId = await postDocument(body.documentId, await controlDeps(gate.user.orgId))
+        const entryId = await postDocument(
+          body.documentId,
+          await controlDeps(gate.user.orgId),
+          { audit: { actorId: gate.user.id, source: 'ui' } },
+        )
         return NextResponse.json({ ok: true, entryId })
       }
       default:

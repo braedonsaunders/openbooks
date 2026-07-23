@@ -1,4 +1,5 @@
 import { sql } from "drizzle-orm";
+import { getTranslations } from "next-intl/server";
 import { PageHeader } from "@openbooks/ui";
 import { db } from "@openbooks/engine/src/db.ts";
 import { listSandboxes } from "@openbooks/engine/src/sandbox/index.ts";
@@ -10,6 +11,7 @@ export const dynamic = "force-dynamic";
 
 export default async function SandboxesPage() {
   const authz = await requirePermission("admin.sandboxes.manage");
+  const tHub = await getTranslations("admin.hub");
   // Always manage sandboxes against the home production org.
   const rows = (await listSandboxes(authz.user.productionOrgId)) as unknown as SandboxRow[];
 
@@ -24,6 +26,7 @@ export default async function SandboxesPage() {
     <ListPageLayout
       header={
         <PageHeader
+          back={{ href: "/admin", label: tHub("title") }}
           title="Environments"
           description="Create and manage sandbox copies of your production books — instant to clone, isolated, refreshable, and promotable back to production."
         />

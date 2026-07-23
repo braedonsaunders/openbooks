@@ -183,9 +183,9 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
   try {
     await db.transaction(async (tx) => {
       await tx.execute(sql`select set_config('openbooks.amend', 'on', true)`)
-      const auditCandidate = await captureTransactionAuditSnapshot(tx, id)
-      const auditBefore = auditCandidate?.document.status === 'posted' ? auditCandidate : null
-        const sigBefore = await glSignature(tx, id, user.orgId)
+      const auditBefore = await captureTransactionAuditSnapshot(tx, id)
+      if (!auditBefore) throw new Error(`journal ${id} disappeared before amendment`)
+      const sigBefore = await glSignature(tx, id, user.orgId)
 
       if (preparedLines) {
         await tx.execute(sql`delete from document_lines where document_id = ${id} and org_id = ${user.orgId}`)
@@ -223,19 +223,17 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
       if ((await glSignature(tx, id, user.orgId)) !== sigBefore) {
         await regenerateGlImpactTx(tx, id, deps, user.id)
       }
-      if (auditBefore) {
-        const auditAfter = await captureTransactionAuditSnapshot(tx, id)
-        if (!auditAfter) throw new Error(`journal ${id} disappeared during amendment`)
-        await recordTransactionAudit(tx, {
-          orgId: user.orgId,
-          documentId: id,
-          action: 'update',
-          actorId: user.id,
-          source: 'ui',
-          before: auditBefore,
-          after: auditAfter,
-        })
-      }
+      const auditAfter = await captureTransactionAuditSnapshot(tx, id)
+      if (!auditAfter) throw new Error(`journal ${id} disappeared during amendment`)
+      await recordTransactionAudit(tx, {
+        orgId: user.orgId,
+        documentId: id,
+        action: 'update',
+        actorId: user.id,
+        source: 'ui',
+        before: auditBefore,
+        after: auditAfter,
+      })
     })
   } catch (e) {
     if (e instanceof ClosedPeriodError) return NextResponse.json({ error: e.message }, { status: 422 })

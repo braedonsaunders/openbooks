@@ -46,18 +46,19 @@ export async function GET(request: NextRequest) {
   const perPage = 15
 
   const events = sql`
-    select a.id::text as id, a.action, a.changes, a.actor_id, a.at
+    select a.id::text as id, a.action, a.changes, a.actor_id, a.at, a.request_id
       from audit_log a
      where a.org_id = ${authz.user.orgId} and a.table_name = ${table} and a.row_id = ${recordId}
     union all
     select ${`${recordId}:created`} as id, 'insert' as action,
-           jsonb_build_object('source', 'record_metadata') as changes,
-           ${metadata.created_by}::uuid as actor_id, ${metadata.created_at}::timestamptz as at
-    union all
-    select ${`${recordId}:updated`} as id, 'update' as action,
-           jsonb_build_object('source', 'record_metadata') as changes,
-           ${metadata.updated_by}::uuid as actor_id, ${metadata.updated_at}::timestamptz as at
-     where ${metadata.updated_at}::timestamptz > ${metadata.created_at}::timestamptz + interval '1 second'
+           jsonb_build_object('source', 'record_metadata', 'event', 'record_created') as changes,
+           ${metadata.created_by}::uuid as actor_id, ${metadata.created_at}::timestamptz as at,
+           null::text as request_id
+     where not exists (
+       select 1 from audit_log a
+        where a.org_id = ${authz.user.orgId} and a.table_name = ${table}
+          and a.row_id = ${recordId} and a.action = 'insert'
+     )
   `
   const filters = sql`
     ${action ? sql`and e.action = ${action}` : sql``}
@@ -67,7 +68,7 @@ export async function GET(request: NextRequest) {
   const [rows, count] = await Promise.all([
     db.execute(sql`
       with events as (${events})
-      select e.id, e.action, e.changes, e.at, u.name as actor_name
+      select e.id, e.action, e.changes, e.at, e.request_id, u.name as actor_name
         from events e left join users u on u.id = e.actor_id
        where true ${filters}
        order by e.at desc, e.id desc
@@ -84,5 +85,6 @@ export async function GET(request: NextRequest) {
     page,
     perPage,
     actions: ACTIONS,
+    recordType: String(metadata.kind),
   })
 }

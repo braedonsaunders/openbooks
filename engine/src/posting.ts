@@ -11,6 +11,7 @@ import {
 } from "./subsidiaries.ts";
 import { assertPeriodModulesOpen, closeModuleForDocument, CloseError } from "./close.ts";
 import { resolveBillInventoryAccounts } from "./inventory.ts";
+import { captureTransactionAuditSnapshot, recordTransactionAudit } from "./transaction-audit.ts";
 
 /**
  * The posting engine: document → journal entry, through the kernel.
@@ -841,7 +842,10 @@ async function applySubsidiaries(
 export async function postDocument(
   documentId: string,
   deps: PostingDeps,
-  options: { deferEffects?: boolean } = {},
+  options: {
+    deferEffects?: boolean;
+    audit?: { actorId: string | null; source: string };
+  } = {},
 ): Promise<string> {
   const [doc] = await db.select().from(schema.documents).where(eq(schema.documents.id, documentId));
   if (!doc) throw new PostingError(`document ${documentId} not found`);
@@ -981,6 +985,12 @@ export async function postDocument(
   // -- write entry + lines + flip document, atomically ---------------------
   const entryId = await inDbTransaction(async (tx) => {
     if (deps.migration) await tx.execute(sql`set local openbooks.migration = on`);
+    const auditBefore = options.audit
+      ? await captureTransactionAuditSnapshot(tx, documentId)
+      : null;
+    if (options.audit && !auditBefore) {
+      throw new PostingError(`document ${documentId} disappeared before posting`);
+    }
     const [entry] = await tx
       .insert(schema.journalEntries)
       .values({
@@ -1046,6 +1056,20 @@ export async function postDocument(
       .returning({ id: schema.documents.id });
     if (flipped.length === 0) {
       throw new PostingError(`document ${doc.documentNumber} was already posted or voided`);
+    }
+
+    if (options.audit && auditBefore) {
+      const auditAfter = await captureTransactionAuditSnapshot(tx, documentId);
+      if (!auditAfter) throw new PostingError(`document ${documentId} disappeared during posting`);
+      await recordTransactionAudit(tx, {
+        orgId: doc.orgId,
+        documentId,
+        action: "post",
+        actorId: options.audit.actorId,
+        source: options.audit.source,
+        before: auditBefore,
+        after: auditAfter,
+      });
     }
 
     return entry.id;
