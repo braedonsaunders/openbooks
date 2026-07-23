@@ -41,9 +41,11 @@ export async function autopilotDay(profile: Profile, world: SimOrg, manifest: Ru
          set document_date = ${today},
              due_date = case when due_date is null or due_date < ${today} then ${addDays(today, 30)} else due_date end
        where id = ${bill.id} and org_id = ${world.orgId} and status = 'draft' and document_date < ${today}`);
-    await ops.postBill(world, bill.id);
-    recordCoverage(manifest, "vendor_bill");
-    summary.billsPosted++;
+    try {
+      await ops.postBill(world, bill.id);
+      recordCoverage(manifest, "vendor_bill");
+      summary.billsPosted++;
+    } catch (e) { console.error(`[autopilot ${today}] post-bill skipped: ${(e as Error).message}`); }
   }
 
   const open = (await observe.apOpen(world)) as { vendorId: string; lineId: string; dueDate: string | null }[];
@@ -57,11 +59,10 @@ export async function autopilotDay(profile: Profile, world: SimOrg, manifest: Ru
     }
   }
   for (const [vendorId, lineIds] of byVendor) {
-    const res = await ops.payVendor(world, vendorId, lineIds, world.actors.apClerk, today);
-    if (res) {
-      recordCoverage(manifest, "vendor_payment");
-      summary.vendorsPaid++;
-    }
+    try {
+      const res = await ops.payVendor(world, vendorId, lineIds, world.actors.apClerk, today);
+      if (res) { recordCoverage(manifest, "vendor_payment"); summary.vendorsPaid++; }
+    } catch (e) { console.error(`[autopilot ${today}] pay-vendor skipped: ${(e as Error).message}`); }
   }
 
   // --- AR: issue prepared invoices, apply the suggested receipts ---------
@@ -76,18 +77,24 @@ export async function autopilotDay(profile: Profile, world: SimOrg, manifest: Ru
              due_date = case when due_date is null or due_date < ${today} then ${addDays(today, 30)} else due_date end,
              expected_pay_date = case when expected_pay_date is null or expected_pay_date < ${today} then ${addDays(today, 38)} else expected_pay_date end
        where id = ${inv.id} and org_id = ${world.orgId} and status = 'draft' and document_date < ${today}`);
-    await ops.issueInvoice(world, inv.id);
-    recordCoverage(manifest, "customer_invoice");
-    summary.invoicesIssued++;
+    try {
+      await ops.issueInvoice(world, inv.id);
+      recordCoverage(manifest, "customer_invoice");
+      summary.invoicesIssued++;
+    } catch (e) { console.error(`[autopilot ${today}] issue-invoice skipped: ${(e as Error).message}`); }
   }
 
   const receipts = (await observe.arReceipts(world)) as { id: string; suggested: { lineId: string; amount: string }[] | null }[];
   for (const r of receipts) {
-    const alloc = (r.suggested ?? []).map((s) => ({ lineId: s.lineId, amount: s.amount }));
+    // Only apply positive allocations (a short-pay of a tiny invoice can round to
+    // 0.00, which the payment engine correctly rejects).
+    const alloc = (r.suggested ?? []).filter((s) => Number(s.amount) > 0.005).map((s) => ({ lineId: s.lineId, amount: s.amount }));
     if (alloc.length === 0) continue;
-    await ops.applyReceipt(world, r.id, alloc, world.actors.arClerk);
-    recordCoverage(manifest, "customer_payment");
-    summary.receiptsApplied++;
+    try {
+      await ops.applyReceipt(world, r.id, alloc, world.actors.arClerk);
+      recordCoverage(manifest, "customer_payment");
+      summary.receiptsApplied++;
+    } catch (e) { console.error(`[autopilot ${today}] apply-receipt skipped: ${(e as Error).message}`); }
   }
 
   // --- Construction PM: drive the job portfolio (all billing methods) mid-month ----
