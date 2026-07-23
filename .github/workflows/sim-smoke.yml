@@ -1,0 +1,72 @@
+name: sim-smoke
+
+# Deterministic smoke of the business-simulation harness: stand up a throwaway
+# Postgres, load the schema, provision a company, and run it on autopilot (the
+# non-LLM persona stand-in) for a short window. The invariant oracle gates each
+# period — a failure fails the job with the defect bundle attached.
+
+on:
+  pull_request:
+    paths:
+      - "engine/src/sim/**"
+      - "engine/src/clock.ts"
+      - "engine/src/posting.ts"
+      - "engine/src/payments.ts"
+      - "engine/src/close.ts"
+  workflow_dispatch:
+
+jobs:
+  smoke:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: openbooks
+          POSTGRES_PASSWORD: openbooks
+          POSTGRES_DB: openbooks_sim
+        ports:
+          - 5433:5432
+        options: >-
+          --health-cmd "pg_isready -U openbooks -d openbooks_sim"
+          --health-interval 5s --health-timeout 5s --health-retries 12
+    env:
+      OPENBOOKS_SIM: "1"
+      OPENBOOKS_DB_URL: postgres://openbooks:openbooks@localhost:5433/openbooks_sim
+      PGPASSWORD: openbooks
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - run: npm ci
+
+      - name: Load schema
+        # Apply the generated migrations in order, then the constraint layers.
+        run: |
+          for f in $(ls schema/migrations/generated/*.sql | sort); do
+            echo "applying $f"
+            psql "$OPENBOOKS_DB_URL" -v ON_ERROR_STOP=1 -f "$f"
+          done
+          psql "$OPENBOOKS_DB_URL" -v ON_ERROR_STOP=1 -f schema/migrations/referential-integrity.sql
+          psql "$OPENBOOKS_DB_URL" -v ON_ERROR_STOP=1 -f schema/migrations/kernel-constraints.sql
+
+      - name: Typecheck
+        run: npm --prefix engine run typecheck
+
+      - name: Provision + run (autopilot)
+        run: |
+          RUN=$(npm --prefix engine run --silent sim -- provision \
+            --profile general-contractor --seed 1 --start 2026-01-01 --end 2026-02-28 \
+            | node -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>console.log(JSON.parse(s).runDir))')
+          echo "run dir: $RUN"
+          npm --prefix engine run --silent sim -- run "$RUN"
+          npm --prefix engine run --silent sim -- coverage "$RUN"
+
+      - name: Upload defect bundles (if any)
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: sim-defects
+          path: engine/sim-runs/**/defects/**
+          if-no-files-found: ignore

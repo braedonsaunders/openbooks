@@ -27,6 +27,7 @@
     "sync": "tsx src/sync/cli.ts",
     "demo": "tsx src/demo-e2e.ts",
     "harness": "tsx src/harness/cli.ts",
+    "sim": "tsx src/sim/cli.ts",
     "typecheck": "tsc --noEmit"
   }
 }
