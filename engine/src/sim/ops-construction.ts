@@ -9,8 +9,8 @@ import {
   releaseRetainage,
   type PayApplicationLineUpdate,
 } from "../construction-billing.ts";
-import { mulDecimal } from "../money.ts";
-import { postDraftDocument } from "./activities/documents.ts";
+import { add, cmp, mulDecimal, sum } from "../money.ts";
+import { postDraftDocument, createAndPostDocument } from "./activities/documents.ts";
 import type { SimOrg } from "./world.ts";
 
 /**
@@ -36,20 +36,39 @@ export interface SimProject {
 }
 
 /** Create a project with a schedule of values (G703 line items). */
+export type BillingMethod =
+  | "time_and_materials"
+  | "schedule_of_values"
+  | "fixed_price"
+  | "not_to_exceed"
+  | "cost_plus";
+
 export async function setupProject(
   world: SimOrg,
-  opts: { name: string; code: string; customerId: string; startsOn: string; endsOn: string; lines: SovLineSpec[] },
+  opts: {
+    name: string;
+    code: string;
+    customerId: string;
+    startsOn: string;
+    endsOn: string;
+    lines?: SovLineSpec[];
+    billingMethod?: BillingMethod;
+    /** Contract/NTE ceiling (fixed_price / not_to_exceed); defaults to Σ SOV. */
+    contractValue?: string;
+  },
 ): Promise<SimProject> {
   const projectId = randomUUID();
-  const contractValue = opts.lines.reduce((acc, l) => acc + Number(l.scheduledValue), 0).toFixed(2);
+  const lines = opts.lines ?? [];
+  const method = opts.billingMethod ?? "schedule_of_values";
+  const contractValue = opts.contractValue ?? sum(lines.map((line) => line.scheduledValue));
   await db.execute(sql`
     insert into projects (id, org_id, name, code, status, billing_method, customer_id, contract_value, starts_on, ends_on)
-    values (${projectId}, ${world.orgId}, ${opts.name}, ${opts.code}, 'active', 'schedule_of_values',
+    values (${projectId}, ${world.orgId}, ${opts.name}, ${opts.code}, 'active', ${method},
             ${opts.customerId}, ${contractValue}, ${opts.startsOn}, ${opts.endsOn})`);
 
   const sovLines: { id: string; scheduledValue: string }[] = [];
   let sort = 0;
-  for (const line of opts.lines) {
+  for (const line of lines) {
     const id = randomUUID();
     await db.execute(sql`
       insert into sov_lines (id, org_id, project_id, description, scheduled_value, income_account_id, sort_order)
@@ -87,6 +106,55 @@ export async function runProgressBilling(
   const inv = await generatePayApplicationInvoice(world.orgId, approverId, app.id);
   await postDraftDocument(world, inv.invoiceId);
   return inv;
+}
+
+/**
+ * Fixed-price / lump-sum milestone billing: invoice a stated amount against the
+ * contract (e.g. a completed milestone or a percent of the fixed price). DR AR /
+ * CR contract revenue. Guards against billing past the contract value.
+ */
+export async function billFixedPrice(
+  world: SimOrg,
+  projectId: string,
+  amount: string,
+  invoiceDate: string,
+  description = "Milestone billing",
+): Promise<{ invoiceId: string; documentNumber: string; amount: string; billedToDate: string; contractValue: string }> {
+  const proj = (await db.execute(sql`
+    select customer_id, name, code, billing_method, contract_value::text as contract
+      from projects
+     where id = ${projectId} and org_id = ${world.orgId}`)) as unknown as {
+    rows: { customer_id: string | null; name: string; code: string; billing_method: string; contract: string }[];
+  };
+  const p = proj.rows[0];
+  if (!p?.customer_id) throw new Error(`project ${projectId} has no customer to bill`);
+  if (p.billing_method !== "fixed_price" && p.billing_method !== "not_to_exceed") {
+    throw new Error(`project ${projectId} uses ${p.billing_method}, not fixed-price billing`);
+  }
+  if (cmp(amount, "0") <= 0) throw new Error("fixed-price billing amount must be greater than zero");
+  const priorRow = (await db.execute(sql`
+    select coalesce(sum(total), 0)::text as billed from documents
+     where org_id = ${world.orgId} and kind = 'customer_invoice' and status = 'posted'
+       and custom->'sim'->>'projectId' = ${projectId}`)) as unknown as { rows: { billed: string }[] };
+  const priorBilled = priorRow.rows[0]?.billed ?? "0";
+  const billedToDate = add(priorBilled, amount);
+  if (cmp(billedToDate, p.contract) > 0) {
+    throw new Error(`fixed-price billing would exceed contract value ${p.contract}`);
+  }
+
+  const documentNumber = `FP-${p.code}-${invoiceDate.replace(/-/g, "")}`;
+  const res = await createAndPostDocument(world, {
+    kind: "customer_invoice",
+    documentNumber,
+    partyId: p.customer_id,
+    documentDate: invoiceDate,
+    createdBy: world.actors.arClerk,
+    currency: world.currency,
+    memo: `${description} — ${p.name}`,
+    custom: { sim: { fixedPrice: true, projectId } },
+    lines: [{ accountId: world.accounts.revenueService!, description, amount, projectId }],
+  });
+  return { invoiceId: res.documentId, documentNumber, amount, billedToDate, contractValue: p.contract };
 }
 
 /** Release withheld retainage for a project as a final billing. */
