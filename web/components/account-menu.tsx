@@ -218,7 +218,7 @@ export function AccountMenu({
             />
             {environments.isSuperAdmin && (
               <Link
-                href="/admin/super"
+                href="/platform"
                 onClick={close}
                 className="group relative flex flex-col gap-2 rounded-xl border border-slate-200 bg-white p-3 transition-colors hover:border-slate-300 hover:bg-slate-50 dark:border-slate-800 dark:bg-slate-900 dark:hover:border-slate-700 dark:hover:bg-slate-800/60"
               >
