@@ -7,7 +7,7 @@ import { isFeatureEnabled } from './features'
 /** Page-boundary enforcement for every Projects-domain surface. Navigation
  * hiding is presentation only; this guard is the authoritative control. */
 export async function requireProjectsFeature(orgId: string): Promise<void> {
-  if (!(await isFeatureEnabled(orgId, 'projects'))) redirect('/admin/setup/projects')
+  if (!(await isFeatureEnabled(orgId, 'projects'))) redirect('/admin/setup/features')
 }
 
 /** API-boundary enforcement for every Projects-domain mutation and query. A

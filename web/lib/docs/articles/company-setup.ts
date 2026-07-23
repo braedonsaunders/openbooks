@@ -457,17 +457,12 @@ export const setupProjectsGroup: DocArticle = {
 
 The **Projects** group owns project-accounting configuration. The authoritative
 Projects and Field Tickets gates live on **Company Settings → Features**. The
-Projects landing page is always available to administrators and shows effective
-status; the remaining workspaces appear after the parent gate is enabled. No
-project API or background operation remains available when the parent gate is
-off, and disabling it never deletes history.
+configuration workspaces appear after the parent gate is enabled. No project API
+or background operation remains available when the parent gate is off, and
+disabling it never deletes history.
 
 ## The menu items
 
-- **Projects** — review effective gate status, active billing models,
-  applications-for-payment procedures, and costing workspaces. Enable or
-  disable Projects only on **Company Settings → Features**; open operational or
-  financial obligations block disablement.
 - **Project Types** — per-type profiles for profitability, invoicing, and invoice
   backup. A type also selects the billing procedure: standard project billing
   requests or Schedule-of-Values applications for payment. See **Project Types**.
