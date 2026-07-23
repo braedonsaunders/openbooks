@@ -13,6 +13,7 @@ import * as ops from "./ops.ts";
 import * as opsLifecycle from "./ops-lifecycle.ts";
 import * as opsPeriodic from "./ops-periodic.ts";
 import * as opsConstruction from "./ops-construction.ts";
+import * as opsTm from "./ops-tm.ts";
 import type { ScriptJournalLine } from "../journal-writes.ts";
 
 /**
@@ -170,6 +171,8 @@ async function main(): Promise<number> {
           case "trial-balance": return observe.trialBalance(world, f.asOf ?? manifest.simDate);
           case "period-status": return observe.periodStatus(world);
           case "projects": return observe.projects(world);
+          case "crew": return observe.crew(world);
+          case "unbilled-time": return observe.unbilledTime(world);
           default: throw new Error(`unknown observe screen "${screen}"`);
         }
       });
@@ -269,6 +272,18 @@ async function main(): Promise<number> {
             );
           case "release-retainage":
             return opsConstruction.releaseProjectRetainage(world, f.project!, f.period ?? manifest.simDate, f.amount!, world.actors.controller);
+          // --- Construction T&M: crew time -> labor cost -> T&M invoice ---
+          case "log-crew-day":
+            return opsTm.logCrewDay(world, {
+              projectId: f.project!,
+              workedOn: f.date ?? manifest.simDate,
+              hours: f.hours ?? "8",
+              employeeIds: f.crew ? f.crew.split(",").filter(Boolean) : undefined,
+            });
+          case "post-labor":
+            return opsTm.postLaborForProject(world, f.project!);
+          case "bill-tm":
+            return opsTm.billTimeAndMaterials(world, f.project!, f.date ?? manifest.simDate);
           default:
             throw new Error(`unknown act "${action}"`);
         }
