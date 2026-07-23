@@ -1905,6 +1905,9 @@
         "quarantine": "検疫"
       }
     },
+    "invoicing": {
+      "navTitle": "請求書"
+    },
     "bankFeeds": {
       "navTitle": "Bank Feeds"
     }

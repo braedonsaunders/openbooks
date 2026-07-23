@@ -39,7 +39,8 @@ export const FEATURES: FeatureDef[] = [
   // Subscription billing: plans + subscriptions that auto-generate recurring
   // invoices (SaaS/retainer style). Off by default — recurring document
   // schedules + dunning work without it; this adds the plan/subscription model.
-  { key: 'subscriptionBilling', defaultEnabled: false, category: 'sales' },
+  // Invoicing owns this switch so billing policy has one authoritative home.
+  { key: 'subscriptionBilling', defaultEnabled: false, category: 'sales', showInSwitchboard: false },
   // Operations
   // Projects is governed from Company Settings → Projects. Schedule-of-values
   // billing is a project-type billing procedure, not an independent module.
@@ -199,6 +200,14 @@ const FEATURE_DISABLE_CHECKS: Record<string, (orgId: string) => Promise<FeatureD
     if (recons) impacts.push({ labelKey: 'reconciliations', count: recons })
     if (statements) impacts.push({ labelKey: 'bankStatements', count: statements })
     return { blocked: false, impacts }
+  },
+  subscriptionBilling: async (orgId) => {
+    const n = await countRows(sql`
+      select count(*)::int as n from subscriptions
+       where org_id = ${orgId} and status = 'active'`)
+    // Silently stopping scheduled customer invoices is not a reversible display
+    // preference. Administrators must pause or cancel active contracts first.
+    return { blocked: n > 0, impacts: n ? [{ labelKey: 'activeSubscriptions', count: n }] : [] }
   },
   fixedAssets: async (orgId) => {
     const n = await countRows(sql`select count(*)::int as n from fixed_assets where org_id = ${orgId}`)
