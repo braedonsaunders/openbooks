@@ -4,9 +4,11 @@ import {
   createPaymentDocument,
   postPaymentWithApplications,
   sameCurrencyAllocation,
+  updateDraftPayment,
   type AllocationInput,
 } from "../payments.ts";
 import { createScriptJournal, type ScriptJournalLine } from "../journal-writes.ts";
+import { sum } from "../money.ts";
 import { setPeriodLockState, CLOSE_MODULES } from "../close.ts";
 import { postDraftDocument, collectibleOpenItems } from "./activities/documents.ts";
 import type { SimOrg } from "./world.ts";
@@ -57,12 +59,18 @@ export async function payVendor(
     kind: "vendor_payment",
     createdBy: actorId,
     partyId: vendorId,
+    bankAccountId: world.accounts.bank,
     documentDate,
     currency: world.currency,
     memo: `AP payment ${documentDate}`,
   });
-  await postPaymentWithApplications(payment.id, allocations, actorId);
-  const paid = chosen.reduce((acc, i) => acc + Number(i.open), 0).toFixed(2);
+  await updateDraftPayment(
+    payment.id,
+    { allocations, bankAccountId: world.accounts.bank },
+    actorId,
+  );
+  await postPaymentWithApplications(payment.id, undefined, actorId);
+  const paid = sum(chosen.map((item) => item.open));
   return { paymentId: payment.id, paid };
 }
 
@@ -86,7 +94,12 @@ export async function applyReceipt(
   actorId: string,
 ): Promise<{ entryId: string }> {
   const built: AllocationInput[] = allocations.map((a) => sameCurrencyAllocation(a.lineId, a.amount));
-  const { entryId } = await postPaymentWithApplications(paymentDocId, built, actorId);
+  await updateDraftPayment(
+    paymentDocId,
+    { allocations: built, bankAccountId: world.accounts.bank },
+    actorId,
+  );
+  const { entryId } = await postPaymentWithApplications(paymentDocId, undefined, actorId);
   return { entryId };
 }
 

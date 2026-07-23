@@ -1,7 +1,7 @@
 import { join } from "node:path";
 import { pool, withOrgContext } from "../db.ts";
 import { withSimClock } from "../clock.ts";
-import { assertSimDatabase } from "./db-guard.ts";
+import { assertSimEnabled } from "./db-guard.ts";
 import { listProfiles } from "./profiles/index.ts";
 import { provisionRun, dayStart, dayEnd, verify, loadRun } from "./runner.ts";
 import { resetOrg } from "./world.ts";
@@ -60,7 +60,7 @@ async function main(): Promise<number> {
     return 0;
   }
 
-  assertSimDatabase();
+  assertSimEnabled();
 
   switch (cmd) {
     case "provision": {
@@ -213,4 +213,15 @@ async function main(): Promise<number> {
 
 main()
   .then(async (code) => { await pool.end(); process.exit(code); })
-  .catch(async (e) => { console.error(e instanceof Error ? e.stack ?? e.message : e); await pool.end(); process.exit(1); });
+  .catch(async (e) => {
+    console.error(e instanceof Error ? e.stack ?? e.message : e);
+    // Drizzle wraps the driver error; surface the underlying Postgres cause.
+    let cause = (e as { cause?: unknown }).cause;
+    while (cause) {
+      const c = cause as { message?: string; detail?: string; code?: string; cause?: unknown };
+      console.error(`  caused by: ${c.code ? `[${c.code}] ` : ""}${c.message ?? String(cause)}${c.detail ? ` — ${c.detail}` : ""}`);
+      cause = c.cause;
+    }
+    await pool.end();
+    process.exit(1);
+  });

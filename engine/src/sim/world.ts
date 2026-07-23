@@ -5,6 +5,7 @@ import { dropScratchOrg } from "../test-fixtures.ts";
 import { ensureCloseDefaults } from "../close.ts";
 import { seedProjectTypes } from "../seed-project-types.ts";
 import { ensureReportDefinitions } from "../ensure-report-definitions.ts";
+import { assertSimOrg, SIM_ORG_PREFIX } from "./db-guard.ts";
 import type { Profile } from "./profiles/index.ts";
 
 /**
@@ -67,6 +68,12 @@ const COA: [string, string, string, string][] = [
   ["inventory", "1300", "Inventory Asset", "asset_current_other"],
   ["ap", "2000", "Accounts Payable", "liability_payable"],
   ["accrued", "2100", "Accrued Liabilities", "liability_current_other"],
+  ["employeePayable", "2110", "Employee Reimbursements Payable", "liability_current_other"],
+  ["badDebt", "6600", "Bad Debt Expense", "expense"],
+  ["depreciation", "6700", "Depreciation Expense", "expense"],
+  ["accumDep", "1500", "Accumulated Depreciation", "asset_current_other"],
+  ["equipment", "1400", "Equipment", "asset_current_other"],
+  ["fxGainLoss", "7010", "Realized FX Gain/Loss", "expense"],
   ["taxOutput", "2250", "Tax Payable", "liability_current_other"],
   ["revenueService", "4000", "Service Revenue", "income"],
   ["revenueProduct", "4010", "Product Revenue", "income"],
@@ -108,7 +115,7 @@ export async function provisionOrg(profile: Profile, window: { startDate: string
 
     await db.execute(sql`
       insert into orgs (id, name, base_currency, country, settings, env_kind)
-      values (${orgId}, ${profile.name}, ${cur}, ${profile.country}, '{}'::jsonb, 'production')`);
+      values (${orgId}, ${SIM_ORG_PREFIX + profile.name}, ${cur}, ${profile.country}, '{}'::jsonb, 'production')`);
 
     const fiscalCalendarId = randomUUID();
     await db.execute(sql`
@@ -153,9 +160,14 @@ export async function provisionOrg(profile: Profile, window: { startDate: string
         values (${id}, ${orgId}, ${number}, ${name}, ${type}, false, true, false, false, '[]'::jsonb, '{}'::jsonb, true)`);
     }
 
-    // Control accounts (posting reads these from orgs.settings).
+    // Control accounts (posting reads these from orgs.settings) + sim tag. The
+    // simHarness flag is what the destructive-op guard checks before any wipe.
     await db.execute(sql`
-      update orgs set settings = ${JSON.stringify({ controlAccounts: { ar: accounts.ar, ap: accounts.ap, bank: accounts.bank } })}::jsonb
+      update orgs set settings = ${JSON.stringify({
+        simHarness: true,
+        simProfile: profile.id,
+        controlAccounts: { ar: accounts.ar, ap: accounts.ap, bank: accounts.bank, employeePayable: accounts.employeePayable },
+      })}::jsonb
        where id = ${orgId}`);
 
     // Vendor / customer population.
@@ -200,7 +212,8 @@ export async function provisionOrg(profile: Profile, window: { startDate: string
   });
 }
 
-/** Tear an org down completely (bypasses posted-entry immutability). */
+/** Tear a SIM org down completely (bypasses posted-entry immutability). Refuses untagged orgs. */
 export async function resetOrg(orgId: string): Promise<void> {
+  await assertSimOrg(orgId);
   await dropScratchOrg(orgId);
 }
