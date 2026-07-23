@@ -258,11 +258,13 @@ async function main(): Promise<number> {
             });
             return opsConstruction.setupProject(world, {
               name: f.name ?? "Project",
-              code: f.code ?? `PRJ-${Date.now()}`,
+              code: f.code ?? `PRJ-${f.name ?? "X"}`,
               customerId: f.customer ?? world.customers[0]!.id,
               startsOn: f.startsOn ?? manifest.simDate,
               endsOn: f.endsOn ?? manifest.endDate,
-              lines,
+              lines: lines.length ? lines : undefined,
+              billingMethod: f.method as opsConstruction.BillingMethod | undefined,
+              contractValue: f.contract,
             });
           }
           case "progress-bill":
@@ -270,6 +272,8 @@ async function main(): Promise<number> {
               world, f.project!, f.period ?? manifest.simDate, f.fraction ?? "0.1",
               world.actors.arClerk, world.actors.controller,
             );
+          case "bill-fixed":
+            return opsConstruction.billFixedPrice(world, f.project!, f.amount!, f.date ?? manifest.simDate, f.desc ?? "Milestone billing");
           case "release-retainage":
             return opsConstruction.releaseProjectRetainage(world, f.project!, f.period ?? manifest.simDate, f.amount!, world.actors.controller);
           // --- Construction T&M: crew time -> labor cost -> T&M invoice ---

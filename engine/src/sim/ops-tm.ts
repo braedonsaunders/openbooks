@@ -15,10 +15,22 @@ import type { SimOrg } from "./world.ts";
  * rate. Gross profit = billed (bill rate) − labor cost — a real T&M margin.
  */
 
-/** Log one approved, billable crew time entry against a project. */
+/** Create a field-ticket document (a non-posting crew record) for a job/day. */
+export async function createFieldTicket(world: SimOrg, projectId: string, date: string): Promise<{ fieldTicketId: string; number: string }> {
+  const id = randomUUID();
+  const number = `FT-${date.replace(/-/g, "")}-${id.slice(0, 4)}`;
+  await db.execute(sql`
+    insert into documents
+      (id, org_id, kind, status, document_number, document_date, currency, subtotal, tax_total, total, created_by, custom)
+    values (${id}, ${world.orgId}, 'field_ticket', 'approved', ${number}, ${date}, ${world.currency},
+            '0.00', '0.00', '0.00', ${world.actors.controller}, ${JSON.stringify({ sim: { fieldTicket: true, projectId } })}::jsonb)`);
+  return { fieldTicketId: id, number };
+}
+
+/** Log one approved, billable crew time entry against a project (optionally on a field ticket). */
 export async function logTime(
   world: SimOrg,
-  input: { projectId: string; employeeId: string; hours: string; workedOn: string },
+  input: { projectId: string; employeeId: string; hours: string; workedOn: string; fieldTicketId?: string | null },
 ): Promise<{ timeEntryId: string }> {
   const emp = world.employees.find((e) => e.id === input.employeeId);
   if (!emp) throw new Error(`unknown employee ${input.employeeId}`);
@@ -27,25 +39,30 @@ export async function logTime(
   await db.execute(sql`
     insert into time_entries
       (id, org_id, employee_party_id, worked_on, hours, time_type_id, item_id, project_id,
-       is_billable, cost_rate, bill_rate, status)
+       is_billable, cost_rate, bill_rate, status, field_ticket_id)
     values (${id}, ${world.orgId}, ${input.employeeId}, ${input.workedOn}, ${input.hours},
             ${world.timeTypeId}, ${world.laborItemId}, ${input.projectId},
-            true, ${emp.costRate}, ${emp.billRate}, 'approved')`);
+            true, ${emp.costRate}, ${emp.billRate}, 'approved', ${input.fieldTicketId ?? null})`);
   return { timeEntryId: id };
 }
 
-/** Log a full crew-day: `hours` for each crew member (all crew by default) on a job. */
+/**
+ * Log a full crew-day on a job via a FIELD TICKET (how a contractor actually
+ * captures crew hours): one field ticket for the day, `hours` for each crew
+ * member (all crew by default) recorded against it.
+ */
 export async function logCrewDay(
   world: SimOrg,
   input: { projectId: string; workedOn: string; hours: string; employeeIds?: string[] },
-): Promise<{ timeEntryIds: string[] }> {
+): Promise<{ timeEntryIds: string[]; fieldTicket: string }> {
   const ids = input.employeeIds ?? world.employees.map((e) => e.id);
+  const { fieldTicketId, number } = await createFieldTicket(world, input.projectId, input.workedOn);
   const out: string[] = [];
   for (const employeeId of ids) {
-    const r = await logTime(world, { projectId: input.projectId, employeeId, hours: input.hours, workedOn: input.workedOn });
+    const r = await logTime(world, { projectId: input.projectId, employeeId, hours: input.hours, workedOn: input.workedOn, fieldTicketId });
     out.push(r.timeEntryId);
   }
-  return { timeEntryIds: out };
+  return { timeEntryIds: out, fieldTicket: number };
 }
 
 /** Post the labor cost for approved time entries (DR field labor / CR labor clearing). */
