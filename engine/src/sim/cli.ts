@@ -204,7 +204,9 @@ async function main(): Promise<number> {
               const accountId = world.accounts[key!] ?? key!;
               return { accountId, amount: amount! };
             });
-            return ops.postAdjustingJournal(world, world.actors.controller, lines, f.memo ?? "adjustment", manifest.simDate);
+            // --date lets the controller date a month-end adjustment into the
+            // period being closed (e.g. 2026-01-31), not merely "today".
+            return ops.postAdjustingJournal(world, world.actors.controller, lines, f.memo ?? "adjustment", f.date ?? manifest.simDate);
           }
           case "close-month": {
             const period = world.periods.find((p) => p.name === f.period || p.id === f.period);
