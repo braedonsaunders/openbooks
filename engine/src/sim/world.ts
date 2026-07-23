@@ -58,6 +58,11 @@ export interface SimOrg {
   customers: SimCustomer[];
   actors: Record<"apClerk" | "arClerk" | "controller" | "admin", string>;
   periods: SimPeriod[];
+  /** Field crew for T&M labor (present when the chart supports the labor flow). */
+  employees: { id: string; name: string; costRate: string; billRate: string }[];
+  /** Time type + labor service item for time-entry logging (T&M). */
+  timeTypeId: string | null;
+  laborItemId: string | null;
 }
 
 /**
@@ -226,9 +231,10 @@ export async function provisionOrg(profile: Profile, window: { startDate: string
       periods.push({ id, fiscalYear: year, month, name, startsOn, endsOn });
     }
 
-    // Chart of accounts.
+    // Chart of accounts — this company's own chart (or the default services one).
     const accounts: Record<string, string> = {};
-    for (const [key, number, name, type] of COA) {
+    const chart = profile.coa ?? COA;
+    for (const [key, number, name, type] of chart) {
       const id = randomUUID();
       accounts[key] = id;
       await db.execute(sql`
@@ -238,19 +244,19 @@ export async function provisionOrg(profile: Profile, window: { startDate: string
 
     // Control accounts (posting reads these from orgs.settings) + sim tag. The
     // simHarness flag is what the destructive-op guard checks before any wipe.
-    await db.execute(sql`
-      update orgs set settings = ${JSON.stringify({
-        simHarness: true,
-        simProfile: profile.id,
-        controlAccounts: {
-          ar: accounts.ar,
-          ap: accounts.ap,
-          bank: accounts.bank,
-          employeePayable: accounts.employeePayable,
-          retainageReceivable: accounts.retainageReceivable,
-        },
-      })}::jsonb
-       where id = ${orgId}`);
+    // Optional control accounts (labor WIP/clearing, unbilled, retainage, FX) are
+    // wired only when this company's chart defines them.
+    const control: Record<string, string> = { ar: accounts.ar!, ap: accounts.ap!, bank: accounts.bank! };
+    for (const k of ["employeePayable", "retainageReceivable", "laborWip", "laborClearing", "unbilledReceivable", "projectRevenue", "payrollVariance"]) {
+      if (accounts[k]) control[k] = accounts[k]!;
+    }
+    if (accounts.fxGainLoss) control.fxRealizedGainLoss = accounts.fxGainLoss;
+    const settings: Record<string, unknown> = { simHarness: true, simProfile: profile.id, controlAccounts: control };
+    // Turn labor costing ON when the chart has the labor-flow accounts (T&M builds).
+    if (accounts.laborWip && accounts.laborClearing) {
+      settings.laborCosting = { mode: "post", hoursPerDay: 8, annualHours: 2080, components: [] };
+    }
+    await db.execute(sql`update orgs set settings = ${JSON.stringify(settings)}::jsonb where id = ${orgId}`);
 
     // Vendor / customer population.
     const vendors: SimVendor[] = [];
@@ -285,18 +291,48 @@ export async function provisionOrg(profile: Profile, window: { startDate: string
       admin: await mkUser("Sam Admin", "admin"),
     };
 
+    // Field crew + a time type + a labor service item — the T&M labor flow, wired
+    // only when this company's chart defines the labor accounts.
+    const employees: SimOrg["employees"] = [];
+    let timeTypeId: string | null = null;
+    let laborItemId: string | null = null;
+    if (accounts.laborWip && accounts.laborClearing) {
+      const crew: [string, string, string][] = [
+        ["Miguel Torres (Foreman)", "72.00", "165.00"],
+        ["Dwayne Ellis (Journeyman)", "58.00", "135.00"],
+        ["Priya Nair (Journeyman)", "56.00", "130.00"],
+        ["Sam Whitaker (Apprentice)", "38.00", "95.00"],
+        ["Rosa Delgado (Equip. Operator)", "64.00", "150.00"],
+      ];
+      for (const [name, costRate, billRate] of crew) {
+        const id = randomUUID();
+        await db.execute(sql`
+          insert into parties (id, org_id, kind, display_name, is_active, custom)
+          values (${id}, ${orgId}, 'employee', ${name}, true, '{}'::jsonb)`);
+        employees.push({ id, name, costRate, billRate });
+      }
+      timeTypeId = randomUUID();
+      await db.execute(sql`
+        insert into time_types (id, org_id, name, cost_multiplier, bill_multiplier, is_billable_default, show_on_field_ticket)
+        values (${timeTypeId}, ${orgId}, 'Regular Time', '1', '1', true, true)`);
+      laborItemId = randomUUID();
+      await db.execute(sql`
+        insert into items (id, org_id, kind, name, show_on_timesheet, is_active, custom, create_plans_on, revenue_allocation, income_account_id)
+        values (${laborItemId}, ${orgId}, 'service', 'Field Labor (T&M)', true, true, '{}'::jsonb, 'billing', 'normal', ${accounts.revenueService})`);
+    }
+
     // Built-in configuration a fresh org needs.
     await ensureCloseDefaults(orgId, actors.admin);
     await seedProjectTypes(orgId, actors.admin);
     await ensureReportDefinitions(orgId);
 
-    return { orgId, bookId, subsidiaryId, fiscalCalendarId, currency: cur, accounts, vendors, customers, actors, periods };
+    return { orgId, bookId, subsidiaryId, fiscalCalendarId, currency: cur, accounts, vendors, customers, actors, periods, employees, timeTypeId, laborItemId };
   });
 
   // Opening balances — posted OUTSIDE the provisioning bypass block (createScriptJournal
   // opens its own transaction; running it inside withBypass's pinned tx would nest and
   // prematurely commit). Scaled so different companies open at different sizes.
-  const scale = profile.industry === "construction" ? 2.5 : 1;
+  const scale = profile.openingScale ?? (profile.industry === "construction" ? 2.5 : 1);
   await withOrgContext(world.orgId, () =>
     createScriptJournal(
       world.orgId,

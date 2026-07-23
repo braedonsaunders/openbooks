@@ -1,4 +1,86 @@
-import type { Profile } from "./types.ts";
+import type { CoaEntry, Profile } from "./types.ts";
+
+/**
+ * A contractor's own chart — job-cost structured and distinctly named vs. the
+ * services chart: contracts receivable + retainage, costs/billings in excess
+ * (under/over-billings), a job-cost (COGS) block split labor/materials/subs/
+ * equipment, Work-in-Process + Labor Clearing for the T&M labor flow, and an
+ * equipment-heavy fixed-asset block. `laborWip` is the direct-labor job-cost
+ * account (so approved crew time lands in COGS and T&M gross margin is real);
+ * `laborClearing` holds the offset until payroll washes it.
+ */
+const CONSTRUCTION_COA: CoaEntry[] = [
+  // Assets
+  ["bank", "1010", "Operating Account", "asset_bank"],
+  ["bankPayroll", "1020", "Payroll Account", "asset_bank"],
+  ["bankSavings", "1030", "Contract Reserve", "asset_bank"],
+  ["ar", "1200", "Contracts Receivable", "asset_receivable"],
+  ["retainageReceivable", "1210", "Retainage Receivable", "asset_receivable"],
+  ["allowanceDoubtful", "1290", "Allowance for Doubtful Contracts", "asset_current_other"],
+  ["underBillings", "1250", "Costs & Est. Earnings in Excess of Billings", "asset_current_other"],
+  ["prepaid", "1300", "Prepaid Expenses", "asset_current_other"],
+  ["prepaidInsurance", "1310", "Prepaid Insurance & Bonds", "asset_current_other"],
+  ["inventory", "1350", "Materials Inventory", "asset_current_other"],
+  ["taxInput", "1360", "Recoverable Sales Tax", "asset_current_other"],
+  ["deposits", "1400", "Deposits", "asset_other"],
+  ["equipment", "1500", "Construction Equipment", "asset_fixed"],
+  ["vehicles", "1510", "Trucks & Vehicles", "asset_fixed"],
+  ["furniture", "1520", "Office Furniture & Fixtures", "asset_fixed"],
+  ["leasehold", "1530", "Yard & Shop Improvements", "asset_fixed"],
+  ["accumDep", "1590", "Accumulated Depreciation", "asset_fixed"],
+  // Liabilities
+  ["ap", "2010", "Accounts Payable — Trade", "liability_payable"],
+  ["creditCard", "2050", "Company Credit Cards", "liability_card"],
+  ["accrued", "2100", "Accrued Expenses", "liability_current_other"],
+  ["employeePayable", "2110", "Employee Reimbursements", "liability_current_other"],
+  ["accruedPayroll", "2120", "Accrued Payroll & Union", "liability_current_other"],
+  ["laborClearing", "2130", "Labor Clearing", "liability_current_other"],
+  ["overBillings", "2200", "Billings in Excess of Costs", "liability_current_other"],
+  ["deferredRevenue", "2210", "Customer Deposits", "liability_current_other"],
+  ["taxOutput", "2250", "Sales Tax Payable", "liability_current_other"],
+  ["payrollTaxPayable", "2260", "Payroll Taxes Payable", "liability_current_other"],
+  ["retainagePayable", "2300", "Retainage Payable — Subs", "liability_current_other"],
+  ["currentDebt", "2400", "Current Portion — Equipment Notes", "liability_current_other"],
+  ["lineOfCredit", "2700", "Line of Credit", "liability_long_term"],
+  ["notesPayable", "2800", "Equipment Notes Payable", "liability_long_term"],
+  // Equity
+  ["commonStock", "3000", "Common Stock", "equity"],
+  ["apic", "3100", "Paid-In Capital", "equity"],
+  ["retainedEarnings", "3200", "Retained Earnings", "equity"],
+  ["distributions", "3300", "Shareholder Distributions", "equity"],
+  ["openingBalanceEquity", "3900", "Opening Balance Equity", "equity"],
+  // Income
+  ["revenueService", "4000", "Contract Revenue — Labor", "income"],
+  ["revenueProduct", "4010", "Contract Revenue — Materials", "income"],
+  ["revenueConsulting", "4020", "Change Order Revenue", "income"],
+  ["otherIncome", "4900", "Other Income", "income_other"],
+  ["interestIncome", "4910", "Interest Income", "income_other"],
+  // Job costs (COGS)
+  ["cogs", "5000", "Job Cost — Other", "cogs"],
+  ["materials", "5100", "Job Cost — Materials", "cogs"],
+  ["subcontractor", "5200", "Job Cost — Subcontractors", "cogs"],
+  ["directLabor", "5300", "Job Cost — Payroll Labor", "cogs"],
+  ["laborWip", "5350", "Job Cost — Field Labor (T&M crews)", "cogs"],
+  ["equipmentRental", "5400", "Job Cost — Equipment", "cogs"],
+  // Overhead (operating expenses)
+  ["payroll", "6000", "Office Salaries", "expense"],
+  ["benefits", "6010", "Employee Benefits", "expense"],
+  ["payrollTaxExpense", "6020", "Payroll Taxes — Overhead", "expense"],
+  ["rent", "6100", "Rent", "expense"],
+  ["utilities", "6200", "Utilities & Fuel", "expense"],
+  ["insurance", "6300", "Insurance & Bonds", "expense"],
+  ["office", "6400", "Office & Software", "expense"],
+  ["professionalFees", "6500", "Professional Fees", "expense"],
+  ["marketing", "6550", "Marketing", "expense"],
+  ["badDebt", "6600", "Bad Debt Expense", "expense"],
+  ["travel", "6650", "Travel & Vehicle", "expense"],
+  ["meals", "6660", "Meals", "expense"],
+  ["depreciation", "6700", "Depreciation Expense", "expense"],
+  ["bankFees", "6800", "Bank & Financing Fees", "expense"],
+  ["miscExpense", "6900", "Miscellaneous", "expense_other"],
+  ["interestExpense", "7000", "Interest Expense", "expense_other"],
+  ["fxGainLoss", "7010", "Realized FX Gain/Loss", "expense_other"],
+];
 
 /**
  * A mid-size general contractor. Materials + subcontractor heavy on the cost
@@ -13,6 +95,8 @@ export const generalContractor: Profile = {
   industry: "construction",
   baseCurrency: "USD",
   country: "US",
+  coa: CONSTRUCTION_COA,
+  openingScale: 2.5,
   vendors: [
     { name: "Cascade Building Supply", termDays: 30, expenseCategories: ["materials"], billMin: 800, billMax: 45000 },
     { name: "Ironclad Steel & Rebar", termDays: 45, expenseCategories: ["materials"], billMin: 2000, billMax: 80000 },

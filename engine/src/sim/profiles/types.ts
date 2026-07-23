@@ -49,12 +49,24 @@ export interface Cadence {
   closeDayOfMonth: number;
 }
 
+/** A chart-of-accounts entry: [semanticKey, number, name, accountType]. */
+export type CoaEntry = [string, string, string, string];
+
 export interface Profile {
   id: string;
   name: string;
   industry: string;
   baseCurrency: string;
   country: string;
+  /**
+   * This company's complete chart of accounts — every company has its OWN chart
+   * (different names/numbers/accounts). Must define the semantic keys the
+   * generator/ops/opening-balances reference; may add any industry-specific
+   * accounts. If omitted, world.ts's DEFAULT_COA is used.
+   */
+  coa?: CoaEntry[];
+  /** Opening-balance scale (1 = mid-size services firm; larger = bigger company). */
+  openingScale?: number;
   /** ISO 4217-ish description only; the CoA is fixed but categories vary by use. */
   vendors: VendorSpec[];
   customers: CustomerSpec[];
