@@ -11,6 +11,9 @@ export const professionalServices: Profile = {
   industry: "professional_services",
   baseCurrency: "USD",
   country: "US",
+  // A consulting firm: labor is the dominant cost (delivery consultants), leaving
+  // a realistic ~20-25% net margin after overhead.
+  economics: { laborPctOfRevenue: "0.55", cogsPctOfRevenue: "0.06" },
   vendors: [
     { name: "WeWork Downtown", termDays: 30, expenseCategories: ["rent"], billMin: 8000, billMax: 12000 },
     { name: "Adobe Creative Cloud", termDays: 30, expenseCategories: ["office"], billMin: 600, billMax: 2400 },
@@ -20,7 +23,6 @@ export const professionalServices: Profile = {
     { name: "Sterling Accounting Partners", termDays: 30, expenseCategories: ["professionalFees"], billMin: 1500, billMax: 9000 },
     { name: "BrandForge Marketing", termDays: 30, expenseCategories: ["marketing"], billMin: 2000, billMax: 25000 },
     { name: "Corporate Travel Partners", termDays: 30, expenseCategories: ["travel", "meals"], billMin: 500, billMax: 14000 },
-    { name: "Paychex Payroll Services", termDays: 15, expenseCategories: ["payroll", "benefits", "payrollTaxExpense"], billMin: 20000, billMax: 65000 },
     { name: "First National Bank", termDays: 30, expenseCategories: ["bankFees", "interestExpense"], billMin: 200, billMax: 4500 },
     { name: "CloudStack Hosting", termDays: 30, expenseCategories: ["office"], billMin: 1500, billMax: 9000 },
   ],

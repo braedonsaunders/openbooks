@@ -1,7 +1,9 @@
 import { sql } from "drizzle-orm";
 import { db } from "../db.ts";
 import { createPaymentDocument } from "../payments.ts";
-import { addDays, isWeekend } from "./manifest.ts";
+import { createScriptJournal } from "../journal-writes.ts";
+import { add, cmp, mulDecimal, neg, sum } from "../money.ts";
+import { addDays, isWeekend, isMonthEnd } from "./manifest.ts";
 import { mark, nextNumber, type SimContext } from "./context.ts";
 import { createDraftDocument, collectibleOpenItems } from "./activities/documents.ts";
 import type { Rng } from "./rng.ts";
@@ -146,5 +148,56 @@ export async function generateDay(ctx: SimContext): Promise<DayEvents> {
   }
   if (events.paymentsArrived > 0) mark(ctx, "payment_arrived");
 
+  // 4. Month-end payroll + delivery cost, sized to delivered revenue → a coherent P&L.
+  if (isMonthEnd(ctx.simDate) && ctx.profile.economics) {
+    await postMonthlyLaborAndCogs(ctx);
+  }
+
   return events;
+}
+
+/**
+ * Book the month's payroll run and direct delivery cost, sized to the revenue
+ * actually delivered this month, so the P&L carries a realistic cost structure
+ * (labor is the dominant cost) instead of revenue-with-token-costs. Posted as a
+ * balanced journal dated month-end. Skips months with no revenue.
+ */
+async function postMonthlyLaborAndCogs(ctx: SimContext): Promise<void> {
+  const econ = ctx.profile.economics!;
+  const monthStart = `${ctx.simDate.slice(0, 7)}-01`;
+  const rev = (await db.execute(sql`
+    select coalesce(sum(case when kind = 'customer_invoice' then total
+                             when kind = 'customer_credit'  then -total else 0 end), 0)::text as revenue
+      from documents
+     where org_id = ${ctx.world.orgId} and status = 'posted'
+       and kind in ('customer_invoice', 'customer_credit')
+       and document_date >= ${monthStart} and document_date <= ${ctx.simDate}`)) as unknown as {
+    rows: { revenue: string }[];
+  };
+  const revenue = rev.rows[0]?.revenue ?? "0";
+  if (cmp(revenue, "0") <= 0) return;
+
+  const labor = mulDecimal(revenue, econ.laborPctOfRevenue);
+  const salaries = mulDecimal(labor, "0.68");
+  const benefits = mulDecimal(labor, "0.20");
+  // Use the exact residual so rounded components always cross-foot to labor.
+  const payrollTax = add(labor, neg(sum([salaries, benefits])));
+  const cogs = mulDecimal(revenue, econ.cogsPctOfRevenue);
+  const a = ctx.world.accounts;
+  const lines = [
+    { accountId: a.payroll!, amount: salaries, description: "Salaries & wages" },
+    { accountId: a.benefits!, amount: benefits, description: "Employee benefits" },
+    { accountId: a.payrollTaxExpense!, amount: payrollTax, description: "Payroll taxes" },
+    { accountId: a.cogs!, amount: cogs, description: "Direct delivery cost" },
+  ];
+  const total = sum([salaries, benefits, payrollTax, cogs]);
+  lines.push({ accountId: a.bank!, amount: neg(total), description: "Payroll & cost paid" });
+
+  await createScriptJournal(
+    ctx.world.orgId,
+    ctx.world.actors.controller,
+    { documentDate: ctx.simDate, memo: `Payroll & delivery cost — ${ctx.simDate.slice(0, 7)}`, referenceNumber: "PAYROLL", lines },
+    { post: true },
+  );
+  mark(ctx, "payroll_run");
 }
