@@ -53,17 +53,32 @@ export async function cheapInvariants(orgId: string): Promise<InvariantResult> {
     failures.push({ invariant: "per-entry-balance", detail: `${unbalanced} posted entries do not balance` });
   }
 
-  // documents.total must equal the debit sum of its posted entry (for the
-  // kinds the harness creates with a header total).
+  // documents.total must equal the net posting to the AR/AP CONTROL account for
+  // that document. This is retainage-safe: an AIA pay-app invoice legitimately
+  // has total = net (currentDue) while its gross work is split across revenue and
+  // a separate Retainage Receivable debit — so comparing total to the whole debit
+  // sum would false-alarm. The control-account posting always equals the net.
   const totalDrift = await scalar(sql`
-    select count(*) from documents d
-      join journal_lines l on l.entry_id = d.posted_entry_id
-     where d.org_id = ${orgId} and d.status = 'posted'
-       and d.kind in ('vendor_bill','customer_invoice','vendor_credit','customer_credit')
-     group by d.id, d.total
-    having abs(coalesce(sum(case when l.amount > 0 then l.amount else 0 end), 0) - d.total) >= 0.005`);
-  if (totalDrift !== "" && Number(totalDrift) > 0) {
-    failures.push({ invariant: "doc-total-tieout", detail: `${totalDrift} documents whose total != entry debit sum` });
+    with ctrl as (
+      select (settings->'controlAccounts'->>'ar')::uuid as ar,
+             (settings->'controlAccounts'->>'ap')::uuid as ap
+        from orgs where id = ${orgId}
+    ),
+    per_doc as (
+      select d.id, d.kind, d.total,
+             coalesce(sum(l.amount) filter (where l.account_id = (select ar from ctrl)), 0) as ar_amt,
+             coalesce(sum(l.amount) filter (where l.account_id = (select ap from ctrl)), 0) as ap_amt
+        from documents d
+        join journal_lines l on l.entry_id = d.posted_entry_id
+       where d.org_id = ${orgId} and d.status = 'posted'
+         and d.kind in ('vendor_bill','customer_invoice','vendor_credit','customer_credit')
+       group by d.id, d.kind, d.total
+    )
+    select count(*) from per_doc
+     where (kind in ('customer_invoice','customer_credit') and abs(abs(ar_amt) - total) >= 0.005)
+        or (kind in ('vendor_bill','vendor_credit') and abs(abs(ap_amt) - total) >= 0.005)`);
+  if (Number(totalDrift || "0") > 0) {
+    failures.push({ invariant: "doc-total-tieout", detail: `${totalDrift} documents whose total != control-account posting` });
   }
 
   return { pass: failures.length === 0, failures };
