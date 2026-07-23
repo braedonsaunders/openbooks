@@ -12,13 +12,19 @@ export interface ResolvedProjectType {
   backupProfile: BackupProfile
 }
 
+/** Legacy JSON profiles predate the explicit procedure discriminator. Treat
+ * absence as standard without rewriting historical configuration in place. */
+function normalizedInvoicingProfile(profile: InvoicingProfile): InvoicingProfile {
+  return { ...profile, billingProcedure: profile.billingProcedure ?? 'standard' }
+}
+
 const DEFAULTS = BUILTIN_PROJECT_TYPES
 const byKey = new Map(DEFAULTS.map((t) => [t.key, t]))
 const byMethod = new Map(DEFAULTS.map((t) => [t.billingMethod, t]))
 
 function fallback(billingMethod: string | null): ResolvedProjectType {
   const t = (billingMethod && byMethod.get(billingMethod as any)) || byKey.get('time_and_materials')!
-  return { id: null, key: t.key, name: t.name, financialProfile: t.financialProfile, invoicingProfile: t.invoicingProfile, backupProfile: t.backupProfile }
+  return { id: null, key: t.key, name: t.name, financialProfile: t.financialProfile, invoicingProfile: normalizedInvoicingProfile(t.invoicingProfile), backupProfile: t.backupProfile }
 }
 
 /** Resolve the profiles governing a project: its assigned type, else the
@@ -34,7 +40,7 @@ export async function loadProjectType(orgId: string, projectId: string): Promise
   const row = r.rows[0]
   if (!row) return fallback(null)
   if (row.id && row.fp && row.ip && row.bp) {
-    return { id: row.id, key: row.key!, name: row.name!, financialProfile: row.fp, invoicingProfile: row.ip, backupProfile: row.bp }
+    return { id: row.id, key: row.key!, name: row.name!, financialProfile: row.fp, invoicingProfile: normalizedInvoicingProfile(row.ip), backupProfile: row.bp }
   }
   return fallback(row.billing_method)
 }

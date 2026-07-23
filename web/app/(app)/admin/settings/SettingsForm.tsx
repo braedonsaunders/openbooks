@@ -15,8 +15,8 @@ import {
   CardDescription,
   CardHeader,
   CardTitle,
+  FieldLabel,
   Input,
-  Label,
   SearchSelect,
   Select,
   type SelectOption,
@@ -165,7 +165,7 @@ export function SettingsForm({
         ) : null}
         <CardContent className="grid gap-4 sm:grid-cols-2">
           <div className="space-y-1.5">
-            <Label htmlFor="name">{t('organization.displayName')}</Label>
+            <FieldLabel htmlFor="name" help={t('organization.displayNameHint')}>{t('organization.displayName')}</FieldLabel>
             <Input
               id="name"
               value={form.name}
@@ -174,7 +174,7 @@ export function SettingsForm({
             />
           </div>
           <div className="space-y-1.5">
-            <Label htmlFor="legalName">{t('organization.legalName')}</Label>
+            <FieldLabel htmlFor="legalName" help={t('organization.legalNameHint')}>{t('organization.legalName')}</FieldLabel>
             <Input
               id="legalName"
               value={form.legalName}
@@ -183,7 +183,7 @@ export function SettingsForm({
             />
           </div>
           <div className="space-y-1.5">
-            <Label htmlFor="country">{t('organization.country')}</Label>
+            <FieldLabel htmlFor="country" help={t('organization.countryHint')}>{t('organization.country')}</FieldLabel>
             <SearchSelect
               ariaLabel={t('organization.country')}
               value={form.country}
@@ -193,7 +193,7 @@ export function SettingsForm({
             />
           </div>
           <div className="space-y-1.5">
-            <Label htmlFor="defaultLocale">{t('organization.defaultLanguage')}</Label>
+            <FieldLabel htmlFor="defaultLocale" help={t('organization.defaultLanguageHint')}>{t('organization.defaultLanguage')}</FieldLabel>
             <Select
               id="defaultLocale"
               value={form.defaultLocale}
@@ -209,12 +209,9 @@ export function SettingsForm({
                 </option>
               ))}
             </Select>
-            <p className="text-xs text-slate-500 dark:text-slate-400">
-              {t('organization.defaultLanguageHint')}
-            </p>
           </div>
           <div className="space-y-1.5">
-            <Label htmlFor="reportPdfStyle">{t('organization.reportPdfStyle')}</Label>
+            <FieldLabel htmlFor="reportPdfStyle" help={t('organization.reportPdfStyleHint')}>{t('organization.reportPdfStyle')}</FieldLabel>
             <Select
               id="reportPdfStyle"
               value={form.reportPdfStyle}
@@ -225,12 +222,9 @@ export function SettingsForm({
               <option value="modern">{t('organization.reportPdfStyleModern')}</option>
               <option value="formal">{t('organization.reportPdfStyleFormal')}</option>
             </Select>
-            <p className="text-xs text-slate-500 dark:text-slate-400">
-              {t('organization.reportPdfStyleHint')}
-            </p>
           </div>
           <div className="space-y-1.5">
-            <Label htmlFor="baseCurrency">{t('organization.baseCurrency')}</Label>
+            <FieldLabel htmlFor="baseCurrency" help={t('organization.baseCurrencyHint')}>{t('organization.baseCurrency')}</FieldLabel>
             <Select
               id="baseCurrency"
               value={form.baseCurrency}
@@ -242,9 +236,6 @@ export function SettingsForm({
                 </option>
               ))}
             </Select>
-            <p className="text-xs text-slate-500 dark:text-slate-400">
-              {t('organization.baseCurrencyHint')}
-            </p>
           </div>
         </CardContent>
       </Card>
@@ -261,7 +252,7 @@ export function SettingsForm({
         <CardContent className="space-y-4">
           <div className="grid gap-4 sm:grid-cols-2">
             <div className="space-y-1.5">
-              <Label htmlFor="fiscalStart">{t('fiscal.startsIn')}</Label>
+              <FieldLabel htmlFor="fiscalStart" help={t('fiscal.description')}>{t('fiscal.startsIn')}</FieldLabel>
               <Select
                 id="fiscalStart"
                 value={String(form.fiscalYearStartMonth)}
@@ -277,7 +268,7 @@ export function SettingsForm({
               </Select>
             </div>
             <div className="space-y-1.5">
-              <Label>{t('fiscal.runs')}</Label>
+              <FieldLabel help={t('fiscal.description')}>{t('fiscal.runs')}</FieldLabel>
               <div className="flex h-10 items-center rounded-lg border border-slate-200 bg-slate-50 px-3 text-sm text-slate-700 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-200">
                 {fiscalRangeLabel(form.fiscalYearStartMonth)}
               </div>
@@ -308,7 +299,7 @@ export function SettingsForm({
         </CardHeader>
         <CardContent className="grid gap-4 sm:grid-cols-2">
           <div className="space-y-1.5">
-            <Label htmlFor="fairValueRangePolicy">{t('revenue.fairValueRangePolicy.label')}</Label>
+            <FieldLabel htmlFor="fairValueRangePolicy" help={t('revenue.fairValueRangePolicy.hint')}>{t('revenue.fairValueRangePolicy.label')}</FieldLabel>
             <Select
               id="fairValueRangePolicy"
               value={form.fairValueRangePolicy}
@@ -319,9 +310,6 @@ export function SettingsForm({
               <option value="warn">{t('revenue.fairValueRangePolicy.warn')}</option>
               <option value="off">{t('revenue.fairValueRangePolicy.off')}</option>
             </Select>
-            <p className="text-xs text-slate-500 dark:text-slate-400">
-              {t('revenue.fairValueRangePolicy.hint')}
-            </p>
           </div>
         </CardContent>
       </Card>
@@ -344,7 +332,7 @@ export function SettingsForm({
             const label = t(`controlAccounts.fields.${field.key}.label`)
             return (
               <div key={field.key} className="space-y-1.5">
-                <Label htmlFor={`ctrl-${field.key}`}>{label}</Label>
+                <FieldLabel htmlFor={`ctrl-${field.key}`} help={t(`controlAccounts.fields.${field.key}.hint`)}>{label}</FieldLabel>
                 <SearchSelect
                   id={`ctrl-${field.key}`}
                   value={form.controlAccounts[field.key] ?? ''}
@@ -357,9 +345,6 @@ export function SettingsForm({
                   emptyLabel={tCommon('labels.notSet')}
                   ariaLabel={label}
                 />
-                <p className="text-xs text-slate-500 dark:text-slate-400">
-                  {t(`controlAccounts.fields.${field.key}.hint`)}
-                </p>
               </div>
             )
           })}

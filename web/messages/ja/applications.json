@@ -1,0 +1,19 @@
+{
+  "title": "支払申請",
+  "description": "出来高明細、累計支払申請、変更注文、保留金によるプロジェクト請求。",
+  "project": "プロジェクト",
+  "loading": "統制された請求データを読み込んでいます…",
+  "errors": { "load": "支払申請を読み込めませんでした", "action": "操作に失敗しました" },
+  "empty": { "title": "対象プロジェクトがありません", "description": "支払申請を使用するプロジェクトタイプを有効にし、プロジェクトに割り当ててください。", "manageProjectTypes": "プロジェクトタイプを管理" },
+  "summary": { "contractSum": "契約総額", "retainageHeld": "保留金残高", "committedCost": "確定原価（未決済発注）" },
+  "sov": {
+    "title": "出来高明細", "item": "項目", "itemPlaceholder": "項目番号", "description": "説明", "scheduledValue": "契約価額", "retainagePercent": "保留率 %", "default": "既定", "delete": "削除", "deleteConfirm": "明細「{description}」を削除しますか？", "empty": "出来高明細はまだありません。", "defaultIncomeAccount": "既定の収益勘定", "addLine": "行を追加"
+  },
+  "changeOrders": {
+    "title": "変更注文", "number": "変更注文番号", "description": "説明", "amount": "金額", "applyTo": "適用先", "newScheduleLine": "新規明細行（増額変更）", "deductiveHint": "減額変更は既存の明細行を減額する必要があります。", "additiveHint": "変更する明細行を選択するか、新しい増額行を作成します。", "adjusts": "{description} を調整", "approve": "承認", "void": "無効化", "voidConfirm": "変更注文 {number} を無効にしますか？監査履歴は保持されます。", "add": "変更注文を追加", "empty": "変更注文はありません。", "status": { "draft": "下書き", "approved": "承認済み", "void": "無効" }
+  },
+  "payApplications": {
+    "title": "支払申請", "applicationNumber": "申請 #{number}", "retainage": "保留金", "enterDraws": "出来高を入力", "hideDraws": "出来高を非表示", "approve": "承認", "createInvoice": "請求書を作成", "void": "無効化", "voidConfirm": "申請 #{number} を無効にしますか？出来高と監査履歴は保持されます。", "item": "項目", "description": "説明", "workThisPeriod": "当期出来高", "materialsStored": "保管材料", "submit": "承認申請", "submittedMessage": "独立承認のため申請を提出しました", "billedMessage": "{number} を請求済み — 当期請求額 {currentDue}、保留金 {retainage}", "empty": "支払申請はありません。", "periodEnding": "期間終了日", "newApplication": "新規申請", "status": { "draft": "下書き", "submitted": "提出済み", "approved": "承認済み", "invoiced": "請求済み", "posted": "請求済み", "void": "無効" }
+  },
+  "retainage": { "notConfigured": "保留金未収勘定が設定されていません。統制勘定で設定するまで、保留金を含む請求はブロックされます。", "title": "保留金を解除", "description": "保留金を回収可能な売掛金として請求します。残高：{held}", "amount": "金額", "release": "解除", "createdMessage": "保留金解除請求書 {number}（{amount}）を作成しました" }
+}

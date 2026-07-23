@@ -26,6 +26,7 @@ import { currentFiscalYear } from "../../../lib/fiscal";
 import { clamp, isUuid, pickString } from "../../../lib/list-params";
 import { StartCloseButton } from "./StartCloseButton";
 import { CloseWizard } from "./CloseWizard";
+import { subsidiaryFeatureEnabled } from "../../../lib/features";
 
 export const dynamic = "force-dynamic";
 
@@ -39,6 +40,7 @@ export default async function PeriodClose({
   const authz = await requirePermission("close.read");
   const { orgId, id: actorId } = authz.user;
   const sp = await searchParams;
+  const subsidiaryEnabled = await subsidiaryFeatureEnabled(orgId);
   const runId = pickString(sp.run);
   await ensureCloseDefaults(orgId, actorId);
 
@@ -131,6 +133,7 @@ export default async function PeriodClose({
           canApprove={can(authz, "close.approve")}
           canReopen={can(authz, "close.reopen")}
           canManageFlows={can(authz, "flows.manage")}
+          subsidiaryEnabled={subsidiaryEnabled}
         />
       );
     }

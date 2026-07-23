@@ -38,7 +38,7 @@
     "requestFailed": "Impossible de créer la demande",
     "invoiceCreated": "Facture {number} créée",
     "invoiceFailed": "Impossible de créer la facture",
-    "invoiceType": "Type",
+    "invoiceType": "Étape de facturation",
     "basis": "Base",
     "drawAmount": "Montant du tirage",
     "startDate": "Date de début",

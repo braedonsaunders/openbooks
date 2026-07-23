@@ -7,6 +7,7 @@ import { nextDocumentNumber } from './bills'
 import { controlDeps } from './documents'
 import { resolveItemRate } from './item-rates'
 import type { RatePrice } from '@openbooks/engine/src/item-rate-pricing.ts'
+import { isFeatureEnabled } from './features'
 
 /**
  * Project charges / resource usage — the native replacement for source platform's
@@ -60,6 +61,7 @@ export async function createProjectCharge(
   input: ChargeInput,
   opts: { post?: boolean } = { post: true },
 ): Promise<{ id: string; documentNumber: string }> {
+  if (!(await isFeatureEnabled(orgId, 'projects'))) throw new ChargeError('Projects feature is disabled')
   if (!input.lines?.length) throw new ChargeError('A charge needs at least one line')
 
   const created = await db.transaction(async (tx) => {

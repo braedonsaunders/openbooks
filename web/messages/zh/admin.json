@@ -523,8 +523,10 @@
       "description": "此公司在全应用范围内的标识方式。",
       "displayName": "显示名称",
       "displayNamePlaceholder": "Acme Manufacturing",
+      "displayNameHint": "在 OpenBooks 各处显示的公司名称，不必与注册法定名称相同。",
       "legalName": "法定名称",
       "legalNamePlaceholder": "Acme Manufacturing Inc.",
+      "legalNameHint": "用于正式记录、报表和文件的公司注册名称。",
       "country": "国家/地区",
       "countryPlaceholder": "选择国家…",
       "countryHint": "两位字母 ISO 代码（如 CA、US、GB）。",
@@ -1551,7 +1553,7 @@
       },
       "number-sequences": {
         "title": "编号序列",
-        "description": "文档编号前缀和计数器。"
+        "description": "控制每种文档或自定义记录的前缀、下一个编号和位数。自定义记录首次生成编号时会自动创建对应序列。"
       },
       "time-types": {
         "title": "工时类型",
@@ -1788,6 +1790,9 @@
       "customerId": "客户",
       "projectId": "项目",
       "isDefault": "默认"
+    },
+    "fieldHelp": {
+      "gapless": "无间隔表示序列中的每个编号都必须有记录，不能跳号。仅在法律或审计要求必须连续编号时启用。"
     },
     "options": {
       "taxDepreciationModel": { "pool": "Class pool", "macrs": "Per-asset MACRS" },
@@ -2164,10 +2169,6 @@
     "subscriptionBilling": {
       "title": "Subscription Billing",
       "description": "Plans and subscriptions that auto-generate recurring invoices (SaaS / retainer)."
-    },
-    "constructionBilling": {
-      "title": "Construction Progress Billing",
-      "description": "AIA schedule of values, applications for payment, and retainage for contractors."
     }
   }
 }

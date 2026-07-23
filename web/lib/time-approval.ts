@@ -3,6 +3,7 @@ import { laborCostingSettings, snapshotLaborCostRates } from '@openbooks/engine/
 import { applyOverheadForTime } from '@openbooks/engine/src/overhead-apply.ts'
 import { postProjectLaborCost } from '@openbooks/engine/src/project-recognition.ts'
 import { snapshotTimeBillRates } from './item-rates'
+import { isFeatureEnabled } from './features'
 
 /**
  * The ONE set of side-effects that fire when time becomes approved — shared by
@@ -17,6 +18,7 @@ import { snapshotTimeBillRates } from './item-rates'
  */
 export async function runTimeApprovalEffects(orgId: string, actorId: string, timeEntryIds: string[]): Promise<void> {
   if (timeEntryIds.length === 0) return
+  if (!(await isFeatureEnabled(orgId, 'projects'))) return
   const settings = await laborCostingSettings(orgId)
   await snapshotLaborCostRates(orgId, timeEntryIds)
   await snapshotTimeBillRates(orgId, timeEntryIds)

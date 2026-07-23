@@ -17,7 +17,7 @@ import {
   type FormSection,
   type PartyPickerKind,
 } from '@openbooks/forms-core'
-import { Button, cn, Input, Label, SearchSelect, Textarea, type SelectOption } from '@openbooks/ui'
+import { Button, cn, FieldLabel, Input, Label, SearchSelect, Textarea, type SelectOption } from '@openbooks/ui'
 import {
   formatFieldValue,
   isNumericField,
@@ -334,10 +334,10 @@ function HeaderSection({
           const required = Boolean(field.required || field.validation?.required)
           return (
             <div key={field.id} className={cn('space-y-1.5', wide && 'sm:col-span-2')}>
-              <Label>
+              <FieldLabel help={field.helpText}>
                 {field.label}
                 {required ? <span className="ml-0.5 text-red-500">*</span> : null}
-              </Label>
+              </FieldLabel>
               <FieldInput
                 field={field}
                 value={computed[field.id]}
@@ -347,8 +347,6 @@ function HeaderSection({
               />
               {error ? (
                 <p className="text-xs text-red-600 dark:text-red-400">{error}</p>
-              ) : field.helpText ? (
-                <p className="text-xs text-slate-500 dark:text-slate-400">{field.helpText}</p>
               ) : null}
             </div>
           )
@@ -427,8 +425,13 @@ function LineListEditor({
                         isNumericField(f) && 'text-right',
                       )}
                     >
-                      {f.label}
-                      {required ? <span className="ml-0.5 text-red-500">*</span> : null}
+                      <FieldLabel
+                        help={f.helpText}
+                        className="text-xs font-medium text-slate-600 dark:text-slate-300"
+                      >
+                        {f.label}
+                        {required ? <span className="ml-0.5 text-red-500">*</span> : null}
+                      </FieldLabel>
                     </th>
                   )
                 })}

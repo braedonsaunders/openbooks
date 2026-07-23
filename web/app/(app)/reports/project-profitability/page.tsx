@@ -13,6 +13,7 @@ import { requirePermission } from '../../../../lib/authz'
 import type { ReportDrillTarget } from '../../../../lib/report-drill'
 import { parseListParams } from '../../../../lib/list-params'
 import { ProjectProfitabilityTable, type ProjectProfitabilityGroup } from './ProjectProfitabilityTable'
+import { requireProjectsFeature } from '../../../../lib/projects-gate'
 
 export const dynamic = 'force-dynamic'
 const CUSTOMERS_PER_PAGE = 10
@@ -24,6 +25,7 @@ export default async function ProjectProfitabilityPage({
 }) {
   const t = await getTranslations('reports')
   const authz = await requirePermission('reports.read')
+  await requireProjectsFeature(authz.user.orgId)
   const sp = await searchParams
   const list = parseListParams(sp, { sort: 'net', allowedSorts: ['net'] as const, perPage: CUSTOMERS_PER_PAGE })
   const q = parseReportQuery(sp)

@@ -6,7 +6,7 @@ import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { useTranslations } from 'next-intl'
 import { toast } from 'sonner'
-import { Badge, Button, Input, Label, SearchSelect, Select } from '@openbooks/ui'
+import { Badge, Button, FieldLabel, Input, SearchSelect, Select } from '@openbooks/ui'
 import { TransactionDrawer } from './transaction-drawer'
 import { LineGrid, type LineGridColumn } from './line-grid'
 import { CustomFieldInputs, customFieldColumns, type CustomFieldDefClient } from './custom-field-inputs'
@@ -719,7 +719,7 @@ export function DocumentDrawer({
       case 'party_id':
         return (
           <>
-            <Label>{label}{required && isEditable ? <span className="text-red-500"> *</span> : null}</Label>
+            <FieldLabel fieldName={label}>{label}{required && isEditable ? <span className="text-red-500"> *</span> : null}</FieldLabel>
             {isEditable ? (
               <SearchSelect
                 options={(parties ?? []).map((v) => ({ value: v.id, label: v.display_name ?? '' }))}
@@ -733,7 +733,7 @@ export function DocumentDrawer({
       case 'payment_card_id':
         return (
           <>
-            <Label>{label}{required && isEditable ? <span className="text-red-500"> *</span> : null}</Label>
+            <FieldLabel fieldName={label}>{label}{required && isEditable ? <span className="text-red-500"> *</span> : null}</FieldLabel>
             {isEditable ? (
               <SearchSelect
                 options={(cards ?? []).map((c) => ({ value: c.id, label: c.display_name ?? c.label ?? '' }))}
@@ -751,7 +751,7 @@ export function DocumentDrawer({
       case 'document_date':
         return (
           <>
-            <Label>{label}</Label>
+            <FieldLabel fieldName={label}>{label}</FieldLabel>
             {isEditable ? (
               <Input type="date" value={documentDate} onChange={(e) => setDocumentDate(e.target.value)} />
             ) : (<p className="text-sm">{doc.document_date}</p>)}
@@ -760,7 +760,7 @@ export function DocumentDrawer({
       case 'due_date':
         return (
           <>
-            <Label>{label}</Label>
+            <FieldLabel fieldName={label}>{label}</FieldLabel>
             {isEditable ? (
               <Input type="date" value={dueDate} onChange={(e) => setDueDate(e.target.value)} />
             ) : (<p className="text-sm">{doc.due_date ?? '—'}</p>)}
@@ -769,7 +769,7 @@ export function DocumentDrawer({
       case 'reference_number':
         return (
           <>
-            <Label>{label}</Label>
+            <FieldLabel fieldName={label}>{label}</FieldLabel>
             {isEditable ? (
               <Input value={referenceNumber} onChange={(e) => setReferenceNumber(e.target.value)} />
             ) : (<p className="text-sm">{doc.reference_number ?? '—'}</p>)}
@@ -778,7 +778,7 @@ export function DocumentDrawer({
       case 'memo':
         return (
           <>
-            <Label>{label}</Label>
+            <FieldLabel fieldName={label}>{label}</FieldLabel>
             {isEditable ? (
               <Input value={memo} onChange={(e) => setMemo(e.target.value)} />
             ) : (<p className="text-sm">{doc.memo ?? '—'}</p>)}
@@ -787,7 +787,7 @@ export function DocumentDrawer({
       case 'posting_date':
         return (
           <>
-            <Label>{label}</Label>
+            <FieldLabel fieldName={label}>{label}</FieldLabel>
             {isEditable ? (
               <Input type="date" value={postingDate} onChange={(e) => setPostingDate(e.target.value)} />
             ) : (<p className="text-sm">{doc.posting_date ?? '—'}</p>)}
@@ -796,7 +796,7 @@ export function DocumentDrawer({
       case 'expected_pay_date':
         return (
           <>
-            <Label>{label}</Label>
+            <FieldLabel fieldName={label}>{label}</FieldLabel>
             {isEditable ? (
               <Input type="date" value={expectedPayDate} onChange={(e) => setExpectedPayDate(e.target.value)} />
             ) : (<p className="text-sm">{doc.expected_pay_date ?? '—'}</p>)}
@@ -805,7 +805,7 @@ export function DocumentDrawer({
       case 'department_id':
         return (
           <>
-            <Label>{label}</Label>
+            <FieldLabel fieldName={label}>{label}</FieldLabel>
             {isEditable ? (
               <SearchSelect options={(departments ?? []).map((d) => ({ value: d.id, label: d.name ?? '' }))} value={departmentId} onChange={(v) => setDepartmentId(v ?? '')} placeholder="—" />
             ) : (<p className="text-sm">{optName(departments, doc.department_id)}</p>)}
@@ -814,7 +814,7 @@ export function DocumentDrawer({
       case 'project_id':
         return (
           <>
-            <Label>{label}</Label>
+            <FieldLabel fieldName={label}>{label}</FieldLabel>
             {isEditable ? (
               <SearchSelect options={(projects ?? []).map((pr) => ({ value: pr.id, label: pr.name ?? '' }))} value={projectIdHeader} onChange={(v) => setProjectIdHeader(v ?? '')} placeholder="—" />
             ) : (<p className="text-sm">{optName(projects, doc.project_id)}</p>)}
@@ -823,7 +823,7 @@ export function DocumentDrawer({
       case 'location_id':
         return (
           <>
-            <Label>{label}</Label>
+            <FieldLabel fieldName={label}>{label}</FieldLabel>
             {isEditable ? (
               <SearchSelect options={(locations ?? []).map((l) => ({ value: l.id, label: l.name ?? '' }))} value={locationId} onChange={(v) => setLocationId(v ?? '')} placeholder="—" />
             ) : (<p className="text-sm">{optName(locations, doc.location_id)}</p>)}
@@ -832,7 +832,7 @@ export function DocumentDrawer({
       case 'class_id':
         return (
           <>
-            <Label>{label}</Label>
+            <FieldLabel fieldName={label}>{label}</FieldLabel>
             {isEditable ? (
               <SearchSelect options={(classes ?? []).map((c) => ({ value: c.id, label: c.name ?? '' }))} value={classId} onChange={(v) => setClassId(v ?? '')} placeholder="—" />
             ) : (<p className="text-sm">{optName(classes, doc.class_id)}</p>)}
@@ -846,7 +846,7 @@ export function DocumentDrawer({
         const rootName = subsidiaries?.[0]?.name ?? '—'
         return (
           <>
-            <Label>{label}</Label>
+            <FieldLabel fieldName={label}>{label}</FieldLabel>
             {isEditable && !isPosted ? (
               <SearchSelect
                 options={subsidiaryOpts}
@@ -863,7 +863,7 @@ export function DocumentDrawer({
       case 'payment_hold_reason':
         return (
           <>
-            <Label>{label}</Label>
+            <FieldLabel fieldName={label}>{label}</FieldLabel>
             {isEditable ? (
               <Input value={paymentHoldReason} onChange={(e) => setPaymentHoldReason(e.target.value)} />
             ) : (<p className="text-sm">{doc.payment_hold_reason ?? '—'}</p>)}
@@ -872,7 +872,7 @@ export function DocumentDrawer({
       case 'internal_notes':
         return (
           <>
-            <Label>{label}</Label>
+            <FieldLabel fieldName={label}>{label}</FieldLabel>
             {isEditable ? (
               <Input value={internalNotes} onChange={(e) => setInternalNotes(e.target.value)} />
             ) : (<p className="text-sm">{doc.internal_notes ?? '—'}</p>)}
@@ -881,7 +881,7 @@ export function DocumentDrawer({
       case 'billing_method':
         return (
           <>
-            <Label>{label}</Label>
+            <FieldLabel fieldName={label}>{label}</FieldLabel>
             {isEditable ? (
               <Select value={billingMethod} onChange={(e) => setBillingMethod(e.target.value)}>
                 <option value="">—</option>
@@ -898,7 +898,7 @@ export function DocumentDrawer({
       case 'is_final_invoice':
         return (
           <>
-            <Label>{label}</Label>
+            <FieldLabel fieldName={label}>{label}</FieldLabel>
             {isEditable ? (
               <label className="flex h-9 items-center gap-2 text-sm">
                 <input type="checkbox" checked={isFinalInvoice} onChange={(e) => setIsFinalInvoice(e.target.checked)} className="h-4 w-4 rounded border-slate-300 text-teal-600 focus:ring-teal-500" />
@@ -1111,15 +1111,15 @@ export function DocumentDrawer({
         {isTransfer ? (
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
             <div className={field}>
-              <Label>{t('drawer.transferAmount')}{editable ? <span className="text-red-500"> *</span> : null}</Label>
+              <FieldLabel fieldName={t('drawer.transferAmount')}>{t('drawer.transferAmount')}{editable ? <span className="text-red-500"> *</span> : null}</FieldLabel>
               {editable ? <Input type="number" step="0.01" value={transfer?.amount ?? ''} onChange={(e) => setTransfer((p) => ({ ...p!, amount: e.target.value }))} /> : <p className="text-sm tabular-nums">{money(payload.lines[0]?.amount, { currency: doc.currency })}</p>}
             </div>
             <div className={field}>
-              <Label>{t('drawer.toAccount')}{editable ? <span className="text-red-500"> *</span> : null}</Label>
+              <FieldLabel fieldName={t('drawer.toAccount')}>{t('drawer.toAccount')}{editable ? <span className="text-red-500"> *</span> : null}</FieldLabel>
               {editable ? <SearchSelect options={(bankAccounts ?? accounts).map((a) => ({ value: a.id, label: `${a.number ?? ''} ${a.name ?? ''}`.trim() }))} value={transfer?.toAccount ?? ''} onChange={(v) => setTransfer((p) => ({ ...p!, toAccount: v ?? '' }))} placeholder={t('drawer.accountPlaceholder')} /> : <p className="text-sm">{accountName(payload.lines[0]?.account_id)}</p>}
             </div>
             <div className={field}>
-              <Label>{t('drawer.fromAccount')}{editable ? <span className="text-red-500"> *</span> : null}</Label>
+              <FieldLabel fieldName={t('drawer.fromAccount')}>{t('drawer.fromAccount')}{editable ? <span className="text-red-500"> *</span> : null}</FieldLabel>
               {editable ? <SearchSelect options={(bankAccounts ?? accounts).map((a) => ({ value: a.id, label: `${a.number ?? ''} ${a.name ?? ''}`.trim() }))} value={transfer?.fromAccount ?? ''} onChange={(v) => setTransfer((p) => ({ ...p!, fromAccount: v ?? '' }))} placeholder={t('drawer.accountPlaceholder')} /> : <p className="text-sm">{accountName(payload.lines[1]?.account_id)}</p>}
             </div>
           </div>
@@ -1128,7 +1128,7 @@ export function DocumentDrawer({
         {config.kind === 'deposit' ? (
           <div className="grid gap-4 sm:grid-cols-2">
             <div className={field}>
-              <Label>{t('drawer.depositTo')}{editable ? <span className="text-red-500"> *</span> : null}</Label>
+              <FieldLabel fieldName={t('drawer.depositTo')}>{t('drawer.depositTo')}{editable ? <span className="text-red-500"> *</span> : null}</FieldLabel>
               {editable ? <SearchSelect options={(bankAccounts ?? accounts).map((a) => ({ value: a.id, label: `${a.number ?? ''} ${a.name ?? ''}`.trim() }))} value={(customValues.controlAccountId as string) ?? ''} onChange={(v) => setCustomValues((c) => ({ ...c, controlAccountId: v ?? '' }))} placeholder={t('drawer.accountPlaceholder')} /> : <p className="text-sm">{accountName(customValues.controlAccountId as string)}</p>}
             </div>
           </div>
@@ -1148,7 +1148,7 @@ export function DocumentDrawer({
             <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
               {config.partyRole ? (
                 <div className={`${field} lg:col-span-2`}>
-                  <Label>{partyLabel}{editable ? <span className="text-red-500"> *</span> : null}</Label>
+                  <FieldLabel fieldName={partyLabel}>{partyLabel}{editable ? <span className="text-red-500"> *</span> : null}</FieldLabel>
                   {editable ? (
                     <SearchSelect
                       options={(parties ?? []).map((p) => ({ value: p.id, label: p.display_name ?? '' }))}
@@ -1164,7 +1164,7 @@ export function DocumentDrawer({
 
               {config.fundingSource === 'card' ? (
                 <div className={`${field} lg:col-span-2`}>
-                  <Label>{t('drawer.card')}{editable ? <span className="text-red-500"> *</span> : null}</Label>
+                  <FieldLabel fieldName={t('drawer.card')}>{t('drawer.card')}{editable ? <span className="text-red-500"> *</span> : null}</FieldLabel>
                   {editable ? (
                     <SearchSelect
                       options={(cards ?? []).map((c) => ({ value: c.id, label: c.display_name ?? c.label ?? '' }))}
@@ -1185,7 +1185,7 @@ export function DocumentDrawer({
               ) : null}
 
               <div className={field}>
-                <Label>{t('drawer.dateLabel')}</Label>
+                <FieldLabel fieldName={t('drawer.dateLabel')}>{t('drawer.dateLabel')}</FieldLabel>
                 {editable ? (
                   <Input type="date" value={documentDate} onChange={(e) => setDocumentDate(e.target.value)} />
                 ) : (
@@ -1194,7 +1194,7 @@ export function DocumentDrawer({
               </div>
               {config.hasDueDate ? (
                 <div className={field}>
-                  <Label>{t('drawer.dueDate')}</Label>
+                  <FieldLabel fieldName={t('drawer.dueDate')}>{t('drawer.dueDate')}</FieldLabel>
                   {editable ? (
                     <Input type="date" value={dueDate} onChange={(e) => setDueDate(e.target.value)} />
                   ) : (
@@ -1204,7 +1204,7 @@ export function DocumentDrawer({
               ) : null}
               {config.hasReference ? (
                 <div className={field}>
-                  <Label>{t('drawer.reference')}</Label>
+                  <FieldLabel fieldName={t('drawer.reference')}>{t('drawer.reference')}</FieldLabel>
                   {editable ? (
                     <Input value={referenceNumber} onChange={(e) => setReferenceNumber(e.target.value)} />
                   ) : (
@@ -1213,7 +1213,7 @@ export function DocumentDrawer({
                 </div>
               ) : null}
               <div className={`${field} lg:col-span-3`}>
-                <Label>{tCommon('labels.memo')}</Label>
+                <FieldLabel fieldName={tCommon('labels.memo')}>{tCommon('labels.memo')}</FieldLabel>
                 {editable ? (
                   <Input value={memo} onChange={(e) => setMemo(e.target.value)} />
                 ) : (
@@ -1233,7 +1233,7 @@ export function DocumentDrawer({
               const selectedLabel = segment.values.find((value) => value.id === selected)
               return (
                 <div className={field} key={segment.key}>
-                  <Label>{segment.name}</Label>
+                  <FieldLabel fieldName={segment.name}>{segment.name}</FieldLabel>
                   {editable ? (
                     <SearchSelect
                       options={segment.values.map((value) => ({
@@ -1255,7 +1255,7 @@ export function DocumentDrawer({
 
         {!isTransfer ? (
           <div className="space-y-2">
-            <Label>{tCommon('labels.lines')}</Label>
+            <FieldLabel fieldName={tCommon('labels.lines')}>{tCommon('labels.lines')}</FieldLabel>
             <LineGrid<LineRow>
               columns={useLayout ? columnsFromLayout : columns}
               rows={rows}

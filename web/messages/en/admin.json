@@ -569,8 +569,10 @@
       "subsidiariesLink": "Open Subsidiaries",
       "displayName": "Display name",
       "displayNamePlaceholder": "Acme Manufacturing",
+      "displayNameHint": "The company name people see throughout OpenBooks. It does not need to match the registered legal name.",
       "legalName": "Legal name",
       "legalNamePlaceholder": "Acme Manufacturing Inc.",
+      "legalNameHint": "The company’s registered name for formal records, reports and documents.",
       "country": "Country",
       "countryPlaceholder": "Select a country…",
       "countryHint": "Two-letter ISO code (e.g. CA, US, GB).",
@@ -1543,7 +1545,7 @@
       },
       "number-sequences": {
         "title": "Number Sequences",
-        "description": "Document numbering prefixes and counters."
+        "description": "Control the prefix, next number, and length for each document or custom record. Custom-record sequences are created automatically. Gapless numbering means every number is accounted for with no skipped values."
       },
       "time-types": {
         "title": "Time Types",
@@ -1808,7 +1810,7 @@
       "netDays": "Net days",
       "discountDays": "Discount days",
       "discountPercent": "Discount %",
-      "documentKind": "Document",
+      "documentKind": "Document or record",
       "prefix": "Prefix",
       "nextNumber": "Next number",
       "padding": "Padding",
@@ -1914,6 +1916,9 @@
       "projectId": "Project",
       "isDefault": "Default",
       "billMultiplier": "Bill multiplier"
+    },
+    "fieldHelp": {
+      "gapless": "Gapless means every number in the sequence must be accounted for, with no skipped numbers. Enable it only when your legal or audit requirements require uninterrupted numbering."
     },
     "options": {
       "sourceKind": {
@@ -2406,7 +2411,8 @@
         "assets": "{count, plural, one {# fixed asset} other {# fixed assets}}",
         "inventoryMovements": "{count, plural, one {# inventory movement} other {# inventory movements}}",
         "projects": "{count, plural, one {# project} other {# projects}}",
-        "revenueSchedules": "{count, plural, one {# deferred-revenue schedule} other {# deferred-revenue schedules}}"
+        "revenueSchedules": "{count, plural, one {# deferred-revenue schedule} other {# deferred-revenue schedules}}",
+        "controlCheckUnavailable": "an integrity check that could not be completed"
       },
       "errors": {
         "blocked": "This feature can't be turned off — its data is load-bearing for the ledger."
@@ -2750,10 +2756,6 @@
     "subscriptionBilling": {
       "title": "Subscription Billing",
       "description": "Plans and subscriptions that auto-generate recurring invoices (SaaS / retainer)."
-    },
-    "constructionBilling": {
-      "title": "Construction Progress Billing",
-      "description": "AIA schedule of values, applications for payment, and retainage for contractors."
     }
   }
 }

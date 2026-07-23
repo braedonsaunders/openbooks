@@ -35,6 +35,7 @@ import {
 } from './report-pdf'
 import { executeReport, mergeReportFilters } from './custom-reports'
 import type { ReportQuery } from './report-filters'
+import { isFeatureEnabled } from './features'
 
 /**
  * The single catalog of built-in report "kinds" and the one place that turns
@@ -130,6 +131,9 @@ export type ResolveReportCtx = {
  */
 export async function resolveReport(kind: ReportKind, p: URLSearchParams, ctx: ResolveReportCtx): Promise<ResolvedReport> {
   const { orgId, t, period, query: q } = ctx
+  if (kind === 'project-profitability' && !(await isFeatureEnabled(orgId, 'projects'))) {
+    throw new Error('Projects feature is disabled')
+  }
   // Subsidiary context: exports and scheduled runs honor the same picker value
   // as the on-screen report (consolidated subtree + translation included).
   const subView = await reportSubsidiaryView(q.subsidiaryId, period.to)

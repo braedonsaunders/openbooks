@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from 'react'
 import { useTranslations } from 'next-intl'
-import { Input, Label, Select, Textarea } from '@openbooks/ui'
+import { FieldLabel, Input, Select, Textarea } from '@openbooks/ui'
 import { SearchSelect } from '@openbooks/ui'
 import type { CustomFieldDefClient } from './custom-field-inputs'
 
@@ -57,7 +57,7 @@ export function CustomFieldInput({
   if (isDisabled) {
     return (
       <div className="space-y-1.5">
-        <Label>{def.label}</Label>
+        <FieldLabel help={def.config.helpText}>{def.label}</FieldLabel>
         <p className="text-sm text-slate-600 dark:text-slate-400">
           {def.fieldType === 'boolean'
             ? value
@@ -73,10 +73,10 @@ export function CustomFieldInput({
 
   return (
     <div className="space-y-1.5">
-      <Label>
+      <FieldLabel help={def.config.helpText}>
         {def.label}
         {def.isRequired ? <span className="text-red-500"> *</span> : null}
-      </Label>
+      </FieldLabel>
       {def.fieldType === 'long_text' ? (
         <Textarea
           value={(value as string) ?? ''}
@@ -124,9 +124,6 @@ export function CustomFieldInput({
           onChange={(e) => onChange(e.target.value)}
         />
       )}
-      {def.config.helpText ? (
-        <p className="text-xs text-slate-500 dark:text-slate-400">{def.config.helpText}</p>
-      ) : null}
     </div>
   )
 }

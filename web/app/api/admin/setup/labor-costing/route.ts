@@ -9,6 +9,7 @@ import {
   type LaborCostComponent,
 } from '@openbooks/engine/src/labor-costing.ts'
 import { canonicalDecimal, compareDecimal } from '../../../../../lib/exact-decimal'
+import { guardProjectsFeature } from '../../../../../lib/projects-gate'
 
 export const dynamic = 'force-dynamic'
 
@@ -66,6 +67,8 @@ function cleanComponents(input: unknown): LaborCostComponent[] {
 export async function GET(req: Request) {
   const gate = await guardPermission('admin.setup.manage')
   if (gate instanceof NextResponse) return gate
+  const feature = await guardProjectsFeature(gate.user.orgId)
+  if (feature) return feature
   const url = new URL(req.url)
   const employee = url.searchParams.get('employee')
   if (!employee || !isUuid(employee)) return NextResponse.json({ error: 'employee required' }, { status: 422 })
@@ -102,6 +105,8 @@ export async function PUT(req: Request) {
   const gate = await guardPermission('admin.setup.manage')
   if (gate instanceof NextResponse) return gate
   const orgId = gate.user.orgId
+  const feature = await guardProjectsFeature(orgId)
+  if (feature) return feature
   const body = await req.json().catch(() => ({}))
 
   const s = body.settings ?? {}
@@ -139,6 +144,8 @@ export async function POST(req: Request) {
   const gate = await guardPermission('admin.setup.manage')
   if (gate instanceof NextResponse) return gate
   const orgId = gate.user.orgId
+  const feature = await guardProjectsFeature(orgId)
+  if (feature) return feature
   const userId = gate.user.id
   const body = await req.json().catch(() => ({}))
 

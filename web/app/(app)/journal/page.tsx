@@ -157,7 +157,7 @@ export default async function Journal({
           loadFieldDefs('documents', 'journal'),
           loadFieldDefs('document_lines', 'journal'),
           // Multi-subsidiary orgs only — null keeps ALL subsidiary UI hidden.
-          isMultiSubsidiary().then(async (multi) => {
+          isMultiSubsidiary(authz.user.orgId).then(async (multi) => {
             if (!multi) return null
             const options = await subsidiaryOptions()
             return allowedSubsidiaries ? options.filter((option) => allowedSubsidiaries.has(option.id)) : options

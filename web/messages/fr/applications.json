@@ -1,0 +1,19 @@
+{
+  "title": "Demandes de paiement",
+  "description": "Facturation de projet par tableaux de valeurs, demandes cumulatives, avenants et retenues.",
+  "project": "Projet",
+  "loading": "Chargement des données de facturation contrôlées…",
+  "errors": { "load": "Impossible de charger les demandes de paiement", "action": "Échec de l’action" },
+  "empty": { "title": "Aucun projet admissible", "description": "Activez un type de projet utilisant les demandes de paiement, puis attribuez-le à un projet.", "manageProjectTypes": "Gérer les types de projet" },
+  "summary": { "contractSum": "Montant du contrat", "retainageHeld": "Retenue détenue", "committedCost": "Coût engagé (BC ouverts)" },
+  "sov": {
+    "title": "Tableau des valeurs", "item": "Poste", "itemPlaceholder": "Nº de poste", "description": "Description", "scheduledValue": "Valeur prévue", "retainagePercent": "Retenue %", "default": "par défaut", "delete": "Supprimer", "deleteConfirm": "Supprimer la ligne « {description} » ?", "empty": "Aucune ligne du tableau des valeurs.", "defaultIncomeAccount": "Compte de produits par défaut", "addLine": "Ajouter une ligne"
+  },
+  "changeOrders": {
+    "title": "Avenants", "number": "Nº d’avenant", "description": "Description", "amount": "Montant", "applyTo": "Appliquer à", "newScheduleLine": "Nouvelle ligne (ajout)", "deductiveHint": "Un avenant déductif doit réduire une ligne existante.", "additiveHint": "Choisissez une ligne à réviser ou créez une nouvelle ligne additive.", "adjusts": "Ajuste {description}", "approve": "Approuver", "void": "Annuler", "voidConfirm": "Annuler l’avenant {number} ? Son historique d’audit sera conservé.", "add": "Ajouter un avenant", "empty": "Aucun avenant.", "status": { "draft": "Brouillon", "approved": "Approuvé", "void": "Annulé" }
+  },
+  "payApplications": {
+    "title": "Demandes de paiement", "applicationNumber": "Demande nº {number}", "retainage": "Retenue", "enterDraws": "Saisir les travaux", "hideDraws": "Masquer les travaux", "approve": "Approuver", "createInvoice": "Créer la facture", "void": "Annuler", "voidConfirm": "Annuler la demande nº {number} ? Les montants et l’historique d’audit seront conservés.", "item": "Poste", "description": "Description", "workThisPeriod": "Travaux de la période", "materialsStored": "Matériaux entreposés", "submit": "Soumettre pour approbation", "submittedMessage": "Demande soumise pour approbation indépendante", "billedMessage": "Facture {number} — exigible {currentDue}, retenue {retainage}", "empty": "Aucune demande.", "periodEnding": "Fin de période", "newApplication": "Nouvelle demande", "status": { "draft": "Brouillon", "submitted": "Soumise", "approved": "Approuvée", "invoiced": "Facturée", "posted": "Facturée", "void": "Annulée" }
+  },
+  "retainage": { "notConfigured": "Aucun compte de retenues à recevoir n’est configuré. La facturation avec retenue sera bloquée jusqu’à sa configuration dans les comptes de contrôle.", "title": "Libérer la retenue", "description": "Transfère la retenue détenue aux comptes clients. Détenue : {held}", "amount": "Montant", "release": "Libérer", "createdMessage": "Facture de libération {number} de {amount} créée" }
+}

@@ -2,12 +2,15 @@ import { NextResponse } from 'next/server'
 import { guardPermission } from '../../../lib/authz'
 import { isUuid } from '../../../lib/list-params'
 import { createBillingRequest, listBillingRequests } from '../../../lib/billing-requests'
+import { guardProjectsFeature } from '../../../lib/projects-gate'
 
 export const runtime = 'nodejs'
 
 export async function GET(req: Request) {
   const gate = await guardPermission('projects.read')
   if (gate instanceof NextResponse) return gate
+  const feature = await guardProjectsFeature(gate.user.orgId)
+  if (feature) return feature
   const projectId = new URL(req.url).searchParams.get('projectId')
   if (!projectId || !isUuid(projectId)) return NextResponse.json({ error: 'projectId required' }, { status: 400 })
   const requests = await listBillingRequests(gate.user.orgId, projectId)
@@ -17,6 +20,8 @@ export async function GET(req: Request) {
 export async function POST(req: Request) {
   const gate = await guardPermission('projects.manage')
   if (gate instanceof NextResponse) return gate
+  const feature = await guardProjectsFeature(gate.user.orgId)
+  if (feature) return feature
   const body = (await req.json()) as any
   if (!body?.projectId || !isUuid(String(body.projectId))) {
     return NextResponse.json({ error: 'projectId required' }, { status: 400 })

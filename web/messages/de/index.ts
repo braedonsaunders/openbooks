@@ -53,6 +53,7 @@ import sync from './sync.json'
 import tax from './tax.json'
 import timesheets from './timesheets.json'
 import laborPricing from './labor-pricing.json'
+import applications from './applications.json'
 
 export default {
   common,
@@ -107,4 +108,5 @@ export default {
   sync,
   tax,
   timesheets,
+  applications,
 } as const

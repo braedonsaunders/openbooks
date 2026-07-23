@@ -16,6 +16,10 @@
   "confirm": {
     "defaultTitle": "Confirmer"
   },
+  "fieldHelp": {
+    "open": "Expliquer ce champ",
+    "generic": "Définit la valeur {field} pour cet enregistrement ou cette opération."
+  },
   "select": {
     "placeholder": "Sélectionner…",
     "searchPlaceholder": "Rechercher…",

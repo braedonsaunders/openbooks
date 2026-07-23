@@ -16,6 +16,10 @@
   "confirm": {
     "defaultTitle": "确认"
   },
+  "fieldHelp": {
+    "open": "解释此字段",
+    "generic": "设置此记录或操作的“{field}”值。"
+  },
   "select": {
     "placeholder": "选择…",
     "searchPlaceholder": "搜索…",

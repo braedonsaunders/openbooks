@@ -4,6 +4,7 @@ import { db } from '@openbooks/engine/src/db.ts'
 import { guardPermission } from '../../../lib/authz'
 import { isUuid } from '../../../lib/list-params'
 import { createProjectCharge, ChargeError, type ChargeLineInput } from '../../../lib/project-charges'
+import { guardProjectsFeature } from '../../../lib/projects-gate'
 
 export const runtime = 'nodejs'
 
@@ -11,6 +12,8 @@ export const runtime = 'nodejs'
 export async function GET(req: Request) {
   const gate = await guardPermission('projects.read')
   if (gate instanceof NextResponse) return gate
+  const feature = await guardProjectsFeature(gate.user.orgId)
+  if (feature) return feature
   const projectId = new URL(req.url).searchParams.get('projectId')
   if (!projectId || !isUuid(projectId)) return NextResponse.json({ error: 'projectId required' }, { status: 400 })
   const project = (await db.execute(sql`select subsidiary_id from projects where id = ${projectId} and org_id = ${gate.user.orgId}`)) as any
@@ -36,6 +39,8 @@ export async function GET(req: Request) {
 export async function POST(req: Request) {
   const gate = await guardPermission('projects.manage')
   if (gate instanceof NextResponse) return gate
+  const feature = await guardProjectsFeature(gate.user.orgId)
+  if (feature) return feature
   const body = (await req.json()) as { projectId?: string; referenceNumber?: string; lines?: ChargeLineInput[] }
   if (!body?.projectId || !isUuid(String(body.projectId))) {
     return NextResponse.json({ error: 'projectId required' }, { status: 400 })

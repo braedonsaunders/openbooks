@@ -14,6 +14,7 @@ import {
 } from "../../../../../lib/close/report-descriptor";
 import { clamp, isUuid, pickString } from "../../../../../lib/list-params";
 import { CloseSetupWorkspace } from "./CloseSetupWorkspace";
+import { subsidiaryFeatureEnabled } from "../../../../../lib/features";
 
 const PER_PAGE = 20;
 const CONFIG_PER_PAGE = 12;
@@ -252,7 +253,7 @@ export async function CloseSetupPage({
   // Option sources for the structured policy/automation/package editors — so
   // notifications, assignments, and reporting packages pick from real people,
   // roles, and reports (built-in + custom) instead of hand-typed JSON.
-  const [users, roles, reportDefs, subsidiaries, dimensions] = (await Promise.all([
+  const [users, roles, reportDefs, subsidiaries, dimensions, subsidiaryUiEnabled] = (await Promise.all([
     db.execute(
       sql`select id, name, email from users where org_id = ${orgId} and is_active order by name`,
     ),
@@ -266,6 +267,7 @@ export async function CloseSetupPage({
       sql`select id, name from subsidiaries where org_id = ${orgId} and is_active order by name`,
     ),
     dimensionOptions(orgId),
+    subsidiaryFeatureEnabled(orgId),
   ])) as any[];
 
   // The report picker must show the full catalog even when the org has never
@@ -353,7 +355,7 @@ export async function CloseSetupPage({
       users={users.rows}
       roles={roles.rows}
       reportDefs={mergedReportDefs}
-      subsidiaries={subsidiaries.rows}
+      subsidiaries={subsidiaryUiEnabled ? subsidiaries.rows : []}
       dimensions={dimensions}
       reopenRequests={reopenRequests.rows}
       reopenPage={reopenList.page}

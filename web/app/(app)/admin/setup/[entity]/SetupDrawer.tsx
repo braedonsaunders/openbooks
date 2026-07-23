@@ -364,24 +364,28 @@ function FieldControl({
     return (
       <div className={wrap}>
         <Label>{label}</Label>
-        <div className="flex h-10 items-center rounded-lg border border-slate-200 bg-slate-50 px-3 font-mono text-sm text-slate-600 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-300">
+        <div className={cn('flex h-10 items-center rounded-lg border border-slate-200 bg-slate-50 px-3 text-sm text-slate-600 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-300', field.kind !== 'ref' && 'font-mono')}>
           {String(lockedDisplay ?? '') || '—'}
         </div>
+        {field.helpTextKey ? <p className="text-xs text-slate-500 dark:text-slate-400">{t(field.helpTextKey)}</p> : null}
       </div>
     )
   }
 
   if (field.kind === 'boolean') {
     return (
-      <label className="flex items-center gap-2 self-end pb-2 text-sm text-slate-700 dark:text-slate-200">
-        <input
-          type="checkbox"
-          checked={Boolean(value)}
-          onChange={(e) => onChange(e.target.checked)}
-          className="h-4 w-4 rounded border-slate-300 text-teal-600 focus:ring-teal-500"
-        />
-        {label}
-      </label>
+      <div className="self-end space-y-1.5 pb-2">
+        <label className="flex items-center gap-2 text-sm text-slate-700 dark:text-slate-200">
+          <input
+            type="checkbox"
+            checked={Boolean(value)}
+            onChange={(e) => onChange(e.target.checked)}
+            className="h-4 w-4 rounded border-slate-300 text-teal-600 focus:ring-teal-500"
+          />
+          {label}
+        </label>
+        {field.helpTextKey ? <p className="text-xs text-slate-500 dark:text-slate-400">{t(field.helpTextKey)}</p> : null}
+      </div>
     )
   }
 
@@ -491,6 +495,7 @@ function FieldControl({
         value={String(value ?? '')}
         onChange={(e) => onChange(e.target.value)}
       />
+      {field.helpTextKey ? <p className="text-xs text-slate-500 dark:text-slate-400">{t(field.helpTextKey)}</p> : null}
     </div>
   )
 }

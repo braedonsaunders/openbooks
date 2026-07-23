@@ -22,11 +22,13 @@ import { Pagination } from '../../../../../components/pagination'
 import { isUuid, mergeHref, parseListParams, parsePrefixedListParams, pickString } from '../../../../../lib/list-params'
 import {
   SETUP_ENTITY_BY_KEY,
+  setupEntityForFeatureState,
   toSnake,
   type SetupColumn,
   type SetupEntity,
   type SetupRefSource,
 } from '../../../../../lib/setup/registry'
+import { loadNumberSequenceKindOptions } from '../../../../../lib/setup/number-sequence-kinds'
 import { CompanyTab } from './CompanyTab'
 import { CloseSetupPage } from './CloseSetupPage'
 import { FxProviderPage } from './FxProviderPage'
@@ -62,6 +64,7 @@ async function loadAccounts(orgId: string): Promise<RefOption[]> {
 
 /** Options for a setup-entity ref source (id + code/name label). */
 async function loadEntityOptions(source: string, orgId: string): Promise<RefOption[]> {
+  if (source === 'number-sequence-kinds') return loadNumberSequenceKindOptions(orgId)
   if (source === 'accounting-periods') {
     const periods = (await db.execute(sql`
       select id as value, name as label from accounting_periods
@@ -214,9 +217,13 @@ export default async function SetupEntityPage({
     redirect(mergeHref('/admin/setup/depreciation', sp, { tab: bookDepreciationTabs[entityKey] }))
   }
 
-  const entity = SETUP_ENTITY_BY_KEY.get(entityKey)
-  if (!entity || entity.nestedUnder || entity.rehomed) notFound()
-  if (entity.featureKey && !featureEnabled(await resolvedFeatureState(orgId), entity.featureKey)) notFound()
+  const baseEntity = SETUP_ENTITY_BY_KEY.get(entityKey)
+  if (!baseEntity || baseEntity.nestedUnder || baseEntity.rehomed) notFound()
+  const features = await resolvedFeatureState(orgId)
+  if (baseEntity.featureKey && !featureEnabled(features, baseEntity.featureKey)) notFound()
+  const entity = setupEntityForFeatureState(baseEntity, {
+    multiSubsidiary: featureEnabled(features, 'multiSubsidiary'),
+  })
 
   const t = await getTranslations('admin.setup')
   const rowParam = typeof sp.row === 'string' ? sp.row : undefined

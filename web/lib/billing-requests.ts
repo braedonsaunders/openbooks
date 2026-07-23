@@ -2,6 +2,7 @@ import 'server-only'
 import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/db.ts'
 import { resolveInvoicingPreference } from './invoicing-preference.ts'
+import { isFeatureEnabled } from './features'
 
 /** CRUD for project billing requests + milestone schedules. */
 
@@ -36,6 +37,7 @@ export async function nextBillingRequestNumber(orgId: string): Promise<string> {
 }
 
 export async function createBillingRequest(orgId: string, userId: string, input: BillingRequestInput) {
+  if (!(await isFeatureEnabled(orgId, 'projects'))) throw new Error('Projects feature is disabled')
   const proj = (await db.execute(sql`
     select id, billing_method, customer_po_number from projects where id = ${input.projectId} and org_id = ${orgId}
   `)) as unknown as { rows: { id: string; billing_method: string | null; customer_po_number: string | null }[] }
@@ -44,6 +46,12 @@ export async function createBillingRequest(orgId: string, userId: string, input:
   // Defaults come from the resolved invoicing preference cascade
   // (project type ← customer ← project) unless the request overrides them.
   const eff = await resolveInvoicingPreference(orgId, input.projectId)
+  if (eff.billingProcedure === 'application_for_payment') {
+    throw new Error('This project bills through applications for payment; create the invoice from its Schedule of Values workflow')
+  }
+  if (input.invoiceType !== undefined && input.invoiceType !== 'progress' && input.invoiceType !== 'final') {
+    throw new Error('Invoice stage must be progress or final')
+  }
   const basis = input.basis && BASES.has(input.basis) ? input.basis : (BASES.has(eff.defaultBasis) ? eff.defaultBasis : 'date_range')
   const backupRequired = input.backupRequired ?? eff.backupRequired
   const backupType = input.backupType && BACKUP_TYPES.has(input.backupType)
@@ -60,7 +68,7 @@ export async function createBillingRequest(orgId: string, userId: string, input:
       ${orgId}, ${input.projectId}, ${requestNumber}, ${input.invoiceType ?? 'progress'}, ${basis},
       ${input.drawAmount ?? null}, ${input.startDate ?? null}, ${input.cutoffDate ?? null},
       ${input.invoiceDescription ?? null}, ${input.customerPo ?? proj.rows[0].customer_po_number},
-      ${proj.rows[0].billing_method}, ${input.backupRequired === true}, ${backupType},
+      ${proj.rows[0].billing_method}, ${backupRequired}, ${backupType},
       ${input.selectedTimeEntryIds ? JSON.stringify(input.selectedTimeEntryIds) : null},
       ${input.notes ?? null}, 'open', ${userId}, ${userId})
     returning id, request_number

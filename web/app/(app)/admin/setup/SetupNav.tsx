@@ -87,6 +87,7 @@ export function SetupNav({
   bankFeedsEnabled?: boolean
 }) {
   const t = useTranslations('admin.setup')
+  const tAdmin = useTranslations('admin')
   const tClose = useTranslations('close.setup')
   const td = useTranslations('data')
   const tCrm = useTranslations('crm')
@@ -150,8 +151,9 @@ export function SetupNav({
                   })),
                 ]
               : group.key === 'projects'
-              ? projectsEnabled
-                ? [
+              ? [
+                  { href: '/admin/setup/projects', label: tAdmin('features.projects.title'), iconKey: 'briefcase' },
+                  ...(projectsEnabled ? [
                   { href: '/admin/setup/project-types', label: tProjectTypes('title'), iconKey: 'briefcase' },
                   { href: '/admin/setup/overhead', label: t('entities.overhead-model.title'), iconKey: 'gauge' },
                   { href: '/admin/setup/labor-costing', label: t('laborCosting.navTitle'), iconKey: 'coins' },
@@ -165,8 +167,8 @@ export function SetupNav({
                       label: t(`entities.${e.key}.title`),
                       iconKey: e.iconKey,
                     })),
+                  ] : []),
                 ]
-                : []
               : group.key === 'taxes'
               ? [
                   { href: '/admin/setup/tax-setup', label: t('taxSetup.navTitle'), iconKey: 'landmark' },

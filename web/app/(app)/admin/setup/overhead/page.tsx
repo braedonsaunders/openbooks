@@ -13,6 +13,7 @@ import { countUnappliedOverheadTime, listOverheadApplications, overheadApplicati
 import { OverheadLifecycle } from './OverheadLifecycle'
 import { RatesTab } from './RatesTab'
 import { currentPublishedRates } from '../../../../../lib/overhead-publish'
+import { requireProjectsFeature } from '../../../../../lib/projects-gate'
 
 export const dynamic = 'force-dynamic'
 
@@ -36,6 +37,7 @@ export default async function OverheadModelSetup({
   searchParams: Promise<Record<string, string | string[] | undefined>>
 }) {
   const authz = await requirePermission('admin.setup.manage')
+  await requireProjectsFeature(authz.user.orgId)
   const t = await getTranslations('admin')
   const sp = await searchParams
   const rawView = typeof sp.view === 'string' ? sp.view : ''

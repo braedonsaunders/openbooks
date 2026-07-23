@@ -67,6 +67,8 @@ export interface SetupField {
   defaultValue?: string | number | boolean
   /** Persisted field managed by another visible control; omit it from drawers. */
   hidden?: boolean
+  /** Optional explanatory copy rendered directly beneath the control. */
+  helpTextKey?: string
 }
 
 export interface SetupColumn {
@@ -118,6 +120,25 @@ export interface SetupEntity {
   featureKey?: string
   columns: SetupColumn[]
   fields: SetupField[]
+}
+
+/**
+ * Subsidiary scope is an optional product feature, not merely a nullable
+ * database column. Keep the registry as the source of truth, then derive the
+ * UI descriptor so every generic setup list and drawer applies the same guard.
+ */
+export function setupEntityForFeatureState(
+  entity: SetupEntity,
+  features: { multiSubsidiary: boolean },
+): SetupEntity {
+  if (features.multiSubsidiary) return entity
+  const isSubsidiaryControl = (control: SetupField | SetupColumn) =>
+    control.ref === 'subsidiaries' || control.key === 'subsidiaryIncludeChildren'
+  return {
+    ...entity,
+    columns: entity.columns.filter((column) => !isSubsidiaryControl(column)),
+    fields: entity.fields.filter((field) => !isSubsidiaryControl(field)),
+  }
 }
 
 export interface SetupGroup {
@@ -886,7 +907,7 @@ export const SETUP_ENTITIES: SetupEntity[] = [
     orderBy: 'document_kind',
     hasActive: false,
     columns: [
-      { key: 'documentKind', kind: 'code' },
+      { key: 'documentKind', kind: 'ref', ref: 'number-sequence-kinds' },
       { key: 'subsidiaryId', kind: 'ref', ref: 'subsidiaries' },
       { key: 'prefix', kind: 'code' },
       { key: 'nextNumber', kind: 'number' },
@@ -894,12 +915,12 @@ export const SETUP_ENTITIES: SetupEntity[] = [
       { key: 'gapless', kind: 'boolean' },
     ],
     fields: [
-      { key: 'documentKind', kind: 'text', required: true, lockedOnEdit: true },
+      { key: 'documentKind', kind: 'ref', ref: 'number-sequence-kinds', required: true, lockedOnEdit: true },
       { key: 'subsidiaryId', kind: 'ref', ref: 'subsidiaries', lockedOnEdit: true },
       { key: 'prefix', kind: 'text', keepDefault: true },
-      { key: 'nextNumber', kind: 'integer', required: true },
-      { key: 'padding', kind: 'integer', required: true },
-      { key: 'gapless', kind: 'boolean' },
+      { key: 'nextNumber', kind: 'integer', required: true, defaultValue: 1 },
+      { key: 'padding', kind: 'integer', required: true, defaultValue: 5 },
+      { key: 'gapless', kind: 'boolean', helpTextKey: 'fieldHelp.gapless' },
     ],
   },
   {
@@ -1170,6 +1191,7 @@ export const SETUP_ENTITIES: SetupEntity[] = [
     singularTitleKey: 'entities.overhead-rates.singular',
     actorCols: true,
     groupKey: 'projects',
+    featureKey: 'projects',
     iconKey: 'percent',
     orgScoped: true,
     orderBy: 'effective_from desc',

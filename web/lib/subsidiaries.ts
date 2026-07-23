@@ -2,6 +2,7 @@ import "server-only";
 import { sql } from "drizzle-orm";
 import { db } from "@openbooks/engine/src/db.ts";
 import type { SubsidiaryRestriction } from "@openbooks/schema";
+import { subsidiaryFeatureEnabled } from "./features";
 
 /**
  * Web-side subsidiary helpers — the option tree for pickers, the
@@ -54,13 +55,19 @@ export async function subsidiaryOptions(
   return out;
 }
 
-/** True when the org runs more than one active subsidiary — gates ALL subsidiary UI. */
-export async function isMultiSubsidiary(): Promise<boolean> {
-  const r = (await db.execute(sql`
-    select count(*)::int as n from subsidiaries where is_active and not is_elimination`)) as unknown as {
-    rows: { n: number }[];
-  };
-  return (r.rows[0]?.n ?? 0) > 1;
+/** The feature flag is the sole gate for ALL subsidiary UI. */
+export async function isMultiSubsidiary(orgId: string): Promise<boolean> {
+  return subsidiaryFeatureEnabled(orgId);
+}
+
+/** Picker options that disappear completely while the feature is disabled. */
+export async function subsidiaryUiOptions(
+  orgId: string,
+  includeInactive = false,
+  includeElimination = false,
+): Promise<SubsidiaryOption[]> {
+  if (!(await subsidiaryFeatureEnabled(orgId))) return [];
+  return subsidiaryOptions(includeInactive, includeElimination);
 }
 
 /** The org's root subsidiary id. */

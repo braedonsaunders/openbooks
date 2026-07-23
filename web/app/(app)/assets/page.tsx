@@ -111,7 +111,7 @@ export default async function Assets({
   }
 
   const [multiSub, allSubsidiaries, depreciationBooks] = await Promise.all([
-    isMultiSubsidiary(),
+    isMultiSubsidiary(orgId),
     subsidiaryOptions(),
     db.execute(sql`select id, name, is_primary from accounting_books where org_id=${orgId} and is_active and posts_gl order by is_primary desc, code`) as any,
   ])

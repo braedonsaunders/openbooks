@@ -5,6 +5,7 @@ import { guardPermission } from '../../../../../lib/authz'
 import { isUuid } from '../../../../../lib/list-params'
 import { pdfResponse, safeName } from '../../../../../lib/export'
 import { assembleInvoiceBackup, loadInvoiceBackup, type BackupType } from '../../../../../lib/invoice-backup'
+import { guardProjectsFeature } from '../../../../../lib/projects-gate'
 
 export const runtime = 'nodejs'
 
@@ -20,6 +21,8 @@ async function requestInvoice(orgId: string, requestId: string) {
 export async function POST(_req: Request, { params }: { params: Promise<{ id: string }> }) {
   const gate = await guardPermission('ar.create')
   if (gate instanceof NextResponse) return gate
+  const feature = await guardProjectsFeature(gate.user.orgId)
+  if (feature) return feature
   const { id } = await params
   if (!isUuid(id)) return NextResponse.json({ error: 'not found' }, { status: 404 })
   const req = await requestInvoice(gate.user.orgId, id)
@@ -36,6 +39,8 @@ export async function POST(_req: Request, { params }: { params: Promise<{ id: st
 export async function GET(_req: Request, { params }: { params: Promise<{ id: string }> }) {
   const gate = await guardPermission('ar.read')
   if (gate instanceof NextResponse) return gate
+  const feature = await guardProjectsFeature(gate.user.orgId)
+  if (feature) return feature
   const { id } = await params
   if (!isUuid(id)) return NextResponse.json({ error: 'not found' }, { status: 404 })
   const req = await requestInvoice(gate.user.orgId, id)

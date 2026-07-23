@@ -14,6 +14,7 @@ import { loadFieldDefs } from '../../../../lib/custom-fields'
 import { FormDesigner, NewFormButton } from './FormDesigner'
 import { ListViewDesigner, NewViewButton } from './ListViewDesigner'
 import { ensureCustomizationDefaults } from '../../../../lib/customization/seed-defaults'
+import { subsidiaryFeatureEnabled } from '../../../../lib/features'
 
 export const dynamic = 'force-dynamic'
 
@@ -28,6 +29,7 @@ export default async function CustomizationPage({
   searchParams: Promise<Record<string, string | string[] | undefined>>
 }) {
   const authz = await requirePermission('admin.customization.manage')
+  const subsidiaryUiEnabled = await subsidiaryFeatureEnabled(authz.user.orgId)
   const t = await getTranslations('customization')
   const tCommon = await getTranslations('common')
   const tHub = await getTranslations('admin.hub')
@@ -269,7 +271,7 @@ export default async function CustomizationPage({
         </>
       )}
 
-      {formId && designerRecordType ? <FormDesigner recordType={designerRecordType} def={openForm} headerDefs={designerHeaderDefs as any} lineDefs={designerLineDefs as any} duplicateFrom={duplicateFrom} /> : null}
+      {formId && designerRecordType ? <FormDesigner recordType={designerRecordType} def={openForm} headerDefs={designerHeaderDefs as any} lineDefs={designerLineDefs as any} duplicateFrom={duplicateFrom} subsidiaryEnabled={subsidiaryUiEnabled} /> : null}
       {viewId && designerRecordType ? <ListViewDesigner recordType={designerRecordType} def={openView} canManageOrg={true} userId={authz.user.id} showInListDefs={viewShowInList as any} /> : null}
     </ListPageLayout>
   )

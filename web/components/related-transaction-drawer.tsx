@@ -48,7 +48,7 @@ function canSeeDocument(doc: Record<string, any>, partyId: string | undefined, a
 }
 
 async function visibleSubsidiaries(authz: Authz) {
-  if (!(await isMultiSubsidiary())) return undefined
+  if (!(await isMultiSubsidiary(authz.user.orgId))) return undefined
   const options = await subsidiaryOptions()
   return authz.allowedSubsidiaryIds
     ? options.filter((option) => authz.allowedSubsidiaryIds!.has(option.id))
@@ -129,7 +129,7 @@ export async function loadRelatedTransactionDrawerData({
     const roleCondition = orderKind === 'purchase_order'
       ? sql`(p.custom->>'nsKind' = 'vendor' or exists (select 1 from vendor_roles r where r.party_id = p.id and r.is_active))`
       : sql`(p.custom->>'nsKind' = 'customer' or exists (select 1 from customer_roles r where r.party_id = p.id and r.is_active))`
-    const [parties, accounts, items, taxCodes, taxGroups, departments, projects, segments, resolvedForm] = await Promise.all([
+    const [parties, accounts, items, taxCodes, taxGroups, departments, projects, segments, subsidiaries, resolvedForm] = await Promise.all([
       db.execute(sql`select p.id, p.display_name from parties p where p.org_id = ${authz.user.orgId} and ${roleCondition} and p.is_active order by p.display_name limit 2000`) as any,
       db.execute(sql`select id, number, name from accounts where org_id = ${authz.user.orgId} and is_active and not is_summary order by number nulls last`) as any,
       db.execute(sql`select id, code, name, default_rate, income_account_id, expense_account_id, tax_code_id, unit from items where org_id = ${authz.user.orgId} and is_active order by name limit 2000`) as any,
@@ -138,6 +138,7 @@ export async function loadRelatedTransactionDrawerData({
       db.execute(sql`select id, name from departments where org_id = ${authz.user.orgId} and is_active order by name`) as any,
       db.execute(sql`select id, name from projects where org_id = ${authz.user.orgId} and is_active order by name limit 2000`) as any,
       customSegmentOptions(authz.user.orgId),
+      visibleSubsidiaries(authz),
       resolveFormLayout({
         orgId: authz.user.orgId,
         userId: authz.user.id,
@@ -161,6 +162,10 @@ export async function loadRelatedTransactionDrawerData({
         departments: departments.rows,
         projects: projects.rows,
         segments,
+        subsidiaries: (subsidiaries ?? []).map((subsidiary) => ({
+          id: subsidiary.id,
+          name: `${'  '.repeat(subsidiary.depth)}${subsidiary.name}`,
+        })),
         canManage: can(authz, orderKind === 'purchase_order' ? 'ap.create' : 'ar.create'),
         layout: resolvedForm.layout,
       },

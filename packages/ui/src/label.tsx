@@ -1,7 +1,7 @@
 import * as React from 'react'
 import { cn } from './utils'
 
-export const Label = React.forwardRef<
+export const BaseLabel = React.forwardRef<
   HTMLLabelElement,
   React.LabelHTMLAttributes<HTMLLabelElement>
 >(({ className, ...props }, ref) => (
@@ -11,4 +11,4 @@ export const Label = React.forwardRef<
     {...props}
   />
 ))
-Label.displayName = 'Label'
+BaseLabel.displayName = 'BaseLabel'

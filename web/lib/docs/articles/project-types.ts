@@ -7,7 +7,7 @@ export const projectTypes: DocArticle = {
   order: 1,
   summary:
     'Configure how each class of project is costed, priced, invoiced, and backed up — the profitability, invoicing, and backup profiles behind every project.',
-  updated: '2026-07-20',
+  updated: '2026-07-23',
   keywords: [
     'project type',
     'profitability',
@@ -37,9 +37,9 @@ and that type carries three profiles:
 - **Backup** — whether an invoice needs a backup package and what it contains.
 
 You manage project types under **Settings → Company Setup → Project
-Types**. Four built-in types ship with world-class defaults you can use as-is or
-duplicate and tune: **Time & Materials**, **Fixed Price**, **Cost-Plus**, and
-**Not-to-Exceed**.
+Types**. Five built-in types ship with controlled defaults you can use as-is or
+duplicate and tune: **Time & Materials**, **Fixed Price**, **Cost-Plus**,
+**Not-to-Exceed**, and **Schedule of Values**.
 
 ---
 
@@ -62,6 +62,37 @@ The **General** tab holds the type's identity and defaults:
 
 The Profitability tab defines how every number on a project's mini P&L is
 computed. Each measure has a configurable **source**.
+
+The **Billing procedure** on the Invoicing tab chooses the operational workflow:
+
+- **Standard billing requests** — date ranges, selected time, milestones, or
+  controlled draws generate a draft project invoice.
+- **Applications for payment** — a Schedule of Values, cumulative applications,
+  change orders, and retainage generate the project invoice. This procedure is
+  part of Projects and is not a separate organization feature.
+
+**Progress/interim**, **final**, and **retainage release** are invoice or
+application stages. They are not billing methods and are never feature toggles.
+
+### Controlled Applications for Payment lifecycle
+
+Applications for Payment use an enforced maker-checker workflow:
+
+1. A preparer creates a **Draft** and enters the current draw by SOV line.
+2. **Submit** persists and validates every draw line atomically, including
+   cumulative overbilling and retainage bounds.
+3. A different user with AR approval permission moves the application to
+   **Approved**. The preparer cannot approve their own application.
+4. A user with AR posting permission creates the controlled draft customer
+   invoice. The application becomes **Invoiced** and cannot generate another.
+
+Only one draft/submitted/approved application can exist for a project at a time.
+Once an SOV line has appeared in an application it is immutable; contract changes
+must flow through an independently approved change order. An additive change may
+create a new SOV line or revise an existing one. A deductive change must identify
+an existing line and cannot reduce it below zero or below the amount already
+invoiced. Retainage releases are reserved against the GL-backed retained balance
+so concurrent draft releases cannot exceed funds held.
 
 ### Price and backlog
 

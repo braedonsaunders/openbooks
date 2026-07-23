@@ -523,8 +523,10 @@
       "description": "Wie dieses Unternehmen in der gesamten App identifiziert wird.",
       "displayName": "Anzeigename",
       "displayNamePlaceholder": "Acme Manufacturing",
+      "displayNameHint": "Der Firmenname, der in OpenBooks angezeigt wird. Er muss nicht dem eingetragenen rechtlichen Namen entsprechen.",
       "legalName": "Rechtlicher Name",
       "legalNamePlaceholder": "Acme Manufacturing Inc.",
+      "legalNameHint": "Der eingetragene Firmenname für formelle Aufzeichnungen, Berichte und Dokumente.",
       "country": "Land",
       "countryPlaceholder": "Land auswählen…",
       "countryHint": "Zweistelliger ISO-Code (z. B. CA, US, GB).",
@@ -1551,7 +1553,7 @@
       },
       "number-sequences": {
         "title": "Nummernkreise",
-        "description": "Präfixe und Zähler für die Belegnummerierung."
+        "description": "Steuern Sie Präfix, nächste Nummer und Länge für jeden Beleg oder benutzerdefinierten Datensatz. Folgen für benutzerdefinierte Datensätze werden bei der ersten Nummernvergabe automatisch erstellt."
       },
       "time-types": {
         "title": "Zeitarten",
@@ -1788,6 +1790,9 @@
       "customerId": "Kunde",
       "projectId": "Projekt",
       "isDefault": "Standard"
+    },
+    "fieldHelp": {
+      "gapless": "Lückenlos bedeutet, dass jede Nummer in der Folge belegt sein muss und keine Nummer übersprungen wird. Aktivieren Sie dies nur, wenn gesetzliche oder prüfungsbezogene Vorgaben eine ununterbrochene Nummerierung verlangen."
     },
     "options": {
       "taxDepreciationModel": { "pool": "Class pool", "macrs": "Per-asset MACRS" },
@@ -2164,10 +2169,6 @@
     "subscriptionBilling": {
       "title": "Subscription Billing",
       "description": "Plans and subscriptions that auto-generate recurring invoices (SaaS / retainer)."
-    },
-    "constructionBilling": {
-      "title": "Construction Progress Billing",
-      "description": "AIA schedule of values, applications for payment, and retainage for contractors."
     }
   }
 }

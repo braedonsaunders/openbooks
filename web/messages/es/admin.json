@@ -502,8 +502,10 @@
       "description": "Cómo se identifica esta empresa en toda la aplicación.",
       "displayName": "Nombre para mostrar",
       "displayNamePlaceholder": "Acme Manufacturing",
+      "displayNameHint": "El nombre de la empresa que se muestra en OpenBooks. No tiene que coincidir con la razón social registrada.",
       "legalName": "Razón social",
       "legalNamePlaceholder": "Acme Manufacturing Inc.",
+      "legalNameHint": "El nombre registrado de la empresa para registros, informes y documentos formales.",
       "country": "País",
       "countryPlaceholder": "Seleccione un país…",
       "countryHint": "Código ISO de dos letras (p. ej., CA, US, GB).",
@@ -1402,7 +1404,7 @@
       },
       "number-sequences": {
         "title": "Number Sequences",
-        "description": "Document numbering prefixes and counters."
+        "description": "Controle el prefijo, el número siguiente y la longitud de cada documento o registro personalizado. Las secuencias personalizadas se crean automáticamente al generar su primer número."
       },
       "time-types": {
         "title": "Time Types",
@@ -1740,6 +1742,9 @@
       "projectId": "Proyecto",
       "isDefault": "Predeterminado",
       "billMultiplier": "Multiplicador de facturación"
+    },
+    "fieldHelp": {
+      "gapless": "Sin huecos significa que cada número de la secuencia debe quedar contabilizado, sin números omitidos. Actívelo solo cuando los requisitos legales o de auditoría exijan una numeración ininterrumpida."
     },
     "options": {
       "taxDepreciationModel": { "pool": "Class pool", "macrs": "Per-asset MACRS" },
@@ -2510,10 +2515,6 @@
     "subscriptionBilling": {
       "title": "Subscription Billing",
       "description": "Plans and subscriptions that auto-generate recurring invoices (SaaS / retainer)."
-    },
-    "constructionBilling": {
-      "title": "Construction Progress Billing",
-      "description": "AIA schedule of values, applications for payment, and retainage for contractors."
     }
   }
 }

@@ -16,6 +16,10 @@
   "confirm": {
     "defaultTitle": "確認"
   },
+  "fieldHelp": {
+    "open": "このフィールドの説明",
+    "generic": "このレコードまたは操作の「{field}」の値を設定します。"
+  },
   "select": {
     "placeholder": "選択…",
     "searchPlaceholder": "検索…",

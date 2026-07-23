@@ -4,6 +4,7 @@ import { db } from "@openbooks/engine/src/db.ts";
 import { currentUser } from "./auth";
 import type { StatementSubsidiaryContext } from "./statement-matrix";
 import { allowedSubsidiaryIds, subsidiaryOptions, subtreeIds, type SubsidiaryOption } from "./subsidiaries";
+import { subsidiaryFeatureEnabled } from "./features";
 
 /**
  * Resolves a report's subsidiary picker value into the statement engine's
@@ -138,6 +139,10 @@ export async function reportSubsidiaryView(
   periodTo: string,
 ): Promise<ResolvedSubsidiaryView & { picker: { id: string; label: string }[] }> {
   const user = await currentUser();
+  const subsidiaryUiEnabled = Boolean(user && await subsidiaryFeatureEnabled(user.orgId));
+  if (!subsidiaryUiEnabled) {
+    return { consolidated: false, options: [], picker: [] };
+  }
   const allowed = user && !user.isSuperAdmin ? await allowedSubsidiaryIds(user.id) : null;
   const view = await resolveSubsidiaryView(subsidiaryId, periodTo, allowed);
   const hasChildren = new Set(view.options.map((s) => s.parentId).filter(Boolean));

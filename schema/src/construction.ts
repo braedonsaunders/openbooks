@@ -4,6 +4,7 @@ import {
   integer,
   pgTable,
   text,
+  timestamp,
   uniqueIndex,
   uuid,
 } from "drizzle-orm/pg-core";
@@ -59,7 +60,11 @@ export const changeOrders = pgTable(
       .default("draft"),
     /** Net change to the contract sum (informational; the SOV lines are truth). */
     amount: money("amount").notNull().default("0"),
+    /** Existing SOV line adjusted by this change. Required for deductive COs;
+     * null means approval creates a new additive SOV line. */
+    targetSovLineId: uuid("target_sov_line_id"),
     approvedOn: date("approved_on"),
+    approvedBy: uuid("approved_by"),
     ...auditColumns,
   },
   (t) => [
@@ -81,7 +86,7 @@ export const payApplications = pgTable(
     kind: text("kind", { enum: ["progress", "retainage_release"] })
       .notNull()
       .default("progress"),
-    status: text("status", { enum: ["draft", "submitted", "approved", "posted", "void"] })
+    status: text("status", { enum: ["draft", "submitted", "approved", "invoiced", "posted", "void"] })
       .notNull()
       .default("draft"),
     /** Default retainage % applied to lines without their own override. */
@@ -89,6 +94,10 @@ export const payApplications = pgTable(
     /** The customer_invoice document this application posted (null until posted). */
     invoiceDocumentId: uuid("invoice_document_id"),
     memo: text("memo"),
+    submittedAt: timestamp("submitted_at", { withTimezone: true }),
+    submittedBy: uuid("submitted_by"),
+    approvedAt: timestamp("approved_at", { withTimezone: true }),
+    approvedBy: uuid("approved_by"),
     ...auditColumns,
   },
   (t) => [

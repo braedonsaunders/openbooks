@@ -68,7 +68,7 @@ export default async function AdminRolesPage({
 
   // Subsidiary access is only surfaced in multi-subsidiary orgs — single-sub
   // orgs never see any subsidiary UI.
-  const subsidiaries: SubsidiaryPickerOption[] | null = (await isMultiSubsidiary())
+  const subsidiaries: SubsidiaryPickerOption[] | null = (await isMultiSubsidiary(authz.user.orgId))
     ? (await subsidiaryOptions()).map((s) => ({ id: s.id, name: s.name, depth: s.depth }))
     : null
 

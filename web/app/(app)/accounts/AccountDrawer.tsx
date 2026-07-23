@@ -203,12 +203,12 @@ export function AccountDrawer({
               <SearchSelect value={form.currencyRestriction} onChange={(v) => set('currencyRestriction', v)} options={currencies} clearable emptyLabel={t('drawer.anyCurrency')} ariaLabel={t('drawer.currencyRestriction')} />
             ) : value(form.currencyRestriction || t('drawer.anyCurrency'))}
           </div>
-          <div className={fieldClass}>
+          {subsidiaries.length > 0 ? <div className={fieldClass}>
             <Label>{tc('labels.subsidiary')}</Label>
             {editable ? (
               <SearchSelect value={form.subsidiaryId} onChange={(v) => set('subsidiaryId', v)} options={subsidiaries} clearable emptyLabel={t('drawer.allSubsidiaries')} ariaLabel={tc('labels.subsidiary')} />
             ) : value(subsidiaries.find((option) => option.value === form.subsidiaryId)?.label ?? payload.subsidiaryName ?? t('drawer.allSubsidiaries'))}
-          </div>
+          </div> : null}
         </section>
 
         <section className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
@@ -238,10 +238,10 @@ export function AccountDrawer({
             <input type="checkbox" checked={form.eliminate} disabled={!editable} onChange={(e) => set('eliminate', e.target.checked)} className={checkboxClass} />
             <span className="text-sm">{t('drawer.eliminate')}</span>
           </label>
-          <label className="flex items-center gap-2">
+          {subsidiaries.length > 0 ? <label className="flex items-center gap-2">
             <input type="checkbox" checked={form.subsidiaryIncludeChildren} disabled={!editable || !form.subsidiaryId} onChange={(e) => set('subsidiaryIncludeChildren', e.target.checked)} className={checkboxClass} />
             <span className="text-sm">{t('drawer.includeSubsidiaries')}</span>
-          </label>
+          </label> : null}
         </section>
 
         <section className={fieldClass}>

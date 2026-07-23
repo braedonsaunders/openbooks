@@ -7,6 +7,7 @@ import { loadProjectType } from './project-type'
 /** The fully-resolved invoicing/backup settings for a project after applying
  *  the project type default ← customer override ← project override cascade. */
 export interface EffectiveInvoicing {
+  billingProcedure: 'standard' | 'application_for_payment'
   allowedBases: string[]
   defaultBasis: string
   lineBuilder: string
@@ -52,6 +53,7 @@ export async function resolveInvoicingPreference(orgId: string, projectId: strin
   const [invoiceTemplateId, tmplSrc] = pick<string | null>(null, 'invoiceTemplateId', 'invoiceTemplateId')
 
   return {
+    billingProcedure: type.invoicingProfile.billingProcedure ?? 'standard',
     allowedBases: type.invoicingProfile.allowedBases,
     defaultBasis,
     lineBuilder: type.invoicingProfile.lineBuilder,

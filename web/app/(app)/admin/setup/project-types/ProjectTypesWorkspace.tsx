@@ -43,10 +43,13 @@ const LABELS: Record<string, string> = {
   total_hours: 'All hours',
   could_be_invoiced: 'Could be invoiced',
   percent_complete_cost: 'Percent complete (cost)',
+  application_for_payment: 'Applications for payment (SOV / retainage)',
+  standard: 'Standard billing requests',
 }
 const humanize = (v: string) => LABELS[v] ?? v.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase())
 
 const BILLING_METHODS = ['', 'time_and_materials', 'fixed_price', 'cost_plus']
+const BILLING_PROCEDURES = ['standard', 'application_for_payment']
 const COST_SOURCES = ['account_types', 'account_group']
 const LABOR_SOURCES = ['in_actual_cost', 'time_rate', 'payroll_je', 'account_group']
 const OVERHEAD_METHODS = ['none', 'percent_of_labor', 'per_labor_hour', 'rate_engine', 'account_group_actual']
@@ -63,11 +66,11 @@ const BACKUP_TYPES = ['costed_timesheets', 'timesheets_purchases', 'purchases', 
 const MEASURE_KEYS = ['invoiced_to_date', 'revenue_posted', 'could_be_invoiced', 'total_price', 'actual_cost', 'labor_cost', 'overhead', 'committed_cost', 'total_cost', 'billable_value', 'unbilled_billable', 'cost_budget', 'remaining_budget', 'gross_profit', 'margin_pct']
 const VARIANTS = ['line', 'subtotal', 'total']
 
-function EnumField({ label, value, options, onChange }: { label: string; value: string; options: string[]; onChange: (v: string) => void }) {
+function EnumField({ label, value, options, onChange, disabled = false }: { label: string; value: string; options: string[]; onChange: (v: string) => void; disabled?: boolean }) {
   return (
     <div className="space-y-1.5">
       <Label>{label}</Label>
-      <Select value={value} onChange={(e) => onChange(e.target.value)}>
+      <Select value={value} disabled={disabled} onChange={(e) => onChange(e.target.value)}>
         {options.map((o) => <option key={o} value={o}>{o === '' ? '—' : humanize(o)}</option>)}
       </Select>
     </div>
@@ -116,7 +119,7 @@ const BLANK = (t: string, name: string): ProjectTypeRow => ({
       { measure: 'gross_profit', variant: 'total' },
     ],
   },
-  invoicingProfile: { allowedBases: ['time_selection', 'date_range'], defaultBasis: 'time_selection', lineBuilder: 'tm_actual', revenueAccount: 'item_income', recognition: 'as_invoiced' },
+  invoicingProfile: { billingProcedure: 'standard', allowedBases: ['time_selection', 'date_range'], defaultBasis: 'time_selection', lineBuilder: 'tm_actual', revenueAccount: 'item_income', recognition: 'as_invoiced' },
   backupProfile: { required: true, defaultBackupType: 'costed_timesheets', allowedBackupTypes: ['costed_timesheets', 'purchases', 'none'] },
 })
 
@@ -220,7 +223,9 @@ export function ProjectTypesWorkspace({ types, dimensions }: { types: ProjectTyp
               <div className="space-y-1.5"><Label>{tCommon('labels.name')}</Label><Input value={draft.name} onChange={(e) => setDraft({ ...draft, name: e.target.value })} /></div>
               <div className="space-y-1.5"><Label>{t('key')}</Label><Input value={draft.key} disabled={draft.isBuiltIn} className="font-mono" placeholder="auto" onChange={(e) => setDraft({ ...draft, key: e.target.value })} /></div>
               <div className="space-y-1.5 sm:col-span-2"><Label>{tCommon('labels.description')}</Label><Textarea value={draft.description ?? ''} onChange={(e) => setDraft({ ...draft, description: e.target.value })} /></div>
-              <EnumField label={t('billingMethod')} value={draft.billingMethod ?? ''} options={BILLING_METHODS} onChange={(v) => setDraft({ ...draft, billingMethod: v || null })} />
+              <EnumField label={t('billingMethod')} value={draft.billingMethod ?? ''} options={BILLING_METHODS}
+                disabled={ip.billingProcedure === 'application_for_payment'}
+                onChange={(v) => setDraft({ ...draft, billingMethod: v || null })} />
               <div className="space-y-1.5"><Label>{t('sortOrder')}</Label><Input inputMode="numeric" value={String(draft.sortOrder)} onChange={(e) => setDraft({ ...draft, sortOrder: Number(e.target.value) || 0 })} /></div>
               <EnumField label={tCommon('labels.status')} value={draft.isActive ? 'active' : 'inactive'} options={['active', 'inactive']} onChange={(v) => setDraft({ ...draft, isActive: v === 'active' })} />
             </div>
@@ -283,9 +288,35 @@ export function ProjectTypesWorkspace({ types, dimensions }: { types: ProjectTyp
 
           {sub === 'invoicing' ? (
             <div className="grid gap-4 sm:grid-cols-2">
-              <div className="sm:col-span-2"><Chips label={t('allowedBases')} all={BASES} selected={ip.allowedBases} onToggle={(v) => setIp({ allowedBases: toggle(ip.allowedBases, v) })} /></div>
-              <EnumField label={t('defaultBasis')} value={ip.defaultBasis} options={ip.allowedBases} onChange={(v) => setIp({ defaultBasis: v })} />
-              <EnumField label={t('lineBuilder')} value={ip.lineBuilder} options={LINE_BUILDERS} onChange={(v) => setIp({ lineBuilder: v as any })} />
+              <EnumField label={t('billingProcedure')} value={ip.billingProcedure ?? 'standard'} options={BILLING_PROCEDURES} onChange={(v) => {
+                if (v === 'application_for_payment') {
+                  setDraft({
+                    ...draft,
+                    billingMethod: 'fixed_price',
+                    invoicingProfile: {
+                      ...ip,
+                      billingProcedure: 'application_for_payment',
+                      allowedBases: ['draw_amount'],
+                      defaultBasis: 'draw_amount',
+                      lineBuilder: 'draw',
+                    },
+                  })
+                } else {
+                  setIp({ billingProcedure: 'standard' })
+                }
+              }} />
+              <div className="text-xs leading-5 text-slate-500 dark:text-slate-400">{t('billingProcedureHint')}</div>
+              {ip.billingProcedure === 'application_for_payment' ? (
+                <div className="sm:col-span-2 rounded-lg border border-teal-200 bg-teal-50 px-3 py-2 text-xs leading-5 text-teal-800 dark:border-teal-900 dark:bg-teal-950/30 dark:text-teal-200">
+                  {t('applicationProcedureControls')}
+                </div>
+              ) : (
+                <>
+                  <div className="sm:col-span-2"><Chips label={t('allowedBases')} all={BASES} selected={ip.allowedBases} onToggle={(v) => setIp({ allowedBases: toggle(ip.allowedBases, v) })} /></div>
+                  <EnumField label={t('defaultBasis')} value={ip.defaultBasis} options={ip.allowedBases} onChange={(v) => setIp({ defaultBasis: v })} />
+                  <EnumField label={t('lineBuilder')} value={ip.lineBuilder} options={LINE_BUILDERS} onChange={(v) => setIp({ lineBuilder: v as any })} />
+                </>
+              )}
               <EnumField label={t('revenueAccount')} value={ip.revenueAccount} options={REVENUE_ACCTS} onChange={(v) => setIp({ revenueAccount: v as any })} />
               <EnumField label={t('recognition')} value={ip.recognition} options={RECOGNITIONS} onChange={(v) => setIp({ recognition: v as any })} />
             </div>

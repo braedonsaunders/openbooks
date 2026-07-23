@@ -4,6 +4,7 @@ import { db } from '@openbooks/engine/src/db.ts'
 import { syncProjectRevenueContracts } from '@openbooks/engine/src/project-revenue.ts'
 import { guardPermission } from '../../../../../lib/authz'
 import { isUuid } from '../../../../../lib/list-params'
+import { guardProjectsFeature } from '../../../../../lib/projects-gate'
 
 export const runtime = 'nodejs'
 
@@ -16,6 +17,8 @@ export const runtime = 'nodejs'
 export async function PUT(req: Request, { params }: { params: Promise<{ id: string }> }) {
   const gate = await guardPermission('projects.manage')
   if (gate instanceof NextResponse) return gate
+  const feature = await guardProjectsFeature(gate.user.orgId)
+  if (feature) return feature
   const { id } = await params
   if (!isUuid(id)) return NextResponse.json({ error: 'not found' }, { status: 404 })
 

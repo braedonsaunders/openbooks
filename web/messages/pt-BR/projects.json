@@ -38,7 +38,7 @@
     "requestFailed": "Não foi possível criar a solicitação de faturamento",
     "invoiceCreated": "Fatura {number} criada",
     "invoiceFailed": "Não foi possível criar a fatura",
-    "invoiceType": "Tipo",
+    "invoiceType": "Etapa da fatura",
     "basis": "Base",
     "drawAmount": "Valor da medição",
     "startDate": "Data de início",

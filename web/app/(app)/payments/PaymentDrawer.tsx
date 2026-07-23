@@ -7,7 +7,7 @@ import { useRouter } from 'next/navigation'
 import { useTranslations } from 'next-intl'
 import { toast } from 'sonner'
 import { Wand2 } from 'lucide-react'
-import { Badge, Button, Input, Label, SearchSelect } from '@openbooks/ui'
+import { Badge, Button, FieldLabel, Input, Label, SearchSelect } from '@openbooks/ui'
 import { TransactionDrawer } from '../../../components/transaction-drawer'
 import { DocTypeBadge, docTypeMeta } from '../../../components/doc-type-badge'
 import { PdfButton } from '../../../components/pdf-button'
@@ -423,15 +423,15 @@ export function PaymentDrawer({
     const label = placement.labelOverride?.trim()
     switch (placement.key) {
       case 'party_id':
-        return <><Label>{label || partyLabel}{isEditable ? <span className="text-red-500"> *</span> : null}</Label>{isEditable ? <SearchSelect options={parties.map((party) => ({ value: party.id, label: party.display_name ?? '' }))} value={partyId} onChange={(value) => setPartyId(value ?? '')} placeholder={t('selectPartyPlaceholder', { side })} /> : <p className="text-sm">{doc.party_name}</p>}</>
+        return <><FieldLabel fieldName={label || partyLabel}>{label || partyLabel}{isEditable ? <span className="text-red-500"> *</span> : null}</FieldLabel>{isEditable ? <SearchSelect options={parties.map((party) => ({ value: party.id, label: party.display_name ?? '' }))} value={partyId} onChange={(value) => setPartyId(value ?? '')} placeholder={t('selectPartyPlaceholder', { side })} /> : <p className="text-sm">{doc.party_name}</p>}</>
       case 'bank_account_id':
-        return <><Label>{label || t('bankAccount')}{isEditable ? <span className="text-red-500"> *</span> : null}</Label>{isEditable ? <SearchSelect options={bankAccounts.map((account) => ({ value: account.id, label: `${account.number ?? ''} ${account.name ?? ''}`.trim() }))} value={bankAccountId} onChange={(value) => setBankAccountId(value ?? '')} placeholder={t('selectBankAccountPlaceholder')} /> : <p className="text-sm">{`${doc.bank_account_number ?? ''} ${doc.bank_account_name ?? ''}`.trim() || '—'}</p>}</>
+        return <><FieldLabel fieldName={label || t('bankAccount')}>{label || t('bankAccount')}{isEditable ? <span className="text-red-500"> *</span> : null}</FieldLabel>{isEditable ? <SearchSelect options={bankAccounts.map((account) => ({ value: account.id, label: `${account.number ?? ''} ${account.name ?? ''}`.trim() }))} value={bankAccountId} onChange={(value) => setBankAccountId(value ?? '')} placeholder={t('selectBankAccountPlaceholder')} /> : <p className="text-sm">{`${doc.bank_account_number ?? ''} ${doc.bank_account_name ?? ''}`.trim() || '—'}</p>}</>
       case 'document_date':
-        return <><Label>{label || tCommon('labels.date')}</Label>{isEditable ? <Input type="date" value={documentDate} onChange={(event) => setDocumentDate(event.target.value)} /> : <p className="text-sm">{doc.document_date}</p>}</>
+        return <><FieldLabel fieldName={label || tCommon('labels.date')}>{label || tCommon('labels.date')}</FieldLabel>{isEditable ? <Input type="date" value={documentDate} onChange={(event) => setDocumentDate(event.target.value)} /> : <p className="text-sm">{doc.document_date}</p>}</>
       case 'reference_number':
-        return <><Label>{label || tCommon('labels.reference')}</Label>{isEditable ? <Input value={referenceNumber} onChange={(event) => setReferenceNumber(event.target.value)} placeholder={t('referencePlaceholder')} /> : <p className="text-sm">{doc.reference_number ?? '—'}</p>}</>
+        return <><FieldLabel fieldName={label || tCommon('labels.reference')}>{label || tCommon('labels.reference')}</FieldLabel>{isEditable ? <Input value={referenceNumber} onChange={(event) => setReferenceNumber(event.target.value)} placeholder={t('referencePlaceholder')} /> : <p className="text-sm">{doc.reference_number ?? '—'}</p>}</>
       case 'memo':
-        return <><Label>{label || tCommon('labels.memo')}</Label>{isEditable ? <Input value={memo} onChange={(event) => setMemo(event.target.value)} /> : <p className="text-sm">{doc.memo ?? '—'}</p>}</>
+        return <><FieldLabel fieldName={label || tCommon('labels.memo')}>{label || tCommon('labels.memo')}</FieldLabel>{isEditable ? <Input value={memo} onChange={(event) => setMemo(event.target.value)} /> : <p className="text-sm">{doc.memo ?? '—'}</p>}</>
       default:
         return null
     }

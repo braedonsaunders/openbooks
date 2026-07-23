@@ -546,8 +546,10 @@
       "description": "Comment cette entreprise est identifiée dans l’application.",
       "displayName": "Nom d’affichage",
       "displayNamePlaceholder": "Acme Manufacturing",
+      "displayNameHint": "Le nom de l’entreprise affiché dans OpenBooks. Il peut différer de la raison sociale enregistrée.",
       "legalName": "Raison sociale",
       "legalNamePlaceholder": "Acme Manufacturing Inc.",
+      "legalNameHint": "Le nom enregistré de l’entreprise utilisé dans les dossiers, rapports et documents officiels.",
       "country": "Pays",
       "countryPlaceholder": "Sélectionnez un pays…",
       "countryHint": "Code ISO à deux lettres (p. ex. CA, US, GB).",
@@ -1446,7 +1448,7 @@
       },
       "number-sequences": {
         "title": "Number Sequences",
-        "description": "Document numbering prefixes and counters."
+        "description": "Contrôlez le préfixe, le prochain numéro et la longueur de chaque document ou enregistrement personnalisé. Les séquences personnalisées sont créées automatiquement lors de la première numérotation."
       },
       "time-types": {
         "title": "Time Types",
@@ -1784,6 +1786,9 @@
       "projectId": "Projet",
       "isDefault": "Par défaut",
       "billMultiplier": "Multiplicateur de facturation"
+    },
+    "fieldHelp": {
+      "gapless": "Sans rupture signifie que chaque numéro de la séquence doit être justifié, sans aucun numéro sauté. Activez cette option uniquement si vos obligations légales ou d’audit imposent une numérotation ininterrompue."
     },
     "options": {
       "taxDepreciationModel": { "pool": "Class pool", "macrs": "Per-asset MACRS" },
@@ -2554,10 +2559,6 @@
     "subscriptionBilling": {
       "title": "Subscription Billing",
       "description": "Plans and subscriptions that auto-generate recurring invoices (SaaS / retainer)."
-    },
-    "constructionBilling": {
-      "title": "Construction Progress Billing",
-      "description": "AIA schedule of values, applications for payment, and retainage for contractors."
     }
   }
 }

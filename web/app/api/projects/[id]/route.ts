@@ -6,6 +6,7 @@ import { isUuid } from '../../../../lib/list-params'
 import { loadFieldDefs, validateCustomValues } from '../../../../lib/custom-fields'
 import { loadProject } from '../_lib'
 import { normalizeMoney } from '@openbooks/engine/src/money.ts'
+import { guardProjectsFeature } from '../../../../lib/projects-gate'
 
 export const runtime = 'nodejs'
 
@@ -83,6 +84,8 @@ async function partyExists(id: string, orgId: string): Promise<boolean> {
 export async function GET(_req: Request, { params }: { params: Promise<{ id: string }> }) {
   const gate = await guardPermission('projects.read')
   if (gate instanceof NextResponse) return gate
+  const feature = await guardProjectsFeature(gate.user.orgId)
+  if (feature) return feature
   const { id } = await params
   if (!isUuid(id)) return NextResponse.json({ error: 'not found' }, { status: 404 })
   const payload = await loadProject(id, gate.user.orgId)
@@ -100,6 +103,8 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
 export async function PATCH(req: Request, { params }: { params: Promise<{ id: string }> }) {
   const gate = await guardPermission('projects.manage')
   if (gate instanceof NextResponse) return gate
+  const feature = await guardProjectsFeature(gate.user.orgId)
+  if (feature) return feature
   const user = gate.user
   const { id } = await params
   if (!isUuid(id)) return NextResponse.json({ error: 'not found' }, { status: 404 })
@@ -240,7 +245,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     if (v === 'invalid') return bad('Invalid project type')
     projectTypeId = v
     if (v) {
-      const pt = (await db.execute(sql`select billing_method from project_types where id = ${v} and org_id = ${user.orgId}`)) as unknown as { rows: { billing_method: string | null }[] }
+      const pt = (await db.execute(sql`select billing_method from project_types where id = ${v} and org_id = ${user.orgId} and is_active`)) as unknown as { rows: { billing_method: string | null }[] }
       if (pt.rows.length === 0) return bad('Unknown project type')
       derivedBilling = pt.rows[0].billing_method ?? undefined
     }
@@ -258,7 +263,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
       subsidiary_id = ${subsidiaryId !== undefined ? subsidiaryId : sql`subsidiary_id`},
       subsidiary_include_children = ${body.subsidiaryIncludeChildren !== undefined ? body.subsidiaryIncludeChildren : sql`subsidiary_include_children`},
       status = coalesce(${body.status ?? null}, status),
-      billing_method = ${body.billingMethod !== undefined ? body.billingMethod : (derivedBilling !== undefined ? derivedBilling : sql`billing_method`)},
+      billing_method = ${derivedBilling !== undefined ? derivedBilling : (body.billingMethod !== undefined ? body.billingMethod : sql`billing_method`)},
       customer_po_number = ${body.customerPoNumber !== undefined ? strOrNull(body.customerPoNumber) : sql`customer_po_number`},
       contract_value = ${contractValue !== undefined ? contractValue : sql`contract_value`},
       starts_on = ${startsOn !== undefined ? startsOn : sql`starts_on`},

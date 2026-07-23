@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server'
 import { publishOverheadRates } from '../../../../../lib/overhead-publish'
+import { guardProjectsFeature } from '../../../../../lib/projects-gate'
 
 export const runtime = 'nodejs'
 
@@ -23,6 +24,8 @@ export async function POST(req: Request) {
   if (!orgId || !/^\d{4}-\d{2}-\d{2}$/.test(effectiveFrom ?? '')) {
     return NextResponse.json({ error: 'orgId and effectiveFrom are required' }, { status: 422 })
   }
+  const feature = await guardProjectsFeature(orgId)
+  if (feature) return feature
   try {
     const result = await publishOverheadRates(orgId, null, effectiveFrom)
     return NextResponse.json({ ok: true, ...result })

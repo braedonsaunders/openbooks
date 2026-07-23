@@ -136,11 +136,13 @@ export function FormDesigner({
   headerDefs,
   lineDefs,
   duplicateFrom,
+  subsidiaryEnabled,
 }: {
   recordType: string
   def: FormDef | null
   headerDefs: FieldDef[] | null
   lineDefs: FieldDef[] | null
+  subsidiaryEnabled: boolean
   /** When creating a copy of an existing/standard form: prefilled name + layout. */
   duplicateFrom?: { name: string; layout: FormLayoutConfig } | null
 }) {
@@ -171,6 +173,7 @@ export function FormDesigner({
   const [isActive, setIsActive] = useState(def?.isActive ?? true)
   const [layout, setLayout] = useState<FormLayoutConfig>(initial)
   const [busy, setBusy] = useState(false)
+  const fieldAvailable = (key: string) => subsidiaryEnabled || (key !== 'subsidiary_id' && key !== 'additional_subsidiaries')
 
   const headerDefByDefKey = useMemo(() => new Map(headerD.map((d) => [d.key, d])), [headerD])
   const lineDefByDefKey = useMemo(() => new Map(lineD.map((d) => [d.key, d])), [lineD])
@@ -384,7 +387,7 @@ export function FormDesigner({
                 ) : null}
               </div>
               <div className="space-y-2">
-                {g.fields.map((f, fi) => (
+                {g.fields.map((f, fi) => fieldAvailable(f.key) ? (
                   <FieldRow
                     key={f.key}
                     field={f}
@@ -402,8 +405,8 @@ export function FormDesigner({
                     onMoveDown={() => setLayout((p) => { const n = structuredClone(p) as FormLayoutConfig; n.header.groups[gi]!.fields = reorder(n.header.groups[gi]!.fields, fi, fi + 1); return n })}
                     onMoveGroup={(toGi) => moveField(gi, fi, toGi)}
                   />
-                ))}
-                {g.fields.length === 0 ? <p className="text-xs text-slate-400">{t('designer.forms.emptyGroup')}</p> : null}
+                ) : null)}
+                {g.fields.filter((field) => fieldAvailable(field.key)).length === 0 ? <p className="text-xs text-slate-400">{t('designer.forms.emptyGroup')}</p> : null}
               </div>
             </div>
           ))}
@@ -414,7 +417,7 @@ export function FormDesigner({
           <h3 className="text-xs font-semibold tracking-wide text-slate-500 uppercase dark:text-slate-400">{t('designer.forms.linesSection')}</h3>
           <div className="rounded-lg border border-slate-200 p-3 dark:border-slate-800">
             <div className="space-y-2">
-              {layout.lines.columns.map((c, ci) => (
+              {layout.lines.columns.map((c, ci) => fieldAvailable(c.key) ? (
                 <ColumnRow
                   key={c.key}
                   col={c}
@@ -427,7 +430,7 @@ export function FormDesigner({
                   onMoveUp={() => setLayout((p) => { const n = structuredClone(p) as FormLayoutConfig; n.lines.columns = reorder(n.lines.columns, ci, ci - 1); return n })}
                   onMoveDown={() => setLayout((p) => { const n = structuredClone(p) as FormLayoutConfig; n.lines.columns = reorder(n.lines.columns, ci, ci + 1); return n })}
                 />
-              ))}
+              ) : null)}
             </div>
           </div>
           <AddFieldPanel level="line" recordType={recordType} usedKeys={usedFieldKeys} onCreated={(d) => addCustomField(d, 'line')} />

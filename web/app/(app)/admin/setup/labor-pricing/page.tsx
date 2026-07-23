@@ -1,12 +1,12 @@
 import Link from "next/link";
-import { notFound } from "next/navigation";
 import { getTranslations } from "next-intl/server";
 import { BookOpen } from "lucide-react";
 import { Button } from "@openbooks/ui";
 import { sql } from "drizzle-orm";
 import { db } from "@openbooks/engine/src/db.ts";
 import { can, requirePermission } from "../../../../../lib/authz";
-import { isFeatureEnabled } from "../../../../../lib/features";
+import { subsidiaryFeatureEnabled } from "../../../../../lib/features";
+import { requireProjectsFeature } from "../../../../../lib/projects-gate";
 import {
   isUuid,
   parseListParams,
@@ -28,8 +28,9 @@ export default async function LaborPricingPage({
   searchParams: Promise<Record<string, string | string[] | undefined>>;
 }) {
   const authz = await requirePermission("admin.setup.manage");
-  if (!(await isFeatureEnabled(authz.user.orgId, "projects"))) notFound();
+  await requireProjectsFeature(authz.user.orgId);
   const orgId = authz.user.orgId;
+  const subsidiaryUiEnabled = await subsidiaryFeatureEnabled(orgId);
   const sp = await searchParams;
   const t = await getTranslations("laborPricing");
   const list = parseListParams(sp, {
@@ -44,7 +45,7 @@ export default async function LaborPricingPage({
   const timeParam = pickString(sp.time);
   const timeFilter = timeParam === "scheduled" || timeParam === "expired" || timeParam === "all" ? timeParam : "active";
   const dimensionParam = pickString(sp.dimension);
-  const dimensionTypes = ["department", "subsidiary", "location", "class", "trade", "job_title", "other"] as const;
+  const dimensionTypes = ["department", ...(subsidiaryUiEnabled ? ["subsidiary"] : []), "location", "class", "trade", "job_title", "other"] as const;
   const dimensionFilter = dimensionParam === "unscoped" || (dimensionTypes as readonly string[]).includes(dimensionParam ?? "") ? dimensionParam! : "all";
   const effectiveFilter = timeFilter === "active"
     ? sql`and v.status = 'active' and v.effective_from <= current_date and (v.effective_to is null or v.effective_to >= current_date)`
@@ -272,7 +273,7 @@ export default async function LaborPricingPage({
         }
         options={{
           department: named(departmentsRes),
-          subsidiary: named(subsidiariesRes),
+          subsidiary: subsidiaryUiEnabled ? named(subsidiariesRes) : [],
           location: named(locationsRes),
           class: named(classesRes),
           trade: named(tradesRes),

@@ -3,12 +3,12 @@ import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/db.ts'
 import Link from 'next/link'
 import { PageHeader } from '@openbooks/ui'
-import { isFeatureEnabled } from '../../../lib/features'
+import { requireProjectsFeature } from '../../../lib/projects-gate'
 import { ListPageLayout } from '../../../components/page-layout'
 import { EntityListView } from '../../../components/entity-list-view'
 import { can, requirePermission } from '../../../lib/authz'
 import { isUuid, pickString } from '../../../lib/list-params'
-import { subsidiaryOptions } from '../../../lib/subsidiaries'
+import { subsidiaryUiOptions } from '../../../lib/subsidiaries'
 import { resolveFormLayout } from '../../../lib/customization/resolve'
 import { loadFieldDefs } from '../../../lib/custom-fields'
 import { loadProject } from '../../api/projects/_lib'
@@ -29,9 +29,8 @@ export default async function Projects({
   const authz = await requirePermission('projects.read')
   const canManage = can(authz, 'projects.manage')
   const orgId = authz.user.orgId
-  // Coherence with construction progress billing: when that feature is on, offer
-  // a direct route to a project's AIA schedule of values / applications.
-  const progressBillingOn = can(authz, 'ar.read') && (await isFeatureEnabled(orgId, 'constructionBilling'))
+  await requireProjectsFeature(orgId)
+  const canViewApplications = can(authz, 'ar.read')
 
   const sp = await searchParams
   const projectId = typeof sp.project === 'string' ? sp.project : undefined
@@ -47,12 +46,15 @@ export default async function Projects({
           select id, display_name from parties
            where org_id = ${orgId} and is_active
            order by display_name limit 2000`) as any,
-        subsidiaryOptions(),
+        subsidiaryUiOptions(orgId),
         loadProjectCockpit(orgId, openProject.project.id as string),
-        db.execute(sql`select id, name from project_types where org_id = ${orgId} and is_active order by sort_order, name`) as any,
+        db.execute(sql`
+          select id, name, billing_method as "billingMethod",
+                 coalesce(invoicing_profile->>'billingProcedure', 'standard') as "billingProcedure"
+            from project_types where org_id = ${orgId} and is_active order by sort_order, name`) as any,
       ])
     : [null, [], null, null]
-  const projectTypes = (projectTypesRes?.rows ?? []) as { id: string; name: string }[]
+  const projectTypes = (projectTypesRes?.rows ?? []) as { id: string; name: string; billingMethod: string | null; billingProcedure: string }[]
 
   const resolvedForm = openProject
     ? await resolveFormLayout({
@@ -74,12 +76,12 @@ export default async function Projects({
           description={t('list.description')}
           actions={
             <div className="flex items-center gap-2">
-              {progressBillingOn && (
+              {canViewApplications && (
                 <Link
                   href={(openProject ? `/construction?projectId=${openProject.project.id}` : '/construction') as never}
                   className="rounded-lg border border-slate-200 px-3 py-1.5 text-sm font-medium text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:text-slate-200 dark:hover:bg-slate-800"
                 >
-                  Progress Billing
+                  Applications for Payment
                 </Link>
               )}
               {canManage ? <NewProjectButton /> : null}

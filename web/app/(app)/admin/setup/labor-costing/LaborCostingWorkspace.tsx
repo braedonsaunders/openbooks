@@ -112,6 +112,7 @@ export function LaborCostingWorkspace(props: {
   trades: Opt[]
   departments: Opt[]
   subsidiaries: SubsidiaryOpt[]
+  defaultSubsidiary: SubsidiaryOpt | null
   jobTitles: string[]
   accounts: { id: string; label: string }[]
   currencies: string[]
@@ -168,7 +169,7 @@ export function LaborCostingWorkspace(props: {
   const iso = (d: Date) => d.toISOString().slice(0, 10)
   const [recFrom, setRecFrom] = useState(iso(lastMonth))
   const [recTo, setRecTo] = useState(iso(lastMonthEnd))
-  const [recSubsidiaryId, setRecSubsidiaryId] = useState(props.subsidiaries[0]?.id ?? '')
+  const [recSubsidiaryId, setRecSubsidiaryId] = useState(props.subsidiaries[0]?.id ?? props.defaultSubsidiary?.id ?? '')
   const [rec, setRec] = useState<{
     subsidiaryId: string
     currency: string
@@ -178,7 +179,9 @@ export function LaborCostingWorkspace(props: {
     openBalance: string
     perProject: { projectId: string; name: string; standard: string }[]
   } | null>(null)
-  const reconciliationCurrency = props.subsidiaries.find((subsidiary) => subsidiary.id === recSubsidiaryId)?.currency ?? props.orgCurrency
+  const reconciliationCurrency = props.subsidiaries.find((subsidiary) => subsidiary.id === recSubsidiaryId)?.currency
+    ?? props.defaultSubsidiary?.currency
+    ?? props.orgCurrency
 
   // Fixed adders are configured in org base currency, so the illustrative
   // wage must also be base currency (never borrow a foreign wage row).
@@ -392,7 +395,7 @@ export function LaborCostingWorkspace(props: {
                 { value: 'job_title', label: t('rates.scopeJobTitle') },
                 { value: 'trade', label: t('rates.scopeTrade') },
                 { value: 'department', label: t('rates.scopeDepartment') },
-                { value: 'subsidiary', label: t('rates.scopeSubsidiary') },
+                ...(props.subsidiaries.length > 0 ? [{ value: 'subsidiary', label: t('rates.scopeSubsidiary') }] : []),
                 { value: 'org', label: t('rates.scopeOrg') },
               ]}
             />
@@ -734,7 +737,7 @@ export function LaborCostingWorkspace(props: {
       {view === 'reconciliation' && (
         <Card title={t('reconciliation.title')} hint={t('reconciliation.hint')}>
           <div className="flex flex-wrap items-end gap-2">
-            <div>
+            {props.subsidiaries.length > 0 ? <div>
               <Label htmlFor="rec-subsidiary">{t('reconciliation.subsidiary')}</Label>
               <Select
                 id="rec-subsidiary"
@@ -748,7 +751,7 @@ export function LaborCostingWorkspace(props: {
                   <option key={subsidiary.id} value={subsidiary.id}>{subsidiary.name} · {subsidiary.currency}</option>
                 ))}
               </Select>
-            </div>
+            </div> : null}
             <div>
               <Label htmlFor="rec-from">{t('reconciliation.from')}</Label>
               <Input id="rec-from" type="date" value={recFrom} onChange={(e) => setRecFrom(e.target.value)} />
@@ -986,7 +989,7 @@ function RateDrawer({
             <option value="job_title">{t('rates.scopeJobTitle')}</option>
             <option value="trade">{t('rates.scopeTrade')}</option>
             <option value="department">{t('rates.scopeDepartment')}</option>
-            <option value="subsidiary">{t('rates.scopeSubsidiary')}</option>
+            {subsidiaries.length > 0 ? <option value="subsidiary">{t('rates.scopeSubsidiary')}</option> : null}
             <option value="org">{t('rates.scopeOrg')}</option>
           </Select>
         </div>
