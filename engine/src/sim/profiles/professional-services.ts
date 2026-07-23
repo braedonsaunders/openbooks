@@ -18,12 +18,17 @@ export const professionalServices: Profile = {
     { name: "Talent Contractors Inc", termDays: 30, expenseCategories: ["subcontractor"], billMin: 3000, billMax: 40000 },
     { name: "Beacon Professional Liability", termDays: 30, expenseCategories: ["insurance"], billMin: 900, billMax: 4000 },
     { name: "Sterling Accounting Partners", termDays: 30, expenseCategories: ["professionalFees"], billMin: 1500, billMax: 9000 },
+    { name: "BrandForge Marketing", termDays: 30, expenseCategories: ["marketing"], billMin: 2000, billMax: 25000 },
+    { name: "Corporate Travel Partners", termDays: 30, expenseCategories: ["travel", "meals"], billMin: 500, billMax: 14000 },
+    { name: "Paychex Payroll Services", termDays: 15, expenseCategories: ["payroll", "benefits", "payrollTaxExpense"], billMin: 20000, billMax: 65000 },
+    { name: "First National Bank", termDays: 30, expenseCategories: ["bankFees", "interestExpense"], billMin: 200, billMax: 4500 },
+    { name: "CloudStack Hosting", termDays: 30, expenseCategories: ["office"], billMin: 1500, billMax: 9000 },
   ],
   customers: [
     {
       name: "Northwind Retail Corp",
       termDays: 30,
-      revenueCategories: ["revenueService"],
+      revenueCategories: ["revenueService", "revenueConsulting"],
       invoiceMin: 8000,
       invoiceMax: 60000,
       payment: { onTime: 0.6, late: 0.28, veryLate: 0.07, shortPay: 0.03, delinquent: 0.02 },
@@ -31,7 +36,7 @@ export const professionalServices: Profile = {
     {
       name: "Bluewater Logistics",
       termDays: 30,
-      revenueCategories: ["revenueService"],
+      revenueCategories: ["revenueService", "revenueConsulting"],
       invoiceMin: 12000,
       invoiceMax: 95000,
       payment: { onTime: 0.55, late: 0.3, veryLate: 0.1, shortPay: 0.03, delinquent: 0.02 },
@@ -39,7 +44,7 @@ export const professionalServices: Profile = {
     {
       name: "Cardinal Health Systems",
       termDays: 45,
-      revenueCategories: ["revenueService"],
+      revenueCategories: ["revenueService", "revenueConsulting"],
       invoiceMin: 20000,
       invoiceMax: 180000,
       payment: { onTime: 0.5, late: 0.32, veryLate: 0.12, shortPay: 0.04, delinquent: 0.02 },
@@ -47,7 +52,7 @@ export const professionalServices: Profile = {
     {
       name: "Evergreen Startups Ltd",
       termDays: 15,
-      revenueCategories: ["revenueService"],
+      revenueCategories: ["revenueService", "revenueConsulting"],
       invoiceMin: 3000,
       invoiceMax: 30000,
       payment: { onTime: 0.4, late: 0.35, veryLate: 0.15, shortPay: 0.06, delinquent: 0.04 },

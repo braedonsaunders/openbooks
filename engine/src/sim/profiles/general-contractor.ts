@@ -22,6 +22,10 @@ export const generalContractor: Profile = {
     { name: "Statewide Insurance", termDays: 30, expenseCategories: ["insurance"], billMin: 1200, billMax: 6000 },
     { name: "City Utilities", termDays: 21, expenseCategories: ["utilities"], billMin: 300, billMax: 2500 },
     { name: "Anderson Legal & Bonding", termDays: 30, expenseCategories: ["professionalFees"], billMin: 800, billMax: 15000 },
+    { name: "United Equipment Rental", termDays: 30, expenseCategories: ["equipmentRental"], billMin: 1500, billMax: 35000 },
+    { name: "TradeForce Labor Brokers", termDays: 15, expenseCategories: ["directLabor"], billMin: 8000, billMax: 90000 },
+    { name: "Summit Payroll Co", termDays: 15, expenseCategories: ["payroll", "benefits", "payrollTaxExpense"], billMin: 40000, billMax: 140000 },
+    { name: "Fleet Fuel & Maintenance", termDays: 30, expenseCategories: ["equipmentRental", "travel"], billMin: 800, billMax: 9000 },
   ],
   customers: [
     {
