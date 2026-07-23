@@ -1,10 +1,11 @@
 import { randomUUID } from "node:crypto";
 import { sql } from "drizzle-orm";
-import { db, withBypass } from "../db.ts";
+import { db, withBypass, withOrgContext } from "../db.ts";
 import { dropScratchOrg } from "../test-fixtures.ts";
 import { ensureCloseDefaults } from "../close.ts";
 import { seedProjectTypes } from "../seed-project-types.ts";
 import { ensureReportDefinitions } from "../ensure-report-definitions.ts";
+import { createScriptJournal } from "../journal-writes.ts";
 import { assertSimOrg, SIM_ORG_PREFIX } from "./db-guard.ts";
 import type { Profile } from "./profiles/index.ts";
 
@@ -59,35 +60,109 @@ export interface SimOrg {
   periods: SimPeriod[];
 }
 
-/** Chart of accounts: [key, number, name, type]. Types are verified enum values. */
+/**
+ * A full, complex chart of accounts — a real company's books, not a stub. Proper
+ * multi-bank cash, receivables with an allowance, prepaids, inventory/WIP, a fixed-
+ * asset block with accumulated depreciation, current + long-term liabilities, a
+ * complete EQUITY section (common stock, APIC, retained earnings, distributions,
+ * opening-balance equity), multiple revenue streams, a COGS block, and a full
+ * operating-expense breakdown. Semantic keys drive the generator/ops; the depth
+ * is what makes the balance sheet and P&L read like a going concern.
+ * [key, number, name, type] — types are verified account_type enum values.
+ */
 const COA: [string, string, string, string][] = [
+  // ---- Assets ----
   ["bank", "1000", "Operating Cash", "asset_bank"],
+  ["bankPayroll", "1010", "Payroll Checking", "asset_bank"],
+  ["bankSavings", "1020", "Money Market Savings", "asset_bank"],
   ["ar", "1100", "Accounts Receivable", "asset_receivable"],
   ["retainageReceivable", "1150", "Retainage Receivable", "asset_receivable"],
+  ["allowanceDoubtful", "1190", "Allowance for Doubtful Accounts", "asset_current_other"],
   ["prepaid", "1200", "Prepaid Expenses", "asset_current_other"],
-  ["taxInput", "1250", "Recoverable Tax", "asset_current_other"],
-  ["inventory", "1300", "Inventory Asset", "asset_current_other"],
+  ["prepaidInsurance", "1210", "Prepaid Insurance", "asset_current_other"],
+  ["taxInput", "1250", "Recoverable Sales Tax", "asset_current_other"],
+  ["inventory", "1300", "Inventory", "asset_current_other"],
+  ["unbilledRevenue", "1310", "Unbilled Revenue (WIP)", "asset_current_other"],
+  ["employeeAdvances", "1400", "Employee Advances", "asset_current_other"],
+  ["deposits", "1450", "Security Deposits", "asset_other"],
+  ["equipment", "1500", "Equipment", "asset_fixed"],
+  ["vehicles", "1510", "Vehicles", "asset_fixed"],
+  ["furniture", "1520", "Furniture & Fixtures", "asset_fixed"],
+  ["leasehold", "1530", "Leasehold Improvements", "asset_fixed"],
+  ["accumDep", "1590", "Accumulated Depreciation", "asset_fixed"],
+  // ---- Liabilities ----
   ["ap", "2000", "Accounts Payable", "liability_payable"],
+  ["creditCard", "2050", "Corporate Credit Card", "liability_card"],
   ["accrued", "2100", "Accrued Liabilities", "liability_current_other"],
   ["employeePayable", "2110", "Employee Reimbursements Payable", "liability_current_other"],
-  ["badDebt", "6600", "Bad Debt Expense", "expense"],
-  ["depreciation", "6700", "Depreciation Expense", "expense"],
-  ["accumDep", "1500", "Accumulated Depreciation", "asset_current_other"],
-  ["equipment", "1400", "Equipment", "asset_current_other"],
-  ["fxGainLoss", "7010", "Realized FX Gain/Loss", "expense"],
-  ["taxOutput", "2250", "Tax Payable", "liability_current_other"],
+  ["accruedPayroll", "2120", "Accrued Payroll", "liability_current_other"],
+  ["deferredRevenue", "2200", "Deferred Revenue", "liability_current_other"],
+  ["taxOutput", "2250", "Sales Tax Payable", "liability_current_other"],
+  ["payrollTaxPayable", "2260", "Payroll Taxes Payable", "liability_current_other"],
+  ["retainagePayable", "2300", "Retainage Payable", "liability_current_other"],
+  ["currentDebt", "2400", "Current Portion of Long-Term Debt", "liability_current_other"],
+  ["lineOfCredit", "2700", "Line of Credit", "liability_long_term"],
+  ["notesPayable", "2800", "Notes Payable", "liability_long_term"],
+  // ---- Equity ----
+  ["commonStock", "3000", "Common Stock", "equity"],
+  ["apic", "3100", "Additional Paid-In Capital", "equity"],
+  ["retainedEarnings", "3200", "Retained Earnings", "equity"],
+  ["distributions", "3300", "Owner Distributions", "equity"],
+  ["openingBalanceEquity", "3900", "Opening Balance Equity", "equity"],
+  // ---- Income ----
   ["revenueService", "4000", "Service Revenue", "income"],
   ["revenueProduct", "4010", "Product Revenue", "income"],
-  ["cogs", "5000", "Cost of Goods Sold", "expense"],
-  ["materials", "5100", "Materials", "expense"],
-  ["subcontractor", "5200", "Subcontractor Costs", "expense"],
-  ["payroll", "6000", "Payroll", "expense"],
+  ["revenueConsulting", "4020", "Consulting Revenue", "income"],
+  ["otherIncome", "4900", "Other Income", "income_other"],
+  ["interestIncome", "4910", "Interest Income", "income_other"],
+  // ---- COGS ----
+  ["cogs", "5000", "Cost of Services", "cogs"],
+  ["materials", "5100", "Materials & Supplies", "cogs"],
+  ["subcontractor", "5200", "Subcontractor Costs", "cogs"],
+  ["directLabor", "5300", "Direct Labor", "cogs"],
+  ["equipmentRental", "5400", "Equipment Rental", "cogs"],
+  // ---- Operating expenses ----
+  ["payroll", "6000", "Salaries & Wages", "expense"],
+  ["benefits", "6010", "Employee Benefits", "expense"],
+  ["payrollTaxExpense", "6020", "Payroll Tax Expense", "expense"],
   ["rent", "6100", "Rent", "expense"],
   ["utilities", "6200", "Utilities", "expense"],
   ["insurance", "6300", "Insurance", "expense"],
   ["office", "6400", "Office & Software", "expense"],
   ["professionalFees", "6500", "Professional Fees", "expense"],
+  ["marketing", "6550", "Marketing & Advertising", "expense"],
+  ["badDebt", "6600", "Bad Debt Expense", "expense"],
+  ["travel", "6650", "Travel", "expense"],
+  ["meals", "6660", "Meals & Entertainment", "expense"],
+  ["depreciation", "6700", "Depreciation Expense", "expense"],
+  ["bankFees", "6800", "Bank & Merchant Fees", "expense"],
+  ["miscExpense", "6900", "Miscellaneous Expense", "expense_other"],
+  ["interestExpense", "7000", "Interest Expense", "expense_other"],
+  ["fxGainLoss", "7010", "Realized FX Gain/Loss", "expense_other"],
 ];
+
+/**
+ * A balanced opening balance sheet, posted as a journal on day one — so the
+ * company starts as a going concern (cash, receivables, a depreciated fixed-asset
+ * base, debt, paid-in capital) with the residual booked to Retained Earnings.
+ * Signed base amounts: debit positive, credit negative; they sum to zero.
+ * Scaled by `s` so different companies open at different sizes.
+ */
+function openingBalanceLines(accounts: Record<string, string>, s: number): { accountId: string; amount: number }[] {
+  const raw: [string, number][] = [
+    ["bank", 420_000], ["bankSavings", 260_000], ["ar", 185_000], ["prepaid", 24_000],
+    ["prepaidInsurance", 31_000], ["inventory", 46_000], ["equipment", 640_000], ["vehicles", 185_000],
+    ["furniture", 92_000], ["leasehold", 128_000], ["accumDep", -286_000], ["deposits", 18_000],
+    ["ap", -98_000], ["creditCard", -21_500], ["accruedPayroll", -37_000], ["deferredRevenue", -52_000],
+    ["currentDebt", -60_000], ["lineOfCredit", -150_000], ["notesPayable", -430_000],
+    ["commonStock", -10_000], ["apic", -240_000],
+  ];
+  const lines = raw.map(([k, v]) => ({ accountId: accounts[k]!, amount: Math.round(v * s) }));
+  // Retained Earnings is the balancing residual (prior years' accumulated result).
+  const residual = lines.reduce((acc, l) => acc + l.amount, 0);
+  lines.push({ accountId: accounts.retainedEarnings!, amount: -residual });
+  return lines;
+}
 
 function lastDayOfMonth(year: number, month: number): string {
   const day = new Date(Date.UTC(year, month, 0)).getUTCDate();
@@ -110,7 +185,7 @@ function monthsInWindow(startDate: string, endDate: string): { year: number; mon
 }
 
 export async function provisionOrg(profile: Profile, window: { startDate: string; endDate: string }): Promise<SimOrg> {
-  return withBypass(async () => {
+  const world = await withBypass(async () => {
     const orgId = randomUUID();
     const cur = profile.baseCurrency;
 
@@ -217,6 +292,26 @@ export async function provisionOrg(profile: Profile, window: { startDate: string
 
     return { orgId, bookId, subsidiaryId, fiscalCalendarId, currency: cur, accounts, vendors, customers, actors, periods };
   });
+
+  // Opening balances — posted OUTSIDE the provisioning bypass block (createScriptJournal
+  // opens its own transaction; running it inside withBypass's pinned tx would nest and
+  // prematurely commit). Scaled so different companies open at different sizes.
+  const scale = profile.industry === "construction" ? 2.5 : 1;
+  await withOrgContext(world.orgId, () =>
+    createScriptJournal(
+      world.orgId,
+      world.actors.controller,
+      {
+        documentDate: window.startDate,
+        memo: "Opening balances",
+        referenceNumber: "OPENING",
+        lines: openingBalanceLines(world.accounts, scale).map((l) => ({ accountId: l.accountId, amount: l.amount })),
+      },
+      { post: true },
+    ),
+  );
+
+  return world;
 }
 
 /**
