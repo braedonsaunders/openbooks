@@ -76,7 +76,7 @@ export const professionalServices: Profile = {
     },
   ],
   cadence: {
-    billsPerDay: 1.2,
+    billsPerDay: 0.45,
     invoicesPerDay: 1.8,
     expenseReportsPerDay: 0.8,
     journalPerDay: 0.25,
