@@ -74,6 +74,38 @@ export async function payVendor(
   return { paymentId: payment.id, paid };
 }
 
+/**
+ * Reimburse an employee: pay their open expense-report items (the credit legs on
+ * Employee Reimbursements) in one payment, exactly like an AP payment but for the
+ * employee-payable subledger. Closes the open items so subledger↔GL stays tied.
+ */
+export async function reimburseEmployee(
+  world: SimOrg,
+  employeeId: string,
+  actorId: string,
+  documentDate: string,
+): Promise<{ paymentId: string; paid: string } | null> {
+  const items = (await collectibleOpenItems(world.orgId, employeeId, "ap", ["expense_report"])).filter(
+    (i) => Number(i.open) > 0.005,
+  );
+  if (items.length === 0) return null;
+
+  const allocations: AllocationInput[] = items.map((i) => sameCurrencyAllocation(i.lineId, i.open));
+  const payment = await createPaymentDocument({
+    orgId: world.orgId,
+    kind: "vendor_payment",
+    createdBy: actorId,
+    partyId: employeeId,
+    bankAccountId: world.accounts.bank,
+    documentDate,
+    currency: world.currency,
+    memo: `Expense reimbursement ${documentDate}`,
+  });
+  await updateDraftPayment(payment.id, { allocations, bankAccountId: world.accounts.bank }, actorId);
+  await postPaymentWithApplications(payment.id, undefined, actorId);
+  return { paymentId: payment.id, paid: sum(items.map((i) => i.open)) };
+}
+
 // --- AR -------------------------------------------------------------------
 
 /** Issue (post) a draft customer invoice. */

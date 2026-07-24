@@ -65,6 +65,44 @@ export interface SimOrg {
   laborItemId: string | null;
   /** Active client engagements/jobs that billable work is logged against (bottom-up). */
   engagements: { id: string; customerId: string; code: string; name: string }[];
+  /**
+   * A construction company's job portfolio — a concurrent MIX of billing methods.
+   * Crews log field-ticket time against these daily (bottom-up labor cost); the PM
+   * autopilot bills each per its method monthly. Empty for non-construction.
+   */
+  jobs: SimJob[];
+  /**
+   * SaaS subscriptions opened at provisioning. The recurring-billing engine bills
+   * these on their cycle; revenue parks in deferred and is recognized ratably.
+   * Empty for non-SaaS.
+   */
+  subscriptions: SimSubscription[];
+}
+
+export interface SimSubscription {
+  id: string;
+  customerId: string;
+  planKey: string;
+  interval: "monthly" | "annually";
+  termMonths: number;
+  amount: number;
+  quantity: number;
+}
+
+export interface SimJob {
+  id: string;
+  code: string;
+  name: string;
+  customerId: string;
+  method: "time_and_materials" | "schedule_of_values" | "fixed_price" | "not_to_exceed" | "cost_plus";
+  /** Contract/NTE ceiling or fixed price (decimal string; "0" for open-ended T&M). */
+  contractValue: string;
+  /** Crew weight — drives share of daily labor + equipment/material sizing. */
+  crewSize: number;
+  /** Puts owned equipment on site (billed at a day rate on T&M work). */
+  equipment: boolean;
+  /** Monthly consumed material cost (billed at a markup on T&M jobs). */
+  monthlyMaterials: number;
 }
 
 /**
@@ -357,9 +395,123 @@ export async function provisionOrg(profile: Profile, window: { startDate: string
       }
     }
 
+    // Construction job portfolio — a concurrent mix of billing methods, opened at
+    // provisioning. Crews log field tickets against these daily (bottom-up), and
+    // the PM autopilot bills each per its method. This is the company's ONLY
+    // revenue source (profiles with a portfolio set invoicesPerDay to 0).
+    const jobs: SimJob[] = [];
+    if (accounts.laborWip && accounts.laborClearing && profile.jobPortfolio?.length) {
+      const custByName = new Map(customers.map((c) => [c.name, c]));
+      const typeByKey = new Map(
+        ((await db.execute(sql`
+          select id, key from project_types where org_id = ${orgId} and is_active`)) as unknown as {
+          rows: { id: string; key: string }[];
+        }).rows.map((t) => [t.key, t.id]),
+      );
+      for (const spec of profile.jobPortfolio) {
+        const customer = custByName.get(spec.customer);
+        const typeId = typeByKey.get(spec.method);
+        if (!customer || !typeId) continue;
+        const id = randomUUID();
+        const sovTotal = spec.sovLines?.reduce((a, l) => a + l.scheduledValue, 0) ?? 0;
+        const contractValue = String(spec.contractValue ?? sovTotal ?? 0);
+        await db.execute(sql`
+          insert into projects (id, org_id, name, code, status, project_type_id, customer_id, contract_value, starts_on)
+          values (${id}, ${orgId}, ${spec.name}, ${spec.code}, 'active', ${typeId}, ${customer.id},
+                  ${contractValue}, ${window.startDate})`);
+        let sort = 0;
+        for (const line of spec.sovLines ?? []) {
+          await db.execute(sql`
+            insert into sov_lines (id, org_id, project_id, description, scheduled_value, income_account_id, sort_order)
+            values (${randomUUID()}, ${orgId}, ${id}, ${line.description}, ${String(line.scheduledValue)},
+                    ${accounts.revenueService}, ${sort++})`);
+        }
+        jobs.push({
+          id, code: spec.code, name: spec.name, customerId: customer.id, method: spec.method,
+          contractValue, crewSize: spec.crewSize ?? 3, equipment: spec.equipment ?? false,
+          monthlyMaterials: spec.monthlyMaterials ?? 0,
+        });
+      }
+    }
+
+    // SaaS subscription base — recognition rules + plan items + plans + the
+    // subscriber population, plus the org feature flag the recurring-billing engine
+    // gates on. Billing/recognition run through the real engines in the driver.
+    const subscriptions: SimSubscription[] = [];
+    if (profile.subscriptionPlans?.length && accounts.deferredRevenue && accounts.subscriptionRevenue) {
+      // Merge, don't jsonb_set the nested path: jsonb_set won't create a missing
+      // intermediate 'features' object, so it would no-op on a fresh '{}' settings.
+      await db.execute(sql`
+        update orgs
+           set settings = coalesce(settings, '{}'::jsonb)
+             || jsonb_build_object('features', coalesce(settings->'features', '{}'::jsonb) || '{"subscriptionBilling": true}'::jsonb)
+         where id = ${orgId}`);
+      // One straight-line recognition rule per distinct term length.
+      const ruleByTerm = new Map<number, string>();
+      for (const term of new Set(profile.subscriptionPlans.map((p) => p.termMonths))) {
+        const ruleId = randomUUID();
+        await db.execute(sql`
+          insert into recognition_rules
+            (id, org_id, code, name, method, is_forecast, recognition_periods, start_date_source, end_date_source,
+             period_offset, start_offset_days, initial_amount_percent, deferred_account_id, recognized_account_id, is_active)
+          values (${ruleId}, ${orgId}, ${`SL${term}`}, ${`${term}-month straight line`}, 'straight_line_even', false,
+                  ${term}, 'obligation', 'term', 0, 0, '0', ${accounts.deferredRevenue}, ${accounts.subscriptionRevenue}, true)`);
+        ruleByTerm.set(term, ruleId);
+      }
+      const custByName = new Map(customers.map((c) => [c.name, c]));
+      const planByKey = new Map<string, { id: string; interval: string; termMonths: number; amount: number }>();
+      for (const plan of profile.subscriptionPlans) {
+        const itemId = randomUUID();
+        await db.execute(sql`
+          insert into items (id, org_id, kind, name, show_on_timesheet, is_active, custom, create_plans_on,
+                             revenue_allocation, income_account_id, recognition_rule_id, deferred_account_id)
+          values (${itemId}, ${orgId}, 'service', ${plan.name}, false, true, '{}'::jsonb, 'billing', 'normal',
+                  ${accounts.subscriptionRevenue}, ${ruleByTerm.get(plan.termMonths)}, ${accounts.deferredRevenue})`);
+        const planId = randomUUID();
+        await db.execute(sql`
+          insert into subscription_plans
+            (id, org_id, name, description, amount, currency_code, interval, interval_count, income_account_id, item_id, is_active)
+          values (${planId}, ${orgId}, ${plan.name}, ${plan.name}, ${String(plan.amount)}, ${cur},
+                  ${plan.interval}, 1, ${accounts.subscriptionRevenue}, ${itemId}, true)`);
+        planByKey.set(plan.key, { id: planId, interval: plan.interval, termMonths: plan.termMonths, amount: plan.amount });
+      }
+      for (const sub of profile.subscribers ?? []) {
+        const customer = custByName.get(sub.customer);
+        const plan = planByKey.get(sub.plan);
+        if (!customer || !plan) continue;
+        const id = randomUUID();
+        await db.execute(sql`
+          insert into subscriptions
+            (id, org_id, customer_id, plan_id, quantity, status, start_on, next_bill_on, current_period_start, auto_post)
+          values (${id}, ${orgId}, ${customer.id}, ${plan.id}, ${String(sub.quantity)}, 'active',
+                  ${window.startDate}, ${window.startDate}, ${window.startDate}, true)`);
+        subscriptions.push({
+          id, customerId: customer.id, planKey: sub.plan, interval: plan.interval as "monthly" | "annually",
+          termMonths: plan.termMonths, amount: plan.amount, quantity: sub.quantity,
+        });
+      }
+
+      // Dunning policy + escalating stages, so overdue subscription invoices get
+      // chased (the recurring-revenue collections workflow).
+      const policyId = randomUUID();
+      await db.execute(sql`
+        insert into dunning_policies (id, org_id, name, applies_to_kind, grace_period_days, min_balance, is_active)
+        values (${policyId}, ${orgId}, 'Standard Dunning', 'customer_invoice', 3, '25', true)`);
+      const stages: [number, number, string][] = [
+        [1, 5, "Friendly reminder"], [2, 15, "Past-due notice"], [3, 30, "Final notice before suspension"],
+      ];
+      for (const [seq, offset, name] of stages) {
+        await db.execute(sql`
+          insert into dunning_stages (id, org_id, policy_id, sequence, name, offset_days, subject_template, body_template, escalate)
+          values (${randomUUID()}, ${orgId}, ${policyId}, ${seq}, ${name}, ${offset},
+                  ${`[{{company}}] ${name} — invoice {{documentNumber}}`},
+                  ${`Your invoice {{documentNumber}} for {{balance}} is {{daysOverdue}} days past due.`}, ${seq === 3})`);
+      }
+    }
+
     await ensureReportDefinitions(orgId);
 
-    return { orgId, bookId, subsidiaryId, fiscalCalendarId, currency: cur, accounts, vendors, customers, actors, periods, employees, timeTypeId, laborItemId, engagements };
+    return { orgId, bookId, subsidiaryId, fiscalCalendarId, currency: cur, accounts, vendors, customers, actors, periods, employees, timeTypeId, laborItemId, engagements, jobs, subscriptions };
   });
 
   // Opening balances — posted OUTSIDE the provisioning bypass block (createScriptJournal

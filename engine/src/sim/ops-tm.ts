@@ -99,10 +99,19 @@ interface UnbilledTime {
  * entry as invoiced (idempotency). Returns the billed total, the labor cost
  * behind it, and the gross margin.
  */
+export interface ExtraBillLine {
+  accountId: string;
+  description: string;
+  amount: string;
+  quantity?: string;
+  unitPrice?: string;
+}
+
 export async function billTimeAndMaterials(
   world: SimOrg,
   projectId: string,
   invoiceDate: string,
+  opts: { extraLines?: ExtraBillLine[]; memo?: string; costPlusFee?: number } = {},
 ): Promise<{ invoiceId: string; documentNumber: string; billed: string; laborCost: string; lines: number } | null> {
   const proj = (await db.execute(sql`
     select customer_id, name, code from projects where id = ${projectId} and org_id = ${world.orgId}`)) as unknown as {
@@ -116,15 +125,21 @@ export async function billTimeAndMaterials(
       from time_entries
      where org_id = ${world.orgId} and project_id = ${projectId}
        and status = 'approved' and is_billable and invoiced_by_line_id is null`)) as unknown as { rows: UnbilledTime[] };
-  if (time.rows.length === 0) return null;
+  const extraLines = opts.extraLines ?? [];
+  if (time.rows.length === 0 && extraLines.length === 0) return null;
 
+  // Cost-plus jobs bill labor at cost × (1 + fee); standard T&M bills at bill rate.
+  const fee = opts.costPlusFee;
+  const rateOf = (t: UnbilledTime) => (fee === undefined ? t.bill_rate : mul(t.cost_rate, (1 + fee).toFixed(4)));
   const empName = new Map(world.employees.map((e) => [e.id, e.name]));
-  const lineAmounts = time.rows.map((t) => mul(t.hours, t.bill_rate));
-  const total = sumMoney(lineAmounts);
+  const effRates = time.rows.map(rateOf);
+  const lineAmounts = time.rows.map((t, i) => mul(t.hours, effRates[i]!));
+  const laborBilled = sumMoney(lineAmounts);
+  const total = sumMoney([laborBilled, ...extraLines.map((l) => l.amount)]);
   const laborCost = sumMoney(time.rows.map((t) => mul(t.hours, t.cost_rate)));
 
   const docId = randomUUID();
-  const documentNumber = `TM-${proj.rows[0]!.code}-${invoiceDate.replace(/-/g, "")}`;
+  const documentNumber = `${fee === undefined ? "TM" : "CP"}-${proj.rows[0]!.code}-${invoiceDate.replace(/-/g, "")}`;
   // Net-30 terms with a modest collection lag, so the environment's collection
   // step remits against this invoice (otherwise billed T&M never gets paid).
   const dueDate = addDays(invoiceDate, 30);
@@ -135,22 +150,33 @@ export async function billTimeAndMaterials(
        currency, subtotal, tax_total, total, created_by, memo, custom)
     values (${docId}, ${world.orgId}, 'customer_invoice', 'draft', ${documentNumber}, ${customerId}, ${invoiceDate},
             ${dueDate}, ${expectedPayDate}, ${world.currency}, ${total}, '0.00', ${total}, ${world.actors.arClerk},
-            ${`T&M billing — ${proj.rows[0]!.name}`},
+            ${opts.memo ?? `T&M billing — ${proj.rows[0]!.name}`},
             ${JSON.stringify({ sim: { tm: true, projectId, payFraction: "1" } })}::jsonb)`);
 
   const lineIds: { lineId: string; timeEntryId: string }[] = [];
+  let lineNo = 0;
   for (let i = 0; i < time.rows.length; i++) {
     const t = time.rows[i]!;
+    const rate = effRates[i]!;
     const lineId = randomUUID();
     await db.execute(sql`
       insert into document_lines
         (id, org_id, document_id, line_number, account_id, description, quantity, unit_price, amount, tax_amount,
          project_id, time_entry_id, time_type_id, employee_id, bill_rate, is_billable)
-      values (${lineId}, ${world.orgId}, ${docId}, ${i + 1}, ${world.accounts.revenueService},
-              ${`Labor — ${empName.get(t.employee_party_id) ?? "crew"}: ${t.hours}h @ ${t.bill_rate}/hr`},
-              ${t.hours}, ${t.bill_rate}, ${lineAmounts[i]}, '0.00',
-              ${projectId}, ${t.id}, ${t.time_type_id}, ${t.employee_party_id}, ${t.bill_rate}, true)`);
+      values (${lineId}, ${world.orgId}, ${docId}, ${++lineNo}, ${world.accounts.revenueService},
+              ${`Labor — ${empName.get(t.employee_party_id) ?? "crew"}: ${t.hours}h @ ${rate}/hr`},
+              ${t.hours}, ${rate}, ${lineAmounts[i]}, '0.00',
+              ${projectId}, ${t.id}, ${t.time_type_id}, ${t.employee_party_id}, ${rate}, true)`);
     lineIds.push({ lineId, timeEntryId: t.id });
+  }
+  // Non-time revenue lines: equipment at day rate, materials at markup, etc.
+  for (const ex of extraLines) {
+    await db.execute(sql`
+      insert into document_lines
+        (id, org_id, document_id, line_number, account_id, description, quantity, unit_price, amount, tax_amount,
+         project_id, is_billable)
+      values (${randomUUID()}, ${world.orgId}, ${docId}, ${++lineNo}, ${ex.accountId}, ${ex.description},
+              ${ex.quantity ?? "1"}, ${ex.unitPrice ?? ex.amount}, ${ex.amount}, '0.00', ${projectId}, true)`);
   }
 
   await postDocument(docId, postingDeps(world));
@@ -162,5 +188,5 @@ export async function billTimeAndMaterials(
        where id = ${timeEntryId} and org_id = ${world.orgId}`);
   }
 
-  return { invoiceId: docId, documentNumber, billed: total, laborCost, lines: time.rows.length };
+  return { invoiceId: docId, documentNumber, billed: total, laborCost, lines: lineNo };
 }
