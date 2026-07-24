@@ -3,10 +3,11 @@ import { db } from "../db.ts";
 import { createPaymentDocument } from "../payments.ts";
 import { createScriptJournal } from "../journal-writes.ts";
 import { add, cmp, mulDecimal, neg, sum } from "../money.ts";
-import { addDays, isWeekend, isMonthEnd } from "./manifest.ts";
+import { addDays, isWeekend, isMonthEnd, dayOfMonth } from "./manifest.ts";
 import { mark, nextNumber, type SimContext } from "./context.ts";
+import type { SimJob } from "./world.ts";
 import { createDraftDocument, collectibleOpenItems } from "./activities/documents.ts";
-import { isBottomUp, isLaborBased, logDailyBillableTime, monthEndLaborAndPayroll } from "./bottomup.ts";
+import { isBottomUp, isLaborBased, logDailyBillableTime, monthEndLaborAndPayroll, hasJobPortfolio, logDailyCrewTime, monthEndConstructionCosts } from "./bottomup.ts";
 import type { Rng } from "./rng.ts";
 import type { SimCustomer } from "./world.ts";
 
@@ -55,11 +56,18 @@ export async function generateDay(ctx: SimContext): Promise<DayEvents> {
   const rng = ctx.rng.stream(`gen:${ctx.simDate}`);
   const events: DayEvents = { billsArrived: 0, invoicesPrepared: 0, paymentsArrived: 0 };
 
-  // 1. Vendor bills arrive → AP inbox (draft vendor_bill).
-  const billCount = sampleCount(rng, ctx.profile.cadence.billsPerDay, weekend);
+  // 1. Overhead vendor bills arrive → AP inbox (draft vendor_bill). Job-cost
+  // vendors (materials/subs/equipment rental) are EXCLUDED here — they only bill
+  // job-tagged via generateJobCostBills, so job costs never enter the ledger
+  // untagged and unbillable.
+  const jobCostCats = new Set(["materials", "subcontractor", "equipmentRental"]);
+  const overheadVendors = ctx.world.jobs.length > 0
+    ? ctx.world.vendors.filter((v) => !v.expenseCategories.some((c) => jobCostCats.has(c)))
+    : ctx.world.vendors;
+  const billCount = overheadVendors.length === 0 ? 0 : sampleCount(rng, ctx.profile.cadence.billsPerDay, weekend);
   for (let i = 0; i < billCount; i++) {
     const r = rng.stream(`bill:${i}`);
-    const vendor = r.pick(ctx.world.vendors);
+    const vendor = r.pick(overheadVendors);
     const category = r.pick(vendor.expenseCategories);
     const accountId = ctx.world.accounts[category] ?? ctx.world.accounts.materials!;
     await createDraftDocument(ctx.world, {
@@ -78,11 +86,27 @@ export async function generateDay(ctx: SimContext): Promise<DayEvents> {
   }
   if (events.billsArrived > 0) mark(ctx, "bill_arrived");
 
+  // 1b. Job-cost vendor bills — materials, subcontractors, and outside equipment
+  // rentals arrive tagged to specific jobs (real construction job costing through
+  // the AP cycle). These post to the ledger project-tagged, so the PM autopilot
+  // bills each job off its ACTUAL posted cost, to the penny.
+  await generateJobCostBills(ctx);
+
+  // 1c. Crew expense reports — per-diems, travel, meals, small tools — costed to
+  // the job they were incurred on (real expense_report documents, employee-payable
+  // subledger). These job-tagged costs are reimbursed to the crew and billed out
+  // to the customer at a markup on T&M work.
+  await generateExpenseReports(ctx, rng, weekend);
+
   // 2. Revenue driver. Bottom-up companies (workforce + engagements) log billable
   // TIME each day — revenue emerges when that time is billed. Others prepare draft
   // invoices directly.
   if (isBottomUp(ctx)) {
     await logDailyBillableTime(ctx);
+  } else if (hasJobPortfolio(ctx)) {
+    // Construction: crews log field-ticket time against the job portfolio. Revenue
+    // emerges when the PM autopilot bills each job (per method) monthly.
+    await logDailyCrewTime(ctx);
   } else {
     const invCount = sampleCount(rng, ctx.profile.cadence.invoicesPerDay, weekend);
     for (let i = 0; i < invCount; i++) {
@@ -161,6 +185,8 @@ export async function generateDay(ctx: SimContext): Promise<DayEvents> {
   if (isMonthEnd(ctx.simDate)) {
     if (isLaborBased(ctx)) await monthEndLaborAndPayroll(ctx);
     else if (ctx.profile.economics) await postMonthlyLaborAndCogs(ctx);
+    // Non-labor job costs (materials consumed + equipment depreciation).
+    if (hasJobPortfolio(ctx)) await monthEndConstructionCosts(ctx);
   }
 
   return events;
@@ -210,4 +236,113 @@ async function postMonthlyLaborAndCogs(ctx: SimContext): Promise<void> {
     { post: true },
   );
   mark(ctx, "payroll_run");
+}
+
+/**
+ * Materials, subcontractor, and outside-equipment-rental vendor bills arrive
+ * tagged to jobs across four checkpoints a month. Each bill is a REAL draft
+ * vendor_bill (posted + paid by the AP cycle) whose line carries the job's
+ * project_id, so the cost lands in the ledger project-tagged. Sized so a job's
+ * monthly purchases ≈ its `monthlyMaterials` budget, split materials/subs/rentals.
+ */
+async function generateJobCostBills(ctx: SimContext): Promise<number> {
+  if (isWeekend(ctx.simDate) || ctx.world.jobs.length === 0) return 0;
+  if (![4, 11, 18, 25].includes(dayOfMonth(ctx.simDate))) return 0;
+  const a = ctx.world.accounts;
+  const byCat = (cat: string) => ctx.world.vendors.filter((v) => v.expenseCategories.includes(cat));
+  const matV = byCat("materials");
+  const subV = byCat("subcontractor");
+  const rentV = byCat("equipmentRental");
+  const rng = ctx.rng.stream(`jobcost:${ctx.simDate}`);
+  let count = 0;
+  for (const job of ctx.world.jobs) {
+    if (job.monthlyMaterials <= 0) continue;
+    const r = rng.stream(job.id);
+    const perCk = job.monthlyMaterials / 4;
+    if (matV.length && a.materials) {
+      const amt = perCk * 0.65 * r.float(0.7, 1.3);
+      if (amt > 50) { await mkJobBill(ctx, r.pick(matV), a.materials, job, "materials", amt); count++; }
+    }
+    if (subV.length && a.subcontractor && r.chance(0.5)) {
+      const amt = perCk * 0.5 * r.float(0.6, 1.4);
+      if (amt > 50) { await mkJobBill(ctx, r.pick(subV), a.subcontractor, job, "subcontractor", amt); count++; }
+    }
+    if (job.equipment && rentV.length && a.equipmentRental && r.chance(0.35)) {
+      const amt = perCk * 0.3 * r.float(0.5, 1.2);
+      if (amt > 50) { await mkJobBill(ctx, r.pick(rentV), a.equipmentRental, job, "equipmentRental", amt); count++; }
+    }
+  }
+  if (count > 0) mark(ctx, "bill_arrived");
+  return count;
+}
+
+/**
+ * Crew members file expense reports for job-incurred costs — per diems, mileage,
+ * meals, small tools. Each is a real draft `expense_report` whose lines are tagged
+ * to the job (project_id) and hit the Job Cost — Travel & Per Diem account, so the
+ * cost is billable and reimbursable. The environment approves + reimburses them.
+ */
+async function generateExpenseReports(ctx: SimContext, rng: SimContext["rng"], weekend: boolean): Promise<number> {
+  const a = ctx.world.accounts;
+  if (ctx.world.jobs.length === 0 || ctx.world.employees.length === 0 || !a.jobTravel) return 0;
+  const count = sampleCount(rng, ctx.profile.cadence.expenseReportsPerDay, weekend);
+  const kinds: [string, number, number][] = [
+    ["Per diem", 45, 75], ["Mileage & fuel", 30, 220], ["Job-site meals (crew)", 60, 340],
+    ["Small tools & consumables", 40, 480], ["Lodging (out-of-town job)", 120, 620],
+  ];
+  const weights = ctx.world.jobs.map((j) => Math.max(1, j.crewSize));
+  const totalW = weights.reduce((x, y) => x + y, 0);
+  let made = 0;
+  for (let i = 0; i < count; i++) {
+    const r = rng.stream(`exp:${i}`);
+    const emp = r.pick(ctx.world.employees);
+    // Weighted job pick (crew is where the work — and the expense — is).
+    let x = r.float(0, totalW);
+    let idx = 0;
+    while (idx < weights.length - 1 && x > weights[idx]!) { x -= weights[idx]!; idx++; }
+    const job = ctx.world.jobs[idx]!;
+    const nLines = 1 + (r.chance(0.4) ? 1 : 0);
+    const lines: { accountId: string; description: string; amount: string; projectId: string }[] = [];
+    for (let k = 0; k < nLines; k++) {
+      const [label, lo, hi] = r.pick(kinds);
+      lines.push({ accountId: a.jobTravel!, description: `${label} — ${job.code}`, amount: r.money(lo, hi), projectId: job.id });
+    }
+    await createDraftDocument(ctx.world, {
+      kind: "expense_report",
+      documentNumber: nextNumber(ctx, "EXP"),
+      partyId: emp.id,
+      documentDate: ctx.simDate,
+      dueDate: addDays(ctx.simDate, 14),
+      createdBy: ctx.world.actors.apClerk,
+      currency: ctx.world.currency,
+      memo: `Expense report — ${emp.name}`,
+      custom: { sim: { source: "generator", expense: true, projectId: job.id } },
+      lines,
+    });
+    made++;
+  }
+  if (made > 0) mark(ctx, "expense_report");
+  return made;
+}
+
+async function mkJobBill(
+  ctx: SimContext,
+  vendor: SimContext["world"]["vendors"][number],
+  accountId: string,
+  job: SimJob,
+  category: string,
+  amount: number,
+): Promise<void> {
+  await createDraftDocument(ctx.world, {
+    kind: "vendor_bill",
+    documentNumber: nextNumber(ctx, "BILL"),
+    partyId: vendor.id,
+    documentDate: ctx.simDate,
+    dueDate: addDays(ctx.simDate, vendor.termDays),
+    createdBy: ctx.world.actors.apClerk,
+    currency: ctx.world.currency,
+    memo: `${category} — ${job.name}`,
+    custom: { sim: { source: "generator", category, projectId: job.id } },
+    lines: [{ accountId, description: `${category} — ${job.code}`, amount: amount.toFixed(2), projectId: job.id }],
+  });
 }

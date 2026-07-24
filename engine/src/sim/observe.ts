@@ -24,6 +24,15 @@ export async function apInbox(world: SimOrg) {
      order by d.due_date nulls last, d.total desc`);
 }
 
+/** Draft expense reports awaiting approval/posting (the expense inbox). */
+export async function expenseInbox(world: SimOrg) {
+  return rows(sql`
+    select d.id, d.document_number as number, p.display_name as employee, d.total, d.document_date, d.party_id
+      from documents d join parties p on p.id = d.party_id
+     where d.org_id = ${world.orgId} and d.kind = 'expense_report' and d.status = 'draft'
+     order by d.document_date`);
+}
+
 /** Open (posted, unpaid) AP items by vendor — what a pay run would consider. */
 export async function apOpen(world: SimOrg) {
   const out: { vendor: string; vendorId: string; lineId: string; documentId: string; open: string; dueDate: string | null }[] = [];

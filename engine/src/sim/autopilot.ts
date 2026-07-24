@@ -5,6 +5,7 @@ import * as observe from "./observe.ts";
 import * as ops from "./ops.ts";
 import * as opsTm from "./ops-tm.ts";
 import { autopilotConstruction } from "./construction-autopilot.ts";
+import { autopilotSaas } from "./saas-autopilot.ts";
 import type { SimOrg } from "./world.ts";
 import type { RunManifest } from "./manifest.ts";
 import type { Profile } from "./profiles/index.ts";
@@ -65,6 +66,31 @@ export async function autopilotDay(profile: Profile, world: SimOrg, manifest: Ru
     } catch (e) { console.error(`[autopilot ${today}] pay-vendor skipped: ${(e as Error).message}`); }
   }
 
+  // --- Expense reports: approve/post the crew's job-tagged reports, then
+  // reimburse each employee (their Employee-Reimbursements open items) ------
+  const expInbox = (await observe.expenseInbox(world)) as { id: string; party_id: string }[];
+  const employeesWithExpenses = new Set<string>();
+  for (const exp of expInbox) {
+    await db.execute(sql`
+      update documents set document_date = ${today}
+       where id = ${exp.id} and org_id = ${world.orgId} and status = 'draft' and document_date < ${today}`);
+    try {
+      await ops.postBill(world, exp.id);
+      recordCoverage(manifest, "expense_report");
+      employeesWithExpenses.add(exp.party_id);
+    } catch (e) { console.error(`[autopilot ${today}] post-expense skipped: ${(e as Error).message}`); }
+  }
+  // Reimburse weekly (Fridays) and at month-end so the payable doesn't accrue.
+  if (new Date(`${today}T00:00:00Z`).getUTCDay() === 5 || isMonthEnd(today)) {
+    const empIds = new Set<string>([...employeesWithExpenses, ...world.employees.map((e) => e.id)]);
+    for (const empId of empIds) {
+      try {
+        const res = await ops.reimburseEmployee(world, empId, world.actors.apClerk, today);
+        if (res) recordCoverage(manifest, "expense_reimbursement");
+      } catch (e) { console.error(`[autopilot ${today}] reimburse skipped: ${(e as Error).message}`); }
+    }
+  }
+
   // --- AR: issue prepared invoices, apply the suggested receipts ---------
   const arIn = (await observe.arInbox(world)) as { id: string }[];
   for (const inv of arIn) {
@@ -98,8 +124,27 @@ export async function autopilotDay(profile: Profile, world: SimOrg, manifest: Ru
   }
 
   // --- Construction PM: drive the job portfolio (all billing methods) mid-month ----
-  const con = await autopilotConstruction(world, today);
-  if (con.actions > 0) recordCoverage(manifest, "construction_billing");
+  const con = await autopilotConstruction(profile, world, today);
+  if (con.actions > 0) {
+    recordCoverage(manifest, "construction_billing");
+    recordCoverage(manifest, "customer_invoice"); // AIA draws / milestones / T&M all post customer invoices
+  }
+
+  // --- SaaS RevOps: recurring billing → deferred revenue → recognition, dunning,
+  // expansion/churn (all through the real engines) --------------------------
+  if (world.subscriptions.length > 0) {
+    const saas = await autopilotSaas(profile, world, today);
+    // Obligations are built only from freshly-billed subscription invoices, so they
+    // are the reliable signal that recurring billing fired (robust to resume, where
+    // a claimed subscription's `posted` count can read 0 on the resumed day).
+    if (saas.billed > 0 || saas.obligationsBuilt > 0) {
+      recordCoverage(manifest, "subscription_billing");
+      recordCoverage(manifest, "customer_invoice");
+    }
+    if (saas.recognized > 0) recordCoverage(manifest, "revenue_recognition");
+    if (saas.dunned > 0) recordCoverage(manifest, "dunning");
+    if (saas.changed > 0) recordCoverage(manifest, "subscription_change");
+  }
 
   // --- Bottom-up: bill each engagement's accumulated billable time at month-end ----
   if (isMonthEnd(today) && world.engagements.length > 0) {

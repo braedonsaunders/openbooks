@@ -52,6 +52,66 @@ export interface Cadence {
 /** A chart-of-accounts entry: [semanticKey, number, name, accountType]. */
 export type CoaEntry = [string, string, string, string];
 
+/**
+ * A SaaS subscription plan. Each becomes a `subscription_plans` row backed by a
+ * service `item` that carries a straight-line recognition rule spanning `termMonths`
+ * (1 = monthly plan recognized in-month; 12 = annual plan billed up-front and
+ * recognized ratably over the year — the classic deferred-revenue case). Billing
+ * runs through the real recurring-billing engine; revenue drains deferred → earned
+ * via the real revenue-recognition engine.
+ */
+export interface PlanSpec {
+  key: string;
+  name: string;
+  /** Price per billing period (monthly plans: per month; annual: per year). */
+  amount: number;
+  interval: "monthly" | "annually";
+  /** Recognition term in months (1 for monthly, 12 for annual). */
+  termMonths: number;
+}
+
+/** A cohort of subscribers on a plan, opened at provisioning (seat count varies). */
+export interface SubscriberSpec {
+  customer: string;
+  plan: string;
+  /** Seats/quantity. */
+  quantity: number;
+}
+
+/** The five governed construction billing methods (project_types keys). */
+export type BillingMethod =
+  | "time_and_materials"
+  | "schedule_of_values"
+  | "fixed_price"
+  | "not_to_exceed"
+  | "cost_plus";
+
+/**
+ * A construction job in the seeded portfolio. The company runs a MIX of billing
+ * methods concurrently (like a real GC): T&M and NTE jobs bill accumulated crew
+ * time + equipment + materials; SOV jobs run AIA progress draws with retainage;
+ * fixed-price jobs bill milestones; cost-plus bills cost + a fee. Crews log field
+ * tickets against every active job daily, so labor cost — and thus margin —
+ * emerges bottom-up regardless of how the job is billed.
+ */
+export interface JobSpec {
+  /** Customer this job is for (matched by name against the profile's customers). */
+  customer: string;
+  name: string;
+  code: string;
+  method: BillingMethod;
+  /** Contract/NTE ceiling or fixed price (fixed_price / not_to_exceed / cost_plus fee base). */
+  contractValue?: number;
+  /** G703 schedule-of-values lines (schedule_of_values jobs). Σ = contract. */
+  sovLines?: { description: string; scheduledValue: number }[];
+  /** Crew headcount assigned to this job (drives daily labor volume). Default 3. */
+  crewSize?: number;
+  /** Does this job put owned equipment on site (billed at a day rate on T&M work)? */
+  equipment?: boolean;
+  /** Monthly consumed material cost, billed at a markup on T&M jobs. Default 0. */
+  monthlyMaterials?: number;
+}
+
 export interface Profile {
   id: string;
   name: string;
@@ -92,6 +152,37 @@ export interface Profile {
   workforce?: { name: string; costRate: string; billRate: string }[];
   /** How many active engagements/jobs to open per customer (bottom-up billing). */
   engagementsPerCustomer?: number;
+  /**
+   * A construction company's job portfolio — a mix of billing methods run
+   * concurrently and driven bottom-up (crews log field tickets against each job
+   * daily; the PM autopilot bills each per its method monthly). When present, this
+   * is the ONLY source of revenue (set cadence.invoicesPerDay to 0), so the P&L
+   * margin emerges from rates × utilization − overhead, at real GC fidelity.
+   */
+  jobPortfolio?: JobSpec[];
+  /** Billed equipment day-rate per crew-day on jobs that put equipment on site. */
+  equipmentDayRate?: number;
+  /** Markup on consumed materials when billed on T&M work (e.g. 0.15 = +15%). */
+  materialMarkup?: number;
+  /**
+   * SaaS subscription plans + the subscriber base opened at provisioning. When
+   * present, the company runs on RECURRING revenue: the recurring-billing engine
+   * bills subscriptions on their cycle, invoices park in deferred revenue, and the
+   * revenue-recognition engine drains deferred → earned ratably. Churn/expansion,
+   * dunning, and usage overages ride on top.
+   */
+  subscriptionPlans?: PlanSpec[];
+  subscribers?: SubscriberSpec[];
+  /** Fraction of subscribers billed monthly for usage overages (0-1). */
+  usageBillingRate?: number;
+  /** SaaS fixed monthly payroll/opex (R&D + S&M + G&A), booked month-end. */
+  saasMonthlyPayroll?: number;
+  /**
+   * Monthly office/PM/admin overhead payroll — the staff a contractor carries
+   * beyond the billable field crew (project managers, estimators, admin, yard).
+   * Booked as a month-end operating expense so company NET margin lands realistic
+   * (~10%) even though job-level GROSS margin is high (~45%). */
+  officeOverheadPerMonth?: number;
   /** Target billable utilization (0-1): fraction of an 8h day a worker bills. */
   utilization?: number;
   /** ISO 4217-ish description only; the CoA is fixed but categories vary by use. */

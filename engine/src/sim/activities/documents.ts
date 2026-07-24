@@ -113,8 +113,9 @@ export async function collectibleOpenItems(
   orgId: string,
   partyId: string,
   side: "ar" | "ap",
+  kindsOverride?: string[],
 ): Promise<OpenItemRow[]> {
-  const kinds = side === "ar" ? ["customer_invoice", "customer_credit"] : ["vendor_bill", "vendor_credit"];
+  const kinds = kindsOverride ?? (side === "ar" ? ["customer_invoice", "customer_credit"] : ["vendor_bill", "vendor_credit"]);
   const rows = (await db.execute(sql`
     with lines as (
       select l.id as line_id, d.id as document_id, d.kind, d.due_date, d.expected_pay_date, d.custom, l.amount,
