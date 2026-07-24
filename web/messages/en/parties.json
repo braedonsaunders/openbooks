@@ -29,6 +29,8 @@
     "tabs": {
       "ariaLabel": "Party record sections",
       "overview": "Overview",
+      "invoicing": "Invoicing",
+      "pricing": "Pricing",
       "transactions": "Transactions",
       "activities": "Activities",
       "contacts": "Contacts",

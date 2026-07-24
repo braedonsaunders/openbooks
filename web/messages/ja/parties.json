@@ -34,7 +34,9 @@
       "contacts": "連絡先",
       "addresses": "住所",
       "accounting": "会計",
-      "wages": "賃金レート"
+      "wages": "賃金レート",
+      "invoicing": "請求",
+      "pricing": "価格"
     },
     "wages": {
       "title": "賃金レート",
@@ -175,5 +177,25 @@
       "employee": "従業員の詳細"
     }
   },
-  "rateBookAssignments": { "title": "レートブック割当", "hint": { "customer": "この顧客の料金に適用する有効日付きレートブックです。", "project": "このプロジェクトの料金に適用する有効日付きレートブックです。" }, "new": "新しい割当", "rateBook": "レートブック", "effectiveFrom": "開始日", "effectiveTo": "終了日", "dateBasis": "スケジュール日", "dateBasisOptions": { "usage_date": "利用日または取引日", "project_start": "プロジェクト開始日" }, "empty": "割当なし — 組織の既定値を使用します。", "noBooks": "先にレートブックを作成してください。", "rateBookRequired": "レートブックを選択", "created": "レートブックを割り当てました", "confirmDelete": "この割当を削除しますか？" }
+  "rateBookAssignments": {
+    "title": "レートブック割当",
+    "hint": {
+      "customer": "この顧客の料金に適用する有効日付きレートブックです。",
+      "project": "このプロジェクトの料金に適用する有効日付きレートブックです。"
+    },
+    "new": "新しい割当",
+    "rateBook": "レートブック",
+    "effectiveFrom": "開始日",
+    "effectiveTo": "終了日",
+    "dateBasis": "スケジュール日",
+    "dateBasisOptions": {
+      "usage_date": "利用日または取引日",
+      "project_start": "プロジェクト開始日"
+    },
+    "empty": "割当なし — 組織の既定値を使用します。",
+    "noBooks": "先にレートブックを作成してください。",
+    "rateBookRequired": "レートブックを選択",
+    "created": "レートブックを割り当てました",
+    "confirmDelete": "この割当を削除しますか？"
+  }
 }

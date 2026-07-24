@@ -34,7 +34,9 @@
       "contacts": "Contactos",
       "addresses": "Direcciones",
       "accounting": "Contabilidad",
-      "wages": "Tarifas salariales"
+      "wages": "Tarifas salariales",
+      "invoicing": "Facturación",
+      "pricing": "Precios"
     },
     "wages": {
       "title": "Tarifas salariales",
@@ -178,5 +180,44 @@
     "customForm": "Formulario del registro",
     "manageForms": "Personalizar el formulario"
   },
-  "rateBookAssignments": { "title": "Precios de mano de obra", "hint": { "customer": "Tarjetas de tarifas laborales con vigencia asignadas a este cliente.", "project": "Tarjetas de tarifas laborales con vigencia asignadas a este proyecto." }, "new": "Asignar tarjeta", "rateBook": "Tarjeta de tarifa laboral", "effectiveFrom": "Vigente desde", "effectiveTo": "Vigente hasta", "dateBasis": "Fecha del calendario", "dateBasisOptions": { "usage_date": "Fecha de uso o transacción", "project_start": "Fecha de inicio del proyecto" }, "empty": "No hay una tarjeta asignada; se usa la predeterminada de la organización.", "noBooks": "Cree primero una tarjeta de precios de mano de obra.", "rateBookRequired": "Elija una tarjeta de tarifa", "created": "Tarjeta de tarifa asignada", "confirmDelete": "¿Quitar esta asignación?", "search": "Buscar tarjetas asignadas…", "statusFilter": "Estado de la asignación", "status": { "active": "Activas", "inactive": "Inactivas", "all": "Todos los estados" }, "openPricing": "Abrir precios", "count": "{count, plural, one {# asignación} other {# asignaciones}}", "errors": { "invalidRecord": "Elija un registro válido.", "scope": "Elija exactamente un cliente o un proyecto.", "dates": "Elija fechas de vigencia válidas.", "dateOrder": "La fecha final no puede ser anterior a la inicial.", "dateBasis": "Elija una fecha de calendario válida.", "references": "Elija registros de esta organización.", "overlap": "Este registro ya tiene precios activos durante parte de ese período.", "save": "No se pudo guardar la asignación." } }
+  "rateBookAssignments": {
+    "title": "Precios de mano de obra",
+    "hint": {
+      "customer": "Tarjetas de tarifas laborales con vigencia asignadas a este cliente.",
+      "project": "Tarjetas de tarifas laborales con vigencia asignadas a este proyecto."
+    },
+    "new": "Asignar tarjeta",
+    "rateBook": "Tarjeta de tarifa laboral",
+    "effectiveFrom": "Vigente desde",
+    "effectiveTo": "Vigente hasta",
+    "dateBasis": "Fecha del calendario",
+    "dateBasisOptions": {
+      "usage_date": "Fecha de uso o transacción",
+      "project_start": "Fecha de inicio del proyecto"
+    },
+    "empty": "No hay una tarjeta asignada; se usa la predeterminada de la organización.",
+    "noBooks": "Cree primero una tarjeta de precios de mano de obra.",
+    "rateBookRequired": "Elija una tarjeta de tarifa",
+    "created": "Tarjeta de tarifa asignada",
+    "confirmDelete": "¿Quitar esta asignación?",
+    "search": "Buscar tarjetas asignadas…",
+    "statusFilter": "Estado de la asignación",
+    "status": {
+      "active": "Activas",
+      "inactive": "Inactivas",
+      "all": "Todos los estados"
+    },
+    "openPricing": "Abrir precios",
+    "count": "{count, plural, one {# asignación} other {# asignaciones}}",
+    "errors": {
+      "invalidRecord": "Elija un registro válido.",
+      "scope": "Elija exactamente un cliente o un proyecto.",
+      "dates": "Elija fechas de vigencia válidas.",
+      "dateOrder": "La fecha final no puede ser anterior a la inicial.",
+      "dateBasis": "Elija una fecha de calendario válida.",
+      "references": "Elija registros de esta organización.",
+      "overlap": "Este registro ya tiene precios activos durante parte de ese período.",
+      "save": "No se pudo guardar la asignación."
+    }
+  }
 }

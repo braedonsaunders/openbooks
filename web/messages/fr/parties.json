@@ -34,7 +34,9 @@
       "contacts": "Contacts",
       "addresses": "Adresses",
       "accounting": "Comptabilité",
-      "wages": "Taux de rémunération"
+      "wages": "Taux de rémunération",
+      "invoicing": "Facturation",
+      "pricing": "Tarification"
     },
     "wages": {
       "title": "Taux de rémunération",
@@ -178,5 +180,44 @@
     "customForm": "Formulaire du dossier",
     "manageForms": "Personnaliser le formulaire"
   },
-  "rateBookAssignments": { "title": "Tarification de la main-d’œuvre", "hint": { "customer": "Fiches de taux de main-d’œuvre datées affectées à ce client.", "project": "Fiches de taux de main-d’œuvre datées affectées à ce projet." }, "new": "Affecter une fiche", "rateBook": "Fiche de taux de main-d’œuvre", "effectiveFrom": "En vigueur du", "effectiveTo": "En vigueur au", "dateBasis": "Date de la grille", "dateBasisOptions": { "usage_date": "Date d’utilisation ou de transaction", "project_start": "Date de début du projet" }, "empty": "Aucune fiche affectée — la valeur par défaut de l’organisation s’applique.", "noBooks": "Créez d’abord une fiche de tarification de la main-d’œuvre.", "rateBookRequired": "Choisissez une fiche de taux", "created": "Fiche de taux affectée", "confirmDelete": "Retirer cette affectation ?", "search": "Rechercher les fiches affectées…", "statusFilter": "Statut de l’affectation", "status": { "active": "Actives", "inactive": "Inactives", "all": "Tous les statuts" }, "openPricing": "Ouvrir la tarification", "count": "{count, plural, one {# affectation} other {# affectations}}", "errors": { "invalidRecord": "Choisissez un dossier valide.", "scope": "Choisissez exactement un client ou un projet.", "dates": "Choisissez des dates d’effet valides.", "dateOrder": "La date de fin ne peut pas précéder la date de début.", "dateBasis": "Choisissez une date de grille valide.", "references": "Choisissez des dossiers de cette organisation.", "overlap": "Ce dossier possède déjà une tarification active pour une partie de cette période.", "save": "Impossible d’enregistrer l’affectation." } }
+  "rateBookAssignments": {
+    "title": "Tarification de la main-d’œuvre",
+    "hint": {
+      "customer": "Fiches de taux de main-d’œuvre datées affectées à ce client.",
+      "project": "Fiches de taux de main-d’œuvre datées affectées à ce projet."
+    },
+    "new": "Affecter une fiche",
+    "rateBook": "Fiche de taux de main-d’œuvre",
+    "effectiveFrom": "En vigueur du",
+    "effectiveTo": "En vigueur au",
+    "dateBasis": "Date de la grille",
+    "dateBasisOptions": {
+      "usage_date": "Date d’utilisation ou de transaction",
+      "project_start": "Date de début du projet"
+    },
+    "empty": "Aucune fiche affectée — la valeur par défaut de l’organisation s’applique.",
+    "noBooks": "Créez d’abord une fiche de tarification de la main-d’œuvre.",
+    "rateBookRequired": "Choisissez une fiche de taux",
+    "created": "Fiche de taux affectée",
+    "confirmDelete": "Retirer cette affectation ?",
+    "search": "Rechercher les fiches affectées…",
+    "statusFilter": "Statut de l’affectation",
+    "status": {
+      "active": "Actives",
+      "inactive": "Inactives",
+      "all": "Tous les statuts"
+    },
+    "openPricing": "Ouvrir la tarification",
+    "count": "{count, plural, one {# affectation} other {# affectations}}",
+    "errors": {
+      "invalidRecord": "Choisissez un dossier valide.",
+      "scope": "Choisissez exactement un client ou un projet.",
+      "dates": "Choisissez des dates d’effet valides.",
+      "dateOrder": "La date de fin ne peut pas précéder la date de début.",
+      "dateBasis": "Choisissez une date de grille valide.",
+      "references": "Choisissez des dossiers de cette organisation.",
+      "overlap": "Ce dossier possède déjà une tarification active pour une partie de cette période.",
+      "save": "Impossible d’enregistrer l’affectation."
+    }
+  }
 }

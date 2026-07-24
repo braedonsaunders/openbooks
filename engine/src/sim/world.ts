@@ -308,6 +308,9 @@ export async function provisionOrg(profile: Profile, window: { startDate: string
       await db.execute(sql`
         insert into parties (id, org_id, kind, display_name, is_active, custom)
         values (${id}, ${orgId}, 'vendor', ${v.name}, true, '{}'::jsonb)`);
+      // A party is a vendor because it carries a vendor role — this is what the
+      // vendor list (and every role-scoped view) filters on.
+      await db.execute(sql`insert into vendor_roles (id, org_id, party_id) values (${randomUUID()}, ${orgId}, ${id})`);
       vendors.push({ id, ...v });
     }
     const customers: SimCustomer[] = [];
@@ -316,6 +319,7 @@ export async function provisionOrg(profile: Profile, window: { startDate: string
       await db.execute(sql`
         insert into parties (id, org_id, kind, display_name, is_active, custom)
         values (${id}, ${orgId}, 'customer', ${c.name}, true, '{}'::jsonb)`);
+      await db.execute(sql`insert into customer_roles (id, org_id, party_id) values (${randomUUID()}, ${orgId}, ${id})`);
       customers.push({ id, ...c });
     }
 
@@ -352,6 +356,7 @@ export async function provisionOrg(profile: Profile, window: { startDate: string
         await db.execute(sql`
           insert into parties (id, org_id, kind, display_name, is_active, custom)
           values (${id}, ${orgId}, 'employee', ${w.name}, true, '{}'::jsonb)`);
+        await db.execute(sql`insert into employee_roles (id, org_id, party_id) values (${randomUUID()}, ${orgId}, ${id})`);
         employees.push({ id, name: w.name, costRate: w.costRate, billRate: w.billRate });
       }
       timeTypeId = randomUUID();

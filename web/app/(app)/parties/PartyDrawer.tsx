@@ -121,7 +121,7 @@ const emptyContact = (): ContactRow => ({
   mobilePhone: '', isPrimary: 'false', isActive: 'true',
 })
 
-export type PartyTab = 'overview' | 'transactions' | 'activities' | 'contacts' | 'addresses' | 'accounting' | 'wages'
+export type PartyTab = 'overview' | 'invoicing' | 'pricing' | 'transactions' | 'activities' | 'contacts' | 'addresses' | 'accounting' | 'wages'
 
 const checkboxClass = 'h-4 w-4 rounded border-slate-300 text-teal-600 focus:ring-teal-500'
 const field = 'space-y-1.5'
@@ -519,8 +519,10 @@ export function PartyDrawer({
         const value = recordType === 'vendor' ? vendor.taxCodeId : customer.taxCodeId
         return <><Label>{label(placement, t('taxCode'))}</Label><Select value={value} onChange={(event) => recordType === 'vendor' ? setVendor({ ...vendor, taxCodeId: event.target.value }) : setCustomer({ ...customer, taxCodeId: event.target.value })} disabled={ro}><option value="">—</option>{taxCodes.map((code) => <option key={code.id} value={code.id}>{code.label ?? code.name}</option>)}</Select></>
       }
-      case 'invoicing_preference': return <div className="space-y-2"><div><h3 className="text-sm font-semibold text-slate-900 dark:text-slate-100">{label(placement, tInv('heading'))}</h3><p className="text-xs text-slate-500 dark:text-slate-400">{tInv('customerHint')}</p></div><InvoicingPreferenceFields value={invoicingPref} onChange={setInvoicingPref} disabled={ro} /></div>
-      case 'labor_pricing': return isPlaceholderName ? null : <RateBookAssignmentSection scope="customer" scopeId={String(p.id)} />
+      // Invoicing preferences + labor pricing now live on dedicated subtabs, not
+      // inline in the overview layout — see the 'invoicing' / 'pricing' tabs.
+      case 'invoicing_preference': return null
+      case 'labor_pricing': return null
       case 'payment_method': return <><Label>{label(placement, t('paymentMethod'))}</Label><Select value={vendor.paymentMethod} onChange={(event) => setVendor({ ...vendor, paymentMethod: event.target.value })} disabled={ro}><option value="">—</option>{PAYMENT_METHOD_OPTIONS.map((option) => <option key={option.value} value={option.value}>{t(option.labelKey)}</option>)}</Select></>
       case 'eft_notification_email': return <><Label>{label(placement, t('eftNotificationEmail'))}</Label><Input type="email" value={vendor.eftNotificationEmail} onChange={(event) => setVendor({ ...vendor, eftNotificationEmail: event.target.value })} disabled={ro} /></>
       case 'is_1099_or_t4a': return <label className="flex items-center gap-2 pt-7"><input type="checkbox" checked={vendor.is1099OrT4a} onChange={(event) => setVendor({ ...vendor, is1099OrT4a: event.target.checked })} disabled={ro} className={checkboxClass} /><span className="text-sm">{label(placement, t('t4aReportable'))}</span></label>
@@ -537,6 +539,10 @@ export function PartyDrawer({
   }
   const tabs: Array<{ key: PartyTab; label: string; count?: number }> = [
     { key: 'overview', label: t('tabs.overview') },
+    // Invoicing preferences + labor pricing live on their own subtabs (customers only),
+    // out of the crowded overview.
+    ...(role === 'customer' ? [{ key: 'invoicing' as const, label: t('tabs.invoicing') }] : []),
+    ...(role === 'customer' && !isPlaceholderName ? [{ key: 'pricing' as const, label: t('tabs.pricing') }] : []),
     { key: 'transactions', label: t('tabs.transactions'), count: payload.transactionSummary.count },
     ...(role === 'customer' && canReadActivities ? [{ key: 'activities' as const, label: t('tabs.activities') }] : []),
     { key: 'contacts', label: t('tabs.contacts'), count: contacts.length },
@@ -833,16 +839,6 @@ export function PartyDrawer({
                   </Select>
                 </div>
               </div>
-              <div className="mt-4 space-y-2">
-                <div>
-                  <h4 className="text-sm font-semibold text-slate-900 dark:text-slate-100">{tInv('heading')}</h4>
-                  <p className="text-xs text-slate-500 dark:text-slate-400">{tInv('customerHint')}</p>
-                </div>
-                <InvoicingPreferenceFields value={invoicingPref} onChange={setInvoicingPref} disabled={ro} />
-              </div>
-              {role === 'customer' && !isPlaceholderName ? (
-                <RateBookAssignmentSection scope="customer" scopeId={String(p.id)} />
-              ) : null}
               </>
             ) : null}
           </div>
@@ -1045,6 +1041,19 @@ export function PartyDrawer({
         </section>
 
         </>
+        ) : null}
+
+        {tab === 'invoicing' && role === 'customer' ? (
+          <section className="space-y-3">
+            <div>
+              <h3 className="text-sm font-semibold text-slate-900 dark:text-slate-100">{tInv('heading')}</h3>
+              <p className="text-xs text-slate-500 dark:text-slate-400">{tInv('customerHint')}</p>
+            </div>
+            <InvoicingPreferenceFields value={invoicingPref} onChange={setInvoicingPref} disabled={ro} />
+          </section>
+        ) : null}
+        {tab === 'pricing' && role === 'customer' && !isPlaceholderName ? (
+          <RateBookAssignmentSection scope="customer" scopeId={String(p.id)} />
         ) : null}
 
         {tab === 'transactions' ? <TransactionSublist partyId={String(p.id)} role={role} /> : null}
