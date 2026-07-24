@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, type ReactNode } from 'react'
-import { usePathname, useRouter, useSearchParams } from 'next/navigation'
+import { useSearchParams } from 'next/navigation'
 import { useTranslations } from 'next-intl'
 import { ChevronDown } from 'lucide-react'
 import { Button, Popover, UrlDrawer } from '@openbooks/ui'
@@ -50,8 +50,6 @@ export function TransactionDrawer({
   targetTable = 'documents',
 }: TransactionDrawerProps) {
   const t = useTranslations('common')
-  const pathname = usePathname()
-  const router = useRouter()
   const searchParams = useSearchParams()
   const [actionsOpen, setActionsOpen] = useState(false)
   const tabs = [
@@ -60,8 +58,14 @@ export function TransactionDrawer({
     { key: 'attachments', label: t('auditTrail.tabs.attachments') },
     { key: 'audit', label: t('auditTrail.tabs.audit') },
   ]
+  // Tab is client-local state (seeded once from the URL for deep-linking). Switching
+  // tabs must NOT navigate: a router.replace re-runs the server page and remounts the
+  // flyout (it visibly closes and reopens). The drawer is keyed per record upstream,
+  // so this re-seeds correctly when a different record opens.
   const requestedTab = searchParams.get('transactionTab')
-  const activeTab = tabs.some((tab) => tab.key === requestedTab) ? requestedTab! : 'details'
+  const [activeTab, setActiveTab] = useState(() =>
+    ['attachments', 'audit', ...detailTabs.map((d) => d.key)].includes(requestedTab ?? '') ? requestedTab! : 'details',
+  )
   const hasActions = actions != null || actionsMenuHeader != null
   const requestedReturn = searchParams.get('drawerReturn')
   const nestedReturn = requestedReturn?.startsWith('/') && !requestedReturn.startsWith('//')
@@ -85,13 +89,7 @@ export function TransactionDrawer({
               type="button"
               role="tab"
               aria-selected={activeTab === tab.key}
-              onClick={() => {
-                const next = new URLSearchParams(searchParams.toString())
-                if (tab.key === 'details') next.delete('transactionTab')
-                else next.set('transactionTab', tab.key)
-                const query = next.toString()
-                router.replace(query ? `${pathname}?${query}` : pathname, { scroll: false })
-              }}
+              onClick={() => setActiveTab(tab.key)}
               className={`border-b-2 px-3 py-3 text-sm font-medium transition-colors ${
                 activeTab === tab.key
                   ? 'border-teal-600 text-teal-700 dark:border-teal-400 dark:text-teal-300'
