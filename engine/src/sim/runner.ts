@@ -1,7 +1,8 @@
 import { execSync } from "node:child_process";
 import { randomUUID } from "node:crypto";
 import { join } from "node:path";
-import { withOrgContext } from "../db.ts";
+import { sql } from "drizzle-orm";
+import { db, withOrgContext } from "../db.ts";
 import { withSimClock } from "../clock.ts";
 import { Rng } from "./rng.ts";
 import { provisionOrg } from "./world.ts";
@@ -51,6 +52,29 @@ function persistContext(manifest: RunManifest, ctx: SimContext): void {
   manifest.rngState = ctx.rng.serialize();
   manifest.counters = ctx.counters;
   manifest.coverage = [...ctx.coverage].sort();
+}
+
+/**
+ * Make document numbering crash-safe across resume. If a `run` process dies
+ * mid-day AFTER a document insert committed but BEFORE the manifest (counter +
+ * simDate) is written, the resumed day would re-issue an already-used number and
+ * collide on documents_org_kind_number forever. Before generating a day, advance
+ * each `seq:PREFIX` counter to at least the max number already in the ledger, so
+ * the next number is always free. Must run inside an org context.
+ */
+async function reconcileNumberCounters(orgId: string, counters: Record<string, number>): Promise<void> {
+  for (const key of Object.keys(counters)) {
+    if (!key.startsWith("seq:")) continue;
+    const prefix = key.slice(4);
+    const r = (await db.execute(sql`
+      select coalesce(max((regexp_replace(document_number, '^.*-', ''))::int), 0) as mx
+        from documents
+       where org_id = ${orgId} and document_number ~ ${`^${prefix}-[0-9]+$`}`)) as unknown as {
+      rows: { mx: number }[];
+    };
+    const dbMax = Number(r.rows[0]?.mx ?? 0);
+    if (dbMax > (counters[key] ?? 0)) counters[key] = dbMax;
+  }
 }
 
 export interface ProvisionResult {
@@ -134,6 +158,8 @@ export async function dayStart(runDir: string): Promise<DayStartResult> {
   const events = await withSimClock(simDate, () =>
     withOrgContext(manifest.orgId, async () => {
       const ctx = makeContext(manifest.profileId, world, manifest, simDate);
+      // Crash-safety: never re-issue a document number already committed to the ledger.
+      await reconcileNumberCounters(manifest.orgId, ctx.counters);
       const ev = await generateDay(ctx);
       persistContext(manifest, ctx);
       return ev;
