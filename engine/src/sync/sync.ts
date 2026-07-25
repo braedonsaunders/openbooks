@@ -482,6 +482,7 @@ async function insertImportedLines(
         subsidiaryId: line.subsidiaryId,
         extraDims: line.extraDims ?? {},
         description: line.description,
+        isBillable: line.isBillable ?? false,
       })),
     )
     .returning({
