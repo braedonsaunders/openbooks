@@ -12,14 +12,25 @@
   "empty": "Choisissez une déclaration et une période, puis calculez.",
   "adjustmentAria": "Ajustement pour {label}",
   "adjustmentPlaceholder": "0,00",
-  "columns": { "line": "Ligne", "description": "Description", "amount": "Montant" },
+  "columns": {
+    "line": "Ligne",
+    "description": "Description",
+    "amount": "Montant"
+  },
   "noForms": {
     "title": "Aucune déclaration configurée",
     "description": "Importez un module de juridiction ou créez une déclaration dans Configuration → Taxes.",
     "openSetup": "Ouvrir la configuration fiscale"
   },
-  "export": { "label": "Export de travail", "pdf": "PDF de travail", "csv": "CSV de travail", "xlsx": "Excel de travail" },
-  "official": { "download": "Formulaire officiel rempli" },
+  "export": {
+    "label": "Export de travail",
+    "pdf": "PDF de travail",
+    "csv": "CSV de travail",
+    "xlsx": "Excel de travail"
+  },
+  "official": {
+    "download": "Formulaire officiel rempli"
+  },
   "submission": {
     "title": "Comment déposer cette déclaration",
     "description": "Après avoir révisé la déclaration, utilisez le canal et l’action configurés ci-dessous.",
@@ -50,8 +61,18 @@
     "save": "Enregistrer dans l’historique",
     "saving": "Enregistrement…",
     "saved": "Instantané de la déclaration enregistré",
-    "status": { "prepared": "Préparée", "filed": "Déposée" },
-    "columns": { "form": "Déclaration", "period": "Période", "version": "Version", "status": "Statut", "reference": "Référence", "saved": "Enregistrée" },
+    "status": {
+      "prepared": "Préparée",
+      "filed": "Déposée"
+    },
+    "columns": {
+      "form": "Déclaration",
+      "period": "Période",
+      "version": "Version",
+      "status": "Statut",
+      "reference": "Référence",
+      "saved": "Enregistrée"
+    },
     "drawerDescription": "du {from} au {to} · version {version}",
     "formCode": "Code de déclaration",
     "country": "Pays",
@@ -65,8 +86,89 @@
     "line": "Ligne",
     "lineDescription": "Description",
     "amount": "Montant",
-    "hash": "SHA-256 de l’instantané : {hash}"
-    ,"snapshotWatermark": "Instantané immuable enregistré · SHA-256 {hash}"
-    ,"export": { "pdf": "PDF", "xlsx": "Excel", "csv": "CSV" }
+    "hash": "SHA-256 de l’instantané : {hash}",
+    "snapshotWatermark": "Instantané immuable enregistré · SHA-256 {hash}",
+    "export": {
+      "pdf": "PDF",
+      "xlsx": "Excel",
+      "csv": "CSV"
+    }
+  },
+  "provisions": {
+    "title": "Provision d'impôt sur le résultat",
+    "description": "ASC 740 / IAS 12 — impôt exigible et différé, provision pour dépréciation et rapprochement des taux.",
+    "empty": "Aucune provision. Calculez la première provision annuelle pour commencer.",
+    "columns": {
+      "fiscalYear": "Exercice",
+      "version": "Version",
+      "status": "Statut",
+      "totalExpense": "Charge totale",
+      "effectiveRate": "Taux effectif",
+      "created": "Créée"
+    },
+    "status": {
+      "draft": "brouillon",
+      "posted": "comptabilisée",
+      "superseded": "remplacée"
+    },
+    "post": "Comptabiliser",
+    "posting": "Comptabilisation…",
+    "categories": {
+      "fixed_assets": "Immobilisations",
+      "revenue_recognition": "Reconnaissance du revenu",
+      "provisions": "Provisions",
+      "loss_carryforward": "Report déficitaire",
+      "other": "Autre"
+    },
+    "compute": {
+      "button": "Calculer la provision",
+      "title": "Calculer la provision de l'exercice",
+      "fiscalYear": "Exercice",
+      "permanent": "Différences permanentes",
+      "temporary": "Différences temporaires supplémentaires",
+      "addLine": "Ajouter une ligne",
+      "descriptionPlaceholder": "Description",
+      "lossUsed": "Report déficitaire utilisé",
+      "valuationAllowance": "Provision pour dépréciation",
+      "cancel": "Annuler",
+      "compute": "Calculer",
+      "computing": "Calcul…",
+      "categories": {
+        "fixed_assets": "Immobilisations",
+        "revenue_recognition": "Reconnaissance du revenu",
+        "provisions": "Provisions",
+        "loss_carryforward": "Report déficitaire",
+        "other": "Autre"
+      },
+      "valuationAllowanceIas12": "Ajustement de comptabilisation de l'IDA"
+    },
+    "detail": {
+      "title": "Provision {year} · v{version}",
+      "reconciliation": "Rapprochement des taux",
+      "amount": "Montant",
+      "percent": "% du résultat",
+      "pretax": "Résultat comptable avant impôt",
+      "total": "Charge d'impôt totale",
+      "taxableIncome": "Résultat imposable",
+      "currentTax": "Impôt exigible",
+      "deferredExpense": "Impôt différé (mouvement)",
+      "balances": {
+        "dta": "Impôt différé actif (brut)",
+        "dtl": "Impôt différé passif",
+        "va": "Provision pour dépréciation",
+        "vaIas12": "Ajustement de comptabilisation de l'IDA"
+      },
+      "differences": "Différences temporaires",
+      "noDifferences": "Aucune différence temporaire mesurée.",
+      "columns": {
+        "item": "Élément",
+        "bookBasis": "Base comptable",
+        "taxBasis": "Base fiscale",
+        "difference": "Différence",
+        "effect": "Effet d'impôt"
+      },
+      "auto": "auto",
+      "manual": "manuel"
+    }
   }
 }

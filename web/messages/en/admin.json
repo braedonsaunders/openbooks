@@ -595,7 +595,11 @@
       "startsIn": "Fiscal year starts in",
       "runs": "Fiscal year runs",
       "range": "{start} → {end}",
-      "warning": "Changing the start month re-labels <strong>every accounting period</strong> — their fiscal year, period number and name are re-derived from each period’s start date the moment you save. Journal entries and dates are untouched, but reports and period-close groupings will shift to the new calendar."
+      "warning": "Changing the start month re-labels <strong>every accounting period</strong> — their fiscal year, period number and name are re-derived from each period’s start date the moment you save. Journal entries and dates are untouched, but reports and period-close groupings will shift to the new calendar.",
+      "taxFramework": "Income tax framework",
+      "taxFrameworkHint": "Drives the income tax provision's recognition language (Company Settings → fiscal).",
+      "frameworkAsc740": "ASC 740 (US GAAP)",
+      "frameworkIas12": "IAS 12 (IFRS)"
     },
     "months": {
       "january": "January",
@@ -665,6 +669,26 @@
         "projectRevenue": {
           "label": "Project revenue",
           "hint": "Credited by percent-complete revenue recognition"
+        },
+        "incomeTaxExpense": {
+          "label": "Income tax expense",
+          "hint": "Debited by the income tax provision (ASC 740)"
+        },
+        "incomeTaxPayable": {
+          "label": "Income tax payable",
+          "hint": "Credited for the current tax provision"
+        },
+        "deferredTaxAsset": {
+          "label": "Deferred tax asset",
+          "hint": "Deductible temporary differences and loss carryforwards"
+        },
+        "deferredTaxLiability": {
+          "label": "Deferred tax liability",
+          "hint": "Taxable temporary differences"
+        },
+        "valuationAllowance": {
+          "label": "Valuation allowance",
+          "hint": "Contra deferred tax asset"
         }
       }
     },
@@ -1799,6 +1823,11 @@
         "title": "Information return boxes",
         "singular": "Box rule",
         "description": "Which 1099/T4A box an account’s spend belongs in. Anything unmapped falls to the vendor’s default box."
+      },
+      "income-tax-rates": {
+        "title": "Income Tax Rates",
+        "singularTitle": "Income Tax Rate",
+        "description": "Enacted income tax rates by jurisdiction, effective-dated — they drive the ASC 740 provision."
       }
     },
     "fields": {
@@ -2596,7 +2625,41 @@
       "navTitle": "Bank Feeds"
     },
     "paymentProviders": {
-      "navTitle": "Payment Providers"
+      "title": "Payment Providers",
+      "description": "Hosted checkout providers for customer payment links on invoices. Payout and fee reconciliation stays under Banking → PSP settlements.",
+      "saved": "Saved.",
+      "enableAcceptance": "Enable payment links",
+      "apiKey": "API key / secret",
+      "webhookSecret": "Webhook secret",
+      "publishableKey": "Publishable key",
+      "merchantAccount": "Merchant account",
+      "secretConfigured": "Configured — enter to replace",
+      "receiptBankAccount": "Receipt bank account",
+      "surchargeRule": "Surcharge rule",
+      "noSurcharge": "No surcharge",
+      "save": "Save",
+      "surchargeRules": "Surcharge rules",
+      "surchargeHint": "Optional processing fees added on top of the invoice total at checkout. The fee posts to the income account on receipt.",
+      "ruleName": "Name",
+      "ruleCalc": "Calculation",
+      "ruleProvider": "Provider",
+      "ruleEffective": "Effective",
+      "deactivate": "Deactivate",
+      "inactive": "inactive",
+      "percent": "Percent",
+      "fixed": "Fixed amount",
+      "cap": "Cap (optional)",
+      "allProviders": "All providers",
+      "paymentMethod": "Payment method",
+      "methodAll": "All methods",
+      "methodCard": "Card",
+      "methodBankDebit": "Bank debit",
+      "effectiveFrom": "Effective from",
+      "addRule": "Add rule",
+      "calcPercent": "Percent of invoice",
+      "calcFixed": "Fixed amount",
+      "calcBoth": "Percent + fixed",
+      "feeIncomeAccount": "Fee income account"
     },
     "wizard": {
       "skip": "Skip for now",

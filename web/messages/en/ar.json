@@ -147,5 +147,19 @@
       "recurring": "Recurring inflows (grants, rent received, subscriptions) join the forecast as categories — configure them in the <cashCockpit>Cash cockpit</cashCockpit>.",
       "documentation": "Read the accounts-receivable guide"
     }
+  },
+  "paymentLinks": {
+    "title": "Online payment links",
+    "create": "Create link",
+    "empty": "No payment links yet.",
+    "copyLink": "Copy link",
+    "copied": "Copied",
+    "void": "Void",
+    "status": {
+      "active": "active",
+      "paid": "paid",
+      "void": "void",
+      "expired": "expired"
+    }
   }
 }

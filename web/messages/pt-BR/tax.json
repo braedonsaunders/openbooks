@@ -12,14 +12,25 @@
   "empty": "Escolha uma declaração e um período e depois calcule.",
   "adjustmentAria": "Ajuste para {label}",
   "adjustmentPlaceholder": "0,00",
-  "columns": { "line": "Linha", "description": "Descrição", "amount": "Valor" },
+  "columns": {
+    "line": "Linha",
+    "description": "Descrição",
+    "amount": "Valor"
+  },
   "noForms": {
     "title": "Nenhuma declaração fiscal configurada",
     "description": "Importe um pacote de jurisdição ou crie uma declaração em Configuração → Impostos.",
     "openSetup": "Abrir configuração de declarações fiscais"
   },
-  "export": { "label": "Exportação de cópia de trabalho", "pdf": "PDF de cópia de trabalho", "csv": "CSV de cópia de trabalho", "xlsx": "Excel de cópia de trabalho" },
-  "official": { "download": "Formulário oficial preenchido" },
+  "export": {
+    "label": "Exportação de cópia de trabalho",
+    "pdf": "PDF de cópia de trabalho",
+    "csv": "CSV de cópia de trabalho",
+    "xlsx": "Excel de cópia de trabalho"
+  },
+  "official": {
+    "download": "Formulário oficial preenchido"
+  },
   "submission": {
     "title": "Como enviar esta declaração",
     "description": "Use o canal de envio e a ação configurados abaixo após revisar a declaração.",
@@ -50,8 +61,18 @@
     "save": "Salvar no histórico",
     "saving": "Salvando…",
     "saved": "Snapshot da declaração salvo",
-    "status": { "prepared": "Preparada", "filed": "Enviada" },
-    "columns": { "form": "Declaração", "period": "Período", "version": "Versão", "status": "Status", "reference": "Referência", "saved": "Salvo" },
+    "status": {
+      "prepared": "Preparada",
+      "filed": "Enviada"
+    },
+    "columns": {
+      "form": "Declaração",
+      "period": "Período",
+      "version": "Versão",
+      "status": "Status",
+      "reference": "Referência",
+      "saved": "Salvo"
+    },
     "drawerDescription": "{from} a {to} · versão {version}",
     "formCode": "Código da declaração",
     "country": "País",
@@ -65,8 +86,89 @@
     "line": "Linha",
     "lineDescription": "Descrição",
     "amount": "Valor",
-    "hash": "SHA-256 do snapshot: {hash}"
-    ,"snapshotWatermark": "Snapshot imutável salvo · SHA-256 {hash}"
-    ,"export": { "pdf": "PDF", "xlsx": "Excel", "csv": "CSV" }
+    "hash": "SHA-256 do snapshot: {hash}",
+    "snapshotWatermark": "Snapshot imutável salvo · SHA-256 {hash}",
+    "export": {
+      "pdf": "PDF",
+      "xlsx": "Excel",
+      "csv": "CSV"
+    }
+  },
+  "provisions": {
+    "title": "Provisão de imposto de renda",
+    "description": "ASC 740 / IAS 12 — imposto corrente e diferido, provisão de avaliação e reconciliação de alíquotas.",
+    "empty": "Nenhuma provisão. Calcule a primeira provisão anual para começar.",
+    "columns": {
+      "fiscalYear": "Exercício",
+      "version": "Versão",
+      "status": "Situação",
+      "totalExpense": "Despesa total",
+      "effectiveRate": "Alíquota efetiva",
+      "created": "Criada"
+    },
+    "status": {
+      "draft": "rascunho",
+      "posted": "lançada",
+      "superseded": "substituída"
+    },
+    "post": "Lançar",
+    "posting": "Lançando…",
+    "categories": {
+      "fixed_assets": "Imobilizado",
+      "revenue_recognition": "Reconhecimento de receita",
+      "provisions": "Provisões",
+      "loss_carryforward": "Prejuízos acumulados",
+      "other": "Outro"
+    },
+    "compute": {
+      "button": "Calcular provisão",
+      "title": "Calcular a provisão do exercício",
+      "fiscalYear": "Exercício",
+      "permanent": "Diferenças permanentes",
+      "temporary": "Diferenças temporárias adicionais",
+      "addLine": "Adicionar linha",
+      "descriptionPlaceholder": "Descrição",
+      "lossUsed": "Prejuízos acumulados usados",
+      "valuationAllowance": "Provisão de avaliação",
+      "cancel": "Cancelar",
+      "compute": "Calcular",
+      "computing": "Calculando…",
+      "categories": {
+        "fixed_assets": "Imobilizado",
+        "revenue_recognition": "Reconhecimento de receita",
+        "provisions": "Provisões",
+        "loss_carryforward": "Prejuízos acumulados",
+        "other": "Outro"
+      },
+      "valuationAllowanceIas12": "Ajuste de reconhecimento do IDA"
+    },
+    "detail": {
+      "title": "Provisão {year} · v{version}",
+      "reconciliation": "Reconciliação de alíquotas",
+      "amount": "Valor",
+      "percent": "% do resultado",
+      "pretax": "Lucro antes do imposto",
+      "total": "Despesa total de imposto",
+      "taxableIncome": "Base tributável",
+      "currentTax": "Imposto corrente",
+      "deferredExpense": "Imposto diferido (movimento)",
+      "balances": {
+        "dta": "Imposto diferido ativo (bruto)",
+        "dtl": "Imposto diferido passivo",
+        "va": "Provisão de avaliação",
+        "vaIas12": "Ajuste de reconhecimento do IDA"
+      },
+      "differences": "Diferenças temporárias",
+      "noDifferences": "Nenhuma diferença temporária medida.",
+      "columns": {
+        "item": "Item",
+        "bookBasis": "Base contábil",
+        "taxBasis": "Base fiscal",
+        "difference": "Diferença",
+        "effect": "Efeito fiscal"
+      },
+      "auto": "auto",
+      "manual": "manual"
+    }
   }
 }

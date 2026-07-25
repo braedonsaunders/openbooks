@@ -53,5 +53,11 @@
   "overheadRateSource": "Fuente de la tasa",
   "overheadHoursBasis": "Se aplica a",
   "overheadScope": "Alcance de la tasa",
-  "overheadRateEngineHint": "Calcula los gastos generales desde la tarjeta de tasas publicada con fecha de vigencia ($/hora por departamento × horas del proyecto). Gestione las tasas en el Modelo de gastos generales."
+  "overheadRateEngineHint": "Calcula los gastos generales desde la tarjeta de tasas publicada con fecha de vigencia ($/hora por departamento × horas del proyecto). Gestione las tasas en el Modelo de gastos generales.",
+  "costSourceKinds": "Fuentes de costo facturable",
+  "markupPresentation": "Presentación del margen",
+  "notToExceed": "No exceder",
+  "surcharges": "Recargos automáticos",
+  "surchargeLabel": "Etiqueta",
+  "addSurcharge": "Añadir recargo"
 }

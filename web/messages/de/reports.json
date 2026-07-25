@@ -29,7 +29,9 @@
       "projectProfitabilityTitle": "Projektrentabilität",
       "projectProfitabilityDescription": "Umsatz, Kosten und Marge je Projekt – abgestimmt auf die GuV, mit genehmigten Projektstunden",
       "ordersTitle": "Auftragspipeline",
-      "ordersDescription": "Offene Angebote, Kundenaufträge und Bestellungen – Anzahl, Wert und Konversion"
+      "ordersDescription": "Offene Angebote, Kundenaufträge und Bestellungen – Anzahl, Wert und Konversion",
+      "cashFlowIndirectTitle": "Kapitalfluss (indirekt)",
+      "cashFlowIndirectDescription": "Indirekte Methode — Jahresüberschuss zum operativen Cashflow mit Working-Capital-Details"
     },
     "groups": {
       "financial": "Finanzberichte",
@@ -201,6 +203,36 @@
       "financing": "Finanzierungstätigkeit"
     },
     "subtotal": "Netto-Cashflow aus {section}",
+    "reconciliation": "Anfangsbestand + Nettoveränderung = Endbestand",
+    "reconciled": "abgestimmt",
+    "offBy": "Differenz {amount}"
+  },
+  "cashFlowIndirect": {
+    "title": "Kapitalflussrechnung (indirekte Methode)",
+    "dateRange": "{from} → {to}",
+    "openingCash": "Anfangsbestand Zahlungsmittel",
+    "closingCash": "Endbestand Zahlungsmittel",
+    "netChange": "Nettoveränderung der Zahlungsmittel",
+    "empty": "Keine Zahlungsmittelbewegungen in dieser Periode.",
+    "netIncome": "Jahresüberschuss",
+    "adjustmentsHeader": "Überleitung des Jahresüberschusses zum Cashflow",
+    "wcHeader": "Veränderungen des operativen Working Capital",
+    "sections": {
+      "operating": "Betriebliche Tätigkeit",
+      "investing": "Investitionstätigkeit",
+      "financing": "Finanzierungstätigkeit"
+    },
+    "adjustments": {
+      "depreciation": "Abschreibungen",
+      "disposal": "(Gewinn) Verlust aus Anlagenabgängen",
+      "unrealizedFx": "Nicht realisierter Währungs(gewinn)verlust"
+    },
+    "subtotals": {
+      "operating": "Cashflow aus laufender Geschäftstätigkeit",
+      "investing": "Cashflow aus der Investitionstätigkeit",
+      "financing": "Cashflow aus der Finanzierungstätigkeit"
+    },
+    "fxEffect": "Wechselkurseffekte auf den Zahlungsmittelbestand",
     "reconciliation": "Anfangsbestand + Nettoveränderung = Endbestand",
     "reconciled": "abgestimmt",
     "offBy": "Differenz {amount}"

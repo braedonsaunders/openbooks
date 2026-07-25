@@ -29,7 +29,9 @@
       "projectProfitabilityTitle": "プロジェクト収益性",
       "projectProfitabilityDescription": "プロジェクト別の収益、原価、利益 — 損益計算書に紐付き、承認済みの作業時間を含む",
       "ordersTitle": "受注パイプライン",
-      "ordersDescription": "未処理の見積、受注、発注書 — 件数、金額、転換率"
+      "ordersDescription": "未処理の見積、受注、発注書 — 件数、金額、転換率",
+      "cashFlowIndirectTitle": "キャッシュ・フロー（間接法）",
+      "cashFlowIndirectDescription": "間接法 — 当期純利益を営業キャッシュ・フローに調整（運転資本明細付き）"
     },
     "groups": {
       "financial": "財務諸表",
@@ -201,6 +203,36 @@
       "financing": "財務活動"
     },
     "subtotal": "{section}による純キャッシュ",
+    "reconciliation": "期首 + 純増減 = 期末",
+    "reconciled": "照合済み",
+    "offBy": "{amount}の差異"
+  },
+  "cashFlowIndirect": {
+    "title": "キャッシュ・フロー計算書（間接法）",
+    "dateRange": "{from} → {to}",
+    "openingCash": "期首現金",
+    "closingCash": "期末現金",
+    "netChange": "現金の純増減",
+    "empty": "この期間に現金の増減はありません。",
+    "netIncome": "当期純利益",
+    "adjustmentsHeader": "当期純利益をネットキャッシュに調整する項目",
+    "wcHeader": "営業運転資本の増減",
+    "sections": {
+      "operating": "営業活動",
+      "investing": "投資活動",
+      "financing": "財務活動"
+    },
+    "adjustments": {
+      "depreciation": "減価償却費および償却費",
+      "disposal": "資産売却（益）損",
+      "unrealizedFx": "未実現為替（益）損"
+    },
+    "subtotals": {
+      "operating": "営業活動によるキャッシュ・フロー",
+      "investing": "投資活動によるキャッシュ・フロー",
+      "financing": "財務活動によるキャッシュ・フロー"
+    },
+    "fxEffect": "為替変動による現金への影響",
     "reconciliation": "期首 + 純増減 = 期末",
     "reconciled": "照合済み",
     "offBy": "{amount}の差異"

@@ -62,7 +62,10 @@
   "cockpit": {
     "title": "Contas a receber",
     "description": "Sua central de controle de recebíveis — quanto devem, o que está vencido e o que cobrar nesta semana.",
-    "tabs": { "overview": "Visão geral", "invoices": "Faturas" },
+    "tabs": {
+      "overview": "Visão geral",
+      "invoices": "Faturas"
+    },
     "current": "a vencer",
     "customer": "Cliente",
     "overdueCol": "Vencido",
@@ -143,6 +146,20 @@
       },
       "recurring": "Entradas recorrentes (subsídios, aluguéis recebidos e assinaturas) entram na previsão como categorias — configure-as no <cashCockpit>painel de caixa</cashCockpit>.",
       "documentation": "Ler o guia de contas a receber"
+    }
+  },
+  "paymentLinks": {
+    "title": "Links de pagamento online",
+    "create": "Criar link",
+    "empty": "Nenhum link de pagamento.",
+    "copyLink": "Copiar link",
+    "copied": "Copiado",
+    "void": "Anular",
+    "status": {
+      "active": "ativo",
+      "paid": "pago",
+      "void": "anulado",
+      "expired": "expirado"
     }
   }
 }

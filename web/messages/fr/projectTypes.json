@@ -53,5 +53,11 @@
   "overheadRateSource": "Source du taux",
   "overheadHoursBasis": "S’applique à",
   "overheadScope": "Portée du taux",
-  "overheadRateEngineHint": "Calcule les frais généraux à partir de la grille de taux publiée et datée ($/heure par département × heures du projet). Gérez les taux dans l’espace Modèle de frais généraux."
+  "overheadRateEngineHint": "Calcule les frais généraux à partir de la grille de taux publiée et datée ($/heure par département × heures du projet). Gérez les taux dans l’espace Modèle de frais généraux.",
+  "costSourceKinds": "Sources de coûts facturables",
+  "markupPresentation": "Présentation de la majoration",
+  "notToExceed": "Ne pas dépasser",
+  "surcharges": "Suppléments automatiques",
+  "surchargeLabel": "Libellé",
+  "addSurcharge": "Ajouter un supplément"
 }

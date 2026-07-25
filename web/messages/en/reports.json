@@ -29,7 +29,9 @@
       "projectProfitabilityTitle": "Project Profitability",
       "projectProfitabilityDescription": "Revenue, cost and margin by project — ties to the P&L, with approved job hours",
       "ordersTitle": "Order pipeline",
-      "ordersDescription": "Open quotes, sales orders and purchase orders — count, value and conversion"
+      "ordersDescription": "Open quotes, sales orders and purchase orders — count, value and conversion",
+      "cashFlowIndirectTitle": "Cash Flow (Indirect)",
+      "cashFlowIndirectDescription": "GAAP indirect method — net income reconciled to operating cash with working-capital detail"
     },
     "groups": {
       "financial": "Financial Statements",
@@ -201,6 +203,36 @@
       "financing": "Financing activities"
     },
     "subtotal": "Net cash from {section}",
+    "reconciliation": "Opening + net change = closing",
+    "reconciled": "reconciled",
+    "offBy": "off by {amount}"
+  },
+  "cashFlowIndirect": {
+    "title": "Cash Flow Statement (Indirect Method)",
+    "dateRange": "{from} → {to}",
+    "openingCash": "Opening cash",
+    "closingCash": "Closing cash",
+    "netChange": "Net change in cash",
+    "empty": "No cash movements in this period.",
+    "netIncome": "Net income",
+    "adjustmentsHeader": "Adjustments to reconcile net income to net cash",
+    "wcHeader": "Changes in operating working capital",
+    "sections": {
+      "operating": "Operating activities",
+      "investing": "Investing activities",
+      "financing": "Financing activities"
+    },
+    "adjustments": {
+      "depreciation": "Depreciation and amortization",
+      "disposal": "(Gain) loss on disposal of assets",
+      "unrealizedFx": "Unrealized foreign exchange (gain) loss"
+    },
+    "subtotals": {
+      "operating": "Net cash provided by (used in) operating activities",
+      "investing": "Net cash provided by (used in) investing activities",
+      "financing": "Net cash provided by (used in) financing activities"
+    },
+    "fxEffect": "Effect of exchange rate changes on cash",
     "reconciliation": "Opening + net change = closing",
     "reconciled": "reconciled",
     "offBy": "off by {amount}"

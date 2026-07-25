@@ -46,5 +46,11 @@
     "subtotal": "小计",
     "total": "合计"
   },
-  "help": "文档"
+  "help": "文档",
+  "costSourceKinds": "可计费成本来源",
+  "markupPresentation": "加价显示方式",
+  "notToExceed": "不得超出",
+  "surcharges": "自动附加费",
+  "surchargeLabel": "标签",
+  "addSurcharge": "添加附加费"
 }

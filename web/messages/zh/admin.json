@@ -549,7 +549,11 @@
       "startsIn": "财年开始于",
       "runs": "财年区间",
       "range": "{start} → {end}",
-      "warning": "更改开始月份会重新标注<strong>每一个会计期间</strong>——保存的那一刻，它们的财年、期间编号和名称会根据各期间的起始日期重新推导。日记账分录和日期不受影响，但报表和期末结账分组将按新日历发生变动。"
+      "warning": "更改开始月份会重新标注<strong>每一个会计期间</strong>——保存的那一刻，它们的财年、期间编号和名称会根据各期间的起始日期重新推导。日记账分录和日期不受影响，但报表和期末结账分组将按新日历发生变动。",
+      "taxFramework": "所得税准则",
+      "taxFrameworkHint": "决定所得税计提的确认用语（公司设置 → 财年）。",
+      "frameworkAsc740": "ASC 740（美国公认会计准则）",
+      "frameworkIas12": "IAS 12（国际财务报告准则）"
     },
     "months": {
       "january": "一月",
@@ -618,6 +622,26 @@
         "projectRevenue": {
           "label": "项目收入",
           "hint": "按完工百分比确认收入时贷记"
+        },
+        "incomeTaxExpense": {
+          "label": "所得税费用",
+          "hint": "由所得税计提（ASC 740）借记"
+        },
+        "incomeTaxPayable": {
+          "label": "应交所得税",
+          "hint": "当期所得税贷记"
+        },
+        "deferredTaxAsset": {
+          "label": "递延所得税资产",
+          "hint": "可抵扣暂时性差异和亏损结转"
+        },
+        "deferredTaxLiability": {
+          "label": "递延所得税负债",
+          "hint": "应纳税暂时性差异"
+        },
+        "valuationAllowance": {
+          "label": "递延所得税资产减值准备",
+          "hint": "递延所得税资产备抵"
         }
       }
     },
@@ -1146,14 +1170,25 @@
       "title": "Book Depreciation",
       "description": "Configure reusable depreciation methods and the method, life and convention each accounting book applies to an asset category.",
       "tabsAria": "Book depreciation setup sections",
-      "tabs": { "methods": "Methods", "books": "Book policies" }
+      "tabs": {
+        "methods": "Methods",
+        "books": "Book policies"
+      }
     },
     "taxDepreciationSetup": {
       "navTitle": "Tax Depreciation",
       "title": "Tax Depreciation",
       "description": "Install country tax-depreciation packs and configure class assignments, regimes, classes, conventions and first-year rules. This is separate from sales-tax, VAT and nexus setup.",
       "tabsAria": "Fixed asset setup sections",
-      "tabs": { "overview": "Overview", "categories": "Asset categories", "regimes": "Tax regimes", "classes": "Tax classes", "firstYear": "First-year rules", "methods": "Methods", "books": "Book policies" },
+      "tabs": {
+        "overview": "Overview",
+        "categories": "Asset categories",
+        "regimes": "Tax regimes",
+        "classes": "Tax classes",
+        "firstYear": "First-year rules",
+        "methods": "Methods",
+        "books": "Book policies"
+      },
       "packsTitle": "Country depreciation packs",
       "packsDescription": "Installing a pack creates editable tenant configuration. Existing overrides are never replaced.",
       "recommended": "Company country",
@@ -1168,14 +1203,29 @@
       "assetCategory": "Asset category",
       "notAssigned": "Not assigned",
       "classCount": "{count, plural, one {# class} other {# classes}}",
-      "models": { "pool": "Class pool", "macrs": "Per-asset MACRS" },
+      "models": {
+        "pool": "Class pool",
+        "macrs": "Per-asset MACRS"
+      },
       "customizeTitle": "Customize",
       "customizeDescription": "Country packs are starting points; seeded values remain editable.",
       "links": {
-        "regimes": { "title": "Regimes", "description": "Country, calculation model and asset class attribute." },
-        "classes": { "title": "Classes and methods", "description": "Rates, recovery periods, methods and conventions." },
-        "firstYear": { "title": "First-year rules", "description": "Effective-dated acceleration and eligibility." },
-        "assignments": { "title": "Asset-category assignments", "description": "Assign categories to regime classes in Tax attributes." }
+        "regimes": {
+          "title": "Regimes",
+          "description": "Country, calculation model and asset class attribute."
+        },
+        "classes": {
+          "title": "Classes and methods",
+          "description": "Rates, recovery periods, methods and conventions."
+        },
+        "firstYear": {
+          "title": "First-year rules",
+          "description": "Effective-dated acceleration and eligibility."
+        },
+        "assignments": {
+          "title": "Asset-category assignments",
+          "description": "Assign categories to regime classes in Tax attributes."
+        }
       }
     },
     "taxOfficial": {
@@ -1647,6 +1697,11 @@
       "bom-components": {
         "title": "物料清单",
         "description": "构建每个装配物料所消耗的组件。"
+      },
+      "income-tax-rates": {
+        "title": "所得税税率",
+        "singularTitle": "所得税税率",
+        "description": "按辖区划分的法定所得税税率，带生效日期 — 用于 ASC 740 所得税计提。"
       }
     },
     "fields": {
@@ -1655,8 +1710,8 @@
       "calculationModel": "Calculation model",
       "regime": "Regime",
       "classCode": "Class code",
-      "rate": "Rate",
-      "method": "Method",
+      "rate": "汇率",
+      "method": "方法",
       "firstYearFraction": "First-year fraction",
       "allowRecapture": "Allow recapture",
       "allowTerminalLoss": "Allow terminal loss",
@@ -1714,7 +1769,6 @@
       "isBillableDefault": "默认可计费",
       "showOnFieldTicket": "在现场工单上显示",
       "category": "类别",
-      "method": "方法",
       "postsGl": "过账至总账",
       "bookId": "账簿",
       "categoryId": "资产类别",
@@ -1745,7 +1799,6 @@
       "fromCurrency": "从币种",
       "toCurrency": "至币种",
       "rateType": "汇率类型",
-      "rate": "汇率",
       "source": "来源",
       "periodId": "会计期间",
       "currentRate": "当前汇率",
@@ -1800,11 +1853,28 @@
       "gapless": "无间隔表示序列中的每个编号都必须有记录，不能跳号。仅在法律或审计要求必须连续编号时启用。"
     },
     "options": {
-      "taxDepreciationModel": { "pool": "Class pool", "macrs": "Per-asset MACRS" },
-      "macrsSystem": { "gds": "GDS", "ads": "ADS" },
-      "macrsMethod": { "200db": "200% declining balance", "150db": "150% declining balance", "straightLine": "Straight line" },
-      "taxDepreciationConvention": { "halfYear": "Half-year", "midQuarter": "Mid-quarter", "midMonth": "Mid-month" },
-      "poolMethod": { "declining": "Declining balance", "straightLine": "Straight line" },
+      "taxDepreciationModel": {
+        "pool": "Class pool",
+        "macrs": "Per-asset MACRS"
+      },
+      "macrsSystem": {
+        "gds": "GDS",
+        "ads": "ADS"
+      },
+      "macrsMethod": {
+        "200db": "200% declining balance",
+        "150db": "150% declining balance",
+        "straightLine": "Straight line"
+      },
+      "taxDepreciationConvention": {
+        "halfYear": "Half-year",
+        "midQuarter": "Mid-quarter",
+        "midMonth": "Mid-month"
+      },
+      "poolMethod": {
+        "declining": "Declining balance",
+        "straightLine": "Straight line"
+      },
       "appliesTo": {
         "sales": "销售",
         "purchases": "采购",
@@ -1912,6 +1982,43 @@
     },
     "bankFeeds": {
       "navTitle": "Bank Feeds"
+    },
+    "paymentProviders": {
+      "title": "支付服务商",
+      "description": "用于发票客户支付链接的托管收银服务商。结算与手续费对账仍在 银行 → PSP 结算 中处理。",
+      "saved": "已保存。",
+      "enableAcceptance": "启用支付链接",
+      "apiKey": "API 密钥 / 密文",
+      "webhookSecret": "Webhook 密钥",
+      "publishableKey": "公钥",
+      "merchantAccount": "商户号",
+      "secretConfigured": "已配置 — 输入以替换",
+      "receiptBankAccount": "收款银行账户",
+      "surchargeRule": "附加费规则",
+      "noSurcharge": "无附加费",
+      "save": "保存",
+      "surchargeRules": "附加费规则",
+      "surchargeHint": "可选的处理费，在结账时加到发票总额之上。收款时计入收入科目。",
+      "ruleName": "名称",
+      "ruleCalc": "计算方式",
+      "ruleProvider": "服务商",
+      "ruleEffective": "生效",
+      "deactivate": "停用",
+      "inactive": "已停用",
+      "percent": "百分比",
+      "fixed": "固定金额",
+      "cap": "上限（可选）",
+      "allProviders": "全部服务商",
+      "paymentMethod": "支付方式",
+      "methodAll": "全部",
+      "methodCard": "银行卡",
+      "methodBankDebit": "银行扣款",
+      "effectiveFrom": "生效日期",
+      "addRule": "添加规则",
+      "calcPercent": "按发票百分比",
+      "calcFixed": "固定金额",
+      "calcBoth": "百分比 + 固定",
+      "feeIncomeAccount": "手续费收入科目"
     }
   },
   "flows": {
@@ -2174,6 +2281,10 @@
     "subscriptionBilling": {
       "title": "Subscription Billing",
       "description": "Plans and subscriptions that auto-generate recurring invoices (SaaS / retainer)."
+    },
+    "onlinePayments": {
+      "title": "在线支付",
+      "description": "发票上的托管支付链接（Stripe / Adyen / GoCardless 银行扣款）、附加费规则以及自动核销收款的 Webhook。"
     }
   }
 }
