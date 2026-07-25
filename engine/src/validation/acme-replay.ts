@@ -28,6 +28,7 @@ const SANDBOX_ORG = process.env.SANDBOX_ORG ?? "6d5799ad-a37c-4aea-9cd4-748e4dc5
 const GOLDEN = "/tmp/golden-invoices.json";
 const JOBSET = "/tmp/jobset.json";
 const RESULTS = "/tmp/replay-results.json";
+const RUN = randomUUID().slice(0, 6);
 const APPLY = process.argv.includes("--apply");
 const LIMIT = Number(process.argv.find((a) => a.startsWith("--limit="))?.split("=")[1] ?? "0");
 
@@ -127,8 +128,19 @@ async function replayJob(job: string, golden: Golden[], actor: string, billingTy
     projectId = m.rows[0]?.project_id ?? null;
   }
   if (!projectId) {
+    // Fallback (and the only option once a job's invoices have been replayed away):
+    // the import made a duplicate project per job — one coded with the NetSuite id
+    // and empty, one coded with the job name holding the data. Take the twin
+    // carrying the most cost, never the empty shell.
     const p = (await retry(() => db.execute(sql`
-      select id from projects where org_id = ${SANDBOX_ORG} and code = ${job} limit 1`))) as any;
+      select p.id,
+             (select count(*) from time_entries te where te.project_id = p.id)
+           + (select count(*) from document_lines dl where dl.project_id = p.id) as rows
+        from projects p
+       where p.org_id = ${SANDBOX_ORG}
+         and (p.code = ${job}
+              or p.name = (select name from projects where org_id = ${SANDBOX_ORG} and code = ${job} limit 1))
+       order by rows desc limit 1`))) as any;
     projectId = p.rows[0]?.id ?? null;
   }
   res.projectId = projectId;
@@ -194,14 +206,14 @@ async function replayJob(job: string, golden: Golden[], actor: string, billingTy
       for (let i = 0; i < golden.length; i++) {
         const amt = num(golden[i].net);
         if (amt <= 0) continue;
-        const rid = await makeRequest("draw_amount", amt, `REPLAY-${job}-${i + 1}`);
+        const rid = await makeRequest("draw_amount", amt, `RPL-${RUN}-${job}-${i + 1}`);
         const out = await retry(() => generateInvoiceFromBillingRequest(SANDBOX_ORG, actor, rid));
         res.replayInvoiceId = out.id;
         total += await subtotalOf(out.id);
       }
       res.replayTotal = total;
     } else {
-      const rid = await makeRequest("date_range", null, `REPLAY-${job}`);
+      const rid = await makeRequest("date_range", null, `RPL-${RUN}-${job}`);
       const out = await retry(() => generateInvoiceFromBillingRequest(SANDBOX_ORG, actor, rid));
       res.replayInvoiceId = out.id;
       res.replayTotal = await subtotalOf(out.id);
@@ -210,7 +222,9 @@ async function replayJob(job: string, golden: Golden[], actor: string, billingTy
     res.status = Math.abs(res.delta) <= 0.005 ? "match" : "mismatch";
   } catch (e) {
     res.status = "error";
-    res.note = String((e as Error).message).slice(0, 200);
+    const chain: string[] = [];
+    for (let c: any = e; c; c = c.cause) if (c?.message) chain.push(String(c.message).replace(/\s+/g, " "));
+    res.note = (chain.pop() ?? "unknown").slice(0, 200); // innermost cause is the useful one
   }
   return res;
 }
