@@ -38,6 +38,12 @@ export interface NativeDocLine {
    * without it the project-billing engine can only ever bill labor.
    */
   isBillable?: boolean;
+  /**
+   * Stable id of this line in the source system. Without it a migrated document
+   * can only ever be reconciled or re-synced as a whole, so a line-level
+   * correction has nothing to match on and provenance stops at the header.
+   */
+  sourceLineRef?: string | null;
 }
 
 export interface NativeDocument {

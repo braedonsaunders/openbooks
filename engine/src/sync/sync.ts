@@ -483,6 +483,9 @@ async function insertImportedLines(
         extraDims: line.extraDims ?? {},
         description: line.description,
         isBillable: line.isBillable ?? false,
+        // Line identity from the source system, so a migrated document can be
+        // reconciled and re-synced line by line rather than only as a whole.
+        custom: line.sourceLineRef ? { sourceLineRef: line.sourceLineRef } : {},
       })),
     )
     .returning({
