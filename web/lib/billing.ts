@@ -121,6 +121,11 @@ export async function generateInvoiceFromBillingRequest(
     }
     const built: BuiltLine[] = []
 
+    // A request that names a work-based basis is billing actual work, so it must
+    // build from that work even when the project type defaults to milestones —
+    // an explicit basis outranks the type's default line builder.
+    const billsActualWork = req.basis === 'field_ticket' || req.basis === 'time_selection' || req.basis === 'date_range'
+
     if (req.basis === 'draw_amount') {
       const amt = String(req.draw_amount ?? '0')
       if (!amt || isZero(amt)) throw new BillingError('Enter a draw amount to bill')
@@ -138,7 +143,7 @@ export async function generateInvoiceFromBillingRequest(
         timeTypeId: null,
         sourceCostLineId: null,
       })
-    } else if (req.basis === 'milestone' || invoicing.lineBuilder === 'milestone') {
+    } else if (req.basis === 'milestone' || (invoicing.lineBuilder === 'milestone' && !billsActualWork)) {
       // Bill the selected (or all open) milestone schedule rows.
       const scheds = (await tx.execute(sql`
         select id, name, amount_billed from billing_schedules
@@ -457,7 +462,7 @@ export async function generateInvoiceFromBillingRequest(
     `)
 
     // Advance milestone schedules consumed by this request.
-    if (req.basis === 'milestone' || invoicing.lineBuilder === 'milestone') {
+    if (req.basis === 'milestone' || (invoicing.lineBuilder === 'milestone' && !billsActualWork)) {
       await tx.execute(sql`
         update billing_schedules set billing_request_id = ${requestId}, percent_billed = coalesce(percent_complete, percent_billed), updated_by = ${userId}
          where org_id = ${orgId} and project_id = ${req.project_id} and billing_request_id is null
