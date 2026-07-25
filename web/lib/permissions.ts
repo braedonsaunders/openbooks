@@ -124,6 +124,7 @@ export const PERMISSION_CATALOGUE = [
   "admin.audit.read",
   "admin.ai.manage",
   "admin.sandboxes.manage",
+  "admin.backups.manage",
   "api.keys.manage",
 ] as const;
 
@@ -356,6 +357,7 @@ export const PERMISSION_GROUPS: {
       { key: "admin.audit.read", labelKey: permissionLabelKey("admin.audit.read") },
       { key: "admin.ai.manage", labelKey: permissionLabelKey("admin.ai.manage") },
       { key: "admin.sandboxes.manage", labelKey: permissionLabelKey("admin.sandboxes.manage") },
+      { key: "admin.backups.manage", labelKey: permissionLabelKey("admin.backups.manage") },
       { key: "api.keys.manage", labelKey: permissionLabelKey("api.keys.manage") },
     ],
   },

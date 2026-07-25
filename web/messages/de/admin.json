@@ -55,6 +55,10 @@
         "title": "Umgebungen",
         "description": "Isolierte Sandbox-Kopien der Produktion erstellen, aktualisieren und hochstufen"
       },
+      "backup": {
+        "title": "Sicherungen",
+        "description": "Sicherungen herunterladen, planen und aufbewahren"
+      },
       "apiKeys": {
         "title": "API-Schlüssel",
         "description": "Bereichsbezogene API-Schlüssel für Integrationen erstellen und Nutzungsprotokolle anzeigen"
@@ -771,6 +775,7 @@
     "admin_audit_read": "Prüfprotokoll anzeigen",
     "admin_ai_manage": "KI-Einstellungen verwalten",
     "admin_sandboxes_manage": "Sandbox-Umgebungen erstellen und verwalten",
+    "admin_backups_manage": "Organisationssicherungen verwalten",
     "api_keys_manage": "API-Schlüssel verwalten",
     "assets_read": "Anlagevermögen und Abschreibung anzeigen",
     "assets_manage": "Anlagen erstellen und bearbeiten, Abschreibung ausführen",

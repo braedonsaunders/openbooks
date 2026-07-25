@@ -75,6 +75,9 @@ longPool.on("error", (err) => {
   console.error("[pg longPool] transient client error (ignored, will reconnect):", (err as Error).message);
 });
 
+/** Timeout-free pool for long org-scoped units of work (backups, clones). */
+export { longPool };
+
 // ---------------------------------------------------------------------------
 // Tenant isolation via Postgres RLS.
 //

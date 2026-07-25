@@ -55,6 +55,10 @@
         "title": "環境",
         "description": "本番の分離されたサンドボックスコピーを作成、更新、昇格"
       },
+      "backup": {
+        "title": "バックアップ",
+        "description": "組織のバックアップをダウンロード・スケジュール・保持"
+      },
       "apiKeys": {
         "title": "APIキー",
         "description": "連携用のスコープ付きAPIキーを作成し、使用ログを表示"
@@ -771,6 +775,7 @@
     "admin_audit_read": "監査ログを表示",
     "admin_ai_manage": "AI設定を管理",
     "admin_sandboxes_manage": "サンドボックス環境を作成および管理",
+    "admin_backups_manage": "組織のバックアップを管理",
     "api_keys_manage": "APIキーを管理",
     "assets_read": "固定資産と減価償却を表示",
     "assets_manage": "資産を作成および編集し、減価償却を実行",

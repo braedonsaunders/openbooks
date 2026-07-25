@@ -55,6 +55,10 @@
         "title": "Ambientes",
         "description": "Crie, atualize e promova cópias sandbox isoladas da produção"
       },
+      "backup": {
+        "title": "Backups",
+        "description": "Baixar, agendar e reter backups da organização"
+      },
       "apiKeys": {
         "title": "Chaves de API",
         "description": "Crie chaves de API com escopo para integrações e veja logs de uso"
@@ -771,6 +775,7 @@
     "admin_audit_read": "Ver o log de auditoria",
     "admin_ai_manage": "Gerenciar configurações de IA",
     "admin_sandboxes_manage": "Criar e gerenciar ambientes sandbox",
+    "admin_backups_manage": "Gerenciar backups da organização",
     "api_keys_manage": "Gerenciar chaves de API",
     "assets_read": "Ver ativos imobilizados e depreciação",
     "assets_manage": "Criar e editar ativos, executar depreciação",

@@ -59,6 +59,10 @@
         "title": "Documentation de l'API",
         "description": "Parcourez la référence de l'API REST pour chaque type d'enregistrement et de transaction"
       },
+      "backup": {
+        "title": "Sauvegardes",
+        "description": "Télécharger, planifier et conserver les sauvegardes"
+      },
       "audit": {
         "title": "Journal d’audit",
         "description": "Chaque écriture capturée avec son auteur et les différences avant/après"
@@ -792,6 +796,7 @@
     "admin_nav_manage": "Personnaliser la navigation",
     "admin_customization_manage": "Personnaliser les formulaires et les vues de liste",
     "admin_audit_read": "Consulter le journal d’audit",
+    "admin_backups_manage": "Gérer les sauvegardes de l’organisation",
     "admin_ai_manage": "Gérer les paramètres d'IA",
     "api_keys_manage": "Gérer les clés API",
     "assets_read": "Consulter les immobilisations et l’amortissement",

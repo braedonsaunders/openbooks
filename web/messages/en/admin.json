@@ -55,6 +55,10 @@
         "title": "Environments",
         "description": "Create, refresh, and promote isolated sandbox copies of production"
       },
+      "backup": {
+        "title": "Backups",
+        "description": "Download, schedule & retain organization backups"
+      },
       "apiKeys": {
         "title": "API Keys",
         "description": "Create scoped API keys for integrations and view usage logs"
@@ -818,6 +822,7 @@
     "admin_audit_read": "View the audit log",
     "admin_ai_manage": "Manage AI settings",
     "admin_sandboxes_manage": "Create and manage sandbox environments",
+    "admin_backups_manage": "Manage organization backups",
     "api_keys_manage": "Manage API keys",
     "assets_read": "View fixed assets and depreciation",
     "assets_manage": "Create and edit assets, run depreciation",

@@ -59,6 +59,10 @@
         "title": "Aplicaciones",
         "description": "Crea e instala paquetes de aplicación: un frontend aislado y un backend gobernado"
       },
+      "backup": {
+        "title": "Copias de seguridad",
+        "description": "Descargar, programar y conservar las copias de seguridad"
+      },
       "audit": {
         "title": "Registro de auditoría",
         "description": "Cada escritura queda capturada con el actor y las diferencias antes/después"
@@ -748,6 +752,7 @@
     "admin_nav_manage": "Personalizar la navegación",
     "admin_customization_manage": "Personalizar formularios y vistas de lista",
     "admin_audit_read": "Ver el registro de auditoría",
+    "admin_backups_manage": "Gestionar las copias de seguridad de la organización",
     "admin_ai_manage": "Gestionar la configuración de IA",
     "api_keys_manage": "Gestionar las claves API",
     "assets_read": "Ver activos fijos y depreciación",
