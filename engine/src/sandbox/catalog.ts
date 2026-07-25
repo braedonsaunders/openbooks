@@ -192,6 +192,51 @@ export function deletionOrder(cat: Catalog): string[] {
   return order;
 }
 
+/**
+ * Safe INSERT order for cloning an org: a referenced table (parent) is copied
+ * BEFORE any table that references it (child). Required because 152 of the FKs are
+ * NON-DEFERRABLE, so `set constraints all deferred` can't save an out-of-order
+ * insert — the check fires immediately. Unlike deletionOrder this considers ALL FK
+ * edges (delete rule is irrelevant to an INSERT check), excluding self-references
+ * and declared cycle-breakers. Genuine cycles (documents↔journal_entries, all
+ * deferrable) are appended last and resolved by the deferred checks at commit.
+ */
+export function insertionOrder(cat: Catalog): string[] {
+  const names = cat.tables.map((t) => t.name);
+  const inSet = new Set(names);
+  const children = new Map<string, Set<string>>(); // parent → children that must follow it
+  const indeg = new Map<string, number>(); // # of unresolved parents per child
+  for (const n of names) {
+    children.set(n, new Set());
+    indeg.set(n, 0);
+  }
+  for (const t of cat.tables) {
+    for (const [column, ref] of Object.entries(t.fks)) {
+      if (ref === t.name || !inSet.has(ref)) continue;
+      if (SANDBOX_CYCLE_BREAKERS[t.name]?.includes(column)) continue;
+      if (!children.get(ref)!.has(t.name)) {
+        children.get(ref)!.add(t.name);
+        indeg.set(t.name, (indeg.get(t.name) ?? 0) + 1);
+      }
+    }
+  }
+  const queue = names.filter((n) => (indeg.get(n) ?? 0) === 0);
+  const order: string[] = [];
+  const seen = new Set<string>();
+  while (queue.length) {
+    const n = queue.shift()!;
+    if (seen.has(n)) continue;
+    seen.add(n);
+    order.push(n);
+    for (const child of children.get(n) ?? []) {
+      indeg.set(child, (indeg.get(child) ?? 0) - 1);
+      if ((indeg.get(child) ?? 0) === 0) queue.push(child);
+    }
+  }
+  for (const n of names) if (!seen.has(n)) order.push(n); // cyclic tail → deferred FKs
+  return order;
+}
+
 /** Tables left after Kahn's acyclic pass. Their FK graph contains a cycle (or
  * depends on one), so only this tail needs deferred constraint checking during
  * a sandbox wipe. */

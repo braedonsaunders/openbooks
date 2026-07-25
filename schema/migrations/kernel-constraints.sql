@@ -387,6 +387,14 @@ declare
   v_fx fx_rates%rowtype;
   v_status_count integer;
 begin
+  -- Bulk migration / sandbox-clone copies pre-validated application rows through
+  -- ob_rebase before their journal lines exist in the target, so this row-by-row
+  -- cross-reference check can't hold mid-copy. 'set local openbooks.migration = on'
+  -- (transaction-scoped, direct-DB only) relaxes it; every normal write still
+  -- validates in full.
+  if coalesce(current_setting('openbooks.migration', true), 'off') = 'on' then
+    return new;
+  end if;
   -- Deterministic row locks serialize competing applications to either line.
   perform id from journal_lines
    where id in (new.from_line_id, new.to_line_id)
