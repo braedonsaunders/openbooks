@@ -41,6 +41,14 @@ const EXCLUDE = new Set([
   "backup_runs",
 ]);
 
+/**
+ * Escape hatch for uuid `*_id` columns that must survive a clone UNCHANGED —
+ * references to rows that are shared rather than copied per tenant. Everything
+ * else with no derivable target is rebased, because keeping the source org's id
+ * is a cross-tenant reference and always wrong.
+ */
+export const UNREBASED_REFS: ReadonlySet<string> = new Set<string>([]);
+
 /** Source-row filter for the org-less rebased tables (they have no org_id). */
 export const PARENT_FILTER: Record<string, (prodOrg: string) => string> = {
   file_versions: (o) =>
@@ -200,7 +208,17 @@ export async function loadCatalog(): Promise<Catalog> {
       if (ref && rebaseSet.has(ref)) {
         t.fks[c.name] = ref;
         t.fkDeleteRules[c.name] = "NO ACTION";
+        continue;
       }
+      // Whatever is left is a reference whose target cannot be derived from its
+      // name — polymorphic columns like labor_rate_version_scopes.scope_value_id
+      // or resource_grants.resource_id. Copying such a value verbatim leaves the
+      // sandbox POINTING AT THE SOURCE ORG'S ROW: a silent cross-tenant
+      // reference that reads as valid configuration. Rebasing needs no target
+      // table — ob_rebase is a pure function of (id, seed), so it maps any
+      // cloned row's id to its counterpart. Rebase, and treat the rare pointer
+      // to something not cloned as the dangling reference it already was.
+      if (!UNREBASED_REFS.has(`${t.name}.${c.name}`)) t.forceRebase.add(c.name);
     }
   }
 
