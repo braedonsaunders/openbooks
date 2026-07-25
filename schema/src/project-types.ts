@@ -136,7 +136,14 @@ export interface InvoicingProfile {
    *  means standard. */
   billingProcedure?: "standard" | "application_for_payment";
   /** Billing bases the request form offers for this type. */
-  allowedBases: string[]; // date_range | draw_amount | time_selection | milestone
+  /**
+   * Billing bases this type offers. `field_ticket` bills a SELECTION OF SIGNED
+   * FIELD TICKETS (crew tickets / billable timesheets) as the unit of work —
+   * how field-service and construction crews are billed — while an office or
+   * shop department on the same tenant can stay on date_range. Which bases a
+   * project type offers is configuration, not an engine assumption.
+   */
+  allowedBases: string[]; // date_range | draw_amount | time_selection | milestone | field_ticket
   defaultBasis: string;
   /** How invoice lines are built. */
   lineBuilder: "tm_actual" | "milestone" | "draw" | "cost_plus";
