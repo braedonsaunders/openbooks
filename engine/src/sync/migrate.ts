@@ -330,8 +330,8 @@ async function findByRef(table: string, orgId: string, refKey: string, sourceRef
 async function findPartyByRef(orgId: string, refKey: string, sourceRef: string) {
   const direct = await findByRef("parties", orgId, refKey, sourceRef);
   if (direct || refKey !== "nsId") return direct;
-  // AdminApp2 and NetSuite use the same NetSuite customer id. If the labor
-  // import arrived first, adopt that party instead of creating a second one.
+  // Two connectors can key the same customer by the same upstream id. If the
+  // other import arrived first, adopt that party instead of creating a second one.
   const existing = (await db.execute(sql`
     select id from parties
      where org_id = ${orgId}
@@ -342,7 +342,7 @@ async function findPartyByRef(orgId: string, refKey: string, sourceRef: string) 
 
 /**
  * Same cross-connector identity problem as findPartyByRef, for jobs/projects:
- * AdminApp2 and NetSuite both key a job by its NetSuite id, but each connector
+ * Two connectors can key the same job by the same upstream id, but each one
  * only looks up its OWN ref key, so whichever ran second created a second,
  * empty project for every job. Adopt the existing row instead — matching in
  * either direction, since either connector can arrive first.

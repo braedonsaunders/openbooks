@@ -12,7 +12,7 @@ import { getMoneyFormatter } from './money-server'
 import type { MoneyFormatter } from './money-format'
 
 /**
- * Invoice backup PDF package — the native reimplementation of adminapp2's
+ * Invoice backup PDF package — the native implementation of the
  * getInvoiceBackupPDF (a source platform front-end there). Assembles, in a configurable
  * order, the invoice PDF + a costed-timesheet page + the vendor-bill/receipt
  * attachments of the cost documents the invoice billed, merges them with pdf-lib,

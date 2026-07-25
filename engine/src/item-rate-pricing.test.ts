@@ -8,7 +8,7 @@ const legacy: RateTier[] = [
   { id: "month", unitCode: "month", unitName: "Month", baseQuantity: "12", costRate: "0", billRate: "800" },
 ];
 
-test("capped ladder reproduces adminapp2 1/4/12 roll-up", () => {
+test("capped ladder reproduces the 1/4/12 roll-up", () => {
   const result = priceCappedLadder("15", legacy, "bill");
   assert.equal(result.amount, "1050.0000");
   assert.deepEqual(result.components.map((c) => [c.unitCode, c.quantity]), [["month", "1.0000"], ["week", "1.0000"]]);

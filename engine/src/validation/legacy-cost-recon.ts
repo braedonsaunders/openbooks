@@ -1,10 +1,10 @@
 /**
- * Rassaun JOB COST reconciliation — does OpenBooks carry the same cost on a job
+ * the tenant's JOB COST reconciliation — does OpenBooks carry the same cost on a job
  * as the legacy system, to the penny?
  *
- * Golden source: AdminApp2 `job_costbilled` (TotalJobCost / MarginDollars /
+ * Golden source: the legacy system's exported job-cost table (TotalJobCost / MarginDollars /
  * TotalJobPrice), which is what the business actually reports on. Its composition
- * (see adminapp2-invoice-assembly notes) is:
+ * (see the legacy invoice-assembly notes) is:
  *   actual bill/expense/PO cost + real labor cost from payroll journals
  *   + estimated (unposted) labor + labor burden.
  *
@@ -13,7 +13,7 @@
  * so a divergence is a real accounting difference, not a report definition.
  *
  * Cache the golden first:
- *   tsql -H 10.0.0.44 -U webapp -P … -D AdminApp2 \
+ *   <export from the legacy system> \
  *     -Q "select JobID, TotalJobCost, TotalJobPrice, InvoicedToDate from job_costbilled"
  *   → /tmp/golden-cost.json  [{ job, cost, price, invoiced }]
  *
@@ -75,14 +75,14 @@ async function resolveProject(job: string): Promise<string | null> {
 }
 
 (async () => {
-  if (!existsSync(GOLDEN_COST)) throw new Error(`missing ${GOLDEN_COST} — export job_costbilled from AdminApp2 first`);
+  if (!existsSync(GOLDEN_COST)) throw new Error(`missing ${GOLDEN_COST} — export job_costbilled from the legacy system first`);
   const golden = JSON.parse(readFileSync(GOLDEN_COST, "utf8")) as { job: string; cost: string; price?: string }[];
   const byJob = new Map(golden.map((g) => [String(g.job), g]));
   const jobs = (JSON.parse(readFileSync(JOBSET, "utf8")) as { job: string }[]).map((j) => String(j.job));
   const list = LIMIT > 0 ? jobs.slice(0, LIMIT) : jobs;
 
   const results: any[] = [];
-  console.log("job        AdminApp2 cost   OpenBooks cost         delta   pct");
+  console.log("job        legacy cost   OpenBooks cost         delta   pct");
   for (const job of list) {
     const g = byJob.get(job);
     if (!g) { results.push({ job, status: "no-golden" }); continue; }
@@ -103,7 +103,7 @@ async function resolveProject(job: string): Promise<string | null> {
   const scored = results.filter((r) => r.status === "match" || r.status === "mismatch");
   const s = (f: (r: any) => number) => scored.reduce((t, r) => t + f(r), 0);
   console.log(`\n--- cost reconciliation (${scored.length} jobs) ---`);
-  console.log(`AdminApp2 cost ${money(s((r) => r.goldenCost))}`);
+  console.log(`legacy cost ${money(s((r) => r.goldenCost))}`);
   console.log(`OpenBooks cost ${money(s((r) => r.obCost))}  delta ${money(s((r) => r.obCost) - s((r) => r.goldenCost))}`);
   console.log(`match ${scored.filter((r) => r.status === "match").length} | mismatch ${scored.filter((r) => r.status === "mismatch").length}`);
   console.log(`results -> ${OUT}`);

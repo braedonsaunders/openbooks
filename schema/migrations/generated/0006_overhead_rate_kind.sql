@@ -1,4 +1,4 @@
--- Overhead rates carry a rate KIND: per_hour ($/labor-hour — the source platform/adminapp
+-- Overhead rates carry a rate KIND: per_hour ($/labor-hour — the source platform
 -- model) or percent (% of labor cost). The rate_percent column holds the value
 -- either way (name kept for back-compat). Existing imported source platform labor-burden
 -- rates are per-hour dollar figures. Idempotent.

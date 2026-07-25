@@ -1,5 +1,5 @@
 /**
- * Rassaun invoice replay + penny reconciliation harness.
+ * the tenant's invoice replay + penny reconciliation harness.
  *
  * For each selected job: delete the migrated invoices through the real product
  * delete path (which releases billing provenance), then drive the real project-

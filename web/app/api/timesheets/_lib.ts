@@ -31,7 +31,7 @@ function parseIso(iso: string): Date {
 
 /**
  * Normalize any ISO date to the Sunday that starts its week. Weeks run
- * Sunday→Saturday (matches adminapp2). Given a non-Sunday, walk back to Sunday.
+ * Sunday→Saturday. Given a non-Sunday, walk back to Sunday.
  */
 export function weekStart(iso: string): string {
   const d = parseIso(iso)

@@ -13,7 +13,7 @@ import {
 import { auditColumns, id, money, orgRef } from "./helpers";
 
 /**
- * Project billing — the native reimplementation of the adminapp2 job-billing
+ * Project billing — the native job-billing
  * flow (a source platform front-end there). A billing_request is a pre-invoice work
  * order that generates a `customer_invoice` DOCUMENT (never a parallel invoice
  * table — invoices are documents, posted through the existing kernel). The
@@ -28,7 +28,7 @@ export const billingRequests = pgTable(
     projectId: uuid("project_id").notNull(),
     requestNumber: text("request_number").notNull(),
     invoiceType: text("invoice_type", { enum: ["progress", "final"] }).notNull().default("progress"),
-    /** How the invoice lines are derived (adminapp2 ProgressType, generalized). */
+    /** How the invoice lines are derived. */
     basis: text("basis", {
       enum: ["date_range", "draw_amount", "time_selection", "milestone"],
     }).notNull().default("date_range"),
@@ -67,7 +67,7 @@ export const billingRequests = pgTable(
   ],
 );
 
-/** Milestone / progress billing schedule (adminapp2 JobBillingSchedule). */
+/** Milestone / progress billing schedule. */
 export const billingSchedules = pgTable(
   "billing_schedules",
   {
