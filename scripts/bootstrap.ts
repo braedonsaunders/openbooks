@@ -4,7 +4,9 @@
  *   1. Applies schema/migrations/generated/*.sql in filename order, tracked in
  *      _applied_migrations (skip-once semantics; a changed already-applied file
  *      logs a loud warning instead of re-running).
- *   2. Applies referential-integrity.sql + kernel-constraints.sql the same way.
+ *   2. Applies referential-integrity.sql + kernel-constraints.sql the same way,
+ *      then environments.sql (row-level security) on EVERY boot so tables added
+ *      by a later migration can never end up without tenant isolation.
  *   3. Ensures the SELECT-only `openbooks_read` role + grants (SQL workbench
  *      and user-script queries need it).
  *   4. Ensures an org, its primary accounting book, monthly accounting
@@ -247,6 +249,43 @@ async function migrate(): Promise<void> {
       readFileSync(join(migrationsDir, f), "utf8"),
     );
   }
+  await applyRowLevelSecurity();
+}
+
+/**
+ * Install the tenant-isolation policies — EVERY boot, deliberately untracked.
+ *
+ * `environments.sql` creates the `org_isolation` policy for every base table
+ * carrying `org_id`, so its job is to cover tables that did not exist when it
+ * last ran. Recording it in `_applied_migrations` like a migration would run it
+ * exactly once and leave every table added afterwards with row-level security
+ * switched off — reachable cross-tenant by any query that forgets its `where
+ * org_id =` clause. It is idempotent by construction (enable/force RLS, drop
+ * policy if exists, create policy), so re-running it is free.
+ */
+async function applyRowLevelSecurity(): Promise<void> {
+  const file = join(migrationsDir, "environments.sql");
+  await pool.query(readFileSync(file, "utf8"));
+  const unprotected = (await db.execute(sql`
+    select c.relname as table_name
+      from pg_class c
+      join pg_namespace n on n.oid = c.relnamespace
+     where n.nspname = 'public'
+       and c.relkind = 'r'
+       and not c.relrowsecurity
+       and exists (
+         select 1 from information_schema.columns col
+          where col.table_schema = 'public'
+            and col.table_name = c.relname
+            and col.column_name = 'org_id')
+  `)) as unknown as { rows: { table_name: string }[] };
+  // Fail loudly rather than booting an app whose tenant isolation has a hole.
+  if (unprotected.rows.length > 0) {
+    throw new Error(
+      `row-level security missing on: ${unprotected.rows.map((r) => r.table_name).join(", ")}`,
+    );
+  }
+  console.log("[bootstrap] row-level security installed on every org-scoped table");
 }
 
 async function ensureReadRole(): Promise<void> {
