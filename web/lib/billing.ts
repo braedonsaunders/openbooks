@@ -230,7 +230,14 @@ export async function generateInvoiceFromBillingRequest(
         : ["vendor_bill", "expense_report", "card_charge", "check"]
 
       const costRows = (await tx.execute(sql`
-        select dl.id, dl.amount, dl.cost_multiplier, dl.description, dl.item_id, dl.quantity, dl.unit,
+        select dl.id,
+               -- Order-family documents record the opposite sign to purchase
+               -- documents (a sales-order line is revenue-side, so it is stored
+               -- negative). Normalize to a positive "value to bill" so a
+               -- configured order cost-source adds to the invoice instead of
+               -- subtracting from it; a genuine credit still flips negative.
+               (case when d.kind in ('sales_order','purchase_order') then -dl.amount else dl.amount end) as amount,
+               dl.cost_multiplier, dl.description, dl.item_id, dl.quantity, dl.unit,
                dl.bill_rate, dl.bill_amount, dl.equipment_unit_id, dl.rate_version_id, d.kind,
                dl.rate_presentation, i.income_account_id, i.tax_code_id, i.name as item_name,
                coalesce(rc.components, '[]'::jsonb) as bill_components
