@@ -110,7 +110,7 @@ export function resolveNetSuiteCrmCurrency(
   return /^[A-Z]{3}$/.test(code) && configuredCurrencies.has(code) ? code : null
 }
 
-async function credentials(orgId: string, connectionId?: string): Promise<NetSuiteCreds> {
+async function credentials(orgId: string, connectionId?: string): Promise<NetSuiteCreds & { probabilityField?: string }> {
   const row = (await db.execute(sql`
     select config, secrets from connections where org_id=${orgId} and source='netsuite'
       ${connectionId ? sql`and id=${connectionId}` : sql``}
@@ -121,7 +121,9 @@ async function credentials(orgId: string, connectionId?: string): Promise<NetSui
   if (!secret?.consumerKey || !secret.consumerSecret || !secret.tokenKey || !secret.tokenSecret || !connection.config.account || !connection.config.host) {
     throw new Error('The tenant NetSuite connection is missing credentials')
   }
-  return { account: String(connection.config.account), host: String(connection.config.host), consumerKey: secret.consumerKey, consumerSecret: secret.consumerSecret, tokenKey: secret.tokenKey, tokenSecret: secret.tokenSecret }
+  const mappings = (connection.config.mappingJson ?? {}) as Record<string, unknown>
+  return { account: String(connection.config.account), host: String(connection.config.host), consumerKey: secret.consumerKey, consumerSecret: secret.consumerSecret, tokenKey: secret.tokenKey, tokenSecret: secret.tokenSecret,
+    probabilityField: typeof mappings.crmProbabilityField === "string" ? mappings.crmProbabilityField : undefined }
 }
 
 function date(value: unknown): string | null {
@@ -279,12 +281,20 @@ export async function importNetSuiteCrm(orgId: string, connectionId?: string): P
     report.accountStatuses++
   }
 
-  const customers = await suiteql<{ id:string; stage:string; entitystatus?:string; probability?:string; custentity_atlas_customer_probability?:string; dateprospect?:string; dateclosed?:string; datecreated?:string }>(`select id,stage,entitystatus,probability,custentity_atlas_customer_probability,dateprospect,dateclosed,datecreated from customer`, creds)
+  // An account may expose a custom qualification-probability field; a stock
+  // NetSuite has none. SuiteQL errors on an unknown identifier, so only select
+  // it when the connection maps one, and fall back to the standard `probability`.
+  const probField = typeof (creds as { probabilityField?: string }).probabilityField === "string"
+    && /^[a-z0-9_]+$/i.test((creds as { probabilityField?: string }).probabilityField!)
+      ? (creds as { probabilityField?: string }).probabilityField!
+      : undefined
+  const probCol = probField ? `,${probField}` : ""
+  const customers = await suiteql<{ id:string; stage:string; entitystatus?:string; probability?:string; dateprospect?:string; dateclosed?:string; datecreated?:string }>(`select id,stage,entitystatus,probability${probCol}, dateprospect,dateclosed,datecreated from customer`, creds)
   for (const customer of customers) {
     const lifecycle = stage(customer.stage)
     const party = (await db.execute(sql`select id from parties where org_id=${orgId} and custom->>'nsId'=${customer.id} limit 1`)) as unknown as { rows: { id: string }[] }
     if (!party.rows[0]) { report.missingParties++; continue }
-    const scoreText = customer.custentity_atlas_customer_probability ?? customer.probability
+    const scoreText = (probField ? (customer as Record<string, string | undefined>)[probField] : undefined) ?? customer.probability
     const score = scoreText == null || scoreText === '' ? null : Math.max(0, Math.min(100, Math.round(Number(scoreText))))
     const statusId = customer.entitystatus ? statusIds.get(`${lifecycle}:${customer.entitystatus}`) ?? null : null
     const saved = (await db.execute(sql`insert into crm_account_profiles(org_id,party_id,lifecycle_stage,status_id,qualification_score,qualified_at,converted_at,acquired_on,is_active,custom,created_by,updated_by) values(${orgId},${party.rows[0].id},${lifecycle},${statusId},${score},${lifecycle !== 'lead' ? date(customer.dateprospect ?? customer.datecreated) : null},${lifecycle === 'customer' ? date(customer.dateclosed ?? customer.datecreated) : null},${lifecycle === 'customer' ? date(customer.dateclosed ?? customer.datecreated) : null},true,${JSON.stringify({ netsuite: { id: customer.id, stage: customer.stage, statusId: customer.entitystatus } })}::jsonb,${actorId},${actorId}) on conflict(party_id) do update set lifecycle_stage=excluded.lifecycle_stage,status_id=excluded.status_id,qualification_score=excluded.qualification_score,qualified_at=coalesce(crm_account_profiles.qualified_at,excluded.qualified_at),converted_at=coalesce(crm_account_profiles.converted_at,excluded.converted_at),acquired_on=coalesce(crm_account_profiles.acquired_on,excluded.acquired_on),is_active=true,custom=crm_account_profiles.custom||excluded.custom,updated_at=now(),updated_by=${actorId} returning id`)) as unknown as { rows: { id: string }[] }
