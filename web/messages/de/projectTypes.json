@@ -49,8 +49,5 @@
   "help": "Dokumentation",
   "costSourceKinds": "Abrechenbare Kostenquellen",
   "markupPresentation": "Aufschlagsdarstellung",
-  "notToExceed": "Nicht überschreiten",
-  "surcharges": "Automatische Zuschläge",
-  "surchargeLabel": "Bezeichnung",
-  "addSurcharge": "Zuschlag hinzufügen"
+  "notToExceed": "Nicht überschreiten"
 }

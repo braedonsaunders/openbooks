@@ -152,22 +152,6 @@ export interface InvoicingProfile {
   /** Revenue recognition policy. */
   recognition: "as_invoiced" | "percent_complete_cost" | "milestone";
   /**
-   * Automatic surcharge lines appended to the invoice — each a percentage of a
-   * running basis (billed labor, billed cost, or the whole subtotal). Generalizes
-   * fuel surcharges, environmental fees, small-tools recovery, etc. Empty/omitted
-   * for tenants that don't use them.
-   */
-  surcharges?: Array<{
-    key: string;
-    label: string;
-    /** What the percentage applies to: billed labor value, billed cost value, or the subtotal. */
-    basis: "labor" | "cost" | "subtotal";
-    /** Percent as a plain number string, e.g. "5" for 5%. */
-    percent: string;
-    /** Optional item id whose income account/description the line uses; else default income. */
-    itemId?: string | null;
-  }>;
-  /**
    * How the cost/labor markup is presented. "embedded" (default) folds the markup
    * into each line's rate; "lump_sum" bills the base amounts and adds ONE markup
    * line for the total markup. Same invoice total either way.

@@ -115,7 +115,7 @@ export async function generateInvoiceFromBillingRequest(
       unit?: string | null
       equipmentUnitId?: string | null
       rateVersionId?: string | null
-      /** Pre-markup amount + whether this line is labor — for lump-sum markup and surcharge bases. */
+      /** Pre-markup amount + whether this line is labor — for lump-sum markup. */
       baseAmount?: string
       isLabor?: boolean
     }
@@ -361,34 +361,6 @@ export async function generateInvoiceFromBillingRequest(
         }
       }
 
-      // (2) Percentage surcharge lines: each is percent × a running basis
-      //     (billed labor / billed cost / subtotal). Generic — the tenant defines
-      //     which surcharges exist; the product has no named surcharge concept.
-      const laborValue = built.filter((l) => l.isLabor).reduce((s, l) => add(s, l.amount), '0')
-      const costValue = built.filter((l) => !l.isLabor).reduce((s, l) => add(s, l.amount), '0')
-      // A surcharge percentage is often negotiated per customer, so let the
-      // customer override the project type's default for a given surcharge key.
-      const custSurcharges = (await tx.execute(sql`
-        select coalesce(cr.custom->'surcharges', '{}'::jsonb) s
-          from customer_roles cr where cr.org_id = ${orgId} and cr.party_id = ${project.customer_id} limit 1
-      `)) as unknown as { rows: { s: Record<string, string> }[] }
-      const customerRate = custSurcharges.rows[0]?.s ?? {}
-      for (const sc of invoicing.surcharges ?? []) {
-        const basisVal = sc.basis === 'labor' ? laborValue : sc.basis === 'cost' ? costValue : add(laborValue, costValue)
-        const rate = customerRate[sc.key] ?? sc.percent
-        const pctMult = fromUnits(roundDiv(toUnits(String(rate ?? '0')), 100n))
-        const amt = mulRate(basisVal, pctMult)
-        if (cmp(amt, '0') <= 0) continue
-        const item = sc.itemId
-          ? ((await tx.execute(sql`select income_account_id, tax_code_id from items where id = ${sc.itemId} and org_id = ${orgId}`)) as unknown as { rows: any[] }).rows[0]
-          : null
-        built.push({
-          itemId: sc.itemId ?? null, accountId: item?.income_account_id ?? defaultIncomeId,
-          description: sc.label, quantity: '1', unitPrice: amt, amount: amt,
-          taxCodeId: item?.tax_code_id ?? null, employeeId: null, timeEntryId: null,
-          timeTypeId: null, sourceCostLineId: null,
-        })
-      }
     }
 
     // (3) Not-to-exceed cap: trim the cumulative invoiced total to the contract.
