@@ -549,7 +549,11 @@
       "startsIn": "O ano fiscal começa em",
       "runs": "O ano fiscal vai de",
       "range": "{start} → {end}",
-      "warning": "Alterar o mês de início rerrotula <strong>todos os períodos contábeis</strong> — seu ano fiscal, número e nome de período são rederivados da data de início de cada período no momento em que você salva. Lançamentos contábeis e datas permanecem intocados, mas relatórios e agrupamentos de fechamento de período mudarão para o novo calendário."
+      "warning": "Alterar o mês de início rerrotula <strong>todos os períodos contábeis</strong> — seu ano fiscal, número e nome de período são rederivados da data de início de cada período no momento em que você salva. Lançamentos contábeis e datas permanecem intocados, mas relatórios e agrupamentos de fechamento de período mudarão para o novo calendário.",
+      "taxFramework": "Norma de imposto de renda",
+      "taxFrameworkHint": "Define a terminologia da provisão (Configurações → exercício).",
+      "frameworkAsc740": "ASC 740 (US GAAP)",
+      "frameworkIas12": "IAS 12 (IFRS)"
     },
     "months": {
       "january": "Janeiro",
@@ -618,6 +622,26 @@
         "projectRevenue": {
           "label": "Receita de projeto",
           "hint": "Creditada pelo reconhecimento de receita por percentual de conclusão"
+        },
+        "incomeTaxExpense": {
+          "label": "Despesa de imposto de renda",
+          "hint": "Debitada pela provisão de IR (ASC 740)"
+        },
+        "incomeTaxPayable": {
+          "label": "Imposto de renda a pagar",
+          "hint": "Creditado pelo imposto corrente"
+        },
+        "deferredTaxAsset": {
+          "label": "Imposto diferido ativo",
+          "hint": "Diferenças temporárias dedutíveis e prejuízos acumulados"
+        },
+        "deferredTaxLiability": {
+          "label": "Imposto diferido passivo",
+          "hint": "Diferenças temporárias tributáveis"
+        },
+        "valuationAllowance": {
+          "label": "Provisão de avaliação",
+          "hint": "Contra imposto diferido ativo"
         }
       }
     },
@@ -1146,14 +1170,25 @@
       "title": "Book Depreciation",
       "description": "Configure reusable depreciation methods and the method, life and convention each accounting book applies to an asset category.",
       "tabsAria": "Book depreciation setup sections",
-      "tabs": { "methods": "Methods", "books": "Book policies" }
+      "tabs": {
+        "methods": "Methods",
+        "books": "Book policies"
+      }
     },
     "taxDepreciationSetup": {
       "navTitle": "Tax Depreciation",
       "title": "Tax Depreciation",
       "description": "Install country tax-depreciation packs and configure class assignments, regimes, classes, conventions and first-year rules. This is separate from sales-tax, VAT and nexus setup.",
       "tabsAria": "Fixed asset setup sections",
-      "tabs": { "overview": "Overview", "categories": "Asset categories", "regimes": "Tax regimes", "classes": "Tax classes", "firstYear": "First-year rules", "methods": "Methods", "books": "Book policies" },
+      "tabs": {
+        "overview": "Overview",
+        "categories": "Asset categories",
+        "regimes": "Tax regimes",
+        "classes": "Tax classes",
+        "firstYear": "First-year rules",
+        "methods": "Methods",
+        "books": "Book policies"
+      },
       "packsTitle": "Country depreciation packs",
       "packsDescription": "Installing a pack creates editable tenant configuration. Existing overrides are never replaced.",
       "recommended": "Company country",
@@ -1168,14 +1203,29 @@
       "assetCategory": "Asset category",
       "notAssigned": "Not assigned",
       "classCount": "{count, plural, one {# class} other {# classes}}",
-      "models": { "pool": "Class pool", "macrs": "Per-asset MACRS" },
+      "models": {
+        "pool": "Class pool",
+        "macrs": "Per-asset MACRS"
+      },
       "customizeTitle": "Customize",
       "customizeDescription": "Country packs are starting points; seeded values remain editable.",
       "links": {
-        "regimes": { "title": "Regimes", "description": "Country, calculation model and asset class attribute." },
-        "classes": { "title": "Classes and methods", "description": "Rates, recovery periods, methods and conventions." },
-        "firstYear": { "title": "First-year rules", "description": "Effective-dated acceleration and eligibility." },
-        "assignments": { "title": "Asset-category assignments", "description": "Assign categories to regime classes in Tax attributes." }
+        "regimes": {
+          "title": "Regimes",
+          "description": "Country, calculation model and asset class attribute."
+        },
+        "classes": {
+          "title": "Classes and methods",
+          "description": "Rates, recovery periods, methods and conventions."
+        },
+        "firstYear": {
+          "title": "First-year rules",
+          "description": "Effective-dated acceleration and eligibility."
+        },
+        "assignments": {
+          "title": "Asset-category assignments",
+          "description": "Assign categories to regime classes in Tax attributes."
+        }
       }
     },
     "taxOfficial": {
@@ -1647,6 +1697,11 @@
       "bom-components": {
         "title": "Lista de Materiais",
         "description": "Componentes consumidos para montar cada item de montagem."
+      },
+      "income-tax-rates": {
+        "title": "Alíquotas de imposto de renda",
+        "singularTitle": "Alíquota de IR",
+        "description": "Alíquotas promulgadas por jurisdição, com vigência — alimentam a provisão ASC 740."
       }
     },
     "fields": {
@@ -1655,8 +1710,8 @@
       "calculationModel": "Calculation model",
       "regime": "Regime",
       "classCode": "Class code",
-      "rate": "Rate",
-      "method": "Method",
+      "rate": "Taxa",
+      "method": "Método",
       "firstYearFraction": "First-year fraction",
       "allowRecapture": "Allow recapture",
       "allowTerminalLoss": "Allow terminal loss",
@@ -1714,7 +1769,6 @@
       "isBillableDefault": "Faturável por padrão",
       "showOnFieldTicket": "Mostrar em apontamentos de campo",
       "category": "Categoria",
-      "method": "Método",
       "postsGl": "Lança no razão",
       "bookId": "Livro",
       "categoryId": "Categoria de ativo",
@@ -1745,7 +1799,6 @@
       "fromCurrency": "Moeda de origem",
       "toCurrency": "Moeda de destino",
       "rateType": "Tipo de taxa",
-      "rate": "Taxa",
       "source": "Origem",
       "periodId": "Período contábil",
       "currentRate": "Taxa atual",
@@ -1800,11 +1853,28 @@
       "gapless": "Sem lacunas significa que todos os números da sequência devem ser contabilizados, sem números pulados. Ative somente quando exigências legais ou de auditoria determinarem uma numeração ininterrupta."
     },
     "options": {
-      "taxDepreciationModel": { "pool": "Class pool", "macrs": "Per-asset MACRS" },
-      "macrsSystem": { "gds": "GDS", "ads": "ADS" },
-      "macrsMethod": { "200db": "200% declining balance", "150db": "150% declining balance", "straightLine": "Straight line" },
-      "taxDepreciationConvention": { "halfYear": "Half-year", "midQuarter": "Mid-quarter", "midMonth": "Mid-month" },
-      "poolMethod": { "declining": "Declining balance", "straightLine": "Straight line" },
+      "taxDepreciationModel": {
+        "pool": "Class pool",
+        "macrs": "Per-asset MACRS"
+      },
+      "macrsSystem": {
+        "gds": "GDS",
+        "ads": "ADS"
+      },
+      "macrsMethod": {
+        "200db": "200% declining balance",
+        "150db": "150% declining balance",
+        "straightLine": "Straight line"
+      },
+      "taxDepreciationConvention": {
+        "halfYear": "Half-year",
+        "midQuarter": "Mid-quarter",
+        "midMonth": "Mid-month"
+      },
+      "poolMethod": {
+        "declining": "Declining balance",
+        "straightLine": "Straight line"
+      },
       "appliesTo": {
         "sales": "Vendas",
         "purchases": "Compras",
@@ -1912,6 +1982,43 @@
     },
     "bankFeeds": {
       "navTitle": "Bank Feeds"
+    },
+    "paymentProviders": {
+      "title": "Provedores de pagamento",
+      "description": "Provedores de checkout hospedado para links de pagamento em faturas. A reconciliação de repasses fica em Banco → Liquidações PSP.",
+      "saved": "Salvo.",
+      "enableAcceptance": "Ativar links de pagamento",
+      "apiKey": "Chave de API / segredo",
+      "webhookSecret": "Segredo do webhook",
+      "publishableKey": "Chave pública",
+      "merchantAccount": "Conta do lojista",
+      "secretConfigured": "Configurado — digite para substituir",
+      "receiptBankAccount": "Conta bancária de recebimento",
+      "surchargeRule": "Regra de tarifa",
+      "noSurcharge": "Sem tarifa",
+      "save": "Salvar",
+      "surchargeRules": "Regras de tarifa",
+      "surchargeHint": "Taxas de processamento opcionais somadas ao total da fatura no checkout. São lançadas como receita no recebimento.",
+      "ruleName": "Nome",
+      "ruleCalc": "Cálculo",
+      "ruleProvider": "Provedor",
+      "ruleEffective": "Vigente",
+      "deactivate": "Desativar",
+      "inactive": "inativa",
+      "percent": "Percentual",
+      "fixed": "Valor fixo",
+      "cap": "Teto (opcional)",
+      "allProviders": "Todos os provedores",
+      "paymentMethod": "Meio de pagamento",
+      "methodAll": "Todos",
+      "methodCard": "Cartão",
+      "methodBankDebit": "Débito em conta",
+      "effectiveFrom": "Vigente a partir de",
+      "addRule": "Adicionar regra",
+      "calcPercent": "Percentual da fatura",
+      "calcFixed": "Valor fixo",
+      "calcBoth": "Percentual + fixo",
+      "feeIncomeAccount": "Conta de receita da tarifa"
     }
   },
   "flows": {
@@ -2174,6 +2281,10 @@
     "subscriptionBilling": {
       "title": "Subscription Billing",
       "description": "Plans and subscriptions that auto-generate recurring invoices (SaaS / retainer)."
+    },
+    "onlinePayments": {
+      "title": "Pagamentos online",
+      "description": "Links de pagamento hospedados nas faturas (Stripe / Adyen / débito GoCardless), regras de tarifa e webhooks que baixam recebimentos automaticamente."
     }
   }
 }

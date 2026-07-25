@@ -528,7 +528,11 @@
       "startsIn": "El ejercicio fiscal comienza en",
       "runs": "El ejercicio fiscal abarca",
       "range": "{start} → {end}",
-      "warning": "Cambiar el mes de inicio vuelve a etiquetar <strong>todos los períodos contables</strong>: su ejercicio fiscal, número de período y nombre se vuelven a derivar de la fecha de inicio de cada período en el momento en que guarda. Los asientos contables y las fechas no se modifican, pero los informes y las agrupaciones de cierre de período cambiarán al nuevo calendario."
+      "warning": "Cambiar el mes de inicio vuelve a etiquetar <strong>todos los períodos contables</strong>: su ejercicio fiscal, número de período y nombre se vuelven a derivar de la fecha de inicio de cada período en el momento en que guarda. Los asientos contables y las fechas no se modifican, pero los informes y las agrupaciones de cierre de período cambiarán al nuevo calendario.",
+      "taxFramework": "Marco de impuesto sobre beneficios",
+      "taxFrameworkHint": "Determina la terminología de la provisión (Configuración → ejercicio).",
+      "frameworkAsc740": "ASC 740 (US GAAP)",
+      "frameworkIas12": "IAS 12 (IFRS)"
     },
     "months": {
       "january": "Enero",
@@ -597,6 +601,26 @@
         "projectRevenue": {
           "label": "Ingresos del proyecto",
           "hint": "Acreditado por el reconocimiento de ingresos por porcentaje de avance"
+        },
+        "incomeTaxExpense": {
+          "label": "Gasto por impuesto sobre beneficios",
+          "hint": "Debitado por la provisión de impuestos (ASC 740)"
+        },
+        "incomeTaxPayable": {
+          "label": "Impuesto a pagar",
+          "hint": "Acreditado por el impuesto corriente"
+        },
+        "deferredTaxAsset": {
+          "label": "Activo por impuesto diferido",
+          "hint": "Diferencias temporarias deducibles y pérdidas arrastradas"
+        },
+        "deferredTaxLiability": {
+          "label": "Pasivo por impuesto diferido",
+          "hint": "Diferencias temporarias imponibles"
+        },
+        "valuationAllowance": {
+          "label": "Provisión de valoración",
+          "hint": "Contra activo por impuesto diferido"
         }
       }
     },
@@ -1649,6 +1673,11 @@
         "title": "Casillas de declaraciones",
         "singular": "Regla de casilla",
         "description": "A qué casilla 1099/T4A pertenece el gasto de una cuenta. Lo no asignado cae en la casilla predeterminada del proveedor."
+      },
+      "income-tax-rates": {
+        "title": "Tasas de impuesto sobre beneficios",
+        "singularTitle": "Tasa de impuesto",
+        "description": "Tasas promulgadas por jurisdicción, con vigencia — alimentan la provisión ASC 740."
       }
     },
     "fields": {
@@ -2352,7 +2381,41 @@
       "navTitle": "Bank Feeds"
     },
     "paymentProviders": {
-      "navTitle": "Proveedores de pago"
+      "title": "Proveedores de pago",
+      "description": "Proveedores de cobro alojado para los enlaces de pago de facturas. La conciliación de liquidaciones permanece en Banca → Liquidaciones PSP.",
+      "saved": "Guardado.",
+      "enableAcceptance": "Activar enlaces de pago",
+      "apiKey": "Clave API / secreto",
+      "webhookSecret": "Secreto de webhook",
+      "publishableKey": "Clave pública",
+      "merchantAccount": "Cuenta de comercio",
+      "secretConfigured": "Configurado — introduzca para reemplazar",
+      "receiptBankAccount": "Cuenta bancaria de cobro",
+      "surchargeRule": "Regla de recargo",
+      "noSurcharge": "Sin recargo",
+      "save": "Guardar",
+      "surchargeRules": "Reglas de recargo",
+      "surchargeHint": "Comisiones opcionales añadidas al total de la factura en el cobro. Se contabilizan como ingreso al cobrar.",
+      "ruleName": "Nombre",
+      "ruleCalc": "Cálculo",
+      "ruleProvider": "Proveedor",
+      "ruleEffective": "Vigente",
+      "deactivate": "Desactivar",
+      "inactive": "inactiva",
+      "percent": "Porcentaje",
+      "fixed": "Importe fijo",
+      "cap": "Tope (opcional)",
+      "allProviders": "Todos los proveedores",
+      "paymentMethod": "Método de pago",
+      "methodAll": "Todos",
+      "methodCard": "Tarjeta",
+      "methodBankDebit": "Domiciliación bancaria",
+      "effectiveFrom": "Vigente desde",
+      "addRule": "Añadir regla",
+      "calcPercent": "Porcentaje de la factura",
+      "calcFixed": "Importe fijo",
+      "calcBoth": "Porcentaje + fijo",
+      "feeIncomeAccount": "Cuenta de ingreso de la comisión"
     }
   },
   "flows": {

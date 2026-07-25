@@ -2,7 +2,10 @@
   "title": "Tax Filings",
   "description": "Prepare government tax returns from the ledger and preserve what was filed.",
   "setup": "Tax filing setup",
-  "tabs": { "prepare": "Prepare a return", "history": "Previous filings" },
+  "tabs": {
+    "prepare": "Prepare a return",
+    "history": "Previous filings"
+  },
   "notice": "Notice",
   "period": "{from} to {to}",
   "form": "Return",
@@ -13,14 +16,30 @@
   "empty": "Choose a return and a period, then compute.",
   "adjustmentAria": "Adjustment for {label}",
   "adjustmentPlaceholder": "0.00",
-  "columns": { "line": "Line", "description": "Description", "amount": "Amount" },
+  "columns": {
+    "line": "Line",
+    "description": "Description",
+    "amount": "Amount"
+  },
   "noForms": {
     "title": "No tax returns configured",
     "description": "Import a jurisdiction pack or create a return in Setup → Taxes.",
     "openSetup": "Open tax filing setup"
   },
-  "export": { "label": "Working-copy export", "menu": "Export", "groupForm": "Filing form", "groupData": "Working-copy data", "facsimile": "Form PDF", "pdf": "Working-copy PDF", "csv": "Working-copy CSV", "xlsx": "Working-copy Excel", "json": "Structured JSON" },
-  "official": { "download": "Filled official form" },
+  "export": {
+    "label": "Working-copy export",
+    "menu": "Export",
+    "groupForm": "Filing form",
+    "groupData": "Working-copy data",
+    "facsimile": "Form PDF",
+    "pdf": "Working-copy PDF",
+    "csv": "Working-copy CSV",
+    "xlsx": "Working-copy Excel",
+    "json": "Structured JSON"
+  },
+  "official": {
+    "download": "Filled official form"
+  },
   "submission": {
     "title": "How to file this return",
     "description": "Use the configured filing channel and action below after reviewing the return.",
@@ -51,8 +70,18 @@
     "save": "Save to history",
     "saving": "Saving…",
     "saved": "Return snapshot saved",
-    "status": { "prepared": "Prepared", "filed": "Filed" },
-    "columns": { "form": "Return", "period": "Period", "version": "Version", "status": "Status", "reference": "Reference", "saved": "Saved" },
+    "status": {
+      "prepared": "Prepared",
+      "filed": "Filed"
+    },
+    "columns": {
+      "form": "Return",
+      "period": "Period",
+      "version": "Version",
+      "status": "Status",
+      "reference": "Reference",
+      "saved": "Saved"
+    },
     "drawerDescription": "{from} to {to} · version {version}",
     "formCode": "Return code",
     "country": "Country",
@@ -66,8 +95,89 @@
     "line": "Line",
     "lineDescription": "Description",
     "amount": "Amount",
-    "hash": "Snapshot SHA-256: {hash}"
-    ,"snapshotWatermark": "Saved immutable snapshot · SHA-256 {hash}"
-    ,"export": { "pdf": "PDF", "xlsx": "Excel", "csv": "CSV" }
+    "hash": "Snapshot SHA-256: {hash}",
+    "snapshotWatermark": "Saved immutable snapshot · SHA-256 {hash}",
+    "export": {
+      "pdf": "PDF",
+      "xlsx": "Excel",
+      "csv": "CSV"
+    }
+  },
+  "provisions": {
+    "title": "Income Tax Provision",
+    "description": "ASC 740 / IAS 12 — current and deferred tax, valuation allowance, and the rate reconciliation.",
+    "empty": "No provision runs yet. Compute the first fiscal-year provision to get started.",
+    "columns": {
+      "fiscalYear": "Fiscal year",
+      "version": "Version",
+      "status": "Status",
+      "totalExpense": "Total expense",
+      "effectiveRate": "Effective rate",
+      "created": "Created"
+    },
+    "status": {
+      "draft": "draft",
+      "posted": "posted",
+      "superseded": "superseded"
+    },
+    "post": "Post provision",
+    "posting": "Posting…",
+    "categories": {
+      "fixed_assets": "Fixed assets",
+      "revenue_recognition": "Revenue recognition",
+      "provisions": "Provisions",
+      "loss_carryforward": "Loss carryforward",
+      "other": "Other"
+    },
+    "compute": {
+      "button": "Compute provision",
+      "title": "Compute fiscal-year provision",
+      "fiscalYear": "Fiscal year",
+      "permanent": "Permanent differences",
+      "temporary": "Additional temporary differences",
+      "addLine": "Add line",
+      "descriptionPlaceholder": "Description",
+      "lossUsed": "Loss carryforward used",
+      "valuationAllowance": "Valuation allowance",
+      "cancel": "Cancel",
+      "compute": "Compute",
+      "computing": "Computing…",
+      "categories": {
+        "fixed_assets": "Fixed assets",
+        "revenue_recognition": "Revenue recognition",
+        "provisions": "Provisions",
+        "loss_carryforward": "Loss carryforward",
+        "other": "Other"
+      },
+      "valuationAllowanceIas12": "DTA recognition adjustment"
+    },
+    "detail": {
+      "title": "FY{year} provision · v{version}",
+      "reconciliation": "Rate reconciliation",
+      "amount": "Amount",
+      "percent": "% of pretax",
+      "pretax": "Pretax book income",
+      "total": "Total income tax expense",
+      "taxableIncome": "Taxable income",
+      "currentTax": "Current tax",
+      "deferredExpense": "Deferred tax (movement)",
+      "balances": {
+        "dta": "Deferred tax assets (gross)",
+        "dtl": "Deferred tax liabilities",
+        "va": "Valuation allowance",
+        "vaIas12": "DTA recognition adjustment"
+      },
+      "differences": "Temporary differences",
+      "noDifferences": "No temporary differences measured.",
+      "columns": {
+        "item": "Item",
+        "bookBasis": "Book basis",
+        "taxBasis": "Tax basis",
+        "difference": "Difference",
+        "effect": "Tax effect"
+      },
+      "auto": "auto",
+      "manual": "manual"
+    }
   }
 }

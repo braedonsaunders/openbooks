@@ -62,7 +62,10 @@
   "cockpit": {
     "title": "应收账款",
     "description": "应收账款控制中心——查看未收款、逾期款项和本周应催收金额。",
-    "tabs": { "overview": "概览", "invoices": "发票" },
+    "tabs": {
+      "overview": "概览",
+      "invoices": "发票"
+    },
     "current": "未到期",
     "customer": "客户",
     "overdueCol": "逾期",
@@ -143,6 +146,20 @@
       },
       "recurring": "补助、租金收入和订阅等经常性流入会作为类别加入预测——请在<cashCockpit>现金驾驶舱</cashCockpit>中配置。",
       "documentation": "阅读应收账款指南"
+    }
+  },
+  "paymentLinks": {
+    "title": "在线支付链接",
+    "create": "创建链接",
+    "empty": "暂无支付链接。",
+    "copyLink": "复制链接",
+    "copied": "已复制",
+    "void": "作废",
+    "status": {
+      "active": "有效",
+      "paid": "已支付",
+      "void": "已作废",
+      "expired": "已过期"
     }
   }
 }

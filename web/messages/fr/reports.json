@@ -29,7 +29,9 @@
       "projectProfitabilityTitle": "Rentabilité des projets",
       "projectProfitabilityDescription": "Produits, coûts et marge par projet — concorde avec le résultat, avec les heures approuvées",
       "ordersTitle": "Pipeline de commandes",
-      "ordersDescription": "Devis, commandes client et bons de commande ouverts — nombre, valeur et conversion"
+      "ordersDescription": "Devis, commandes client et bons de commande ouverts — nombre, valeur et conversion",
+      "cashFlowIndirectTitle": "Flux de trésorerie (indirect)",
+      "cashFlowIndirectDescription": "Méthode indirecte — résultat net rapproché des flux opérationnels avec le détail du fonds de roulement"
     },
     "groups": {
       "financial": "États financiers",
@@ -201,6 +203,36 @@
       "financing": "Activités de financement"
     },
     "subtotal": "Flux net des {section}",
+    "reconciliation": "Ouverture + variation nette = clôture",
+    "reconciled": "rapproché",
+    "offBy": "écart de {amount}"
+  },
+  "cashFlowIndirect": {
+    "title": "Tableau des flux de trésorerie (méthode indirecte)",
+    "dateRange": "{from} → {to}",
+    "openingCash": "Trésorerie d’ouverture",
+    "closingCash": "Trésorerie de clôture",
+    "netChange": "Variation nette de trésorerie",
+    "empty": "Aucun mouvement de trésorerie sur cette période.",
+    "netIncome": "Résultat net",
+    "adjustmentsHeader": "Ajustements pour rapprocher le résultat net de la trésorerie",
+    "wcHeader": "Variation du fonds de roulement opérationnel",
+    "sections": {
+      "operating": "Activités d’exploitation",
+      "investing": "Activités d’investissement",
+      "financing": "Activités de financement"
+    },
+    "adjustments": {
+      "depreciation": "Amortissement et dépréciation",
+      "disposal": "(Gain) perte sur cession d'immobilisations",
+      "unrealizedFx": "Écart de change non réalisé (gain) perte"
+    },
+    "subtotals": {
+      "operating": "Flux nets de trésorerie liés aux activités opérationnelles",
+      "investing": "Flux nets de trésorerie liés aux activités d'investissement",
+      "financing": "Flux nets de trésorerie liés aux activités de financement"
+    },
+    "fxEffect": "Effet des variations de change sur la trésorerie",
     "reconciliation": "Ouverture + variation nette = clôture",
     "reconciled": "rapproché",
     "offBy": "écart de {amount}"

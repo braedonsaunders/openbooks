@@ -46,5 +46,11 @@
     "subtotal": "小計",
     "total": "合計"
   },
-  "help": "ドキュメント"
+  "help": "ドキュメント",
+  "costSourceKinds": "請求可能なコスト元",
+  "markupPresentation": "マークアップの表示",
+  "notToExceed": "上限超過なし",
+  "surcharges": "自動サーチャージ",
+  "surchargeLabel": "ラベル",
+  "addSurcharge": "サーチャージを追加"
 }

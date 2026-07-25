@@ -62,7 +62,10 @@
   "cockpit": {
     "title": "売掛金管理",
     "description": "売掛金の管理センター — 未回収額、延滞額、今週回収すべき金額を確認できます。",
-    "tabs": { "overview": "概要", "invoices": "請求書" },
+    "tabs": {
+      "overview": "概要",
+      "invoices": "請求書"
+    },
     "current": "期日内",
     "customer": "顧客",
     "overdueCol": "延滞",
@@ -143,6 +146,20 @@
       },
       "recurring": "補助金、受取家賃、サブスクリプションなどの定期入金はカテゴリとして予測に加わります。<cashCockpit>資金繰りコックピット</cashCockpit>で設定してください。",
       "documentation": "売掛金ガイドを読む"
+    }
+  },
+  "paymentLinks": {
+    "title": "オンライン決済リンク",
+    "create": "リンクを作成",
+    "empty": "決済リンクはまだありません。",
+    "copyLink": "リンクをコピー",
+    "copied": "コピー済み",
+    "void": "無効化",
+    "status": {
+      "active": "有効",
+      "paid": "支払済",
+      "void": "無効",
+      "expired": "期限切れ"
     }
   }
 }

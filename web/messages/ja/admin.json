@@ -549,7 +549,11 @@
       "startsIn": "会計年度の開始月",
       "runs": "会計年度の期間",
       "range": "{start} → {end}",
-      "warning": "開始月を変更すると、<strong>すべての会計期間</strong>のラベルが付け直されます。保存した瞬間に、各期間の開始日から会計年度、期間番号、名称が再導出されます。仕訳と日付はそのままですが、レポートと期末決算のグループ分けは新しいカレンダーに合わせて変わります。"
+      "warning": "開始月を変更すると、<strong>すべての会計期間</strong>のラベルが付け直されます。保存した瞬間に、各期間の開始日から会計年度、期間番号、名称が再導出されます。仕訳と日付はそのままですが、レポートと期末決算のグループ分けは新しいカレンダーに合わせて変わります。",
+      "taxFramework": "所得税の会計基準",
+      "taxFrameworkHint": "税金計算の認識用語を決定します（会社設定 → 会計年度）。",
+      "frameworkAsc740": "ASC 740（米国会計基準）",
+      "frameworkIas12": "IAS 12（IFRS）"
     },
     "months": {
       "january": "1月",
@@ -618,6 +622,26 @@
         "projectRevenue": {
           "label": "プロジェクト収益",
           "hint": "進捗度による収益認識で貸方計上されます"
+        },
+        "incomeTaxExpense": {
+          "label": "法人税等費用",
+          "hint": "税金計算（ASC 740）により借記"
+        },
+        "incomeTaxPayable": {
+          "label": "未払法人税等",
+          "hint": "当期税額の貸記先"
+        },
+        "deferredTaxAsset": {
+          "label": "繰延税金資産",
+          "hint": "将来減算一時差異および繰越欠損金"
+        },
+        "deferredTaxLiability": {
+          "label": "繰延税金負債",
+          "hint": "将来加算一時差異"
+        },
+        "valuationAllowance": {
+          "label": "評価性引当額",
+          "hint": "繰延税金資産の控除項目"
         }
       }
     },
@@ -1146,14 +1170,25 @@
       "title": "Book Depreciation",
       "description": "Configure reusable depreciation methods and the method, life and convention each accounting book applies to an asset category.",
       "tabsAria": "Book depreciation setup sections",
-      "tabs": { "methods": "Methods", "books": "Book policies" }
+      "tabs": {
+        "methods": "Methods",
+        "books": "Book policies"
+      }
     },
     "taxDepreciationSetup": {
       "navTitle": "Tax Depreciation",
       "title": "Tax Depreciation",
       "description": "Install country tax-depreciation packs and configure class assignments, regimes, classes, conventions and first-year rules. This is separate from sales-tax, VAT and nexus setup.",
       "tabsAria": "Fixed asset setup sections",
-      "tabs": { "overview": "Overview", "categories": "Asset categories", "regimes": "Tax regimes", "classes": "Tax classes", "firstYear": "First-year rules", "methods": "Methods", "books": "Book policies" },
+      "tabs": {
+        "overview": "Overview",
+        "categories": "Asset categories",
+        "regimes": "Tax regimes",
+        "classes": "Tax classes",
+        "firstYear": "First-year rules",
+        "methods": "Methods",
+        "books": "Book policies"
+      },
       "packsTitle": "Country depreciation packs",
       "packsDescription": "Installing a pack creates editable tenant configuration. Existing overrides are never replaced.",
       "recommended": "Company country",
@@ -1168,14 +1203,29 @@
       "assetCategory": "Asset category",
       "notAssigned": "Not assigned",
       "classCount": "{count, plural, one {# class} other {# classes}}",
-      "models": { "pool": "Class pool", "macrs": "Per-asset MACRS" },
+      "models": {
+        "pool": "Class pool",
+        "macrs": "Per-asset MACRS"
+      },
       "customizeTitle": "Customize",
       "customizeDescription": "Country packs are starting points; seeded values remain editable.",
       "links": {
-        "regimes": { "title": "Regimes", "description": "Country, calculation model and asset class attribute." },
-        "classes": { "title": "Classes and methods", "description": "Rates, recovery periods, methods and conventions." },
-        "firstYear": { "title": "First-year rules", "description": "Effective-dated acceleration and eligibility." },
-        "assignments": { "title": "Asset-category assignments", "description": "Assign categories to regime classes in Tax attributes." }
+        "regimes": {
+          "title": "Regimes",
+          "description": "Country, calculation model and asset class attribute."
+        },
+        "classes": {
+          "title": "Classes and methods",
+          "description": "Rates, recovery periods, methods and conventions."
+        },
+        "firstYear": {
+          "title": "First-year rules",
+          "description": "Effective-dated acceleration and eligibility."
+        },
+        "assignments": {
+          "title": "Asset-category assignments",
+          "description": "Assign categories to regime classes in Tax attributes."
+        }
       }
     },
     "taxOfficial": {
@@ -1647,6 +1697,11 @@
       "bom-components": {
         "title": "部品表",
         "description": "各組立品目を製造するために消費される部品。"
+      },
+      "income-tax-rates": {
+        "title": "所得税率",
+        "singularTitle": "所得税率",
+        "description": "管轄区別の制定所得税率（効力日付き）— ASC 740 税金計算の基礎。"
       }
     },
     "fields": {
@@ -1655,8 +1710,8 @@
       "calculationModel": "Calculation model",
       "regime": "Regime",
       "classCode": "Class code",
-      "rate": "Rate",
-      "method": "Method",
+      "rate": "レート",
+      "method": "方法",
       "firstYearFraction": "First-year fraction",
       "allowRecapture": "Allow recapture",
       "allowTerminalLoss": "Allow terminal loss",
@@ -1714,7 +1769,6 @@
       "isBillableDefault": "既定で請求可能",
       "showOnFieldTicket": "フィールドチケットに表示",
       "category": "カテゴリ",
-      "method": "方法",
       "postsGl": "GLに記帳",
       "bookId": "帳簿",
       "categoryId": "資産カテゴリ",
@@ -1745,7 +1799,6 @@
       "fromCurrency": "換算元通貨",
       "toCurrency": "換算先通貨",
       "rateType": "レートタイプ",
-      "rate": "レート",
       "source": "ソース",
       "periodId": "会計期間",
       "currentRate": "期末時点レート",
@@ -1800,11 +1853,28 @@
       "gapless": "欠番なしとは、連番のすべての番号が記録され、番号が飛ばないことを意味します。法令または監査要件で途切れない採番が必要な場合にのみ有効にしてください。"
     },
     "options": {
-      "taxDepreciationModel": { "pool": "Class pool", "macrs": "Per-asset MACRS" },
-      "macrsSystem": { "gds": "GDS", "ads": "ADS" },
-      "macrsMethod": { "200db": "200% declining balance", "150db": "150% declining balance", "straightLine": "Straight line" },
-      "taxDepreciationConvention": { "halfYear": "Half-year", "midQuarter": "Mid-quarter", "midMonth": "Mid-month" },
-      "poolMethod": { "declining": "Declining balance", "straightLine": "Straight line" },
+      "taxDepreciationModel": {
+        "pool": "Class pool",
+        "macrs": "Per-asset MACRS"
+      },
+      "macrsSystem": {
+        "gds": "GDS",
+        "ads": "ADS"
+      },
+      "macrsMethod": {
+        "200db": "200% declining balance",
+        "150db": "150% declining balance",
+        "straightLine": "Straight line"
+      },
+      "taxDepreciationConvention": {
+        "halfYear": "Half-year",
+        "midQuarter": "Mid-quarter",
+        "midMonth": "Mid-month"
+      },
+      "poolMethod": {
+        "declining": "Declining balance",
+        "straightLine": "Straight line"
+      },
       "appliesTo": {
         "sales": "販売",
         "purchases": "購買",
@@ -1915,6 +1985,43 @@
     },
     "bankFeeds": {
       "navTitle": "Bank Feeds"
+    },
+    "paymentProviders": {
+      "title": "決済プロバイダー",
+      "description": "請求書の顧客決済リンク向けホスト型チェックアウトプロバイダー。入金・手数料の照合は 銀行 → PSP決済 で行います。",
+      "saved": "保存しました。",
+      "enableAcceptance": "決済リンクを有効化",
+      "apiKey": "APIキー / シークレット",
+      "webhookSecret": "Webhookシークレット",
+      "publishableKey": "公開キー",
+      "merchantAccount": "マーチャントアカウント",
+      "secretConfigured": "設定済み — 入力で置換",
+      "receiptBankAccount": "入金銀行口座",
+      "surchargeRule": "サーチャージルール",
+      "noSurcharge": "サーチャージなし",
+      "save": "保存",
+      "surchargeRules": "サーチャージルール",
+      "surchargeHint": "チェックアウト時に請求額へ上乗せする任意の処理手数料。入金時に収益科目へ計上されます。",
+      "ruleName": "名称",
+      "ruleCalc": "計算方法",
+      "ruleProvider": "プロバイダー",
+      "ruleEffective": "有効期間",
+      "deactivate": "無効化",
+      "inactive": "無効",
+      "percent": "割合",
+      "fixed": "定額",
+      "cap": "上限（任意）",
+      "allProviders": "すべてのプロバイダー",
+      "paymentMethod": "決済方法",
+      "methodAll": "すべて",
+      "methodCard": "カード",
+      "methodBankDebit": "銀行引落",
+      "effectiveFrom": "有効開始日",
+      "addRule": "ルールを追加",
+      "calcPercent": "請求額の割合",
+      "calcFixed": "定額",
+      "calcBoth": "割合 + 定額",
+      "feeIncomeAccount": "手数料収益科目"
     }
   },
   "flows": {
@@ -2177,6 +2284,10 @@
     "subscriptionBilling": {
       "title": "Subscription Billing",
       "description": "Plans and subscriptions that auto-generate recurring invoices (SaaS / retainer)."
+    },
+    "onlinePayments": {
+      "title": "オンライン決済",
+      "description": "請求書のホスト型決済リンク（Stripe / Adyen / GoCardless銀行引落）、サーチャージルール、入金を自動消込するWebhook。"
     }
   }
 }

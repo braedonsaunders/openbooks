@@ -62,7 +62,10 @@
   "cockpit": {
     "title": "Cuentas por cobrar",
     "description": "Su centro de control de cobros: cuánto le deben, qué está vencido y qué cobrar esta semana.",
-    "tabs": { "overview": "Resumen", "invoices": "Facturas" },
+    "tabs": {
+      "overview": "Resumen",
+      "invoices": "Facturas"
+    },
     "current": "al corriente",
     "customer": "Cliente",
     "overdueCol": "Vencido",
@@ -143,6 +146,20 @@
       },
       "recurring": "Los cobros recurrentes (subvenciones, alquileres, suscripciones) se incorporan al pronóstico como categorías; configúrelos en el <cashCockpit>panel de tesorería</cashCockpit>.",
       "documentation": "Leer la guía de cuentas por cobrar"
+    }
+  },
+  "paymentLinks": {
+    "title": "Enlaces de pago en línea",
+    "create": "Crear enlace",
+    "empty": "Sin enlaces de pago.",
+    "copyLink": "Copiar enlace",
+    "copied": "Copiado",
+    "void": "Anular",
+    "status": {
+      "active": "activo",
+      "paid": "pagado",
+      "void": "anulado",
+      "expired": "caducado"
     }
   }
 }

@@ -572,7 +572,11 @@
       "startsIn": "L’exercice financier commence en",
       "runs": "L’exercice financier s’étend",
       "range": "{start} → {end}",
-      "warning": "Changer le mois de début ré-étiquette <strong>chaque période comptable</strong> — leur exercice financier, leur numéro et leur nom de période sont recalculés à partir de la date de début de chaque période dès l’enregistrement. Les écritures de journal et les dates demeurent intactes, mais les rapports et les regroupements de clôture de période basculeront vers le nouveau calendrier."
+      "warning": "Changer le mois de début ré-étiquette <strong>chaque période comptable</strong> — leur exercice financier, leur numéro et leur nom de période sont recalculés à partir de la date de début de chaque période dès l’enregistrement. Les écritures de journal et les dates demeurent intactes, mais les rapports et les regroupements de clôture de période basculeront vers le nouveau calendrier.",
+      "taxFramework": "Référentiel d'impôt sur le résultat",
+      "taxFrameworkHint": "Détermine le libellé de la provision d'impôt (Paramètres → exercice).",
+      "frameworkAsc740": "ASC 740 (US GAAP)",
+      "frameworkIas12": "IAS 12 (IFRS)"
     },
     "months": {
       "january": "Janvier",
@@ -641,6 +645,26 @@
         "projectRevenue": {
           "label": "Produits du projet",
           "hint": "Crédité par la comptabilisation des produits selon l'avancement"
+        },
+        "incomeTaxExpense": {
+          "label": "Charge d'impôt sur le résultat",
+          "hint": "Débitée par la provision d'impôt (ASC 740)"
+        },
+        "incomeTaxPayable": {
+          "label": "Impôt à payer",
+          "hint": "Crédité pour l'impôt exigible"
+        },
+        "deferredTaxAsset": {
+          "label": "Impôt différé actif",
+          "hint": "Différences temporaires déductibles et reports déficitaires"
+        },
+        "deferredTaxLiability": {
+          "label": "Impôt différé passif",
+          "hint": "Différences temporaires imposables"
+        },
+        "valuationAllowance": {
+          "label": "Provision pour dépréciation",
+          "hint": "Contrepartie de l'impôt différé actif"
         }
       }
     },
@@ -1693,6 +1717,11 @@
         "title": "Cases des déclarations",
         "singular": "Règle de case",
         "description": "La case 1099/T4A à laquelle appartiennent les dépenses d'un compte. Le reste tombe dans la case par défaut du fournisseur."
+      },
+      "income-tax-rates": {
+        "title": "Taux d'impôt sur le résultat",
+        "singularTitle": "Taux d'impôt",
+        "description": "Taux d'impôt adoptés par juridiction, datés — ils pilotent la provision ASC 740."
       }
     },
     "fields": {
@@ -2396,7 +2425,41 @@
       "navTitle": "Bank Feeds"
     },
     "paymentProviders": {
-      "navTitle": "Fournisseurs de paiement"
+      "title": "Fournisseurs de paiement",
+      "description": "Fournisseurs de paiement hébergé pour les liens de paiement client sur les factures. Le rapprochement des versements reste sous Banque → Règlements PSP.",
+      "saved": "Enregistré.",
+      "enableAcceptance": "Activer les liens de paiement",
+      "apiKey": "Clé API / secret",
+      "webhookSecret": "Secret webhook",
+      "publishableKey": "Clé publique",
+      "merchantAccount": "Compte marchand",
+      "secretConfigured": "Configuré — saisir pour remplacer",
+      "receiptBankAccount": "Compte bancaire d'encaissement",
+      "surchargeRule": "Règle de surcharge",
+      "noSurcharge": "Aucune surcharge",
+      "save": "Enregistrer",
+      "surchargeRules": "Règles de surcharge",
+      "surchargeHint": "Frais de traitement optionnels ajoutés au total de la facture au paiement. Ils sont comptabilisés en produit à l'encaissement.",
+      "ruleName": "Nom",
+      "ruleCalc": "Calcul",
+      "ruleProvider": "Fournisseur",
+      "ruleEffective": "En vigueur",
+      "deactivate": "Désactiver",
+      "inactive": "inactive",
+      "percent": "Pourcentage",
+      "fixed": "Montant fixe",
+      "cap": "Plafond (optionnel)",
+      "allProviders": "Tous les fournisseurs",
+      "paymentMethod": "Moyen de paiement",
+      "methodAll": "Tous",
+      "methodCard": "Carte",
+      "methodBankDebit": "Prélèvement bancaire",
+      "effectiveFrom": "À partir du",
+      "addRule": "Ajouter une règle",
+      "calcPercent": "Pourcentage de la facture",
+      "calcFixed": "Montant fixe",
+      "calcBoth": "Pourcentage + fixe",
+      "feeIncomeAccount": "Compte de produit des frais"
     }
   },
   "flows": {

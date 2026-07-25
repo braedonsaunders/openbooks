@@ -53,5 +53,11 @@
   "overheadRateSource": "Rate source",
   "overheadHoursBasis": "Applies to",
   "overheadScope": "Rate scope",
-  "overheadRateEngineHint": "Costs overhead from the published, effective-dated Overhead Rates card (per-department $/hour × this project’s labor hours). Manage rates in the Overhead Model workspace."
+  "overheadRateEngineHint": "Costs overhead from the published, effective-dated Overhead Rates card (per-department $/hour × this project’s labor hours). Manage rates in the Overhead Model workspace.",
+  "costSourceKinds": "Billable cost sources",
+  "markupPresentation": "Markup presentation",
+  "notToExceed": "Not to exceed",
+  "surcharges": "Automatic surcharges",
+  "surchargeLabel": "Label",
+  "addSurcharge": "Add surcharge"
 }

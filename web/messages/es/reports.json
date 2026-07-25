@@ -29,7 +29,9 @@
       "projectProfitabilityTitle": "Rentabilidad por proyecto",
       "projectProfitabilityDescription": "Ingresos, costo y margen por proyecto — cuadra con el estado de resultados, con horas aprobadas",
       "ordersTitle": "Flujo de pedidos",
-      "ordersDescription": "Presupuestos, órdenes de venta y de compra abiertos — cantidad, valor y conversión"
+      "ordersDescription": "Presupuestos, órdenes de venta y de compra abiertos — cantidad, valor y conversión",
+      "cashFlowIndirectTitle": "Flujo de caja (indirecto)",
+      "cashFlowIndirectDescription": "Método indirecto — resultado neto conciliado con el efectivo operativo con detalle de capital de trabajo"
     },
     "groups": {
       "financial": "Estados financieros",
@@ -201,6 +203,36 @@
       "financing": "Actividades de financiamiento"
     },
     "subtotal": "Flujo neto de {section}",
+    "reconciliation": "Inicial + variación neta = final",
+    "reconciled": "conciliado",
+    "offBy": "descuadre de {amount}"
+  },
+  "cashFlowIndirect": {
+    "title": "Estado de flujo de efectivo (método indirecto)",
+    "dateRange": "{from} → {to}",
+    "openingCash": "Efectivo inicial",
+    "closingCash": "Efectivo final",
+    "netChange": "Variación neta de efectivo",
+    "empty": "No hay movimientos de efectivo en este período.",
+    "netIncome": "Resultado neto",
+    "adjustmentsHeader": "Ajustes para conciliar el resultado neto con el efectivo",
+    "wcHeader": "Variaciones en el capital de trabajo operativo",
+    "sections": {
+      "operating": "Actividades de operación",
+      "investing": "Actividades de inversión",
+      "financing": "Actividades de financiamiento"
+    },
+    "adjustments": {
+      "depreciation": "Depreciación y amortización",
+      "disposal": "(Ganancia) pérdida por enajenación de activos",
+      "unrealizedFx": "Diferencia de cambio no realizada (ganancia) pérdida"
+    },
+    "subtotals": {
+      "operating": "Efectivo neto de actividades operativas",
+      "investing": "Efectivo neto de actividades de inversión",
+      "financing": "Efectivo neto de actividades de financiación"
+    },
+    "fxEffect": "Efecto de las variaciones cambiarias sobre el efectivo",
     "reconciliation": "Inicial + variación neta = final",
     "reconciled": "conciliado",
     "offBy": "descuadre de {amount}"

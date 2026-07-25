@@ -29,7 +29,9 @@
       "projectProfitabilityTitle": "Rentabilidade de Projetos",
       "projectProfitabilityDescription": "Receita, custo e margem por projeto — conciliado à Demonstração de Resultados, com horas de trabalho aprovadas",
       "ordersTitle": "Funil de pedidos",
-      "ordersDescription": "Orçamentos, pedidos de venda e pedidos de compra em aberto — quantidade, valor e conversão"
+      "ordersDescription": "Orçamentos, pedidos de venda e pedidos de compra em aberto — quantidade, valor e conversão",
+      "cashFlowIndirectTitle": "Fluxo de caixa (indireto)",
+      "cashFlowIndirectDescription": "Método indireto — lucro líquido reconciliado ao caixa operacional com detalhe do capital de giro"
     },
     "groups": {
       "financial": "Demonstrações Financeiras",
@@ -201,6 +203,36 @@
       "financing": "Atividades de financiamento"
     },
     "subtotal": "Caixa líquido de {section}",
+    "reconciliation": "Inicial + variação líquida = final",
+    "reconciled": "conciliado",
+    "offBy": "diferença de {amount}"
+  },
+  "cashFlowIndirect": {
+    "title": "Demonstração do fluxo de caixa (método indireto)",
+    "dateRange": "{from} → {to}",
+    "openingCash": "Caixa inicial",
+    "closingCash": "Caixa final",
+    "netChange": "Variação líquida do caixa",
+    "empty": "Nenhuma movimentação de caixa neste período.",
+    "netIncome": "Lucro líquido",
+    "adjustmentsHeader": "Ajustes para reconciliar o lucro líquido ao caixa",
+    "wcHeader": "Variações no capital de giro operacional",
+    "sections": {
+      "operating": "Atividades operacionais",
+      "investing": "Atividades de investimento",
+      "financing": "Atividades de financiamento"
+    },
+    "adjustments": {
+      "depreciation": "Depreciação e amortização",
+      "disposal": "(Ganho) perda na baixa de ativos",
+      "unrealizedFx": "Variação cambial não realizada (ganho) perda"
+    },
+    "subtotals": {
+      "operating": "Caixa líquido das atividades operacionais",
+      "investing": "Caixa líquido das atividades de investimento",
+      "financing": "Caixa líquido das atividades de financiamento"
+    },
+    "fxEffect": "Efeito das variações cambiais sobre o caixa",
     "reconciliation": "Inicial + variação líquida = final",
     "reconciled": "conciliado",
     "offBy": "diferença de {amount}"

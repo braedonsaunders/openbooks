@@ -62,7 +62,10 @@
   "cockpit": {
     "title": "Comptes clients",
     "description": "Votre centre de pilotage des créances — montants dus, retards et encaissements à effectuer cette semaine.",
-    "tabs": { "overview": "Vue d’ensemble", "invoices": "Factures" },
+    "tabs": {
+      "overview": "Vue d’ensemble",
+      "invoices": "Factures"
+    },
     "current": "courant",
     "customer": "Client",
     "overdueCol": "En retard",
@@ -143,6 +146,20 @@
       },
       "recurring": "Les encaissements récurrents (subventions, loyers reçus, abonnements) rejoignent la prévision sous forme de catégories — configurez-les dans le <cashCockpit>cockpit de trésorerie</cashCockpit>.",
       "documentation": "Lire le guide des comptes clients"
+    }
+  },
+  "paymentLinks": {
+    "title": "Liens de paiement en ligne",
+    "create": "Créer un lien",
+    "empty": "Aucun lien de paiement.",
+    "copyLink": "Copier le lien",
+    "copied": "Copié",
+    "void": "Annuler",
+    "status": {
+      "active": "actif",
+      "paid": "payé",
+      "void": "annulé",
+      "expired": "expiré"
     }
   }
 }

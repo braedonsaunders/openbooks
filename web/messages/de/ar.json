@@ -62,7 +62,10 @@
   "cockpit": {
     "title": "Debitorenbuchhaltung",
     "description": "Ihre Steuerzentrale für Forderungen — offene Beträge, Überfälliges und diese Woche einzuziehende Zahlungen.",
-    "tabs": { "overview": "Übersicht", "invoices": "Ausgangsrechnungen" },
+    "tabs": {
+      "overview": "Übersicht",
+      "invoices": "Ausgangsrechnungen"
+    },
     "current": "aktuell",
     "customer": "Kunde",
     "overdueCol": "Überfällig",
@@ -143,6 +146,20 @@
       },
       "recurring": "Wiederkehrende Einzahlungen (Zuschüsse, Mieteinnahmen, Abonnements) fließen als Kategorien in die Prognose ein — konfigurieren Sie sie im <cashCockpit>Liquiditätscockpit</cashCockpit>.",
       "documentation": "Leitfaden zur Debitorenbuchhaltung lesen"
+    }
+  },
+  "paymentLinks": {
+    "title": "Online-Zahlungslinks",
+    "create": "Link erstellen",
+    "empty": "Noch keine Zahlungslinks.",
+    "copyLink": "Link kopieren",
+    "copied": "Kopiert",
+    "void": "Stornieren",
+    "status": {
+      "active": "aktiv",
+      "paid": "bezahlt",
+      "void": "storniert",
+      "expired": "abgelaufen"
     }
   }
 }

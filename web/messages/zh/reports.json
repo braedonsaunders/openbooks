@@ -29,7 +29,9 @@
       "projectProfitabilityTitle": "项目盈利能力",
       "projectProfitabilityDescription": "按项目列示收入、成本与利润率——与利润表勾稽，含已审批工时",
       "ordersTitle": "订单管线",
-      "ordersDescription": "未清报价单、销售订单与采购订单——数量、金额与转化情况"
+      "ordersDescription": "未清报价单、销售订单与采购订单——数量、金额与转化情况",
+      "cashFlowIndirectTitle": "现金流量（间接法）",
+      "cashFlowIndirectDescription": "间接法 — 净利润调节至经营现金流，附营运资本明细"
     },
     "groups": {
       "financial": "财务报表",
@@ -201,6 +203,36 @@
       "financing": "筹资活动"
     },
     "subtotal": "{section}产生的现金净额",
+    "reconciliation": "期初 + 净变动 = 期末",
+    "reconciled": "已勾稽",
+    "offBy": "相差 {amount}"
+  },
+  "cashFlowIndirect": {
+    "title": "现金流量表（间接法）",
+    "dateRange": "{from} → {to}",
+    "openingCash": "期初现金",
+    "closingCash": "期末现金",
+    "netChange": "现金净变动",
+    "empty": "本期间内无现金变动。",
+    "netIncome": "净利润",
+    "adjustmentsHeader": "将净利润调节为经营活动现金净流量的调整项目",
+    "wcHeader": "经营性营运资本的变动",
+    "sections": {
+      "operating": "经营活动",
+      "investing": "投资活动",
+      "financing": "筹资活动"
+    },
+    "adjustments": {
+      "depreciation": "折旧与摊销",
+      "disposal": "资产处置（收益）损失",
+      "unrealizedFx": "未实现汇兑（收益）损失"
+    },
+    "subtotals": {
+      "operating": "经营活动产生的现金流量净额",
+      "investing": "投资活动产生的现金流量净额",
+      "financing": "筹资活动产生的现金流量净额"
+    },
+    "fxEffect": "汇率变动对现金的影响",
     "reconciliation": "期初 + 净变动 = 期末",
     "reconciled": "已勾稽",
     "offBy": "相差 {amount}"
