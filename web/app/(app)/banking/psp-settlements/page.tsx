@@ -1,6 +1,8 @@
 'use client'
 
 import { useEffect, useState } from 'react'
+import Link from 'next/link'
+import { useTranslations } from 'next-intl'
 import { Button, Card, Input, Label, PageHeader, Select } from '@openbooks/ui'
 import { ListPageLayout, PageContainer } from '../../../../components/page-layout'
 
@@ -9,6 +11,7 @@ import { ListPageLayout, PageContainer } from '../../../../components/page-layou
  * and post the balanced kernel journal for fees/disputes/FX/net deposit.
  */
 export default function PspSettlementsPage() {
+  const t = useTranslations('banking.pspSettlements')
   const [batches, setBatches] = useState<any[]>([])
   const [provider, setProvider] = useState('stripe')
   const [externalRef, setExternalRef] = useState('')
@@ -89,6 +92,12 @@ export default function PspSettlementsPage() {
   return (
     <ListPageLayout header={<PageHeader title="PSP settlements" description="Import Stripe, Recurly, or Chargebee payouts. Fees, disputes, and FX post through the GL kernel." />}>
       <PageContainer className="space-y-6">
+        <p className="text-xs text-slate-500 dark:text-slate-400">
+          {t('acceptanceNote')}{' '}
+          <Link href="/admin/setup/payment-providers" className="text-teal-700 hover:underline dark:text-teal-300">
+            {t('acceptanceLink')}
+          </Link>
+        </p>
         {err && <p className="text-sm text-red-600">{err}</p>}
         {msg && <p className="text-sm text-teal-700 dark:text-teal-300">{msg}</p>}
 

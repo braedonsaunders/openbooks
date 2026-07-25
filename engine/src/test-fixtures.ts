@@ -284,6 +284,19 @@ export async function dropScratchOrg(orgId: string): Promise<void> {
     await tx.execute(sql`delete from file_blobs where version_id in (select v.id from file_versions v join files f on f.id=v.file_id where f.org_id=${orgId})`);
     await tx.execute(sql`delete from file_versions where file_id in (select id from files where org_id=${orgId})`);
     const tables = [
+      // Income-tax provision (runs reference their journals).
+      "temporary_differences",
+      "tax_provision_runs",
+      "income_tax_rates",
+      // Payment acceptance + PSP settlement (no FK enforcement, but keep
+      // scratch tenants hermetic — leftover provider configs would let other
+      // tests' webhook signatures resolve the wrong org).
+      "payment_attempts",
+      "payment_links",
+      "payment_surcharge_rules",
+      "psp_settlement_lines",
+      "psp_settlement_batches",
+      "psp_provider_configs",
       "report_delivery_outbox",
       "report_run_artifacts",
       "report_runs",

@@ -1,7 +1,7 @@
 import { getTranslations } from 'next-intl/server'
 import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/db.ts'
-import { supportedTaxCountries } from '@openbooks/engine/src/tax-provision.ts'
+import { supportedTaxCountries } from '@openbooks/engine/src/tax-pack-provisioning.ts'
 import { requirePermission } from '../../../../../lib/authz'
 import { TaxSetupGuide } from './TaxSetupGuide'
 

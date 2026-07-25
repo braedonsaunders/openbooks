@@ -9,6 +9,7 @@
     "packages/*"
   ],
   "devDependencies": {
+    "@playwright/test": "^1.62.0",
     "drizzle-kit": "^0.31.10",
     "typescript": "^7.0.2"
   },

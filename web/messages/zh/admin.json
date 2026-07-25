@@ -2018,7 +2018,13 @@
       "calcPercent": "按发票百分比",
       "calcFixed": "固定金额",
       "calcBoth": "百分比 + 固定",
-      "feeIncomeAccount": "手续费收入科目"
+      "feeIncomeAccount": "手续费收入科目",
+      "webhookUrl": "Webhook 地址",
+      "webhookHint": "将此端点粘贴到服务商后台以接收支付事件。",
+      "copy": "复制",
+      "copied": "已复制",
+      "testConnection": "测试连接",
+      "testing": "测试中…"
     }
   },
   "flows": {

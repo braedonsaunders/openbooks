@@ -183,6 +183,8 @@ export function documentEmail(args: {
   partyName?: string
   message?: string
   attachmentName: string
+  /** Optional hosted payment link rendered as a call-to-action. */
+  paymentUrl?: string
 }): EmailOut {
   const subject = `${args.docTitle} ${args.reference} — ${args.orgName}`
   const greeting = args.partyName ? `Hello ${args.partyName},` : 'Hello,'
@@ -191,6 +193,7 @@ export function documentEmail(args: {
     `${greeting}\n\n` +
     (msg ? `${msg}\n\n` : '') +
     `Please find ${args.docTitle} ${args.reference} attached (${args.attachmentName}).\n\n` +
+    (args.paymentUrl ? `Pay online: ${args.paymentUrl}\n\n` : '') +
     `— ${args.orgName} via OpenBooks`
   const html = shell({
     heading: `${args.docTitle} ${args.reference}`,
@@ -198,6 +201,7 @@ export function documentEmail(args: {
       <p>${esc(greeting)}</p>
       ${msg ? `<p style="white-space:pre-wrap">${esc(msg)}</p>` : ''}
       <p>Please find <strong>${esc(args.docTitle)} ${esc(args.reference)}</strong> attached as <strong>${esc(args.attachmentName)}</strong>.</p>
+      ${args.paymentUrl ? `<p style="margin:16px 0"><a href="${esc(args.paymentUrl)}" style="display:inline-block;background:#0f766e;color:#ffffff;padding:10px 18px;border-radius:10px;text-decoration:none;font-weight:600">Pay online</a></p><p style="font-size:12px;color:#666;word-break:break-all">${esc(args.paymentUrl)}</p>` : ''}
       <p style="color:#666">${esc(args.orgName)} · OpenBooks</p>`,
     footer: `Sent by ${args.orgName} via OpenBooks.`,
   })

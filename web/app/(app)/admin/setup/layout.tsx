@@ -49,6 +49,7 @@ export default async function SetupLayout({ children }: { children: ReactNode })
             projectsEnabled={featureEnabled(features, 'projects')}
             currencyEnabled={featureEnabled(features, 'multiCurrency')}
             bankFeedsEnabled={featureEnabled(features, 'bankFeeds')}
+            onlinePaymentsEnabled={featureEnabled(features, 'onlinePayments')}
           />
         </aside>
         <div className="app-scroll min-h-0 flex-1 overflow-y-auto bg-slate-50 dark:bg-slate-950">

@@ -110,6 +110,13 @@ export async function PUT(req: Request) {
         orgSets.push(sql`country = ${country}`)
         changes.country = [cur.country, country]
       }
+      // Sensible income-tax framework default for the jurisdiction, set only
+      // when the org has never made an explicit choice (Company Settings can
+      // always override later — the setting is never clobbered here).
+      if (country && nextSettings!.taxFramework === undefined) {
+        nextSettings!.taxFramework = country === 'US' ? 'asc740' : 'ias12'
+        settingsChanges.taxFramework = [null, nextSettings!.taxFramework]
+      }
     }
     if (inputCurrency !== undefined && typeof inputCurrency === 'string' && /^[A-Z]{3}$/.test(inputCurrency) && inputCurrency !== cur.base_currency) {
       const known = (await tx.execute(sql`select 1 from currencies where code = ${inputCurrency} limit 1`)) as unknown as { rows: unknown[] }

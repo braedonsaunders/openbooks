@@ -5,6 +5,7 @@ import { validateCustomQuery, type ReportRuleGroup } from '@openbooks/reports'
 import {
   agingByParty,
   cashFlow,
+  cashFlowIndirect,
   generalLedger,
   journalReport,
   partnerBalances,
@@ -21,6 +22,7 @@ import { budgetVsActualView } from './budget-report'
 import {
   agingExportData,
   cashFlowExportData,
+  cashFlowIndirectExportData,
   generalLedgerExportData,
   journalExportData,
   partnersExportData,
@@ -54,6 +56,7 @@ export const REPORT_KINDS = [
   'partners',
   'aging',
   'cash-flow',
+  'cash-flow-indirect',
   'general-ledger',
   'journal',
   'registers',
@@ -88,6 +91,8 @@ export function statementPageHref(statement: { kind?: string; params?: Record<st
       return '/reports/balance-sheet'
     case 'cash-flow':
       return '/reports/cash-flow'
+    case 'cash-flow-indirect':
+      return '/reports/cash-flow-indirect'
     case 'trial-balance':
       return '/reports/trial-balance'
     case 'general-ledger':
@@ -265,6 +270,8 @@ export async function resolveReport(kind: ReportKind, p: URLSearchParams, ctx: R
       return { render: 'data', data: agingExportData(side, await agingByParty(side, asOf, dims, orgId), t) }
     case 'cash-flow':
       return { render: 'data', data: cashFlowExportData(await cashFlow(from, to, dims, orgId), from, to, t) }
+    case 'cash-flow-indirect':
+      return { render: 'data', data: cashFlowIndirectExportData(await cashFlowIndirect(from, to, dims, orgId), from, to, t) }
   }
 
   throw new Error('unknown statement')

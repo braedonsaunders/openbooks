@@ -7,7 +7,9 @@ import { NextResponse, type NextRequest } from "next/server";
 
 // /api/flows/email-action is sessionless BY DESIGN: one-click email approvals
 // carry their own HMAC token (verified in the route) instead of a cookie.
-const PUBLIC = ["/login", "/api/login", "/api/v1/", "/api/flows/email-action", "/favicon.ico", "/icon.svg"];
+// /pay + /api/pay are the hosted payment-link pages (random 192-bit bearer
+// tokens); /api/payments/webhooks verifies provider HMAC signatures internally.
+const PUBLIC = ["/login", "/api/login", "/api/v1/", "/api/flows/email-action", "/pay", "/api/pay", "/api/payments/webhooks", "/favicon.ico", "/icon.svg"];
 
 async function validSignature(token: string, secret: string): Promise<boolean> {
   const parts = token.split(".");

@@ -475,6 +475,15 @@ export const NAV_MODULES: NavModule[] = [
     requiredPermission: 'reports.read',
   },
   {
+    key: 'tax-provisions',
+    href: '/tax/provisions',
+    label: 'Income Tax',
+    iconKey: 'percent',
+    group: 'accounting',
+    subgroup: 'planning-compliance',
+    requiredPermission: 'reports.read',
+  },
+  {
     key: 'continuous-close',
     href: '/continuous-close',
     label: 'Close Monitor',
@@ -792,6 +801,7 @@ export const DEFAULT_NAV_ORDER: Record<NavGroupKey, readonly string[]> = {
     'tax-depreciation',
     'budgets',
     'tax-filings',
+    'tax-provisions',
     'continuous-close',
     'close',
   ],

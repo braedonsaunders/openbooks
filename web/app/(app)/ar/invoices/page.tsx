@@ -21,6 +21,8 @@ import {
 import { loadFieldDefs } from '../../../../lib/custom-fields'
 import { isMultiSubsidiary, subsidiaryOptions } from '../../../../lib/subsidiaries'
 import { resolveFormLayout } from '../../../../lib/customization/resolve'
+import { featureEnabled, resolvedFeatureState } from '../../../../lib/features'
+import { PaymentLinksPanel } from '../../../../components/payment-links-panel'
 
 export const dynamic = 'force-dynamic'
 
@@ -42,6 +44,7 @@ export default async function ArInvoices({
 }) {
   const authz = await requirePermission('ar.read')
   const canCreate = can(authz, 'ar.create')
+  const onlinePaymentsEnabled = featureEnabled(await resolvedFeatureState(authz.user.orgId), 'onlinePayments')
   const t = await getTranslations('ar')
   const tCommon = await getTranslations('common')
   const sp = await searchParams
@@ -132,6 +135,11 @@ export default async function ArInvoices({
         currentLayoutId={resolvedForm.row?.id ?? null}
         recordType={openKind}
         canCustomize={can(authz, 'admin.customization.manage')}
+        afterContent={
+          openKind === 'customer_invoice' && onlinePaymentsEnabled ? (
+            <PaymentLinksPanel documentId={String(openDoc.doc.id)} canManage={canCreate} />
+          ) : null
+        }
       />
     ) : null
 

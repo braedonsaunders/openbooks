@@ -184,6 +184,9 @@ export interface DocumentDrawerProps {
   /** User holds admin.customization.manage — shows the Customize entry that
    *  deep-links into the form designer for this record type. */
   canCustomize?: boolean
+  /** Optional kind-specific section rendered read-only at the bottom of the
+   *  drawer body (e.g. online payment links on customer invoices). */
+  afterContent?: React.ReactNode
 }
 
 export function DocumentDrawer({
@@ -213,6 +216,7 @@ export function DocumentDrawer({
   currentLayoutId,
   recordType,
   canCustomize,
+  afterContent,
 }: DocumentDrawerProps) {
   const { money } = useMoney()
   const t = useTranslations(config.i18n)
@@ -1271,6 +1275,8 @@ export function DocumentDrawer({
           // (flows + legacy policy engine). Renders nothing when empty.
           <ApprovalHistory subjectKind={String(doc.kind)} subjectId={String(doc.id)} />
         ) : null}
+
+        {mode === 'view' ? afterContent : null}
 
       </div>
     </TransactionDrawer>

@@ -2659,7 +2659,13 @@
       "calcPercent": "Percent of invoice",
       "calcFixed": "Fixed amount",
       "calcBoth": "Percent + fixed",
-      "feeIncomeAccount": "Fee income account"
+      "feeIncomeAccount": "Fee income account",
+      "webhookUrl": "Webhook URL",
+      "webhookHint": "Paste this endpoint into the provider's dashboard to receive payment events.",
+      "copy": "Copy",
+      "copied": "Copied",
+      "testConnection": "Test connection",
+      "testing": "Testing…"
     },
     "wizard": {
       "skip": "Skip for now",

@@ -2018,7 +2018,13 @@
       "calcPercent": "Prozent vom Rechnungsbetrag",
       "calcFixed": "Festbetrag",
       "calcBoth": "Prozent + Festbetrag",
-      "feeIncomeAccount": "Ertragskonto für Gebühren"
+      "feeIncomeAccount": "Ertragskonto für Gebühren",
+      "webhookUrl": "Webhook-URL",
+      "webhookHint": "Hinterlegen Sie diesen Endpunkt im Dashboard des Anbieters für Zahlungsereignisse.",
+      "copy": "Kopieren",
+      "copied": "Kopiert",
+      "testConnection": "Verbindung testen",
+      "testing": "Teste…"
     }
   },
   "flows": {

@@ -77,6 +77,7 @@ export function SetupNav({
   projectsEnabled = true,
   currencyEnabled = true,
   bankFeedsEnabled = false,
+  onlinePaymentsEnabled = false,
 }: {
   canExport: boolean
   canImport: boolean
@@ -85,6 +86,7 @@ export function SetupNav({
   projectsEnabled?: boolean
   currencyEnabled?: boolean
   bankFeedsEnabled?: boolean
+  onlinePaymentsEnabled?: boolean
 }) {
   const t = useTranslations('admin.setup')
   const tClose = useTranslations('close.setup')
@@ -134,6 +136,9 @@ export function SetupNav({
                   })),
                   ...(bankFeedsEnabled
                     ? [{ href: '/admin/setup/bank-feeds', label: t('bankFeeds.navTitle'), iconKey: 'landmark' }]
+                    : []),
+                  ...(onlinePaymentsEnabled
+                    ? [{ href: '/admin/setup/payment-providers', label: t('paymentProviders.navTitle'), iconKey: 'payments' }]
                     : []),
                   { href: '/admin/setup/payment-operations', label: t('entities.payment-operations.title'), iconKey: 'payments' },
                   { href: '/admin/setup/crm', label: tCrm('setup.title'), iconKey: 'users' },

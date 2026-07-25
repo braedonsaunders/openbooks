@@ -43,6 +43,12 @@ const CONTROL_ACCOUNT_KEYS = [
   "payrollVariance",
   "unbilledReceivable",
   "projectRevenue",
+  // ASC 740 income-tax provision (inert until mapped).
+  "incomeTaxExpense",
+  "incomeTaxPayable",
+  "deferredTaxAsset",
+  "deferredTaxLiability",
+  "valuationAllowance",
 ] as const;
 type ControlAccountKey = (typeof CONTROL_ACCOUNT_KEYS)[number];
 
@@ -85,6 +91,7 @@ export async function GET() {
       country: row.country as string,
       fiscalYearStartMonth:
         typeof settings.fiscalYearStartMonth === "number" ? settings.fiscalYearStartMonth : 1,
+      taxFramework: settings.taxFramework === "ias12" ? "ias12" : "asc740",
       defaultLocale: isLocale(settings.defaultLocale) ? settings.defaultLocale : DEFAULT_LOCALE,
       reportPdfStyle: settings.reportPdfStyle === "formal" ? "formal" : "modern",
       fairValueRangePolicy:
@@ -141,6 +148,7 @@ export async function PUT(req: Request) {
     country?: unknown;
     baseCurrency?: unknown;
     fiscalYearStartMonth?: unknown;
+    taxFramework?: unknown;
     controlAccounts?: unknown;
     defaultLocale?: unknown;
     reportPdfStyle?: unknown;
@@ -287,6 +295,17 @@ export async function PUT(req: Request) {
     nextSettings.fiscalYearStartMonth = nextStartMonth;
     changes.fiscalYearStartMonth = [curStartMonth, nextStartMonth];
     settingsChanged = true;
+  }
+  if (body.taxFramework !== undefined) {
+    if (body.taxFramework !== "asc740" && body.taxFramework !== "ias12") {
+      return NextResponse.json({ error: "taxFramework must be asc740 or ias12" }, { status: 400 });
+    }
+    const curFramework = settings.taxFramework === "ias12" ? "ias12" : "asc740";
+    if (body.taxFramework !== curFramework) {
+      nextSettings.taxFramework = body.taxFramework;
+      changes.taxFramework = [curFramework, body.taxFramework];
+      settingsChanged = true;
+    }
   }
   if (nextControl !== undefined) {
     const curControl = (settings.controlAccounts ?? {}) as Record<string, string>;

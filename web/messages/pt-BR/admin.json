@@ -2018,7 +2018,13 @@
       "calcPercent": "Percentual da fatura",
       "calcFixed": "Valor fixo",
       "calcBoth": "Percentual + fixo",
-      "feeIncomeAccount": "Conta de receita da tarifa"
+      "feeIncomeAccount": "Conta de receita da tarifa",
+      "webhookUrl": "URL do webhook",
+      "webhookHint": "Cole este endpoint no painel do provedor para receber eventos de pagamento.",
+      "copy": "Copiar",
+      "copied": "Copiado",
+      "testConnection": "Testar conexão",
+      "testing": "Testando…"
     }
   },
   "flows": {

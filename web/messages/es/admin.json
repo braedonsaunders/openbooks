@@ -2415,7 +2415,13 @@
       "calcPercent": "Porcentaje de la factura",
       "calcFixed": "Importe fijo",
       "calcBoth": "Porcentaje + fijo",
-      "feeIncomeAccount": "Cuenta de ingreso de la comisión"
+      "feeIncomeAccount": "Cuenta de ingreso de la comisión",
+      "webhookUrl": "URL del webhook",
+      "webhookHint": "Pegue este endpoint en el panel del proveedor para recibir eventos de pago.",
+      "copy": "Copiar",
+      "copied": "Copiado",
+      "testConnection": "Probar conexión",
+      "testing": "Probando…"
     }
   },
   "flows": {

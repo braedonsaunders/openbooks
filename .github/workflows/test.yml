@@ -73,7 +73,7 @@ jobs:
         # would turn this job green while running nothing. Run one known
         # integration file and hard-fail if anything skipped or nothing ran.
         run: |
-          node --import tsx --test --test-force-exit \
+          node --import tsx --test --test-force-exit --test-reporter=tap \
             engine/src/kernel-constraints.integration.test.ts 2>&1 | tee canary.tap
           node -e 'const s=require("fs").readFileSync("canary.tap","utf8"); \
             if (/# SKIP/i.test(s)) { console.error("FATAL: integration tests skipped — DB wiring is broken"); process.exit(1); } \
