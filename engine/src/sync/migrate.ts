@@ -340,6 +340,24 @@ async function findPartyByRef(orgId: string, refKey: string, sourceRef: string) 
   return existing.rows[0]?.id ?? null;
 }
 
+/**
+ * Same cross-connector identity problem as findPartyByRef, for jobs/projects:
+ * AdminApp2 and NetSuite both key a job by its NetSuite id, but each connector
+ * only looks up its OWN ref key, so whichever ran second created a second,
+ * empty project for every job. Adopt the existing row instead — matching in
+ * either direction, since either connector can arrive first.
+ */
+async function findProjectByRef(orgId: string, refKey: string, sourceRef: string) {
+  const direct = await findByRef("projects", orgId, refKey, sourceRef);
+  if (direct) return direct;
+  const existing = (await db.execute(sql`
+    select id from projects
+     where org_id = ${orgId}
+       and (custom->'source'->>'externalId' = ${sourceRef} or custom->>'nsId' = ${sourceRef})
+     limit 1`)) as { rows: { id: string }[] };
+  return existing.rows[0]?.id ?? null;
+}
+
 async function loadSubsidiaries(records: SourceEntity[], ctx: Ctx, s: ResourceLoadStats): Promise<void> {
   const pending = [...records];
   while (pending.length > 0) {
@@ -522,7 +540,7 @@ async function upsert(resource: string, ctx: Ctx, rec: SourceEntity, s: Resource
       starts: str(f.startsOn), ends: str(f.endsOn), isActive: f.isActive !== false,
     };
     const contractValue = typeof f.contractValue === "string" ? f.contractValue : null;
-    const id = await findByRef("projects", orgId, refKey, rec.sourceRef);
+    const id = await findProjectByRef(orgId, refKey, rec.sourceRef);
     if (id) {
       await db.execute(sql`update projects set name=${name}, code=${vals.code}, status=${vals.status}::text,
         project_type_id=coalesce((select id from project_types pt where pt.org_id=${orgId} and pt.key=${vals.billing} limit 1), project_type_id),
