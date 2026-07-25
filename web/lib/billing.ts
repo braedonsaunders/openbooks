@@ -207,6 +207,8 @@ export async function generateInvoiceFromBillingRequest(
           timeEntryId: te.id,
           timeTypeId: te.time_type_id,
           sourceCostLineId: null,
+          baseAmount: amount,
+          isLabor: true,
         })
       }
 
@@ -273,6 +275,80 @@ export async function generateInvoiceFromBillingRequest(
             unit: cl.unit,
             equipmentUnitId: cl.equipment_unit_id,
             rateVersionId: cl.rate_version_id,
+            // Pre-markup base (cost documents only; project charges carry their own price).
+            baseAmount: isProjectCharge ? amount : String(cl.amount ?? '0'),
+          })
+        }
+      }
+
+      // -- generalized invoice shaping (all config-driven; empty by default) ---
+      // (1) Lump-sum markup: bill the cost lines at base and add ONE markup line
+      //     for the aggregate markup, instead of embedding it in each line.
+      if (invoicing.markupPresentation === 'lump_sum') {
+        let markupTotal = '0'
+        for (const l of built) {
+          if (l.baseAmount == null || l.isLabor) continue
+          const delta = add(l.amount, `-${l.baseAmount}`)
+          if (cmp(delta, '0') > 0) {
+            markupTotal = add(markupTotal, delta)
+            l.amount = l.baseAmount
+            l.unitPrice = l.baseAmount
+            l.quantity = '1'
+          }
+        }
+        if (cmp(markupTotal, '0') > 0) {
+          built.push({
+            itemId: null, accountId: defaultIncomeId, description: 'Markup', quantity: '1',
+            unitPrice: markupTotal, amount: markupTotal, taxCodeId: null, employeeId: null,
+            timeEntryId: null, timeTypeId: null, sourceCostLineId: null,
+          })
+        }
+      }
+
+      // (2) Percentage surcharge lines: each is percent × a running basis
+      //     (billed labor / billed cost / subtotal). Generic — the tenant defines
+      //     which surcharges exist; the product has no named surcharge concept.
+      const laborValue = built.filter((l) => l.isLabor).reduce((s, l) => add(s, l.amount), '0')
+      const costValue = built.filter((l) => !l.isLabor).reduce((s, l) => add(s, l.amount), '0')
+      for (const sc of invoicing.surcharges ?? []) {
+        const basisVal = sc.basis === 'labor' ? laborValue : sc.basis === 'cost' ? costValue : add(laborValue, costValue)
+        const pctMult = fromUnits(roundDiv(toUnits(String(sc.percent ?? '0')), 100n))
+        const amt = mulRate(basisVal, pctMult)
+        if (cmp(amt, '0') <= 0) continue
+        const item = sc.itemId
+          ? ((await tx.execute(sql`select income_account_id, tax_code_id from items where id = ${sc.itemId} and org_id = ${orgId}`)) as unknown as { rows: any[] }).rows[0]
+          : null
+        built.push({
+          itemId: sc.itemId ?? null, accountId: item?.income_account_id ?? defaultIncomeId,
+          description: sc.label, quantity: '1', unitPrice: amt, amount: amt,
+          taxCodeId: item?.tax_code_id ?? null, employeeId: null, timeEntryId: null,
+          timeTypeId: null, sourceCostLineId: null,
+        })
+      }
+    }
+
+    // (3) Not-to-exceed cap: trim the cumulative invoiced total to the contract.
+    if (invoicing.notToExceed && built.length) {
+      const contractRes = (await tx.execute(sql`
+        select coalesce(contract_value, 0)::text as contract from projects where id = ${req.project_id} and org_id = ${orgId}
+      `)) as unknown as { rows: { contract: string }[] }
+      const contract = contractRes.rows[0]?.contract ?? '0'
+      if (cmp(contract, '0') > 0) {
+        const invRes = (await tx.execute(sql`
+          select coalesce(sum(subtotal), 0)::text as inv from documents
+           where org_id = ${orgId} and project_id = ${req.project_id} and kind = 'customer_invoice' and status = 'posted'
+        `)) as unknown as { rows: { inv: string }[] }
+        const invoicedToDate = invRes.rows[0]?.inv ?? '0'
+        const running = sum(built.map((l) => l.amount))
+        const remaining = add(contract, `-${invoicedToDate}`)
+        if (cmp(remaining, '0') <= 0) throw new BillingError('The not-to-exceed budget is fully invoiced')
+        const over = add(running, `-${remaining}`)
+        if (cmp(over, '0') > 0) {
+          built.push({
+            itemId: invoicing.notToExceedItemId ?? null, accountId: defaultIncomeId,
+            description: 'Not-to-exceed cap adjustment', quantity: '1', unitPrice: `-${over}`,
+            amount: `-${over}`, taxCodeId: null, employeeId: null, timeEntryId: null,
+            timeTypeId: null, sourceCostLineId: null,
           })
         }
       }
