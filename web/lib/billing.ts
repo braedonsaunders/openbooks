@@ -24,6 +24,11 @@ interface GenerateResult {
   kind: string
 }
 
+/** Negate a decimal safely — prefixing '-' breaks when the value is already negative. */
+function negate(v: string): string {
+  return fromUnits(-toUnits(String(v ?? '0')))
+}
+
 /** Month/percent → multiplier string. markupPercent 15 → '1.15'. */
 function markupMultiplier(markupPercent: unknown): string {
   try {
@@ -334,7 +339,7 @@ export async function generateInvoiceFromBillingRequest(
         let markupTotal = '0'
         for (const l of built) {
           if (l.baseAmount == null || l.isLabor) continue
-          const delta = add(l.amount, `-${l.baseAmount}`)
+          const delta = add(l.amount, negate(l.baseAmount))
           if (cmp(delta, '0') > 0) {
             markupTotal = add(markupTotal, delta)
             l.amount = l.baseAmount
@@ -386,14 +391,14 @@ export async function generateInvoiceFromBillingRequest(
         `)) as unknown as { rows: { inv: string }[] }
         const invoicedToDate = invRes.rows[0]?.inv ?? '0'
         const running = sum(built.map((l) => l.amount))
-        const remaining = add(contract, `-${invoicedToDate}`)
+        const remaining = add(contract, negate(invoicedToDate))
         if (cmp(remaining, '0') <= 0) throw new BillingError('The not-to-exceed budget is fully invoiced')
-        const over = add(running, `-${remaining}`)
+        const over = add(running, negate(remaining))
         if (cmp(over, '0') > 0) {
           built.push({
             itemId: invoicing.notToExceedItemId ?? null, accountId: defaultIncomeId,
-            description: 'Not-to-exceed cap adjustment', quantity: '1', unitPrice: `-${over}`,
-            amount: `-${over}`, taxCodeId: null, employeeId: null, timeEntryId: null,
+            description: 'Not-to-exceed cap adjustment', quantity: '1', unitPrice: negate(over),
+            amount: negate(over), taxCodeId: null, employeeId: null, timeEntryId: null,
             timeTypeId: null, sourceCostLineId: null,
           })
         }
