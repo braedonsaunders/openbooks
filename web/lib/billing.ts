@@ -212,6 +212,16 @@ export async function generateInvoiceFromBillingRequest(
         })
       }
 
+      // Cost is billed for the SAME period as the labor. Without this a progress
+      // invoice cut for one month would sweep in every later month's unbilled
+      // materials, because only the time query honoured the request's range.
+      const costDateFilter = sql.join(
+        [
+          req.start_date ? sql` and d.document_date >= ${req.start_date}` : sql``,
+          req.cutoff_date ? sql` and d.document_date <= ${req.cutoff_date}` : sql``,
+        ],
+        sql``,
+      )
       // Billable cost lines (materials/subs/equipment) on the document kinds this
       // project type treats as cost sources — configurable, because tenants stage
       // priced billable items differently (purchase docs, or e.g. sales orders).
@@ -237,6 +247,7 @@ export async function generateInvoiceFromBillingRequest(
           ) rc on true
          where dl.org_id = ${orgId} and dl.project_id = ${req.project_id}
            and dl.is_billable and dl.billed_by_line_id is null
+           ${costDateFilter}
            and ((d.kind = 'project_charge' and d.status in ('approved','posted'))
              or (d.status in ('posted','approved') and d.kind = any(${`{${costKinds.join(",")}}`}::text[])))
       `)) as unknown as { rows: any[] }
