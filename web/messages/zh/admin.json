@@ -55,6 +55,10 @@
         "title": "环境",
         "description": "创建、刷新并提升与生产隔离的沙箱副本"
       },
+      "backup": {
+        "title": "备份",
+        "description": "下载、计划并保留组织备份"
+      },
       "apiKeys": {
         "title": "API 密钥",
         "description": "为集成创建作用域受限的 API 密钥并查看使用日志"
@@ -771,6 +775,7 @@
     "admin_audit_read": "查看审计日志",
     "admin_ai_manage": "管理 AI 设置",
     "admin_sandboxes_manage": "创建并管理沙箱环境",
+    "admin_backups_manage": "管理组织备份",
     "api_keys_manage": "管理 API 密钥",
     "assets_read": "查看固定资产和折旧",
     "assets_manage": "创建并编辑资产，运行折旧",

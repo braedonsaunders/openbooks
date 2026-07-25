@@ -16,6 +16,8 @@ import { startReportScheduler } from "./scheduler.ts";
 import { startSandboxScheduler } from "./sandbox-scheduler.ts";
 import { startOverheadScheduler } from "./overhead-scheduler.ts";
 import { createApCaptureWorker } from "./ap-capture-worker.ts";
+import { createBackupWorker } from "./backup-worker.ts";
+import { startBackupScheduler } from "./backup-scheduler.ts";
 
 const workers = [
   createEmailWorker(),
@@ -25,16 +27,18 @@ const workers = [
   createSandboxWorker(),
   createScriptsWorker(),
   createApCaptureWorker(),
+  createBackupWorker(),
 ];
 startReportScheduler();
 startSandboxScheduler();
 startMirrorScheduler();
 startOverheadScheduler();
+startBackupScheduler();
 
 for (const w of workers) {
   w.on("failed", (job, err) => console.error(`[worker] ${w.name} job ${job?.id} failed:`, err?.message));
 }
-console.log("[worker] online — queues: emails, reports, migration, sandbox, scripts, ap-capture; report + sandbox schedulers ticking");
+console.log("[worker] online — queues: emails, reports, migration, sandbox, scripts, ap-capture, backup; report + sandbox + backup schedulers ticking");
 
 const heartbeat = async () => {
   try {

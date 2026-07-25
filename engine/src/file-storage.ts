@@ -20,11 +20,26 @@ function s3(): S3Client {
       secretAccessKey: env.S3_SECRET_ACCESS_KEY!,
     },
     forcePathStyle: true,
+    // Only send integrity checksums when an operation requires them (e.g.
+    // DeleteObjects). The SDK's default ("WHEN_SUPPORTED") appends a trailing
+    // CRC32 to streamed PUT bodies, which several S3-compatible stores either
+    // reject or silently fold into the object; the backup service computes
+    // its own sha256, so nothing is lost.
+    requestChecksumCalculation: "WHEN_REQUIRED",
   });
   return client;
 }
 
 const objectKey = (versionId: string) => `file-cabinet/${versionId}`;
+
+/** Shared S3 client + bucket for other object-storage users (org backups). */
+export function getS3Client(): S3Client {
+  return s3();
+}
+
+export function s3Bucket(): string {
+  return env.S3_BUCKET!;
+}
 
 export async function putS3Blob(versionId: string, bytes: Buffer, contentType: string): Promise<void> {
   await s3().send(new PutObjectCommand({

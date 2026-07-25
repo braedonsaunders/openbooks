@@ -5,6 +5,7 @@ import { getTranslations } from 'next-intl/server'
 import {
   ArrowUpRight,
   Boxes,
+  DatabaseBackup,
   Link as LinkIcon,
   Mail,
   PanelLeft,
@@ -126,6 +127,12 @@ const GROUPS: Group[] = [
         icon: <Boxes size={18} />,
         cardKey: 'sandboxes',
         permission: 'admin.sandboxes.manage',
+      },
+      {
+        href: '/admin/backups',
+        icon: <DatabaseBackup size={18} />,
+        cardKey: 'backup',
+        permission: 'admin.backups.manage',
       },
       {
         href: '/admin/audit',

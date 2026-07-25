@@ -34,6 +34,11 @@ const EXCLUDE = new Set([
   "audit_log",
   "api_key_events",
   "intercompany_pairs",
+  // A sandbox must not inherit production's backup schedule, and its run
+  // ledger must not reference production's S3 objects (a delete inside the
+  // sandbox would remove production's backup). Sandboxes start backup-free.
+  "backup_policies",
+  "backup_runs",
 ]);
 
 /** Source-row filter for the org-less rebased tables (they have no org_id). */
