@@ -56,10 +56,23 @@ export interface TableInfo {
   hasOrgId: boolean;
   hasId: boolean;
   columns: ColumnInfo[];
-  /** column name → referenced table (foreign keys). */
+  /** column name → referenced table (foreign keys + inferred references). */
   fks: Record<string, string>;
   /** column name → FK ON DELETE rule (NO ACTION, RESTRICT, CASCADE, ...). */
   fkDeleteRules: Record<string, string>;
+  /**
+   * column → referenced table for REAL, NON-DEFERRABLE foreign keys only. These
+   * are the FKs that constrain INSERT order (deferrable ones resolve at commit;
+   * inferred references have no constraint at all). Drives insertionOrder.
+   */
+  hardFks: Record<string, string>;
+  /**
+   * uuid columns that MUST be rebased even without a resolvable FK — they sit in a
+   * unique index that omits org_id, so copying the prod value verbatim collides with
+   * prod's own row. Covers polymorphic references (subject_id, target_value_id) whose
+   * target can't be named; ob_rebase(same seed) maps them to the sandbox row anyway.
+   */
+  forceRebase: Set<string>;
 }
 
 export interface Catalog {
@@ -93,7 +106,7 @@ export async function loadCatalog(): Promise<Catalog> {
   // Foreign-key edges: (table, column) → referenced table + delete behavior.
   const fkRes = (await db.execute(sql`
     select tc.table_name, kcu.column_name, ccu.table_name as ref_table,
-           rc.delete_rule
+           rc.delete_rule, tc.is_deferrable
       from information_schema.table_constraints tc
       join information_schema.key_column_usage kcu
         on kcu.constraint_name = tc.constraint_name and kcu.table_schema = tc.table_schema
@@ -114,6 +127,8 @@ export async function loadCatalog(): Promise<Catalog> {
         columns: [],
         fks: {},
         fkDeleteRules: {},
+        hardFks: {},
+        forceRebase: new Set<string>(),
       };
       byTable.set(r.table_name, t);
     }
@@ -127,7 +142,23 @@ export async function loadCatalog(): Promise<Catalog> {
     if (t) {
       t.fks[r.column_name] = r.ref_table;
       t.fkDeleteRules[r.column_name] = r.delete_rule;
+      if (r.is_deferrable !== "YES") t.hardFks[r.column_name] = r.ref_table;
     }
+  }
+
+  // uuid columns inside a UNIQUE index that omits org_id — must be force-rebased or
+  // the copy collides with prod's own row (the key is global, not per-tenant).
+  const uqRes = (await db.execute(sql`
+    select ix.indrelid::regclass::text as table_name, a.attname as column_name
+      from pg_index ix
+      join pg_attribute a on a.attrelid = ix.indrelid and a.attnum = any(ix.indkey)
+     where ix.indisunique and a.atttypid = 'uuid'::regtype
+       and exists (select 1 from pg_attribute o where o.attrelid = ix.indrelid and o.attname = 'org_id' and not o.attisdropped)
+       and not exists (select 1 from pg_attribute o2 join lateral unnest(ix.indkey) kk(n) on o2.attnum = kk.n
+                        where o2.attrelid = ix.indrelid and o2.attname = 'org_id')`)) as any;
+  for (const r of uqRes.rows as any[]) {
+    const t = byTable.get(r.table_name);
+    if (t && r.column_name !== "id" && r.column_name !== "org_id") t.forceRebase.add(r.column_name);
   }
 
   // Tenant set = every org-owned table + org-less children. Rebase set is the
@@ -138,6 +169,35 @@ export async function loadCatalog(): Promise<Catalog> {
   for (const e of EXTRA_REBASE) if (byTable.has(e)) tenantSet.add(e);
   const rebaseSet = new Set(tenantSet);
   for (const e of EXCLUDE) rebaseSet.delete(e);
+
+  // Infer references for uuid `<name>_id` columns that carry NO foreign-key
+  // constraint (schema drift left many internal references unconstrained — e.g.
+  // document_line_tax_components.document_line_id, document_lines.project_id).
+  // Without rebasing them the clone copies prod ids verbatim: usually a silently
+  // corrupt reference, and a hard duplicate-key error where a unique index omits
+  // org_id (the copied prod key collides with prod's own row). Rebase iff the
+  // inferred target is a table we actually clone. Only fills gaps — real FKs win.
+  const allTables = new Set(byTable.keys());
+  const plural = (s: string) => (s.endsWith("s") ? s : s.endsWith("y") ? s.slice(0, -1) + "ies" : s + "s");
+  const inferRef = (col: string): string | null => {
+    const base = col.slice(0, -3); // strip "_id"
+    const last = base.split("_").pop()!;
+    for (const cand of [plural(base), base, plural(last), last]) {
+      if (allTables.has(cand)) return cand;
+    }
+    return null;
+  };
+  for (const t of byTable.values()) {
+    if (!rebaseSet.has(t.name)) continue;
+    for (const c of t.columns) {
+      if (!c.isUuid || c.name === "id" || c.name === "org_id" || t.fks[c.name] || !c.name.endsWith("_id")) continue;
+      const ref = inferRef(c.name);
+      if (ref && rebaseSet.has(ref)) {
+        t.fks[c.name] = ref;
+        t.fkDeleteRules[c.name] = "NO ACTION";
+      }
+    }
+  }
 
   const tables = [...rebaseSet].map((n) => byTable.get(n)!).filter(Boolean);
   const tenantTables = [...tenantSet].map((n) => byTable.get(n)!).filter(Boolean);
@@ -211,7 +271,12 @@ export function insertionOrder(cat: Catalog): string[] {
     indeg.set(n, 0);
   }
   for (const t of cat.tables) {
-    for (const [column, ref] of Object.entries(t.fks)) {
+    // Only REAL non-deferrable FKs constrain insert order — deferrable ones (the
+    // documents↔journal_entries cycle) resolve at commit, and inferred references
+    // have no constraint. Using t.fks here would trap document_lines behind the
+    // deferrable cycle and copy its non-deferrable children (charge_rate_components)
+    // before it.
+    for (const [column, ref] of Object.entries(t.hardFks)) {
       if (ref === t.name || !inSet.has(ref)) continue;
       if (SANDBOX_CYCLE_BREAKERS[t.name]?.includes(column)) continue;
       if (!children.get(ref)!.has(t.name)) {

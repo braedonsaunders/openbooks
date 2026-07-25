@@ -15,6 +15,8 @@ function table(deleteRule: string): TableInfo {
     columns: [],
     fks: { parent_id: "tree" },
     fkDeleteRules: { parent_id: deleteRule },
+    hardFks: { parent_id: "tree" },
+    forceRebase: new Set<string>(),
   };
 }
 
