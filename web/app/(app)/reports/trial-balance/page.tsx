@@ -7,6 +7,7 @@ import { resolvePeriod } from '../../../../lib/periods'
 import { parseReportQuery } from '../../../../lib/report-filters'
 import { reportSubsidiaryView } from '../../../../lib/consolidation'
 import { orgBranding } from '../../../../lib/report-pdf'
+import { decimalAdd, decimalNeg, decimalSum } from '../../../../lib/statement-format'
 import { ReportFilterBar } from '../ReportFilterBar'
 import { ExportMenu } from '../ExportMenu'
 import { SaveViewButton } from '../SaveViewButton'
@@ -28,12 +29,12 @@ export default async function TrialBalance({
   const subView = await reportSubsidiaryView(q.subsidiaryId, date)
   const dims = { ...q.dims, subsidiaryIds: subView.subsidiary?.ids }
   const [rows, opts, org, branding] = await Promise.all([trialBalance(date, dims), dimensionOptions(), orgInfo(), orgBranding()])
-  const totalDebits = rows.reduce((a, r) => a + Number(r.debits), 0)
-  const totalCredits = rows.reduce((a, r) => a + Number(r.credits), 0)
+  const totalDebits = decimalSum(rows.map((r) => r.debits))
+  const totalCredits = decimalSum(rows.map((r) => r.credits))
 
   // The unified report shape: every value drills to the account register as of
   // the report date (five-cell rows share one href).
-  const dataRows: PaperCell[][] = rows.map((r) => [r.number, r.name, Number(r.debits), Number(r.credits), Number(r.balance)])
+  const dataRows: PaperCell[][] = rows.map((r) => [r.number, r.name, r.debits, r.credits, r.balance])
   const links = rows.map((r) => [`/accounts/${r.id}?to=${date}`, `/accounts/${r.id}?to=${date}`, null, null, null])
   const drills: (ReportDrillTarget | null)[][] = rows.map((r) => {
     const target: ReportDrillTarget = {
@@ -47,7 +48,7 @@ export default async function TrialBalance({
     }
     return [null, null, target, target, target]
   })
-  dataRows.push(['', t('trialBalance.totals'), totalDebits, totalCredits, totalDebits - totalCredits])
+  dataRows.push(['', t('trialBalance.totals'), totalDebits, totalCredits, decimalAdd(totalDebits, decimalNeg(totalCredits))])
   links.push([null, null, null, null, null])
   const totalsTarget: ReportDrillTarget = { kind: 'ledger', label: t('trialBalance.totals'), to: date, mode: 'balance', dims, subsidiaryId: q.subsidiaryId }
   drills.push([null, null, totalsTarget, totalsTarget, totalsTarget])

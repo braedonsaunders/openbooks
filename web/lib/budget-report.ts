@@ -12,6 +12,13 @@ import {
   type StatementView,
   type StatementViewLine,
 } from './statement-matrix'
+import {
+  decimalAdd,
+  decimalIsMaterial,
+  decimalNeg,
+  type ExactDecimal,
+  type StatementValue,
+} from './statement-format'
 
 /**
  * Budget vs Actual. Budget data is dimensional like the ledger (account ×
@@ -69,10 +76,12 @@ type Acct = {
 /** Roll a [actual, budget] leaf vector up the account tree, reader-signed. */
 function treeify(
   accounts: Acct[],
-  leaf: Map<string, [number, number]>,
-): { id: string; number: string | null; name: string; type: string; depth: number; isSummary: boolean; values: number[] }[] {
+  leaf: Map<string, [ExactDecimal, ExactDecimal]>,
+): { id: string; number: string | null; name: string; type: string; depth: number; isSummary: boolean; values: ExactDecimal[] }[] {
   const byId = new Map(accounts.map((a) => [a.id, a]))
-  const rolled = new Map<string, [number, number]>(accounts.map((a) => [a.id, [...(leaf.get(a.id) ?? [0, 0])] as [number, number]]))
+  const rolled = new Map<string, [ExactDecimal, ExactDecimal]>(
+    accounts.map((a) => [a.id, [...(leaf.get(a.id) ?? ['0.0000', '0.0000'])] as [ExactDecimal, ExactDecimal]]),
+  )
   for (const a of accounts) {
     const own = leaf.get(a.id)
     if (!own) continue
@@ -80,8 +89,8 @@ function treeify(
     while (p) {
       const acc = rolled.get(p)
       if (acc) {
-        acc[0] += own[0]
-        acc[1] += own[1]
+        acc[0] = decimalAdd(acc[0], own[0])
+        acc[1] = decimalAdd(acc[1], own[1])
       }
       p = byId.get(p)?.parent_id ?? null
     }
@@ -91,13 +100,13 @@ function treeify(
     if (!children.has(a.parent_id)) children.set(a.parent_id, [])
     children.get(a.parent_id)!.push(a)
   }
-  const out: { id: string; number: string | null; name: string; type: string; depth: number; isSummary: boolean; values: number[] }[] = []
+  const out: { id: string; number: string | null; name: string; type: string; depth: number; isSummary: boolean; values: ExactDecimal[] }[] = []
   const walk = (parent: string | null, depth: number) => {
     for (const a of children.get(parent) ?? []) {
-      const raw = rolled.get(a.id) ?? [0, 0]
+      const raw = rolled.get(a.id) ?? ['0.0000', '0.0000']
       const flip = CREDIT_NORMAL.has(a.type)
-      const values = [flip ? -raw[0] : raw[0], flip ? -raw[1] : raw[1]]
-      if (values.some((v) => Math.abs(v) >= 0.005) || a.is_summary) {
+      const values = [flip ? decimalNeg(raw[0]) : raw[0], flip ? decimalNeg(raw[1]) : raw[1]]
+      if (values.some((v) => decimalIsMaterial(v)) || a.is_summary) {
         out.push({ id: a.id, number: a.number, name: a.name, type: a.type, depth, isSummary: a.is_summary, values })
       }
       walk(a.id, depth + 1)
@@ -105,7 +114,7 @@ function treeify(
   }
   walk(null, 0)
   return out.filter((r, i) => {
-    if (!r.isSummary || r.values.some((v) => Math.abs(v) >= 0.005)) return true
+    if (!r.isSummary || r.values.some((v) => decimalIsMaterial(v))) return true
     const next = out[i + 1]
     return next !== undefined && next.depth > r.depth
   })
@@ -164,12 +173,12 @@ export async function budgetVsActualView(
      order by number nulls last, name
   `)) as unknown as { rows: Acct[] }
 
-  const leaf = new Map<string, [number, number]>()
-  for (const r of actualRows.rows) leaf.set(r.account_id, [Number(r.amt), 0])
+  const leaf = new Map<string, [ExactDecimal, ExactDecimal]>()
+  for (const r of actualRows.rows) leaf.set(r.account_id, [String(r.amt), '0.0000'])
   for (const r of budgetRows.rows) {
-    const cur = leaf.get(r.account_id) ?? [0, 0]
-    cur[1] = Number(r.amt)
-    leaf.set(r.account_id, cur)
+    const cur = leaf.get(r.account_id) ?? ['0.0000', '0.0000']
+    cur[1] = String(r.amt)
+    leaf.set(r.account_id, cur as [ExactDecimal, ExactDecimal])
   }
 
   const treeRows = treeify(accounts.rows, leaf)
@@ -191,7 +200,7 @@ export async function budgetVsActualView(
       type: r.type,
       depth: r.depth,
       isSummary: r.isSummary,
-      values: recomputeVariance({ columns, rows: [], truncated: false }, [...r.values, 0, 0]),
+      values: recomputeVariance({ columns, rows: [], truncated: false }, [...r.values, '0.0000', '0.0000']),
     })),
     truncated: false,
   }
@@ -210,7 +219,7 @@ export async function budgetVsActualView(
     matrix.rows
       .filter((r) => types.includes(r.type))
       .map((r) => ({ kind: 'account' as const, label: r.name, number: r.number, accountId: r.id, depth: r.depth, emphasis: r.isSummary, values: r.values }))
-  const section = (title: string, types: string[], total: number[]) => {
+  const section = (title: string, types: string[], total: StatementValue[]) => {
     lines.push({ kind: 'section', label: title, depth: 0 })
     lines.push(...accountLines(types))
     lines.push({ kind: 'subtotal', label: labels.totalOf(title), depth: 0, values: total, drillTypes: types })

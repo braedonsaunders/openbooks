@@ -1,0 +1,183 @@
+'use client'
+
+import { useEffect, useState } from 'react'
+import { Button, Card, Input, Label, PageHeader, Select } from '@openbooks/ui'
+import { ListPageLayout, PageContainer } from '../../../../components/page-layout'
+
+/**
+ * Minimal PSP settlement import UI — paste Stripe/Recurly/Chargebee JSON
+ * and post the balanced kernel journal for fees/disputes/FX/net deposit.
+ */
+export default function PspSettlementsPage() {
+  const [batches, setBatches] = useState<any[]>([])
+  const [provider, setProvider] = useState('stripe')
+  const [externalRef, setExternalRef] = useState('')
+  const [settlementDate, setSettlementDate] = useState(new Date().toISOString().slice(0, 10))
+  const [payload, setPayload] = useState('[]')
+  const [bankAccountId, setBankAccountId] = useState('')
+  const [feeAccountId, setFeeAccountId] = useState('')
+  const [clearingAccountId, setClearingAccountId] = useState('')
+  const [msg, setMsg] = useState<string | null>(null)
+  const [err, setErr] = useState<string | null>(null)
+
+  const load = async () => {
+    const r = await fetch('/api/psp/settlements')
+    if (r.ok) {
+      const d = await r.json()
+      setBatches(d.batches ?? [])
+    }
+  }
+  useEffect(() => {
+    void load()
+  }, [])
+
+  const importBatch = async () => {
+    setErr(null)
+    setMsg(null)
+    let parsed: unknown
+    try {
+      parsed = JSON.parse(payload)
+    } catch {
+      setErr('Payload must be valid JSON')
+      return
+    }
+    const body: Record<string, unknown> = {
+      action: 'import',
+      provider,
+      externalRef,
+      settlementDate,
+      bankAccountId: bankAccountId || undefined,
+      feeAccountId: feeAccountId || undefined,
+      clearingAccountId: clearingAccountId || undefined,
+    }
+    if (provider === 'stripe') {
+      body.transactions = parsed
+      body.payoutId = externalRef
+    } else {
+      body.payload = parsed
+    }
+    const r = await fetch('/api/psp/settlements', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify(body),
+    })
+    const d = await r.json()
+    if (!r.ok) {
+      setErr(d.error ?? 'Import failed')
+      return
+    }
+    setMsg(`Imported batch ${d.batchId} (net ${d.totals?.netAmount ?? '—'})`)
+    void load()
+  }
+
+  const post = async (batchId: string) => {
+    setErr(null)
+    const r = await fetch('/api/psp/settlements', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ action: 'post', batchId }),
+    })
+    const d = await r.json()
+    if (!r.ok) {
+      setErr(d.error ?? 'Post failed')
+      return
+    }
+    setMsg(`Posted journal ${d.entryId}`)
+    void load()
+  }
+
+  return (
+    <ListPageLayout header={<PageHeader title="PSP settlements" description="Import Stripe, Recurly, or Chargebee payouts. Fees, disputes, and FX post through the GL kernel." />}>
+      <PageContainer className="space-y-6">
+        {err && <p className="text-sm text-red-600">{err}</p>}
+        {msg && <p className="text-sm text-teal-700 dark:text-teal-300">{msg}</p>}
+
+        <Card className="space-y-3 p-4">
+          <h3 className="text-sm font-semibold">Import settlement</h3>
+          <div className="grid gap-3 sm:grid-cols-3">
+            <div>
+              <Label>Provider</Label>
+              <Select value={provider} onChange={(e) => setProvider(e.target.value)}>
+                <option value="stripe">Stripe</option>
+                <option value="recurly">Recurly</option>
+                <option value="chargebee">Chargebee</option>
+              </Select>
+            </div>
+            <div>
+              <Label>External ref / payout id</Label>
+              <Input value={externalRef} onChange={(e) => setExternalRef(e.target.value)} />
+            </div>
+            <div>
+              <Label>Settlement date</Label>
+              <Input type="date" value={settlementDate} onChange={(e) => setSettlementDate(e.target.value)} />
+            </div>
+            <div>
+              <Label>Bank account id</Label>
+              <Input value={bankAccountId} onChange={(e) => setBankAccountId(e.target.value)} placeholder="uuid" />
+            </div>
+            <div>
+              <Label>Fee account id</Label>
+              <Input value={feeAccountId} onChange={(e) => setFeeAccountId(e.target.value)} placeholder="uuid" />
+            </div>
+            <div>
+              <Label>Clearing account id</Label>
+              <Input value={clearingAccountId} onChange={(e) => setClearingAccountId(e.target.value)} placeholder="uuid" />
+            </div>
+          </div>
+          <div>
+            <Label>{provider === 'stripe' ? 'Balance transactions JSON array' : 'Settlement JSON object'}</Label>
+            <textarea
+              className="mt-1 min-h-32 w-full rounded border p-2 font-mono text-xs dark:border-slate-700 dark:bg-slate-950"
+              value={payload}
+              onChange={(e) => setPayload(e.target.value)}
+            />
+          </div>
+          <Button size="sm" disabled={!externalRef} onClick={() => void importBatch()}>
+            Import draft
+          </Button>
+        </Card>
+
+        <Card className="p-4">
+          <h3 className="mb-3 text-sm font-semibold">Recent batches</h3>
+          <table className="w-full text-sm">
+            <thead className="text-left text-muted-foreground">
+              <tr>
+                <th className="py-1">Provider</th>
+                <th>Ref</th>
+                <th>Date</th>
+                <th className="text-right">Net</th>
+                <th>Status</th>
+                <th></th>
+              </tr>
+            </thead>
+            <tbody>
+              {batches.map((b) => (
+                <tr key={b.id} className="border-t">
+                  <td className="py-1">{b.provider}</td>
+                  <td className="font-mono text-xs">{b.externalRef}</td>
+                  <td>{b.settlementDate}</td>
+                  <td className="text-right tabular-nums">{b.netAmount}</td>
+                  <td>{b.status}</td>
+                  <td className="text-right">
+                    {b.status === 'draft' && (
+                      <Button size="sm" variant="ghost" onClick={() => void post(b.id)}>
+                        Post
+                      </Button>
+                    )}
+                  </td>
+                </tr>
+              ))}
+              {batches.length === 0 && (
+                <tr>
+                  <td colSpan={6} className="py-4 text-center text-muted-foreground">
+                    No settlements imported yet.
+                  </td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </Card>
+      </PageContainer>
+    </ListPageLayout>
+  )
+}

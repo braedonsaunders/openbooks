@@ -4,6 +4,7 @@ import {
   index,
   integer,
   jsonb,
+  numeric,
   pgTable,
   text,
   timestamp,
@@ -86,7 +87,15 @@ export const timeEntries = pgTable(
   ],
 );
 
-/** Project WBS — tasks under a project, for estimates vs actuals. */
+/**
+ * Project WBS — tasks under a project, for estimates vs actuals.
+ *
+ * This is also the SCHEDULED activity. The `schedule*` columns below carry the
+ * critical-path plan (dates, outline, constraints, progress) for orgs with the
+ * Project Scheduling feature on; they are simply null everywhere else. Keeping
+ * the plan on the same row as the estimate means time entries, costs and the
+ * schedule can never disagree about which task they refer to.
+ */
 export const projectTasks = pgTable(
   "project_tasks",
   {
@@ -101,9 +110,52 @@ export const projectTasks = pgTable(
       .default("open"),
     estimatedHours: money("estimated_hours"),
     estimatedCost: money("estimated_cost"),
+
+    // --- Scheduling (null unless the project is scheduled) ------------------
+    description: text("description"),
+    /** Bar, zero-duration marker, or a parent whose dates roll up. */
+    scheduleTaskType: text("schedule_task_type", { enum: ["task", "milestone", "summary"] })
+      .notNull()
+      .default("task"),
+    /**
+     * Execution status of the PLAN. Deliberately separate from `status`, which
+     * is the costing lifecycle (open/complete/cancelled) that estimates and
+     * time entries key off.
+     */
+    scheduleStatus: text("schedule_status", {
+      enum: ["not_started", "in_progress", "complete", "on_hold"],
+    })
+      .notNull()
+      .default("not_started"),
+    scheduleStart: date("schedule_start"),
+    scheduleEnd: date("schedule_end"),
+    scheduleDuration: integer("schedule_duration").notNull().default(0),
+    /** 0–1 fraction. */
+    scheduleProgress: numeric("schedule_progress", { precision: 5, scale: 4 })
+      .notNull()
+      .default("0"),
+    /** Free-text owner label; capacity planning uses schedule_task_assignments. */
+    scheduleAssignee: text("schedule_assignee"),
+    /** Flat display sequence within the project. */
+    scheduleOrder: integer("schedule_order").notNull().default(0),
+    scheduleOutlineLevel: integer("schedule_outline_level").notNull().default(0),
+    scheduleCalendarId: uuid("schedule_calendar_id"),
+    schedulePhase: text("schedule_phase"),
+    scheduleConstraintType: text("schedule_constraint_type", {
+      enum: ["asap", "alap", "snet", "snlt", "fnet", "fnlt", "mso", "mfo"],
+    })
+      .notNull()
+      .default("asap"),
+    scheduleConstraintDate: date("schedule_constraint_date"),
+    scheduleDeadlineDate: date("schedule_deadline_date"),
+    scheduleActualStart: date("schedule_actual_start"),
+    scheduleActualEnd: date("schedule_actual_end"),
     ...auditColumns,
   },
-  (t) => [index("project_tasks_project").on(t.projectId)],
+  (t) => [
+    index("project_tasks_project").on(t.projectId),
+    index("project_tasks_schedule_order").on(t.orgId, t.projectId, t.scheduleOrder),
+  ],
 );
 
 /**

@@ -43,6 +43,11 @@ export const FEATURES: FeatureDef[] = [
   { key: 'projects', defaultEnabled: true, category: 'operations', navModules: ['projects', 'construction-billing', 'field-tickets'] },
   { key: 'timeTracking', defaultEnabled: true, category: 'operations', navModules: ['timesheets'] },
   { key: 'fieldTickets', defaultEnabled: false, category: 'operations', navModules: ['field-tickets'], parentKey: 'projects' },
+  // Project scheduling: critical-path Gantt, work-breakdown outline, working
+  // calendars, baselines and resource levelling. Off by default — a schedule is
+  // a planning instrument, not an accounting one, and orgs that only job-cost
+  // projects should not carry it. Subordinate to the Projects parent gate.
+  { key: 'projectScheduling', defaultEnabled: false, category: 'operations', parentKey: 'projects' },
   { key: 'inventory', defaultEnabled: true, category: 'operations', navModules: ['inventory'] },
   { key: 'equipment', defaultEnabled: true, category: 'operations', navModules: ['equipment'] },
   { key: 'expenses', defaultEnabled: true, category: 'operations', navModules: ['expenses'] },
@@ -262,6 +267,14 @@ const FEATURE_DISABLE_CHECKS: Record<string, (orgId: string) => Promise<FeatureD
     if (projectTime) impacts.push({ labelKey: 'openProjectTimeEntries', count: projectTime })
     if (changeOrders) impacts.push({ labelKey: 'openChangeOrders', count: changeOrders })
     return { blocked: active + billingRequests + payApplications + retainage + fieldTickets + projectDocuments + projectTime + changeOrders > 0, impacts }
+  },
+  // A schedule is planning data, never posted history, so turning it off is
+  // always safe — but say how much plan goes dark before it happens.
+  projectScheduling: async (orgId) => {
+    const n = await countRows(sql`
+      select count(*)::int as n from project_tasks
+       where org_id = ${orgId} and schedule_start is not null`)
+    return { blocked: false, impacts: n ? [{ labelKey: 'scheduledTasks', count: n }] : [] }
   },
   fieldTickets: async (orgId) => {
     const n = await countRows(sql`

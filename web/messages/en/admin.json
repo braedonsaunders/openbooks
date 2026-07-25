@@ -2397,6 +2397,7 @@
       "navTitle": "Features",
       "title": "Features",
       "description": "Switch optional modules on or off for your company. Turning a feature off hides it everywhere — its data is never deleted.",
+      "runWizard": "Run setup wizard",
       "enabled": "{name} enabled",
       "disabled": "{name} disabled",
       "countOn": "{n} of {total} on",
@@ -2438,6 +2439,132 @@
     },
     "bankFeeds": {
       "navTitle": "Bank Feeds"
+    },
+    "wizard": {
+      "skip": "Skip for now",
+      "back": "Back",
+      "next": "Continue",
+      "apply": "Set up my books",
+      "error": "Something went wrong. Please try again.",
+      "welcome": {
+        "title": "Let's set up your books",
+        "description": "Answer a few quick questions and we'll configure your chart of accounts, features, and tax — everything you need to start posting. You can change anything later.",
+        "f1": "Chart of accounts",
+        "f2": "Industry presets",
+        "f3": "Feature switches"
+      },
+      "company": {
+        "title": "Tell us about your business",
+        "description": "The basics. You can edit these anytime in Company Settings.",
+        "name": "Business name",
+        "namePlaceholder": "e.g. Saunders Construction Ltd.",
+        "legalName": "Legal name (optional)",
+        "legalNamePlaceholder": "Registered legal entity name",
+        "country": "Country",
+        "currency": "Base currency",
+        "fiscalYear": "Fiscal year starts in"
+      },
+      "industry": {
+        "title": "What's your industry?",
+        "description": "We'll set up a chart of accounts and feature defaults tailored to your line of work. You can customize everything after.",
+        "search": "Search industries…",
+        "locked": "Your industry can't be changed after transactions have been posted, but you can still customize your chart of accounts and features individually."
+      },
+      "operations": {
+        "title": "How do you operate?",
+        "description": "Turn on the modules you need. Each can be toggled individually later on the Features page.",
+        "note": "These are starting points — every feature has its own safety check. You can turn any feature on or off later, even ones from other industries.",
+        "projects": {
+          "title": "Projects & job costing",
+          "description": "Track jobs with budgets, costing, billing, and profitability."
+        },
+        "timeTracking": {
+          "title": "Time tracking",
+          "description": "Timesheets with submission, approval, and cost/bill rate tracking."
+        },
+        "inventory": {
+          "title": "Inventory",
+          "description": "Stock tracking, locations, item costing, and assemblies."
+        },
+        "subscriptionBilling": {
+          "title": "Subscription billing",
+          "description": "Plans and subscriptions that auto-generate recurring invoices."
+        },
+        "multiSubsidiary": {
+          "title": "Multiple entities",
+          "description": "Run more than one legal entity with consolidation and intercompany."
+        },
+        "multiCurrency": {
+          "title": "Multi-currency",
+          "description": "Transact in foreign currencies with exchange rates and revaluation."
+        }
+      },
+      "review": {
+        "title": "Review your setup",
+        "description": "Here's what we'll configure. Click 'Set up my books' to apply everything.",
+        "companyName": "Business name",
+        "country": "Country",
+        "currency": "Currency",
+        "industry": "Industry",
+        "chartOfAccounts": "Chart of accounts",
+        "accounts": "accounts",
+        "features": "Features enabled",
+        "note": "After setup, you can fine-tune every account, feature, and tax setting from Company Settings."
+      },
+      "applying": {
+        "title": "Setting up your books…",
+        "description": "Creating your chart of accounts, configuring features, and mapping control accounts."
+      },
+      "done": {
+        "title": "You're all set!",
+        "description": "Your books are configured and ready. Head to the dashboard to get started."
+      },
+      "industries": {
+        "general_business": {
+          "title": "General Business",
+          "description": "A standard setup that works for any company. No industry-specific assumptions."
+        },
+        "construction_contractor": {
+          "title": "Construction & Trade",
+          "description": "Contractors, trades, and builders. Job costing, progress billing, retainage, and field tickets."
+        },
+        "professional_services": {
+          "title": "Professional Services",
+          "description": "Consultants, agencies, and advisors. Time tracking, project profitability, and retainer billing."
+        },
+        "engineering_architecture": {
+          "title": "Engineering & Architecture",
+          "description": "EPC and AEC firms. WBS, phase billing, equipment costing, and progress billing."
+        },
+        "it_software_saas": {
+          "title": "Software & SaaS",
+          "description": "Subscription billing, ASC 606 revenue recognition, and deferred revenue tracking."
+        },
+        "accounting_firm": {
+          "title": "Accounting Practice",
+          "description": "Bookkeeping and accounting firms. Multi-client, trust accounting, and engagement tracking."
+        },
+        "wholesale_distribution": {
+          "title": "Wholesale & Distribution",
+          "description": "Distributors and wholesalers. Inventory, landed cost, GRNI, and stock locations."
+        },
+        "property_management": {
+          "title": "Property Management",
+          "description": "Rental portfolios and property managers. Recurring rent, CAM, security deposits, and fixed assets."
+        },
+        "nonprofit": {
+          "title": "Non-Profit",
+          "description": "Charities and non-profits. Grant tracking, fund accounting, donations, and restricted net assets."
+        },
+        "manufacturing": {
+          "title": "Manufacturing",
+          "description": "Light and discrete manufacturing. BOMs, raw materials, WIP, finished goods, and overhead."
+        },
+        "healthcare_practice": {
+          "title": "Healthcare Practice",
+          "description": "Medical and dental practices. Patient AR, medical supplies, and equipment."
+        }
+      }
     }
   },
   "flows": {
@@ -2768,6 +2895,10 @@
     "subscriptionBilling": {
       "title": "Subscription Billing",
       "description": "Plans and subscriptions that auto-generate recurring invoices (SaaS / retainer)."
+    },
+    "projectScheduling": {
+      "title": "Project Scheduling",
+      "description": "Gantt charts, critical path, and resource leveling for project schedules."
     }
   }
 }

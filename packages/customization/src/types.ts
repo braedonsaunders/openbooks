@@ -89,6 +89,41 @@ export interface FormActionPlacement {
   visible: boolean
 }
 
+/**
+ * Placement of one tab on a record flyout.
+ *
+ * A record cockpit's tabs are as much a layout decision as its fields, so they
+ * are customized the same way: hide the ones a company doesn't use, reorder to
+ * match how it works, rename to its vocabulary, and add tabs of its own.
+ *
+ * Two kinds exist. A BUILT-IN tab (`key` matches the record type's registered
+ * tab) renders the product panel behind it — the designer can hide, rename and
+ * reorder it, but never author its contents. A CUSTOM tab (`key` starts with
+ * `tab_`) is authored here and renders the header groups listed in `groupIds`,
+ * which is how a company puts its own fields on their own tab instead of at the
+ * bottom of Overview.
+ */
+export interface FormTabPlacement {
+  /** Registered built-in tab key, or `tab_<slug>` for an author-created tab. */
+  key: string
+  /** Hidden when false. Default true. */
+  visible: boolean
+  /** Override the default label (null/undefined = registry default). */
+  labelOverride?: string | null
+  /**
+   * Header group ids rendered on this tab. Only meaningful for custom tabs;
+   * built-in tabs render their product panel.
+   */
+  groupIds?: string[]
+}
+
+/** Prefix that marks an author-created tab. */
+export const CUSTOM_TAB_PREFIX = 'tab_'
+
+export function isCustomTabKey(key: string) {
+  return key.startsWith(CUSTOM_TAB_PREFIX)
+}
+
 export interface FormLayoutConfig {
   schemaVersion: 1
   /** One-time marker for the baseline-form visibility defaults applied by the
@@ -103,6 +138,12 @@ export interface FormLayoutConfig {
   /** Ordered flyout actions. Runtime permissions/status still decide whether
    * an enabled action is currently available. */
   actions: FormActionPlacement[]
+  /**
+   * Ordered flyout tabs. Absent on record types without a tabbed cockpit, and
+   * on layouts saved before tabs became customizable — the renderer falls back
+   * to the registry order in both cases.
+   */
+  tabs?: FormTabPlacement[]
 }
 
 /* ------------------------------------------------------------------ */
@@ -213,6 +254,21 @@ export interface ListFilterMeta {
   entitySource?: string
 }
 
+/**
+ * A tab the record's flyout can draw. `featureKey` ties a tab to an optional
+ * feature: the designer still lists it (so configuration is discoverable), but
+ * the renderer hides it while the feature is off — a layout choice can never
+ * turn a gated capability back on.
+ */
+export interface FormTabMeta {
+  key: string
+  labelKey: string
+  /** Cannot be hidden or reordered away (the record's primary tab). */
+  locked?: boolean
+  /** Feature gate this tab belongs to, if any. */
+  featureKey?: string
+}
+
 export interface RecordTypeMeta {
   key: RecordTypeKey
   labelKey: string
@@ -241,6 +297,11 @@ export interface RecordTypeMeta {
    * (all 'entity' types, plus payments/transfer). Defaults to 'document_lines'.
    */
   customFieldLineTable?: string | null
+  /**
+   * Tabs this record's flyout draws, in default order. Record types without a
+   * tabbed cockpit omit this.
+   */
+  tabs?: FormTabMeta[]
 }
 
 export const DEFAULT_PER_PAGE = 25

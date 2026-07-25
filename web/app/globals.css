@@ -5,6 +5,13 @@
    (toggled by the theme switcher) instead of the OS `prefers-color-scheme`. */
 @custom-variant dark (&:where(.dark, .dark *));
 
+/* Semantic colour tokens for the vendored AppKit packages (see vendor/appkit).
+   This is the single definition of `--color-bg` / `--color-fg` / `--color-primary`
+   and friends — the raw triples that used to sit in the base layer below were
+   only read by packages/ui/src/styles.css, which this app never imports. */
+@import './appkit-bridge.css';
+@import '@appkit/scheduling/styles.css';
+
 @layer base {
   /* Tailwind v4 compat: restore v3 default border color (gray-200) so bare
      `border` utilities don't fall back to currentColor across the app. */
@@ -14,28 +21,6 @@
   ::backdrop,
   ::file-selector-button {
     border-color: var(--color-gray-200, currentColor);
-  }
-
-  :root {
-    --color-bg: 255 255 255;
-    --color-fg: 17 24 39;
-    --color-muted: 107 114 128;
-    --color-border: 229 231 235;
-    --color-primary: 15 118 110;
-    --color-primary-fg: 255 255 255;
-    --color-danger: 220 38 38;
-    --color-warning: 217 119 6;
-    --color-success: 22 163 74;
-    --radius: 0.5rem;
-  }
-
-  .dark {
-    --color-bg: 17 24 39;
-    --color-fg: 243 244 246;
-    --color-muted: 156 163 175;
-    --color-border: 55 65 81;
-    --color-primary: 20 184 166;
-    --color-primary-fg: 17 24 39;
   }
 
   html,

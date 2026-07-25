@@ -1,0 +1,195 @@
+name: test
+
+# Test gate for the monorepo. deploy.yml typechecks and builds; this workflow
+# runs the actual suites and publishes coverage. Jobs:
+#   unit        — fast, no database; integration files self-skip
+#   integration — full suite against a throwaway postgres:16, with a canary
+#                 that fails the job if the DB-backed tests silently skipped
+#   coverage    — full suite with V8 coverage, summary in the job page + lcov
+#                 artifact upload
+#   e2e         — Playwright browser smoke against the real app + real DB
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: test-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  unit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - name: Unit tests (no database)
+        # OPENBOOKS_DB_URL deliberately unset/empty: *.integration.test.ts
+        # files self-skip, everything else must pass.
+        env:
+          OPENBOOKS_DB_URL: ""
+        run: npm test
+
+  integration:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: openbooks
+          POSTGRES_PASSWORD: openbooks
+          POSTGRES_DB: openbooks_test
+        ports:
+          - 5433:5432
+        options: >-
+          --health-cmd "pg_isready -U openbooks -d openbooks_test"
+          --health-interval 5s --health-timeout 5s --health-retries 12
+    env:
+      OPENBOOKS_DB_URL: postgres://openbooks:openbooks@localhost:5433/openbooks_test
+      PGPASSWORD: openbooks
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+
+      - name: Load schema
+        # The production bootstrap is the authoritative provisioner: tracked
+        # migrations, referential integrity, kernel constraints, base seeds.
+        run: npx tsx scripts/bootstrap.ts
+
+      - name: Integration canary
+        # DB-backed tests self-skip when OPENBOOKS_DB_URL is missing, which
+        # would turn this job green while running nothing. Run one known
+        # integration file and hard-fail if anything skipped or nothing ran.
+        run: |
+          node --import tsx --test --test-force-exit \
+            engine/src/kernel-constraints.integration.test.ts 2>&1 | tee canary.tap
+          node -e 'const s=require("fs").readFileSync("canary.tap","utf8"); \
+            if (/# SKIP/i.test(s)) { console.error("FATAL: integration tests skipped — DB wiring is broken"); process.exit(1); } \
+            if (!/^ok \d+ - /m.test(s)) { console.error("FATAL: canary ran zero tests"); process.exit(1); } \
+            console.log("canary ok: integration tests executed against the database");'
+
+      - name: Full test suite (with database)
+        run: npm test
+
+  coverage:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: openbooks
+          POSTGRES_PASSWORD: openbooks
+          POSTGRES_DB: openbooks_coverage
+        ports:
+          - 5433:5432
+        options: >-
+          --health-cmd "pg_isready -U openbooks -d openbooks_coverage"
+          --health-interval 5s --health-timeout 5s --health-retries 12
+    env:
+      OPENBOOKS_DB_URL: postgres://openbooks:openbooks@localhost:5433/openbooks_coverage
+      PGPASSWORD: openbooks
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+
+      - name: Load schema
+        run: npx tsx scripts/bootstrap.ts
+
+      - name: Test suite with coverage
+        run: |
+          node --import tsx --test --test-force-exit --experimental-test-coverage \
+            --test-reporter=spec --test-reporter-destination=stdout \
+            --test-reporter=lcov --test-reporter-destination=lcov.info \
+            'engine/src/**/*.test.ts' 'packages/**/*.test.ts' \
+            'web/lib/**/*.test.ts' 'schema/**/*.test.ts' 2>&1 | tee coverage.txt
+
+      - name: Publish coverage summary
+        if: always()
+        run: |
+          {
+            echo "# Test coverage"
+            echo ""
+            echo '```'
+            awk '/start of coverage report/,0' coverage.txt | sed 's/^ℹ //' | head -60 || tail -40 coverage.txt
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload coverage artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage
+          path: |
+            lcov.info
+            coverage.txt
+          if-no-files-found: ignore
+
+  e2e:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: openbooks
+          POSTGRES_PASSWORD: openbooks
+          POSTGRES_DB: openbooks_e2e
+        ports:
+          - 5433:5432
+        options: >-
+          --health-cmd "pg_isready -U openbooks -d openbooks_e2e"
+          --health-interval 5s --health-timeout 5s --health-retries 12
+    env:
+      OPENBOOKS_DB_URL: postgres://openbooks:openbooks@localhost:5433/openbooks_e2e
+      PGPASSWORD: openbooks
+      SESSION_SECRET: e2e-ci-secret-not-production
+      ADMIN_EMAIL: e2e@openbooks.test
+      ADMIN_NAME: E2E Admin
+      ADMIN_PASSWORD: e2e-test-password-123
+      E2E_EMAIL: e2e@openbooks.test
+      E2E_PASSWORD: e2e-test-password-123
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+
+      - name: Load schema + seed admin
+        # bootstrap creates the first org, roles, calendars, and — because
+        # ADMIN_EMAIL is set — the admin login the specs authenticate with.
+        run: npx tsx scripts/bootstrap.ts
+
+      - name: Install Playwright browser
+        run: npx playwright install --with-deps chromium
+
+      - name: Playwright smoke suite
+        run: npx playwright test
+
+      - name: Upload Playwright report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report
+          path: |
+            playwright-report/
+            test-results/
+          if-no-files-found: ignore

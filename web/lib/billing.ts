@@ -110,6 +110,9 @@ export async function generateInvoiceFromBillingRequest(
       unit?: string | null
       equipmentUnitId?: string | null
       rateVersionId?: string | null
+      /** Pre-markup amount + whether this line is labor — for lump-sum markup and surcharge bases. */
+      baseAmount?: string
+      isLabor?: boolean
     }
     const built: BuiltLine[] = []
 
