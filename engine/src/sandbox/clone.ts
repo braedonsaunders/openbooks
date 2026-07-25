@@ -1,6 +1,6 @@
 import { sql } from "drizzle-orm";
 import { db, withOrg } from "../db.ts";
-import { assertUuid, loadCatalog, PARENT_FILTER, type TableInfo } from "./catalog.ts";
+import { assertUuid, insertionOrder, loadCatalog, PARENT_FILTER, type TableInfo } from "./catalog.ts";
 import { loadMaskingPolicies, maskExpr, type MaskTransform } from "./masking.ts";
 
 /**
@@ -116,7 +116,8 @@ function generateCopySql(
 }
 
 export async function runClone(opts: CloneOptions): Promise<CloneResult> {
-  const { tables, rebaseSet } = await loadCatalog();
+  const cat = await loadCatalog();
+  const { tables, rebaseSet } = cat;
   const masking = opts.masked
     ? await loadMaskingPolicies(opts.productionOrgId)
     : new Map<string, Map<string, MaskTransform>>();
@@ -125,6 +126,11 @@ export async function runClone(opts: CloneOptions): Promise<CloneResult> {
   let selected =
     opts.tier === "dev" ? tables.filter((t) => CUSTOMIZATION_LAYER.has(t.name)) : tables;
   if (opts.onlyTables) selected = selected.filter((t) => opts.onlyTables!.has(t.name));
+  // Copy parents before children: 152 FKs are non-deferrable, so `set constraints
+  // all deferred` alone can't guarantee a valid order.
+  const insOrder = insertionOrder(cat);
+  const rank = new Map(insOrder.map((n, i) => [n, i]));
+  selected = [...selected].sort((a, b) => (rank.get(a.name) ?? 1e9) - (rank.get(b.name) ?? 1e9));
 
   const perTable: { table: string; rows: number }[] = [];
   let rowsCopied = 0;
