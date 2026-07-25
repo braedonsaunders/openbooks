@@ -165,6 +165,7 @@
     "tabs": {
       "overview": "Overview",
       "work_breakdown": "Work breakdown",
+      "schedule": "Schedule",
       "financials": "Financials & budget",
       "cost_time": "Cost & Time",
       "transactions": "Transactions",
@@ -274,5 +275,27 @@
     "no": "No",
     "customerHint": "Override the project type for this customer.",
     "projectHint": "Override the type/customer for this project."
+  },
+  "schedule": {
+    "status": {
+      "not_started": "Not started",
+      "in_progress": "In progress",
+      "complete": "Complete",
+      "on_hold": "On hold"
+    },
+    "view": {
+      "gantt": "Gantt",
+      "list": "List",
+      "board": "Board"
+    },
+    "empty": {
+      "title": "No scheduled work yet",
+      "description": "Add the first activity to start building this project's schedule.",
+      "action": "Add activity"
+    },
+    "leveling": {
+      "heading": "Resource levelling",
+      "description": "Delay activities so no crew, machine or subcontractor is booked past its daily capacity. Review the proposed moves before applying them."
+    }
   }
 }

@@ -6,6 +6,7 @@ import {
   lintFormLayout,
   mergeRegisteredFieldsIntoLayout,
   refreshDefaultFormLayout,
+  resolveFormTabs,
 } from './schema.ts'
 import { getRecordType } from './registry.ts'
 
@@ -161,4 +162,81 @@ test('the baseline form upgrade refreshes built-in placement without losing fiel
   assert.equal(fields.find((field) => field.key === 'customer_po_number')!.labelOverride, 'PO reference')
   assert.equal(fields.at(-1)!.key, 'cf_permit_number')
   assert.deepEqual(lintFormLayout(legacy), [])
+})
+
+test('the project cockpit ships a customizable tab list', () => {
+  const layout = defaultFormLayout('project')
+
+  assert.deepEqual(layout.tabs?.map((tab) => tab.key), [
+    'overview',
+    'work_breakdown',
+    'schedule',
+    'financials',
+    'cost_time',
+    'charges',
+    'billing',
+    'transactions',
+  ])
+  assert.equal(
+    layout.tabs?.every((tab) => tab.visible),
+    true,
+  )
+})
+
+test('saved tab layouts keep their order, gain new tabs, and drop retired ones', () => {
+  const layout = defaultFormLayout('project')
+  layout.tabs = [
+    { key: 'billing', visible: true },
+    { key: 'overview', visible: true },
+    { key: 'work_breakdown', visible: false, labelOverride: 'Scope' },
+    { key: 'retired_tab', visible: true },
+    { key: 'tab_safety', visible: true, groupIds: ['primary'] },
+  ]
+
+  const resolved = resolveFormTabs(layout)
+
+  // Chosen order is preserved, the unknown tab is dropped, the author's own tab
+  // survives, and every tab the registry has since added is appended.
+  assert.deepEqual(resolved.map((tab) => tab.key), [
+    'billing',
+    'overview',
+    'work_breakdown',
+    'tab_safety',
+    'schedule',
+    'financials',
+    'cost_time',
+    'charges',
+    'transactions',
+  ])
+  assert.equal(resolved.find((tab) => tab.key === 'work_breakdown')?.visible, false)
+  assert.equal(resolved.find((tab) => tab.key === 'work_breakdown')?.labelOverride, 'Scope')
+})
+
+test('a locked tab can never be hidden or ordered away', () => {
+  const layout = defaultFormLayout('project')
+  layout.tabs = [{ key: 'overview', visible: false }]
+
+  assert.deepEqual(
+    lintFormLayout(layout).map((issue) => issue.message),
+    ['overview cannot be hidden'],
+  )
+  // Even a layout that omits it entirely still renders it.
+  layout.tabs = [{ key: 'billing', visible: true }]
+  assert.equal(resolveFormTabs(layout)[0]?.key, 'overview')
+})
+
+test('tab lint rejects unknown tabs, product-panel groups, and shared groups', () => {
+  const layout = defaultFormLayout('project')
+  layout.tabs = [
+    { key: 'overview', visible: true },
+    { key: 'financials', visible: true, groupIds: ['primary'] },
+    { key: 'tab_one', visible: true, groupIds: ['primary', 'ghost'] },
+    { key: 'tab_two', visible: true, groupIds: ['primary'] },
+  ]
+
+  const messages = lintFormLayout(layout).map((issue) => issue.message)
+
+  assert.ok(messages.includes('only custom tabs can host field groups'))
+  assert.ok(messages.includes('unknown field group: ghost'))
+  assert.ok(messages.includes('field group primary is on more than one tab'))
 })

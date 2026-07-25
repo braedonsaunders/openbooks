@@ -2418,6 +2418,7 @@
         "openPayApplications": "{count, plural, one {# open application for payment} other {# open applications for payment}}",
         "outstandingRetainage": "outstanding retainage",
         "openFieldTickets": "{count, plural, one {# open field ticket} other {# open field tickets}}",
+        "scheduledTasks": "{count, plural, one {# scheduled activity} other {# scheduled activities}}",
         "openProjectDocuments": "{count, plural, one {# unposted project document} other {# unposted project documents}}",
         "openProjectTimeEntries": "{count, plural, one {# unapproved project time entry} other {# unapproved project time entries}}",
         "openChangeOrders": "{count, plural, one {# draft change order} other {# draft change orders}}",
@@ -2843,6 +2844,10 @@
     "fieldTickets": {
       "title": "Field tickets",
       "description": "Signed crew timesheets for T&M work: the foreman records the whole crew's hours plus equipment and materials, the customer signs, and invoices are built from the signed tickets."
+    },
+    "projectScheduling": {
+      "title": "Project scheduling",
+      "description": "Critical-path scheduling for jobs: a drag-editable Gantt over the work breakdown, typed dependencies, working calendars, deadlines and constraints, baselines with variance, and resource levelling."
     },
     "inventory": {
       "title": "Inventory",

@@ -6,7 +6,13 @@ import { useTranslations } from 'next-intl'
 import { ChevronDown, Plus, Receipt, Trash2, TrendingUp } from 'lucide-react'
 import { toast } from 'sonner'
 import { Badge, Button, Input, Label, Popover, SearchSelect, Select, Textarea, UrlDrawer, cn } from '@openbooks/ui'
-import { defaultFormLayout, type FormLayoutConfig, type HeaderFieldPlacement } from '@openbooks/customization'
+import {
+  defaultFormLayout,
+  isCustomTabKey,
+  resolveFormTabs,
+  type FormLayoutConfig,
+  type HeaderFieldPlacement,
+} from '@openbooks/customization'
 import { CustomFieldInput } from '../../../components/custom-field-input'
 import type { CustomFieldDefClient } from '../../../components/custom-field-inputs'
 import { HeaderFields } from '../../../components/transaction-form/header-fields'
@@ -17,6 +23,7 @@ import type { RecognitionStatus } from './tabs/RecognitionCard'
 import { CostTimeTab, type CostTimeData } from './tabs/CostTimeTab'
 import { TransactionsTab } from './tabs/TransactionsTab'
 import { WorkBreakdownTab, type WorkBreakdownTask } from './tabs/WorkBreakdownTab'
+import { ScheduleTab } from './tabs/ScheduleTab'
 import { ChargesSection, type ChargeRow, type ChargeItemOption, type ChargeEquipmentOption } from './tabs/ChargesSection'
 import { BillingSection, type BillingRequestClient, type UnbilledClient, type EffectiveInvoicingClient } from './tabs/BillingSection'
 import { formatMoney } from '@openbooks/engine/src/money.ts'
@@ -74,8 +81,23 @@ export interface ProjectCockpitData {
   }[]
 }
 
-const TAB_KEYS = ['overview', 'work_breakdown', 'financials', 'cost_time', 'charges', 'billing', 'transactions'] as const
-type TabKey = (typeof TAB_KEYS)[number]
+/**
+ * The cockpit's default tabs. The rendered set comes from the resolved form
+ * layout (Customization → Forms), so a company can hide, reorder, rename, and
+ * add tabs; this list is only the fallback and the source of the panel each
+ * built-in key draws.
+ */
+const TAB_KEYS = [
+  'overview',
+  'work_breakdown',
+  'schedule',
+  'financials',
+  'cost_time',
+  'charges',
+  'billing',
+  'transactions',
+] as const
+type TabKey = (typeof TAB_KEYS)[number] | string
 
 const emptyTask = (): TaskRow => ({
   id: null,
@@ -95,6 +117,8 @@ export function ProjectDrawer({
   layout,
   cockpit,
   projectTypes = [],
+  schedulingEnabled = false,
+  locale,
 }: {
   payload: ProjectPayload
   parties: PartyOpt[]
@@ -107,6 +131,10 @@ export function ProjectDrawer({
   cockpit: ProjectCockpitData
   /** Configurable project types (Setup → Project Types) for the selector. */
   projectTypes?: { id: string; name: string; billingMethod: string | null; billingProcedure: string }[]
+  /** Server-resolved Projects → Project Scheduling gate. */
+  schedulingEnabled?: boolean
+  /** Tenant locale, so the schedule surface formats dates like the rest of the app. */
+  locale?: string
 }) {
   const { currency } = useMoney()
   const t = useTranslations('projects')
@@ -309,6 +337,20 @@ export function ProjectDrawer({
 
   const ro = !editable
   const effectiveLayout = layout ?? defaultFormLayout('project')
+
+  /** Overview shows every field group that no custom tab has claimed. */
+  const overviewLayout = useMemo(() => {
+    const claimed = new Set(
+      (effectiveLayout.tabs ?? [])
+        .filter((placement) => isCustomTabKey(placement.key))
+        .flatMap((placement) => placement.groupIds ?? []),
+    )
+    if (claimed.size === 0) return effectiveLayout
+    return {
+      ...effectiveLayout,
+      header: { groups: effectiveLayout.header.groups.filter((group) => !claimed.has(group.id)) },
+    }
+  }, [effectiveLayout])
   const cfByKey = useMemo(
     () => new Map(customFieldDefs.map((d) => [`cf_${d.key}`, d])),
     [customFieldDefs],
@@ -456,7 +498,35 @@ export function ProjectDrawer({
     )
   }
 
-  const tabs = TAB_KEYS.map((key) => ({ key, label: t(`cockpit.tabs.${key}`) }))
+  /**
+   * The tabs this cockpit actually draws: the customized order and visibility
+   * from the form layout, minus anything whose feature is off. A layout choice
+   * can surface a tab, never enable a gated capability — `schedulingEnabled`
+   * comes from the server-resolved Features state.
+   */
+  const tabs = useMemo(() => {
+    const gatedOff = new Set<string>(schedulingEnabled ? [] : ['schedule'])
+    return resolveFormTabs(effectiveLayout)
+      .filter((placement) => placement.visible && !gatedOff.has(placement.key))
+      .map((placement) => ({
+        key: placement.key,
+        groupIds: placement.groupIds ?? [],
+        label:
+          placement.labelOverride?.trim() ||
+          (isCustomTabKey(placement.key)
+            ? placement.key.replace(/^tab_/, '').replace(/_/g, ' ')
+            : t(`cockpit.tabs.${placement.key}`)),
+      }))
+  }, [effectiveLayout, schedulingEnabled, t])
+
+  // A hidden or gated-off tab must never stay selected.
+  useEffect(() => {
+    if (tabs.length > 0 && !tabs.some((item) => item.key === tab)) {
+      setTab(tabs[0]!.key)
+    }
+  }, [tab, tabs])
+
+  const activeTab = tabs.find((item) => item.key === tab) ?? null
 
   return (
     <UrlDrawer
@@ -563,7 +633,8 @@ export function ProjectDrawer({
     >
       {tab === 'overview' ? (
         <div className="space-y-7 p-1">
-          <HeaderFields layout={effectiveLayout} editable={editable} renderField={renderProjectField} />
+          {/* Groups moved onto an author-created tab are drawn there, not here. */}
+          <HeaderFields layout={overviewLayout} editable={editable} renderField={renderProjectField} />
 
           {/* Project-level invoicing/backup override (cascades over type ← customer). */}
           <section className="space-y-3">
@@ -626,8 +697,37 @@ export function ProjectDrawer({
         />
       ) : null}
 
+      {tab === 'schedule' && schedulingEnabled ? (
+        <ScheduleTab
+          projectId={String(pr.id)}
+          projectStart={startsOn || null}
+          projectEnd={endsOn || null}
+          canManage={canManage}
+          locale={locale}
+        />
+      ) : null}
+
       {tab === 'transactions' ? (
         <TransactionsTab transactions={cockpit.transactions} />
+      ) : null}
+
+      {/* An author-created tab renders the field groups assigned to it, using
+          the same renderer as Overview so its fields behave identically. */}
+      {activeTab && isCustomTabKey(activeTab.key) ? (
+        <div className="space-y-7 p-1">
+          <HeaderFields
+            layout={{
+              ...effectiveLayout,
+              header: {
+                groups: effectiveLayout.header.groups.filter((group) =>
+                  activeTab.groupIds.includes(group.id),
+                ),
+              },
+            }}
+            editable={editable}
+            renderField={renderProjectField}
+          />
+        </div>
       ) : null}
     </UrlDrawer>
   )
