@@ -393,14 +393,21 @@ async function setProgress(
 
 /** Denormalize a posted document's header totals from its journal entry. */
 async function setDocumentTotalsFromEntry(docId: string): Promise<void> {
+  // The document total is the amount on its OPEN-ITEM (AR/AP control) leg — the
+  // receivable/payable — not the sum of every positive journal line. A retainage /
+  // holdback line debits an income account (a positive amount that is NOT the
+  // total); summing all positives double-counts it and overstates the invoice by
+  // the holdback. Fall back to the positive-side sum for docs with no open item
+  // (cash sales etc.). subtotal = total − tax.
   await db.execute(sql`
     update documents d set
-      total = coalesce(j.pos, 0),
+      total = coalesce(nullif(abs(j.oi), 0), j.pos, 0),
       tax_total = coalesce(abs(lt.tax), 0),
-      subtotal = coalesce(j.pos, 0) - coalesce(abs(lt.tax), 0)
+      subtotal = coalesce(nullif(abs(j.oi), 0), j.pos, 0) - coalesce(abs(lt.tax), 0)
     from documents d2
     left join lateral (
-      select sum(jl.amount) filter (where jl.amount > 0) as pos
+      select sum(jl.amount) filter (where jl.amount > 0) as pos,
+             sum(jl.amount) filter (where jl.is_open_item) as oi
         from journal_lines jl where jl.entry_id = d2.posted_entry_id) j on true
     left join lateral (
       select sum(l.tax_amount) as tax from document_lines l where l.document_id = d2.id) lt on true
