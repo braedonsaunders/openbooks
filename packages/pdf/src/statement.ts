@@ -19,8 +19,10 @@ export type StatementPdfRow = {
   /** Account-tree depth for indentation (description column only). */
   indent?: number
   /** Column-aligned values; null/undefined renders blank. Percentages are raw
-   *  (e.g. -83.4 → "(83.4%)"); amounts should already be scaled by the caller. */
-  values?: (number | null | undefined)[]
+   *  (e.g. -83.4 → "(83.4%)"); amounts should already be scaled by the caller.
+   *  Exact decimal STRINGS preserve financial precision end-to-end; numbers are
+   *  still accepted for legacy callers. */
+  values?: (number | string | null | undefined)[]
 }
 
 export type StatementPdfStyle = 'formal' | 'modern'
@@ -92,8 +94,27 @@ function decodeDataUrl(url: string): Buffer | null {
   }
 }
 
+function numericValue(v: number | string): number | string | null {
+  if (typeof v === 'number') return Number.isFinite(v) ? v : null
+  const exact = v.trim()
+  return /^[-+]?(?:\d+(?:\.\d*)?|\.\d+)(?:[eE][-+]?\d+)?$/.test(exact) ? exact : null
+}
+
+function isNegativeValue(v: number | string): boolean {
+  return typeof v === 'number' ? v < 0 : v.trim().startsWith('-')
+}
+
+function absString(v: number | string): number | string {
+  return typeof v === 'number' ? Math.abs(v) : v.trim().replace(/^[-+]/, '')
+}
+
+function belowEps(v: number | string, resolvedDigits: number): boolean {
+  const n = typeof v === 'number' ? v : Number(v)
+  return Number.isFinite(n) && Math.abs(n) < 0.5 * 10 ** -resolvedDigits
+}
+
 function formatValue(
-  v: number | null | undefined,
+  v: number | string | null | undefined,
   kind: StatementPdfColumnKind,
   decimals: number | undefined,
   locale: string,
@@ -101,10 +122,13 @@ function formatValue(
   showCurrency: boolean,
 ): string {
   if (v === null || v === undefined) return ''
+  const numeric = numericValue(v)
+  if (numeric === null) return DASH
   if (kind === 'variance_pct') {
-    if (!Number.isFinite(v)) return DASH
-    const s = new Intl.NumberFormat(locale, { style: 'percent', minimumFractionDigits: 1, maximumFractionDigits: 1 }).format(Math.abs(v) / 100)
-    return v < 0 ? `(${s})` : s
+    const pct = typeof numeric === 'number' ? numeric : Number(numeric)
+    if (!Number.isFinite(pct)) return DASH
+    const s = new Intl.NumberFormat(locale, { style: 'percent', minimumFractionDigits: 1, maximumFractionDigits: 1 }).format(Math.abs(pct) / 100)
+    return pct < 0 ? `(${s})` : s
   }
   const currencyOptions: Intl.NumberFormatOptions = {
     style: 'currency',
@@ -115,14 +139,14 @@ function formatValue(
     maximumFractionDigits: decimals,
   }
   const resolvedDigits = new Intl.NumberFormat(locale, currencyOptions).resolvedOptions().maximumFractionDigits ?? 2
-  const eps = 0.5 * 10 ** -resolvedDigits
-  if (Math.abs(v) < eps) return DASH
-  if (showCurrency) return new Intl.NumberFormat(locale, currencyOptions).format(v)
+  if (belowEps(numeric, resolvedDigits)) return DASH
+  // Intl accepts string mathematical values, preserving precision beyond 2^53.
+  if (showCurrency) return new Intl.NumberFormat(locale, currencyOptions).format(numeric as never)
   const abs = new Intl.NumberFormat(locale, {
     minimumFractionDigits: decimals ?? resolvedDigits,
     maximumFractionDigits: decimals ?? resolvedDigits,
-  }).format(Math.abs(v))
-  return v < 0 ? `(${abs})` : abs
+  }).format(absString(numeric) as never)
+  return isNegativeValue(numeric) ? `(${abs})` : abs
 }
 
 /** Render a financial statement to a PDF Buffer. */
@@ -236,11 +260,12 @@ export async function renderStatementPdf(input: StatementPdfInput): Promise<Buff
     for (let i = 0; i < nCols; i++) {
       const kind = input.columns[i]!.kind
       const cell = formatValue(row.values?.[i], kind, decimals, locale, currency, showCurrency)
-      const neg = typeof row.values?.[i] === 'number' && (row.values![i] as number) < 0
+      const rawValue = row.values?.[i]
+      const neg = typeof rawValue === 'number' ? rawValue < 0 : typeof rawValue === 'string' && rawValue.trim().startsWith('-')
       doc.fillColor(input.style === 'formal' ? theme.text : neg ? '#b91c1c' : theme.text)
       doc.text(cell, valX(i), y, { width: valW - cellPad, align: 'right', lineBreak: false })
     }
-    if (row.values && row.values.some((v) => typeof v === 'number')) firstAmountRowDone = true
+    if (row.values && row.values.some((v) => typeof v === 'number' || typeof v === 'string')) firstAmountRowDone = true
     y = doc.y + rowPadY
 
     // Double rule below a grand total.

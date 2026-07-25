@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, type ReactNode } from 'react'
+import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { useTranslations } from 'next-intl'
 import { toast } from 'sonner'
@@ -21,6 +22,7 @@ import {
   Receipt,
   Repeat2,
   ShoppingCart,
+  Sparkles,
   Target,
   TrendingUp,
   Users,
@@ -69,9 +71,11 @@ const CATEGORY_ORDER = ['sales', 'operations', 'accounting', 'platform'] as cons
 export function FeaturesWorkspace({
   features,
   disableStatus = {},
+  wizardHref,
 }: {
   features: Feature[]
   disableStatus?: Record<string, DisableStatus>
+  wizardHref?: string
 }) {
   const t = useTranslations('admin')
   const router = useRouter()
@@ -132,10 +136,22 @@ export function FeaturesWorkspace({
   return (
     <div className="space-y-8">
       <div>
-        <h2 className="text-lg font-semibold text-slate-900 dark:text-slate-100">{t('setup.features.title')}</h2>
-        <p className="mt-1 max-w-2xl text-sm text-slate-500 dark:text-slate-400">
-          {t('setup.features.description')}
-        </p>
+        <div className="flex items-start justify-between gap-4">
+          <div>
+            <h2 className="text-lg font-semibold text-slate-900 dark:text-slate-100">{t('setup.features.title')}</h2>
+            <p className="mt-1 max-w-2xl text-sm text-slate-500 dark:text-slate-400">
+              {t('setup.features.description')}
+            </p>
+          </div>
+          {wizardHref && (
+            <Link
+              href={wizardHref}
+              className="flex shrink-0 items-center gap-1.5 rounded-lg border border-teal-200 bg-teal-50 px-3 py-2 text-sm font-medium text-teal-700 transition-colors hover:bg-teal-100 dark:border-teal-800 dark:bg-teal-950/40 dark:text-teal-300 dark:hover:bg-teal-950/60"
+            >
+              <Sparkles size={15} /> {t('setup.features.runWizard')}
+            </Link>
+          )}
+        </div>
       </div>
 
       {categories.map((cat) => {

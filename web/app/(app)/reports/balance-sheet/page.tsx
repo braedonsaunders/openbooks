@@ -6,6 +6,7 @@ import { dimensionOptions } from '../../../../lib/reports'
 import { orgInfo } from '../../../../lib/data'
 import { reportSubsidiaryView } from '../../../../lib/consolidation'
 import { balanceSheetView } from '../../../../lib/statement-matrix'
+import { decimalAdd, decimalCmp, decimalNeg } from '../../../../lib/statement-format'
 import { resolvePeriod } from '../../../../lib/periods'
 import { parseReportQuery, scaleFactor } from '../../../../lib/report-filters'
 import { StatementMatrixTable } from '../StatementMatrixTable'
@@ -55,11 +56,12 @@ export default async function BalanceSheet({
     orgInfo(),
   ])
 
-  const valueOf = (label: string) => view.lines.find((l) => l.label === label)?.values?.[0] ?? 0
+  const valueOf = (label: string) => view.lines.find((l) => l.label === label)?.values?.[0] ?? '0.0000'
   const totalAssets = valueOf(labels.totalAssets)
   const totalLiabilities = valueOf(labels.totalLiabilities)
   const totalEquity = valueOf(labels.totalEquity)
-  const balanced = Math.abs(totalAssets - (totalLiabilities + totalEquity)) < 0.01
+  const difference = decimalAdd(totalAssets, decimalNeg(decimalAdd(totalLiabilities, totalEquity)))
+  const balanced = decimalCmp(difference, '-0.0100') > 0 && decimalCmp(difference, '0.0100') < 0
 
   return (
     <ListPageLayout
@@ -98,7 +100,7 @@ export default async function BalanceSheet({
             <Badge variant={balanced ? 'success' : 'destructive'}>
               {balanced
                 ? t('balanceSheet.balanced')
-                : t('balanceSheet.offBy', { amount: money(totalAssets - totalLiabilities - totalEquity) })}
+                : t('balanceSheet.offBy', { amount: money(difference) })}
             </Badge>
           </div>
         </>

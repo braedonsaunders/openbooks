@@ -277,6 +277,9 @@ export async function dropScratchOrg(orgId: string): Promise<void> {
     // inv_move_guard blocks deleting POSTED movements but allows posted→pending;
     // demote them first so the delete can proceed.
     await tx.execute(sql`update inventory_movements set status = 'pending' where org_id = ${orgId}`);
+    // documents.posted_entry_id ↔ journal_entries.source_document_id is a
+    // genuine cycle of NOT DEFERRABLE FKs; null one side before deleting.
+    await tx.execute(sql`update documents set posted_entry_id = null where org_id = ${orgId}`);
     await tx.execute(sql`delete from tax_group_members where tax_group_id in (select id from tax_groups where org_id = ${orgId})`);
     await tx.execute(sql`delete from file_blobs where version_id in (select v.id from file_versions v join files f on f.id=v.file_id where f.org_id=${orgId})`);
     await tx.execute(sql`delete from file_versions where file_id in (select id from files where org_id=${orgId})`);
@@ -310,7 +313,6 @@ export async function dropScratchOrg(orgId: string): Promise<void> {
       "document_links",
       "document_line_tax_components",
       "document_lines",
-      "documents",
       "depreciation_schedule_lines",
       "depreciation_inputs",
       "depreciation_schedules",
@@ -322,14 +324,17 @@ export async function dropScratchOrg(orgId: string): Promise<void> {
       "file_attachments",
       "files",
       "folders",
-      "tax_rates",
-      "tax_groups",
-      "tax_codes",
+      // Journal lines reference accounts, tax codes, parties, and entries;
+      // entries reference documents — so this whole block precedes all four.
       "journal_lines",
       "ownership_consolidation_entries",
       "journal_entries",
       "ownership_consolidation_runs",
       "subsidiary_ownership_interests",
+      "documents",
+      "tax_rates",
+      "tax_groups",
+      "tax_codes",
       "equipment_units",
       "labor_rate_adjustment_targets",
       "labor_rate_adjustments",

@@ -185,8 +185,9 @@ export type StatementSheetRow = {
   label: string
   /** Account-tree depth (real Excel indentation is applied from this). */
   indent?: number
-  /** Column-aligned values; null renders blank. */
-  values?: (number | null)[]
+  /** Column-aligned values; null renders blank. Exact decimal strings preserve
+   *  financial precision through aggregation; they are written as numeric cells. */
+  values?: (number | string | null)[]
 }
 export type StatementSheet = {
   company: string
@@ -262,7 +263,8 @@ export async function statementSheetToXlsx(sheet: StatementSheet): Promise<Buffe
       for (let i = 0; i < nCols; i++) {
         const cell = ws.getCell(r, i + 2)
         const v = row.values[i]
-        cell.value = v === null || v === undefined || !Number.isFinite(v) ? null : v
+        const numeric = v === null || v === undefined ? null : typeof v === 'number' ? (Number.isFinite(v) ? v : null) : (v.trim() === '' || Number.isNaN(Number(v)) ? null : Number(v))
+        cell.value = numeric
         cell.numFmt = sheet.columns[i]!.kind === 'variance_pct' ? PCT_FMT : AMOUNT_FMT
         cell.alignment = { horizontal: 'right' }
         cell.font = { bold }

@@ -25,5 +25,5 @@ export default async function FeaturesSetup() {
     features.filter((f) => f.enabled).map((f) => f.key),
   )
 
-  return <FeaturesWorkspace features={features} disableStatus={disableStatus} />
+  return <FeaturesWorkspace features={features} disableStatus={disableStatus} wizardHref="/admin/setup/wizard" />
 }

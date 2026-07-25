@@ -3,6 +3,14 @@ import { sql, type SQL } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/db.ts'
 import { addDays, addMonthsIso, fiscalMonthsBetween, fiscalQuartersBetween } from '@openbooks/reports'
 import { resolveOrgId } from './org-scope'
+import {
+  decimalAdd,
+  decimalIsMaterial,
+  decimalNeg,
+  decimalPercentChange,
+  type ExactDecimal,
+  type StatementValue,
+} from './statement-format'
 
 /**
  * Multi-column statement engine. Where the legacy `accountBalances` returned a
@@ -84,8 +92,8 @@ export type MatrixRow = {
   type: string
   depth: number
   isSummary: boolean
-  /** Reader-signed values aligned to `columns`. */
-  values: number[]
+  /** Reader-signed exact decimal values aligned to `columns`. */
+  values: StatementValue[]
 }
 
 export type StatementMatrix = {
@@ -370,19 +378,19 @@ function treeifyMatrix(
     name: string
     type: string
     is_summary: boolean
-    vals: number[]
+    vals: ExactDecimal[]
   }[],
   types: string[],
   colCount: number,
   showZero: boolean,
 ): MatrixRow[] {
   const byId = new Map(rows.map((r) => [r.id, r]))
-  const rolled = new Map<string, number[]>(rows.map((r) => [r.id, [...r.vals]]))
+  const rolled = new Map<string, ExactDecimal[]>(rows.map((r) => [r.id, [...r.vals]]))
   for (const r of rows) {
     let p = r.parent_id
     while (p) {
       const acc = rolled.get(p)
-      if (acc) for (let i = 0; i < colCount; i++) acc[i]! += r.vals[i]!
+      if (acc) for (let i = 0; i < colCount; i++) acc[i] = decimalAdd(acc[i] ?? '0.0000', r.vals[i] ?? '0.0000')
       p = byId.get(p)?.parent_id ?? null
     }
   }
@@ -397,8 +405,8 @@ function treeifyMatrix(
       if (!types.includes(r.type)) continue
       const raw = rolled.get(r.id) ?? []
       const flip = CREDIT_NORMAL.has(r.type)
-      const values = raw.map((v) => (flip ? -v : v))
-      const nonZero = values.some((v) => Math.abs(v) >= 0.005)
+      const values = raw.map((v) => (flip ? decimalNeg(v) : v))
+      const nonZero = values.some((v) => decimalIsMaterial(v ?? '0.0000'))
       if (nonZero || r.is_summary || showZero) {
         out.push({
           id: r.id,
@@ -417,7 +425,7 @@ function treeifyMatrix(
   // Prune empty summary rows with no visible descendants (unless showing zeros).
   if (showZero) return out
   return out.filter((r, i) => {
-    if (!r.isSummary || r.values.some((v) => Math.abs(v) >= 0.005)) return true
+    if (!r.isSummary || r.values.some((v) => decimalIsMaterial(v ?? '0.0000'))) return true
     const next = out[i + 1]
     return next !== undefined && next.depth > r.depth
   })
@@ -505,7 +513,7 @@ export async function statementMatrix(opts: {
     name: r.name as string,
     type: r.type as string,
     is_summary: r.is_summary as boolean,
-    vals: cols.map((_, i) => Number(r[`c${i}`] ?? 0)),
+    vals: cols.map((_, i) => String(r[`c${i}`] ?? '0')),
   }))
 
   const rows = treeifyMatrix(parsed, opts.types, cols.length, showZero)
@@ -528,10 +536,8 @@ export async function statementMatrix(opts: {
     columns.push({ key: 'var_abs', label: 'Variance', kind: 'variance_abs' })
     columns.push({ key: 'var_pct', label: 'Variance %', kind: 'variance_pct' })
     for (const row of rows) {
-      const [cur, prior] = [row.values[0]!, row.values[1]!]
-      const abs = cur - prior
-      const pct = prior !== 0 ? (abs / Math.abs(prior)) * 100 : NaN
-      row.values.push(abs, pct)
+      const [cur, prior] = [row.values[0] ?? '0.0000', row.values[1] ?? '0.0000']
+      row.values.push(decimalAdd(cur, decimalNeg(prior)), decimalPercentChange(cur, prior))
     }
   }
 
@@ -541,35 +547,39 @@ export async function statementMatrix(opts: {
 /** Recompute the variance columns of a values vector from its first two amount
  *  columns. Percentages are non-linear, so any derived/combined total must run
  *  through this rather than summing the variance cells directly. */
-export function recomputeVariance(matrix: StatementMatrix, values: number[]): number[] {
+export function recomputeVariance(matrix: StatementMatrix, values: StatementValue[]): StatementValue[] {
   const amountIdx = matrix.columns.map((c, i) => (c.kind === 'amount' ? i : -1)).filter((i) => i >= 0)
   const varAbs = matrix.columns.findIndex((c) => c.kind === 'variance_abs')
   const varPct = matrix.columns.findIndex((c) => c.kind === 'variance_pct')
   if (varAbs < 0 || amountIdx.length < 2) return values
-  const cur = values[amountIdx[0]!]!
-  const prior = values[amountIdx[1]!]!
-  values[varAbs] = cur - prior
-  if (varPct >= 0) values[varPct] = prior !== 0 ? ((cur - prior) / Math.abs(prior)) * 100 : NaN
+  const cur = values[amountIdx[0]!] ?? '0.0000'
+  const prior = values[amountIdx[1]!] ?? '0.0000'
+  values[varAbs] = decimalAdd(cur, decimalNeg(prior))
+  if (varPct >= 0) values[varPct] = decimalPercentChange(cur, prior)
   return values
 }
 
 /** Per-column totals over the depth-0 rows of the given types (section total). */
-export function sumSection(matrix: StatementMatrix, types: string[]): number[] {
-  const totals = matrix.columns.map(() => 0)
+export function sumSection(matrix: StatementMatrix, types: string[]): StatementValue[] {
+  const totals: StatementValue[] = matrix.columns.map(() => '0.0000')
   for (const row of matrix.rows) {
     if (row.depth !== 0 || !types.includes(row.type)) continue
-    for (let i = 0; i < totals.length; i++) totals[i]! += row.values[i]!
+    for (let i = 0; i < totals.length; i++) totals[i] = decimalAdd(totals[i] ?? '0.0000', row.values[i] ?? '0.0000')
   }
   return recomputeVariance(matrix, totals)
 }
 
 /** Element-wise signed combine of total vectors (e.g. revenue − cogs −
  *  expenses), then re-derive variance columns from the combined amounts. */
-export function combineTotals(matrix: StatementMatrix, vectors: number[][], signs: number[]): number[] {
+export function combineTotals(matrix: StatementMatrix, vectors: StatementValue[][], signs: number[]): StatementValue[] {
   const width = matrix.columns.length
-  const out = new Array(width).fill(0)
+  const out: StatementValue[] = new Array(width).fill('0.0000')
   vectors.forEach((v, k) => {
-    for (let i = 0; i < width; i++) out[i] += (signs[k] ?? 1) * (v[i] ?? 0)
+    const sign = signs[k] ?? 1
+    for (let i = 0; i < width; i++) {
+      const value = v[i] ?? '0.0000'
+      out[i] = decimalAdd(out[i] ?? '0.0000', sign < 0 ? decimalNeg(value) : value)
+    }
   })
   return recomputeVariance(matrix, out)
 }
@@ -596,8 +606,8 @@ export type StatementViewLine = {
   depth: number
   /** Bold grand-total emphasis (net income, total assets, …). */
   emphasis?: boolean
-  /** Absent on section headers; reader-signed and column-aligned otherwise. */
-  values?: number[]
+  /** Absent on section headers; reader-signed exact decimals, column-aligned. */
+  values?: StatementValue[]
   /** Account types this row aggregates — drill-through for subtotal/total rows
    *  (and computed rows like accumulated earnings) that have no single accountId. */
   drillTypes?: string[]
@@ -664,7 +674,7 @@ export async function profitAndLossView(
   const netIncome = combineTotals(matrix, [revenue, cogs, expenses], [1, -1, -1])
 
   const lines: StatementViewLine[] = []
-  const section = (title: string, types: string[], total: number[]) => {
+  const section = (title: string, types: string[], total: StatementValue[]) => {
     lines.push({ kind: 'section', label: title, depth: 0 })
     lines.push(...accountLines(matrix, types))
     lines.push({ kind: 'subtotal', label: labels.totalOf(title), depth: 0, values: total, drillTypes: types })

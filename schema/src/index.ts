@@ -18,6 +18,7 @@ export * from "./banking";
 export * from "./bank-feeds";
 export * from "./payment-operations";
 export * from "./planning";
+export * from "./scheduling";
 export * from "./time";
 export * from "./billing";
 export * from "./dunning";

@@ -144,6 +144,37 @@ export interface InvoicingProfile {
   revenueAccount: "item_income" | "unbilled_receivable" | "fixed";
   /** Revenue recognition policy. */
   recognition: "as_invoiced" | "percent_complete_cost" | "milestone";
+  /**
+   * Automatic surcharge lines appended to the invoice — each a percentage of a
+   * running basis (billed labor, billed cost, or the whole subtotal). Generalizes
+   * fuel surcharges, environmental fees, small-tools recovery, etc. Empty/omitted
+   * for tenants that don't use them.
+   */
+  surcharges?: Array<{
+    key: string;
+    label: string;
+    /** What the percentage applies to: billed labor value, billed cost value, or the subtotal. */
+    basis: "labor" | "cost" | "subtotal";
+    /** Percent as a plain number string, e.g. "5" for 5%. */
+    percent: string;
+    /** Optional item id whose income account/description the line uses; else default income. */
+    itemId?: string | null;
+  }>;
+  /**
+   * How the cost/labor markup is presented. "embedded" (default) folds the markup
+   * into each line's rate; "lump_sum" bills the base amounts and adds ONE markup
+   * line for the total markup. Same invoice total either way.
+   */
+  markupPresentation?: "embedded" | "lump_sum";
+  /**
+   * Not-to-exceed: cap the CUMULATIVE amount invoiced on the project at its
+   * contract/budget value. When a request would push the running total past the
+   * cap, a negative adjustment line trims it to the remaining amount (and an
+   * already-exhausted budget blocks the invoice). Uncapped when omitted/false.
+   */
+  notToExceed?: boolean;
+  /** Optional item id for the not-to-exceed adjustment line; else default income. */
+  notToExceedItemId?: string | null;
 }
 
 export interface BackupProfile {

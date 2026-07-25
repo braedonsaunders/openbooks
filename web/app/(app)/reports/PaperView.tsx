@@ -81,10 +81,9 @@ export function PaperView({
   const { money } = useMoney()
   const fmt = (value: PaperCell, isMoney: boolean): string => {
     if (value === null || value === undefined || value === '') return ''
-    if (typeof value !== 'number') return value
-    return isMoney
-      ? money(value, { currency: currency || undefined, accounting: true })
-      : format.number(value, { maximumFractionDigits: 2 })
+    if (isMoney) return money(value, { currency: currency || undefined, accounting: true })
+    if (typeof value === 'number') return format.number(value, { maximumFractionDigits: 2 })
+    return value
   }
   const wide = data.groups.some((group) => group.columns.length > 5)
   return (

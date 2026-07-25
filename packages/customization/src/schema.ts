@@ -20,13 +20,14 @@ import type {
   FilterOperator,
   FormActionPlacement,
   FormLayoutConfig,
+  FormTabPlacement,
   HeaderFieldPlacement,
   LineColumnPlacement,
   ListColumnPlacement,
   ListViewConfig,
   RecordTypeKey,
 } from "./types";
-import { DEFAULT_PER_PAGE } from "./types";
+import { DEFAULT_PER_PAGE, isCustomTabKey } from "./types";
 
 const fieldKeySchema = z
   .string()
@@ -78,6 +79,17 @@ const formActionPlacementSchema = z.object({
   visible: z.boolean(),
 });
 
+const formTabPlacementSchema = z.object({
+  key: z
+    .string()
+    .min(1)
+    .max(60)
+    .regex(/^[a-z0-9_]+$/, "tab key must be snake_case"),
+  visible: z.boolean(),
+  labelOverride: z.string().max(120).nullable().optional(),
+  groupIds: z.array(z.string().min(1).max(60)).max(20).optional(),
+});
+
 export const formLayoutConfigSchema = z.object({
   schemaVersion: z.literal(1),
   defaultVisibilityVersion: z.literal(1).optional(),
@@ -86,6 +98,7 @@ export const formLayoutConfigSchema = z.object({
   header: z.object({ groups: z.array(headerGroupSchema).min(1).max(20) }),
   lines: z.object({ columns: z.array(lineColumnPlacementSchema).max(200) }),
   actions: z.array(formActionPlacementSchema).length(FORM_ACTION_KEYS.length),
+  tabs: z.array(formTabPlacementSchema).max(30).optional(),
 });
 
 const filterOperatorSchema = z.enum([
@@ -220,6 +233,8 @@ export function lintFormLayout(config: FormLayoutConfig): LintIssue[] {
   for (const key of FORM_ACTION_KEYS) {
     if (!seenActions.has(key)) issues.push({ path: "actions", message: `action "${key}" is missing` })
   }
+
+  issues.push(...lintFormTabs(config))
 
   return issues
 }
@@ -403,7 +418,46 @@ export function defaultFormLayout(recordType: RecordTypeKey): FormLayoutConfig {
       })),
     },
     actions: FORM_ACTION_KEYS.map<FormActionPlacement>((key) => ({ key, visible: true })),
+    ...(meta.tabs?.length
+      ? { tabs: meta.tabs.map<FormTabPlacement>((tab) => ({ key: tab.key, visible: true })) }
+      : {}),
   }
+}
+
+/**
+ * The tabs a layout should render, in order.
+ *
+ * Anything the registry has gained since the layout was saved is appended
+ * (visible), so shipping a new cockpit tab never requires a data migration and
+ * never silently hides itself. Registered tabs that vanished from the registry
+ * are dropped; author-created tabs are always kept.
+ */
+export function resolveFormTabs(layout: FormLayoutConfig): FormTabPlacement[] {
+  const meta = RECORD_TYPE_BY_KEY[layout.recordType]
+  const registered = meta?.tabs ?? []
+  if (registered.length === 0 && !layout.tabs?.length) return []
+
+  const registeredKeys = new Set(registered.map((tab) => tab.key))
+  const placed = (layout.tabs ?? []).filter(
+    (tab) => registeredKeys.has(tab.key) || isCustomTabKey(tab.key),
+  )
+  const placedKeys = new Set(placed.map((tab) => tab.key))
+
+  const appended = registered
+    .filter((tab) => !placedKeys.has(tab.key) && !tab.locked)
+    .map<FormTabPlacement>((tab) => ({ key: tab.key, visible: true }))
+
+  const resolved = [...placed, ...appended]
+  // A locked tab can never be hidden or ordered away — a record must always be
+  // able to show itself. One a layout has dropped comes back at the front,
+  // where the record's own fields belong.
+  for (const tab of registered) {
+    if (!tab.locked) continue
+    const existing = resolved.find((item) => item.key === tab.key)
+    if (existing) existing.visible = true
+    else resolved.unshift({ key: tab.key, visible: true })
+  }
+  return resolved
 }
 
 /**
@@ -535,6 +589,63 @@ export interface ParseResult<T> {
   success: boolean
   data?: T
   issues: LintIssue[]
+}
+
+/** Cross-field checks for the tab list (called from lintFormLayout). */
+function lintFormTabs(config: FormLayoutConfig): LintIssue[] {
+  const issues: LintIssue[] = []
+  const meta = RECORD_TYPE_BY_KEY[config.recordType]
+  if (!config.tabs?.length) return issues
+  if (!meta?.tabs?.length) {
+    issues.push({ path: "tabs", message: "this record type has no customizable tabs" })
+    return issues
+  }
+
+  const registered = new Map(meta.tabs.map((tab) => [tab.key, tab]))
+  const groupIds = new Set(config.header.groups.map((group) => group.id))
+  const seen = new Set<string>()
+
+  config.tabs.forEach((tab, index) => {
+    if (seen.has(tab.key)) {
+      issues.push({ path: `tabs.${index}.key`, message: `duplicate tab: ${tab.key}` })
+    }
+    seen.add(tab.key)
+
+    const builtIn = registered.get(tab.key)
+    if (!builtIn && !isCustomTabKey(tab.key)) {
+      issues.push({ path: `tabs.${index}.key`, message: `unknown tab: ${tab.key}` })
+      return
+    }
+    if (builtIn?.locked && !tab.visible) {
+      issues.push({ path: `tabs.${index}.visible`, message: `${tab.key} cannot be hidden` })
+    }
+    if (builtIn && tab.groupIds?.length) {
+      issues.push({
+        path: `tabs.${index}.groupIds`,
+        message: "only custom tabs can host field groups",
+      })
+    }
+    for (const groupId of tab.groupIds ?? []) {
+      if (!groupIds.has(groupId)) {
+        issues.push({ path: `tabs.${index}.groupIds`, message: `unknown field group: ${groupId}` })
+      }
+    }
+  })
+
+  // A group placed on two tabs would render its fields twice, and an edit in
+  // one copy would look lost in the other.
+  const assigned = new Map<string, string>()
+  for (const tab of config.tabs) {
+    for (const groupId of tab.groupIds ?? []) {
+      const owner = assigned.get(groupId)
+      if (owner && owner !== tab.key) {
+        issues.push({ path: "tabs", message: `field group ${groupId} is on more than one tab` })
+      }
+      assigned.set(groupId, tab.key)
+    }
+  }
+
+  return issues
 }
 
 export function parseFormLayout(input: unknown): ParseResult<FormLayoutConfig> {

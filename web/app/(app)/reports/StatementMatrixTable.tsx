@@ -10,7 +10,7 @@ import { cn } from '@openbooks/ui'
 import type { StatementView } from '../../../lib/statement-matrix'
 import type { StatementBasis, StatementDimFilter } from '../../../lib/statement-matrix'
 import { buildDrillTarget, type ReportScale } from '../../../lib/report-filters'
-import { isNegative, scaleDivisor } from '../../../lib/statement-format'
+import { decimalIsMaterial, decimalScale, decimalToNumber, isNegative, scaleDivisor, type StatementValue } from '../../../lib/statement-format'
 import { ReportDrillLink } from './ReportDrillLink'
 import { REPORT_SECTION_VISIBILITY_EVENT, type ReportSectionVisibility } from './report-section-events'
 
@@ -56,11 +56,17 @@ export function StatementMatrixTable({
   const { money } = useMoney()
   const cols = view.columns
   const lines = view.lines
-  const valueText = (value: number, kind: StatementView['columns'][number]['kind']): string => {
-    if (kind === 'variance_pct') return format.number(value / 100, { style: 'percent', minimumFractionDigits: 1, maximumFractionDigits: 1 })
-    const scaled = value / scaleDivisor(scale)
+  const valueText = (value: StatementValue, kind: StatementView['columns'][number]['kind']): string => {
+    if (value === null || value === undefined) return ''
+    if (kind === 'variance_pct') {
+      const percent = decimalToNumber(value)
+      return Number.isFinite(percent)
+        ? format.number(percent / 100, { style: 'percent', minimumFractionDigits: 1, maximumFractionDigits: 1 })
+        : '–'
+    }
+    const scaled = decimalScale(value, scaleDivisor(scale))
     const digits = scale === 'actual' ? undefined : 0
-    if (Math.abs(scaled) < (digits === 0 ? 0.5 : 0.005)) return '–'
+    if (!decimalIsMaterial(scaled, digits === 0 ? '0.5000' : '0.0050')) return '–'
     return money(scaled, {
       currency,
       accounting: true,

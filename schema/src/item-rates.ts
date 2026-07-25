@@ -285,7 +285,10 @@ export const itemRateLines = pgTable(
   ],
 );
 
-/** Customer/project rate-book selection. Both null means organization scope. */
+/** Customer/project rate-book selection. All scope keys null means organization
+ *  scope. Dimension scopes (department/subsidiary/location/class) let the same
+ *  customer carry different rate books per dimension over identical date ranges;
+ *  the no-overlap guard (0065) keys on the full scope tuple so those coexist. */
 export const itemRateBookAssignments = pgTable(
   "item_rate_book_assignments",
   {
@@ -296,6 +299,10 @@ export const itemRateBookAssignments = pgTable(
     rateVersionId: uuid("rate_version_id"),
     customerId: uuid("customer_id"),
     projectId: uuid("project_id"),
+    departmentId: uuid("department_id"),
+    subsidiaryId: uuid("subsidiary_id"),
+    locationId: uuid("location_id"),
+    classId: uuid("class_id"),
     effectiveFrom: date("effective_from"),
     effectiveTo: date("effective_to"),
     /** Usage date is the normal price-list behavior. Project-start locks a
@@ -309,8 +316,9 @@ export const itemRateBookAssignments = pgTable(
   (t) => [
     index("item_rate_assignments_customer").on(t.orgId, t.customerId),
     index("item_rate_assignments_project").on(t.orgId, t.projectId),
+    index("item_rate_assignments_dimensions").on(t.orgId, t.subsidiaryId, t.departmentId, t.locationId, t.classId),
     check(
-      "item_rate_assignment_one_scope",
+      "item_rate_assignment_one_primary_scope",
       sql`not (${t.customerId} is not null and ${t.projectId} is not null)`,
     ),
     check(

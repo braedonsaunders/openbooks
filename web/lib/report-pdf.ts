@@ -13,6 +13,7 @@ import {
   type StatementPdfStyle,
 } from '@openbooks/pdf'
 import type { StatementView } from './statement-matrix'
+import { decimalScale } from './statement-format'
 import {
   reportResultToXlsx,
   reportResultToCsv,
@@ -535,7 +536,7 @@ export async function renderStatementViewPdf(
       kind: l.kind,
       label: l.label,
       indent: l.kind === 'account' ? l.depth : 0,
-      values: l.values?.map((v, i) => (view.columns[i]!.kind === 'variance_pct' ? v : v / divisor)),
+      values: l.values?.map((v, i) => (view.columns[i]!.kind === 'variance_pct' ? v ?? null : v == null ? null : decimalScale(v, divisor))),
     })),
     style: branding.reportPdfStyle,
     branding,
@@ -563,7 +564,7 @@ export async function statementViewToXlsx(
       kind: l.kind,
       label: l.label,
       indent: l.depth,
-      values: l.values?.map((v) => (Number.isFinite(v) ? v : null)),
+      values: l.values?.map((v) => v ?? null),
     })),
   })
 }
@@ -578,7 +579,7 @@ export function statementViewToExportData(
   const rows: (string | number | null)[][] = view.lines.map((l) => {
     const label = l.kind === 'account' ? `${indent(l.depth)}${l.label}` : l.label
     if (!l.values) return [label, ...view.columns.map(() => null)]
-    return [label, ...l.values.map((v) => (Number.isFinite(v) ? v : null))]
+    return [label, ...l.values.map((v) => v ?? null)]
   })
   return {
     title: opts.title,

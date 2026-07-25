@@ -38,6 +38,7 @@ export interface InventoryAccounts {
 export interface InventoryProfile extends InventoryAccounts {
   itemId: string;
   costingMethod: "fifo" | "moving_average" | "standard";
+  tracking: "none" | "lot" | "serial";
   standardCost: string | null;
   baseUnit: string;
   allowNegativeInventory: boolean;
@@ -49,12 +50,13 @@ export class InventoryError extends Error {}
 
 async function resolveProfile(orgId: string, itemId: string): Promise<InventoryProfile> {
   const r = (await db.execute(sql`
-    select item_id, costing_method, asset_account_id, cogs_account_id, adjustment_account_id,
+    select item_id, costing_method, tracking, asset_account_id, cogs_account_id, adjustment_account_id,
            variance_account_id, standard_cost, base_unit, allow_negative_inventory,
            negative_cost_basis, provisional_unit_cost
       from item_inventory_profiles where org_id = ${orgId} and item_id = ${itemId}`)) as unknown as {
     rows: {
-      item_id: string; costing_method: InventoryProfile["costingMethod"]; asset_account_id: string;
+      item_id: string; costing_method: InventoryProfile["costingMethod"]; tracking: InventoryProfile["tracking"];
+      asset_account_id: string;
       cogs_account_id: string; adjustment_account_id: string | null; variance_account_id: string | null;
       standard_cost: string | null; base_unit: string; allow_negative_inventory: boolean;
       negative_cost_basis: InventoryProfile["negativeCostBasis"]; provisional_unit_cost: string | null;
@@ -65,6 +67,7 @@ async function resolveProfile(orgId: string, itemId: string): Promise<InventoryP
   return {
     itemId: p.item_id,
     costingMethod: p.costing_method,
+    tracking: p.tracking,
     assetAccountId: p.asset_account_id,
     cogsAccountId: p.cogs_account_id,
     adjustmentAccountId: p.adjustment_account_id,
@@ -234,6 +237,7 @@ export interface MovementResult {
 export async function receiveInventory(orgId: string, actorId: string | null, input: ReceiveInput): Promise<MovementResult> {
   if (cmp(input.quantity, "0") <= 0) throw new InventoryError("receipt quantity must be positive");
   const profile = await resolveProfile(orgId, input.itemId);
+  assertTracking(profile, { quantity: input.quantity, lotId: input.lotId, serialId: input.serialId }, "receipt");
   const period = await periodForDate(orgId, input.date);
   if (!period) throw new InventoryError(`no accounting period for ${input.date}`);
   const bookId = await primaryBookId(orgId);
@@ -1153,3 +1157,591 @@ export async function applyInventoryIssuesForInvoice(
 }
 
 export { cmp as compareMoney };
+
+// ---------------------------------------------------------------------------
+// Lot / serial tracking
+// ---------------------------------------------------------------------------
+
+/**
+ * Enforce an item's tracking discipline on a movement. Lot-tracked items must
+ * name a lot on receipt; serial-tracked items always move exactly one unit and
+ * must name the serial. (Issues pick lots/serials via their own inputs; the
+ * receipt-side rule is what guarantees downstream traceability.)
+ */
+export function assertTracking(
+  profile: { tracking: string },
+  input: { quantity: string; lotId?: string | null; serialId?: string | null },
+  kind: string,
+): void {
+  if (profile.tracking === "lot") {
+    if (kind === "receipt" && !input.lotId) {
+      throw new InventoryError("lot-tracked item requires a lot on receipt");
+    }
+  } else if (profile.tracking === "serial") {
+    if (!input.serialId) throw new InventoryError(`serial-tracked item requires a serial on ${kind}`);
+    if (cmp(input.quantity, "1") !== 0 && cmp(input.quantity, "-1") !== 0) {
+      throw new InventoryError("serial-tracked movements must be exactly one unit per serial");
+    }
+  }
+}
+
+/** Find-or-create a lot for an item; a later expiry date is never lost. */
+export async function ensureLot(
+  orgId: string,
+  itemId: string,
+  lotNumber: string,
+  expiresOn: string | null,
+  actorId: string | null,
+): Promise<string> {
+  if (!lotNumber?.trim()) throw new InventoryError("lot number is required");
+  const r = (await db.execute(sql`
+    insert into lots (org_id, item_id, lot_number, expires_on, created_by, updated_by)
+    values (${orgId}, ${itemId}, ${lotNumber.trim()}, ${expiresOn ?? null}, ${actorId}, ${actorId})
+    on conflict (item_id, lot_number) do update
+      set expires_on = coalesce(excluded.expires_on, lots.expires_on),
+          updated_at = now(), updated_by = ${actorId}
+    returning id`)) as unknown as { rows: { id: string }[] };
+  return r.rows[0].id;
+}
+
+/** Find-or-create a serial for an item, placing it in stock at a location. */
+export async function ensureSerial(
+  orgId: string,
+  itemId: string,
+  serialNumber: string,
+  stockLocationId: string | null,
+  actorId: string | null,
+): Promise<string> {
+  if (!serialNumber?.trim()) throw new InventoryError("serial number is required");
+  const r = (await db.execute(sql`
+    insert into serials (org_id, item_id, serial_number, status, current_stock_location_id, created_by, updated_by)
+    values (${orgId}, ${itemId}, ${serialNumber.trim()}, 'in_stock', ${stockLocationId ?? null}, ${actorId}, ${actorId})
+    on conflict (item_id, serial_number) do update
+      set current_stock_location_id = coalesce(excluded.current_stock_location_id, serials.current_stock_location_id),
+          updated_at = now(), updated_by = ${actorId}
+    returning id`)) as unknown as { rows: { id: string }[] };
+  return r.rows[0].id;
+}
+
+export interface LotRecallFilter {
+  lotNumber?: string;
+  lotId?: string;
+  itemId?: string;
+  expiresOnOrBefore?: string;
+  includeExpiryOnly?: boolean;
+}
+
+export interface LotRecallRow {
+  movementId: string;
+  lotId: string;
+  lotNumber: string;
+  expiresOn: string | null;
+  itemId: string;
+  itemCode: string | null;
+  itemName: string | null;
+  kind: string;
+  movedAt: string;
+  quantity: string;
+  locationCode: string | null;
+  documentId: string | null;
+  documentNumber: string | null;
+  partyName: string | null;
+}
+
+/**
+ * Lot traceability: every movement that touched a lot, with the source
+ * document and party where the movement came from a bill/invoice line. This
+ * is the recall report — "which customers received lot X" runs the same query
+ * filtered to issues.
+ */
+export async function queryLotRecall(orgId: string, filter: LotRecallFilter): Promise<LotRecallRow[]> {
+  const r = (await db.execute(sql`
+    select im.id as "movementId", l.id as "lotId", l.lot_number as "lotNumber", l.expires_on::text as "expiresOn",
+           i.id as "itemId", i.code as "itemCode", i.name as "itemName", im.kind, im.moved_at::text as "movedAt",
+           im.quantity::text as "quantity", sl.code as "locationCode",
+           d.id as "documentId", d.document_number as "documentNumber", p.name as "partyName"
+      from inventory_movements im
+      join lots l on l.id = im.lot_id and l.org_id = im.org_id
+      join items i on i.id = im.item_id and i.org_id = im.org_id
+      left join stock_locations sl on sl.id = im.stock_location_id
+      left join document_lines dl on dl.id = im.document_line_id
+      left join documents d on d.id = dl.document_id
+      left join parties p on p.id = d.party_id
+     where im.org_id = ${orgId}
+       and (${filter.lotId ?? null}::uuid is null or l.id = ${filter.lotId ?? null}::uuid)
+       and (${filter.itemId ?? null}::uuid is null or l.item_id = ${filter.itemId ?? null}::uuid)
+       and (${filter.lotNumber ?? null}::text is null or l.lot_number ilike '%' || ${filter.lotNumber ?? ""} || '%')
+       and (${filter.expiresOnOrBefore ?? null}::date is null or l.expires_on <= ${filter.expiresOnOrBefore ?? null}::date)
+       and (${filter.includeExpiryOnly !== true} or l.expires_on is not null)
+     order by im.moved_at desc
+     limit 500`)) as unknown as { rows: LotRecallRow[] };
+  return r.rows;
+}
+
+// ---------------------------------------------------------------------------
+// Transfer orders — two-step (ship → in-transit → receive) location moves
+// ---------------------------------------------------------------------------
+
+async function nextSequenceNumber(
+  orgId: string,
+  kind: string,
+  prefix: string,
+  subsidiaryId: string | null,
+): Promise<string> {
+  const configured = subsidiaryId
+    ? ((await db.execute(sql`
+        select 1 from number_sequences where org_id = ${orgId} and document_kind = ${kind}
+          and subsidiary_id = ${subsidiaryId} limit 1`)) as unknown as { rows: unknown[] }).rows.length > 0
+    : false;
+  const seq = (await db.execute(sql`
+    insert into number_sequences (org_id, document_kind, subsidiary_id, prefix)
+    values (${orgId}, ${kind}, ${configured ? subsidiaryId : null}, ${prefix})
+    on conflict on constraint sequences_org_kind_sub
+    do update set next_number = number_sequences.next_number + 1
+    returning prefix, next_number, padding`)) as unknown as {
+    rows: { prefix: string; next_number: number; padding: number }[];
+  };
+  const s = seq.rows[0];
+  return `${s.prefix}${String(s.next_number).padStart(s.padding, "0")}`;
+}
+
+export interface TransferOrderLineInput {
+  itemId: string;
+  quantity: string;
+  lotId?: string | null;
+  serialId?: string | null;
+}
+
+export interface CreateTransferOrderInput {
+  fromStockLocationId: string;
+  toStockLocationId: string;
+  subsidiaryId: string;
+  orderedOn: string;
+  /** GL account holding value while goods are in transit (optional; when set,
+   *  ship/receive post value reclasses against each item's asset account). */
+  inTransitAccountId?: string | null;
+  transitStockLocationId?: string | null;
+  memo?: string | null;
+  lines: TransferOrderLineInput[];
+}
+
+interface TransferOrderRow {
+  id: string;
+  status: string;
+  from_stock_location_id: string;
+  to_stock_location_id: string;
+  transit_stock_location_id: string | null;
+  in_transit_account_id: string | null;
+  subsidiary_id: string;
+  document_number: string;
+}
+
+export async function createTransferOrder(
+  orgId: string,
+  actorId: string | null,
+  input: CreateTransferOrderInput,
+): Promise<{ id: string; documentNumber: string }> {
+  if (input.fromStockLocationId === input.toStockLocationId) {
+    throw new InventoryError("transfer order needs two different locations");
+  }
+  if (!input.lines?.length) throw new InventoryError("transfer order needs at least one line");
+  for (const line of input.lines) {
+    if (cmp(line.quantity, "0") <= 0) throw new InventoryError("transfer order line quantity must be positive");
+  }
+  const documentNumber = await nextSequenceNumber(orgId, "transfer_order", "TO-", input.subsidiaryId);
+  return await db.transaction(async (tx) => {
+    const order = (await tx.execute(sql`
+      insert into transfer_orders
+        (org_id, document_number, status, from_stock_location_id, to_stock_location_id,
+         transit_stock_location_id, in_transit_account_id, subsidiary_id, ordered_on, memo, created_by, updated_by)
+      values (${orgId}, ${documentNumber}, 'draft', ${input.fromStockLocationId}, ${input.toStockLocationId},
+              ${input.transitStockLocationId ?? null}, ${input.inTransitAccountId ?? null}, ${input.subsidiaryId},
+              ${input.orderedOn}, ${input.memo ?? null}, ${actorId}, ${actorId})
+      returning id`)) as unknown as { rows: { id: string }[] };
+    const id = order.rows[0].id;
+    for (let i = 0; i < input.lines.length; i++) {
+      const line = input.lines[i];
+      await tx.execute(sql`
+        insert into transfer_order_lines
+          (org_id, transfer_order_id, line_number, item_id, quantity, lot_id, serial_id, created_by, updated_by)
+        values (${orgId}, ${id}, ${i + 1}, ${line.itemId}, ${line.quantity},
+                ${line.lotId ?? null}, ${line.serialId ?? null}, ${actorId}, ${actorId})`);
+    }
+    return { id, documentNumber };
+  });
+}
+
+async function loadTransferOrderForUpdate(tx: Runner, orgId: string, orderId: string): Promise<TransferOrderRow> {
+  const r = (await tx.execute(sql`
+    select id, status, from_stock_location_id, to_stock_location_id, transit_stock_location_id,
+           in_transit_account_id, subsidiary_id, document_number
+      from transfer_orders where org_id = ${orgId} and id = ${orderId} for update`)) as unknown as {
+    rows: TransferOrderRow[];
+  };
+  if (!r.rows[0]) throw new InventoryError("transfer order not found");
+  return r.rows[0];
+}
+
+async function resolveTransitLocation(tx: Runner, orgId: string, order: TransferOrderRow): Promise<string> {
+  if (order.transit_stock_location_id) return order.transit_stock_location_id;
+  const r = (await tx.execute(sql`
+    select id from stock_locations where org_id = ${orgId} and kind = 'transit' and is_active
+     order by created_at limit 1`)) as unknown as { rows: { id: string }[] };
+  if (!r.rows[0]) {
+    throw new InventoryError(`transfer order ${order.document_number} has no transit stock location and none exists`);
+  }
+  return r.rows[0].id;
+}
+
+/** Post the in-transit value reclass for a ship/receive leg, when the order
+ *  carries an in-transit GL account. `direction` = 'ship' moves value into the
+ *  in-transit account, 'receive' moves it back out. */
+async function postInTransitReclass(
+  tx: Runner,
+  p: {
+    orgId: string;
+    order: TransferOrderRow;
+    date: string;
+    direction: "ship" | "receive";
+    amounts: { assetAccountId: string; value: string; memo: string }[];
+  },
+): Promise<string | null> {
+  if (!p.order.in_transit_account_id) return null;
+  const amounts = p.amounts.filter((a) => !isZero(a.value));
+  if (amounts.length === 0) return null;
+  const total = sum(amounts.map((a) => a.value));
+  const periodId = await periodForDate(p.orgId, p.date);
+  if (!periodId) throw new InventoryError(`no accounting period for ${p.date}`);
+  const bookId = await primaryBookId(p.orgId);
+  const currency = await subsidiaryCurrency(p.orgId, p.order.subsidiary_id);
+  const inTransit = p.order.in_transit_account_id;
+  const lines: JournalLineInput[] = p.direction === "ship"
+    ? [
+        { accountId: inTransit, amount: total, memo: "Goods in transit" },
+        ...amounts.map((a) => ({ accountId: a.assetAccountId, amount: neg(a.value), memo: a.memo })),
+      ]
+    : [
+        ...amounts.map((a) => ({ accountId: a.assetAccountId, amount: a.value, memo: a.memo })),
+        { accountId: inTransit, amount: neg(total), memo: "Goods received from transit" },
+      ];
+  return postInventoryEntry(tx, {
+    orgId: p.orgId,
+    bookId,
+    subsidiaryId: p.order.subsidiary_id,
+    currency,
+    periodId,
+    date: p.date,
+    entryNumber: `INV-XFER-${p.direction.toUpperCase()}-${p.order.document_number}`,
+    memo: `Transfer ${p.order.document_number} ${p.direction === "ship" ? "shipped" : "received"}`,
+    lines,
+  });
+}
+
+/**
+ * Ship a draft transfer order: every line's full quantity moves source →
+ * transit location at carried cost (subledger), and — when the order names an
+ * in-transit account — value reclasses into it. One-shot by design; partial
+ * shipments ride additional transfer orders.
+ */
+export async function shipTransferOrder(
+  orgId: string,
+  actorId: string | null,
+  orderId: string,
+  date?: string,
+): Promise<{ id: string; status: string; entryId: string | null }> {
+  const shipDate = date ?? new Date().toISOString().slice(0, 10);
+  return await db.transaction(async (tx) => {
+    const order = await loadTransferOrderForUpdate(tx, orgId, orderId);
+    if (order.status !== "draft") throw new InventoryError(`transfer order ${order.document_number} is ${order.status}`);
+    const transitId = await resolveTransitLocation(tx, orgId, order);
+    const lines = (await tx.execute(sql`
+      select id, item_id, quantity from transfer_order_lines
+       where org_id = ${orgId} and transfer_order_id = ${orderId} order by line_number for update`)) as unknown as {
+      rows: { id: string; item_id: string; quantity: string }[];
+    };
+    const amounts: { assetAccountId: string; value: string; memo: string }[] = [];
+    for (const line of lines.rows) {
+      const profile = await resolveProfile(orgId, line.item_id);
+      const moved = await transferInventory(orgId, actorId, {
+        itemId: line.item_id,
+        fromStockLocationId: order.from_stock_location_id,
+        toStockLocationId: transitId,
+        quantity: line.quantity,
+        subsidiaryId: order.subsidiary_id,
+        date: shipDate,
+        memo: `Transfer ${order.document_number} shipped`,
+      });
+      await tx.execute(sql`
+        update transfer_order_lines
+           set quantity_shipped = ${line.quantity}, ship_movement_id = ${moved.fromMovementId}, updated_at = now(), updated_by = ${actorId}
+         where id = ${line.id}`);
+      amounts.push({ assetAccountId: profile.assetAccountId, value: moved.value, memo: `Transfer ${order.document_number}` });
+    }
+    const entryId = await postInTransitReclass(tx, { orgId, order, date: shipDate, direction: "ship", amounts });
+    await tx.execute(sql`
+      update transfer_orders
+         set status = 'in_transit', shipped_on = ${shipDate}, ship_journal_entry_id = ${entryId}, updated_at = now(), updated_by = ${actorId}
+       where id = ${orderId}`);
+    return { id: orderId, status: "in_transit", entryId };
+  });
+}
+
+/** Receive an in-transit transfer order at its destination location. */
+export async function receiveTransferOrder(
+  orgId: string,
+  actorId: string | null,
+  orderId: string,
+  date?: string,
+): Promise<{ id: string; status: string; entryId: string | null }> {
+  const receiveDate = date ?? new Date().toISOString().slice(0, 10);
+  return await db.transaction(async (tx) => {
+    const order = await loadTransferOrderForUpdate(tx, orgId, orderId);
+    if (order.status !== "in_transit") throw new InventoryError(`transfer order ${order.document_number} is ${order.status}`);
+    const transitId = await resolveTransitLocation(tx, orgId, order);
+    const lines = (await tx.execute(sql`
+      select id, item_id, quantity_shipped from transfer_order_lines
+       where org_id = ${orgId} and transfer_order_id = ${orderId} order by line_number for update`)) as unknown as {
+      rows: { id: string; item_id: string; quantity_shipped: string }[];
+    };
+    const amounts: { assetAccountId: string; value: string; memo: string }[] = [];
+    for (const line of lines.rows) {
+      if (isZero(line.quantity_shipped)) continue;
+      const profile = await resolveProfile(orgId, line.item_id);
+      const moved = await transferInventory(orgId, actorId, {
+        itemId: line.item_id,
+        fromStockLocationId: transitId,
+        toStockLocationId: order.to_stock_location_id,
+        quantity: line.quantity_shipped,
+        subsidiaryId: order.subsidiary_id,
+        date: receiveDate,
+        memo: `Transfer ${order.document_number} received`,
+      });
+      await tx.execute(sql`
+        update transfer_order_lines
+           set quantity_received = ${line.quantity_shipped}, receive_movement_id = ${moved.toMovementId}, updated_at = now(), updated_by = ${actorId}
+         where id = ${line.id}`);
+      amounts.push({ assetAccountId: profile.assetAccountId, value: moved.value, memo: `Transfer ${order.document_number}` });
+    }
+    const entryId = await postInTransitReclass(tx, { orgId, order, date: receiveDate, direction: "receive", amounts });
+    await tx.execute(sql`
+      update transfer_orders
+         set status = 'received', received_on = ${receiveDate}, receive_journal_entry_id = ${entryId}, updated_at = now(), updated_by = ${actorId}
+       where id = ${orderId}`);
+    return { id: orderId, status: "received", entryId };
+  });
+}
+
+// ---------------------------------------------------------------------------
+// Landed cost vouchers — one freight/duty amount spread across many targets
+// ---------------------------------------------------------------------------
+
+export interface LandedCostVoucherTargetInput {
+  itemId: string;
+  stockLocationId: string;
+  /** basis 'manual': the exact amount this target receives. */
+  manualAmount?: string | null;
+}
+
+export interface PostLandedCostVoucherInput {
+  amount: string;
+  basis: "value" | "quantity" | "weight" | "manual";
+  freightAccountId: string;
+  subsidiaryId: string;
+  voucherDate: string;
+  sourceDocumentLineId?: string | null;
+  memo?: string | null;
+  targets: LandedCostVoucherTargetInput[];
+}
+
+interface OpenLayer {
+  id: string;
+  remaining_quantity: string;
+  unit_cost: string;
+}
+
+/** The apportionment weight of one target's on-hand layers under a basis. */
+function layerWeights(
+  layers: OpenLayer[],
+  basis: "value" | "quantity" | "weight",
+  weightsByLayer?: Map<string, string>,
+): string[] {
+  return layers.map((l) => {
+    if (basis === "quantity") return l.remaining_quantity;
+    if (basis === "weight") return extendCost(l.remaining_quantity, weightsByLayer?.get(l.id) ?? "0");
+    return extendCost(l.remaining_quantity, l.unit_cost);
+  });
+}
+
+/**
+ * Capitalize one freight/duty amount across several item+location targets.
+ * Shares are apportioned by the basis (value, quantity, layer weight, or
+ * explicit manual amounts that must sum to the total), each target's share
+ * bumps its open cost layers, and ONE balanced entry posts DR each target's
+ * inventory asset / CR the freight account.
+ */
+export async function postLandedCostVoucher(
+  orgId: string,
+  actorId: string | null,
+  input: PostLandedCostVoucherInput,
+): Promise<{ id: string; documentNumber: string; entryId: string }> {
+  if (cmp(input.amount, "0") <= 0) throw new InventoryError("landed cost amount must be positive");
+  if (!input.targets?.length) throw new InventoryError("landed cost voucher needs at least one target");
+  const periodId = await periodForDate(orgId, input.voucherDate);
+  if (!periodId) throw new InventoryError(`no accounting period for ${input.voucherDate}`);
+
+  // Resolve layers + weights per target before touching anything.
+  const resolved: {
+    target: LandedCostVoucherTargetInput;
+    profile: InventoryProfile;
+    layers: OpenLayer[];
+    shareWeight: string;
+    manualAmount: string | null;
+  }[] = [];
+  for (const target of input.targets) {
+    const profile = await resolveProfile(orgId, target.itemId);
+    const layers = ((await db.execute(sql`
+      select id, remaining_quantity, unit_cost from cost_layers
+       where org_id = ${orgId} and item_id = ${target.itemId} and stock_location_id = ${target.stockLocationId}
+         and remaining_quantity > 0 order by received_at, id`)) as unknown as { rows: OpenLayer[] }).rows;
+    if (layers.length === 0) {
+      throw new InventoryError(`no on-hand layers for item ${target.itemId} at location ${target.stockLocationId}`);
+    }
+    const manualAmount = target.manualAmount ?? null;
+    let shareWeight = "0";
+    if (input.basis === "manual") {
+      if (!manualAmount || cmp(manualAmount, "0") <= 0) {
+        throw new InventoryError("manual-basis vouchers require a positive manual amount per target");
+      }
+    } else {
+      let weightsByLayer: Map<string, string> | undefined;
+      if (input.basis === "weight") {
+        weightsByLayer = new Map();
+        const w = (await db.execute(sql`
+          select cost_layer_id, weight from cost_layer_weights
+           where org_id = ${orgId} and cost_layer_id in (${joinIds(layers.map((l) => l.id))})`)) as unknown as {
+          rows: { cost_layer_id: string; weight: string }[];
+        };
+        for (const row of w.rows) weightsByLayer.set(row.cost_layer_id, row.weight);
+      }
+      const apportionBasis: "value" | "quantity" = input.basis === "quantity" ? "quantity" : "value";
+      const weights = layerWeights(layers, apportionBasis, weightsByLayer);
+      shareWeight = sum(weights);
+      if (isZero(shareWeight)) {
+        throw new InventoryError(`target item ${target.itemId} has no ${input.basis} basis to apportion on`);
+      }
+    }
+    resolved.push({ target, profile, layers, shareWeight, manualAmount });
+  }
+
+  const shares = input.basis === "manual"
+    ? resolved.map((r) => toUnits(r.manualAmount!))
+    : apportionUnits(toUnits(input.amount), resolved.map((r) => r.shareWeight));
+  const shareTotal = fromUnits(shares.reduce((a, b) => a + b, 0n));
+  if (cmp(shareTotal, input.amount) !== 0) {
+    throw new InventoryError(
+      input.basis === "manual"
+        ? `manual target amounts (${shareTotal}) must sum to the voucher amount (${input.amount})`
+        : "apportionment failed",
+    );
+  }
+
+  const documentNumber = await nextSequenceNumber(orgId, "landed_cost_voucher", "LCV-", input.subsidiaryId);
+  const bookId = await primaryBookId(orgId);
+  const currency = await subsidiaryCurrency(orgId, input.subsidiaryId);
+
+  return await db.transaction(async (tx) => {
+    const voucher = (await tx.execute(sql`
+      insert into landed_cost_vouchers
+        (org_id, document_number, status, amount, basis, freight_account_id, source_document_line_id,
+         subsidiary_id, voucher_date, memo, created_by, updated_by)
+      values (${orgId}, ${documentNumber}, 'draft', ${input.amount}, ${input.basis}, ${input.freightAccountId},
+              ${input.sourceDocumentLineId ?? null}, ${input.subsidiaryId}, ${input.voucherDate},
+              ${input.memo ?? null}, ${actorId}, ${actorId})
+      returning id`)) as unknown as { rows: { id: string }[] };
+    const voucherId = voucher.rows[0].id;
+
+    const entryLines: JournalLineInput[] = [];
+    const layerIds: string[] = [];
+    for (let i = 0; i < resolved.length; i++) {
+      const r = resolved[i];
+      const share = shares[i];
+      const shareAmount = fromUnits(share);
+      await tx.execute(sql`
+        insert into landed_cost_voucher_targets
+          (org_id, voucher_id, item_id, stock_location_id, manual_amount, allocated_amount, created_by, updated_by)
+        values (${orgId}, ${voucherId}, ${r.target.itemId}, ${r.target.stockLocationId},
+                ${r.manualAmount}, ${shareAmount}, ${actorId}, ${actorId})`);
+      if (share === 0n) continue;
+
+      // Sub-apportion the share across the target's own layers on the same basis.
+      let weightsByLayer: Map<string, string> | undefined;
+      if (input.basis === "weight") {
+        weightsByLayer = new Map();
+        const w = (await tx.execute(sql`
+          select cost_layer_id, weight from cost_layer_weights
+           where org_id = ${orgId} and cost_layer_id in (${joinIds(r.layers.map((l) => l.id))})`)) as unknown as {
+          rows: { cost_layer_id: string; weight: string }[];
+        };
+        for (const row of w.rows) weightsByLayer.set(row.cost_layer_id, row.weight);
+      }
+      const layerApportionBasis: "value" | "quantity" = input.basis === "quantity" ? "quantity" : "value";
+      const subShares = apportionUnits(
+        share,
+        layerWeights(r.layers, layerApportionBasis, weightsByLayer),
+      );
+      for (let j = 0; j < r.layers.length; j++) {
+        const layerShare = subShares[j];
+        if (layerShare === 0n) continue;
+        const layer = r.layers[j];
+        const qtyUnits = toUnits(layer.remaining_quantity);
+        const bump = qtyUnits === 0n ? 0n : roundDiv(layerShare * 10_000n, qtyUnits);
+        await tx.execute(sql`
+          update cost_layers set unit_cost = ${fromUnits(toUnits(layer.unit_cost) + bump)}, updated_at = now()
+           where id = ${layer.id}`);
+        await tx.execute(sql`
+          insert into landed_cost_allocations
+            (org_id, source_document_line_id, target_cost_layer_id, basis, amount, journal_entry_id, created_by, updated_by)
+          values (${orgId}, ${input.sourceDocumentLineId ?? null}, ${layer.id}, ${input.basis},
+                  ${fromUnits(layerShare)}, null, ${actorId}, ${actorId})`);
+        layerIds.push(layer.id);
+      }
+      entryLines.push({
+        accountId: r.profile.assetAccountId,
+        amount: shareAmount,
+        memo: input.memo ?? `Landed cost ${documentNumber}`,
+      });
+    }
+    entryLines.push({
+      accountId: input.freightAccountId,
+      amount: neg(input.amount),
+      memo: input.memo ?? `Landed cost ${documentNumber}`,
+    });
+
+    const entryId = await postInventoryEntry(tx, {
+      orgId,
+      bookId,
+      subsidiaryId: input.subsidiaryId,
+      currency,
+      periodId,
+      date: input.voucherDate,
+      entryNumber: `INV-LCV-${documentNumber}`,
+      memo: input.memo ?? `Landed cost voucher ${documentNumber}`,
+      lines: entryLines,
+    });
+    await tx.execute(sql`
+      update landed_cost_allocations set journal_entry_id = ${entryId}
+       where org_id = ${orgId} and journal_entry_id is null
+         and target_cost_layer_id in (${joinIds(layerIds)})`);
+    await tx.execute(sql`
+      update landed_cost_vouchers set status = 'posted', journal_entry_id = ${entryId}, updated_at = now(), updated_by = ${actorId}
+       where id = ${voucherId}`);
+    return { id: voucherId, documentNumber, entryId };
+  });
+}
+
+/** SQL list literal for a non-empty uuid array. */
+function joinIds(ids: string[]) {
+  if (ids.length === 0) throw new InventoryError("internal: empty id list");
+  return sql.join(ids.map((id) => sql`${id}::uuid`), sql`, `);
+}
+

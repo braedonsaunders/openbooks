@@ -8,6 +8,9 @@ export default {
     './components/**/*.{ts,tsx}',
     './lib/**/*.{ts,tsx}',
     '../packages/ui/src/**/*.{ts,tsx}',
+    // Vendored AppKit packages ship compiled JS; their utility classes must be
+    // scanned or the schedule surface renders unstyled.
+    '../node_modules/@appkit/*/**/*.js',
   ],
   theme: {
     extend: {
