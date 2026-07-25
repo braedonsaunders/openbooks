@@ -175,6 +175,14 @@ export interface InvoicingProfile {
   notToExceed?: boolean;
   /** Optional item id for the not-to-exceed adjustment line; else default income. */
   notToExceedItemId?: string | null;
+  /**
+   * Which posted document kinds supply rebillable job cost. Defaults to the
+   * purchase-side documents (vendor_bill, expense_report, card_charge, check);
+   * `project_charge` is always included. A tenant that stages priced billable
+   * items on another document — e.g. sales orders for equipment or consumables —
+   * adds that kind here instead of the engine assuming one company's workflow.
+   */
+  costSourceKinds?: string[];
 }
 
 export interface BackupProfile {
