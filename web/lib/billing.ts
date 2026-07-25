@@ -212,7 +212,13 @@ export async function generateInvoiceFromBillingRequest(
         })
       }
 
-      // Billable cost lines (materials/subs) on posted cost documents.
+      // Billable cost lines (materials/subs/equipment) on the document kinds this
+      // project type treats as cost sources — configurable, because tenants stage
+      // priced billable items differently (purchase docs, or e.g. sales orders).
+      const costKinds = invoicing.costSourceKinds?.length
+        ? invoicing.costSourceKinds
+        : ["vendor_bill", "expense_report", "card_charge", "check"]
+
       const costRows = (await tx.execute(sql`
         select dl.id, dl.amount, dl.cost_multiplier, dl.description, dl.item_id, dl.quantity, dl.unit,
                dl.bill_rate, dl.bill_amount, dl.equipment_unit_id, dl.rate_version_id, d.kind,
@@ -232,7 +238,7 @@ export async function generateInvoiceFromBillingRequest(
          where dl.org_id = ${orgId} and dl.project_id = ${req.project_id}
            and dl.is_billable and dl.billed_by_line_id is null
            and ((d.kind = 'project_charge' and d.status in ('approved','posted'))
-             or (d.status = 'posted' and d.kind in ('vendor_bill', 'expense_report', 'card_charge', 'check')))
+             or (d.status in ('posted','approved') and d.kind = any(${`{${costKinds.join(",")}}`}::text[])))
       `)) as unknown as { rows: any[] }
 
       for (const cl of costRows.rows) {
