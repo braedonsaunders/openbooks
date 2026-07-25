@@ -3,7 +3,7 @@ import { basename, extname } from "node:path";
 import { sql } from "drizzle-orm";
 import { db } from "../db.ts";
 import { putS3Blob, s3Enabled } from "../file-storage.ts";
-import { netsuiteRestlet, type NetSuiteCreds } from "../netsuite.ts";
+import { netsuiteRestlet, netsuiteSoapFileGet, type NetSuiteCreds } from "../netsuite.ts";
 import {
   DEFAULT_NETSUITE_BRIDGE_DEPLOYMENT_ID,
   DEFAULT_NETSUITE_BRIDGE_SCRIPT_ID,
@@ -47,6 +47,9 @@ export interface ImportSummary {
   createdFiles: number;
   newVersions: number;
   unchangedFiles: number;
+  /** Already-imported files skipped without download (source last-modified
+   * matches the stored marker, or marker safely backfilled — see below). */
+  skippedUnchanged: number;
   createdLinks: number;
   failures: number;
   failureDetails: AttachmentImportFailure[];
@@ -137,6 +140,7 @@ async function resolveContext(options: ImportOptions): Promise<{
   actorId: string;
   creds: NetSuiteCreds;
   bridge: { script: string; deploy: string };
+  soapEndpointVersion: string;
 }> {
   const orgResult = (await db.execute(sql`
     select id, name from orgs where id::text = ${options.org} or name = ${options.org}
@@ -181,6 +185,7 @@ async function resolveContext(options: ImportOptions): Promise<{
       script: String(connection.config.bridgeScriptId || DEFAULT_NETSUITE_BRIDGE_SCRIPT_ID),
       deploy: String(connection.config.bridgeDeploymentId || DEFAULT_NETSUITE_BRIDGE_DEPLOYMENT_ID),
     },
+    soapEndpointVersion: String(connection.config.soapEndpoint || "2022_1"),
   };
 }
 
@@ -267,76 +272,30 @@ export function decodeBridgeAttachment(response: unknown, expectedFileId: string
   return { source: { id, name }, bytes };
 }
 
-function decodeBridgeAttachmentChunk(
-  response: unknown,
-  expectedFileId: string,
-  expectedSize: number,
-  expectedOffset: number,
-): { contents: string; nextOffset: number; done: boolean } {
-  if (!response || typeof response !== "object") throw new Error("attachment bridge returned an invalid chunk response");
-  const body = response as { ok?: unknown; error?: unknown; file?: Record<string, unknown> };
-  if (body.ok !== true || !body.file) throw new Error(String(body.error || "attachment bridge chunk download failed"));
-  const id = String(body.file.id ?? "");
-  const size = Number(body.file.size);
-  const encoding = String(body.file.encoding ?? "");
-  const offset = Number(body.file.offset);
-  const contents = body.file.contents;
-  const nextOffset = Number(body.file.nextOffset);
-  const done = body.file.done === true;
-  if (id !== expectedFileId || size !== expectedSize || encoding !== "base64-chunk") {
-    throw new Error(`attachment bridge returned the wrong chunk for source file ${expectedFileId}`);
-  }
-  if (offset !== expectedOffset || typeof contents !== "string" || !contents.length || contents.length % 4 !== 0) {
-    throw new Error(`attachment bridge returned malformed chunk content for source file ${expectedFileId}`);
-  }
-  if (!Number.isSafeInteger(nextOffset) || nextOffset !== offset + contents.length) {
-    throw new Error(`attachment bridge returned a discontinuous chunk for source file ${expectedFileId}`);
-  }
-  return { contents, nextOffset, done };
-}
-
-async function downloadSourceFile(
+export async function downloadSourceFile(
   fileId: string,
   creds: NetSuiteCreds,
   bridge: { script: string; deploy: string },
+  soapEndpointVersion?: string,
 ): Promise<{ source: SourceFile; bytes: Buffer }> {
   const response = await netsuiteRestlet<unknown>(bridge.script, bridge.deploy, {
     action: "attachmentContent",
     fileId,
   }, creds, "POST");
   const body = response as { ok?: unknown; error?: unknown; file?: Record<string, unknown> };
-  if (body?.file?.encoding !== "base64-chunks") return decodeBridgeAttachment(response, fileId);
-  if (body.ok !== true) throw new Error(String(body.error || "attachment bridge download failed"));
-
-  const id = String(body.file.id ?? "");
-  const name = String(body.file.name ?? "");
-  const size = Number(body.file.size);
-  const encodedSize = Number(body.file.encodedSize);
-  const chunkSize = Number(body.file.chunkSize);
-  if (id !== fileId || !name || !Number.isSafeInteger(size) || size <= 0
-      || !Number.isSafeInteger(encodedSize) || encodedSize !== Math.ceil(size / 3) * 4
-      || !Number.isSafeInteger(chunkSize) || chunkSize <= 0 || chunkSize % 4 !== 0) {
-    throw new Error(`attachment bridge returned malformed chunk metadata for source file ${fileId}`);
+  const encoding = body?.file ? String(body.file.encoding ?? "") : "";
+  if (encoding === "base64") return decodeBridgeAttachment(response, fileId);
+  if (body?.ok === true && (encoding === "oversized" || encoding === "base64-chunks")) {
+    // The file is too large for the RESTlet transport. Every SuiteScript
+    // read path is capped or broken (getContents 10.0MB cap, FileReader read
+    // budget, getSegments' unconsumable iterable — all verified live), so
+    // pull the whole file through SuiteTalk SOAP instead: the only NetSuite
+    // read path without a size ceiling (proven to 23MB+). The 'base64-chunks'
+    // marker from older bridges is honoured the same way.
+    const { name, bytes } = await netsuiteSoapFileGet(fileId, creds, soapEndpointVersion);
+    return { source: { id: fileId, name }, bytes };
   }
-
-  const chunks: string[] = [];
-  let offset = 0;
-  while (offset < encodedSize) {
-    const chunkResponse = await netsuiteRestlet<unknown>(bridge.script, bridge.deploy, {
-      action: "attachmentContentChunk",
-      fileId,
-      offset,
-    }, creds, "POST");
-    const chunk = decodeBridgeAttachmentChunk(chunkResponse, fileId, size, offset);
-    chunks.push(chunk.contents);
-    offset = chunk.nextOffset;
-    if (chunk.done !== (offset === encodedSize)) {
-      throw new Error(`attachment bridge ended chunks at the wrong position for source file ${fileId}`);
-    }
-  }
-  const bytes = Buffer.from(chunks.join(""), "base64");
-  if (bytes.length !== size) throw new Error(`attachment bridge size mismatch for source file ${fileId}`);
-  return { source: { id, name }, bytes };
+  throw new Error(String(body?.error || "attachment bridge download failed"));
 }
 
 /** Title-case a snake_case kind ("vendor_bill" -> "Vendor Bill"). Must match
@@ -411,9 +370,11 @@ async function persistFile(input: {
   targetDocumentIds: string[];
   bytes: Buffer;
   contentType: string;
-}): Promise<{ created: boolean; versioned: boolean; unchanged: boolean; createdLinks: number }> {
+  sourceModifiedAt: Date | null;
+}): Promise<{ fileId: string; created: boolean; versioned: boolean; unchanged: boolean; createdLinks: number }> {
   const hash = createHash("sha256").update(input.bytes).digest("hex");
   const filename = safeFilename(input.source.name, input.source.id);
+  const sourceModifiedAtIso = input.sourceModifiedAt?.toISOString() ?? null;
   return db.transaction(async (tx) => {
     const existing = (await tx.execute(sql`
       select id, content_hash as "contentHash",
@@ -432,11 +393,11 @@ async function persistFile(input: {
       const folderId = await ensureRecordFolder(tx, input.orgId, input.targetDocumentIds[0]);
       await tx.execute(sql`
         insert into files (id, org_id, folder_id, name, extension, file_type, content_type,
-                           size_bytes, storage_kind, source_system, source_id, content_hash,
+                           size_bytes, storage_kind, source_system, source_id, source_modified_at, content_hash,
                            created_by, updated_by, created_at, updated_at)
         values (${fileId}, ${input.orgId}, ${folderId}, ${filename}, ${extension(filename)},
                 ${derivedFileType(input.contentType)}, ${input.contentType}, ${input.bytes.length}, 's3',
-                ${SOURCE_SYSTEM}, ${input.source.id}, ${hash}, ${input.actorId}, ${input.actorId}, now(), now())
+                ${SOURCE_SYSTEM}, ${input.source.id}, ${sourceModifiedAtIso}, ${hash}, ${input.actorId}, ${input.actorId}, now(), now())
       `);
       created = true;
     }
@@ -455,6 +416,7 @@ async function persistFile(input: {
         update files set current_version_id = ${versionId}, name = ${filename}, extension = ${extension(filename)},
                          file_type = ${derivedFileType(input.contentType)}, content_type = ${input.contentType},
                          size_bytes = ${input.bytes.length}, storage_kind = 's3', content_hash = ${hash},
+                         source_modified_at = ${sourceModifiedAtIso},
                          updated_by = ${input.actorId}, updated_at = now()
          where id = ${fileId} and org_id = ${input.orgId}
       `);
@@ -463,7 +425,8 @@ async function persistFile(input: {
       await tx.execute(sql`
         update files set name = ${filename}, extension = ${extension(filename)},
                          file_type = ${derivedFileType(input.contentType)}, content_type = ${input.contentType},
-                         size_bytes = ${input.bytes.length}, updated_by = ${input.actorId}, updated_at = now()
+                         size_bytes = ${input.bytes.length}, source_modified_at = ${sourceModifiedAtIso},
+                         updated_by = ${input.actorId}, updated_at = now()
          where id = ${fileId} and org_id = ${input.orgId}
       `);
     }
@@ -478,7 +441,7 @@ async function persistFile(input: {
       `)) as unknown as { rows: { id: string }[] };
       createdLinks += linked.rows.length;
     }
-    return { created, versioned, unchanged: !created && unchanged, createdLinks };
+    return { fileId, created, versioned, unchanged: !created && unchanged, createdLinks };
   });
 }
 
@@ -499,18 +462,44 @@ async function verifyImport(orgId: string, fileToDocuments: Map<string, Set<stri
   }
 }
 
-async function prioritizeMissingFiles(orgId: string, fileIds: string[]): Promise<string[]> {
-  const imported = (await db.execute(sql`
-    select source_id as "sourceId"
-      from files
-     where org_id = ${orgId} and source_system = ${SOURCE_SYSTEM} and source_id is not null
-  `)) as unknown as { rows: { sourceId: string }[] };
-  const existing = new Set(imported.rows.map((row) => row.sourceId));
-  return [...fileIds].sort((left, right) => Number(existing.has(left)) - Number(existing.has(right)));
+/**
+ * Upstream last-modified per source file id, in epoch ms. The source's wall
+ * clock is read as UTC (the codebase's watermark convention) — only equality
+ * across runs matters, so the absolute frame is irrelevant. Files missing
+ * from the result (deleted upstream, or metadata not exposed) simply stay
+ * download-eligible, the always-safe default.
+ */
+export async function fetchSourceFileModified(
+  fileIds: string[],
+  creds: NetSuiteCreds,
+  bridge: { script: string; deploy: string },
+): Promise<Map<string, number>> {
+  const modified = new Map<string, number>();
+  for (const chunk of chunks(fileIds, 250)) {
+    const response = await netsuiteRestlet<{
+      ok?: boolean;
+      error?: string;
+      rows?: { id: string | number; lastmod: string | null }[];
+    }>(bridge.script, bridge.deploy, {
+      action: "query",
+      sql: `SELECT id, TO_CHAR(lastmodifieddate, 'YYYY-MM-DD HH24:MI:SS') AS lastmod FROM file WHERE id IN (${chunk.join(",")})`,
+    }, creds, "POST");
+    if (response.ok === false) throw new Error(response.error || "source file metadata query failed");
+    for (const row of response.rows ?? []) {
+      const ms = row.lastmod ? Date.parse(`${row.lastmod.replace(" ", "T")}Z`) : NaN;
+      if (Number.isFinite(ms)) modified.set(String(row.id), ms);
+    }
+  }
+  return modified;
 }
 
+/** Clock-skew margin for the marker backfill: the source's wall clock and ours
+ *  need not agree, so only treat a stored version as definitively newer than
+ *  the source's last change when a full day separates the two instants. */
+const BACKFILL_SKEW_MS = 24 * 60 * 60_000;
+
 export async function importNetSuiteAttachments(options: ImportOptions): Promise<ImportSummary> {
-  const { orgId, actorId, creds, bridge } = await resolveContext(options);
+  const { orgId, actorId, creds, bridge, soapEndpointVersion } = await resolveContext(options);
   if (options.execute && !s3Enabled) {
     throw new Error("S3/MinIO is not configured; refusing to fall back to database blobs");
   }
@@ -531,6 +520,7 @@ export async function importNetSuiteAttachments(options: ImportOptions): Promise
     createdFiles: 0,
     newVersions: 0,
     unchangedFiles: 0,
+    skippedUnchanged: 0,
     createdLinks: 0,
     failures: 0,
     failureDetails: [],
@@ -538,12 +528,100 @@ export async function importNetSuiteAttachments(options: ImportOptions): Promise
   console.log(`[inventory] found ${summary.sourceFiles} unique files across ${summary.sourceLinks} transaction links`);
   if (!options.execute) return summary;
 
-  const fileIds = await prioritizeMissingFiles(orgId, Array.from(fileToDocuments.keys()));
-  await concurrentMap(fileIds, options.concurrency, async (fileId, index) => {
+  // -- incremental decision: download only new or provably-changed files ------
+  // The source's own last-modified instant is the equality token. A file is
+  // skipped when its stored marker matches; a pre-marker row (imported before
+  // markers existed) is backfilled WITHOUT a download when the stored version
+  // was created long after the source's last change (skew-margined) — the
+  // bytes held are then provably current. Everything else is downloaded:
+  // unknown, marker-mismatch, or metadata missing. A metadata outage degrades
+  // to the old full re-read, which is always correct — never to silent skips.
+  const sourceModified = await fetchSourceFileModified(
+    Array.from(fileToDocuments.keys()),
+    creds,
+    bridge,
+  ).catch((error: unknown) => {
+    console.error(`[import] source file metadata unavailable — falling back to a full re-read: ${(error as Error).message}`);
+    return null;
+  });
+  const imported = (await db.execute(sql`
+    select f.source_id as "sourceId",
+           f.source_modified_at as "sourceModifiedAt",
+           fv.created_at as "versionCreatedAt"
+      from files f
+      left join file_versions fv on fv.id = f.current_version_id
+     where f.org_id = ${orgId} and f.source_system = ${SOURCE_SYSTEM} and f.source_id is not null
+  `)) as unknown as { rows: { sourceId: string; sourceModifiedAt: string | null; versionCreatedAt: string | null }[] };
+  const importedById = new Map(imported.rows.map((row) => [row.sourceId, {
+    modifiedMs: row.sourceModifiedAt ? Date.parse(row.sourceModifiedAt) : null,
+    versionCreatedMs: row.versionCreatedAt ? Date.parse(row.versionCreatedAt) : null,
+  }]));
+
+  const downloadIds: string[] = [];
+  const downloadSet = new Set<string>();
+  const backfill: { fileId: string; modifiedMs: number }[] = [];
+  for (const fileId of fileToDocuments.keys()) {
+    const lastModifiedMs = sourceModified?.get(fileId) ?? null;
+    const have = importedById.get(fileId);
+    if (!have) {
+      downloadIds.push(fileId);
+      downloadSet.add(fileId);
+      continue;
+    }
+    if (lastModifiedMs != null && have.modifiedMs != null && have.modifiedMs === lastModifiedMs) {
+      summary.skippedUnchanged++;
+      continue;
+    }
+    if (lastModifiedMs != null && have.modifiedMs == null && have.versionCreatedMs != null
+        && lastModifiedMs <= have.versionCreatedMs - BACKFILL_SKEW_MS) {
+      backfill.push({ fileId, modifiedMs: lastModifiedMs });
+      summary.skippedUnchanged++;
+      continue;
+    }
+    downloadIds.push(fileId);
+    downloadSet.add(fileId);
+  }
+  for (const batch of chunks(backfill, 500)) {
+    const tuples = batch
+      .map(({ fileId, modifiedMs }) => `('${fileId}', '${new Date(modifiedMs).toISOString()}'::timestamptz)`)
+      .join(",");
+    await db.execute(sql.raw(`
+      update files f set source_modified_at = v.marker
+        from (values ${tuples}) as v(source_id, marker)
+       where f.org_id = '${orgId}' and f.source_system = '${SOURCE_SYSTEM}' and f.source_id = v.source_id
+    `));
+  }
+  if (backfill.length > 0) {
+    console.log(`[import] backfilled last-modified markers for ${backfill.length} already-current files`);
+  }
+
+  // Skipped files bypass persistFile, but the source's link graph may have
+  // grown (an already-held file attached to another transaction) — ensure
+  // every inventoried link exists.
+  const linkTuples: string[] = [];
+  for (const [fileId, documentIds] of fileToDocuments) {
+    if (downloadSet.has(fileId) || !importedById.has(fileId)) continue;
+    for (const documentId of documentIds) linkTuples.push(`('${fileId}', '${documentId}'::uuid)`);
+  }
+  for (const batch of chunks(linkTuples, 1000)) {
+    const res = (await db.execute(sql.raw(`
+      insert into file_attachments (org_id, file_id, target_table, target_id, created_by, created_at)
+      select '${orgId}', f.id, 'documents', v.did, '${actorId}', now()
+        from (values ${batch.join(",")}) as v(sid, did)
+        join files f on f.org_id = '${orgId}' and f.source_system = '${SOURCE_SYSTEM}' and f.source_id = v.sid
+      on conflict (org_id, file_id, target_table, target_id) do nothing
+    `))) as unknown as { rowCount?: number };
+    summary.createdLinks += res.rowCount ?? 0;
+  }
+
+  downloadIds.sort((left, right) => Number(left) - Number(right));
+  console.log(`[import] downloading ${downloadIds.length} new/changed files (${summary.skippedUnchanged} skipped unchanged)`);
+  await concurrentMap(downloadIds, options.concurrency, async (fileId, index) => {
     try {
-      const { source, bytes: sourceBytes } = await downloadSourceFile(fileId, creds, bridge);
+      const { source, bytes: sourceBytes } = await downloadSourceFile(fileId, creds, bridge, soapEndpointVersion);
       const bytes = normalizeAttachmentBytes(sourceBytes);
       const contentType = detectContentType(bytes, source.name);
+      const lastModifiedMs = sourceModified?.get(fileId) ?? null;
       const persisted = await persistFile({
         orgId,
         actorId,
@@ -551,6 +629,7 @@ export async function importNetSuiteAttachments(options: ImportOptions): Promise
         targetDocumentIds: Array.from(fileToDocuments.get(source.id) ?? []),
         bytes,
         contentType,
+        sourceModifiedAt: lastModifiedMs != null ? new Date(lastModifiedMs) : null,
       });
       if (persisted.created) summary.createdFiles++;
       if (persisted.versioned) summary.newVersions++;
@@ -562,8 +641,8 @@ export async function importNetSuiteAttachments(options: ImportOptions): Promise
       summary.failureDetails.push({ fileId, message });
       console.error(`[import] source file ${fileId} failed: ${message}`);
     }
-    if ((index + 1) % 100 === 0 || index + 1 === fileIds.length) {
-      console.log(`[import] ${index + 1}/${fileIds.length} files (${summary.failures} failed)`);
+    if ((index + 1) % 100 === 0 || index + 1 === downloadIds.length) {
+      console.log(`[import] ${index + 1}/${downloadIds.length} files (${summary.failures} failed)`);
     }
   });
   if (summary.failures) throw new AttachmentImportError(summary);
