@@ -366,9 +366,17 @@ export async function generateInvoiceFromBillingRequest(
       //     which surcharges exist; the product has no named surcharge concept.
       const laborValue = built.filter((l) => l.isLabor).reduce((s, l) => add(s, l.amount), '0')
       const costValue = built.filter((l) => !l.isLabor).reduce((s, l) => add(s, l.amount), '0')
+      // A surcharge percentage is often negotiated per customer, so let the
+      // customer override the project type's default for a given surcharge key.
+      const custSurcharges = (await tx.execute(sql`
+        select coalesce(cr.custom->'surcharges', '{}'::jsonb) s
+          from customer_roles cr where cr.org_id = ${orgId} and cr.party_id = ${project.customer_id} limit 1
+      `)) as unknown as { rows: { s: Record<string, string> }[] }
+      const customerRate = custSurcharges.rows[0]?.s ?? {}
       for (const sc of invoicing.surcharges ?? []) {
         const basisVal = sc.basis === 'labor' ? laborValue : sc.basis === 'cost' ? costValue : add(laborValue, costValue)
-        const pctMult = fromUnits(roundDiv(toUnits(String(sc.percent ?? '0')), 100n))
+        const rate = customerRate[sc.key] ?? sc.percent
+        const pctMult = fromUnits(roundDiv(toUnits(String(rate ?? '0')), 100n))
         const amt = mulRate(basisVal, pctMult)
         if (cmp(amt, '0') <= 0) continue
         const item = sc.itemId
