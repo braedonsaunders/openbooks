@@ -22,6 +22,7 @@ function result(overrides: Partial<SyncResult> = {}): SyncResult {
     sourceUnbuildable: 0,
     skipped: [],
     deletedAtSource: [],
+    autoResolvedDeletions: [],
     applications: null,
     trueUp: null,
     tb: { accounts: 1, matches: 1, mismatches: [] },

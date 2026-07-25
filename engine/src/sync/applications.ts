@@ -48,6 +48,8 @@ export async function reconcileApplications(
   }
 
   // -- open AR/AP lines per source ref ----------------------------------------
+  // Posted entries only: a reversed entry (voided / source-deleted document)
+  // no longer carries a settleable open item.
   const lineRows = (await db.execute(sql`
     select d.custom->>${refKey} as ref, l.id as line_id, e.posting_date::text as pdate,
            l.line_number as line_no, abs(l.amount) as amt,
@@ -57,7 +59,7 @@ export async function reconcileApplications(
       join documents d on d.id = e.source_document_id
       join journal_lines l on l.entry_id = e.id and l.is_open_item
       join accounts a on a.id = l.account_id
-     where e.origin = 'document' and d.org_id = ${orgId}
+     where e.origin = 'document' and e.status = 'posted' and d.org_id = ${orgId}
        and a.type in ('liability_payable', 'asset_receivable')
        and d.custom->>${refKey} is not null`)) as unknown as {
     rows: { ref: string; line_id: string; pdate: string; line_no: number; amt: string; account_id: string; party_id: string | null; subsidiary_id: string; currency: string; fx_rate: string; amount_sign: string }[];

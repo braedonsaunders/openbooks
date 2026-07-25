@@ -6,6 +6,7 @@ import {
   recordTransactionAudit,
 } from "../transaction-audit.ts";
 import { assertPeriodModulesOpen, closeModuleForDocument } from "../close.ts";
+import { deleteDocument } from "../document-delete.ts";
 
 export type SourceDeletionAction = "retain" | "void";
 
@@ -21,6 +22,61 @@ const SOURCE_REF_KEYS: Record<string, string> = {
 
 export class SourceDeletionResolutionError extends Error {
   readonly name = "SourceDeletionResolutionError";
+}
+
+/**
+ * Mirror a source deletion automatically. The source is the system of
+ * record: a transaction deleted (or cancelled) upstream must vanish here
+ * too — never linger as a report-only divergence. Settlements touching the
+ * document's entry are released first (the source's applications vanished
+ * with the transaction, so the items it settled re-open exactly like the
+ * source's), then the document is removed through the engine's guarded
+ * delete — the same atomic audit tombstone as a controller-initiated
+ * delete. A document that cannot be removed (controller-closed GL period,
+ * downstream posted conversion) throws, so the caller keeps the ref flagged
+ * and verification fails honestly instead of forcing the books.
+ */
+export async function mirrorSourceDeletion(input: {
+  orgId: string;
+  source: string;
+  sourceRef: string;
+}): Promise<{ documentId: string | null; deleted: boolean }> {
+  return withOrg(input.orgId, async () => {
+    const refKey = SOURCE_REF_KEYS[input.source];
+    if (!refKey)
+      throw new SourceDeletionResolutionError(
+        `source deletion mirroring is unsupported for ${input.source}`,
+      );
+    const documentResult = (await db.execute(sql`
+      select id, kind, status, posted_entry_id
+        from documents
+       where org_id = ${input.orgId} and custom->>${refKey} = ${input.sourceRef}
+       limit 1 for update`)) as unknown as {
+      rows: {
+        id: string;
+        kind: string;
+        status: string;
+        posted_entry_id: string | null;
+      }[];
+    };
+    const document = documentResult.rows[0] ?? null;
+    if (!document) return { documentId: null, deleted: false };
+    if (document.posted_entry_id) {
+      // Release every settlement touching the entry, both directions. The
+      // guarded delete below does this too, but only after its open-item
+      // guard BLOCKS on incoming applications — the mirror releases them
+      // deliberately, so clear the guard's evidence first.
+      await db.execute(sql`
+        delete from applications
+         where from_line_id in (select id from journal_lines where entry_id = ${document.posted_entry_id})
+            or to_line_id in (select id from journal_lines where entry_id = ${document.posted_entry_id})`);
+    }
+    await deleteDocument(document.id, null, {
+      source: "mirror",
+      reason: `source_deleted:${input.source}:${input.sourceRef}`,
+    });
+    return { documentId: document.id, deleted: true };
+  });
 }
 
 /**
