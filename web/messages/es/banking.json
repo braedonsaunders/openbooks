@@ -511,5 +511,9 @@
       "lastSync": "Last sync",
       "never": "Never"
     }
+  },
+  "pspSettlements": {
+    "acceptanceNote": "Las liquidaciones concilian los pagos a posteriori. Los enlaces de pago alojados se configuran en",
+    "acceptanceLink": "Configuración → Proveedores de pago"
   }
 }

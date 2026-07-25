@@ -1,8 +1,8 @@
 import { randomUUID } from "node:crypto";
 import { sql } from "drizzle-orm";
 import { db, withOrg } from "./db.ts";
-import { add, cmp, fromUnits, isZero, neg, toUnits } from "./money.ts";
-import { sealJson, unsealJson } from "./secrets.ts";
+import { cmp, fromUnits, isZero, neg, toUnits } from "./money.ts";
+import { sealJson } from "./secrets.ts";
 import { assertNotSandbox } from "./sandbox/guard.ts";
 
 /**
@@ -42,15 +42,6 @@ export interface ParsedSettlement {
   lines: ParsedSettlementLine[];
   memo?: string | null;
   raw?: Record<string, unknown>;
-}
-
-function pad(n: number): string {
-  return String(n).padStart(2, "0");
-}
-
-function moneyAbs(v: string): string {
-  const u = toUnits(v);
-  return fromUnits(u < 0n ? -u : u);
 }
 
 /** Pure: roll line-level amounts into batch totals. */
@@ -125,7 +116,6 @@ export function parseStripeBalanceTransactions(
   let currency = "USD";
   for (const r of rows) {
     currency = (r.currency ?? currency).toUpperCase();
-    const amount = fromUnits(BigInt(Math.round(r.amount))); // cents → money scale 1e4: amount is already cents, need *100 for 1e4?
     // Stripe amounts are in the smallest currency unit (cents). money uses 4dp of major unit.
     // 123 cents = 1.2300 → units = 12300 = cents * 100
     const major = fromUnits(BigInt(Math.round(r.amount)) * 100n);
@@ -283,7 +273,8 @@ async function primaryBookId(orgId: string): Promise<string> {
 async function periodForDate(orgId: string, date: string): Promise<string | null> {
   const r = (await db.execute(sql`
     select id from accounting_periods
-     where org_id = ${orgId} and ${date}::date between start_date and end_date limit 1
+     where org_id = ${orgId} and is_adjustment = false and starts_on <= ${date} and ends_on >= ${date}
+     limit 1
   `)) as unknown as { rows: { id: string }[] };
   return r.rows[0]?.id ?? null;
 }
@@ -397,6 +388,7 @@ async function insertLines(
  * AR cash applications, or the batch can CR income if configured as direct.
  */
 export async function postSettlementBatch(orgId: string, batchId: string, actorId: string | null): Promise<{ entryId: string }> {
+  await assertNotSandbox(orgId, "post a PSP settlement");
   return await withOrg(orgId, async () => {
     const batch = (await db.execute(sql`
       select * from psp_settlement_batches where id = ${batchId} and org_id = ${orgId} for update
@@ -496,9 +488,9 @@ export async function postSettlementBatch(orgId: string, batchId: string, actorI
     const entryNumber = `PSP-${b.provider.toUpperCase()}-${b.external_ref}`.slice(0, 64);
     await db.execute(sql`
       insert into journal_entries
-        (id, org_id, book_id, entry_number, entry_date, period_id, currency, status, origin, memo, created_by, updated_by)
-      values (${entryId}, ${orgId}, ${bookId}, ${entryNumber}, ${b.settlement_date}, ${periodId},
-              ${b.currency}, 'draft', 'document', ${b.memo ?? `PSP ${b.provider} ${b.external_ref}`}, ${actorId}, ${actorId})
+        (id, org_id, book_id, subsidiary_id, entry_number, posting_date, period_id, memo, status, origin, created_by, updated_by)
+      values (${entryId}, ${orgId}, ${bookId}, ${b.subsidiary_id}, ${entryNumber}, ${b.settlement_date}, ${periodId},
+              ${b.memo ?? `PSP ${b.provider} ${b.external_ref}`}, 'draft', 'document', ${actorId}, ${actorId})
     `);
     let ln = 0;
     for (const l of jlines) {
@@ -510,18 +502,22 @@ export async function postSettlementBatch(orgId: string, batchId: string, actorI
                 ${b.currency}, ${l.amount}, 1, ${l.memo})
       `);
     }
-    await db.execute(sql`update journal_entries set status = 'posted', posted_at = now() where id = ${entryId}`);
+    await db.execute(sql`update journal_entries set status = 'posted', posted_at = now(), posted_by = ${actorId} where id = ${entryId}`);
     await db.execute(sql`
       update psp_settlement_batches set status = 'posted', journal_entry_id = ${entryId}, posted_at = now(),
              updated_at = now(), updated_by = ${actorId}
        where id = ${batchId} and org_id = ${orgId}
     `);
+    await db.execute(sql`
+      insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
+      values (${orgId}, 'psp_settlement_batches', ${batchId}, 'post',
+              ${JSON.stringify({ after: { journalEntryId: entryId, netAmount: b.net_amount } })}::jsonb, ${actorId})
+    `);
     return { entryId };
   });
 }
 
-export async function savePspProviderConfig(
-  orgId: string,
+export async function savePspProviderConfig(  orgId: string,
   input: {
     provider: PspProvider;
     displayName?: string;
@@ -557,9 +553,3 @@ export async function savePspProviderConfig(
       updated_at = now(), updated_by = ${actorId}
   `);
 }
-
-void pad;
-void moneyAbs;
-void add;
-void unsealJson;
-void assertNotSandbox;

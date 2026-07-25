@@ -30,7 +30,7 @@ test("reports hub links to the financial statements", async ({ browser, baseURL 
   try {
     await page.goto("/reports");
     await expect(page.locator('a[href="/reports/balance-sheet"]').first()).toBeVisible();
-    await expect(page.locator('a[href="/reports/profit-and-loss"]').first()).toBeVisible();
+    await expect(page.locator('a[href="/reports/pnl"]').first()).toBeVisible();
   } finally {
     await context.close();
   }
@@ -52,6 +52,28 @@ test("AR workspace renders", async ({ browser, baseURL }) => {
     const res = await page.goto("/ar");
     expect(res?.status()).toBe(200);
     await expect(page.locator("main")).toBeVisible();
+  } finally {
+    await context.close();
+  }
+});
+
+test("indirect cash flow page renders", async ({ browser, baseURL }) => {
+  const { context, page } = await authedContext(browser, baseURL!);
+  try {
+    const res = await page.goto("/reports/cash-flow-indirect");
+    expect(res?.status()).toBe(200);
+    await expect(page.locator("table").first()).toBeVisible();
+  } finally {
+    await context.close();
+  }
+});
+
+test("income tax provisions page renders", async ({ browser, baseURL }) => {
+  const { context, page } = await authedContext(browser, baseURL!);
+  try {
+    const res = await page.goto("/tax/provisions");
+    expect(res?.status()).toBe(200);
+    await expect(page.locator("table").first()).toBeVisible();
   } finally {
     await context.close();
   }

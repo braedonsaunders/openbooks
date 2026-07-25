@@ -498,6 +498,73 @@ export function cashFlowExportData(
   }
 }
 
+export function cashFlowIndirectExportData(
+  cf: {
+    netIncome: number
+    adjustments: { key: string; label?: string; amount: number }[]
+    workingCapital: { name: string; number: string | null; amount: number }[]
+    operating: number
+    investing: { name: string; number: string | null; amount: number }[]
+    investingTotal: number
+    financing: { name: string; number: string | null; amount: number }[]
+    financingTotal: number
+    fxEffectOnCash: number
+    netChange: number
+    openingCash: number
+    closingCash: number
+  },
+  from: string,
+  to: string,
+  t: Translator,
+): ExportData {
+  const line = (l: { name: string; number: string | null; amount: number }) =>
+    [`${l.number ? `${l.number} · ` : ''}${l.name}`, l.amount] as (string | number)[]
+  const groups: PdfTableGroup[] = [
+    {
+      kind: 'section',
+      title: t('cashFlowIndirect.sections.operating'),
+      columns: [t('export.columns.accountName'), t('export.columns.amount')],
+      rows: [
+        [t('cashFlowIndirect.netIncome'), cf.netIncome],
+        ...cf.adjustments.map((a) => [a.label ?? t(`cashFlowIndirect.adjustments.${a.key}`), a.amount] as (string | number)[]),
+        ...cf.workingCapital.map(line),
+        [t('cashFlowIndirect.subtotals.operating'), cf.operating],
+      ],
+      align: ['left', 'right'],
+    },
+    {
+      kind: 'section',
+      title: t('cashFlowIndirect.sections.investing'),
+      columns: [t('export.columns.accountName'), t('export.columns.amount')],
+      rows: [...cf.investing.map(line), [t('cashFlowIndirect.subtotals.investing'), cf.investingTotal]],
+      align: ['left', 'right'],
+    },
+    {
+      kind: 'section',
+      title: t('cashFlowIndirect.sections.financing'),
+      columns: [t('export.columns.accountName'), t('export.columns.amount')],
+      rows: [
+        ...cf.financing.map(line),
+        ...(Math.abs(cf.fxEffectOnCash) >= 0.005
+          ? [[t('cashFlowIndirect.fxEffect'), cf.fxEffectOnCash] as (string | number)[]]
+          : []),
+        [t('cashFlowIndirect.subtotals.financing'), cf.financingTotal],
+      ],
+      align: ['left', 'right'],
+    },
+  ]
+  return {
+    title: t('cashFlowIndirect.title'),
+    dateRangeLabel: t('cashFlowIndirect.dateRange', { from, to }),
+    summary: [
+      { label: t('cashFlowIndirect.openingCash'), value: cf.openingCash },
+      { label: t('cashFlowIndirect.netChange'), value: cf.netChange },
+      { label: t('cashFlowIndirect.closingCash'), value: cf.closingCash },
+    ],
+    groups,
+  }
+}
+
 // --- multi-column statement view (P&L / Balance Sheet) ----------------------
 // The new matrix engine produces a StatementView (columns + typed lines). These
 // adapters render it as a professional statement PDF, and flatten it for the

@@ -514,5 +514,9 @@
       "lastSync": "Last sync",
       "never": "Never"
     }
+  },
+  "pspSettlements": {
+    "acceptanceNote": "決済は入金後の照合です。請求書のホスト型決済リンクは別途こちらで設定します：",
+    "acceptanceLink": "会社設定 → 決済プロバイダー"
   }
 }

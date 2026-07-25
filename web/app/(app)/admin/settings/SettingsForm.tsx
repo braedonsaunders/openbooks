@@ -39,6 +39,11 @@ type ControlAccounts = {
   laborClearing?: string
   unbilledReceivable?: string
   projectRevenue?: string
+  incomeTaxExpense?: string
+  incomeTaxPayable?: string
+  deferredTaxAsset?: string
+  deferredTaxLiability?: string
+  valuationAllowance?: string
 }
 
 type Initial = {
@@ -47,6 +52,7 @@ type Initial = {
   country: string
   baseCurrency: string
   fiscalYearStartMonth: number
+  taxFramework?: 'asc740' | 'ias12'
   defaultLocale: Locale
   reportPdfStyle: 'formal' | 'modern'
   fairValueRangePolicy: 'warn' | 'off'
@@ -74,6 +80,11 @@ const CONTROL_FIELDS: { key: keyof ControlAccounts }[] = [
   { key: 'laborClearing' },
   { key: 'unbilledReceivable' },
   { key: 'projectRevenue' },
+  { key: 'incomeTaxExpense' },
+  { key: 'incomeTaxPayable' },
+  { key: 'deferredTaxAsset' },
+  { key: 'deferredTaxLiability' },
+  { key: 'valuationAllowance' },
 ]
 
 export function SettingsForm({
@@ -272,6 +283,17 @@ export function SettingsForm({
               <div className="flex h-10 items-center rounded-lg border border-slate-200 bg-slate-50 px-3 text-sm text-slate-700 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-200">
                 {fiscalRangeLabel(form.fiscalYearStartMonth)}
               </div>
+            </div>
+            <div className="space-y-1.5">
+              <FieldLabel htmlFor="taxFramework" help={t('fiscal.taxFrameworkHint')}>{t('fiscal.taxFramework')}</FieldLabel>
+              <Select
+                id="taxFramework"
+                value={form.taxFramework ?? 'asc740'}
+                onChange={(e) => setForm((f) => ({ ...f, taxFramework: e.target.value as 'asc740' | 'ias12' }))}
+              >
+                <option value="asc740">{t('fiscal.frameworkAsc740')}</option>
+                <option value="ias12">{t('fiscal.frameworkIas12')}</option>
+              </Select>
             </div>
           </div>
           {startMonthChanged ? (

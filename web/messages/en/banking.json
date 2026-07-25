@@ -691,5 +691,9 @@
       "lastSync": "Last sync",
       "never": "Never"
     }
+  },
+  "pspSettlements": {
+    "acceptanceNote": "Settlements reconcile payouts after the fact. Hosted payment links (customer checkout on invoices) are configured separately under",
+    "acceptanceLink": "Company Settings → Payment Providers"
   }
 }

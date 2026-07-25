@@ -3,7 +3,7 @@ import { db } from "./db.ts";
 import { installTaxReturnPacks, taxReturnPack, TAX_RETURN_PACKS } from "./seed-tax-forms.ts";
 
 /**
- * One-click country provisioning.
+ * One-click country provisioning for INDIRECT tax (sales tax / GST / VAT).
  *
  * Picking a country (and, where supported, its states/provinces) installs the
  * whole indirect-tax stack for that jurisdiction: the jurisdiction record, a

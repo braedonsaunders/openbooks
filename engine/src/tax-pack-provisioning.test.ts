@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { PACK_DEFAULT_CODES, supportedTaxCountries } from "./tax-provision.ts";
+import { PACK_DEFAULT_CODES, supportedTaxCountries } from "./tax-pack-provisioning.ts";
 import { TAX_RETURN_PACKS } from "./seed-tax-forms.ts";
 
 test("every pack has a default tax code", () => {

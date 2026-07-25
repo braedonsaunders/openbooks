@@ -40,6 +40,13 @@ export const STANDARD_STATEMENT_DEFINITIONS: StandardStatementDefinition[] = [
     statementKind: 'cash-flow',
   },
   {
+    slug: 'cash-flow-indirect',
+    name: 'Cash Flow Statement (Indirect)',
+    description:
+      'GAAP indirect-method cash flow: net income reconciled to operating cash via non-cash add-backs and per-account working-capital detail, plus investing and financing sections.',
+    statementKind: 'cash-flow-indirect',
+  },
+  {
     slug: 'trial-balance',
     name: 'Trial Balance',
     description: 'Debit and credit balances for every account, as of a date.',

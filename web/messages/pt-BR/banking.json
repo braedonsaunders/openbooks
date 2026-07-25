@@ -514,5 +514,9 @@
       "lastSync": "Last sync",
       "never": "Never"
     }
+  },
+  "pspSettlements": {
+    "acceptanceNote": "As liquidações reconciliam repasses posteriormente. Os links de pagamento hospedados são configurados em",
+    "acceptanceLink": "Configurações → Provedores de pagamento"
   }
 }

@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server'
-import { provisionTaxPacks } from '@openbooks/engine/src/tax-provision.ts'
+import { provisionTaxPacks } from '@openbooks/engine/src/tax-pack-provisioning.ts'
 import { taxReturnPack } from '@openbooks/engine/src/seed-tax-forms.ts'
 import { guardPermission } from '../../../../lib/authz'
 

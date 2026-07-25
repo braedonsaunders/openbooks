@@ -2021,7 +2021,13 @@
       "calcPercent": "請求額の割合",
       "calcFixed": "定額",
       "calcBoth": "割合 + 定額",
-      "feeIncomeAccount": "手数料収益科目"
+      "feeIncomeAccount": "手数料収益科目",
+      "webhookUrl": "Webhook URL",
+      "webhookHint": "このエンドポイントをプロバイダーのダッシュボードに登録して決済イベントを受信します。",
+      "copy": "コピー",
+      "copied": "コピー済み",
+      "testConnection": "接続テスト",
+      "testing": "テスト中…"
     }
   },
   "flows": {

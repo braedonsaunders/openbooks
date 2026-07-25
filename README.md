@@ -236,10 +236,16 @@ Contributions are welcome — issues, discussions, and PRs all help.
 1. Fork the repo and follow the [Quick start](#quick-start).
 2. Keep changes type-safe: `npx tsc -p web --noEmit`, `npx tsc -p engine
    --noEmit`, and a clean `cd web && npx next build`. **Never commit on red.**
-3. Respect the non-negotiables: kernel discipline, complete i18n across every
+3. Keep changes tested. `npm test` runs the full `node:test` suite (unit plus
+   DB-backed integration tests — set `OPENBOOKS_DB_URL` to a scratch database
+   and run `npx tsx scripts/bootstrap.ts` first; without it, integration tests
+   skip). `npm run test:coverage` adds a coverage report, and `npm run
+   test:e2e` runs the Playwright browser smoke suite. The `test` workflow
+   gates all of it on every push and PR.
+4. Respect the non-negotiables: kernel discipline, complete i18n across every
    shipped locale, flyout-first records, and search/filter/pagination on every
    list.
-4. Open a PR describing the change and the workflow it improves.
+5. Open a PR describing the change and the workflow it improves.
 
 If you run a real back office and something here doesn't match how your books
 actually work, that feedback is gold —

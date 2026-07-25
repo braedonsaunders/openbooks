@@ -1,4 +1,6 @@
 import 'server-only'
+import { sql } from 'drizzle-orm'
+import { db } from '@openbooks/engine/src/db.ts'
 import { documentEmail, sendVia } from '@openbooks/emails'
 import {
   insertEmailLog,
@@ -6,6 +8,7 @@ import {
   markEmailSent,
   resolveOrgEmailTransport,
 } from '@openbooks/engine/src/email-config.ts'
+import { appBaseUrl } from '@openbooks/engine/src/flows/email-tokens.ts'
 import { PDF_RECORD_TYPE_BY_KEY } from './catalog'
 import { mergeAndPrintPdf } from './render'
 import { resolvePdfTemplate } from './store'
@@ -69,6 +72,18 @@ export async function sendRecordPdfEmail(args: {
   const partyName = typeof v.party_name === 'string' && v.party_name ? v.party_name : undefined
   const attachmentName = `${meta.docTitle}-${record.reference}.pdf`.replace(/\s+/g, '-')
   const pdf = await mergeAndPrintPdf(tpl, record.values)
+  // When the invoice has an active hosted payment link, include it as a
+  // pay-online call-to-action. Creating the link is the opt-in; nothing is
+  // attached for invoices without one.
+  let paymentUrl: string | undefined
+  if (args.recordType === 'customer_invoice') {
+    const link = (await db.execute(sql`
+      select token from payment_links
+       where org_id = ${args.orgId} and document_id = ${args.id} and status = 'active'
+       order by created_at desc limit 1
+    `)) as unknown as { rows: { token: string }[] }
+    if (link.rows[0]) paymentUrl = `${appBaseUrl()}/pay/${link.rows[0].token}`
+  }
   const body = documentEmail({
     orgName,
     docTitle: meta.docTitle,
@@ -76,6 +91,7 @@ export async function sendRecordPdfEmail(args: {
     partyName,
     message: args.message,
     attachmentName,
+    paymentUrl,
   })
 
   const logId = await insertEmailLog({

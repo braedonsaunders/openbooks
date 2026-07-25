@@ -2459,7 +2459,13 @@
       "calcPercent": "Pourcentage de la facture",
       "calcFixed": "Montant fixe",
       "calcBoth": "Pourcentage + fixe",
-      "feeIncomeAccount": "Compte de produit des frais"
+      "feeIncomeAccount": "Compte de produit des frais",
+      "webhookUrl": "URL du webhook",
+      "webhookHint": "Collez ce point de terminaison dans le tableau de bord du fournisseur pour recevoir les événements.",
+      "copy": "Copier",
+      "copied": "Copié",
+      "testConnection": "Tester la connexion",
+      "testing": "Test…"
     }
   },
   "flows": {

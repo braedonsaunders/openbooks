@@ -514,5 +514,9 @@
       "lastSync": "Last sync",
       "never": "Never"
     }
+  },
+  "pspSettlements": {
+    "acceptanceNote": "结算用于事后核对平台打款。发票托管支付链接在以下位置单独配置：",
+    "acceptanceLink": "公司设置 → 支付服务商"
   }
 }

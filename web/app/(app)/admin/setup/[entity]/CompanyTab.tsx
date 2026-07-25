@@ -52,6 +52,7 @@ export async function CompanyTab({ orgId }: { orgId: string }) {
           baseCurrency: (row?.base_currency as string) ?? '',
           fiscalYearStartMonth:
             typeof settings.fiscalYearStartMonth === 'number' ? settings.fiscalYearStartMonth : 1,
+          taxFramework: settings.taxFramework === 'ias12' ? 'ias12' : 'asc740',
           defaultLocale: isLocale(settings.defaultLocale) ? settings.defaultLocale : DEFAULT_LOCALE,
           reportPdfStyle: settings.reportPdfStyle === 'formal' ? 'formal' : 'modern',
           fairValueRangePolicy:
@@ -71,6 +72,11 @@ export async function CompanyTab({ orgId }: { orgId: string }) {
             laborClearing: control.laborClearing ?? '',
             unbilledReceivable: control.unbilledReceivable ?? '',
             projectRevenue: control.projectRevenue ?? '',
+            incomeTaxExpense: control.incomeTaxExpense ?? '',
+            incomeTaxPayable: control.incomeTaxPayable ?? '',
+            deferredTaxAsset: control.deferredTaxAsset ?? '',
+            deferredTaxLiability: control.deferredTaxLiability ?? '',
+            valuationAllowance: control.valuationAllowance ?? '',
           },
         }}
         accounts={accountOptions}

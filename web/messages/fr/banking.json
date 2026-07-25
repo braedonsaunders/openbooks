@@ -511,5 +511,9 @@
       "lastSync": "Last sync",
       "never": "Never"
     }
+  },
+  "pspSettlements": {
+    "acceptanceNote": "Les règlements rapprochent les versements après coup. Les liens de paiement hébergés se configurent sous",
+    "acceptanceLink": "Paramètres → Fournisseurs de paiement"
   }
 }

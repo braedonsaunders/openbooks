@@ -514,5 +514,9 @@
       "lastSync": "Last sync",
       "never": "Never"
     }
+  },
+  "pspSettlements": {
+    "acceptanceNote": "Abrechnungen gleichen Auszahlungen nachträglich ab. Gehostete Zahlungslinks werden separat konfiguriert unter",
+    "acceptanceLink": "Einstellungen → Zahlungsanbieter"
   }
 }

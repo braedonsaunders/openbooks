@@ -49,6 +49,7 @@ export default async function Reports() {
         card('pnl', '/reports/pnl', 'FileText'),
         card('balanceSheet', '/reports/balance-sheet', 'Scale'),
         card('cashFlow', '/reports/cash-flow', 'Waves'),
+        card('cashFlowIndirect', '/reports/cash-flow-indirect', 'Waves'),
         card('trialBalance', '/reports/trial-balance', 'ClipboardList'),
       ],
     },
