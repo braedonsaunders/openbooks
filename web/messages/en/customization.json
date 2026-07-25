@@ -108,7 +108,12 @@
         "text": "Text"
       },
       "customFields": "Custom fields",
-      "noCustomFields": "No custom fields defined for this record type yet."
+      "noCustomFields": "No custom fields defined for this record type yet.",
+      "tabsSection": "Tabs",
+      "tabsHelp": "The tabs this record's flyout shows. Hide the ones you don't use, reorder them to match how you work, rename them to your vocabulary, or add a tab of your own for your custom fields.",
+      "addTab": "Add tab",
+      "customTab": "Custom",
+      "tabLocked": "This tab shows the record's own fields and can't be hidden."
     },
     "list": {
       "new": "New view",

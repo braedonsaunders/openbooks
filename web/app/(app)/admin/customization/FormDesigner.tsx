@@ -12,11 +12,14 @@ import {
   fieldMetaFor,
   getRecordType,
   isCustomFieldKey,
+  isCustomTabKey,
   mergeRegisteredFieldsIntoLayout,
+  resolveFormTabs,
   type FieldKind,
   type FormActionPlacement,
   type FormLayoutConfig,
   type HeaderFieldPlacement,
+  type FormTabPlacement,
   type HeaderGroup,
   type LineColumnPlacement,
 } from '@openbooks/customization'
@@ -292,6 +295,67 @@ export function FormDesigner({
     }
   }
 
+  /* ---------------------------------------------------------------- */
+  /* Tabs — hide, reorder, rename, and author new ones                  */
+  /* ---------------------------------------------------------------- */
+
+  // The registry decides which tabs exist and which are locked; the layout
+  // decides their order, visibility and labels.
+  const registeredTabs = meta?.tabs ?? []
+  const tabPlacements = useMemo(() => resolveFormTabs(layout), [layout])
+
+  const tabDefaultLabel = (key: string) => {
+    const registered = registeredTabs.find((item) => item.key === key)
+    if (registered && tRoot.has(registered.labelKey as never)) return tRoot(registered.labelKey as never)
+    if (isCustomTabKey(key)) return key.replace(/^tab_/, '').replace(/_/g, ' ')
+    return key
+  }
+  const tabLocked = (key: string) => registeredTabs.find((item) => item.key === key)?.locked === true
+
+  function setTabs(next: (tabs: FormTabPlacement[]) => FormTabPlacement[]) {
+    setLayout((previous) => {
+      const clone = structuredClone(previous) as FormLayoutConfig
+      clone.tabs = next(resolveFormTabs(clone))
+      return clone
+    })
+  }
+
+  function addCustomTab() {
+    const used = new Set(tabPlacements.map((tab) => tab.key))
+    let index = 1
+    while (used.has(`tab_${index}`)) index += 1
+    const key = `tab_${index}`
+    setLayout((previous) => {
+      const clone = structuredClone(previous) as FormLayoutConfig
+      const tabs = resolveFormTabs(clone)
+      // A new tab owns a group of its own, so fields can be moved onto it
+      // immediately instead of leaving an empty tab the user can't fill.
+      const groupId = nextId('group', new Set(clone.header.groups.map((group) => group.id)))
+      clone.header.groups.push({ id: groupId, label: null, fields: [] })
+      tabs.push({ key, visible: true, labelOverride: '', groupIds: [groupId] })
+      clone.tabs = tabs
+      return clone
+    })
+  }
+
+  function removeCustomTab(key: string) {
+    setLayout((previous) => {
+      const clone = structuredClone(previous) as FormLayoutConfig
+      const tabs = resolveFormTabs(clone)
+      const removed = tabs.find((tab) => tab.key === key)
+      clone.tabs = tabs.filter((tab) => tab.key !== key)
+      // Its groups return to Overview rather than taking their fields with them.
+      for (const groupId of removed?.groupIds ?? []) {
+        const group = clone.header.groups.find((item) => item.id === groupId)
+        if (!group) continue
+        if (group.fields.length === 0) {
+          clone.header.groups = clone.header.groups.filter((item) => item.id !== groupId)
+        }
+      }
+      return clone
+    })
+  }
+
   async function save() {
     setBusy(true)
     const body = { recordType, name, layout, isDefault, isActive }
@@ -435,6 +499,53 @@ export function FormDesigner({
           </div>
           <AddFieldPanel level="line" recordType={recordType} usedKeys={usedFieldKeys} onCreated={(d) => addCustomField(d, 'line')} />
         </div>
+
+        {registeredTabs.length > 0 ? (
+          <div className="space-y-3">
+            <h3 className="text-xs font-semibold tracking-wide text-slate-500 uppercase dark:text-slate-400">{t('designer.forms.tabsSection')}</h3>
+            <p className="text-xs text-slate-400">{t('designer.forms.tabsHelp')}</p>
+            <div className="space-y-1.5 rounded-lg border border-slate-200 p-3 dark:border-slate-800">
+              {tabPlacements.map((tab, ti) => {
+                const locked = tabLocked(tab.key)
+                const custom = isCustomTabKey(tab.key)
+                return (
+                  <div key={tab.key} className="flex items-center gap-2 rounded-md border border-slate-100 px-2.5 py-1.5 dark:border-slate-800">
+                    <GripVertical size={14} className="text-slate-300" />
+                    <Input
+                      value={tab.labelOverride ?? ''}
+                      placeholder={tabDefaultLabel(tab.key)}
+                      aria-label={tabDefaultLabel(tab.key)}
+                      onChange={(e) => setTabs((tabs) => tabs.map((item, index) => (index === ti ? { ...item, labelOverride: e.target.value } : item)))}
+                      className="h-7 flex-1 text-xs"
+                    />
+                    {custom ? <KindChip label={t('designer.forms.customTab')} /> : null}
+                    <button type="button" onClick={() => setTabs((tabs) => reorder(tabs, ti, ti - 1))} className="text-slate-400 hover:text-slate-600" aria-label={tCommon('actions.previous')}><ChevronUp size={15} /></button>
+                    <button type="button" onClick={() => setTabs((tabs) => reorder(tabs, ti, ti + 1))} className="text-slate-400 hover:text-slate-600" aria-label={tCommon('actions.next')}><ChevronDown size={15} /></button>
+                    <button
+                      type="button"
+                      disabled={locked}
+                      onClick={() => setTabs((tabs) => tabs.map((item, index) => (index === ti ? { ...item, visible: !item.visible } : item)))}
+                      className={locked ? 'cursor-not-allowed text-slate-200 dark:text-slate-700' : tab.visible ? 'text-slate-400 hover:text-slate-600' : 'text-red-500'}
+                      aria-label={t('designer.forms.visible')}
+                      title={locked ? t('designer.forms.tabLocked') : undefined}
+                    >
+                      {tab.visible ? <Eye size={15} /> : <EyeOff size={15} />}
+                    </button>
+                    {custom ? (
+                      <button type="button" onClick={() => removeCustomTab(tab.key)} className="text-slate-400 hover:text-red-600" aria-label={tCommon('actions.delete')}>
+                        <Trash2 size={15} />
+                      </button>
+                    ) : null}
+                  </div>
+                )
+              })}
+              <Button type="button" variant="outline" size="sm" onClick={addCustomTab} className="mt-1 h-7 text-xs">
+                <Plus size={14} />
+                {t('designer.forms.addTab')}
+              </Button>
+            </div>
+          </div>
+        ) : null}
 
         <div className="space-y-3">
           <h3 className="text-xs font-semibold tracking-wide text-slate-500 uppercase dark:text-slate-400">{t('designer.forms.actionsSection')}</h3>

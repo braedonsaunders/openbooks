@@ -1,9 +1,10 @@
-import { getTranslations } from 'next-intl/server'
+import { getLocale, getTranslations } from 'next-intl/server'
 import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/db.ts'
 import Link from 'next/link'
 import { PageHeader } from '@openbooks/ui'
 import { requireProjectsFeature } from '../../../lib/projects-gate'
+import { isFeatureEnabled } from '../../../lib/features'
 import { ListPageLayout } from '../../../components/page-layout'
 import { EntityListView } from '../../../components/entity-list-view'
 import { can, requirePermission } from '../../../lib/authz'
@@ -55,6 +56,13 @@ export default async function Projects({
       ])
     : [null, [], null, null]
   const projectTypes = (projectTypesRes?.rows ?? []) as { id: string; name: string; billingMethod: string | null; billingProcedure: string }[]
+
+  // The Schedule tab is a Projects sub-capability: resolved on the server so a
+  // client-side layout choice can never surface a gated feature.
+  const [schedulingEnabled, locale] = await Promise.all([
+    isFeatureEnabled(orgId, 'projectScheduling'),
+    getLocale(),
+  ])
 
   const resolvedForm = openProject
     ? await resolveFormLayout({
@@ -110,6 +118,8 @@ export default async function Projects({
                 layout={resolvedForm?.layout}
                 cockpit={cockpit}
                 projectTypes={projectTypes}
+                schedulingEnabled={schedulingEnabled}
+                locale={locale}
               />
             ) : null}
           </>
