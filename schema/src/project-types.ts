@@ -174,6 +174,15 @@ export interface InvoicingProfile {
    * adds that kind here instead of the engine assuming one company's workflow.
    */
   costSourceKinds?: string[];
+  /**
+   * What to do when the customer holds rate cards but none is in force on the
+   * work date. `block` (the default) refuses to invoice, because billing anyway
+   * silently drops every negotiated surcharge and markup. `carry_forward` bills
+   * at the last card in force, which is how businesses that let a card lapse
+   * while work continues actually behave. There is no safe engine default that
+   * suits both, so it is the tenant's call.
+   */
+  rateCardLapse?: "block" | "carry_forward";
 }
 
 export interface BackupProfile {

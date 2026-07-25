@@ -274,5 +274,10 @@
     "no": "Nein",
     "customerHint": "Überschreiben Sie den Projekttyp für diesen Kunden.",
     "projectHint": "Überschreiben Sie den Typ/Kunden für dieses Projekt."
+  },
+  "invoicing": {
+    "rateCardLapse": "Wenn die Preisliste abgelaufen ist",
+    "block": "Fakturierung sperren",
+    "carry_forward": "Mit letzter Preisliste abrechnen"
   }
 }

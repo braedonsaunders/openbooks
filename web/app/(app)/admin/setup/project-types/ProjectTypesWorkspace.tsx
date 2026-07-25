@@ -335,6 +335,9 @@ export function ProjectTypesWorkspace({ types, dimensions }: { types: ProjectTyp
                 onChange={(v) => setIp({ markupPresentation: v as any })} />
               <EnumField label={t('notToExceed')} value={ip.notToExceed ? 'yes' : 'no'} options={['no', 'yes']}
                 onChange={(v) => setIp({ notToExceed: v === 'yes' })} />
+              <EnumField label={t('rateCardLapse')} value={ip.rateCardLapse ?? 'block'}
+                options={['block', 'carry_forward']}
+                onChange={(v) => setIp({ rateCardLapse: v as 'block' | 'carry_forward' })} />
 
             </div>
           ) : null}

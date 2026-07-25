@@ -274,5 +274,10 @@
     "no": "Não",
     "customerHint": "Substitua o tipo de projeto para este cliente.",
     "projectHint": "Substitua o tipo/cliente para este projeto."
+  },
+  "invoicing": {
+    "rateCardLapse": "Quando a tabela de preços expirou",
+    "block": "Bloquear o faturamento",
+    "carry_forward": "Faturar pela última tabela"
   }
 }
