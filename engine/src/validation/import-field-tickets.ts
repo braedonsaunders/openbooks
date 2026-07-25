@@ -116,11 +116,11 @@ const addDays = (iso: string, n: number) => {
         from (select unnest(${`{${batch.map((b) => b.ticket).join(",")}}`}::uuid[]) ticket,
                      unnest(${`{${batch.map((b) => b.project).join(",")}}`}::uuid[]) project,
                      unnest(${`{${batch.map((b) => b.emp).join(",")}}`}::uuid[]) emp,
-                     unnest(${`{${batch.map((b) => b.day).join(",")}}`}::date[]) day,
+                     unnest(${`{${batch.map((b) => b.day).join(",")}}`}::date[]) wday,
                      unnest(${`{${batch.map((b) => b.hours).join(",")}}`}::numeric[]) hours) v
        where te.org_id = ${ORG} and te.field_ticket_id is null
          and te.project_id = v.project and te.employee_party_id = v.emp
-         and te.worked_on = v.day and abs(te.hours - v.hours) < 0.005`))) as any;
+         and te.worked_on = v.wday and abs(te.hours - v.hours) < 0.005`))) as any;
     return r.rowCount ?? 0;
   };
   for (const t of tickets) {
@@ -167,4 +167,9 @@ const addDays = (iso: string, n: number) => {
     console.log("verify:", JSON.stringify(v.rows[0]));
   }
   process.exit(0);
-})().catch((e) => { console.error("FATAL:", (e as Error).message); process.exit(1); });
+})().catch((e) => {
+  const chain: string[] = [];
+  for (let c: any = e; c; c = c.cause) if (c?.message) chain.push(String(c.message).replace(/\s+/g, " ").slice(0, 200));
+  console.error("FATAL:", chain.pop() ?? "unknown");
+  process.exit(1);
+});
