@@ -140,6 +140,23 @@ export async function runScenario(orgId: string, opts: { at: string; gitSha?: st
        group by l.account_id having abs(sum(l.amount)) >= 0.005) x`);
   checks.push({ name: "overhead-pair-zero", ok: Number(ovh.n) === 0, detail: `${ovh.n} accounts moved by overhead_applied entries (want 0 — pairs must net to zero)` });
 
+  // Netting to zero is necessary but NOT sufficient: a pair can net to zero and
+  // still be applied backwards, putting a CREDIT on every job. The P&L looks
+  // right while job cost is understated by the whole overhead amount — invisible
+  // to a trial balance, visible only in job costing. Assert the direction too:
+  // the project-tagged legs must be DEBITS.
+  const ovhDir = await one<{ tagged: string }>(sql`
+    select coalesce(sum(l.amount), 0) tagged from journal_lines l
+      join journal_entries e on e.id = l.entry_id
+     where l.org_id = ${orgId} and e.origin = 'overhead_applied'
+       and e.status = 'posted' and l.project_id is not null`);
+  const taggedTotal = Number(ovhDir.tagged);
+  checks.push({
+    name: "overhead-burdens-jobs",
+    ok: taggedTotal >= -0.005,
+    detail: `project-tagged overhead totals ${taggedTotal.toFixed(2)} (want >= 0 — burden must DEBIT jobs, not credit them)`,
+  });
+
   // -- Labor clearing balance (informational): standards in, payroll out — the
   // residual is in-flight work + unposted variance, so it is reported, not gated.
   const clr = await one<{ b: string | null }>(sql`
