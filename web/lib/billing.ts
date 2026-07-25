@@ -176,6 +176,17 @@ export async function generateInvoiceFromBillingRequest(
         selected && selected.length
           ? sql` and te.id = any(${`{${selected.join(',')}}`}::uuid[])`
           : sql``
+      // A field-ticket basis bills a SELECTION OF SIGNED CREW TICKETS as the unit
+      // of work — the crew's week, approved and signed by the customer — rather
+      // than an arbitrary date window. The tickets carry the labor; their span
+      // scopes the cost billed alongside it.
+      const ticketIds: string[] =
+        req.basis === 'field_ticket' && Array.isArray((req.custom ?? {}).fieldTicketIds)
+          ? ((req.custom as { fieldTicketIds: string[] }).fieldTicketIds ?? [])
+          : []
+      const ticketFilter = ticketIds.length
+        ? sql` and te.field_ticket_id = any(${`{${ticketIds.join(',')}}`}::uuid[])`
+        : sql``
 
       const timeRows = (await tx.execute(sql`
         select te.id, te.hours, te.cost_rate, te.bill_rate, te.item_id, te.time_type_id,
@@ -185,7 +196,7 @@ export async function generateInvoiceFromBillingRequest(
           left join items i on i.id = te.item_id
          where te.org_id = ${orgId} and te.project_id = ${req.project_id}
            and te.status = 'approved' and te.is_billable and te.invoiced_by_line_id is null
-           ${dateFilter}${selFilter}
+           ${dateFilter}${selFilter}${ticketFilter}
          order by te.worked_on
       `)) as unknown as { rows: any[] }
 
@@ -215,6 +226,13 @@ export async function generateInvoiceFromBillingRequest(
       // Cost is billed for the SAME period as the labor. Without this a progress
       // invoice cut for one month would sweep in every later month's unbilled
       // materials, because only the time query honoured the request's range.
+      // On a field-ticket basis the cost billed alongside the labor is scoped by
+      // the selected tickets' own span, so a ticket's materials travel with it.
+      const ticketSpan = ticketIds.length
+        ? sql` and d.document_date between
+              (select min(document_date) from documents where org_id = ${orgId} and id = any(${`{${ticketIds.join(',')}}`}::uuid[]))
+          and (select max(document_date) from documents where org_id = ${orgId} and id = any(${`{${ticketIds.join(',')}}`}::uuid[]))`
+        : sql``
       const costDateFilter = sql.join(
         [
           req.start_date ? sql` and d.document_date >= ${req.start_date}` : sql``,
@@ -254,7 +272,7 @@ export async function generateInvoiceFromBillingRequest(
           ) rc on true
          where dl.org_id = ${orgId} and dl.project_id = ${req.project_id}
            and dl.is_billable and dl.billed_by_line_id is null
-           ${costDateFilter}
+           ${costDateFilter}${ticketSpan}
            and ((d.kind = 'project_charge' and d.status in ('approved','posted'))
              or (d.status in ('posted','approved') and d.kind = any(${`{${costKinds.join(",")}}`}::text[])))
       `)) as unknown as { rows: any[] }
