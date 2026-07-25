@@ -228,10 +228,14 @@ export async function generateInvoiceFromBillingRequest(
       // materials, because only the time query honoured the request's range.
       // On a field-ticket basis the cost billed alongside the labor is scoped by
       // the selected tickets' own span, so a ticket's materials travel with it.
+      // Crews attach materials and equipment to the ticket they were consumed on,
+      // so follow that link. Only fall back to the tickets' date span for lines
+      // that carry no ticket of their own, or a ticket's own costs would be lost.
       const ticketSpan = ticketIds.length
-        ? sql` and d.document_date between
-              (select min(document_date) from documents where org_id = ${orgId} and id = any(${`{${ticketIds.join(',')}}`}::uuid[]))
-          and (select max(document_date) from documents where org_id = ${orgId} and id = any(${`{${ticketIds.join(',')}}`}::uuid[]))`
+        ? sql` and (dl.field_ticket_id = any(${`{${ticketIds.join(',')}}`}::uuid[])
+                or (dl.field_ticket_id is null and d.document_date between
+                      (select min(document_date) from documents where org_id = ${orgId} and id = any(${`{${ticketIds.join(',')}}`}::uuid[]))
+                  and (select max(document_date) from documents where org_id = ${orgId} and id = any(${`{${ticketIds.join(',')}}`}::uuid[]))))`
         : sql``
       const costDateFilter = sql.join(
         [
