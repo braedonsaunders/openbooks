@@ -1,13 +1,10 @@
 /**
  * Penny-parity harness for project financials. Computes resolveProjectFinancials
- * per job and diffs each measure against ground-truth targets from the NetSuite
- * RESTlet (bit_projectCost_RL) / adminapp JobCostBilled. Run:
+ * per project and diffs each measure against ground-truth targets exported from
+ * whatever system is being migrated from. Run:
  *   NODE_OPTIONS="--conditions=react-server" npx tsx engine/src/sync/project-financials-verify.ts
- *   ... --targets targets.json   (map of nsId -> { measure: value })
- *   ... --job 6089               (show one job's measures)
- *
- * Ground truth for job 6089 (M23-BCC-1509) validated earlier this project:
- *   invoiced $6,206,001.04 · actual cost $6,320,076.85 · open-PO $24,316.85.
+ *   ... --targets targets.json   (map of source id -> { measure: value })
+ *   ... --job <sourceId>         (show one project's measures)
  */
 import { readFileSync } from 'node:fs'
 import { db } from '../db.ts'
