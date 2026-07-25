@@ -29,7 +29,7 @@ export class DeleteError extends Error {}
 
 export async function deleteDocument(
   documentId: string,
-  userId: string,
+  userId: string | null,
   audit: { source?: string; reason?: string } = {},
 ): Promise<{ documentId: string }> {
   return db.transaction(async (tx) => {

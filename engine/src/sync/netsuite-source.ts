@@ -1017,20 +1017,23 @@ export class NetSuiteSource implements MigrationSource {
     }
 
     // The application graph. A full sweep pulls the whole universe (~19 pages);
-    // an incremental mirror pulls only links whose PAYING document is in this
-    // pull's changed set — applying, editing, or unapplying an application
-    // always bumps the payment/credit's lastmodifieddate, so every new or
-    // changed link has its nextdoc here. Filtering on nextdoc alone keeps the
-    // chunks disjoint (no duplicate rows to double-count), and the reconciler
-    // is delta-safe/insert-only so a narrower pull never disturbs existing
-    // applications.
+    // an incremental mirror pulls links touched by THIS pull's changed set on
+    // EITHER side. NetSuite does not guarantee which side's lastmodifieddate a
+    // link change bumps: applying a journal to an invoice bumps the INVOICE
+    // while the paying journal keeps its old timestamp, so filtering on the
+    // paying side (nextdoc) alone silently misses settlements whose payer
+    // didn't change — the open item then stays open here while the source
+    // shows it settled, and the open-item gate fails deterministically.
+    // Duplicate rows from links whose both sides changed collapse in
+    // uniqueNetSuiteApplicationLinks, and the reconciler is delta-safe/
+    // insert-only so a wider pull never disturbs existing applications.
     const links: NsApplicationLink[] = [];
     if (effectiveSince) {
       for (let i = 0; i < tids.length; i += 150) {
         const chunk = tids.slice(i, i + 150);
         if (chunk.length === 0) continue;
         links.push(...(await this.q<NsApplicationLink>(
-          `SELECT previousdoc, previousline, nextdoc, nextline, foreignamount FROM nexttransactionlinelink WHERE linktype = 'Payment' AND nextdoc IN (${chunk.join(",")}) ORDER BY previousdoc, previousline, nextdoc, nextline`,
+          `SELECT previousdoc, previousline, nextdoc, nextline, foreignamount FROM nexttransactionlinelink WHERE linktype = 'Payment' AND (nextdoc IN (${chunk.join(",")}) OR previousdoc IN (${chunk.join(",")})) ORDER BY previousdoc, previousline, nextdoc, nextline`,
         )));
       }
     } else {

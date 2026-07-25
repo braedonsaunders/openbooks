@@ -21,6 +21,7 @@ import {
   type ApplyStats,
 } from "./applications.ts";
 import { trueUpResidualGl, type TrueUpStats } from "./trueup.ts";
+import { mirrorSourceDeletion } from "./source-deletions.ts";
 import type { MigrationSource, SourceOpenItem } from "./source.ts";
 import {
   verifyAccountMonths,
@@ -52,7 +53,9 @@ import type { ComputedTaxComponent } from "../tax.ts";
  *    re-materialized via regenerateGlImpactTx — entry keeps its identity so
  *    applications and bank matches stay linked)
  *  - unchanged           → skip (canonical content compare)
- *  - deleted at source   → reported (voiding is deliberate, never automatic)
+ *  - deleted at source   → mirrored: removed through the engine's guarded
+ *    delete (settlements released, immutable audit tombstone) — the source
+ *    stays the system of record; only controller-dispositioned refs are kept
  */
 
 export interface SyncResult {
@@ -66,7 +69,11 @@ export interface SyncResult {
   docsFailed: number;
   sourceUnbuildable: number;
   skipped: string[];
+  /** Still unresolved after auto-mirroring (kept by controller disposition or
+   * a deletion that could not be mirrored — these fail verification). */
   deletedAtSource: string[];
+  /** Source deletions mirrored automatically this run (guarded delete). */
+  autoResolvedDeletions: string[];
   applications: ApplyStats | null;
   trueUp: TrueUpStats | null;
   tb: {
@@ -893,14 +900,26 @@ export async function runSync(
       }
     }
 
-    // -- 5. deletions at source: reported, never auto-voided ---------------------
+    // -- 5. deletions at source: mirrored automatically ------------------------
+    // The source is the system of record: a transaction deleted (or
+    // cancelled) upstream must vanish here too — never linger as a
+    // report-only divergence. Each candidate is removed through the engine's
+    // guarded delete (settlements released first, immutable audit tombstone
+    // written in the same transaction). A candidate that cannot be removed —
+    // controller-closed GL period, downstream posted conversion — stays
+    // flagged and fails verification honestly.
     // On a FULL sweep the pulled set is the complete source universe, so any
     // previously-imported ref that vanished was deleted at source (our books
-    // only ever contain refs the source once returned).
+    // only ever contain refs the source once returned). Already-voided
+    // documents are financially exact mirrors of a deletion (net-zero GL, no
+    // open balance) and are not re-flagged.
+    const nonVoidedExistingRefs = [...existing]
+      .filter(([, have]) => have.status !== "voided")
+      .map(([ref]) => ref);
     const deletedAtSource = new Set(
       sourceDeletionCandidates(
         since === null,
-        existing.keys(),
+        nonVoidedExistingRefs,
         [
           ...changes.documents.map((doc) => doc.sourceRef),
           ...changes.unbuildable.map((row) => row.ref),
@@ -910,24 +929,44 @@ export async function runSync(
       ),
     );
     // A source-CANCELLED transaction that we imported while it was posted is a
-    // ledger divergence: flag it like a deletion (report-only, never auto-void).
+    // ledger divergence: mirror it like a deletion. An already-voided document
+    // is again an exact mirror (its reversal nets the GL to zero) — skip it.
     for (const u of changes.unbuildable) {
-      if (u.reason === "cancelled" && existing.get(u.ref)?.posted)
+      const have = existing.get(u.ref);
+      if (u.reason === "cancelled" && have?.posted && have.status !== "voided")
         deletedAtSource.add(u.ref);
     }
-    if (connectionId && deletedAtSource.size > 0) {
-      const resolved = (await db.execute(sql`
-        select source_ref from source_deletion_resolutions
-         where org_id = ${org.id} and connection_id = ${connectionId}
-           and source_ref in ${[...deletedAtSource]}`)) as unknown as {
-        rows: { source_ref: string }[];
-      };
-      const unresolved = unresolvedSourceDeletionCandidates(
+    const autoResolvedDeletions: string[] = [];
+    if (deletedAtSource.size > 0) {
+      // Recorded controller dispositions (retain / manual void) are
+      // acknowledged divergences: they stand and are never auto-mirrored.
+      const resolvedRows = connectionId
+        ? ((await db.execute(sql`
+            select source_ref from source_deletion_resolutions
+             where org_id = ${org.id} and connection_id = ${connectionId}
+               and source_ref in ${[...deletedAtSource]}`)) as unknown as {
+            rows: { source_ref: string }[];
+          }).rows
+        : [];
+      for (const ref of unresolvedSourceDeletionCandidates(
         deletedAtSource,
-        resolved.rows.map((row) => row.source_ref),
-      );
-      deletedAtSource.clear();
-      for (const ref of unresolved) deletedAtSource.add(ref);
+        resolvedRows.map((row) => row.source_ref),
+      )) {
+        try {
+          await mirrorSourceDeletion({
+            orgId: org.id,
+            source: source.name,
+            sourceRef: ref,
+          });
+          autoResolvedDeletions.push(ref);
+          deletedAtSource.delete(ref);
+        } catch (deletionError) {
+          skipped.push(
+            `${ref}: source deletion could not be mirrored: ${(deletionError as Error).message.slice(0, 200)}`,
+          );
+        }
+      }
+      for (const row of resolvedRows) deletedAtSource.delete(row.source_ref);
     }
 
     // -- 6. applications ----------------------------------------------------------
@@ -1053,6 +1092,7 @@ export async function runSync(
       sourceUnbuildable: changes.unbuildable.length,
       skipped: skipped.slice(0, 200),
       deletedAtSource: [...deletedAtSource].sort(),
+      autoResolvedDeletions: autoResolvedDeletions.sort(),
       applications,
       trueUp,
       tb: {

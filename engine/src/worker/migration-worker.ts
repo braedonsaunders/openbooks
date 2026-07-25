@@ -128,6 +128,30 @@ export function createMigrationWorker(): Worker<MigrationJobData> {
 const MIRROR_TICK_MS = 5 * 60_000;
 
 /**
+ * Stale-run reaper. A worker that dies mid-run (deploy rollout, crash, OOM)
+ * leaves its sync_runs row 'running' forever — and the mirror scheduler's
+ * concurrency guard below then refuses to enqueue the next mirror for that
+ * connection, a permanent stall that merely LOOKS like a live run. Sweep rows
+ * that can no longer have a live owner: well past BullMQ's lock + stalled
+ * recovery window (5 min lockDuration, 30 s stalledInterval) for incremental
+ * and attachment runs, hours for full migrations. A rare false positive is
+ * self-correcting: the still-running attempt writes its final status by id
+ * when it finishes, overwriting the reaper's mark.
+ */
+export async function reapStaleSyncRuns(): Promise<number> {
+  const res = (await db.execute(sql`
+    update sync_runs
+       set status = 'failed', finished_at = now(),
+           error_message = 'Run never finished: the worker was interrupted (deploy, crash, or restart). Marked failed by the stale-run reaper.'
+     where status = 'running'
+       and started_at < now() - case
+         when kind = 'full_migration' then interval '6 hours'
+         else interval '30 minutes'
+       end`)) as unknown as { rowCount?: number };
+  return res.rowCount ?? 0;
+}
+
+/**
  * Mirror scheduler: cadence is based only on the last successful incremental
  * proof. Failed mirrors retry with bounded exponential backoff; attachment and
  * full-migration activity never postpones or disables the mirror.
@@ -135,6 +159,9 @@ const MIRROR_TICK_MS = 5 * 60_000;
 export function startMirrorScheduler(): void {
   const tick = async () => {
     try {
+      const reaped = await reapStaleSyncRuns();
+      if (reaped > 0)
+        console.log(`[mirror-scheduler] reaped ${reaped} stale sync run(s)`);
       await purgeExpiredQbdBridgeData();
       const candidates = (await db.execute(sql`
         select c.id, c.org_id as "orgId", c.mirror_schedule as schedule,
