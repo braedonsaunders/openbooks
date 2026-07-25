@@ -12,6 +12,7 @@ import {
 import { assertPeriodModulesOpen, closeModuleForDocument, CloseError } from "./close.ts";
 import { resolveBillInventoryAccounts } from "./inventory.ts";
 import { captureTransactionAuditSnapshot, recordTransactionAudit } from "./transaction-audit.ts";
+import { assertBillPostingAllowed, ComplianceError } from "./compliance.ts";
 
 /**
  * The posting engine: document → journal entry, through the kernel.
@@ -511,10 +512,21 @@ export const RULES: Record<string, RuleFn> = {
 
   customer_payment: (doc, lines, deps) => {
     const total = sum(lines.map(lineTotal));
+    const custom = (doc.custom ?? {}) as Record<string, unknown>;
+    // Optional payment-acceptance surcharge: the customer was charged
+    // total = invoice portion + fee; the fee leg credits a fee-income account
+    // instead of AR, so the AR leg cross-foots to the open-item applications.
+    const fee = typeof custom.feeAmount === "string" ? custom.feeAmount : "0";
+    const feeAccountId = typeof custom.feeIncomeAccountId === "string" ? custom.feeIncomeAccountId : null;
+    if (toUnits(fee) < 0n) throw new Error("customer payment fee cannot be negative");
+    if (cmp(fee, total) > 0) throw new Error("customer payment fee exceeds the receipt");
+    if (!isZero(fee) && !feeAccountId) throw new Error("customer payment fee income account is required");
+    const receivable = add(total, neg(fee));
     return [
       { accountId: lines[0]?.accountId ?? deps.control.bank, amount: total, ...dims(doc) }, // debit bank
       // The AR leg is an OPEN ITEM: it settles the invoices it paid (from_line).
-      { accountId: controlOverride(doc) ?? deps.control.ar, amount: neg(total), partyId: doc.partyId, isOpenItem: true, ...dims(doc) }, // credit AR
+      { accountId: controlOverride(doc) ?? deps.control.ar, amount: neg(receivable), partyId: doc.partyId, isOpenItem: true, ...dims(doc) }, // credit AR
+      ...(!isZero(fee) ? [{ accountId: feeAccountId!, amount: neg(fee), ...dims(doc) }] : []), // credit fee income
     ];
   },
 
@@ -947,6 +959,30 @@ export async function postDocument(
     throw new PostingError(
       `open-item line on account ${orphanOpenItem.accountId} has no party — every AR/AP line must carry its customer/vendor (line entity)`,
     );
+  }
+
+  // -- subcontractor compliance: block_bill requirements -------------------
+  // A vendor bill for a subcontractor whose insurance/licence has lapsed under a
+  // `block_bill` policy cannot be recorded at all. Enforced here, in the kernel,
+  // so no import, script, or API route can route around it. Migration posts are
+  // exempt: historical books are reproduced as they were, not re-adjudicated.
+  if (
+    !deps.migration &&
+    effectiveDoc.partyId &&
+    (effectiveDoc.kind === "vendor_bill" || effectiveDoc.kind === "expense_report")
+  ) {
+    try {
+      await assertBillPostingAllowed({
+        orgId: doc.orgId,
+        partyId: effectiveDoc.partyId,
+        projectId: effectiveDoc.projectId ?? null,
+        documentNumber: effectiveDoc.documentNumber,
+        asOf: effectiveDoc.postingDate ?? effectiveDoc.documentDate,
+      });
+    } catch (error) {
+      if (error instanceof ComplianceError) throw new PostingError(error.message);
+      throw error;
+    }
   }
 
   // -- subsidiaries: stamp, intercompany-balance, validate restrictions ----

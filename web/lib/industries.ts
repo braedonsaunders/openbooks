@@ -180,6 +180,9 @@ export const INDUSTRIES: IndustryDef[] = [
       timeTracking: true,
       subscriptionBilling: false,
       revenueRecognition: true,
+      // A general contractor cannot release a subcontractor's money without
+      // current insurance and a signed waiver, and files 1099-NEC every January.
+      subcontractorCompliance: true,
     },
     coa: [
       { number: '1000', name: 'Operating Account', type: 'asset_bank', reconcilable: true },
@@ -305,6 +308,9 @@ export const INDUSTRIES: IndustryDef[] = [
       inventory: true,
       subscriptionBilling: false,
       revenueRecognition: true,
+      // Design firms sub out geotechnical, survey and specialty engineering:
+      // same certificate-of-insurance and 1099 obligations as a contractor.
+      subcontractorCompliance: true,
     },
     coa: [
       { number: '1000', name: 'Operating Account', type: 'asset_bank', reconcilable: true },

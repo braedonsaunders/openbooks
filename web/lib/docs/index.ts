@@ -11,6 +11,7 @@ import { laborPricing } from './articles/labor-pricing'
 import { taxConfiguration } from './articles/tax-configuration'
 import { taxJurisdictionsAndNexus, taxReturnsAndBoxes } from './articles/taxes'
 import { fieldTickets } from './articles/field-tickets'
+import { subcontractorCompliance } from './articles/subcontractor-compliance'
 import { itemRates } from './articles/item-rates'
 import { fixedAssetsDepreciation } from './articles/fixed-assets-depreciation'
 import { revenueRecognition } from './articles/revenue-recognition'
@@ -218,7 +219,7 @@ const RAW_DOC_ARTICLES: DocArticle[] = [
   paymentsAndApplications,
   bankingAndReconciliation,
   periodClose,
-  projectTypes, overheadCosting, laborCosting, laborPricing, fieldTickets,
+  projectTypes, overheadCosting, laborCosting, laborPricing, fieldTickets, subcontractorCompliance,
   itemRates,
   financialReports,
   analyticsAndSavedViews,

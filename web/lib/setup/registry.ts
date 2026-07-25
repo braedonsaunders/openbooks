@@ -154,6 +154,7 @@ export const SETUP_GROUPS: SetupGroup[] = [
   { key: 'taxes', iconKey: 'receipt' },
   { key: 'dimensions', iconKey: 'layers' },
   { key: 'projects', iconKey: 'briefcase' },
+  { key: 'compliance', iconKey: 'shield' },
   { key: 'billing', iconKey: 'hash' },
   { key: 'revenue', iconKey: 'trending-up' },
   { key: 'inventory', iconKey: 'package' },
@@ -294,6 +295,80 @@ const FX_RATE_TYPES = [
 const CONSOLIDATED_RATE_SOURCES = [
   { value: 'derived', labelKey: 'options.rateSource.derived' },
   { value: 'manual', labelKey: 'options.rateSource.manual' },
+]
+
+// --- Subcontractor compliance ----------------------------------------------
+
+const COMPLIANCE_CATEGORIES = [
+  { value: 'insurance', labelKey: 'options.complianceCategory.insurance' },
+  { value: 'tax_form', labelKey: 'options.complianceCategory.taxForm' },
+  { value: 'licence', labelKey: 'options.complianceCategory.licence' },
+  { value: 'bond', labelKey: 'options.complianceCategory.bond' },
+  { value: 'safety', labelKey: 'options.complianceCategory.safety' },
+  { value: 'other', labelKey: 'options.complianceCategory.other' },
+]
+
+// What a lapse does. `block_bill` is strictly stronger than `block_payment`:
+// evidence that stops a bill being recorded also stops its cash leaving.
+const COMPLIANCE_ENFORCEMENT = [
+  { value: 'advisory', labelKey: 'options.complianceEnforcement.advisory' },
+  { value: 'warn', labelKey: 'options.complianceEnforcement.warn' },
+  { value: 'block_payment', labelKey: 'options.complianceEnforcement.blockPayment' },
+  { value: 'block_bill', labelKey: 'options.complianceEnforcement.blockBill' },
+]
+
+const LIEN_WAIVER_ENFORCEMENT = [
+  { value: 'none', labelKey: 'options.lienWaiverEnforcement.none' },
+  { value: 'warn', labelKey: 'options.lienWaiverEnforcement.warn' },
+  { value: 'block', labelKey: 'options.lienWaiverEnforcement.block' },
+]
+
+export const LIEN_WAIVER_TYPES = [
+  { value: 'conditional_progress', labelKey: 'options.lienWaiverType.conditionalProgress' },
+  { value: 'unconditional_progress', labelKey: 'options.lienWaiverType.unconditionalProgress' },
+  { value: 'conditional_final', labelKey: 'options.lienWaiverType.conditionalFinal' },
+  { value: 'unconditional_final', labelKey: 'options.lienWaiverType.unconditionalFinal' },
+]
+
+const INFORMATION_RETURN_FORM_TYPES = [
+  { value: '1099-NEC', labelKey: 'options.informationReturnForm.nec' },
+  { value: '1099-MISC', labelKey: 'options.informationReturnForm.misc' },
+  { value: 'T4A', labelKey: 'options.informationReturnForm.t4a' },
+]
+
+/** The class-level default adds "not reportable" to the real form types. */
+const INFORMATION_RETURN_FORMS_OPTIONS = [
+  { value: 'none', labelKey: 'options.informationReturnForm.none' },
+  ...INFORMATION_RETURN_FORM_TYPES,
+]
+
+/**
+ * Statutory boxes across all three forms, flattened for the box-rule picker.
+ * Kept in sync with INFORMATION_RETURN_FORMS in
+ * engine/src/information-returns.ts (asserted by registry.test.ts) — the boxes
+ * are law, so they live in code; which ACCOUNT feeds which box is the org's
+ * configuration and lives in the table.
+ */
+const INFORMATION_RETURN_BOXES = [
+  { value: 'nec1', labelKey: 'options.informationReturnBox.nec1' },
+  { value: 'nec2', labelKey: 'options.informationReturnBox.nec2' },
+  { value: 'nec4', labelKey: 'options.informationReturnBox.nec4' },
+  { value: 'misc1', labelKey: 'options.informationReturnBox.misc1' },
+  { value: 'misc2', labelKey: 'options.informationReturnBox.misc2' },
+  { value: 'misc3', labelKey: 'options.informationReturnBox.misc3' },
+  { value: 'misc4', labelKey: 'options.informationReturnBox.misc4' },
+  { value: 'misc5', labelKey: 'options.informationReturnBox.misc5' },
+  { value: 'misc6', labelKey: 'options.informationReturnBox.misc6' },
+  { value: 'misc8', labelKey: 'options.informationReturnBox.misc8' },
+  { value: 'misc9', labelKey: 'options.informationReturnBox.misc9' },
+  { value: 'misc10', labelKey: 'options.informationReturnBox.misc10' },
+  { value: 'misc11', labelKey: 'options.informationReturnBox.misc11' },
+  { value: 'misc12', labelKey: 'options.informationReturnBox.misc12' },
+  { value: 'misc14', labelKey: 'options.informationReturnBox.misc14' },
+  { value: 'misc15', labelKey: 'options.informationReturnBox.misc15' },
+  { value: 't4a020', labelKey: 'options.informationReturnBox.t4a020' },
+  { value: 't4a048', labelKey: 'options.informationReturnBox.t4a048' },
+  { value: 't4a022', labelKey: 'options.informationReturnBox.t4a022' },
 ]
 
 // Revenue recognition (ASC 606 / IFRS 15) — mirrors source platform ARM rule methods.
@@ -1456,6 +1531,150 @@ export const SETUP_ENTITIES: SetupEntity[] = [
       { key: 'averageRate', kind: 'decimal', required: true },
       { key: 'historicalRate', kind: 'decimal', required: true },
       { key: 'source', kind: 'select', required: true, options: CONSOLIDATED_RATE_SOURCES },
+    ],
+  },
+  // ── Subcontractor compliance ──────────────────────────────────────────
+  // The policy layer of the compliance module. Nothing about what a
+  // subcontractor must carry is hardcoded: the classes, the certificates, the
+  // limits, and what a lapse does are all rows here.
+  {
+    key: 'compliance-classes',
+    table: 'compliance_classes',
+    singularTitleKey: 'entities.compliance-classes.singular',
+    groupKey: 'compliance',
+    iconKey: 'users',
+    orgScoped: true,
+    actorCols: true,
+    naturalKey: 'code',
+    hasActive: true,
+    featureKey: 'subcontractorCompliance',
+    docSlug: 'subcontractor-compliance',
+    columns: [
+      { key: 'code', kind: 'code' },
+      { key: 'name', kind: 'text' },
+      { key: 'lienWaiverEnforcement', kind: 'badge', options: LIEN_WAIVER_ENFORCEMENT },
+      { key: 'defaultInformationReturn', kind: 'badge', options: INFORMATION_RETURN_FORMS_OPTIONS },
+      { key: 'isActive', kind: 'badge-active' },
+    ],
+    fields: [
+      { key: 'code', kind: 'text', required: true, lockedOnEdit: true },
+      { key: 'name', kind: 'text', required: true },
+      { key: 'description', kind: 'textarea' },
+      {
+        key: 'lienWaiverEnforcement',
+        kind: 'select',
+        options: LIEN_WAIVER_ENFORCEMENT,
+        keepDefault: true,
+        helpTextKey: 'fieldHelp.lienWaiverEnforcement',
+      },
+      {
+        key: 'defaultLienWaiverType',
+        kind: 'select',
+        options: LIEN_WAIVER_TYPES,
+        helpTextKey: 'fieldHelp.defaultLienWaiverType',
+      },
+      {
+        key: 'defaultInformationReturn',
+        kind: 'select',
+        options: INFORMATION_RETURN_FORMS_OPTIONS,
+        keepDefault: true,
+        helpTextKey: 'fieldHelp.defaultInformationReturn',
+      },
+      { key: 'isActive', kind: 'boolean' },
+    ],
+  },
+  {
+    key: 'compliance-requirements',
+    table: 'compliance_requirements',
+    singularTitleKey: 'entities.compliance-requirements.singular',
+    groupKey: 'compliance',
+    iconKey: 'shield',
+    orgScoped: true,
+    actorCols: true,
+    naturalKey: 'code',
+    hasActive: true,
+    featureKey: 'subcontractorCompliance',
+    docSlug: 'subcontractor-compliance',
+    columns: [
+      { key: 'code', kind: 'code' },
+      { key: 'name', kind: 'text' },
+      { key: 'category', kind: 'badge', options: COMPLIANCE_CATEGORIES },
+      { key: 'classId', kind: 'ref', ref: 'compliance-classes' },
+      { key: 'minCoverageAmount', kind: 'number' },
+      { key: 'enforcement', kind: 'badge', options: COMPLIANCE_ENFORCEMENT },
+      { key: 'isActive', kind: 'badge-active' },
+    ],
+    fields: [
+      { key: 'code', kind: 'text', required: true, lockedOnEdit: true },
+      { key: 'name', kind: 'text', required: true },
+      { key: 'category', kind: 'select', options: COMPLIANCE_CATEGORIES, keepDefault: true },
+      {
+        key: 'classId',
+        kind: 'ref',
+        ref: 'compliance-classes',
+        helpTextKey: 'fieldHelp.complianceRequirementClass',
+      },
+      {
+        key: 'enforcement',
+        kind: 'select',
+        options: COMPLIANCE_ENFORCEMENT,
+        keepDefault: true,
+        helpTextKey: 'fieldHelp.complianceEnforcement',
+      },
+      { key: 'requiresExpiry', kind: 'boolean', defaultValue: true, helpTextKey: 'fieldHelp.requiresExpiry' },
+      { key: 'graceDays', kind: 'integer', keepDefault: true, defaultHintKey: 'fieldHelp.graceDaysHint' },
+      { key: 'expiryWarningDays', kind: 'integer', keepDefault: true, defaultHintKey: 'fieldHelp.expiryWarningDaysHint' },
+      {
+        key: 'minCoverageAmount',
+        kind: 'decimal',
+        helpTextKey: 'fieldHelp.minCoverageAmount',
+      },
+      { key: 'minAggregateAmount', kind: 'decimal' },
+      { key: 'coverageCurrency', kind: 'text', helpTextKey: 'fieldHelp.coverageCurrency' },
+      { key: 'requiresAdditionalInsured', kind: 'boolean' },
+      { key: 'requiresWaiverOfSubrogation', kind: 'boolean' },
+      { key: 'requiresPrimaryNoncontributory', kind: 'boolean' },
+      {
+        key: 'requiresVerification',
+        kind: 'boolean',
+        defaultValue: true,
+        helpTextKey: 'fieldHelp.requiresVerification',
+      },
+      { key: 'isActive', kind: 'boolean' },
+    ],
+  },
+  {
+    // Which 1099/T4A box an account's spend belongs in. Anything unmapped falls
+    // to the vendor's default box, so an org that reports everything as
+    // nonemployee compensation configures nothing here at all.
+    key: 'information-return-box-rules',
+    table: 'information_return_box_rules',
+    singularTitleKey: 'entities.information-return-box-rules.singular',
+    groupKey: 'compliance',
+    iconKey: 'receipt',
+    orgScoped: true,
+    actorCols: true,
+    orderBy: 'form_type, box',
+    hasActive: true,
+    featureKey: 'subcontractorCompliance',
+    docSlug: 'subcontractor-compliance',
+    columns: [
+      { key: 'formType', kind: 'badge', options: INFORMATION_RETURN_FORM_TYPES },
+      { key: 'box', kind: 'badge', options: INFORMATION_RETURN_BOXES },
+      { key: 'accountId', kind: 'ref', ref: 'accounts' },
+      { key: 'isActive', kind: 'badge-active' },
+    ],
+    fields: [
+      { key: 'formType', kind: 'select', options: INFORMATION_RETURN_FORM_TYPES, required: true },
+      {
+        key: 'box',
+        kind: 'select',
+        options: INFORMATION_RETURN_BOXES,
+        required: true,
+        helpTextKey: 'fieldHelp.informationReturnBox',
+      },
+      { key: 'accountId', kind: 'ref', ref: 'accounts', required: true },
+      { key: 'isActive', kind: 'boolean' },
     ],
   },
   {

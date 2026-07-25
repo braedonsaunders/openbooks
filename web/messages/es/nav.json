@@ -63,7 +63,11 @@
     "revenue": "Reconocimiento de ingresos",
     "inventory": "Inventario",
     "docs": "Documentación",
-    "field-tickets": "Partes de obra"
+    "field-tickets": "Partes de obra",
+    "compliance": "Cumplimiento",
+    "compliance-vendors": "Subcontratistas",
+    "lien-waivers": "Renuncias de gravamen",
+    "information-returns": "Declaraciones informativas"
   },
   "groups": {
     "my-work": "Mi trabajo",
@@ -95,6 +99,7 @@
     "customize": "Personalizar",
     "automate": "Automatizar",
     "extend": "Extender",
-    "records": "Registros"
+    "records": "Registros",
+    "compliance": "Cumplimiento"
   }
 }

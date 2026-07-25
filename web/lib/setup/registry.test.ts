@@ -1,5 +1,6 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
+import { INFORMATION_RETURN_FORMS } from '@openbooks/engine/src/information-returns.ts'
 import { SETUP_ENTITY_BY_KEY, setupEntitiesByGroup, setupEntityForFeatureState } from './registry.ts'
 
 test('tax rates and return boxes are nested under their owning records', () => {
@@ -72,5 +73,39 @@ test('generic setup subsidiary controls follow the feature flag everywhere', () 
     const disabled = setupEntityForFeatureState(entity, { multiSubsidiary: false })
     assert.ok(!disabled.fields.some((field) => field.ref === 'subsidiaries' || field.key === 'subsidiaryIncludeChildren'))
     assert.ok(!disabled.columns.some((column) => column.ref === 'subsidiaries'))
+  }
+})
+
+test('compliance setup entities are gated and reachable from the rail', () => {
+  const byGroup = setupEntitiesByGroup()
+  assert.deepEqual(byGroup.get('compliance')?.map((entity) => entity.key), [
+    'compliance-classes',
+    'compliance-requirements',
+    'information-return-box-rules',
+  ])
+  for (const key of ['compliance-classes', 'compliance-requirements', 'information-return-box-rules']) {
+    const entity = SETUP_ENTITY_BY_KEY.get(key)
+    assert.ok(entity, key)
+    // Hiding the tab is presentation; the API re-checks this same key.
+    assert.equal(entity.featureKey, 'subcontractorCompliance', key)
+    assert.equal(entity.docSlug, 'subcontractor-compliance', key)
+  }
+})
+
+test('every information-return box option is a real statutory box', () => {
+  const rules = SETUP_ENTITY_BY_KEY.get('information-return-box-rules')
+  assert.ok(rules)
+  const offered = new Set(
+    rules.fields.find((field) => field.key === 'box')?.options?.map((option) => option.value) ?? [],
+  )
+  assert.ok(offered.size > 0)
+  const statutory = new Set(
+    Object.values(INFORMATION_RETURN_FORMS).flatMap((form) => form.boxes.map((box) => box.key)),
+  )
+  for (const box of offered) {
+    assert.ok(statutory.has(box), `${box} is offered in setup but is not a box on any form`)
+  }
+  for (const box of statutory) {
+    assert.ok(offered.has(box), `${box} exists on a form but cannot be mapped in setup`)
   }
 })
