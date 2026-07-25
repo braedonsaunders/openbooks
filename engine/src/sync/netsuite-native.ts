@@ -260,6 +260,7 @@ export function buildNativeFromNetSuite(
       // Rebillable job cost: carried from the source so migrated materials/subs/
       // expenses remain billable to the project's customer.
       isBillable: String(l.isbillable ?? "").toUpperCase() === "T",
+      sourceLineRef: l.id == null ? null : String(l.id),
     };
     lines.push(row);
     return row;
@@ -554,6 +555,7 @@ function buildOrder(
       description: l.memo ?? null,
       lineNumber: ++n,
       isBillable: String(l.isbillable ?? "").toUpperCase() === "T",
+      sourceLineRef: l.id == null ? null : String(l.id),
     };
     lines.push(row);
     detailRows.push({ row, codeId: code?.id ?? null });

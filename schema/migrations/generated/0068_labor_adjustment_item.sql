@@ -11,3 +11,9 @@ alter table "labor_rate_adjustment_targets" add constraint "labor_rate_adjustmen
   'labor', 'material', 'item', 'item_kind', 'item_category', 'transaction_type', 'department',
   'subsidiary', 'location', 'class', 'trade', 'job_title', 'project', 'customer', 'other'
 ));
+
+-- Migrated lines keep their source-system line id, so a document can be
+-- reconciled and corrected line by line instead of only as a whole.
+create index if not exists "document_lines_source_line_ref"
+  on "document_lines" ("org_id", (("custom" ->> 'sourceLineRef')))
+  where ("custom" ->> 'sourceLineRef') is not null;
