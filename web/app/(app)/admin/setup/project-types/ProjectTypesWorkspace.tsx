@@ -62,7 +62,6 @@ const BASES = ['time_selection', 'date_range', 'draw_amount', 'milestone', 'fiel
 /** Documents a tenant may treat as a source of rebillable job cost. */
 const COST_SOURCE_KINDS = ['vendor_bill', 'expense_report', 'card_charge', 'check', 'sales_order', 'purchase_order']
 const MARKUP_PRESENTATIONS = ['embedded', 'lump_sum']
-const SURCHARGE_BASES = ['labor', 'cost', 'subtotal']
 const LINE_BUILDERS = ['tm_actual', 'milestone', 'draw', 'cost_plus']
 const REVENUE_ACCTS = ['item_income', 'unbilled_receivable', 'fixed']
 const RECOGNITIONS = ['as_invoiced', 'percent_complete_cost', 'milestone']
@@ -337,25 +336,6 @@ export function ProjectTypesWorkspace({ types, dimensions }: { types: ProjectTyp
               <EnumField label={t('notToExceed')} value={ip.notToExceed ? 'yes' : 'no'} options={['no', 'yes']}
                 onChange={(v) => setIp({ notToExceed: v === 'yes' })} />
 
-              {/* Percentage lines the invoice adds automatically (fuel/environmental
-                  /small-tools recovery — whatever this tenant charges). */}
-              <div className="sm:col-span-2 space-y-2">
-                <Label>{t('surcharges')}</Label>
-                {(ip.surcharges ?? []).map((sc, i) => (
-                  <div key={i} className="grid gap-2 sm:grid-cols-4">
-                    <Input value={sc.label} placeholder={t('surchargeLabel')}
-                      onChange={(e) => { const n = [...(ip.surcharges ?? [])]; n[i] = { ...n[i], label: e.target.value, key: n[i].key || e.target.value.toLowerCase().replace(/\W+/g, '_') }; setIp({ surcharges: n }) }} />
-                    <EnumField label="" value={sc.basis} options={SURCHARGE_BASES}
-                      onChange={(v) => { const n = [...(ip.surcharges ?? [])]; n[i] = { ...n[i], basis: v as any }; setIp({ surcharges: n }) }} />
-                    <Input value={sc.percent} placeholder="%" inputMode="decimal"
-                      onChange={(e) => { const n = [...(ip.surcharges ?? [])]; n[i] = { ...n[i], percent: e.target.value }; setIp({ surcharges: n }) }} />
-                    <Button variant="outline" onClick={() => setIp({ surcharges: (ip.surcharges ?? []).filter((_, j) => j !== i) })}>{tCommon('actions.remove')}</Button>
-                  </div>
-                ))}
-                <Button variant="outline" onClick={() => setIp({ surcharges: [...(ip.surcharges ?? []), { key: '', label: '', basis: 'labor', percent: '0' }] })}>
-                  {t('addSurcharge')}
-                </Button>
-              </div>
             </div>
           ) : null}
 

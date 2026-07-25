@@ -49,8 +49,5 @@
   "help": "Documentação",
   "costSourceKinds": "Fontes de custo faturável",
   "markupPresentation": "Apresentação da margem",
-  "notToExceed": "Não exceder",
-  "surcharges": "Sobretaxas automáticas",
-  "surchargeLabel": "Rótulo",
-  "addSurcharge": "Adicionar sobretaxa"
+  "notToExceed": "Não exceder"
 }
