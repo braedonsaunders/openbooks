@@ -37,10 +37,15 @@ export const FEATURES: FeatureDef[] = [
   // invoices (SaaS/retainer style). Off by default — recurring document
   // schedules + dunning work without it; this adds the plan/subscription model.
   { key: 'subscriptionBilling', defaultEnabled: false, category: 'sales' },
+  // Online customer payments: hosted payment links on invoices (Stripe /
+  // Adyen / GoCardless bank debit), surcharge rules, provider webhooks that
+  // auto-apply receipts to open items. Off by default — manual receipts and
+  // payment files work without it.
+  { key: 'onlinePayments', defaultEnabled: false, category: 'sales' },
   // Operations
   // Projects is a parent gate on the centralized Features page.
   // Schedule-of-values billing remains a project-type procedure, not a gate.
-  { key: 'projects', defaultEnabled: true, category: 'operations', navModules: ['projects', 'construction-billing', 'field-tickets'] },
+  { key: 'projects', defaultEnabled: true, category: 'operations', navModules: ['projects', 'construction-billing', 'field-tickets', 'lien-waivers'] },
   { key: 'timeTracking', defaultEnabled: true, category: 'operations', navModules: ['timesheets'] },
   { key: 'fieldTickets', defaultEnabled: false, category: 'operations', navModules: ['field-tickets'], parentKey: 'projects' },
   // Project scheduling: critical-path Gantt, work-breakdown outline, working
@@ -48,6 +53,15 @@ export const FEATURES: FeatureDef[] = [
   // a planning instrument, not an accounting one, and orgs that only job-cost
   // projects should not carry it. Subordinate to the Projects parent gate.
   { key: 'projectScheduling', defaultEnabled: false, category: 'operations', parentKey: 'projects' },
+  // Subcontractor compliance: certificates of insurance, lien waivers, and
+  // year-end information returns (1099-NEC/MISC, T4A) for the people you pay.
+  // Off by default and deliberately NOT a child of `projects`: COI tracking and
+  // 1099 filing are buy-side controls that stand on their own, and an org with
+  // no projects still has subcontractors to vet. The lien-waiver surface is the
+  // one part that needs a project, so it additionally requires the Projects
+  // gate — enforced at its own page/API boundary, not by a parent gate that
+  // would take insurance tracking down with it.
+  { key: 'subcontractorCompliance', defaultEnabled: false, category: 'operations', navModules: ['compliance', 'compliance-vendors', 'lien-waivers', 'information-returns'] },
   { key: 'inventory', defaultEnabled: true, category: 'operations', navModules: ['inventory'] },
   { key: 'equipment', defaultEnabled: true, category: 'operations', navModules: ['equipment'] },
   { key: 'expenses', defaultEnabled: true, category: 'operations', navModules: ['expenses'] },
@@ -60,7 +74,7 @@ export const FEATURES: FeatureDef[] = [
   // revaluation, and realized/unrealized gain-loss. Data-dependent default (see
   // resolveMultiCurrency), NOT the static flag below.
   { key: 'multiCurrency', defaultEnabled: false, category: 'accounting' },
-  { key: 'banking', defaultEnabled: true, category: 'accounting', navModules: ['banking-cash', 'banking-transactions', 'banking-match', 'banking-recons', 'banking-rules', 'banking-imports'] },
+  { key: 'banking', defaultEnabled: true, category: 'accounting', navModules: ['banking-cash', 'banking-transactions', 'banking-psp-settlements', 'banking-match', 'banking-recons', 'banking-rules', 'banking-imports'] },
   // Automated bank connectivity (SFTP file drops + Plaid/GoCardless/TrueLayer
   // live feeds). Off by default — manual OFX/CSV import always works without it.
   { key: 'bankFeeds', defaultEnabled: false, category: 'accounting' },
@@ -275,6 +289,43 @@ const FEATURE_DISABLE_CHECKS: Record<string, (orgId: string) => Promise<FeatureD
       select count(*)::int as n from project_tasks
        where org_id = ${orgId} and schedule_start is not null`)
     return { blocked: false, impacts: n ? [{ labelKey: 'scheduledTasks', count: n }] : [] }
+  },
+  // Compliance evidence and information returns are records, not postings, so
+  // switching the module off strands nothing — EXCEPT a finalized information
+  // return that has not been filed yet. That is a statutory obligation in
+  // flight: file it or void it before the module goes dark.
+  subcontractorCompliance: async (orgId) => {
+    const [trackedVendors, activeRecords, blockingPolicies, openWaiverRequests, pendingFilings, unfiledFinalized] =
+      await Promise.all([
+        countRows(sql`
+          select count(*)::int as n from vendor_roles
+           where org_id = ${orgId} and compliance_class_id is not null and is_active`),
+        countRows(sql`
+          select count(*)::int as n from compliance_records
+           where org_id = ${orgId} and status = 'active'
+             and (expires_on is null or expires_on >= current_date)`),
+        countRows(sql`
+          select count(*)::int as n from compliance_requirements
+           where org_id = ${orgId} and is_active
+             and enforcement in ('block_payment', 'block_bill')`),
+        countRows(sql`
+          select count(*)::int as n from lien_waivers
+           where org_id = ${orgId} and status in ('draft', 'requested', 'received')`),
+        countRows(sql`
+          select count(*)::int as n from information_return_filings
+           where org_id = ${orgId} and status in ('draft', 'computed')`),
+        countRows(sql`
+          select count(*)::int as n from information_return_filings
+           where org_id = ${orgId} and status = 'finalized'`),
+      ])
+    const impacts: FeatureImpact[] = []
+    if (trackedVendors) impacts.push({ labelKey: 'trackedVendors', count: trackedVendors })
+    if (activeRecords) impacts.push({ labelKey: 'activeCertificates', count: activeRecords })
+    if (blockingPolicies) impacts.push({ labelKey: 'blockingCompliancePolicies', count: blockingPolicies })
+    if (openWaiverRequests) impacts.push({ labelKey: 'openLienWaivers', count: openWaiverRequests })
+    if (pendingFilings) impacts.push({ labelKey: 'draftInformationReturns', count: pendingFilings })
+    if (unfiledFinalized) impacts.push({ labelKey: 'unfiledInformationReturns', count: unfiledFinalized })
+    return { blocked: unfiledFinalized > 0, impacts }
   },
   fieldTickets: async (orgId) => {
     const n = await countRows(sql`

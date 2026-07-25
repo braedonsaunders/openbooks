@@ -296,6 +296,54 @@ export const NAV_MODULES: NavModule[] = [
     requiredPermission: 'expenses.read',
   },
 
+  // Purchasing → Compliance. Subcontractor compliance is a BUY-SIDE control: it
+  // decides whether a payee's money may be released, so it belongs beside the
+  // pay run rather than under Projects. `lien-waivers` is listed on BOTH the
+  // subcontractorCompliance and projects feature gates, so it disappears when
+  // either is off — a lien is a claim against a project, and there is no waiving
+  // one without projects.
+  {
+    key: 'compliance',
+    href: '/compliance',
+    label: 'Compliance',
+    iconKey: 'shield',
+    group: 'purchasing',
+    subgroup: 'compliance',
+    requiredPermission: 'compliance.read',
+    featureKey: 'subcontractorCompliance',
+    exact: true,
+  },
+  {
+    key: 'compliance-vendors',
+    href: '/compliance/vendors',
+    label: 'Subcontractors',
+    iconKey: 'list-checks',
+    group: 'purchasing',
+    subgroup: 'compliance',
+    requiredPermission: 'compliance.read',
+    featureKey: 'subcontractorCompliance',
+  },
+  {
+    key: 'lien-waivers',
+    href: '/compliance/lien-waivers',
+    label: 'Lien Waivers',
+    iconKey: 'clipboard-check',
+    group: 'purchasing',
+    subgroup: 'compliance',
+    requiredPermission: 'compliance.read',
+    featureKey: 'subcontractorCompliance',
+  },
+  {
+    key: 'information-returns',
+    href: '/compliance/information-returns',
+    label: 'Information Returns',
+    iconKey: 'receipt',
+    group: 'purchasing',
+    subgroup: 'compliance',
+    requiredPermission: 'compliance.read',
+    featureKey: 'subcontractorCompliance',
+  },
+
   // Banking — the bank feed, matching, and reconciliation.
   {
     key: 'banking',
@@ -716,7 +764,7 @@ export const DEFAULT_NAV_ORDER: Record<NavGroupKey, readonly string[]> = {
     'ar-invoices',
     'receipts',
   ],
-  purchasing: ['purchase-orders', 'ap', 'ap-bills', 'payments', 'expenses', 'vendors'],
+  purchasing: ['purchase-orders', 'ap', 'ap-bills', 'payments', 'expenses', 'vendors', 'compliance', 'compliance-vendors', 'lien-waivers', 'information-returns'],
   operations: [
     'projects',
     'construction-billing',

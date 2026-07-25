@@ -63,7 +63,11 @@
     "revenue": "Comptabilisation des revenus",
     "inventory": "Inventaire",
     "docs": "Documentation",
-    "field-tickets": "Bons de régie"
+    "field-tickets": "Bons de régie",
+    "compliance": "Conformité",
+    "compliance-vendors": "Sous-traitants",
+    "lien-waivers": "Renonciations au privilège",
+    "information-returns": "Déclarations de renseignements"
   },
   "groups": {
     "my-work": "Mon travail",
@@ -95,6 +99,7 @@
     "customize": "Personnaliser",
     "automate": "Automatiser",
     "extend": "Étendre",
-    "records": "Enregistrements"
+    "records": "Enregistrements",
+    "compliance": "Conformité"
   }
 }

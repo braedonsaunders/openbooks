@@ -1,0 +1,361 @@
+{
+  "title": "Conformité des sous-traitants",
+  "description": "Attestations d'assurance, renonciations au privilège et déclarations de renseignements de fin d'année pour ceux que vous payez.",
+  "tabs": {
+    "overview": "Vue d'ensemble",
+    "vendors": "Sous-traitants",
+    "lienWaivers": "Renonciations au privilège",
+    "informationReturns": "Déclarations de renseignements"
+  },
+  "setup": {
+    "prompt": "Rien n'est encore appliqué. Définissez les catégories de contreparties et les attestations exigées de chacune.",
+    "action": "Configurer la conformité"
+  },
+  "stats": {
+    "tracked": "Sous-traitants suivis",
+    "trackedHint": "{count} politiques en vigueur",
+    "compliant": "Couverts",
+    "compliantHint": "{expiring} expirent bientôt",
+    "blocked": "Bloqués",
+    "blockedHint": "{bills} factures concernées",
+    "exposure": "Exposition bloquée",
+    "exposureHint": "Dettes qui ne peuvent être libérées"
+  },
+  "panels": {
+    "blocked": "Paiements retenus par le contrôle",
+    "blockedHint": "Réévalués en direct sur les preuves du jour",
+    "blockedEmpty": "Aucune retenue. Toutes les factures de sous-traitance ouvertes passent.",
+    "expiring": "Expirations ce mois-ci",
+    "expiringHint": "À relancer avant échéance",
+    "expiringEmpty": "Aucune attestation dans sa fenêtre d'alerte.",
+    "waivers": "Renonciations en attente",
+    "waiversHint": "Demandées ou reçues mais non encore signées",
+    "waiversEmpty": "Aucune renonciation n'attend de signature.",
+    "waiversAction": "Toutes les renonciations",
+    "readiness": "Préparation 1099 — {year}",
+    "readinessHint": "À corriger avant janvier",
+    "readinessEmpty": "Chaque fournisseur déclarable a ce qu'il faut pour déclarer.",
+    "readinessAction": "Déclarations"
+  },
+  "empty": {
+    "title": "Aucun sous-traitant n'est encore suivi",
+    "description": "Attribuez une catégorie de conformité à un fournisseur pour commencer à exiger des attestations."
+  },
+  "states": {
+    "compliant": "Couvert",
+    "expiring": "Expire bientôt",
+    "waived": "Dérogation",
+    "missing": "Manquant",
+    "expired": "Expiré",
+    "insufficient": "Insuffisant",
+    "awaiting_verification": "Non vérifié",
+    "rejected": "Refusé"
+  },
+  "reasons": {
+    "no_evidence": "aucun document au dossier",
+    "rejected": "refusé",
+    "awaiting_verification": "en attente de vérification",
+    "not_yet_effective": "pas encore en vigueur",
+    "expired": "expiré",
+    "coverage_below_minimum": "limite par sinistre sous le minimum",
+    "aggregate_below_minimum": "limite globale sous le minimum",
+    "coverage_currency_mismatch": "limite libellée dans une autre devise",
+    "coverage_amount_missing": "aucune limite indiquée sur l'attestation",
+    "missing_additional_insured": "non désigné comme assuré additionnel",
+    "missing_waiver_of_subrogation": "aucune renonciation à la subrogation",
+    "missing_primary_noncontributory": "non primaire et non contributive"
+  },
+  "decision": {
+    "cleared": "Conforme",
+    "warned": "Avertissement",
+    "blocked": "Bloqué",
+    "overridden": "Dérogé"
+  },
+  "certificateStatus": {
+    "pending_review": "À vérifier",
+    "active": "Vérifié",
+    "rejected": "Refusé",
+    "superseded": "Remplacé"
+  },
+  "waiverStatus": {
+    "draft": "Brouillon",
+    "requested": "Demandée",
+    "received": "Reçue",
+    "signed": "Signée",
+    "rejected": "Refusée",
+    "void": "Annulée"
+  },
+  "filingStatus": {
+    "draft": "Brouillon",
+    "computed": "Calculée",
+    "finalized": "Finalisée",
+    "filed": "Déposée",
+    "void": "Annulée"
+  },
+  "recipientStatus": {
+    "included": "Déclaré",
+    "excluded": "Exclu",
+    "corrected": "Corrigé",
+    "void": "Annulé"
+  },
+  "filingChannel": {
+    "iris": "IRS IRIS",
+    "fire": "IRS FIRE",
+    "provider": "Prestataire de dépôt",
+    "paper": "Papier",
+    "other": "Autre"
+  },
+  "direction": {
+    "received": "Du sous-traitant",
+    "issued": "Émise par nous"
+  },
+  "waiverType": {
+    "conditional_progress": "Conditionnelle — acompte",
+    "unconditional_progress": "Inconditionnelle — acompte",
+    "conditional_final": "Conditionnelle — finale",
+    "unconditional_final": "Inconditionnelle — finale"
+  },
+  "waiverTypeHint": {
+    "conditional_progress": "Libère les travaux jusqu'à la date seulement après encaissement du paiement.",
+    "unconditional_progress": "Libère les travaux jusqu'à la date immédiatement — même si le paiement n'est jamais honoré.",
+    "conditional_final": "Libère tout le contrat, retenue comprise, dès l'encaissement du paiement final.",
+    "unconditional_final": "Libère tout le contrat, retenue comprise, immédiatement et sans condition."
+  },
+  "taxClassification": {
+    "individual": "Particulier",
+    "sole_proprietor": "Entreprise individuelle",
+    "partnership": "Société de personnes",
+    "c_corp": "Société de type C",
+    "s_corp": "Société de type S",
+    "llc": "SARL / LLC",
+    "trust_estate": "Fiducie ou succession",
+    "government": "Administration publique",
+    "nonprofit": "Organisme sans but lucratif",
+    "other": "Autre"
+  },
+  "tinType": {
+    "ein": "EIN",
+    "ssn": "SSN",
+    "itin": "ITIN",
+    "atin": "ATIN",
+    "sin": "NAS (Canada)",
+    "bn": "Numéro d'entreprise (Canada)",
+    "unknown": "Inconnu"
+  },
+  "readiness": {
+    "unflagged": "Payé au-delà du seuil mais non marqué déclarable",
+    "missingTin": "Aucun numéro fiscal au dossier",
+    "noForm": "Aucune déclaration attribuée"
+  },
+  "vendors": {
+    "title": "Matrice de conformité des sous-traitants",
+    "description": "Une ligne par sous-traitant suivi, une colonne par politique. La même évaluation que celle du cycle de paiement.",
+    "columns": {
+      "vendor": "Sous-traitant",
+      "class": "Catégorie",
+      "status": "État",
+      "exposure": "Dette ouverte"
+    },
+    "filters": {
+      "class": "Catégorie",
+      "allClasses": "Toutes les catégories",
+      "state": "État",
+      "allStates": "Tous les états",
+      "attention": "À traiter",
+      "expiring": "Expire bientôt"
+    },
+    "empty": {
+      "title": "Aucun sous-traitant suivi ne correspond",
+      "description": "Attribuez une catégorie de conformité dans l'onglet Conformité d'un fournisseur pour l'ajouter à la matrice."
+    }
+  },
+  "drawer": {
+    "tabs": {
+      "certificates": "Attestations",
+      "identification": "Identification fiscale",
+      "exceptions": "Dérogations",
+      "aria": "Sections de conformité"
+    }
+  },
+  "certificates": {
+    "empty": "Aucun document au dossier pour ce sous-traitant.",
+    "recordTitle": "Enregistrer une attestation",
+    "record": "Enregistrer l'attestation",
+    "recordHint": "Enregistrée à vérifier. Une autre personne doit la vérifier pour qu'elle compte.",
+    "noPolicies": "Aucune politique ne s'applique encore à la catégorie de ce sous-traitant.",
+    "noExpiry": "sans échéance",
+    "limits": "Par sinistre {occurrence} · globale {aggregate}",
+    "additionalInsured": "Assuré additionnel",
+    "waiverOfSubrogation": "Renonciation à la subrogation",
+    "primaryNoncontributory": "Primaire et non contributive",
+    "verify": "Vérifier",
+    "reject": "Refuser",
+    "rejectTitle": "Refuser cette attestation",
+    "rejectReason": "Pour quel motif ?",
+    "verifiedBy": "Vérifiée par {who} le {when}",
+    "selfVerifyBlocked": "Une attestation doit être vérifiée par une autre personne que celle qui l'a enregistrée."
+  },
+  "exceptions": {
+    "intro": "Une dérogation est le seul moyen de contourner une exigence bloquante. Elle expire toujours et reste tracée.",
+    "empty": "Aucune dérogation en vigueur.",
+    "grantTitle": "Accorder une dérogation",
+    "grant": "Accorder la dérogation",
+    "grantHint": "120 jours maximum. Une suspension plus longue est un changement de politique, pas une dérogation.",
+    "revoke": "Révoquer",
+    "revokeTitle": "Révoquer cette dérogation",
+    "revokeReason": "Pour quel motif ?",
+    "window": "{from} → {to}"
+  },
+  "lienWaivers": {
+    "title": "Renonciations au privilège",
+    "description": "Quittances légales échangées contre paiement de travaux — reçues des sous-traitants, émises aux maîtres d'ouvrage.",
+    "new": "Nouvelle renonciation",
+    "create": "Créer la renonciation",
+    "columns": {
+      "number": "Renonciation",
+      "direction": "Sens",
+      "party": "Partie",
+      "project": "Projet",
+      "type": "Type",
+      "through": "Jusqu'au",
+      "amount": "Montant",
+      "status": "État",
+      "jurisdiction": "Juridiction",
+      "bill": "Facture visée",
+      "requested": "Demandée le"
+    },
+    "filters": {
+      "direction": "Sens",
+      "allDirections": "Tous les sens",
+      "status": "État",
+      "allStatuses": "Tous les états"
+    },
+    "empty": {
+      "title": "Aucune renonciation",
+      "description": "Créez-en une lorsque vous demandez une quittance à un sous-traitant, ou que vous en émettez une avec une demande de paiement."
+    },
+    "jurisdictionHint": "La loi dont le formulaire suit la forme, p. ex. US-CA ou CA-ON. Imprimée sur le document.",
+    "editTitle": "Conditions de la quittance",
+    "notesHint": "Réserves et réclamations contestées imprimées sur la renonciation.",
+    "copyFromBill": "Reprendre le montant d'une facture…",
+    "request": "Marquer demandée",
+    "receive": "Marquer reçue",
+    "reject": "Refuser",
+    "rejectTitle": "Refuser cette renonciation",
+    "rejectReason": "Pour quel motif ?",
+    "void": "Annuler",
+    "voidTitle": "Annuler cette renonciation",
+    "voidReason": "Pour quel motif ?",
+    "recordSignature": "Enregistrer la renonciation signée",
+    "recordSignatureHint": "Marquer une renonciation signée libère le paiement bloqué. Ne le faites qu'une fois le document signé en main.",
+    "signedByName": "Signée par",
+    "signedByTitle": "Fonction",
+    "signedAt": "Date de signature",
+    "notarized": "Notariée",
+    "markSigned": "Marquer signée",
+    "signedBy": "Signée par {who} {title} le {when}",
+    "printForm": "Imprimer le formulaire",
+    "executedCopy": "Exemplaire signé",
+    "executedCopyHint": "Joignez ici la renonciation signée numérisée. Elle reste dans la Bibliothèque de fichiers et est liée à cet enregistrement.",
+    "errors": {
+      "partyAndProject": "Choisissez une partie et un projet — un privilège porte sur un projet précis."
+    }
+  },
+  "informationReturns": {
+    "title": "Déclarations de renseignements",
+    "description": "1099-NEC, 1099-MISC et T4A, calculés d'après les sommes réellement versées dans l'année civile.",
+    "new": "Ouvrir une déclaration",
+    "create": "Ouvrir la déclaration",
+    "orgRoot": "Organisation entière",
+    "columns": {
+      "year": "Année",
+      "form": "Formulaire",
+      "entity": "Entité déclarante",
+      "recipients": "Bénéficiaires",
+      "total": "Déclaré",
+      "status": "État",
+      "attention": "À traiter",
+      "vendor": "Fournisseur",
+      "issue": "Problème",
+      "classification": "Classification",
+      "paid": "Versé",
+      "recipient": "Bénéficiaire",
+      "tin": "N° fiscal"
+    },
+    "empty": {
+      "title": "Aucune déclaration",
+      "description": "Ouvrez une déclaration pour une année civile terminée et calculez-la depuis le grand livre."
+    },
+    "excluded": "+{count} exclus",
+    "missingTin": "{count} sans numéro fiscal",
+    "readinessTitle": "Préparation — {year}",
+    "readinessDescription": "Fournisseurs qui fausseront une déclaration si personne ne les relance.",
+    "readinessClear": "Chaque fournisseur déclarable a un numéro fiscal et un formulaire attribué.",
+    "detailDescription": "{entity} · seuil de déclaration {threshold}",
+    "compute": "Calculer depuis le grand livre",
+    "recompute": "Recalculer",
+    "computed": "{count} bénéficiaires calculés, {exceptions} anomalies à examiner.",
+    "finalize": "Finaliser",
+    "markFiled": "Marquer déposée",
+    "printCopies": "Exemplaires des bénéficiaires",
+    "exportTransmittal": "Fichier de transmission",
+    "void": "Annuler la déclaration",
+    "voidTitle": "Annuler cette déclaration",
+    "voidReason": "Pour quel motif ?",
+    "frozenNotice": "Cette déclaration est figée. Les montants et exclusions reflètent ce qui a été transmis ; les corrections passent par une nouvelle déclaration.",
+    "noRecipients": "Rien de calculé. Calculez la déclaration pour retracer les paiements de l'année.",
+    "adjust": "Ajuster",
+    "adjustDescription": "Les ajustements sont des écarts signés par rapport au montant du grand livre : la traçabilité n'est jamais écrasée.",
+    "adjustReason": "Motif de l'ajustement",
+    "delta": "écart",
+    "ledgerFigure": "Grand livre : {value}",
+    "exclude": "Exclure ce bénéficiaire de la déclaration",
+    "exclusionReason": "Motif de l'exclusion",
+    "channel": "Canal de dépôt",
+    "reference": "Référence de confirmation",
+    "referenceHint": "Le reçu ou l'identifiant de soumission renvoyé par le canal.",
+    "filedVia": "Déposée via {channel} · {reference}",
+    "footnote": "Les montants correspondent aux sommes versées dans l'année civile, retracées via les lettrages jusqu'aux comptes de charges de chaque facture. Un astérisque signale un montant ajusté par une personne."
+  },
+  "fields": {
+    "requirement": "Exigence",
+    "select": "Sélectionner…",
+    "none": "Aucun",
+    "issuer": "Assureur ou autorité émettrice",
+    "policyNumber": "N° de police ou d'attestation",
+    "effectiveFrom": "En vigueur le",
+    "expiresOn": "Expire le",
+    "expiryRequired": "Cette exigence nécessite une date d'échéance.",
+    "coverageAmount": "Limite par sinistre",
+    "aggregateAmount": "Limite globale",
+    "coverageCurrency": "Devise de la limite",
+    "coverageCurrencyHint": "Doit être {currency} — les limites ne sont jamais converties pour la comparaison.",
+    "project": "Projet",
+    "allProjects": "Tous les projets",
+    "supersedes": "Renouvelle",
+    "notes": "Notes",
+    "reason": "Motif",
+    "save": "Enregistrer",
+    "complianceClass": "Catégorie de conformité",
+    "complianceClassHint": "Sans catégorie, ce fournisseur n'est pas suivi et ne bloque jamais un paiement.",
+    "notTracked": "Non suivi",
+    "taxClassification": "Classification fiscale",
+    "unknown": "Inconnu",
+    "reportable": "Déclarable sur une déclaration de renseignements",
+    "informationReturnForm": "Formulaire",
+    "inheritClass": "Hériter de la catégorie",
+    "notReportable": "Non déclarable",
+    "informationReturnBox": "Case par défaut",
+    "defaultBox": "Défaut du formulaire",
+    "tinType": "Type de numéro fiscal",
+    "tin": "Numéro d'identification fiscale",
+    "tinPlaceholder": "9 chiffres",
+    "tinHint": "Chiffré au repos. Seuls les quatre derniers chiffres sont réaffichés.",
+    "backupWithholding": "Soumis à la retenue de sûreté"
+  },
+  "errors": {
+    "saveFailed": "Impossible d'enregistrer.",
+    "pickRequirement": "Choisissez l'exigence à laquelle cette attestation répond.",
+    "exceptionIncomplete": "Une dérogation nécessite une exigence et une date de fin."
+  }
+}

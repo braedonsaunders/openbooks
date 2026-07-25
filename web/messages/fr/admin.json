@@ -735,7 +735,8 @@
       "admin": "Administration",
       "assets": "Immobilisations et amortissement",
       "data": "Importation et exportation",
-      "crm": "Gestion de la relation client"
+      "crm": "Gestion de la relation client",
+      "compliance": "Conformité"
     },
     "gl_read": "Consulter les journaux et les soldes",
     "gl_manage": "Gérer le plan comptable",
@@ -818,7 +819,12 @@
     "crm_forecasts_read": "Voir les prévisions de vente",
     "crm_forecasts_manage": "Créer des instantanés de prévision",
     "crm_forecasts_override": "Remplacer les prévisions d’équipe",
-    "crm_setup_manage": "Gérer la configuration CRM"
+    "crm_setup_manage": "Gérer la configuration CRM",
+    "compliance_read": "Consulter la conformité des sous-traitants",
+    "compliance_manage": "Enregistrer attestations, renonciations et déclarations",
+    "compliance_verify": "Vérifier les attestations",
+    "compliance_waive": "Accorder des dérogations de conformité",
+    "compliance_file": "Finaliser et déposer les déclarations de renseignements"
   },
   "ai": {
     "metaTitle": "Paramètres d'IA",
@@ -1047,14 +1053,25 @@
       "title": "Book Depreciation",
       "description": "Configure reusable depreciation methods and the method, life and convention each accounting book applies to an asset category.",
       "tabsAria": "Book depreciation setup sections",
-      "tabs": { "methods": "Methods", "books": "Book policies" }
+      "tabs": {
+        "methods": "Methods",
+        "books": "Book policies"
+      }
     },
     "taxDepreciationSetup": {
       "navTitle": "Tax Depreciation",
       "title": "Tax Depreciation",
       "description": "Install country tax-depreciation packs and configure class assignments, regimes, classes, conventions and first-year rules. This is separate from sales-tax, VAT and nexus setup.",
       "tabsAria": "Fixed asset setup sections",
-      "tabs": { "overview": "Overview", "categories": "Asset categories", "regimes": "Tax regimes", "classes": "Tax classes", "firstYear": "First-year rules", "methods": "Methods", "books": "Book policies" },
+      "tabs": {
+        "overview": "Overview",
+        "categories": "Asset categories",
+        "regimes": "Tax regimes",
+        "classes": "Tax classes",
+        "firstYear": "First-year rules",
+        "methods": "Methods",
+        "books": "Book policies"
+      },
       "packsTitle": "Country depreciation packs",
       "packsDescription": "Installing a pack creates editable tenant configuration. Existing overrides are never replaced.",
       "recommended": "Company country",
@@ -1069,14 +1086,29 @@
       "assetCategory": "Asset category",
       "notAssigned": "Not assigned",
       "classCount": "{count, plural, one {# class} other {# classes}}",
-      "models": { "pool": "Class pool", "macrs": "Per-asset MACRS" },
+      "models": {
+        "pool": "Class pool",
+        "macrs": "Per-asset MACRS"
+      },
       "customizeTitle": "Customize",
       "customizeDescription": "Country packs are starting points; seeded values remain editable.",
       "links": {
-        "regimes": { "title": "Regimes", "description": "Country, calculation model and asset class attribute." },
-        "classes": { "title": "Classes and methods", "description": "Rates, recovery periods, methods and conventions." },
-        "firstYear": { "title": "First-year rules", "description": "Effective-dated acceleration and eligibility." },
-        "assignments": { "title": "Asset-category assignments", "description": "Assign categories to regime classes in Tax attributes." }
+        "regimes": {
+          "title": "Regimes",
+          "description": "Country, calculation model and asset class attribute."
+        },
+        "classes": {
+          "title": "Classes and methods",
+          "description": "Rates, recovery periods, methods and conventions."
+        },
+        "firstYear": {
+          "title": "First-year rules",
+          "description": "Effective-dated acceleration and eligibility."
+        },
+        "assignments": {
+          "title": "Asset-category assignments",
+          "description": "Assign categories to regime classes in Tax attributes."
+        }
       }
     },
     "taxOfficial": {
@@ -1149,7 +1181,8 @@
       "currency": "Currency",
       "revenue": "Revenus",
       "inventory": "Stocks",
-      "projects": "Projets"
+      "projects": "Projets",
+      "compliance": "Conformité"
     },
     "fxProvider": {
       "title": "Fournisseur de taux de change",
@@ -1645,6 +1678,21 @@
           "lifecycle": "Cycle de vie des taux",
           "application": "Application au grand livre"
         }
+      },
+      "compliance-classes": {
+        "title": "Catégories de contreparties",
+        "singular": "Catégorie de contrepartie",
+        "description": "Le type de contrepartie qu'est un fournisseur, et le contrôle de paiement qui en découle."
+      },
+      "compliance-requirements": {
+        "title": "Exigences de conformité",
+        "singular": "Exigence de conformité",
+        "description": "Une ligne par politique : ce qui doit être au dossier, les limites exigées et l'effet d'un manquement."
+      },
+      "information-return-box-rules": {
+        "title": "Cases des déclarations",
+        "singular": "Règle de case",
+        "description": "La case 1099/T4A à laquelle appartiennent les dépenses d'un compte. Le reste tombe dans la case par défaut du fournisseur."
       }
     },
     "fields": {
@@ -1653,7 +1701,7 @@
       "calculationModel": "Calculation model",
       "regime": "Regime",
       "classCode": "Class code",
-      "rate": "Rate",
+      "rate": "Taux",
       "method": "Method",
       "firstYearFraction": "First-year fraction",
       "allowRecapture": "Allow recapture",
@@ -1711,8 +1759,7 @@
       "costMultiplier": "Cost multiplier",
       "isBillableDefault": "Billable by default",
       "showOnFieldTicket": "Afficher sur les bons de régie",
-      "category": "Category",
-      "method": "Method",
+      "category": "Catégorie",
       "postsGl": "Comptabilise au grand livre",
       "bookId": "Livre",
       "categoryId": "Catégorie d’immobilisation",
@@ -1739,7 +1786,6 @@
       "fromCurrency": "Devise source",
       "toCurrency": "Devise cible",
       "rateType": "Type de taux",
-      "rate": "Taux",
       "source": "Source",
       "periodId": "Période comptable",
       "currentRate": "Taux courant",
@@ -1790,17 +1836,63 @@
       "customerId": "Client",
       "projectId": "Projet",
       "isDefault": "Par défaut",
-      "billMultiplier": "Multiplicateur de facturation"
+      "billMultiplier": "Multiplicateur de facturation",
+      "lienWaiverEnforcement": "Contrôle des renonciations",
+      "defaultLienWaiverType": "Formulaire par défaut",
+      "defaultInformationReturn": "Déclaration par défaut",
+      "classId": "S'applique à la catégorie",
+      "enforcement": "En cas de manquement",
+      "requiresExpiry": "Doit porter une échéance",
+      "graceDays": "Jours de grâce",
+      "expiryWarningDays": "Alerter avant échéance (jours)",
+      "minCoverageAmount": "Limite minimale par sinistre",
+      "minAggregateAmount": "Limite globale minimale",
+      "coverageCurrency": "Devise de la limite",
+      "requiresAdditionalInsured": "Assuré additionnel exigé",
+      "requiresWaiverOfSubrogation": "Renonciation à la subrogation exigée",
+      "requiresPrimaryNoncontributory": "Primaire et non contributive exigée",
+      "requiresVerification": "Vérification par une seconde personne exigée",
+      "formType": "Formulaire",
+      "box": "Case"
     },
     "fieldHelp": {
-      "gapless": "Sans rupture signifie que chaque numéro de la séquence doit être justifié, sans aucun numéro sauté. Activez cette option uniquement si vos obligations légales ou d’audit imposent une numérotation ininterrompue."
+      "gapless": "Sans rupture signifie que chaque numéro de la séquence doit être justifié, sans aucun numéro sauté. Activez cette option uniquement si vos obligations légales ou d’audit imposent une numérotation ininterrompue.",
+      "lienWaiverEnforcement": "Bloquer signifie qu'une facture de cette catégorie ne peut être payée sans renonciation signée qui la couvre.",
+      "defaultLienWaiverType": "Présélectionné lors de la création d'une renonciation pour ces contreparties.",
+      "defaultInformationReturn": "Utilisé lorsqu'un fournisseur de cette catégorie n'indique pas lui-même de formulaire.",
+      "complianceRequirementClass": "Laissez vide pour l'appliquer à toutes les contreparties suivies.",
+      "complianceEnforcement": "Bloquer le paiement retient l'argent ; bloquer la facture empêche jusqu'à son enregistrement.",
+      "requiresExpiry": "Activé pour l'assurance ; désactivé pour un W-9, qui n'expire pas.",
+      "graceDaysHint": "0",
+      "expiryWarningDaysHint": "30",
+      "minCoverageAmount": "Les attestations sous cette limite sont refusées. Les limites ne sont jamais converties entre devises.",
+      "coverageCurrency": "Obligatoire dès qu'une limite minimale est fixée — une limite est un montant et doit être comparable.",
+      "requiresVerification": "Celui qui enregistre une attestation ne peut jamais être celui qui la vérifie.",
+      "informationReturnBox": "Les cases sont légales. Ce que vous configurez, c'est quel compte alimente quelle case."
     },
     "options": {
-      "taxDepreciationModel": { "pool": "Class pool", "macrs": "Per-asset MACRS" },
-      "macrsSystem": { "gds": "GDS", "ads": "ADS" },
-      "macrsMethod": { "200db": "200% declining balance", "150db": "150% declining balance", "straightLine": "Straight line" },
-      "taxDepreciationConvention": { "halfYear": "Half-year", "midQuarter": "Mid-quarter", "midMonth": "Mid-month" },
-      "poolMethod": { "declining": "Declining balance", "straightLine": "Straight line" },
+      "taxDepreciationModel": {
+        "pool": "Class pool",
+        "macrs": "Per-asset MACRS"
+      },
+      "macrsSystem": {
+        "gds": "GDS",
+        "ads": "ADS"
+      },
+      "macrsMethod": {
+        "200db": "200% declining balance",
+        "150db": "150% declining balance",
+        "straightLine": "Straight line"
+      },
+      "taxDepreciationConvention": {
+        "halfYear": "Half-year",
+        "midQuarter": "Mid-quarter",
+        "midMonth": "Mid-month"
+      },
+      "poolMethod": {
+        "declining": "Declining balance",
+        "straightLine": "Straight line"
+      },
       "appliesTo": {
         "sales": "Sales",
         "purchases": "Purchases",
@@ -1908,6 +2000,58 @@
       "overheadRateKind": {
         "per_hour": "$/heure",
         "percent": "% de la main-d’œuvre"
+      },
+      "complianceCategory": {
+        "insurance": "Assurance",
+        "taxForm": "Formulaire fiscal",
+        "licence": "Licence",
+        "bond": "Cautionnement",
+        "safety": "Sécurité",
+        "other": "Autre"
+      },
+      "complianceEnforcement": {
+        "advisory": "Signaler seulement",
+        "warn": "Avertir au paiement",
+        "blockPayment": "Bloquer le paiement",
+        "blockBill": "Bloquer la facture"
+      },
+      "lienWaiverEnforcement": {
+        "none": "Non suivi",
+        "warn": "Avertir",
+        "block": "Bloquer le paiement"
+      },
+      "lienWaiverType": {
+        "conditionalProgress": "Conditionnelle — acompte",
+        "unconditionalProgress": "Inconditionnelle — acompte",
+        "conditionalFinal": "Conditionnelle — finale",
+        "unconditionalFinal": "Inconditionnelle — finale"
+      },
+      "informationReturnForm": {
+        "none": "Non déclarable",
+        "nec": "1099-NEC",
+        "misc": "1099-MISC",
+        "t4a": "T4A"
+      },
+      "informationReturnBox": {
+        "nec1": "NEC 1 — Rémunération de non-salariés",
+        "nec2": "NEC 2 — Ventes directes de 5 000 $ ou plus",
+        "nec4": "NEC 4 — Impôt fédéral retenu",
+        "misc1": "MISC 1 — Loyers",
+        "misc2": "MISC 2 — Redevances",
+        "misc3": "MISC 3 — Autres revenus",
+        "misc4": "MISC 4 — Impôt fédéral retenu",
+        "misc5": "MISC 5 — Produits de pêche",
+        "misc6": "MISC 6 — Paiements médicaux et de santé",
+        "misc8": "MISC 8 — Paiements de substitution",
+        "misc9": "MISC 9 — Indemnités d'assurance récolte",
+        "misc10": "MISC 10 — Produits bruts versés à un avocat",
+        "misc11": "MISC 11 — Poisson acheté pour revente",
+        "misc12": "MISC 12 — Reports au titre de l'article 409A",
+        "misc14": "MISC 14 — Parachutes dorés excédentaires",
+        "misc15": "MISC 15 — Rémunération différée non admissible",
+        "t4a020": "T4A 020 — Commissions de travail indépendant",
+        "t4a048": "T4A 048 — Honoraires de services",
+        "t4a022": "T4A 022 — Impôt sur le revenu retenu"
       }
     },
     "laborCosting": {
@@ -2238,10 +2382,21 @@
         "operations": "Opérations",
         "accounting": "Comptabilité",
         "platform": "Plateforme"
+      },
+      "impacts": {
+        "trackedVendors": "{count, plural, one {# sous-traitant suivi} other {# sous-traitants suivis}}",
+        "activeCertificates": "{count, plural, one {# attestation en cours} other {# attestations en cours}}",
+        "blockingCompliancePolicies": "{count, plural, one {# politique bloquant le paiement} other {# politiques bloquant le paiement}}",
+        "openLienWaivers": "{count, plural, one {# renonciation en attente de signature} other {# renonciations en attente de signature}}",
+        "draftInformationReturns": "{count, plural, one {# déclaration de renseignements en cours} other {# déclarations de renseignements en cours}}",
+        "unfiledInformationReturns": "{count, plural, one {# déclaration finalisée non déposée} other {# déclarations finalisées non déposées}}"
       }
     },
     "bankFeeds": {
       "navTitle": "Bank Feeds"
+    },
+    "paymentProviders": {
+      "navTitle": "Fournisseurs de paiement"
     }
   },
   "flows": {
@@ -2564,6 +2719,14 @@
     "subscriptionBilling": {
       "title": "Subscription Billing",
       "description": "Plans and subscriptions that auto-generate recurring invoices (SaaS / retainer)."
+    },
+    "onlinePayments": {
+      "title": "Paiements en ligne",
+      "description": "Liens de paiement hébergés sur les factures (Stripe / Adyen / prélèvement GoCardless), règles de surcharge et webhooks qui imputent automatiquement les encaissements."
+    },
+    "subcontractorCompliance": {
+      "title": "Conformité des sous-traitants",
+      "description": "Attestations d'assurance, renonciations au privilège et déclarations 1099-NEC/MISC et T4A, avec blocage des paiements lorsque la couverture d'un sous-traitant expire."
     }
   }
 }

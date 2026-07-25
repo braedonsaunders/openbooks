@@ -63,7 +63,11 @@
     "revenue": "Revenue Recognition",
     "inventory": "Inventory",
     "docs": "Documentation",
-    "field-tickets": "Field Tickets"
+    "field-tickets": "Field Tickets",
+    "compliance": "Compliance",
+    "compliance-vendors": "Subcontractors",
+    "lien-waivers": "Lien Waivers",
+    "information-returns": "Information Returns"
   },
   "groups": {
     "my-work": "My Work",
@@ -95,6 +99,7 @@
     "customize": "Customize",
     "automate": "Automate",
     "extend": "Extend",
-    "records": "Records"
+    "records": "Records",
+    "compliance": "Compliance"
   }
 }

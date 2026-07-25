@@ -68,6 +68,16 @@ export const PERMISSION_CATALOGUE = [
   // Projects & job costing
   "projects.read",
   "projects.manage",
+  // Subcontractor compliance — certificates of insurance, lien waivers, and
+  // year-end information returns. Deliberately four keys, because these are
+  // four different duties: recording evidence is not verifying it, granting an
+  // exception to a payment block is not either, and transmitting a statutory
+  // filing is its own authority.
+  "compliance.read",
+  "compliance.manage",
+  "compliance.verify",
+  "compliance.waive",
+  "compliance.file",
   // Fixed assets & depreciation
   "assets.read",
   "assets.manage",
@@ -255,6 +265,17 @@ export const PERMISSION_GROUPS: {
     ],
   },
   {
+    key: "compliance",
+    labelKey: "permissions.groups.compliance",
+    permissions: [
+      { key: "compliance.read", labelKey: permissionLabelKey("compliance.read") },
+      { key: "compliance.manage", labelKey: permissionLabelKey("compliance.manage") },
+      { key: "compliance.verify", labelKey: permissionLabelKey("compliance.verify") },
+      { key: "compliance.waive", labelKey: permissionLabelKey("compliance.waive") },
+      { key: "compliance.file", labelKey: permissionLabelKey("compliance.file") },
+    ],
+  },
+  {
     key: "assets",
     labelKey: "permissions.groups.assets",
     permissions: [
@@ -430,6 +451,11 @@ export const BUILT_IN_ROLES: Record<
       "items.manage",
       "projects.read",
       "projects.manage",
+      "compliance.read",
+      "compliance.manage",
+      "compliance.verify",
+      "compliance.waive",
+      "compliance.file",
       "assets.read",
       "assets.manage",
       "time.read",
@@ -488,6 +514,8 @@ export const BUILT_IN_ROLES: Record<
       "items.manage",
       "projects.read",
       "projects.manage",
+      "compliance.read",
+      "compliance.manage",
       "assets.read",
       "assets.manage",
       "time.read",
@@ -520,6 +548,9 @@ export const BUILT_IN_ROLES: Record<
       "budgets.approve",
       "insights.read",
       "records.read",
+      "compliance.read",
+      "compliance.verify",
+      "compliance.waive",
       "time.read",
       "time.approve",
       "assistant.use",
@@ -531,7 +562,7 @@ export const BUILT_IN_ROLES: Record<
   viewer: {
     name: "Viewer",
     description: "Read-only access to the ledger, subledgers, reports, and insights.",
-    permissions: ["gl.read", "close.read", "ap.read", "ar.read", "reports.read", "budgets.read", "insights.read", "records.read", "items.read", "assets.read", "time.read", "assistant.use", "documents.read", "data.export", "apps.use"],
+    permissions: ["gl.read", "close.read", "ap.read", "ar.read", "reports.read", "budgets.read", "insights.read", "records.read", "items.read", "assets.read", "time.read", "compliance.read", "assistant.use", "documents.read", "data.export", "apps.use"],
   },
   sales_manager: {
     name: "Sales Manager",

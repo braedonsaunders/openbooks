@@ -75,7 +75,46 @@ export const vendorRoles = pgTable("vendor_roles", {
   eftNotificationEmail: text("eft_notification_email"),
   currency: currencyCode("currency"),
   taxCodeId: uuid("tax_code_id"),
+  /**
+   * Reportable on a year-end information return (1099/T4A). THE switch for
+   * "do we file for this vendor"; `informationReturnForm` only decides which
+   * form, and the resolver requires both (see engine/src/information-returns.ts).
+   */
   is1099OrT4a: boolean("is_t4a").notNull().default(false),
+  /**
+   * Subcontractor-compliance classification (→ compliance_classes). NULL means
+   * this vendor is not subject to compliance tracking at all — there is no
+   * separate "tracked" flag to fall out of sync with.
+   */
+  complianceClassId: uuid("compliance_class_id"),
+  /** Which information return to file; null = inherit the compliance class default. */
+  informationReturnForm: text("information_return_form", {
+    enum: ["none", "1099-NEC", "1099-MISC", "T4A"],
+  }),
+  /** Default box for this vendor's spend; null = the form's default box. */
+  informationReturnBox: text("information_return_box"),
+  /** W-9 / TD1 federal tax classification — drives corporation exclusions. */
+  taxClassification: text("tax_classification", {
+    enum: [
+      "individual",
+      "sole_proprietor",
+      "partnership",
+      "c_corp",
+      "s_corp",
+      "llc",
+      "trust_estate",
+      "government",
+      "nonprofit",
+      "other",
+    ],
+  }),
+  /** Taxpayer identification number, sealed at rest (engine/src/secrets.ts). */
+  tinEncrypted: text("tin_encrypted"),
+  /** Last four digits, plaintext, for display and matching. Never the full TIN. */
+  tinLast4: text("tin_last4"),
+  tinType: text("tin_type", { enum: ["ssn", "ein", "itin", "atin", "sin", "bn", "unknown"] }),
+  /** Under backup withholding (missing/incorrect TIN, IRS B-notice). */
+  backupWithholding: boolean("backup_withholding").notNull().default(false),
   isActive: boolean("is_active").notNull().default(true),
   custom: jsonb("custom").notNull().default({}),
   ...auditColumns,

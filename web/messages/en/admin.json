@@ -759,7 +759,8 @@
       "admin": "Administration",
       "assets": "Fixed assets & depreciation",
       "data": "Import & Export",
-      "crm": "Customer relationship management"
+      "crm": "Customer relationship management",
+      "compliance": "Compliance"
     },
     "gl_read": "View journals and balances",
     "gl_manage": "Manage the chart of accounts",
@@ -843,7 +844,12 @@
     "crm_forecasts_read": "View sales forecasts",
     "crm_forecasts_manage": "Create forecast snapshots",
     "crm_forecasts_override": "Override team forecasts",
-    "crm_setup_manage": "Manage CRM setup"
+    "crm_setup_manage": "Manage CRM setup",
+    "compliance_read": "View subcontractor compliance",
+    "compliance_manage": "Record certificates, waivers and filings",
+    "compliance_verify": "Verify certificates",
+    "compliance_waive": "Grant compliance exceptions",
+    "compliance_file": "Finalize and file information returns"
   },
   "ai": {
     "metaTitle": "AI settings",
@@ -1112,14 +1118,25 @@
       "title": "Book Depreciation",
       "description": "Configure reusable depreciation methods and the method, life and convention each accounting book applies to an asset category.",
       "tabsAria": "Book depreciation setup sections",
-      "tabs": { "methods": "Methods", "books": "Book policies" }
+      "tabs": {
+        "methods": "Methods",
+        "books": "Book policies"
+      }
     },
     "taxDepreciationSetup": {
       "navTitle": "Tax Depreciation",
       "title": "Tax Depreciation",
       "description": "Install country tax-depreciation packs and configure class assignments, regimes, classes, conventions and first-year rules. This is separate from sales-tax, VAT and nexus setup.",
       "tabsAria": "Fixed asset setup sections",
-      "tabs": { "overview": "Overview", "categories": "Asset categories", "regimes": "Tax regimes", "classes": "Tax classes", "firstYear": "First-year rules", "methods": "Methods", "books": "Book policies" },
+      "tabs": {
+        "overview": "Overview",
+        "categories": "Asset categories",
+        "regimes": "Tax regimes",
+        "classes": "Tax classes",
+        "firstYear": "First-year rules",
+        "methods": "Methods",
+        "books": "Book policies"
+      },
       "packsTitle": "Country depreciation packs",
       "packsDescription": "Installing a pack creates editable tenant configuration. Existing overrides are never replaced.",
       "recommended": "Company country",
@@ -1134,14 +1151,29 @@
       "assetCategory": "Asset category",
       "notAssigned": "Not assigned",
       "classCount": "{count, plural, one {# class} other {# classes}}",
-      "models": { "pool": "Class pool", "macrs": "Per-asset MACRS" },
+      "models": {
+        "pool": "Class pool",
+        "macrs": "Per-asset MACRS"
+      },
       "customizeTitle": "Customize",
       "customizeDescription": "Country packs are starting points. Add custom regimes and classes or override any seeded value.",
       "links": {
-        "regimes": { "title": "Regimes", "description": "Country, calculation model and asset class attribute." },
-        "classes": { "title": "Classes and methods", "description": "Rates, recovery periods, MACRS systems, methods and conventions." },
-        "firstYear": { "title": "First-year rules", "description": "Effective-dated acceleration and first-year eligibility." },
-        "assignments": { "title": "Asset-category assignments", "description": "Assign each asset category to a regime class in Tax attributes." }
+        "regimes": {
+          "title": "Regimes",
+          "description": "Country, calculation model and asset class attribute."
+        },
+        "classes": {
+          "title": "Classes and methods",
+          "description": "Rates, recovery periods, MACRS systems, methods and conventions."
+        },
+        "firstYear": {
+          "title": "First-year rules",
+          "description": "Effective-dated acceleration and first-year eligibility."
+        },
+        "assignments": {
+          "title": "Asset-category assignments",
+          "description": "Assign each asset category to a regime class in Tax attributes."
+        }
       }
     },
     "taxBoxes": {
@@ -1214,7 +1246,8 @@
       "currency": "Currency",
       "revenue": "Revenue",
       "inventory": "Inventory",
-      "projects": "Projects"
+      "projects": "Projects",
+      "compliance": "Compliance"
     },
     "fxProvider": {
       "title": "Exchange rate provider",
@@ -1751,6 +1784,21 @@
           "lifecycle": "Rate lifecycle",
           "application": "Ledger application"
         }
+      },
+      "compliance-classes": {
+        "title": "Counterparty classes",
+        "singular": "Counterparty class",
+        "description": "What kind of counterparty a vendor is, and what payment control that carries."
+      },
+      "compliance-requirements": {
+        "title": "Compliance requirements",
+        "singular": "Compliance requirement",
+        "description": "One row per policy: what must be on file, the limits it must show, and what a lapse does."
+      },
+      "information-return-box-rules": {
+        "title": "Information return boxes",
+        "singular": "Box rule",
+        "description": "Which 1099/T4A box an account’s spend belongs in. Anything unmapped falls to the vendor’s default box."
       }
     },
     "fields": {
@@ -1920,10 +1968,39 @@
       "customerId": "Customer",
       "projectId": "Project",
       "isDefault": "Default",
-      "billMultiplier": "Bill multiplier"
+      "billMultiplier": "Bill multiplier",
+      "lienWaiverEnforcement": "Lien waiver control",
+      "defaultLienWaiverType": "Default waiver form",
+      "defaultInformationReturn": "Default information return",
+      "classId": "Applies to class",
+      "enforcement": "On failure",
+      "requiresExpiry": "Must carry an expiry",
+      "graceDays": "Grace days",
+      "expiryWarningDays": "Warn before expiry (days)",
+      "minCoverageAmount": "Minimum per-occurrence limit",
+      "minAggregateAmount": "Minimum aggregate limit",
+      "coverageCurrency": "Limit currency",
+      "requiresAdditionalInsured": "Requires additional insured",
+      "requiresWaiverOfSubrogation": "Requires waiver of subrogation",
+      "requiresPrimaryNoncontributory": "Requires primary and non-contributory",
+      "requiresVerification": "Requires second-person verification",
+      "formType": "Form",
+      "box": "Box"
     },
     "fieldHelp": {
-      "gapless": "Gapless means every number in the sequence must be accounted for, with no skipped numbers. Enable it only when your legal or audit requirements require uninterrupted numbering."
+      "gapless": "Gapless means every number in the sequence must be accounted for, with no skipped numbers. Enable it only when your legal or audit requirements require uninterrupted numbering.",
+      "lienWaiverEnforcement": "Block means a bill for this class cannot be paid until a signed waiver covers it.",
+      "defaultLienWaiverType": "Pre-selected when you create a waiver for one of these counterparties.",
+      "defaultInformationReturn": "Used when a vendor of this class does not name a form itself.",
+      "complianceRequirementClass": "Leave empty to apply to every tracked counterparty.",
+      "complianceEnforcement": "Block payment stops the money; block bill stops the bill being recorded at all.",
+      "requiresExpiry": "On for insurance; off for a W-9, which does not expire.",
+      "graceDaysHint": "0",
+      "expiryWarningDaysHint": "30",
+      "minCoverageAmount": "Certificates below this limit are refused. Limits are never converted between currencies.",
+      "coverageCurrency": "Required once a minimum limit is set — a limit is a money amount and must be comparable.",
+      "requiresVerification": "Whoever records a certificate can never be the one who verifies it.",
+      "informationReturnBox": "Boxes are statutory. What you configure is which of your accounts feeds which box."
     },
     "options": {
       "sourceKind": {
@@ -1969,10 +2046,24 @@
         "declining": "Declining balance",
         "straightLine": "Straight line"
       },
-      "taxDepreciationModel": { "pool": "Class pool", "macrs": "Per-asset MACRS" },
-      "macrsSystem": { "gds": "GDS", "ads": "ADS" },
-      "macrsMethod": { "200db": "200% declining balance", "150db": "150% declining balance", "straightLine": "Straight line" },
-      "taxDepreciationConvention": { "halfYear": "Half-year", "midQuarter": "Mid-quarter", "midMonth": "Mid-month" },
+      "taxDepreciationModel": {
+        "pool": "Class pool",
+        "macrs": "Per-asset MACRS"
+      },
+      "macrsSystem": {
+        "gds": "GDS",
+        "ads": "ADS"
+      },
+      "macrsMethod": {
+        "200db": "200% declining balance",
+        "150db": "150% declining balance",
+        "straightLine": "Straight line"
+      },
+      "taxDepreciationConvention": {
+        "halfYear": "Half-year",
+        "midQuarter": "Mid-quarter",
+        "midMonth": "Mid-month"
+      },
       "rateDateBasis": {
         "usageDate": "Usage date",
         "projectStart": "Project start date"
@@ -2079,6 +2170,58 @@
       "overheadRateKind": {
         "per_hour": "$/hour",
         "percent": "% of labor"
+      },
+      "complianceCategory": {
+        "insurance": "Insurance",
+        "taxForm": "Tax form",
+        "licence": "Licence",
+        "bond": "Bond",
+        "safety": "Safety",
+        "other": "Other"
+      },
+      "complianceEnforcement": {
+        "advisory": "Report only",
+        "warn": "Warn on payment",
+        "blockPayment": "Block payment",
+        "blockBill": "Block the bill"
+      },
+      "lienWaiverEnforcement": {
+        "none": "Not tracked",
+        "warn": "Warn",
+        "block": "Block payment"
+      },
+      "lienWaiverType": {
+        "conditionalProgress": "Conditional — progress",
+        "unconditionalProgress": "Unconditional — progress",
+        "conditionalFinal": "Conditional — final",
+        "unconditionalFinal": "Unconditional — final"
+      },
+      "informationReturnForm": {
+        "none": "Not reportable",
+        "nec": "1099-NEC",
+        "misc": "1099-MISC",
+        "t4a": "T4A"
+      },
+      "informationReturnBox": {
+        "nec1": "NEC 1 — Nonemployee compensation",
+        "nec2": "NEC 2 — Direct sales of $5,000 or more",
+        "nec4": "NEC 4 — Federal income tax withheld",
+        "misc1": "MISC 1 — Rents",
+        "misc2": "MISC 2 — Royalties",
+        "misc3": "MISC 3 — Other income",
+        "misc4": "MISC 4 — Federal income tax withheld",
+        "misc5": "MISC 5 — Fishing boat proceeds",
+        "misc6": "MISC 6 — Medical and health care payments",
+        "misc8": "MISC 8 — Substitute payments",
+        "misc9": "MISC 9 — Crop insurance proceeds",
+        "misc10": "MISC 10 — Gross proceeds paid to an attorney",
+        "misc11": "MISC 11 — Fish purchased for resale",
+        "misc12": "MISC 12 — Section 409A deferrals",
+        "misc14": "MISC 14 — Excess golden parachute payments",
+        "misc15": "MISC 15 — Nonqualified deferred compensation",
+        "t4a020": "T4A 020 — Self-employed commissions",
+        "t4a048": "T4A 048 — Fees for services",
+        "t4a022": "T4A 022 — Income tax deducted"
       }
     },
     "laborCosting": {
@@ -2428,7 +2571,13 @@
         "openProjectTimeEntries": "{count, plural, one {# unapproved project time entry} other {# unapproved project time entries}}",
         "openChangeOrders": "{count, plural, one {# draft change order} other {# draft change orders}}",
         "revenueSchedules": "{count, plural, one {# deferred-revenue schedule} other {# deferred-revenue schedules}}",
-        "controlCheckUnavailable": "an integrity check that could not be completed"
+        "controlCheckUnavailable": "an integrity check that could not be completed",
+        "trackedVendors": "{count, plural, one {# tracked subcontractor} other {# tracked subcontractors}}",
+        "activeCertificates": "{count, plural, one {# current certificate} other {# current certificates}}",
+        "blockingCompliancePolicies": "{count, plural, one {# policy that blocks payment} other {# policies that block payment}}",
+        "openLienWaivers": "{count, plural, one {# lien waiver awaiting signature} other {# lien waivers awaiting signature}}",
+        "draftInformationReturns": "{count, plural, one {# information return in progress} other {# information returns in progress}}",
+        "unfiledInformationReturns": "{count, plural, one {# finalized information return that has not been filed} other {# finalized information returns that have not been filed}}"
       },
       "errors": {
         "blocked": "This feature can't be turned off — its data is load-bearing for the ledger."
@@ -2445,6 +2594,9 @@
     },
     "bankFeeds": {
       "navTitle": "Bank Feeds"
+    },
+    "paymentProviders": {
+      "navTitle": "Payment Providers"
     },
     "wizard": {
       "skip": "Skip for now",
@@ -2851,8 +3003,8 @@
       "description": "Signed crew timesheets for T&M work: the foreman records the whole crew's hours plus equipment and materials, the customer signs, and invoices are built from the signed tickets."
     },
     "projectScheduling": {
-      "title": "Project scheduling",
-      "description": "Critical-path scheduling for jobs: a drag-editable Gantt over the work breakdown, typed dependencies, working calendars, deadlines and constraints, baselines with variance, and resource levelling."
+      "title": "Project Scheduling",
+      "description": "Gantt charts, critical path, and resource leveling for project schedules."
     },
     "inventory": {
       "title": "Inventory",
@@ -2906,9 +3058,13 @@
       "title": "Subscription Billing",
       "description": "Plans and subscriptions that auto-generate recurring invoices (SaaS / retainer)."
     },
-    "projectScheduling": {
-      "title": "Project Scheduling",
-      "description": "Gantt charts, critical path, and resource leveling for project schedules."
+    "onlinePayments": {
+      "title": "Online Payments",
+      "description": "Hosted payment links on invoices (Stripe / Adyen / GoCardless bank debit), surcharge rules, and webhooks that auto-apply receipts to open items."
+    },
+    "subcontractorCompliance": {
+      "title": "Subcontractor compliance",
+      "description": "Certificates of insurance, lien waivers, and 1099-NEC/MISC and T4A information returns, with payment holds when a subcontractor's coverage lapses."
     }
   }
 }

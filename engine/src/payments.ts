@@ -6,6 +6,11 @@ import { assertNotSandbox } from "./sandbox/guard.ts";
 import { runTriggerScripts, type ScriptContext } from "./scripting.ts";
 import { emitStatusChange, runRecordFlows } from "./flows/run.ts";
 import { sealSecret, unsealJson, unsealSecret } from "./secrets.ts";
+import {
+  evaluateBillsForRelease,
+  recordReleaseCheck,
+  type BillReleaseDecision,
+} from "./compliance.ts";
 
 /**
  * Payments: vendor payments and customer receipts with open-item application,
@@ -260,6 +265,10 @@ export async function updateDraftPayment(
     discountAmount?: string;
     discountAccountId?: string | null;
     controlAccountId?: string | null;
+    /** Payment-acceptance surcharge: charged on top of the applications and
+     *  credited to a fee-income account (customer payments only). */
+    feeAmount?: string;
+    feeIncomeAccountId?: string | null;
   },
   userId: string,
 ): Promise<void> {
@@ -274,21 +283,29 @@ export async function updateDraftPayment(
     discountAmount?: string;
     discountAccountId?: string;
     controlAccountId?: string;
+    feeAmount?: string;
+    feeIncomeAccountId?: string;
   };
   const partyId = patch.partyId !== undefined ? patch.partyId : doc.partyId;
   const bankAccountId =
     patch.bankAccountId !== undefined ? patch.bankAccountId : (custom.bankAccountId ?? null);
   const allocations = patch.allocations ?? custom.allocations ?? [];
-  const creditAllocations = patch.creditAllocations ?? custom.creditAllocations ?? [];
+  const creditAllocations = custom.creditAllocations ?? [];
   const discountAmount = patch.discountAmount ?? custom.discountAmount ?? "0";
   const discountAccountId = patch.discountAccountId !== undefined ? patch.discountAccountId : (custom.discountAccountId ?? null);
   const controlAccountId = patch.controlAccountId !== undefined ? patch.controlAccountId : (custom.controlAccountId ?? null);
+  const feeAmount = patch.feeAmount ?? custom.feeAmount ?? "0";
+  const feeIncomeAccountId = patch.feeIncomeAccountId !== undefined ? patch.feeIncomeAccountId : (custom.feeIncomeAccountId ?? null);
 
   validateAllocationInputs(allocations);
   validateAllocationInputs(creditAllocations.map((a) => sameCurrencyAllocation(`${a.fromLineId}:${a.toLineId}`, a.amount)));
   const discountUnits = toUnits(discountAmount);
   if (discountUnits < 0n) throw new PaymentError("discount amount cannot be negative");
   if (discountUnits > 0n && !discountAccountId) throw new PaymentError("select a discount account before applying a discount");
+  const feeUnits = toUnits(feeAmount);
+  if (feeUnits < 0n) throw new PaymentError("fee amount cannot be negative");
+  if (feeUnits > 0n && doc.kind !== "customer_payment") throw new PaymentError("fees only apply to customer receipts");
+  if (feeUnits > 0n && !feeIncomeAccountId) throw new PaymentError("a fee income account is required for a surcharge");
 
   if (bankAccountId) {
     const bank = (await db.execute(sql`
@@ -298,8 +315,8 @@ export async function updateDraftPayment(
     `)) as unknown as { rows: { id: string }[] };
     if (!bank.rows[0]) throw new PaymentError("bank account must be an active bank-type account");
   }
-  if (discountAccountId || controlAccountId) {
-    const refs = [discountAccountId, controlAccountId].filter(Boolean) as string[];
+  if (discountAccountId || controlAccountId || feeIncomeAccountId) {
+    const refs = [discountAccountId, controlAccountId, feeIncomeAccountId].filter(Boolean) as string[];
     const validRefs = (await db.execute(sql`
       select id from accounts where org_id = ${doc.orgId} and id in ${refs} and is_active and not is_summary
     `)) as unknown as { rows: { id: string }[] };
@@ -331,7 +348,10 @@ export async function updateDraftPayment(
 
   const grossApplied = sum(allocations.map((a) => a.sourceTransactionAmount));
   if (cmp(discountAmount, grossApplied) > 0) throw new PaymentError("discount cannot exceed the payment applications");
-  const total = fromUnits(toUnits(grossApplied) - discountUnits);
+  // Collected = applications − discount + surcharge fee; the bank line carries
+  // the full collected amount, AR settles the applications, fee income clears
+  // the surcharge leg (see the customer_payment posting rule).
+  const total = fromUnits(toUnits(grossApplied) - discountUnits + feeUnits);
 
   await db.transaction(async (tx) => {
     await tx.execute(sql`delete from document_lines where document_id = ${id}`);
@@ -353,7 +373,7 @@ export async function updateDraftPayment(
         document_date = coalesce(${patch.documentDate ?? null}, document_date),
         reference_number = ${patch.referenceNumber !== undefined ? patch.referenceNumber : sql`reference_number`},
         memo = ${patch.memo !== undefined ? patch.memo : sql`memo`},
-        custom = ${JSON.stringify({ ...custom, bankAccountId, allocations, creditAllocations, discountAmount, discountAccountId, controlAccountId })}::jsonb,
+        custom = ${JSON.stringify({ ...custom, bankAccountId, allocations, creditAllocations, discountAmount, discountAccountId, controlAccountId, feeAmount, feeIncomeAccountId })}::jsonb,
         subtotal = ${total}, tax_total = '0', total = ${total},
         updated_at = now(), updated_by = ${userId}
       where id = ${id}
@@ -695,8 +715,11 @@ export async function postPaymentWithApplications(
 
     const totalAlloc = sum(allocs.map((a) => a.sourceTransactionAmount));
     const discountAmount = custom.discountAmount ?? "0";
-    if (cmp(totalAlloc, fromUnits(toUnits(doc.total) + toUnits(discountAmount))) !== 0) {
-      throw new PaymentError(`cash ${doc.total} plus discount ${discountAmount} must equal applications ${totalAlloc}`);
+    const feeAmount = (custom as { feeAmount?: string }).feeAmount ?? "0";
+    // Applications settle the invoice portion: cash + early-payment discount
+    // (vendor side) − acceptance surcharge fee (customer side) = applications.
+    if (cmp(totalAlloc, fromUnits(toUnits(doc.total) + toUnits(discountAmount) - toUnits(feeAmount))) !== 0) {
+      throw new PaymentError(`cash ${doc.total} plus discount ${discountAmount} less fee ${feeAmount} must equal applications ${totalAlloc}`);
     }
 
     const deps = await paymentControlDeps(doc.orgId);
@@ -1176,7 +1199,7 @@ export async function createPaymentRun(opts: {
   // Selected bills → their open AP lines with current open balances.
   const bills = (await db.execute(sql`
     select d.id as document_id, d.document_number, d.kind as document_kind, d.document_date, d.party_id, p.display_name as vendor,
-           d.currency, d.fx_rate, d.subsidiary_id, jl.account_id as control_account_id,
+           d.project_id, d.currency, d.fx_rate, d.subsidiary_id, jl.account_id as control_account_id,
            jl.id as open_line_id, abs(jl.amount) - coalesce(ap.applied, 0) as open_base,
            round((abs(jl.amount) - coalesce(ap.applied, 0)) / d.fx_rate, 4) as open,
            pt.discount_days, pt.discount_percent
@@ -1196,7 +1219,7 @@ export async function createPaymentRun(opts: {
        and d.currency = ${profile.currency}
        and (${profile.subsidiary_id}::uuid is null or d.subsidiary_id = ${profile.subsidiary_id})
   `)) as unknown as {
-    rows: { document_id: string; document_number: string; document_kind: string; document_date: string; party_id: string; vendor: string; currency: string; fx_rate: string; subsidiary_id: string | null; control_account_id: string; open_line_id: string; open_base: string; open: string; discount_days: number | null; discount_percent: string | null }[];
+    rows: { document_id: string; document_number: string; document_kind: string; document_date: string; party_id: string; vendor: string; project_id: string | null; currency: string; fx_rate: string; subsidiary_id: string | null; control_account_id: string; open_line_id: string; open_base: string; open: string; discount_days: number | null; discount_percent: string | null }[];
   };
 
   const found = new Set(bills.rows.map((b) => b.document_id));
@@ -1206,6 +1229,47 @@ export async function createPaymentRun(opts: {
   }
   const payable = bills.rows.filter((b) => cmp(b.open, "0") > 0);
   if (payable.length === 0) throw new PaymentError("all selected bills are already fully paid");
+
+  // --- subcontractor compliance -------------------------------------------
+  // A bill whose vendor fails a blocking requirement (lapsed insurance, missing
+  // lien waiver) never enters the run. Refusing the whole selection is
+  // deliberate: silently dropping bills would leave the operator believing a
+  // subcontractor had been paid. Every evaluated decision is frozen into
+  // compliance_release_checks whether it cleared or not.
+  const releaseDecisions = await evaluateBillsForRelease({
+    orgId: opts.orgId,
+    asOf: opts.scheduledFor ?? undefined,
+    bills: payable.map((b) => ({
+      documentId: b.document_id,
+      documentNumber: b.document_number,
+      partyId: b.party_id,
+      vendorName: b.vendor,
+      projectId: b.project_id,
+      documentDate: b.document_date,
+      amount: b.open,
+      currency: b.currency,
+    })),
+  });
+  for (const decision of releaseDecisions) {
+    if (!decision.compliance.tracked && decision.reasons.length === 0) continue;
+    await recordReleaseCheck({
+      orgId: opts.orgId,
+      partyId: decision.partyId,
+      documentId: decision.documentId,
+      stage: "run_created",
+      decision: decision.decision,
+      snapshot: { compliance: decision.compliance, lienWaiver: decision.lienWaiver, reasons: decision.reasons },
+      checkedBy: opts.createdBy,
+    });
+  }
+  const blockedBills = releaseDecisions.filter((d) => d.decision === "blocked");
+  if (blockedBills.length > 0) {
+    throw new PaymentError(
+      `subcontractor compliance blocks payment: ${blockedBills
+        .map((d) => `${d.documentNumber} (${d.vendorName}) — ${d.reasons.join("; ")}`)
+        .join(" | ")}`,
+    );
+  }
 
   const byVendor = new Map<string, typeof payable>();
   for (const b of payable) {
@@ -1475,11 +1539,69 @@ export interface RunBlocker {
   instructionId: string;
   payee: string;
   reason: string;
+  /** 'bank' = payee bank details; 'compliance' = subcontractor compliance. */
+  source?: "bank" | "compliance";
+}
+
+/**
+ * Re-evaluate subcontractor compliance for every bill still in a run.
+ *
+ * A run created on Monday can be released on Friday, by which time a
+ * certificate may have lapsed. The control therefore runs again at readiness
+ * and at posting — a release is never authorised by a stale evaluation.
+ */
+export async function paymentRunComplianceDecisions(
+  runId: string,
+  orgId: string,
+): Promise<Array<BillReleaseDecision & { instructionId: string; payee: string }>> {
+  const rows = (await db.execute(sql`
+    select i.id as instruction_id, i.payee_party_id, p.display_name as payee,
+           d.id as document_id, d.document_number, d.project_id, d.document_date,
+           ri.payment_amount, ri.currency
+      from payment_run_items ri
+      join payment_instructions i on i.id = ri.payment_instruction_id
+      join documents d on d.id = ri.source_document_id
+      join parties p on p.id = i.payee_party_id
+     where ri.payment_run_id = ${runId} and ri.org_id = ${orgId}
+       and i.status <> 'cancelled' and ri.kind <> 'credit'
+  `)) as unknown as {
+    rows: {
+      instruction_id: string;
+      payee_party_id: string;
+      payee: string;
+      document_id: string;
+      document_number: string;
+      project_id: string | null;
+      document_date: string;
+      payment_amount: string;
+      currency: string;
+    }[];
+  };
+  if (rows.rows.length === 0) return [];
+  const decisions = await evaluateBillsForRelease({
+    orgId,
+    bills: rows.rows.map((r) => ({
+      documentId: r.document_id,
+      documentNumber: r.document_number,
+      partyId: r.payee_party_id,
+      vendorName: r.payee,
+      projectId: r.project_id,
+      documentDate: r.document_date,
+      amount: r.payment_amount,
+      currency: r.currency,
+    })),
+  });
+  return decisions.map((d, i) => ({
+    ...d,
+    instructionId: rows.rows[i]!.instruction_id,
+    payee: rows.rows[i]!.payee,
+  }));
 }
 
 /**
  * Everything the run detail view and the file export need to agree on:
- * EFT settings state and per-instruction bank-detail blockers.
+ * EFT settings state, per-instruction bank-detail blockers, and subcontractor
+ * compliance blockers.
  */
 export async function paymentRunReadiness(runId: string, orgId: string): Promise<{
   eft: EftSettingsResult;
@@ -1560,6 +1682,32 @@ export async function paymentRunReadiness(runId: string, orgId: string): Promise
       blockers.push({ instructionId: r.id, payee: r.payee, reason: `CPA-005 CAD file cannot carry ${r.currency}` });
     }
   }
+  for (const blocker of blockers) blocker.source = "bank";
+
+  // Compliance is re-evaluated here rather than trusted from run creation, and
+  // the outcome is frozen so the run's readiness state is evidenced, not just
+  // displayed.
+  const compliance = await paymentRunComplianceDecisions(runId, orgId);
+  for (const decision of compliance) {
+    if (decision.decision === "cleared") continue;
+    await recordReleaseCheck({
+      orgId,
+      partyId: decision.partyId,
+      documentId: decision.documentId,
+      paymentRunId: runId,
+      paymentInstructionId: decision.instructionId,
+      stage: "readiness",
+      decision: decision.decision,
+      snapshot: { compliance: decision.compliance, lienWaiver: decision.lienWaiver, reasons: decision.reasons },
+    });
+    if (decision.decision !== "blocked") continue;
+    blockers.push({
+      instructionId: decision.instructionId,
+      payee: decision.payee,
+      reason: `${decision.documentNumber}: ${decision.reasons.join("; ")}`,
+      source: "compliance",
+    });
+  }
   return { eft, blockers };
 }
 
@@ -1601,11 +1749,45 @@ export async function postPaymentRun(
     }[];
   };
 
+  // Final compliance gate. Posting is the irreversible step, so the control
+  // runs once more against today's evidence and blocks the instruction rather
+  // than the whole run — a lapsed certificate on one subcontractor must not
+  // strand everyone else's money.
+  const complianceByInstruction = new Map<string, (BillReleaseDecision & { instructionId: string })[]>();
+  for (const decision of await paymentRunComplianceDecisions(runId, orgId)) {
+    const list = complianceByInstruction.get(decision.instructionId) ?? [];
+    list.push(decision);
+    complianceByInstruction.set(decision.instructionId, list);
+  }
+
   let posted = 0;
   const failures: { payee: string; error: string }[] = [];
   for (const ins of instructions.rows) {
     try {
       if (!ins.payment_document_id) throw new PaymentError("instruction has no payment document");
+      const decisions = complianceByInstruction.get(ins.id) ?? [];
+      for (const decision of decisions) {
+        if (decision.decision === "cleared") continue;
+        await recordReleaseCheck({
+          orgId,
+          partyId: decision.partyId,
+          documentId: decision.documentId,
+          paymentRunId: runId,
+          paymentInstructionId: ins.id,
+          stage: "run_posted",
+          decision: decision.decision,
+          snapshot: { compliance: decision.compliance, lienWaiver: decision.lienWaiver, reasons: decision.reasons },
+          checkedBy: userId,
+        });
+      }
+      const blocked = decisions.filter((d) => d.decision === "blocked");
+      if (blocked.length > 0) {
+        throw new PaymentError(
+          `subcontractor compliance blocks release: ${blocked
+            .map((d) => `${d.documentNumber} — ${d.reasons.join("; ")}`)
+            .join(" | ")}`,
+        );
+      }
       // Already posted individually from its own flyout — just mark it sent.
       if (ins.document_status !== "posted") {
         await postPaymentWithApplications(ins.payment_document_id, undefined, userId);
