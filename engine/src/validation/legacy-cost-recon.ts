@@ -17,7 +17,7 @@
  *     -Q "select JobID, TotalJobCost, TotalJobPrice, InvoicedToDate from job_costbilled"
  *   → /tmp/golden-cost.json  [{ job, cost, price, invoiced }]
  *
- * Usage: npx tsx src/validation/rassaun-cost-recon.ts [--limit=N]
+ * Usage: npx tsx src/validation/legacy-cost-recon.ts [--limit=N]
  */
 import { readFileSync, writeFileSync, existsSync } from "node:fs";
 import { sql } from "drizzle-orm";

@@ -4,17 +4,17 @@
  * For each selected job: delete the migrated invoices through the real product
  * delete path (which releases billing provenance), then drive the real project-
  * billing engine to REBUILD an invoice from the job's cost data, and reconcile the
- * result against the NetSuite golden totals.
+ * result against the source system's golden totals.
  *
- * The golden source is NetSuite (cached to /tmp/golden-invoices.json by ns.ts) —
+ * The golden source is the legacy system (cached to /tmp/golden-invoices.json by the connector golden-data fetcher) —
  * never the OpenBooks import, which is what's under test.
  *
  * Comparison unit is the JOB TOTAL: the original job was billed across N invoices
  * with per-run timesheet/date selections, so replaying its whole unbilled universe
  * yields one invoice whose subtotal must equal the sum of the job's golden invoices.
  *
- * Usage (read-only plan):   npx tsx --conditions=react-server src/validation/rassaun-replay.ts
- *        (destructive run): npx tsx --conditions=react-server src/validation/rassaun-replay.ts --apply [--limit=N]
+ * Usage (read-only plan):   npx tsx --conditions=react-server src/validation/legacy-replay.ts
+ *        (destructive run): npx tsx --conditions=react-server src/validation/legacy-replay.ts --apply [--limit=N]
  * Requires: the sandbox org (never prod — asserted), VPN access to the DB.
  */
 import { randomUUID } from "node:crypto";
@@ -58,7 +58,7 @@ interface JobResult {
   projectId: string | null;
   goldenCount: number;
   goldenTotal: number;
-  /** Golden PRE-TAX total (NetSuite item-line net) — what the engine rebuilds. */
+  /** Golden PRE-TAX total (the source system's item-line net) — what the engine rebuilds. */
   goldenNet: number;
   /** Invoices found in the sandbox before the replay + their total. */
   existingCount: number;
@@ -111,9 +111,9 @@ async function replayJob(job: string, golden: Golden[], actor: string, billingTy
   };
 
   // Resolve the project through the job's own invoices: document_number is the
-  // NetSuite transaction id, and its LINES carry the project. Matching on
+  // the source system's transaction id, and its LINES carry the project. Matching on
   // projects.code is unreliable — the import created a duplicate project per job
-  // (one coded with the NetSuite internal id, empty; one coded with the job name,
+  // (one coded with the the source system internal id, empty; one coded with the job name,
   // holding the data), so the code lookup can land on the empty shell.
   const nsIds = golden.map((g) => String((g as { id?: string }).id ?? "")).filter(Boolean);
   let projectId: string | null = null;
@@ -129,7 +129,7 @@ async function replayJob(job: string, golden: Golden[], actor: string, billingTy
   }
   if (!projectId) {
     // Fallback (and the only option once a job's invoices have been replayed away):
-    // the import made a duplicate project per job — one coded with the NetSuite id
+    // the import made a duplicate project per job — one coded with the the source system id
     // and empty, one coded with the job name holding the data. Take the twin
     // carrying the most cost, never the empty shell.
     const p = (await retry(() => db.execute(sql`
@@ -172,7 +172,7 @@ async function replayJob(job: string, golden: Golden[], actor: string, billingTy
                select 1 from documents d join journal_lines jl on jl.entry_id = d.posted_entry_id
                 where d.id = ${inv.id} and (jl.id = a.to_line_id or jl.id = a.from_line_id))`);
       }));
-      await retry(() => deleteDocument(inv.id, actor, { source: "rassaun-replay", reason: "invoice replay validation" }));
+      await retry(() => deleteDocument(inv.id, actor, { source: "legacy-replay", reason: "invoice replay validation" }));
       res.deleted++;
     } catch (e) {
       res.status = "error";
@@ -192,7 +192,7 @@ async function replayJob(job: string, golden: Golden[], actor: string, billingTy
       insert into billing_requests (id, org_id, project_id, request_number, invoice_type, basis,
                                     draw_amount, status, invoice_description, created_by)
       values (${requestId}, ${SANDBOX_ORG}, ${projectId}, ${label}, 'final', ${basis},
-              ${amount === null ? null : String(amount)}, 'open', ${"Replay of NetSuite job " + job}, ${actor})`));
+              ${amount === null ? null : String(amount)}, 'open', ${"Replay of the source system job " + job}, ${actor})`));
     return requestId;
   };
   const subtotalOf = async (docId: string): Promise<number> => {
@@ -231,7 +231,7 @@ async function replayJob(job: string, golden: Golden[], actor: string, billingTy
 
 (async () => {
   await assertSandbox();
-  if (!existsSync(GOLDEN) || !existsSync(JOBSET)) throw new Error(`missing cached golden data (${GOLDEN} / ${JOBSET}) — run ns.ts first`);
+  if (!existsSync(GOLDEN) || !existsSync(JOBSET)) throw new Error(`missing cached golden data (${GOLDEN} / ${JOBSET}) — run the connector golden-data fetcher first`);
   const goldenRows = JSON.parse(readFileSync(GOLDEN, "utf8")) as (Golden & { job: string })[];
   const jobset = JSON.parse(readFileSync(JOBSET, "utf8")) as { job: string }[];
   const types: Record<string, string> = existsSync("/tmp/jobtypes.json") ? JSON.parse(readFileSync("/tmp/jobtypes.json", "utf8")) : {};
