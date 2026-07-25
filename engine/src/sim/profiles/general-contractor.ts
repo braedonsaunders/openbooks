@@ -85,8 +85,8 @@ const CONSTRUCTION_COA: CoaEntry[] = [
 ];
 
 /**
- * A larger, multi-method general contractor modeled on the real Rassaun job
- * cost→bill fidelity (AdminApp2). Bigger than the reference: a 12-person field
+ * A larger, multi-method general contractor modeled on a real reference
+ * contractor's job cost→bill fidelity. Bigger than the reference: a 12-person field
  * crew across a concurrent portfolio of ~16 jobs running EVERY billing method at
  * once — T&M, AIA schedule-of-values (with retainage), fixed-price milestones,
  * not-to-exceed, and cost-plus. Revenue is FULLY BOTTOM-UP: crews log field
