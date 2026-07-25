@@ -114,6 +114,9 @@ export const files = pgTable(
     /** Stable upstream identity for idempotent source-system migrations. */
     sourceSystem: text("source_system"),
     sourceId: text("source_id"),
+    /** Upstream last-modified instant (source wall clock stored as UTC by
+     *  convention) — the incremental attachment sync's equality token. */
+    sourceModifiedAt: timestamp("source_modified_at", { withTimezone: true }),
     /** SHA-256 hash of the bytes — change-tracking for text files. */
     contentHash: text("content_hash"),
     isInactive: boolean("is_inactive").notNull().default(false),

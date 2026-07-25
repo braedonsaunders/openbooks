@@ -240,3 +240,84 @@ export async function netsuiteRecord<T = Record<string, unknown>>(
   if (!res.ok) throw new Error(`SuiteTalk ${recordType}/${id} HTTP ${res.status}: ${(await res.text()).slice(0, 500)}`);
   return await res.json() as T;
 }
+
+/**
+ * File-cabinet content through SuiteTalk SOAP (TokenPassport, HMAC-SHA256).
+ *
+ * This is the ONLY NetSuite read path without a ~10MB ceiling: the RESTlet
+ * transport hits `File.getContents()`'s 10.0MB cap, the FileReader read
+ * budget dies when load+reads cross 10MB, and getSegments' iterable cannot
+ * be consumed in this runtime — all verified empirically against account
+ * 8638714. SOAP file-get returned a 23.1MB file (30.8M base64 chars) whole.
+ */
+export async function netsuiteSoapFileGet(
+  fileId: string,
+  creds: NetSuiteCreds,
+  endpointVersion = "2022_1",
+): Promise<{ name: string; bytes: Buffer }> {
+  if (!/^\d+$/.test(fileId)) throw new Error("NetSuite file id must be numeric");
+  const url = `${creds.host}/services/NetSuitePort_${endpointVersion}`;
+  const nonce = randomBytes(16).toString("hex");
+  const timestamp = String(Math.floor(Date.now() / 1000));
+  const signatureBase = [creds.account, creds.consumerKey, creds.tokenKey, nonce, timestamp].join("&");
+  const signatureKey = `${creds.consumerSecret}&${creds.tokenSecret}`;
+  const signature = createHmac("sha256", signatureKey).update(signatureBase).digest("base64");
+  const envelope = `<?xml version="1.0" encoding="UTF-8"?>
+<soap-env:Envelope xmlns:soap-env="http://schemas.xmlsoap.org/soap/envelope/">
+  <soap-env:Header>
+    <tokenPassport xmlns="urn:messages_${endpointVersion}.platform.webservices.netsuite.com">
+      <account>${creds.account}</account>
+      <consumerKey>${creds.consumerKey}</consumerKey>
+      <token>${creds.tokenKey}</token>
+      <nonce>${nonce}</nonce>
+      <timestamp>${timestamp}</timestamp>
+      <signature algorithm="HMAC-SHA256">${signature}</signature>
+    </tokenPassport>
+  </soap-env:Header>
+  <soap-env:Body>
+    <get xmlns="urn:messages_${endpointVersion}.platform.webservices.netsuite.com">
+      <baseRef xsi:type="ns7:RecordRef" type="file" internalId="${fileId}"
+        xmlns:ns7="urn:core_${endpointVersion}.platform.webservices.netsuite.com"
+        xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"/>
+    </get>
+  </soap-env:Body>
+</soap-env:Envelope>`;
+
+  let lastError: unknown;
+  for (let attempt = 1; attempt <= 3; attempt++) {
+    const ctl = new AbortController();
+    const timer = setTimeout(() => ctl.abort(), 180_000);
+    try {
+      const response = await fetch(url, {
+        method: "POST",
+        headers: { "Content-Type": "text/xml; charset=utf-8", SOAPAction: "get" },
+        body: envelope,
+        signal: ctl.signal,
+      });
+      const text = await response.text();
+      if (!response.ok) {
+        throw new Error(`SuiteTalk SOAP HTTP ${response.status}: ${text.slice(0, 500)}`);
+      }
+      if (!text.includes('isSuccess="true"')) {
+        const message = text.match(/<message[^>]*>([^<]*)<\/message>/);
+        throw new Error(`SuiteTalk SOAP file-get failed for ${fileId}: ${message?.[1] ?? text.slice(0, 300)}`);
+      }
+      const name = text.match(/<(?:\w+:)?name>([^<]*)<\/(?:\w+:)?name>/)?.[1] ?? "";
+      const open = /<(\w+:)?content>/.exec(text);
+      if (!open) throw new Error(`SuiteTalk SOAP file-get returned no content for ${fileId}`);
+      const contentStart = open.index + open[0].length;
+      const closeTag = `</${open[1] ?? ""}content>`;
+      const contentEnd = text.indexOf(closeTag, contentStart);
+      if (contentEnd < 0) throw new Error(`SuiteTalk SOAP file-get returned truncated content for ${fileId}`);
+      const bytes = Buffer.from(text.slice(contentStart, contentEnd).trim(), "base64");
+      if (bytes.length === 0) throw new Error(`SuiteTalk SOAP file-get returned empty content for ${fileId}`);
+      return { name, bytes };
+    } catch (error) {
+      lastError = error;
+      if (attempt < 3) await sleep(attempt * 2_000);
+    } finally {
+      clearTimeout(timer);
+    }
+  }
+  throw lastError instanceof Error ? lastError : new Error("SuiteTalk SOAP file-get failed after retries");
+}

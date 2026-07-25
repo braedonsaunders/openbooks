@@ -5,7 +5,7 @@
  */
 define(['N/file', 'N/format', 'N/query', 'N/record', 'N/runtime', 'N/search', 'N/task'],
   (file, format, query, record, runtime, search, task) => {
-    const BRIDGE_VERSION = '1.2.0';
+    const BRIDGE_VERSION = '1.3.0';
     const SCHEMA_VERSION = 1;
     const MARKER_PATH = 'SuiteScripts/OpenBooks/Jobs/bridge-marker.json';
     const EXPORT_SCRIPT_ID = 'customscript_openbooks_export_mr';
@@ -14,8 +14,6 @@ define(['N/file', 'N/format', 'N/query', 'N/record', 'N/runtime', 'N/search', 'N
     const MAX_PARTITIONS = 250;
     const MAX_ATTACHMENT_RECORDS = 50;
     const MAX_ATTACHMENT_BYTES = 9 * 1024 * 1024;
-    const ATTACHMENT_CHUNK_CHARS = 6 * 1024 * 1024;
-    const ATTACHMENT_READER_CHARS = 1024 * 1024;
 
     const text = (value) => value == null ? '' : String(value);
     const assert = (condition, message) => {
@@ -232,6 +230,12 @@ define(['N/file', 'N/format', 'N/query', 'N/record', 'N/runtime', 'N/search', 'N
       assert(Number(loaded.size) > 0, 'attachment is empty');
       const size = Number(loaded.size);
       if (size > MAX_ATTACHMENT_BYTES) {
+        // Beyond the RESTlet response transport. SuiteScript offers no
+        // working read path at this size (getContents caps at 10.0MB,
+        // FileReader's read budget includes the load, getSegments' iterable
+        // is unconsumable in this runtime — all verified live), so the client
+        // must fall back to the SuiteTalk SOAP file-get, which has no
+        // ceiling (proven beyond 23MB).
         return {
           ok: true,
           schemaVersion: SCHEMA_VERSION,
@@ -240,9 +244,7 @@ define(['N/file', 'N/format', 'N/query', 'N/record', 'N/runtime', 'N/search', 'N
             name: loaded.name,
             fileType: text(loaded.fileType),
             size,
-            encoding: 'base64-chunks',
-            encodedSize: Math.ceil(size / 3) * 4,
-            chunkSize: ATTACHMENT_CHUNK_CHARS,
+            encoding: 'oversized',
           },
         };
       }
@@ -256,52 +258,6 @@ define(['N/file', 'N/format', 'N/query', 'N/record', 'N/runtime', 'N/search', 'N
           size: Number(loaded.size),
           encoding: 'base64',
           contents: loaded.getContents(),
-        },
-      };
-    };
-
-    const attachmentContentChunk = (input) => {
-      const fileId = text(input.fileId);
-      assert(/^\d+$/.test(fileId), 'fileId must be numeric');
-      const offset = Number(input.offset);
-      assert(Number.isSafeInteger(offset) && offset >= 0 && offset % 4 === 0,
-        'offset must be a non-negative base64 character position divisible by four');
-
-      const loaded = file.load({ id: fileId });
-      const size = Number(loaded.size);
-      assert(size > MAX_ATTACHMENT_BYTES, 'chunk transport is only required for large attachments');
-      const encodedSize = Math.ceil(size / 3) * 4;
-      assert(offset < encodedSize, 'offset is beyond the attachment content');
-
-      const reader = loaded.getReader();
-      let remaining = offset;
-      while (remaining > 0) {
-        const skipped = reader.readChars({ number: Math.min(ATTACHMENT_READER_CHARS, remaining) });
-        assert(skipped != null && skipped.length > 0, 'attachment stream ended before the requested offset');
-        remaining -= skipped.length;
-      }
-      const requested = Math.min(ATTACHMENT_CHUNK_CHARS, encodedSize - offset);
-      const parts = [];
-      let unread = requested;
-      while (unread > 0) {
-        const part = reader.readChars({ number: Math.min(ATTACHMENT_READER_CHARS, unread) });
-        assert(part != null && part.length > 0, 'attachment stream ended before the expected encoded size');
-        parts.push(part);
-        unread -= part.length;
-      }
-      const contents = parts.join('');
-      assert(contents.length === requested, 'attachment stream ended before the expected encoded size');
-      return {
-        ok: true,
-        schemaVersion: SCHEMA_VERSION,
-        file: {
-          id: fileId,
-          size,
-          encoding: 'base64-chunk',
-          offset,
-          contents,
-          nextOffset: offset + contents.length,
-          done: offset + contents.length === encodedSize,
         },
       };
     };
@@ -412,7 +368,6 @@ define(['N/file', 'N/format', 'N/query', 'N/record', 'N/runtime', 'N/search', 'N
         if (action === 'deleted') return deletedRecords(input);
         if (action === 'attachmentInventory') return attachmentInventory(input);
         if (action === 'attachmentContent') return attachmentContent(input);
-        if (action === 'attachmentContentChunk') return attachmentContentChunk(input);
         if (action === 'startExport') return startExport(input);
         if (action === 'exportStatus') return exportFiles(input);
         if (action === 'listExports') return listExports();
