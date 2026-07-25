@@ -150,6 +150,13 @@ export const documentLines = pgTable(
     costMultiplier: money("cost_multiplier"), // e.g. 1.5 OT
     isBillable: boolean("is_billable").notNull().default(false),
     billedByLineId: uuid("billed_by_line_id"), // invoice line that billed this cost
+    /**
+     * The field ticket this cost belongs to. Crews attach materials, equipment
+     * and expenses to the ticket they were consumed on, so ticket-based billing
+     * must follow that link rather than inferring it from dates — the mirror of
+     * time_entries.field_ticket_id.
+     */
+    fieldTicketId: uuid("field_ticket_id"),
 
     // Explicit rate/usage snapshots. Native columns keep financial behavior out
     // of custom JSON and allow cost=0 with a positive customer bill amount.
