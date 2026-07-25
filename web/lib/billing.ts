@@ -1,7 +1,17 @@
 import 'server-only'
 import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/db.ts'
-import { add, cmp, fromUnits, isZero, mulRate, roundDiv, sum, toUnits } from '@openbooks/engine/src/money.ts'
+import { add, cmp, fromUnits, isZero, mulDecimal, roundDiv, sum, toUnits } from '@openbooks/engine/src/money.ts'
+import { mergeCharges, priceAdjustments, resolveRateAdjustments } from './rate-adjustments'
+
+/** Map a time type's name onto the buckets a rate-card adjustment can exclude. */
+function timeKindOf(name: unknown): 'regular' | 'overtime' | 'double_time' | null {
+  const n = String(name ?? '').toLowerCase()
+  if (!n) return null
+  if (n.includes('double')) return 'double_time'
+  if (n.includes('over')) return 'overtime'
+  return 'regular'
+}
 import { recognitionAccounts } from '@openbooks/engine/src/project-recognition.ts'
 import { loadProjectType } from './project-type'
 import { nextDocumentNumber } from './bills'
@@ -118,6 +128,11 @@ export async function generateInvoiceFromBillingRequest(
       /** Pre-markup amount + whether this line is labor — for lump-sum markup. */
       baseAmount?: string
       isLabor?: boolean
+      /** Item classification + time bucket, for rate-card adjustment targeting. */
+      itemKind?: string | null
+      itemCategory?: string | null
+      departmentId?: string | null
+      timeKind?: 'regular' | 'overtime' | 'double_time' | null
     }
     const built: BuiltLine[] = []
 
@@ -200,10 +215,12 @@ export async function generateInvoiceFromBillingRequest(
 
       const timeRows = (await tx.execute(sql`
         select te.id, te.hours, te.cost_rate, te.bill_rate, te.item_id, te.time_type_id,
-               te.employee_party_id, te.memo,
-               i.income_account_id, i.default_rate, i.tax_code_id, i.name as item_name
+               te.employee_party_id, te.memo, te.department_id,
+               i.income_account_id, i.default_rate, i.tax_code_id, i.name as item_name,
+               i.kind as item_kind, i.category as item_category, tt.name as time_type_name
           from time_entries te
           left join items i on i.id = te.item_id
+          left join time_types tt on tt.id = te.time_type_id
          where te.org_id = ${orgId} and te.project_id = ${req.project_id}
            and te.status = 'approved' and te.is_billable and te.invoiced_by_line_id is null
            ${dateFilter}${selFilter}${ticketFilter}
@@ -213,9 +230,9 @@ export async function generateInvoiceFromBillingRequest(
       for (const te of timeRows.rows) {
         const rate =
           invoicing.lineBuilder === 'cost_plus'
-            ? mulRate(String(te.cost_rate ?? '0'), markup)
+            ? mulDecimal(String(te.cost_rate ?? '0'), markup)
             : String(te.bill_rate ?? te.default_rate ?? '0')
-        const amount = mulRate(String(te.hours ?? '0'), rate)
+        const amount = mulDecimal(String(te.hours ?? '0'), rate)
         built.push({
           itemId: te.item_id,
           accountId: te.income_account_id ?? defaultIncomeId,
@@ -230,6 +247,10 @@ export async function generateInvoiceFromBillingRequest(
           sourceCostLineId: null,
           baseAmount: amount,
           isLabor: true,
+          itemKind: te.item_kind ?? 'labor',
+          itemCategory: te.item_category ?? null,
+          timeKind: timeKindOf(te.time_type_name),
+          departmentId: te.department_id ?? null,
         })
       }
 
@@ -271,7 +292,9 @@ export async function generateInvoiceFromBillingRequest(
                (case when d.kind in ('sales_order','purchase_order') then -dl.amount else dl.amount end) as amount,
                dl.cost_multiplier, dl.description, dl.item_id, dl.quantity, dl.unit,
                dl.bill_rate, dl.bill_amount, dl.equipment_unit_id, dl.rate_version_id, d.kind,
+               coalesce(dl.department_id, d.department_id) as department_id,
                dl.rate_presentation, i.income_account_id, i.tax_code_id, i.name as item_name,
+               i.kind as item_kind, i.category as item_category,
                coalesce(rc.components, '[]'::jsonb) as bill_components
           from document_lines dl
           join documents d on d.id = dl.document_id
@@ -294,7 +317,7 @@ export async function generateInvoiceFromBillingRequest(
       for (const cl of costRows.rows) {
         const isProjectCharge = cl.kind === 'project_charge'
         const mult = cl.cost_multiplier && cmp(String(cl.cost_multiplier), '0') > 0 ? String(cl.cost_multiplier) : markup
-        const amount = isProjectCharge ? String(cl.bill_amount ?? '0') : mulRate(String(cl.amount ?? '0'), mult)
+        const amount = isProjectCharge ? String(cl.bill_amount ?? '0') : mulDecimal(String(cl.amount ?? '0'), mult)
         const components = isProjectCharge && cl.rate_presentation === 'rate_components' && Array.isArray(cl.bill_components)
           ? cl.bill_components
           : []
@@ -328,6 +351,8 @@ export async function generateInvoiceFromBillingRequest(
             timeEntryId: null,
             timeTypeId: null,
             sourceCostLineId: cl.id,
+            itemKind: cl.item_kind ?? null,
+            departmentId: cl.department_id ?? null,
             unit: cl.unit,
             equipmentUnitId: cl.equipment_unit_id,
             rateVersionId: cl.rate_version_id,
@@ -361,6 +386,40 @@ export async function generateInvoiceFromBillingRequest(
         }
       }
 
+    }
+
+    const invoiceDate = req.cutoff_date ?? new Date().toISOString().slice(0, 10)
+
+    // (2b) Commercial adjustments from the customer's rate card — fuel/shift
+    //      surcharges, negotiated markups, per-diem. Which lines each one
+    //      measures, and whether it bills separately at all, is card
+    //      configuration; nothing here is specific to a trade or tenant.
+    if (built.length) {
+      const departments = [...new Set(built.map((l) => l.departmentId ?? null))]
+      const charges = mergeCharges(
+        (await Promise.all(departments.map(async (departmentId) =>
+          priceAdjustments(
+            built.filter((l) => (l.departmentId ?? null) === departmentId).map((l) => ({
+              amount: l.amount, itemId: l.itemId, itemKind: l.itemKind ?? null,
+              departmentId, isLabor: l.isLabor === true, timeKind: l.timeKind ?? null,
+            })),
+            await resolveRateAdjustments({ orgId, projectId: req.project_id, onDate: invoiceDate, departmentId }),
+          )))).flat(),
+      )
+      for (const c of charges) {
+        const item = c.adjustment.itemId
+          ? ((await tx.execute(sql`
+              select income_account_id, tax_code_id from items
+               where id = ${c.adjustment.itemId} and org_id = ${orgId}
+            `)) as unknown as { rows: { income_account_id: string | null; tax_code_id: string | null }[] }).rows[0]
+          : undefined
+        built.push({
+          itemId: c.adjustment.itemId, accountId: item?.income_account_id ?? defaultIncomeId,
+          description: c.adjustment.name, quantity: '1', unitPrice: c.amount, amount: c.amount,
+          taxCodeId: item?.tax_code_id ?? null, employeeId: null, timeEntryId: null,
+          timeTypeId: null, sourceCostLineId: null,
+        })
+      }
     }
 
     // (3) Not-to-exceed cap: trim the cumulative invoiced total to the contract.
@@ -402,7 +461,7 @@ export async function generateInvoiceFromBillingRequest(
                              status, project_id, subsidiary_id, billing_method, is_final_invoice,
                              reference_number, memo, subtotal, tax_total, total, created_by)
       values (${orgId}, 'customer_invoice', ${documentNumber}, ${project.customer_id},
-              ${new Date().toISOString().slice(0, 10)}, ${currency}, 'draft', ${req.project_id},
+              ${invoiceDate}, ${currency}, 'draft', ${req.project_id},
               ${project.subsidiary_id}, ${billingMethod === 'cost_plus' ? 'time_and_materials' : billingMethod},
               ${req.invoice_type === 'final'}, ${req.customer_po ?? project.customer_po_number},
               ${req.invoice_description}, '0', '0', '0', ${userId})

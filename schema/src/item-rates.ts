@@ -110,6 +110,8 @@ export const laborRateAdjustments = pgTable(
         "text",
       ],
     }).notNull(),
+    /** Unit follows `calculation`: a percent value is a PERCENTAGE (3.75 means
+     * 3.75%), never a fraction; fixed/per_hour/per_day are money. */
     value: numeric("value", { precision: 19, scale: 10 }),
     unit: text("unit"),
     presentation: text("presentation", {
@@ -120,6 +122,10 @@ export const laborRateAdjustments = pgTable(
     threshold: numeric("threshold", { precision: 19, scale: 4 }),
     thresholdUnit: text("threshold_unit"),
     referenceText: text("reference_text"),
+    /** Item that carries the charge when presentation = 'separate'. A surcharge
+     * bills as a real invoice line, so it needs a real item for its revenue
+     * account and tax treatment; 'included' adjustments never need one. */
+    itemId: uuid("item_id"),
     appliesRegular: boolean("applies_regular").notNull().default(true),
     appliesOvertime: boolean("applies_overtime").notNull().default(true),
     appliesDoubleTime: boolean("applies_double_time").notNull().default(true),
@@ -150,7 +156,10 @@ export const laborRateAdjustmentTargets = pgTable(
   "labor_rate_adjustment_targets",
   {
     id: id(), orgId: orgRef(), adjustmentId: uuid("adjustment_id").notNull(),
-    targetType: text("target_type", { enum: ["item", "item_kind", "item_category", "transaction_type", "department", "subsidiary", "location", "class", "trade", "job_title", "project", "customer", "other"] }).notNull(),
+    /** `labor` and `material` describe where the charge CAME FROM — billable time
+     * versus a cost document — which is stable across tenants no matter how each
+     * one classifies its items. The rest match the line's own attributes. */
+    targetType: text("target_type", { enum: ["labor", "material", "item", "item_kind", "item_category", "transaction_type", "department", "subsidiary", "location", "class", "trade", "job_title", "project", "customer", "other"] }).notNull(),
     targetValueId: uuid("target_value_id"), targetValueText: text("target_value_text"),
     includeChildren: boolean("include_children").notNull().default(false), ...auditColumns,
   },

@@ -1147,22 +1147,32 @@ function AdjustmentSection({
                         <span>—</span>
                       ) : (
                         <>
-                          <Input
-                            inputMode="decimal"
-                            className="text-right tabular-nums"
-                            value={a.value ?? ""}
-                            onChange={(e) =>
-                              setAdjustment(i, { value: e.target.value })
-                            }
-                          />
-                          <Input
-                            className="mt-1"
-                            aria-label={t("adjustmentUnit")}
-                            value={a.unit ?? ""}
-                            onChange={(e) =>
-                              setAdjustment(i, { unit: e.target.value })
-                            }
-                          />
+                          {/* A bare number is ambiguous for a percentage — 3.75
+                              and 0.0375 both look plausible — so the unit is
+                              shown, and for percent it is not editable. */}
+                          <div className="flex items-center gap-1">
+                            <Input
+                              inputMode="decimal"
+                              className="text-right tabular-nums"
+                              value={a.value ?? ""}
+                              onChange={(e) =>
+                                setAdjustment(i, { value: e.target.value })
+                              }
+                            />
+                            {a.calculation === "percent" ? (
+                              <span className="text-muted-foreground text-sm">%</span>
+                            ) : null}
+                          </div>
+                          {a.calculation === "percent" ? null : (
+                            <Input
+                              className="mt-1"
+                              aria-label={t("adjustmentUnit")}
+                              value={a.unit ?? ""}
+                              onChange={(e) =>
+                                setAdjustment(i, { unit: e.target.value })
+                              }
+                            />
+                          )}
                         </>
                       )}
                     </TableCell>

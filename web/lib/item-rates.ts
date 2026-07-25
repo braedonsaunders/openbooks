@@ -41,6 +41,10 @@ export async function resolveItemRate(input: {
   itemId: string
   equipmentUnitId?: string | null
   onDate: string
+  /** Dimensions of the work being priced; they live on the line, not the job. */
+  departmentId?: string | null
+  locationId?: string | null
+  classId?: string | null
   baseQuantity: string
   /** Explicit package choice (for example day, week, or month). */
   rateUnitCode?: string | null
@@ -56,13 +60,13 @@ export async function resolveItemRate(input: {
   if (!p) return null
 
   const context = (await db.execute(sql`
-    select p.customer_id, p.starts_on, p.department_id, p.subsidiary_id, p.location_id, p.class_id,
+    select p.customer_id, p.starts_on, p.subsidiary_id,
            coalesce(s.base_currency,o.base_currency) as target_currency,
            (select rate_book_id from equipment_units
              where id = ${input.equipmentUnitId ?? null} and org_id = ${input.orgId}) as unit_rate_book_id
       from projects p join orgs o on o.id=p.org_id left join subsidiaries s on s.id=p.subsidiary_id
       where p.id = ${input.projectId} and p.org_id = ${input.orgId}
-  `)) as unknown as { rows: { customer_id: string | null; starts_on: string | null; department_id: string | null; subsidiary_id: string | null; location_id: string | null; class_id: string | null; target_currency:string; unit_rate_book_id: string | null }[] }
+  `)) as unknown as { rows: { customer_id: string | null; starts_on: string | null; subsidiary_id: string | null; target_currency:string; unit_rate_book_id: string | null }[] }
   const ctx = context.rows[0]
   if (!ctx) return null
   const projectStart = ctx.starts_on ?? input.onDate
@@ -87,10 +91,10 @@ export async function resolveItemRate(input: {
        where a.org_id = ${input.orgId} and a.is_active
          and (a.project_id is null or a.project_id = ${input.projectId})
          and (a.customer_id is null or a.customer_id = ${ctx.customer_id})
-         and (a.department_id is null or a.department_id = ${ctx.department_id})
+         and (a.department_id is null or a.department_id = ${input.departmentId ?? null})
          and (a.subsidiary_id is null or a.subsidiary_id = ${ctx.subsidiary_id})
-         and (a.location_id is null or a.location_id = ${ctx.location_id})
-         and (a.class_id is null or a.class_id = ${ctx.class_id})
+         and (a.location_id is null or a.location_id = ${input.locationId ?? null})
+         and (a.class_id is null or a.class_id = ${input.classId ?? null})
          and (a.effective_from is null or a.effective_from <= case when a.date_basis = 'project_start' then ${projectStart}::date else ${input.onDate}::date end)
          and (a.effective_to is null or a.effective_to >= case when a.date_basis = 'project_start' then ${projectStart}::date else ${input.onDate}::date end)
       union all select ${ctx.unit_rate_book_id}::uuid, null::uuid, 3, 0, null::date where ${ctx.unit_rate_book_id}::uuid is not null
