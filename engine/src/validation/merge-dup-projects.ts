@@ -26,9 +26,13 @@ const APPLY = process.argv.includes("--apply");
     await db.transaction(async (tx) => {
       await tx.execute(sql`select set_config('openbooks.sandbox_wipe','on',true)`);
       await tx.execute(sql`select set_config('openbooks.amend','on',true)`);
-      for (const t of ["time_entries", "document_lines", "journal_lines", "documents", "billing_requests", "billing_schedules"]) {
+      // every table with an FK to projects (introspected from the live catalog)
+      for (const t of ["time_entries", "document_lines", "journal_lines", "documents", "billing_requests",
+                       "billing_schedules", "budget_lines", "compliance_records", "compliance_waivers",
+                       "fixed_assets", "item_rate_book_assignments", "lien_waivers", "project_tasks"]) {
         await tx.execute(sql.raw(`update "${t}" set project_id = '${p.keep_id}' where org_id = '${O}' and project_id = '${p.drop_id}'`));
       }
+      await tx.execute(sql`update projects set parent_id = ${p.keep_id} where org_id = ${O} and parent_id = ${p.drop_id}`);
       // carry the dropped row's source ids so future syncs from either connector match
       await tx.execute(sql`
         update projects k set custom = coalesce(k.custom,'{}'::jsonb) || coalesce((select d.custom from projects d where d.id = ${p.drop_id}),'{}'::jsonb) || coalesce(k.custom,'{}'::jsonb)
