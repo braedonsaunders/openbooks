@@ -297,5 +297,10 @@
       "heading": "Resource levelling",
       "description": "Delay activities so no crew, machine or subcontractor is booked past its daily capacity. Review the proposed moves before applying them."
     }
+  },
+  "invoicing": {
+    "rateCardLapse": "When the rate card has lapsed",
+    "block": "Block invoicing",
+    "carry_forward": "Bill at the last card"
   }
 }

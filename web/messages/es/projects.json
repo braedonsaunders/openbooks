@@ -274,5 +274,10 @@
     "no": "No",
     "customerHint": "Anula el tipo de proyecto para este cliente.",
     "projectHint": "Anula el tipo/cliente para este proyecto."
+  },
+  "invoicing": {
+    "rateCardLapse": "Cuando la tarifa ha caducado",
+    "block": "Bloquear la facturación",
+    "carry_forward": "Facturar con la última tarifa"
   }
 }

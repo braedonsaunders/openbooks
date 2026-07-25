@@ -2,7 +2,7 @@ import 'server-only'
 import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/db.ts'
 import { add, cmp, fromUnits, isZero, mulDecimal, roundDiv, sum, toUnits } from '@openbooks/engine/src/money.ts'
-import { mergeCharges, priceAdjustments, resolveRateAdjustments } from './rate-adjustments'
+import { findLapsedRateCard, mergeCharges, priceAdjustments, resolveRateAdjustments } from './rate-adjustments'
 
 /** Map a time type's name onto the buckets a rate-card adjustment can exclude. */
 function timeKindOf(name: unknown): 'regular' | 'overtime' | 'double_time' | null {
@@ -132,6 +132,8 @@ export async function generateInvoiceFromBillingRequest(
       itemKind?: string | null
       itemCategory?: string | null
       departmentId?: string | null
+      /** Date the work happened — the date its price is negotiated as of. */
+      workedOn?: string | null
       timeKind?: 'regular' | 'overtime' | 'double_time' | null
     }
     const built: BuiltLine[] = []
@@ -215,7 +217,7 @@ export async function generateInvoiceFromBillingRequest(
 
       const timeRows = (await tx.execute(sql`
         select te.id, te.hours, te.cost_rate, te.bill_rate, te.item_id, te.time_type_id,
-               te.employee_party_id, te.memo, te.department_id,
+               te.employee_party_id, te.memo, te.department_id, te.worked_on,
                i.income_account_id, i.default_rate, i.tax_code_id, i.name as item_name,
                i.kind as item_kind, i.category as item_category, tt.name as time_type_name
           from time_entries te
@@ -251,6 +253,7 @@ export async function generateInvoiceFromBillingRequest(
           itemCategory: te.item_category ?? null,
           timeKind: timeKindOf(te.time_type_name),
           departmentId: te.department_id ?? null,
+          workedOn: te.worked_on ? String(te.worked_on).slice(0, 10) : null,
         })
       }
 
@@ -292,7 +295,7 @@ export async function generateInvoiceFromBillingRequest(
                (case when d.kind in ('sales_order','purchase_order') then -dl.amount else dl.amount end) as amount,
                dl.cost_multiplier, dl.description, dl.item_id, dl.quantity, dl.unit,
                dl.bill_rate, dl.bill_amount, dl.equipment_unit_id, dl.rate_version_id, d.kind,
-               coalesce(dl.department_id, d.department_id) as department_id,
+               coalesce(dl.department_id, d.department_id) as department_id, d.document_date,
                dl.rate_presentation, i.income_account_id, i.tax_code_id, i.name as item_name,
                i.kind as item_kind, i.category as item_category,
                coalesce(rc.components, '[]'::jsonb) as bill_components
@@ -353,6 +356,7 @@ export async function generateInvoiceFromBillingRequest(
             sourceCostLineId: cl.id,
             itemKind: cl.item_kind ?? null,
             departmentId: cl.department_id ?? null,
+            workedOn: cl.document_date ? String(cl.document_date).slice(0, 10) : null,
             unit: cl.unit,
             equipmentUnitId: cl.equipment_unit_id,
             rateVersionId: cl.rate_version_id,
@@ -389,12 +393,30 @@ export async function generateInvoiceFromBillingRequest(
     }
 
     const invoiceDate = req.cutoff_date ?? new Date().toISOString().slice(0, 10)
+    // Prices are negotiated as of the date work is PERFORMED, not the day the
+    // invoice happens to be cut: re-billing or catching up on old work must not
+    // silently apply today's card. Latest work date on the invoice wins, so a
+    // period bills at the rates in force at its end.
+    const rateDate = built.reduce<string | null>(
+      (latest, l) => (l.workedOn && (!latest || l.workedOn > latest) ? l.workedOn : latest), null,
+    ) ?? invoiceDate
 
     // (2b) Commercial adjustments from the customer's rate card — fuel/shift
     //      surcharges, negotiated markups, per-diem. Which lines each one
     //      measures, and whether it bills separately at all, is card
     //      configuration; nothing here is specific to a trade or tenant.
     if (built.length) {
+      const lapsed = await findLapsedRateCard({ orgId, projectId: req.project_id, onDate: rateDate })
+      if (lapsed && invoicing.rateCardLapse !== 'carry_forward') {
+        throw new BillingError(
+          `This customer's rate card expired on ${lapsed.lastEffectiveTo ?? 'an earlier date'} and none covers ${rateDate}. ` +
+          'Extend or add a rate card before invoicing — billing now would drop the negotiated surcharges and markups.',
+        )
+      }
+      // Carrying forward prices the work at the last card in force, never at a
+      // later one: a card that starts after the work was done was not the deal.
+      const cardDate = lapsed?.lastEffectiveTo ?? rateDate
+
       const departments = [...new Set(built.map((l) => l.departmentId ?? null))]
       const charges = mergeCharges(
         (await Promise.all(departments.map(async (departmentId) =>
@@ -403,7 +425,7 @@ export async function generateInvoiceFromBillingRequest(
               amount: l.amount, itemId: l.itemId, itemKind: l.itemKind ?? null,
               departmentId, isLabor: l.isLabor === true, timeKind: l.timeKind ?? null,
             })),
-            await resolveRateAdjustments({ orgId, projectId: req.project_id, onDate: invoiceDate, departmentId }),
+            await resolveRateAdjustments({ orgId, projectId: req.project_id, onDate: cardDate, departmentId }),
           )))).flat(),
       )
       for (const c of charges) {

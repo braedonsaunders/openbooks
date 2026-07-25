@@ -108,10 +108,14 @@ export async function resolveRateAdjustments(input: {
       union all select b.id, null::uuid, 5, 0, null::date from item_rate_books b
        where b.org_id = ${input.orgId} and b.is_default and b.is_active
     ),
-    ranked as (
-      select v.id as version_id,
-             row_number() over (order by s.priority, s.dimension_specificity desc,
-                                s.effective_from desc nulls last, v.effective_from desc) as rn
+    -- A version may restrict itself to certain dimensions. A customer commonly
+    -- holds one card per department, so ignoring these would hand a job an
+    -- arbitrary department's rates and surcharges. Unscoped cards apply to
+    -- everything, and a card naming the work's department outranks them.
+    scoped_versions as (
+      select v.id as version_id, s.priority, s.dimension_specificity,
+             s.effective_from as assigned_from, v.effective_from,
+             (select count(*) from labor_rate_version_scopes vs where vs.version_id = v.id) as scope_count
         from scoped s
         join item_rate_versions v on v.rate_book_id = s.rate_book_id and v.org_id = ${input.orgId}
          and v.status = 'active'
@@ -120,6 +124,22 @@ export async function resolveRateAdjustments(input: {
                and (v.effective_to is null or v.effective_to >= ${input.onDate}::date)))
         join item_rate_books b on b.id = s.rate_book_id and b.is_active
        where exists (select 1 from labor_rate_adjustments a where a.version_id = v.id and a.is_active)
+         and (not exists (select 1 from labor_rate_version_scopes vs where vs.version_id = v.id)
+           or exists (select 1 from labor_rate_version_scopes vs
+                       where vs.version_id = v.id
+                         and case vs.scope_type
+                               when 'department' then vs.scope_value_id = ${input.departmentId ?? null}::uuid
+                               when 'subsidiary' then vs.scope_value_id = ${ctx.subsidiary_id}::uuid
+                               when 'location' then vs.scope_value_id = ${input.locationId ?? null}::uuid
+                               when 'class' then vs.scope_value_id = ${input.classId ?? null}::uuid
+                               else false end))
+    ),
+    ranked as (
+      select version_id,
+             row_number() over (order by priority, dimension_specificity desc,
+                                (scope_count > 0) desc, assigned_from desc nulls last,
+                                effective_from desc) as rn
+        from scoped_versions
     )
     select a.id, a.code, a.name, a.category, a.calculation, a.value::text, a.presentation,
            a.threshold::text, a.item_id, a.applies_regular, a.applies_overtime,
@@ -176,6 +196,35 @@ export function lineMatchesAdjustment(line: AdjustableLine, adjustment: Resolved
       default: return false
     }
   })
+}
+
+/**
+ * A customer that HOLDS rate cards covering this work but has none in effect on
+ * the date has a LAPSE, not an absence of terms: every negotiated surcharge and
+ * markup would bill as nothing and understate the invoice with no trace. A
+ * customer with no cards at all simply has no terms, which is not a problem.
+ */
+export async function findLapsedRateCard(input: {
+  orgId: string
+  projectId: string
+  onDate: string
+}): Promise<{ customerId: string; lastEffectiveTo: string | null } | null> {
+  const r = (await db.execute(sql`
+    select p.customer_id,
+           max(v.effective_to) filter (where v.effective_to < ${input.onDate}::date)::text as last_effective_to
+      from projects p
+      join item_rate_book_assignments a on a.customer_id = p.customer_id and a.org_id = ${input.orgId} and a.is_active
+      join item_rate_versions v on v.rate_book_id = a.rate_book_id and v.status = 'active'
+     where p.id = ${input.projectId} and p.org_id = ${input.orgId}
+       and exists (select 1 from labor_rate_adjustments x where x.version_id = v.id and x.is_active
+                     and x.presentation = 'separate' and x.value > 0)
+     group by p.customer_id
+    having count(*) filter (
+      where v.effective_from <= ${input.onDate}::date
+        and (v.effective_to is null or v.effective_to >= ${input.onDate}::date)) = 0
+  `)) as unknown as { rows: { customer_id: string; last_effective_to: string | null }[] }
+  const row = r.rows[0]
+  return row ? { customerId: row.customer_id, lastEffectiveTo: row.last_effective_to } : null
 }
 
 export interface AdjustmentCharge {

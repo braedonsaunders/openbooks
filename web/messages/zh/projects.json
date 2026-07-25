@@ -274,5 +274,10 @@
     "no": "否",
     "customerHint": "为此客户覆盖项目类型。",
     "projectHint": "为此项目覆盖类型/客户。"
+  },
+  "invoicing": {
+    "rateCardLapse": "费率卡已失效时",
+    "block": "阻止开票",
+    "carry_forward": "按最近一版费率卡开票"
   }
 }
