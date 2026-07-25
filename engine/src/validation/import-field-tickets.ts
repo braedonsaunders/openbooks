@@ -51,7 +51,7 @@ const parseTickets = (): Ticket[] =>
   readFileSync("/tmp/ft-head.tsv", "utf8").split("\n").map((l) => l.split("\t")).filter((c) => c.length >= 13 && /^\d+$/.test(c[0]))
     .map((c) => ({
       legacyId: c[0], number: c[1], jobRef: c[2], empRef: c[3], customerRef: c[4],
-      begin: c[5], end: c[6], billed: c[7] === "Yes", final: c[8] === "Yes", approval: c[9],
+      begin: c[5]!, end: c[6]!, billed: c[7] === "Yes", final: c[8] === "Yes", approval: c[9],
       foremanRef: c[10], po: c[11] === "NULL" ? null : c[11], description: (c[12] ?? "").trim() || null,
     }));
 
@@ -100,15 +100,35 @@ const addDays = (iso: string, n: number) => {
   };
   const actor = ((await retry(() => db.execute(sql`select id from users where org_id = ${ORG} order by created_at limit 1`))) as any).rows[0]?.id;
 
+  // Preload the tickets already landed so a resumed run costs one query, not one per ticket.
+  const existingTickets = new Map<string, string>(
+    (((await retry(() => db.execute(sql`
+      select document_number n, id from documents where org_id = ${ORG} and kind = 'field_ticket'`))) as any).rows as any[])
+      .map((x) => [String(x.n), String(x.id)]),
+  );
   let created = 0, linked = 0, noProject = 0, existing = 0;
+  const pending: { ticket: string; project: string; emp: string; day: string; hours: number }[] = [];
+  /** One statement links a whole batch: unnest the tuples and join on them. */
+  const flush = async (batch: typeof pending): Promise<number> => {
+    if (!batch.length) return 0;
+    const r = (await retry(() => db.execute(sql`
+      update time_entries te set field_ticket_id = v.ticket::uuid
+        from (select unnest(${`{${batch.map((b) => b.ticket).join(",")}}`}::uuid[]) ticket,
+                     unnest(${`{${batch.map((b) => b.project).join(",")}}`}::uuid[]) project,
+                     unnest(${`{${batch.map((b) => b.emp).join(",")}}`}::uuid[]) emp,
+                     unnest(${`{${batch.map((b) => b.day).join(",")}}`}::date[]) day,
+                     unnest(${`{${batch.map((b) => b.hours).join(",")}}`}::numeric[]) hours) v
+       where te.org_id = ${ORG} and te.field_ticket_id is null
+         and te.project_id = v.project and te.employee_party_id = v.emp
+         and te.worked_on = v.day and abs(te.hours - v.hours) < 0.005`))) as any;
+    return r.rowCount ?? 0;
+  };
   for (const t of tickets) {
     const projectId = projects.get(t.jobRef) ?? null;
     if (!projectId) { noProject++; continue; }
     if (!APPLY) continue;
 
-    const dup = (await retry(() => db.execute(sql`
-      select id from documents where org_id = ${ORG} and kind = 'field_ticket' and document_number = ${t.number} limit 1`))) as any;
-    let ticketDocId: string = dup.rows[0]?.id;
+    let ticketDocId: string | undefined = existingTickets.get(t.number);
     if (ticketDocId) existing++;
     else {
       const ins = (await retry(() => db.execute(sql`
@@ -122,27 +142,23 @@ const addDays = (iso: string, n: number) => {
                   finalTicket: t.final, approval: t.approval } })}::jsonb)
         returning id`))) as any;
       ticketDocId = ins.rows[0].id;
+      existingTickets.set(t.number, ticketDocId!);
       created++;
     }
 
-    // Link the labor already in the ledger for this crew/week — never re-import
-    // hours, or the job would carry its cost twice.
+    // Collect the (project, employee, day, hours) tuples this ticket covers; the
+    // linking runs as ONE set-based statement per batch below. Doing it per hour
+    // cell meant ~40k sequential round-trips, which saturated the database.
     for (const r of byTicket.get(t.legacyId) ?? []) {
       const empId = parties.get(r.empRef);
       if (!empId) continue;
       for (const h of r.hours) {
-        const worked = addDays(t.begin, h.day);
-        const ttId = timeType(h.kind);
-        const up = (await retry(() => db.execute(sql`
-          update time_entries set field_ticket_id = ${ticketDocId}
-           where org_id = ${ORG} and project_id = ${projectId} and employee_party_id = ${empId}
-             and worked_on = ${worked} and field_ticket_id is null
-             ${ttId ? sql`and (time_type_id = ${ttId} or time_type_id is null)` : sql``}
-             and abs(hours - ${String(h.h)}::numeric) < 0.005`))) as any;
-        linked += up.rowCount ?? 0;
+        pending.push({ ticket: ticketDocId!, project: projectId, emp: empId, day: addDays(t.begin, h.day), hours: h.h });
       }
     }
+    if (pending.length >= 400) linked += await flush(pending.splice(0, pending.length));
   }
+  linked += await flush(pending);
   console.log(`${APPLY ? "imported" : "PLAN"}: tickets created ${created}, already present ${existing}, unmapped job ${noProject}, time entries linked ${linked}`);
   if (APPLY) {
     const v = (await retry(() => db.execute(sql`
