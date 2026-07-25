@@ -45,7 +45,7 @@ async function retry<T>(fn: () => Promise<T>, attempts = 8): Promise<T> {
 }
 const num = (v: unknown) => Number(v ?? 0);
 const m2 = (v: number) => v.toFixed(2);
-/** NetSuite dates come back MM/DD/YYYY. */
+/** The source system returns dates as MM/DD/YYYY. */
 const iso = (d: string) => {
   const us = /^(\d{2})\/(\d{2})\/(\d{4})$/.exec(String(d));
   return us ? `${us[3]}-${us[1]}-${us[2]}` : String(d).slice(0, 10);
