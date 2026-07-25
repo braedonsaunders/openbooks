@@ -44,6 +44,8 @@ export interface NsLine {
   entity?: string | null;
   subsidiary?: string | null;
   memo?: string | null;
+  /** 'T' when the source marks the line rebillable to the job's customer. */
+  isbillable?: string | null;
 }
 
 // --- Classification -------------------------------------------------------------
@@ -255,6 +257,9 @@ export function buildNativeFromNetSuite(
       description: l.memo ?? null,
       lineNumber: ++lineNo,
       subsidiaryId: sub(l),
+      // Rebillable job cost: carried from the source so migrated materials/subs/
+      // expenses remain billable to the project's customer.
+      isBillable: String(l.isbillable ?? "").toUpperCase() === "T",
     };
     lines.push(row);
     return row;
@@ -548,6 +553,7 @@ function buildOrder(
         : null,
       description: l.memo ?? null,
       lineNumber: ++n,
+      isBillable: String(l.isbillable ?? "").toUpperCase() === "T",
     };
     lines.push(row);
     detailRows.push({ row, codeId: code?.id ?? null });

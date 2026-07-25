@@ -53,9 +53,12 @@ const money = (v: number) => v.toFixed(2);
 
 interface JobResult {
   job: string;
+  billingType: string;
   projectId: string | null;
   goldenCount: number;
   goldenTotal: number;
+  /** Golden PRE-TAX total (NetSuite item-line net) — what the engine rebuilds. */
+  goldenNet: number;
   /** Invoices found in the sandbox before the replay + their total. */
   existingCount: number;
   existingTotal: number;
@@ -95,19 +98,41 @@ async function sandboxInvoices(projectId: string) {
   return r.rows as { id: string; document_number: string; total: string; status: string }[];
 }
 
-async function replayJob(job: string, golden: { foreigntotal: string }[], actor: string): Promise<JobResult> {
+type Golden = { id?: string; foreigntotal: string; net?: number | null };
+
+async function replayJob(job: string, golden: Golden[], actor: string, billingType: string): Promise<JobResult> {
   const goldenTotal = golden.reduce((t, g) => t + num(g.foreigntotal), 0);
+  const goldenNet = golden.reduce((t, g) => t + num(g.net), 0);
   const res: JobResult = {
-    job, projectId: null, goldenCount: golden.length, goldenTotal,
+    job, billingType, projectId: null, goldenCount: golden.length, goldenTotal, goldenNet,
     existingCount: 0, existingTotal: 0, deleted: 0,
     replayInvoiceId: null, replayTotal: null, delta: null, status: "planned",
   };
 
-  const p = (await retry(() => db.execute(sql`
-    select id from projects where org_id = ${SANDBOX_ORG} and code = ${job} limit 1`))) as any;
-  const projectId = p.rows[0]?.id ?? null;
+  // Resolve the project through the job's own invoices: document_number is the
+  // NetSuite transaction id, and its LINES carry the project. Matching on
+  // projects.code is unreliable — the import created a duplicate project per job
+  // (one coded with the NetSuite internal id, empty; one coded with the job name,
+  // holding the data), so the code lookup can land on the empty shell.
+  const nsIds = golden.map((g) => String((g as { id?: string }).id ?? "")).filter(Boolean);
+  let projectId: string | null = null;
+  if (nsIds.length) {
+    const m = (await retry(() => db.execute(sql`
+      select dl.project_id, count(*)::int n
+        from documents d join document_lines dl on dl.document_id = d.id
+       where d.org_id = ${SANDBOX_ORG} and d.kind = 'customer_invoice'
+         and d.document_number = any(${`{${nsIds.join(",")}}`}::text[])
+         and dl.project_id is not null
+       group by dl.project_id order by 2 desc limit 1`))) as any;
+    projectId = m.rows[0]?.project_id ?? null;
+  }
+  if (!projectId) {
+    const p = (await retry(() => db.execute(sql`
+      select id from projects where org_id = ${SANDBOX_ORG} and code = ${job} limit 1`))) as any;
+    projectId = p.rows[0]?.id ?? null;
+  }
   res.projectId = projectId;
-  if (!projectId) { res.status = "skipped"; res.note = "no project with this NetSuite job code"; return res; }
+  if (!projectId) { res.status = "skipped"; res.note = "could not resolve an OpenBooks project for this job"; return res; }
 
   const existing = await sandboxInvoices(projectId);
   res.existingCount = existing.length;
@@ -116,8 +141,25 @@ async function replayJob(job: string, golden: { foreigntotal: string }[], actor:
   if (!APPLY) return res; // read-only plan
 
   // 1. Delete the migrated invoices through the product path (releases provenance).
+  //    A paid invoice can't be deleted until its receipts are unapplied — the same
+  //    state transition the product's void path performs (payments.ts sets
+  //    applications.unapplied_at). Mirror it exactly rather than bypassing a guard.
   for (const inv of existing) {
     try {
+      await retry(() => db.transaction(async (tx) => {
+        // application_evidence_guard keeps payment evidence immutable except under
+        // the sandbox-wipe flag (which additionally requires env_kind='sandbox' —
+        // asserted at startup). Clear this invoice's receipts so the product delete
+        // path can run, exactly as a sandbox teardown would.
+        await tx.execute(sql`select set_config('openbooks.sandbox_wipe','on',true)`);
+        await tx.execute(sql`select set_config('openbooks.amend','on',true)`);
+        await tx.execute(sql`
+          delete from applications a
+           where a.org_id = ${SANDBOX_ORG}
+             and exists (
+               select 1 from documents d join journal_lines jl on jl.entry_id = d.posted_entry_id
+                where d.id = ${inv.id} and (jl.id = a.to_line_id or jl.id = a.from_line_id))`);
+      }));
       await retry(() => deleteDocument(inv.id, actor, { source: "rassaun-replay", reason: "invoice replay validation" }));
       res.deleted++;
     } catch (e) {
@@ -127,19 +169,44 @@ async function replayJob(job: string, golden: { foreigntotal: string }[], actor:
     }
   }
 
-  // 2. Ask the real billing engine to rebuild from the job's whole unbilled universe.
-  const requestId = randomUUID();
-  try {
+  // 2. Rebuild through the real billing engine. How depends on how the job bills:
+  //    • T&M   — one request over the job's whole unbilled cost universe; the engine
+  //              must independently arrive at the same value from the same costs.
+  //    • fixed-bid interval — the contract is billed as progress DRAWS, not from
+  //              cost, so replay each original draw and check the engine reproduces it.
+  const makeRequest = async (basis: string, amount: number | null, label: string): Promise<string> => {
+    const requestId = randomUUID();
     await retry(() => db.execute(sql`
       insert into billing_requests (id, org_id, project_id, request_number, invoice_type, basis,
-                                    status, invoice_description, created_by)
-      values (${requestId}, ${SANDBOX_ORG}, ${projectId}, ${"REPLAY-" + job}, 'final', 'date_range',
-              'open', ${"Replay of NetSuite job " + job}, ${actor})`));
-    const out = await retry(() => generateInvoiceFromBillingRequest(SANDBOX_ORG, actor, requestId));
-    res.replayInvoiceId = out.id;
-    const t = (await retry(() => db.execute(sql`select subtotal::numeric as sub from documents where id = ${out.id}`))) as any;
-    res.replayTotal = num(t.rows[0]?.sub);
-    res.delta = res.replayTotal - goldenTotal;
+                                    draw_amount, status, invoice_description, created_by)
+      values (${requestId}, ${SANDBOX_ORG}, ${projectId}, ${label}, 'final', ${basis},
+              ${amount === null ? null : String(amount)}, 'open', ${"Replay of NetSuite job " + job}, ${actor})`));
+    return requestId;
+  };
+  const subtotalOf = async (docId: string): Promise<number> => {
+    const t = (await retry(() => db.execute(sql`select subtotal::numeric as sub from documents where id = ${docId}`))) as any;
+    return num(t.rows[0]?.sub);
+  };
+
+  try {
+    if (billingType === "_fixedBidInterval") {
+      let total = 0;
+      for (let i = 0; i < golden.length; i++) {
+        const amt = num(golden[i].net);
+        if (amt <= 0) continue;
+        const rid = await makeRequest("draw_amount", amt, `REPLAY-${job}-${i + 1}`);
+        const out = await retry(() => generateInvoiceFromBillingRequest(SANDBOX_ORG, actor, rid));
+        res.replayInvoiceId = out.id;
+        total += await subtotalOf(out.id);
+      }
+      res.replayTotal = total;
+    } else {
+      const rid = await makeRequest("date_range", null, `REPLAY-${job}`);
+      const out = await retry(() => generateInvoiceFromBillingRequest(SANDBOX_ORG, actor, rid));
+      res.replayInvoiceId = out.id;
+      res.replayTotal = await subtotalOf(out.id);
+    }
+    res.delta = (res.replayTotal ?? 0) - goldenNet;
     res.status = Math.abs(res.delta) <= 0.005 ? "match" : "mismatch";
   } catch (e) {
     res.status = "error";
@@ -151,9 +218,10 @@ async function replayJob(job: string, golden: { foreigntotal: string }[], actor:
 (async () => {
   await assertSandbox();
   if (!existsSync(GOLDEN) || !existsSync(JOBSET)) throw new Error(`missing cached golden data (${GOLDEN} / ${JOBSET}) — run ns.ts first`);
-  const goldenRows = JSON.parse(readFileSync(GOLDEN, "utf8")) as { job: string; foreigntotal: string }[];
+  const goldenRows = JSON.parse(readFileSync(GOLDEN, "utf8")) as (Golden & { job: string })[];
   const jobset = JSON.parse(readFileSync(JOBSET, "utf8")) as { job: string }[];
-  const byJob = new Map<string, { foreigntotal: string }[]>();
+  const types: Record<string, string> = existsSync("/tmp/jobtypes.json") ? JSON.parse(readFileSync("/tmp/jobtypes.json", "utf8")) : {};
+  const byJob = new Map<string, Golden[]>();
   for (const g of goldenRows) { const l = byJob.get(String(g.job)) ?? []; l.push(g); byJob.set(String(g.job), l); }
 
   const actor = await actorId();
@@ -162,27 +230,34 @@ async function replayJob(job: string, golden: { foreigntotal: string }[], actor:
 
   const results: JobResult[] = [];
   for (const job of jobs) {
-    const r = await replayJob(job, byJob.get(job) ?? [], actor);
+    const r = await replayJob(job, byJob.get(job) ?? [], actor, types[job] ?? "unknown");
     results.push(r);
     writeFileSync(RESULTS, JSON.stringify(results, null, 1)); // incremental: survives a flap
     const mark = r.status === "match" ? "OK " : r.status === "mismatch" ? "DIFF" : r.status === "error" ? "ERR " : "    ";
+    const kind = r.billingType === "_timeAndMaterials" ? "T&M " : r.billingType === "_fixedBidInterval" ? "FIXD" : "??? ";
     console.log(
-      `${mark} job ${job.padEnd(8)} golden ${money(r.goldenTotal).padStart(12)} (${String(r.goldenCount).padStart(2)} inv)` +
-      ` | sandbox ${money(r.existingTotal).padStart(12)}` +
-      (APPLY ? ` | replay ${(r.replayTotal === null ? "-" : money(r.replayTotal)).padStart(12)} | delta ${(r.delta === null ? "-" : money(r.delta)).padStart(10)}` : "") +
+      `${mark} ${kind} job ${job.padEnd(8)} goldenNet ${money(r.goldenNet).padStart(12)} (${String(r.goldenCount).padStart(2)} inv)` +
+      (APPLY ? ` | replay ${(r.replayTotal === null ? "-" : money(r.replayTotal)).padStart(12)} | delta ${(r.delta === null ? "-" : money(r.delta)).padStart(12)}` : ` | sandbox ${money(r.existingTotal).padStart(12)}`) +
       (r.note ? `  ${r.note}` : ""),
     );
   }
 
-  const sum = (f: (r: JobResult) => number) => results.reduce((t, r) => t + f(r), 0);
-  console.log(`\n--- summary (${results.length} jobs) ---`);
-  console.log(`golden total   ${money(sum((r) => r.goldenTotal))}`);
-  console.log(`sandbox total  ${money(sum((r) => r.existingTotal))}  (pre-replay migrated invoices)`);
-  if (APPLY) {
-    console.log(`replay total   ${money(sum((r) => r.replayTotal ?? 0))}`);
-    const c = (s: JobResult["status"]) => results.filter((r) => r.status === s).length;
-    console.log(`match ${c("match")} | mismatch ${c("mismatch")} | error ${c("error")} | skipped ${c("skipped")}`);
-  }
+  const report = (label: string, rows: JobResult[]) => {
+    if (!rows.length) return;
+    const s = (f: (r: JobResult) => number) => rows.reduce((t, r) => t + f(r), 0);
+    const c = (st: JobResult["status"]) => rows.filter((r) => r.status === st).length;
+    console.log(`\n--- ${label} (${rows.length} jobs) ---`);
+    console.log(`  goldenNet ${money(s((r) => r.goldenNet))} | gross ${money(s((r) => r.goldenTotal))}`);
+    if (APPLY) {
+      console.log(`  replay    ${money(s((r) => r.replayTotal ?? 0))} | net delta ${money(s((r) => r.replayTotal ?? 0) - s((r) => r.goldenNet))}`);
+      console.log(`  match ${c("match")} | mismatch ${c("mismatch")} | error ${c("error")} | skipped ${c("skipped")}`);
+    } else {
+      console.log(`  sandbox   ${money(s((r) => r.existingTotal))} (migrated invoices, pre-replay)`);
+    }
+  };
+  report("T&M (rebuilt from cost — the real engine test)", results.filter((r) => r.billingType === "_timeAndMaterials"));
+  report("Fixed-bid interval (rebuilt as progress draws)", results.filter((r) => r.billingType === "_fixedBidInterval"));
+  report("ALL", results);
   console.log(`results -> ${RESULTS}`);
   process.exit(0);
 })().catch((e) => { console.error("FATAL:", (e as Error).message); process.exit(1); });

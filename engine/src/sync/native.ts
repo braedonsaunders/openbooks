@@ -32,6 +32,12 @@ export interface NativeDocLine {
   subsidiaryId?: string | null;
   description: string | null;
   lineNumber: number;
+  /**
+   * Is this cost line rebillable to the project's customer? Carried from the
+   * source system so migrated cost (materials, subs, expenses) stays billable —
+   * without it the project-billing engine can only ever bill labor.
+   */
+  isBillable?: boolean;
 }
 
 export interface NativeDocument {
