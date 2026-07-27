@@ -499,28 +499,32 @@ export async function generateInvoiceFromBillingRequest(
     //      measures, and whether it bills separately at all, is card
     //      configuration; nothing here is specific to a trade or tenant.
     if (built.length) {
-      const lapsed = await findLapsedRateCard({ orgId, projectId: req.project_id, onDate: rateDate })
-      if (lapsed && invoicing.rateCardLapse !== 'carry_forward') {
-        throw new BillingError(
-          `This customer's rate card expired on ${lapsed.lastEffectiveTo ?? 'an earlier date'} and none covers ${rateDate}. ` +
-          'Extend or add a rate card before invoicing — billing now would drop the negotiated surcharges and markups.',
-        )
-      }
-      // Carrying forward prices the work at the last card in force, never at a
-      // later one: a card that starts after the work was done was not the deal.
-      const cardDate = lapsed?.lastEffectiveTo ?? rateDate
-
       const departments = [...new Set(built.map((l) => l.departmentId ?? null))]
       const charges = mergeCharges(
-        (await Promise.all(departments.map(async (departmentId) =>
-          priceAdjustments(
+        (await Promise.all(departments.map(async (departmentId) => {
+          // A lapse is per department, so each is asked separately: one
+          // department's card running out says nothing about another's.
+          const lapsed = await findLapsedRateCard({
+            orgId, projectId: req.project_id, onDate: rateDate, departmentId,
+          })
+          if (lapsed && invoicing.rateCardLapse !== 'carry_forward') {
+            throw new BillingError(
+              `This customer's rate card expired on ${lapsed.lastEffectiveTo ?? 'an earlier date'} and none covers ${rateDate}. ` +
+              'Extend or add a rate card before invoicing — billing now would drop the negotiated surcharges and markups.',
+            )
+          }
+          // Carrying forward prices the work at the last card in force, never at
+          // a later one: a card that starts after the work was done was not the deal.
+          const cardDate = lapsed?.lastEffectiveTo ?? rateDate
+          return priceAdjustments(
             built.filter((l) => (l.departmentId ?? null) === departmentId).map((l) => ({
               amount: l.amount, itemId: l.itemId, itemKind: l.itemKind ?? null,
               departmentId, isLabor: l.isLabor === true, timeKind: l.timeKind ?? null,
             })),
             await resolveRateAdjustments({ orgId, projectId: req.project_id, onDate: cardDate, departmentId }),
             invoicing.surchargeRounding ?? 'half_up',
-          )))).flat(),
+          )
+        }))).flat(),
         invoicing.surchargeRounding ?? 'half_up',
       )
       for (const c of charges) {

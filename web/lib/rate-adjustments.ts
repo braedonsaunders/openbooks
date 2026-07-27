@@ -147,16 +147,29 @@ export async function findLapsedRateCard(input: {
   orgId: string
   projectId: string
   onDate: string
+  /** A lapse is per DEPARTMENT: a customer's electrical card covering the date
+   *  says nothing about whether their mechanical card has run out. */
+  departmentId?: string | null
 }): Promise<{ customerId: string; lastEffectiveTo: string | null } | null> {
   const r = (await db.execute(sql`
     select p.customer_id,
            max(v.effective_to) filter (where v.effective_to < ${input.onDate}::date)::text as last_effective_to
       from projects p
-      join item_rate_book_assignments a on a.customer_id = p.customer_id and a.org_id = ${input.orgId} and a.is_active
+      -- A card can be assigned to the PROJECT as well as the customer, and a
+      -- job that names its own card is the most specific case there is. Looking
+      -- only at customer assignments made every project-assigned card invisible
+      -- here, so a lapse went undetected and its terms silently stopped applying.
+      join item_rate_book_assignments a
+        on (a.customer_id = p.customer_id or a.project_id = p.id)
+       and a.org_id = ${input.orgId} and a.is_active
       join item_rate_versions v on v.rate_book_id = a.rate_book_id and v.status = 'active'
      where p.id = ${input.projectId} and p.org_id = ${input.orgId}
        and exists (select 1 from labor_rate_adjustments x where x.version_id = v.id and x.is_active
                      and x.presentation = 'separate' and x.value > 0)
+       and (not exists (select 1 from labor_rate_version_scopes vs where vs.version_id = v.id)
+         or exists (select 1 from labor_rate_version_scopes vs
+                     where vs.version_id = v.id and vs.scope_type = 'department'
+                       and vs.scope_value_id = ${input.departmentId ?? null}::uuid))
      group by p.customer_id
     having count(*) filter (
       where v.effective_from <= ${input.onDate}::date
