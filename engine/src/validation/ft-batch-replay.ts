@@ -99,6 +99,17 @@ interface Inv { id: string; tranid: string; job: string; date: string; net: numb
       r.orders = orderIds.length;
 
       if (APPLY) {
+        // Clear this invoice's earlier replays first. Re-running otherwise piles
+        // up a draft per attempt, and thousands of them make the tenant unusable
+        // for anyone looking at real work.
+        await retry(() => db.execute(sql`
+          delete from document_lines where document_id in (
+            select id from documents where org_id = ${ORG} and kind = 'customer_invoice'
+              and status = 'draft' and memo = ${"Replay of " + inv.tranid})`));
+        await retry(() => db.execute(sql`
+          delete from documents where org_id = ${ORG} and kind = 'customer_invoice'
+            and status = 'draft' and memo = ${"Replay of " + inv.tranid}`));
+
         // Replay each invoice from a clean slate so results are independent.
         await retry(() => db.execute(sql`update time_entries set invoiced_by_line_id = null where org_id = ${ORG} and project_id = ${pid}`));
         await retry(() => db.execute(sql`update document_lines set billed_by_line_id = null where org_id = ${ORG} and project_id = ${pid}`));
