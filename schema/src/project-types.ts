@@ -183,6 +183,16 @@ export interface InvoicingProfile {
    * suits both, so it is the tenant's call.
    */
   rateCardLapse?: "block" | "carry_forward";
+  /**
+   * On a field-ticket invoice, which cost travels with the ticket.
+   * `ticket_only` (the default) bills only cost the crew attached to that
+   * ticket. `ticket_or_period` also sweeps in cost carrying NO ticket whose
+   * date falls in the ticket's span — convenient where crews do not tag
+   * materials, but it ATTRIBUTES BY GUESS: the same untagged line is eligible
+   * for every ticket covering its date, so whichever invoice is cut first
+   * takes it and the rest of the job is over-billed.
+   */
+  ticketCostScope?: "ticket_only" | "ticket_or_period";
 }
 
 export interface BackupProfile {

@@ -16,7 +16,7 @@
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { sql } from "drizzle-orm";
 import { db } from "../db.ts";
-import { nsClient } from "../netsuite-golden.ts";
+import { sourceClient } from "../sync/source-client.ts";
 
 const ORG = process.env.SANDBOX_ORG ?? "6d5799ad-a37c-4aea-9cd4-748e4dc59614";
 const CACHE = "/tmp/ns-job-lines.json";
@@ -50,7 +50,7 @@ async function fetchSourceLines(): Promise<SrcLine[]> {
     console.log(`source lines: ${cached.length} (cached — pass --refresh to re-pull)`);
     return cached;
   }
-  const client = nsClient();
+  const client = sourceClient();
   const out: SrcLine[] = [];
   for (const type of TYPES) {
     // Chunked by transaction id: a single unbounded scan trips governance.
