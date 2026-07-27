@@ -52,10 +52,25 @@ interface Inv { id: string; tranid: string; job: string; date: string; net: numb
   // expense reports belong to an invoice is a decision someone made, not a date
   // range, so the replay names them the same way it names the field tickets.
   const ordersByInvoice = new Map<string, string[]>();
+  const addRefs = (key: string, refs: string[]) =>
+    ordersByInvoice.set(key, [...new Set([...(ordersByInvoice.get(key) ?? []), ...refs])]);
   if (existsSync("/tmp/inv-orders.json")) {
     for (const row of JSON.parse(readFileSync("/tmp/inv-orders.json", "utf8")) as any[]) {
-      const key = String(row.inv);
-      ordersByInvoice.set(key, [...new Set([...(ordersByInvoice.get(key) ?? []), String(row.ord)])]);
+      addRefs(String(row.inv), [String(row.ord)]);
+    }
+  }
+  // The original also records the sales orders it billed, as a list on the
+  // invoice itself. Those carry the equipment and consumables, which is a
+  // decision no date range can reconstruct.
+  const finalInvoices = new Set<string>();
+  if (existsSync("/tmp/inv-so.json")) {
+    for (const row of JSON.parse(readFileSync("/tmp/inv-so.json", "utf8")) as any[]) {
+      if (String(row.fin ?? "").toUpperCase() === "T") finalInvoices.add(String(row.id));
+      try {
+        const parsed = JSON.parse(String(row.sojson ?? "null"));
+        const refs = Array.isArray(parsed) ? parsed : parsed && typeof parsed === "object" ? Object.values(parsed) : [];
+        addRefs(String(row.id), refs.map((x) => String(x)).filter((x) => /^\d+$/.test(x)));
+      } catch { /* a malformed list on one invoice must not stop the batch */ }
     }
   }
   const list = LIMIT > 0 ? all.slice(0, LIMIT) : all;
@@ -90,7 +105,8 @@ interface Inv { id: string; tranid: string; job: string; date: string; net: numb
         const rid = randomUUID();
         await retry(() => db.execute(sql`
           insert into billing_requests (id, org_id, project_id, request_number, invoice_type, basis, status, invoice_description, custom, created_by)
-          values (${rid}, ${ORG}, ${pid}, ${"FTB-" + randomUUID().slice(0, 8)}, 'progress', 'field_ticket', 'open',
+          values (${rid}, ${ORG}, ${pid}, ${"FTB-" + randomUUID().slice(0, 8)},
+                  ${finalInvoices.has(String(inv.id)) ? "final" : "progress"}, 'field_ticket', 'open',
                   ${"Replay of " + inv.tranid}, ${JSON.stringify({ fieldTicketIds: ids, sourceDocumentIds: orderIds })}::jsonb, ${actor})`));
         const out = await retry(() => generateInvoiceFromBillingRequest(ORG, actor, rid));
         const d = (await retry(() => db.execute(sql`select subtotal::numeric s from documents where id = ${out.id}`))) as any;
