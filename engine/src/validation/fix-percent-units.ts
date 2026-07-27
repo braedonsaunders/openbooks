@@ -10,11 +10,11 @@
  */
 import { sql } from "drizzle-orm";
 import { db } from "../db.ts";
-const ORG = process.env.SANDBOX_ORG ?? "6d5799ad-a37c-4aea-9cd4-748e4dc59614";
+import { resolveTargetOrg } from "./target-org.ts";
+const ORG = process.env.TARGET_ORG ?? process.env.SANDBOX_ORG ?? "6d5799ad-a37c-4aea-9cd4-748e4dc59614";
 const APPLY = process.argv.includes("--apply");
 
-const env:any = await db.execute(sql`select env_kind from orgs where id=${ORG}`);
-if (env.rows[0]?.env_kind !== "sandbox") throw new Error("refusing: target org is not a sandbox");
+await resolveTargetOrg(ORG);
 
 const before:any = await db.execute(sql`
   select code, count(*)::int n, max(value)::text hi from labor_rate_adjustments

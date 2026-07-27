@@ -7,12 +7,12 @@
  */
 import { sql } from "drizzle-orm";
 import { db } from "../db.ts";
+import { resolveTargetOrg } from "./target-org.ts";
 const ORG = process.env.SANDBOX_ORG ?? "6d5799ad-a37c-4aea-9cd4-748e4dc59614";
 const APPLY = process.argv.includes("--apply");
 async function retry<T>(fn:()=>Promise<T>,n=10):Promise<T>{let l:unknown;for(let i=0;i<n;i++){try{return await fn()}catch(e){l=e;await new Promise(r=>setTimeout(r,2500*(i+1)))}}throw l}
 
-const env:any = await retry(()=>db.execute(sql`select env_kind from orgs where id=${ORG}`));
-if (env.rows[0]?.env_kind !== "sandbox") throw new Error("refusing: target org is not a sandbox");
+await resolveTargetOrg(ORG);
 
 const found:any = await retry(()=>db.execute(sql`
   select count(*)::int n, count(*) filter (where status <> 'draft')::int posted

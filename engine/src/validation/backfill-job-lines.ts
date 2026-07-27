@@ -19,8 +19,9 @@
 import { readFileSync } from "node:fs";
 import { sql } from "drizzle-orm";
 import { db } from "../db.ts";
+import { resolveTargetOrg } from "./target-org.ts";
 
-const ORG = process.env.SANDBOX_ORG ?? "6d5799ad-a37c-4aea-9cd4-748e4dc59614";
+const ORG = process.env.TARGET_ORG ?? process.env.SANDBOX_ORG ?? "6d5799ad-a37c-4aea-9cd4-748e4dc59614";
 const APPLY = process.argv.includes("--apply");
 const LIMIT = Number(process.argv.find((a) => a.startsWith("--limit="))?.split("=")[1] ?? "0");
 
@@ -59,8 +60,7 @@ const markupPercent = (markup: string | null): string | null => {
 };
 
 (async () => {
-  const env = (await retry(() => db.execute(sql`select env_kind from orgs where id = ${ORG}`))) as any;
-  if (env.rows[0]?.env_kind !== "sandbox") throw new Error("refusing: target org is not a sandbox");
+  await resolveTargetOrg(ORG);
 
   const src = JSON.parse(readFileSync("/tmp/ns-job-lines.json", "utf8")) as SrcLine[];
   const byTxn = new Map<string, SrcLine[]>();
