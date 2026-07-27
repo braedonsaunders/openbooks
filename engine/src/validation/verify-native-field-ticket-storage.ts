@@ -78,6 +78,7 @@ const pass =
   counts.documents === counts.native_headers
   && counts.missing_native === 0
   && counts.orphan_native === 0
+  && counts.legacy_json_copies === 0
   && counts.legacy_json_mismatches === 0;
 const report = {
   schemaVersion: 1,
