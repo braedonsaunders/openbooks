@@ -3,6 +3,7 @@ import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/db.ts'
 import { add, cmp, fromUnits, isZero, mulDecimal, mulPercent, roundDiv, sum, toUnits } from '@openbooks/engine/src/money.ts'
 import { findLapsedRateCard, mergeCharges, priceAdjustments, resolveRateAdjustments } from './rate-adjustments'
+import { applyRollup, resolveInvoicingProfile } from './invoice-rollup'
 
 /** Round money to the currency's minor unit, half away from zero. */
 function toCents(amount: string): string {
@@ -92,8 +93,10 @@ export async function generateInvoiceFromBillingRequest(
 
     const projRes = (await tx.execute(sql`
       select p.id, p.customer_id, p.customer_po_number, p.subsidiary_id, p.custom,
+             p.invoicing_profile as project_invoicing, c.invoicing_profile as customer_invoicing,
              coalesce(s.base_currency,o.base_currency) as billing_currency
         from projects p join orgs o on o.id=p.org_id left join subsidiaries s on s.id=p.subsidiary_id
+             left join parties c on c.id = p.customer_id
        where p.id = ${req.project_id} and p.org_id = ${orgId}
     `)) as unknown as { rows: any[] }
     const project = projRes.rows[0]
@@ -104,7 +107,13 @@ export async function generateInvoiceFromBillingRequest(
     // The project type governs line building, the credit account, and the coarse
     // billing-method label snapshotted onto the invoice document.
     const ptype = await loadProjectType(orgId, project.id)
-    const invoicing = ptype.invoicingProfile
+    // The agreement is with the CUSTOMER and is sometimes specific to one job,
+    // so the type's rules are narrowed by each in turn.
+    const invoicing = resolveInvoicingProfile(
+      ptype.invoicingProfile,
+      project.customer_invoicing as Partial<typeof ptype.invoicingProfile> | null,
+      project.project_invoicing as Partial<typeof ptype.invoicingProfile> | null,
+    )
     const billingMethod: string = req.billing_method_snapshot ?? ptype.billingMethod ?? 'time_and_materials'
     if (invoicing.billingProcedure === 'application_for_payment') {
       throw new BillingError('This project bills through applications for payment')
@@ -157,6 +166,8 @@ export async function generateInvoiceFromBillingRequest(
       workedOn?: string | null
       /** True when the source line carried its own negotiated markup. */
       hasLineMarkup?: boolean
+      /** Document kind the charge came from, for rollup grouping. */
+      sourceKind?: string | null
       timeKind?: 'regular' | 'overtime' | 'double_time' | null
     }
     const built: BuiltLine[] = []
@@ -408,6 +419,8 @@ export async function generateInvoiceFromBillingRequest(
             timeTypeId: null,
             sourceCostLineId: cl.id,
             itemKind: cl.item_kind ?? null,
+            itemCategory: cl.item_category ?? null,
+            sourceKind: cl.kind ?? null,
             departmentId: cl.department_id ?? null,
             hasLineMarkup: cl.markup_percent != null,
             workedOn: cl.document_date ? String(cl.document_date).slice(0, 10) : null,
@@ -562,6 +575,30 @@ export async function generateInvoiceFromBillingRequest(
     }
 
     if (built.length === 0) throw new BillingError('Nothing available to bill for the selected criteria')
+
+    // Present the invoice the way this customer has agreed to see it. Only the
+    // PRESENTATION changes: provenance still points at the detail lines, so the
+    // backup and every downstream reconciliation keep the full picture.
+    const rolled = applyRollup(
+      built.map((l) => ({ ...l, sourceKind: l.sourceKind ?? null, itemCategory: l.itemCategory ?? null })),
+      invoicing.rollup,
+      (group, amount, quantity) => ({
+        itemId: group.itemId ?? null,
+        accountId: defaultIncomeId,
+        description: group.label,
+        quantity,
+        unitPrice: amount,
+        amount,
+        taxCodeId: null,
+        employeeId: null,
+        timeEntryId: null,
+        timeTypeId: null,
+        sourceCostLineId: null,
+        sourceKind: null,
+        itemCategory: null,
+      }),
+    )
+    const presentedLines = rolled.presented
     if (built.some((l) => !l.accountId)) {
       throw new BillingError('An income account is required — configure income accounts on the billable items')
     }
@@ -581,9 +618,13 @@ export async function generateInvoiceFromBillingRequest(
     `)).rows as any[]
     const invoiceId = created.id
 
+    // The invoice carries the PRESENTED lines; provenance is stamped from the
+    // detail behind them. A rolled-up line bills many source rows, and every one
+    // of those rows must still be marked billed or it becomes available again.
     const amounts: string[] = []
+    const presentedLineIds: string[] = []
     let lineNo = 1
-    for (const l of built) {
+    for (const l of presentedLines) {
       const [line] = (await tx.execute(sql`
         insert into document_lines (org_id, document_id, line_number, item_id, account_id, description,
               quantity, unit, unit_price, amount, tax_code_id, employee_id, time_entry_id, time_type_id,
@@ -594,16 +635,20 @@ export async function generateInvoiceFromBillingRequest(
               ${l.unitPrice}, ${l.amount}, ${userId})
         returning id
       `)).rows as any[]
-      const newLineId = line.id
+      presentedLineIds.push(String(line.id))
       amounts.push(l.amount)
-      // Write provenance so these rows can't be billed again.
+      lineNo++
+    }
+
+    for (const [index, l] of built.entries()) {
+      const billedBy = presentedLineIds[rolled.presentedIndexOf[index] ?? index]
+      if (!billedBy) continue
       if (l.timeEntryId) {
-        await tx.execute(sql`update time_entries set invoiced_by_line_id = ${newLineId} where id = ${l.timeEntryId} and org_id = ${orgId}`)
+        await tx.execute(sql`update time_entries set invoiced_by_line_id = ${billedBy} where id = ${l.timeEntryId} and org_id = ${orgId}`)
       }
       if (l.sourceCostLineId) {
-        await tx.execute(sql`update document_lines set billed_by_line_id = ${newLineId} where id = ${l.sourceCostLineId} and org_id = ${orgId}`)
+        await tx.execute(sql`update document_lines set billed_by_line_id = ${billedBy} where id = ${l.sourceCostLineId} and org_id = ${orgId}`)
       }
-      lineNo++
     }
 
     const subtotal = sum(amounts)

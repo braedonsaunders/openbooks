@@ -214,6 +214,8 @@ export const projects = pgTable(
     // coarse "billing method" is derived from the type (project_types.billing_method),
     // defaulting to time_and_materials for an unconfigured project.
     projectTypeId: uuid("project_type_id"), // → project_types
+    /** Invoicing rules for THIS job, layered over the customer's and the type's. */
+    invoicingProfile: jsonb("invoicing_profile"),
     // Native invoicing/backup override for this project (cascades over the type
     // and customer). A first-class capability, not a user custom field.
     invoicingPreference: jsonb("invoicing_preference").$type<InvoicingPreference>(),

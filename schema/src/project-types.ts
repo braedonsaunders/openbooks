@@ -206,7 +206,52 @@ export interface InvoicingProfile {
    * and is what some negotiated agreements specify.
    */
   surchargeRounding?: "half_up" | "down";
+  /**
+   * How the invoice presents what was billed. Detail is always retained on the
+   * document and its backup; this only decides what the CUSTOMER is shown, which
+   * is a commercial choice that varies by agreement — some want every hour and
+   * every part, others want four lines.
+   */
+  rollup?: InvoiceRollup;
 }
+
+/**
+ * Invoice rollup — summarising billed lines into the groups a customer expects.
+ *
+ * `none` itemises. `by_group` sums into the named groups, in order, by matching
+ * each line; anything unmatched keeps its own line so nothing can be silently
+ * swallowed. Groups are declared rather than hardcoded because what counts as a
+ * presentation group is the tenant's language, not the engine's.
+ */
+export interface InvoiceRollup {
+  mode: "none" | "by_group";
+  groups?: InvoiceRollupGroup[];
+  /** Show the collapsed detail beneath each group instead of replacing it. */
+  keepDetail?: boolean;
+}
+
+export interface InvoiceRollupGroup {
+  /** What the customer sees, e.g. "Labour", "Equipment", "Fuel Surcharge". */
+  label: string;
+  /** Item to carry the rolled-up line, so it posts to the right revenue account. */
+  itemId?: string | null;
+  /** Matches labor lines (billed from time) when true, cost lines when false. */
+  isLabor?: boolean;
+  /** Any of these item categories, matched case-insensitively. */
+  itemCategories?: string[];
+  /** Any of these item kinds (service, other_charge, equipment_charge…). */
+  itemKinds?: string[];
+  /** Any of these source document kinds (sales_order, vendor_bill…). */
+  sourceKinds?: string[];
+}
+
+/**
+ * A partial invoicing profile layered over the project type's. The agreement is
+ * with a CUSTOMER and sometimes specific to one PROJECT, so presentation and
+ * billing rules must be narrowable at both without cloning a project type per
+ * customer — which is what tenants otherwise end up doing.
+ */
+export type InvoicingProfileOverride = Partial<InvoicingProfile>;
 
 export interface BackupProfile {
   required: boolean;

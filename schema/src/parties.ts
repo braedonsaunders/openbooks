@@ -40,7 +40,9 @@ export const parties = pgTable(
     isActive: boolean("is_active").notNull().default(true),
     /** Customer-level invoicing/backup override (cascades over project type). */
     invoicingPreference: jsonb("invoicing_preference").$type<InvoicingPreference>(),
-    custom: jsonb("custom").notNull().default({}),
+    /** Invoicing rules agreed with this customer, layered over the project type. */
+  invoicingProfile: jsonb("invoicing_profile"),
+  custom: jsonb("custom").notNull().default({}),
     ...auditColumns,
   },
   (t) => [
