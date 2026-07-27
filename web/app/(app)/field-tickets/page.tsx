@@ -33,7 +33,6 @@ export default async function FieldTicketsPage({
   const orgId = authz.user.orgId
   if (!(await isFeatureEnabled(orgId, 'fieldTickets'))) notFound()
   const canManage = can(authz, 'time.manage')
-  const canApprove = can(authz, 'time.approve')
   const equipmentEnabled = await isFeatureEnabled(orgId, 'equipment')
   const t = await getTranslations('fieldTickets')
   const sp = await searchParams
@@ -86,15 +85,24 @@ export default async function FieldTicketsPage({
         db.execute(sql`
           select p.id, coalesce(p.code || ' · ' || p.name, p.name) as name,
                  cust.display_name as "customerName",
-                 coalesce(
-                   case when p.custom->>'fieldTicketPeriod' in ('shift','daily','weekly') then p.custom->>'fieldTicketPeriod' end,
-                   case when cust.custom->>'fieldTicketPeriod' in ('shift','daily','weekly') then cust.custom->>'fieldTicketPeriod' end,
-                   case when o.settings->'fieldTickets'->>'defaultPeriod' in ('shift','daily','weekly') then o.settings->'fieldTickets'->>'defaultPeriod' end,
-                   'weekly'
-                 ) as period
+                 coalesce((
+                   select policy.period
+                     from field_ticket_policies policy
+                    where policy.org_id = p.org_id and policy.is_active
+                      and policy.effective_from <= current_date
+                      and (policy.effective_to is null or policy.effective_to >= current_date)
+                      and (
+                        (policy.scope = 'project' and policy.project_id = p.id)
+                        or (policy.scope = 'customer' and policy.customer_party_id = p.customer_id)
+                        or policy.scope = 'organization'
+                      )
+                    order by case policy.scope
+                      when 'project' then 1 when 'customer' then 2 else 3 end,
+                      policy.effective_from desc
+                    limit 1
+                 ), 'weekly') as period
             from projects p
             left join parties cust on cust.id = p.customer_id and cust.org_id = p.org_id
-            join orgs o on o.id = p.org_id
            where p.org_id = ${orgId} and p.is_active order by p.name limit 2000`),
         openTicket.projectId
           ? db.execute(sql`
@@ -154,7 +162,6 @@ export default async function FieldTicketsPage({
         availableLayouts={resolvedForm?.available}
         currentLayoutId={resolvedForm?.row?.id ?? null}
         canCustomize={can(authz, 'admin.customization.manage')}
-        canApprove={canApprove}
         canManage={canManage}
       />
     ) : null

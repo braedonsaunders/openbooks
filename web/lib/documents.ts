@@ -169,6 +169,12 @@ export interface DocumentLineInput extends BillLineInput {
 /** The header + lines payload for a document edit. Every field is optional; an
  *  absent key leaves the stored value untouched (partial patch). */
 export interface DocumentEditInput {
+  /** Required evidence for every posted-document amendment. Not persisted on
+   * the document; stored only in the immutable before/after audit envelope. */
+  amendmentReason?: string
+  /** Optimistic concurrency token from documents.updated_at. Required for
+   * posted amendments so a stale editor cannot overwrite a newer revision. */
+  expectedUpdatedAt?: string
   partyId?: string | null
   paymentCardId?: string | null
   documentDate?: string
@@ -199,6 +205,7 @@ export interface DocumentEditCurrent {
   taxTotal: string
   partyId: string | null
   documentDate: string
+  updatedAt?: string
 }
 
 export interface DocumentEditContext {
@@ -377,6 +384,23 @@ export async function applyDocumentEdit(
       await tx.execute(sql`select set_config('openbooks.amend', 'on', true)`)
       const auditCandidate = await captureTransactionAuditSnapshot(tx, id)
       const auditBefore = auditCandidate?.document.status === 'posted' ? auditCandidate : null
+      if (auditBefore) {
+        const reason = body.amendmentReason?.trim() ?? ''
+        if (reason.length < 5 || reason.length > 500) {
+          throw new DocumentEditError(422, 'A posted-document amendment requires a reason between 5 and 500 characters')
+        }
+        if (!body.expectedUpdatedAt) {
+          throw new DocumentEditError(409, 'This posted document must be reloaded before it can be amended')
+        }
+        const actualUpdatedAt = String(auditBefore.document.updated_at ?? '')
+        const expectedUpdatedAt = String(body.expectedUpdatedAt)
+        if (
+          !actualUpdatedAt ||
+          new Date(actualUpdatedAt).toISOString() !== new Date(expectedUpdatedAt).toISOString()
+        ) {
+          throw new DocumentEditError(409, 'This document changed after you opened it. Reload it and review the newer revision before saving')
+        }
+      }
       const sigBefore = await glSignature(tx, id, orgId)
 
       if (preparedLines) {
@@ -456,6 +480,7 @@ export async function applyDocumentEdit(
           action: 'update',
           actorId: userId,
           source: ctx.source,
+          reason: body.amendmentReason!.trim(),
           before: auditBefore,
           after: auditAfter,
         })

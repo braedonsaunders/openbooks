@@ -11,21 +11,20 @@
  *   /tmp/ft-rows.tsv  TimesheetID, EmpID, ItemId, Shortform, then 7 days x
  *                     (Reg, Over, Double)
  *
- * Creates one `field_ticket` document per ticket and LINKS the labor that is
- * already in the ledger (time_entries.field_ticket_id) rather than re-importing
- * hours, so the import can never double-count cost. Keys map through the ids the
- * rest of the migration already uses: projects/parties/items custom->>'nsId'.
+ * Creates one `field_ticket` document plus its native `field_tickets` header.
+ * It deliberately does not infer time lineage from coincident project/person/
+ * date/hour values. Exact line attachment is a separate source-identity
+ * reconciliation (`link-field-ticket-time-by-source.ts`).
  *
  * Usage: npx tsx src/validation/import-field-tickets.ts [--apply]
  */
 import { readFileSync } from "node:fs";
 import { sql } from "drizzle-orm";
-import { db } from "../db.ts";
+import { db, withOrg } from "../db.ts";
 import { resolveTargetOrg } from "./target-org.ts";
 
 const ORG = process.env.TARGET_ORG ?? process.env.SANDBOX_ORG ?? "6d5799ad-a37c-4aea-9cd4-748e4dc59614";
 const APPLY = process.argv.includes("--apply");
-const DAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 
 async function retry<T>(fn: () => Promise<T>, attempts = 8): Promise<T> {
   let last: unknown;
@@ -70,12 +69,6 @@ const parseRows = (): Row[] =>
       return { ticketId: c[0], empRef: c[1], itemRef: c[2], hours };
     });
 
-const addDays = (iso: string, n: number) => {
-  const d = new Date(`${iso}T00:00:00Z`);
-  d.setUTCDate(d.getUTCDate() + n);
-  return d.toISOString().slice(0, 10);
-};
-
 (async () => {
   await resolveTargetOrg(ORG);
 
@@ -92,12 +85,6 @@ const addDays = (iso: string, n: number) => {
   };
   const projects = await map("projects");
   const parties = await map("parties");
-  const items = await map("items");
-  const tt = (await retry(() => db.execute(sql`select id, name from time_types where org_id = ${ORG}`))) as any;
-  const timeType = (kind: string): string | null => {
-    const want = kind === "Regular" ? "regular time" : kind === "Over" ? "over time" : "double time";
-    return (tt.rows as any[]).find((t) => String(t.name).toLowerCase() === want)?.id ?? null;
-  };
   const actor = ((await retry(() => db.execute(sql`select id from users where org_id = ${ORG} order by created_at limit 1`))) as any).rows[0]?.id;
 
   // Preload the tickets already landed so a resumed run costs one query, not one per ticket.
@@ -106,23 +93,7 @@ const addDays = (iso: string, n: number) => {
       select document_number n, id from documents where org_id = ${ORG} and kind = 'field_ticket'`))) as any).rows as any[])
       .map((x) => [String(x.n), String(x.id)]),
   );
-  let created = 0, linked = 0, noProject = 0, existing = 0;
-  const pending: { ticket: string; project: string; emp: string; day: string; hours: number }[] = [];
-  /** One statement links a whole batch: unnest the tuples and join on them. */
-  const flush = async (batch: typeof pending): Promise<number> => {
-    if (!batch.length) return 0;
-    const r = (await retry(() => db.execute(sql`
-      update time_entries te set field_ticket_id = v.ticket::uuid
-        from (select unnest(${`{${batch.map((b) => b.ticket).join(",")}}`}::uuid[]) ticket,
-                     unnest(${`{${batch.map((b) => b.project).join(",")}}`}::uuid[]) project,
-                     unnest(${`{${batch.map((b) => b.emp).join(",")}}`}::uuid[]) emp,
-                     unnest(${`{${batch.map((b) => b.day).join(",")}}`}::date[]) wday,
-                     unnest(${`{${batch.map((b) => b.hours).join(",")}}`}::numeric[]) hours) v
-       where te.org_id = ${ORG} and te.field_ticket_id is null
-         and te.project_id = v.project and te.employee_party_id = v.emp
-         and te.worked_on = v.wday and abs(te.hours - v.hours) < 0.005`))) as any;
-    return r.rowCount ?? 0;
-  };
+  let created = 0, nativeCreated = 0, noProject = 0, existing = 0;
   for (const t of tickets) {
     const projectId = projects.get(t.jobRef) ?? null;
     if (!projectId) { noProject++; continue; }
@@ -131,39 +102,47 @@ const addDays = (iso: string, n: number) => {
     let ticketDocId: string | undefined = existingTickets.get(t.number);
     if (ticketDocId) existing++;
     else {
-      const ins = (await retry(() => db.execute(sql`
-        insert into documents (org_id, kind, document_number, party_id, project_id, document_date, currency,
-                               status, memo, subtotal, tax_total, total, reference_number, created_by, custom)
-        values (${ORG}, 'field_ticket', ${t.number}, ${parties.get(t.customerRef) ?? null}, ${projectId},
-                ${t.end}, 'CAD', ${t.approval === "Yes" ? "approved" : "draft"}, ${t.description},
-                '0', '0', '0', ${t.po}, ${actor},
-                ${JSON.stringify({ legacy: { id: t.legacyId, number: t.number, jobRef: t.jobRef, empRef: t.empRef,
-                  foremanRef: t.foremanRef, periodBegin: t.begin, periodEnd: t.end, billed: t.billed,
-                  finalTicket: t.final, approval: t.approval } })}::jsonb)
-        returning id`))) as any;
-      ticketDocId = ins.rows[0].id;
+      ticketDocId = await retry(() => withOrg(ORG, async () => {
+        const ins = (await db.execute(sql`
+          insert into documents (org_id, kind, document_number, party_id, project_id, document_date, currency,
+                                 status, memo, subtotal, tax_total, total, reference_number, created_by, custom)
+          values (${ORG}, 'field_ticket', ${t.number}, ${parties.get(t.customerRef) ?? null}, ${projectId},
+                  ${t.end}, 'CAD', ${t.approval === "Yes" ? "approved" : "draft"}, ${t.description},
+                  '0', '0', '0', ${t.po}, ${actor},
+                  ${JSON.stringify({ legacy: { system: "adminapp2", id: t.legacyId, number: t.number,
+                    jobRef: t.jobRef, empRef: t.empRef, foremanRef: t.foremanRef,
+                    periodBegin: t.begin, periodEnd: t.end, billed: t.billed,
+                    finalTicket: t.final, approval: t.approval } })}::jsonb)
+          returning id`)) as any;
+        await db.execute(sql`
+          insert into field_tickets
+            (document_id, org_id, period, period_start, period_end,
+             foreman_party_id, created_by, updated_by)
+          values (${ins.rows[0].id}, ${ORG}, 'weekly', ${t.begin}, ${t.end},
+                  ${parties.get(t.foremanRef) ?? null}, ${actor}, ${actor})
+        `);
+        return String(ins.rows[0].id);
+      }));
       existingTickets.set(t.number, ticketDocId!);
       created++;
     }
 
-    // Collect the (project, employee, day, hours) tuples this ticket covers; the
-    // linking runs as ONE set-based statement per batch below. Doing it per hour
-    // cell meant ~40k sequential round-trips, which saturated the database.
-    for (const r of byTicket.get(t.legacyId) ?? []) {
-      const empId = parties.get(r.empRef);
-      if (!empId) continue;
-      for (const h of r.hours) {
-        pending.push({ ticket: ticketDocId!, project: projectId, emp: empId, day: addDays(t.begin, h.day), hours: h.h });
-      }
-    }
-    if (pending.length >= 400) linked += await flush(pending.splice(0, pending.length));
+    const native = await retry(() => db.execute(sql`
+      insert into field_tickets
+        (document_id, org_id, period, period_start, period_end,
+         foreman_party_id, created_by, updated_by)
+      values (${ticketDocId}, ${ORG}, 'weekly', ${t.begin}, ${t.end},
+              ${parties.get(t.foremanRef) ?? null}, ${actor}, ${actor})
+      on conflict (document_id) do nothing
+      returning document_id
+    `));
+    nativeCreated += native.rows.length;
   }
-  linked += await flush(pending);
-  console.log(`${APPLY ? "imported" : "PLAN"}: tickets created ${created}, already present ${existing}, unmapped job ${noProject}, time entries linked ${linked}`);
+  console.log(`${APPLY ? "imported" : "PLAN"}: tickets created ${created}, native headers added ${nativeCreated}, already present ${existing}, unmapped job ${noProject}`);
   if (APPLY) {
     const v = (await retry(() => db.execute(sql`
       select (select count(*) from documents where org_id = ${ORG} and kind = 'field_ticket')::int tickets,
-             (select count(*) from time_entries where org_id = ${ORG} and field_ticket_id is not null)::int linked`))) as any;
+             (select count(*) from field_tickets where org_id = ${ORG})::int native_headers`))) as any;
     console.log("verify:", JSON.stringify(v.rows[0]));
   }
   process.exit(0);

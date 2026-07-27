@@ -265,9 +265,13 @@ export async function decideGate(args: {
       try {
         if (outcome.resume === "reject") {
           await cancelSubjectApprovals(gate.orgId, gate.subjectKind, gate.subjectId);
-          await adapter.releaseApproval(gate.subjectId, "rejected", ctx);
+          await adapter.releaseApproval(gate.subjectId, "rejected", ctx, {
+            comment: args.comment?.trim() || null,
+          });
         } else if ((await subjectOpenGateCount(gate.orgId, gate.subjectKind, gate.subjectId)) === 0) {
-          await adapter.releaseApproval(gate.subjectId, "approved", ctx);
+          await adapter.releaseApproval(gate.subjectId, "approved", ctx, {
+            comment: args.comment?.trim() || null,
+          });
         }
       } catch (e) {
         hadFailure = true;

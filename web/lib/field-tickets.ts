@@ -1,21 +1,23 @@
 import 'server-only'
 import { sql } from 'drizzle-orm'
-import { db } from '@openbooks/engine/src/db.ts'
+import { db, withOrg } from '@openbooks/engine/src/db.ts'
+import { submitForApproval } from '@openbooks/engine/src/flows/index.ts'
 import { mul, divRate, add, sum } from '@openbooks/engine/src/money.ts'
 import { nextDocumentNumber } from './bills'
 import { createProjectCharge } from './project-charges'
-import { runTimeApprovalEffects } from './time-approval'
 import { resolveItemRate, snapshotTimeBillRates } from './item-rates'
+import { getS3Blob } from './file-storage'
 
 /**
  * Field tickets — the signed crew timesheet for T&M work (the industry's
  * LEM sheet / field ticket / billable timesheet), native as a NON-POSTING
  * `documents` kind:
  *
- *   header    documents (kind 'field_ticket'), customer = party_id, job =
- *             project_id, ticket specifics under custom.fieldTicket
- *   hours     time_entries rows (field_ticket_id) — approval reuses the whole
- *             labor chain: rate snapshots, WIP posting, overhead pairs
+ *   header    documents (kind 'field_ticket') + the one-to-one field_tickets
+ *             native extension; customer = party_id, job = project_id
+ *   hours     time_entries rows (field_ticket_id); each atomic line belongs to
+ *             one project and zero-or-one ticket, while its timesheet/payroll
+ *             approval lifecycle remains independent
  *   items     document_lines on the ticket; approval materializes them as a
  *             posted project_charge so the T&M billing engine sweeps them
  *   signing   foreman + customer signatures stored on the ticket; the signed
@@ -34,13 +36,16 @@ export interface TicketSignature {
   at: string // ISO timestamp
 }
 
-export interface FieldTicketCustom {
+/** Native Field Ticket payload exposed to UI/PDF callers. This is assembled
+ * from relational tables; it is not persisted in documents.custom. */
+export interface FieldTicketData {
   period: TicketPeriod
   periodStart: string
   periodEnd: string
   foremanPartyId: string | null
   signatures?: { foreman?: TicketSignature; customer?: TicketSignature }
   send?: { to?: string | null; sentAt: string; expiresAt: string; message?: string | null; respondedAt?: string | null }
+  rejectionReason?: string | null
   /** The project_charge materialized at approval (item lines → job cost + billing). */
   chargeDocumentId?: string | null
 }
@@ -60,26 +65,34 @@ export function ticketWindow(period: TicketPeriod, anchorIso: string): { start: 
   return { start, end: iso(date) }
 }
 
-/** Resolve the ticket period: job (project.custom) > customer (party.custom) > org default > weekly. */
-export async function resolveTicketPeriod(orgId: string, projectId: string | null): Promise<TicketPeriod> {
+/** Resolve the effective-dated policy: project > customer > organization >
+ * product default. The chosen value is snapshotted on the ticket header. */
+export async function resolveTicketPeriod(
+  orgId: string,
+  projectId: string | null,
+  onDate = iso(new Date()),
+): Promise<TicketPeriod> {
   const valid = (v: unknown): v is TicketPeriod => TICKET_PERIODS.includes(v as TicketPeriod)
-  if (projectId) {
-    const r = (await db.execute(sql`
-      select p.custom->>'fieldTicketPeriod' as proj, cust.custom->>'fieldTicketPeriod' as cust
-        from projects p
-        left join parties cust on cust.id = p.customer_id
-       where p.id = ${projectId} and p.org_id = ${orgId}`)) as unknown as {
-      rows: { proj: string | null; cust: string | null }[]
-    }
-    const row = r.rows[0]
-    if (valid(row?.proj)) return row!.proj as TicketPeriod
-    if (valid(row?.cust)) return row!.cust as TicketPeriod
-  }
-  const o = (await db.execute(sql`
-    select settings->'fieldTickets'->>'defaultPeriod' as p from orgs where id = ${orgId}`)) as unknown as {
-    rows: { p: string | null }[]
-  }
-  return valid(o.rows[0]?.p) ? (o.rows[0]!.p as TicketPeriod) : 'weekly'
+  const resolved = (await db.execute(sql`
+    select policy.period
+      from field_ticket_policies policy
+      left join projects project
+        on project.id = ${projectId} and project.org_id = policy.org_id
+     where policy.org_id = ${orgId}
+       and policy.is_active
+       and policy.effective_from <= ${onDate}::date
+       and (policy.effective_to is null or policy.effective_to >= ${onDate}::date)
+       and (
+         (policy.scope = 'project' and policy.project_id = ${projectId})
+         or (policy.scope = 'customer' and policy.customer_party_id = project.customer_id)
+         or policy.scope = 'organization'
+       )
+     order by case policy.scope
+       when 'project' then 1 when 'customer' then 2 else 3 end,
+       policy.effective_from desc
+     limit 1
+  `)) as unknown as { rows: { period: string }[] }
+  return valid(resolved.rows[0]?.period) ? resolved.rows[0].period : 'weekly'
 }
 
 /**
@@ -103,31 +116,33 @@ export async function createFieldTicket(
       ).rows[0] ?? null
     : null
   if (input.projectId && !proj) throw new FieldTicketError('Project not found')
-  const period = input.period ?? (await resolveTicketPeriod(orgId, input.projectId ?? null))
-  const window = ticketWindow(period, input.date ?? iso(new Date()))
+  const anchorDate = input.date ?? iso(new Date())
+  const period = input.period ?? (await resolveTicketPeriod(orgId, input.projectId ?? null, anchorDate))
+  const window = ticketWindow(period, anchorDate)
   const org = (await db.execute(sql`select base_currency from orgs where id = ${orgId}`)) as unknown as {
     rows: { base_currency: string }[]
   }
   const foreman = (await db.execute(sql`select party_id from users where id = ${userId}`)) as unknown as {
     rows: { party_id: string | null }[]
   }
-  const custom: { fieldTicket: FieldTicketCustom } = {
-    fieldTicket: {
-      period,
-      periodStart: window.start,
-      periodEnd: window.end,
-      foremanPartyId: foreman.rows[0]?.party_id ?? null,
-    },
-  }
   const documentNumber = await nextDocumentNumber(orgId, 'field_ticket', 'FT-', proj?.subsidiary_id ?? undefined)
-  const row = (await db.execute(sql`
-    insert into documents (org_id, kind, document_number, document_date, currency, status, party_id, project_id,
-                           subsidiary_id, reference_number, billing_method, subtotal, tax_total, total, custom, created_by)
-    values (${orgId}, 'field_ticket', ${documentNumber}, ${window.end}, ${org.rows[0]?.base_currency ?? 'CAD'},
-            'draft', ${proj?.customer_id ?? null}, ${proj?.id ?? null}, ${proj?.subsidiary_id ?? null},
-            ${proj?.po ?? null}, 'time_and_materials', '0', '0', '0', ${JSON.stringify(custom)}, ${userId})
-    returning id, document_number`)) as unknown as { rows: { id: string; document_number: string }[] }
-  return { id: row.rows[0].id, documentNumber: row.rows[0].document_number }
+  return withOrg(orgId, async () => {
+    const row = (await db.execute(sql`
+      insert into documents (org_id, kind, document_number, document_date, currency, status, party_id, project_id,
+                             subsidiary_id, reference_number, billing_method, subtotal, tax_total, total, custom, created_by)
+      values (${orgId}, 'field_ticket', ${documentNumber}, ${window.end}, ${org.rows[0]?.base_currency ?? 'CAD'},
+              'draft', ${proj?.customer_id ?? null}, ${proj?.id ?? null}, ${proj?.subsidiary_id ?? null},
+              ${proj?.po ?? null}, 'time_and_materials', '0', '0', '0', '{}'::jsonb, ${userId})
+      returning id, document_number`)) as unknown as { rows: { id: string; document_number: string }[] }
+    await db.execute(sql`
+      insert into field_tickets
+        (document_id, org_id, period, period_start, period_end, foreman_party_id,
+         created_by, updated_by)
+      values (${row.rows[0].id}, ${orgId}, ${period}, ${window.start}, ${window.end},
+              ${foreman.rows[0]?.party_id ?? null}, ${userId}, ${userId})
+    `)
+    return { id: row.rows[0].id, documentNumber: row.rows[0].document_number }
+  })
 }
 
 /**
@@ -150,7 +165,7 @@ export async function updateTicketHeader(
 ): Promise<void> {
   const doc = await loadHeader(orgId, ticketId)
   if (doc.status !== 'draft') throw new FieldTicketError('Only draft tickets can be edited')
-  const ft = { ...doc.custom.fieldTicket }
+  const ft = { ...doc.fieldTicket }
 
   // Resolve every column ONCE in JS (a column may only be assigned once).
   let projChange: { id: string; customer_id: string | null; subsidiary_id: string | null; po: string | null } | null = null
@@ -165,7 +180,7 @@ export async function updateTicketHeader(
     projChange = proj.rows[0]
     // Re-resolve the period for the new job unless the caller pinned one.
     if (patch.period === undefined) {
-      const resolved = await resolveTicketPeriod(orgId, projChange.id)
+      const resolved = await resolveTicketPeriod(orgId, projChange.id, patch.documentDate ?? doc.document_date)
       if (resolved !== ft.period) patch.period = resolved
     }
   }
@@ -202,9 +217,15 @@ export async function updateTicketHeader(
       document_date = ${nextDate},
       reference_number = ${nextRef},
       memo = ${nextMemo},
-      custom = jsonb_set(custom, '{fieldTicket}', ${JSON.stringify(ft)}::jsonb),
       updated_at = now(), updated_by = ${userId}
      where id = ${ticketId} and org_id = ${orgId}`)
+  await db.execute(sql`
+    update field_tickets
+       set period = ${ft.period}, period_start = ${ft.periodStart},
+           period_end = ${ft.periodEnd}, foreman_party_id = ${ft.foremanPartyId},
+           updated_at = now(), updated_by = ${userId}
+     where document_id = ${ticketId} and org_id = ${orgId}
+  `)
   // Re-home any existing draft hours/lines onto the new project.
   if (projChange) {
     await db.execute(sql`update time_entries set project_id = ${projChange.id}, project_task_id = null where field_ticket_id = ${ticketId} and org_id = ${orgId} and status = 'draft'`)
@@ -229,7 +250,7 @@ export interface CrewRowInput {
 export async function saveCrewGrid(orgId: string, userId: string, ticketId: string, rows: CrewRowInput[]): Promise<void> {
   const doc = await loadHeader(orgId, ticketId)
   if (doc.status !== 'draft') throw new FieldTicketError('Only draft tickets can be edited')
-  const ft = doc.custom.fieldTicket
+  const ft = doc.fieldTicket
 
   const existing = (await db.execute(sql`
     select id, employee_party_id, item_id, project_task_id, time_type_id, worked_on::text as worked_on, hours
@@ -340,7 +361,7 @@ export async function addTicketLine(
       projectId: doc.project_id,
       itemId: input.itemId,
       equipmentUnitId: input.equipmentUnitId,
-      onDate: doc.custom.fieldTicket.periodEnd,
+      onDate: doc.fieldTicket.periodEnd,
       baseQuantity: quantity,
       rateUnitCode: input.rateUnitCode,
     })
@@ -411,72 +432,158 @@ interface HeaderRow {
   document_date: string
   reference_number: string | null
   memo: string | null
-  custom: { fieldTicket: FieldTicketCustom }
+  period: TicketPeriod
+  period_start: string
+  period_end: string
+  foreman_party_id: string | null
+  charge_document_id: string | null
+  submitted_by: string | null
+  submitted_at: string | null
+  rejection_reason: string | null
+  fieldTicket: FieldTicketData
 }
 
 async function loadHeader(orgId: string, ticketId: string): Promise<HeaderRow> {
   const r = (await db.execute(sql`
-    select id, document_number, status, party_id, project_id, document_date::text as document_date, reference_number, memo, custom
-      from documents where id = ${ticketId} and org_id = ${orgId} and kind = 'field_ticket'`)) as unknown as {
+    select d.id, d.document_number, d.status, d.party_id, d.project_id,
+           d.document_date::text as document_date, d.reference_number, d.memo,
+           ft.period, ft.period_start::text as period_start,
+           ft.period_end::text as period_end,
+           ft.foreman_party_id, ft.charge_document_id, ft.submitted_by,
+           ft.submitted_at::text as submitted_at, ft.rejection_reason
+      from documents d
+      join field_tickets ft
+        on ft.document_id = d.id and ft.org_id = d.org_id
+     where d.id = ${ticketId} and d.org_id = ${orgId}
+       and d.kind = 'field_ticket'`)) as unknown as {
     rows: HeaderRow[]
   }
   if (!r.rows[0]) throw new FieldTicketError('Ticket not found')
   const row = r.rows[0]
-  if (!row.custom?.fieldTicket) throw new FieldTicketError('Ticket is malformed (missing fieldTicket data)')
+  row.fieldTicket = {
+    period: row.period,
+    periodStart: row.period_start,
+    periodEnd: row.period_end,
+    foremanPartyId: row.foreman_party_id,
+    chargeDocumentId: row.charge_document_id,
+  }
+  if (row.rejection_reason) {
+    ;(row.fieldTicket as FieldTicketData & { rejectionReason?: string }).rejectionReason = row.rejection_reason
+  }
   return row
 }
 
-export async function patchTicketCustom(
+async function auditTicketLifecycle(
   orgId: string,
   ticketId: string,
-  patch: Partial<FieldTicketCustom>,
+  actorId: string,
+  action: 'update' | 'approve' | 'reject',
+  changes: Record<string, unknown>,
 ): Promise<void> {
-  const doc = await loadHeader(orgId, ticketId)
-  const next = { ...doc.custom.fieldTicket, ...patch }
   await db.execute(sql`
-    update documents set custom = jsonb_set(custom, '{fieldTicket}', ${JSON.stringify(next)}::jsonb), updated_at = now()
-     where id = ${ticketId} and org_id = ${orgId}`)
-}
-
-/** Submit: draft → pending_approval (validates the ticket isn't empty). */
-export async function submitFieldTicket(orgId: string, userId: string, ticketId: string): Promise<void> {
-  const doc = await loadHeader(orgId, ticketId)
-  if (doc.status !== 'draft') throw new FieldTicketError('Only draft tickets can be submitted')
-  const counts = (await db.execute(sql`
-    select (select count(*) from time_entries where field_ticket_id = ${ticketId}) as hours,
-           (select count(*) from document_lines where document_id = ${ticketId}) as lines`)) as unknown as {
-    rows: { hours: number; lines: number }[]
-  }
-  if (Number(counts.rows[0].hours) === 0 && Number(counts.rows[0].lines) === 0) {
-    throw new FieldTicketError('Add hours or lines before submitting')
-  }
-  await db.execute(sql`
-    update time_entries set status = 'submitted', updated_at = now(), updated_by = ${userId}
-     where org_id = ${orgId} and field_ticket_id = ${ticketId} and status = 'draft'`)
-  await db.execute(sql`
-    update documents set status = 'pending_approval', updated_at = now(), updated_by = ${userId}
-     where id = ${ticketId} and org_id = ${orgId}`)
+    insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
+    values (${orgId}, 'documents', ${ticketId}, ${action}, ${JSON.stringify(changes)}::jsonb, ${actorId})
+  `)
 }
 
 /**
- * Approve: hours become approved time (full labor chain fires), item lines
- * materialize as a POSTED project_charge (job cost + billing sweep), the
- * ticket locks. Both provenance directions recorded via document_links.
+ * Submit through Flows. An enabled tenant-authored on_submit flow may create
+ * gates; when none does, the ticket approves immediately. There is no default
+ * approver, hardcoded threshold, or parallel approval path.
  */
-export async function approveFieldTicket(orgId: string, userId: string, ticketId: string): Promise<void> {
-  const doc = await loadHeader(orgId, ticketId)
-  if (doc.status !== 'pending_approval') throw new FieldTicketError('Only submitted tickets can be approved')
+export async function submitFieldTicket(orgId: string, userId: string, ticketId: string): Promise<void> {
+  const outcome = await withOrg(orgId, async () => {
+    const doc = await loadHeader(orgId, ticketId)
+    if (doc.status !== 'draft') throw new FieldTicketError('Only draft tickets can be submitted')
+    const counts = (await db.execute(sql`
+      select (select count(*) from time_entries where org_id = ${orgId} and field_ticket_id = ${ticketId}) as hours,
+             (select count(*) from document_lines where org_id = ${orgId} and document_id = ${ticketId}) as lines`)) as unknown as {
+      rows: { hours: number; lines: number }[]
+    }
+    if (Number(counts.rows[0].hours) === 0 && Number(counts.rows[0].lines) === 0) {
+      throw new FieldTicketError('Add hours or lines before submitting')
+    }
 
-  const entries = (await db.execute(sql`
-    update time_entries set status = 'approved', approved_by = ${userId}, approved_at = now(),
-           updated_at = now(), updated_by = ${userId}
-     where org_id = ${orgId} and field_ticket_id = ${ticketId} and status = 'submitted'
-     returning id`)) as unknown as { rows: { id: string }[] }
-  try {
-    await runTimeApprovalEffects(orgId, userId, entries.rows.map((r) => r.id))
-  } catch (e) {
-    console.error('[field-tickets] approval effects failed (entries stay re-postable):', (e as Error).message)
+    await db.execute(sql`
+      update field_tickets
+         set submitted_by = ${userId}, submitted_at = now(),
+             rejection_reason = null, updated_at = now(), updated_by = ${userId}
+       where document_id = ${ticketId} and org_id = ${orgId}`)
+
+    const routed = await submitForApproval('field_ticket', ticketId, userId)
+    if (routed.flowError) {
+      await auditTicketLifecycle(orgId, ticketId, userId, 'update', {
+        source: 'flows',
+        event: 'submit_failed',
+        reason: routed.flowError,
+      })
+      return { flowError: routed.flowError }
+    }
+
+    if (routed.gated) {
+      await auditTicketLifecycle(orgId, ticketId, userId, 'update', {
+        source: 'flows',
+        from: 'draft',
+        to: 'pending_approval',
+        flowRunId: routed.runId,
+      })
+      return { flowError: null }
+    }
+
+    await releaseFieldTicketApproval(orgId, userId, ticketId, 'approved', null)
+    return { flowError: null }
+  })
+  if (outcome.flowError) throw new FieldTicketError(outcome.flowError)
+}
+
+/**
+ * Deterministic approval release called by Flows, or directly after submit
+ * when no tenant-authored approval gate exists. The caller owns a withOrg
+ * transaction, so project-charge materialization, status, links, and audit
+ * either all commit or all roll back. The ticket's commercial approval never
+ * changes its atomic time lines' independent timesheet/payroll approval state.
+ */
+export async function releaseFieldTicketApproval(
+  orgId: string,
+  userId: string,
+  ticketId: string,
+  outcome: 'approved' | 'rejected',
+  comment?: string | null,
+): Promise<void> {
+  const doc = await loadHeader(orgId, ticketId)
+  if (outcome === 'rejected') {
+    if (doc.status !== 'pending_approval') {
+      throw new FieldTicketError('Only submitted tickets can be rejected')
+    }
+    const reason = comment?.trim() || 'Rejected in approval flow'
+    await db.execute(sql`
+      update documents set status = 'draft', updated_at = now(), updated_by = ${userId}
+       where id = ${ticketId} and org_id = ${orgId}`)
+    await db.execute(sql`
+      update field_tickets
+         set rejection_reason = ${reason.slice(0, 500)}, updated_at = now(),
+             updated_by = ${userId}
+       where document_id = ${ticketId} and org_id = ${orgId}`)
+    await auditTicketLifecycle(orgId, ticketId, userId, 'reject', {
+      source: 'flows',
+      from: 'pending_approval',
+      to: 'draft',
+      reason,
+    })
+    return
   }
+
+  if (doc.status !== 'draft' && doc.status !== 'pending_approval') {
+    if (doc.status === 'approved') return
+    throw new FieldTicketError('Only draft or submitted tickets can be approved')
+  }
+  const previousStatus = doc.status
+
+  const entryCount = (await db.execute(sql`
+    select count(*)::int as count
+      from time_entries
+     where org_id = ${orgId} and field_ticket_id = ${ticketId}
+  `)) as unknown as { rows: { count: number }[] }
 
   // Materialize item lines as a project charge so job cost + T&M billing see them.
   const lines = (await db.execute(sql`
@@ -489,7 +596,8 @@ export async function approveFieldTicket(orgId: string, userId: string, ticketId
       rate_version_id: string | null; rate_presentation: 'summary' | 'rate_components' | null;
       base_quantity: string | null; base_unit: string | null }[]
   }
-  if (lines.rows.length > 0 && doc.project_id) {
+  let chargeDocumentId = doc.fieldTicket.chargeDocumentId ?? null
+  if (lines.rows.length > 0 && doc.project_id && !chargeDocumentId) {
     const lineIds = `{${lines.rows.map((line) => line.id).join(',')}}`
     const componentRows = (await db.execute(sql`
       select document_line_id, role, rate_line_id, unit_code, unit_name, quantity, rate, amount
@@ -509,7 +617,7 @@ export async function approveFieldTicket(orgId: string, userId: string, ticketId
       {
         projectId: doc.project_id,
         referenceNumber: doc.document_number,
-        documentDate: doc.custom.fieldTicket.periodEnd,
+        documentDate: doc.fieldTicket.periodEnd,
         lines: lines.rows.map((l) => {
           const costComponents = componentsFor(l.id, 'cost')
           const billComponents = componentsFor(l.id, 'bill')
@@ -537,39 +645,40 @@ export async function approveFieldTicket(orgId: string, userId: string, ticketId
       { post: true },
     )
     await db.execute(sql`
-      insert into document_links (org_id, from_document_id, to_document_id, kind)
-      values (${orgId}, ${ticketId}, ${charge.id}, 'created_from')`)
-    await patchTicketCustom(orgId, ticketId, { chargeDocumentId: charge.id })
+      insert into document_links (org_id, from_document_id, to_document_id, link_type, created_by, updated_by)
+      values (${orgId}, ${ticketId}, ${charge.id}, 'created_from', ${userId}, ${userId})`)
+    await db.execute(sql`
+      update field_tickets
+         set charge_document_id = ${charge.id}, updated_at = now(),
+             updated_by = ${userId}
+       where document_id = ${ticketId} and org_id = ${orgId}
+         and charge_document_id is null
+    `)
+    chargeDocumentId = charge.id
   }
 
   await db.execute(sql`
     update documents set status = 'approved', updated_at = now(), updated_by = ${userId}
      where id = ${ticketId} and org_id = ${orgId}`)
-}
-
-/** Reject: back to draft with the reason recorded; hours reopen. */
-export async function rejectFieldTicket(orgId: string, userId: string, ticketId: string, reason: string): Promise<void> {
-  const doc = await loadHeader(orgId, ticketId)
-  if (doc.status !== 'pending_approval') throw new FieldTicketError('Only submitted tickets can be rejected')
-  await db.execute(sql`
-    update time_entries set status = 'draft', updated_at = now(), updated_by = ${userId}
-     where org_id = ${orgId} and field_ticket_id = ${ticketId} and status = 'submitted'`)
-  await db.execute(sql`
-    update documents set status = 'draft', updated_at = now(), updated_by = ${userId},
-           custom = jsonb_set(custom, '{fieldTicket,rejectionReason}', ${JSON.stringify(reason.slice(0, 500))}::jsonb)
-     where id = ${ticketId} and org_id = ${orgId}`)
+  await auditTicketLifecycle(orgId, ticketId, userId, 'approve', {
+    source: previousStatus === 'pending_approval' ? 'flows' : 'submit_without_approval_flow',
+    from: previousStatus,
+    to: 'approved',
+    timeEntries: entryCount.rows[0]?.count ?? 0,
+    chargeDocumentId,
+  })
 }
 
 /** Full ticket payload for the editor and the PDF. */
 export async function loadFieldTicket(orgId: string, ticketId: string) {
   const doc = await loadHeader(orgId, ticketId)
-  const [customer, project, foreman, entries, lines] = await Promise.all([
+  const [customer, project, foreman, entries, lines, signatureRows, requestRows] = await Promise.all([
     db.execute(sql`
       select display_name, email from parties
        where id = coalesce(${doc.party_id}, (select customer_id from projects where id = ${doc.project_id} and org_id = ${orgId}))
          and org_id = ${orgId}`) as unknown as Promise<{ rows: { display_name: string; email: string | null }[] }>,
     db.execute(sql`select code, name from projects where id = ${doc.project_id}`) as unknown as Promise<{ rows: { code: string | null; name: string }[] }>,
-    db.execute(sql`select display_name from parties where id = ${doc.custom.fieldTicket.foremanPartyId}`) as unknown as Promise<{ rows: { display_name: string }[] }>,
+    db.execute(sql`select display_name from parties where id = ${doc.fieldTicket.foremanPartyId}`) as unknown as Promise<{ rows: { display_name: string }[] }>,
     db.execute(sql`
       select te.id, te.employee_party_id, p.display_name as employee_name, te.item_id, i.name as item_name,
              te.time_type_id, tt.name as time_type_name, coalesce(tt.bill_multiplier, '1') as bill_multiplier,
@@ -597,6 +706,38 @@ export async function loadFieldTicket(orgId: string, ticketId: string) {
         left join equipment_units eu on eu.id = dl.equipment_unit_id
        where dl.document_id = ${ticketId} and dl.org_id = ${orgId}
        order by dl.line_number`) as unknown as Promise<{ rows: TicketLineRow[] }>,
+    db.execute(sql`
+      select s.role, s.signer_name, s.comment, s.signed_at::text as signed_at,
+             fv.id as version_id, fv.content_type, fv.storage_kind, fb.bytes
+        from field_ticket_signatures s
+        join files f on f.id = s.signature_file_id and f.org_id = s.org_id
+        join file_versions fv on fv.id = f.current_version_id
+        left join file_blobs fb on fb.version_id = fv.id
+       where s.org_id = ${orgId} and s.field_ticket_id = ${ticketId}
+       order by s.signed_at`) as unknown as Promise<{ rows: Array<{
+         role: 'foreman' | 'customer'
+         signer_name: string
+         comment: string | null
+         signed_at: string
+         version_id: string
+         content_type: string
+         storage_kind: string
+         bytes: Buffer | null
+       }> }>,
+    db.execute(sql`
+      select recipient, message, sent_at::text as sent_at,
+             expires_at::text as expires_at, responded_at::text as responded_at
+        from field_ticket_signature_requests
+       where org_id = ${orgId} and field_ticket_id = ${ticketId}
+         and sent_at is not null
+       order by sent_at desc
+       limit 1`) as unknown as Promise<{ rows: Array<{
+         recipient: string
+         message: string | null
+         sent_at: string
+         expires_at: string
+         responded_at: string | null
+       }> }>,
   ])
   // Draft entries have no bill-rate snapshot yet — resolve a live preview so
   // the ticket shows money before approval (approval stamps the real ones).
@@ -607,6 +748,34 @@ export async function loadFieldTicket(orgId: string, ticketId: string) {
     entries.rows.map((e) => (e.bill_rate != null ? mul(String(e.hours), String(e.bill_rate)) : '0')),
   )
   const linesTotal = sum(lines.rows.map((l) => String(l.bill_amount ?? l.amount)))
+  const signatures: { foreman?: TicketSignature; customer?: TicketSignature } = {}
+  for (const signature of signatureRows.rows) {
+    const bytes = signature.storage_kind === 's3'
+      ? await getS3Blob(signature.version_id)
+      : signature.bytes
+    signatures[signature.role] = {
+      image: bytes
+        ? `data:${signature.content_type};base64,${Buffer.from(bytes).toString('base64')}`
+        : null,
+      name: signature.signer_name,
+      comment: signature.comment,
+      at: signature.signed_at,
+    }
+  }
+  const latestRequest = requestRows.rows[0]
+  const fieldTicket: FieldTicketData = {
+    ...doc.fieldTicket,
+    signatures: Object.keys(signatures).length ? signatures : undefined,
+    send: latestRequest
+      ? {
+          to: latestRequest.recipient,
+          message: latestRequest.message,
+          sentAt: latestRequest.sent_at,
+          expiresAt: latestRequest.expires_at,
+          respondedAt: latestRequest.responded_at,
+        }
+      : undefined,
+  }
   return {
     id: doc.id,
     documentNumber: doc.document_number,
@@ -620,7 +789,7 @@ export async function loadFieldTicket(orgId: string, ticketId: string) {
     projectId: doc.project_id,
     projectName: project.rows[0] ? [project.rows[0].code, project.rows[0].name].filter(Boolean).join(' · ') : '',
     foremanName: foreman.rows[0]?.display_name ?? '',
-    fieldTicket: doc.custom.fieldTicket,
+    fieldTicket,
     entries: entries.rows,
     lines: lines.rows,
     laborTotal,

@@ -238,6 +238,13 @@
       "reject": "Rejected"
     }
   },
+  "amendment": {
+    "title": "Explain this posted-document amendment",
+    "deleteTitle": "Explain why this posted document is being deleted",
+    "reason": "Reason for change",
+    "placeholder": "Describe what changed and why",
+    "deletePlaceholder": "Describe why deleting the posted transaction is necessary"
+  },
   "approvalFlow": {
     "pendingWith": "Pending with {names}",
     "rejectTitle": "Reject this document?",

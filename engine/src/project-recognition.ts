@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import { db } from "./db.ts";
+import { db, inDbTransaction } from "./db.ts";
 import { add, mulRate, neg, sum, isZero } from "./money.ts";
 
 /**
@@ -65,7 +65,7 @@ export async function postProjectGlEntry(opts: {
   if (lines.length === 0) return null;
   const bal = sum(lines.map((l) => l.amount));
   if (!isZero(bal)) throw new Error(`unbalanced project GL entry (${bal})`);
-  return db.transaction(async (tx) => {
+  return inDbTransaction(async (tx) => {
     const book = (await tx.execute(sql`
       select id from accounting_books where org_id = ${orgId} and is_active
        order by is_primary desc, code limit 1`)) as unknown as { rows: { id: string }[] };
@@ -126,7 +126,7 @@ export async function postProjectGlEntry(opts: {
 
 /** Reverse a posted origin-tagged entry (negated mirror, reverses_entry_id). */
 export async function reverseProjectGlEntry(orgId: string, actorId: string, entryId: string): Promise<string | null> {
-  return db.transaction(async (tx) => {
+  return inDbTransaction(async (tx) => {
     const head = (await tx.execute(sql`
       select entry_number, book_id, subsidiary_id, period_id, posting_date, origin, status
         from journal_entries where id = ${entryId} and org_id = ${orgId}`)) as unknown as { rows: any[] };

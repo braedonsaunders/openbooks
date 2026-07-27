@@ -56,7 +56,7 @@ const cents = (v: unknown) => Math.round(Math.abs(Number(v ?? 0)) * 100);
     // Source side: drop the mainline (the AR total) and tax lines; what remains
     // is what the customer was actually charged for.
     const src = await retry(() => client.query<Record<string, string>>(`
-      select tl.netamount amt, tl.custcol_bit_item_category cat, tl.item,
+      select tl.foreignamount amt, tl.custcol_bit_item_category cat, tl.item,
              tl.quantity qty, tl.memo, tl.mainline, tl.taxline
         from transactionline tl where tl.transaction = ${inv.id} order by tl.id`));
     const srcLines = src
@@ -83,7 +83,7 @@ const cents = (v: unknown) => Math.round(Math.abs(Number(v ?? 0)) * 100);
     const extra = ourLines.filter((o) => !o.used);
     const sum = (xs: { amt: number }[]) => xs.reduce((t, x) => t + x.amt, 0) / 100;
 
-    console.log(`\n=== ${tranid}  golden ${inv.net}  replay ${doc.rows[0].st} ===`);
+    console.log(`\n=== ${tranid}  golden ${sum(srcLines).toFixed(2)}  replay ${doc.rows[0].st} ===`);
     console.log(`  ${srcLines.length} source lines, ${ourLines.length} replayed, ${srcLines.length - missing.length} matched`);
     if (missing.length) {
       console.log(`  MISSING from the replay (${missing.length}, ${sum(missing).toFixed(2)}):`);

@@ -177,6 +177,15 @@ const poolDb = drizzle(basePool, { schema });
  * Pass `null` to run with bypass — trusted code that must span orgs.
  */
 export async function withOrg<T>(orgId: string | null, fn: () => Promise<T>): Promise<T> {
+  const active = orgContext.getStore();
+  if (active?.txDb && !active.bypass) {
+    if (orgId !== active.orgId) {
+      throw new Error("cannot change organization inside an active tenant transaction");
+    }
+    // Reuse the pinned transaction. Opening a second transaction here would
+    // hide the caller's uncommitted aggregate writes and break atomicity.
+    return fn();
+  }
   // Long-running, timeout-free pool — a clone/wipe is one big transaction.
   const client = await longPool.connect();
   const bypass = orgId === null;
@@ -235,7 +244,16 @@ export function withOrgContext<T>(orgId: string, fn: () => Promise<T>): Promise<
  */
 export const db = new Proxy(poolDb, {
   get(target, prop, receiver) {
-    const active = orgContext.getStore()?.txDb ?? target;
+    const current = orgContext.getStore()?.txDb;
+    // `withOrg` pins a client and opens the authoritative transaction itself.
+    // Calling drizzle's database.transaction() on that same client would emit a
+    // second BEGIN/COMMIT, prematurely commit the outer unit, and clear its
+    // SET LOCAL tenant scope. Treat nested transaction helpers as participation
+    // in the existing atomic unit; any thrown error reaches the outer rollback.
+    if (prop === "transaction" && current) {
+      return async (fn: (tx: typeof current) => Promise<unknown>) => fn(current);
+    }
+    const active = current ?? target;
     const value = Reflect.get(active as object, prop, receiver);
     return typeof value === "function" ? value.bind(active) : value;
   },

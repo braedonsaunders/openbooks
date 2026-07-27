@@ -60,7 +60,7 @@ const money = (v: number) => v.toLocaleString(undefined, { minimumFractionDigits
   for (let i = 0; i < tids.length; i += 60) {
     const chunk = tids.slice(i, i + 60);
     const rows = await retry(() => client.query<Record<string, string>>(`
-      select tl.transaction txn, tl.netamount amt, tl.custcol_bit_item_category cat,
+      select tl.transaction txn, tl.foreignamount amt, tl.custcol_bit_item_category cat,
              tl.memo, tl.mainline, tl.taxline, tl.custcol_bit_timesheet_number tix
         from transactionline tl where tl.transaction in (${chunk.join(",")})`));
     for (const r of rows) {
@@ -95,21 +95,28 @@ const money = (v: number) => v.toLocaleString(undefined, { minimumFractionDigits
     if (!inv) continue;
     const golden = goldenLines.get(String(inv.id)) ?? [];
     const ours = ((await retry(() => db.execute(sql`
-      select dl.description, dl.amount::text amt from document_lines dl
+      select dl.description, dl.amount::text amt, dl.time_entry_id from document_lines dl
         join documents d on d.id = dl.document_id
        where d.org_id = ${ORG} and d.memo = ${"Replay of " + r.tranid}
        order by d.created_at desc`))) as any).rows as any[];
     const ourCents = ours.map((o) => cents(o.amt)).filter((c) => c !== 0);
-
+    const laborCents = ours
+      .filter((o) => o.time_entry_id)
+      .reduce((total, o) => total + cents(o.amt), 0);
+    const unmatched = [...ourCents];
     const missing = golden.filter((g) => {
-      const pool = [...ourCents];
-      return !pool.includes(g.amt);
+      const match = unmatched.indexOf(g.amt);
+      if (match < 0) return true;
+      unmatched.splice(match, 1);
+      return false;
     });
     const deletedOrders = (orderLists.get(String(inv.id)) ?? []).filter((o) => !alive.has(o));
     const cat6 = golden.filter((g) => g.cat === "6").reduce((t, g) => t + g.amt, 0) / 100;
     const billedTickets = goldenTickets.get(String(inv.id)) ?? new Set<string>();
     const unbilledTickets = (inv.tickets ?? []).filter((t: string) => !billedTickets.has(t));
     const ratio = r.net ? r.replay / r.net : 0;
+    const deltaCents = Math.round(r.delta * 100);
+    const laborChargeRate = laborCents > 0 ? (deltaCents * 100) / laborCents : 0;
 
     let reason: string;
     if (deletedOrders.length && cat6 > 0 && Math.abs(Math.abs(r.delta) - cat6) < 1) {
@@ -122,6 +129,8 @@ const money = (v: number) => v.toLocaleString(undefined, { minimumFractionDigits
       reason = "a single line differs by a cent — charge lines match exactly";
     } else if (unbilledTickets.length) {
       reason = `the invoice HEADER names ${unbilledTickets.length} ticket(s) that none of its lines bill (${unbilledTickets.slice(0, 2).join(", ")}) — the original did not invoice that work here`;
+    } else if (r.delta > 0 && Math.abs(laborChargeRate - 3.75) < 0.002) {
+      reason = "replay adds a charge equal to 3.75% of labor; the source invoice omitted that surcharge";
     } else if (r.delta > 0 && !missing.length) {
       reason = "we bill more than the original with nothing missing — cause not identified";
     } else if (cat6 > 0) {

@@ -209,6 +209,13 @@
     "retry": "再試行",
     "actions": { "insert": "作成", "update": "更新", "delete": "削除", "post": "記帳", "void": "無効化", "approve": "承認", "reject": "却下" }
   },
+  "amendment": {
+    "title": "転記済み伝票の変更理由",
+    "deleteTitle": "転記済み伝票を削除する理由",
+    "reason": "変更理由",
+    "placeholder": "変更内容と理由を記載してください",
+    "deletePlaceholder": "転記済み取引を削除する必要がある理由を記載してください"
+  },
   "approvalFlow": {
     "pendingWith": "{names}の承認待ち",
     "rejectTitle": "このドキュメントを却下しますか？",

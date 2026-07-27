@@ -1,6 +1,6 @@
 import { notFound } from 'next/navigation'
 import { withOrgContext } from '@openbooks/engine/src/db.ts'
-import { verifySigningToken } from '../../../../lib/field-ticket-token'
+import { validateSigningRequest, verifySigningToken } from '../../../../lib/field-ticket-token'
 import { loadFieldTicket } from '../../../../lib/field-tickets'
 import { SignTicketForm } from './SignTicketForm'
 
@@ -18,7 +18,12 @@ export default async function SignFieldTicketPage({ params }: { params: Promise<
 
   let ticket
   try {
-    ticket = await withOrgContext(verified.orgId, () => loadFieldTicket(verified.orgId, verified.ticketId))
+    ticket = await withOrgContext(verified.orgId, async () => {
+      if (!(await validateSigningRequest(token, verified, { allowResponded: true }))) {
+        throw new Error('Signing request is not valid')
+      }
+      return loadFieldTicket(verified.orgId, verified.ticketId)
+    })
   } catch {
     notFound()
   }

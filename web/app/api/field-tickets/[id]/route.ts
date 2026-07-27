@@ -4,11 +4,8 @@ import { isUuid } from '../../../../lib/list-params'
 import { isFeatureEnabled } from '../../../../lib/features'
 import {
   addTicketLine,
-  approveFieldTicket,
   FieldTicketError,
   loadFieldTicket,
-  patchTicketCustom,
-  rejectFieldTicket,
   removeTicketLine,
   saveCrewGrid,
   submitFieldTicket,
@@ -59,18 +56,14 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
   }
 }
 
-/**
- * Ticket actions. Editing needs time.manage; approve/reject need time.approve
- * (the same split as personal timesheets).
- */
+/** Ticket drafting/submission actions. Approval decisions live only in Flows. */
 export async function POST(req: Request, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params
   if (!isUuid(id)) return NextResponse.json({ error: 'not found' }, { status: 404 })
   const body = await req.json().catch(() => ({}))
   const action = String(body.action ?? '')
 
-  const permission = action === 'approve' || action === 'reject' ? 'time.approve' : 'time.manage'
-  const gate = await guardPermission(permission)
+  const gate = await guardPermission('time.manage')
   if (gate instanceof NextResponse) return gate
   const orgId = gate.user.orgId
   const userId = gate.user.id
@@ -80,11 +73,17 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
     if (action === 'save-grid') {
       await saveCrewGrid(orgId, userId, id, Array.isArray(body.rows) ? body.rows : [])
     } else if (action === 'patch') {
-      const patch: Record<string, unknown> = {}
-      if ('workDescription' in body) patch.workDescription = body.workDescription ? String(body.workDescription).slice(0, 2000) : null
-      if ('poNumber' in body) patch.poNumber = body.poNumber ? String(body.poNumber).slice(0, 100) : null
-      if ('foremanPartyId' in body) patch.foremanPartyId = isUuid(body.foremanPartyId) ? body.foremanPartyId : null
-      await patchTicketCustom(orgId, id, patch)
+      await updateTicketHeader(orgId, userId, id, {
+        ...(('workDescription' in body)
+          ? { memo: body.workDescription ? String(body.workDescription).slice(0, 2000) : null }
+          : {}),
+        ...(('poNumber' in body)
+          ? { referenceNumber: body.poNumber ? String(body.poNumber).slice(0, 100) : null }
+          : {}),
+        ...(('foremanPartyId' in body)
+          ? { foremanPartyId: isUuid(body.foremanPartyId) ? body.foremanPartyId : null }
+          : {}),
+      })
     } else if (action === 'add-line') {
       await addTicketLine(orgId, userId, id, {
         itemId: body.itemId,
@@ -100,10 +99,6 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
       await removeTicketLine(orgId, id, body.lineId)
     } else if (action === 'submit') {
       await submitFieldTicket(orgId, userId, id)
-    } else if (action === 'approve') {
-      await approveFieldTicket(orgId, userId, id)
-    } else if (action === 'reject') {
-      await rejectFieldTicket(orgId, userId, id, String(body.reason ?? ''))
     } else if (action === 'send-signature') {
       const base = process.env.OPENBOOKS_APP_URL || new URL(req.url).origin
       await sendTicketForSignature({

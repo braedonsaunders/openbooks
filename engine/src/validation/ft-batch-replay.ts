@@ -10,17 +10,21 @@
  * Reads /tmp/ft-invoices.json  [{ id, tranid, job, date, net, tickets: [...] }]
  * Writes /tmp/ft-batch-results.json
  *
- * Usage: npx tsx --conditions=react-server src/validation/ft-batch-replay.ts [--limit=N] [--apply]
+ * Usage: npx tsx --conditions=react-server src/validation/ft-batch-replay.ts [INV#### ...] [--limit=N] [--apply|--score-existing]
  */
 import { randomUUID } from "node:crypto";
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { sql } from "drizzle-orm";
 import { db } from "../db.ts";
+import { fromUnits, toUnits } from "../money.ts";
+import { sourceClient } from "../sync/source-client.ts";
 import { generateInvoiceFromBillingRequest } from "../../../web/lib/billing.ts";
 
 const ORG = process.env.SANDBOX_ORG ?? "6d5799ad-a37c-4aea-9cd4-748e4dc59614";
 const APPLY = process.argv.includes("--apply");
+const SCORE_EXISTING = process.argv.includes("--score-existing");
 const LIMIT = Number(process.argv.find((a) => a.startsWith("--limit="))?.split("=")[1] ?? "0");
+const NAMED = process.argv.slice(2).filter((arg) => /^INV\d+$/i.test(arg));
 
 async function retry<T>(fn: () => Promise<T>, n = 6): Promise<T> {
   let last: unknown;
@@ -42,6 +46,37 @@ const cause = (e: unknown) => {
 };
 
 interface Inv { id: string; tranid: string; job: string; date: string; net: number; tickets: string[] }
+
+/**
+ * The source connector's `netamount` can be zero for real customer-facing charge lines
+ * even though `foreignamount` carries the amount included in the invoice.
+ * Recompute every golden subtotal from signed transaction-currency detail
+ * instead of trusting a stale export that can silently omit those lines.
+ */
+async function sourceSubtotals(invoices: Inv[]): Promise<Map<string, number>> {
+  const client = sourceClient();
+  const totals = new Map<string, number>();
+  for (let i = 0; i < invoices.length; i += 60) {
+    const chunk = invoices.slice(i, i + 60);
+    const ids = chunk.map((invoice) => String(invoice.id));
+    if (ids.some((id) => !/^\d+$/.test(id))) throw new Error("source invoice id is not numeric");
+    const rows = await retry(() => client.query<{ txn: string; subtotal: string }>(`
+      select tl.transaction txn, sum(tl.foreignamount) subtotal
+        from transactionline tl
+       where tl.transaction in (${ids.join(",")})
+         and tl.mainline = 'F' and tl.taxline = 'F'
+       group by tl.transaction`));
+    for (const row of rows) {
+      const units = toUnits(String(row.subtotal ?? "0"));
+      totals.set(String(row.txn), Number(fromUnits(units < 0n ? -units : units)));
+    }
+  }
+  const missing = invoices.filter((invoice) => !totals.has(String(invoice.id)));
+  if (missing.length) {
+    throw new Error(`source subtotal missing for ${missing.slice(0, 5).map((invoice) => invoice.tranid).join(", ")}`);
+  }
+  return totals;
+}
 
 (async () => {
   const env = (await retry(() => db.execute(sql`select env_kind from orgs where id = ${ORG}`))) as any;
@@ -73,14 +108,39 @@ interface Inv { id: string; tranid: string; job: string; date: string; net: numb
       } catch { /* a malformed list on one invoice must not stop the batch */ }
     }
   }
-  const list = LIMIT > 0 ? all.slice(0, LIMIT) : all;
+  const selected = NAMED.length
+    ? all.filter((invoice) => NAMED.includes(invoice.tranid))
+    : all;
+  const missingNames = NAMED.filter((tranid) => !selected.some((invoice) => invoice.tranid === tranid));
+  if (missingNames.length) throw new Error(`invoice not in replay set: ${missingNames.join(", ")}`);
+  const list = LIMIT > 0 ? selected.slice(0, LIMIT) : selected;
+  const goldenByInvoice = await sourceSubtotals(list);
   const actor = ((await retry(() => db.execute(sql`select id from users where org_id = ${ORG} order by created_at limit 1`))) as any).rows[0]?.id;
-  console.log(`${APPLY ? "REPLAY" : "PLAN"}: ${list.length} invoices with explicit field tickets\n`);
+  console.log(`${APPLY ? "REPLAY" : SCORE_EXISTING ? "SCORE" : "PLAN"}: ${list.length} invoices with explicit field tickets\n`);
+
+  const existingReplays = new Map<string, number>();
+  if (SCORE_EXISTING) {
+    const rows = (await retry(() => db.execute(sql`
+      select distinct on (memo) memo, subtotal::text as subtotal
+        from documents
+       where org_id = ${ORG} and kind = 'customer_invoice'
+         and status = 'draft' and memo like 'Replay of INV%'
+       order by memo, created_at desc
+    `))) as unknown as { rows: { memo: string; subtotal: string }[] };
+    for (const row of rows.rows) existingReplays.set(row.memo, Number(row.subtotal));
+  }
 
   const results: any[] = [];
   let exact = 0, near = 0, off = 0, err = 0;
-  for (const inv of list) {
-    const r: any = { ...inv, replay: null, delta: null, status: "skipped" };
+  for (const cached of list) {
+    const inv = { ...cached, net: goldenByInvoice.get(String(cached.id))! };
+    const r: any = {
+      ...inv,
+      ...(Math.abs(cached.net - inv.net) > 0.005 ? { cachedNet: cached.net } : {}),
+      replay: null,
+      delta: null,
+      status: "skipped",
+    };
     try {
       const t = (await retry(() => db.execute(sql`
         select id, project_id from documents where org_id = ${ORG} and kind = 'field_ticket'
@@ -98,7 +158,11 @@ interface Inv { id: string; tranid: string; job: string; date: string; net: numb
         : [];
       r.orders = orderIds.length;
 
-      if (APPLY) {
+      let replay: number | null = null;
+      if (SCORE_EXISTING) {
+        replay = existingReplays.get(`Replay of ${inv.tranid}`) ?? null;
+        if (replay === null) r.note = "no existing replay";
+      } else if (APPLY) {
         // Release provenance BEFORE clearing earlier replays: those rows still
         // point at the lines about to be deleted, and the foreign key is what
         // stops a billed row from losing the invoice that billed it.
@@ -123,7 +187,10 @@ interface Inv { id: string; tranid: string; job: string; date: string; net: numb
                   ${"Replay of " + inv.tranid}, ${JSON.stringify({ fieldTicketIds: ids, sourceDocumentIds: orderIds })}::jsonb, ${actor})`));
         const out = await retry(() => generateInvoiceFromBillingRequest(ORG, actor, rid));
         const d = (await retry(() => db.execute(sql`select subtotal::numeric s from documents where id = ${out.id}`))) as any;
-        r.replay = Number(d.rows[0]?.s ?? 0);
+        replay = Number(d.rows[0]?.s ?? 0);
+      }
+      if (replay !== null) {
+        r.replay = replay;
         r.delta = r.replay - inv.net;
         const pct = inv.net ? Math.abs(r.delta) / inv.net : 1;
         r.status = Math.abs(r.delta) <= 0.005 ? "exact" : pct <= 0.01 ? "near" : "off";
@@ -132,13 +199,15 @@ interface Inv { id: string; tranid: string; job: string; date: string; net: numb
     } catch (e) { r.status = "error"; r.note = cause(e); err++; }
     results.push(r);
     writeFileSync("/tmp/ft-batch-results.json", JSON.stringify(results));
-    if (APPLY && results.length % 25 === 0) console.log(`  …${results.length} — exact ${exact} near ${near} off ${off} err ${err}`);
+    if ((APPLY || SCORE_EXISTING) && results.length % 25 === 0) {
+      console.log(`  …${results.length} — exact ${exact} near ${near} off ${off} err ${err}`);
+    }
   }
 
   const scored = results.filter((x) => x.replay !== null);
   const sum = (f: (x: any) => number) => scored.reduce((t, x) => t + f(x), 0);
   console.log(`\n--- ${results.length} invoices ---`);
-  if (APPLY) {
+  if (APPLY || SCORE_EXISTING) {
     console.log(`exact ${exact} | within 1% ${near} | off ${off} | error ${err}`);
     console.log(`golden $${sum((x) => x.net).toFixed(2)} | replay $${sum((x) => x.replay).toFixed(2)} | delta $${(sum((x) => x.replay) - sum((x) => x.net)).toFixed(2)}`);
     if (scored.length) console.log(`penny-exact rate: ${(100 * exact / scored.length).toFixed(1)}%`);

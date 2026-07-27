@@ -1,4 +1,5 @@
 import 'server-only'
+import { randomUUID } from 'node:crypto'
 import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/db.ts'
 import { sendVia } from '@openbooks/emails'
@@ -8,8 +9,8 @@ import {
   markEmailSent,
   resolveOrgEmailTransport,
 } from '@openbooks/engine/src/email-config.ts'
-import { mintSigningToken } from './field-ticket-token'
-import { FieldTicketError, patchTicketCustom } from './field-tickets'
+import { mintSigningToken, signingTokenDigest } from './field-ticket-token'
+import { FieldTicketError } from './field-tickets'
 import { resolvePdfTemplate } from './pdf-templates/store'
 import { mergeAndPrintPdf } from './pdf-templates/render'
 import { loadPdfRecordValues } from './pdf-templates/values'
@@ -48,7 +49,9 @@ export async function sendTicketForSignature(args: {
   if (!tpl || !record) throw new FieldTicketError('Could not render the ticket PDF')
   if (!transport) throw new FieldTicketError('Email delivery is not configured — set it up in Admin → Email')
 
-  const token = mintSigningToken(args.orgId, args.ticketId)
+  const requestId = randomUUID()
+  const expiresAt = new Date(Date.now() + 14 * 24 * 60 * 60 * 1000)
+  const token = mintSigningToken(args.orgId, args.ticketId, requestId, expiresAt)
   const signUrl = `${args.appBaseUrl.replace(/\/$/, '')}/sign/field-tickets/${token}`
   const orgName = org.rows[0]?.name ?? 'OpenBooks'
   const subject = `${orgName} — timesheet ${row.document_number} for your approval`
@@ -78,28 +81,40 @@ export async function sendTicketForSignature(args: {
     categoryKey: 'document',
     meta: { recordType: 'field_ticket', recordId: args.ticketId, purpose: 'signature_request' },
   })
+  await db.execute(sql`
+    insert into field_ticket_signature_requests
+      (id, org_id, field_ticket_id, recipient, message, sent_at, expires_at,
+       token_digest, email_log_id, created_by)
+    values (${requestId}, ${args.orgId}, ${args.ticketId}, ${to},
+            ${args.message ?? null}, null, ${expiresAt.toISOString()},
+            ${signingTokenDigest(token)}, ${logId}, ${args.userId})
+  `)
+  let providerMessageId: string
   try {
-    const { id } = await sendVia(transport, {
+    const sent = await sendVia(transport, {
       to,
       subject,
       html,
       text,
       attachments: [{ filename: attachmentName, content: pdf.toString('base64'), contentType: 'application/pdf' }],
     })
-    await markEmailSent(logId, id)
+    providerMessageId = sent.id
   } catch (e) {
     await markEmailFailed(logId, e instanceof Error ? e.message : String(e))
+    await db.execute(sql`
+      update field_ticket_signature_requests
+         set revoked_at = coalesce(revoked_at, now())
+       where id = ${requestId} and org_id = ${args.orgId}
+    `)
     throw e
   }
+  await markEmailSent(logId, providerMessageId)
+  await db.execute(sql`
+    update field_ticket_signature_requests
+       set sent_at = now()
+     where id = ${requestId} and org_id = ${args.orgId}
+       and sent_at is null and revoked_at is null
+  `)
 
-  await patchTicketCustom(args.orgId, args.ticketId, {
-    send: {
-      to,
-      sentAt: new Date().toISOString(),
-      expiresAt: new Date(Date.now() + 14 * 24 * 60 * 60 * 1000).toISOString(),
-      message: args.message ?? null,
-      respondedAt: null,
-    },
-  })
   return { to }
 }

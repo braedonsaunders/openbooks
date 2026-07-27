@@ -37,6 +37,7 @@
     "purchase_order": "pedido de compra",
     "sales_order": "pedido de venda",
     "quote": "orçamento",
+    "field_ticket": "boletim de campo",
     "close_run": "fechamento de período"
   },
   "decide": {

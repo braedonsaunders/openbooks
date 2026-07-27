@@ -37,6 +37,7 @@
     "purchase_order": "発注書",
     "sales_order": "受注",
     "quote": "見積",
+    "field_ticket": "作業票",
     "close_run": "期間決算"
   },
   "decide": {

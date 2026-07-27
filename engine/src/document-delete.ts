@@ -48,6 +48,12 @@ export async function deleteDocument(
     const entryId = doc.status === "posted" ? doc.postedEntryId : null;
 
     if (entryId) {
+      const reason = audit.reason?.trim() ?? "";
+      if (reason.length < 5 || reason.length > 500) {
+        throw new DeleteError(
+          "deleting a posted document requires a reason between 5 and 500 characters",
+        );
+      }
       // 1. period open?
       const closed = (await tx.execute(sql`
         select 1 from journal_entries e
@@ -138,7 +144,7 @@ export async function deleteDocument(
       action: "delete",
       actorId: userId,
       source: audit.source ?? "ui",
-      reason: audit.reason ?? "user_requested",
+      reason: audit.reason?.trim() || "user_requested",
       before,
       after: null,
     });

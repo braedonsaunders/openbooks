@@ -686,7 +686,12 @@ async function loadTimeEntries(records: SourceEntity[], ctx: Ctx, s: ResourceLoa
         ${str(f.hours) ?? "0"}, ${ref(ctx.maps.time_types, f.timeTypeRef)}, ${ref(ctx.maps.items, f.itemRef)},
         ${ref(ctx.maps.projects, f.projectRef)}, ${ref(ctx.maps.departments, f.departmentRef)},
         ${!!f.isBillable}, ${str(f.costRate)}, ${str(f.billRate)}, 'approved',
-        ${JSON.stringify({ [refKey]: rec.sourceRef })}::jsonb)`;
+        ${JSON.stringify({
+          [refKey]: rec.sourceRef,
+          ...(str(f.fieldTicketNumber)
+            ? { sourceFieldTicketNumber: str(f.fieldTicketNumber) }
+            : {}),
+        })}::jsonb)`;
     });
     await db.execute(sql`insert into time_entries
       (org_id, employee_party_id, worked_on, hours, time_type_id, item_id, project_id, department_id, is_billable, cost_rate, bill_rate, status, custom)
@@ -706,7 +711,13 @@ async function loadTimeEntries(records: SourceEntity[], ctx: Ctx, s: ResourceLoa
       await db.execute(sql`update time_entries set worked_on=${str(f.workedOn) ?? "1970-01-01"}, hours=${str(f.hours) ?? "0"},
         time_type_id=${ref(ctx.maps.time_types, f.timeTypeRef)}, item_id=${ref(ctx.maps.items, f.itemRef)},
         project_id=${ref(ctx.maps.projects, f.projectRef)}, department_id=${ref(ctx.maps.departments, f.departmentRef)},
-        is_billable=${!!f.isBillable}, cost_rate=${str(f.costRate)}, bill_rate=${str(f.billRate)} where id=${id}`);
+        is_billable=${!!f.isBillable}, cost_rate=${str(f.costRate)}, bill_rate=${str(f.billRate)},
+        custom = custom || ${JSON.stringify({
+          ...(str(f.fieldTicketNumber)
+            ? { sourceFieldTicketNumber: str(f.fieldTicketNumber) }
+            : {}),
+        })}::jsonb
+        where id=${id}`);
       s.updated++;
       continue;
     }

@@ -238,6 +238,13 @@
       "reject": "Rejeté"
     }
   },
+  "amendment": {
+    "title": "Justifier la modification du document comptabilisé",
+    "deleteTitle": "Justifier la suppression du document comptabilisé",
+    "reason": "Motif de la modification",
+    "placeholder": "Décrivez ce qui a changé et pourquoi",
+    "deletePlaceholder": "Expliquez pourquoi la suppression de l’écriture comptabilisée est nécessaire"
+  },
   "approvalFlow": {
     "pendingWith": "En attente de {names}",
     "rejectTitle": "Rejeter ce document ?",

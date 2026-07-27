@@ -507,9 +507,12 @@ export async function generateInvoiceFromBillingRequest(
           const lapsed = await findLapsedRateCard({
             orgId, projectId: req.project_id, onDate: rateDate, departmentId,
           })
-          if (lapsed && invoicing.rateCardLapse !== 'carry_forward') {
+          // Carry-forward needs an earlier agreement to carry. A future-only
+          // card is not evidence of terms for this work and must still fail
+          // closed rather than silently pricing the adjustment at zero.
+          if (lapsed && (invoicing.rateCardLapse !== 'carry_forward' || !lapsed.lastEffectiveTo)) {
             throw new BillingError(
-              `This customer's rate card expired on ${lapsed.lastEffectiveTo ?? 'an earlier date'} and none covers ${rateDate}. ` +
+              `This customer's rate card ${lapsed.lastEffectiveTo ? `expired on ${lapsed.lastEffectiveTo}` : 'has no version in force on or before this work'} and none covers ${rateDate}. ` +
               'Extend or add a rate card before invoicing — billing now would drop the negotiated surcharges and markups.',
             )
           }

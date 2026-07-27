@@ -1030,7 +1030,7 @@ export async function createFile(input: {
   filename: string
   contentType: string
   bytes: Buffer
-  createdBy: string
+  createdBy: string | null
 }): Promise<FileMeta> {
   const extension = deriveExtension(input.filename)
   const fileType = deriveFileType(input.contentType)
@@ -1297,7 +1297,7 @@ export async function uploadAndAttach(input: {
   filename: string
   contentType: string
   bytes: Buffer
-  createdBy: string
+  createdBy: string | null
 }): Promise<AttachedFile> {
   const folderId = await ensureRecordFolder(input.orgId, input.targetTable, input.targetId)
   // NOTE: createFile runs its own transaction on the shared pool, so it must

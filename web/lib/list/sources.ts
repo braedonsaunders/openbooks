@@ -133,11 +133,12 @@ const SOURCES: Record<string, DocListSource> = {
     kinds: ['field_ticket'],
     drawerParam: 'ticket',
     partyRole: 'customer',
-    joins: sql`left join projects ftproj on ftproj.id = d.project_id`,
+    joins: sql`join field_tickets ft on ft.document_id = d.id and ft.org_id = d.org_id
+               left join projects ftproj on ftproj.id = d.project_id`,
     builtInExpr: {
       ...DOCUMENT_BUILT_IN_EXPR,
       project_name: sql`coalesce(ftproj.code || ' · ' || ftproj.name, ftproj.name)`,
-      period: sql`initcap(d.custom->'fieldTicket'->>'period')`,
+      period: sql`initcap(ft.period)`,
     },
   }),
   purchase_order: documentSource({ recordType: 'purchase_order', kinds: ['purchase_order'], drawerParam: 'order', partyRole: 'vendor' }),

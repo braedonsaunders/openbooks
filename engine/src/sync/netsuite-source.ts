@@ -83,6 +83,10 @@ export interface NetSuiteAccountMappings {
   timeTypeRecord?: string;
   timeTypeMultiplierField?: string;
   timeEntryTypeField?: string;
+  /** Transaction-column field whose value is the originating Field Ticket
+   * document number. The mapping is tenant-owned because NetSuite accounts use
+   * different custom fields for this provenance. */
+  timeEntryFieldTicketNumberField?: string;
   projectStatuses?: Record<string, "active" | "awarded" | "substantially_complete" | "closed" | "cancelled">;
 }
 
@@ -208,6 +212,11 @@ export function parseNetSuiteMappings(value: unknown): NetSuiteAccountMappings {
     timeTypeRecord: safeSuiteScriptId(raw.timeTypeRecord, "timeTypeRecord") ?? undefined,
     timeTypeMultiplierField: safeSuiteScriptId(raw.timeTypeMultiplierField, "timeTypeMultiplierField") ?? undefined,
     timeEntryTypeField: safeSuiteScriptId(raw.timeEntryTypeField, "timeEntryTypeField") ?? undefined,
+    timeEntryFieldTicketNumberField:
+      safeSuiteScriptId(
+        raw.timeEntryFieldTicketNumberField,
+        "timeEntryFieldTicketNumberField",
+      ) ?? undefined,
     projectStatuses,
   };
 }
@@ -790,6 +799,9 @@ export class NetSuiteSource implements MigrationSource {
     const timeType = this.mappings.timeEntryTypeField
       ? `tb.${this.mappings.timeEntryTypeField} AS timetype`
       : "NULL AS timetype";
+    const fieldTicketNumber = this.mappings.timeEntryFieldTicketNumberField
+      ? `tb.${this.mappings.timeEntryFieldTicketNumberField} AS fieldticketnumber`
+      : "NULL AS fieldticketnumber";
     const maxRows = await this.q<{ m?: string }>(`
       SELECT MAX(tb.id) AS m
         FROM timebill tb
@@ -808,6 +820,7 @@ export class NetSuiteSource implements MigrationSource {
         SELECT tb.id, tb.employee, tb.customer, tb.department, tb.item, tb.hours,
                tb.rate, tb.laborcost, tb.isbillable,
                ${timeType},
+               ${fieldTicketNumber},
                TO_CHAR(tb.trandate, 'MM/DD/YYYY') AS trandate
           FROM timebill tb
          WHERE ${conditions.join(" AND ")}
@@ -825,6 +838,7 @@ export class NetSuiteSource implements MigrationSource {
       fields: {
         employeeRef: s(tb.employee), projectRef: s(tb.customer), itemRef: s(tb.item),
         departmentRef: s(tb.department), timeTypeRef: s(tb.timetype),
+        fieldTicketNumber: s(tb.fieldticketnumber),
         workedOn: isoDate(tb.trandate), hours: s(tb.hours) ?? "0",
         costRate: s(tb.laborcost), billRate: s(tb.rate), isBillable: isT(tb.isbillable),
       },

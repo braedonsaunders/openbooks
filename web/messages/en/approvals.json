@@ -37,6 +37,7 @@
     "purchase_order": "purchase order",
     "sales_order": "sales order",
     "quote": "quote",
+    "field_ticket": "field ticket",
     "close_run": "period close"
   },
   "decide": {

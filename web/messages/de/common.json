@@ -209,6 +209,13 @@
     "retry": "Erneut versuchen",
     "actions": { "insert": "Erstellt", "update": "Aktualisiert", "delete": "Gelöscht", "post": "Gebucht", "void": "Storniert", "approve": "Genehmigt", "reject": "Abgelehnt" }
   },
+  "amendment": {
+    "title": "Änderung am gebuchten Beleg begründen",
+    "deleteTitle": "Begründen Sie die Löschung des gebuchten Belegs",
+    "reason": "Änderungsgrund",
+    "placeholder": "Beschreiben Sie, was geändert wurde und warum",
+    "deletePlaceholder": "Beschreiben Sie, warum die gebuchte Transaktion gelöscht werden muss"
+  },
   "approvalFlow": {
     "pendingWith": "Ausstehend bei {names}",
     "rejectTitle": "Dieses Dokument ablehnen?",
