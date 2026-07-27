@@ -200,6 +200,12 @@ export interface InvoicingProfile {
    * where the same item is issued many times across a period.
    */
   lineGrouping?: "per_source_line" | "per_item";
+  /**
+   * How a percentage surcharge lands on the cent. `half_up` is ordinary money
+   * rounding; `down` truncates, which never overcharges by a fraction of a cent
+   * and is what some negotiated agreements specify.
+   */
+  surchargeRounding?: "half_up" | "down";
 }
 
 export interface BackupProfile {
