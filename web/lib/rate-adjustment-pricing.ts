@@ -4,7 +4,19 @@
  * Split from the resolver so the arithmetic deciding what a customer is charged
  * can be tested directly, mirroring item-rate-currency alongside item-rates.
  */
-import { add, mulPercent, sum } from '@openbooks/engine/src/money.ts'
+import { add, fromUnits, mulPercent, roundDiv, sum, toUnits } from '@openbooks/engine/src/money.ts'
+
+/** How a percentage charge lands on the cent. */
+export type AdjustmentRounding = 'half_up' | 'down'
+
+/** Truncate toward zero at the cent — a charge rounded DOWN never overcharges. */
+function floorToCents(amount: string): string {
+  const units = toUnits(amount)
+  const negative = units < 0n
+  const magnitude = negative ? -units : units
+  const floored = (magnitude / 100n) * 100n
+  return fromUnits(negative ? -floored : floored)
+}
 
 export type AdjustmentCategory = 'markup' | 'travel' | 'allowance' | 'minimum' | 'surcharge' | 'other'
 export type AdjustmentCalculation = 'percent' | 'fixed' | 'per_hour' | 'per_day' | 'distance' | 'time' | 'text'
@@ -83,7 +95,11 @@ export interface AdjustmentCharge {
  * adjustments are already inside the resolved rates and `informational` ones
  * are display-only, so neither adds an amount here.
  */
-export function priceAdjustments(lines: AdjustableLine[], adjustments: ResolvedAdjustment[]): AdjustmentCharge[] {
+export function priceAdjustments(
+  lines: AdjustableLine[],
+  adjustments: ResolvedAdjustment[],
+  rounding: AdjustmentRounding = 'half_up',
+): AdjustmentCharge[] {
   const charges: AdjustmentCharge[] = []
   for (const adjustment of adjustments) {
     if (adjustment.presentation !== 'separate') continue
@@ -97,7 +113,11 @@ export function priceAdjustments(lines: AdjustableLine[], adjustments: ResolvedA
     // negotiated term simply does not trigger.
     if (adjustment.threshold && Number(basis) < Number(adjustment.threshold)) continue
 
-    const amount = adjustment.calculation === 'fixed' ? adjustment.value : mulPercent(basis, adjustment.value, 2)
+    const amount = adjustment.calculation === 'fixed'
+      ? adjustment.value
+      : rounding === 'down'
+        ? floorToCents(mulPercent(basis, adjustment.value, 4))
+        : mulPercent(basis, adjustment.value, 2)
     if (Number(amount) === 0) continue
     charges.push({ adjustment, basis, amount })
   }
@@ -109,7 +129,10 @@ export function priceAdjustments(lines: AdjustableLine[], adjustments: ResolvedA
  * resolved separately so each can carry its own agreement, but when they land
  * on the same negotiated term the customer should see a single charge.
  */
-export function mergeCharges(charges: AdjustmentCharge[]): AdjustmentCharge[] {
+export function mergeCharges(
+  charges: AdjustmentCharge[],
+  rounding: AdjustmentRounding = 'half_up',
+): AdjustmentCharge[] {
   const byAdjustment = new Map<string, AdjustmentCharge>()
   for (const c of charges) {
     const prior = byAdjustment.get(c.adjustment.id)
@@ -121,7 +144,9 @@ export function mergeCharges(charges: AdjustmentCharge[]): AdjustmentCharge[] {
     // each rounded to cents drifts by a cent per group, and a fixed charge would
     // be billed once per department rather than once.
     if (c.adjustment.calculation === 'percent' && c.adjustment.value) {
-      c.amount = mulPercent(c.basis, c.adjustment.value, 2)
+      c.amount = rounding === 'down'
+        ? floorToCents(mulPercent(c.basis, c.adjustment.value, 4))
+        : mulPercent(c.basis, c.adjustment.value, 2)
     }
   }
   return [...byAdjustment.values()].sort((a, b) => a.adjustment.sortOrder - b.adjustment.sortOrder)

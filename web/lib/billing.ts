@@ -498,7 +498,9 @@ export async function generateInvoiceFromBillingRequest(
               departmentId, isLabor: l.isLabor === true, timeKind: l.timeKind ?? null,
             })),
             await resolveRateAdjustments({ orgId, projectId: req.project_id, onDate: cardDate, departmentId }),
+            invoicing.surchargeRounding ?? 'half_up',
           )))).flat(),
+        invoicing.surchargeRounding ?? 'half_up',
       )
       for (const c of charges) {
         const item = c.adjustment.itemId
