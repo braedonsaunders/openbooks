@@ -378,10 +378,10 @@ for (const [group, expected] of expectedGroups) {
 }
 
 /**
- * NetSuite retains the authoritative AdminApp2 lineage on each TimeBill:
- * TimeBill.id is already time_entries.custom.nsId and the configured source
- * document field carries the field-ticket number. Unlike the aggregate
- * fallback above, this proves the assignment of each individual atomic line.
+ * The upstream time source retains authoritative lineage on each atomic line:
+ * its source ID is already retained by the target time entry and a configured
+ * source field carries the field-ticket number. Unlike the aggregate fallback
+ * above, this proves each individual assignment without tenant-specific logic.
  */
 const entryBySourceRef = new Map<string, TimeEntry>();
 for (const entry of entries) {

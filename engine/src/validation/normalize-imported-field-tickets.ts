@@ -1,6 +1,6 @@
 /**
  * Normalize imported Field Ticket documents into the product's native shape
- * and retain approved NetSuite-only archival tickets.
+ * and retain approved source-only archival tickets.
  *
  * Inputs are immutable source artifacts, not tenant-specific code:
  *   --headers  legacy ticket headers (TSV; see import-field-tickets.ts)
@@ -386,7 +386,7 @@ if (apply) {
     await retry(() => withOrg(orgId, async () => {
       const custom = {
         sourceArchive: {
-          system: "netsuite",
+          system: "source_import",
           disposition: "source_header_missing",
           sourceProjectRef: plan.projectRef,
           sourceTimeLineCount: plan.lineCount,
