@@ -80,6 +80,40 @@ if (!existsSync(headerPath) || !existsSync(rowPath)) {
 
 const hash = (path: string) =>
   createHash("sha256").update(readFileSync(path)).digest("hex");
+async function retry<T>(fn: () => Promise<T>, attempts = 7): Promise<T> {
+  let last: unknown;
+  for (let attempt = 0; attempt < attempts; attempt++) {
+    try {
+      return await fn();
+    } catch (error) {
+      last = error;
+      const messages: string[] = [];
+      const seen = new Set<unknown>();
+      let current: unknown = error;
+      while (current && !seen.has(current)) {
+        seen.add(current);
+        messages.push(
+          current instanceof Error ? current.message : String(current),
+        );
+        current =
+          typeof current === "object" && "cause" in current
+            ? (current as { cause?: unknown }).cause
+            : null;
+      }
+      if (
+        !/timeout|terminated|ECONN|ETIMEDOUT|EHOSTUNREACH|Connection/i.test(
+          messages.join("\n"),
+        )
+      ) {
+        throw error;
+      }
+      await new Promise((resolve) =>
+        setTimeout(resolve, 750 * (attempt + 1)),
+      );
+    }
+  }
+  throw last;
+}
 const addDays = (iso: string, days: number) => {
   const date = new Date(`${iso}T00:00:00Z`);
   date.setUTCDate(date.getUTCDate() + days);
@@ -169,7 +203,7 @@ for (const line of readFileSync(rowPath, "utf8").split(/\r?\n/)) {
   }
 }
 
-const rawEntries = await withOrgContext(orgId, async () => {
+const rawEntries = await retry(() => withOrgContext(orgId, async () => {
   const result = await db.execute(sql`
     select te.id,
            te.custom->>'nsId' as source_ref,
@@ -200,7 +234,7 @@ const rawEntries = await withOrgContext(orgId, async () => {
        and employee.custom->>'nsId' is not null
   `);
   return result.rows as Array<Record<string, unknown>>;
-});
+}));
 
 const entries: TimeEntry[] = rawEntries.map((row) => ({
   id: String(row.id),

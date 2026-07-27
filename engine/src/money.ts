@@ -136,6 +136,63 @@ export function normalizeMoney(value: string | number): string {
   return fromUnits(toUnits(value));
 }
 
+/**
+ * Canonicalize a non-money decimal without crossing the IEEE-754 boundary.
+ * Quantities and commercial rates legitimately carry more precision than
+ * posted money, so callers choose an explicit scale (up to 10 places).
+ */
+export function normalizeDecimal(
+  value: string | number,
+  decimalPlaces = 8,
+): string {
+  if (
+    !Number.isInteger(decimalPlaces) ||
+    decimalPlaces < 0 ||
+    decimalPlaces > 10
+  ) {
+    throw new Error("decimalPlaces must be an integer from 0 through 10");
+  }
+  let raw = String(value).trim();
+  if (!/^[-+]?(\d+(\.\d*)?|\.\d+)([eE][-+]?\d+)?$/.test(raw)) {
+    throw new Error(`not a decimal number: "${value}"`);
+  }
+  const negative = raw.startsWith("-");
+  raw = raw.replace(/^[-+]/, "");
+  let exponent = 0;
+  const exponentMatch = raw.match(/[eE]([-+]?\d+)$/);
+  if (exponentMatch) {
+    exponent = Number(exponentMatch[1]);
+    raw = raw.slice(0, exponentMatch.index);
+  }
+  const [wholePart = "0", fractionPart = ""] = raw.split(".");
+  let digits = `${wholePart}${fractionPart}`;
+  if (!digits) digits = "0";
+  let decimalIndex = wholePart.length + exponent;
+  if (decimalIndex <= 0) {
+    digits = `${"0".repeat(-decimalIndex)}${digits}`;
+    decimalIndex = 0;
+  } else if (decimalIndex >= digits.length) {
+    digits = `${digits}${"0".repeat(decimalIndex - digits.length)}`;
+    decimalIndex = digits.length;
+  }
+  let whole = digits.slice(0, decimalIndex) || "0";
+  let fraction = digits.slice(decimalIndex);
+  if (
+    fraction.length > decimalPlaces &&
+    /[1-9]/.test(fraction.slice(decimalPlaces))
+  ) {
+    throw new Error(
+      `decimal loses precision beyond ${decimalPlaces} decimal places: "${value}"`,
+    );
+  }
+  whole = whole.replace(/^0+(?=\d)/, "") || "0";
+  fraction = fraction.slice(0, decimalPlaces).padEnd(decimalPlaces, "0");
+  const isZero = whole === "0" && !/[1-9]/.test(fraction);
+  return `${negative && !isZero ? "-" : ""}${whole}${
+    decimalPlaces > 0 ? `.${fraction}` : ""
+  }`;
+}
+
 /** Round a ledger value to a requested precision without binary floating point. */
 export function roundMoney(value: string | number, decimalPlaces = 4): string {
   if (!Number.isInteger(decimalPlaces) || decimalPlaces < 0 || decimalPlaces > 4) {

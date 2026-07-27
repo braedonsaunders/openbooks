@@ -102,9 +102,11 @@ export const documentLines = pgTable(
     itemId: uuid("item_id"), // → items (catalog); nullable: direct account lines
     accountId: uuid("account_id"), // expense/income account when no item
     description: text("description"),
-    quantity: money("quantity").notNull().default("1"),
+    /** Quantities and rates preserve commercial precision independently from
+     * the four-decimal posted amount. */
+    quantity: numeric("quantity", { precision: 28, scale: 8 }).notNull().default("1"),
     unit: text("unit"),
-    unitPrice: money("unit_price").notNull().default("0"),
+    unitPrice: numeric("unit_price", { precision: 28, scale: 8 }).notNull().default("0"),
     amount: money("amount").notNull(), // qty × price, txn currency
     taxCodeId: uuid("tax_code_id"),
     /** Mutually exclusive with tax_code_id; expands to ordered component evidence. */

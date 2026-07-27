@@ -145,7 +145,8 @@ export function uniqueNetSuiteTransactionLines(rows: NsLine[]): NsLine[] {
     const payload = JSON.stringify([
       row.transaction, row.id, row.mainline, row.taxline, row.item ?? null,
       row.account ?? null, row.expenseaccount ?? null, row.netamount ?? null,
-      row.foreignamount ?? null, row.department ?? null, row.entity ?? null,
+      row.foreignamount ?? null, row.quantity ?? null, row.rate ?? null,
+      row.units ?? null, row.department ?? null, row.entity ?? null,
       row.subsidiary ?? null, row.memo ?? null, row.taxrate1 ?? null,
       row.taxcode ?? null,
     ]);
@@ -244,7 +245,9 @@ const HEADER_COLS = `t.id, t.type AS ttype, t.tranid, TO_CHAR(t.trandate, 'MM/DD
   TO_CHAR(t.duedate, 'MM/DD/YYYY') AS duedate, t.entity, t.currency, t.memo, t.status,
   t.otherrefnum, t.posting`;
 const LINE_COLS = `tl.transaction, tl.id, tl.mainline, tl.taxline, tl.item, tl.account,
-  tl.expenseaccount, tl.netamount, tl.foreignamount, tl.department, tl.entity, tl.subsidiary,
+  tl.expenseaccount, tl.netamount, tl.foreignamount, tl.quantity, tl.rate,
+  BUILTIN.DF(tl.units) AS units,
+  tl.department, tl.entity, tl.subsidiary,
   tl.memo, tl.taxrate1, tl.taxcode, tl.isbillable`;
 
 /** Line columns plus whatever optional fields this account has mapped. */

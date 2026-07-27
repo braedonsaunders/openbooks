@@ -1,4 +1,10 @@
-import { fromUnits, mulDecimal, normalizeMoney, toUnits } from "../money.ts";
+import {
+  fromUnits,
+  mulDecimal,
+  normalizeDecimal,
+  normalizeMoney,
+  toUnits,
+} from "../money.ts";
 import type { NativeContext, NativeDocLine, NativeDocument } from "./native.ts";
 
 /**
@@ -50,6 +56,9 @@ export interface NsLine {
   item?: string | null;
   netamount?: string | null;
   foreignamount?: string | null;
+  quantity?: string | null;
+  rate?: string | null;
+  units?: string | null;
   taxrate1?: string | null;
   taxcode?: string | null;
   department?: string | null;
@@ -258,10 +267,24 @@ export function buildNativeFromNetSuite(
     l: NsLine,
     taxCodeId: string | null = null,
   ): NativeDocLine => {
+    const sourceQuantity =
+      l.quantity == null || l.quantity === ""
+        ? "1.00000000"
+        : normalizeDecimal(String(l.quantity), 8);
+    const quantity = sourceQuantity.startsWith("-")
+      ? sourceQuantity.slice(1)
+      : sourceQuantity;
+    const normalizedAmount = fromUnits(amtUnits);
     const row: NativeDocLine = {
       accountId,
-      itemId: null,
-      amount: fromUnits(amtUnits),
+      itemId: l.item ? (ctx.itemByRef.get(l.item) ?? null) : null,
+      quantity: /^0(?:\.0+)?$/.test(quantity) ? "1.00000000" : quantity,
+      unit: l.units ?? null,
+      unitPrice:
+        l.rate == null || l.rate === ""
+          ? normalizedAmount
+          : normalizeDecimal(String(l.rate), 8),
+      amount: normalizedAmount,
       taxAmount: "0",
       taxOverridden: false,
       taxCodeId,
@@ -552,6 +575,23 @@ function buildOrder(
     const row: NativeDocLine = {
       accountId,
       itemId,
+      quantity: (() => {
+        const normalized =
+          l.quantity == null || l.quantity === ""
+            ? "1.00000000"
+            : normalizeDecimal(String(l.quantity), 8);
+        const magnitude = normalized.startsWith("-")
+          ? normalized.slice(1)
+          : normalized;
+        return /^0(?:\.0+)?$/.test(magnitude)
+          ? "1.00000000"
+          : magnitude;
+      })(),
+      unit: l.units ?? null,
+      unitPrice:
+        l.rate == null || l.rate === ""
+          ? fromUnits(amountUnits)
+          : normalizeDecimal(String(l.rate), 8),
       // NetSuite sales-order detail is the future credit side of the sale;
       // OpenBooks stores orders in document direction. Opposite-signed source
       // discount lines remain negative after the same normalization.

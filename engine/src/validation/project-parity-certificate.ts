@@ -17,6 +17,7 @@
  *   --refresh-source
  *   --source-projects=/path/projects.json
  *   --source-invoices=/path/invoices.json
+ *   --source-invoice-lines=/path/invoice-lines.json
  *   --source-project-gl=/path/project-account-totals.json
  *   --legacy-tickets=/path/field-ticket-headers.tsv
  *   --legacy-crew=/path/field-ticket-crew.tsv
@@ -28,7 +29,7 @@ import { createHash, randomUUID } from "node:crypto";
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { sql } from "drizzle-orm";
 import { db, withOrgContext } from "../db.ts";
-import { fromUnits, toUnits } from "../money.ts";
+import { fromUnits, normalizeDecimal, toUnits } from "../money.ts";
 import { sourceClient } from "../sync/source-client.ts";
 
 type JsonRow = Record<string, unknown>;
@@ -73,6 +74,9 @@ const paths = {
     args.get("source-projects") ?? "/tmp/parity-ns-projects.json",
   sourceInvoices:
     args.get("source-invoices") ?? "/tmp/parity-ns-invoices.json",
+  sourceInvoiceLines:
+    args.get("source-invoice-lines") ??
+    "/tmp/parity-source-invoice-lines.json",
   sourceProjectGl:
     args.get("source-project-gl") ??
     "/tmp/parity-ns-project-account-totals.json",
@@ -101,6 +105,10 @@ function fileHash(path: string): string | null {
 
 function canonicalMoney(value: unknown): string {
   return fromUnits(toUnits(String(value ?? "0")));
+}
+
+function canonicalDecimal(value: unknown): string {
+  return normalizeDecimal(String(value ?? "0"), 8);
 }
 
 function moneyEqual(left: unknown, right: unknown): boolean {
@@ -154,10 +162,22 @@ async function retry<T>(fn: () => Promise<T>, attempts = 7): Promise<T> {
       return await fn();
     } catch (error) {
       last = error;
-      const message = error instanceof Error ? error.message : String(error);
+      const messages: string[] = [];
+      const seen = new Set<unknown>();
+      let current: unknown = error;
+      while (current && !seen.has(current)) {
+        seen.add(current);
+        messages.push(
+          current instanceof Error ? current.message : String(current),
+        );
+        current =
+          typeof current === "object" && "cause" in current
+            ? (current as { cause?: unknown }).cause
+            : null;
+      }
       if (
         !/timeout|terminated|ECONN|ETIMEDOUT|EHOSTUNREACH|Connection/i.test(
-          message,
+          messages.join("\n"),
         )
       ) {
         throw error;
@@ -180,6 +200,18 @@ async function refreshSource(): Promise<void> {
     "select id, tranid, trandate, entity, foreigntotal, status, postingperiod from transaction where type = 'CustInvc'",
   );
   writeFileSync(paths.sourceInvoices, JSON.stringify(invoices));
+  const invoiceLines = await client.query<JsonRow>(
+    `select tl.transaction, tl.id, tl.mainline, tl.taxline, tl.item,
+            tl.account, tl.expenseaccount, tl.netamount, tl.foreignamount,
+            tl.quantity, tl.rate, BUILTIN.DF(tl.units) as units,
+            tl.department, tl.entity, tl.subsidiary, tl.memo,
+            tl.taxrate1, tl.taxcode
+       from transactionline tl
+       join transaction t on t.id = tl.transaction
+      where t.type = 'CustInvc'
+      order by tl.transaction, tl.id`,
+  );
+  writeFileSync(paths.sourceInvoiceLines, JSON.stringify(invoiceLines));
   const projectGl = await client.query<JsonRow>(
     `select tl.entity as project, a.accttype as accounttype,
             sum(tl.netamount) as amount
@@ -255,13 +287,14 @@ if (args.has("refresh-source")) await refreshSource();
 
 const sourceProjects = readJson(paths.sourceProjects);
 const sourceInvoices = readJson(paths.sourceInvoices);
+const sourceInvoiceLines = readJson(paths.sourceInvoiceLines);
 const sourceProjectGl = readJson(paths.sourceProjectGl);
 const legacyTickets = parseLegacyTicketHeaders(paths.legacyTickets);
 const legacyCrew = parseLegacyCrew(paths.legacyCrew, legacyTickets);
 const legacyProjectFinancials = readJson(paths.legacyProjectFinancials);
 
 const target = await withOrgContext(orgId, async () => {
-  const [org, projects, invoices, tickets, projectGl, ticketCrew] = await Promise.all([
+  const [org, projects, invoices, invoiceLines, tickets, projectGl, ticketCrew] = await Promise.all([
     retry(() => db.execute(sql`
       select id, name, env_kind from orgs where id = ${orgId}
     `)),
@@ -274,6 +307,30 @@ const target = await withOrgContext(orgId, async () => {
              project_id, custom->>'nsId' as source_id
         from documents
        where org_id = ${orgId} and kind = 'customer_invoice'
+    `)),
+    retry(() => db.execute(sql`
+      select d.custom->>'nsId' as source_document_id,
+             dl.custom->>'sourceLineRef' as source_line_id,
+             dl.line_number, dl.quantity::text, dl.unit,
+             dl.unit_price::text, dl.amount::text, dl.description,
+             item.custom->>'nsId' as source_item_id,
+             account.custom->>'nsId' as source_account_id,
+             project.custom->>'nsId' as source_project_id,
+             party.custom->>'nsId' as source_party_id
+        from document_lines dl
+        join documents d
+          on d.id = dl.document_id and d.org_id = dl.org_id
+        left join items item
+          on item.id = dl.item_id and item.org_id = dl.org_id
+        left join accounts account
+          on account.id = dl.account_id and account.org_id = dl.org_id
+        left join projects project
+          on project.id = dl.project_id and project.org_id = dl.org_id
+        left join parties party
+          on party.id = dl.party_id and party.org_id = dl.org_id
+       where dl.org_id = ${orgId}
+         and d.kind = 'customer_invoice'
+         and d.custom->>'nsId' is not null
     `)),
     retry(() => db.execute(sql`
       select d.id, d.document_number,
@@ -319,6 +376,7 @@ const target = await withOrgContext(orgId, async () => {
     org: (org as unknown as { rows: JsonRow[] }).rows[0] ?? null,
     projects: (projects as unknown as { rows: JsonRow[] }).rows,
     invoices: (invoices as unknown as { rows: JsonRow[] }).rows,
+    invoiceLines: (invoiceLines as unknown as { rows: JsonRow[] }).rows,
     tickets: (tickets as unknown as { rows: JsonRow[] }).rows,
     projectGl: (projectGl as unknown as { rows: JsonRow[] }).rows,
     ticketCrew: (ticketCrew as unknown as { rows: JsonRow[] }).rows,
@@ -608,15 +666,141 @@ gates.legacyProjectFinancialMeasures =
         detail: `missing complete legacy project financial export (${paths.legacyProjectFinancials})`,
       };
 
-gates.invoiceLines = {
-  status: "unproven",
-  sourceCount: null,
-  targetCount: null,
-  exactCount: null,
-  mismatchCount: null,
-  detail:
-    "All-invoice line identity/sequence/item/quantity/rate/amount/tax extraction is required",
-};
+if (!sourceInvoiceLines) {
+  gates.invoiceLines = {
+    status: "unproven",
+    sourceCount: null,
+    targetCount: target.invoiceLines.length,
+    exactCount: null,
+    mismatchCount: null,
+    detail: `missing ${paths.sourceInvoiceLines}`,
+  };
+} else {
+  const sourceDetail = sourceInvoiceLines.filter(
+    (row) =>
+      String(row.mainline).toUpperCase() === "F" &&
+      String(row.taxline).toUpperCase() === "F",
+  );
+  const sourceByKey = new Map<string, JsonRow>();
+  const expectedLineNumber = new Map<string, number>();
+  const sourceByDocument = new Map<string, JsonRow[]>();
+  for (const row of sourceDetail) {
+    const documentRef = String(row.transaction);
+    const lineRef = String(row.id);
+    const key = `${documentRef}|${lineRef}`;
+    if (sourceByKey.has(key)) {
+      throw new Error(`duplicate source invoice line ${key}`);
+    }
+    sourceByKey.set(key, row);
+    const group = sourceByDocument.get(documentRef) ?? [];
+    group.push(row);
+    sourceByDocument.set(documentRef, group);
+  }
+  for (const [documentRef, rows] of sourceByDocument) {
+    rows.sort((left, right) => {
+      const a = Number(left.id);
+      const b = Number(right.id);
+      return Number.isFinite(a) && Number.isFinite(b)
+        ? a - b
+        : String(left.id).localeCompare(String(right.id));
+    });
+    rows.forEach((row, index) =>
+      expectedLineNumber.set(`${documentRef}|${String(row.id)}`, index + 1),
+    );
+  }
+  const targetByKey = new Map<string, JsonRow>();
+  let targetWithoutIdentity = 0;
+  for (const row of target.invoiceLines) {
+    if (!row.source_document_id || !row.source_line_id) {
+      targetWithoutIdentity++;
+      continue;
+    }
+    const key = `${String(row.source_document_id)}|${String(row.source_line_id)}`;
+    if (targetByKey.has(key)) {
+      differences.push({
+        layer: "invoice_line",
+        sourceRef: key,
+        field: "duplicate_source_identity",
+        source: "unique",
+        target: "duplicate",
+      });
+      continue;
+    }
+    targetByKey.set(key, row);
+  }
+  const mismatchedSourceLines = new Set<string>();
+  for (const [key, source] of sourceByKey) {
+    const found = targetByKey.get(key);
+    if (!found) {
+      differences.push({
+        layer: "invoice_line",
+        sourceRef: key,
+        field: "presence",
+        source: "present",
+        target: null,
+      });
+      mismatchedSourceLines.add(key);
+      continue;
+    }
+    const sourceAmountUnits = -toUnits(
+      String(source.foreignamount ?? source.netamount ?? "0"),
+    );
+    const rawQuantity =
+      source.quantity == null || source.quantity === ""
+        ? "1.00000000"
+        : canonicalDecimal(source.quantity);
+    const quantityMagnitude = rawQuantity.startsWith("-")
+      ? rawQuantity.slice(1)
+      : rawQuantity;
+    const expectedQuantity = /^0(?:\.0+)?$/.test(quantityMagnitude)
+      ? "1.00000000"
+      : quantityMagnitude;
+    const expectedAmount = fromUnits(sourceAmountUnits);
+    const expectedRate =
+      source.rate == null || source.rate === ""
+        ? expectedAmount
+        : canonicalDecimal(source.rate);
+    const expectedAccount = String(
+      source.expenseaccount ?? source.account ?? "",
+    );
+    for (const [field, sourceValue, targetValue] of [
+      ["line_number", String(expectedLineNumber.get(key)), String(found.line_number)],
+      ["item", String(source.item ?? ""), String(found.source_item_id ?? "")],
+      ["account", expectedAccount, String(found.source_account_id ?? "")],
+      ["quantity", expectedQuantity, canonicalDecimal(found.quantity)],
+      ["unit", String(source.units ?? ""), String(found.unit ?? "")],
+      ["unit_price", expectedRate, canonicalDecimal(found.unit_price)],
+      ["amount", expectedAmount, canonicalMoney(found.amount)],
+      ["description", String(source.memo ?? ""), String(found.description ?? "")],
+    ] as const) {
+      if (sourceValue === targetValue) continue;
+      differences.push({
+        layer: "invoice_line",
+        sourceRef: key,
+        field,
+        source: sourceValue,
+        target: targetValue,
+      });
+      mismatchedSourceLines.add(key);
+    }
+  }
+  const targetOnlyCount =
+    targetWithoutIdentity +
+    [...targetByKey.keys()].filter((key) => !sourceByKey.has(key)).length;
+  gates.invoiceLines = {
+    status:
+      mismatchedSourceLines.size === 0 && targetOnlyCount === 0
+        ? "exact"
+        : "different",
+    sourceCount: sourceByKey.size,
+    targetCount: target.invoiceLines.length,
+    exactCount: sourceByKey.size - mismatchedSourceLines.size,
+    mismatchCount: mismatchedSourceLines.size + targetOnlyCount,
+    targetOnlyCount,
+    detail:
+      "Every source customer-invoice detail line by stable identity, sequence, item, account, quantity, unit, rate, amount, and description",
+  };
+}
 if (!legacyCrew) {
   gates.fieldTicketCrewAndHours = {
     status: "unproven",
