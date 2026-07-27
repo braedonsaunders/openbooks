@@ -453,6 +453,9 @@ export async function generateInvoiceFromBillingRequest(
             itemId: null, accountId: defaultIncomeId, description: 'Markup', quantity: '1',
             unitPrice: markupTotal, amount: markupTotal, taxCodeId: null, employeeId: null,
             timeEntryId: null, timeTypeId: null, sourceCostLineId: null,
+            // Computed by the engine rather than billed from work, so a rollup
+            // can present it beside the other charges the agreement combines.
+            sourceKind: 'charge',
           })
         }
       }
@@ -531,20 +534,9 @@ export async function generateInvoiceFromBillingRequest(
           itemId: c.adjustment.itemId, accountId: item?.income_account_id ?? defaultIncomeId,
           description: c.adjustment.name, quantity: '1', unitPrice: c.amount, amount: c.amount,
           taxCodeId: item?.tax_code_id ?? null, employeeId: null, timeEntryId: null,
-          timeTypeId: null, sourceCostLineId: null,
+          timeTypeId: null, sourceCostLineId: null, sourceKind: 'charge',
         })
       }
-    }
-
-    // An invoice is payable in the currency's minor unit, so every billed line
-    // is rounded to the cent. Rate and markup arithmetic runs at four decimals
-    // and legitimately lands on fractions of a cent; carrying those through to
-    // the customer leaves an invoice that cannot actually be paid, and summing
-    // them drifts the total against the same invoice cut anywhere else.
-    for (const l of built) {
-      l.amount = toCents(l.amount)
-      if (l.baseAmount != null) l.baseAmount = toCents(l.baseAmount)
-      if (l.quantity === '1') l.unitPrice = l.amount
     }
 
     // (3) Not-to-exceed cap: trim the cumulative invoiced total to the contract.
@@ -617,6 +609,17 @@ export async function generateInvoiceFromBillingRequest(
       returning id
     `)).rows as any[]
     const invoiceId = created.id
+
+    // An invoice is payable in the currency's minor unit, so every billed line
+    // is rounded to the cent. Rate and markup arithmetic runs at four decimals
+    // and legitimately lands on fractions of a cent; carrying those through to
+    // the customer leaves an invoice that cannot actually be paid, and summing
+    // them drifts the total against the same invoice cut anywhere else.
+    for (const l of presentedLines) {
+      l.amount = toCents(l.amount)
+      if (l.baseAmount != null) l.baseAmount = toCents(l.baseAmount)
+      if (l.quantity === '1') l.unitPrice = l.amount
+    }
 
     // The invoice carries the PRESENTED lines; provenance is stamped from the
     // detail behind them. A rolled-up line bills many source rows, and every one
