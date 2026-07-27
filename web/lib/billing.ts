@@ -286,6 +286,18 @@ export async function generateInvoiceFromBillingRequest(
       // On a field-ticket basis the cost billed alongside the labor is scoped by
       // the selected tickets' own span, so a ticket's materials travel with it.
       // Crews attach materials and equipment to the ticket they were consumed on,
+      // A request may name cost documents it bills — bills, expense reports or
+      // orders explicitly chosen for this invoice. Those are always in scope: the
+      // period and ticket windows exist to GUESS what was chosen, so they widen
+      // the selection and must never veto something named outright.
+      const sourceDocumentIds: string[] = Array.isArray((req.custom ?? {}).sourceDocumentIds)
+        ? ((req.custom as { sourceDocumentIds: string[] }).sourceDocumentIds ?? [])
+            .filter((id) => /^[0-9a-f-]{36}$/i.test(id))
+        : []
+      const chosenDocuments = sourceDocumentIds.length
+        ? sql` and dl.document_id = any(${`{${sourceDocumentIds.join(',')}}`}::uuid[])`
+        : sql``
+
       // so follow that link. Only fall back to the tickets' date span for lines
       // that carry no ticket of their own, or a ticket's own costs would be lost.
       const ticketSpan = ticketIds.length
@@ -342,7 +354,7 @@ export async function generateInvoiceFromBillingRequest(
            -- dropped every consumable and equipment charge staged on an order.
            and (dl.is_billable or d.kind in ('sales_order', 'purchase_order'))
            and dl.billed_by_line_id is null
-           ${costDateFilter}${ticketSpan}
+           and ((true ${costDateFilter}${ticketSpan}) ${sourceDocumentIds.length ? sql`or dl.document_id = any(${`{${sourceDocumentIds.join(',')}}`}::uuid[])` : sql``})
            and ((d.kind = 'project_charge' and d.status in ('approved','posted'))
              or (d.status in ('posted','approved') and d.kind = any(${`{${costKinds.join(",")}}`}::text[])))
       `)) as unknown as { rows: any[] }
