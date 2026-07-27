@@ -144,7 +144,7 @@ if (
 
 const targetRows = await retry(() => db.execute(sql`
   select d.id, d.document_number, d.project_id,
-         d.document_date::text as document_date, d.custom,
+         d.document_date::text as document_date,
          project.custom->>'nsId' as project_ref,
          ft.document_id as native_document_id
     from documents d
@@ -192,30 +192,20 @@ const headerNormalizations = headers.flatMap((header) => {
     foremanPartyId: partyBySourceRef.get(header.foremanRef) ?? null,
   }];
 });
-const fallbackNormalizations = [...targetByNumber.values()].flatMap((targetRow) => {
-  if (targetRow.native_document_id || headerByNumber.has(String(targetRow.document_number))) {
-    return [];
-  }
-  const custom = (targetRow.custom ?? {}) as Record<string, unknown>;
-  const legacy = (custom.fieldTicket ?? {}) as Record<string, unknown>;
-  const end = String(legacy.periodEnd ?? targetRow.document_date ?? "");
-  const start = String(legacy.periodStart ?? end);
-  const period = ["shift", "daily", "weekly"].includes(String(legacy.period))
-    ? String(legacy.period)
-    : "weekly";
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(start) || !/^\d{4}-\d{2}-\d{2}$/.test(end)) {
-    throw new Error(`ticket ${String(targetRow.document_number)} has no valid native period source`);
-  }
-  return [{
-    id: String(targetRow.id),
-    number: String(targetRow.document_number),
-    period,
-    periodStart: start,
-    periodEnd: end,
-    foremanPartyId: legacy.foremanPartyId ? String(legacy.foremanPartyId) : null,
-  }];
-});
-const normalizations = [...headerNormalizations, ...fallbackNormalizations];
+const missingSourceHeaders = [...targetByNumber.values()]
+  .filter(
+    (targetRow) =>
+      !targetRow.native_document_id
+      && !headerByNumber.has(String(targetRow.document_number)),
+  )
+  .map((targetRow) => String(targetRow.document_number));
+if (missingSourceHeaders.length > 0) {
+  throw new Error(
+    `${missingSourceHeaders.length} non-native Field Tickets lack an authoritative source header: `
+      + missingSourceHeaders.slice(0, 10).join(", "),
+  );
+}
+const normalizations = headerNormalizations;
 
 const sourceLinesByTicket = new Map<string, TimeLine[]>();
 for (const line of timeLines) {
