@@ -74,6 +74,8 @@ export const NETSUITE_TRANSACTION_WATERMARK_QUERY =
 
 export interface NetSuiteAccountMappings {
   projectForemanField?: string;
+  /** Line field holding the rebill markup, if this account records one. */
+  lineMarkupField?: string;
   projectPurchaseOrderField?: string;
   itemCategoryField?: string;
   customerShortCodeField?: string;
@@ -198,6 +200,7 @@ export function parseNetSuiteMappings(value: unknown): NetSuiteAccountMappings {
       })) as NetSuiteAccountMappings["projectStatuses"];
   return {
     projectForemanField: safeSuiteScriptId(raw.projectForemanField, "projectForemanField") ?? undefined,
+    lineMarkupField: safeSuiteScriptId(raw.lineMarkupField, "lineMarkupField") ?? undefined,
     projectPurchaseOrderField: safeSuiteScriptId(raw.projectPurchaseOrderField, "projectPurchaseOrderField") ?? undefined,
     itemCategoryField: safeSuiteScriptId(raw.itemCategoryField, "itemCategoryField") ?? undefined,
     customerShortCodeField: safeSuiteScriptId(raw.customerShortCodeField, "customerShortCodeField") ?? undefined,
@@ -234,6 +237,13 @@ const HEADER_COLS = `t.id, t.type AS ttype, t.tranid, TO_CHAR(t.trandate, 'MM/DD
 const LINE_COLS = `tl.transaction, tl.id, tl.mainline, tl.taxline, tl.item, tl.account,
   tl.expenseaccount, tl.netamount, tl.foreignamount, tl.department, tl.entity, tl.subsidiary,
   tl.memo, tl.taxrate1, tl.taxcode, tl.isbillable`;
+
+/** Line columns plus whatever optional fields this account has mapped. */
+function lineCols(mappings: NetSuiteAccountMappings): string {
+  return mappings.lineMarkupField
+    ? `${LINE_COLS}, ${mappings.lineMarkupField} AS markup`
+    : LINE_COLS;
+}
 
 export function normalizeNetSuiteAccountingPeriods(
   rows: Record<string, string>[],
@@ -886,7 +896,7 @@ export class NetSuiteSource implements MigrationSource {
         `SELECT ${HEADER_COLS} FROM transaction t WHERE t.id IN (${chunk.join(",")}) ORDER BY t.id`,
       ));
       for (const line of await this.q<NsLine>(
-        `SELECT ${LINE_COLS} FROM transactionline tl WHERE tl.transaction IN (${chunk.join(",")}) ORDER BY tl.transaction, tl.id`,
+        `SELECT ${lineCols(this.mappings)} FROM transactionline tl WHERE tl.transaction IN (${chunk.join(",")}) ORDER BY tl.transaction, tl.id`,
       )) {
         const key = String(line.transaction);
         linesByTxn.set(key, [...(linesByTxn.get(key) ?? []), line]);
@@ -965,7 +975,7 @@ export class NetSuiteSource implements MigrationSource {
         if (chunk.length === 0) continue;
         ctx.onProgress?.({ phase: "pull", message: "Pulling transaction lines…", current: Math.min(i + 150, tids.length), total: tids.length });
         collectLines(await this.q<NsLine>(
-          `SELECT ${LINE_COLS} FROM transactionline tl WHERE tl.transaction IN (${chunk.join(",")}) ORDER BY tl.transaction, tl.id`,
+          `SELECT ${lineCols(this.mappings)} FROM transactionline tl WHERE tl.transaction IN (${chunk.join(",")}) ORDER BY tl.transaction, tl.id`,
         ));
       }
     } else {
@@ -973,7 +983,7 @@ export class NetSuiteSource implements MigrationSource {
       const windowsWithHeaders = fullWindows.filter((_, index) => occupiedWindows.has(index));
       const partitions = windowsWithHeaders.map(([lo, hi], index) => ({
         id: `line-${String(index).padStart(4, "0")}`,
-        sql: `SELECT ${LINE_COLS} FROM transactionline tl WHERE tl.transaction > ${lo} AND tl.transaction <= ${hi} ORDER BY tl.transaction, tl.id`,
+        sql: `SELECT ${lineCols(this.mappings)} FROM transactionline tl WHERE tl.transaction > ${lo} AND tl.transaction <= ${hi} ORDER BY tl.transaction, tl.id`,
       }));
       const exported = await this.bridge.bulkQuery<NsLine>(partitions);
       let windowsRead = 0;

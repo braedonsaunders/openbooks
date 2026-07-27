@@ -45,6 +45,19 @@ async function retry<T>(fn: () => Promise<T>, n = 12): Promise<T> {
 
 const money = (v: string | null) => (v == null ? null : Math.abs(Number(v)).toFixed(4));
 
+/**
+ * The source records a line's markup as a PERCENT in mixed units — 15 and 0.15
+ * both mean 15%. It lands in document_lines.markup_percent, NOT cost_multiplier:
+ * that column is a rate factor for the work itself (the source's own is 1/2/3,
+ * an overtime factor), and putting a markup there bills 15% as fifteen times.
+ */
+const markupPercent = (markup: string | null): string | null => {
+  if (markup == null || markup === "") return null;
+  const v = Number(markup);
+  if (!Number.isFinite(v) || v < 0) return null;
+  return (v > 1 ? v : v * 100).toFixed(4);
+};
+
 (async () => {
   const env = (await retry(() => db.execute(sql`select env_kind from orgs where id = ${ORG}`))) as any;
   if (env.rows[0]?.env_kind !== "sandbox") throw new Error("refusing: target org is not a sandbox");
@@ -97,7 +110,7 @@ const money = (v: string | null) => (v == null ? null : Math.abs(Number(v)).toFi
         updates.push({
           id: hit.id, billable: s.billable,
           ticket: s.ticket ? (tickets.get(s.ticket) ?? null) : null,
-          mult: s.mult ?? s.markup ?? null,
+          mult: markupPercent(s.markup),
           ref: s.line,
         });
       });
@@ -109,7 +122,7 @@ const money = (v: string | null) => (v == null ? null : Math.abs(Number(v)).toFi
         update document_lines dl
            set is_billable = v.billable,
                field_ticket_id = coalesce(v.ticket::uuid, dl.field_ticket_id),
-               cost_multiplier = coalesce(v.mult::numeric, dl.cost_multiplier),
+               markup_percent = coalesce(v.mult::numeric, dl.markup_percent),
                custom = coalesce(dl.custom, '{}'::jsonb) || jsonb_build_object('sourceLineRef', v.ref),
                updated_at = now()
           from (select unnest(${`{${updates.map((u) => u.id).join(",")}}`}::uuid[]) id,

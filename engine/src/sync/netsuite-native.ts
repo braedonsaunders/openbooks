@@ -28,6 +28,18 @@ export interface NsHeader {
   otherrefnum?: string | null;
 }
 
+/**
+ * A source markup arrives as a percentage but in mixed units — 15 and 0.15 both
+ * mean 15%, depending on who keyed the line. Anything above 1 is already a
+ * percentage; anything at or below 1 is a fraction of cost.
+ */
+export function normalizeMarkupPercent(raw: unknown): string | null {
+  if (raw == null || raw === "") return null;
+  const v = Number(raw);
+  if (!Number.isFinite(v) || v < 0) return null;
+  return (v > 1 ? v : v * 100).toFixed(4);
+}
+
 export interface NsLine {
   transaction: string;
   id: string;
@@ -46,6 +58,8 @@ export interface NsLine {
   memo?: string | null;
   /** 'T' when the source marks the line rebillable to the job's customer. */
   isbillable?: string | null;
+  /** Rebill markup, from whichever line field the account mapped. */
+  markup?: string | null;
 }
 
 // --- Classification -------------------------------------------------------------
@@ -261,6 +275,7 @@ export function buildNativeFromNetSuite(
       // expenses remain billable to the project's customer.
       isBillable: String(l.isbillable ?? "").toUpperCase() === "T",
       sourceLineRef: l.id == null ? null : String(l.id),
+      markupPercent: normalizeMarkupPercent(l.markup),
     };
     lines.push(row);
     return row;
@@ -556,6 +571,7 @@ function buildOrder(
       lineNumber: ++n,
       isBillable: String(l.isbillable ?? "").toUpperCase() === "T",
       sourceLineRef: l.id == null ? null : String(l.id),
+      markupPercent: normalizeMarkupPercent(l.markup),
     };
     lines.push(row);
     detailRows.push({ row, codeId: code?.id ?? null });

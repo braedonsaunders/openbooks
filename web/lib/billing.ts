@@ -1,7 +1,7 @@
 import 'server-only'
 import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/db.ts'
-import { add, cmp, fromUnits, isZero, mulDecimal, roundDiv, sum, toUnits } from '@openbooks/engine/src/money.ts'
+import { add, cmp, fromUnits, isZero, mulDecimal, mulPercent, roundDiv, sum, toUnits } from '@openbooks/engine/src/money.ts'
 import { findLapsedRateCard, mergeCharges, priceAdjustments, resolveRateAdjustments } from './rate-adjustments'
 
 /** Map a time type's name onto the buckets a rate-card adjustment can exclude. */
@@ -295,7 +295,7 @@ export async function generateInvoiceFromBillingRequest(
                -- configured order cost-source adds to the invoice instead of
                -- subtracting from it; a genuine credit still flips negative.
                (case when d.kind in ('sales_order','purchase_order') then -dl.amount else dl.amount end) as amount,
-               dl.cost_multiplier, dl.description, dl.item_id, dl.quantity, dl.unit,
+               dl.cost_multiplier, dl.markup_percent, dl.description, dl.item_id, dl.quantity, dl.unit,
                dl.bill_rate, dl.bill_amount, dl.equipment_unit_id, dl.rate_version_id, d.kind,
                coalesce(dl.department_id, d.department_id) as department_id, d.document_date,
                dl.rate_presentation, i.income_account_id, i.tax_code_id, i.name as item_name,
@@ -321,8 +321,15 @@ export async function generateInvoiceFromBillingRequest(
 
       for (const cl of costRows.rows) {
         const isProjectCharge = cl.kind === 'project_charge'
-        const mult = cl.cost_multiplier && cmp(String(cl.cost_multiplier), '0') > 0 ? String(cl.cost_multiplier) : markup
-        const amount = isProjectCharge ? String(cl.bill_amount ?? '0') : mulDecimal(String(cl.amount ?? '0'), mult)
+        // A markup recorded ON THE LINE is the deal struck for that line and
+        // wins outright — including an explicit zero, which bills at cost. Only
+        // a line that says nothing falls back to the project type's markup.
+        const base = String(cl.amount ?? '0')
+        const amount = isProjectCharge
+          ? String(cl.bill_amount ?? '0')
+          : cl.markup_percent != null
+            ? add(base, mulPercent(base, String(cl.markup_percent), 4))
+            : mulDecimal(base, markup)
         const components = isProjectCharge && cl.rate_presentation === 'rate_components' && Array.isArray(cl.bill_components)
           ? cl.bill_components
           : []

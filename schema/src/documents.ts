@@ -10,8 +10,7 @@ import {
   text,
   timestamp,
   uniqueIndex,
-  uuid,
-} from "drizzle-orm/pg-core";
+  uuid, numeric,} from "drizzle-orm/pg-core";
 import { auditColumns, currencyCode, fxRate, id, money, orgRef } from "./helpers";
 
 /**
@@ -147,7 +146,18 @@ export const documentLines = pgTable(
     employeeId: uuid("employee_id"), // labor line: who worked it
     timeEntryId: uuid("time_entry_id"), // provenance from timesheets
     timeTypeId: uuid("time_type_id"),
-    costMultiplier: money("cost_multiplier"), // e.g. 1.5 OT
+    /** Rate factor for the WORK ITSELF — 1.5 for overtime, 2 for double time.
+     *  Never a markup: conflating the two turns a 15% markup into fifteen times
+     *  the cost. */
+    costMultiplier: money("cost_multiplier"),
+    /**
+     * Markup charged over this line's cost when it is rebilled, as a PERCENTAGE
+     * (15 means 15%, never 0.15). Null means bill at cost — distinct from 0,
+     * which also bills at cost but says so deliberately, and both differ from
+     * "unset, so fall back to the project type's default markup".
+     */
+    markupPercent: numeric("markup_percent", { precision: 19, scale: 4 }),
+    /** Can this cost be rebilled to the project's customer? */
     isBillable: boolean("is_billable").notNull().default(false),
     billedByLineId: uuid("billed_by_line_id"), // invoice line that billed this cost
     /**
