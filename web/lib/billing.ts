@@ -4,6 +4,15 @@ import { db } from '@openbooks/engine/src/db.ts'
 import { add, cmp, fromUnits, isZero, mulDecimal, mulPercent, roundDiv, sum, toUnits } from '@openbooks/engine/src/money.ts'
 import { findLapsedRateCard, mergeCharges, priceAdjustments, resolveRateAdjustments } from './rate-adjustments'
 
+/** Round money to the currency's minor unit, half away from zero. */
+function toCents(amount: string): string {
+  const units = toUnits(amount)
+  const negative = units < 0n
+  const magnitude = negative ? -units : units
+  const rounded = roundDiv(magnitude, 100n) * 100n
+  return fromUnits(negative ? -rounded : rounded)
+}
+
 /** The day the invoice is cut, or the period it closes. */
 function invoiceDateOf(req: { cutoff_date?: string | null }): string {
   return req.cutoff_date ?? new Date().toISOString().slice(0, 10)
@@ -425,6 +434,17 @@ export async function generateInvoiceFromBillingRequest(
     // presentation 'included', meaning it is already embedded in the negotiated
     // labor rates rather than layered onto rebilled cost. Applying it to cost
     // lines double-charges it. A line's OWN markup is what prices that line.
+
+    // An invoice is payable in the currency's minor unit, so every billed line
+    // is rounded to the cent. Rate and markup arithmetic runs at four decimals
+    // and legitimately lands on fractions of a cent; carrying those through to
+    // the customer leaves an invoice that cannot actually be paid, and summing
+    // them drifts the total against the same invoice cut anywhere else.
+    for (const l of built) {
+      l.amount = toCents(l.amount)
+      if (l.baseAmount != null) l.baseAmount = toCents(l.baseAmount)
+      if (l.quantity === '1') l.unitPrice = l.amount
+    }
 
     // (2a) Present the same item as one line. Cost arrives one line per source
     //      document line — a welder issued three times is three lines — but the
