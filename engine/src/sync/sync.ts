@@ -1,6 +1,6 @@
 import { desc, eq, sql } from "drizzle-orm";
 import { db, schema, withOrg } from "../db.ts";
-import { toUnits, fromUnits } from "../money.ts";
+import { toUnits, fromUnits, normalizeDecimal } from "../money.ts";
 import {
   postDocument,
   regenerateGlImpactTx,
@@ -239,8 +239,13 @@ function nativeKey(d: NativeDocument): string {
     d.controlAccountId,
     d.extraDims ?? {},
     d.lines.map((l) => [
+      l.lineNumber,
+      l.sourceLineRef ?? null,
       l.accountId,
       l.itemId,
+      normalizeDecimal(l.quantity ?? "1", 8),
+      l.unit ?? null,
+      normalizeDecimal(l.unitPrice ?? l.amount, 8),
       toUnits(l.amount).toString(),
       toUnits(l.taxAmount).toString(),
       l.taxOverridden,
@@ -270,8 +275,13 @@ type StoredDocumentKeyRow = {
 };
 type StoredLineKeyRow = {
   document_id: string;
+  line_number: number;
+  source_line_ref: string | null;
   account_id: string | null;
   item_id: string | null;
+  quantity: string;
+  unit: string | null;
+  unit_price: string;
   amount: string;
   tax_amount: string;
   tax_overridden: boolean;
@@ -299,8 +309,13 @@ function storedCanonicalKey(
     d.ctrl,
     d.extra_dims ?? {},
     lines.map((l) => [
+      l.line_number,
+      l.source_line_ref,
       l.account_id,
       l.item_id,
+      normalizeDecimal(l.quantity, 8),
+      l.unit,
+      normalizeDecimal(l.unit_price, 8),
       toUnits(l.amount).toString(),
       toUnits(l.tax_amount).toString(),
       l.tax_overridden,
@@ -326,7 +341,9 @@ async function storedKey(docId: string): Promise<string> {
   ).rows;
   const lines = (
     (await db.execute(sql`
-      select account_id, item_id, amount, tax_amount, tax_overridden, tax_code_id,
+      select line_number, custom->>'sourceLineRef' as source_line_ref,
+             account_id, item_id, quantity, unit, unit_price,
+             amount, tax_amount, tax_overridden, tax_code_id,
              party_id, department_id, project_id, subsidiary_id, extra_dims, description
         from document_lines where document_id = ${docId} order by line_number`)) as unknown as {
       rows: StoredLineKeyRow[];
@@ -348,7 +365,10 @@ async function loadStoredKeys(
      where org_id = ${orgId} and custom->>${refKey} is not null
      order by id`)) as unknown as { rows: StoredDocumentKeyRow[] };
   const lineResult = (await db.execute(sql`
-    select dl.document_id, dl.account_id, dl.item_id, dl.amount, dl.tax_amount, dl.tax_overridden,
+    select dl.document_id, dl.line_number,
+           dl.custom->>'sourceLineRef' as source_line_ref,
+           dl.account_id, dl.item_id, dl.quantity, dl.unit, dl.unit_price,
+           dl.amount, dl.tax_amount, dl.tax_overridden,
            dl.tax_code_id, dl.party_id, dl.department_id, dl.project_id, dl.subsidiary_id,
            dl.extra_dims, dl.description
       from document_lines dl
