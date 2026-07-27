@@ -215,6 +215,10 @@ export async function generateInvoiceFromBillingRequest(
         req.basis === 'time_selection' && Array.isArray(req.selected_time_entry_ids)
           ? (req.selected_time_entry_ids as string[])
           : null
+      // A FINAL invoice closes the job: everything still unbilled goes on it, so
+      // the ticket and period windows are dropped for both labor and cost.
+      // Anything they would exclude would otherwise never be billed at all.
+      const isFinal = req.invoice_type === 'final'
       const dateFilter = sql.join(
         [
           req.start_date ? sql` and te.worked_on >= ${req.start_date}` : sql``,
@@ -248,7 +252,7 @@ export async function generateInvoiceFromBillingRequest(
           left join time_types tt on tt.id = te.time_type_id
          where te.org_id = ${orgId} and te.project_id = ${req.project_id}
            and te.status = 'approved' and te.is_billable and te.invoiced_by_line_id is null
-           ${dateFilter}${selFilter}${ticketFilter}
+           ${isFinal ? sql`` : sql`${dateFilter}${ticketFilter}`}${selFilter}
          order by te.worked_on
       `)) as unknown as { rows: any[] }
 
@@ -300,7 +304,7 @@ export async function generateInvoiceFromBillingRequest(
 
       // so follow that link. Only fall back to the tickets' date span for lines
       // that carry no ticket of their own, or a ticket's own costs would be lost.
-      const ticketSpan = ticketIds.length
+      const ticketSpan = isFinal ? sql`` : ticketIds.length
         ? invoicing.ticketCostScope === 'ticket_or_period'
           ? sql` and (dl.field_ticket_id = any(${`{${ticketIds.join(',')}}`}::uuid[])
                 or (dl.field_ticket_id is null and d.document_date between
@@ -354,7 +358,7 @@ export async function generateInvoiceFromBillingRequest(
            -- dropped every consumable and equipment charge staged on an order.
            and (dl.is_billable or d.kind in ('sales_order', 'purchase_order'))
            and dl.billed_by_line_id is null
-           and ((true ${costDateFilter}${ticketSpan}) ${sourceDocumentIds.length ? sql`or dl.document_id = any(${`{${sourceDocumentIds.join(',')}}`}::uuid[])` : sql``})
+           and ((true ${isFinal ? sql`` : costDateFilter}${ticketSpan}) ${sourceDocumentIds.length ? sql`or dl.document_id = any(${`{${sourceDocumentIds.join(',')}}`}::uuid[])` : sql``})
            and ((d.kind = 'project_charge' and d.status in ('approved','posted'))
              or (d.status in ('posted','approved') and d.kind = any(${`{${costKinds.join(",")}}`}::text[])))
       `)) as unknown as { rows: any[] }
