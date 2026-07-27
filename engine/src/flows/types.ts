@@ -71,6 +71,7 @@ export interface FlowSubjectAdapter {
     subjectId: string,
     outcome: "approved" | "rejected",
     ctx: FlowExecCtx,
+    detail?: { comment?: string | null },
   ): Promise<void>;
   /** set_field action — writableFields only, throws on violation. */
   setField(subjectId: string, field: string, value: unknown, ctx: FlowExecCtx): Promise<void>;

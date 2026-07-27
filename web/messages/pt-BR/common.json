@@ -209,6 +209,13 @@
     "retry": "Tentar novamente",
     "actions": { "insert": "Criado", "update": "Atualizado", "delete": "Excluído", "post": "Lançado", "void": "Anulado", "approve": "Aprovado", "reject": "Rejeitado" }
   },
+  "amendment": {
+    "title": "Explique a alteração do documento lançado",
+    "deleteTitle": "Explique por que o documento lançado será excluído",
+    "reason": "Motivo da alteração",
+    "placeholder": "Descreva o que mudou e por quê",
+    "deletePlaceholder": "Descreva por que é necessário excluir a transação lançada"
+  },
   "approvalFlow": {
     "pendingWith": "Pendente com {names}",
     "rejectTitle": "Rejeitar este documento?",

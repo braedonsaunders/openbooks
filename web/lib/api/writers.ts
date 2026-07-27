@@ -385,6 +385,7 @@ async function createDocument(user: SessionUser, docKind: string, body: DocApiBo
     taxTotal: "0",
     partyId: null,
     documentDate: body.documentDate ?? new Date().toISOString().slice(0, 10),
+    updatedAt: undefined,
   };
   try {
     await applyDocumentEdit(draft.id, current, body, { orgId: user.orgId, userId: user.id, source: "api" });
@@ -401,7 +402,7 @@ async function createDocument(user: SessionUser, docKind: string, body: DocApiBo
 async function updateDocument(user: SessionUser, docKind: string, id: string, body: DocApiBody): Promise<WriteResult> {
   const owned = (await db.execute(sql`
     select kind, status, total, tax_total as "taxTotal", party_id as "partyId",
-           document_date as "documentDate"
+           document_date as "documentDate", updated_at as "updatedAt"
       from documents where id = ${id} and org_id = ${user.orgId} and kind = ${docKind}`)) as unknown as { rows: DocumentEditCurrent[] };
   const row = owned.rows[0];
   if (!row) return err(404, "not found");

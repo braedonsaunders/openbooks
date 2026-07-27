@@ -37,6 +37,7 @@
     "purchase_order": "bon de commande",
     "sales_order": "commande client",
     "quote": "soumission",
+    "field_ticket": "fiche de travail",
     "close_run": "clôture de période"
   },
   "decide": {

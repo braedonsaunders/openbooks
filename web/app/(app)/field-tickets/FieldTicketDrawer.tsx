@@ -6,7 +6,7 @@ import { Fragment, useEffect, useMemo, useState } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { useTranslations } from 'next-intl'
 import { toast } from 'sonner'
-import { Check, Mail, Plus, Send, Trash2, X } from 'lucide-react'
+import { Mail, Plus, Send, Trash2 } from 'lucide-react'
 import { Badge, Button, Input, Label, SearchSelect, Select, Textarea, cn } from '@openbooks/ui'
 import { defaultFormLayout, type FormLayoutConfig, type HeaderFieldPlacement } from '@openbooks/customization'
 import { TransactionDrawer } from '../../../components/transaction-drawer'
@@ -171,12 +171,12 @@ export function FieldTicketDrawer(props: {
   availableLayouts?: { id: string; name: string }[]
   currentLayoutId?: string | null
   canCustomize?: boolean
-  canApprove: boolean
   canManage: boolean
 }) {
   const { money } = useMoney()
   const t = useTranslations('fieldTickets')
   const tCommon = useTranslations('common')
+  const tNav = useTranslations('nav')
   const router = useRouter()
   const searchParams = useSearchParams()
   const [ticket, setTicket] = useState(props.ticket)
@@ -186,8 +186,6 @@ export function FieldTicketDrawer(props: {
   const [grid, setGrid] = useState<GridRow[]>(() => buildGrid(props.ticket.entries))
   const [gridDirty, setGridDirty] = useState(false)
   const [busy, setBusy] = useState(false)
-  const [rejecting, setRejecting] = useState(false)
-  const [rejectReason, setRejectReason] = useState('')
   const [sending, setSending] = useState(false)
   const [sendTo, setSendTo] = useState(props.ticket.customerEmail ?? '')
   const [sendMessage, setSendMessage] = useState('')
@@ -600,15 +598,10 @@ export function FieldTicketDrawer(props: {
       case 'pdf':
         return <PdfButton recordType="field_ticket" recordId={ticket.id} />
       case 'approval':
-        return ticket.status === 'pending_approval' && props.canApprove ? (
-          <>
-            <Button disabled={busy} onClick={async () => (await call('POST', { action: 'approve' })) && toast.success(t('editor.approved'))}>
-              <Check size={14} /> {t('editor.approve')}
-            </Button>
-            <Button variant="outline" disabled={busy} onClick={() => setRejecting(true)}>
-              <X size={14} /> {t('editor.reject')}
-            </Button>
-          </>
+        return ticket.status === 'pending_approval' ? (
+          <Button variant="outline" asChild>
+            <Link href="/approvals">{tCommon('actions.view')} {tNav('approvals')}</Link>
+          </Button>
         ) : null
       case 'submit':
         return ticket.status === 'draft' && props.canManage ? (
@@ -766,29 +759,6 @@ export function FieldTicketDrawer(props: {
         {ticket.fieldTicket.rejectionReason && ticket.status === 'draft' && (
           <div className="rounded-md bg-rose-50 p-2.5 text-sm text-rose-700 dark:bg-rose-950/40 dark:text-rose-300">
             {t('editor.rejectionNote', { reason: ticket.fieldTicket.rejectionReason })}
-          </div>
-        )}
-
-        {rejecting && (
-          <div className="flex flex-wrap items-end gap-2 rounded-lg border border-slate-200 p-3 dark:border-slate-700">
-            <div className="min-w-64 flex-1">
-              <Label htmlFor="ft-reject">{t('editor.rejectReason')}</Label>
-              <Input id="ft-reject" value={rejectReason} onChange={(e) => setRejectReason(e.target.value)} />
-            </div>
-            <Button
-              size="sm"
-              disabled={busy || !rejectReason.trim()}
-              onClick={async () => {
-                if (await call('POST', { action: 'reject', reason: rejectReason })) {
-                  setRejecting(false)
-                  setRejectReason('')
-                  toast.success(t('editor.rejected'))
-                }
-              }}
-            >
-              {t('editor.confirmReject')}
-            </Button>
-            <Button size="sm" variant="ghost" onClick={() => setRejecting(false)}>{t('editor.cancel')}</Button>
           </div>
         )}
 

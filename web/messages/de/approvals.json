@@ -37,6 +37,7 @@
     "purchase_order": "Bestellung",
     "sales_order": "Kundenauftrag",
     "quote": "Angebot",
+    "field_ticket": "Leistungsnachweis",
     "close_run": "Periodenabschluss"
   },
   "decide": {

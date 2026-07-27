@@ -21,6 +21,7 @@ import { PDF_RECORD_TYPE_BY_KEY } from '../lib/pdf-templates/catalog'
 import { cmp } from '@openbooks/engine/src/money.ts'
 import { computeLineTaxes, type TaxComponentConfig } from '@openbooks/engine/src/tax.ts'
 import { confirmDialog } from '../lib/confirm'
+import { promptDialog } from '../lib/prompt'
 import { runClientScripts } from '../lib/client-scripts'
 import type { DocKindConfig } from '../lib/document-kinds'
 import {
@@ -424,6 +425,17 @@ export function DocumentDrawer({
   }
 
   async function save() {
+    let amendmentReason: string | undefined
+    if (isPosted) {
+      const reason = await promptDialog({
+        title: tCommon('amendment.title'),
+        label: tCommon('amendment.reason'),
+        placeholder: tCommon('amendment.placeholder'),
+        confirmLabel: tCommon('actions.save'),
+      })
+      if (!reason) return
+      amendmentReason = reason
+    }
     setBusy(true)
     setSaveState('saving')
     // Client scripts (sandboxed, opaque-origin evaluator) gate the save: an
@@ -439,7 +451,15 @@ export function DocumentDrawer({
     const res = await fetch(`/api/documents/${doc.id}`, {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(payload_),
+      body: JSON.stringify({
+        ...payload_,
+        ...(isPosted
+          ? {
+              amendmentReason,
+              expectedUpdatedAt: String(doc.updated_at),
+            }
+          : {}),
+      }),
     })
     if (res.ok) {
       const data = (await res.json()) as DocPayload
@@ -486,8 +506,21 @@ export function DocumentDrawer({
       }))
     )
       return
+    const reason = isPosted
+      ? await promptDialog({
+          title: tCommon('amendment.deleteTitle'),
+          label: tCommon('amendment.reason'),
+          placeholder: tCommon('amendment.deletePlaceholder'),
+          confirmLabel: tCommon('actions.delete'),
+        })
+      : null
+    if (isPosted && !reason) return
     setBusy(true)
-    const res = await fetch(`/api/documents/${doc.id}`, { method: 'DELETE' })
+    const res = await fetch(`/api/documents/${doc.id}`, {
+      method: 'DELETE',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ reason }),
+    })
     if (res.ok) {
       toast.success(t('toasts.deleted'))
       router.push(basePath)

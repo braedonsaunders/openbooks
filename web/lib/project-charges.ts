@@ -1,6 +1,6 @@
 import 'server-only'
 import { sql } from 'drizzle-orm'
-import { db } from '@openbooks/engine/src/db.ts'
+import { db, inDbTransaction } from '@openbooks/engine/src/db.ts'
 import { postDocument } from '@openbooks/engine/src/posting.ts'
 import { cmp, divRate, isZero, mul, sum } from '@openbooks/engine/src/money.ts'
 import { nextDocumentNumber } from './bills'
@@ -64,7 +64,7 @@ export async function createProjectCharge(
   if (!(await isFeatureEnabled(orgId, 'projects'))) throw new ChargeError('Projects feature is disabled')
   if (!input.lines?.length) throw new ChargeError('A charge needs at least one line')
 
-  const created = await db.transaction(async (tx) => {
+  const created = await inDbTransaction(async (tx) => {
     const proj = (await tx.execute(sql`
       select id, subsidiary_id from projects where id = ${input.projectId} and org_id = ${orgId}
     `)) as unknown as { rows: { id: string; subsidiary_id: string | null }[] }

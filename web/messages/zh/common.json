@@ -209,6 +209,13 @@
     "retry": "重试",
     "actions": { "insert": "已创建", "update": "已更新", "delete": "已删除", "post": "已过账", "void": "已作废", "approve": "已批准", "reject": "已驳回" }
   },
+  "amendment": {
+    "title": "说明已过账单据的修改",
+    "deleteTitle": "说明删除已过账单据的原因",
+    "reason": "修改原因",
+    "placeholder": "说明修改了什么以及原因",
+    "deletePlaceholder": "说明为何必须删除已过账交易"
+  },
   "approvalFlow": {
     "pendingWith": "等待 {names} 处理",
     "rejectTitle": "驳回此单据？",

@@ -238,6 +238,13 @@
       "reject": "Rechazado"
     }
   },
+  "amendment": {
+    "title": "Explique la modificación del documento contabilizado",
+    "deleteTitle": "Explique por qué se elimina este documento contabilizado",
+    "reason": "Motivo del cambio",
+    "placeholder": "Describa qué cambió y por qué",
+    "deletePlaceholder": "Describa por qué es necesario eliminar la transacción contabilizada"
+  },
   "approvalFlow": {
     "pendingWith": "Pendiente de {names}",
     "rejectTitle": "¿Rechazar este documento?",

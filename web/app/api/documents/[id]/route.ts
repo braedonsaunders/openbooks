@@ -58,7 +58,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
 
   const owned = (await db.execute(
     sql`select kind, status, total, tax_total as "taxTotal", party_id as "partyId",
-               document_date as "documentDate"
+               document_date as "documentDate", updated_at as "updatedAt"
           from documents where id = ${id} and org_id = ${user.orgId}`,
   )) as unknown as { rows: (DocumentEditCurrent)[] }
   const row = owned.rows[0]
@@ -115,7 +115,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
 }
 
 /** Delete a document (guarded: open period, no applied payments, no downstream conversion). */
-export async function DELETE(_req: Request, { params }: { params: Promise<{ id: string }> }) {
+export async function DELETE(req: Request, { params }: { params: Promise<{ id: string }> }) {
   const authz = await getAuthz()
   if (!authz) return NextResponse.json({ error: 'unauthorized' }, { status: 401 })
   const { id } = await params
@@ -145,7 +145,11 @@ export async function DELETE(_req: Request, { params }: { params: Promise<{ id: 
     }
   }
   try {
-    await deleteDocument(id, authz.user.id)
+    const body = (await req.json().catch(() => ({}))) as { reason?: string }
+    await deleteDocument(id, authz.user.id, {
+      source: 'ui',
+      reason: body.reason,
+    })
     return NextResponse.json({ ok: true })
   } catch (e) {
     if (e instanceof DeleteError) return NextResponse.json({ error: e.message }, { status: 422 })

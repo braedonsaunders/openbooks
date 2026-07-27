@@ -20,6 +20,7 @@ export * from "./payment-operations";
 export * from "./planning";
 export * from "./scheduling";
 export * from "./time";
+export * from "./field-tickets";
 export * from "./billing";
 export * from "./dunning";
 export * from "./construction";

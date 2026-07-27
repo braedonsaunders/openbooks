@@ -20,7 +20,33 @@ export async function register() {
   // engine can't import web/lib, so it exposes a renderer hook this process
   // fills at boot; the standalone worker has no renderer and degrades to
   // sending without the attachment.
-  const { registerFlowPdfRenderer } = await import('@openbooks/engine/src/flows/index.ts')
+  const {
+    registerFlowApprovalReleaseHandler,
+    registerFlowPdfRenderer,
+  } = await import('@openbooks/engine/src/flows/index.ts')
+
+  // Field-ticket approval policy is tenant-authored in Flows. The engine owns
+  // routing and gate decisions; this web hook supplies the product service
+  // that atomically materializes ticket-owned project charges, provenance,
+  // status, and audit evidence when the gate resolves. Time-entry approval and
+  // payroll posting remain an independent lifecycle.
+  registerFlowApprovalReleaseHandler('field_ticket', async ({
+    subjectId,
+    outcome,
+    comment,
+    ctx,
+  }) => {
+    if (!ctx.userId) throw new Error('field-ticket approval needs an acting user')
+    const { releaseFieldTicketApproval } = await import('./lib/field-tickets')
+    await releaseFieldTicketApproval(
+      ctx.orgId,
+      ctx.userId,
+      subjectId,
+      outcome,
+      comment,
+    )
+  })
+
   registerFlowPdfRenderer(async ({ orgId, subjectKind, subjectId }) => {
     const { PDF_RECORD_TYPE_BY_KEY } = await import('./lib/pdf-templates/catalog')
     const meta = PDF_RECORD_TYPE_BY_KEY[subjectKind]

@@ -62,6 +62,7 @@ supported keys are:
   "timeTypeRecord": "customrecord_example_time_type",
   "timeTypeMultiplierField": "custrecord_example_multiplier",
   "timeEntryTypeField": "custcol_example_time_type",
+  "timeEntryFieldTicketNumberField": "custcol_example_field_ticket",
   "projectStatuses": {
     "Awarded": "awarded",
     "Substantially Complete": "substantially_complete"

@@ -33,6 +33,7 @@ export interface SubmitResult {
 export async function submitForApproval(
   _targetKind: string,
   targetId: string,
+  actorId?: string | null,
 ): Promise<SubmitResult> {
   const [doc] = await db.select().from(schema.documents).where(eq(schema.documents.id, targetId));
   if (!doc) throw new Error("target document not found");
@@ -74,7 +75,7 @@ export async function submitForApproval(
   // decides whether this kind may proceed without an approval.
   const flowResult = await runRecordFlows({ kind: "on_submit" }, doc.kind, doc.id, {
     orgId: doc.orgId,
-    userId: doc.createdBy,
+    userId: actorId ?? doc.createdBy,
   });
   if (flowResult.gatesCreated > 0) {
     await db

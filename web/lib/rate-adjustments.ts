@@ -152,28 +152,99 @@ export async function findLapsedRateCard(input: {
   departmentId?: string | null
 }): Promise<{ customerId: string; lastEffectiveTo: string | null } | null> {
   const r = (await db.execute(sql`
-    select p.customer_id,
-           max(v.effective_to) filter (where v.effective_to < ${input.onDate}::date)::text as last_effective_to
-      from projects p
-      -- A card can be assigned to the PROJECT as well as the customer, and a
-      -- job that names its own card is the most specific case there is. Looking
-      -- only at customer assignments made every project-assigned card invisible
-      -- here, so a lapse went undetected and its terms silently stopped applying.
-      join item_rate_book_assignments a
-        on (a.customer_id = p.customer_id or a.project_id = p.id)
-       and a.org_id = ${input.orgId} and a.is_active
-      join item_rate_versions v on v.rate_book_id = a.rate_book_id and v.status = 'active'
-     where p.id = ${input.projectId} and p.org_id = ${input.orgId}
-       and exists (select 1 from labor_rate_adjustments x where x.version_id = v.id and x.is_active
-                     and x.presentation = 'separate' and x.value > 0)
-       and (not exists (select 1 from labor_rate_version_scopes vs where vs.version_id = v.id)
-         or exists (select 1 from labor_rate_version_scopes vs
-                     where vs.version_id = v.id and vs.scope_type = 'department'
-                       and vs.scope_value_id = ${input.departmentId ?? null}::uuid))
-     group by p.customer_id
-    having count(*) filter (
-      where v.effective_from <= ${input.onDate}::date
-        and (v.effective_to is null or v.effective_to >= ${input.onDate}::date)) = 0
+    with context as (
+      select p.id as project_id, p.customer_id, p.starts_on, p.subsidiary_id
+        from projects p
+       where p.id = ${input.projectId} and p.org_id = ${input.orgId}
+    ),
+    scoped as (
+      select a.rate_book_id, a.rate_version_id,
+             case when a.project_id is not null then 1
+                  when a.customer_id is not null then 2
+                  else 4 end as priority,
+             (case when a.department_id is not null then 1 else 0 end
+              + case when a.subsidiary_id is not null then 1 else 0 end
+              + case when a.location_id is not null then 1 else 0 end
+              + case when a.class_id is not null then 1 else 0 end) as dimension_specificity,
+             a.effective_from as assigned_from
+        from item_rate_book_assignments a
+        cross join context c
+       where a.org_id = ${input.orgId} and a.is_active
+         and (a.project_id is null or a.project_id = c.project_id)
+         and (a.customer_id is null or a.customer_id = c.customer_id)
+         and (a.department_id is null or a.department_id = ${input.departmentId ?? null}::uuid)
+         and (a.subsidiary_id is null or a.subsidiary_id = c.subsidiary_id)
+         and a.location_id is null and a.class_id is null
+         and (a.effective_from is null or a.effective_from <=
+              case when a.date_basis = 'project_start' then coalesce(c.starts_on, ${input.onDate}::date) else ${input.onDate}::date end)
+         and (a.effective_to is null or a.effective_to >=
+              case when a.date_basis = 'project_start' then coalesce(c.starts_on, ${input.onDate}::date) else ${input.onDate}::date end)
+      union all
+      select b.id, null::uuid, 5, 0, null::date
+        from item_rate_books b
+       where b.org_id = ${input.orgId} and b.is_default and b.is_active
+    ),
+    candidates as (
+      select s.*
+        from scoped s
+       where exists (
+         select 1
+           from item_rate_versions v
+           join labor_rate_adjustments x on x.version_id = v.id
+            and x.is_active and x.presentation = 'separate' and x.value > 0
+          where v.rate_book_id = s.rate_book_id and v.org_id = ${input.orgId} and v.status = 'active'
+            and (s.rate_version_id is null or v.id = s.rate_version_id)
+            and (s.priority = 1
+              or not exists (select 1 from labor_rate_version_scopes vs where vs.version_id = v.id)
+              or exists (
+                select 1 from labor_rate_version_scopes vs
+                 where vs.version_id = v.id
+                   and case vs.scope_type
+                         when 'department' then vs.scope_value_id = ${input.departmentId ?? null}::uuid
+                         when 'subsidiary' then vs.scope_value_id = (select subsidiary_id from context)
+                         else false
+                       end
+              ))
+       )
+    ),
+    selected as (
+      select *
+        from candidates
+       order by priority, dimension_specificity desc, assigned_from desc nulls last, rate_book_id
+       limit 1
+    ),
+    coverage as (
+      select max(v.effective_to) filter (where v.effective_to < ${input.onDate}::date)::text as last_effective_to,
+             count(*) filter (
+               where s.rate_version_id is not null
+                  or (v.effective_from <= ${input.onDate}::date
+                      and (v.effective_to is null or v.effective_to >= ${input.onDate}::date))
+             ) as covering_versions
+        from selected s
+        join item_rate_versions v on v.rate_book_id = s.rate_book_id
+         and v.org_id = ${input.orgId} and v.status = 'active'
+         and (s.rate_version_id is null or v.id = s.rate_version_id)
+       where exists (
+         select 1 from labor_rate_adjustments x
+          where x.version_id = v.id and x.is_active
+            and x.presentation = 'separate' and x.value > 0
+       )
+         and (s.priority = 1
+           or not exists (select 1 from labor_rate_version_scopes vs where vs.version_id = v.id)
+           or exists (
+             select 1 from labor_rate_version_scopes vs
+              where vs.version_id = v.id
+                and case vs.scope_type
+                      when 'department' then vs.scope_value_id = ${input.departmentId ?? null}::uuid
+                      when 'subsidiary' then vs.scope_value_id = (select subsidiary_id from context)
+                      else false
+                    end
+           ))
+    )
+    select c.customer_id, coverage.last_effective_to
+      from context c cross join coverage
+     where exists (select 1 from selected)
+       and coverage.covering_versions = 0
   `)) as unknown as { rows: { customer_id: string; last_effective_to: string | null }[] }
   const row = r.rows[0]
   return row ? { customerId: row.customer_id, lastEffectiveTo: row.last_effective_to } : null

@@ -342,11 +342,13 @@ test("NetSuite account mappings accept explicit custom IDs without connector con
       JSON.stringify({
         projectForemanField: "custentity_foreman",
         timeTypeRecord: "customrecord_time_type",
+        timeEntryFieldTicketNumberField: "custcol_field_ticket",
         projectStatuses: { "Substantially Complete": "substantially_complete" },
       }),
     ),
     {
       projectForemanField: "custentity_foreman",
+      lineMarkupField: undefined,
       projectPurchaseOrderField: undefined,
       itemCategoryField: undefined,
       customerShortCodeField: undefined,
@@ -354,6 +356,7 @@ test("NetSuite account mappings accept explicit custom IDs without connector con
       timeTypeRecord: "customrecord_time_type",
       timeTypeMultiplierField: undefined,
       timeEntryTypeField: undefined,
+      timeEntryFieldTicketNumberField: "custcol_field_ticket",
       projectStatuses: { "substantially complete": "substantially_complete" },
     },
   );

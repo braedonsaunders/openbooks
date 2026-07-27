@@ -13,8 +13,9 @@ import { isFeatureEnabled } from './features'
  *   2. bill-rate snapshot (rate books, per-time-type tiers)
  *   3. standard labor posting (DR labor WIP / CR clearing) when mode is on
  *   4. the overhead net-zero pair (rides with the hours)
- * Everything is inert-until-configured; callers should treat failures as
- * non-blocking (entries stay re-postable).
+ * Everything is inert-until-configured. Callers must run the status transition
+ * and these effects in one transaction and fail closed: approved time may not
+ * exist without the rate/cost/GL evidence its configured policy requires.
  */
 export async function runTimeApprovalEffects(orgId: string, actorId: string, timeEntryIds: string[]): Promise<void> {
   if (timeEntryIds.length === 0) return

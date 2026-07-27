@@ -7,7 +7,7 @@ export const fieldTickets: DocArticle = {
   order: 4,
   summary:
     'Signed crew timesheets for T&M work: capture the whole crew’s hours plus equipment and materials once, get the customer’s signature, and build invoices from the signed tickets.',
-  updated: '2026-07-21',
+  updated: '2026-07-27',
   keywords: ['field ticket', 'LEM', 'billable timesheet', 'T&M', 'signature', 'crew', 'foreman', 'work order', 'daily ticket'],
   related: ['labor-costing', 'item-rates', 'project-types'],
   body: `# Field Tickets
@@ -33,29 +33,57 @@ Shift, daily, or weekly — resolved most-specific-wins:
 
 | Level | Where |
 |---|---|
-| Job | The project's field-ticket period setting |
-| Customer | The customer's field-ticket period setting |
-| Company | Setup → Features (default: weekly, Sunday-start) |
+| Job | Effective-dated Field Ticket policy for the project |
+| Customer | Effective-dated Field Ticket policy for the customer |
+| Company | Effective-dated organization policy (product default: weekly, Sunday-start) |
+
+The resolved period is copied to the ticket when it is created. Changing a
+policy therefore affects future tickets without reinterpreting history.
 
 ## Lifecycle
 
 **Draft** — the foreman builds the ticket: crew rows (employee × labor class)
 with per-day regular/overtime/double hours, and sales-order-style lines for
 equipment, consumables, and materials (rates prefill from the item and rate
-books; stay editable). Labor money shows live preview rates.
+books; stay editable). Labor money shows live preview rates. Every atomic time
+entry belongs to exactly one project and may reference zero or one Field
+Ticket. A weekly employee timesheet is a separate container and may contain
+lines from several projects, entry sources, and Field Tickets.
 
-**Submitted** — locked for approval.
+**Pending approval** — only when the tenant has enabled an **on submit** Flow
+for field tickets and that Flow creates an approval gate. The tenant chooses
+the conditions, assignees, quorum, signatures, reminders, and escalation in
+the visual Flows editor. OpenBooks does not install a default approver or
+hardcode an approval threshold. When no Flow creates a gate, submission moves
+straight to Approved.
 
-**Approved** — the moment everything becomes real, through the same machinery
-as personal timesheets: hours become approved time entries (cost + bill rates
-snapshot, standard labor posts to the job, overhead rides along as the
-net-zero pair), and item lines materialize as a **posted project charge** so
-job cost and T&M billing see them. Approved history never restates.
+**Approved** — the ticket's commercial review is complete. Item lines
+materialize as a **posted project charge** so job cost and T&M billing see them.
+The gate decision, project charge, provenance, status, and audit evidence
+commit atomically; if a configured effect fails, the approval remains pending
+and can be retried safely.
+
+Field Ticket approval does **not** approve, reject, or repost its time entries.
+Employee timesheet/payroll approval is an independent lifecycle with its own
+controls and posting effects. This preserves one authoritative status for each
+purpose and allows a ticket to contain lines that came from direct daily or
+weekly time entry.
 
 **Signed** — send the ticket to the customer: they get the ticket PDF and a
 secure signing link (valid 14 days), draw their signature on any device, and
-the ticket records who signed and when. A signed ticket refuses a second
-signature.
+the ticket records who signed and when. Each request has a revocable,
+single-use credential. Signature images are immutable File Cabinet evidence
+stored through the configured database or S3-compatible object store; a signed
+ticket refuses a second signature.
+
+## Native data and audit controls
+
+Field Tickets are a first-class OpenBooks aggregate: common commercial fields
+live on the document, while period, foreman, submission, rejection, and charge
+linkage live on the one-to-one native Field Ticket header. Signatures and
+delivery requests have dedicated evidence tables. Tenant custom fields and
+source-system provenance remain extensions; OpenBooks does not store its own
+Field Ticket state in a tenant custom-field payload.
 
 ## Invoicing
 
