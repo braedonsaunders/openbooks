@@ -38,9 +38,11 @@ async function retry<T>(fn: () => Promise<T>, n = 10): Promise<T> {
   console.log(`target: ${env.rows[0].name} (sandbox ${ORG})`);
 
   const conn = (await retry(() => db.execute(sql`
-    select * from connections where org_id = ${ORG} and source = 'netsuite' and status = 'active' limit 1`))) as any;
+    select * from connections where org_id = ${ORG} and status = 'active'
+     order by created_at limit 1`))) as any;
   const row = conn.rows[0];
   if (!row) throw new Error("no active source connection on this sandbox");
+  console.log(`source: ${row.source}`);
 
   if (!APPLY) {
     console.log("PLAN: would run a full migration through runFullMigration (pass --apply)");

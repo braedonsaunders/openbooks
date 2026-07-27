@@ -38,6 +38,8 @@ export interface NativeDocLine {
    * without it the project-billing engine can only ever bill labor.
    */
   isBillable?: boolean;
+  /** Markup over cost when this line is rebilled, as a PERCENTAGE (15 = 15%). */
+  markupPercent?: string | null;
   /**
    * Stable id of this line in the source system. Without it a migrated document
    * can only ever be reconciled or re-synced as a whole, so a line-level
