@@ -86,7 +86,11 @@ export async function resolveRateAdjustments(input: {
                and (v.effective_to is null or v.effective_to >= ${input.onDate}::date)))
         join item_rate_books b on b.id = s.rate_book_id and b.is_active
        where exists (select 1 from labor_rate_adjustments a where a.version_id = v.id and a.is_active)
-         and (not exists (select 1 from labor_rate_version_scopes vs where vs.version_id = v.id)
+         -- A PROJECT-scoped assignment names this exact card for this job, which
+         -- is the most specific statement of intent there is; its own dimension
+         -- scopes cannot then disqualify it.
+         and (s.priority = 1
+           or not exists (select 1 from labor_rate_version_scopes vs where vs.version_id = v.id)
            or exists (select 1 from labor_rate_version_scopes vs
                        where vs.version_id = v.id
                          and case vs.scope_type
