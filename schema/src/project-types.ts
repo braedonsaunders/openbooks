@@ -193,6 +193,13 @@ export interface InvoicingProfile {
    * takes it and the rest of the job is over-billed.
    */
   ticketCostScope?: "ticket_only" | "ticket_or_period";
+  /**
+   * How billed cost is presented. `per_source_line` shows one invoice line per
+   * source line. `per_item` sums the same item into a single line — what a
+   * customer usually expects to see for consumables and equipment charges,
+   * where the same item is issued many times across a period.
+   */
+  lineGrouping?: "per_source_line" | "per_item";
 }
 
 export interface BackupProfile {

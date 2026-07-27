@@ -313,7 +313,12 @@ export async function generateInvoiceFromBillingRequest(
              where c.document_line_id = dl.id and c.role = 'bill'
           ) rc on true
          where dl.org_id = ${orgId} and dl.project_id = ${req.project_id}
-           and dl.is_billable and dl.billed_by_line_id is null
+           -- An ORDER line is a commitment to bill the customer: that is what
+           -- ordering the work means, so it carries no separate billable flag
+           -- and source systems do not set one. Requiring the flag silently
+           -- dropped every consumable and equipment charge staged on an order.
+           and (dl.is_billable or d.kind in ('sales_order', 'purchase_order'))
+           and dl.billed_by_line_id is null
            ${costDateFilter}${ticketSpan}
            and ((d.kind = 'project_charge' and d.status in ('approved','posted'))
              or (d.status in ('posted','approved') and d.kind = any(${`{${costKinds.join(",")}}`}::text[])))
@@ -399,6 +404,26 @@ export async function generateInvoiceFromBillingRequest(
         }
       }
 
+    }
+
+    // (2a) Present the same item as one line. Cost arrives one line per source
+    //      document line — a welder issued three times is three lines — but the
+    //      customer is billed for the item, so sum them. Labor keeps its own
+    //      lines: hours are read per employee and day.
+    if (invoicing.lineGrouping === 'per_item') {
+      const grouped = new Map<string, (typeof built)[number]>()
+      const kept: typeof built = []
+      for (const l of built) {
+        const key = l.isLabor || !l.itemId ? null : `${l.itemId}|${l.unitPrice}|${l.accountId}|${l.taxCodeId}`
+        if (!key) { kept.push(l); continue }
+        const prior = grouped.get(key)
+        if (!prior) { grouped.set(key, l); kept.push(l); continue }
+        prior.quantity = add(prior.quantity, l.quantity)
+        prior.amount = add(prior.amount, l.amount)
+        if (prior.baseAmount != null && l.baseAmount != null) prior.baseAmount = add(prior.baseAmount, l.baseAmount)
+      }
+      built.length = 0
+      built.push(...kept)
     }
 
     const invoiceDate = req.cutoff_date ?? new Date().toISOString().slice(0, 10)
