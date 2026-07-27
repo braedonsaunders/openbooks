@@ -4,6 +4,18 @@ import { db } from '@openbooks/engine/src/db.ts'
 import { add, cmp, fromUnits, isZero, mulDecimal, mulPercent, roundDiv, sum, toUnits } from '@openbooks/engine/src/money.ts'
 import { findLapsedRateCard, mergeCharges, priceAdjustments, resolveRateAdjustments } from './rate-adjustments'
 
+/** The day the invoice is cut, or the period it closes. */
+function invoiceDateOf(req: { cutoff_date?: string | null }): string {
+  return req.cutoff_date ?? new Date().toISOString().slice(0, 10)
+}
+
+/** Prices are negotiated as of the date work was PERFORMED, not the day billed. */
+function rateDateOf(lines: { workedOn?: string | null }[]): string | null {
+  return lines.reduce<string | null>(
+    (latest, l) => (l.workedOn && (!latest || l.workedOn > latest) ? l.workedOn : latest), null,
+  )
+}
+
 /** Map a time type's name onto the buckets a rate-card adjustment can exclude. */
 function timeKindOf(name: unknown): 'regular' | 'overtime' | 'double_time' | null {
   const n = String(name ?? '').toLowerCase()
@@ -134,6 +146,8 @@ export async function generateInvoiceFromBillingRequest(
       departmentId?: string | null
       /** Date the work happened — the date its price is negotiated as of. */
       workedOn?: string | null
+      /** True when the source line carried its own negotiated markup. */
+      hasLineMarkup?: boolean
       timeKind?: 'regular' | 'overtime' | 'double_time' | null
     }
     const built: BuiltLine[] = []
@@ -370,6 +384,7 @@ export async function generateInvoiceFromBillingRequest(
             sourceCostLineId: cl.id,
             itemKind: cl.item_kind ?? null,
             departmentId: cl.department_id ?? null,
+            hasLineMarkup: cl.markup_percent != null,
             workedOn: cl.document_date ? String(cl.document_date).slice(0, 10) : null,
             unit: cl.unit,
             equipmentUnitId: cl.equipment_unit_id,
@@ -406,6 +421,11 @@ export async function generateInvoiceFromBillingRequest(
 
     }
 
+    // Rebill markup is NOT taken from the rate card's markup term: that term is
+    // presentation 'included', meaning it is already embedded in the negotiated
+    // labor rates rather than layered onto rebilled cost. Applying it to cost
+    // lines double-charges it. A line's OWN markup is what prices that line.
+
     // (2a) Present the same item as one line. Cost arrives one line per source
     //      document line — a welder issued three times is three lines — but the
     //      customer is billed for the item, so sum them. Labor keeps its own
@@ -426,14 +446,12 @@ export async function generateInvoiceFromBillingRequest(
       built.push(...kept)
     }
 
-    const invoiceDate = req.cutoff_date ?? new Date().toISOString().slice(0, 10)
+    const invoiceDate = invoiceDateOf(req)
     // Prices are negotiated as of the date work is PERFORMED, not the day the
     // invoice happens to be cut: re-billing or catching up on old work must not
     // silently apply today's card. Latest work date on the invoice wins, so a
     // period bills at the rates in force at its end.
-    const rateDate = built.reduce<string | null>(
-      (latest, l) => (l.workedOn && (!latest || l.workedOn > latest) ? l.workedOn : latest), null,
-    ) ?? invoiceDate
+    const rateDate = rateDateOf(built) ?? invoiceDate
 
     // (2b) Commercial adjustments from the customer's rate card — fuel/shift
     //      surcharges, negotiated markups, per-diem. Which lines each one
