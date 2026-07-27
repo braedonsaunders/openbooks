@@ -227,13 +227,18 @@ export function effectiveTaxCodeId(
 }
 
 /** Canonical content key of a native document (change detection). */
-function nativeKey(d: NativeDocument): string {
+export function canonicalNativeDocumentKey(d: NativeDocument): string {
   return JSON.stringify([
     d.kind,
+    d.posting,
     d.partyId,
     d.subsidiaryId,
     d.documentDate,
     d.dueDate,
+    d.currency,
+    normalizeDecimal(d.fxRate ?? "1", 8),
+    d.posting ? null : toUnits(d.subtotal ?? "0").toString(),
+    d.posting ? null : toUnits(d.total ?? "0").toString(),
     d.memo,
     d.referenceNumber,
     d.controlAccountId,
@@ -272,6 +277,11 @@ type StoredDocumentKeyRow = {
   reference_number: string | null;
   ctrl: string | null;
   extra_dims: Record<string, string>;
+  posted: boolean;
+  currency: string;
+  fx_rate: string;
+  subtotal: string;
+  total: string;
 };
 type StoredLineKeyRow = {
   document_id: string;
@@ -300,10 +310,15 @@ function storedCanonicalKey(
 ): string {
   return JSON.stringify([
     d.kind,
+    d.posted,
     d.party_id,
     d.subsidiary_id,
     d.ddate,
     d.due,
+    d.currency,
+    normalizeDecimal(d.fx_rate, 8),
+    d.posted ? null : toUnits(d.subtotal).toString(),
+    d.posted ? null : toUnits(d.total).toString(),
     d.memo,
     d.reference_number,
     d.ctrl,
@@ -333,8 +348,11 @@ function storedCanonicalKey(
 async function storedKey(docId: string): Promise<string> {
   const [d] = (
     (await db.execute(sql`
-      select kind, party_id, subsidiary_id, posting_date::text as ddate, due_date::text as due,
-             memo, reference_number, custom->>'controlAccountId' as ctrl, extra_dims, id
+      select kind, party_id, subsidiary_id,
+             coalesce(posting_date, document_date)::text as ddate,
+             due_date::text as due,
+             memo, reference_number, custom->>'controlAccountId' as ctrl, extra_dims, id,
+             posted_entry_id is not null as posted, currency, fx_rate, subtotal, total
         from documents where id = ${docId}`)) as unknown as {
       rows: StoredDocumentKeyRow[];
     }
@@ -359,8 +377,11 @@ async function loadStoredKeys(
   refKey: string,
 ): Promise<Map<string, string>> {
   const documents = (await db.execute(sql`
-    select id, kind, party_id, subsidiary_id, posting_date::text as ddate, due_date::text as due,
-           memo, reference_number, custom->>'controlAccountId' as ctrl, extra_dims
+    select id, kind, party_id, subsidiary_id,
+           coalesce(posting_date, document_date)::text as ddate,
+           due_date::text as due,
+           memo, reference_number, custom->>'controlAccountId' as ctrl, extra_dims,
+           posted_entry_id is not null as posted, currency, fx_rate, subtotal, total
       from documents
      where org_id = ${orgId} and custom->>${refKey} is not null
      order by id`)) as unknown as { rows: StoredDocumentKeyRow[] };
@@ -389,6 +410,152 @@ async function loadStoredKeys(
       storedCanonicalKey(document, linesByDocument.get(document.id) ?? []),
     ]),
   );
+}
+
+export interface FullSyncPreflight {
+  source: string;
+  orgId: string;
+  connectionId: string | null;
+  generatedAt: string;
+  sourceDocuments: number;
+  targetDocuments: number;
+  newDocuments: number;
+  amendedDocuments: number;
+  unchangedDocuments: number;
+  sourceUnbuildable: number;
+  nonLedgerSourceRefs: number;
+  duplicateSourceRefs: string[];
+  acknowledgedSourceDeletions: string[];
+  actionableSourceDeletions: string[];
+  samples: {
+    newDocuments: string[];
+    amendedDocuments: string[];
+    unbuildable: Array<{ ref: string; reason: string }>;
+  };
+}
+
+/**
+ * Read-only full-sweep plan. It pulls and normalizes the complete source
+ * transaction population, compares canonical target content, and identifies
+ * every source deletion before a production operator authorizes any write.
+ */
+export async function preflightFullSync(
+  source: MigrationSource,
+  opts: { orgId: string; connectionId?: string },
+): Promise<FullSyncPreflight> {
+  const orgRows = (await db.execute(sql`
+    select id from orgs where id = ${opts.orgId}
+  `)) as unknown as { rows: { id: string }[] };
+  if (!orgRows.rows[0]) throw new Error(`organization ${opts.orgId} not found`);
+
+  const ctx = await buildNativeContext(
+    opts.orgId,
+    source.refKey,
+    source.baseCurrency,
+  );
+  const changes = await source.nativeChanges(null, ctx);
+  const existingRows = (await db.execute(sql`
+    select id, status, custom->>${source.refKey} as ref
+      from documents
+     where org_id = ${opts.orgId}
+       and custom->>${source.refKey} is not null
+  `)) as unknown as {
+    rows: { id: string; status: string; ref: string }[];
+  };
+  const existingByRef = new Map(
+    existingRows.rows.map((row) => [row.ref, row]),
+  );
+  const storedKeys = await loadStoredKeys(opts.orgId, source.refKey);
+
+  const sourceRefCounts = new Map<string, number>();
+  for (const document of changes.documents) {
+    sourceRefCounts.set(
+      document.sourceRef,
+      (sourceRefCounts.get(document.sourceRef) ?? 0) + 1,
+    );
+  }
+  const duplicateSourceRefs = [...sourceRefCounts]
+    .filter(([, count]) => count > 1)
+    .map(([ref]) => ref)
+    .sort();
+
+  const newRefs: string[] = [];
+  const amendedRefs: string[] = [];
+  let unchangedDocuments = 0;
+  for (const sourceDocument of changes.documents) {
+    const document: NativeDocument = {
+      ...sourceDocument,
+      subsidiaryId:
+        sourceDocument.subsidiaryId ?? ctx.rootSubsidiaryId,
+      currency: sourceDocument.currency ?? source.baseCurrency,
+    };
+    const existing = existingByRef.get(document.sourceRef);
+    if (!existing) {
+      newRefs.push(document.sourceRef);
+      continue;
+    }
+    if (
+      canonicalNativeDocumentKey(document)
+      === storedKeys.get(existing.id)
+    ) {
+      unchangedDocuments++;
+    } else {
+      amendedRefs.push(document.sourceRef);
+    }
+  }
+
+  const currentSourceRefs = [
+    ...changes.documents.map((document) => document.sourceRef),
+    ...changes.unbuildable.map((row) => row.ref),
+    ...(changes.nonLedgerRefs ?? []),
+  ];
+  const deletionCandidates = sourceDeletionCandidates(
+    true,
+    existingRows.rows
+      .filter((row) => row.status !== "voided")
+      .map((row) => row.ref),
+    currentSourceRefs,
+    changes.deletedRefs,
+  );
+  const acknowledgedRows =
+    opts.connectionId && deletionCandidates.length > 0
+      ? ((await db.execute(sql`
+          select source_ref
+            from source_deletion_resolutions
+           where org_id = ${opts.orgId}
+             and connection_id = ${opts.connectionId}
+             and source_ref in ${deletionCandidates}
+        `)) as unknown as { rows: { source_ref: string }[] }).rows
+      : [];
+  const acknowledged = new Set(
+    acknowledgedRows.map((row) => row.source_ref),
+  );
+
+  return {
+    source: source.name,
+    orgId: opts.orgId,
+    connectionId: opts.connectionId ?? null,
+    generatedAt: new Date().toISOString(),
+    sourceDocuments: changes.documents.length,
+    targetDocuments: existingRows.rows.length,
+    newDocuments: newRefs.length,
+    amendedDocuments: amendedRefs.length,
+    unchangedDocuments,
+    sourceUnbuildable: changes.unbuildable.length,
+    nonLedgerSourceRefs: (changes.nonLedgerRefs ?? []).length,
+    duplicateSourceRefs,
+    acknowledgedSourceDeletions: deletionCandidates
+      .filter((ref) => acknowledged.has(ref))
+      .sort(),
+    actionableSourceDeletions: deletionCandidates
+      .filter((ref) => !acknowledged.has(ref))
+      .sort(),
+    samples: {
+      newDocuments: newRefs.slice(0, 50),
+      amendedDocuments: amendedRefs.slice(0, 50),
+      unbuildable: changes.unbuildable.slice(0, 50),
+    },
+  };
 }
 
 /** Best-effort live progress write (throttled) so the platform page can show a
@@ -716,6 +883,7 @@ export async function runSync(
       const doc: NativeDocument = {
         ...sourceDoc,
         subsidiaryId: sourceDoc.subsidiaryId ?? ctx.rootSubsidiaryId,
+        currency: sourceDoc.currency ?? source.baseCurrency,
       };
       try {
         const taxEvidence = await importedTaxEvidence(
@@ -834,7 +1002,7 @@ export async function runSync(
           continue;
         }
         if (
-          nativeKey(doc) ===
+          canonicalNativeDocumentKey(doc) ===
           (fullStoredKeys?.get(have.id) ?? (await storedKey(have.id)))
         ) {
           docsUnchanged++;
@@ -861,11 +1029,15 @@ export async function runSync(
               currency = ${doc.currency ?? source.baseCurrency}, fx_rate = ${doc.fxRate ?? "1"},
               memo = ${doc.memo}, reference_number = ${doc.referenceNumber},
               extra_dims = ${JSON.stringify(doc.extraDims ?? {})}::jsonb,
-              custom = custom || ${JSON.stringify(
-                doc.controlAccountId
-                  ? { controlAccountId: doc.controlAccountId }
-                  : {},
-              )}::jsonb,
+              custom = case
+                when ${doc.controlAccountId}::text is null
+                  then custom - 'controlAccountId'
+                else custom || ${JSON.stringify(
+                  doc.controlAccountId
+                    ? { controlAccountId: doc.controlAccountId }
+                    : {},
+                )}::jsonb
+              end,
               updated_at = now()
             where id = ${have.id}`);
           await tx.execute(

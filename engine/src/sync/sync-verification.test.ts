@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import {
+  canonicalNativeDocumentKey,
   effectiveLineSubsidiary,
   effectiveTaxCodeId,
   sourceDeletionCandidates,
@@ -9,6 +10,7 @@ import {
   verifyOpenItems,
   type SyncResult,
 } from "./sync.ts";
+import type { NativeDocument } from "./native.ts";
 
 function result(overrides: Partial<SyncResult> = {}): SyncResult {
   return {
@@ -91,6 +93,78 @@ test("zero tax ignores arbitrary rate-matched code identity during change detect
   assert.equal(effectiveTaxCodeId("0", "legacy-zero-code"), null);
   assert.equal(effectiveTaxCodeId("0.0000", null), null);
   assert.equal(effectiveTaxCodeId("13.00", "hst-code"), "hst-code");
+});
+
+const canonicalDocument = (
+  overrides: Partial<NativeDocument> = {},
+): NativeDocument => ({
+  sourceRef: "source-1",
+  kind: "customer_invoice",
+  posting: true,
+  partyId: "party",
+  subsidiaryId: "subsidiary",
+  currency: "CAD",
+  fxRate: "1",
+  documentDate: "2026-07-27",
+  dueDate: "2026-08-27",
+  memo: null,
+  referenceNumber: "INV-1",
+  controlAccountId: "ar",
+  lines: [{
+    accountId: "income",
+    itemId: "item",
+    quantity: "1",
+    unit: "hour",
+    unitPrice: "10",
+    amount: "10",
+    taxAmount: "0",
+    taxOverridden: false,
+    taxCodeId: null,
+    departmentId: null,
+    projectId: "project",
+    description: "Labour",
+    lineNumber: 1,
+    sourceLineRef: "1",
+  }],
+  ...overrides,
+});
+
+test("change detection includes currency and exact exchange rate", () => {
+  const baseline = canonicalNativeDocumentKey(canonicalDocument());
+  assert.notEqual(
+    baseline,
+    canonicalNativeDocumentKey(canonicalDocument({ currency: "USD" })),
+  );
+  assert.notEqual(
+    baseline,
+    canonicalNativeDocumentKey(canonicalDocument({ fxRate: "1.00000001" })),
+  );
+});
+
+test("change detection includes non-posting commercial totals only", () => {
+  const posting = canonicalDocument({ subtotal: "99", total: "99" });
+  assert.equal(
+    canonicalNativeDocumentKey(posting),
+    canonicalNativeDocumentKey({
+      ...posting,
+      subtotal: "100",
+      total: "100",
+    }),
+  );
+  const order = canonicalDocument({
+    posting: false,
+    kind: "sales_order",
+    subtotal: "99",
+    total: "99",
+  });
+  assert.notEqual(
+    canonicalNativeDocumentKey(order),
+    canonicalNativeDocumentKey({
+      ...order,
+      subtotal: "100",
+      total: "100",
+    }),
+  );
 });
 
 test("open-item verification distinguishes a closed zero balance from a missing document", () => {
