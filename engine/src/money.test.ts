@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { abs, formatMoney, mul, mulDecimal, mulDecimalFactors, mulPercent, mulRate, mulRatio, normalizeMoney, roundDiv, roundMoney, toUnits } from "./money.ts";
+import { abs, formatMoney, mul, mulDecimal, mulDecimalFactors, mulPercent, mulRate, mulRatio, normalizeDecimal, normalizeMoney, roundDiv, roundMoney, toUnits } from "./money.ts";
 
 test("mul handles quantity math, zero rates and exact rounding", () => {
   assert.equal(mul("3", "12.3456"), "37.0368");
@@ -42,6 +42,9 @@ test("mulRatio allocates exact partial carrying values", () => {
 
 test("normalization and rational rounding never depend on binary floats", () => {
   assert.equal(normalizeMoney("00012.3"), "12.3000");
+  assert.equal(normalizeDecimal("43.566784", 8), "43.56678400");
+  assert.equal(normalizeDecimal("-2.5e-3", 8), "-0.00250000");
+  assert.throws(() => normalizeDecimal("1.000000001", 8), /precision/);
   assert.equal(roundDiv(5n, 2n), 3n);
   assert.equal(roundDiv(-5n, 2n), -3n);
 });

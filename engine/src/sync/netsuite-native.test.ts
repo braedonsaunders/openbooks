@@ -31,6 +31,7 @@ const context = {
     ["2", "sub-child"],
   ]),
   partyByRef: new Map(),
+  itemByRef: new Map([["item-1", "item-a"]]),
   deptByRef: new Map(),
   projectByRef: new Map(),
   taxByRate: new Map(),
@@ -156,6 +157,47 @@ test("NetSuite transactions fail closed when a subsidiary was not loaded", () =>
   ];
   const built = buildNativeFromNetSuite(context, header, lines);
   assert.deepEqual(built, { skip: "unmapped subsidiary 99" });
+});
+
+test("NetSuite invoice lines preserve item, quantity, unit, rate, amount, and source identity", () => {
+  const built = buildNativeFromNetSuite(
+    context,
+    { ...header, ttype: "CustInvc" },
+    [
+      {
+        transaction: "123",
+        id: "7",
+        mainline: "F",
+        taxline: "F",
+        account: "20",
+        item: "item-1",
+        quantity: "-2",
+        rate: "95.7",
+        units: "Hour",
+        foreignamount: "-191.4",
+        subsidiary: "1",
+      },
+    ],
+  );
+  assert.ok(!("skip" in built));
+  assert.deepEqual(
+    {
+      itemId: built.doc.lines[0]?.itemId,
+      quantity: built.doc.lines[0]?.quantity,
+      unit: built.doc.lines[0]?.unit,
+      unitPrice: built.doc.lines[0]?.unitPrice,
+      amount: built.doc.lines[0]?.amount,
+      sourceLineRef: built.doc.lines[0]?.sourceLineRef,
+    },
+    {
+      itemId: "item-a",
+      quantity: "2.00000000",
+      unit: "Hour",
+      unitPrice: "95.70000000",
+      amount: "191.4000",
+      sourceLineRef: "7",
+    },
+  );
 });
 
 test("NetSuite sales orders normalize source credit-side detail into document direction", () => {

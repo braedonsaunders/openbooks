@@ -14,6 +14,12 @@ import type { PostingDeps } from "../posting.ts";
 export interface NativeDocLine {
   accountId: string | null;
   itemId: string | null;
+  /** Commercial line presentation in document direction. Amount remains the
+   * authoritative source total when source-side rounding means qty × rate is
+   * not exactly representable at four decimals. */
+  quantity?: string | null;
+  unit?: string | null;
+  unitPrice?: string | null;
   /** Line-level subledger entity (customer/vendor/employee → parties). Source
    *  systems carry the entity on the LINE (NetSuite line "Name", QBO line
    *  Entity); AR/AP journal legs settle/age by it. Null falls back to the
