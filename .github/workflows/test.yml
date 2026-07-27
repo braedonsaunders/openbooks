@@ -19,6 +19,11 @@ concurrency:
   group: test-${{ github.ref }}
   cancel-in-progress: true
 
+env:
+  # Deterministic non-production key for token round-trip tests. Production
+  # credentials are supplied only by the deployment environment.
+  SESSION_SECRET: openbooks-ci-test-secret-not-production
+
 jobs:
   unit:
     runs-on: ubuntu-latest
@@ -75,7 +80,7 @@ jobs:
         run: |
           node --import tsx --test --test-force-exit --test-reporter=tap \
             engine/src/kernel-constraints.integration.test.ts 2>&1 | tee canary.tap
-          node -e 'const s=require("fs").readFileSync("canary.tap","utf8"); if (/# SKIP/i.test(s)) { console.error("FATAL: integration tests skipped — DB wiring is broken"); process.exit(1); } if (!/^ok \d+ - /m.test(s)) { console.error("FATAL: canary ran zero tests"); process.exit(1); } console.log("canary ok: integration tests executed against the database");'
+          node -e 'const s=require("fs").readFileSync("canary.tap","utf8"); if (/# SKIP(?:\s|$)/im.test(s)) { console.error("FATAL: integration tests skipped — DB wiring is broken"); process.exit(1); } if (!/^ok \d+ - /m.test(s)) { console.error("FATAL: canary ran zero tests"); process.exit(1); } console.log("canary ok: integration tests executed against the database");'
 
       - name: Full test suite (with database)
         run: npm test
