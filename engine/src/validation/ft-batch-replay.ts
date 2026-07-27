@@ -13,7 +13,7 @@
  * Usage: npx tsx --conditions=react-server src/validation/ft-batch-replay.ts [--limit=N] [--apply]
  */
 import { randomUUID } from "node:crypto";
-import { readFileSync, writeFileSync } from "node:fs";
+import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { sql } from "drizzle-orm";
 import { db } from "../db.ts";
 import { generateInvoiceFromBillingRequest } from "../../../web/lib/billing.ts";
@@ -48,6 +48,16 @@ interface Inv { id: string; tranid: string; job: string; date: string; net: numb
   if (env.rows[0]?.env_kind !== "sandbox") throw new Error("refusing: target org is not a sandbox");
 
   const all = JSON.parse(readFileSync("/tmp/ft-invoices.json", "utf8")) as Inv[];
+  // The cost documents the original invoice was raised FROM. Which bills and
+  // expense reports belong to an invoice is a decision someone made, not a date
+  // range, so the replay names them the same way it names the field tickets.
+  const ordersByInvoice = new Map<string, string[]>();
+  if (existsSync("/tmp/inv-orders.json")) {
+    for (const row of JSON.parse(readFileSync("/tmp/inv-orders.json", "utf8")) as any[]) {
+      const key = String(row.inv);
+      ordersByInvoice.set(key, [...new Set([...(ordersByInvoice.get(key) ?? []), String(row.ord)])]);
+    }
+  }
   const list = LIMIT > 0 ? all.slice(0, LIMIT) : all;
   const actor = ((await retry(() => db.execute(sql`select id from users where org_id = ${ORG} order by created_at limit 1`))) as any).rows[0]?.id;
   console.log(`${APPLY ? "REPLAY" : "PLAN"}: ${list.length} invoices with explicit field tickets\n`);
@@ -65,6 +75,14 @@ interface Inv { id: string; tranid: string; job: string; date: string; net: numb
       const pid = t.rows[0].project_id;
       r.ticketsFound = ids.length;
 
+      const orderRefs = ordersByInvoice.get(String(inv.id)) ?? [];
+      const orderIds = orderRefs.length
+        ? ((await retry(() => db.execute(sql`
+            select id from documents where org_id = ${ORG}
+              and custom->>'nsId' = any(${`{${orderRefs.join(",")}}`}::text[])`))) as any).rows.map((x: any) => String(x.id))
+        : [];
+      r.orders = orderIds.length;
+
       if (APPLY) {
         // Replay each invoice from a clean slate so results are independent.
         await retry(() => db.execute(sql`update time_entries set invoiced_by_line_id = null where org_id = ${ORG} and project_id = ${pid}`));
@@ -73,7 +91,7 @@ interface Inv { id: string; tranid: string; job: string; date: string; net: numb
         await retry(() => db.execute(sql`
           insert into billing_requests (id, org_id, project_id, request_number, invoice_type, basis, status, invoice_description, custom, created_by)
           values (${rid}, ${ORG}, ${pid}, ${"FTB-" + randomUUID().slice(0, 8)}, 'progress', 'field_ticket', 'open',
-                  ${"Replay of " + inv.tranid}, ${JSON.stringify({ fieldTicketIds: ids })}::jsonb, ${actor})`));
+                  ${"Replay of " + inv.tranid}, ${JSON.stringify({ fieldTicketIds: ids, sourceDocumentIds: orderIds })}::jsonb, ${actor})`));
         const out = await retry(() => generateInvoiceFromBillingRequest(ORG, actor, rid));
         const d = (await retry(() => db.execute(sql`select subtotal::numeric s from documents where id = ${out.id}`))) as any;
         r.replay = Number(d.rows[0]?.s ?? 0);
