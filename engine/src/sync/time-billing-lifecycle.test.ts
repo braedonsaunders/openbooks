@@ -37,7 +37,7 @@ test("time billing is a native lifecycle independent of invoice-line linkage", (
   assert.match(projectFinancials, /const totalLineBill/i);
   assert.match(
     projectFinancials,
-    /const billableValue = add\(totalTimeBill, totalLineBill\)/i,
+    /const billableValue = add\(\s*add\(totalTimeBill, totalLineBill\),\s*adjustments\.billable_value,\s*\)/i,
   );
   assert.doesNotMatch(
     projectFinancials,

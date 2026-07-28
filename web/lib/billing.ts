@@ -340,12 +340,11 @@ export async function generateInvoiceFromBillingRequest(
 
       const costRows = (await tx.execute(sql`
         select dl.id,
-               -- Order-family documents record the opposite sign to purchase
-               -- documents (a sales-order line is revenue-side, so it is stored
-               -- negative). Normalize to a positive "value to bill" so a
-               -- configured order cost-source adds to the invoice instead of
-               -- subtracting from it; a genuine credit still flips negative.
-               (case when d.kind in ('sales_order','purchase_order') then -dl.amount else dl.amount end) as amount,
+               -- Native order lines are stored in document direction: ordinary
+               -- commitments are positive and discount lines remain negative.
+               -- Credits are the only source kind whose positive document amount
+               -- must be inverted when it becomes customer-billable value.
+               (case when d.kind = 'vendor_credit' then -dl.amount else dl.amount end) as amount,
                dl.cost_multiplier, dl.markup_percent, dl.description, dl.item_id, dl.quantity, dl.unit,
                dl.bill_rate, dl.bill_amount, dl.equipment_unit_id, dl.rate_version_id, d.kind,
                coalesce(dl.department_id, d.department_id) as department_id, d.document_date,
