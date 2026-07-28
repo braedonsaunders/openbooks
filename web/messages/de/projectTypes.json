@@ -55,6 +55,7 @@
   },
   "help": "Dokumentation",
   "costSourceKinds": "Abrechenbare Kostenquellen",
+  "costSourceStatuses": "Status abrechenbarer Kosten",
   "markupPresentation": "Aufschlagsdarstellung",
   "notToExceed": "Nicht überschreiten"
 }

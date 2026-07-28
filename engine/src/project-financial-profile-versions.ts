@@ -141,6 +141,22 @@ export function assertValidProjectFinancialProfile(
   if (billable.costSourceKinds !== undefined) {
     strings(billable.costSourceKinds, "billableValue.costSourceKinds");
   }
+  if (billable.costSourceStatuses !== undefined) {
+    const statuses = strings(
+      billable.costSourceStatuses,
+      "billableValue.costSourceStatuses",
+    );
+    if (
+      statuses.some(
+        (status) =>
+          !["pending_approval", "approved", "posted"].includes(status),
+      )
+    ) {
+      throw new Error(
+        "billableValue.costSourceStatuses contains an unsupported lifecycle",
+      );
+    }
+  }
   oneOf(object(profile.costBudget, "costBudget").source, ["wbs_estimates", "none"], "costBudget.source");
 
   const price = object(profile.totalPrice, "totalPrice");

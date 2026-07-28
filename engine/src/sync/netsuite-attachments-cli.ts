@@ -16,12 +16,27 @@ function parseArgs(argv: string[]): ImportOptions {
   if (limit !== undefined && (!Number.isInteger(limit) || limit < 1)) {
     throw new Error("--limit must be a positive integer");
   }
+  const sourceFileIds = argv.flatMap((value, index) => {
+    if (value === "--file-id") return argv[index + 1] ? [argv[index + 1]] : [];
+    if (value === "--file-ids") return argv[index + 1]?.split(",") ?? [];
+    return [];
+  });
+  if (
+    argv.includes("--file-id")
+    && argv.some((value, index) => value === "--file-id" && !argv[index + 1])
+  ) {
+    throw new Error("--file-id requires a numeric NetSuite file id");
+  }
+  if (argv.includes("--file-ids") && sourceFileIds.length === 0) {
+    throw new Error("--file-ids requires a comma-separated list of NetSuite file ids");
+  }
   return {
     org,
     connectionId: read("--connection"),
     execute: argv.includes("--execute"),
     concurrency,
     limit,
+    sourceFileIds,
   };
 }
 

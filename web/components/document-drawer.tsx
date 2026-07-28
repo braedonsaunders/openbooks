@@ -23,6 +23,7 @@ import { computeLineTaxes, type TaxComponentConfig } from '@openbooks/engine/src
 import { confirmDialog } from '../lib/confirm'
 import { promptDialog } from '../lib/prompt'
 import { runClientScripts } from '../lib/client-scripts'
+import { displayLineDecimal } from '../lib/line-grid-decimal'
 import type { DocKindConfig } from '../lib/document-kinds'
 import {
   type FormLayoutConfig,
@@ -666,12 +667,12 @@ export function DocumentDrawer({
         options: (items ?? []).map((it) => ({ value: it.id, label: `${it.code ? it.code + ' ' : ''}${it.name ?? ''}`.trim() })), placeholder: '—',
       },
       description: { key: 'description', width: 'minmax(160px,1.6fr)', type: 'text' },
-      quantity: { key: 'quantity', width: '90px', type: 'text', align: 'right' },
+      quantity: { key: 'quantity', width: '90px', type: 'decimal', decimalScale: 8, align: 'right' },
       unit: { key: 'unit', width: '80px', type: 'text' },
-      unit_price: { key: 'unitPrice', width: '110px', type: 'amount', align: 'right' },
-      cost_rate: { key: 'costRate', width: '110px', type: 'readonly', align: 'right' },
-      bill_rate: { key: 'billRate', width: '110px', type: 'readonly', align: 'right' },
-      bill_amount: { key: 'billAmount', width: '120px', type: 'readonly', align: 'right' },
+      unit_price: { key: 'unitPrice', width: '110px', type: 'decimal', decimalScale: 8, align: 'right' },
+      cost_rate: { key: 'costRate', width: '110px', type: 'readonly', align: 'right', render: (row) => displayLineDecimal(row.costRate, 8) },
+      bill_rate: { key: 'billRate', width: '110px', type: 'readonly', align: 'right', render: (row) => displayLineDecimal(row.billRate, 8) },
+      bill_amount: { key: 'billAmount', width: '120px', type: 'readonly', align: 'right', render: (row) => money(row.billAmount, { currency: doc.currency }) },
       is_billable: {
         key: 'isBillable',
         width: '90px',
@@ -1328,6 +1329,7 @@ export function DocumentDrawer({
               onRowsChange={setRows}
               emptyRow={emptyLine}
               readOnly={!editable || config.kind === 'project_charge'}
+              formatAmount={(value) => money(value, { currency: doc.currency })}
             />
           </div>
         ) : null}

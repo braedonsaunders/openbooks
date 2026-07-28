@@ -30,6 +30,8 @@ export interface NsHeader {
   currency?: string | null;
   memo?: string | null;
   status?: string | null;
+  /** NetSuite approval status: 1 pending, 2 approved, 3 rejected. */
+  approvalstatus?: string | null;
   posting?: string | null; // 'T' | 'F'
   postingperiod?: string | null;
   otherrefnum?: string | null;
@@ -70,6 +72,12 @@ export interface NsLine {
   isbillable?: string | null;
   /** Rebill markup, from whichever line field the account mapped. */
   markup?: string | null;
+  /**
+   * Expense-report settlement/control leg. NetSuite emits corporate-card and
+   * other settlement accounts as a non-mainline row; it is the balancing
+   * account, not an expense line.
+   */
+  settlementamount?: string | null;
 }
 
 // --- Classification -------------------------------------------------------------
@@ -96,6 +104,16 @@ export const TTYPE_KIND: Record<string, string> = {
   CustPymt: "customer_payment",
   Deposit: "deposit",
 };
+const NONPOSTING_DOCUMENT_KINDS = new Set([
+  "vendor_bill",
+  "customer_invoice",
+  "expense_report",
+  "vendor_credit",
+  "customer_credit",
+  "card_charge",
+  "card_refund",
+  "journal",
+]);
 const NEGATE_DETAIL = new Set(["customer_invoice", "vendor_credit"]);
 /** Kinds whose per-transaction control account is surfaced onto the document. */
 const CONTROL_KINDS = new Set([
@@ -167,15 +185,20 @@ export function buildNativeFromNetSuite(
     }
     return buildOrder(ctx, h, rawLines, orderKind);
   }
-  if (h.posting !== "T") return { skip: `posting='${h.posting}'` };
   const kind = TTYPE_KIND[tt];
   if (!kind) return { skip: `unmapped type ${tt}` };
+  const sourcePosts = h.posting === "T";
+  if (!sourcePosts && !NONPOSTING_DOCUMENT_KINDS.has(kind)) {
+    return { skip: `posting='${h.posting}'` };
+  }
   const postingPeriodRef = String(h.postingperiod ?? "").trim();
-  if (!postingPeriodRef) {
+  if (sourcePosts && !postingPeriodRef) {
     return { skip: "posting transaction has no source posting period" };
   }
-  const postingPeriod = ctx.periodByRef.get(postingPeriodRef);
-  if (!postingPeriod) {
+  const postingPeriod = postingPeriodRef
+    ? ctx.periodByRef.get(postingPeriodRef)
+    : null;
+  if (sourcePosts && !postingPeriod) {
     return { skip: `unmapped posting period ${postingPeriodRef}` };
   }
 
@@ -240,7 +263,7 @@ export function buildNativeFromNetSuite(
     // accounting facts. Do not invent a period-end date for late or
     // adjustment postings; exact period identity is carried separately.
     postingDate: documentDate,
-    postingPeriodId: postingPeriod.id,
+    postingPeriodId: postingPeriod?.id ?? null,
     dueDate: h.duedate ? parseNsDate(h.duedate) : null,
     memo: h.memo ?? null,
     referenceNumber: h.otherrefnum ?? h.tranid ?? null,
@@ -321,7 +344,7 @@ export function buildNativeFromNetSuite(
   };
   const finish = (taxComputedMatch: boolean): BuiltNative => {
     const controlAccountId = CONTROL_KINDS.has(effKind)
-      ? controlAccountFor(ctx, rawLines)
+      ? controlAccountFor(ctx, rawLines, effKind)
       : null;
     // NetSuite can retain a transaction marked posting='T' after every GL line
     // has been reduced to exactly zero (for example a regenerated labour-burden
@@ -331,12 +354,25 @@ export function buildNativeFromNetSuite(
     const hasLedgerImpact = lines.some(
       (line) => toUnits(line.amount) !== 0n || toUnits(line.taxAmount) !== 0n,
     );
+    const subtotal = lines.reduce(
+      (total, line) => total + toUnits(line.amount),
+      0n,
+    );
+    const taxTotal = lines.reduce(
+      (total, line) => total + toUnits(line.taxAmount),
+      0n,
+    );
     return {
       doc: {
         ...base,
-        posting: hasLedgerImpact,
+        posting: sourcePosts && hasLedgerImpact,
+        lifecycleStatus: sourcePosts
+          ? "approved"
+          : netSuiteLifecycleStatus(h.approvalstatus),
         kind: effKind,
         controlAccountId,
+        subtotal: fromUnits(subtotal),
+        total: fromUnits(subtotal + taxTotal),
         lines,
       },
       taxComputedMatch,
@@ -441,6 +477,16 @@ export function buildNativeFromNetSuite(
   const rateByCode = new Map<string, bigint>();
   for (const l of rawLines) {
     if (!(l.mainline === "F" && l.taxline === "F")) continue;
+    // A corporate-card/cash settlement is the expense report's balancing
+    // account. Keeping it as an expense line and also asking the posting rule
+    // to create a control leg duplicates the settlement and misstates cost.
+    if (
+      kind === "expense_report" &&
+      l.settlementamount != null &&
+      l.settlementamount !== ""
+    ) {
+      continue;
+    }
     const acct = mkAcct(l);
     if (!acct)
       return { skip: `unmapped account ${l.expenseaccount ?? l.account}` };
@@ -531,12 +577,31 @@ export function buildNativeFromNetSuite(
   return finish(false);
 }
 
-/** Per-transaction control account: the mainline='T' non-tax line's account. */
+function netSuiteLifecycleStatus(
+  approvalStatus: string | null | undefined,
+): "draft" | "pending_approval" | "approved" | "rejected" {
+  if (approvalStatus === "1") return "pending_approval";
+  if (approvalStatus === "2") return "approved";
+  if (approvalStatus === "3") return "rejected";
+  return "draft";
+}
+
+/** Per-transaction control account, including an expense settlement account. */
 function controlAccountFor(
   ctx: NativeContext,
   rawLines: NsLine[],
+  kind: string,
 ): string | null {
-  const ctrl = rawLines.find((l) => l.mainline === "T" && l.taxline === "F");
+  const ctrl =
+    kind === "expense_report"
+      ? rawLines.find(
+          (line) =>
+            line.taxline === "F" &&
+            line.settlementamount != null &&
+            line.settlementamount !== "",
+        ) ??
+        rawLines.find((line) => line.mainline === "T" && line.taxline === "F")
+      : rawLines.find((line) => line.mainline === "T" && line.taxline === "F");
   if (!ctrl) return null;
   const ref = ctrl.expenseaccount ?? ctrl.account;
   return ref ? (ctx.accountByRef.get(ref)?.id ?? null) : null;
@@ -649,6 +714,10 @@ function buildOrder(
       documentNumber: h.tranid ?? h.id,
       kind: orderKind,
       posting: false,
+      lifecycleStatus:
+        h.approvalstatus == null
+          ? "approved"
+          : netSuiteLifecycleStatus(h.approvalstatus),
       partyId: h.entity ? (ctx.partyByRef.get(h.entity) ?? null) : null,
       subsidiaryId: rawLines.find((line) => line.subsidiary)?.subsidiary
         ? (ctx.subsidiaryByRef.get(

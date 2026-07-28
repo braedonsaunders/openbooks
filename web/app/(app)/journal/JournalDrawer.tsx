@@ -602,6 +602,7 @@ export function JournalDrawer({
             emptyRow={emptyLine}
             readOnly={!editable}
             minRows={2}
+            formatAmount={(value) => money(value, { currency: doc.currency })}
           />
         </div>
 

@@ -62,6 +62,7 @@ const COMMIT_KINDS = ['purchase_order', 'sales_order']
 const BASES = ['time_selection', 'date_range', 'draw_amount', 'milestone', 'field_ticket']
 /** Documents a tenant may treat as a source of rebillable job cost. */
 const COST_SOURCE_KINDS = ['vendor_bill', 'expense_report', 'card_charge', 'check', 'sales_order', 'purchase_order']
+const COST_SOURCE_STATUSES = ['pending_approval', 'approved', 'posted']
 const MARKUP_PRESENTATIONS = ['embedded', 'lump_sum']
 const LINE_BUILDERS = ['tm_actual', 'milestone', 'draw', 'cost_plus']
 const REVENUE_ACCTS = ['item_income', 'unbilled_receivable', 'fixed']
@@ -352,6 +353,7 @@ export function ProjectTypesWorkspace({ types, dimensions }: { types: ProjectTyp
               <EnumField label={t('budgetSource')} value={fp.costBudget.source} options={BUDGET_SOURCES} onChange={(v) => setFp({ costBudget: { source: v as any } })} />
               <div className="sm:col-span-2"><Chips label={t('committedKinds')} all={COMMIT_KINDS} selected={fp.committedCost.docKinds} onToggle={(v) => setFp({ committedCost: { docKinds: toggle(fp.committedCost.docKinds, v) } })} /></div>
               <div className="sm:col-span-2"><Chips label={t('costSourceKinds')} all={COST_SOURCE_KINDS} selected={fp.billableValue.costSourceKinds ?? ['vendor_bill', 'expense_report', 'card_charge', 'check']} onToggle={(v) => setFp({ billableValue: { ...fp.billableValue, costSourceKinds: toggle(fp.billableValue.costSourceKinds ?? ['vendor_bill', 'expense_report', 'card_charge', 'check'], v) } })} /></div>
+              <div className="sm:col-span-2"><Chips label={t('costSourceStatuses')} all={COST_SOURCE_STATUSES} selected={fp.billableValue.costSourceStatuses ?? ['approved', 'posted']} onToggle={(v) => setFp({ billableValue: { ...fp.billableValue, costSourceStatuses: toggle(fp.billableValue.costSourceStatuses ?? ['approved', 'posted'], v) as FinancialProfile['billableValue']['costSourceStatuses'] } })} /></div>
               <div className="sm:col-span-2"><Chips label={t('totalCostComponents')} all={['actual_cost', 'committed_cost', 'labor_cost', 'overhead']} selected={fp.totalCost.components} onToggle={(v) => setFp({ totalCost: { components: toggle(fp.totalCost.components, v) as any } })} /></div>
 
               {/* P&L statement layout editor */}

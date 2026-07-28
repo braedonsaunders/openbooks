@@ -55,6 +55,7 @@
   },
   "help": "ドキュメント",
   "costSourceKinds": "請求可能なコスト元",
+  "costSourceStatuses": "請求可能原価のライフサイクル状態",
   "markupPresentation": "マークアップの表示",
   "notToExceed": "上限超過なし"
 }

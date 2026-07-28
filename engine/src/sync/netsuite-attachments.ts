@@ -2,8 +2,13 @@ import { createHash, randomUUID } from "node:crypto";
 import { basename, extname } from "node:path";
 import { sql } from "drizzle-orm";
 import { db } from "../db.ts";
-import { putS3Blob, s3Enabled } from "../file-storage.ts";
-import { netsuiteRestlet, netsuiteSoapFileGet, type NetSuiteCreds } from "../netsuite.ts";
+import { getS3Blob, putS3Blob, s3Enabled } from "../file-storage.ts";
+import {
+  netsuiteRestlet,
+  netsuiteSoapFileGet,
+  netsuiteSoapTransactionIdsForFile,
+  type NetSuiteCreds,
+} from "../netsuite.ts";
 import {
   DEFAULT_NETSUITE_BRIDGE_DEPLOYMENT_ID,
   DEFAULT_NETSUITE_BRIDGE_SCRIPT_ID,
@@ -32,6 +37,10 @@ export interface ImportOptions {
   execute: boolean;
   concurrency: number;
   limit?: number;
+  /** Restrict an operational retry to these upstream NetSuite file IDs.
+   * Indexed source joins resolve only these files and their transaction links;
+   * no unrelated transaction inventory or file bytes are read. */
+  sourceFileIds?: string[];
 }
 
 export interface AttachmentImportFailure {
@@ -40,6 +49,8 @@ export interface AttachmentImportFailure {
 }
 
 export interface ImportSummary {
+  scope: "all" | "source_file_ids";
+  requestedSourceFileIds: string[];
   sourceDocuments: number;
   sourceDocumentsWithoutId: number;
   sourceFiles: number;
@@ -66,6 +77,31 @@ function chunks<T>(values: T[], size: number): T[][] {
   const result: T[][] = [];
   for (let index = 0; index < values.length; index += size) result.push(values.slice(index, index + size));
   return result;
+}
+
+export function normalizeSourceFileIds(values: readonly string[]): string[] {
+  const normalized = Array.from(new Set(values.map((value) => value.trim()).filter(Boolean)));
+  const malformed = normalized.filter((value) => !/^\d+$/.test(value));
+  if (malformed.length > 0) {
+    throw new Error(`source file ids must be numeric: ${malformed.join(", ")}`);
+  }
+  return normalized.sort((left, right) => Number(left) - Number(right));
+}
+
+export function selectRequestedAttachmentFiles(
+  inventory: ReadonlyMap<string, Set<string>>,
+  requestedSourceFileIds: readonly string[],
+): Map<string, Set<string>> {
+  const requested = normalizeSourceFileIds(requestedSourceFileIds);
+  if (requested.length === 0) return new Map(inventory);
+
+  const missing = requested.filter((fileId) => !inventory.has(fileId));
+  if (missing.length > 0) {
+    throw new Error(
+      `requested source files are not attached to an imported vendor bill or expense report: ${missing.join(", ")}`,
+    );
+  }
+  return new Map(requested.map((fileId) => [fileId, new Set(inventory.get(fileId)!)]));
 }
 
 async function concurrentMap<T, R>(
@@ -204,6 +240,80 @@ async function sourceDocuments(orgId: string, limit?: number): Promise<{
     documents: result.rows.filter((row): row is SourceDocument => Boolean(row.nsId)),
     withoutSourceId: result.rows.filter((row) => !row.nsId).length,
   };
+}
+
+async function targetedAttachmentInventory(
+  orgId: string,
+  sourceFileIds: string[],
+  creds: NetSuiteCreds,
+  concurrency: number,
+  soapEndpointVersion?: string,
+): Promise<{
+  documents: SourceDocument[];
+  fileToDocuments: Map<string, Set<string>>;
+}> {
+  const relationships = await concurrentMap(
+    sourceFileIds,
+    concurrency,
+    async (fileId) => ({
+      fileId,
+      transactionIds: await netsuiteSoapTransactionIdsForFile(
+        fileId,
+        creds,
+        soapEndpointVersion,
+      ),
+    }),
+  );
+  const sourceTransactionIds = Array.from(
+    new Set(relationships.flatMap((row) => row.transactionIds)),
+  );
+  if (sourceTransactionIds.length === 0) {
+    throw new Error(
+      `requested source files have no NetSuite transaction relationships: ${sourceFileIds.join(", ")}`,
+    );
+  }
+  const sourceIdsSql = sql.join(
+    sourceTransactionIds.map((sourceId) => sql`${sourceId}`),
+    sql`, `,
+  );
+  const result = (await db.execute(sql`
+    select id, kind, custom->>'nsId' as "nsId"
+      from documents
+     where org_id = ${orgId}
+       and kind in ('vendor_bill', 'expense_report')
+       and custom->>'nsId' in (${sourceIdsSql})
+     order by kind, id
+  `)) as unknown as {
+    rows: Array<{ id: string; kind: SourceKind; nsId: string | null }>;
+  };
+  const documents = result.rows.filter(
+    (row): row is SourceDocument => Boolean(row.nsId),
+  );
+  const documentBySourceId = new Map<string, SourceDocument>();
+  for (const document of documents) {
+    if (documentBySourceId.has(document.nsId)) {
+      throw new Error(
+        `multiple imported documents share NetSuite transaction ${document.nsId}`,
+      );
+    }
+    documentBySourceId.set(document.nsId, document);
+  }
+
+  const fileToDocuments = new Map<string, Set<string>>();
+  for (const relationship of relationships) {
+    const targets = new Set<string>();
+    for (const transactionId of relationship.transactionIds) {
+      const document = documentBySourceId.get(transactionId);
+      if (document) targets.add(document.id);
+    }
+    if (targets.size === 0) {
+      throw new Error(
+        `requested source file ${relationship.fileId} is not attached to an imported vendor bill or expense report`,
+      );
+    }
+    fileToDocuments.set(relationship.fileId, targets);
+  }
+  return { documents, fileToDocuments };
 }
 
 async function attachmentInventory(
@@ -445,20 +555,79 @@ async function persistFile(input: {
   });
 }
 
-async function verifyImport(orgId: string, fileToDocuments: Map<string, Set<string>>): Promise<void> {
-  const expectedFiles = fileToDocuments.size;
-  const expectedLinks = Array.from(fileToDocuments.values()).reduce((sum, ids) => sum + ids.size, 0);
-  const counts = (await db.execute(sql`
-    select count(distinct f.id) as files, count(fa.id) as links,
-           count(*) filter (where fv.id is null) as "missingVersions"
+async function verifyImport(
+  orgId: string,
+  fileToDocuments: Map<string, Set<string>>,
+  verifyStoredBytes: boolean,
+): Promise<void> {
+  const sourceFileIds = Array.from(fileToDocuments.keys());
+  if (sourceFileIds.length === 0) return;
+  const sourceIdsSql = sql.join(sourceFileIds.map((fileId) => sql`${fileId}`), sql`, `);
+  const filesResult = (await db.execute(sql`
+    select f.source_id as "sourceId", f.id, f.current_version_id as "currentVersionId",
+           f.storage_kind as "storageKind", f.size_bytes as "sizeBytes",
+           f.content_hash as "contentHash", fv.storage_kind as "versionStorageKind",
+           fv.size_bytes as "versionSizeBytes", fv.content_hash as "versionContentHash"
       from files f
-      left join file_versions fv on fv.id = f.current_version_id and fv.storage_kind = 's3'
-      left join file_attachments fa on fa.file_id = f.id and fa.org_id = f.org_id and fa.target_table = 'documents'
+      left join file_versions fv on fv.id = f.current_version_id
      where f.org_id = ${orgId} and f.source_system = ${SOURCE_SYSTEM}
-  `)) as unknown as { rows: { files: string; links: string; missingVersions: string }[] };
-  const row = counts.rows[0];
-  if (Number(row.files) < expectedFiles || Number(row.links) < expectedLinks || Number(row.missingVersions) > 0) {
-    throw new Error(`verification failed: expected ${expectedFiles} files/${expectedLinks} links, found ${row.files}/${row.links}`);
+       and f.source_id in (${sourceIdsSql})
+  `)) as unknown as {
+    rows: {
+      sourceId: string;
+      id: string;
+      currentVersionId: string | null;
+      storageKind: string;
+      sizeBytes: number;
+      contentHash: string | null;
+      versionStorageKind: string | null;
+      versionSizeBytes: number | null;
+      versionContentHash: string | null;
+    }[];
+  };
+  const filesBySourceId = new Map(filesResult.rows.map((row) => [row.sourceId, row]));
+
+  for (const sourceFileId of sourceFileIds) {
+    const row = filesBySourceId.get(sourceFileId);
+    if (!row?.currentVersionId || row.storageKind !== "s3" || row.versionStorageKind !== "s3") {
+      throw new Error(`verification failed: source file ${sourceFileId} has no current S3 version`);
+    }
+    if (
+      !row.contentHash
+      || row.contentHash !== row.versionContentHash
+      || row.sizeBytes !== row.versionSizeBytes
+    ) {
+      throw new Error(`verification failed: source file ${sourceFileId} metadata does not match its current version`);
+    }
+    if (verifyStoredBytes) {
+      const bytes = await getS3Blob(row.currentVersionId);
+      if (!bytes) throw new Error(`verification failed: source file ${sourceFileId} is missing from object storage`);
+      const storedHash = createHash("sha256").update(bytes).digest("hex");
+      if (bytes.length !== row.sizeBytes || storedHash !== row.contentHash) {
+        throw new Error(`verification failed: source file ${sourceFileId} object bytes do not match the database`);
+      }
+    }
+  }
+
+  const linksResult = (await db.execute(sql`
+    select f.source_id as "sourceId", fa.target_id as "targetId"
+      from files f
+      join file_attachments fa
+        on fa.org_id = f.org_id and fa.file_id = f.id and fa.target_table = 'documents'
+     where f.org_id = ${orgId} and f.source_system = ${SOURCE_SYSTEM}
+       and f.source_id in (${sourceIdsSql})
+  `)) as unknown as { rows: { sourceId: string; targetId: string }[] };
+  const actualLinks = new Set(
+    linksResult.rows.map((row) => `${row.sourceId}\0${row.targetId}`),
+  );
+  for (const [sourceFileId, documentIds] of fileToDocuments) {
+    for (const documentId of documentIds) {
+      if (!actualLinks.has(`${sourceFileId}\0${documentId}`)) {
+        throw new Error(
+          `verification failed: source file ${sourceFileId} is not linked to document ${documentId}`,
+        );
+      }
+    }
   }
 }
 
@@ -499,20 +668,49 @@ export async function fetchSourceFileModified(
 const BACKFILL_SKEW_MS = 24 * 60 * 60_000;
 
 export async function importNetSuiteAttachments(options: ImportOptions): Promise<ImportSummary> {
+  const requestedSourceFileIds = normalizeSourceFileIds(options.sourceFileIds ?? []);
+  if (requestedSourceFileIds.length > 0 && options.limit !== undefined) {
+    throw new Error("targeted source-file retries cannot be combined with a document limit");
+  }
   const { orgId, actorId, creds, bridge, soapEndpointVersion } = await resolveContext(options);
   if (options.execute && !s3Enabled) {
     throw new Error("S3/MinIO is not configured; refusing to fall back to database blobs");
   }
-  const { documents, withoutSourceId } = await sourceDocuments(orgId, options.limit);
-  console.log(`[inventory] resolving attachments for ${documents.length} source transactions`);
-  const fileToDocuments = await attachmentInventory(
-    documents,
-    creds,
-    options.concurrency,
-    bridge,
-  );
+  let documents: SourceDocument[];
+  let withoutSourceId: number;
+  let fileToDocuments: Map<string, Set<string>>;
+  if (requestedSourceFileIds.length > 0) {
+    const targeted = await targetedAttachmentInventory(
+      orgId,
+      requestedSourceFileIds,
+      creds,
+      options.concurrency,
+      soapEndpointVersion,
+    );
+    documents = targeted.documents;
+    withoutSourceId = 0;
+    fileToDocuments = targeted.fileToDocuments;
+    console.log(
+      `[inventory] resolved ${requestedSourceFileIds.length} requested files directly across ${documents.length} source transactions`,
+    );
+  } else {
+    const source = await sourceDocuments(orgId, options.limit);
+    documents = source.documents;
+    withoutSourceId = source.withoutSourceId;
+    console.log(
+      `[inventory] resolving attachments for ${documents.length} source transactions`,
+    );
+    fileToDocuments = await attachmentInventory(
+      documents,
+      creds,
+      options.concurrency,
+      bridge,
+    );
+  }
   const sourceLinks = Array.from(fileToDocuments.values()).reduce((sum, ids) => sum + ids.size, 0);
   const summary: ImportSummary = {
+    scope: requestedSourceFileIds.length > 0 ? "source_file_ids" : "all",
+    requestedSourceFileIds,
     sourceDocuments: documents.length,
     sourceDocumentsWithoutId: withoutSourceId,
     sourceFiles: fileToDocuments.size,
@@ -525,7 +723,11 @@ export async function importNetSuiteAttachments(options: ImportOptions): Promise
     failures: 0,
     failureDetails: [],
   };
-  console.log(`[inventory] found ${summary.sourceFiles} unique files across ${summary.sourceLinks} transaction links`);
+  console.log(
+    requestedSourceFileIds.length > 0
+      ? `[inventory] selected ${summary.sourceFiles} requested files across ${summary.sourceLinks} transaction links`
+      : `[inventory] found ${summary.sourceFiles} unique files across ${summary.sourceLinks} transaction links`,
+  );
   if (!options.execute) return summary;
 
   // -- incremental decision: download only new or provably-changed files ------
@@ -544,6 +746,12 @@ export async function importNetSuiteAttachments(options: ImportOptions): Promise
     console.error(`[import] source file metadata unavailable — falling back to a full re-read: ${(error as Error).message}`);
     return null;
   });
+  const requestedIdsSql = requestedSourceFileIds.length > 0
+    ? sql`and f.source_id in (${sql.join(
+      requestedSourceFileIds.map((fileId) => sql`${fileId}`),
+      sql`, `,
+    )})`
+    : sql``;
   const imported = (await db.execute(sql`
     select f.source_id as "sourceId",
            f.source_modified_at as "sourceModifiedAt",
@@ -551,6 +759,7 @@ export async function importNetSuiteAttachments(options: ImportOptions): Promise
       from files f
       left join file_versions fv on fv.id = f.current_version_id
      where f.org_id = ${orgId} and f.source_system = ${SOURCE_SYSTEM} and f.source_id is not null
+       ${requestedIdsSql}
   `)) as unknown as { rows: { sourceId: string; sourceModifiedAt: string | null; versionCreatedAt: string | null }[] };
   const importedById = new Map(imported.rows.map((row) => [row.sourceId, {
     modifiedMs: row.sourceModifiedAt ? Date.parse(row.sourceModifiedAt) : null,
@@ -646,6 +855,6 @@ export async function importNetSuiteAttachments(options: ImportOptions): Promise
     }
   });
   if (summary.failures) throw new AttachmentImportError(summary);
-  await verifyImport(orgId, fileToDocuments);
+  await verifyImport(orgId, fileToDocuments, requestedSourceFileIds.length > 0);
   return summary;
 }

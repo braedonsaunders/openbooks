@@ -173,6 +173,8 @@ export async function resolveProjectFinancials(
   const billableCostKinds = profile.billableValue.costSourceKinds?.length
     ? profile.billableValue.costSourceKinds
     : ['vendor_bill', 'expense_report', 'card_charge', 'check']
+  const billableCostStatuses =
+    profile.billableValue.costSourceStatuses ?? ['approved', 'posted']
 
   const [invRes, costRes, committedRes, billableTimeRes, billableLineRes, laborRes, overheadRes, hoursRes, byAccountRes, docRes] = await Promise.all([
     // invoicedToDate — effective line tagging (line override, then header
@@ -279,9 +281,9 @@ export async function resolveProjectFinancials(
        where dl.org_id = ${orgId}
          and coalesce(dl.project_id, d.project_id) = ${projectId}
          and dl.is_billable
-         and ((d.kind = 'project_charge' and d.status in ('approved','posted'))
-           or (d.status in ('approved','posted')
-             and d.kind in (${kindList(billableCostKinds.length ? billableCostKinds : ['__none__'])})))`),
+         and d.status in (${kindList(billableCostStatuses.length ? billableCostStatuses : ['__none__'])})
+         and (d.kind = 'project_charge'
+           or d.kind in (${kindList(billableCostKinds.length ? billableCostKinds : ['__none__'])}))`),
     // laborCost — resolved per profile source (payroll JE / time rate / group).
     profile.laborCost.source === 'payroll_je'
       ? db.execute(sql`select coalesce(sum(l.amount), 0) as labor from journal_lines l join journal_entries e on e.id = l.entry_id

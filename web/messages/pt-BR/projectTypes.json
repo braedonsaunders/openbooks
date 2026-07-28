@@ -55,6 +55,7 @@
   },
   "help": "Documentação",
   "costSourceKinds": "Fontes de custo faturável",
+  "costSourceStatuses": "Estados do ciclo de vida do custo faturável",
   "markupPresentation": "Apresentação da margem",
   "notToExceed": "Não exceder"
 }

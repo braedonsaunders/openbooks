@@ -241,6 +241,182 @@ export async function netsuiteRecord<T = Record<string, unknown>>(
   return await res.json() as T;
 }
 
+function xmlAttribute(value: string): string {
+  return value
+    .replaceAll("&", "&amp;")
+    .replaceAll('"', "&quot;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;");
+}
+
+function soapTokenPassport(
+  creds: NetSuiteCreds,
+  endpointVersion: string,
+): string {
+  const nonce = randomBytes(16).toString("hex");
+  const timestamp = String(Math.floor(Date.now() / 1000));
+  const signatureBase = [
+    creds.account,
+    creds.consumerKey,
+    creds.tokenKey,
+    nonce,
+    timestamp,
+  ].join("&");
+  const signatureKey = `${creds.consumerSecret}&${creds.tokenSecret}`;
+  const signature = createHmac("sha256", signatureKey)
+    .update(signatureBase)
+    .digest("base64");
+  return `<tokenPassport xmlns="urn:messages_${endpointVersion}.platform.webservices.netsuite.com">
+      <account>${xmlAttribute(creds.account)}</account>
+      <consumerKey>${xmlAttribute(creds.consumerKey)}</consumerKey>
+      <token>${xmlAttribute(creds.tokenKey)}</token>
+      <nonce>${nonce}</nonce>
+      <timestamp>${timestamp}</timestamp>
+      <signature algorithm="HMAC-SHA256">${signature}</signature>
+    </tokenPassport>`;
+}
+
+async function netsuiteSoapRequest(
+  action: string,
+  body: string,
+  creds: NetSuiteCreds,
+  endpointVersion: string,
+  timeoutMs = 180_000,
+): Promise<string> {
+  const url = `${creds.host}/services/NetSuitePort_${endpointVersion}`;
+  let lastError: unknown;
+  for (let attempt = 1; attempt <= 3; attempt++) {
+    const ctl = new AbortController();
+    const timer = setTimeout(() => ctl.abort(), timeoutMs);
+    try {
+      const envelope = `<?xml version="1.0" encoding="UTF-8"?>
+<soap-env:Envelope xmlns:soap-env="http://schemas.xmlsoap.org/soap/envelope/">
+  <soap-env:Header>
+    ${soapTokenPassport(creds, endpointVersion)}
+  </soap-env:Header>
+  <soap-env:Body>${body}</soap-env:Body>
+</soap-env:Envelope>`;
+      const response = await fetch(url, {
+        method: "POST",
+        headers: {
+          "Content-Type": "text/xml; charset=utf-8",
+          SOAPAction: action,
+        },
+        body: envelope,
+        signal: ctl.signal,
+      });
+      const text = await response.text();
+      if (!response.ok) {
+        throw new Error(
+          `SuiteTalk SOAP HTTP ${response.status}: ${text.slice(0, 500)}`,
+        );
+      }
+      return text;
+    } catch (error) {
+      lastError = error;
+      if (attempt < 3) await sleep(attempt * 2_000);
+    } finally {
+      clearTimeout(timer);
+    }
+  }
+  throw lastError instanceof Error
+    ? lastError
+    : new Error("SuiteTalk SOAP request failed after retries");
+}
+
+export function parseSoapTransactionSearchPage(text: string): {
+  transactionIds: string[];
+  searchId: string | null;
+  totalPages: number;
+} {
+  if (!text.includes('isSuccess="true"')) {
+    const message = text.match(/<(?:\w+:)?message[^>]*>([^<]*)<\/(?:\w+:)?message>/);
+    throw new Error(
+      `SuiteTalk SOAP transaction search failed: ${message?.[1] ?? text.slice(0, 300)}`,
+    );
+  }
+  const transactionIds = new Set<string>();
+  for (const match of text.matchAll(/<(?:\w+:)?record\b([^>]*)>/g)) {
+    const internalId = match[1]?.match(/\binternalId="(\d+)"/)?.[1];
+    if (internalId) transactionIds.add(internalId);
+  }
+  const searchId =
+    text.match(/<(?:\w+:)?searchId>([^<]+)<\/(?:\w+:)?searchId>/)?.[1] ??
+    null;
+  const totalPages = Number(
+    text.match(
+      /<(?:\w+:)?totalPages>(\d+)<\/(?:\w+:)?totalPages>/,
+    )?.[1] ?? 0,
+  );
+  return {
+    transactionIds: [...transactionIds],
+    searchId,
+    totalPages: Number.isSafeInteger(totalPages) ? totalPages : 0,
+  };
+}
+
+/**
+ * Resolve every transaction related to one file through indexed SuiteTalk
+ * joins. This is bounded by the requested file identity: it does not enumerate
+ * the account's transaction or file populations.
+ */
+export async function netsuiteSoapTransactionIdsForFile(
+  fileId: string,
+  creds: NetSuiteCreds,
+  endpointVersion = "2022_1",
+): Promise<string[]> {
+  if (!/^\d+$/.test(fileId)) throw new Error("NetSuite file id must be numeric");
+  const transactionIds = new Set<string>();
+  for (const join of ["fileJoin", "lineFileJoin"] as const) {
+    const searchBody = `<search xmlns="urn:messages_${endpointVersion}.platform.webservices.netsuite.com">
+      <searchRecord xsi:type="tranSales:TransactionSearch"
+        xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+        xmlns:tranSales="urn:sales_${endpointVersion}.transactions.webservices.netsuite.com"
+        xmlns:platformCommon="urn:common_${endpointVersion}.platform.webservices.netsuite.com"
+        xmlns:platformCore="urn:core_${endpointVersion}.platform.webservices.netsuite.com">
+        <tranSales:${join}>
+          <platformCommon:internalId operator="anyOf">
+            <platformCore:searchValue internalId="${fileId}"/>
+          </platformCommon:internalId>
+        </tranSales:${join}>
+      </searchRecord>
+    </search>`;
+    let pageText = await netsuiteSoapRequest(
+      "search",
+      searchBody,
+      creds,
+      endpointVersion,
+      60_000,
+    );
+    let page = parseSoapTransactionSearchPage(pageText);
+    for (const transactionId of page.transactionIds) {
+      transactionIds.add(transactionId);
+    }
+    if (page.totalPages > 1 && !page.searchId) {
+      throw new Error(
+        `SuiteTalk SOAP transaction search omitted its search id for file ${fileId}`,
+      );
+    }
+    for (let pageIndex = 2; pageIndex <= page.totalPages; pageIndex++) {
+      pageText = await netsuiteSoapRequest(
+        "searchMoreWithId",
+        `<searchMoreWithId xmlns="urn:messages_${endpointVersion}.platform.webservices.netsuite.com">
+          <searchId>${xmlAttribute(page.searchId!)}</searchId>
+          <pageIndex>${pageIndex}</pageIndex>
+        </searchMoreWithId>`,
+        creds,
+        endpointVersion,
+        60_000,
+      );
+      page = parseSoapTransactionSearchPage(pageText);
+      for (const transactionId of page.transactionIds) {
+        transactionIds.add(transactionId);
+      }
+    }
+  }
+  return [...transactionIds].sort((left, right) => Number(left) - Number(right));
+}
+
 /**
  * File-cabinet content through SuiteTalk SOAP (TokenPassport, HMAC-SHA256).
  *

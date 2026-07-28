@@ -121,6 +121,13 @@ export interface FinancialProfile {
     timeRate: "bill_rate" | "cost_times_markup";
     /** Document kinds whose eligible lines contribute to selling value. */
     costSourceKinds?: string[];
+    /**
+     * Source-document lifecycle states whose billable lines contribute to the
+     * statistical selling value. Defaults to approved + posted. A tenant may
+     * include pending approval when its source ERP exposes unapproved work in
+     * project forecasts; this never makes the document posted accounting.
+     */
+    costSourceStatuses?: Array<"pending_approval" | "approved" | "posted">;
   };
   /** Budgeted cost. */
   costBudget: { source: "wbs_estimates" | "none" };

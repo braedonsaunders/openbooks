@@ -68,6 +68,12 @@ export interface NativeDocument {
   kind: string;
   /** false = order/quote — document only, no GL. */
   posting: boolean;
+  /**
+   * Source-owned lifecycle for a non-posting document. Connectors must not
+   * promote a pending source transaction to approved merely because it has no
+   * GL yet. Posting documents always finish as `posted` through the kernel.
+   */
+  lifecycleStatus?: "draft" | "pending_approval" | "approved" | "rejected";
   partyId: string | null;
   /** Source legal entity; undefined falls back to the tenant root. */
   subsidiaryId?: string | null;

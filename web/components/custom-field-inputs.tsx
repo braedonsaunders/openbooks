@@ -84,6 +84,7 @@ export function customFieldColumns<Row extends Record<string, unknown>>(
             placeholder: def.label,
           }
         case 'number':
+          return { ...base, width: '110px', type: 'decimal' as const, decimalScale: 8, align: 'right' as const }
         case 'currency':
           return { ...base, width: '110px', type: 'amount' as const, align: 'right' as const }
         case 'date':
