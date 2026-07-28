@@ -424,15 +424,27 @@ const target = await withOrgContext(orgId, async () => {
       select d.custom->'legacy'->>'id' as legacy_id,
              employee.custom->>'nsId' as source_employee_id,
              item.custom->>'nsId' as source_item_id,
-             te.worked_on::text as worked_on,
-             coalesce(tt.classification, 'regular') as time_kind,
-             sum(te.hours)::text as hours
-        from time_entries te
-        join documents d on d.id = te.field_ticket_id and d.org_id = te.org_id
-        join parties employee on employee.id = te.employee_party_id and employee.org_id = te.org_id
-        left join items item on item.id = te.item_id and item.org_id = te.org_id
-        left join time_types tt on tt.id = te.time_type_id and tt.org_id = te.org_id
-       where te.org_id = ${orgId} and d.kind = 'field_ticket'
+             line.worked_on::text as worked_on,
+             line.time_classification as time_kind,
+             sum(line.hours)::text as hours
+        from documents d
+        join field_ticket_labor_snapshots snapshot
+          on snapshot.field_ticket_id = d.id
+         and snapshot.org_id = d.org_id
+         and snapshot.superseded_at is null
+         and snapshot.evidence_basis = 'source_import'
+         and snapshot.source_system = 'adminapp2'
+        join field_ticket_labor_lines line
+          on line.snapshot_id = snapshot.id
+         and line.org_id = snapshot.org_id
+         and line.field_ticket_id = snapshot.field_ticket_id
+        join parties employee
+          on employee.id = line.employee_party_id
+         and employee.org_id = line.org_id
+        left join items item
+          on item.id = line.item_id
+         and item.org_id = line.org_id
+       where d.org_id = ${orgId} and d.kind = 'field_ticket'
          and d.custom->'legacy'->>'id' is not null
        group by legacy_id, source_employee_id, source_item_id, worked_on, time_kind
     `)),
@@ -889,8 +901,13 @@ if (!legacyCrew) {
     detail: `missing ${paths.legacyCrew} or ticket headers`,
   };
 } else {
+  const currentSourceTicketIds = new Set(
+    legacyTickets!.map((ticket) => String(ticket.id)),
+  );
   const targetCrew = new Map<string, bigint>();
-  for (const row of target.ticketCrew) {
+  for (const row of target.ticketCrew.filter((candidate) =>
+    currentSourceTicketIds.has(String(candidate.legacy_id)),
+  )) {
     const key = [
       row.legacy_id,
       row.source_employee_id,
