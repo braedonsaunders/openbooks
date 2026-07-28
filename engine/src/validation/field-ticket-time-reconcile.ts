@@ -211,11 +211,7 @@ const rawEntries = await retry(() => withOrgContext(orgId, async () => {
            employee.custom->>'nsId' as employee_ref,
            item.custom->>'nsId' as item_ref,
            te.worked_on::text as worked_on,
-           case
-             when lower(coalesce(tt.name, '')) like '%double%' then 'double_time'
-             when lower(coalesce(tt.name, '')) like '%over%' then 'overtime'
-             else 'regular'
-           end as time_kind,
+           coalesce(tt.classification, 'regular') as time_kind,
            te.hours::text,
            ticket.custom->'legacy'->>'id' as current_ticket_ref,
            ticket.document_number as current_ticket_number,

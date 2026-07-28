@@ -33,3 +33,24 @@ test("source evidence import cannot create or relink time entries", () => {
   assert.match(importer, /operationalTimeRowsMutated:\s*0/);
   assert.match(importer, /supersedeCurrent:\s*true/);
 });
+
+test("the source certificate is exhaustive rather than sampled", () => {
+  const verifier = readFileSync(
+    "engine/src/validation/verify-field-ticket-labor-evidence.ts",
+    "utf8",
+  );
+  assert.match(verifier, /for \(const \[key, hours\] of expected\)/);
+  assert.match(verifier, /for \(const \[key, hours\] of actual\)/);
+  assert.match(verifier, /ticketHashMismatches/);
+  assert.match(verifier, /certified:\s*failureCount === 0/);
+});
+
+test("time semantics are explicit and snapshotted independently from rates", () => {
+  const schema = readFileSync("schema/src/documents.ts", "utf8");
+  const evidenceSchema = readFileSync("schema/src/field-tickets.ts", "utf8");
+  const pdf = readFileSync("web/lib/pdf-templates/values.ts", "utf8");
+  assert.match(schema, /classification[\s\S]*regular[\s\S]*overtime[\s\S]*double_time[\s\S]*other/);
+  assert.match(evidenceSchema, /timeClassification:\s*text\("time_classification"/);
+  assert.match(pdf, /tier\(e\.time_classification\)/);
+  assert.doesNotMatch(pdf, /tier\(e\.bill_multiplier\)/);
+});

@@ -1251,6 +1251,16 @@ export const SETUP_ENTITIES: SetupEntity[] = [
     hasActive: true,
     columns: [
       { key: 'name', kind: 'text' },
+      {
+        key: 'classification',
+        kind: 'badge',
+        options: [
+          { value: 'regular', labelKey: 'timeClassification.regular' },
+          { value: 'overtime', labelKey: 'timeClassification.overtime' },
+          { value: 'double_time', labelKey: 'timeClassification.doubleTime' },
+          { value: 'other', labelKey: 'timeClassification.other' },
+        ],
+      },
       { key: 'costMultiplier', kind: 'number' },
       { key: 'billMultiplier', kind: 'number' },
       { key: 'isBillableDefault', kind: 'boolean' },
@@ -1259,6 +1269,19 @@ export const SETUP_ENTITIES: SetupEntity[] = [
     ],
     fields: [
       { key: 'name', kind: 'text', required: true },
+      {
+        key: 'classification',
+        kind: 'select',
+        required: true,
+        keepDefault: true,
+        defaultValue: 'regular',
+        options: [
+          { value: 'regular', labelKey: 'timeClassification.regular' },
+          { value: 'overtime', labelKey: 'timeClassification.overtime' },
+          { value: 'double_time', labelKey: 'timeClassification.doubleTime' },
+          { value: 'other', labelKey: 'timeClassification.other' },
+        ],
+      },
       { key: 'costMultiplier', kind: 'decimal', keepDefault: true },
       { key: 'billMultiplier', kind: 'decimal', keepDefault: true },
       { key: 'isBillableDefault', kind: 'boolean' },

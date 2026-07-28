@@ -1765,6 +1765,7 @@
       "nextNumber": "Próximo número",
       "padding": "Preenchimento",
       "gapless": "Sem lacunas",
+      "classification": "Classificação",
       "costMultiplier": "Multiplicador de custo",
       "isBillableDefault": "Faturável por padrão",
       "showOnFieldTicket": "Mostrar em apontamentos de campo",
@@ -1853,6 +1854,12 @@
       "gapless": "Sem lacunas significa que todos os números da sequência devem ser contabilizados, sem números pulados. Ative somente quando exigências legais ou de auditoria determinarem uma numeração ininterrupta."
     },
     "options": {
+      "timeClassification": {
+        "regular": "Normal",
+        "overtime": "Hora extra",
+        "doubleTime": "Hora dupla",
+        "other": "Outro"
+      },
       "taxDepreciationModel": {
         "pool": "Class pool",
         "macrs": "Per-asset MACRS"

@@ -159,6 +159,9 @@ export const fieldTicketLaborLines = pgTable(
     itemName: text("item_name"),
     timeTypeId: uuid("time_type_id"),
     timeTypeName: text("time_type_name").notNull(),
+    timeClassification: text("time_classification", {
+      enum: ["regular", "overtime", "double_time", "other"],
+    }).notNull(),
     projectTaskId: uuid("project_task_id"),
     projectTaskName: text("project_task_name"),
     workedOn: date("worked_on").notNull(),

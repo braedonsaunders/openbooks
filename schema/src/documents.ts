@@ -315,6 +315,14 @@ export const timeTypes = pgTable("time_types", {
   id: id(),
   orgId: orgRef(),
   name: text("name").notNull(), // Regular, Overtime, Double-time, Shop…
+  /** Semantic class is independent from the commercial multipliers. A tenant
+   * may pay straight time while presenting an overtime category, so neither
+   * names nor numeric rates are a safe way to infer this meaning. */
+  classification: text("classification", {
+    enum: ["regular", "overtime", "double_time", "other"],
+  })
+    .notNull()
+    .default("regular"),
   costMultiplier: money("cost_multiplier").notNull().default("1"),
   /** Default bill-rate multiplier (OT ×1.5, DT ×2). A rate-book line's
    * explicit per-time-type rate overrides this. */

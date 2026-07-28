@@ -106,7 +106,7 @@ export const setupAccountingGroup: DocArticle = {
   category: 'administration',
   order: 11,
   summary: 'Accounting books and the governed period-close configuration.',
-  updated: '2026-07-21',
+  updated: '2026-07-27',
   keywords: ['accounting books', 'primary book', 'period close', 'close policy', 'multi-book'],
   related: ['setup-company-group', 'financial-reports', 'company-settings'],
   body: `# Setup: Accounting
@@ -329,11 +329,15 @@ costing engine.
 
 ## Time Types
 
-A **Time Type** classifies an hour and carries a **Cost multiplier** and **Bill
-multiplier** applied to the base rate — for example, an overtime type at 1.5×
-cost. **Billable by default** sets the initial billable flag on new entries of
-that type. **Show on field tickets** opts the type into the compact crew grid
-without changing its availability in timesheets, pricing, imports, or costing.
+A **Time Type** gives an hour an explicit semantic **Classification** (regular,
+overtime, double time, or other) and carries separate **Cost multiplier** and
+**Bill multiplier** values applied to the base rate. Classification is never
+inferred from a tenant-editable name or a numeric multiplier: an overtime
+category may legitimately have a 1.0 bill multiplier and must still render and
+report as overtime. **Billable by default** sets the initial billable flag on
+new entries of that type. **Show on field tickets** opts the type into the
+compact crew grid without changing its availability in timesheets, pricing,
+imports, or costing.
 
 ## Worker Comp Groups
 

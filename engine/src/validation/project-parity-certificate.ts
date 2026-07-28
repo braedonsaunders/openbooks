@@ -356,11 +356,7 @@ const target = await withOrgContext(orgId, async () => {
              employee.custom->>'nsId' as source_employee_id,
              item.custom->>'nsId' as source_item_id,
              te.worked_on::text as worked_on,
-             case
-               when lower(coalesce(tt.name, '')) like '%double%' then 'double_time'
-               when lower(coalesce(tt.name, '')) like '%over%' then 'overtime'
-               else 'regular'
-             end as time_kind,
+             coalesce(tt.classification, 'regular') as time_kind,
              sum(te.hours)::text as hours
         from time_entries te
         join documents d on d.id = te.field_ticket_id and d.org_id = te.org_id

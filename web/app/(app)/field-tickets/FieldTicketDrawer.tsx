@@ -48,6 +48,7 @@ interface EntryRow {
   item_id: string | null
   item_name: string | null
   time_type_id: string | null
+  time_classification: 'regular' | 'overtime' | 'double_time' | 'other'
   project_task_id: string | null
   project_task_name: string | null
   worked_on: string
