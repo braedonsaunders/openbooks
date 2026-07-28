@@ -93,7 +93,7 @@ export interface OverheadSource {
     /** live = recompute from actuals via the True Cost engine; standard = use the effective-dated overhead_rates table. */
     rateSource: "live" | "standard";
     /** Which project hours the $/hr rate multiplies. */
-    hoursBasis: "billed_hours" | "total_hours";
+    hoursBasis: "billed_hours" | "actual_hours" | "total_hours";
     /** Account-group dimension holding the overhead cost pools (default "overhead"). */
     dimension: string;
     /** How the rate is scoped. */
@@ -109,13 +109,19 @@ export interface FinancialProfile {
   /** Posted GL cost. */
   actualCost: CostSource;
   /** Labor cost source (payroll JE vs time-entry rate vs an account group). */
-  laborCost: { source: "in_actual_cost" | "time_rate" | "payroll_je" | "account_group" | "none"; dimension?: string; groupKeys?: string[] };
+  laborCost: { source: "in_actual_cost" | "time_rate" | "estimated_time_rate" | "payroll_je" | "account_group" | "none"; dimension?: string; groupKeys?: string[] };
   /** Overhead applied to the job (statistical allocation — see OverheadSource). */
   overhead: OverheadSource;
   /** Open commitments: doc kinds whose unbilled remainder is "committed". */
   committedCost: { docKinds: string[] };
   /** Statistical billable value of all work (drives T&M price + could-be-invoiced). */
-  billableValue: { includeUnbilledTime: boolean; includeUnbilledCostLines: boolean; timeRate: "bill_rate" | "cost_times_markup" };
+  billableValue: {
+    includeUnbilledTime: boolean;
+    includeUnbilledCostLines: boolean;
+    timeRate: "bill_rate" | "cost_times_markup";
+    /** Document kinds whose eligible lines contribute to selling value. */
+    costSourceKinds?: string[];
+  };
   /** Budgeted cost. */
   costBudget: { source: "wbs_estimates" | "none" };
   /** How the contract/selling price is determined. */

@@ -79,6 +79,7 @@ export async function applyOverheadForTime(orgId: string, actorId: string, timeE
        )
      where te.org_id = ${orgId} and te.id = any(${idArr}::uuid[])
        and te.status = 'approved' and te.project_id is not null
+       and te.costing_basis = 'actual'
        and te.overhead_journal_entry_id is null
        and not exists (
          select 1 from projects p
@@ -148,6 +149,7 @@ export async function countUnappliedOverheadTime(orgId: string): Promise<{ entri
     select count(*)::int as entries, coalesce(sum(te.hours), 0) as hours
       from time_entries te
      where te.org_id = ${orgId} and te.status = 'approved' and te.project_id is not null
+       and te.costing_basis = 'actual'
        and te.overhead_journal_entry_id is null
        and exists (
          select 1 from overhead_rates r
@@ -192,6 +194,7 @@ export async function backfillOverhead(orgId: string, actorId: string): Promise<
       select te.id
         from time_entries te
        where te.org_id = ${orgId} and te.status = 'approved' and te.project_id is not null
+         and te.costing_basis = 'actual'
          and te.overhead_journal_entry_id is null
          and exists (
            select 1 from overhead_rates r

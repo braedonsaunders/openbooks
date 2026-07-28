@@ -111,6 +111,7 @@ export interface SourceLedgerContext {
 export interface SourceTimeEntryBillingState {
   sourceRef: string;
   billingStatus: "unbilled" | "billed";
+  costingBasis: "actual" | "estimated";
   sourceStatus?: string | null;
 }
 

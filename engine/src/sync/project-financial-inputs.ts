@@ -25,6 +25,7 @@ interface TargetBillingState {
   id: string;
   source_ref: string;
   billing_status: "unbilled" | "billed";
+  costing_basis: "actual" | "estimated";
   source_status: string | null;
   invoiced_by_line_id: string | null;
 }
@@ -83,6 +84,7 @@ export async function syncProjectFinancialInputs(
 
   const targetResult = (await db.execute(sql`
     select id, custom ->> ${source.refKey} as source_ref, billing_status,
+           costing_basis,
            custom ->> 'sourceBillingStatus' as source_status,
            invoiced_by_line_id
       from time_entries
@@ -209,8 +211,11 @@ export async function syncProjectFinancialInputs(
     const target = targetByRef.get(state.sourceRef);
     if (!target) return [];
     const sourceStatus = state.sourceStatus ?? null;
-    if (target.billing_status === state.billingStatus) return [];
+    const billingChanged = target.billing_status !== state.billingStatus;
+    const costingChanged = target.costing_basis !== state.costingBasis;
+    if (!billingChanged && !costingChanged) return [];
     if (
+      billingChanged &&
       target.invoiced_by_line_id &&
       state.billingStatus === "unbilled"
     ) {
@@ -222,7 +227,10 @@ export async function syncProjectFinancialInputs(
       {
         id: target.id,
         sourceRef: state.sourceRef,
+        beforeBillingStatus: target.billing_status,
         billingStatus: state.billingStatus,
+        beforeCostingBasis: target.costing_basis,
+        costingBasis: state.costingBasis,
         sourceStatus,
       },
     ];
@@ -285,28 +293,42 @@ export async function syncProjectFinancialInputs(
         with input as (
           select *
             from jsonb_to_recordset(${JSON.stringify(batch)}::jsonb)
-                 as x(id uuid, "sourceRef" text, "billingStatus" text, "sourceStatus" text)
+                 as x(
+                   id uuid,
+                   "sourceRef" text,
+                   "beforeBillingStatus" text,
+                   "billingStatus" text,
+                   "beforeCostingBasis" text,
+                   "costingBasis" text,
+                   "sourceStatus" text
+                 )
         ),
         prior as materialized (
           select te.id, te.billing_status as before_status,
+                 te.costing_basis as before_costing_basis,
                  te.custom ->> 'sourceBillingStatus' as before_source_status,
                  input."sourceRef" as source_ref,
                  input."billingStatus" as after_status,
+                 input."costingBasis" as after_costing_basis,
                  input."sourceStatus" as after_source_status
             from time_entries te
             join input on input.id = te.id
            where te.org_id = ${options.orgId}
              and te.custom ->> ${source.refKey} = input."sourceRef"
-             and te.billing_status is distinct from input."billingStatus"
+             and (
+               te.billing_status is distinct from input."billingStatus"
+               or te.costing_basis is distinct from input."costingBasis"
+             )
            for update
         ),
         updated as (
           update time_entries te
              set billing_status = prior.after_status,
+                 costing_basis = prior.after_costing_basis,
                  custom = jsonb_set(
                    coalesce(te.custom, '{}'::jsonb),
                    '{sourceBillingStatus}',
-                   to_jsonb(prior.after_source_status),
+                   coalesce(to_jsonb(prior.after_source_status), 'null'::jsonb),
                    true
                  ),
                  updated_at = now(),
@@ -321,10 +343,12 @@ export async function syncProjectFinancialInputs(
                jsonb_build_object(
                  'before', jsonb_build_object(
                    'billingStatus', prior.before_status,
+                   'costingBasis', prior.before_costing_basis,
                    'sourceBillingStatus', prior.before_source_status
                  ),
                  'after', jsonb_build_object(
                    'billingStatus', prior.after_status,
+                   'costingBasis', prior.after_costing_basis,
                    'sourceBillingStatus', prior.after_source_status
                  ),
                  'source', jsonb_build_object(

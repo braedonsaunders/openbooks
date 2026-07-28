@@ -266,6 +266,7 @@ export function normalizeNetSuiteTimeEntry(
       billRate: s(tb.rate),
       isBillable: isT(tb.isbillable),
       billingStatus: isT(tb.billed) ? "billed" : "unbilled",
+      costingBasis: isT(tb.posted) ? "actual" : "estimated",
       sourceBillingStatus: s(tb.billingstatus),
     },
   };
@@ -559,6 +560,8 @@ export class NetSuiteSource implements MigrationSource {
         sourceRef: entry.sourceRef,
         billingStatus:
           entry.fields.billingStatus === "billed" ? "billed" : "unbilled",
+        costingBasis:
+          entry.fields.costingBasis === "estimated" ? "estimated" : "actual",
         sourceStatus: s(entry.fields.sourceBillingStatus),
       })),
       projects: projects.map((project) => ({
@@ -946,7 +949,7 @@ export class NetSuiteSource implements MigrationSource {
         id: `time-${String(index).padStart(4, "0")}`,
         sql: `
         SELECT tb.id, tb.employee, tb.customer, tb.department, tb.item, tb.hours,
-               tb.rate, tb.laborcost, tb.isbillable, tb.billed,
+               tb.rate, tb.laborcost, tb.isbillable, tb.billed, tb.posted,
                tb.status AS billingstatus,
                ${timeType},
                ${fieldTicketNumber},
