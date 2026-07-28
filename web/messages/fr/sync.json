@@ -24,6 +24,7 @@
     "test": "Tester",
     "mirrorNow": "Miroir maintenant",
     "syncAttachments": "Synchroniser les pièces jointes",
+    "syncProjectFinancials": "Synchroniser les données financières des projets",
     "preflight": "Vérifier avant synchronisation",
     "runMigration": "Lancer la migration",
     "pauseMirror": "Suspendre le miroir",
@@ -45,6 +46,7 @@
       "incremental": "incrémentale",
       "attachments": "pièces jointes",
       "full_preflight": "Vérification complète",
+      "project_financials": "Données financières des projets",
       "targeted_repair": "Réparation ciblée",
       "mirror": "miroir"
     },
@@ -58,6 +60,7 @@
     },
     "stats": {
       "attachments": "{files} fichiers sources · {links} liens de transaction · {created} nouveaux fichiers",
+      "projectFinancials": "{projects} projets source ({projectChanges} modifiés) · {source} écritures de temps source · {exact} exactes · {changed} états de facturation rapprochés",
       "docs": "+{new} docs · {amended} modifiés · {unchanged} inchangés",
       "applied": "{count} lettrés",
       "tb": "BV {matches}/{accounts}",
@@ -79,16 +82,19 @@
     "queuingPreflight": "Mise en file de la vérification complète en lecture seule…",
     "queuingMirror": "Mise en file du miroir…",
     "queuingAttachments": "Mise en file de la synchronisation des pièces jointes…",
+    "queuingProjectFinancials": "Mise en file de la synchronisation financière des projets…",
     "migrationQueued": "Migration en file d’attente — exécutée par le worker",
     "preflightQueued": "Vérification en file — aucune écriture comptable ni aucun document ne sera modifié",
     "mirrorQueued": "Miroir en file d’attente — exécuté par le worker",
     "attachmentsQueued": "Synchronisation des pièces jointes en file d’attente — exécutée en arrière-plan",
+    "projectFinancialsQueued": "Synchronisation financière des projets mise en file — aucun document, grand livre, fichier ou PDF ne sera modifié",
     "runFailed": "Impossible de mettre l’exécution en file d’attente (HTTP {status})",
     "runErrors": {
       "CONNECTION_NOT_FOUND": "La connexion n’existe plus.",
       "CONNECTION_UNCONFIGURED": "Ajoutez les identifiants avant d’exécuter cette connexion.",
       "INVALID_MODE": "Choisissez une action de migration valide.",
-      "ATTACHMENTS_UNSUPPORTED": "Cette connexion ne prend pas en charge la migration des pièces jointes."
+      "ATTACHMENTS_UNSUPPORTED": "Cette connexion ne prend pas en charge la migration des pièces jointes.",
+      "PROJECT_FINANCIALS_UNSUPPORTED": "Cette connexion ne fournit pas la synchronisation des données financières des projets."
     },
     "testing": "Test de la connexion…",
     "connected": "Connecté",

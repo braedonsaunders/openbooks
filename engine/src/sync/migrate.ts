@@ -47,6 +47,12 @@ interface Ctx {
   incremental: boolean;
   maps: RefMaps;
   usedShortCodes: Set<string>;
+  audit?: {
+    connectionId: string | null;
+    runId: string;
+    actorId: string | null;
+    sourceName: string;
+  };
 }
 
 const ref = (m: Map<string, string>, v: unknown): string | null =>
@@ -71,6 +77,7 @@ async function ensureSchema(): Promise<void> {
   await db.execute(sql`alter table payment_terms add column if not exists custom jsonb not null default '{}'::jsonb`);
   await db.execute(sql`alter table time_types add column if not exists custom jsonb not null default '{}'::jsonb`);
   await db.execute(sql`alter table time_entries add column if not exists custom jsonb not null default '{}'::jsonb`);
+  await db.execute(sql`alter table time_entries add column if not exists billing_status text not null default 'unbilled'`);
   await db.execute(sql`
     create table if not exists contacts (
       id uuid primary key default uuid_generate_v7(),
@@ -112,6 +119,7 @@ export async function loadEntities(
   orgId: string,
   since: Date | null = null,
   onProgress?: (message: string, current: number, total: number) => void,
+  audit?: Ctx["audit"],
 ): Promise<EntityLoadStats> {
   if (!source.entities) return {};
   await ensureSchema();
@@ -119,6 +127,7 @@ export async function loadEntities(
   const ctx: Ctx = {
     orgId, refKey, currency: source.baseCurrency, incremental: since != null,
     usedShortCodes: new Set(),
+    audit,
     maps: {
       subsidiaries: await loadMap("subsidiaries", orgId, refKey),
       accounts: await loadMap("accounts", orgId, refKey),
@@ -665,15 +674,77 @@ async function upsertRole(table: string, orgId: string, partyId: string, cols: R
     on conflict (party_id) do update set ${sql.join(setList, sql`, `)}`);
 }
 
+async function auditTimeBillingChange(
+  tx: { execute: (query: any) => Promise<any> },
+  ctx: Ctx,
+  timeEntryId: string,
+  sourceRef: string,
+  beforeStatus: "unbilled" | "billed",
+  afterStatus: "unbilled" | "billed",
+  beforeSourceStatus: string | null,
+  afterSourceStatus: string | null,
+): Promise<void> {
+  if (!ctx.audit) {
+    throw new Error(
+      `time-entry billing state ${sourceRef} cannot change without sync-run audit context`,
+    );
+  }
+  await tx.execute(sql`
+    insert into audit_log
+      (org_id, table_name, row_id, action, changes, actor_id, request_id)
+    values (
+      ${ctx.orgId}, 'time_entries', ${timeEntryId}, 'update',
+      jsonb_build_object(
+        'before', jsonb_build_object(
+          'billingStatus', cast(${beforeStatus} as text),
+          'sourceBillingStatus', cast(${beforeSourceStatus} as text)
+        ),
+        'after', jsonb_build_object(
+          'billingStatus', cast(${afterStatus} as text),
+          'sourceBillingStatus', cast(${afterSourceStatus} as text)
+        ),
+        'source', jsonb_build_object(
+          'system', cast(${ctx.audit.sourceName} as text),
+          'ref', cast(${sourceRef} as text),
+          'connectionId', cast(${ctx.audit.connectionId} as text),
+          'syncRunId', cast(${ctx.audit.runId} as text)
+        )
+      ),
+      ${ctx.audit.actorId}, ${ctx.audit.runId}
+    )
+  `);
+}
+
 /** High-volume time-entry loader — batched inserts; skip-unchanged on full load. */
 async function loadTimeEntries(records: SourceEntity[], ctx: Ctx, s: ResourceLoadStats) {
   const { orgId, refKey } = ctx;
-  const existing = new Map<string, string>();
+  const existing = new Map<
+    string,
+    {
+      id: string;
+      billingStatus: "unbilled" | "billed";
+      sourceBillingStatus: string | null;
+    }
+  >();
   const rows = (await db.execute(sql`
-    select id, custom->>${refKey} ns from time_entries where org_id=${orgId} and custom->>${refKey} is not null`)) as {
-    rows: { id: string; ns: string }[];
+    select id, custom->>${refKey} ns, billing_status,
+           custom->>'sourceBillingStatus' as source_billing_status
+      from time_entries
+     where org_id=${orgId} and custom->>${refKey} is not null`)) as {
+    rows: {
+      id: string;
+      ns: string;
+      billing_status: "unbilled" | "billed";
+      source_billing_status: string | null;
+    }[];
   };
-  for (const r of rows.rows) existing.set(r.ns, r.id);
+  for (const r of rows.rows) {
+    existing.set(r.ns, {
+      id: r.id,
+      billingStatus: r.billing_status,
+      sourceBillingStatus: r.source_billing_status,
+    });
+  }
 
   const BATCH = 500;
   let batch: SourceEntity[] = [];
@@ -686,15 +757,17 @@ async function loadTimeEntries(records: SourceEntity[], ctx: Ctx, s: ResourceLoa
         ${str(f.hours) ?? "0"}, ${ref(ctx.maps.time_types, f.timeTypeRef)}, ${ref(ctx.maps.items, f.itemRef)},
         ${ref(ctx.maps.projects, f.projectRef)}, ${ref(ctx.maps.departments, f.departmentRef)},
         ${!!f.isBillable}, ${str(f.costRate)}, ${str(f.billRate)}, 'approved',
+        ${str(f.billingStatus) === "billed" ? "billed" : "unbilled"},
         ${JSON.stringify({
           [refKey]: rec.sourceRef,
+          sourceBillingStatus: str(f.sourceBillingStatus),
           ...(str(f.fieldTicketNumber)
             ? { sourceFieldTicketNumber: str(f.fieldTicketNumber) }
             : {}),
         })}::jsonb)`;
     });
     await db.execute(sql`insert into time_entries
-      (org_id, employee_party_id, worked_on, hours, time_type_id, item_id, project_id, department_id, is_billable, cost_rate, bill_rate, status, custom)
+      (org_id, employee_party_id, worked_on, hours, time_type_id, item_id, project_id, department_id, is_billable, cost_rate, bill_rate, status, billing_status, custom)
       values ${sql.join(values, sql`, `)}`);
     s.created += b.length;
   };
@@ -703,21 +776,88 @@ async function loadTimeEntries(records: SourceEntity[], ctx: Ctx, s: ResourceLoa
     const f = rec.fields;
     const empId = ref(ctx.maps.parties, f.employeeRef);
     if (!empId) { s.skipped++; continue; }
-    const id = existing.get(rec.sourceRef);
-    if (id) {
-      // A full load re-emits everything; only touch existing rows when the pull
-      // was incremental (i.e. the source flagged them changed).
-      if (!ctx.incremental) { s.skipped++; continue; }
-      await db.execute(sql`update time_entries set worked_on=${str(f.workedOn) ?? "1970-01-01"}, hours=${str(f.hours) ?? "0"},
-        time_type_id=${ref(ctx.maps.time_types, f.timeTypeRef)}, item_id=${ref(ctx.maps.items, f.itemRef)},
-        project_id=${ref(ctx.maps.projects, f.projectRef)}, department_id=${ref(ctx.maps.departments, f.departmentRef)},
-        is_billable=${!!f.isBillable}, cost_rate=${str(f.costRate)}, bill_rate=${str(f.billRate)},
-        custom = custom || ${JSON.stringify({
-          ...(str(f.fieldTicketNumber)
-            ? { sourceFieldTicketNumber: str(f.fieldTicketNumber) }
-            : {}),
-        })}::jsonb
-        where id=${id}`);
+    const prior = existing.get(rec.sourceRef);
+    if (prior) {
+      const id = prior.id;
+      const sourceBillingStatus =
+        f.billingStatus === "billed" || f.billingStatus === "unbilled"
+          ? f.billingStatus
+          : null;
+      // A full load re-emits everything. Billing state is still reconciled:
+      // historical source time may have been loaded before OpenBooks had a
+      // first-class billing lifecycle, and treating it as unbilled would
+      // double-count project selling value. All other fields remain
+      // skip-unchanged on a full load.
+      if (!ctx.incremental) {
+        if (
+          sourceBillingStatus === null ||
+          sourceBillingStatus === prior.billingStatus
+        ) {
+          s.skipped++;
+          continue;
+        }
+        const changed = await db.transaction(async (tx) => {
+          const updated = (await tx.execute(sql`
+            update time_entries
+               set billing_status = ${sourceBillingStatus},
+                   custom = custom || ${JSON.stringify({
+                     sourceBillingStatus: str(f.sourceBillingStatus),
+                   })}::jsonb,
+                   updated_at = now()
+             where id = ${id} and org_id = ${orgId}
+               and billing_status is distinct from ${sourceBillingStatus}
+             returning id`)) as unknown as { rows: { id: string }[] };
+          if (updated.rows.length) {
+            await auditTimeBillingChange(
+              tx,
+              ctx,
+              id,
+              rec.sourceRef,
+              prior.billingStatus,
+              sourceBillingStatus,
+              prior.sourceBillingStatus,
+              str(f.sourceBillingStatus),
+            );
+          }
+          return updated.rows.length > 0;
+        });
+        if (changed) s.updated++;
+        else s.skipped++;
+        continue;
+      }
+      const billingChanged =
+        sourceBillingStatus !== null &&
+        sourceBillingStatus !== prior.billingStatus;
+      const update = (tx: { execute: (query: any) => Promise<any> }) =>
+        tx.execute(sql`update time_entries set worked_on=${str(f.workedOn) ?? "1970-01-01"}, hours=${str(f.hours) ?? "0"},
+          time_type_id=${ref(ctx.maps.time_types, f.timeTypeRef)}, item_id=${ref(ctx.maps.items, f.itemRef)},
+          project_id=${ref(ctx.maps.projects, f.projectRef)}, department_id=${ref(ctx.maps.departments, f.departmentRef)},
+          is_billable=${!!f.isBillable}, cost_rate=${str(f.costRate)}, bill_rate=${str(f.billRate)},
+          billing_status=coalesce(${sourceBillingStatus}, billing_status),
+          custom = custom || ${JSON.stringify({
+            sourceBillingStatus: str(f.sourceBillingStatus),
+            ...(str(f.fieldTicketNumber)
+              ? { sourceFieldTicketNumber: str(f.fieldTicketNumber) }
+              : {}),
+          })}::jsonb
+          where id=${id}`);
+      if (billingChanged) {
+        await db.transaction(async (tx) => {
+          await update(tx);
+          await auditTimeBillingChange(
+            tx,
+            ctx,
+            id,
+            rec.sourceRef,
+            prior.billingStatus,
+            sourceBillingStatus,
+            prior.sourceBillingStatus,
+            str(f.sourceBillingStatus),
+          );
+        });
+      } else {
+        await update(db);
+      }
       s.updated++;
       continue;
     }

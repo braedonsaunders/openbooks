@@ -6,7 +6,8 @@ import { sql } from "drizzle-orm";
  * cost lines become billable again and the originating billing request reopens.
  * Idempotent; runs inside the caller's transaction. Without this, voiding or
  * deleting an invoice would strand its time as permanently un-rebillable
- * (the generator only picks rows whose invoiced_by/billed_by is NULL).
+ * (the generator only picks time whose billing lifecycle is `unbilled` and
+ * cost rows whose billed_by link is NULL).
  *
  * Lives in engine (not web/lib) so every delete/void path can reach it. No-op
  * for non-invoice documents.
@@ -23,7 +24,11 @@ export async function releaseBillingProvenance(
   const lineIds = lineRes.rows.map((r) => r.id);
   if (lineIds.length > 0) {
     const idArr = `{${lineIds.join(",")}}`;
-    await tx.execute(sql`update time_entries set invoiced_by_line_id = null where org_id = ${orgId} and invoiced_by_line_id = any(${idArr}::uuid[])`);
+    await tx.execute(sql`
+      update time_entries
+         set invoiced_by_line_id = null, billing_status = 'unbilled'
+       where org_id = ${orgId}
+         and invoiced_by_line_id = any(${idArr}::uuid[])`);
     await tx.execute(sql`update document_lines set billed_by_line_id = null where org_id = ${orgId} and billed_by_line_id = any(${idArr}::uuid[])`);
   }
   await tx.execute(sql`

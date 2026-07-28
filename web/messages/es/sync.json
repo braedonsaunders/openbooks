@@ -24,6 +24,7 @@
     "test": "Probar",
     "mirrorNow": "Reflejar ahora",
     "syncAttachments": "Sincronizar archivos adjuntos",
+    "syncProjectFinancials": "Sincronizar finanzas de proyectos",
     "preflight": "Verificar antes de sincronizar",
     "runMigration": "Ejecutar migración",
     "pauseMirror": "Pausar espejo",
@@ -45,6 +46,7 @@
       "incremental": "incremental",
       "attachments": "archivos adjuntos",
       "full_preflight": "Verificación completa",
+      "project_financials": "Finanzas de proyectos",
       "targeted_repair": "Reparación dirigida",
       "mirror": "espejo"
     },
@@ -58,6 +60,7 @@
     },
     "stats": {
       "attachments": "{files} archivos de origen · {links} enlaces de transacción · {created} archivos nuevos",
+      "projectFinancials": "{projects} proyectos de origen ({projectChanges} cambiados) · {source} registros de tiempo de origen · {exact} exactos · {changed} estados de facturación conciliados",
       "docs": "+{new} docs · {amended} modificados · {unchanged} sin cambios",
       "applied": "{count} aplicados",
       "tb": "BC {matches}/{accounts}",
@@ -79,16 +82,19 @@
     "queuingPreflight": "Poniendo en cola la verificación completa de solo lectura…",
     "queuingMirror": "Poniendo en cola el espejo…",
     "queuingAttachments": "Poniendo en cola la sincronización de archivos adjuntos…",
+    "queuingProjectFinancials": "Poniendo en cola la sincronización financiera de proyectos…",
     "migrationQueued": "Migración en cola — se ejecuta en el worker",
     "preflightQueued": "Verificación en cola — no se modificarán la contabilidad ni los documentos",
     "mirrorQueued": "Espejo en cola — se ejecuta en el worker",
     "attachmentsQueued": "Sincronización de archivos adjuntos en cola — se ejecuta en segundo plano",
+    "projectFinancialsQueued": "Sincronización financiera de proyectos en cola — no se cambiarán documentos, libro mayor, archivos ni PDF",
     "runFailed": "No se pudo poner la ejecución en cola (HTTP {status})",
     "runErrors": {
       "CONNECTION_NOT_FOUND": "La conexión ya no existe.",
       "CONNECTION_UNCONFIGURED": "Añada credenciales antes de ejecutar esta conexión.",
       "INVALID_MODE": "Elija una acción de migración válida.",
-      "ATTACHMENTS_UNSUPPORTED": "Esta conexión no admite la migración de archivos adjuntos."
+      "ATTACHMENTS_UNSUPPORTED": "Esta conexión no admite la migración de archivos adjuntos.",
+      "PROJECT_FINANCIALS_UNSUPPORTED": "Esta conexión no ofrece sincronización de entradas financieras de proyectos."
     },
     "testing": "Probando la conexión…",
     "connected": "Conectado",

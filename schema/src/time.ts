@@ -74,6 +74,16 @@ export const timeEntries = pgTable(
     /** The field ticket (documents kind 'field_ticket') this entry belongs to,
      * when hours were captured on a crew ticket rather than a personal week. */
     fieldTicketId: uuid("field_ticket_id"),
+    /**
+     * Commercial billing lifecycle is independent of invoice-line provenance.
+     * Imported systems can prove that time was billed without exposing the
+     * exact invoice line; OpenBooks-native billing also carries the link below.
+     */
+    billingStatus: text("billing_status", {
+      enum: ["unbilled", "billed"],
+    })
+      .notNull()
+      .default("unbilled"),
     invoicedByLineId: uuid("invoiced_by_line_id"),
     payrollBatchRef: text("payroll_batch_ref"),
     /** Keeps the source platform timebill nsId + source flags for the import bridge. */
@@ -84,6 +94,7 @@ export const timeEntries = pgTable(
     index("time_entries_employee_date").on(t.employeePartyId, t.workedOn),
     index("time_entries_project").on(t.projectId, t.isBillable),
     index("time_entries_status").on(t.orgId, t.status),
+    index("time_entries_billing_status").on(t.orgId, t.billingStatus),
   ],
 );
 

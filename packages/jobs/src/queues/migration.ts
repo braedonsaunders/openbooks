@@ -8,6 +8,7 @@ export const MIGRATION_QUEUE = 'migration'
  *   full_migration — master data + entire GL history, verified (the one click).
  *   preflight      — read-only full-population document and ledger comparison.
  *   mirror         — incremental catch-up from the connection's cursor.
+ *   project_financials — full source billing-state reconciliation only.
  *   attachments    — source-file inventory and idempotent object-storage import.
  * The heavy lifting runs on the worker so an 8-year backfill isn't hostage to
  * an HTTP request timeout.
@@ -15,7 +16,7 @@ export const MIGRATION_QUEUE = 'migration'
 export type MigrationJobData = {
   orgId: string
   connectionId: string
-  mode: 'full_migration' | 'preflight' | 'mirror' | 'attachments'
+  mode: 'full_migration' | 'preflight' | 'mirror' | 'project_financials' | 'attachments'
   triggeredBy?: string
 }
 

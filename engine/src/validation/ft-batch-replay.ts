@@ -166,7 +166,7 @@ async function sourceSubtotals(invoices: Inv[]): Promise<Map<string, number>> {
         // Release provenance BEFORE clearing earlier replays: those rows still
         // point at the lines about to be deleted, and the foreign key is what
         // stops a billed row from losing the invoice that billed it.
-        await retry(() => db.execute(sql`update time_entries set invoiced_by_line_id = null where org_id = ${ORG} and project_id = ${pid}`));
+        await retry(() => db.execute(sql`update time_entries set invoiced_by_line_id = null, billing_status = 'unbilled' where org_id = ${ORG} and project_id = ${pid}`));
         await retry(() => db.execute(sql`update document_lines set billed_by_line_id = null where org_id = ${ORG} and project_id = ${pid}`));
 
         // Then clear this invoice's earlier replays. Re-running otherwise piles

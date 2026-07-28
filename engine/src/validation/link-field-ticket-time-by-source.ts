@@ -108,7 +108,8 @@ for (let offset = 0; offset < uniqueLinks.size; offset += BATCH) {
            current_ticket.document_number as current_ticket_number,
            target_ticket.id as target_ticket_id,
            target_ticket.project_id as ticket_project_id,
-           (te.invoiced_by_line_id is not null
+           (te.billing_status = 'billed'
+             or te.invoiced_by_line_id is not null
              or te.cost_journal_entry_id is not null
              or te.overhead_journal_entry_id is not null) as protected_evidence
       from source

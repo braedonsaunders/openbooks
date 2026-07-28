@@ -24,6 +24,7 @@
     "test": "测试",
     "mirrorNow": "立即镜像",
     "syncAttachments": "同步附件",
+    "syncProjectFinancials": "同步项目财务",
     "preflight": "同步前验证",
     "runMigration": "运行迁移",
     "pauseMirror": "暂停镜像",
@@ -45,6 +46,7 @@
       "incremental": "增量",
       "attachments": "附件",
       "full_preflight": "完整预检",
+      "project_financials": "项目财务",
       "targeted_repair": "定向修复",
       "mirror": "镜像"
     },
@@ -58,6 +60,7 @@
     },
     "stats": {
       "attachments": "{files} 个源文件 · {links} 个交易链接 · {created} 个新文件",
+      "projectFinancials": "{projects} 个源项目（{projectChanges} 个变更）· {source} 条源工时记录 · {exact} 条精确 · {changed} 个计费状态已核对",
       "docs": "+{new} 份单据 · {amended} 份修订 · {unchanged} 份未变",
       "applied": "已应用 {count}",
       "tb": "试算平衡 {matches}/{accounts}",
@@ -79,16 +82,19 @@
     "queuingPreflight": "正在排队只读全量验证…",
     "queuingMirror": "正在排队镜像…",
     "queuingAttachments": "正在排队附件同步…",
+    "queuingProjectFinancials": "正在将项目财务同步加入队列…",
     "migrationQueued": "迁移已排队——我们将在后台运行",
     "preflightQueued": "验证已排队——不会更改会计数据或文档",
     "mirrorQueued": "镜像已排队——正在后台运行",
     "attachmentsQueued": "附件同步已排队——正在后台运行",
+    "projectFinancialsQueued": "项目财务同步已加入队列 — 不会更改单据、总账、文件或 PDF",
     "runFailed": "无法将运行加入队列（HTTP {status}）",
     "runErrors": {
       "CONNECTION_NOT_FOUND": "该连接已不存在。",
       "CONNECTION_UNCONFIGURED": "请先添加凭据，再运行此连接。",
       "INVALID_MODE": "请选择有效的迁移操作。",
-      "ATTACHMENTS_UNSUPPORTED": "此连接不支持附件迁移。"
+      "ATTACHMENTS_UNSUPPORTED": "此连接不支持附件迁移。",
+      "PROJECT_FINANCIALS_UNSUPPORTED": "此连接不提供项目财务输入同步。"
     },
     "testing": "正在测试连接…",
     "connected": "已连接",

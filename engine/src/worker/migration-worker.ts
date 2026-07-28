@@ -13,6 +13,7 @@ import {
   runFullMigration,
   runSync,
 } from "../sync/sync.ts";
+import { syncProjectFinancialInputs } from "../sync/project-financial-inputs.ts";
 import {
   AttachmentImportError,
   importNetSuiteAttachments,
@@ -87,6 +88,58 @@ export function createMigrationWorker(): Worker<MigrationJobData> {
       }
 
       const source = buildSource(conn);
+      if (mode === "project_financials") {
+        await db.execute(sql`
+          update sync_runs
+             set status = 'failed', finished_at = now(),
+                 error_message = 'Project-financial sync was interrupted before the worker could finish it.'
+           where org_id = ${orgId} and connection_id = ${connectionId}
+             and kind = 'project_financials' and status = 'running'
+        `);
+        const started = (await db.execute(sql`
+          insert into sync_runs
+            (org_id, connection_id, source, kind, status, triggered_by, progress)
+          values
+            (${orgId}, ${connectionId}, ${conn.source}, 'project_financials',
+             'running', ${triggeredBy ?? "worker"},
+             ${JSON.stringify({
+               phase: "project_financials",
+               message:
+                 "Reconciling complete source time-entry billing state…",
+             })}::jsonb)
+          returning id
+        `)) as unknown as { rows: { id: string }[] };
+        const runId = started.rows[0]!.id;
+        try {
+          const summary = await syncProjectFinancialInputs(source, {
+            orgId,
+            connectionId,
+            runId,
+            actorId: triggeredBy,
+            apply: true,
+          });
+          await db.execute(sql`
+            update sync_runs
+               set status = 'ok', finished_at = now(),
+                   stats = ${JSON.stringify(summary)}::jsonb,
+                   progress = ${JSON.stringify({ phase: "complete" })}::jsonb
+             where id = ${runId}
+          `);
+          return { runId, kind: "project_financials", ...summary };
+        } catch (error) {
+          const message =
+            error instanceof Error ? error.message : String(error);
+          await db.execute(sql`
+            update sync_runs
+               set status = 'failed', finished_at = now(),
+                   error_message = ${message}
+             where id = ${runId}
+          `);
+          throw error;
+        } finally {
+          await source.dispose?.();
+        }
+      }
       if (mode === "preflight") {
         await db.execute(sql`
           update sync_runs

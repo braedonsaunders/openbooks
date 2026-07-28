@@ -131,7 +131,8 @@ export async function unbilledTime(world: SimOrg) {
            sum(t.hours * t.cost_rate)::text as labor_cost,
            bool_or(t.cost_journal_entry_id is null) as has_uncosted
       from time_entries t join projects p on p.id = t.project_id
-     where t.org_id = ${world.orgId} and t.status = 'approved' and t.is_billable and t.invoiced_by_line_id is null
+     where t.org_id = ${world.orgId} and t.status = 'approved' and t.is_billable
+       and t.billing_status = 'unbilled'
      group by p.id, p.name, p.code
      order by p.code`);
 }

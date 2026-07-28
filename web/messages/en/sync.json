@@ -35,6 +35,7 @@
     "test": "Test",
     "mirrorNow": "Mirror now",
     "syncAttachments": "Sync attachments",
+    "syncProjectFinancials": "Sync project financials",
     "preflight": "Verify before sync",
     "runMigration": "Run migration",
     "pauseMirror": "Pause mirror",
@@ -58,6 +59,7 @@
       "incremental": "Incremental",
       "attachments": "Attachments",
       "full_preflight": "Full preflight",
+      "project_financials": "Project financials",
       "targeted_repair": "Targeted repair",
       "mirror": "Mirror"
     },
@@ -71,6 +73,7 @@
     },
     "stats": {
       "attachments": "{files} source files · {links} transaction links · {created} new files",
+      "projectFinancials": "{projects} source projects ({projectChanges} changed) · {source} source time entries · {exact} exact · {changed} billing states reconciled",
       "docs": "+{new} docs · {amended} amended · {unchanged} unchanged",
       "applied": "{count} applied",
       "tb": "TB {matches}/{accounts}",
@@ -92,16 +95,19 @@
     "queuingPreflight": "Queuing read-only full-population verification…",
     "queuingMirror": "Queuing mirror…",
     "queuingAttachments": "Queuing attachment sync…",
+    "queuingProjectFinancials": "Queuing project-financial sync…",
     "migrationQueued": "Migration queued — we'll run it in the background",
     "preflightQueued": "Verification queued — no accounting or documents will be changed",
     "mirrorQueued": "Mirror queued — running in the background",
     "attachmentsQueued": "Attachment sync queued — running in the background",
+    "projectFinancialsQueued": "Project-financial sync queued — documents, GL, files, and PDFs will not be changed",
     "runFailed": "Could not queue the run (HTTP {status})",
     "runErrors": {
       "CONNECTION_NOT_FOUND": "The connection no longer exists.",
       "CONNECTION_UNCONFIGURED": "Add credentials before running this connection.",
       "INVALID_MODE": "Choose a valid migration action.",
       "ATTACHMENTS_UNSUPPORTED": "This connection does not support attachment migration.",
+      "PROJECT_FINANCIALS_UNSUPPORTED": "This connection does not expose project-financial input synchronization.",
       "RUN_ALREADY_ACTIVE": "A run of this type is already active for this connection."
     },
     "testing": "Testing connection…",

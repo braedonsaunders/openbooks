@@ -102,6 +102,37 @@ export interface SourceLedgerContext {
   bookKind: string;
 }
 
+/**
+ * Source-native billing disposition for a time entry. `billed` means the work
+ * has been commercially consumed by billing; it does not assert that the
+ * source exposes a one-to-one invoice line (fixed-price/progress billing often
+ * does not).
+ */
+export interface SourceTimeEntryBillingState {
+  sourceRef: string;
+  billingStatus: "unbilled" | "billed";
+  sourceStatus?: string | null;
+}
+
+export interface SourceProjectCommercialState {
+  sourceRef: string;
+  /** Connector-normalized project-type key when the source exposes one. */
+  billingMethod:
+    | "time_and_materials"
+    | "fixed_price"
+    | "cost_plus"
+    | null;
+  /** Source contract/ceiling amount; null means the source has no such fact. */
+  contractValue: string | null;
+}
+
+/** Complete source population needed to rematerialize project financial state
+ * without touching accounting documents, files, or rendered evidence. */
+export interface SourceProjectFinancialInputs {
+  timeEntryBillingStates: SourceTimeEntryBillingState[];
+  projects: SourceProjectCommercialState[];
+}
+
 // --- The adapter -----------------------------------------------------------------
 
 export interface MigrationSource {
@@ -174,6 +205,13 @@ export interface MigrationSource {
    * bucket. When present, the sync engine treats this as a mandatory gate.
    */
   projectMonthlyActivity?(): Promise<SourceProjectAccountMonthRow[]>;
+
+  /**
+   * Optional complete commercial-state snapshot for project financials.
+   * Connectors implement this when source billing disposition cannot be
+   * reconstructed from migrated invoice-line links alone.
+   */
+  projectFinancialInputs?(): Promise<SourceProjectFinancialInputs>;
 
   /** Live per-document unpaid balances (AR/AP aging verification). */
   openItems?(): Promise<SourceOpenItem[]>;

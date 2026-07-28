@@ -11,6 +11,7 @@ import type {
   SourceEntity,
   SourceOpenItem,
   SourceProjectAccountMonthRow,
+  SourceProjectFinancialInputs,
   SourceLedgerContext,
   SourceTrialBalanceRow,
 } from "./source.ts";
@@ -243,6 +244,32 @@ const isoDate = (v: unknown): string | null => {
   const [m, d, y] = t.split("/");
   return m && d && y ? `${y}-${m.padStart(2, "0")}-${d.padStart(2, "0")}` : t;
 };
+
+/** Normalize the source's commercial billing fact independently of any local
+ * invoice-line link. NetSuite's `billed` flag is authoritative; its status
+ * label is retained only as audit/provenance evidence. */
+export function normalizeNetSuiteTimeEntry(
+  tb: Record<string, unknown>,
+): SourceEntity {
+  return {
+    sourceRef: String(tb.id),
+    fields: {
+      employeeRef: s(tb.employee),
+      projectRef: s(tb.customer),
+      itemRef: s(tb.item),
+      departmentRef: s(tb.department),
+      timeTypeRef: s(tb.timetype),
+      fieldTicketNumber: s(tb.fieldticketnumber),
+      workedOn: isoDate(tb.trandate),
+      hours: s(tb.hours) ?? "0",
+      costRate: s(tb.laborcost),
+      billRate: s(tb.rate),
+      isBillable: isT(tb.isbillable),
+      billingStatus: isT(tb.billed) ? "billed" : "unbilled",
+      sourceBillingStatus: s(tb.billingstatus),
+    },
+  };
+}
 const HEADER_COLS = `t.id, t.type AS ttype, t.tranid, TO_CHAR(t.trandate, 'MM/DD/YYYY') AS trandate,
   TO_CHAR(t.duedate, 'MM/DD/YYYY') AS duedate, t.entity, t.currency, t.memo, t.status,
   t.otherrefnum, t.posting`;
@@ -520,6 +547,34 @@ export class NetSuiteSource implements MigrationSource {
         FROM accountingperiod
        ORDER BY startdate, enddate, id`);
     return normalizeNetSuiteAccountingPeriods(rows);
+  }
+
+  async projectFinancialInputs(): Promise<SourceProjectFinancialInputs> {
+    const [entries, projects] = await Promise.all([
+      this.timeEntries(null),
+      this.projects(null),
+    ]);
+    return {
+      timeEntryBillingStates: entries.map((entry) => ({
+        sourceRef: entry.sourceRef,
+        billingStatus:
+          entry.fields.billingStatus === "billed" ? "billed" : "unbilled",
+        sourceStatus: s(entry.fields.sourceBillingStatus),
+      })),
+      projects: projects.map((project) => ({
+        sourceRef: project.sourceRef,
+        billingMethod:
+          project.fields.billingMethod === "time_and_materials" ||
+          project.fields.billingMethod === "fixed_price" ||
+          project.fields.billingMethod === "cost_plus"
+            ? project.fields.billingMethod
+            : null,
+        contractValue:
+          typeof project.fields.contractValue === "string"
+            ? project.fields.contractValue
+            : null,
+      })),
+    };
   }
 
   private async subsidiaries(): Promise<SourceEntity[]> {
@@ -891,7 +946,8 @@ export class NetSuiteSource implements MigrationSource {
         id: `time-${String(index).padStart(4, "0")}`,
         sql: `
         SELECT tb.id, tb.employee, tb.customer, tb.department, tb.item, tb.hours,
-               tb.rate, tb.laborcost, tb.isbillable,
+               tb.rate, tb.laborcost, tb.isbillable, tb.billed,
+               tb.status AS billingstatus,
                ${timeType},
                ${fieldTicketNumber},
                TO_CHAR(tb.trandate, 'MM/DD/YYYY') AS trandate
@@ -906,16 +962,7 @@ export class NetSuiteSource implements MigrationSource {
       const exported = await this.bridge.bulkQuery<Record<string, string>>(partitions);
       for (const partition of partitions) rows.push(...(exported.get(partition.id) ?? []));
     }
-    return rows.map((tb) => ({
-      sourceRef: String(tb.id),
-      fields: {
-        employeeRef: s(tb.employee), projectRef: s(tb.customer), itemRef: s(tb.item),
-        departmentRef: s(tb.department), timeTypeRef: s(tb.timetype),
-        fieldTicketNumber: s(tb.fieldticketnumber),
-        workedOn: isoDate(tb.trandate), hours: s(tb.hours) ?? "0",
-        costRate: s(tb.laborcost), billRate: s(tb.rate), isBillable: isT(tb.isbillable),
-      },
-    }));
+    return rows.map(normalizeNetSuiteTimeEntry);
   }
 
   private projectStatus(row: Record<string, string>): string {

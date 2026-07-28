@@ -16,7 +16,7 @@
  * Optional:
  *   --refresh-source
  *   --refresh-project-gl-source
- *   --source-accounting-book=<NetSuite accounting book id>
+ *   --source-accounting-book=<source accounting book id>
  *   --source-projects=/path/projects.json
  *   --source-invoices=/path/invoices.json
  *   --source-invoice-lines=/path/invoice-lines.json
@@ -33,6 +33,8 @@ import { sql } from "drizzle-orm";
 import { db, withOrgContext } from "../db.ts";
 import { fromUnits, normalizeDecimal, toUnits } from "../money.ts";
 import { sourceClient } from "../sync/source-client.ts";
+import { resolveProjectFinancials } from "../../../web/lib/project-financials.ts";
+import { loadProjectType } from "../../../web/lib/project-type.ts";
 
 type JsonRow = Record<string, unknown>;
 
@@ -55,6 +57,8 @@ interface Difference {
   field: string;
   source: string | null;
   target: string | null;
+  /** Read-only diagnostic evidence. Never participates in pass/fail. */
+  evidence?: Record<string, string | number | null>;
 }
 
 const args = new Map(
@@ -198,7 +202,7 @@ async function retry<T>(fn: () => Promise<T>, attempts = 7): Promise<T> {
 async function refreshProjectGlSource(
   client = sourceClient(),
 ): Promise<string> {
-  // transactionline.netamount is not the posted amount for every NetSuite
+  // transactionline.netamount is not the posted amount for every source
   // special item. For example, a posting Markup line can carry foreignamount
   // while netamount is zero; transactionaccountingline is the authoritative
   // book impact. Never infer the ledger from the commercial line projection.
@@ -225,14 +229,14 @@ async function refreshProjectGlSource(
     requestedSourceAccountingBook ?? (books.length === 1 ? books[0]! : null);
   if (!sourceAccountingBook) {
     throw new Error(
-      `NetSuite project GL contains ${books.length} accounting books (${books.join(
+      `source project GL contains ${books.length} accounting books (${books.join(
         ", ",
       )}); pass --source-accounting-book=<id> explicitly`,
     );
   }
   if (!books.includes(sourceAccountingBook)) {
     throw new Error(
-      `NetSuite accounting book ${sourceAccountingBook} is absent; available books: ${books.join(
+      `source accounting book ${sourceAccountingBook} is absent; available books: ${books.join(
         ", ",
       )}`,
     );
@@ -774,28 +778,103 @@ if (!legacyTickets) {
 
 const sourceProjectCount = sourceProjects?.length ?? null;
 const legacyFinancialCount = legacyProjectFinancials?.length ?? null;
-gates.legacyProjectFinancialMeasures =
-  legacyProjectFinancials && sourceProjectCount !== null
-    ? {
-        status:
-          legacyFinancialCount === sourceProjectCount ? "different" : "unproven",
-        sourceCount: legacyFinancialCount,
-        targetCount: target.projects.length,
-        exactCount: null,
-        mismatchCount: null,
-        detail:
-          legacyFinancialCount === sourceProjectCount
-            ? "Full-population source loaded; measure comparison implementation is required"
-            : `Source financial measures cover ${legacyFinancialCount}/${sourceProjectCount} projects`,
-      }
-    : {
-        status: "unproven",
-        sourceCount: legacyFinancialCount,
-        targetCount: target.projects.length,
-        exactCount: null,
-        mismatchCount: null,
-        detail: `missing complete legacy project financial export (${paths.legacyProjectFinancials})`,
-      };
+if (legacyProjectFinancials && sourceProjectCount !== null) {
+  const availableFinancialCount = legacyProjectFinancials.length;
+  const targetBySourceProject = new Map(
+    target.projects
+      .filter((row) => row.source_id)
+      .map((row) => [String(row.source_id), row]),
+  );
+  let exactProjects = 0;
+  for (const source of legacyProjectFinancials) {
+    const sourceRef = String(source.job ?? "");
+    const project = targetBySourceProject.get(sourceRef);
+    if (!project) {
+      differences.push({
+        layer: "legacy_project_financial",
+        sourceRef,
+        field: "project_presence",
+        source: "present",
+        target: null,
+      });
+      continue;
+    }
+    const projectType = await loadProjectType(orgId, String(project.id));
+    const financials = await resolveProjectFinancials(
+      orgId,
+      String(project.id),
+      projectType.financialProfile,
+    );
+    const sourceCost = canonicalMoney(source.cost);
+    const sourcePrice = canonicalMoney(source.price);
+    const sourceInvoiced = canonicalMoney(source.invoiced);
+    const sourceGrossProfit = fromUnits(
+      toUnits(sourcePrice) - toUnits(sourceCost),
+    );
+    const evidence = {
+      projectType: projectType.key,
+      actualCost: canonicalMoney(financials.measures.actual_cost),
+      committedCost: canonicalMoney(financials.measures.committed_cost),
+      overhead: canonicalMoney(financials.measures.overhead),
+      invoicedToDate: canonicalMoney(financials.measures.invoiced_to_date),
+      unbilledBillable: canonicalMoney(financials.measures.unbilled_billable),
+      billableValue: canonicalMoney(financials.measures.billable_value),
+      contractValue: canonicalMoney(financials.contractValue),
+    };
+    let exact = true;
+    for (const [field, sourceValue, targetValue] of [
+      ["total_cost", sourceCost, canonicalMoney(financials.measures.total_cost)],
+      ["total_price", sourcePrice, canonicalMoney(financials.measures.total_price)],
+      [
+        "invoiced_to_date",
+        sourceInvoiced,
+        canonicalMoney(financials.measures.invoiced_to_date),
+      ],
+      [
+        "gross_profit",
+        sourceGrossProfit,
+        canonicalMoney(financials.measures.gross_profit),
+      ],
+    ] as const) {
+      if (moneyEqual(sourceValue, targetValue)) continue;
+      exact = false;
+      differences.push({
+        layer: "legacy_project_financial",
+        sourceRef,
+        field,
+        source: sourceValue,
+        target: targetValue,
+        evidence,
+      });
+    }
+    if (exact) exactProjects++;
+  }
+  const availableMismatches = availableFinancialCount - exactProjects;
+  const completePopulation = availableFinancialCount === sourceProjectCount;
+  gates.legacyProjectFinancialMeasures = {
+    status:
+      availableMismatches > 0
+        ? "different"
+        : completePopulation
+          ? "exact"
+          : "unproven",
+    sourceCount: availableFinancialCount,
+    targetCount: target.projects.length,
+    exactCount: exactProjects,
+    mismatchCount: availableMismatches,
+    detail:
+      `Compared source TotalJobCost, TotalJobPrice, InvoicedToDate, and derived gross margin for every available row; source export covers ${availableFinancialCount}/${sourceProjectCount} projects`,
+  };
+} else {
+  gates.legacyProjectFinancialMeasures = {
+    status: "unproven",
+    sourceCount: legacyFinancialCount,
+    targetCount: target.projects.length,
+    exactCount: null,
+    mismatchCount: null,
+    detail: `missing complete legacy project financial export (${paths.legacyProjectFinancials})`,
+  };
+}
 
 if (!sourceInvoiceLines) {
   gates.invoiceLines = {

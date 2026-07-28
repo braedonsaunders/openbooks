@@ -24,6 +24,7 @@
     "test": "Testen",
     "mirrorNow": "Jetzt spiegeln",
     "syncAttachments": "Anhänge synchronisieren",
+    "syncProjectFinancials": "Projektfinanzen synchronisieren",
     "preflight": "Vor Synchronisierung prüfen",
     "runMigration": "Migration ausführen",
     "pauseMirror": "Spiegelung pausieren",
@@ -45,6 +46,7 @@
       "incremental": "Inkrementell",
       "attachments": "Anhänge",
       "full_preflight": "Vollständige Vorprüfung",
+      "project_financials": "Projektfinanzen",
       "targeted_repair": "Gezielte Reparatur",
       "mirror": "Spiegelung"
     },
@@ -58,6 +60,7 @@
     },
     "stats": {
       "attachments": "{files} Quelldateien · {links} Transaktionsverknüpfungen · {created} neue Dateien",
+      "projectFinancials": "{projects} Quellprojekte ({projectChanges} geändert) · {source} Quellzeiteinträge · {exact} exakt · {changed} Abrechnungsstatus abgeglichen",
       "docs": "+{new} Dok. · {amended} geändert · {unchanged} unverändert",
       "applied": "{count} angewendet",
       "tb": "SB {matches}/{accounts}",
@@ -79,16 +82,19 @@
     "queuingPreflight": "Schreibgeschützte Gesamtprüfung wird eingereiht…",
     "queuingMirror": "Spiegelung wird eingereiht…",
     "queuingAttachments": "Anhangssynchronisierung wird eingereiht…",
+    "queuingProjectFinancials": "Projektfinanz-Synchronisierung wird eingereiht…",
     "migrationQueued": "Migration eingereiht — wir führen sie im Hintergrund aus",
     "preflightQueued": "Prüfung eingereiht — Buchhaltung und Dokumente werden nicht geändert",
     "mirrorQueued": "Spiegelung eingereiht — läuft im Hintergrund",
     "attachmentsQueued": "Anhangssynchronisierung eingereiht — läuft im Hintergrund",
+    "projectFinancialsQueued": "Projektfinanz-Synchronisierung eingereiht — Belege, Hauptbuch, Dateien und PDFs bleiben unverändert",
     "runFailed": "Der Lauf konnte nicht eingereiht werden (HTTP {status})",
     "runErrors": {
       "CONNECTION_NOT_FOUND": "Die Verbindung ist nicht mehr vorhanden.",
       "CONNECTION_UNCONFIGURED": "Fügen Sie Anmeldedaten hinzu, bevor Sie diese Verbindung ausführen.",
       "INVALID_MODE": "Wählen Sie eine gültige Migrationsaktion.",
-      "ATTACHMENTS_UNSUPPORTED": "Diese Verbindung unterstützt keine Anhangsmigration."
+      "ATTACHMENTS_UNSUPPORTED": "Diese Verbindung unterstützt keine Anhangsmigration.",
+      "PROJECT_FINANCIALS_UNSUPPORTED": "Diese Verbindung unterstützt keine Synchronisierung der Projektfinanz-Eingaben."
     },
     "testing": "Verbindung wird getestet…",
     "connected": "Verbunden",
