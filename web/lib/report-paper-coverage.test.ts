@@ -88,6 +88,7 @@ test('every collapsible report exposes shared expand-all and collapse-all contro
   assert.match(filterBar, /controls\.sections/)
   assert.match(filterBar, /setAllReportSections\('expand'\)/)
   assert.match(filterBar, /setAllReportSections\('collapse'\)/)
+  assert.match(filterBar, /onOpenChange=\{setOptionsOpen\}[\s\S]*align="end"/)
 
   const statement = source('app/(app)/reports/StatementMatrixTable.tsx')
   assert.match(statement, /REPORT_SECTION_VISIBILITY_EVENT/)

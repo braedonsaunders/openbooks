@@ -292,7 +292,7 @@ export function ReportFilterBar({
         <Popover
           open={optionsOpen}
           onOpenChange={setOptionsOpen}
-          align="start"
+          align="end"
           trigger={
             <button
               type="button"
