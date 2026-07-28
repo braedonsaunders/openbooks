@@ -143,6 +143,18 @@ export function drawTable(
     if (y + rowHeight > page.contentBottom) {
       doc.addPage()
       y = page.contentTop
+      // Section tables can span several pages. Repeat the section identity
+      // before the column header so a detached/printed continuation page is
+      // still self-describing (particularly important for account-grouped
+      // General Ledger exports).
+      if (group.kind === 'section') {
+        doc.font(theme.fontBold).fontSize(theme.h2).fillColor(theme.primary)
+        doc.text(group.title, page.contentLeft, y, {
+          width: page.contentWidth,
+          lineBreak: true,
+        })
+        y = doc.y + 3
+      }
       y = drawHeader(y)
     }
     const rowTop = y

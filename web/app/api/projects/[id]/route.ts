@@ -11,7 +11,6 @@ import { guardProjectsFeature } from '../../../../lib/projects-gate'
 export const runtime = 'nodejs'
 
 const STATUSES = ['quoted', 'awarded', 'active', 'substantially_complete', 'closed', 'cancelled'] as const
-const TASK_STATUSES = ['open', 'complete', 'cancelled'] as const
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/
 
 function bad(error: string, fieldErrors?: Record<string, string>) {
@@ -42,15 +41,6 @@ function moneyOrNull(v: unknown): string | null | 'invalid' {
   }
 }
 
-interface TaskInput {
-  id?: string | null
-  code?: string | null
-  name?: string
-  status?: string
-  estimatedHours?: string | null
-  estimatedCost?: string | null
-}
-
 interface PatchBody {
   name?: string
   code?: string | null
@@ -69,7 +59,7 @@ interface PatchBody {
   subsidiaryId?: string | null
   subsidiaryIncludeChildren?: boolean
   isActive?: boolean
-  tasks?: TaskInput[]
+  tasks?: unknown
 }
 
 async function partyExists(id: string, orgId: string): Promise<boolean> {
@@ -93,10 +83,10 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
 
 /**
  * Autosave for the project flyout: header fields, the party links, the contract
- * value, the WBS task list (replace semantics — rows not
- * present are deleted, provided rows are inserted/updated), and the explicit
- * activate/deactivate action. Only provided fields are touched; a real name is
- * required to activate.
+ * value, and the explicit activate/deactivate action. WBS tasks have their own
+ * task-scoped, audited and concurrency-controlled endpoints; accepting them
+ * here would create a second mutation path with unsafe replace semantics.
+ * Only provided fields are touched; a real name is required to activate.
  */
 export async function PATCH(req: Request, { params }: { params: Promise<{ id: string }> }) {
   const gate = await guardPermission('projects.manage')
@@ -113,6 +103,9 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
   if (!existing.rows[0]) return NextResponse.json({ error: 'not found' }, { status: 404 })
 
   const body = (await req.json()) as PatchBody
+  if (body.tasks !== undefined) {
+    return bad('Work breakdown tasks must be changed through the project task endpoint')
+  }
 
   // -- enums ---------------------------------------------------------------
   if (body.status !== undefined && !STATUSES.includes(body.status as (typeof STATUSES)[number])) {
@@ -201,32 +194,6 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
   const contractValue = body.contractValue === undefined ? undefined : moneyOrNull(body.contractValue)
   if (contractValue === 'invalid') return bad('Contract value must be a number')
 
-  // -- validate tasks up front (before we touch anything) ------------------
-  let tasks: { id: string | null; code: string | null; name: string; status: string; estimatedHours: string | null; estimatedCost: string | null }[] | undefined
-  if (body.tasks !== undefined) {
-    if (!Array.isArray(body.tasks)) return bad('Tasks must be a list')
-    tasks = []
-    for (const t of body.tasks) {
-      const tName = typeof t.name === 'string' ? t.name.trim() : ''
-      if (!tName) continue // skip blank rows silently
-      const tStatus =
-        t.status && TASK_STATUSES.includes(t.status as (typeof TASK_STATUSES)[number]) ? t.status : 'open'
-      const eh = moneyOrNull(t.estimatedHours)
-      if (eh === 'invalid') return bad('Estimated hours must be a number')
-      const ec = moneyOrNull(t.estimatedCost)
-      if (ec === 'invalid') return bad('Estimated cost must be a number')
-      const tid = t.id != null && isUuid(String(t.id)) ? String(t.id) : null
-      tasks.push({
-        id: tid,
-        code: strOrNull(t.code),
-        name: tName,
-        status: tStatus,
-        estimatedHours: eh,
-        estimatedCost: ec,
-      })
-    }
-  }
-
   // Project type governs the billing classifier (its own billing_method column);
   // the project only stores the type reference.
   let projectTypeId: string | null | undefined
@@ -262,43 +229,6 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
       updated_at = now(), updated_by = ${user.id}
     where id = ${id}
   `)
-
-  // -- WBS tasks: replace-in-place -----------------------------------------
-  if (tasks !== undefined) {
-    const keepIds = tasks.map((t) => t.id).filter((v): v is string => v !== null)
-    // delete rows the client dropped
-    if (keepIds.length > 0) {
-      await db.execute(sql`
-        delete from project_tasks
-         where project_id = ${id} and org_id = ${user.orgId}
-           and id not in (${sql.join(keepIds.map((k) => sql`${k}`), sql`, `)})
-      `)
-    } else {
-      await db.execute(sql`delete from project_tasks where project_id = ${id} and org_id = ${user.orgId}`)
-    }
-    // upsert provided rows
-    for (const t of tasks) {
-      if (t.id) {
-        await db.execute(sql`
-          update project_tasks set
-            code = ${t.code},
-            name = ${t.name},
-            status = ${t.status},
-            estimated_hours = ${t.estimatedHours},
-            estimated_cost = ${t.estimatedCost},
-            updated_at = now(), updated_by = ${user.id}
-          where id = ${t.id} and project_id = ${id} and org_id = ${user.orgId}
-        `)
-      } else {
-        await db.execute(sql`
-          insert into project_tasks
-            (org_id, project_id, code, name, status, estimated_hours, estimated_cost, created_by, updated_by)
-          values
-            (${user.orgId}, ${id}, ${t.code}, ${t.name}, ${t.status}, ${t.estimatedHours}, ${t.estimatedCost}, ${user.id}, ${user.id})
-        `)
-      }
-    }
-  }
 
   const payload = await loadProject(id, user.orgId)
   return NextResponse.json(payload)

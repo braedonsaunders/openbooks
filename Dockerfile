@@ -46,8 +46,20 @@ RUN npx esbuild engine/src/worker/index.ts \
 # --- runtime ------------------------------------------------------------------
 FROM node:24-bookworm-slim AS runtime
 WORKDIR /app
+# HTML-authored reports and forms are printed by the shared Chromium renderer.
+# Ship the renderer and deterministic multilingual fonts in the production
+# image so PDF availability and typography never depend on the host machine.
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends \
+      chromium \
+      fonts-liberation \
+      fonts-noto-core \
+      fonts-noto-cjk \
+      fonts-noto-color-emoji \
+    && rm -rf /var/lib/apt/lists/*
 ENV NODE_ENV=production \
     NEXT_TELEMETRY_DISABLED=1 \
+    PUPPETEER_EXECUTABLE_PATH=/usr/bin/chromium \
     HOSTNAME=0.0.0.0 \
     PORT=3000
 

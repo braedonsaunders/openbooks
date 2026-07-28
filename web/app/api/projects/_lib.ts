@@ -16,6 +16,7 @@ export interface ProjectTaskRow {
   status: string
   estimated_hours: string | null
   estimated_cost: string | null
+  updated_at: string
 }
 
 /** Client-safe custom field definition (drops server-only bits). */
@@ -56,7 +57,7 @@ export async function loadProject(id: string, orgId: string): Promise<ProjectPay
         ? db.execute(sql`select display_name from parties where id = ${row.manager_id} and org_id = ${orgId}`)
         : Promise.resolve({ rows: [] }),
       db.execute(sql`
-        select id, code, name, status, estimated_hours, estimated_cost
+        select id, code, name, status, estimated_hours, estimated_cost, updated_at
           from project_tasks
          where project_id = ${id} and org_id = ${orgId}
          order by code nulls last, name

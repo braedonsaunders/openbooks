@@ -1,0 +1,60 @@
+import { NextResponse } from 'next/server'
+import { guardPermission } from '../../../../../lib/authz'
+import { isUuid } from '../../../../../lib/list-params'
+import { guardProjectsFeature } from '../../../../../lib/projects-gate'
+import {
+  createWorkBreakdownTask,
+  loadWorkBreakdownTasks,
+} from '../../../../../lib/project-work-breakdown'
+import {
+  parseWorkBreakdownTaskInput,
+  ProjectWorkBreakdownError,
+} from '../../../../../lib/project-work-breakdown-validation'
+
+export const runtime = 'nodejs'
+
+function errorResponse(error: unknown) {
+  if (error instanceof ProjectWorkBreakdownError) {
+    return NextResponse.json({ error: error.message }, { status: error.status })
+  }
+  throw error
+}
+
+export async function GET(_request: Request, { params }: { params: Promise<{ id: string }> }) {
+  const gate = await guardPermission('projects.read')
+  if (gate instanceof NextResponse) return gate
+  const feature = await guardProjectsFeature(gate.user.orgId)
+  if (feature) return feature
+  const { id } = await params
+  if (!isUuid(id)) return NextResponse.json({ error: 'not found' }, { status: 404 })
+
+  try {
+    return NextResponse.json({ tasks: await loadWorkBreakdownTasks(gate.user.orgId, id) })
+  } catch (error) {
+    return errorResponse(error)
+  }
+}
+
+export async function POST(request: Request, { params }: { params: Promise<{ id: string }> }) {
+  const gate = await guardPermission('projects.manage')
+  if (gate instanceof NextResponse) return gate
+  const feature = await guardProjectsFeature(gate.user.orgId)
+  if (feature) return feature
+  const { id } = await params
+  if (!isUuid(id)) return NextResponse.json({ error: 'not found' }, { status: 404 })
+
+  try {
+    const body = await request.json().catch(() => {
+      throw new ProjectWorkBreakdownError('Task details must be valid JSON')
+    })
+    const task = await createWorkBreakdownTask({
+      orgId: gate.user.orgId,
+      projectId: id,
+      actorId: gate.user.id,
+      input: parseWorkBreakdownTaskInput(body),
+    })
+    return NextResponse.json({ task }, { status: 201 })
+  } catch (error) {
+    return errorResponse(error)
+  }
+}

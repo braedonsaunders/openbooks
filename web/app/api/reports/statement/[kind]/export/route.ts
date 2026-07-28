@@ -20,6 +20,7 @@ import { parseReportQuery } from '../../../../../../lib/report-filters'
 import { reportCsvOptions } from '../../../../../../lib/report-labels'
 import { csvResponse, pdfResponse, safeName, xlsxResponse } from '../../../../../../lib/export'
 import { guardProjectsFeature } from '../../../../../../lib/projects-gate'
+import { renderGeneralLedgerPaperPdf } from '../../../../../../lib/general-ledger-pdf'
 
 export const runtime = 'nodejs'
 
@@ -81,6 +82,14 @@ export async function GET(req: Request, { params }: { params: Promise<{ kind: st
         )
       }
       return emitData(statementViewToExportData(view, { title, dateRangeLabel: periodPhrase, accountLabel: t('export.columns.accountName') }))
+    }
+
+    if (format === 'pdf' && kind === 'general-ledger') {
+      const { page } = resolveLayout(null)
+      return pdfResponse(
+        await renderGeneralLedgerPaperPdf(resolved.data, branding, page),
+        filename,
+      )
     }
 
     return emitData(resolved.data)
