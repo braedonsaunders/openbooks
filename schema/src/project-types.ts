@@ -1,4 +1,16 @@
-import { pgTable, text, integer, boolean, jsonb, uniqueIndex } from "drizzle-orm/pg-core";
+import {
+  pgTable,
+  text,
+  integer,
+  boolean,
+  jsonb,
+  date,
+  index,
+  uuid,
+  uniqueIndex,
+  check,
+} from "drizzle-orm/pg-core";
+import { sql } from "drizzle-orm";
 import { id, orgRef, auditColumns } from "./helpers";
 
 /**
@@ -301,6 +313,54 @@ export const projectTypes = pgTable(
     ...auditColumns,
   },
   (t) => [uniqueIndex("project_types_org_key").on(t.orgId, t.key)],
+);
+
+/**
+ * Effective-dated financial-policy history. This table is authoritative for
+ * project profitability calculations; `project_types.financial_profile`
+ * remains only as a backward-compatible seed value for pre-version tenants.
+ * Published profiles are append-only. A new version closes the prior range.
+ */
+export const projectFinancialProfileVersions = pgTable(
+  "project_financial_profile_versions",
+  {
+    id: id(),
+    orgId: orgRef(),
+    projectTypeId: uuid("project_type_id")
+      .notNull()
+      .references(() => projectTypes.id),
+    effectiveFrom: date("effective_from").notNull(),
+    effectiveTo: date("effective_to"),
+    financialProfile: jsonb("financial_profile")
+      .$type<FinancialProfile>()
+      .notNull(),
+    reason: text("reason").notNull(),
+    ...auditColumns,
+  },
+  (t) => [
+    uniqueIndex("project_financial_profile_versions_identity").on(
+      t.projectTypeId,
+      t.effectiveFrom,
+    ),
+    index("project_financial_profile_versions_effective").on(
+      t.orgId,
+      t.projectTypeId,
+      t.effectiveFrom,
+      t.effectiveTo,
+    ),
+    check(
+      "project_financial_profile_versions_dates",
+      sql`${t.effectiveTo} is null or ${t.effectiveTo} >= ${t.effectiveFrom}`,
+    ),
+    check(
+      "project_financial_profile_versions_profile_object",
+      sql`jsonb_typeof(${t.financialProfile}) = 'object'`,
+    ),
+    check(
+      "project_financial_profile_versions_reason",
+      sql`length(btrim(${t.reason})) >= 8`,
+    ),
+  ],
 );
 
 /* ------------------------------------------------------------------ */

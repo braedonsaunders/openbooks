@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict'
+import { readFileSync } from 'node:fs'
 import test from 'node:test'
 import { BUILTIN_PROJECT_TYPES } from '@openbooks/schema'
 
@@ -15,4 +16,38 @@ test('schedule-of-values billing is a fixed-price project procedure', () => {
   assert.equal(type.billingMethod, 'fixed_price')
   assert.equal(type.invoicingProfile.billingProcedure, 'application_for_payment')
   assert.deepEqual(type.invoicingProfile.allowedBases, ['draw_amount'])
+})
+
+test('fixed-price time is cost evidence unless an explicit work basis bills it', () => {
+  const type = BUILTIN_PROJECT_TYPES.find((candidate) => candidate.key === 'fixed_price')
+  if (!type) throw new Error('fixed_price built-in is missing')
+  assert.equal(type.financialProfile.totalPrice.method, 'contract_field')
+  assert.equal(type.invoicingProfile.defaultBasis, 'milestone')
+  assert.equal(type.invoicingProfile.lineBuilder, 'milestone')
+
+  const billing = readFileSync('web/lib/billing.ts', 'utf8')
+  assert.match(
+    billing,
+    /const billsActualWork = req\.basis === 'field_ticket' \|\| req\.basis === 'time_selection' \|\| req\.basis === 'date_range'/,
+  )
+  assert.match(
+    billing,
+    /invoicing\.lineBuilder === 'milestone' && !billsActualWork/,
+  )
+})
+
+test('project financial policy is effective-dated, immutable, and tenant isolated', () => {
+  const migration = readFileSync(
+    'schema/migrations/generated/0079_project_financial_profile_versions.sql',
+    'utf8',
+  )
+  assert.match(migration, /project financial profile effective ranges cannot overlap/)
+  assert.match(migration, /published project financial profile versions are immutable/)
+  assert.match(migration, /project_types\.financial_profile is a seed value/)
+  assert.match(migration, /FORCE ROW LEVEL SECURITY/)
+  assert.match(migration, /CREATE POLICY org_isolation ON project_financial_profile_versions/)
+
+  const resolver = readFileSync('web/lib/project-type.ts', 'utf8')
+  assert.match(resolver, /v\.effective_from <= \$\{asOf\}/)
+  assert.match(resolver, /v\.effective_to is null or v\.effective_to >= \$\{asOf\}/)
 })

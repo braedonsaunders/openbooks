@@ -8,6 +8,13 @@
   "billingMethod": "Abrechnungsmethode",
   "sortOrder": "Sortierreihenfolge",
   "saved": "Projekttyp gespeichert",
+  "financialPolicyEffective": "Aktuelle Finanzrichtlinie gültig ab: {date}",
+  "financialEffectiveFrom": "Neue Richtlinie gültig ab",
+  "financialChangeReason": "Änderungsgrund",
+  "financialChangeReasonPlaceholder": "Änderung der Bilanzierungsrichtlinie beschreiben",
+  "financialChangeReasonRequired": "Geben Sie einen aussagekräftigen Grund für die Änderung der Finanzrichtlinie ein",
+  "financialVersionNotice": "Beim Speichern wird eine neue zeitlich gültige Richtlinie veröffentlicht. Frühere Perioden behalten ihre ursprüngliche Richtlinie.",
+  "legacySeed": "übernommener Ausgangswert",
   "deleteConfirm": "„{name}“ löschen oder archivieren?",
   "tabs": {
     "general": "Allgemein",

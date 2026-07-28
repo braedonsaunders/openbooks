@@ -93,7 +93,13 @@ export function OverheadActions({ departments, projectTypes, autoOpen }: { depar
         approach === 'percent' ? { method: 'percent_of_labor', ratePercent: Number(flatRate) || 0 }
         : approach === 'per_hour' ? { method: 'per_labor_hour', ratePerHour: Number(flatRate) || 0 }
         : { method: 'rate_engine', rateEngine: { rateSource: 'standard', hoursBasis: 'total_hours', dimension: 'overhead', scope: 'department' } }
-      await post({ action: 'apply', projectTypeIds: [...typeIds], overhead })
+      await post({
+        action: 'apply',
+        projectTypeIds: [...typeIds],
+        overhead,
+        effectiveFrom,
+        reason: 'Configured overhead policy through the overhead setup wizard',
+      })
       toast.success(t('wizardDone'))
       setOpen(null)
       setStep(0)

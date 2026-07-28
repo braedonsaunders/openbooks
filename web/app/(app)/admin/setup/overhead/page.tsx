@@ -50,9 +50,21 @@ export default async function OverheadModelSetup({
   const iso = (d: Date) => d.toISOString().slice(0, 10)
   const data = await trueCostData(authz.user.orgId, { from: iso(from), to: iso(to), label: 'TTM' })
   const typesRes = (await db.execute(sql`
-    select id, name, financial_profile->'overhead' as overhead
-      from project_types where org_id = ${authz.user.orgId} and is_active
-     order by sort_order, name`)) as unknown as {
+    select pt.id, pt.name,
+           coalesce(version.financial_profile, pt.financial_profile)->'overhead' as overhead
+      from project_types pt
+      left join lateral (
+        select v.financial_profile
+          from project_financial_profile_versions v
+         where v.org_id = pt.org_id
+           and v.project_type_id = pt.id
+           and v.effective_from <= current_date
+           and (v.effective_to is null or v.effective_to >= current_date)
+         order by v.effective_from desc
+         limit 1
+      ) version on true
+     where pt.org_id = ${authz.user.orgId} and pt.is_active
+     order by pt.sort_order, pt.name`)) as unknown as {
     rows: { id: string; name: string; overhead: { method?: string; ratePercent?: number; ratePerHour?: number } | null }[]
   }
   const cardRes = (await db.execute(sql`

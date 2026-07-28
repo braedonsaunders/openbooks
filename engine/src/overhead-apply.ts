@@ -84,7 +84,19 @@ export async function applyOverheadForTime(orgId: string, actorId: string, timeE
          select 1 from projects p
          join project_types pt on pt.id = p.project_type_id
         where p.id = te.project_id
-          and pt.financial_profile->'overhead'->>'method' = 'none'
+          and coalesce(
+            (
+              select v.financial_profile->'overhead'->>'method'
+                from project_financial_profile_versions v
+               where v.org_id = te.org_id
+                 and v.project_type_id = pt.id
+                 and v.effective_from <= te.worked_on
+                 and (v.effective_to is null or v.effective_to >= te.worked_on)
+               order by v.effective_from desc
+               limit 1
+            ),
+            pt.financial_profile->'overhead'->>'method'
+          ) = 'none'
        )`)) as unknown as {
     rows: { id: string; project_id: string; worked_on: string; amount: string }[];
   };
@@ -148,7 +160,19 @@ export async function countUnappliedOverheadTime(orgId: string): Promise<{ entri
          select 1 from projects p
          join project_types pt on pt.id = p.project_type_id
         where p.id = te.project_id
-          and pt.financial_profile->'overhead'->>'method' = 'none'
+          and coalesce(
+            (
+              select v.financial_profile->'overhead'->>'method'
+                from project_financial_profile_versions v
+               where v.org_id = te.org_id
+                 and v.project_type_id = pt.id
+                 and v.effective_from <= te.worked_on
+                 and (v.effective_to is null or v.effective_to >= te.worked_on)
+               order by v.effective_from desc
+               limit 1
+            ),
+            pt.financial_profile->'overhead'->>'method'
+          ) = 'none'
        )`)) as unknown as { rows: { entries: number; hours: string }[] };
   return { entries: Number(r.rows[0]?.entries ?? 0), hours: String(r.rows[0]?.hours ?? "0") };
 }
@@ -180,7 +204,19 @@ export async function backfillOverhead(orgId: string, actorId: string): Promise<
            select 1 from projects p
            join project_types pt on pt.id = p.project_type_id
           where p.id = te.project_id
-            and pt.financial_profile->'overhead'->>'method' = 'none'
+            and coalesce(
+              (
+                select v.financial_profile->'overhead'->>'method'
+                  from project_financial_profile_versions v
+                 where v.org_id = te.org_id
+                   and v.project_type_id = pt.id
+                   and v.effective_from <= te.worked_on
+                   and (v.effective_to is null or v.effective_to >= te.worked_on)
+                 order by v.effective_from desc
+                 limit 1
+              ),
+              pt.financial_profile->'overhead'->>'method'
+            ) = 'none'
          )
        order by te.worked_on
        limit 2000`)) as unknown as { rows: { id: string }[] };

@@ -8,6 +8,13 @@
   "billingMethod": "Billing method",
   "sortOrder": "Sort order",
   "saved": "Project type saved",
+  "financialPolicyEffective": "Current financial policy effective from: {date}",
+  "financialEffectiveFrom": "New policy effective from",
+  "financialChangeReason": "Reason for change",
+  "financialChangeReasonPlaceholder": "Describe the accounting-policy change",
+  "financialChangeReasonRequired": "Enter a meaningful reason for the financial-policy change",
+  "financialVersionNotice": "Saving publishes a new effective-dated policy. Prior periods keep their original policy.",
+  "legacySeed": "legacy seed",
   "deleteConfirm": "Delete or archive “{name}”?",
   "tabs": {
     "general": "General",
