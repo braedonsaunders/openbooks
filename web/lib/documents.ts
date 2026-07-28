@@ -131,7 +131,8 @@ export async function loadDocument(id: string, orgId?: string) {
   if (!doc.rows[0]) return null
   const lines = (await db.execute(sql`
     select l.id, l.line_number, l.account_id, l.item_id, l.description, l.quantity, l.unit,
-           l.unit_price, l.amount, l.tax_code_id, l.tax_group_id, l.tax_input_amount, l.tax_amount,
+           l.unit_price, l.amount, l.cost_rate, l.bill_rate, l.cost_amount, l.bill_amount, l.is_billable,
+           l.tax_code_id, l.tax_group_id, l.tax_input_amount, l.tax_amount,
            l.tax_overridden, l.department_id, l.project_id, l.location_id, l.class_id,
            l.extra_dims, l.custom
       from document_lines l

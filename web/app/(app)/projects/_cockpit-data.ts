@@ -86,6 +86,7 @@ export async function loadProjectCockpit(orgId: string, projectId: string): Prom
       costByCategory: financials.costByCategory,
       costByAccount: financials.costByAccount,
       projectType: financials.projectType,
+      costBudgetApplies: projectType.financialProfile.totalPrice.method === 'not_to_exceed',
     },
     projectType: { key: projectType.key, name: projectType.name },
     time,

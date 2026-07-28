@@ -17,6 +17,7 @@ export type ReportDrillTarget =
       projectCustomerId?: string
       unassignedProjectCustomer?: boolean
       projectSearch?: string
+      activeProjectsOnly?: boolean
       /** Revenue less debit-normal costs, used by profit subtotals. */
       profitSigned?: boolean
       /** Only journal entries that touch a bank account; used by Cash Flow. */
@@ -55,6 +56,7 @@ export type ReportDrillTarget =
       projectCustomerId?: string
       unassignedProjectCustomer?: boolean
       projectSearch?: string
+      activeProjectsOnly?: boolean
     }
   | {
       kind: 'custom'
@@ -175,6 +177,7 @@ export function parseReportDrillTarget(raw: string | null): ReportDrillTarget | 
       projectCustomerId,
       unassignedProjectCustomer: input.unassignedProjectCustomer === true,
       projectSearch,
+      activeProjectsOnly: input.activeProjectsOnly === true,
       profitSigned: input.profitSigned === true,
       cashOnly: input.cashOnly === true,
     }
@@ -236,6 +239,7 @@ export function parseReportDrillTarget(raw: string | null): ReportDrillTarget | 
       kind: 'time', label, from, to, projectId, projectCustomerId,
       unassignedProjectCustomer: input.unassignedProjectCustomer === true,
       projectSearch,
+      activeProjectsOnly: input.activeProjectsOnly === true,
     }
   }
 

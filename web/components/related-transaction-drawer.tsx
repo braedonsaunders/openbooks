@@ -64,15 +64,40 @@ export async function loadRelatedTransactionDrawerData({
   id,
   kind,
   partyId,
+  projectId,
   authz,
   formLayoutId,
 }: {
   id: string
   kind: string
   partyId?: string
+  projectId?: string
   authz: Authz
   formLayoutId?: string
 }): Promise<RelatedTransactionDrawerData | null> {
+  if (projectId) {
+    const related = (await db.execute(sql`
+      select d.id
+        from documents d
+       where d.id = ${id}
+         and d.org_id = ${authz.user.orgId}
+         and (
+           d.project_id = ${projectId}
+           or exists (
+             select 1 from document_lines line
+              where line.org_id = d.org_id
+                and line.document_id = d.id
+                and line.project_id = ${projectId}
+           )
+         )
+         ${authz.allowedSubsidiaryIds
+           ? authz.allowedSubsidiaryIds.size > 0
+             ? sql`and d.subsidiary_id in ${[...authz.allowedSubsidiaryIds]}`
+             : sql`and false`
+           : sql``}
+    `)) as unknown as { rows: { id: string }[] }
+    if (!related.rows[0]) return null
+  }
   if (PAYMENT_KINDS.has(kind)) {
     const permission = kind === 'vendor_payment' ? 'ap.read' : 'ar.read'
     if (!can(authz, permission)) return null
@@ -306,8 +331,11 @@ export async function loadRelatedTransactionDrawerData({
       subsidiaries,
       headerDefs: headerDefs as any,
       lineDefs: lineDefs as any,
-      canCreate: can(authz, createPermission(kind)),
-      canPost: can(authz, postPermission(kind)),
+      // Project charges are created through their rate-aware service. The
+      // universal drawer is deliberately read-only so generic line editing
+      // cannot discard immutable cost/bill rate snapshots.
+      canCreate: kind === 'project_charge' ? false : can(authz, createPermission(kind)),
+      canPost: kind === 'project_charge' ? false : can(authz, postPermission(kind)),
       layout: resolvedForm.layout,
       availableLayouts: resolvedForm.available,
       currentLayoutId: resolvedForm.row?.id ?? null,

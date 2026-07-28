@@ -72,6 +72,10 @@ interface LineRow extends Record<string, unknown> {
   quantity: string
   unit: string
   unitPrice: string
+  costRate: string
+  billRate: string
+  billAmount: string
+  isBillable: boolean
   departmentId: string
   projectId: string
   locationId: string
@@ -113,6 +117,10 @@ const emptyLine = (): LineRow => ({
   quantity: '',
   unit: '',
   unitPrice: '',
+  costRate: '',
+  billRate: '',
+  billAmount: '',
+  isBillable: false,
   departmentId: '',
   projectId: '',
   locationId: '',
@@ -135,6 +143,10 @@ function toRow(l: Record<string, any>, lineDefs: CustomFieldDefClient[], segment
     quantity: l.quantity != null ? String(l.quantity) : '',
     unit: l.unit ?? '',
     unitPrice: l.unit_price != null ? String(l.unit_price) : '',
+    costRate: l.cost_rate != null ? String(l.cost_rate) : '',
+    billRate: l.bill_rate != null ? String(l.bill_rate) : '',
+    billAmount: l.bill_amount != null ? String(l.bill_amount) : '',
+    isBillable: l.is_billable === true,
     departmentId: l.department_id ?? '',
     projectId: l.project_id ?? '',
     locationId: l.location_id ?? '',
@@ -653,6 +665,15 @@ export function DocumentDrawer({
       quantity: { key: 'quantity', width: '90px', type: 'text', align: 'right' },
       unit: { key: 'unit', width: '80px', type: 'text' },
       unit_price: { key: 'unitPrice', width: '110px', type: 'amount', align: 'right' },
+      cost_rate: { key: 'costRate', width: '110px', type: 'readonly', align: 'right' },
+      bill_rate: { key: 'billRate', width: '110px', type: 'readonly', align: 'right' },
+      bill_amount: { key: 'billAmount', width: '120px', type: 'readonly', align: 'right' },
+      is_billable: {
+        key: 'isBillable',
+        width: '90px',
+        type: 'readonly',
+        render: (row) => row.isBillable ? tCommon('labels.yes') : tCommon('labels.no'),
+      },
       department_id: {
         key: 'departmentId', width: '140px', type: 'select',
         options: [{ value: '', label: '—' }, ...departments.map((d) => ({ value: d.id, label: d.name ?? '' }))],
@@ -687,6 +708,10 @@ export function DocumentDrawer({
       quantity: tCommon('labels.quantity'),
       unit: tCommon('labels.unit'),
       unit_price: tCommon('labels.unitPrice'),
+      cost_rate: tCommon('labels.costRate'),
+      bill_rate: tCommon('labels.billRate'),
+      bill_amount: tCommon('labels.billAmount'),
+      is_billable: tCommon('labels.billable'),
       department_id: tCommon('labels.department'),
       project_id: tCommon('labels.project'),
       location_id: tCommon('labels.location'),

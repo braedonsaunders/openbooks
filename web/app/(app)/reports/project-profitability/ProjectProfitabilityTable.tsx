@@ -10,7 +10,6 @@ import { isNegative } from '../../../../lib/statement-format'
 import type { ReportDrillTarget } from '../../../../lib/report-drill'
 import { ReportDrillLink } from '../ReportDrillLink'
 import { ReportPaper } from '../ReportPaper'
-import { Pagination } from '../../../../components/pagination'
 import { REPORT_SECTION_VISIBILITY_EVENT, type ReportSectionVisibility } from '../report-section-events'
 import {
   Table,
@@ -88,7 +87,6 @@ export function ProjectProfitabilityTable({
   totalLabel,
   totals,
   totalDrills,
-  pagination,
 }: {
   company: string
   title: string
@@ -100,12 +98,6 @@ export function ProjectProfitabilityTable({
   totalLabel: string
   totals: Values
   totalDrills: Drills
-  pagination: {
-    currentParams: Record<string, string | string[] | undefined>
-    total: number
-    page: number
-    perPage: number
-  }
 }) {
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set())
   useEffect(() => {
@@ -176,9 +168,6 @@ export function ProjectProfitabilityTable({
           </TableBody>
         </Table>
       )}
-      <div className="mt-3">
-        <Pagination basePath="/reports/project-profitability" {...pagination} />
-      </div>
     </ReportPaper>
   )
 }

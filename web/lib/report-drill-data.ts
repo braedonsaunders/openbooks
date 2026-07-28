@@ -44,6 +44,7 @@ async function ledgerData(target: Extract<ReportDrillTarget, { kind: 'ledger' }>
       projectCustomerId: target.projectCustomerId,
       unassignedProjectCustomer: target.unassignedProjectCustomer,
       projectSearch: target.projectSearch,
+      activeProjectsOnly: target.activeProjectsOnly,
       profitSigned: target.profitSigned,
       cashOnly: target.cashOnly,
       limit: REPORT_DRILL_PAGE_SIZE,
@@ -184,16 +185,22 @@ async function timeData(target: Extract<ReportDrillTarget, { kind: 'time' }>, au
            and (p.name ilike ${`%${target.projectSearch.trim()}%`} or cu.display_name ilike ${`%${target.projectSearch.trim()}%`})
       )`
     : sql``
+  const activeProjects = target.activeProjectsOnly
+    ? sql`and te.project_id in (
+        select p.id from projects p
+         where p.org_id = ${authz.user.orgId} and p.is_active
+      )`
+    : sql``
   const offset = (page - 1) * REPORT_DRILL_PAGE_SIZE
   const [count, result] = await Promise.all([
-    db.execute(sql`select count(*)::int as n, coalesce(sum(hours), 0) as hours from time_entries te where te.org_id = ${authz.user.orgId} and te.status = 'approved' and te.worked_on >= ${target.from} and te.worked_on <= ${target.to} ${project} ${customer} ${search}`) as any,
+    db.execute(sql`select count(*)::int as n, coalesce(sum(hours), 0) as hours from time_entries te where te.org_id = ${authz.user.orgId} and te.status = 'approved' and te.worked_on >= ${target.from} and te.worked_on <= ${target.to} ${project} ${customer} ${search} ${activeProjects}`) as any,
     db.execute(sql`
       select te.id, te.worked_on::text as date, e.display_name as employee, p.name as project, te.memo, te.hours
         from time_entries te
         join parties e on e.id = te.employee_party_id and e.org_id = te.org_id
         left join projects p on p.id = te.project_id and p.org_id = te.org_id
        where te.org_id = ${authz.user.orgId} and te.status = 'approved'
-         and te.worked_on >= ${target.from} and te.worked_on <= ${target.to} ${project} ${customer} ${search}
+         and te.worked_on >= ${target.from} and te.worked_on <= ${target.to} ${project} ${customer} ${search} ${activeProjects}
        order by te.worked_on desc, e.display_name
        limit ${REPORT_DRILL_PAGE_SIZE} offset ${offset}`) as any,
   ])

@@ -17,6 +17,7 @@
     "sales_order": "Kundenauftrag",
     "purchase_order": "Bestellung",
     "project": "Projekt",
+    "project_charge": "Projektbelastung",
     "fixed_asset": "Anlagevermögen"
   },
   "views": {

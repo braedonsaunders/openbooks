@@ -36,6 +36,7 @@ export function ChargesSection({
   absorption,
   formOpen,
   onFormOpenChange,
+  showList = true,
 }: {
   projectId: string
   charges: ChargeRow[]
@@ -46,6 +47,8 @@ export function ChargesSection({
    *  secondary creates live behind the Actions menu, not a bolted-on section). */
   formOpen: boolean
   onFormOpenChange: (open: boolean) => void
+  /** Transactions owns the canonical list; false keeps only KPIs + creation. */
+  showList?: boolean
 }) {
   const { money } = useMoney()
   const t = useTranslations('projects.charges')
@@ -148,8 +151,9 @@ export function ChargesSection({
         </Card>
       ) : null}
 
-      {/* Charges list */}
-      <div className="space-y-2">
+      {/* The project Transactions tab is the canonical record list. This
+          optional list remains reusable outside that cockpit. */}
+      {showList ? <div className="space-y-2">
         <h3 className="text-sm font-semibold text-slate-900 dark:text-slate-100">{t('title')}</h3>
         <PagedTable
           rows={charges}
@@ -165,7 +169,7 @@ export function ChargesSection({
             { key: 'billed', header: t('billed'), cell: (c) => (c.billed ? <Badge variant="success">{t('billedYes')}</Badge> : <span className="text-slate-400">—</span>) },
           ]}
         />
-      </div>
+      </div> : null}
     </div>
   )
 }

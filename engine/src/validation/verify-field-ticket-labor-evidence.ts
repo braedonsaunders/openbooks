@@ -7,7 +7,7 @@
  *   TARGET_ORG=<uuid> npx tsx src/validation/verify-field-ticket-labor-evidence.ts --production --out report.json
  */
 import { createHash } from "node:crypto";
-import { readFileSync, writeFileSync } from "node:fs";
+import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { sql } from "drizzle-orm";
 import { db } from "../db.ts";
 import { resolveTargetOrg } from "./target-org.ts";
@@ -16,8 +16,27 @@ const ORG =
   process.env.TARGET_ORG ??
   process.env.SANDBOX_ORG ??
   "6d5799ad-a37c-4aea-9cd4-748e4dc59614";
-const outIndex = process.argv.indexOf("--out");
-const OUT = outIndex >= 0 ? process.argv[outIndex + 1] : null;
+const args = new Map(
+  process.argv
+    .slice(2)
+    .filter((arg) => arg.startsWith("--"))
+    .map((arg) => {
+      const [key, ...value] = arg.slice(2).split("=");
+      return [key!, value.length ? value.join("=") : "true"];
+    }),
+);
+const argValue = (name: string): string | null => {
+  const mapped = args.get(name);
+  if (mapped && mapped !== "true") return mapped;
+  const index = process.argv.indexOf(`--${name}`);
+  return index >= 0 ? process.argv[index + 1] ?? null : null;
+};
+const OUT = argValue("out");
+const HEADERS = argValue("headers") ?? "/tmp/ft-head.tsv";
+const ROWS = argValue("rows") ?? "/tmp/ft-rows.tsv";
+if (!existsSync(HEADERS) || !existsSync(ROWS)) {
+  throw new Error("--headers and --rows source artifacts are required");
+}
 const TYPE_REF_BY_KIND = {
   regular: process.env.ADMINAPP2_REGULAR_TIME_TYPE_REF ?? "1",
   overtime: process.env.ADMINAPP2_OVERTIME_TIME_TYPE_REF ?? "2",
@@ -66,7 +85,7 @@ function addDays(iso: string, days: number): string {
 }
 
 function source(): { tickets: Ticket[]; cells: SourceCell[] } {
-  const tickets = readFileSync("/tmp/ft-head.tsv", "utf8")
+  const tickets = readFileSync(HEADERS, "utf8")
     .split("\n")
     .map((line) => line.split("\t"))
     .filter((columns) => columns.length >= 13 && /^\d+$/.test(columns[0]))
@@ -78,7 +97,7 @@ function source(): { tickets: Ticket[]; cells: SourceCell[] } {
       approved: columns[9] === "Yes",
     }));
   const cells: SourceCell[] = [];
-  for (const columns of readFileSync("/tmp/ft-rows.tsv", "utf8")
+  for (const columns of readFileSync(ROWS, "utf8")
     .split("\n")
     .map((line) => line.split("\t"))
     .filter((candidate) => candidate.length >= 25 && /^\d+$/.test(candidate[0]))) {

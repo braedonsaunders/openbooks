@@ -2,9 +2,18 @@
 
 import { useMoney } from '@/components/money-provider'
 import Link from 'next/link'
+import { usePathname, useSearchParams } from 'next/navigation'
+import { useState } from 'react'
 import { useTranslations } from 'next-intl'
-import { Badge, EmptyState } from '@openbooks/ui'
+import { Badge, EmptyState, Select } from '@openbooks/ui'
 import { PagedTable } from '../../../../components/paged-table'
+import { DocTypeBadge, docTypeMeta } from '../../../../components/doc-type-badge'
+import {
+  ChargesSection,
+  type ChargeEquipmentOption,
+  type ChargeItemOption,
+  type ChargeRow,
+} from './ChargesSection'
 interface TxnRow {
   id: string
   kind: string
@@ -15,50 +24,106 @@ interface TxnRow {
   amount: string | number
 }
 
-// document kind → the module flyout that opens it
-const DOC_LINKS: Record<string, { base: string; param: string; labelKey: string }> = {
-  bill: { base: '/ap', param: 'bill', labelKey: 'docKinds.bill' },
-  vendor_bill: { base: '/ap', param: 'bill', labelKey: 'docKinds.bill' },
-  customer_invoice: { base: '/ar', param: 'invoice', labelKey: 'docKinds.invoice' },
-  invoice: { base: '/ar', param: 'invoice', labelKey: 'docKinds.invoice' },
-  expense: { base: '/expenses/reports', param: 'expense', labelKey: 'docKinds.expense' },
-  expense_report: { base: '/expenses/reports', param: 'expense', labelKey: 'docKinds.expense' },
-  purchase_order: { base: '/purchase-orders', param: 'order', labelKey: 'docKinds.purchaseOrder' },
-  sales_order: { base: '/sales-orders', param: 'order', labelKey: 'docKinds.salesOrder' },
-  journal: { base: '/journal', param: 'entry', labelKey: 'docKinds.journal' },
-  journal_entry: { base: '/journal', param: 'entry', labelKey: 'docKinds.journal' },
-}
 const DOC_STATUS_KEYS: Record<string, string> = {
   draft: 'draft', pending_approval: 'pendingApproval', approved: 'approved', rejected: 'rejected',
   posted: 'posted', paid: 'paid', partially_paid: 'partiallyPaid', open: 'open', closed: 'closed',
   voided: 'voided', reversed: 'reversed', cancelled: 'cancelled',
 }
 
-export function TransactionsTab({ transactions }: { transactions: TxnRow[] }) {
+export function TransactionsTab({
+  projectId,
+  transactions,
+  charges,
+  items,
+  equipment,
+  absorption,
+  chargeFormOpen,
+  onChargeFormOpenChange,
+}: {
+  projectId: string
+  transactions: TxnRow[]
+  charges: ChargeRow[]
+  items: ChargeItemOption[]
+  equipment: ChargeEquipmentOption[]
+  absorption: { recovered: string; billValue: string }
+  chargeFormOpen: boolean
+  onChargeFormOpenChange: (open: boolean) => void
+}) {
   const { money } = useMoney()
   const t = useTranslations('projects')
   const tCommon = useTranslations('common')
+  const pathname = usePathname() ?? '/projects'
+  const searchParams = useSearchParams()
+  const [kind, setKind] = useState('')
   const docStatusLabel = (s: string) => (DOC_STATUS_KEYS[s] ? tCommon(`status.${DOC_STATUS_KEYS[s]}`) : s)
+  const kindLabel = (value: string) => {
+    const key = `transactionTypes.${docTypeMeta(value).labelKey}` as never
+    return tCommon.has(key) ? tCommon(key) : value.replace(/_/g, ' ')
+  }
+  const kinds = [...new Set(transactions.map((row) => row.kind))]
+    .sort((a, b) => kindLabel(a).localeCompare(kindLabel(b)))
+  const visibleTransactions = kind ? transactions.filter((row) => row.kind === kind) : transactions
+  const transactionHref = (row: TxnRow) => {
+    if (row.kind === 'field_ticket') {
+      const returnHref = `${pathname}?${searchParams.toString()}`
+      return `/field-tickets?ticket=${row.id}&drawerReturn=${encodeURIComponent(returnHref)}`
+    }
+    const next = new URLSearchParams(searchParams.toString())
+    next.set('projectTab', 'transactions')
+    next.delete('projectTxn')
+    next.delete('projectTxnKind')
+    next.delete('drawerReturn')
+    const returnHref = `${pathname}?${next.toString()}`
+    next.set('projectTxn', row.id)
+    next.set('projectTxnKind', row.kind)
+    next.set('drawerReturn', returnHref)
+    return `${pathname}?${next.toString()}`
+  }
 
   return (
-    <div className="space-y-2">
-      <h2 className="text-sm font-semibold text-slate-900 dark:text-slate-100">{t('cockpit.transactions')}</h2>
+    <div className="space-y-6">
+      <ChargesSection
+        projectId={projectId}
+        charges={charges}
+        items={items}
+        equipment={equipment}
+        absorption={absorption}
+        formOpen={chargeFormOpen}
+        onFormOpenChange={onChargeFormOpenChange}
+        showList={false}
+      />
+      <div className="space-y-2">
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <h2 className="text-sm font-semibold text-slate-900 dark:text-slate-100">{t('cockpit.transactions')}</h2>
+          <Select
+            value={kind}
+            onChange={(event) => setKind(event.target.value)}
+            className="w-auto min-w-44"
+            aria-label={tCommon('labels.type')}
+          >
+            <option value="">{t('cockpit.allTransactionTypes')}</option>
+            {kinds.map((value) => (
+              <option key={value} value={value}>
+                {kindLabel(value)}
+              </option>
+            ))}
+          </Select>
+        </div>
       <PagedTable
-        rows={transactions}
+        rows={visibleTransactions}
         rowKey={(r) => r.id}
         searchable
         empty={<EmptyState title={t('cockpit.noTransactionsTitle')} description={t('cockpit.noTransactionsDescription')} />}
         columns={[
             { key: 'date', header: tCommon('labels.date'), cell: (r) => <span className="text-slate-500 dark:text-slate-400">{r.documentDate}</span> },
-            { key: 'kind', header: t('labels.kind'), cell: (r) => <Badge variant="secondary">{DOC_LINKS[r.kind] ? t(DOC_LINKS[r.kind].labelKey) : r.kind.replace(/_/g, ' ')}</Badge> },
+            { key: 'kind', header: t('labels.kind'), cell: (r) => <DocTypeBadge kind={r.kind} full /> },
             {
               key: 'number', header: tCommon('labels.number'), search: (r) => r.documentNumber,
               cell: (r) => {
-                const link = DOC_LINKS[r.kind]
-                return link ? (
-                  <Link href={`${link.base}?${link.param}=${r.id}`} className="font-medium text-teal-700 hover:underline dark:text-teal-300">{r.documentNumber}</Link>
-                ) : (
-                  <span className="font-medium">{r.documentNumber}</span>
+                return (
+                  <Link href={transactionHref(r) as never} className="font-mono text-[13px] font-semibold text-teal-700 hover:underline dark:text-teal-300">
+                    {r.documentNumber}
+                  </Link>
                 )
               },
             },
@@ -67,6 +132,7 @@ export function TransactionsTab({ transactions }: { transactions: TxnRow[] }) {
             { key: 'amount', header: tCommon('labels.amount'), align: 'right', cell: (r) => money(r.amount) },
         ]}
       />
+      </div>
     </div>
   )
 }

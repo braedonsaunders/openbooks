@@ -4,20 +4,17 @@ import { ListPageLayout } from '../../../../components/page-layout'
 import { dimensionOptions, projectProfitability, projectProfitabilityCustomerOptions } from '../../../../lib/reports'
 import { orgInfo } from '../../../../lib/data'
 import { resolvePeriod } from '../../../../lib/periods'
-import { parseReportQuery, toSearchParams } from '../../../../lib/report-filters'
+import { parseReportQuery, REPORT_PARAM_KEYS, toSearchParams } from '../../../../lib/report-filters'
 import { orgBranding } from '../../../../lib/report-pdf'
 import { ReportFilterBar } from '../ReportFilterBar'
 import { SaveViewButton } from '../SaveViewButton'
 import { ExportMenu } from '../ExportMenu'
 import { requirePermission } from '../../../../lib/authz'
 import type { ReportDrillTarget } from '../../../../lib/report-drill'
-import { parseListParams } from '../../../../lib/list-params'
 import { ProjectProfitabilityTable, type ProjectProfitabilityGroup } from './ProjectProfitabilityTable'
 import { requireProjectsFeature } from '../../../../lib/projects-gate'
 
 export const dynamic = 'force-dynamic'
-const CUSTOMERS_PER_PAGE = 10
-
 export default async function ProjectProfitabilityPage({
   searchParams,
 }: {
@@ -27,12 +24,18 @@ export default async function ProjectProfitabilityPage({
   const authz = await requirePermission('reports.read')
   await requireProjectsFeature(authz.user.orgId)
   const sp = await searchParams
-  const list = parseListParams(sp, { sort: 'net', allowedSorts: ['net'] as const, perPage: CUSTOMERS_PER_PAGE })
+  const search = sp.q?.trim() || undefined
   const q = parseReportQuery(sp)
   const period = await resolvePeriod(q.period, { customFrom: q.from, customTo: q.to, orgId: authz.user.orgId })
   const dims = q.dims
   const [result, opts, customers, org, branding] = await Promise.all([
-    projectProfitability(period.from, period.to, { dims, customerId: q.customerId, search: list.q, orgId: authz.user.orgId }),
+    projectProfitability(period.from, period.to, {
+      dims,
+      customerId: q.customerId,
+      search,
+      projectScope: q.projectScope,
+      orgId: authz.user.orgId,
+    }),
     dimensionOptions(authz.user.orgId),
     projectProfitabilityCustomerOptions(authz.user.orgId),
     orgInfo(authz.user.orgId),
@@ -55,6 +58,7 @@ export default async function ProjectProfitabilityPage({
       projectCustomerId: scope.customerId,
       unassignedProjectCustomer: scope.unassignedCustomer,
       projectSearch: scope.search,
+      activeProjectsOnly: q.projectScope === 'active' && !scope.projectId,
       profitSigned,
       basis: q.basis,
     })
@@ -74,12 +78,12 @@ export default async function ProjectProfitabilityPage({
         projectCustomerId: scope.customerId,
         unassignedProjectCustomer: scope.unassignedCustomer,
         projectSearch: scope.search,
+        activeProjectsOnly: q.projectScope === 'active' && !scope.projectId,
       } satisfies ReportDrillTarget,
     }
   }
 
-  const pageCustomers = result.customers.slice((list.page - 1) * CUSTOMERS_PER_PAGE, list.page * CUSTOMERS_PER_PAGE)
-  const groups: ProjectProfitabilityGroup[] = pageCustomers.map((customer) => {
+  const groups: ProjectProfitabilityGroup[] = result.customers.map((customer) => {
     const name = customer.customerName ?? t('projectProfitability.noCustomer')
     const scope = customer.customerId
       ? { customerId: customer.customerId }
@@ -90,7 +94,7 @@ export default async function ProjectProfitabilityPage({
       expandLabel: t('projectProfitability.expandCustomer', { customer: name }),
       collapseLabel: t('projectProfitability.collapseCustomer', { customer: name }),
       values: customer.totals,
-      drills: profitDrills(name, { ...scope, search: list.q }),
+      drills: profitDrills(name, { ...scope, search }),
       projects: customer.rows.map((project) => ({
         id: project.projectId,
         name: project.projectName,
@@ -114,6 +118,15 @@ export default async function ProjectProfitabilityPage({
             controls={{ search: true, dateRange: true, customer: true, dimensions: true, sections: groups.some((group) => group.projects.length > 0) }}
             dateRange={{ from: period.from, to: period.to }}
             searchPlaceholder={t('projectProfitability.searchPlaceholder')}
+            primaryFilter={{
+              paramKey: REPORT_PARAM_KEYS.projectScope,
+              label: t('projectProfitability.projectScope'),
+              value: q.projectScope,
+              options: [
+                { value: 'active', label: t('projectProfitability.activeProjects') },
+                { value: 'all', label: t('projectProfitability.allProjects') },
+              ],
+            }}
             customers={customers}
             dimensions={opts}
             actions={<><SaveViewButton /><ExportMenu kind="project-profitability" params={sp} /></>}
@@ -140,13 +153,7 @@ export default async function ProjectProfitabilityPage({
         groups={groups}
         totalLabel={totalLabel}
         totals={result.totals}
-        totalDrills={profitDrills(totalLabel, { customerId: q.customerId, search: list.q })}
-        pagination={{
-          currentParams: sp,
-          total: result.customers.length,
-          page: list.page,
-          perPage: CUSTOMERS_PER_PAGE,
-        }}
+        totalDrills={profitDrills(totalLabel, { customerId: q.customerId, search })}
       />
     </ListPageLayout>
   )

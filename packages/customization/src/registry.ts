@@ -271,6 +271,36 @@ function cardRecordType(key: string): RecordTypeMeta {
 const CARD_CHARGE = cardRecordType("card_charge");
 const CARD_REFUND = cardRecordType("card_refund");
 
+/** Project resource usage is a first-class transaction. Its posted lines keep
+ * both job-cost and customer-bill values, so organizations can arrange those
+ * immutable snapshots in the same form designer as every other transaction. */
+const PROJECT_CHARGE: RecordTypeMeta = {
+  key: "project_charge",
+  labelKey: "customization.recordTypes.project_charge",
+  category: "transaction",
+  headerFields: [
+    { key: "project_id", labelKey: "common.labels.project", level: "header", kind: "dimension", required: true, locked: true },
+    { key: "document_date", labelKey: "common.labels.date", level: "header", kind: "date" },
+    { key: "reference_number", labelKey: "common.labels.reference", level: "header", kind: "text" },
+    { key: "memo", labelKey: "common.labels.memo", level: "header", kind: "long_text" },
+    { key: "subsidiary_id", labelKey: "common.labels.subsidiary", level: "header", kind: "entity_ref" },
+  ],
+  lineFields: [
+    { key: "item_id", labelKey: "common.labels.item", level: "line", kind: "entity_ref", required: true },
+    { key: "description", labelKey: "common.labels.description", level: "line", kind: "text" },
+    { key: "quantity", labelKey: "common.labels.quantity", level: "line", kind: "number" },
+    { key: "unit", labelKey: "common.labels.unit", level: "line", kind: "text" },
+    { key: "cost_rate", labelKey: "projects.charges.costRate", level: "line", kind: "currency" },
+    { key: "amount", labelKey: "projects.charges.cost", level: "line", kind: "amount", required: true },
+    { key: "bill_rate", labelKey: "projects.charges.billRate", level: "line", kind: "currency" },
+    { key: "bill_amount", labelKey: "projects.charges.billValue", level: "line", kind: "amount" },
+    { key: "is_billable", labelKey: "timesheets.billable", level: "line", kind: "boolean" },
+    { key: "project_id", labelKey: "common.labels.project", level: "line", kind: "dimension", required: true },
+  ],
+  listColumns: [],
+  listFilters: [],
+};
+
 const CHECK: RecordTypeMeta = {
   key: "check",
   labelKey: "customization.recordTypes.check",
@@ -599,7 +629,6 @@ const PROJECT: RecordTypeMeta = {
     { key: "schedule", labelKey: "projects.cockpit.tabs.schedule", featureKey: "projectScheduling" },
     { key: "financials", labelKey: "projects.cockpit.tabs.financials" },
     { key: "cost_time", labelKey: "projects.cockpit.tabs.cost_time" },
-    { key: "charges", labelKey: "projects.cockpit.tabs.charges" },
     { key: "billing", labelKey: "projects.cockpit.tabs.billing" },
     { key: "transactions", labelKey: "projects.cockpit.tabs.transactions" },
   ],
@@ -768,6 +797,7 @@ export const RECORD_TYPES: RecordTypeMeta[] = [
   CUSTOMER_CREDIT,
   CARD_CHARGE,
   CARD_REFUND,
+  PROJECT_CHARGE,
   CHECK,
   DEPOSIT,
   TRANSFER,

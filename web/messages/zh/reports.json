@@ -904,6 +904,9 @@
     "noCustomer": "未分配客户",
     "expandCustomer": "展开{customer}",
     "collapseCustomer": "收起{customer}",
+    "projectScope": "项目",
+    "activeProjects": "活动项目",
+    "allProjects": "所有项目",
     "columns": {
       "customerJob": "客户 / 项目",
       "project": "项目",

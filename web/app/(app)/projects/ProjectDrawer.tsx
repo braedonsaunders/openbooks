@@ -24,7 +24,7 @@ import { CostTimeTab, type CostTimeData } from './tabs/CostTimeTab'
 import { TransactionsTab } from './tabs/TransactionsTab'
 import { WorkBreakdownTab, type WorkBreakdownTask } from './tabs/WorkBreakdownTab'
 import { ScheduleTab } from './tabs/ScheduleTab'
-import { ChargesSection, type ChargeRow, type ChargeItemOption, type ChargeEquipmentOption } from './tabs/ChargesSection'
+import type { ChargeRow, ChargeItemOption, ChargeEquipmentOption } from './tabs/ChargesSection'
 import { BillingSection, type BillingRequestClient, type UnbilledClient, type EffectiveInvoicingClient } from './tabs/BillingSection'
 import { formatMoney } from '@openbooks/engine/src/money.ts'
 import { useMoney } from '@/components/money-provider'
@@ -94,7 +94,6 @@ const TAB_KEYS = [
   'schedule',
   'financials',
   'cost_time',
-  'charges',
   'billing',
   'transactions',
 ] as const
@@ -120,6 +119,7 @@ export function ProjectDrawer({
   projectTypes = [],
   schedulingEnabled = false,
   locale,
+  initialTab = 'overview',
 }: {
   payload: ProjectPayload
   parties: PartyOpt[]
@@ -136,6 +136,8 @@ export function ProjectDrawer({
   schedulingEnabled?: boolean
   /** Tenant locale, so the schedule surface formats dates like the rest of the app. */
   locale?: string
+  /** Stable URL state used when a related transaction is stacked over the project. */
+  initialTab?: TabKey
 }) {
   const { currency } = useMoney()
   const t = useTranslations('projects')
@@ -198,7 +200,7 @@ export function ProjectDrawer({
   const editable = mode === 'edit' && canManage
 
   // Flyout chrome: subtabs + Actions-menu-driven create forms (repository conventions).
-  const [tab, setTab] = useState<TabKey>('overview')
+  const [tab, setTab] = useState<TabKey>(initialTab)
   const [actionsOpen, setActionsOpen] = useState(false)
   const [chargeFormOpen, setChargeFormOpen] = useState(false)
   const [billingFormOpen, setBillingFormOpen] = useState(false)
@@ -598,7 +600,7 @@ export function ProjectDrawer({
             className="w-56 p-1.5"
           >
             <div className="space-y-0.5">
-              {menuItem(<Plus className="h-3.5 w-3.5" aria-hidden />, t('charges.addTitle'), () => { setTab('charges'); setChargeFormOpen(true) })}
+              {menuItem(<Plus className="h-3.5 w-3.5" aria-hidden />, t('charges.addTitle'), () => { setTab('transactions'); setChargeFormOpen(true) })}
               {cockpit.invoicing.billingProcedure === 'application_for_payment'
                 ? menuItem(<Receipt className="h-3.5 w-3.5" aria-hidden />, 'Applications for payment', () => { setTab('billing'); setBillingFormOpen(false) })
                 : menuItem(<Receipt className="h-3.5 w-3.5" aria-hidden />, t('billing.requestBilling'), () => { setTab('billing'); setBillingFormOpen(true) })}
@@ -674,18 +676,6 @@ export function ProjectDrawer({
 
       {tab === 'cost_time' ? <CostTimeTab data={cockpit.time} /> : null}
 
-      {tab === 'charges' ? (
-        <ChargesSection
-          projectId={pr.id}
-          charges={cockpit.charges}
-          items={cockpit.items}
-          equipment={cockpit.equipment}
-          absorption={cockpit.absorption}
-          formOpen={chargeFormOpen}
-          onFormOpenChange={setChargeFormOpen}
-        />
-      ) : null}
-
       {tab === 'billing' ? (
         <BillingSection
           projectId={pr.id}
@@ -709,7 +699,16 @@ export function ProjectDrawer({
       ) : null}
 
       {tab === 'transactions' ? (
-        <TransactionsTab transactions={cockpit.transactions} />
+        <TransactionsTab
+          projectId={pr.id}
+          transactions={cockpit.transactions}
+          charges={cockpit.charges}
+          items={cockpit.items}
+          equipment={cockpit.equipment}
+          absorption={cockpit.absorption}
+          chargeFormOpen={chargeFormOpen}
+          onChargeFormOpenChange={setChargeFormOpen}
+        />
       ) : null}
 
       {/* An author-created tab renders the field groups assigned to it, using

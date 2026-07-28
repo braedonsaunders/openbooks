@@ -160,13 +160,14 @@
       "operating_expense": "Despesa operacional"
     },
     "transactions": "Transações",
+    "allTransactionTypes": "Todos os tipos de transação",
     "noTransactionsTitle": "Nenhuma transação vinculada a esta obra",
     "noTransactionsDescription": "Contas a pagar, faturas, despesas, pedidos e lançamentos com uma linha vinculada a este projeto aparecem aqui.",
     "tabs": {
       "overview": "Visão geral",
       "work_breakdown": "Estrutura analítica",
       "financials": "Finanças e orçamento",
-      "cost_time": "Custo e Tempo",
+      "cost_time": "Horas e tempo",
       "transactions": "Transações",
       "billing": "Faturamento",
       "charges": "Apropriações"

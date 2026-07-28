@@ -20,6 +20,7 @@
     "vendor": "Fournisseur",
     "employee": "Employé",
     "project": "Projet",
+    "project_charge": "Charge de projet",
     "field_ticket": "Bon de régie",
     "fixed_asset": "Immobilisation"
   },

@@ -3,8 +3,8 @@
  * evidence. This does NOT create, update, approve, post, or relink time entries.
  *
  * Input:
- *   /tmp/ft-head.tsv  ticket headers exported by import-field-tickets.ts
- *   /tmp/ft-rows.tsv  ticket, employee, item, shortform, 7 × (regular, OT, DT)
+ *   --headers  ticket headers exported by import-field-tickets.ts
+ *   --rows     ticket, employee, item, shortform, 7 × (regular, OT, DT)
  *
  * Approved source tickets receive a controlled `source_import` revision.
  * Draft source tickets are reported, not snapshotted: their editable source of
@@ -16,7 +16,7 @@
  *   TARGET_ORG=<uuid> npx tsx src/validation/import-field-ticket-labor-evidence.ts --apply --production
  */
 import { createHash } from "node:crypto";
-import { readFileSync, writeFileSync } from "node:fs";
+import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { sql } from "drizzle-orm";
 import {
   captureFieldTicketLaborEvidence,
@@ -29,9 +29,28 @@ const ORG =
   process.env.TARGET_ORG ??
   process.env.SANDBOX_ORG ??
   "6d5799ad-a37c-4aea-9cd4-748e4dc59614";
-const APPLY = process.argv.includes("--apply");
-const outIndex = process.argv.indexOf("--out");
-const OUT = outIndex >= 0 ? process.argv[outIndex + 1] : null;
+const args = new Map(
+  process.argv
+    .slice(2)
+    .filter((arg) => arg.startsWith("--"))
+    .map((arg) => {
+      const [key, ...value] = arg.slice(2).split("=");
+      return [key!, value.length ? value.join("=") : "true"];
+    }),
+);
+const argValue = (name: string): string | null => {
+  const mapped = args.get(name);
+  if (mapped && mapped !== "true") return mapped;
+  const index = process.argv.indexOf(`--${name}`);
+  return index >= 0 ? process.argv[index + 1] ?? null : null;
+};
+const APPLY = args.get("apply") === "true";
+const OUT = argValue("out");
+const HEADERS = argValue("headers") ?? "/tmp/ft-head.tsv";
+const ROWS = argValue("rows") ?? "/tmp/ft-rows.tsv";
+if (!existsSync(HEADERS) || !existsSync(ROWS)) {
+  throw new Error("--headers and --rows source artifacts are required");
+}
 const TIME_TYPE_SOURCE_REFS: Record<HourKind, string> = {
   regular: process.env.ADMINAPP2_REGULAR_TIME_TYPE_REF ?? "1",
   overtime: process.env.ADMINAPP2_OVERTIME_TIME_TYPE_REF ?? "2",
@@ -89,7 +108,7 @@ function addDays(iso: string, days: number): string {
 }
 
 function parseTickets(): Ticket[] {
-  return readFileSync("/tmp/ft-head.tsv", "utf8")
+  return readFileSync(HEADERS, "utf8")
     .split("\n")
     .map((line) => line.split("\t"))
     .filter((columns) => columns.length >= 13 && /^\d+$/.test(columns[0]))
@@ -104,7 +123,7 @@ function parseTickets(): Ticket[] {
 
 function parseCells(): SourceCell[] {
   const cells: SourceCell[] = [];
-  for (const columns of readFileSync("/tmp/ft-rows.tsv", "utf8")
+  for (const columns of readFileSync(ROWS, "utf8")
     .split("\n")
     .map((line) => line.split("\t"))
     .filter((candidate) => candidate.length >= 25 && /^\d+$/.test(candidate[0]))) {

@@ -17,6 +17,7 @@
     "sales_order": "Pedido de venda",
     "purchase_order": "Pedido de compra",
     "project": "Projeto",
+    "project_charge": "Apropriação de projeto",
     "fixed_asset": "Ativo imobilizado"
   },
   "views": {

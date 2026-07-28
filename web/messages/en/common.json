@@ -82,7 +82,11 @@
     "cardCharge": "Card Charge",
     "cardChargeShort": "Card",
     "cardRefund": "Card Refund",
-    "cardRefundShort": "Card Refund"
+    "cardRefundShort": "Card Refund",
+    "projectCharge": "Project Charge",
+    "projectChargeShort": "Charge",
+    "fieldTicket": "Field Ticket",
+    "fieldTicketShort": "Ticket"
   },
   "labels": {
     "name": "Name",
@@ -102,6 +106,10 @@
     "currency": "Currency",
     "quantity": "Quantity",
     "rate": "Rate",
+    "costRate": "Cost rate",
+    "billRate": "Bill rate",
+    "billAmount": "Bill amount",
+    "billable": "Billable",
     "number": "Number",
     "reference": "Reference",
     "email": "Email",
