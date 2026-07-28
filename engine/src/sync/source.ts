@@ -113,6 +113,18 @@ export interface SourceTimeEntryBillingState {
   billingStatus: "unbilled" | "billed";
   costingBasis: "actual" | "estimated";
   sourceStatus?: string | null;
+  /** Financially material source facts. When exposed, the complete-population
+   * rematerializer reconciles them as well as lifecycle state. */
+  employeeRef?: string | null;
+  projectRef?: string | null;
+  itemRef?: string | null;
+  departmentRef?: string | null;
+  timeTypeRef?: string | null;
+  workedOn?: string | null;
+  hours?: string | null;
+  costRate?: string | null;
+  billRate?: string | null;
+  isBillable?: boolean | null;
 }
 
 export interface SourceProjectCommercialState {

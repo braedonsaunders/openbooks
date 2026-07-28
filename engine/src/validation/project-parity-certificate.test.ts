@@ -47,6 +47,32 @@ test("project financial certification is effective-dated and penny exact", () =>
   );
 });
 
+test("strict certification binds fresh artifacts to one complete source population", () => {
+  assert.match(source, /connectorWatermark/);
+  assert.match(source, /max-sync-lag-minutes/);
+  assert.match(source, /latest connector attempt/);
+  assert.match(source, /kind in \('incremental', 'full_migration'\)/);
+  assert.match(source, /sourceSnapshotCoherence/);
+  assert.match(source, /project-financial identities do not equal the source project population/);
+  assert.match(source, /project-financial artifact lacks a valid fetchedAt for every project/);
+  assert.match(source, /source snapshot is older than/);
+  assert.match(source, /hash changed after source capture/);
+});
+
+test("invoice parity covers business identity and settlement state, not only totals", () => {
+  for (const field of [
+    "document_number",
+    "document_date",
+    "party",
+    "status",
+    "total",
+    "open_balance",
+  ]) {
+    assert.match(source, new RegExp(`\"${field}\"`));
+  }
+  assert.match(source, /foreignamountunpaid/);
+});
+
 test("Field Ticket parity follows the labor source of truth for each lifecycle", () => {
   assert.match(source, /join field_ticket_labor_snapshots snapshot/i);
   assert.match(source, /join field_ticket_labor_lines line/i);

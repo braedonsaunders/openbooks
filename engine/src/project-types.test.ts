@@ -47,6 +47,21 @@ test('project financial policy is effective-dated, immutable, and tenant isolate
   assert.match(migration, /FORCE ROW LEVEL SECURITY/)
   assert.match(migration, /CREATE POLICY org_isolation ON project_financial_profile_versions/)
 
+  const correction = readFileSync(
+    'schema/migrations/generated/0085_project_financial_profile_corrections.sql',
+    'utf8',
+  )
+  assert.match(correction, /openbooks\.correct_project_profile/)
+  assert.match(correction, /may change only policy JSON and requires a reason/)
+  assert.match(correction, /published project financial profile versions are immutable/)
+
+  const service = readFileSync(
+    'engine/src/project-financial-profile-versions.ts',
+    'utf8',
+  )
+  assert.match(service, /controlled_historical_correction/)
+  assert.match(service, /project financial profile changed after the correction was planned/)
+
   const resolver = readFileSync('web/lib/project-type.ts', 'utf8')
   assert.match(resolver, /v\.effective_from <= \$\{asOf\}/)
   assert.match(resolver, /v\.effective_to is null or v\.effective_to >= \$\{asOf\}/)

@@ -41,6 +41,7 @@ const context = {
 
 const header: NsHeader = {
   id: "123",
+  tranid: "JRN-0042",
   ttype: "Journal",
   trandate: "07/15/2026",
   posting: "T",
@@ -69,6 +70,7 @@ test("NetSuite journals retain header and line subsidiary identity", () => {
   ];
   const built = buildNativeFromNetSuite(context, header, lines);
   assert.ok(!("skip" in built));
+  assert.equal(built.doc.documentNumber, "JRN-0042");
   assert.equal(built.doc.posting, true);
   assert.equal(built.doc.subsidiaryId, "sub-root");
   assert.deepEqual(

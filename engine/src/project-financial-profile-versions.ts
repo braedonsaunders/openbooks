@@ -196,6 +196,117 @@ type TransactionExecutor = {
   execute: (query: any) => Promise<any>;
 };
 
+export interface CorrectProjectFinancialProfileInput {
+  orgId: string;
+  versionId: string;
+  expectedFinancialProfile: FinancialProfile;
+  correctedFinancialProfile: FinancialProfile;
+  reason: string;
+  actorId: string;
+}
+
+/**
+ * Correct a published policy without altering its valid-time identity.
+ *
+ * This is intentionally distinct from normal publication. It requires an
+ * optimistic before-image, an attributable actor, a meaningful reason, and
+ * writes complete before/after evidence atomically. Dates and row identity
+ * remain immutable.
+ */
+export async function correctProjectFinancialProfile(
+  input: CorrectProjectFinancialProfileInput,
+): Promise<{ id: string; effectiveFrom: string; effectiveTo: string | null }> {
+  const reason = input.reason.trim();
+  if (reason.length < 8) throw new Error("a meaningful correction reason is required");
+  if (!/^[0-9a-f-]{36}$/i.test(input.actorId)) {
+    throw new Error("an attributable correction actor is required");
+  }
+  assertValidProjectFinancialProfile(input.expectedFinancialProfile);
+  assertValidProjectFinancialProfile(input.correctedFinancialProfile);
+
+  return db.transaction(async (tx) => {
+    const current = (await tx.execute(sql`
+      select id, effective_from::text as effective_from,
+             effective_to::text as effective_to, financial_profile,
+             financial_profile = ${JSON.stringify(input.expectedFinancialProfile)}::jsonb
+               as matches_expected,
+             financial_profile = ${JSON.stringify(input.correctedFinancialProfile)}::jsonb
+               as matches_corrected
+        from project_financial_profile_versions
+       where id = ${input.versionId} and org_id = ${input.orgId}
+       for update
+    `)) as unknown as {
+      rows: Array<{
+        id: string;
+        effective_from: string;
+        effective_to: string | null;
+        financial_profile: FinancialProfile;
+        matches_expected: boolean;
+        matches_corrected: boolean;
+      }>;
+    };
+    const row = current.rows[0];
+    if (!row) throw new Error("project financial profile version not found");
+    const expected = JSON.stringify(input.expectedFinancialProfile);
+    if (!row.matches_expected) {
+      throw new Error("project financial profile changed after the correction was planned");
+    }
+    if (row.matches_corrected) {
+      return {
+        id: row.id,
+        effectiveFrom: row.effective_from,
+        effectiveTo: row.effective_to,
+      };
+    }
+
+    await tx.execute(
+      sql`select set_config('openbooks.correct_project_profile', 'on', true)`,
+    );
+    await tx.execute(
+      sql`select set_config('openbooks.project_profile_correction_reason', ${reason}, true)`,
+    );
+    const updated = await tx.execute(sql`
+      update project_financial_profile_versions
+         set financial_profile = ${JSON.stringify(input.correctedFinancialProfile)}::jsonb,
+             updated_at = now(), updated_by = ${input.actorId}
+       where id = ${row.id} and org_id = ${input.orgId}
+         and financial_profile = ${expected}::jsonb
+      returning id
+    `);
+    if (updated.rows.length !== 1) {
+      throw new Error("project financial profile changed during correction");
+    }
+    await tx.execute(sql`
+      insert into audit_log
+        (org_id, table_name, row_id, action, changes, actor_id)
+      values (
+        ${input.orgId}, 'project_financial_profile_versions', ${row.id},
+        'update',
+        ${JSON.stringify({
+          mode: "controlled_historical_correction",
+          reason,
+          before: {
+            effectiveFrom: row.effective_from,
+            effectiveTo: row.effective_to,
+            financialProfile: row.financial_profile,
+          },
+          after: {
+            effectiveFrom: row.effective_from,
+            effectiveTo: row.effective_to,
+            financialProfile: input.correctedFinancialProfile,
+          },
+        })}::jsonb,
+        ${input.actorId}
+      )
+    `);
+    return {
+      id: row.id,
+      effectiveFrom: row.effective_from,
+      effectiveTo: row.effective_to,
+    };
+  });
+}
+
 /**
  * Publish an append-only, effective-dated project financial policy.
  *

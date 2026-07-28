@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import {
   canonicalNativeDocumentKey,
+  effectiveSourceDocumentNumber,
   effectiveLineSubsidiary,
   effectiveTaxCodeId,
   sourceDeletionCandidates,
@@ -96,6 +97,24 @@ test("zero tax ignores arbitrary rate-matched code identity during change detect
   assert.equal(effectiveTaxCodeId("0", "legacy-zero-code"), null);
   assert.equal(effectiveTaxCodeId("0.0000", null), null);
   assert.equal(effectiveTaxCodeId("13.00", "hst-code"), "hst-code");
+});
+
+test("source display number is distinct from immutable source identity", () => {
+  assert.equal(
+    effectiveSourceDocumentNumber(
+      canonicalDocument({
+        sourceRef: "667706",
+        documentNumber: "INV4194",
+      }),
+    ),
+    "INV4194",
+  );
+  assert.equal(
+    effectiveSourceDocumentNumber(
+      canonicalDocument({ sourceRef: "667706", documentNumber: "  " }),
+    ),
+    "667706",
+  );
 });
 
 const canonicalDocument = (
