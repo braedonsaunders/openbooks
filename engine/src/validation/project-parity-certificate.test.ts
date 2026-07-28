@@ -26,14 +26,18 @@ test("multi-book source GL requires an explicit accounting-book choice", () => {
   );
 });
 
-test("Field Ticket parity compares immutable commercial evidence, not time approval", () => {
+test("Field Ticket parity follows the labor source of truth for each lifecycle", () => {
   assert.match(source, /join field_ticket_labor_snapshots snapshot/i);
   assert.match(source, /join field_ticket_labor_lines line/i);
   assert.match(source, /snapshot\.superseded_at is null/i);
   assert.match(source, /snapshot\.evidence_basis = 'source_import'/i);
-  assert.doesNotMatch(
+  assert.match(
     source,
-    /from time_entries te/i,
-    "commercial ticket evidence must not be inferred from operational time",
+    /d\.status = 'approved'[\s\S]*union all[\s\S]*join time_entries time/i,
+  );
+  assert.match(
+    source,
+    /join time_entries time[\s\S]*d\.status = 'draft'/i,
+    "only draft tickets may be certified directly from editable time",
   );
 });

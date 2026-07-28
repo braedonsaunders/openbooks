@@ -421,32 +421,71 @@ const target = await withOrgContext(orgId, async () => {
        group by p.custom->>'nsId', a.type
     `)),
     retry(() => db.execute(sql`
-      select d.custom->'legacy'->>'id' as legacy_id,
-             employee.custom->>'nsId' as source_employee_id,
-             item.custom->>'nsId' as source_item_id,
-             line.worked_on::text as worked_on,
-             line.time_classification as time_kind,
-             sum(line.hours)::text as hours
-        from documents d
-        join field_ticket_labor_snapshots snapshot
-          on snapshot.field_ticket_id = d.id
-         and snapshot.org_id = d.org_id
-         and snapshot.superseded_at is null
-         and snapshot.evidence_basis = 'source_import'
-         and snapshot.source_system = 'adminapp2'
-        join field_ticket_labor_lines line
-          on line.snapshot_id = snapshot.id
-         and line.org_id = snapshot.org_id
-         and line.field_ticket_id = snapshot.field_ticket_id
-        join parties employee
-          on employee.id = line.employee_party_id
-         and employee.org_id = line.org_id
-        left join items item
-          on item.id = line.item_id
-         and item.org_id = line.org_id
-       where d.org_id = ${orgId} and d.kind = 'field_ticket'
-         and d.custom->'legacy'->>'id' is not null
-       group by legacy_id, source_employee_id, source_item_id, worked_on, time_kind
+      select evidence.legacy_id, evidence.source_employee_id,
+             evidence.source_item_id, evidence.worked_on,
+             evidence.time_kind, sum(evidence.hours)::text as hours
+        from (
+          -- Approved commercial labor is frozen in its current evidence
+          -- revision; later operational time changes cannot reinterpret it.
+          select d.custom->'legacy'->>'id' as legacy_id,
+                 employee.custom->>'nsId' as source_employee_id,
+                 item.custom->>'nsId' as source_item_id,
+                 line.worked_on::text as worked_on,
+                 line.time_classification as time_kind,
+                 line.hours as hours
+            from documents d
+            join field_ticket_labor_snapshots snapshot
+              on snapshot.field_ticket_id = d.id
+             and snapshot.org_id = d.org_id
+             and snapshot.superseded_at is null
+             and snapshot.evidence_basis = 'source_import'
+             and snapshot.source_system = 'adminapp2'
+            join field_ticket_labor_lines line
+              on line.snapshot_id = snapshot.id
+             and line.org_id = snapshot.org_id
+             and line.field_ticket_id = snapshot.field_ticket_id
+            join parties employee
+              on employee.id = line.employee_party_id
+             and employee.org_id = line.org_id
+            left join items item
+              on item.id = line.item_id
+             and item.org_id = line.org_id
+           where d.org_id = ${orgId}
+             and d.kind = 'field_ticket'
+             and d.status = 'approved'
+             and d.custom->'legacy'->>'id' is not null
+
+          union all
+
+          -- A draft has no frozen customer-facing revision yet. Its editable
+          -- labor source of truth is the atomic operational time ledger.
+          select d.custom->'legacy'->>'id' as legacy_id,
+                 employee.custom->>'nsId' as source_employee_id,
+                 item.custom->>'nsId' as source_item_id,
+                 time.worked_on::text as worked_on,
+                 coalesce(time_type.classification, 'regular') as time_kind,
+                 time.hours as hours
+            from documents d
+            join time_entries time
+              on time.field_ticket_id = d.id
+             and time.org_id = d.org_id
+            join parties employee
+              on employee.id = time.employee_party_id
+             and employee.org_id = time.org_id
+            left join items item
+              on item.id = time.item_id
+             and item.org_id = time.org_id
+            left join time_types time_type
+              on time_type.id = time.time_type_id
+             and time_type.org_id = time.org_id
+           where d.org_id = ${orgId}
+             and d.kind = 'field_ticket'
+             and d.status = 'draft'
+             and d.custom->'legacy'->>'id' is not null
+        ) evidence
+       group by evidence.legacy_id, evidence.source_employee_id,
+                evidence.source_item_id, evidence.worked_on,
+                evidence.time_kind
     `)),
   ]);
   return {
