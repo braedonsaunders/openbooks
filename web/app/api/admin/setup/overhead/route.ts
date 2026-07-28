@@ -3,6 +3,7 @@ import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/db.ts'
 import type { FinancialProfile } from '@openbooks/schema'
 import { backfillOverhead } from '@openbooks/engine/src/overhead-apply.ts'
+import { publishProjectFinancialProfileInTransaction } from '@openbooks/engine/src/project-financial-profile-versions.ts'
 import { isUuid } from '../../../../../lib/list-params'
 import { guardPermission } from '../../../../../lib/authz'
 import { publishOverheadRates } from '../../../../../lib/overhead-publish'
@@ -44,25 +45,61 @@ export async function POST(req: Request) {
   if (body.action === 'apply') {
     const typeIds: string[] = Array.isArray(body.projectTypeIds) ? body.projectTypeIds : []
     const overhead = body.overhead as FinancialProfile['overhead'] | undefined
+    const effectiveFrom = String(body.effectiveFrom ?? '')
+    const reason = String(body.reason ?? '').trim()
     if (!typeIds.length || !overhead?.method) {
       return NextResponse.json({ error: 'projectTypeIds + overhead required' }, { status: 400 })
     }
-    for (const id of typeIds) {
-      await db.execute(sql`
-        update project_types set financial_profile =
-          jsonb_set(
-            jsonb_set(
-              jsonb_set(financial_profile, '{overhead}', ${JSON.stringify(overhead)}::jsonb),
-              '{totalCost,components}',
-              case when financial_profile->'totalCost'->'components' ? 'overhead' or ${overhead.method} = 'none'
-                   then financial_profile->'totalCost'->'components'
-                   else (financial_profile->'totalCost'->'components') || '"overhead"'::jsonb end),
-            '{layout}',
-            case when financial_profile->'layout' @> '[{"measure":"overhead"}]' or ${overhead.method} = 'none'
-                 then financial_profile->'layout'
-                 else (financial_profile->'layout') || '{"measure":"overhead","variant":"line"}'::jsonb end),
-          updated_by = ${gate.user.id}, updated_at = now()
-         where org_id = ${orgId} and id = ${id}`)
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(effectiveFrom)) {
+      return NextResponse.json({ error: 'effectiveFrom (YYYY-MM-DD) required' }, { status: 400 })
+    }
+    if (typeIds.some((id) => !isUuid(id))) {
+      return NextResponse.json({ error: 'invalid projectTypeId' }, { status: 422 })
+    }
+    try {
+      await db.transaction(async (tx) => {
+        for (const id of typeIds) {
+          const current = (await tx.execute(sql`
+            select coalesce(version.financial_profile, pt.financial_profile) as financial_profile
+              from project_types pt
+              left join lateral (
+                select v.financial_profile
+                  from project_financial_profile_versions v
+                 where v.org_id = pt.org_id
+                   and v.project_type_id = pt.id
+                   and v.effective_from <= ${effectiveFrom}
+                   and (v.effective_to is null or v.effective_to >= ${effectiveFrom})
+                 order by v.effective_from desc
+                 limit 1
+              ) version on true
+             where pt.org_id = ${orgId} and pt.id = ${id}
+             for update of pt
+          `)) as unknown as { rows: { financial_profile: FinancialProfile }[] }
+          const profile = current.rows[0]?.financial_profile
+          if (!profile) throw new Error('project type not found')
+          const components = profile.totalCost.components.includes('overhead') || overhead.method === 'none'
+            ? profile.totalCost.components
+            : [...profile.totalCost.components, 'overhead' as const]
+          const layout = profile.layout.some((line) => line.measure === 'overhead') || overhead.method === 'none'
+            ? profile.layout
+            : [...profile.layout, { measure: 'overhead' as const, variant: 'line' as const }]
+          await publishProjectFinancialProfileInTransaction(tx, {
+            orgId,
+            projectTypeId: id,
+            effectiveFrom,
+            financialProfile: {
+              ...profile,
+              overhead,
+              totalCost: { components },
+              layout,
+            },
+            reason,
+            actorId: gate.user.id,
+          })
+        }
+      })
+    } catch (e) {
+      return NextResponse.json({ error: (e as Error).message }, { status: 422 })
     }
     return NextResponse.json({ ok: true, applied: typeIds.length })
   }

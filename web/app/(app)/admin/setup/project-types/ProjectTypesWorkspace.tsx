@@ -19,6 +19,7 @@ export interface ProjectTypeRow {
   sortOrder: number
   billingMethod: string | null
   financialProfile: FinancialProfile
+  financialProfileEffectiveFrom: string | null
   invoicingProfile: InvoicingProfile
   backupProfile: BackupProfile
 }
@@ -103,6 +104,7 @@ function Chips({ label, all, selected, onToggle }: { label: string; all: string[
 
 const BLANK = (t: string, name: string): ProjectTypeRow => ({
   id: 'new', key: '', name, description: '', isBuiltIn: false, isActive: true, sortOrder: 50, billingMethod: null,
+  financialProfileEffectiveFrom: null,
   financialProfile: {
     invoicedToDate: { docKinds: ['customer_invoice'], creditKinds: ['customer_credit'] },
     actualCost: { source: 'account_types', accountTypes: ['expense', 'cogs', 'expense_other', 'expense_deferred'] },
@@ -126,6 +128,17 @@ const BLANK = (t: string, name: string): ProjectTypeRow => ({
   backupProfile: { required: true, defaultBackupType: 'costed_timesheets', allowedBackupTypes: ['costed_timesheets', 'purchases', 'none'] },
 })
 
+function stableJson(value: unknown): string {
+  if (Array.isArray(value)) return `[${value.map(stableJson).join(',')}]`
+  if (value && typeof value === 'object') {
+    return `{${Object.entries(value as Record<string, unknown>)
+      .sort(([a], [b]) => a.localeCompare(b))
+      .map(([key, entry]) => `${JSON.stringify(key)}:${stableJson(entry)}`)
+      .join(',')}}`
+  }
+  return JSON.stringify(value) ?? 'undefined'
+}
+
 export function ProjectTypesWorkspace({ types, dimensions }: { types: ProjectTypeRow[]; dimensions: string[]; incomeAccounts: { id: string; number: string; name: string }[] }) {
   const t = useTranslations('projectTypes')
   const tCommon = useTranslations('common')
@@ -135,33 +148,69 @@ export function ProjectTypesWorkspace({ types, dimensions }: { types: ProjectTyp
   const [selId, setSelId] = useState<string>(types[0]?.id ?? 'new')
   const [sub, setSub] = useState<SubTab>('general')
   const [busy, setBusy] = useState(false)
+  const [financialEffectiveFrom, setFinancialEffectiveFrom] = useState(new Date().toISOString().slice(0, 10))
+  const [financialChangeReason, setFinancialChangeReason] = useState('')
 
   const selected = useMemo(() => (selId === 'new' ? BLANK(t('newTypeName'), t('newTypeName')) : list.find((x) => x.id === selId)) ?? list[0], [selId, list, t])
   const [draft, setDraft] = useState<ProjectTypeRow>(selected)
   // Re-sync draft when selection changes.
   const [lastSel, setLastSel] = useState(selId)
-  if (lastSel !== selId) { setLastSel(selId); setDraft(selected) }
+  if (lastSel !== selId) {
+    setLastSel(selId)
+    setDraft(selected)
+    setFinancialEffectiveFrom(new Date().toISOString().slice(0, 10))
+    setFinancialChangeReason('')
+  }
 
   const fp = draft.financialProfile, ip = draft.invoicingProfile, bp = draft.backupProfile
+  const financialChanged = draft.id !== 'new' && stableJson(fp) !== stableJson(selected?.financialProfile)
   const setFp = (patch: Partial<FinancialProfile>) => setDraft({ ...draft, financialProfile: { ...fp, ...patch } })
   const setIp = (patch: Partial<InvoicingProfile>) => setDraft({ ...draft, invoicingProfile: { ...ip, ...patch } })
   const setBp = (patch: Partial<BackupProfile>) => setDraft({ ...draft, backupProfile: { ...bp, ...patch } })
   const toggle = (arr: string[], v: string) => (arr.includes(v) ? arr.filter((x) => x !== v) : [...arr, v])
 
   async function save() {
+    if (financialChanged && financialChangeReason.trim().length < 8) {
+      setSub('profitability')
+      return toast.error(t('financialChangeReasonRequired'))
+    }
     setBusy(true)
     const isNew = draft.id === 'new'
     const res = await fetch('/api/admin/setup/project-types', {
       method: isNew ? 'POST' : 'PATCH',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ ...draft, key: draft.key || draft.name.toLowerCase().replace(/[^a-z0-9]+/g, '_') }),
+      body: JSON.stringify({
+        ...draft,
+        key: draft.key || draft.name.toLowerCase().replace(/[^a-z0-9]+/g, '_'),
+        ...(financialChanged ? { financialEffectiveFrom, financialChangeReason } : {}),
+      }),
     })
     const data = await res.json()
     setBusy(false)
     if (!res.ok) return toast.error(data.error ?? 'Save failed')
     toast.success(t('saved'))
+    if (!isNew) {
+      const saved = {
+        ...draft,
+        financialProfileEffectiveFrom: financialChanged
+          ? financialEffectiveFrom
+          : draft.financialProfileEffectiveFrom,
+      }
+      setList(list.map((row) => (row.id === saved.id ? saved : row)))
+      setDraft(saved)
+      setFinancialChangeReason('')
+    }
     router.refresh()
-    if (isNew && data.id) setSelId(data.id)
+    if (isNew && data.id) {
+      const created = {
+        ...draft,
+        id: data.id as string,
+        financialProfileEffectiveFrom: new Date().toISOString().slice(0, 10),
+      }
+      setList([...list, created])
+      setDraft(created)
+      setSelId(data.id)
+    }
   }
 
   async function remove() {
@@ -236,12 +285,56 @@ export function ProjectTypesWorkspace({ types, dimensions }: { types: ProjectTyp
 
           {sub === 'profitability' ? (
             <div className="grid gap-4 sm:grid-cols-2">
+              {draft.id !== 'new' ? (
+                <div className="sm:col-span-2 rounded-lg border border-slate-200 bg-slate-50 p-3 dark:border-slate-800 dark:bg-slate-900/40">
+                  <p className="text-xs leading-5 text-slate-600 dark:text-slate-300">
+                    {t('financialPolicyEffective', {
+                      date: draft.financialProfileEffectiveFrom ?? t('legacySeed'),
+                    })}
+                  </p>
+                  {financialChanged ? (
+                    <div className="mt-3 grid gap-3 sm:grid-cols-2">
+                      <div className="space-y-1.5">
+                        <Label>{t('financialEffectiveFrom')}</Label>
+                        <Input
+                          type="date"
+                          min={new Date().toISOString().slice(0, 10)}
+                          value={financialEffectiveFrom}
+                          onChange={(e) => setFinancialEffectiveFrom(e.target.value)}
+                        />
+                      </div>
+                      <div className="space-y-1.5">
+                        <Label>{t('financialChangeReason')}</Label>
+                        <Input
+                          value={financialChangeReason}
+                          onChange={(e) => setFinancialChangeReason(e.target.value)}
+                          placeholder={t('financialChangeReasonPlaceholder')}
+                        />
+                      </div>
+                      <p className="sm:col-span-2 text-xs leading-5 text-amber-700 dark:text-amber-300">
+                        {t('financialVersionNotice')}
+                      </p>
+                    </div>
+                  ) : null}
+                </div>
+              ) : null}
               <EnumField label={t('priceMethod')} value={fp.totalPrice.method} options={PRICE_METHODS} onChange={(v) => setFp({ totalPrice: { ...fp.totalPrice, method: v as any } })} />
               <EnumField label={t('cbiFormula')} value={fp.couldBeInvoiced.formula} options={CBI_FORMULAS} onChange={(v) => setFp({ couldBeInvoiced: { formula: v as any } })} />
               <EnumField label={t('costSource')} value={fp.actualCost.source} options={COST_SOURCES} onChange={(v) => setFp({ actualCost: { ...fp.actualCost, source: v as any } })} />
               {fp.actualCost.source === 'account_group' ? <EnumField label={t('costDimension')} value={fp.actualCost.dimension ?? ''} options={['', ...dimensions]} onChange={(v) => setFp({ actualCost: { ...fp.actualCost, dimension: v || undefined } })} /> : <div />}
               <EnumField label={t('laborSource')} value={fp.laborCost.source} options={LABOR_SOURCES} onChange={(v) => setFp({ laborCost: { ...fp.laborCost, source: v as any } })} />
-              <EnumField label={t('overheadMethod')} value={fp.overhead.method} options={OVERHEAD_METHODS} onChange={(v) => setFp({ overhead: { ...fp.overhead, method: v as any } })} />
+              <EnumField label={t('overheadMethod')} value={fp.overhead.method} options={OVERHEAD_METHODS} onChange={(v) => {
+                const method = v as FinancialProfile['overhead']['method']
+                setFp({
+                  overhead: {
+                    ...fp.overhead,
+                    method,
+                    ...(method === 'percent_of_labor' ? { ratePercent: fp.overhead.ratePercent ?? 0 } : {}),
+                    ...(method === 'per_labor_hour' ? { ratePerHour: fp.overhead.ratePerHour ?? 0 } : {}),
+                    ...(method === 'rate_engine' ? { rateEngine: fp.overhead.rateEngine ?? ENGINE_DEFAULT } : {}),
+                  },
+                })
+              }} />
               {fp.overhead.method === 'percent_of_labor' ? (
                 <div className="space-y-1.5"><Label>{t('overheadRatePercent')}</Label><Input type="number" step="0.01" value={fp.overhead.ratePercent ?? ''} onChange={(e) => setFp({ overhead: { ...fp.overhead, ratePercent: e.target.value === '' ? undefined : Number(e.target.value) } })} /></div>
               ) : fp.overhead.method === 'per_labor_hour' ? (

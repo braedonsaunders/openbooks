@@ -10,19 +10,46 @@ import { BUILTIN_PROJECT_TYPES } from "@openbooks/schema";
 
 export async function seedProjectTypes(orgId: string, actorId?: string | null): Promise<void> {
   for (const t of BUILTIN_PROJECT_TYPES) {
-    await db.execute(sql`
-      insert into project_types (
-        org_id, key, name, description, is_built_in, is_active, sort_order,
-        billing_method, financial_profile, invoicing_profile, backup_profile,
-        created_by, updated_by
-      ) values (
-        ${orgId}, ${t.key}, ${t.name}, ${t.description}, true, true, ${t.sortOrder},
-        ${t.billingMethod}, ${JSON.stringify(t.financialProfile)}::jsonb,
-        ${JSON.stringify(t.invoicingProfile)}::jsonb, ${JSON.stringify(t.backupProfile)}::jsonb,
-        ${actorId ?? null}, ${actorId ?? null}
-      )
-      on conflict (org_id, key) do nothing
-    `);
+    await db.transaction(async (tx) => {
+      await tx.execute(sql`
+        insert into project_types (
+          org_id, key, name, description, is_built_in, is_active, sort_order,
+          billing_method, financial_profile, invoicing_profile, backup_profile,
+          created_by, updated_by
+        ) values (
+          ${orgId}, ${t.key}, ${t.name}, ${t.description}, true, true, ${t.sortOrder},
+          ${t.billingMethod}, ${JSON.stringify(t.financialProfile)}::jsonb,
+          ${JSON.stringify(t.invoicingProfile)}::jsonb, ${JSON.stringify(t.backupProfile)}::jsonb,
+          ${actorId ?? null}, ${actorId ?? null}
+        )
+        on conflict (org_id, key) do nothing
+      `);
+      const row = (await tx.execute(sql`
+        select id, financial_profile
+          from project_types
+         where org_id = ${orgId} and key = ${t.key}
+         limit 1
+      `)) as unknown as {
+        rows: { id: string; financial_profile: unknown }[];
+      };
+      const type = row.rows[0]!;
+      await tx.execute(sql`
+        insert into project_financial_profile_versions (
+          org_id, project_type_id, effective_from, financial_profile,
+          reason, created_by, updated_by
+        )
+        select ${orgId}, ${type.id}, date '0001-01-01',
+               ${JSON.stringify(type.financial_profile)}::jsonb,
+               'Initial built-in project financial policy',
+               ${actorId ?? null}, ${actorId ?? null}
+         where not exists (
+           select 1
+             from project_financial_profile_versions v
+            where v.org_id = ${orgId}
+              and v.project_type_id = ${type.id}
+         )
+      `);
+    });
   }
 
   // (Projects are classified by project_type_id at creation; the one-time backfill

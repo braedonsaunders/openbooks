@@ -8,6 +8,13 @@
   "billingMethod": "Método de faturamento",
   "sortOrder": "Ordem de classificação",
   "saved": "Tipo de projeto salvo",
+  "financialPolicyEffective": "Política financeira atual vigente desde: {date}",
+  "financialEffectiveFrom": "Nova política vigente a partir de",
+  "financialChangeReason": "Motivo da alteração",
+  "financialChangeReasonPlaceholder": "Descreva a alteração da política contábil",
+  "financialChangeReasonRequired": "Informe um motivo significativo para a alteração da política financeira",
+  "financialVersionNotice": "Ao salvar, uma nova política com data de vigência é publicada. Os períodos anteriores mantêm a política original.",
+  "legacySeed": "valor inicial legado",
   "deleteConfirm": "Excluir ou arquivar “{name}”?",
   "tabs": {
     "general": "Geral",

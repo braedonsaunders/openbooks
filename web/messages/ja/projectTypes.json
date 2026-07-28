@@ -8,6 +8,13 @@
   "billingMethod": "請求方法",
   "sortOrder": "並び順",
   "saved": "プロジェクトタイプを保存しました",
+  "financialPolicyEffective": "現在の財務ポリシーの適用開始日: {date}",
+  "financialEffectiveFrom": "新しいポリシーの適用開始日",
+  "financialChangeReason": "変更理由",
+  "financialChangeReasonPlaceholder": "会計ポリシーの変更内容を説明してください",
+  "financialChangeReasonRequired": "財務ポリシー変更の具体的な理由を入力してください",
+  "financialVersionNotice": "保存すると、適用日付きの新しいポリシーが公開されます。過去期間には元のポリシーが維持されます。",
+  "legacySeed": "旧初期値",
   "deleteConfirm": "「{name}」を削除またはアーカイブしますか?",
   "tabs": {
     "general": "全般",

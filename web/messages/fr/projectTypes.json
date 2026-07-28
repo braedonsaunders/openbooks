@@ -8,6 +8,13 @@
   "billingMethod": "Méthode de facturation",
   "sortOrder": "Ordre de tri",
   "saved": "Type de projet enregistré",
+  "financialPolicyEffective": "Politique financière actuelle en vigueur depuis le : {date}",
+  "financialEffectiveFrom": "Nouvelle politique en vigueur à partir du",
+  "financialChangeReason": "Motif du changement",
+  "financialChangeReasonPlaceholder": "Décrivez le changement de politique comptable",
+  "financialChangeReasonRequired": "Saisissez un motif pertinent pour le changement de politique financière",
+  "financialVersionNotice": "L’enregistrement publie une nouvelle politique datée. Les périodes antérieures conservent leur politique d’origine.",
+  "legacySeed": "valeur initiale héritée",
   "deleteConfirm": "Supprimer ou archiver « {name} » ?",
   "tabs": {
     "general": "Général",

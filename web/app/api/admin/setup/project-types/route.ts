@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/db.ts'
+import { publishProjectFinancialProfileInTransaction } from '@openbooks/engine/src/project-financial-profile-versions.ts'
 import { guardPermission } from '../../../../../lib/authz'
 import { isUuid } from '../../../../../lib/list-params'
 import { guardProjectsFeature } from '../../../../../lib/projects-gate'
@@ -24,8 +25,9 @@ function validateInvoicingProfile(profile: any, billingMethod: unknown): string 
   return null
 }
 
-/** Create / update / archive a project type. The three profile jsonb blobs are
- *  stored as-provided (shape is TS-typed at the edit surface). */
+/** Create / update / archive a project type. Financial policy is published as
+ * an append-only effective-dated version; the other profiles remain ordinary
+ * audited setup because they do not reinterpret historical profitability. */
 export async function POST(req: Request) {
   const gate = await guardPermission('admin.setup.manage')
   if (gate instanceof NextResponse) return gate
@@ -51,6 +53,14 @@ export async function POST(req: Request) {
           ${gate.user.id}, ${gate.user.id})
         returning id`)) as unknown as { rows: { id: string }[] }
       const createdId = r.rows[0].id
+      await publishProjectFinancialProfileInTransaction(tx, {
+        orgId,
+        projectTypeId: createdId,
+        effectiveFrom: new Date().toISOString().slice(0, 10),
+        financialProfile: b.financialProfile,
+        reason: 'Initial project type financial policy',
+        actorId: gate.user.id,
+      })
       await tx.execute(sql`
         insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
         values (${orgId}, 'project_types', ${createdId}, 'insert',
@@ -87,28 +97,72 @@ export async function PATCH(req: Request) {
     sql`updated_at = now()`,
     sql`updated_by = ${gate.user.id}`,
   ]
-  if (b.financialProfile) sets.push(sql`financial_profile = ${JSON.stringify(b.financialProfile)}::jsonb`)
   if (b.invoicingProfile) sets.push(sql`invoicing_profile = ${JSON.stringify(b.invoicingProfile)}::jsonb`)
   if (b.backupProfile) sets.push(sql`backup_profile = ${JSON.stringify(b.backupProfile)}::jsonb`)
-  const updated = await db.transaction(async (tx) => {
-    const before = (await tx.execute(sql`
-      select key, name, description, is_active, sort_order, billing_method,
-             financial_profile, invoicing_profile, backup_profile
-        from project_types where id = ${b.id} and org_id = ${orgId} for update
-    `)) as unknown as { rows: Record<string, unknown>[] }
-    if (!before.rows[0]) return false
-    const after = (await tx.execute(sql`
-      update project_types set ${sql.join(sets, sql`, `)}
-       where id = ${b.id} and org_id = ${orgId}
-       returning key, name, description, is_active, sort_order, billing_method,
-                 financial_profile, invoicing_profile, backup_profile
-    `)) as unknown as { rows: Record<string, unknown>[] }
-    await tx.execute(sql`
-      insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
-      values (${orgId}, 'project_types', ${b.id}, 'update',
-              ${JSON.stringify({ before: before.rows[0], after: after.rows[0] })}, ${gate.user.id})`)
-    return true
-  })
+  let updated: boolean
+  try {
+    updated = await db.transaction(async (tx) => {
+      const before = (await tx.execute(sql`
+        select pt.key, pt.name, pt.description, pt.is_active, pt.sort_order,
+               pt.billing_method, pt.invoicing_profile, pt.backup_profile,
+               coalesce(version.financial_profile, pt.financial_profile) as financial_profile
+          from project_types pt
+          left join lateral (
+            select v.financial_profile
+              from project_financial_profile_versions v
+             where v.org_id = pt.org_id
+               and v.project_type_id = pt.id
+               and v.effective_from <= current_date
+               and (v.effective_to is null or v.effective_to >= current_date)
+             order by v.effective_from desc
+             limit 1
+          ) version on true
+         where pt.id = ${b.id} and pt.org_id = ${orgId}
+         for update of pt
+      `)) as unknown as { rows: (Record<string, unknown> & { financial_profile: unknown })[] }
+      if (!before.rows[0]) return false
+
+      let financialVersion: { id: string; effectiveFrom: string; effectiveTo: string | null } | null = null
+      if (b.financialProfile) {
+        const comparison = (await tx.execute(sql`
+          select ${JSON.stringify(b.financialProfile)}::jsonb
+                 is distinct from
+                 ${JSON.stringify(before.rows[0].financial_profile)}::jsonb as changed
+        `)) as unknown as { rows: { changed: boolean }[] }
+        if (comparison.rows[0]?.changed) {
+          financialVersion = await publishProjectFinancialProfileInTransaction(tx, {
+            orgId,
+            projectTypeId: b.id,
+            effectiveFrom: String(b.financialEffectiveFrom ?? ''),
+            financialProfile: b.financialProfile,
+            reason: String(b.financialChangeReason ?? ''),
+            actorId: gate.user.id,
+          })
+        }
+      }
+
+      const after = (await tx.execute(sql`
+        update project_types set ${sql.join(sets, sql`, `)}
+         where id = ${b.id} and org_id = ${orgId}
+         returning key, name, description, is_active, sort_order, billing_method,
+                   invoicing_profile, backup_profile
+      `)) as unknown as { rows: Record<string, unknown>[] }
+      const projectTypeBefore = { ...before.rows[0] }
+      delete projectTypeBefore.financial_profile
+      await tx.execute(sql`
+        insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
+        values (${orgId}, 'project_types', ${b.id}, 'update',
+                ${JSON.stringify({
+                  before: projectTypeBefore,
+                  after: after.rows[0],
+                  ...(financialVersion ? { financialProfileVersion: financialVersion } : {}),
+                })},
+                ${gate.user.id})`)
+      return true
+    })
+  } catch (e) {
+    return NextResponse.json({ error: (e as Error).message }, { status: 422 })
+  }
   if (!updated) return NextResponse.json({ error: 'not found' }, { status: 404 })
   return NextResponse.json({ ok: true })
 }
@@ -122,25 +176,20 @@ export async function DELETE(req: Request) {
   const { searchParams } = new URL(req.url)
   const id = searchParams.get('id')
   if (!id || !isUuid(id)) return NextResponse.json({ error: 'not found' }, { status: 404 })
-  // Built-in types archive (is_active=false); custom types with no projects delete.
+  // Once a financial policy exists the project type is accounting configuration.
+  // Archive it; do not erase the type or its policy history even if unused.
   const result = await db.transaction(async (tx) => {
     const before = (await tx.execute(sql`
       select * from project_types where id = ${id} and org_id = ${orgId} for update
     `)) as unknown as { rows: Record<string, unknown>[] }
     if (!before.rows[0]) return null
-    const inUse = (await tx.execute(sql`select 1 from projects where project_type_id = ${id} and org_id = ${orgId} limit 1`)) as unknown as { rows: unknown[] }
-    const archived = before.rows[0].is_built_in === true || inUse.rows.length > 0
-    if (archived) {
-      await tx.execute(sql`update project_types set is_active = false, updated_at = now(), updated_by = ${gate.user.id} where id = ${id} and org_id = ${orgId}`)
-    } else {
-      await tx.execute(sql`delete from project_types where id = ${id} and org_id = ${orgId}`)
-    }
+    await tx.execute(sql`update project_types set is_active = false, updated_at = now(), updated_by = ${gate.user.id} where id = ${id} and org_id = ${orgId}`)
     await tx.execute(sql`
       insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
-      values (${orgId}, 'project_types', ${id}, ${archived ? 'archive' : 'delete'},
+      values (${orgId}, 'project_types', ${id}, 'archive',
               ${JSON.stringify({ before: before.rows[0] })}, ${gate.user.id})`)
-    return archived
+    return true
   })
   if (result === null) return NextResponse.json({ error: 'not found' }, { status: 404 })
-  return NextResponse.json({ ok: true, ...(result ? { archived: true } : {}) })
+  return NextResponse.json({ ok: true, archived: true })
 }

@@ -17,9 +17,22 @@ export default async function ProjectTypesSetup() {
     db.execute(sql`
       select id, key, name, description, is_built_in as "isBuiltIn", is_active as "isActive",
              sort_order as "sortOrder", billing_method as "billingMethod",
-             financial_profile as "financialProfile", invoicing_profile as "invoicingProfile",
-             backup_profile as "backupProfile"
-        from project_types where org_id = ${orgId} order by sort_order, name`),
+             coalesce(version.financial_profile, project_types.financial_profile) as "financialProfile",
+             version.effective_from::text as "financialProfileEffectiveFrom",
+             invoicing_profile as "invoicingProfile", backup_profile as "backupProfile"
+        from project_types
+        left join lateral (
+          select v.financial_profile, v.effective_from
+            from project_financial_profile_versions v
+           where v.org_id = project_types.org_id
+             and v.project_type_id = project_types.id
+             and v.effective_from <= current_date
+             and (v.effective_to is null or v.effective_to >= current_date)
+           order by v.effective_from desc
+           limit 1
+        ) version on true
+       where project_types.org_id = ${orgId}
+       order by sort_order, name`),
     db.execute(sql`select distinct dimension from account_groups where org_id = ${orgId} order by dimension`),
     db.execute(sql`
       select id, number, name from accounts
