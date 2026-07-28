@@ -437,6 +437,11 @@ export function canonicalNativeDocumentKey(d: NativeDocument): string {
   ]);
 }
 
+/** Human-facing source number, kept separate from the immutable sourceRef. */
+export function effectiveSourceDocumentNumber(d: NativeDocument): string {
+  return d.documentNumber?.trim() || d.sourceRef;
+}
+
 /** The same canonical key computed from the stored document. */
 type StoredDocumentKeyRow = {
   id: string;
@@ -633,12 +638,17 @@ export async function preflightFullSync(
   );
   const changes = await source.nativeChanges(null, ctx);
   const existingRows = (await db.execute(sql`
-    select id, status, custom->>${source.refKey} as ref
+    select id, status, document_number, custom->>${source.refKey} as ref
       from documents
      where org_id = ${opts.orgId}
        and custom->>${source.refKey} is not null
   `)) as unknown as {
-    rows: { id: string; status: string; ref: string }[];
+    rows: {
+      id: string;
+      status: string;
+      document_number: string;
+      ref: string;
+    }[];
   };
   const existingByRef = new Map(
     existingRows.rows.map((row) => [row.ref, row]),
@@ -673,6 +683,7 @@ export async function preflightFullSync(
       continue;
     }
     if (
+      existing.document_number === effectiveSourceDocumentNumber(document) &&
       canonicalNativeDocumentKey(document)
       === storedKeys.get(existing.id)
     ) {
@@ -1049,16 +1060,33 @@ export async function runSync(
     // -- 4. existing documents by source ref -------------------------------------
     const existing = new Map<
       string,
-      { id: string; status: string; posted: boolean }
+      {
+        id: string;
+        status: string;
+        posted: boolean;
+        documentNumber: string;
+      }
     >();
     for (const r of (
       (await db.execute(sql`
-        select id, status, posted_entry_id is not null as posted, custom->>${refKey} as ref
+        select id, status, document_number,
+               posted_entry_id is not null as posted, custom->>${refKey} as ref
           from documents where org_id = ${org.id} and custom->>${refKey} is not null`)) as unknown as {
-        rows: { id: string; status: string; posted: boolean; ref: string }[];
+        rows: {
+          id: string;
+          status: string;
+          document_number: string;
+          posted: boolean;
+          ref: string;
+        }[];
       }
     ).rows) {
-      existing.set(r.ref, { id: r.id, status: r.status, posted: r.posted });
+      existing.set(r.ref, {
+        id: r.id,
+        status: r.status,
+        posted: r.posted,
+        documentNumber: r.document_number,
+      });
     }
     // Older rate-keyed order imports retained a non-zero-rate code even when
     // no source tax existed. Zero tax has no unambiguous tax identity in this
@@ -1131,7 +1159,7 @@ export async function runSync(
               .values({
                 orgId: org.id,
                 kind: doc.kind,
-                documentNumber: doc.sourceRef,
+                documentNumber: effectiveSourceDocumentNumber(doc),
                 partyId: doc.partyId,
                 subsidiaryId: doc.subsidiaryId,
                 extraDims: doc.extraDims ?? {},
@@ -1187,6 +1215,7 @@ export async function runSync(
             id: docId,
             status: doc.posting ? "posted" : "approved",
             posted: doc.posting,
+            documentNumber: effectiveSourceDocumentNumber(doc),
           });
           continue;
         }
@@ -1198,6 +1227,12 @@ export async function runSync(
             // posting failed. Rebuild its lines/evidence and post as one unit;
             // a repeat failure leaves the prior approved row unchanged.
             await db.execute(sql`set local openbooks.amend = on`);
+            await db.execute(sql`
+              update documents
+                 set document_number = ${effectiveSourceDocumentNumber(doc)},
+                     updated_at = now()
+               where id = ${have.id}
+            `);
             await db.execute(
               sql`delete from document_lines where document_id = ${have.id}`,
             );
@@ -1221,14 +1256,67 @@ export async function runSync(
           }
           have.posted = true;
           have.status = "posted";
+          have.documentNumber = effectiveSourceDocumentNumber(doc);
           docsNew++;
           continue;
         }
-        if (
+        const sourceDocumentNumber = effectiveSourceDocumentNumber(doc);
+        const canonicalContentUnchanged =
           canonicalNativeDocumentKey(doc) ===
-          (fullStoredKeys?.get(have.id) ?? (await storedKey(have.id)))
-        ) {
-          docsUnchanged++;
+          (fullStoredKeys?.get(have.id) ?? (await storedKey(have.id)));
+        if (canonicalContentUnchanged) {
+          if (have.documentNumber === sourceDocumentNumber) {
+            docsUnchanged++;
+            continue;
+          }
+          await db.transaction(async (tx) => {
+            await tx.execute(sql`set local openbooks.amend = on`);
+            await tx.execute(sql`set local openbooks.migration = on`);
+            const auditBefore = await captureTransactionAuditSnapshot(
+              tx,
+              have.id,
+            );
+            if (!auditBefore) {
+              throw new Error(
+                `document ${have.id} disappeared during source-number reconciliation`,
+              );
+            }
+            const updated = await tx.execute(sql`
+              update documents
+                 set document_number = ${sourceDocumentNumber},
+                     updated_at = now()
+               where id = ${have.id}
+                 and org_id = ${org.id}
+                 and document_number = ${have.documentNumber}
+              returning id
+            `);
+            if (updated.rows.length !== 1) {
+              throw new Error(
+                `document ${have.id} changed during source-number reconciliation`,
+              );
+            }
+            const auditAfter = await captureTransactionAuditSnapshot(
+              tx,
+              have.id,
+            );
+            if (!auditAfter) {
+              throw new Error(
+                `document ${have.id} disappeared after source-number reconciliation`,
+              );
+            }
+            await recordTransactionAudit(tx, {
+              orgId: org.id,
+              documentId: have.id,
+              action: "update",
+              actorId: null,
+              source: "mirror",
+              reason: "source_transaction_number_changed",
+              before: auditBefore,
+              after: auditAfter,
+            });
+          });
+          have.documentNumber = sourceDocumentNumber;
+          docsAmended++;
           continue;
         }
         // AMEND: document is the system of record; its GL projection follows.
@@ -1248,6 +1336,7 @@ export async function runSync(
           await tx.execute(sql`
             update documents set
               kind = ${doc.kind}, party_id = ${doc.partyId}, subsidiary_id = ${doc.subsidiaryId},
+              document_number = ${sourceDocumentNumber},
               document_date = ${doc.documentDate}, posting_date = ${doc.documentDate}, due_date = ${doc.dueDate},
               currency = ${doc.currency ?? source.baseCurrency}, fx_rate = ${doc.fxRate ?? "1"},
               memo = ${doc.memo}, reference_number = ${doc.referenceNumber},
@@ -1305,6 +1394,7 @@ export async function runSync(
           }
         });
         if (have.posted) await setDocumentTotalsFromEntry(have.id);
+        have.documentNumber = sourceDocumentNumber;
         docsAmended++;
       } catch (e) {
         docsFailed++;

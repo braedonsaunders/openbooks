@@ -17,6 +17,9 @@
  *   --refresh-source
  *   --refresh-project-gl-source
  *   --as-of=YYYY-MM-DD
+ *   --connection=<connector uuid>
+ *   --max-sync-lag-minutes=1440
+ *   --max-source-age-minutes=1440
  *   --project-concurrency=8
  *   --source-accounting-book=<source accounting book id>
  *   --source-projects=/path/projects.json
@@ -77,6 +80,10 @@ const orgId = args.get("org") ?? process.env.TARGET_ORG;
 if (!orgId || !/^[0-9a-f-]{36}$/i.test(orgId)) {
   throw new Error("--org=<uuid> is required");
 }
+const connectionId = args.get("connection")?.trim() || null;
+if (connectionId && !/^[0-9a-f-]{36}$/i.test(connectionId)) {
+  throw new Error("--connection must be a UUID");
+}
 const requestedSourceAccountingBook =
   args.get("source-accounting-book")?.trim() || null;
 const financialAsOf = args.get("as-of")?.trim() || undefined;
@@ -91,6 +98,25 @@ if (
 ) {
   throw new Error("--project-concurrency must be an integer from 1 through 16");
 }
+const maxSourceAgeMinutes = Number(
+  args.get("max-source-age-minutes") ?? "1440",
+);
+if (
+  !Number.isFinite(maxSourceAgeMinutes) ||
+  maxSourceAgeMinutes < 5 ||
+  maxSourceAgeMinutes > 1_440
+) {
+  throw new Error("--max-source-age-minutes must be from 5 through 1440");
+}
+const maxSyncLagMinutes = Number(args.get("max-sync-lag-minutes") ?? "1440");
+if (
+  !Number.isFinite(maxSyncLagMinutes) ||
+  maxSyncLagMinutes < 5 ||
+  maxSyncLagMinutes > 10_080
+) {
+  throw new Error("--max-sync-lag-minutes must be from 5 through 10080");
+}
+const certificateStartedAt = new Date();
 
 const paths = {
   sourceProjects: args.get("source-projects") ?? "/tmp/parity-ns-projects.json",
@@ -104,12 +130,24 @@ const paths = {
   legacyCrew: args.get("legacy-crew") ?? "/tmp/ft-rows.tsv",
   legacyProjectFinancials:
     args.get("legacy-project-financials") ?? "/tmp/golden-cost.json",
+  sourceSnapshot:
+    args.get("source-snapshot") ??
+    `${args.get("source-projects") ?? "/tmp/parity-ns-projects.json"}.snapshot.json`,
   out:
     args.get("out") ??
     `/tmp/openbooks-project-parity-${orgId}-${new Date()
       .toISOString()
       .replace(/[:.]/g, "-")}.json`,
 };
+
+interface SourceSnapshotManifest {
+  schemaVersion: 1;
+  source: string;
+  startedAt: string;
+  completedAt: string;
+  sourceAccountingBook: string;
+  artifacts: Record<string, { path: string; sha256: string }>;
+}
 
 function readJson(path: string): JsonRow[] | null {
   if (!existsSync(path)) return null;
@@ -129,6 +167,13 @@ function canonicalMoney(value: unknown): string {
 
 function canonicalDecimal(value: unknown): string {
   return normalizeDecimal(String(value ?? "0"), 8);
+}
+
+function canonicalSourceDate(value: unknown): string {
+  const raw = String(value ?? "").trim();
+  const match = raw.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
+  if (!match) return raw;
+  return `${match[3]}-${match[1]!.padStart(2, "0")}-${match[2]!.padStart(2, "0")}`;
 }
 
 function moneyEqual(left: unknown, right: unknown): boolean {
@@ -308,13 +353,17 @@ async function refreshProjectGlSource(
 }
 
 async function refreshSource(): Promise<void> {
+  const startedAt = new Date().toISOString();
   const client = sourceClient();
   const projects = await client.query<JsonRow>(
     "select id, entityid, companyname, isinactive, jobbillingtype, parent from job",
   );
   writeFileSync(paths.sourceProjects, JSON.stringify(projects));
   const invoices = await client.query<JsonRow>(
-    "select id, tranid, trandate, entity, foreigntotal, status, postingperiod from transaction where type = 'CustInvc'",
+    `select id, tranid, trandate, entity, foreigntotal,
+            foreignamountunpaid, status, postingperiod, posting, voided
+       from transaction
+      where type = 'CustInvc'`,
   );
   writeFileSync(paths.sourceInvoices, JSON.stringify(invoices));
   const invoiceLines = await client.query<JsonRow>(
@@ -329,7 +378,27 @@ async function refreshSource(): Promise<void> {
       order by tl.transaction, tl.id`,
   );
   writeFileSync(paths.sourceInvoiceLines, JSON.stringify(invoiceLines));
-  await refreshProjectGlSource(client);
+  const sourceAccountingBook = await refreshProjectGlSource(client);
+  const artifacts = Object.fromEntries(
+    [
+      ["sourceProjects", paths.sourceProjects],
+      ["sourceInvoices", paths.sourceInvoices],
+      ["sourceInvoiceLines", paths.sourceInvoiceLines],
+      ["sourceProjectGl", paths.sourceProjectGl],
+    ].map(([key, path]) => [
+      key,
+      { path, sha256: fileHash(path)! },
+    ]),
+  );
+  const manifest: SourceSnapshotManifest = {
+    schemaVersion: 1,
+    source: "configured_accounting_source",
+    startedAt,
+    completedAt: new Date().toISOString(),
+    sourceAccountingBook,
+    artifacts,
+  };
+  writeFileSync(paths.sourceSnapshot, JSON.stringify(manifest, null, 2));
 }
 
 function parseLegacyTicketHeaders(path: string): JsonRow[] | null {
@@ -421,6 +490,11 @@ if (sourceAccountingBooks.length > 1) {
 const legacyTickets = parseLegacyTicketHeaders(paths.legacyTickets);
 const legacyCrew = parseLegacyCrew(paths.legacyCrew, legacyTickets);
 const legacyProjectFinancials = readJson(paths.legacyProjectFinancials);
+const sourceSnapshot = existsSync(paths.sourceSnapshot)
+  ? (JSON.parse(
+      readFileSync(paths.sourceSnapshot, "utf8"),
+    ) as SourceSnapshotManifest)
+  : null;
 
 const target = await withOrgContext(orgId, async () => {
   const [
@@ -431,6 +505,8 @@ const target = await withOrgContext(orgId, async () => {
     tickets,
     projectGl,
     ticketCrew,
+    latestSuccessfulSync,
+    latestSyncAttempt,
   ] = await Promise.all([
     retry(() =>
       db.execute(sql`
@@ -445,10 +521,15 @@ const target = await withOrgContext(orgId, async () => {
     ),
     retry(() =>
       db.execute(sql`
-      select id, document_number, document_date::text, total::text,
-             project_id, custom->>'nsId' as source_id
-        from documents
-       where org_id = ${orgId} and kind = 'customer_invoice'
+      select d.id, d.document_number, d.document_date::text,
+             coalesce(d.posting_date, d.document_date)::text as posting_date,
+             d.total::text, d.open_balance::text, d.status,
+             d.project_id, d.custom->>'nsId' as source_id,
+             party.custom->>'nsId' as source_party_id
+        from documents d
+        left join parties party
+          on party.id = d.party_id and party.org_id = d.org_id
+       where d.org_id = ${orgId} and d.kind = 'customer_invoice'
     `),
     ),
     retry(() =>
@@ -570,6 +651,32 @@ const target = await withOrgContext(orgId, async () => {
                 evidence.time_kind
     `),
     ),
+    retry(() =>
+      db.execute(sql`
+      select id, connection_id, status, kind, started_at, finished_at,
+             synced_through, stats
+        from sync_runs
+       where org_id = ${orgId}
+         and kind in ('incremental', 'full_migration')
+         and status = 'ok'
+         and synced_through is not null
+         ${connectionId ? sql`and connection_id = ${connectionId}` : sql``}
+       order by synced_through desc, finished_at desc
+       limit 1
+    `),
+    ),
+    retry(() =>
+      db.execute(sql`
+      select id, connection_id, status, kind, started_at, finished_at,
+             synced_through, stats, error_message
+        from sync_runs
+       where org_id = ${orgId}
+         and kind in ('incremental', 'full_migration')
+         ${connectionId ? sql`and connection_id = ${connectionId}` : sql``}
+       order by started_at desc
+       limit 1
+    `),
+    ),
   ]);
   return {
     org: (org as unknown as { rows: JsonRow[] }).rows[0] ?? null,
@@ -579,6 +686,12 @@ const target = await withOrgContext(orgId, async () => {
     tickets: (tickets as unknown as { rows: JsonRow[] }).rows,
     projectGl: (projectGl as unknown as { rows: JsonRow[] }).rows,
     ticketCrew: (ticketCrew as unknown as { rows: JsonRow[] }).rows,
+    latestSuccessfulSync: (
+      latestSuccessfulSync as unknown as { rows: JsonRow[] }
+    ).rows[0] ?? null,
+    latestSyncAttempt: (
+      latestSyncAttempt as unknown as { rows: JsonRow[] }
+    ).rows[0] ?? null,
   };
 });
 
@@ -586,6 +699,182 @@ if (!target.org) throw new Error(`organization ${orgId} not found`);
 
 const differences: Difference[] = [];
 const gates: Record<string, GateResult> = {};
+
+{
+  const success = target.latestSuccessfulSync;
+  const latest = target.latestSyncAttempt;
+  const syncedThrough = success
+    ? Date.parse(String(success.synced_through ?? ""))
+    : Number.NaN;
+  const lagMinutes = Number.isFinite(syncedThrough)
+    ? Math.max(
+        0,
+        (certificateStartedAt.getTime() - syncedThrough) / 60_000,
+      )
+    : Number.POSITIVE_INFINITY;
+  const stats = (success?.stats ?? null) as JsonRow | null;
+  const exactVerificationSection = (key: string): boolean => {
+    const section = stats?.[key] as JsonRow | undefined;
+    if (!section) return false;
+    const checked = Number(section.checked ?? section.accounts);
+    const matches = Number(section.matches);
+    return Number.isFinite(checked) && checked > 0 && matches === checked;
+  };
+  const successfulEvidenceIsExact =
+    stats !== null &&
+    Number(stats.docsFailed ?? 0) === 0 &&
+    exactVerificationSection("tb") &&
+    exactVerificationSection("openItems") &&
+    exactVerificationSection("periods") &&
+    exactVerificationSection("projectPeriods");
+  const latestAttemptSucceeded =
+    latest !== null &&
+    String(latest.status) === "ok" &&
+    String(latest.id) === String(success?.id);
+  const problems: string[] = [];
+  if (!success) problems.push("no successful accounting-connector watermark");
+  if (success && !successfulEvidenceIsExact) {
+    problems.push("latest successful watermark lacks complete exact verification evidence");
+  }
+  if (lagMinutes > maxSyncLagMinutes) {
+    problems.push(
+      `connector watermark is older than the ${maxSyncLagMinutes}-minute SLA`,
+    );
+  }
+  if (latest && !latestAttemptSucceeded) {
+    problems.push(
+      `latest connector attempt ${String(latest.id)} is ${String(latest.status)}`,
+    );
+  }
+  gates.connectorWatermark = {
+    status: problems.length === 0 ? "exact" : "unproven",
+    sourceCount: success ? 1 : 0,
+    targetCount: latest ? 1 : 0,
+    exactCount: problems.length === 0 ? 1 : null,
+    mismatchCount: problems.length,
+    detail:
+      problems.length === 0
+        ? `Exact connector verification through ${String(
+            success!.synced_through,
+          )}; lag ${lagMinutes.toFixed(1)} minutes within the ${maxSyncLagMinutes}-minute SLA`
+        : problems.join("; "),
+  };
+}
+
+{
+  const requiredArtifactKeys = [
+    "sourceProjects",
+    "sourceInvoices",
+    "sourceInvoiceLines",
+    "sourceProjectGl",
+  ] as const;
+  const snapshotTimes = sourceSnapshot
+    ? [Date.parse(sourceSnapshot.startedAt), Date.parse(sourceSnapshot.completedAt)]
+    : [Number.NaN, Number.NaN];
+  const artifactProblems: string[] = [];
+  if (!sourceSnapshot) {
+    artifactProblems.push(`missing ${paths.sourceSnapshot}`);
+  } else {
+    if (
+      sourceSnapshot.schemaVersion !== 1 ||
+      sourceSnapshot.source !== "configured_accounting_source"
+    ) {
+      artifactProblems.push("invalid source snapshot identity");
+    }
+    for (const key of requiredArtifactKeys) {
+      const artifact = sourceSnapshot.artifacts?.[key];
+      const expectedPath = paths[key];
+      if (!artifact || artifact.path !== expectedPath) {
+        artifactProblems.push(`${key} path is not bound to this certificate`);
+      } else if (artifact.sha256 !== fileHash(expectedPath)) {
+        artifactProblems.push(`${key} hash changed after source capture`);
+      }
+    }
+    if (
+      snapshotTimes.some((value) => !Number.isFinite(value)) ||
+      snapshotTimes[1]! < snapshotTimes[0]!
+    ) {
+      artifactProblems.push("invalid source snapshot observation window");
+    } else if (
+      certificateStartedAt.getTime() - snapshotTimes[1]! >
+      maxSourceAgeMinutes * 60_000
+    ) {
+      artifactProblems.push(
+        `source snapshot is older than ${maxSourceAgeMinutes} minutes`,
+      );
+    }
+  }
+
+  const sourceProjectIds = new Set(
+    sourceProjects?.map((row) => String(row.id)) ?? [],
+  );
+  const financialProjectIds = new Set(
+    legacyProjectFinancials?.map((row) => String(row.job ?? "")) ?? [],
+  );
+  const financialFetchedTimes =
+    legacyProjectFinancials?.map((row) =>
+      Date.parse(String(row.fetchedAt ?? "")),
+    ) ?? [];
+  if (
+    legacyProjectFinancials &&
+    financialProjectIds.size !== legacyProjectFinancials.length
+  ) {
+    artifactProblems.push(
+      "project-financial artifact contains duplicate identities",
+    );
+  }
+  if (
+    sourceProjects &&
+    legacyProjectFinancials &&
+    (sourceProjectIds.size !== financialProjectIds.size ||
+      [...sourceProjectIds].some((id) => !financialProjectIds.has(id)))
+  ) {
+    artifactProblems.push(
+      "project-financial identities do not equal the source project population",
+    );
+  }
+  if (
+    legacyProjectFinancials &&
+    (financialFetchedTimes.length === 0 ||
+      financialFetchedTimes.some((value) => !Number.isFinite(value)))
+  ) {
+    artifactProblems.push(
+      "project-financial artifact lacks a valid fetchedAt for every project",
+    );
+  } else if (
+    sourceSnapshot &&
+    financialFetchedTimes.length > 0 &&
+    snapshotTimes.every(Number.isFinite)
+  ) {
+    const earliest = Math.min(...financialFetchedTimes);
+    const latest = Math.max(...financialFetchedTimes);
+    if (
+      snapshotTimes[1]! - earliest > maxSourceAgeMinutes * 60_000 ||
+      latest - snapshotTimes[1]! > 5 * 60_000
+    ) {
+      artifactProblems.push(
+        `project-financial observations fall outside the ${maxSourceAgeMinutes}-minute source evidence window`,
+      );
+    }
+  }
+  const boundArtifactCount =
+    requiredArtifactKeys.length + (legacyProjectFinancials ? 1 : 0);
+  gates.sourceSnapshotCoherence = {
+    status: artifactProblems.length === 0 ? "exact" : "unproven",
+    sourceCount: boundArtifactCount,
+    targetCount:
+      requiredArtifactKeys.filter((key) => fileHash(paths[key]) !== null).length +
+      (legacyProjectFinancials ? 1 : 0),
+    exactCount: artifactProblems.length === 0 ? boundArtifactCount : null,
+    mismatchCount: artifactProblems.length,
+    detail:
+      artifactProblems.length === 0
+        ? `All live-source artifacts are hash-bound to one bounded observation window; project-financial identities exactly equal the source project population; connector watermark ${String(
+            target.latestSuccessfulSync?.synced_through ?? "unavailable",
+          )}`
+        : artifactProblems.join("; "),
+  };
+}
 
 if (!sourceProjects) {
   gates.projectIdentity = {
@@ -700,19 +989,55 @@ if (!sourceInvoices) {
       });
       continue;
     }
-    const sourceTotal = canonicalMoney(source.foreigntotal);
-    const targetTotal = canonicalMoney(found.total);
-    if (!moneyEqual(sourceTotal, targetTotal)) {
+    let invoiceExact = true;
+    const fields: Array<[string, string, string]> = [
+      [
+        "document_number",
+        String(source.tranid ?? sourceRef),
+        String(found.document_number ?? ""),
+      ],
+      [
+        "document_date",
+        canonicalSourceDate(source.trandate),
+        String(found.document_date ?? ""),
+      ],
+      [
+        "party",
+        String(source.entity ?? ""),
+        String(found.source_party_id ?? ""),
+      ],
+      [
+        "status",
+        String(source.voided).toUpperCase() === "T" ? "voided" : "posted",
+        String(found.status ?? ""),
+      ],
+      [
+        "total",
+        canonicalMoney(source.foreigntotal),
+        canonicalMoney(found.total),
+      ],
+      [
+        "open_balance",
+        canonicalMoney(source.foreignamountunpaid),
+        canonicalMoney(found.open_balance),
+      ],
+    ];
+    for (const [field, sourceValue, targetValue] of fields) {
+      const matches =
+        field === "total" || field === "open_balance"
+          ? moneyEqual(sourceValue, targetValue)
+          : sourceValue === targetValue;
+      if (matches) continue;
+      invoiceExact = false;
       differences.push({
         layer: "invoice_header",
         sourceRef,
-        field: "total",
-        source: sourceTotal,
-        target: targetTotal,
+        field,
+        source: sourceValue,
+        target: targetValue,
       });
-      continue;
     }
-    exact++;
+    if (invoiceExact) exact++;
   }
   const mismatchCount = sourceInvoices.length - exact;
   const sourceIds = new Set(sourceInvoices.map((row) => String(row.id)));
@@ -726,6 +1051,8 @@ if (!sourceInvoices) {
     exactCount: exact,
     mismatchCount,
     targetOnlyCount,
+    detail:
+      "Every source invoice by stable identity, transaction number, date, customer, lifecycle, total, and open balance",
   };
 }
 
@@ -1232,6 +1559,12 @@ const certificate = {
     environment: target.org.env_kind,
   },
   strictPassed,
+  connector: {
+    requestedConnectionId: connectionId,
+    maxLagMinutes: maxSyncLagMinutes,
+    latestSuccessful: target.latestSuccessfulSync,
+    latestAttempt: target.latestSyncAttempt,
+  },
   sourceArtifacts: Object.fromEntries(
     Object.entries(paths)
       .filter(([key]) => key !== "out")

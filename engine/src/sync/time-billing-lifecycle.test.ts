@@ -62,6 +62,28 @@ test("time costing distinguishes actualized labor from estimates", () => {
   );
 });
 
+test("complete-population financial sync reconciles every material time fact", () => {
+  for (const column of [
+    "employee_party_id",
+    "project_id",
+    "item_id",
+    "department_id",
+    "time_type_id",
+    "worked_on",
+    "hours",
+    "cost_rate",
+    "bill_rate",
+    "is_billable",
+    "billing_status",
+    "costing_basis",
+  ]) {
+    assert.match(financialSync, new RegExp(column));
+  }
+  assert.match(financialSync, /cannot move away from Field Ticket/);
+  assert.match(financialSync, /beforeCostRate/);
+  assert.match(financialSync, /beforeBillRate/);
+});
+
 test("project-financial input sync cannot rematerialize documents, GL, files, or PDFs", () => {
   assert.match(financialSync, /update time_entries/i);
   assert.match(financialSync, /update projects/i);

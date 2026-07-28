@@ -57,6 +57,13 @@ export interface NativeDocLine {
 export interface NativeDocument {
   /** Stable id in the source system (idempotency + change detection). */
   sourceRef: string;
+  /**
+   * Human-facing source transaction number. This is deliberately distinct
+   * from sourceRef: an ERP's immutable internal id is provenance, while its
+   * transaction number is the identifier users expect on documents/reports.
+   * Adapters may omit it when the source has no separate display number.
+   */
+  documentNumber?: string | null;
   /** openbooks document kind (drives the posting rule). */
   kind: string;
   /** false = order/quote — document only, no GL. */

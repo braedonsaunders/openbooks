@@ -221,6 +221,7 @@ export function buildNativeFromNetSuite(
   if (unmappedTaxCode) return { skip: `unmapped tax code ${unmappedTaxCode}` };
   const base: Omit<NativeDocument, "kind" | "lines"> = {
     sourceRef: h.id,
+    documentNumber: h.tranid ?? h.id,
     posting: true,
     partyId,
     subsidiaryId,
@@ -630,6 +631,7 @@ function buildOrder(
   return {
     doc: {
       sourceRef: h.id,
+      documentNumber: h.tranid ?? h.id,
       kind: orderKind,
       posting: false,
       partyId: h.entity ? (ctx.partyByRef.get(h.entity) ?? null) : null,

@@ -1,6 +1,6 @@
 import { sql } from "drizzle-orm";
 import { db } from "../db.ts";
-import { fromUnits, toUnits } from "../money.ts";
+import { fromUnits, normalizeDecimal, toUnits } from "../money.ts";
 import type {
   MigrationSource,
 } from "./source.ts";
@@ -28,6 +28,23 @@ interface TargetBillingState {
   costing_basis: "actual" | "estimated";
   source_status: string | null;
   invoiced_by_line_id: string | null;
+  employee_party_id: string;
+  project_id: string | null;
+  item_id: string | null;
+  department_id: string | null;
+  time_type_id: string | null;
+  employee_ref: string | null;
+  project_ref: string | null;
+  item_ref: string | null;
+  department_ref: string | null;
+  time_type_ref: string | null;
+  worked_on: string;
+  hours: string;
+  cost_rate: string | null;
+  bill_rate: string | null;
+  is_billable: boolean;
+  field_ticket_id: string | null;
+  field_ticket_project_ref: string | null;
 }
 
 interface TargetProjectState {
@@ -47,6 +64,10 @@ function duplicates(
     seen.add(ref);
   }
   return [...found].sort();
+}
+
+function decimal(value: string | null | undefined): string | null {
+  return value == null || value === "" ? null : normalizeDecimal(value, 8);
 }
 
 /**
@@ -83,14 +104,93 @@ export async function syncProjectFinancialInputs(
   }
 
   const targetResult = (await db.execute(sql`
-    select id, custom ->> ${source.refKey} as source_ref, billing_status,
-           costing_basis,
-           custom ->> 'sourceBillingStatus' as source_status,
-           invoiced_by_line_id
-      from time_entries
-     where org_id = ${options.orgId}
-       and custom ->> ${source.refKey} is not null
+    select time.id, time.custom ->> ${source.refKey} as source_ref,
+           time.billing_status, time.costing_basis,
+           time.custom ->> 'sourceBillingStatus' as source_status,
+           time.invoiced_by_line_id,
+           time.employee_party_id, time.project_id, time.item_id,
+           time.department_id, time.time_type_id,
+           employee.custom ->> ${source.refKey} as employee_ref,
+           project.custom ->> ${source.refKey} as project_ref,
+           item.custom ->> ${source.refKey} as item_ref,
+           department.custom ->> ${source.refKey} as department_ref,
+           time_type.custom ->> ${source.refKey} as time_type_ref,
+           time.worked_on::text, time.hours::text,
+           time.cost_rate::text, time.bill_rate::text, time.is_billable,
+           time.field_ticket_id,
+           ticket_project.custom ->> ${source.refKey} as field_ticket_project_ref
+      from time_entries time
+      join parties employee
+        on employee.id = time.employee_party_id and employee.org_id = time.org_id
+      left join projects project
+        on project.id = time.project_id and project.org_id = time.org_id
+      left join items item
+        on item.id = time.item_id and item.org_id = time.org_id
+      left join departments department
+        on department.id = time.department_id and department.org_id = time.org_id
+      left join time_types time_type
+        on time_type.id = time.time_type_id and time_type.org_id = time.org_id
+      left join documents ticket
+        on ticket.id = time.field_ticket_id and ticket.org_id = time.org_id
+      left join projects ticket_project
+        on ticket_project.id = ticket.project_id
+       and ticket_project.org_id = ticket.org_id
+     where time.org_id = ${options.orgId}
+       and time.custom ->> ${source.refKey} is not null
   `)) as unknown as { rows: TargetBillingState[] };
+
+  const referenceRows = (await db.execute(sql`
+    select 'employee' as kind, id, custom ->> ${source.refKey} as source_ref
+      from parties where org_id = ${options.orgId}
+    union all
+    select 'project', id, custom ->> ${source.refKey}
+      from projects where org_id = ${options.orgId}
+    union all
+    select 'item', id, custom ->> ${source.refKey}
+      from items where org_id = ${options.orgId}
+    union all
+    select 'department', id, custom ->> ${source.refKey}
+      from departments where org_id = ${options.orgId}
+    union all
+    select 'time_type', id, custom ->> ${source.refKey}
+      from time_types where org_id = ${options.orgId}
+  `)) as unknown as {
+    rows: Array<{ kind: string; id: string; source_ref: string | null }>;
+  };
+  const idsByKind = new Map<string, Map<string, string>>();
+  for (const row of referenceRows.rows) {
+    if (!row.source_ref) continue;
+    const refs = idsByKind.get(row.kind) ?? new Map<string, string>();
+    if (refs.has(row.source_ref)) {
+      throw new Error(
+        `OpenBooks contains duplicate ${source.name} ${row.kind} identity ${row.source_ref}`,
+      );
+    }
+    refs.set(row.source_ref, row.id);
+    idsByKind.set(row.kind, refs);
+  }
+  const resolveRef = (
+    kind: string,
+    sourceRef: string | null | undefined,
+    timeEntryRef: string,
+    required = false,
+  ): string | null => {
+    if (!sourceRef) {
+      if (required) {
+        throw new Error(
+          `source time entry ${timeEntryRef} has no ${kind} identity`,
+        );
+      }
+      return null;
+    }
+    const id = idsByKind.get(kind)?.get(sourceRef) ?? null;
+    if (!id) {
+      throw new Error(
+        `source time entry ${timeEntryRef} requires missing ${kind} ${sourceRef}`,
+      );
+    }
+    return id;
+  };
 
   const targetByRef = new Map<string, TargetBillingState>();
   const duplicateTargetRefs: string[] = [];
@@ -213,7 +313,54 @@ export async function syncProjectFinancialInputs(
     const sourceStatus = state.sourceStatus ?? null;
     const billingChanged = target.billing_status !== state.billingStatus;
     const costingChanged = target.costing_basis !== state.costingBasis;
-    if (!billingChanged && !costingChanged) return [];
+    const afterEmployeeId =
+      state.employeeRef === undefined
+        ? target.employee_party_id
+        : resolveRef(
+            "employee",
+            state.employeeRef,
+            state.sourceRef,
+            true,
+          );
+    const afterProjectId =
+      state.projectRef === undefined
+        ? target.project_id
+        : resolveRef("project", state.projectRef, state.sourceRef);
+    const afterItemId =
+      state.itemRef === undefined
+        ? target.item_id
+        : resolveRef("item", state.itemRef, state.sourceRef);
+    const afterDepartmentId =
+      state.departmentRef === undefined
+        ? target.department_id
+        : resolveRef("department", state.departmentRef, state.sourceRef);
+    const afterTimeTypeId =
+      state.timeTypeRef === undefined
+        ? target.time_type_id
+        : resolveRef("time_type", state.timeTypeRef, state.sourceRef);
+    const factsChanged =
+      (state.employeeRef !== undefined &&
+        target.employee_ref !== (state.employeeRef ?? null)) ||
+      (state.projectRef !== undefined &&
+        target.project_ref !== (state.projectRef ?? null)) ||
+      (state.itemRef !== undefined &&
+        target.item_ref !== (state.itemRef ?? null)) ||
+      (state.departmentRef !== undefined &&
+        target.department_ref !== (state.departmentRef ?? null)) ||
+      (state.timeTypeRef !== undefined &&
+        target.time_type_ref !== (state.timeTypeRef ?? null)) ||
+      (state.workedOn !== undefined &&
+        target.worked_on !== (state.workedOn ?? null)) ||
+      (state.hours !== undefined &&
+        decimal(target.hours) !== decimal(state.hours)) ||
+      (state.costRate !== undefined &&
+        decimal(target.cost_rate) !== decimal(state.costRate)) ||
+      (state.billRate !== undefined &&
+        decimal(target.bill_rate) !== decimal(state.billRate)) ||
+      (state.isBillable !== undefined &&
+        state.isBillable !== null &&
+        target.is_billable !== state.isBillable);
+    if (!billingChanged && !costingChanged && !factsChanged) return [];
     if (
       billingChanged &&
       target.invoiced_by_line_id &&
@@ -221,6 +368,15 @@ export async function syncProjectFinancialInputs(
     ) {
       throw new Error(
         `source time entry ${state.sourceRef} is unbilled but OpenBooks carries invoice-line provenance`,
+      );
+    }
+    if (
+      target.field_ticket_id &&
+      state.projectRef !== undefined &&
+      target.field_ticket_project_ref !== (state.projectRef ?? null)
+    ) {
+      throw new Error(
+        `source time entry ${state.sourceRef} cannot move away from Field Ticket ${target.field_ticket_id}'s project`,
       );
     }
     return [
@@ -231,7 +387,50 @@ export async function syncProjectFinancialInputs(
         billingStatus: state.billingStatus,
         beforeCostingBasis: target.costing_basis,
         costingBasis: state.costingBasis,
+        beforeSourceStatus: target.source_status,
         sourceStatus,
+        beforeEmployeeRef: target.employee_ref,
+        employeeId: afterEmployeeId,
+        employeeRef:
+          state.employeeRef === undefined
+            ? target.employee_ref
+            : state.employeeRef,
+        beforeProjectRef: target.project_ref,
+        projectId: afterProjectId,
+        projectRef:
+          state.projectRef === undefined ? target.project_ref : state.projectRef,
+        beforeItemRef: target.item_ref,
+        itemId: afterItemId,
+        itemRef: state.itemRef === undefined ? target.item_ref : state.itemRef,
+        beforeDepartmentRef: target.department_ref,
+        departmentId: afterDepartmentId,
+        departmentRef:
+          state.departmentRef === undefined
+            ? target.department_ref
+            : state.departmentRef,
+        beforeTimeTypeRef: target.time_type_ref,
+        timeTypeId: afterTimeTypeId,
+        timeTypeRef:
+          state.timeTypeRef === undefined
+            ? target.time_type_ref
+            : state.timeTypeRef,
+        beforeWorkedOn: target.worked_on,
+        workedOn: state.workedOn ?? target.worked_on,
+        beforeHours: decimal(target.hours),
+        hours: decimal(state.hours) ?? decimal(target.hours),
+        beforeCostRate: decimal(target.cost_rate),
+        costRate:
+          state.costRate === undefined
+            ? decimal(target.cost_rate)
+            : decimal(state.costRate),
+        beforeBillRate: decimal(target.bill_rate),
+        billRate:
+          state.billRate === undefined
+            ? decimal(target.bill_rate)
+            : decimal(state.billRate),
+        beforeIsBillable: target.is_billable,
+        isBillable:
+          state.isBillable == null ? target.is_billable : state.isBillable,
       },
     ];
   });
@@ -300,67 +499,107 @@ export async function syncProjectFinancialInputs(
                    "billingStatus" text,
                    "beforeCostingBasis" text,
                    "costingBasis" text,
-                   "sourceStatus" text
+                   "beforeSourceStatus" text,
+                   "sourceStatus" text,
+                   "beforeEmployeeRef" text,
+                   "employeeId" uuid,
+                   "employeeRef" text,
+                   "beforeProjectRef" text,
+                   "projectId" uuid,
+                   "projectRef" text,
+                   "beforeItemRef" text,
+                   "itemId" uuid,
+                   "itemRef" text,
+                   "beforeDepartmentRef" text,
+                   "departmentId" uuid,
+                   "departmentRef" text,
+                   "beforeTimeTypeRef" text,
+                   "timeTypeId" uuid,
+                   "timeTypeRef" text,
+                   "beforeWorkedOn" date,
+                   "workedOn" date,
+                   "beforeHours" numeric,
+                   hours numeric,
+                   "beforeCostRate" numeric,
+                   "costRate" numeric,
+                   "beforeBillRate" numeric,
+                   "billRate" numeric,
+                   "beforeIsBillable" boolean,
+                   "isBillable" boolean
                  )
-        ),
-        prior as materialized (
-          select te.id, te.billing_status as before_status,
-                 te.costing_basis as before_costing_basis,
-                 te.custom ->> 'sourceBillingStatus' as before_source_status,
-                 input."sourceRef" as source_ref,
-                 input."billingStatus" as after_status,
-                 input."costingBasis" as after_costing_basis,
-                 input."sourceStatus" as after_source_status
-            from time_entries te
-            join input on input.id = te.id
-           where te.org_id = ${options.orgId}
-             and te.custom ->> ${source.refKey} = input."sourceRef"
-             and (
-               te.billing_status is distinct from input."billingStatus"
-               or te.costing_basis is distinct from input."costingBasis"
-             )
-           for update
         ),
         updated as (
           update time_entries te
-             set billing_status = prior.after_status,
-                 costing_basis = prior.after_costing_basis,
+             set employee_party_id = input."employeeId",
+                 project_id = input."projectId",
+                 item_id = input."itemId",
+                 department_id = input."departmentId",
+                 time_type_id = input."timeTypeId",
+                 worked_on = input."workedOn",
+                 hours = input.hours,
+                 cost_rate = input."costRate",
+                 bill_rate = input."billRate",
+                 is_billable = input."isBillable",
+                 billing_status = input."billingStatus",
+                 costing_basis = input."costingBasis",
                  custom = jsonb_set(
                    coalesce(te.custom, '{}'::jsonb),
                    '{sourceBillingStatus}',
-                   coalesce(to_jsonb(prior.after_source_status), 'null'::jsonb),
+                   coalesce(to_jsonb(input."sourceStatus"), 'null'::jsonb),
                    true
                  ),
                  updated_at = now(),
                  updated_by = ${actorId}
-            from prior
-           where te.id = prior.id
+            from input
+           where te.id = input.id
+             and te.org_id = ${options.orgId}
+             and te.custom ->> ${source.refKey} = input."sourceRef"
            returning te.id
         )
         insert into audit_log
           (org_id, table_name, row_id, action, changes, actor_id, request_id)
-        select ${options.orgId}, 'time_entries', prior.id, 'update',
+        select ${options.orgId}, 'time_entries', input.id, 'update',
                jsonb_build_object(
                  'before', jsonb_build_object(
-                   'billingStatus', prior.before_status,
-                   'costingBasis', prior.before_costing_basis,
-                   'sourceBillingStatus', prior.before_source_status
+                   'billingStatus', input."beforeBillingStatus",
+                   'costingBasis', input."beforeCostingBasis",
+                   'sourceBillingStatus', input."beforeSourceStatus",
+                   'employeeRef', input."beforeEmployeeRef",
+                   'projectRef', input."beforeProjectRef",
+                   'itemRef', input."beforeItemRef",
+                   'departmentRef', input."beforeDepartmentRef",
+                   'timeTypeRef', input."beforeTimeTypeRef",
+                   'workedOn', input."beforeWorkedOn",
+                   'hours', input."beforeHours",
+                   'costRate', input."beforeCostRate",
+                   'billRate', input."beforeBillRate",
+                   'isBillable', input."beforeIsBillable"
                  ),
                  'after', jsonb_build_object(
-                   'billingStatus', prior.after_status,
-                   'costingBasis', prior.after_costing_basis,
-                   'sourceBillingStatus', prior.after_source_status
+                   'billingStatus', input."billingStatus",
+                   'costingBasis', input."costingBasis",
+                   'sourceBillingStatus', input."sourceStatus",
+                   'employeeRef', input."employeeRef",
+                   'projectRef', input."projectRef",
+                   'itemRef', input."itemRef",
+                   'departmentRef', input."departmentRef",
+                   'timeTypeRef', input."timeTypeRef",
+                   'workedOn', input."workedOn",
+                   'hours', input.hours,
+                   'costRate', input."costRate",
+                   'billRate', input."billRate",
+                   'isBillable', input."isBillable"
                  ),
                  'source', jsonb_build_object(
                    'system', cast(${source.name} as text),
-                   'ref', prior.source_ref,
+                   'ref', input."sourceRef",
                    'connectionId', cast(${options.connectionId} as text),
                    'syncRunId', cast(${options.runId} as text)
                  )
                ),
                ${actorId}, ${options.runId}
-          from prior
-          join updated on updated.id = prior.id
+          from input
+          join updated on updated.id = input.id
       `);
     }
     for (

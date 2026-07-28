@@ -573,6 +573,16 @@ export class NetSuiteSource implements MigrationSource {
         costingBasis:
           entry.fields.costingBasis === "estimated" ? "estimated" : "actual",
         sourceStatus: s(entry.fields.sourceBillingStatus),
+        employeeRef: s(entry.fields.employeeRef),
+        projectRef: s(entry.fields.projectRef),
+        itemRef: s(entry.fields.itemRef),
+        departmentRef: s(entry.fields.departmentRef),
+        timeTypeRef: s(entry.fields.timeTypeRef),
+        workedOn: s(entry.fields.workedOn),
+        hours: s(entry.fields.hours),
+        costRate: s(entry.fields.costRate),
+        billRate: s(entry.fields.billRate),
+        isBillable: Boolean(entry.fields.isBillable),
       })),
       projects: projects.map((project) => ({
         sourceRef: project.sourceRef,
