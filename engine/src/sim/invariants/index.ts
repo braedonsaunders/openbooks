@@ -38,7 +38,7 @@ export async function cheapInvariants(orgId: string): Promise<InvariantResult> {
   const globalBal = await scalar(sql`
     select coalesce(sum(l.amount), 0) from journal_lines l
       join journal_entries e on e.id = l.entry_id
-     where l.org_id = ${orgId} and e.status = 'posted'`);
+     where l.org_id = ${orgId} and e.status in ('posted', 'reversed')`);
   if (Number(globalBal) !== 0) {
     failures.push({ invariant: "global-balance", detail: `sum(all posted lines) = ${globalBal} (want 0)` });
   }
@@ -47,7 +47,7 @@ export async function cheapInvariants(orgId: string): Promise<InvariantResult> {
     select count(*) from (
       select e.id from journal_lines l
         join journal_entries e on e.id = l.entry_id
-       where l.org_id = ${orgId} and e.status = 'posted'
+       where l.org_id = ${orgId} and e.status in ('posted', 'reversed')
        group by e.id having abs(sum(l.amount)) >= 0.005) x`);
   if (Number(unbalanced) !== 0) {
     failures.push({ invariant: "per-entry-balance", detail: `${unbalanced} posted entries do not balance` });

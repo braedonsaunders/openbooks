@@ -183,7 +183,7 @@ export async function monthEndLaborAndPayroll(ctx: SimContext): Promise<void> {
   const totalSalary = ctx.world.employees.reduce((acc, e) => acc + Number(e.costRate) * HOURS_PER_MONTH, 0);
   const bal = (await db.execute(sql`
     select coalesce(sum(l.amount), 0)::text as s from journal_lines l
-      join journal_entries e on e.id = l.entry_id and e.status = 'posted'
+      join journal_entries e on e.id = l.entry_id and e.status in ('posted', 'reversed')
      where l.org_id = ${ctx.world.orgId} and l.account_id = ${a.laborClearing}`)) as unknown as { rows: { s: string }[] };
   const clearingCredit = -Number(bal.rows[0]?.s ?? "0"); // credit magnitude = billable labor accrued this month
   const r2 = (n: number) => Math.round(n * 100) / 100;

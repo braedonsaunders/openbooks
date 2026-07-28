@@ -72,7 +72,7 @@ export async function customersHome(orgId: string, subIds?: string[]): Promise<C
                   where (x.to_line_id = jl.id or x.from_line_id = jl.id) and x.unapplied_at is null
                ), 0) as remaining
           from journal_lines jl
-          join journal_entries je on je.id = jl.entry_id and je.status = 'posted'
+          join journal_entries je on je.id = jl.entry_id and je.status in ('posted', 'reversed')
           join accounts a on a.id = jl.account_id
           join documents d on d.id = je.source_document_id and d.kind = 'customer_invoice'
          where jl.is_open_item and a.type = 'asset_receivable' and jl.amount > 0${lineScope}
@@ -102,7 +102,7 @@ export async function customersHome(orgId: string, subIds?: string[]): Promise<C
                   where (x.to_line_id = jl.id or x.from_line_id = jl.id) and x.unapplied_at is null
                ), 0) as remaining
           from journal_lines jl
-          join journal_entries je on je.id = jl.entry_id and je.status = 'posted'
+          join journal_entries je on je.id = jl.entry_id and je.status in ('posted', 'reversed')
           join accounts a on a.id = jl.account_id
           join documents d on d.id = je.source_document_id and d.kind = 'customer_invoice'
          where jl.is_open_item and a.type = 'asset_receivable' and jl.amount > 0${lineScope}

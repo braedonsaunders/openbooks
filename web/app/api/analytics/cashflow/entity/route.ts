@@ -50,7 +50,7 @@ export async function GET(req: Request) {
              where (x.to_line_id = jl.id or x.from_line_id = jl.id) and x.unapplied_at is null
           ), 0) as remaining
         from journal_lines jl
-        join journal_entries je on je.id = jl.entry_id and je.status = 'posted'
+        join journal_entries je on je.id = jl.entry_id and je.status in ('posted', 'reversed')
         join accounts a on a.id = jl.account_id
         left join documents d on d.id = je.source_document_id
         where jl.org_id = ${user.orgId} and jl.is_open_item and a.type = ${acctType}

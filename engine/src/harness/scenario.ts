@@ -62,8 +62,8 @@ export async function runScenario(orgId: string, opts: { at: string; gitSha?: st
   // -- counts -----------------------------------------------------------------
   const docCount = await one<{ n: string }>(sql`select count(*) n from documents where org_id = ${orgId}`);
   const postedDocs = await one<{ n: string }>(sql`select count(*) n from documents where org_id = ${orgId} and status = 'posted'`);
-  const entryCount = await one<{ n: string }>(sql`select count(*) n from journal_entries where org_id = ${orgId} and status = 'posted'`);
-  const lineCount = await one<{ n: string }>(sql`select count(*) n from journal_lines l join journal_entries e on e.id = l.entry_id where l.org_id = ${orgId} and e.status = 'posted'`);
+  const entryCount = await one<{ n: string }>(sql`select count(*) n from journal_entries where org_id = ${orgId} and status in ('posted','reversed')`);
+  const lineCount = await one<{ n: string }>(sql`select count(*) n from journal_lines l join journal_entries e on e.id = l.entry_id where l.org_id = ${orgId} and e.status in ('posted','reversed')`);
   const counts = {
     documents: Number(docCount.n), postedDocuments: Number(postedDocs.n),
     postedEntries: Number(entryCount.n), postedLines: Number(lineCount.n),
@@ -83,7 +83,7 @@ export async function runScenario(orgId: string, opts: { at: string; gitSha?: st
            join period_locks pl on pl.period_id = p.id and pl.module = 'gl' and pl.state = 'closed'
           where p.org_id = ${orgId}),
         (select (date_trunc('month', max(e.posting_date)) - interval '1 day')::text
-           from journal_entries e where e.org_id = ${orgId} and e.status = 'posted')
+           from journal_entries e where e.org_id = ${orgId} and e.status in ('posted','reversed'))
       ) as cutoff,
       case when exists (
         select 1 from accounting_periods p
@@ -98,7 +98,7 @@ export async function runScenario(orgId: string, opts: { at: string; gitSha?: st
   const gb = await one<{ s: string }>(sql`
     select coalesce(sum(l.amount), 0) s from journal_lines l
       join journal_entries e on e.id = l.entry_id
-     where l.org_id = ${orgId} and e.status = 'posted'`);
+     where l.org_id = ${orgId} and e.status in ('posted','reversed')`);
   checks.push({ name: "global-balance", ok: toUnits(gb.s) === 0n, detail: `sum(all posted lines) = ${gb.s} (want 0)` });
 
   // -- CHECK 2: every posted entry individually balances -----------------------
@@ -106,7 +106,7 @@ export async function runScenario(orgId: string, opts: { at: string; gitSha?: st
     select count(*) n from (
       select e.id from journal_lines l
         join journal_entries e on e.id = l.entry_id
-       where l.org_id = ${orgId} and e.status = 'posted'
+       where l.org_id = ${orgId} and e.status in ('posted','reversed')
        group by e.id having abs(sum(l.amount)) >= 0.005) x`);
   checks.push({ name: "per-entry-balance", ok: Number(unbal.n) === 0, detail: `${unbal.n} posted entries do not balance (want 0)` });
 
@@ -149,7 +149,7 @@ export async function runScenario(orgId: string, opts: { at: string; gitSha?: st
     select coalesce(sum(l.amount), 0) tagged from journal_lines l
       join journal_entries e on e.id = l.entry_id
      where l.org_id = ${orgId} and e.origin = 'overhead_applied'
-       and e.status = 'posted' and l.project_id is not null`);
+       and e.status in ('posted','reversed') and l.project_id is not null`);
   const taggedTotal = Number(ovhDir.tagged);
   checks.push({
     name: "overhead-burdens-jobs",
@@ -176,7 +176,7 @@ export async function runScenario(orgId: string, opts: { at: string; gitSha?: st
       select a.id, a.name as account, a.number, a.type as kind, sum(l.amount) as gl
         from accounts a
         join journal_lines l on l.account_id = a.id
-        join journal_entries e on e.id = l.entry_id and e.status = 'posted' and e.posting_date <= ${cutoff}
+        join journal_entries e on e.id = l.entry_id and e.status in ('posted','reversed') and e.posting_date <= ${cutoff}
        where a.org_id = ${orgId} and a.type in ('asset_receivable','liability_payable')
        group by a.id, a.name, a.number, a.type),
     sub as (
@@ -193,7 +193,7 @@ export async function runScenario(orgId: string, opts: { at: string; gitSha?: st
                and oe.posting_date <= ${cutoff}
           ), 0)) as subledger
         from documents d
-        join journal_entries e on e.id = d.posted_entry_id and e.status = 'posted' and e.posting_date <= ${cutoff}
+        join journal_entries e on e.id = d.posted_entry_id and e.status in ('posted','reversed') and e.posting_date <= ${cutoff}
         join journal_lines l on l.entry_id = d.posted_entry_id and l.is_open_item
         join accounts acc on acc.id = l.account_id and acc.type in ('asset_receivable','liability_payable')
        where d.org_id = ${orgId} and d.status = 'posted'
@@ -204,7 +204,7 @@ export async function runScenario(orgId: string, opts: { at: string; gitSha?: st
       select a.id, sum(l.amount) as direct
         from accounts a
         join journal_lines l on l.account_id = a.id and not l.is_open_item
-        join journal_entries e on e.id = l.entry_id and e.status = 'posted' and e.posting_date <= ${cutoff}
+        join journal_entries e on e.id = l.entry_id and e.status in ('posted','reversed') and e.posting_date <= ${cutoff}
        where a.org_id = ${orgId} and a.type in ('asset_receivable','liability_payable')
        group by a.id)
     select gl.account, gl.number, gl.kind, gl.gl::text as gl,
@@ -238,19 +238,19 @@ export async function runScenario(orgId: string, opts: { at: string; gitSha?: st
   await bench("trial_balance", sql`
     select a.id, sum(l.amount) as bal from accounts a
       join journal_lines l on l.account_id = a.id
-      join journal_entries e on e.id = l.entry_id and e.status = 'posted' and e.posting_date <= ${cutoff}
+      join journal_entries e on e.id = l.entry_id and e.status in ('posted','reversed') and e.posting_date <= ${cutoff}
      where a.org_id = ${orgId} group by a.id having abs(sum(l.amount)) >= 0.005`);
   // Balance sheet aggregate (same inception scan).
   await bench("balance_sheet", sql`
     select a.type, sum(l.amount) as bal from accounts a
       join journal_lines l on l.account_id = a.id
-      join journal_entries e on e.id = l.entry_id and e.status = 'posted' and e.posting_date <= ${cutoff}
+      join journal_entries e on e.id = l.entry_id and e.status in ('posted','reversed') and e.posting_date <= ${cutoff}
      where a.org_id = ${orgId} group by a.type`);
   // P&L for the fiscal year up to the cutoff.
   await bench("profit_and_loss", sql`
     select a.id, sum(l.amount) as bal from accounts a
       join journal_lines l on l.account_id = a.id
-      join journal_entries e on e.id = l.entry_id and e.status='posted' and e.posting_date between ${fyStart} and ${cutoff}
+      join journal_entries e on e.id = l.entry_id and e.status in ('posted','reversed') and e.posting_date between ${fyStart} and ${cutoff}
      where a.org_id = ${orgId} and a.type in ('income','income_other','cogs','expense','expense_other','expense_deferred') group by a.id`);
   // AR aging (open items by party, signed point-in-time as-of cutoff).
   await bench("ar_aging", sql`
@@ -263,7 +263,7 @@ export async function runScenario(orgId: string, opts: { at: string; gitSha?: st
                 and ap.unapplied_at is null and ap.applied_on <= ${cutoff}
                 and oe.posting_date <= ${cutoff}), 0)) ob
       from documents d
-      join journal_entries e on e.id = d.posted_entry_id and e.status='posted' and e.posting_date <= ${cutoff}
+      join journal_entries e on e.id = d.posted_entry_id and e.status in ('posted','reversed') and e.posting_date <= ${cutoff}
       join journal_lines l on l.entry_id = d.posted_entry_id and l.is_open_item
      where d.org_id=${orgId} and d.status='posted' and d.kind in ('customer_invoice','customer_credit')
      group by d.party_id`);
@@ -275,7 +275,7 @@ export async function runScenario(orgId: string, opts: { at: string; gitSha?: st
            count(distinct a.id)::text accounts
       from accounts a
       join journal_lines l on l.account_id = a.id
-      join journal_entries e on e.id = l.entry_id and e.status='posted' and e.posting_date <= ${cutoff}
+      join journal_entries e on e.id = l.entry_id and e.status in ('posted','reversed') and e.posting_date <= ${cutoff}
      where a.org_id = ${orgId}`);
 
   const pass = checks.every((c) => c.ok);

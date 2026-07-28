@@ -497,7 +497,7 @@ export async function statementMatrix(opts: {
     select a.id, a.parent_id, a.number, a.name, a.type, a.is_summary, ${filterCols}
       from accounts a
       left join (journal_lines l join journal_entries e on e.id = l.entry_id and e.org_id = l.org_id)
-        on l.account_id = a.id and l.org_id = ${orgId} and e.org_id = ${orgId} and e.status = 'posted' and ${baseDate}
+        on l.account_id = a.id and l.org_id = ${orgId} and e.org_id = ${orgId} and e.status in ('posted', 'reversed') and ${baseDate}
        and ${dimFilterSql(opts.dims, opts.subsidiary)}${cashFilter}
      where a.org_id = ${orgId}
      group by a.id

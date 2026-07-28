@@ -758,7 +758,7 @@ export async function reconciliationTotals(
       coalesce((
         select sum(jl.amount)
           from journal_lines jl
-          join journal_entries je on je.id = jl.entry_id and je.status = 'posted'
+          join journal_entries je on je.id = jl.entry_id and je.status in ('posted', 'reversed')
          where jl.account_id = ${recon.account_id} and jl.org_id = ${ctx.orgId}
            and (jl.reconciled_at is not null
                 or jl.id in (select journal_line_id from reconciliation_matches
@@ -838,7 +838,7 @@ export async function autoMatch(reconciliationId: string, ctx: BankingContext): 
     db.execute(sql`
       select jl.id, je.posting_date, jl.amount
         from journal_lines jl
-        join journal_entries je on je.id = jl.entry_id and je.status = 'posted'
+        join journal_entries je on je.id = jl.entry_id and je.status in ('posted', 'reversed')
        where jl.account_id = ${recon.account_id} and jl.org_id = ${ctx.orgId}
          and jl.reconciled_at is null and je.posting_date <= ${recon.through_date}
          and not exists (select 1 from reconciliation_matches m where m.journal_line_id = jl.id)
@@ -934,7 +934,7 @@ export async function createMatch(
   const gl = (await db.execute(sql`
     select jl.id
       from journal_lines jl
-      join journal_entries je on je.id = jl.entry_id and je.status = 'posted'
+      join journal_entries je on je.id = jl.entry_id and je.status in ('posted', 'reversed')
      where jl.id = any(${`{${journalLineIds.join(",")}}`}::uuid[]) and jl.org_id = ${ctx.orgId}
        and jl.account_id = ${recon.account_id} and jl.reconciled_at is null
        and not exists (select 1 from reconciliation_matches m where m.journal_line_id = jl.id)
@@ -1077,7 +1077,7 @@ export async function markReconciled(
     const bal = (await tx.execute(sql`
       select coalesce(sum(jl.amount), 0) as cleared
         from journal_lines jl
-        join journal_entries je on je.id = jl.entry_id and je.status = 'posted'
+        join journal_entries je on je.id = jl.entry_id and je.status in ('posted', 'reversed')
        where jl.account_id = ${recon.account_id} and jl.org_id = ${ctx.orgId}
          and (jl.reconciled_at is not null
               or jl.id in (select journal_line_id from reconciliation_matches

@@ -280,5 +280,10 @@ repeat affected close tasks, and close the scope again.
 For a correction after statements were issued, a reversal and correcting entry
 in an open period is often preferable because it preserves the original close.
 Follow the organization's accounting policy.
+
+The original journal remains part of every financial report after its lifecycle
+status changes to **reversed**. Reports include it together with the linked
+posted reversal; excluding the original would report the reversal as new
+economic activity instead of a cancellation.
 `,
 }

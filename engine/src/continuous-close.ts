@@ -302,7 +302,7 @@ async function accountingFindings(orgId: string, agentThreshold: string, detecto
            (r.statement_balance - coalesce((
              select sum(jl.amount)
                from journal_lines jl
-               join journal_entries je on je.id = jl.entry_id and je.status = 'posted'
+               join journal_entries je on je.id = jl.entry_id and je.status in ('posted', 'reversed')
               where jl.org_id = r.org_id and jl.account_id = r.account_id
                 and (jl.reconciled_at is not null or exists (
                   select 1 from reconciliation_matches m
@@ -477,7 +477,7 @@ async function financeFindings(orgId: string, agentThreshold: string, detectors:
         select l.account_id,
                sum(case when a.type in ('income','income_other') then -l.amount else l.amount end) as actual
           from journal_lines l
-          join journal_entries e on e.id = l.entry_id and e.org_id = l.org_id and e.status = 'posted'
+          join journal_entries e on e.id = l.entry_id and e.org_id = l.org_id and e.status in ('posted', 'reversed')
           join accounts a on a.id = l.account_id and a.org_id = l.org_id
          where l.org_id = ${orgId} and e.book_id = ${budget.book_id}
            and e.posting_date >= ${budget.starts_on} and e.posting_date <= ${budget.ends_on}
@@ -574,7 +574,7 @@ async function financeFindings(orgId: string, agentThreshold: string, detectors:
                coalesce(sum(l.amount) filter (where a.type = 'cogs'), 0)::text as cogs,
                coalesce(sum(l.amount) filter (where a.type in ('expense','expense_other','expense_deferred')), 0)::text as opex
           from journal_lines l
-          join journal_entries e on e.id = l.entry_id and e.org_id = l.org_id and e.status = 'posted'
+          join journal_entries e on e.id = l.entry_id and e.org_id = l.org_id and e.status in ('posted', 'reversed')
           join accounting_books b on b.id = e.book_id and b.org_id = e.org_id and b.is_primary
           join accounts a on a.id = l.account_id and a.org_id = l.org_id
          where l.org_id = ${orgId} and e.posting_date >= ${period.starts_on} and e.posting_date <= ${period.ends_on}

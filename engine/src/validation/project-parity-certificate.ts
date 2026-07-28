@@ -347,7 +347,7 @@ const target = await withOrgContext(orgId, async () => {
         join journal_entries je on je.id = jl.entry_id and je.org_id = jl.org_id
         join projects p on p.id = jl.project_id and p.org_id = jl.org_id
         join accounts a on a.id = jl.account_id and a.org_id = jl.org_id
-       where jl.org_id = ${orgId} and je.status = 'posted'
+       where jl.org_id = ${orgId} and je.status in ('posted', 'reversed')
          and p.custom->>'nsId' is not null
        group by p.custom->>'nsId', a.type
     `)),
@@ -551,6 +551,15 @@ if (!sourceProjectGl) {
       row.amount,
     );
   }
+  // A posted entry and its linked reversal remain permanent ledger history.
+  // Their fully offset category key is economically absent, not a target-only
+  // "exact zero" that can inflate the source-population numerator.
+  for (const [key, value] of sourceAmounts) {
+    if (value === 0n) sourceAmounts.delete(key);
+  }
+  for (const [key, value] of targetAmounts) {
+    if (value === 0n) targetAmounts.delete(key);
+  }
   const keys = new Set([...sourceAmounts.keys(), ...targetAmounts.keys()]);
   let exact = 0;
   for (const key of keys) {
@@ -568,12 +577,16 @@ if (!sourceProjectGl) {
       target: fromUnits(targetAmount),
     });
   }
+  const targetOnlyCount = [...targetAmounts.keys()].filter(
+    (key) => !sourceAmounts.has(key),
+  ).length;
   gates.projectGlByAccountCategory = {
     status: exact === keys.size ? "exact" : "different",
     sourceCount: sourceAmounts.size,
     targetCount: targetAmounts.size,
     exactCount: exact,
     mismatchCount: keys.size - exact,
+    targetOnlyCount,
     detail:
       "Signed functional-currency GL amounts grouped by project and normalized account category",
   };

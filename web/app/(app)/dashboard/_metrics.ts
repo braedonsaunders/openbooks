@@ -68,9 +68,9 @@ export async function loadDashboardMetrics(authz: Authz): Promise<DashboardMetri
   const [totals, financials, recentEntries, pendingApprovalList, myGates, draftDocuments] = await Promise.all([
     db.execute(sql`
       select
-        (select count(*) from journal_lines l join journal_entries e on e.id = l.entry_id where e.org_id = ${orgId} and e.status = 'posted') as journal_lines,
+        (select count(*) from journal_lines l join journal_entries e on e.id = l.entry_id where e.org_id = ${orgId} and e.status in ('posted', 'reversed')) as journal_lines,
         (select count(*) from accounts where is_active and org_id = ${orgId}) as accounts,
-        (select count(*) from journal_entries where org_id = ${orgId} and status = 'posted' and posting_date = current_date) as entries_today,
+        (select count(*) from journal_entries where org_id = ${orgId} and status in ('posted', 'reversed') and posting_date = current_date) as entries_today,
         (select count(*) from flow_gates where org_id = ${orgId} and status = 'pending') as pending_approvals,
         (select coalesce(sum(l.amount), 0) from journal_lines l join journal_entries e on e.id = l.entry_id where e.org_id = ${orgId}) as ledger_sum
     `),
@@ -81,7 +81,7 @@ export async function loadDashboardMetrics(authz: Authz): Promise<DashboardMetri
              sum(case when l.amount > 0 then l.amount else 0 end) as total_debits
         from journal_entries e
         join journal_lines l on l.entry_id = e.id
-       where e.org_id = ${orgId} and e.status = 'posted'
+       where e.org_id = ${orgId} and e.status in ('posted', 'reversed')
        group by e.id
        order by e.created_at desc, e.entry_number desc
        limit 5

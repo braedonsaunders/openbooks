@@ -317,7 +317,7 @@ export async function computeTaxReturn(
           join journal_entries e on e.id = l.entry_id
           join tax_codes tc on tc.id = l.tax_code_id
          where l.org_id = ${orgId} and l.tax_code_id = ${src.taxCodeId}
-           and e.status = 'posted' and e.posting_date between ${from} and ${to}
+           and e.status in ('posted', 'reversed') and e.posting_date between ${from} and ${to}
            and l.account_id = coalesce(${acctCol}, ${orgFallback})`)) as unknown as {
         rows: { total: string }[];
       };
@@ -328,7 +328,7 @@ export async function computeTaxReturn(
           from journal_lines l
           join journal_entries e on e.id = l.entry_id
          where l.org_id = ${orgId} and l.tax_code_id = ${src.taxCodeId}
-           and e.status = 'posted' and e.posting_date between ${from} and ${to}`)) as unknown as {
+           and e.status in ('posted', 'reversed') and e.posting_date between ${from} and ${to}`)) as unknown as {
         rows: { total: string }[];
       };
       total = r.rows[0]?.total ?? "0";

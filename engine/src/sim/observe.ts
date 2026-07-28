@@ -92,7 +92,7 @@ export async function trialBalance(world: SimOrg, asOf: string) {
     select a.number, a.name, a.type, sum(l.amount)::text as balance
       from accounts a
       join journal_lines l on l.account_id = a.id
-      join journal_entries e on e.id = l.entry_id and e.status = 'posted' and e.posting_date <= ${asOf}
+      join journal_entries e on e.id = l.entry_id and e.status in ('posted', 'reversed') and e.posting_date <= ${asOf}
      where a.org_id = ${world.orgId}
      group by a.number, a.name, a.type
      having abs(sum(l.amount)) >= 0.005

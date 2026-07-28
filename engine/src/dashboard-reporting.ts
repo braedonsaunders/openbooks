@@ -20,7 +20,7 @@ export function dashboardFinancialMetricsQuery(orgId: string) {
       (select base_currency from orgs where id = ${orgId}) as base_currency,
       (select coalesce(sum(l.amount), 0)
          from journal_lines l
-         join journal_entries e on e.id = l.entry_id and e.status = 'posted'
+         join journal_entries e on e.id = l.entry_id and e.status in ('posted', 'reversed')
          join accounts a on a.id = l.account_id and a.type = 'asset_bank'
         where e.org_id = ${orgId}) as cash_balance,
       (select coalesce(sum(round(d.open_balance * d.fx_rate, 4)), 0)
