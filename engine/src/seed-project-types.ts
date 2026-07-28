@@ -8,7 +8,10 @@ import { db } from "./db.ts";
 import { sql } from "drizzle-orm";
 import { BUILTIN_PROJECT_TYPES } from "@openbooks/schema";
 
-export async function seedProjectTypes(orgId: string, actorId?: string | null): Promise<void> {
+export async function seedProjectTypes(
+  orgId: string,
+  actorId?: string | null,
+): Promise<void> {
   for (const t of BUILTIN_PROJECT_TYPES) {
     await db.transaction(async (tx) => {
       await tx.execute(sql`
@@ -57,13 +60,33 @@ export async function seedProjectTypes(orgId: string, actorId?: string | null): 
 }
 
 async function main() {
-  const org: any = await db.execute(sql`select id from orgs order by created_at`);
+  const org: any = await db.execute(
+    sql`select id from orgs order by created_at`,
+  );
   for (const row of org.rows) await seedProjectTypes(row.id);
-  const c: any = await db.execute(sql`select count(*)::int n from project_types`);
-  const b: any = await db.execute(sql`select count(*)::int n from projects where project_type_id is not null`);
+  const c: any = await db.execute(
+    sql`select count(*)::int n from project_types`,
+  );
+  const b: any = await db.execute(
+    sql`select count(*)::int n from projects where project_type_id is not null`,
+  );
   console.log("project_types:", c.rows[0].n, "| projects typed:", b.rows[0].n);
   process.exit(0);
 }
 
-// Run directly (tsx seed-project-types.ts) — but not when imported.
-if (import.meta.url === `file://${process.argv[1]}`) main();
+/**
+ * Run directly (`tsx seed-project-types.ts`) but never merely because this
+ * module was bundled into another executable. In an esbuild bundle,
+ * `import.meta.url` is the bundle URL for every inlined module, so comparing it
+ * with argv[1] incorrectly launched this CLI from deployment bootstrap.mjs.
+ */
+export function isSeedProjectTypesCli(entrypoint: string | undefined): boolean {
+  return /(^|[/\\])seed-project-types\.(?:[cm]?[jt]s)$/.test(entrypoint ?? "");
+}
+
+if (isSeedProjectTypesCli(process.argv[1])) {
+  void main().catch((error) => {
+    console.error(error);
+    process.exitCode = 1;
+  });
+}
