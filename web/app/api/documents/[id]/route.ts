@@ -33,8 +33,9 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
   }
   // Per-kind read permission (ap.read for bills/banking, ar.read for
   // invoices/credits, gl.read for transfers) — mirrors the old per-module routes.
-  if (!can(authz, readPermission(row.kind))) {
-    return NextResponse.json({ error: `missing permission: ${readPermission(row.kind)}` }, { status: 403 })
+  const readPerm = row.kind === 'project_charge' ? 'projects.read' : readPermission(row.kind)
+  if (!can(authz, readPerm)) {
+    return NextResponse.json({ error: `missing permission: ${readPerm}` }, { status: 403 })
   }
 
   const doc = await loadDocument(id, authz.user.orgId)
@@ -65,8 +66,9 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
   if (!row) return NextResponse.json({ error: 'not found' }, { status: 404 })
   const cfg = DOC_KINDS[row.kind]
   if (!cfg) return NextResponse.json({ error: `kind "${row.kind}" is not editable here` }, { status: 422 })
-  if (!can(authz, createPermission(row.kind))) {
-    return NextResponse.json({ error: `missing permission: ${createPermission(row.kind)}` }, { status: 403 })
+  const editPerm = row.kind === 'project_charge' ? 'projects.manage' : createPermission(row.kind)
+  if (!can(authz, editPerm)) {
+    return NextResponse.json({ error: `missing permission: ${editPerm}` }, { status: 403 })
   }
   if (row.status === 'voided') {
     return NextResponse.json({ error: 'a voided document cannot be edited' }, { status: 422 })
@@ -126,8 +128,9 @@ export async function DELETE(req: Request, { params }: { params: Promise<{ id: s
   if (!row) return NextResponse.json({ error: 'not found' }, { status: 404 })
   const cfg = DOC_KINDS[row.kind]
   if (!cfg) return NextResponse.json({ error: `kind "${row.kind}" is not editable here` }, { status: 422 })
-  if (!can(authz, createPermission(row.kind))) {
-    return NextResponse.json({ error: `missing permission: ${createPermission(row.kind)}` }, { status: 403 })
+  const editPerm = row.kind === 'project_charge' ? 'projects.manage' : createPermission(row.kind)
+  if (!can(authz, editPerm)) {
+    return NextResponse.json({ error: `missing permission: ${editPerm}` }, { status: 403 })
   }
   // Flow-managed lock: a locked record can't be deleted out from under its
   // workflow either (same exemptions as edits).

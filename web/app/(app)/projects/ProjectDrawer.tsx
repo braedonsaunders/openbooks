@@ -3,9 +3,9 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { useTranslations } from 'next-intl'
-import { ChevronDown, Plus, Receipt, Trash2, TrendingUp } from 'lucide-react'
+import { BookOpen, ChevronDown, Plus, Receipt, Trash2, TrendingUp } from 'lucide-react'
 import { toast } from 'sonner'
-import { Badge, Button, Input, Label, Popover, SearchSelect, Select, Textarea, UrlDrawer, cn } from '@openbooks/ui'
+import { Badge, Button, Drawer, Input, Label, Popover, SearchSelect, Select, Textarea, UrlDrawer, cn } from '@openbooks/ui'
 import {
   defaultFormLayout,
   isCustomTabKey,
@@ -19,7 +19,7 @@ import { HeaderFields } from '../../../components/transaction-form/header-fields
 import { InvoicingPreferenceFields, type InvoicingPref } from '../../../components/invoicing-preference-fields'
 import { RateBookAssignmentSection } from '../parties/RateBookAssignmentSection'
 import { FinancialsTab, type FinancialsData } from './tabs/FinancialsTab'
-import type { RecognitionStatus } from './tabs/RecognitionCard'
+import { RecognitionCard, type RecognitionStatus } from './tabs/RecognitionCard'
 import { CostTimeTab, type CostTimeData } from './tabs/CostTimeTab'
 import { TransactionsTab } from './tabs/TransactionsTab'
 import { WorkBreakdownTab, type WorkBreakdownTask } from './tabs/WorkBreakdownTab'
@@ -71,6 +71,7 @@ export interface ProjectCockpitData {
   equipment: ChargeEquipmentOption[]
   absorption: { recovered: string; billValue: string }
   recognition: RecognitionStatus | null
+  glRange: { from: string; to: string }
   transactions: {
     id: string
     kind: string
@@ -90,9 +91,9 @@ export interface ProjectCockpitData {
  */
 const TAB_KEYS = [
   'overview',
+  'financials',
   'work_breakdown',
   'schedule',
-  'financials',
   'cost_time',
   'billing',
   'transactions',
@@ -113,6 +114,7 @@ export function ProjectDrawer({
   parties,
   subsidiaries,
   canManage,
+  canViewGl,
   basePath = '/projects',
   layout,
   cockpit,
@@ -125,6 +127,7 @@ export function ProjectDrawer({
   parties: PartyOpt[]
   subsidiaries: SubsidiaryOpt[]
   canManage: boolean
+  canViewGl: boolean
   basePath?: string
   /** Resolved form layout (custom fields already merged in). */
   layout?: FormLayoutConfig
@@ -204,19 +207,13 @@ export function ProjectDrawer({
   const [actionsOpen, setActionsOpen] = useState(false)
   const [chargeFormOpen, setChargeFormOpen] = useState(false)
   const [billingFormOpen, setBillingFormOpen] = useState(false)
+  const [recognitionOpen, setRecognitionOpen] = useState(false)
 
   const nameValid = name.trim().length > 0 && name.trim() !== 'New project'
 
   const partyOptions = useMemo(
     () => parties.map((p) => ({ value: p.id, label: p.display_name ?? '' })),
     [parties],
-  )
-
-  // The assigned project type is the authoritative billing classifier; untyped
-  // projects default to time & materials.
-  const selectedProjectType = useMemo(
-    () => projectTypes.find((pt) => pt.id === projectTypeId) ?? null,
-    [projectTypes, projectTypeId],
   )
 
   function setTask(task: TaskRow, patch: Partial<TaskRow>) {
@@ -532,6 +529,7 @@ export function ProjectDrawer({
   const activeTab = tabs.find((item) => item.key === tab) ?? null
 
   return (
+    <>
     <UrlDrawer
       open
       closeHref={basePath}
@@ -576,11 +574,13 @@ export function ProjectDrawer({
               {busy ? tCommon('actions.saving') : tCommon('actions.save')}
             </Button>
           </div>
-        ) : canManage ? (
+        ) : canManage || canViewGl || !!cockpit.recognition ? (
           <div className="flex items-center gap-1.5">
-            <Button variant="outline" size="sm" className="h-8 px-2.5 text-xs" onClick={() => { if (tab !== 'work_breakdown') setTab('overview'); setMode('edit') }}>
-              {tCommon('actions.edit')}
-            </Button>
+            {canManage ? (
+              <Button variant="outline" size="sm" className="h-8 px-2.5 text-xs" onClick={() => { if (tab !== 'work_breakdown') setTab('overview'); setMode('edit') }}>
+                {tCommon('actions.edit')}
+              </Button>
+            ) : null}
             <Popover
             open={actionsOpen}
             onOpenChange={setActionsOpen}
@@ -600,19 +600,35 @@ export function ProjectDrawer({
             className="w-56 p-1.5"
           >
             <div className="space-y-0.5">
-              {menuItem(<Plus className="h-3.5 w-3.5" aria-hidden />, t('charges.addTitle'), () => { setTab('transactions'); setChargeFormOpen(true) })}
-              {cockpit.invoicing.billingProcedure === 'application_for_payment'
-                ? menuItem(<Receipt className="h-3.5 w-3.5" aria-hidden />, 'Applications for payment', () => { setTab('billing'); setBillingFormOpen(false) })
-                : menuItem(<Receipt className="h-3.5 w-3.5" aria-hidden />, t('billing.requestBilling'), () => { setTab('billing'); setBillingFormOpen(true) })}
-              {selectedProjectType?.billingMethod === 'fixed_price'
-                ? menuItem(<TrendingUp className="h-3.5 w-3.5" aria-hidden />, t('cockpit.recognizeRevenue'), () => setTab('financials'))
+              {canViewGl
+                ? menuItem(<BookOpen className="h-3.5 w-3.5" aria-hidden />, t('cockpit.viewGeneralLedger'), () => {
+                    const params = new URLSearchParams({
+                      period: 'custom',
+                      from: cockpit.glRange.from,
+                      to: cockpit.glRange.to,
+                      project: String(pr.id),
+                    })
+                    router.push(`/reports/general-ledger?${params.toString()}`)
+                  })
                 : null}
-              <div className="my-1 border-t border-slate-200 dark:border-slate-800" />
-              {isActive
-                ? menuItem(<Trash2 className="h-3.5 w-3.5" aria-hidden />, t('drawer.deactivate'), () => setActiveState(false))
-                : nameValid
-                  ? menuItem(<Plus className="h-3.5 w-3.5" aria-hidden />, t('drawer.activate'), () => setActiveState(true))
-                  : null}
+              {cockpit.recognition
+                ? menuItem(<TrendingUp className="h-3.5 w-3.5" aria-hidden />, t('recognition.title'), () => setRecognitionOpen(true))
+                : null}
+              {canManage ? (
+                <>
+                  <div className="my-1 border-t border-slate-200 dark:border-slate-800" />
+                  {menuItem(<Plus className="h-3.5 w-3.5" aria-hidden />, t('charges.addTitle'), () => { setTab('transactions'); setChargeFormOpen(true) })}
+                  {cockpit.invoicing.billingProcedure === 'application_for_payment'
+                    ? menuItem(<Receipt className="h-3.5 w-3.5" aria-hidden />, 'Applications for payment', () => { setTab('billing'); setBillingFormOpen(false) })
+                    : menuItem(<Receipt className="h-3.5 w-3.5" aria-hidden />, t('billing.requestBilling'), () => { setTab('billing'); setBillingFormOpen(true) })}
+                  <div className="my-1 border-t border-slate-200 dark:border-slate-800" />
+                  {isActive
+                    ? menuItem(<Trash2 className="h-3.5 w-3.5" aria-hidden />, t('drawer.deactivate'), () => setActiveState(false))
+                    : nameValid
+                      ? menuItem(<Plus className="h-3.5 w-3.5" aria-hidden />, t('drawer.activate'), () => setActiveState(true))
+                      : null}
+                </>
+              ) : null}
             </div>
           </Popover>
           </div>
@@ -666,12 +682,7 @@ export function ProjectDrawer({
       ) : null}
 
       {tab === 'financials' ? (
-        <FinancialsTab
-          data={cockpit.financials}
-          projectId={pr.id}
-          recognition={cockpit.recognition}
-          canManage={canManage}
-        />
+        <FinancialsTab data={cockpit.financials} />
       ) : null}
 
       {tab === 'cost_time' ? <CostTimeTab data={cockpit.time} /> : null}
@@ -730,5 +741,18 @@ export function ProjectDrawer({
         </div>
       ) : null}
     </UrlDrawer>
+    <Drawer
+      open={recognitionOpen}
+      onClose={() => setRecognitionOpen(false)}
+      stacked
+      size="lg"
+      title={t('recognition.title')}
+      description={name.trim() || pr.code || undefined}
+    >
+      {cockpit.recognition ? (
+        <RecognitionCard projectId={String(pr.id)} status={cockpit.recognition} canManage={canManage} />
+      ) : null}
+    </Drawer>
+    </>
   )
 }

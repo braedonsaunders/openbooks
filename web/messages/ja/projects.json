@@ -160,6 +160,7 @@
       "operating_expense": "営業費用"
     },
     "transactions": "取引",
+    "viewGeneralLedger": "プロジェクト総勘定元帳を表示",
     "allTransactionTypes": "すべての取引タイプ",
     "noTransactionsTitle": "この案件にタグ付けされた取引はありません",
     "noTransactionsDescription": "このプロジェクトにタグ付けされた明細を持つ仕入請求書、請求書、経費、注文、仕訳がここに表示されます。",
@@ -261,7 +262,8 @@
       "could_be_invoiced": "まだ請求できる金額です。",
       "committed_cost": "未消化の発注書コミットメントです。",
       "total_price": "案件の契約 / 販売価格です。",
-      "total_cost": "発生および確定したすべての原価です。"
+      "total_cost": "発生および確定したすべての原価です。",
+      "overhead": "案件総原価に含まれており、粗利益からすでに差し引かれています。"
     }
   },
   "invoicingPref": {

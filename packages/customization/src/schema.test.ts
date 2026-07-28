@@ -150,7 +150,8 @@ test('the baseline form upgrade refreshes built-in placement without losing fiel
   refreshDefaultFormLayout(legacy)
 
   const fields = legacy.header.groups[0]!.fields
-  assert.equal(legacy.defaultLayoutVersion, 1)
+  assert.equal(legacy.defaultLayoutVersion, 2)
+  assert.deepEqual(legacy.tabs?.slice(0, 2).map((tab) => tab.key), ['overview', 'financials'])
   assert.deepEqual(fields.slice(0, 4).map((field) => field.key), [
     'name',
     'code',
@@ -169,9 +170,9 @@ test('the project cockpit ships a customizable tab list', () => {
 
   assert.deepEqual(layout.tabs?.map((tab) => tab.key), [
     'overview',
+    'financials',
     'work_breakdown',
     'schedule',
-    'financials',
     'cost_time',
     'billing',
     'transactions',
@@ -201,13 +202,20 @@ test('saved tab layouts keep their order, gain new tabs, and drop retired ones',
     'overview',
     'work_breakdown',
     'tab_safety',
-    'schedule',
     'financials',
+    'schedule',
     'cost_time',
     'transactions',
   ])
   assert.equal(resolved.find((tab) => tab.key === 'work_breakdown')?.visible, false)
   assert.equal(resolved.find((tab) => tab.key === 'work_breakdown')?.labelOverride, 'Scope')
+})
+
+test('the default project cockpit puts financials immediately after overview', () => {
+  assert.deepEqual(
+    defaultFormLayout('project').tabs?.slice(0, 2).map((tab) => tab.key),
+    ['overview', 'financials'],
+  )
 })
 
 test('a locked tab can never be hidden or ordered away', () => {

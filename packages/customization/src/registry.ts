@@ -625,9 +625,9 @@ const PROJECT: RecordTypeMeta = {
   // draws it when Projects → Project Scheduling is on.
   tabs: [
     { key: "overview", labelKey: "projects.cockpit.tabs.overview", locked: true },
+    { key: "financials", labelKey: "projects.cockpit.tabs.financials" },
     { key: "work_breakdown", labelKey: "projects.cockpit.tabs.work_breakdown" },
     { key: "schedule", labelKey: "projects.cockpit.tabs.schedule", featureKey: "projectScheduling" },
-    { key: "financials", labelKey: "projects.cockpit.tabs.financials" },
     { key: "cost_time", labelKey: "projects.cockpit.tabs.cost_time" },
     { key: "billing", labelKey: "projects.cockpit.tabs.billing" },
     { key: "transactions", labelKey: "projects.cockpit.tabs.transactions" },

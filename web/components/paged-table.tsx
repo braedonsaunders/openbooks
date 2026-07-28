@@ -1,6 +1,7 @@
 'use client'
 
 import { useMemo, useState, type ReactNode } from 'react'
+import { Search } from 'lucide-react'
 import { useTranslations } from 'next-intl'
 import {
   Button,
@@ -35,6 +36,7 @@ export function PagedTable<T>({
   empty,
   rowKey,
   rowClassName,
+  toolbarAfter,
 }: {
   rows: T[]
   columns: PagedColumn<T>[]
@@ -43,6 +45,8 @@ export function PagedTable<T>({
   empty: ReactNode
   rowKey: (row: T, index: number) => string
   rowClassName?: (row: T) => string | undefined
+  /** Controls rendered immediately after the search box on the same toolbar row. */
+  toolbarAfter?: ReactNode
 }) {
   const t = useTranslations('common')
   const tp = useTranslations('ui.pagination')
@@ -67,15 +71,33 @@ export function PagedTable<T>({
   return (
     <div className="space-y-3">
       {searchable ? (
-        <Input
-          value={query}
-          onChange={(e) => {
-            setQuery(e.target.value)
-            setPage(0)
-          }}
-          placeholder={t('actions.search')}
-          className="max-w-xs"
-        />
+        toolbarAfter ? (
+          <div className="flex flex-wrap gap-2">
+            <div className="relative min-w-56 flex-1">
+              <Search className="pointer-events-none absolute top-1/2 left-2.5 -translate-y-1/2 text-slate-400" size={15} />
+              <Input
+                value={query}
+                onChange={(e) => {
+                  setQuery(e.target.value)
+                  setPage(0)
+                }}
+                placeholder={t('actions.search')}
+                className="pl-8"
+              />
+            </div>
+            {toolbarAfter}
+          </div>
+        ) : (
+          <Input
+            value={query}
+            onChange={(e) => {
+              setQuery(e.target.value)
+              setPage(0)
+            }}
+            placeholder={t('actions.search')}
+            className="max-w-xs"
+          />
+        )
       ) : null}
       <Table>
         <TableHeader>

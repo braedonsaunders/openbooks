@@ -383,9 +383,8 @@ export async function applyDocumentEdit(
   try {
     await db.transaction(async (tx) => {
       await tx.execute(sql`select set_config('openbooks.amend', 'on', true)`)
-      const auditCandidate = await captureTransactionAuditSnapshot(tx, id)
-      const auditBefore = auditCandidate?.document.status === 'posted' ? auditCandidate : null
-      if (auditBefore) {
+      const auditBefore = await captureTransactionAuditSnapshot(tx, id)
+      if (auditBefore?.document.status === 'posted') {
         const reason = body.amendmentReason?.trim() ?? ''
         if (reason.length < 5 || reason.length > 500) {
           throw new DocumentEditError(422, 'A posted-document amendment requires a reason between 5 and 500 characters')
@@ -481,7 +480,7 @@ export async function applyDocumentEdit(
           action: 'update',
           actorId: userId,
           source: ctx.source,
-          reason: body.amendmentReason!.trim(),
+          reason: body.amendmentReason?.trim(),
           before: auditBefore,
           after: auditAfter,
         })

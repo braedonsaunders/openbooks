@@ -131,7 +131,7 @@ export interface FormLayoutConfig {
   defaultVisibilityVersion?: 1
   /** One-time marker for the current built-in placement defaults applied to
    * the tenant-owned baseline form. Named custom forms are never reset. */
-  defaultLayoutVersion?: 1
+  defaultLayoutVersion?: 1 | 2
   recordType: RecordTypeKey
   header: { groups: HeaderGroup[] }
   lines: { columns: LineColumnPlacement[] }

@@ -160,6 +160,7 @@
       "operating_expense": "营业费用"
     },
     "transactions": "交易",
+    "viewGeneralLedger": "查看项目总账",
     "allTransactionTypes": "所有交易类型",
     "noTransactionsTitle": "没有标记到此作业的交易",
     "noTransactionsDescription": "带有明细标记到此项目的应付账单、发票、费用、订单和日记账将显示在此处。",
@@ -261,7 +262,8 @@
       "could_be_invoiced": "仍可开票的金额。",
       "committed_cost": "未结采购订单承诺。",
       "total_price": "作业的合同 / 销售价格。",
-      "total_cost": "所有已发生和已承诺的成本。"
+      "total_cost": "所有已发生和已承诺的成本。",
+      "overhead": "已计入作业总成本，因此已从毛利中扣除。"
     }
   },
   "invoicingPref": {

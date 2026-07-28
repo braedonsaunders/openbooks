@@ -160,6 +160,7 @@
       "operating_expense": "Betriebsausgabe"
     },
     "transactions": "Transaktionen",
+    "viewGeneralLedger": "Projekt-Hauptbuch anzeigen",
     "allTransactionTypes": "Alle Transaktionstypen",
     "noTransactionsTitle": "Keine diesem Auftrag zugeordneten Transaktionen",
     "noTransactionsDescription": "Eingangsrechnungen, Ausgangsrechnungen, Ausgaben, Aufträge und Journale mit einer diesem Projekt zugeordneten Zeile erscheinen hier.",
@@ -261,7 +262,8 @@
       "could_be_invoiced": "Wert, der noch berechnet werden kann.",
       "committed_cost": "Offene Bestellverpflichtungen.",
       "total_price": "Vertrags-/Verkaufspreis des Auftrags.",
-      "total_cost": "Alle angefallenen und gebundenen Kosten."
+      "total_cost": "Alle angefallenen und gebundenen Kosten.",
+      "overhead": "In den gesamten Auftragskosten enthalten und daher bereits vom Bruttogewinn abgezogen."
     }
   },
   "invoicingPref": {
