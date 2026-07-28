@@ -9,6 +9,10 @@ const environments = readFileSync(
   join(root, "schema", "migrations", "environments.sql"),
   "utf8",
 );
+const projectTypeSeed = readFileSync(
+  join(root, "engine", "src", "seed-project-types.ts"),
+  "utf8",
+);
 
 test("deployment bootstrap serializes migrate and seed work", () => {
   assert.match(bootstrap, /pg_advisory_lock/);
@@ -31,4 +35,13 @@ test("row-level security refresh is versioned and drift-driven", () => {
   assert.match(environments, /openbooks:sandbox_isolation:v1/);
   assert.match(environments, /if not rls_enabled then/i);
   assert.match(environments, /if policy_version is distinct from/i);
+});
+
+test("bundled bootstrap cannot launch the project-type seed CLI twice", () => {
+  assert.doesNotMatch(
+    projectTypeSeed,
+    /import\.meta\.url\s*===\s*`file:\/\/\$\{process\.argv\[1\]\}`/,
+  );
+  assert.match(projectTypeSeed, /isSeedProjectTypesCli\(process\.argv\[1\]\)/);
+  assert.match(projectTypeSeed, /seed-project-types\\\./);
 });
