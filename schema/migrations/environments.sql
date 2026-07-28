@@ -55,6 +55,10 @@ end $$;
 do $$
 declare
   t text;
+  relation_oid oid;
+  rls_enabled boolean;
+  rls_forced boolean;
+  policy_version text;
   body text := $pol$
     (
       current_setting('app.bypass_rls', true) = 'on'
@@ -75,27 +79,69 @@ begin
        -- identity/access table, queried during the pre-context auth bootstrap).
        and c.table_name not in ('sandboxes', 'user_org_access')
   loop
-    execute format('alter table %I enable row level security', t);
-    execute format('alter table %I force row level security', t);
-    execute format('drop policy if exists org_isolation on %I', t);
-    execute format(
-      'create policy org_isolation on %I using (%s) with check (%s)',
-      t, body, body);
+    select c.oid, c.relrowsecurity, c.relforcerowsecurity
+      into relation_oid, rls_enabled, rls_forced
+      from pg_class c
+      join pg_namespace n on n.oid = c.relnamespace
+     where n.nspname = 'public' and c.relname = t;
+    if not rls_enabled then
+      execute format('alter table %I enable row level security', t);
+    end if;
+    if not rls_forced then
+      execute format('alter table %I force row level security', t);
+    end if;
+    select obj_description(p.oid, 'pg_policy')
+      into policy_version
+      from pg_policy p
+     where p.polrelid = relation_oid and p.polname = 'org_isolation';
+    if policy_version is distinct from 'openbooks:org_isolation:v1' then
+      execute format('drop policy if exists org_isolation on %I', t);
+      execute format(
+        'create policy org_isolation on %I using (%s) with check (%s)',
+        t, body, body);
+      execute format(
+        'comment on policy org_isolation on %I is %L',
+        t, 'openbooks:org_isolation:v1');
+    end if;
   end loop;
 end $$;
 
 -- sandboxes: visible from either the production org that owns them or the
 -- sandbox org itself (trusted bypass sees all).
-alter table sandboxes enable row level security;
-alter table sandboxes force row level security;
-drop policy if exists sandbox_isolation on sandboxes;
-create policy sandbox_isolation on sandboxes
-  using (
-    current_setting('app.bypass_rls', true) = 'on'
-    or org_id::text = current_setting('app.current_org', true)
-    or production_org_id::text = current_setting('app.current_org', true)
-  )
-  with check (
-    current_setting('app.bypass_rls', true) = 'on'
-    or production_org_id::text = current_setting('app.current_org', true)
-  );
+do $$
+declare
+  policy_version text;
+  rls_enabled boolean;
+  rls_forced boolean;
+begin
+  select relrowsecurity, relforcerowsecurity
+    into rls_enabled, rls_forced
+    from pg_class
+   where oid = 'public.sandboxes'::regclass;
+  if not rls_enabled then
+    alter table sandboxes enable row level security;
+  end if;
+  if not rls_forced then
+    alter table sandboxes force row level security;
+  end if;
+  select obj_description(p.oid, 'pg_policy')
+    into policy_version
+    from pg_policy p
+   where p.polrelid = 'public.sandboxes'::regclass
+     and p.polname = 'sandbox_isolation';
+  if policy_version is distinct from 'openbooks:sandbox_isolation:v1' then
+    drop policy if exists sandbox_isolation on sandboxes;
+    create policy sandbox_isolation on sandboxes
+      using (
+        current_setting('app.bypass_rls', true) = 'on'
+        or org_id::text = current_setting('app.current_org', true)
+        or production_org_id::text = current_setting('app.current_org', true)
+      )
+      with check (
+        current_setting('app.bypass_rls', true) = 'on'
+        or production_org_id::text = current_setting('app.current_org', true)
+      );
+    comment on policy sandbox_isolation on sandboxes
+      is 'openbooks:sandbox_isolation:v1';
+  end if;
+end $$;

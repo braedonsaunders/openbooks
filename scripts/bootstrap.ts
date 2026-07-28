@@ -5,8 +5,8 @@
  *      _applied_migrations (skip-once semantics; a changed already-applied file
  *      logs a loud warning instead of re-running).
  *   2. Applies referential-integrity.sql + kernel-constraints.sql the same way,
- *      then environments.sql (row-level security) on EVERY boot so tables added
- *      by a later migration can never end up without tenant isolation.
+ *      then verifies environments.sql (row-level security), applying it only
+ *      when its version or live catalog coverage has changed.
  *   3. Ensures the SELECT-only `openbooks_read` role + grants (SQL workbench
  *      and user-script queries need it).
  *   4. Ensures an org, its primary accounting book, monthly accounting
@@ -38,7 +38,10 @@ function sha256(s: string): string {
  * tracking was introduced. Only mark them after every non-idempotent object is
  * present; a partial installation must still fail loudly and be repaired.
  */
-async function adoptCompleteLegacyMigration(filename: string, content: string): Promise<void> {
+async function adoptCompleteLegacyMigration(
+  filename: string,
+  content: string,
+): Promise<void> {
   let complete = false;
   if (filename === "generated/0019_qbd_web_connector.sql") {
     const check = (await db.execute(sql`
@@ -134,7 +137,8 @@ async function adoptCompleteLegacyMigration(filename: string, content: string): 
     on conflict do nothing
     returning filename
   `)) as unknown as { rows: { filename: string }[] };
-  if (inserted.rows.length) console.log(`[bootstrap] adopted complete legacy migration: ${filename}`);
+  if (inserted.rows.length)
+    console.log(`[bootstrap] adopted complete legacy migration: ${filename}`);
 }
 
 async function applyTracked(
@@ -236,11 +240,7 @@ async function migrate(): Promise<void> {
     const filename = `generated/${f}`;
     const content = readFileSync(join(migrationsDir, "generated", f), "utf8");
     await adoptCompleteLegacyMigration(filename, content);
-    await applyTracked(
-      "migration",
-      filename,
-      content,
-    );
+    await applyTracked("migration", filename, content);
   }
   for (const f of ["referential-integrity.sql", "kernel-constraints.sql"]) {
     await applyTracked(
@@ -253,19 +253,97 @@ async function migrate(): Promise<void> {
 }
 
 /**
- * Install the tenant-isolation policies — EVERY boot, deliberately untracked.
+ * Install and verify the tenant-isolation policies.
  *
  * `environments.sql` creates the `org_isolation` policy for every base table
  * carrying `org_id`, so its job is to cover tables that did not exist when it
- * last ran. Recording it in `_applied_migrations` like a migration would run it
- * exactly once and leave every table added afterwards with row-level security
- * switched off — reachable cross-tenant by any query that forgets its `where
- * org_id =` clause. It is idempotent by construction (enable/force RLS, drop
- * policy if exists, create policy), so re-running it is free.
+ * last ran. The file digest plus a live catalog drift check provide both
+ * properties we need: changed policy code and newly added/unprotected tables
+ * trigger a refresh, while an ordinary container restart performs no
+ * AccessExclusive table-lock sweep.
  */
 async function applyRowLevelSecurity(): Promise<void> {
   const file = join(migrationsDir, "environments.sql");
-  await pool.query(readFileSync(file, "utf8"));
+  const content = readFileSync(file, "utf8");
+  const digest = sha256(content);
+  const state = (await db.execute(sql`
+    select
+      (select sha256
+         from _applied_migrations
+        where filename = 'environments.sql') as applied_digest,
+      exists (
+        select 1
+          from pg_class relation
+          join pg_namespace namespace_row
+            on namespace_row.oid = relation.relnamespace
+         where namespace_row.nspname = 'public'
+           and relation.relkind = 'r'
+           and exists (
+             select 1
+               from information_schema.columns column_row
+              where column_row.table_schema = 'public'
+                and column_row.table_name = relation.relname
+                and column_row.column_name = 'org_id'
+           )
+           and relation.relname not in ('sandboxes', 'user_org_access')
+           and (
+             not relation.relrowsecurity
+             or not relation.relforcerowsecurity
+             or not exists (
+               select 1
+                 from pg_policy policy
+                where policy.polrelid = relation.oid
+                  and policy.polname = 'org_isolation'
+                  and obj_description(policy.oid, 'pg_policy')
+                    = 'openbooks:org_isolation:v1'
+             )
+           )
+      )
+      or exists (
+        select 1
+          from pg_constraint
+         where contype = 'f'
+           and connamespace = 'public'::regnamespace
+           and not condeferrable
+      )
+      or exists (
+        select 1
+          from pg_class relation
+          join pg_namespace namespace_row
+            on namespace_row.oid = relation.relnamespace
+         where namespace_row.nspname = 'public'
+           and relation.relname = 'sandboxes'
+           and (
+             not relation.relrowsecurity
+             or not relation.relforcerowsecurity
+             or not exists (
+               select 1
+                 from pg_policy policy
+                where policy.polrelid = relation.oid
+                  and policy.polname = 'sandbox_isolation'
+                  and obj_description(policy.oid, 'pg_policy')
+                    = 'openbooks:sandbox_isolation:v1'
+             )
+           )
+      ) as catalog_drift
+  `)) as unknown as {
+    rows: Array<{
+      applied_digest: string | null;
+      catalog_drift: boolean;
+    }>;
+  };
+  const policyState = state.rows[0]!;
+  if (policyState.applied_digest !== digest || policyState.catalog_drift) {
+    console.log("[bootstrap] refreshing row-level security catalog");
+    await pool.query(content);
+    await db.execute(sql`
+      insert into _applied_migrations (filename, sha256)
+      values ('environments.sql', ${digest})
+      on conflict (filename) do update
+        set sha256 = excluded.sha256,
+            applied_at = now()
+    `);
+  }
   const unprotected = (await db.execute(sql`
     select c.relname as table_name
       from pg_class c
@@ -285,7 +363,9 @@ async function applyRowLevelSecurity(): Promise<void> {
       `row-level security missing on: ${unprotected.rows.map((r) => r.table_name).join(", ")}`,
     );
   }
-  console.log("[bootstrap] row-level security installed on every org-scoped table");
+  console.log(
+    "[bootstrap] row-level security verified on every org-scoped table",
+  );
 }
 
 async function ensureReadRole(): Promise<void> {
@@ -425,19 +505,41 @@ async function seedAdmin(orgId: string): Promise<void> {
 }
 
 async function main(): Promise<void> {
-  console.log("[bootstrap] starting");
-  // Some migrations grant privileges to openbooks_read, so a fresh database
-  // must establish the role before applying them. Run the same idempotent
-  // routine again afterward to grant access to the newly created tables.
-  await ensureReadRole();
-  await migrate();
-  await ensureReadRole();
-  const orgId = await ensureOrg();
-  await seedRoles(orgId);
-  await seedProjectTypes(orgId);
-  await seedAdmin(orgId);
-  console.log("[bootstrap] done");
-  await pool.end();
+  const lockClient = await pool.connect();
+  let locked = false;
+  try {
+    // Dokploy/rolling deployments can start more than one container against
+    // the same database. Serialize the entire migrate+seed unit so one
+    // bootstrap cannot seed a relation while another is changing its policy
+    // or constraint definition.
+    await lockClient.query("set statement_timeout = 0");
+    await lockClient.query("select pg_advisory_lock(hashtextextended($1, 0))", [
+      "openbooks:deployment-bootstrap",
+    ]);
+    locked = true;
+    console.log("[bootstrap] starting");
+    // Some migrations grant privileges to openbooks_read, so a fresh database
+    // must establish the role before applying them. Run the same idempotent
+    // routine again afterward to grant access to the newly created tables.
+    await ensureReadRole();
+    await migrate();
+    await ensureReadRole();
+    const orgId = await ensureOrg();
+    await seedRoles(orgId);
+    await seedProjectTypes(orgId);
+    await seedAdmin(orgId);
+    console.log("[bootstrap] done");
+  } finally {
+    if (locked) {
+      await lockClient
+        .query("select pg_advisory_unlock(hashtextextended($1, 0))", [
+          "openbooks:deployment-bootstrap",
+        ])
+        .catch(() => {});
+    }
+    lockClient.release();
+    await pool.end();
+  }
 }
 
 main().catch((err) => {
