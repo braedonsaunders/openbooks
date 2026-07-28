@@ -24,6 +24,12 @@
       "runtimeExecutable": "npx",
       "runtimeArgs": ["-w", "web", "next", "dev", "-p", "4791"],
       "port": 4791
+    },
+    {
+      "name": "bunkhouse-web-dev",
+      "runtimeExecutable": "pnpm",
+      "runtimeArgs": ["--dir", "/Users/braedonsaunders/Documents/Code/bunkhouse/apps/web", "exec", "next", "dev", "-p", "4810"],
+      "port": 4810
     }
   ]
 }
