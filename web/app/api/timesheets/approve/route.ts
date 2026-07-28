@@ -1,9 +1,7 @@
 import { NextResponse } from 'next/server'
-import { sql } from 'drizzle-orm'
-import { db } from '@openbooks/engine/src/db.ts'
 import { guardPermission } from '../../../../lib/authz'
 import { isUuid } from '../../../../lib/list-params'
-import { runTimeApprovalEffects } from '../../../../lib/time-approval'
+import { approveSubmittedTimeEntries } from '../../../../lib/time-approval'
 import { isIsoDate, loadWeek, weekStart, weekWindow } from '../_lib'
 
 export const runtime = 'nodejs'
@@ -34,33 +32,20 @@ export async function POST(req: Request) {
   const week = weekStart(body.week)
   const days = weekWindow(week)
 
-  const approved = (await db.execute(sql`
-    update time_entries
-       set status = 'approved',
-           approved_by = ${user.id},
-           approved_at = now(),
-           updated_at = now(),
-           updated_by = ${user.id}
-     where org_id = ${orgId}
-       and employee_party_id = ${body.employee}
-       and worked_on >= ${days[0]} and worked_on <= ${days[6]}
-       and status = 'submitted'
-     returning id
-  `)) as unknown as { rows: { id: string }[] }
-
-  // Snapshot standard cost rates (wage × time-type multiplier + estimate
-  // components) onto entries that don't carry one, then post labor cost to
-  // project WIP (DR labor WIP / CR labor clearing). Both are inert until
-  // configured (rates entered + labor accounts mapped + mode 'post') and
-  // non-blocking so a GL hiccup never strands the approval — the entries stay
-  // re-postable.
-  const ids = approved.rows.map((r) => r.id)
-  if (ids.length > 0) {
-    try {
-      await runTimeApprovalEffects(orgId, user.id, ids)
-    } catch (e) {
-      console.error('[timesheets/approve] labor cost snapshot/posting failed:', (e as Error).message)
-    }
+  try {
+    await approveSubmittedTimeEntries({
+      orgId,
+      actorId: user.id,
+      employeePartyId: body.employee,
+      from: days[0],
+      to: days[6],
+    })
+  } catch (error) {
+    console.error('[timesheets/approve] approval transaction rolled back:', error)
+    return NextResponse.json(
+      { error: 'Time approval could not complete its configured financial effects. No entries were approved.' },
+      { status: 409 },
+    )
   }
 
   const payload = await loadWeek(orgId, body.employee, week)
