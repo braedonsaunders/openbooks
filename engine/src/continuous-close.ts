@@ -464,14 +464,19 @@ async function financeFindings(orgId: string, agentThreshold: string, detectors:
     } else if (budget && budgetVariancePolicy?.enabled) {
       const threshold = effectiveDetectorMateriality(budgetVariancePolicy, agentThreshold);
       const variances = (await db.execute(sql`
-      with b as (
+      with selected_periods as (
+        select p.id
+          from accounting_periods p
+         where p.org_id = ${orgId}
+           and p.starts_on <= ${budget.ends_on}
+           and p.ends_on >= ${budget.starts_on}
+      ), b as (
         select bl.account_id,
                sum(case when a.type in ('income','income_other') then -bl.amount else bl.amount end) as budget
           from budget_lines bl
-          join accounting_periods p on p.id = bl.period_id and p.org_id = bl.org_id
+          join selected_periods p on p.id = bl.period_id
           join accounts a on a.id = bl.account_id and a.org_id = bl.org_id
          where bl.org_id = ${orgId} and bl.scenario_id = ${budget.id}
-           and p.starts_on <= ${budget.ends_on} and p.ends_on >= ${budget.starts_on}
          group by bl.account_id
       ), actual as (
         select l.account_id,
@@ -480,7 +485,7 @@ async function financeFindings(orgId: string, agentThreshold: string, detectors:
           join journal_entries e on e.id = l.entry_id and e.org_id = l.org_id and e.status in ('posted', 'reversed')
           join accounts a on a.id = l.account_id and a.org_id = l.org_id
          where l.org_id = ${orgId} and e.book_id = ${budget.book_id}
-           and e.posting_date >= ${budget.starts_on} and e.posting_date <= ${budget.ends_on}
+           and e.period_id in (select id from selected_periods)
          group by l.account_id
       )
       select a.id, a.number, a.name, a.type,
@@ -568,7 +573,7 @@ async function financeFindings(orgId: string, agentThreshold: string, detectors:
     };
     if (periods.rows.length === 2) {
       const [current, prior] = periods.rows;
-      const metrics = async (period: { starts_on: string; ends_on: string }) => {
+      const metrics = async (period: { id: string }) => {
       const result = (await db.execute(sql`
         select coalesce(-sum(l.amount) filter (where a.type in ('income','income_other')), 0)::text as revenue,
                coalesce(sum(l.amount) filter (where a.type = 'cogs'), 0)::text as cogs,
@@ -577,7 +582,7 @@ async function financeFindings(orgId: string, agentThreshold: string, detectors:
           join journal_entries e on e.id = l.entry_id and e.org_id = l.org_id and e.status in ('posted', 'reversed')
           join accounting_books b on b.id = e.book_id and b.org_id = e.org_id and b.is_primary
           join accounts a on a.id = l.account_id and a.org_id = l.org_id
-         where l.org_id = ${orgId} and e.posting_date >= ${period.starts_on} and e.posting_date <= ${period.ends_on}
+         where l.org_id = ${orgId} and e.period_id = ${period.id}
         `)) as unknown as {
           rows: { revenue: string; cogs: string; opex: string }[];
         };

@@ -125,10 +125,10 @@ export async function runOwnershipConsolidation(
         const periodActivity = (await tx.execute(sql`
           select coalesce(-sum(l.amount) filter (where a.type in ('income','income_other','cogs','expense','expense_other','expense_deferred')),0)::text as profit,
                  coalesce(sum(l.amount) filter (where l.account_id=${interest.distribution_account_id}),0)::text as distributions
-            from journal_lines l join journal_entries e on e.id=l.entry_id
+           from journal_lines l join journal_entries e on e.id=l.entry_id
             join accounts a on a.id=l.account_id
            where e.org_id=${orgId} and e.status in ('posted','reversed') and l.subsidiary_id=${interest.subsidiary_id}
-             and e.posting_date between ${period.starts_on} and ${period.ends_on}
+             and e.period_id=${periodId}
         `)) as unknown as { rows: { profit: string; distributions: string }[] };
         const profit = periodActivity.rows[0]!.profit;
         const distributions = periodActivity.rows[0]!.distributions;

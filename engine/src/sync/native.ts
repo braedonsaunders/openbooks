@@ -76,6 +76,12 @@ export interface NativeDocument {
   /** Transaction→base fx rate; omitted = "1". Line amounts are in `currency`. */
   fxRate?: string;
   documentDate: string; // ISO yyyy-mm-dd
+  /** Source ledger date, independent from the business document date and from
+   * the explicit accounting-period identity. */
+  postingDate?: string | null;
+  /** Exact target accounting period resolved from the source period identity.
+   * Null/undefined preserves the ordinary date-derived posting behavior. */
+  postingPeriodId?: string | null;
   dueDate: string | null;
   memo: string | null;
   referenceNumber: string | null;
@@ -127,6 +133,16 @@ export interface NativeContext {
   taxByRate: Map<string, { id: string; rate: string }>;
   /** Source ref → tax code id (ref-keyed: sources whose taxes are entities). */
   taxCodeByRef: Map<string, string>;
+  /** Stable source posting-period ref → exact target period scope. */
+  periodByRef: Map<
+    string,
+    {
+      id: string;
+      startsOn: string;
+      endsOn: string;
+      isAdjustment: boolean;
+    }
+  >;
   periodFor(date: string): string | undefined;
 }
 
@@ -215,12 +231,43 @@ export async function buildNativeContext(
 
   const periods = (
     (await db.execute(sql`
-      select id, starts_on, ends_on from accounting_periods
-       where org_id = ${orgId} and is_adjustment = false order by starts_on`)) as unknown as {
-      rows: { id: string; starts_on: string; ends_on: string }[];
+      select id, starts_on, ends_on, is_adjustment,
+             custom->>${refKey} as source_ref
+        from accounting_periods
+       where org_id = ${orgId}
+       order by starts_on, ends_on, period_number`)) as unknown as {
+      rows: {
+        id: string;
+        starts_on: string;
+        ends_on: string;
+        is_adjustment: boolean;
+        source_ref: string | null;
+      }[];
     }
   ).rows;
-  const periodFor = (d: string) => periods.find((p) => p.starts_on <= d && p.ends_on >= d)?.id;
+  const periodFor = (d: string) =>
+    periods.find(
+      (period) =>
+        !period.is_adjustment &&
+        period.starts_on <= d &&
+        period.ends_on >= d,
+    )?.id;
+  const periodByRef: NativeContext["periodByRef"] = new Map();
+  for (const period of periods) {
+    if (!period.source_ref) continue;
+    const existing = periodByRef.get(period.source_ref);
+    if (existing && existing.id !== period.id) {
+      throw new Error(
+        `connector period reference ${period.source_ref} maps to multiple accounting periods`,
+      );
+    }
+    periodByRef.set(period.source_ref, {
+      id: period.id,
+      startsOn: period.starts_on,
+      endsOn: period.ends_on,
+      isAdjustment: period.is_adjustment,
+    });
+  }
   const root = (await db.execute(sql`
     select id from subsidiaries where org_id = ${orgId} and parent_id is null limit 1`)) as unknown as {
     rows: { id: string }[];
@@ -243,6 +290,7 @@ export async function buildNativeContext(
     rootSubsidiaryId: root.rows[0].id,
     taxByRate,
     taxCodeByRef,
+    periodByRef,
     periodFor,
   };
 }

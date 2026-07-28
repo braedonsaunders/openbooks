@@ -61,6 +61,73 @@ test("account-month verification caps diagnostics without hiding the failed coun
   assert.equal(result.checked - result.matches, 2);
 });
 
+test("account verification preserves exact source posting-period identity", () => {
+  assert.deepEqual(
+    verifyAccountMonths(
+      [
+        {
+          accountRef: "4000",
+          periodRef: "ordinary-12",
+          month: "2026-12",
+          amount: "-10",
+        },
+        {
+          accountRef: "4000",
+          periodRef: "adjustment-13",
+          month: "2026-12",
+          amount: "-2",
+        },
+      ],
+      [
+        {
+          accountRef: "4000",
+          periodRef: "ordinary-12",
+          month: "2026-12",
+          amount: "-12",
+        },
+      ],
+    ),
+    {
+      checked: 2,
+      matches: 0,
+      mismatches: [
+        {
+          accountRef: "4000",
+          periodRef: "adjustment-13",
+          month: "2026-12",
+          ours: "0.0000",
+          theirs: "-2.0000",
+        },
+        {
+          accountRef: "4000",
+          periodRef: "ordinary-12",
+          month: "2026-12",
+          ours: "-12.0000",
+          theirs: "-10.0000",
+        },
+      ],
+    },
+  );
+});
+
+test("period-exact verification rejects a target row without period identity", () => {
+  assert.throws(
+    () =>
+      verifyAccountMonths(
+        [
+          {
+            accountRef: "4000",
+            periodRef: "17",
+            month: "2026-07",
+            amount: "1",
+          },
+        ],
+        [{ accountRef: "4000", month: "2026-07", amount: "1" }],
+      ),
+    /no exact period reference/,
+  );
+});
+
 test("project-account-month verification is exact and bidirectional", () => {
   const result = verifyProjectAccountMonths(
     [

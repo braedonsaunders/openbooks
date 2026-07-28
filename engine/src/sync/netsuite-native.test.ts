@@ -37,6 +37,26 @@ const context = {
   projectByRef: new Map(),
   taxByRate: new Map(),
   taxCodeByRef: new Map(),
+  periodByRef: new Map([
+    [
+      "17",
+      {
+        id: "period-july",
+        startsOn: "2026-07-01",
+        endsOn: "2026-07-31",
+        isAdjustment: false,
+      },
+    ],
+    [
+      "18",
+      {
+        id: "period-adjustment",
+        startsOn: "2026-07-01",
+        endsOn: "2026-07-31",
+        isAdjustment: true,
+      },
+    ],
+  ]),
 } as unknown as NativeContext;
 
 const header: NsHeader = {
@@ -45,6 +65,7 @@ const header: NsHeader = {
   ttype: "Journal",
   trandate: "07/15/2026",
   posting: "T",
+  postingperiod: "17",
 };
 
 test("NetSuite journals retain header and line subsidiary identity", () => {
@@ -72,11 +93,90 @@ test("NetSuite journals retain header and line subsidiary identity", () => {
   assert.ok(!("skip" in built));
   assert.equal(built.doc.documentNumber, "JRN-0042");
   assert.equal(built.doc.posting, true);
+  assert.equal(built.doc.postingPeriodId, "period-july");
+  assert.equal(built.doc.postingDate, "2026-07-15");
   assert.equal(built.doc.subsidiaryId, "sub-root");
   assert.deepEqual(
     built.doc.lines.map((line) => line.subsidiaryId),
     ["sub-root", "sub-child"],
   );
+});
+
+test("NetSuite posting transactions fail closed without an exact source period", () => {
+  const lines: NsLine[] = [
+    {
+      transaction: "123",
+      id: "1",
+      mainline: "T",
+      taxline: "F",
+      account: "10",
+      netamount: "-100",
+      subsidiary: "1",
+    },
+    {
+      transaction: "123",
+      id: "2",
+      mainline: "F",
+      taxline: "F",
+      account: "20",
+      netamount: "100",
+      subsidiary: "1",
+    },
+  ];
+  assert.deepEqual(
+    buildNativeFromNetSuite(context, { ...header, postingperiod: null }, lines),
+    { skip: "posting transaction has no source posting period" },
+  );
+  assert.deepEqual(
+    buildNativeFromNetSuite(context, { ...header, postingperiod: "99" }, lines),
+    { skip: "unmapped posting period 99" },
+  );
+});
+
+test("NetSuite preserves source date independently from exact posting period", () => {
+  const lines: NsLine[] = [
+    {
+      transaction: "123",
+      id: "1",
+      mainline: "T",
+      taxline: "F",
+      account: "10",
+      netamount: "-100",
+      subsidiary: "1",
+    },
+    {
+      transaction: "123",
+      id: "2",
+      mainline: "F",
+      taxline: "F",
+      account: "20",
+      netamount: "100",
+      subsidiary: "1",
+    },
+  ];
+  const late = buildNativeFromNetSuite(
+    context,
+    {
+      ...header,
+      trandate: "06/30/2026",
+      postingperiod: "17",
+    },
+    lines,
+  );
+  assert.ok(!("skip" in late));
+  assert.equal(late.doc.documentDate, "2026-06-30");
+  assert.equal(late.doc.postingDate, "2026-06-30");
+  assert.equal(late.doc.postingPeriodId, "period-july");
+
+  const adjustment = buildNativeFromNetSuite(
+    context,
+    { ...header, postingperiod: "18" },
+    lines,
+  );
+  assert.ok(!("skip" in adjustment));
+  assert.equal(adjustment.doc.documentDate, "2026-07-15");
+  assert.equal(adjustment.doc.postingDate, "2026-07-15");
+  assert.equal(adjustment.doc.postingPeriodId, "period-adjustment");
 });
 
 test("zero-value NetSuite journals remain source documents without an invented GL entry", () => {

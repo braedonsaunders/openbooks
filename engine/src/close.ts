@@ -766,10 +766,26 @@ async function periodFingerprint(
       (select coalesce(sum(case when l.amount > 0 then l.amount else 0 end), 0)::text
          from journal_lines l join journal_entries e on e.id = l.entry_id
         where e.org_id = ${orgId} and e.period_id = ${periodId} and e.book_id = ${bookId}) as debits,
-      (select count(*) from documents d join accounting_periods p on p.id = ${periodId}
-        where d.org_id = ${orgId} and coalesce(d.posting_date, d.document_date) between p.starts_on and p.ends_on) as documents,
-      (select coalesce(max(d.updated_at)::text, '') from documents d join accounting_periods p on p.id = ${periodId}
-        where d.org_id = ${orgId} and coalesce(d.posting_date, d.document_date) between p.starts_on and p.ends_on) as document_changed,
+      (select count(*) from documents d
+        join accounting_periods p on p.id = ${periodId} and p.org_id = ${orgId}
+       where d.org_id = ${orgId}
+         and (
+           d.posting_period_id = p.id
+           or (
+             d.posting_period_id is null
+             and coalesce(d.posting_date, d.document_date) between p.starts_on and p.ends_on
+           )
+         )) as documents,
+      (select coalesce(max(d.updated_at)::text, '') from documents d
+        join accounting_periods p on p.id = ${periodId} and p.org_id = ${orgId}
+       where d.org_id = ${orgId}
+         and (
+           d.posting_period_id = p.id
+           or (
+             d.posting_period_id is null
+             and coalesce(d.posting_date, d.document_date) between p.starts_on and p.ends_on
+           )
+         )) as document_changed,
       (select count(*) from reconciliations r join accounting_periods p on p.id = ${periodId}
         where r.org_id = ${orgId} and r.through_date <= p.ends_on and r.status = 'signed_off') as reconciliations
   `)) as unknown as { rows: Record<string, unknown>[] };
@@ -985,7 +1001,9 @@ async function readinessChecks(
   runId: string,
 ): Promise<ReadinessCheck[]> {
   const context = (await db.execute(sql`
-    select r.period_id, r.book_id, p.starts_on, p.ends_on, o.base_currency
+    select r.period_id, r.book_id, p.starts_on, p.ends_on,
+           p.fiscal_calendar_id, p.period_number, p.is_adjustment,
+           o.base_currency
       from close_runs r
       join accounting_periods p on p.id = r.period_id
       join orgs o on o.id = r.org_id
@@ -995,6 +1013,9 @@ async function readinessChecks(
       book_id: string;
       starts_on: string;
       ends_on: string;
+      fiscal_calendar_id: string;
+      period_number: number;
+      is_adjustment: boolean;
       base_currency: string;
     }[];
   };
@@ -1009,7 +1030,13 @@ async function readinessChecks(
         +
         (select count(*) from documents
           where org_id = ${orgId} and status in ('draft','pending_approval','approved')
-            and coalesce(posting_date, document_date) between ${ctx.starts_on} and ${ctx.ends_on}) as count`),
+            and (
+              posting_period_id = ${ctx.period_id}
+              or (
+                posting_period_id is null
+                and coalesce(posting_date, document_date) between ${ctx.starts_on} and ${ctx.ends_on}
+              )
+            )) as count`),
       db.execute(sql`
       select count(*) as count
         from accounts a
@@ -1042,10 +1069,24 @@ async function readinessChecks(
         select l.subsidiary_id, l.currency
           from journal_lines l
           join journal_entries e on e.id = l.entry_id
+          join accounting_periods ep on ep.id = e.period_id and ep.org_id = e.org_id
           join accounts a on a.id = l.account_id
           join subsidiaries s on s.id = l.subsidiary_id
          where l.org_id = ${orgId} and e.book_id = ${ctx.book_id} and e.status in ('posted', 'reversed')
-           and e.origin <> 'revaluation' and e.posting_date <= ${ctx.ends_on}
+           and e.origin <> 'revaluation'
+           and (
+             ep.ends_on < ${ctx.ends_on}
+             or ep.id = ${ctx.period_id}
+             or (
+               ${ctx.is_adjustment}
+               and ep.fiscal_calendar_id = ${ctx.fiscal_calendar_id}
+               and ep.ends_on = ${ctx.ends_on}
+               and (
+                 not ep.is_adjustment
+                 or ep.period_number <= ${ctx.period_number}
+               )
+             )
+           )
            and l.currency <> s.base_currency
            and a.type in ('asset_bank', 'asset_receivable', 'liability_payable')
          group by l.subsidiary_id, l.currency

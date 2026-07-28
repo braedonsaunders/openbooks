@@ -31,6 +31,7 @@ export interface NsHeader {
   memo?: string | null;
   status?: string | null;
   posting?: string | null; // 'T' | 'F'
+  postingperiod?: string | null;
   otherrefnum?: string | null;
 }
 
@@ -169,6 +170,14 @@ export function buildNativeFromNetSuite(
   if (h.posting !== "T") return { skip: `posting='${h.posting}'` };
   const kind = TTYPE_KIND[tt];
   if (!kind) return { skip: `unmapped type ${tt}` };
+  const postingPeriodRef = String(h.postingperiod ?? "").trim();
+  if (!postingPeriodRef) {
+    return { skip: "posting transaction has no source posting period" };
+  }
+  const postingPeriod = ctx.periodByRef.get(postingPeriodRef);
+  if (!postingPeriod) {
+    return { skip: `unmapped posting period ${postingPeriodRef}` };
+  }
 
   const lineTaxCode = (
     l: NsLine,
@@ -219,13 +228,19 @@ export function buildNativeFromNetSuite(
       !ctx.taxCodeByRef.has(String(line.taxcode)),
   )?.taxcode;
   if (unmappedTaxCode) return { skip: `unmapped tax code ${unmappedTaxCode}` };
+  const documentDate = parseNsDate(h.trandate);
   const base: Omit<NativeDocument, "kind" | "lines"> = {
     sourceRef: h.id,
     documentNumber: h.tranid ?? h.id,
     posting: true,
     partyId,
     subsidiaryId,
-    documentDate: parseNsDate(h.trandate),
+    documentDate,
+    // NetSuite exposes transaction date and posting period as independent
+    // accounting facts. Do not invent a period-end date for late or
+    // adjustment postings; exact period identity is carried separately.
+    postingDate: documentDate,
+    postingPeriodId: postingPeriod.id,
     dueDate: h.duedate ? parseNsDate(h.duedate) : null,
     memo: h.memo ?? null,
     referenceNumber: h.otherrefnum ?? h.tranid ?? null,

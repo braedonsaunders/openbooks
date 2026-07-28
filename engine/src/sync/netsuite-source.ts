@@ -277,7 +277,7 @@ export function normalizeNetSuiteTimeEntry(
 }
 const HEADER_COLS = `t.id, t.type AS ttype, t.tranid, TO_CHAR(t.trandate, 'MM/DD/YYYY') AS trandate,
   TO_CHAR(t.duedate, 'MM/DD/YYYY') AS duedate, t.entity, t.currency, t.memo, t.status,
-  t.otherrefnum, t.posting`;
+  t.otherrefnum, t.posting, t.postingperiod`;
 const LINE_COLS = `tl.transaction, tl.id, tl.mainline, tl.taxline, tl.item, tl.account,
   tl.expenseaccount, tl.netamount, tl.foreignamount, tl.quantity, tl.rate,
   BUILTIN.DF(tl.units) AS units,
@@ -1269,17 +1269,26 @@ export class NetSuiteSource implements MigrationSource {
 
   async monthlyActivity(): Promise<SourceAccountMonthRow[]> {
     const accountingBookId = await this.accountingBookId();
-    const rows = await this.q<{ acct?: string; m: string; d: string; c: string }>(`
-      SELECT tal.account AS acct, TO_CHAR(t.trandate, 'YYYY-MM') AS m,
+    const rows = await this.q<{
+      acct?: string;
+      periodref?: string;
+      m: string;
+      d: string;
+      c: string;
+    }>(`
+      SELECT tal.account AS acct, t.postingperiod AS periodref,
+             TO_CHAR(ap.startdate, 'YYYY-MM') AS m,
              SUM(COALESCE(tal.debit, 0)) AS d, SUM(COALESCE(tal.credit, 0)) AS c
         FROM transactionaccountingline tal
         JOIN transaction t ON t.id = tal.transaction
+        JOIN accountingperiod ap ON ap.id = t.postingperiod
        WHERE tal.posting = 'T' AND tal.accountingbook = ${accountingBookId}
-       GROUP BY tal.account, TO_CHAR(t.trandate, 'YYYY-MM')`);
+       GROUP BY tal.account, t.postingperiod, TO_CHAR(ap.startdate, 'YYYY-MM')`);
     return rows
-      .filter((r) => r.acct)
+      .filter((r) => r.acct && r.periodref)
       .map((r) => ({
         accountRef: String(r.acct),
+        periodRef: String(r.periodref),
         month: r.m,
         amount: fromUnits(toUnits(r.d ?? "0") - toUnits(r.c ?? "0")),
       }));
@@ -1290,28 +1299,33 @@ export class NetSuiteSource implements MigrationSource {
     const rows = await this.q<{
       project?: string;
       acct?: string;
+      periodref?: string;
       m: string;
       d: string;
       c: string;
     }>(`
       SELECT tl.entity AS project, tal.account AS acct,
-             TO_CHAR(t.trandate, 'YYYY-MM') AS m,
+             t.postingperiod AS periodref,
+             TO_CHAR(ap.startdate, 'YYYY-MM') AS m,
              SUM(COALESCE(tal.debit, 0)) AS d,
              SUM(COALESCE(tal.credit, 0)) AS c
         FROM transactionaccountingline tal
         JOIN transaction t ON t.id = tal.transaction
+        JOIN accountingperiod ap ON ap.id = t.postingperiod
         JOIN transactionline tl
           ON tl.transaction = tal.transaction
          AND tl.id = tal.transactionline
         JOIN job project ON project.id = tl.entity
        WHERE tal.posting = 'T'
          AND tal.accountingbook = ${accountingBookId}
-       GROUP BY tl.entity, tal.account, TO_CHAR(t.trandate, 'YYYY-MM')`);
+       GROUP BY tl.entity, tal.account, t.postingperiod,
+                TO_CHAR(ap.startdate, 'YYYY-MM')`);
     return rows
-      .filter((row) => row.project && row.acct)
+      .filter((row) => row.project && row.acct && row.periodref)
       .map((row) => ({
         projectRef: String(row.project),
         accountRef: String(row.acct),
+        periodRef: String(row.periodref),
         month: row.m,
         amount: fromUnits(toUnits(row.d ?? "0") - toUnits(row.c ?? "0")),
       }));

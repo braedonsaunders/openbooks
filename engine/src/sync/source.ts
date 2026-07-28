@@ -72,6 +72,10 @@ export interface SourceTrialBalanceRow {
 export interface SourceAccountMonthRow {
   accountRef: string;
   month: string; // YYYY-MM
+  /** Exact source posting-period identity when the source exposes one. When
+   * present on the complete source population, verification keys by this
+   * value rather than collapsing adjustment/late-posted activity by month. */
+  periodRef?: string | null;
   amount: string; // signed decimal string, debit-positive, in home currency
 }
 
@@ -86,6 +90,7 @@ export interface SourceProjectAccountMonthRow {
   projectRef: string;
   accountRef: string;
   month: string; // YYYY-MM
+  periodRef?: string | null;
   amount: string; // signed decimal string, debit-positive, in home currency
 }
 
