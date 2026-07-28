@@ -14,9 +14,14 @@ export interface TransactionAuditSnapshot {
   document: Record<string, unknown>;
   lines: Record<string, unknown>[];
   taxComponents: Record<string, unknown>[];
+  applications: Record<string, unknown>[];
   glImpact: {
     entry: Record<string, unknown>;
     lines: Record<string, unknown>[];
+    reversals: Array<{
+      entry: Record<string, unknown>;
+      lines: Record<string, unknown>[];
+    }>;
   } | null;
 }
 
@@ -47,12 +52,39 @@ export async function captureTransactionAuditSnapshot(
           join document_line_tax_components tc on tc.document_line_id = dl.id
          where dl.document_id = d.id
       ), '[]'::jsonb),
+      'applications', coalesce((
+        select jsonb_agg(to_jsonb(a) order by a.applied_on, a.id)
+          from applications a
+         where e.id is not null and (
+           a.from_line_id in (
+             select jl.id from journal_lines jl where jl.entry_id = e.id
+           )
+           or a.to_line_id in (
+             select jl.id from journal_lines jl where jl.entry_id = e.id
+           )
+         )
+      ), '[]'::jsonb),
       'glImpact', case when e.id is null then null else jsonb_build_object(
         'entry', to_jsonb(e),
         'lines', coalesce((
           select jsonb_agg(to_jsonb(jl) order by jl.line_number, jl.id)
             from journal_lines jl
            where jl.entry_id = e.id
+        ), '[]'::jsonb),
+        'reversals', coalesce((
+          select jsonb_agg(
+            jsonb_build_object(
+              'entry', to_jsonb(reversal),
+              'lines', coalesce((
+                select jsonb_agg(to_jsonb(reversal_line) order by reversal_line.line_number, reversal_line.id)
+                  from journal_lines reversal_line
+                 where reversal_line.entry_id = reversal.id
+              ), '[]'::jsonb)
+            )
+            order by reversal.posting_date, reversal.id
+          )
+            from journal_entries reversal
+           where reversal.reverses_entry_id = e.id
         ), '[]'::jsonb)
       ) end
     ) as snapshot
