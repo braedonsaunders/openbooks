@@ -22,6 +22,25 @@ test('project charges are first-class customizable transactions, not a parallel 
   )
 })
 
+test('project planning is grouped under a customizable project-management tab', () => {
+  const project = getRecordType('project')
+  const drawer = source('app/(app)/projects/ProjectDrawer.tsx')
+
+  assert.deepEqual(
+    project?.tabs?.map((tab) => tab.key),
+    ['overview', 'financials', 'project_management', 'cost_time', 'billing', 'transactions'],
+  )
+  assert.deepEqual(
+    project?.tabs?.find((tab) => tab.key === 'project_management')?.subtabs?.map((tab) => tab.key),
+    ['work_breakdown', 'schedule'],
+  )
+  assert.match(drawer, /tab === 'project_management'/)
+  assert.match(drawer, /managementTab === 'work_breakdown'/)
+  assert.match(drawer, /managementTab === 'schedule' && schedulingEnabled/)
+  assert.doesNotMatch(drawer, /tab === 'work_breakdown'/)
+  assert.doesNotMatch(drawer, /tab === 'schedule'/)
+})
+
 test('project transactions filter by native type and stack the transaction drawer', () => {
   const tab = source('app/(app)/projects/tabs/TransactionsTab.tsx')
   const page = source('app/(app)/projects/page.tsx')

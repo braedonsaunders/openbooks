@@ -22,7 +22,7 @@ import { FinancialsTab, type FinancialsData } from './tabs/FinancialsTab'
 import { RecognitionCard, type RecognitionStatus } from './tabs/RecognitionCard'
 import { CostTimeTab, type CostTimeData } from './tabs/CostTimeTab'
 import { TransactionsTab } from './tabs/TransactionsTab'
-import { WorkBreakdownTab, type WorkBreakdownTask } from './tabs/WorkBreakdownTab'
+import { WorkBreakdownTab } from './tabs/WorkBreakdownTab'
 import { ScheduleTab } from './tabs/ScheduleTab'
 import type { ChargeRow, ChargeItemOption, ChargeEquipmentOption } from './tabs/ChargesSection'
 import { BillingSection, type BillingRequestClient, type UnbilledClient, type EffectiveInvoicingClient } from './tabs/BillingSection'
@@ -39,7 +39,6 @@ interface SubsidiaryOpt {
   name: string
   depth: number
 }
-type TaskRow = WorkBreakdownTask
 interface ProjectPayload {
   project: Record<string, any>
   contractValue: string | null
@@ -53,6 +52,7 @@ interface ProjectPayload {
     status: string
     estimated_hours: string | null
     estimated_cost: string | null
+    updated_at: string
   }[]
   customFieldDefs?: CustomFieldDefClient[]
 }
@@ -92,22 +92,12 @@ export interface ProjectCockpitData {
 const TAB_KEYS = [
   'overview',
   'financials',
-  'work_breakdown',
-  'schedule',
+  'project_management',
   'cost_time',
   'billing',
   'transactions',
 ] as const
 type TabKey = (typeof TAB_KEYS)[number] | string
-
-const emptyTask = (): TaskRow => ({
-  id: null,
-  code: '',
-  name: '',
-  status: 'open',
-  estimatedHours: '',
-  estimatedCost: '',
-})
 
 export function ProjectDrawer({
   payload,
@@ -179,16 +169,6 @@ export function ProjectDrawer({
   const [custom, setCustom] = useState<Record<string, unknown>>(
     (pr.custom as Record<string, unknown> | null) ?? {},
   )
-  const [tasks, setTasks] = useState<TaskRow[]>(
-    payload.tasks.map((task) => ({
-      id: task.id,
-      code: task.code ?? '',
-      name: task.name ?? '',
-      status: task.status ?? 'open',
-      estimatedHours: task.estimated_hours != null ? Number(task.estimated_hours).toString() : '',
-      estimatedCost: task.estimated_cost != null ? formatMoney(task.estimated_cost, 2) : '',
-    })),
-  )
   const [isActive, setIsActive] = useState<boolean>(pr.is_active === true)
   const [subsidiaryId, setSubsidiaryId] = useState<string>(pr.subsidiary_id ?? '')
   const [subsidiaryIncludeChildren, setSubsidiaryIncludeChildren] = useState<boolean>(
@@ -203,7 +183,14 @@ export function ProjectDrawer({
   const editable = mode === 'edit' && canManage
 
   // Flyout chrome: subtabs + Actions-menu-driven create forms (repository conventions).
-  const [tab, setTab] = useState<TabKey>(initialTab)
+  const [tab, setTab] = useState<TabKey>(
+    initialTab === 'work_breakdown' || initialTab === 'schedule'
+      ? 'project_management'
+      : initialTab,
+  )
+  const [managementTab, setManagementTab] = useState<string>(
+    initialTab === 'schedule' ? 'schedule' : 'work_breakdown',
+  )
   const [actionsOpen, setActionsOpen] = useState(false)
   const [chargeFormOpen, setChargeFormOpen] = useState(false)
   const [billingFormOpen, setBillingFormOpen] = useState(false)
@@ -215,10 +202,6 @@ export function ProjectDrawer({
     () => parties.map((p) => ({ value: p.id, label: p.display_name ?? '' })),
     [parties],
   )
-
-  function setTask(task: TaskRow, patch: Partial<TaskRow>) {
-    setTasks((rows) => rows.map((row) => (row === task ? { ...row, ...patch } : row)))
-  }
 
   const savePayload = useMemo(
     () => ({
@@ -238,18 +221,8 @@ export function ProjectDrawer({
       custom,
       subsidiaryId: subsidiaries.length > 0 ? subsidiaryId || null : undefined,
       subsidiaryIncludeChildren: subsidiaries.length > 0 ? subsidiaryIncludeChildren : undefined,
-      tasks: tasks
-        .filter((task) => task.name.trim().length > 0)
-        .map((task) => ({
-          id: task.id,
-          code: task.code || null,
-          name: task.name,
-          status: task.status,
-          estimatedHours: task.estimatedHours || null,
-          estimatedCost: task.estimatedCost || null,
-        })),
     }),
-    [name, code, customerId, foremanId, managerId, status, projectTypeId, invoicingPref, customerPoNumber, startsOn, endsOn, contractValue, notes, custom, subsidiaryId, subsidiaryIncludeChildren, subsidiaries.length, tasks, isActive],
+    [name, code, customerId, foremanId, managerId, status, projectTypeId, invoicingPref, customerPoNumber, startsOn, endsOn, contractValue, notes, custom, subsidiaryId, subsidiaryIncludeChildren, subsidiaries.length, isActive],
   )
   const [dirty, setDirty] = useState(false)
   const first = useRef(true)
@@ -279,16 +252,6 @@ export function ProjectDrawer({
     setCustom((pr.custom as Record<string, unknown> | null) ?? {})
     setSubsidiaryId(pr.subsidiary_id ?? '')
     setSubsidiaryIncludeChildren(pr.subsidiary_include_children !== false)
-    setTasks(
-      payload.tasks.map((task) => ({
-        id: task.id,
-        code: task.code ?? '',
-        name: task.name ?? '',
-        status: task.status ?? 'open',
-        estimatedHours: task.estimated_hours != null ? Number(task.estimated_hours).toString() : '',
-        estimatedCost: task.estimated_cost != null ? formatMoney(task.estimated_cost, 2) : '',
-      })),
-    )
   }
 
   async function save() {
@@ -505,18 +468,30 @@ export function ProjectDrawer({
    * comes from the server-resolved Features state.
    */
   const tabs = useMemo(() => {
-    const gatedOff = new Set<string>(schedulingEnabled ? [] : ['schedule'])
     return resolveFormTabs(effectiveLayout)
-      .filter((placement) => placement.visible && !gatedOff.has(placement.key))
+      .filter((placement) => placement.visible)
       .map((placement) => ({
         key: placement.key,
         groupIds: placement.groupIds ?? [],
+        subtabs: (placement.subtabs ?? [])
+          .filter((subtab) =>
+            subtab.visible && (subtab.key !== 'schedule' || schedulingEnabled),
+          )
+          .map((subtab) => ({
+            key: subtab.key,
+            label:
+              subtab.labelOverride?.trim() ||
+              t(`cockpit.tabs.${subtab.key}`),
+          })),
         label:
           placement.labelOverride?.trim() ||
           (isCustomTabKey(placement.key)
             ? placement.key.replace(/^tab_/, '').replace(/_/g, ' ')
             : t(`cockpit.tabs.${placement.key}`)),
       }))
+      .filter((placement) =>
+        placement.key !== 'project_management' || placement.subtabs.length > 0,
+      )
   }, [effectiveLayout, schedulingEnabled, t])
 
   // A hidden or gated-off tab must never stay selected.
@@ -527,6 +502,18 @@ export function ProjectDrawer({
   }, [tab, tabs])
 
   const activeTab = tabs.find((item) => item.key === tab) ?? null
+  const managementTabs =
+    tabs.find((item) => item.key === 'project_management')?.subtabs ?? []
+
+  useEffect(() => {
+    if (
+      tab === 'project_management' &&
+      managementTabs.length > 0 &&
+      !managementTabs.some((item) => item.key === managementTab)
+    ) {
+      setManagementTab(managementTabs[0]!.key)
+    }
+  }, [managementTab, managementTabs, tab])
 
   return (
     <>
@@ -577,7 +564,7 @@ export function ProjectDrawer({
         ) : canManage || canViewGl || !!cockpit.recognition ? (
           <div className="flex items-center gap-1.5">
             {canManage ? (
-              <Button variant="outline" size="sm" className="h-8 px-2.5 text-xs" onClick={() => { if (tab !== 'work_breakdown') setTab('overview'); setMode('edit') }}>
+              <Button variant="outline" size="sm" className="h-8 px-2.5 text-xs" onClick={() => { setTab('overview'); setMode('edit') }}>
                 {tCommon('actions.edit')}
               </Button>
             ) : null}
@@ -635,7 +622,7 @@ export function ProjectDrawer({
         ) : undefined
       }
       footer={
-        (tab === 'overview' || tab === 'work_breakdown') && mode === 'edit' ? (
+        tab === 'overview' && mode === 'edit' ? (
           <div className="flex w-full items-center gap-3">
             <span className={cn('text-xs', saveState === 'error' ? 'text-red-600 dark:text-red-400' : 'text-slate-500 dark:text-slate-400')}>
               {saveState === 'saving'
@@ -671,16 +658,6 @@ export function ProjectDrawer({
         </div>
       ) : null}
 
-      {tab === 'work_breakdown' ? (
-        <WorkBreakdownTab
-          tasks={tasks}
-          editable={editable}
-          onAdd={() => setTasks((rows) => [...rows, emptyTask()])}
-          onChange={setTask}
-          onRemove={(task) => setTasks((rows) => rows.filter((row) => row !== task))}
-        />
-      ) : null}
-
       {tab === 'financials' ? (
         <FinancialsTab data={cockpit.financials} />
       ) : null}
@@ -699,14 +676,48 @@ export function ProjectDrawer({
         />
       ) : null}
 
-      {tab === 'schedule' && schedulingEnabled ? (
-        <ScheduleTab
-          projectId={String(pr.id)}
-          projectStart={startsOn || null}
-          projectEnd={endsOn || null}
-          canManage={canManage}
-          locale={locale}
-        />
+      {tab === 'project_management' ? (
+        <div>
+          <nav
+            className="mb-5 flex gap-1 border-b border-slate-200 dark:border-slate-800"
+            aria-label={t('cockpit.tabs.project_management')}
+            role="tablist"
+          >
+            {managementTabs.map((item) => (
+              <button
+                key={item.key}
+                type="button"
+                role="tab"
+                aria-selected={managementTab === item.key}
+                onClick={() => setManagementTab(item.key)}
+                className={cn(
+                  '-mb-px border-b-2 px-3 py-2 text-sm font-medium transition-colors',
+                  managementTab === item.key
+                    ? 'border-teal-600 text-teal-700 dark:border-teal-400 dark:text-teal-300'
+                    : 'border-transparent text-slate-500 hover:border-slate-300 hover:text-slate-800 dark:text-slate-400 dark:hover:border-slate-700 dark:hover:text-slate-200',
+                )}
+              >
+                {item.label}
+              </button>
+            ))}
+          </nav>
+          {managementTab === 'work_breakdown' ? (
+            <WorkBreakdownTab
+              projectId={String(pr.id)}
+              tasks={payload.tasks}
+              canManage={canManage}
+            />
+          ) : null}
+          {managementTab === 'schedule' && schedulingEnabled ? (
+            <ScheduleTab
+              projectId={String(pr.id)}
+              projectStart={startsOn || null}
+              projectEnd={endsOn || null}
+              canManage={canManage}
+              locale={locale}
+            />
+          ) : null}
+        </div>
       ) : null}
 
       {tab === 'transactions' ? (

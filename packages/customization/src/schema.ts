@@ -20,6 +20,7 @@ import type {
   FilterOperator,
   FormActionPlacement,
   FormLayoutConfig,
+  FormTabMeta,
   FormTabPlacement,
   HeaderFieldPlacement,
   LineColumnPlacement,
@@ -79,7 +80,7 @@ const formActionPlacementSchema = z.object({
   visible: z.boolean(),
 });
 
-const formTabPlacementSchema = z.object({
+const formTabPlacementBaseSchema = z.object({
   key: z
     .string()
     .min(1)
@@ -90,10 +91,14 @@ const formTabPlacementSchema = z.object({
   groupIds: z.array(z.string().min(1).max(60)).max(20).optional(),
 });
 
+const formTabPlacementSchema = formTabPlacementBaseSchema.extend({
+  subtabs: z.array(formTabPlacementBaseSchema).max(20).optional(),
+});
+
 export const formLayoutConfigSchema = z.object({
   schemaVersion: z.literal(1),
   defaultVisibilityVersion: z.literal(1).optional(),
-  defaultLayoutVersion: z.union([z.literal(1), z.literal(2)]).optional(),
+  defaultLayoutVersion: z.union([z.literal(1), z.literal(2), z.literal(3)]).optional(),
   recordType: recordTypeSchema,
   header: z.object({ groups: z.array(headerGroupSchema).min(1).max(20) }),
   lines: z.object({ columns: z.array(lineColumnPlacementSchema).max(200) }),
@@ -392,7 +397,7 @@ export function defaultFormLayout(recordType: RecordTypeKey): FormLayoutConfig {
   return {
     schemaVersion: 1,
     defaultVisibilityVersion: 1,
-    defaultLayoutVersion: recordType === 'project' ? 2 : 1,
+    defaultLayoutVersion: recordType === 'project' ? 3 : 1,
     recordType,
     header: {
       groups: [
@@ -419,9 +424,82 @@ export function defaultFormLayout(recordType: RecordTypeKey): FormLayoutConfig {
     },
     actions: FORM_ACTION_KEYS.map<FormActionPlacement>((key) => ({ key, visible: true })),
     ...(meta.tabs?.length
-      ? { tabs: meta.tabs.map<FormTabPlacement>((tab) => ({ key: tab.key, visible: true })) }
+      ? {
+          tabs: meta.tabs.map<FormTabPlacement>((tab) => ({
+            key: tab.key,
+            visible: true,
+            ...(tab.subtabs?.length
+              ? {
+                  subtabs: tab.subtabs.map<FormTabPlacement>((subtab) => ({
+                    key: subtab.key,
+                    visible: true,
+                  })),
+                }
+              : {}),
+          })),
+        }
       : {}),
   }
+}
+
+function resolveRegisteredSubtabs(
+  placement: FormTabPlacement,
+  registered: FormTabMeta,
+): FormTabPlacement {
+  if (!registered.subtabs?.length) {
+    const { subtabs: _subtabs, ...withoutSubtabs } = placement
+    return withoutSubtabs
+  }
+
+  const registeredKeys = new Set(registered.subtabs.map((subtab) => subtab.key))
+  const placed = (placement.subtabs ?? []).filter((subtab) => registeredKeys.has(subtab.key))
+  const placedKeys = new Set(placed.map((subtab) => subtab.key))
+  return {
+    ...placement,
+    subtabs: [
+      ...placed,
+      ...registered.subtabs
+        .filter((subtab) => !placedKeys.has(subtab.key))
+        .map<FormTabPlacement>((subtab) => ({ key: subtab.key, visible: true })),
+    ],
+  }
+}
+
+/**
+ * Convert the pre-v3 flat project planning tabs into the nested placement
+ * without discarding tenant-authored order, visibility, or labels. This runs
+ * during resolution for every form (including named custom forms), while only
+ * the tenant baseline receives the separate placement-default refresh.
+ */
+function collapseLegacyProjectPlanningTabs(
+  layout: FormLayoutConfig,
+  tabs: FormTabPlacement[],
+): FormTabPlacement[] {
+  if (layout.recordType !== 'project') return tabs
+  const legacyKeys = new Set(['work_breakdown', 'schedule'])
+  const legacy = tabs.filter((tab) => legacyKeys.has(tab.key))
+  if (legacy.length === 0) return tabs
+
+  const firstLegacyIndex = tabs.findIndex((tab) => legacyKeys.has(tab.key))
+  const existingParent = tabs.find((tab) => tab.key === 'project_management')
+  const parent: FormTabPlacement = {
+    ...(existingParent ?? {
+      key: 'project_management',
+      // If a child did not exist when this form was saved, its newly
+      // registered visible default must remain discoverable.
+      visible: legacy.some((tab) => tab.visible) || legacy.length < legacyKeys.size,
+    }),
+    subtabs: existingParent?.subtabs?.length ? existingParent.subtabs : legacy,
+  }
+  const withoutLegacyOrParent = tabs.filter(
+    (tab) => !legacyKeys.has(tab.key) && tab.key !== 'project_management',
+  )
+  withoutLegacyOrParent.splice(
+    Math.min(firstLegacyIndex, withoutLegacyOrParent.length),
+    0,
+    parent,
+  )
+  return withoutLegacyOrParent
 }
 
 /**
@@ -438,7 +516,8 @@ export function resolveFormTabs(layout: FormLayoutConfig): FormTabPlacement[] {
   if (registered.length === 0 && !layout.tabs?.length) return []
 
   const registeredKeys = new Set(registered.map((tab) => tab.key))
-  const placed = (layout.tabs ?? []).filter(
+  const normalizedTabs = collapseLegacyProjectPlanningTabs(layout, layout.tabs ?? [])
+  const placed = normalizedTabs.filter(
     (tab) => registeredKeys.has(tab.key) || isCustomTabKey(tab.key),
   )
   const placedKeys = new Set(placed.map((tab) => tab.key))
@@ -447,7 +526,11 @@ export function resolveFormTabs(layout: FormLayoutConfig): FormTabPlacement[] {
     .filter((tab) => !placedKeys.has(tab.key) && !tab.locked)
     .map<FormTabPlacement>((tab) => ({ key: tab.key, visible: true }))
 
-  const resolved = [...placed, ...appended]
+  const registeredByKey = new Map(registered.map((tab) => [tab.key, tab]))
+  const resolved = [...placed, ...appended].map((placement) => {
+    const tab = registeredByKey.get(placement.key)
+    return tab ? resolveRegisteredSubtabs(placement, tab) : placement
+  })
   // A locked tab can never be hidden or ordered away — a record must always be
   // able to show itself. One a layout has dropped comes back at the front,
   // where the record's own fields belong.
@@ -523,6 +606,7 @@ export function mergeRegisteredFieldsIntoLayout(layout: FormLayoutConfig): FormL
     ...(layout.actions ?? []),
     ...defaults.actions.filter((action) => !placedActions.has(action.key)),
   ]
+  if (meta.tabs?.length) layout.tabs = resolveFormTabs(layout)
   return layout
 }
 
@@ -554,7 +638,7 @@ export function refreshDefaultFormLayout(layout: FormLayoutConfig): FormLayoutCo
 
   layout.header.groups = customOnlyGroups.filter((group, index) => index === 0 || group.fields.length > 0)
   if (defaults.tabs?.length) {
-    const existingTabs = new Map((layout.tabs ?? []).map((tab) => [tab.key, tab]))
+    const existingTabs = new Map(resolveFormTabs(layout).map((tab) => [tab.key, tab]))
     const builtIns = defaults.tabs.map((tab) => ({ ...tab, ...existingTabs.get(tab.key) }))
     const customTabs = (layout.tabs ?? []).filter((tab) => isCustomTabKey(tab.key))
     layout.tabs = [...builtIns, ...customTabs]
@@ -630,6 +714,25 @@ function lintFormTabs(config: FormLayoutConfig): LintIssue[] {
         path: `tabs.${index}.groupIds`,
         message: "only custom tabs can host field groups",
       })
+    }
+    if (builtIn?.subtabs?.length) {
+      const registeredSubtabs = new Map(builtIn.subtabs.map((subtab) => [subtab.key, subtab]))
+      const seenSubtabs = new Set<string>()
+      for (const [subtabIndex, subtab] of (tab.subtabs ?? []).entries()) {
+        const path = `tabs.${index}.subtabs.${subtabIndex}`
+        if (seenSubtabs.has(subtab.key)) {
+          issues.push({ path: `${path}.key`, message: `duplicate subtab: ${subtab.key}` })
+        }
+        seenSubtabs.add(subtab.key)
+        if (!registeredSubtabs.has(subtab.key)) {
+          issues.push({ path: `${path}.key`, message: `unknown subtab: ${subtab.key}` })
+        }
+        if (subtab.groupIds?.length) {
+          issues.push({ path: `${path}.groupIds`, message: "subtabs cannot host field groups" })
+        }
+      }
+    } else if (tab.subtabs?.length) {
+      issues.push({ path: `tabs.${index}.subtabs`, message: "this tab has no registered subtabs" })
     }
     for (const groupId of tab.groupIds ?? []) {
       if (!groupIds.has(groupId)) {

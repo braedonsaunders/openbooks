@@ -311,6 +311,13 @@ export function FormDesigner({
     return key
   }
   const tabLocked = (key: string) => registeredTabs.find((item) => item.key === key)?.locked === true
+  const subtabDefaultLabel = (parentKey: string, key: string) => {
+    const registered = registeredTabs
+      .find((item) => item.key === parentKey)
+      ?.subtabs?.find((item) => item.key === key)
+    if (registered && tRoot.has(registered.labelKey as never)) return tRoot(registered.labelKey as never)
+    return key.replace(/_/g, ' ')
+  }
 
   function setTabs(next: (tabs: FormTabPlacement[]) => FormTabPlacement[]) {
     setLayout((previous) => {
@@ -318,6 +325,17 @@ export function FormDesigner({
       clone.tabs = next(resolveFormTabs(clone))
       return clone
     })
+  }
+
+  function setSubtabs(
+    parentIndex: number,
+    next: (subtabs: FormTabPlacement[]) => FormTabPlacement[],
+  ) {
+    setTabs((tabs) =>
+      tabs.map((tab, index) =>
+        index === parentIndex ? { ...tab, subtabs: next(tab.subtabs ?? []) } : tab,
+      ),
+    )
   }
 
   function addCustomTab() {
@@ -509,32 +527,68 @@ export function FormDesigner({
                 const locked = tabLocked(tab.key)
                 const custom = isCustomTabKey(tab.key)
                 return (
-                  <div key={tab.key} className="flex items-center gap-2 rounded-md border border-slate-100 px-2.5 py-1.5 dark:border-slate-800">
-                    <GripVertical size={14} className="text-slate-300" />
-                    <Input
-                      value={tab.labelOverride ?? ''}
-                      placeholder={tabDefaultLabel(tab.key)}
-                      aria-label={tabDefaultLabel(tab.key)}
-                      onChange={(e) => setTabs((tabs) => tabs.map((item, index) => (index === ti ? { ...item, labelOverride: e.target.value } : item)))}
-                      className="h-7 flex-1 text-xs"
-                    />
-                    {custom ? <KindChip label={t('designer.forms.customTab')} /> : null}
-                    <button type="button" onClick={() => setTabs((tabs) => reorder(tabs, ti, ti - 1))} className="text-slate-400 hover:text-slate-600" aria-label={tCommon('actions.previous')}><ChevronUp size={15} /></button>
-                    <button type="button" onClick={() => setTabs((tabs) => reorder(tabs, ti, ti + 1))} className="text-slate-400 hover:text-slate-600" aria-label={tCommon('actions.next')}><ChevronDown size={15} /></button>
-                    <button
-                      type="button"
-                      disabled={locked}
-                      onClick={() => setTabs((tabs) => tabs.map((item, index) => (index === ti ? { ...item, visible: !item.visible } : item)))}
-                      className={locked ? 'cursor-not-allowed text-slate-200 dark:text-slate-700' : tab.visible ? 'text-slate-400 hover:text-slate-600' : 'text-red-500'}
-                      aria-label={t('designer.forms.visible')}
-                      title={locked ? t('designer.forms.tabLocked') : undefined}
-                    >
-                      {tab.visible ? <Eye size={15} /> : <EyeOff size={15} />}
-                    </button>
-                    {custom ? (
-                      <button type="button" onClick={() => removeCustomTab(tab.key)} className="text-slate-400 hover:text-red-600" aria-label={tCommon('actions.delete')}>
-                        <Trash2 size={15} />
+                  <div key={tab.key} className="rounded-md border border-slate-100 dark:border-slate-800">
+                    <div className="flex items-center gap-2 px-2.5 py-1.5">
+                      <GripVertical size={14} className="text-slate-300" />
+                      <Input
+                        value={tab.labelOverride ?? ''}
+                        placeholder={tabDefaultLabel(tab.key)}
+                        aria-label={tabDefaultLabel(tab.key)}
+                        onChange={(e) => setTabs((tabs) => tabs.map((item, index) => (index === ti ? { ...item, labelOverride: e.target.value } : item)))}
+                        className="h-7 flex-1 text-xs"
+                      />
+                      {custom ? <KindChip label={t('designer.forms.customTab')} /> : null}
+                      <button type="button" onClick={() => setTabs((tabs) => reorder(tabs, ti, ti - 1))} className="text-slate-400 hover:text-slate-600" aria-label={tCommon('actions.previous')}><ChevronUp size={15} /></button>
+                      <button type="button" onClick={() => setTabs((tabs) => reorder(tabs, ti, ti + 1))} className="text-slate-400 hover:text-slate-600" aria-label={tCommon('actions.next')}><ChevronDown size={15} /></button>
+                      <button
+                        type="button"
+                        disabled={locked}
+                        onClick={() => setTabs((tabs) => tabs.map((item, index) => (index === ti ? { ...item, visible: !item.visible } : item)))}
+                        className={locked ? 'cursor-not-allowed text-slate-200 dark:text-slate-700' : tab.visible ? 'text-slate-400 hover:text-slate-600' : 'text-red-500'}
+                        aria-label={t('designer.forms.visible')}
+                        title={locked ? t('designer.forms.tabLocked') : undefined}
+                      >
+                        {tab.visible ? <Eye size={15} /> : <EyeOff size={15} />}
                       </button>
+                      {custom ? (
+                        <button type="button" onClick={() => removeCustomTab(tab.key)} className="text-slate-400 hover:text-red-600" aria-label={tCommon('actions.delete')}>
+                          <Trash2 size={15} />
+                        </button>
+                      ) : null}
+                    </div>
+                    {tab.subtabs?.length ? (
+                      <div className="space-y-1 border-t border-slate-100 bg-slate-50/60 px-3 py-2 dark:border-slate-800 dark:bg-slate-900/30">
+                        {tab.subtabs.map((subtab, si) => (
+                          <div key={subtab.key} className="flex items-center gap-2 pl-5">
+                            <GripVertical size={12} className="text-slate-300" />
+                            <Input
+                              value={subtab.labelOverride ?? ''}
+                              placeholder={subtabDefaultLabel(tab.key, subtab.key)}
+                              aria-label={subtabDefaultLabel(tab.key, subtab.key)}
+                              onChange={(event) => setSubtabs(ti, (subtabs) =>
+                                subtabs.map((item, index) =>
+                                  index === si ? { ...item, labelOverride: event.target.value } : item,
+                                ),
+                              )}
+                              className="h-7 flex-1 text-xs"
+                            />
+                            <button type="button" onClick={() => setSubtabs(ti, (subtabs) => reorder(subtabs, si, si - 1))} className="text-slate-400 hover:text-slate-600" aria-label={tCommon('actions.previous')}><ChevronUp size={14} /></button>
+                            <button type="button" onClick={() => setSubtabs(ti, (subtabs) => reorder(subtabs, si, si + 1))} className="text-slate-400 hover:text-slate-600" aria-label={tCommon('actions.next')}><ChevronDown size={14} /></button>
+                            <button
+                              type="button"
+                              onClick={() => setSubtabs(ti, (subtabs) =>
+                                subtabs.map((item, index) =>
+                                  index === si ? { ...item, visible: !item.visible } : item,
+                                ),
+                              )}
+                              className={subtab.visible ? 'text-slate-400 hover:text-slate-600' : 'text-red-500'}
+                              aria-label={t('designer.forms.visible')}
+                            >
+                              {subtab.visible ? <Eye size={14} /> : <EyeOff size={14} />}
+                            </button>
+                          </div>
+                        ))}
+                      </div>
                     ) : null}
                   </div>
                 )

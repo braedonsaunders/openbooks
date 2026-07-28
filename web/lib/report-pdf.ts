@@ -29,6 +29,7 @@ import type {
 import { resolveReportLayout } from '@openbooks/reports'
 import { resolveOrgId } from './org-scope'
 import { resolveLocale } from './locale'
+export { generalLedgerExportData } from './report-pdf-detail'
 
 /**
  * Export pipeline for reports: a single intermediate shape (ExportData) feeds
@@ -667,35 +668,10 @@ export function statementViewToExportData(
 // --- detail-report adapters (General Ledger, Journal, Registers, Statement) --
 
 import type {
-  GeneralLedgerResult,
   JournalReportResult,
   RegisterResult,
   PartnerStatementResult,
 } from './reports'
-
-const LEDGER_ALIGN: PdfColumnAlign[] = ['left', 'left', 'left', 'left', 'right', 'right', 'right']
-
-export function generalLedgerExportData(gl: GeneralLedgerResult, title: string, t: Translator): ExportData {
-  const columns = [
-    t('export.columns.accountName'),
-    t('generalLedger.columns.date'),
-    t('generalLedger.columns.entry'),
-    t('generalLedger.columns.detail'),
-    t('trialBalance.columns.debits'),
-    t('trialBalance.columns.credits'),
-    t('export.columns.balance'),
-  ]
-  const rows: (string | number | null)[][] = []
-  for (const a of gl.accounts) {
-    const acct = `${a.number ?? ''} ${a.name}`.trim()
-    rows.push([acct, '', '', t('generalLedger.opening'), null, null, a.opening])
-    for (const l of a.lines) {
-      rows.push([acct, l.date, l.entryNumber ?? '', [l.party, l.memo].filter(Boolean).join(' · '), l.debit || null, l.credit || null, l.balance])
-    }
-    rows.push([acct, '', '', t('generalLedger.closing'), null, null, a.closing])
-  }
-  return { title, dateRangeLabel: t('pnl.dateRange', { from: gl.from, to: gl.to }), summary: [], groups: [{ kind: 'results', title, columns, rows, align: LEDGER_ALIGN }] }
-}
 
 export function journalExportData(j: JournalReportResult, title: string, t: Translator): ExportData {
   const columns = [

@@ -115,6 +115,12 @@ export interface FormTabPlacement {
    * built-in tabs render their product panel.
    */
   groupIds?: string[]
+  /**
+   * Ordered built-in subtabs owned by this product panel. Subtabs use the same
+   * visibility and label controls as top-level tabs, but cannot host custom
+   * field groups or author-created tabs.
+   */
+  subtabs?: FormTabPlacement[]
 }
 
 /** Prefix that marks an author-created tab. */
@@ -131,7 +137,7 @@ export interface FormLayoutConfig {
   defaultVisibilityVersion?: 1
   /** One-time marker for the current built-in placement defaults applied to
    * the tenant-owned baseline form. Named custom forms are never reset. */
-  defaultLayoutVersion?: 1 | 2
+  defaultLayoutVersion?: 1 | 2 | 3
   recordType: RecordTypeKey
   header: { groups: HeaderGroup[] }
   lines: { columns: LineColumnPlacement[] }
@@ -267,6 +273,8 @@ export interface FormTabMeta {
   locked?: boolean
   /** Feature gate this tab belongs to, if any. */
   featureKey?: string
+  /** Product-owned panels grouped beneath this top-level tab. */
+  subtabs?: FormTabMeta[]
 }
 
 export interface RecordTypeMeta {

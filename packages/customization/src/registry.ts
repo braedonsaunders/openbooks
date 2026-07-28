@@ -620,14 +620,21 @@ const PROJECT: RecordTypeMeta = {
   customFieldTable: "projects",
   customFieldLineTable: null,
   // The project cockpit's tabs, in default order. `overview` is locked: a
-  // record has to be able to show its own fields. `schedule` is listed for
-  // every org so the layout is configurable up front, but the renderer only
-  // draws it when Projects → Project Scheduling is on.
+  // record has to be able to show its own fields. Project planning panels live
+  // beneath one top-level Project management workspace. `schedule` remains
+  // discoverable in the form designer, but the renderer only draws it when
+  // Projects → Project Scheduling is on.
   tabs: [
     { key: "overview", labelKey: "projects.cockpit.tabs.overview", locked: true },
     { key: "financials", labelKey: "projects.cockpit.tabs.financials" },
-    { key: "work_breakdown", labelKey: "projects.cockpit.tabs.work_breakdown" },
-    { key: "schedule", labelKey: "projects.cockpit.tabs.schedule", featureKey: "projectScheduling" },
+    {
+      key: "project_management",
+      labelKey: "projects.cockpit.tabs.project_management",
+      subtabs: [
+        { key: "work_breakdown", labelKey: "projects.cockpit.tabs.work_breakdown" },
+        { key: "schedule", labelKey: "projects.cockpit.tabs.schedule", featureKey: "projectScheduling" },
+      ],
+    },
     { key: "cost_time", labelKey: "projects.cockpit.tabs.cost_time" },
     { key: "billing", labelKey: "projects.cockpit.tabs.billing" },
     { key: "transactions", labelKey: "projects.cockpit.tabs.transactions" },

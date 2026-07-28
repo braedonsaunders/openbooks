@@ -150,7 +150,7 @@ test('the baseline form upgrade refreshes built-in placement without losing fiel
   refreshDefaultFormLayout(legacy)
 
   const fields = legacy.header.groups[0]!.fields
-  assert.equal(legacy.defaultLayoutVersion, 2)
+  assert.equal(legacy.defaultLayoutVersion, 3)
   assert.deepEqual(legacy.tabs?.slice(0, 2).map((tab) => tab.key), ['overview', 'financials'])
   assert.deepEqual(fields.slice(0, 4).map((field) => field.key), [
     'name',
@@ -171,12 +171,15 @@ test('the project cockpit ships a customizable tab list', () => {
   assert.deepEqual(layout.tabs?.map((tab) => tab.key), [
     'overview',
     'financials',
-    'work_breakdown',
-    'schedule',
+    'project_management',
     'cost_time',
     'billing',
     'transactions',
   ])
+  assert.deepEqual(
+    layout.tabs?.find((tab) => tab.key === 'project_management')?.subtabs?.map((tab) => tab.key),
+    ['work_breakdown', 'schedule'],
+  )
   assert.equal(
     layout.tabs?.every((tab) => tab.visible),
     true,
@@ -200,15 +203,45 @@ test('saved tab layouts keep their order, gain new tabs, and drop retired ones',
   assert.deepEqual(resolved.map((tab) => tab.key), [
     'billing',
     'overview',
-    'work_breakdown',
+    'project_management',
     'tab_safety',
     'financials',
-    'schedule',
     'cost_time',
     'transactions',
   ])
-  assert.equal(resolved.find((tab) => tab.key === 'work_breakdown')?.visible, false)
-  assert.equal(resolved.find((tab) => tab.key === 'work_breakdown')?.labelOverride, 'Scope')
+  const management = resolved.find((tab) => tab.key === 'project_management')
+  assert.equal(management?.visible, true)
+  assert.equal(management?.subtabs?.find((tab) => tab.key === 'work_breakdown')?.visible, false)
+  assert.equal(management?.subtabs?.find((tab) => tab.key === 'work_breakdown')?.labelOverride, 'Scope')
+  assert.equal(management?.subtabs?.find((tab) => tab.key === 'schedule')?.visible, true)
+})
+
+test('named project forms retain legacy planning visibility and order when tabs nest', () => {
+  const layout = defaultFormLayout('project')
+  layout.defaultLayoutVersion = 2
+  layout.tabs = [
+    { key: 'overview', visible: true },
+    { key: 'schedule', visible: false, labelOverride: 'Timeline' },
+    { key: 'work_breakdown', visible: true, labelOverride: 'Scope' },
+    { key: 'financials', visible: true },
+  ]
+
+  mergeRegisteredFieldsIntoLayout(layout)
+
+  assert.deepEqual(layout.tabs?.map((tab) => tab.key), [
+    'overview',
+    'project_management',
+    'financials',
+    'cost_time',
+    'billing',
+    'transactions',
+  ])
+  const management = layout.tabs?.find((tab) => tab.key === 'project_management')
+  assert.deepEqual(management?.subtabs?.map((tab) => tab.key), ['schedule', 'work_breakdown'])
+  assert.equal(management?.subtabs?.[0]?.visible, false)
+  assert.equal(management?.subtabs?.[0]?.labelOverride, 'Timeline')
+  assert.equal(management?.subtabs?.[1]?.labelOverride, 'Scope')
+  assert.deepEqual(lintFormLayout(layout), [])
 })
 
 test('the default project cockpit puts financials immediately after overview', () => {
