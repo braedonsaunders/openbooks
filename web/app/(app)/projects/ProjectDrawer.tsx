@@ -662,7 +662,7 @@ export function ProjectDrawer({
         <FinancialsTab data={cockpit.financials} />
       ) : null}
 
-      {tab === 'cost_time' ? <CostTimeTab data={cockpit.time} /> : null}
+      {tab === 'cost_time' ? <CostTimeTab data={cockpit.time} projectId={String(pr.id)} /> : null}
 
       {tab === 'billing' ? (
         <BillingSection

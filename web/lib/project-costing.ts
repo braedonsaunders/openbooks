@@ -177,26 +177,29 @@ export interface ProjectTimeRow {
 export interface ProjectTimeSummary {
   byTask: ProjectTimeRow[]
   byEmployee: ProjectTimeRow[]
+  byItem: ProjectTimeRow[]
   totals: { hours: number; billableHours: number; cost: string; bill: string }
 }
 
 /**
- * Approved labor tagged to a project, rolled up two ways (by WBS task and by
- * employee) plus totals. Cost = Σ hours × cost_rate; bill value = Σ hours ×
- * bill_rate; billableHours counts only is_billable entries. This is the labor
- * surface the cockpit's Cost & Time tab renders — the atom of job costing that
- * was previously invisible on the project view.
+ * Approved labor tagged to a project, rolled up by employee, service item, and
+ * WBS task plus totals. Cost = Σ hours × cost_rate; bill value = Σ hours ×
+ * bill_rate; billableHours counts only is_billable entries. Every summary row
+ * is keyed by the same dimension stored on the underlying time entry so the
+ * project drawer can drill back to its canonical records without reconstructing
+ * membership from display labels.
  */
 export async function projectTimeSummary(orgId: string, projectId: string): Promise<ProjectTimeSummary> {
-  const [byTaskRows, byEmpRows, totalRow] = await Promise.all([
+  const [byTaskRows, byEmpRows, byItemRows, totalRow] = await Promise.all([
     db.execute(sql`
       select te.project_task_id as key, coalesce(pt.name, '') as label,
              coalesce(sum(te.hours), 0) as hours,
              coalesce(sum(te.hours) filter (where te.is_billable), 0) as billable_hours,
-             coalesce(sum(te.hours * coalesce(te.cost_rate, 0)), 0) as cost,
-             coalesce(sum(te.hours * coalesce(te.bill_rate, 0)), 0) as bill
+             coalesce(sum(round(te.hours * coalesce(te.cost_rate, 0), 4)), 0) as cost,
+             coalesce(sum(round(te.hours * coalesce(te.bill_rate, 0), 4)), 0) as bill
         from time_entries te
-        left join project_tasks pt on pt.id = te.project_task_id
+        left join project_tasks pt
+          on pt.id = te.project_task_id and pt.org_id = te.org_id and pt.project_id = te.project_id
        where te.org_id = ${orgId} and te.project_id = ${projectId} and te.status = 'approved'
        group by te.project_task_id, pt.name
        order by hours desc
@@ -205,19 +208,31 @@ export async function projectTimeSummary(orgId: string, projectId: string): Prom
       select te.employee_party_id as key, coalesce(pty.display_name, '') as label,
              coalesce(sum(te.hours), 0) as hours,
              coalesce(sum(te.hours) filter (where te.is_billable), 0) as billable_hours,
-             coalesce(sum(te.hours * coalesce(te.cost_rate, 0)), 0) as cost,
-             coalesce(sum(te.hours * coalesce(te.bill_rate, 0)), 0) as bill
+             coalesce(sum(round(te.hours * coalesce(te.cost_rate, 0), 4)), 0) as cost,
+             coalesce(sum(round(te.hours * coalesce(te.bill_rate, 0), 4)), 0) as bill
         from time_entries te
-        left join parties pty on pty.id = te.employee_party_id
+        left join parties pty on pty.id = te.employee_party_id and pty.org_id = te.org_id
        where te.org_id = ${orgId} and te.project_id = ${projectId} and te.status = 'approved'
        group by te.employee_party_id, pty.display_name
        order by hours desc
     `) as any,
     db.execute(sql`
+      select te.item_id as key, coalesce(i.name, '') as label,
+             coalesce(sum(te.hours), 0) as hours,
+             coalesce(sum(te.hours) filter (where te.is_billable), 0) as billable_hours,
+             coalesce(sum(round(te.hours * coalesce(te.cost_rate, 0), 4)), 0) as cost,
+             coalesce(sum(round(te.hours * coalesce(te.bill_rate, 0), 4)), 0) as bill
+        from time_entries te
+        left join items i on i.id = te.item_id and i.org_id = te.org_id
+       where te.org_id = ${orgId} and te.project_id = ${projectId} and te.status = 'approved'
+       group by te.item_id, i.name
+       order by hours desc
+    `) as any,
+    db.execute(sql`
       select coalesce(sum(te.hours), 0) as hours,
              coalesce(sum(te.hours) filter (where te.is_billable), 0) as billable_hours,
-             coalesce(sum(te.hours * coalesce(te.cost_rate, 0)), 0) as cost,
-             coalesce(sum(te.hours * coalesce(te.bill_rate, 0)), 0) as bill
+             coalesce(sum(round(te.hours * coalesce(te.cost_rate, 0), 4)), 0) as cost,
+             coalesce(sum(round(te.hours * coalesce(te.bill_rate, 0), 4)), 0) as bill
         from time_entries te
        where te.org_id = ${orgId} and te.project_id = ${projectId} and te.status = 'approved'
     `) as any,
@@ -234,6 +249,7 @@ export async function projectTimeSummary(orgId: string, projectId: string): Prom
   return {
     byTask: (byTaskRows.rows as any[]).map(row),
     byEmployee: (byEmpRows.rows as any[]).map(row),
+    byItem: (byItemRows.rows as any[]).map(row),
     totals: { hours: n(tot.hours), billableHours: n(tot.billable_hours), cost: m(tot.cost), bill: m(tot.bill) },
   }
 }
