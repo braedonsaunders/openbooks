@@ -7,7 +7,7 @@ const source = readFileSync(
   "utf8",
 );
 
-test("project GL parity uses NetSuite posted accounting lines", () => {
+test("project GL parity uses source posted accounting lines", () => {
   assert.match(source, /from transactionaccountingline tal/i);
   assert.match(source, /sum\(tal\.amount\) as amount/i);
   assert.doesNotMatch(

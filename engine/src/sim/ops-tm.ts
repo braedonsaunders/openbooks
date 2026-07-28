@@ -124,7 +124,7 @@ export async function billTimeAndMaterials(
     select id, hours::text, bill_rate::text, cost_rate::text, employee_party_id, time_type_id
       from time_entries
      where org_id = ${world.orgId} and project_id = ${projectId}
-       and status = 'approved' and is_billable and invoiced_by_line_id is null`)) as unknown as { rows: UnbilledTime[] };
+       and status = 'approved' and is_billable and billing_status = 'unbilled'`)) as unknown as { rows: UnbilledTime[] };
   const extraLines = opts.extraLines ?? [];
   if (time.rows.length === 0 && extraLines.length === 0) return null;
 
@@ -184,7 +184,8 @@ export async function billTimeAndMaterials(
   // Mark each time entry billed (idempotency for the next billing run).
   for (const { lineId, timeEntryId } of lineIds) {
     await db.execute(sql`
-      update time_entries set invoiced_by_line_id = ${lineId}
+      update time_entries
+         set invoiced_by_line_id = ${lineId}, billing_status = 'billed'
        where id = ${timeEntryId} and org_id = ${world.orgId}`);
   }
 

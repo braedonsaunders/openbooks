@@ -274,6 +274,7 @@ async function main(): Promise<void> {
                type.classification,
                te.hours::text as hours,
                te.status,
+               te.billing_status,
                te.cost_journal_entry_id,
                te.overhead_journal_entry_id,
                te.invoiced_by_line_id
@@ -349,6 +350,7 @@ async function main(): Promise<void> {
     );
     if (
       row.status !== "draft" ||
+      row.billing_status === "billed" ||
       row.cost_journal_entry_id ||
       row.overhead_journal_entry_id ||
       row.invoiced_by_line_id

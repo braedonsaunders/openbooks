@@ -294,6 +294,7 @@ export const syncRuns = pgTable(
         "incremental",
         "full_migration",
         "full_preflight",
+        "project_financials",
         "targeted_repair",
         "attachments",
         "tb_check",

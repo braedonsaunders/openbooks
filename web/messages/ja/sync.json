@@ -24,6 +24,7 @@
     "test": "テスト",
     "mirrorNow": "今すぐミラー",
     "syncAttachments": "添付ファイルを同期",
+    "syncProjectFinancials": "プロジェクト財務を同期",
     "preflight": "同期前に検証",
     "runMigration": "移行を実行",
     "pauseMirror": "ミラーを一時停止",
@@ -45,6 +46,7 @@
       "incremental": "差分",
       "attachments": "添付ファイル",
       "full_preflight": "完全事前検証",
+      "project_financials": "プロジェクト財務",
       "targeted_repair": "対象指定修復",
       "mirror": "ミラー"
     },
@@ -58,6 +60,7 @@
     },
     "stats": {
       "attachments": "ソースファイル {files} 件 · 取引リンク {links} 件 · 新規ファイル {created} 件",
+      "projectFinancials": "ソースプロジェクト {projects} 件（変更 {projectChanges} 件）· ソース時間エントリ {source} 件 · 完全一致 {exact} 件 · 請求状態調整 {changed} 件",
       "docs": "+{new} 件のドキュメント · {amended} 件修正 · {unchanged} 件変更なし",
       "applied": "{count} 件適用",
       "tb": "試算表 {matches}/{accounts}",
@@ -79,16 +82,19 @@
     "queuingPreflight": "読み取り専用の全件検証をキューに追加中…",
     "queuingMirror": "ミラーをキューに追加中…",
     "queuingAttachments": "添付ファイル同期をキューに追加中…",
+    "queuingProjectFinancials": "プロジェクト財務同期をキューに追加中…",
     "migrationQueued": "移行をキューに追加しました — バックグラウンドで実行します",
     "preflightQueued": "検証をキューに追加しました — 会計データや文書は変更されません",
     "mirrorQueued": "ミラーをキューに追加しました — バックグラウンドで実行中です",
     "attachmentsQueued": "添付ファイル同期をキューに追加しました — バックグラウンドで実行中です",
+    "projectFinancialsQueued": "プロジェクト財務同期をキューに追加しました — 伝票、総勘定元帳、ファイル、PDF は変更されません",
     "runFailed": "実行をキューに追加できませんでした (HTTP {status})",
     "runErrors": {
       "CONNECTION_NOT_FOUND": "接続は既に存在しません。",
       "CONNECTION_UNCONFIGURED": "この接続を実行する前に認証情報を追加してください。",
       "INVALID_MODE": "有効な移行操作を選択してください。",
-      "ATTACHMENTS_UNSUPPORTED": "この接続は添付ファイル移行に対応していません。"
+      "ATTACHMENTS_UNSUPPORTED": "この接続は添付ファイル移行に対応していません。",
+      "PROJECT_FINANCIALS_UNSUPPORTED": "この接続はプロジェクト財務入力の同期を提供していません。"
     },
     "testing": "接続をテスト中…",
     "connected": "接続しました",

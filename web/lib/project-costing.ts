@@ -286,7 +286,7 @@ export async function projectUnbilled(orgId: string, projectId: string, opts: Un
              count(*) as cnt
         from time_entries te
        where te.org_id = ${orgId} and te.project_id = ${projectId}
-         and te.status = 'approved' and te.is_billable and te.invoiced_by_line_id is null${dateFilter}
+         and te.status = 'approved' and te.is_billable and te.billing_status = 'unbilled'${dateFilter}
     `) as any,
     db.execute(sql`
       select coalesce(sum(case when d.kind = 'project_charge' then coalesce(dl.bill_amount, 0)

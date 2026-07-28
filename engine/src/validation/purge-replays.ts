@@ -23,7 +23,7 @@ if (!APPLY) { console.log("(plan only — pass --apply)"); process.exit(0); }
 
 // Release provenance first so the work becomes billable again, then delete.
 await retry(()=>db.execute(sql`
-  update time_entries set invoiced_by_line_id = null where org_id=${ORG} and invoiced_by_line_id in (
+  update time_entries set invoiced_by_line_id = null, billing_status = 'unbilled' where org_id=${ORG} and invoiced_by_line_id in (
     select dl.id from document_lines dl join documents d on d.id=dl.document_id
      where d.org_id=${ORG} and d.kind='customer_invoice' and d.memo like 'Replay of %')`));
 await retry(()=>db.execute(sql`

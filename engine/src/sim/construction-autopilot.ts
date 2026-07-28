@@ -58,7 +58,7 @@ async function unbilledCrewDays(world: SimOrg, projectId: string): Promise<numbe
   const r = (await db.execute(sql`
     select count(distinct worked_on)::text as days from time_entries
      where org_id = ${world.orgId} and project_id = ${projectId}
-       and status = 'approved' and is_billable and invoiced_by_line_id is null`)) as unknown as {
+       and status = 'approved' and is_billable and billing_status = 'unbilled'`)) as unknown as {
     rows: { days: string }[];
   };
   return Number(r.rows[0]?.days ?? "0");

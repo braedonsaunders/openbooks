@@ -262,7 +262,8 @@ export async function generateInvoiceFromBillingRequest(
           left join items i on i.id = te.item_id
           left join time_types tt on tt.id = te.time_type_id
          where te.org_id = ${orgId} and te.project_id = ${req.project_id}
-           and te.status = 'approved' and te.is_billable and te.invoiced_by_line_id is null
+           and te.status = 'approved' and te.is_billable
+           and te.billing_status = 'unbilled'
            ${isFinal ? sql`` : sql`${dateFilter}${ticketFilter}`}${selFilter}
          order by te.worked_on
       `)) as unknown as { rows: any[] }
@@ -654,7 +655,11 @@ export async function generateInvoiceFromBillingRequest(
       const billedBy = presentedLineIds[rolled.presentedIndexOf[index] ?? index]
       if (!billedBy) continue
       if (l.timeEntryId) {
-        await tx.execute(sql`update time_entries set invoiced_by_line_id = ${billedBy} where id = ${l.timeEntryId} and org_id = ${orgId}`)
+        await tx.execute(sql`
+          update time_entries
+             set invoiced_by_line_id = ${billedBy}, billing_status = 'billed'
+           where id = ${l.timeEntryId} and org_id = ${orgId}
+             and billing_status = 'unbilled'`)
       }
       if (l.sourceCostLineId) {
         await tx.execute(sql`update document_lines set billed_by_line_id = ${billedBy} where id = ${l.sourceCostLineId} and org_id = ${orgId}`)

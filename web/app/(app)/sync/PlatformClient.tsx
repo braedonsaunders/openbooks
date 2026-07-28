@@ -16,6 +16,7 @@ import {
   Download,
   BookOpen,
   Paperclip,
+  Calculator,
 } from "lucide-react";
 import Link from "next/link";
 import { PagedTable, type PagedColumn } from "../../../components/paged-table";
@@ -133,6 +134,18 @@ interface Run {
     createdFiles?: number;
     createdLinks?: number;
     failures?: number;
+    sourceTimeEntries?: number;
+    targetTimeEntries?: number;
+    exactTimeEntries?: number;
+    changedTimeEntries?: number;
+    missingTargetTimeEntries?: number;
+    targetOnlyTimeEntries?: number;
+    sourceProjects?: number;
+    targetProjects?: number;
+    exactProjects?: number;
+    changedProjects?: number;
+    missingTargetProjects?: number;
+    targetOnlyProjects?: number;
   };
   progress?: {
     phase?: string;
@@ -234,6 +247,15 @@ export function PlatformClient() {
         files: s.sourceFiles ?? 0,
         links: s.sourceLinks ?? 0,
         created: s.createdFiles ?? 0,
+      });
+    }
+    if (r.kind === "project_financials") {
+      return t("runs.stats.projectFinancials", {
+        source: s.sourceTimeEntries ?? 0,
+        exact: s.exactTimeEntries ?? 0,
+        changed: s.changedTimeEntries ?? 0,
+        projects: s.sourceProjects ?? 0,
+        projectChanges: s.changedProjects ?? 0,
       });
     }
     if (r.kind === "full_preflight") {
@@ -420,7 +442,12 @@ export function PlatformClient() {
 
   async function run(
     conn: Connection,
-    mode: "full_migration" | "preflight" | "mirror" | "attachments",
+    mode:
+      | "full_migration"
+      | "preflight"
+      | "mirror"
+      | "project_financials"
+      | "attachments",
   ) {
     const key = `${conn.id}:${mode}`;
     setBusy(key);
@@ -429,6 +456,8 @@ export function PlatformClient() {
         ? t("toast.queuingMigration")
         : mode === "preflight"
           ? t("toast.queuingPreflight")
+        : mode === "project_financials"
+          ? t("toast.queuingProjectFinancials")
         : mode === "attachments"
           ? t("toast.queuingAttachments")
           : t("toast.queuingMirror"),
@@ -456,6 +485,8 @@ export function PlatformClient() {
           ? t("toast.migrationQueued")
           : mode === "preflight"
             ? t("toast.preflightQueued")
+          : mode === "project_financials"
+            ? t("toast.projectFinancialsQueued")
           : mode === "attachments"
             ? t("toast.attachmentsQueued")
             : t("toast.mirrorQueued"),
@@ -688,14 +719,25 @@ export function PlatformClient() {
                     <RefreshCw size={14} /> {t("actions.mirrorNow")}
                   </Button>
                   {c.source === "netsuite" ? (
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      disabled={busy === `${c.id}:attachments`}
-                      onClick={() => run(c, "attachments")}
-                    >
-                      <Paperclip size={14} /> {t("actions.syncAttachments")}
-                    </Button>
+                    <>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        disabled={busy === `${c.id}:project_financials`}
+                        onClick={() => run(c, "project_financials")}
+                      >
+                        <Calculator size={14} />{" "}
+                        {t("actions.syncProjectFinancials")}
+                      </Button>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        disabled={busy === `${c.id}:attachments`}
+                        onClick={() => run(c, "attachments")}
+                      >
+                        <Paperclip size={14} /> {t("actions.syncAttachments")}
+                      </Button>
+                    </>
                   ) : null}
                   <Button
                     variant="outline"

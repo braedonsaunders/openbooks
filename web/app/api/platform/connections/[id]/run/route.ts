@@ -36,17 +36,34 @@ export async function POST(
   }
 
   const body = (await req.json().catch(() => ({}))) as {
-    mode?: "full_migration" | "preflight" | "mirror" | "attachments";
+    mode?:
+      | "full_migration"
+      | "preflight"
+      | "mirror"
+      | "project_financials"
+      | "attachments";
   };
   if (
     !body.mode ||
-    !["full_migration", "preflight", "mirror", "attachments"].includes(body.mode)
+    ![
+      "full_migration",
+      "preflight",
+      "mirror",
+      "project_financials",
+      "attachments",
+    ].includes(body.mode)
   ) {
     return NextResponse.json({ errorCode: "INVALID_MODE" }, { status: 400 });
   }
   if (body.mode === "attachments" && conn.source !== "netsuite") {
     return NextResponse.json(
       { errorCode: "ATTACHMENTS_UNSUPPORTED" },
+      { status: 400 },
+    );
+  }
+  if (body.mode === "project_financials" && conn.source !== "netsuite") {
+    return NextResponse.json(
+      { errorCode: "PROJECT_FINANCIALS_UNSUPPORTED" },
       { status: 400 },
     );
   }
@@ -71,7 +88,7 @@ export async function POST(
   }
 
   const job = await enqueueMigration(
-    { orgId, connectionId: id, mode, triggeredBy: "ui" },
+    { orgId, connectionId: id, mode, triggeredBy: gate.user.id },
     { jobId: `migration|${id}|${mode}|${Date.now()}` },
   );
   return NextResponse.json({ jobId: job.id, mode });

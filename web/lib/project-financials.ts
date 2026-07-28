@@ -146,9 +146,10 @@ export async function resolveProjectFinancials(
     db.execute(sql`
       select coalesce(sum(te.hours * coalesce(te.bill_rate, 0)), 0) as bill,
              coalesce(sum(te.hours * coalesce(te.cost_rate, 0)), 0) as cost, count(*) as cnt
-        from time_entries te
+       from time_entries te
        where te.org_id = ${orgId} and te.project_id = ${projectId}
-         and te.status = 'approved' and te.is_billable and te.invoiced_by_line_id is null`),
+         and te.status = 'approved' and te.is_billable
+         and te.billing_status = 'unbilled'`),
     // Unbilled cost documents use markup; project charges carry an explicit
     // independently snapshotted bill amount.
     db.execute(sql`

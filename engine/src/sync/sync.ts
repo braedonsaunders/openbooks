@@ -961,6 +961,14 @@ export async function runSync(
             total,
           });
         },
+        {
+          connectionId,
+          runId: run!.id,
+          actorId: /^[0-9a-f-]{36}$/i.test(triggeredBy)
+            ? triggeredBy
+            : null,
+          sourceName: source.name,
+        },
       );
     }
 

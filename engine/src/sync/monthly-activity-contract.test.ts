@@ -16,8 +16,12 @@ test("NetSuite exposes posting account-month home-currency activity", async () =
     tokenSecret: "test",
   });
   (source as unknown as { q: (query: string) => Promise<Record<string, string>[]> }).q = async (query) => {
+    if (/SELECT DISTINCT tal\.accountingbook AS id/i.test(query)) {
+      return [{ id: "1" }];
+    }
     assert.match(query, /transactionaccountingline/);
     assert.match(query, /tal\.posting = 'T'/);
+    assert.match(query, /tal\.accountingbook = 1/);
     assert.match(query, /TO_CHAR\(t\.trandate, 'YYYY-MM'\)/);
     return [{ acct: "1000", m: "2026-01", d: "12.3456", c: "2.0001" }];
   };
