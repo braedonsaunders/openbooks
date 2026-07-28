@@ -16,6 +16,8 @@
  * Optional:
  *   --refresh-source
  *   --refresh-project-gl-source
+ *   --as-of=YYYY-MM-DD
+ *   --project-concurrency=8
  *   --source-accounting-book=<source accounting book id>
  *   --source-projects=/path/projects.json
  *   --source-invoices=/path/invoices.json
@@ -31,7 +33,7 @@ import { createHash, randomUUID } from "node:crypto";
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { sql } from "drizzle-orm";
 import { db, withOrgContext } from "../db.ts";
-import { fromUnits, normalizeDecimal, toUnits } from "../money.ts";
+import { fromUnits, normalizeDecimal, roundDiv, toUnits } from "../money.ts";
 import { sourceClient } from "../sync/source-client.ts";
 import { resolveProjectFinancials } from "../../../web/lib/project-financials.ts";
 import { loadProjectType } from "../../../web/lib/project-type.ts";
@@ -77,15 +79,24 @@ if (!orgId || !/^[0-9a-f-]{36}$/i.test(orgId)) {
 }
 const requestedSourceAccountingBook =
   args.get("source-accounting-book")?.trim() || null;
+const financialAsOf = args.get("as-of")?.trim() || undefined;
+if (financialAsOf && !/^\d{4}-\d{2}-\d{2}$/.test(financialAsOf)) {
+  throw new Error("--as-of must be YYYY-MM-DD");
+}
+const projectConcurrency = Number(args.get("project-concurrency") ?? "8");
+if (
+  !Number.isInteger(projectConcurrency) ||
+  projectConcurrency < 1 ||
+  projectConcurrency > 16
+) {
+  throw new Error("--project-concurrency must be an integer from 1 through 16");
+}
 
 const paths = {
-  sourceProjects:
-    args.get("source-projects") ?? "/tmp/parity-ns-projects.json",
-  sourceInvoices:
-    args.get("source-invoices") ?? "/tmp/parity-ns-invoices.json",
+  sourceProjects: args.get("source-projects") ?? "/tmp/parity-ns-projects.json",
+  sourceInvoices: args.get("source-invoices") ?? "/tmp/parity-ns-invoices.json",
   sourceInvoiceLines:
-    args.get("source-invoice-lines") ??
-    "/tmp/parity-source-invoice-lines.json",
+    args.get("source-invoice-lines") ?? "/tmp/parity-source-invoice-lines.json",
   sourceProjectGl:
     args.get("source-project-gl") ??
     "/tmp/parity-ns-project-account-totals.json",
@@ -124,6 +135,17 @@ function moneyEqual(left: unknown, right: unknown): boolean {
   return toUnits(String(left ?? "0")) === toUnits(String(right ?? "0"));
 }
 
+function pennyUnits(value: unknown): bigint {
+  const units = toUnits(String(value ?? "0"));
+  const negative = units < 0n;
+  const rounded = roundDiv(negative ? -units : units, 100n);
+  return negative ? -rounded : rounded;
+}
+
+function pennyEqual(left: unknown, right: unknown): boolean {
+  return pennyUnits(left) === pennyUnits(right);
+}
+
 function normalizeSourceAccountType(value: unknown): string {
   const mapping: Record<string, string> = {
     Bank: "asset_bank",
@@ -152,7 +174,10 @@ function addAmount(
   map.set(key, (map.get(key) ?? 0n) + toUnits(String(amount ?? "0")));
 }
 
-function duplicateKeys(rows: JsonRow[], key: (row: JsonRow) => string): Set<string> {
+function duplicateKeys(
+  rows: JsonRow[],
+  key: (row: JsonRow) => string,
+): Set<string> {
   const seen = new Set<string>();
   const duplicate = new Set<string>();
   for (const row of rows) {
@@ -172,6 +197,7 @@ async function retry<T>(fn: () => Promise<T>, attempts = 7): Promise<T> {
     } catch (error) {
       last = error;
       const messages: string[] = [];
+      const codes: string[] = [];
       const seen = new Set<unknown>();
       let current: unknown = error;
       while (current && !seen.has(current)) {
@@ -179,24 +205,53 @@ async function retry<T>(fn: () => Promise<T>, attempts = 7): Promise<T> {
         messages.push(
           current instanceof Error ? current.message : String(current),
         );
+        if (
+          typeof current === "object" &&
+          "code" in current &&
+          typeof (current as { code?: unknown }).code === "string"
+        ) {
+          codes.push((current as { code: string }).code);
+        }
         current =
           typeof current === "object" && "cause" in current
             ? (current as { cause?: unknown }).cause
             : null;
       }
       if (
+        !codes.some((code) => ["40P01", "40001"].includes(code)) &&
         !/timeout|terminated|ECONN|ETIMEDOUT|EHOSTUNREACH|Connection/i.test(
           messages.join("\n"),
         )
       ) {
         throw error;
       }
-      await new Promise((resolve) =>
-        setTimeout(resolve, 750 * (attempt + 1)),
-      );
+      await new Promise((resolve) => setTimeout(resolve, 750 * (attempt + 1)));
     }
   }
   throw last;
+}
+
+async function mapConcurrent<T, R>(
+  rows: readonly T[],
+  concurrency: number,
+  map: (row: T, index: number) => Promise<R>,
+): Promise<R[]> {
+  const results = new Array<R>(rows.length);
+  let cursor = 0;
+  const worker = async () => {
+    for (;;) {
+      const index = cursor++;
+      if (index >= rows.length) return;
+      results[index] = await map(rows[index]!, index);
+    }
+  };
+  await Promise.all(
+    Array.from(
+      { length: Math.min(concurrency, Math.max(rows.length, 1)) },
+      () => worker(),
+    ),
+  );
+  return results;
 }
 
 async function refreshProjectGlSource(
@@ -368,21 +423,36 @@ const legacyCrew = parseLegacyCrew(paths.legacyCrew, legacyTickets);
 const legacyProjectFinancials = readJson(paths.legacyProjectFinancials);
 
 const target = await withOrgContext(orgId, async () => {
-  const [org, projects, invoices, invoiceLines, tickets, projectGl, ticketCrew] = await Promise.all([
-    retry(() => db.execute(sql`
+  const [
+    org,
+    projects,
+    invoices,
+    invoiceLines,
+    tickets,
+    projectGl,
+    ticketCrew,
+  ] = await Promise.all([
+    retry(() =>
+      db.execute(sql`
       select id, name, env_kind from orgs where id = ${orgId}
-    `)),
-    retry(() => db.execute(sql`
+    `),
+    ),
+    retry(() =>
+      db.execute(sql`
       select id, code, name, is_active, custom->>'nsId' as source_id
         from projects where org_id = ${orgId}
-    `)),
-    retry(() => db.execute(sql`
+    `),
+    ),
+    retry(() =>
+      db.execute(sql`
       select id, document_number, document_date::text, total::text,
              project_id, custom->>'nsId' as source_id
         from documents
        where org_id = ${orgId} and kind = 'customer_invoice'
-    `)),
-    retry(() => db.execute(sql`
+    `),
+    ),
+    retry(() =>
+      db.execute(sql`
       select d.custom->>'nsId' as source_document_id,
              d.status as document_status,
              dl.custom->>'sourceLineRef' as source_line_id,
@@ -406,16 +476,20 @@ const target = await withOrgContext(orgId, async () => {
        where dl.org_id = ${orgId}
          and d.kind = 'customer_invoice'
          and d.custom->>'nsId' is not null
-    `)),
-    retry(() => db.execute(sql`
+    `),
+    ),
+    retry(() =>
+      db.execute(sql`
       select d.id, d.document_number,
              d.custom->'legacy'->>'id' as legacy_id,
              p.custom->>'nsId' as source_project_id
         from documents d
         left join projects p on p.id = d.project_id and p.org_id = d.org_id
        where d.org_id = ${orgId} and d.kind = 'field_ticket'
-    `)),
-    retry(() => db.execute(sql`
+    `),
+    ),
+    retry(() =>
+      db.execute(sql`
       select p.custom->>'nsId' as source_project_id,
              a.type as account_type, sum(jl.amount)::text as amount
         from journal_lines jl
@@ -425,8 +499,10 @@ const target = await withOrgContext(orgId, async () => {
        where jl.org_id = ${orgId} and je.status in ('posted', 'reversed')
          and p.custom->>'nsId' is not null
        group by p.custom->>'nsId', a.type
-    `)),
-    retry(() => db.execute(sql`
+    `),
+    ),
+    retry(() =>
+      db.execute(sql`
       select evidence.legacy_id, evidence.source_employee_id,
              evidence.source_item_id, evidence.worked_on,
              evidence.time_kind, sum(evidence.hours)::text as hours
@@ -492,7 +568,8 @@ const target = await withOrgContext(orgId, async () => {
        group by evidence.legacy_id, evidence.source_employee_id,
                 evidence.source_item_id, evidence.worked_on,
                 evidence.time_kind
-    `)),
+    `),
+    ),
   ]);
   return {
     org: (org as unknown as { rows: JsonRow[] }).rows[0] ?? null,
@@ -529,9 +606,8 @@ if (!sourceProjects) {
       .map((row) => [String(row.source_id), row]),
   );
   const sourceDupes = duplicateKeys(sourceProjects, (row) => String(row.id));
-  const targetDupes = duplicateKeys(
-    target.projects,
-    (row) => String(row.source_id ?? ""),
+  const targetDupes = duplicateKeys(target.projects, (row) =>
+    String(row.source_id ?? ""),
   );
   const mismatchedSourceRefs = new Set<string>();
   for (const [sourceRef] of sourceById) {
@@ -552,7 +628,9 @@ if (!sourceProjects) {
       ["name", sourceById.get(sourceRef)?.companyname, found.name],
       [
         "is_active",
-        String(sourceById.get(sourceRef)?.isinactive) === "T" ? "false" : "true",
+        String(sourceById.get(sourceRef)?.isinactive) === "T"
+          ? "false"
+          : "true",
         String(found.is_active),
       ],
     ] as const) {
@@ -785,69 +863,111 @@ if (legacyProjectFinancials && sourceProjectCount !== null) {
       .filter((row) => row.source_id)
       .map((row) => [String(row.source_id), row]),
   );
+  const comparisonResults = await mapConcurrent(
+    legacyProjectFinancials,
+    projectConcurrency,
+    async (source) => {
+      const projectDifferences: Difference[] = [];
+      const sourceRef = String(source.job ?? "");
+      const project = targetBySourceProject.get(sourceRef);
+      if (!project) {
+        projectDifferences.push({
+          layer: "legacy_project_financial",
+          sourceRef,
+          field: "project_presence",
+          source: "present",
+          target: null,
+        });
+        return { exact: false, differences: projectDifferences };
+      }
+      const { projectType, financials } = await retry(async () => {
+        const resolvedProjectType = await loadProjectType(
+          orgId,
+          String(project.id),
+          financialAsOf,
+        );
+        return {
+          projectType: resolvedProjectType,
+          financials: await resolveProjectFinancials(
+            orgId,
+            String(project.id),
+            resolvedProjectType.financialProfile,
+          ),
+        };
+      });
+      const sourceCost = canonicalMoney(source.cost);
+      const sourcePrice = canonicalMoney(source.price);
+      const sourceInvoiced = canonicalMoney(source.invoiced);
+      const sourceGrossProfit =
+        source.grossProfit == null
+          ? fromUnits(toUnits(sourcePrice) - toUnits(sourceCost))
+          : canonicalMoney(source.grossProfit);
+      const evidence = {
+        projectType: projectType.key,
+        actualCost: canonicalMoney(financials.measures.actual_cost),
+        committedCost: canonicalMoney(financials.measures.committed_cost),
+        overhead: canonicalMoney(financials.measures.overhead),
+        invoicedToDate: canonicalMoney(financials.measures.invoiced_to_date),
+        unbilledBillable: canonicalMoney(financials.measures.unbilled_billable),
+        billableValue: canonicalMoney(financials.measures.billable_value),
+        contractValue: canonicalMoney(financials.contractValue),
+      };
+      let exact = true;
+      const measures: Array<[string, string, string]> = [
+        [
+          "total_cost",
+          sourceCost,
+          canonicalMoney(financials.measures.total_cost),
+        ],
+        [
+          "total_price",
+          sourcePrice,
+          canonicalMoney(financials.measures.total_price),
+        ],
+        [
+          "invoiced_to_date",
+          sourceInvoiced,
+          canonicalMoney(financials.measures.invoiced_to_date),
+        ],
+        [
+          "gross_profit",
+          sourceGrossProfit,
+          canonicalMoney(financials.measures.gross_profit),
+        ],
+      ];
+      if (source.couldBeInvoiced != null) {
+        measures.push([
+          "could_be_invoiced",
+          canonicalMoney(source.couldBeInvoiced),
+          canonicalMoney(financials.measures.could_be_invoiced),
+        ]);
+      }
+      if (source.overhead != null) {
+        measures.push([
+          "overhead",
+          canonicalMoney(source.overhead),
+          canonicalMoney(financials.measures.overhead),
+        ]);
+      }
+      for (const [field, sourceValue, targetValue] of measures) {
+        if (pennyEqual(sourceValue, targetValue)) continue;
+        exact = false;
+        projectDifferences.push({
+          layer: "legacy_project_financial",
+          sourceRef,
+          field,
+          source: sourceValue,
+          target: targetValue,
+          evidence,
+        });
+      }
+      return { exact, differences: projectDifferences };
+    },
+  );
   let exactProjects = 0;
-  for (const source of legacyProjectFinancials) {
-    const sourceRef = String(source.job ?? "");
-    const project = targetBySourceProject.get(sourceRef);
-    if (!project) {
-      differences.push({
-        layer: "legacy_project_financial",
-        sourceRef,
-        field: "project_presence",
-        source: "present",
-        target: null,
-      });
-      continue;
-    }
-    const projectType = await loadProjectType(orgId, String(project.id));
-    const financials = await resolveProjectFinancials(
-      orgId,
-      String(project.id),
-      projectType.financialProfile,
-    );
-    const sourceCost = canonicalMoney(source.cost);
-    const sourcePrice = canonicalMoney(source.price);
-    const sourceInvoiced = canonicalMoney(source.invoiced);
-    const sourceGrossProfit = fromUnits(
-      toUnits(sourcePrice) - toUnits(sourceCost),
-    );
-    const evidence = {
-      projectType: projectType.key,
-      actualCost: canonicalMoney(financials.measures.actual_cost),
-      committedCost: canonicalMoney(financials.measures.committed_cost),
-      overhead: canonicalMoney(financials.measures.overhead),
-      invoicedToDate: canonicalMoney(financials.measures.invoiced_to_date),
-      unbilledBillable: canonicalMoney(financials.measures.unbilled_billable),
-      billableValue: canonicalMoney(financials.measures.billable_value),
-      contractValue: canonicalMoney(financials.contractValue),
-    };
-    let exact = true;
-    for (const [field, sourceValue, targetValue] of [
-      ["total_cost", sourceCost, canonicalMoney(financials.measures.total_cost)],
-      ["total_price", sourcePrice, canonicalMoney(financials.measures.total_price)],
-      [
-        "invoiced_to_date",
-        sourceInvoiced,
-        canonicalMoney(financials.measures.invoiced_to_date),
-      ],
-      [
-        "gross_profit",
-        sourceGrossProfit,
-        canonicalMoney(financials.measures.gross_profit),
-      ],
-    ] as const) {
-      if (moneyEqual(sourceValue, targetValue)) continue;
-      exact = false;
-      differences.push({
-        layer: "legacy_project_financial",
-        sourceRef,
-        field,
-        source: sourceValue,
-        target: targetValue,
-        evidence,
-      });
-    }
-    if (exact) exactProjects++;
+  for (const result of comparisonResults) {
+    if (result.exact) exactProjects++;
+    differences.push(...result.differences);
   }
   const availableMismatches = availableFinancialCount - exactProjects;
   const completePopulation = availableFinancialCount === sourceProjectCount;
@@ -862,8 +982,7 @@ if (legacyProjectFinancials && sourceProjectCount !== null) {
     targetCount: target.projects.length,
     exactCount: exactProjects,
     mismatchCount: availableMismatches,
-    detail:
-      `Compared source TotalJobCost, TotalJobPrice, InvoicedToDate, and derived gross margin for every available row; source export covers ${availableFinancialCount}/${sourceProjectCount} projects`,
+    detail: `Compared source TotalJobCost, TotalJobPrice, InvoicedToDate, gross margin, and any explicit invoiceable/overhead measures to the penny for every available row; source export covers ${availableFinancialCount}/${sourceProjectCount} projects`,
   };
 } else {
   gates.legacyProjectFinancialMeasures = {
@@ -980,14 +1099,22 @@ if (!sourceInvoiceLines) {
       source.expenseaccount ?? source.account ?? "",
     );
     for (const [field, sourceValue, targetValue] of [
-      ["line_number", String(expectedLineNumber.get(key)), String(found.line_number)],
+      [
+        "line_number",
+        String(expectedLineNumber.get(key)),
+        String(found.line_number),
+      ],
       ["item", String(source.item ?? ""), String(found.source_item_id ?? "")],
       ["account", expectedAccount, String(found.source_account_id ?? "")],
       ["quantity", expectedQuantity, canonicalDecimal(found.quantity)],
       ["unit", String(source.units ?? ""), String(found.unit ?? "")],
       ["unit_price", expectedRate, canonicalDecimal(found.unit_price)],
       ["amount", expectedAmount, canonicalMoney(found.amount)],
-      ["description", String(source.memo ?? ""), String(found.description ?? "")],
+      [
+        "description",
+        String(source.memo ?? ""),
+        String(found.description ?? ""),
+      ],
     ] as const) {
       if (sourceValue === targetValue) continue;
       differences.push({
@@ -1018,8 +1145,7 @@ if (!sourceInvoiceLines) {
     retainedTargetWithoutIdentity + retainedTargetWithIdentity;
   const actionableTargetOnlyCount =
     actionableTargetWithoutIdentity + actionableTargetWithIdentity;
-  const targetOnlyCount =
-    retainedTargetOnlyCount + actionableTargetOnlyCount;
+  const targetOnlyCount = retainedTargetOnlyCount + actionableTargetOnlyCount;
   gates.invoiceLines = {
     status:
       mismatchedSourceLines.size === 0 && actionableTargetOnlyCount === 0
@@ -1031,8 +1157,7 @@ if (!sourceInvoiceLines) {
     mismatchCount: mismatchedSourceLines.size + actionableTargetOnlyCount,
     targetOnlyCount,
     retainedTargetOnlyCount,
-    detail:
-      `Every source customer-invoice detail line by stable identity, sequence, item, account, quantity, unit, rate, amount, and description; ${retainedTargetOnlyCount} target-only lines belong to controlled voided source-deletion tombstones`,
+    detail: `Every source customer-invoice detail line by stable identity, sequence, item, account, quantity, unit, rate, amount, and description; ${retainedTargetOnlyCount} target-only lines belong to controlled voided source-deletion tombstones`,
   };
 }
 if (!legacyCrew) {
@@ -1058,7 +1183,9 @@ if (!legacyCrew) {
       row.source_item_id,
       row.worked_on,
       row.time_kind,
-    ].map((value) => String(value ?? "")).join("|");
+    ]
+      .map((value) => String(value ?? ""))
+      .join("|");
     addAmount(targetCrew, key, row.hours);
   }
   const keys = new Set([...legacyCrew.keys(), ...targetCrew.keys()]);
@@ -1117,7 +1244,9 @@ const certificate = {
 };
 
 writeFileSync(paths.out, JSON.stringify(certificate, null, 2));
-console.log(`organization: ${String(target.org.name)} (${String(target.org.env_kind)})`);
+console.log(
+  `organization: ${String(target.org.name)} (${String(target.org.env_kind)})`,
+);
 for (const [name, gate] of Object.entries(gates)) {
   console.log(
     `${gate.status === "exact" ? "PASS" : gate.status === "different" ? "FAIL" : "UNPROVEN"} ${name}: ` +

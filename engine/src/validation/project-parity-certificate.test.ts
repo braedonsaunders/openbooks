@@ -27,9 +27,23 @@ test("invoice-line fallback rates use canonical commercial precision", () => {
 test("multi-book source GL requires an explicit accounting-book choice", () => {
   assert.match(source, /--source-accounting-book=<id> explicitly/);
   assert.match(source, /source project GL artifact spans accounting books/);
+  assert.match(source, /row\.accountingbook\) === sourceAccountingBook/);
+});
+
+test("project financial certification is effective-dated and penny exact", () => {
+  assert.match(source, /--as-of must be YYYY-MM-DD/);
   assert.match(
     source,
-    /row\.accountingbook\) === sourceAccountingBook/,
+    /loadProjectType\(\s*orgId,\s*String\(project\.id\),\s*financialAsOf/,
+  );
+  assert.match(source, /function pennyEqual/);
+  assert.match(source, /source\.grossProfit == null/);
+  assert.match(source, /source\.couldBeInvoiced != null/);
+  assert.match(source, /source\.overhead != null/);
+  assert.match(source, /\["40P01", "40001"\]\.includes\(code\)/);
+  assert.match(
+    source,
+    /const \{ projectType, financials \} = await retry\(async \(\) =>/,
   );
 });
 
