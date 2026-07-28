@@ -24,6 +24,7 @@
     "test": "テスト",
     "mirrorNow": "今すぐミラー",
     "syncAttachments": "添付ファイルを同期",
+    "preflight": "同期前に検証",
     "runMigration": "移行を実行",
     "pauseMirror": "ミラーを一時停止",
     "enableMirror": "ミラーを有効化",
@@ -43,6 +44,8 @@
       "full_migration": "完全移行",
       "incremental": "差分",
       "attachments": "添付ファイル",
+      "full_preflight": "完全事前検証",
+      "targeted_repair": "対象指定修復",
       "mirror": "ミラー"
     },
     "status": {
@@ -60,7 +63,11 @@
       "tb": "試算表 {matches}/{accounts}",
       "tbOff": "({count} 件不一致)",
       "openItems": "未決済項目 {matches}/{checked}",
-      "periods": "会計期間 {matches}/{checked}"
+      "periods": "会計期間 {matches}/{checked}",
+      "projectPeriods": "プロジェクト・勘定期間 {matches}/{checked}",
+      "preflightDocs": "ソース文書 {source} · 新規 {new} · 変更 {amended} · 一致 {unchanged}",
+      "sourceBook": "{kind} {ref}",
+      "preflightBlockers": "ブロッカー {count} 件"
     }
   },
   "toast": {
@@ -69,9 +76,11 @@
     "authDenied": "承認が拒否されました",
     "authFailed": "承認に失敗しました ({status})",
     "queuingMigration": "完全移行をキューに追加中…",
+    "queuingPreflight": "読み取り専用の全件検証をキューに追加中…",
     "queuingMirror": "ミラーをキューに追加中…",
     "queuingAttachments": "添付ファイル同期をキューに追加中…",
     "migrationQueued": "移行をキューに追加しました — バックグラウンドで実行します",
+    "preflightQueued": "検証をキューに追加しました — 会計データや文書は変更されません",
     "mirrorQueued": "ミラーをキューに追加しました — バックグラウンドで実行中です",
     "attachmentsQueued": "添付ファイル同期をキューに追加しました — バックグラウンドで実行中です",
     "runFailed": "実行をキューに追加できませんでした (HTTP {status})",

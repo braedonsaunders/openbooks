@@ -24,6 +24,7 @@
     "test": "Probar",
     "mirrorNow": "Reflejar ahora",
     "syncAttachments": "Sincronizar archivos adjuntos",
+    "preflight": "Verificar antes de sincronizar",
     "runMigration": "Ejecutar migración",
     "pauseMirror": "Pausar espejo",
     "enableMirror": "Activar espejo",
@@ -43,6 +44,8 @@
       "full_migration": "migración completa",
       "incremental": "incremental",
       "attachments": "archivos adjuntos",
+      "full_preflight": "Verificación completa",
+      "targeted_repair": "Reparación dirigida",
       "mirror": "espejo"
     },
     "status": {
@@ -60,7 +63,11 @@
       "tb": "BC {matches}/{accounts}",
       "tbOff": "({count} con diferencia)",
       "openItems": "partidas abiertas {matches}/{checked}",
-      "periods": "períodos {matches}/{checked}"
+      "periods": "períodos {matches}/{checked}",
+      "projectPeriods": "períodos de proyecto/cuenta {matches}/{checked}",
+      "preflightDocs": "{source} documentos origen · {new} nuevos · {amended} cambiados · {unchanged} exactos",
+      "sourceBook": "{kind} {ref}",
+      "preflightBlockers": "{count} bloqueos"
     }
   },
   "toast": {
@@ -69,9 +76,11 @@
     "authDenied": "La autorización fue rechazada",
     "authFailed": "La autorización falló ({status})",
     "queuingMigration": "Poniendo en cola la migración completa…",
+    "queuingPreflight": "Poniendo en cola la verificación completa de solo lectura…",
     "queuingMirror": "Poniendo en cola el espejo…",
     "queuingAttachments": "Poniendo en cola la sincronización de archivos adjuntos…",
     "migrationQueued": "Migración en cola — se ejecuta en el worker",
+    "preflightQueued": "Verificación en cola — no se modificarán la contabilidad ni los documentos",
     "mirrorQueued": "Espejo en cola — se ejecuta en el worker",
     "attachmentsQueued": "Sincronización de archivos adjuntos en cola — se ejecuta en segundo plano",
     "runFailed": "No se pudo poner la ejecución en cola (HTTP {status})",

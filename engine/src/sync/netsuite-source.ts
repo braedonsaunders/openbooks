@@ -10,6 +10,8 @@ import type {
   SourceAccountMonthRow,
   SourceEntity,
   SourceOpenItem,
+  SourceProjectAccountMonthRow,
+  SourceLedgerContext,
   SourceTrialBalanceRow,
 } from "./source.ts";
 
@@ -306,15 +308,27 @@ export class NetSuiteSource implements MigrationSource {
   private readonly bridge: NetSuiteBridgeClient;
   private readonly expectedAccount: string;
   private readonly mappings: NetSuiteAccountMappings;
+  private readonly configuredAccountingBookId: string | null;
+  private accountingBookResolution: Promise<string> | null = null;
 
   constructor(
     creds: NetSuiteCreds,
-    opts: { baseCurrency?: string; bridge?: NetSuiteBridgeConfig; mappings?: unknown } = {},
+    opts: {
+      baseCurrency?: string;
+      bridge?: NetSuiteBridgeConfig;
+      mappings?: unknown;
+      accountingBookId?: string;
+    } = {},
   ) {
     this.bridge = new NetSuiteBridgeClient(creds, opts.bridge);
     this.expectedAccount = creds.account;
     this.mappings = parseNetSuiteMappings(opts.mappings);
     this.baseCurrency = opts.baseCurrency ?? "CAD";
+    const accountingBookId = String(opts.accountingBookId ?? "").trim();
+    if (accountingBookId && !/^\d+$/.test(accountingBookId)) {
+      throw new Error("NetSuite accounting book ID must be numeric");
+    }
+    this.configuredAccountingBookId = accountingBookId || null;
   }
 
   private q<T = Record<string, unknown>>(query: string): Promise<T[]> {
@@ -330,10 +344,66 @@ export class NetSuiteSource implements MigrationSource {
       );
     }
     const rows = await this.q<{ n: string }>("SELECT COUNT(*) AS n FROM account");
+    const accountingBookId = await this.accountingBookId();
     return {
       ok: true,
-      detail: `bridge ${health.bridgeVersion} · account ${health.accountId} · ${rows[0]?.n ?? 0} accounts visible`,
+      detail: `bridge ${health.bridgeVersion} · account ${health.accountId} · accounting book ${accountingBookId} · ${rows[0]?.n ?? 0} accounts visible`,
     };
+  }
+
+  /**
+   * Resolve the one authoritative NetSuite accounting book for this connector.
+   * A configured book is verified against posted accounting data. Without a
+   * configured book, auto-selection is allowed only when exactly one book is
+   * present. Multi-book accounts therefore fail closed instead of blending
+   * ledgers.
+   */
+  accountingBookId(): Promise<string> {
+    this.accountingBookResolution ??= this.resolveAccountingBookId();
+    return this.accountingBookResolution;
+  }
+
+  async ledgerContext(): Promise<SourceLedgerContext> {
+    return {
+      bookRef: await this.accountingBookId(),
+      bookKind: "NetSuite accounting book",
+    };
+  }
+
+  private async resolveAccountingBookId(): Promise<string> {
+    const rows = await this.q<{ id?: string }>(`
+      SELECT DISTINCT tal.accountingbook AS id
+        FROM transactionaccountingline tal
+       WHERE tal.posting = 'T'
+       ORDER BY tal.accountingbook`);
+    const available = [
+      ...new Set(
+        rows
+          .map((row) => String(row.id ?? "").trim())
+          .filter((id) => /^\d+$/.test(id)),
+      ),
+    ].sort((left, right) => Number(left) - Number(right));
+
+    if (this.configuredAccountingBookId) {
+      if (
+        available.length > 0 &&
+        !available.includes(this.configuredAccountingBookId)
+      ) {
+        throw new Error(
+          `configured NetSuite accounting book ${this.configuredAccountingBookId} has no posted accounting lines; available books: ${available.join(", ")}`,
+        );
+      }
+      return this.configuredAccountingBookId;
+    }
+    if (available.length === 1) return available[0]!;
+    if (available.length === 0) {
+      throw new Error(
+        "NetSuite accounting book cannot be inferred because no posted accounting lines are visible; configure the accounting book ID",
+      );
+    }
+    throw new Error(
+      `NetSuite exposes multiple accounting books (${available.join(", ")}); configure the authoritative accounting book ID`,
+    );
   }
 
   /**
@@ -866,11 +936,14 @@ export class NetSuiteSource implements MigrationSource {
   async fixedAssetTransactionIds(accountRefs: string[]): Promise<string[]> {
     const refs = [...new Set(accountRefs)].filter((ref) => /^\d+$/.test(ref));
     if (!refs.length) return [];
+    const accountingBookId = await this.accountingBookId();
     const rows = await this.q<{ id: string }>(`
       SELECT DISTINCT t.id
         FROM transaction t
         JOIN transactionaccountingline tal ON tal.transaction = t.id
-       WHERE tal.posting = 'T' AND tal.account IN (${refs.join(",")})
+       WHERE tal.posting = 'T'
+         AND tal.accountingbook = ${accountingBookId}
+         AND tal.account IN (${refs.join(",")})
        ORDER BY t.id`);
     return rows.map((row) => String(row.id));
   }
@@ -879,12 +952,15 @@ export class NetSuiteSource implements MigrationSource {
   async fixedAssetAccountBalances(accountRefs: string[]): Promise<Map<string, string>> {
     const refs = [...new Set(accountRefs)].filter((ref) => /^\d+$/.test(ref));
     if (!refs.length) return new Map();
+    const accountingBookId = await this.accountingBookId();
     const rows = await this.q<{ account: string; debit: string; credit: string }>(`
       SELECT tal.account,
              SUM(COALESCE(tal.debit, 0)) AS debit,
              SUM(COALESCE(tal.credit, 0)) AS credit
         FROM transactionaccountingline tal
-       WHERE tal.posting = 'T' AND tal.account IN (${refs.join(",")})
+       WHERE tal.posting = 'T'
+         AND tal.accountingbook = ${accountingBookId}
+         AND tal.account IN (${refs.join(",")})
        GROUP BY tal.account`);
     return new Map(rows.map((row) => [
       String(row.account),
@@ -937,6 +1013,13 @@ export class NetSuiteSource implements MigrationSource {
       }
     }
     return { documents, applications: [], deletedRefs: [], syncedThrough, unbuildable, nonLedgerRefs };
+  }
+
+  nativeChangesByRefs(
+    sourceRefs: string[],
+    ctx: NativeContext,
+  ): Promise<NativeChanges> {
+    return this.nativeTransactionsByIds(sourceRefs, ctx);
   }
 
   async nativeChanges(since: Date | null, ctx: NativeContext): Promise<NativeChanges> {
@@ -1103,10 +1186,11 @@ export class NetSuiteSource implements MigrationSource {
   // --- verification -----------------------------------------------------------------
 
   async trialBalance(): Promise<SourceTrialBalanceRow[]> {
+    const accountingBookId = await this.accountingBookId();
     const rows = await this.q<{ acct?: string; d: string; c: string }>(`
       SELECT tal.account AS acct, SUM(COALESCE(tal.debit, 0)) AS d, SUM(COALESCE(tal.credit, 0)) AS c
         FROM transactionaccountingline tal
-       WHERE tal.posting = 'T'
+       WHERE tal.posting = 'T' AND tal.accountingbook = ${accountingBookId}
        GROUP BY tal.account`);
     return rows
       .filter((r) => r.acct)
@@ -1114,12 +1198,13 @@ export class NetSuiteSource implements MigrationSource {
   }
 
   async monthlyActivity(): Promise<SourceAccountMonthRow[]> {
+    const accountingBookId = await this.accountingBookId();
     const rows = await this.q<{ acct?: string; m: string; d: string; c: string }>(`
       SELECT tal.account AS acct, TO_CHAR(t.trandate, 'YYYY-MM') AS m,
              SUM(COALESCE(tal.debit, 0)) AS d, SUM(COALESCE(tal.credit, 0)) AS c
         FROM transactionaccountingline tal
         JOIN transaction t ON t.id = tal.transaction
-       WHERE tal.posting = 'T'
+       WHERE tal.posting = 'T' AND tal.accountingbook = ${accountingBookId}
        GROUP BY tal.account, TO_CHAR(t.trandate, 'YYYY-MM')`);
     return rows
       .filter((r) => r.acct)
@@ -1127,6 +1212,38 @@ export class NetSuiteSource implements MigrationSource {
         accountRef: String(r.acct),
         month: r.m,
         amount: fromUnits(toUnits(r.d ?? "0") - toUnits(r.c ?? "0")),
+      }));
+  }
+
+  async projectMonthlyActivity(): Promise<SourceProjectAccountMonthRow[]> {
+    const accountingBookId = await this.accountingBookId();
+    const rows = await this.q<{
+      project?: string;
+      acct?: string;
+      m: string;
+      d: string;
+      c: string;
+    }>(`
+      SELECT tl.entity AS project, tal.account AS acct,
+             TO_CHAR(t.trandate, 'YYYY-MM') AS m,
+             SUM(COALESCE(tal.debit, 0)) AS d,
+             SUM(COALESCE(tal.credit, 0)) AS c
+        FROM transactionaccountingline tal
+        JOIN transaction t ON t.id = tal.transaction
+        JOIN transactionline tl
+          ON tl.transaction = tal.transaction
+         AND tl.id = tal.transactionline
+        JOIN job project ON project.id = tl.entity
+       WHERE tal.posting = 'T'
+         AND tal.accountingbook = ${accountingBookId}
+       GROUP BY tl.entity, tal.account, TO_CHAR(t.trandate, 'YYYY-MM')`);
+    return rows
+      .filter((row) => row.project && row.acct)
+      .map((row) => ({
+        projectRef: String(row.project),
+        accountRef: String(row.acct),
+        month: row.m,
+        amount: fromUnits(toUnits(row.d ?? "0") - toUnits(row.c ?? "0")),
       }));
   }
 

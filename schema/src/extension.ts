@@ -290,7 +290,14 @@ export const syncRuns = pgTable(
     connectionId: uuid("connection_id"),
     source: text("source").notNull(), // "netsuite"
     kind: text("kind", {
-      enum: ["incremental", "full_migration", "attachments", "tb_check"],
+      enum: [
+        "incremental",
+        "full_migration",
+        "full_preflight",
+        "targeted_repair",
+        "attachments",
+        "tb_check",
+      ],
     })
       .notNull()
       .default("incremental"),

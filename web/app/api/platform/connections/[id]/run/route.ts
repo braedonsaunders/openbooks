@@ -36,11 +36,11 @@ export async function POST(
   }
 
   const body = (await req.json().catch(() => ({}))) as {
-    mode?: "full_migration" | "mirror" | "attachments";
+    mode?: "full_migration" | "preflight" | "mirror" | "attachments";
   };
   if (
     !body.mode ||
-    !["full_migration", "mirror", "attachments"].includes(body.mode)
+    !["full_migration", "preflight", "mirror", "attachments"].includes(body.mode)
   ) {
     return NextResponse.json({ errorCode: "INVALID_MODE" }, { status: 400 });
   }
@@ -52,7 +52,12 @@ export async function POST(
   }
   const mode = body.mode;
 
-  const runKind = mode === "mirror" ? "incremental" : mode;
+  const runKind =
+    mode === "mirror"
+      ? "incremental"
+      : mode === "preflight"
+        ? "full_preflight"
+        : mode;
   const running = (await db.execute(sql`
     select 1 from sync_runs
      where org_id = ${orgId} and connection_id = ${id}
