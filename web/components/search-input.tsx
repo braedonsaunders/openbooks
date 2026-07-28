@@ -5,6 +5,11 @@ import { usePathname, useRouter, useSearchParams } from 'next/navigation'
 import { Search, X } from 'lucide-react'
 import { useTranslations } from 'next-intl'
 import { Input, cn } from '@openbooks/ui'
+import {
+  applySearchInputEdit,
+  createSearchInputEditState,
+  reconcileSearchInputUrl,
+} from '../lib/search-input-state'
 
 export function SearchInput({
   placeholder,
@@ -23,9 +28,13 @@ export function SearchInput({
   const router = useRouter()
   const search = useSearchParams()
   const urlValue = search.get(paramKey) ?? ''
-  const [edit, setEdit] = useState({ source: urlValue, value: urlValue })
-  const value = edit.source === urlValue ? edit.value : urlValue
-  const [, startTransition] = useTransition()
+  const [edit, setEdit] = useState(() => createSearchInputEditState(urlValue))
+  const [navigationPending, startTransition] = useTransition()
+  const value = edit.value
+
+  useEffect(() => {
+    setEdit((current) => reconcileSearchInputUrl(current, urlValue, navigationPending))
+  }, [navigationPending, urlValue])
 
   useEffect(() => {
     const handle = setTimeout(() => {
@@ -61,7 +70,7 @@ export function SearchInput({
         type="search"
         placeholder={placeholder ?? t('placeholder')}
         value={value}
-        onChange={(e) => setEdit({ source: urlValue, value: e.target.value })}
+        onChange={(e) => setEdit(applySearchInputEdit(e.target.value, urlValue, navigationPending))}
         // Hide the browser's native search clear (×) — we render our own below,
         // so the native one would show a duplicate clear button.
         className="h-8 pr-9 pl-9 [&::-webkit-search-cancel-button]:hidden"
@@ -70,7 +79,7 @@ export function SearchInput({
         <button
           type="button"
           aria-label={t('clearAria')}
-          onClick={() => setEdit({ source: urlValue, value: '' })}
+          onClick={() => setEdit(applySearchInputEdit('', urlValue, navigationPending))}
           className="absolute top-2 right-2.5 text-slate-400 hover:text-slate-600 dark:text-slate-500"
         >
           <X size={16} />
