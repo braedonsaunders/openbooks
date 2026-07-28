@@ -77,7 +77,8 @@ export async function projectCostSummary(orgId: string, projectId: string): Prom
         coalesce(sum((dl.quantity - dl.quantity_billed) * dl.unit_price) filter (where d.kind = 'sales_order'), 0) as committed_revenue
       from document_lines dl
       join documents d on d.id = dl.document_id
-      where dl.org_id = ${orgId} and dl.project_id = ${projectId}
+      where dl.org_id = ${orgId}
+        and coalesce(dl.project_id, d.project_id) = ${projectId}
         and d.status = 'approved' and d.kind in ('purchase_order', 'sales_order')
         and dl.quantity > dl.quantity_billed
     `) as any,
@@ -99,7 +100,9 @@ export async function projectCostSummary(orgId: string, projectId: string): Prom
              pt.display_name as party_name,
              sum(dl.amount) as amount
       from documents d
-      join document_lines dl on dl.document_id = d.id and dl.project_id = ${projectId}
+      join document_lines dl
+        on dl.document_id = d.id
+       and coalesce(dl.project_id, d.project_id) = ${projectId}
       left join parties pt on pt.id = d.party_id
       where d.org_id = ${orgId}
       group by d.id, d.kind, d.document_number, d.document_date, d.status, pt.display_name
@@ -311,7 +314,8 @@ export async function projectUnbilled(orgId: string, projectId: string, opts: Un
              count(*) as cnt
         from document_lines dl
         join documents d on d.id = dl.document_id
-       where dl.org_id = ${orgId} and dl.project_id = ${projectId}
+       where dl.org_id = ${orgId}
+         and coalesce(dl.project_id, d.project_id) = ${projectId}
          and dl.is_billable and dl.billed_by_line_id is null
          and ((d.kind = 'project_charge' and d.status in ('approved','posted'))
            or (d.status = 'posted' and d.kind in ('vendor_bill', 'expense_report', 'card_charge', 'check')))

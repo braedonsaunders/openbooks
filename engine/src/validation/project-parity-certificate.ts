@@ -564,7 +564,8 @@ const target = await withOrgContext(orgId, async () => {
         left join accounts account
           on account.id = dl.account_id and account.org_id = dl.org_id
         left join projects project
-          on project.id = dl.project_id and project.org_id = dl.org_id
+          on project.id = coalesce(dl.project_id, d.project_id)
+         and project.org_id = dl.org_id
         left join parties party
           on party.id = dl.party_id and party.org_id = dl.org_id
        where dl.org_id = ${orgId}

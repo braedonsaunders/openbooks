@@ -362,7 +362,8 @@ export async function generateInvoiceFromBillingRequest(
               from charge_rate_components c
              where c.document_line_id = dl.id and c.role = 'bill'
           ) rc on true
-         where dl.org_id = ${orgId} and dl.project_id = ${req.project_id}
+         where dl.org_id = ${orgId}
+           and coalesce(dl.project_id, d.project_id) = ${req.project_id}
            -- An ORDER line is a commitment to bill the customer: that is what
            -- ordering the work means, so it carries no separate billable flag
            -- and source systems do not set one. Requiring the flag silently
@@ -554,8 +555,13 @@ export async function generateInvoiceFromBillingRequest(
       const contract = contractRes.rows[0]?.contract ?? '0'
       if (cmp(contract, '0') > 0) {
         const invRes = (await tx.execute(sql`
-          select coalesce(sum(subtotal), 0)::text as inv from documents
-           where org_id = ${orgId} and project_id = ${req.project_id} and kind = 'customer_invoice' and status = 'posted'
+          select coalesce(sum(dl.amount), 0)::text as inv
+            from document_lines dl
+            join documents d
+              on d.id = dl.document_id and d.org_id = dl.org_id
+           where dl.org_id = ${orgId}
+             and coalesce(dl.project_id, d.project_id) = ${req.project_id}
+             and d.kind = 'customer_invoice' and d.status = 'posted'
         `)) as unknown as { rows: { inv: string }[] }
         const invoicedToDate = invRes.rows[0]?.inv ?? '0'
         const running = sum(built.map((l) => l.amount))

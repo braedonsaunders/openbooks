@@ -175,12 +175,15 @@ export async function resolveProjectFinancials(
     : ['vendor_bill', 'expense_report', 'card_charge', 'check']
 
   const [invRes, costRes, committedRes, billableTimeRes, billableLineRes, laborRes, overheadRes, hoursRes, byAccountRes, docRes] = await Promise.all([
-    // invoicedToDate — LINE-level tagging (dl.project_id); credits subtract.
+    // invoicedToDate — effective line tagging (line override, then header
+    // inheritance), matching the posting kernel's dimension semantics.
     db.execute(sql`
       select coalesce(sum(dl.amount) filter (where d.kind in (${kindList(invoiceKinds)})), 0)
            - coalesce(sum(dl.amount) filter (where d.kind in (${kindList(creditKinds.length ? creditKinds : ['__none__'])})), 0) as invoiced
         from document_lines dl join documents d on d.id = dl.document_id
-       where dl.org_id = ${orgId} and dl.project_id = ${projectId} and d.status = 'posted'
+       where dl.org_id = ${orgId}
+         and coalesce(dl.project_id, d.project_id) = ${projectId}
+         and d.status = 'posted'
          and d.kind in (${kindList([...invoiceKinds, ...creditKinds])})`),
     // actualCost + revenuePosted — posted GL tagged to the project.
     db.execute(sql`
@@ -207,7 +210,8 @@ export async function resolveProjectFinancials(
                end
              ), 0) as committed
         from document_lines dl join documents d on d.id = dl.document_id
-       where dl.org_id = ${orgId} and dl.project_id = ${projectId}
+       where dl.org_id = ${orgId}
+         and coalesce(dl.project_id, d.project_id) = ${projectId}
          and d.status = 'approved'
          and (
            d.kind = 'project_charge'
@@ -272,7 +276,8 @@ export async function resolveProjectFinancials(
              )
                filter (where dl.billed_by_line_id is null), 0) as unbilled_cost
         from document_lines dl join documents d on d.id = dl.document_id
-       where dl.org_id = ${orgId} and dl.project_id = ${projectId}
+       where dl.org_id = ${orgId}
+         and coalesce(dl.project_id, d.project_id) = ${projectId}
          and dl.is_billable
          and ((d.kind = 'project_charge' and d.status in ('approved','posted'))
            or (d.status in ('approved','posted')
@@ -319,7 +324,7 @@ export async function resolveProjectFinancials(
         left join document_lines dl on dl.document_id = d.id and dl.org_id = d.org_id
         left join parties pt on pt.id = d.party_id and pt.org_id = d.org_id
        where d.org_id = ${orgId}
-         and (d.project_id = ${projectId} or dl.project_id = ${projectId})
+         and coalesce(dl.project_id, d.project_id) = ${projectId}
        group by d.id, pt.display_name order by d.document_date desc, d.document_number desc`),
   ]) as unknown as { rows: any[] }[]
 
