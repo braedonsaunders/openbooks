@@ -2,6 +2,10 @@ import 'server-only'
 import { sql } from 'drizzle-orm'
 import { db, withOrg } from '@openbooks/engine/src/db.ts'
 import { submitForApproval } from '@openbooks/engine/src/flows/index.ts'
+import {
+  captureFieldTicketLaborEvidence,
+  type FieldTicketLaborEvidenceLine,
+} from '@openbooks/engine/src/field-ticket-labor-evidence.ts'
 import { mul, divRate, add, sum } from '@openbooks/engine/src/money.ts'
 import { nextDocumentNumber } from './bills'
 import { createProjectCharge } from './project-charges'
@@ -17,7 +21,9 @@ import { getS3Blob } from './file-storage'
  *             native extension; customer = party_id, job = project_id
  *   hours     time_entries rows (field_ticket_id); each atomic line belongs to
  *             one project and zero-or-one ticket, while its timesheet/payroll
- *             approval lifecycle remains independent
+ *             approval lifecycle remains independent. Approval captures a
+ *             versioned commercial labor snapshot; it never turns that
+ *             snapshot into a second time/payroll ledger.
  *   items     document_lines on the ticket; approval materializes them as a
  *             posted project_charge so the T&M billing engine sweeps them
  *   signing   foreman + customer signatures stored on the ticket; the signed
@@ -430,6 +436,7 @@ interface HeaderRow {
   party_id: string | null
   project_id: string | null
   document_date: string
+  currency: string
   reference_number: string | null
   memo: string | null
   period: TicketPeriod
@@ -443,9 +450,13 @@ interface HeaderRow {
   fieldTicket: FieldTicketData
 }
 
-async function loadHeader(orgId: string, ticketId: string): Promise<HeaderRow> {
+async function loadHeader(
+  orgId: string,
+  ticketId: string,
+  lockForUpdate = false,
+): Promise<HeaderRow> {
   const r = (await db.execute(sql`
-    select d.id, d.document_number, d.status, d.party_id, d.project_id,
+    select d.id, d.document_number, d.status, d.party_id, d.project_id, d.currency,
            d.document_date::text as document_date, d.reference_number, d.memo,
            ft.period, ft.period_start::text as period_start,
            ft.period_end::text as period_end,
@@ -455,7 +466,8 @@ async function loadHeader(orgId: string, ticketId: string): Promise<HeaderRow> {
       join field_tickets ft
         on ft.document_id = d.id and ft.org_id = d.org_id
      where d.id = ${ticketId} and d.org_id = ${orgId}
-       and d.kind = 'field_ticket'`)) as unknown as {
+       and d.kind = 'field_ticket'
+     ${lockForUpdate ? sql`for update of d, ft` : sql``}`)) as unknown as {
     rows: HeaderRow[]
   }
   if (!r.rows[0]) throw new FieldTicketError('Ticket not found')
@@ -471,6 +483,151 @@ async function loadHeader(orgId: string, ticketId: string): Promise<HeaderRow> {
     ;(row.fieldTicket as FieldTicketData & { rejectionReason?: string }).rejectionReason = row.rejection_reason
   }
   return row
+}
+
+interface LaborSnapshotResult {
+  id: string
+  revision: number
+  lineCount: number
+}
+
+/**
+ * Capture exactly what commercial approval releases. The snapshot is
+ * idempotent for an already-current revision and is deliberately independent
+ * from time-entry approval, labor posting, and payroll status.
+ */
+async function ensureFieldTicketLaborSnapshot(
+  orgId: string,
+  userId: string,
+  doc: HeaderRow,
+): Promise<LaborSnapshotResult> {
+  const current = (await db.execute(sql`
+    select snapshot.id, snapshot.revision,
+           (select count(*)::int
+              from field_ticket_labor_lines line
+             where line.org_id = snapshot.org_id
+               and line.snapshot_id = snapshot.id) as line_count
+      from field_ticket_labor_snapshots snapshot
+     where snapshot.org_id = ${orgId}
+       and snapshot.field_ticket_id = ${doc.id}
+       and snapshot.superseded_at is null
+     limit 1
+  `)) as unknown as { rows: { id: string; revision: number; line_count: number }[] }
+  if (current.rows[0]) {
+    return {
+      id: current.rows[0].id,
+      revision: Number(current.rows[0].revision),
+      lineCount: Number(current.rows[0].line_count),
+    }
+  }
+
+  const entries = (await db.execute(sql`
+    select te.id, te.employee_party_id, employee.display_name as employee_name,
+           te.item_id, item.name as item_name,
+           te.time_type_id, coalesce(time_type.name, 'Unclassified') as time_type_name,
+           te.project_task_id, project_task.name as project_task_name,
+           te.worked_on::text as worked_on, te.hours, te.status,
+           te.cost_rate, te.cost_rate_currency,
+           te.bill_rate, te.bill_rate_currency
+      from time_entries te
+      join parties employee
+        on employee.id = te.employee_party_id
+       and employee.org_id = te.org_id
+      left join items item
+        on item.id = te.item_id
+       and item.org_id = te.org_id
+      left join time_types time_type
+        on time_type.id = te.time_type_id
+       and time_type.org_id = te.org_id
+      left join project_tasks project_task
+        on project_task.id = te.project_task_id
+       and project_task.org_id = te.org_id
+     where te.org_id = ${orgId}
+       and te.field_ticket_id = ${doc.id}
+       and te.hours <> 0
+     order by te.worked_on, te.employee_party_id, te.item_id nulls first,
+              te.time_type_id nulls first, te.project_task_id nulls first, te.id
+  `)) as unknown as {
+    rows: Array<{
+      id: string
+      employee_party_id: string
+      employee_name: string
+      item_id: string | null
+      item_name: string | null
+      time_type_id: string | null
+      time_type_name: string
+      project_task_id: string | null
+      project_task_name: string | null
+      worked_on: string
+      hours: string
+      status: string
+      cost_rate: string | null
+      cost_rate_currency: string | null
+      bill_rate: string | null
+      bill_rate_currency: string | null
+    }>
+  }
+  const missingTimeType = entries.rows.find((entry) => !entry.time_type_id)
+  if (missingTimeType) {
+    throw new FieldTicketError(
+      `Labor entry ${missingTimeType.id} needs a time type before this ticket can be approved`,
+    )
+  }
+
+  const unresolvedBillRates = entries.rows
+    .filter((entry) => entry.bill_rate == null)
+    .map((entry) => entry.id)
+  const resolvedBillRates = unresolvedBillRates.length
+    ? await snapshotTimeBillRates(orgId, unresolvedBillRates, { dryRun: true })
+    : new Map<string, string>()
+
+  const lines: FieldTicketLaborEvidenceLine[] = []
+  for (const entry of entries.rows) {
+    const billRate = entry.bill_rate ?? resolvedBillRates.get(entry.id) ?? null
+    const costAmount = entry.cost_rate == null
+      ? null
+      : mul(String(entry.hours), String(entry.cost_rate))
+    const billAmount = billRate == null
+      ? null
+      : mul(String(entry.hours), String(billRate))
+    lines.push({
+      employeePartyId: entry.employee_party_id,
+      employeeName: entry.employee_name,
+      itemId: entry.item_id,
+      itemName: entry.item_name,
+      timeTypeId: entry.time_type_id,
+      timeTypeName: entry.time_type_name,
+      projectTaskId: entry.project_task_id,
+      projectTaskName: entry.project_task_name,
+      workedOn: entry.worked_on,
+      hours: String(entry.hours),
+      timeEntryId: entry.id,
+      timeEntryStatus: entry.status,
+      costRate: entry.cost_rate,
+      costRateCurrency: entry.cost_rate_currency,
+      billRate,
+      billRateCurrency: entry.bill_rate_currency ?? doc.currency,
+      costAmount,
+      billAmount,
+      sourceSystem: 'openbooks',
+      sourceLineRef: entry.id,
+    })
+  }
+  const snapshot = await captureFieldTicketLaborEvidence({
+    orgId,
+    fieldTicketId: doc.id,
+    actorId: userId,
+    evidenceBasis: 'operational_time',
+    reason: 'Commercial labor evidence captured at Field Ticket approval',
+    sourceSystem: 'openbooks',
+    currency: doc.currency,
+    lines,
+  })
+  return {
+    id: snapshot.id,
+    revision: snapshot.revision,
+    lineCount: snapshot.lineCount,
+  }
 }
 
 async function auditTicketLifecycle(
@@ -550,7 +707,7 @@ export async function releaseFieldTicketApproval(
   outcome: 'approved' | 'rejected',
   comment?: string | null,
 ): Promise<void> {
-  const doc = await loadHeader(orgId, ticketId)
+  const doc = await loadHeader(orgId, ticketId, true)
   if (outcome === 'rejected') {
     if (doc.status !== 'pending_approval') {
       throw new FieldTicketError('Only submitted tickets can be rejected')
@@ -578,12 +735,7 @@ export async function releaseFieldTicketApproval(
     throw new FieldTicketError('Only draft or submitted tickets can be approved')
   }
   const previousStatus = doc.status
-
-  const entryCount = (await db.execute(sql`
-    select count(*)::int as count
-      from time_entries
-     where org_id = ${orgId} and field_ticket_id = ${ticketId}
-  `)) as unknown as { rows: { count: number }[] }
+  const laborSnapshot = await ensureFieldTicketLaborSnapshot(orgId, userId, doc)
 
   // Materialize item lines as a project charge so job cost + T&M billing see them.
   const lines = (await db.execute(sql`
@@ -664,7 +816,10 @@ export async function releaseFieldTicketApproval(
     source: previousStatus === 'pending_approval' ? 'flows' : 'submit_without_approval_flow',
     from: previousStatus,
     to: 'approved',
-    timeEntries: entryCount.rows[0]?.count ?? 0,
+    timeEntries: laborSnapshot.lineCount,
+    laborSnapshotId: laborSnapshot.id,
+    laborSnapshotRevision: laborSnapshot.revision,
+    operationalTimeStatusUnchanged: true,
     chargeDocumentId,
   })
 }
@@ -672,6 +827,73 @@ export async function releaseFieldTicketApproval(
 /** Full ticket payload for the editor and the PDF. */
 export async function loadFieldTicket(orgId: string, ticketId: string) {
   const doc = await loadHeader(orgId, ticketId)
+  const snapshotResult = (await db.execute(sql`
+    select id, revision, evidence_basis, reason, source_system, currency,
+           captured_at::text as captured_at
+      from field_ticket_labor_snapshots
+     where org_id = ${orgId}
+       and field_ticket_id = ${ticketId}
+       and superseded_at is null
+     limit 1
+  `)) as unknown as {
+    rows: Array<{
+      id: string
+      revision: number
+      evidence_basis: 'operational_time' | 'source_import' | 'controlled_amendment'
+      reason: string
+      source_system: string | null
+      currency: string
+      captured_at: string
+    }>
+  }
+  const laborSnapshot = snapshotResult.rows[0] ?? null
+  const entriesQuery = laborSnapshot
+    ? db.execute(sql`
+        select line.id, line.employee_party_id, line.employee_name,
+               line.item_id, line.item_name,
+               line.time_type_id, line.time_type_name,
+               coalesce(time_type.bill_multiplier, '1') as bill_multiplier,
+               line.project_task_id, line.project_task_name,
+               line.worked_on::text as worked_on, line.hours, line.bill_rate,
+               coalesce(line.time_entry_status, 'snapshot') as status,
+               line.time_entry_id, line.source_system, line.source_line_ref
+          from field_ticket_labor_lines line
+          left join time_types time_type
+            on time_type.id = line.time_type_id
+           and time_type.org_id = line.org_id
+         where line.org_id = ${orgId}
+           and line.snapshot_id = ${laborSnapshot.id}
+           and line.field_ticket_id = ${ticketId}
+         order by line.employee_name, line.item_name nulls first,
+                  time_type.bill_multiplier, line.worked_on, line.sequence
+      `)
+    : db.execute(sql`
+        select te.id, te.employee_party_id, p.display_name as employee_name,
+               te.item_id, i.name as item_name,
+               te.time_type_id, coalesce(tt.name, 'Unclassified') as time_type_name,
+               coalesce(tt.bill_multiplier, '1') as bill_multiplier,
+               te.project_task_id, pt.name as project_task_name,
+               te.worked_on::text as worked_on, te.hours, te.bill_rate, te.status,
+               te.id as time_entry_id, 'openbooks'::text as source_system,
+               te.id::text as source_line_ref
+          from time_entries te
+          join parties p
+            on p.id = te.employee_party_id
+           and p.org_id = te.org_id
+          left join items i
+            on i.id = te.item_id
+           and i.org_id = te.org_id
+          left join time_types tt
+            on tt.id = te.time_type_id
+           and tt.org_id = te.org_id
+          left join project_tasks pt
+            on pt.id = te.project_task_id
+           and pt.org_id = te.org_id
+         where te.org_id = ${orgId}
+           and te.field_ticket_id = ${ticketId}
+         order by p.display_name, i.name nulls first,
+                  tt.bill_multiplier, te.worked_on
+      `)
   const [customer, project, foreman, entries, lines, signatureRows, requestRows] = await Promise.all([
     db.execute(sql`
       select display_name, email from parties
@@ -679,18 +901,7 @@ export async function loadFieldTicket(orgId: string, ticketId: string) {
          and org_id = ${orgId}`) as unknown as Promise<{ rows: { display_name: string; email: string | null }[] }>,
     db.execute(sql`select code, name from projects where id = ${doc.project_id}`) as unknown as Promise<{ rows: { code: string | null; name: string }[] }>,
     db.execute(sql`select display_name from parties where id = ${doc.fieldTicket.foremanPartyId}`) as unknown as Promise<{ rows: { display_name: string }[] }>,
-    db.execute(sql`
-      select te.id, te.employee_party_id, p.display_name as employee_name, te.item_id, i.name as item_name,
-             te.time_type_id, tt.name as time_type_name, coalesce(tt.bill_multiplier, '1') as bill_multiplier,
-             te.project_task_id, pt.name as project_task_name,
-             te.worked_on::text as worked_on, te.hours, te.bill_rate, te.status
-        from time_entries te
-        join parties p on p.id = te.employee_party_id
-        left join items i on i.id = te.item_id
-        left join time_types tt on tt.id = te.time_type_id
-        left join project_tasks pt on pt.id = te.project_task_id
-       where te.org_id = ${orgId} and te.field_ticket_id = ${ticketId}
-       order by p.display_name, i.name nulls first, tt.bill_multiplier, te.worked_on`) as unknown as Promise<{ rows: TicketEntryRow[] }>,
+    entriesQuery as unknown as Promise<{ rows: TicketEntryRow[] }>,
     db.execute(sql`
       select dl.id, dl.item_id, i.name as item_name, dl.description, dl.quantity, dl.unit, dl.unit_price, dl.amount,
              dl.cost_rate, dl.bill_rate, dl.cost_amount, dl.bill_amount, dl.base_unit, dl.rate_version_id,
@@ -739,9 +950,11 @@ export async function loadFieldTicket(orgId: string, ticketId: string) {
          responded_at: string | null
        }> }>,
   ])
-  // Draft entries have no bill-rate snapshot yet — resolve a live preview so
-  // the ticket shows money before approval (approval stamps the real ones).
-  const unpriced = entries.rows.filter((e) => e.bill_rate == null).map((e) => e.id)
+  // Only live draft/pending entries receive a rate preview. Approved/signed
+  // tickets render their captured values and never reinterpret history.
+  const unpriced = laborSnapshot
+    ? []
+    : entries.rows.filter((e) => e.bill_rate == null).map((e) => e.id)
   const preview = unpriced.length ? await snapshotTimeBillRates(orgId, unpriced, { dryRun: true }) : new Map<string, string>()
   for (const e of entries.rows) if (e.bill_rate == null && preview.has(e.id)) e.bill_rate = preview.get(e.id)!
   const laborTotal = sum(
@@ -791,6 +1004,7 @@ export async function loadFieldTicket(orgId: string, ticketId: string) {
     foremanName: foreman.rows[0]?.display_name ?? '',
     fieldTicket,
     entries: entries.rows,
+    laborSnapshot,
     lines: lines.rows,
     laborTotal,
     linesTotal,
@@ -804,7 +1018,7 @@ export interface TicketEntryRow {
   employee_name: string
   item_id: string | null
   item_name: string | null
-  time_type_id: string
+  time_type_id: string | null
   time_type_name: string
   bill_multiplier: string
   project_task_id: string | null
@@ -813,6 +1027,9 @@ export interface TicketEntryRow {
   hours: string
   bill_rate: string | null
   status: string
+  time_entry_id: string | null
+  source_system: string | null
+  source_line_ref: string | null
 }
 
 export interface TicketLineRow {
