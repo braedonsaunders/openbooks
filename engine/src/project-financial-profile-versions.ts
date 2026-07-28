@@ -80,7 +80,14 @@ export function assertValidProjectFinancialProfile(
   const labor = object(profile.laborCost, "laborCost");
   oneOf(
     labor.source,
-    ["in_actual_cost", "time_rate", "payroll_je", "account_group", "none"],
+    [
+      "in_actual_cost",
+      "time_rate",
+      "estimated_time_rate",
+      "payroll_je",
+      "account_group",
+      "none",
+    ],
     "laborCost.source",
   );
   if (labor.groupKeys !== undefined) strings(labor.groupKeys, "laborCost.groupKeys");
@@ -102,7 +109,11 @@ export function assertValidProjectFinancialProfile(
   if (overhead.method === "rate_engine") {
     const rateEngine = object(overhead.rateEngine, "overhead.rateEngine");
     oneOf(rateEngine.rateSource, ["live", "standard"], "overhead.rateEngine.rateSource");
-    oneOf(rateEngine.hoursBasis, ["billed_hours", "total_hours"], "overhead.rateEngine.hoursBasis");
+    oneOf(
+      rateEngine.hoursBasis,
+      ["billed_hours", "actual_hours", "total_hours"],
+      "overhead.rateEngine.hoursBasis",
+    );
     oneOf(rateEngine.scope, ["flat", "department", "class"], "overhead.rateEngine.scope");
     if (typeof rateEngine.dimension !== "string" || !rateEngine.dimension) {
       throw new Error("overhead.rateEngine.dimension is required");
@@ -127,6 +138,9 @@ export function assertValidProjectFinancialProfile(
     throw new Error("billableValue inclusion flags must be boolean");
   }
   oneOf(billable.timeRate, ["bill_rate", "cost_times_markup"], "billableValue.timeRate");
+  if (billable.costSourceKinds !== undefined) {
+    strings(billable.costSourceKinds, "billableValue.costSourceKinds");
+  }
   oneOf(object(profile.costBudget, "costBudget").source, ["wbs_estimates", "none"], "costBudget.source");
 
   const price = object(profile.totalPrice, "totalPrice");
@@ -195,12 +209,6 @@ export async function publishProjectFinancialProfile(
   if (!DATE.test(input.effectiveFrom)) {
     throw new Error("effectiveFrom must be YYYY-MM-DD");
   }
-  const today = new Date().toISOString().slice(0, 10);
-  if (input.effectiveFrom < today) {
-    throw new Error(
-      "financial profile versions cannot be backdated through ordinary setup; use a controlled historical correction workflow",
-    );
-  }
   const reason = input.reason.trim();
   if (reason.length < 8) {
     throw new Error("a meaningful reason is required");
@@ -222,12 +230,6 @@ export async function publishProjectFinancialProfileInTransaction(
   if (!DATE.test(input.effectiveFrom)) {
     throw new Error("effectiveFrom must be YYYY-MM-DD");
   }
-  const today = new Date().toISOString().slice(0, 10);
-  if (input.effectiveFrom < today) {
-    throw new Error(
-      "financial profile versions cannot be backdated through ordinary setup; use a controlled historical correction workflow",
-    );
-  }
   if (reason.length < 8) {
     throw new Error("a meaningful reason is required");
   }
@@ -237,11 +239,32 @@ export async function publishProjectFinancialProfileInTransaction(
     sql`select set_config('openbooks.publish_project_profile', 'on', true)`,
   );
   const type = (await tx.execute(sql`
-    select id from project_types
-     where id = ${input.projectTypeId} and org_id = ${input.orgId}
-     for update
-  `)) as unknown as { rows: { id: string }[] };
+    select pt.id,
+           (
+             current_timestamp at time zone coalesce(
+               (
+                 select fc.time_zone
+                   from fiscal_calendars fc
+                  where fc.org_id = pt.org_id
+                    and fc.is_active
+                  order by fc.is_default desc, fc.created_at
+                  limit 1
+               ),
+               o.settings ->> 'timeZone',
+               'UTC'
+             )
+           )::date::text as accounting_today
+      from project_types pt
+      join orgs o on o.id = pt.org_id
+     where pt.id = ${input.projectTypeId} and pt.org_id = ${input.orgId}
+     for update of pt
+  `)) as unknown as { rows: { id: string; accounting_today: string }[] };
   if (!type.rows[0]) throw new Error("project type not found");
+  if (input.effectiveFrom < type.rows[0].accounting_today) {
+    throw new Error(
+      "financial profile versions cannot be backdated through ordinary setup; use a controlled historical correction workflow",
+    );
+  }
 
   const sameDate = (await tx.execute(sql`
     select id from project_financial_profile_versions

@@ -683,6 +683,8 @@ async function auditTimeBillingChange(
   afterStatus: "unbilled" | "billed",
   beforeSourceStatus: string | null,
   afterSourceStatus: string | null,
+  beforeCostingBasis: "actual" | "estimated",
+  afterCostingBasis: "actual" | "estimated",
 ): Promise<void> {
   if (!ctx.audit) {
     throw new Error(
@@ -697,10 +699,12 @@ async function auditTimeBillingChange(
       jsonb_build_object(
         'before', jsonb_build_object(
           'billingStatus', cast(${beforeStatus} as text),
+          'costingBasis', cast(${beforeCostingBasis} as text),
           'sourceBillingStatus', cast(${beforeSourceStatus} as text)
         ),
         'after', jsonb_build_object(
           'billingStatus', cast(${afterStatus} as text),
+          'costingBasis', cast(${afterCostingBasis} as text),
           'sourceBillingStatus', cast(${afterSourceStatus} as text)
         ),
         'source', jsonb_build_object(
@@ -723,11 +727,12 @@ async function loadTimeEntries(records: SourceEntity[], ctx: Ctx, s: ResourceLoa
     {
       id: string;
       billingStatus: "unbilled" | "billed";
+      costingBasis: "actual" | "estimated";
       sourceBillingStatus: string | null;
     }
   >();
   const rows = (await db.execute(sql`
-    select id, custom->>${refKey} ns, billing_status,
+    select id, custom->>${refKey} ns, billing_status, costing_basis,
            custom->>'sourceBillingStatus' as source_billing_status
       from time_entries
      where org_id=${orgId} and custom->>${refKey} is not null`)) as {
@@ -735,6 +740,7 @@ async function loadTimeEntries(records: SourceEntity[], ctx: Ctx, s: ResourceLoa
       id: string;
       ns: string;
       billing_status: "unbilled" | "billed";
+      costing_basis: "actual" | "estimated";
       source_billing_status: string | null;
     }[];
   };
@@ -742,6 +748,7 @@ async function loadTimeEntries(records: SourceEntity[], ctx: Ctx, s: ResourceLoa
     existing.set(r.ns, {
       id: r.id,
       billingStatus: r.billing_status,
+      costingBasis: r.costing_basis,
       sourceBillingStatus: r.source_billing_status,
     });
   }
@@ -758,6 +765,7 @@ async function loadTimeEntries(records: SourceEntity[], ctx: Ctx, s: ResourceLoa
         ${ref(ctx.maps.projects, f.projectRef)}, ${ref(ctx.maps.departments, f.departmentRef)},
         ${!!f.isBillable}, ${str(f.costRate)}, ${str(f.billRate)}, 'approved',
         ${str(f.billingStatus) === "billed" ? "billed" : "unbilled"},
+        ${str(f.costingBasis) === "estimated" ? "estimated" : "actual"},
         ${JSON.stringify({
           [refKey]: rec.sourceRef,
           sourceBillingStatus: str(f.sourceBillingStatus),
@@ -767,7 +775,7 @@ async function loadTimeEntries(records: SourceEntity[], ctx: Ctx, s: ResourceLoa
         })}::jsonb)`;
     });
     await db.execute(sql`insert into time_entries
-      (org_id, employee_party_id, worked_on, hours, time_type_id, item_id, project_id, department_id, is_billable, cost_rate, bill_rate, status, billing_status, custom)
+      (org_id, employee_party_id, worked_on, hours, time_type_id, item_id, project_id, department_id, is_billable, cost_rate, bill_rate, status, billing_status, costing_basis, custom)
       values ${sql.join(values, sql`, `)}`);
     s.created += b.length;
   };
@@ -783,6 +791,10 @@ async function loadTimeEntries(records: SourceEntity[], ctx: Ctx, s: ResourceLoa
         f.billingStatus === "billed" || f.billingStatus === "unbilled"
           ? f.billingStatus
           : null;
+      const sourceCostingBasis =
+        f.costingBasis === "estimated" ? "estimated" : "actual";
+      const effectiveBillingStatus =
+        sourceBillingStatus ?? prior.billingStatus;
       // A full load re-emits everything. Billing state is still reconciled:
       // historical source time may have been loaded before OpenBooks had a
       // first-class billing lifecycle, and treating it as unbilled would
@@ -790,8 +802,8 @@ async function loadTimeEntries(records: SourceEntity[], ctx: Ctx, s: ResourceLoa
       // skip-unchanged on a full load.
       if (!ctx.incremental) {
         if (
-          sourceBillingStatus === null ||
-          sourceBillingStatus === prior.billingStatus
+          effectiveBillingStatus === prior.billingStatus &&
+          sourceCostingBasis === prior.costingBasis
         ) {
           s.skipped++;
           continue;
@@ -799,13 +811,17 @@ async function loadTimeEntries(records: SourceEntity[], ctx: Ctx, s: ResourceLoa
         const changed = await db.transaction(async (tx) => {
           const updated = (await tx.execute(sql`
             update time_entries
-               set billing_status = ${sourceBillingStatus},
+               set billing_status = ${effectiveBillingStatus},
+                   costing_basis = ${sourceCostingBasis},
                    custom = custom || ${JSON.stringify({
                      sourceBillingStatus: str(f.sourceBillingStatus),
                    })}::jsonb,
                    updated_at = now()
              where id = ${id} and org_id = ${orgId}
-               and billing_status is distinct from ${sourceBillingStatus}
+               and (
+                 billing_status is distinct from ${effectiveBillingStatus}
+                 or costing_basis is distinct from ${sourceCostingBasis}
+               )
              returning id`)) as unknown as { rows: { id: string }[] };
           if (updated.rows.length) {
             await auditTimeBillingChange(
@@ -814,9 +830,11 @@ async function loadTimeEntries(records: SourceEntity[], ctx: Ctx, s: ResourceLoa
               id,
               rec.sourceRef,
               prior.billingStatus,
-              sourceBillingStatus,
+              effectiveBillingStatus,
               prior.sourceBillingStatus,
               str(f.sourceBillingStatus),
+              prior.costingBasis,
+              sourceCostingBasis,
             );
           }
           return updated.rows.length > 0;
@@ -826,14 +844,15 @@ async function loadTimeEntries(records: SourceEntity[], ctx: Ctx, s: ResourceLoa
         continue;
       }
       const billingChanged =
-        sourceBillingStatus !== null &&
-        sourceBillingStatus !== prior.billingStatus;
+        effectiveBillingStatus !== prior.billingStatus;
+      const costingChanged = sourceCostingBasis !== prior.costingBasis;
       const update = (tx: { execute: (query: any) => Promise<any> }) =>
         tx.execute(sql`update time_entries set worked_on=${str(f.workedOn) ?? "1970-01-01"}, hours=${str(f.hours) ?? "0"},
           time_type_id=${ref(ctx.maps.time_types, f.timeTypeRef)}, item_id=${ref(ctx.maps.items, f.itemRef)},
           project_id=${ref(ctx.maps.projects, f.projectRef)}, department_id=${ref(ctx.maps.departments, f.departmentRef)},
           is_billable=${!!f.isBillable}, cost_rate=${str(f.costRate)}, bill_rate=${str(f.billRate)},
-          billing_status=coalesce(${sourceBillingStatus}, billing_status),
+          billing_status=${effectiveBillingStatus},
+          costing_basis=${sourceCostingBasis},
           custom = custom || ${JSON.stringify({
             sourceBillingStatus: str(f.sourceBillingStatus),
             ...(str(f.fieldTicketNumber)
@@ -841,7 +860,7 @@ async function loadTimeEntries(records: SourceEntity[], ctx: Ctx, s: ResourceLoa
               : {}),
           })}::jsonb
           where id=${id}`);
-      if (billingChanged) {
+      if (billingChanged || costingChanged) {
         await db.transaction(async (tx) => {
           await update(tx);
           await auditTimeBillingChange(
@@ -850,9 +869,11 @@ async function loadTimeEntries(records: SourceEntity[], ctx: Ctx, s: ResourceLoa
             id,
             rec.sourceRef,
             prior.billingStatus,
-            sourceBillingStatus,
+            effectiveBillingStatus,
             prior.sourceBillingStatus,
             str(f.sourceBillingStatus),
+            prior.costingBasis,
+            sourceCostingBasis,
           );
         });
       } else {

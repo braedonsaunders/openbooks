@@ -50,6 +50,7 @@ export * from "./crm-core";
 export * from "./crm-sales";
 export * from "./ap-capture";
 export * from "./project-types";
+export * from "./project-overhead-adjustments";
 export * from "./qbd";
 export * from "./psp-settlements";
 export * from "./tax-rate-providers";

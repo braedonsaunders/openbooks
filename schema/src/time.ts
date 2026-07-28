@@ -84,6 +84,16 @@ export const timeEntries = pgTable(
     })
       .notNull()
       .default("unbilled"),
+    /**
+     * Whether this line's labor cost has been actualized into accounting.
+     * Estimated lines remain valid commercial/project-planning evidence but
+     * must not be confused with posted payroll labor.
+     */
+    costingBasis: text("costing_basis", {
+      enum: ["actual", "estimated"],
+    })
+      .notNull()
+      .default("actual"),
     invoicedByLineId: uuid("invoiced_by_line_id"),
     payrollBatchRef: text("payroll_batch_ref"),
     /** Keeps the source platform timebill nsId + source flags for the import bridge. */
@@ -95,6 +105,11 @@ export const timeEntries = pgTable(
     index("time_entries_project").on(t.projectId, t.isBillable),
     index("time_entries_status").on(t.orgId, t.status),
     index("time_entries_billing_status").on(t.orgId, t.billingStatus),
+    index("time_entries_costing_basis").on(
+      t.orgId,
+      t.projectId,
+      t.costingBasis,
+    ),
   ],
 );
 

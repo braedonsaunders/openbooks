@@ -75,8 +75,24 @@ async function rateEngineOverhead(
         and (o.effective_to is null or te.worked_on <= o.effective_to)
         and o.org_id = ${orgId}
      where te.org_id = ${orgId} and te.project_id = ${projectId} and te.status = 'approved'
-       ${basis === 'billed_hours' ? sql`and te.is_billable` : sql``}`)) as unknown as { rows: { overhead: string }[] }
+       ${basis === 'billed_hours'
+         ? sql`and te.is_billable`
+         : basis === 'actual_hours'
+           ? sql`and te.costing_basis = 'actual'`
+           : sql``}`)) as unknown as { rows: { overhead: string }[] }
   return amount(r.rows[0]?.overhead)
+}
+
+async function overheadAdjustments(
+  orgId: string,
+  projectId: string,
+): Promise<string> {
+  const r = (await db.execute(sql`
+    select coalesce(sum(amount), 0) as adjustment
+      from project_overhead_adjustments
+     where org_id = ${orgId} and project_id = ${projectId}
+  `)) as unknown as { rows: { adjustment: string }[] }
+  return amount(r.rows[0]?.adjustment)
 }
 
 export async function resolveProjectFinancials(
@@ -115,8 +131,11 @@ export async function resolveProjectFinancials(
   const creditKinds = profile.invoicedToDate.creditKinds
   const kindList = (ks: string[]) => sql.join(ks.map((k) => sql`${k}`), sql`, `)
   const committedKinds = profile.committedCost.docKinds
+  const billableCostKinds = profile.billableValue.costSourceKinds?.length
+    ? profile.billableValue.costSourceKinds
+    : ['vendor_bill', 'expense_report', 'card_charge', 'check']
 
-  const [invRes, costRes, committedRes, unbilledTimeRes, unbilledLineRes, laborRes, overheadRes, hoursRes, byAccountRes, docRes] = await Promise.all([
+  const [invRes, costRes, committedRes, billableTimeRes, billableLineRes, laborRes, overheadRes, hoursRes, byAccountRes, docRes] = await Promise.all([
     // invoicedToDate — LINE-level tagging (dl.project_id); credits subtract.
     db.execute(sql`
       select coalesce(sum(dl.amount) filter (where d.kind in (${kindList(invoiceKinds)})), 0)
@@ -142,25 +161,43 @@ export async function resolveProjectFinancials(
        where dl.org_id = ${orgId} and dl.project_id = ${projectId}
          and d.status = 'approved' and d.kind in (${kindList(committedKinds.length ? committedKinds : ['__none__'])})
          and (coalesce(dl.quantity,0) = 0 or dl.quantity_billed is null or dl.quantity_billed < dl.quantity)`),
-    // unbilled billable time (bill rate / cost×markup) not yet invoiced.
+    // Billable time is selling-value evidence independent of invoice amount.
+    // Fixed/progress invoices often have no one-to-one time-line relationship,
+    // so total price cannot be reconstructed as invoice + unbilled time.
     db.execute(sql`
-      select coalesce(sum(te.hours * coalesce(te.bill_rate, 0)), 0) as bill,
-             coalesce(sum(te.hours * coalesce(te.cost_rate, 0)), 0) as cost, count(*) as cnt
+      select coalesce(sum(te.hours * coalesce(te.bill_rate, 0)), 0) as total_bill,
+             coalesce(sum(te.hours * coalesce(te.cost_rate, 0)), 0) as total_cost,
+             coalesce(sum(te.hours * coalesce(te.bill_rate, 0))
+               filter (where te.billing_status = 'unbilled'), 0) as unbilled_bill,
+             coalesce(sum(te.hours * coalesce(te.cost_rate, 0))
+               filter (where te.billing_status = 'unbilled'), 0) as unbilled_cost
        from time_entries te
        where te.org_id = ${orgId} and te.project_id = ${projectId}
-         and te.status = 'approved' and te.is_billable
-         and te.billing_status = 'unbilled'`),
-    // Unbilled cost documents use markup; project charges carry an explicit
-    // independently snapshotted bill amount.
+         and te.status = 'approved' and te.is_billable`),
+    // Billable cost is likewise all eligible work, with its unbilled subset
+    // retained separately for invoicing/backlog presentation.
     db.execute(sql`
-      select coalesce(sum(case when d.kind = 'project_charge' then coalesce(dl.bill_amount, 0)
-                               else dl.amount * coalesce(nullif(dl.cost_multiplier, 0), 1) end), 0) as bill,
-             coalesce(sum(dl.amount), 0) as cost, count(*) as cnt
+      select coalesce(sum(
+               case when d.kind = 'project_charge'
+                    then coalesce(dl.bill_amount, 0)
+                    else dl.amount * coalesce(nullif(dl.cost_multiplier, 0), 1)
+               end
+             ), 0) as total_bill,
+             coalesce(sum(dl.amount), 0) as total_cost,
+             coalesce(sum(
+               case when d.kind = 'project_charge'
+                    then coalesce(dl.bill_amount, 0)
+                    else dl.amount * coalesce(nullif(dl.cost_multiplier, 0), 1)
+               end
+             ) filter (where dl.billed_by_line_id is null), 0) as unbilled_bill,
+             coalesce(sum(dl.amount)
+               filter (where dl.billed_by_line_id is null), 0) as unbilled_cost
         from document_lines dl join documents d on d.id = dl.document_id
        where dl.org_id = ${orgId} and dl.project_id = ${projectId}
-         and dl.is_billable and dl.billed_by_line_id is null
+         and dl.is_billable
          and ((d.kind = 'project_charge' and d.status in ('approved','posted'))
-           or (d.status = 'posted' and d.kind in ('vendor_bill','expense_report','card_charge','check')))`),
+           or (d.status in ('approved','posted')
+             and d.kind in (${kindList(billableCostKinds.length ? billableCostKinds : ['__none__'])})))`),
     // laborCost — resolved per profile source (payroll JE / time rate / group).
     profile.laborCost.source === 'payroll_je'
       ? db.execute(sql`select coalesce(sum(l.amount), 0) as labor from journal_lines l join journal_entries e on e.id = l.entry_id
@@ -168,6 +205,10 @@ export async function resolveProjectFinancials(
       : profile.laborCost.source === 'time_rate'
         ? db.execute(sql`select coalesce(sum(te.hours * coalesce(te.cost_rate, 0)), 0) as labor from time_entries te
              where te.org_id = ${orgId} and te.project_id = ${projectId} and te.status = 'approved'`)
+        : profile.laborCost.source === 'estimated_time_rate'
+          ? db.execute(sql`select coalesce(sum(te.hours * coalesce(te.cost_rate, 0)), 0) as labor from time_entries te
+               where te.org_id = ${orgId} and te.project_id = ${projectId}
+                 and te.status = 'approved' and te.costing_basis = 'estimated'`)
         : db.execute(sql`select 0 as labor`),
     // overhead (account_group_actual only) — posted GL to overhead accounts.
     profile.overhead.method !== 'account_group_actual'
@@ -206,22 +247,36 @@ export async function resolveProjectFinancials(
   // Overhead is a STATISTICAL allocation (never a GL posting by default). Each
   // method turns a rate into the job's share of company overhead.
   const oh = profile.overhead
-  const overhead =
+  const calculatedOverhead =
     oh.method === 'account_group_actual' ? amount(overheadRes.rows[0]?.overhead)
     : oh.method === 'percent_of_labor' ? mulPercent(laborCost, String(oh.ratePercent ?? 0))
     : oh.method === 'per_labor_hour' ? mul(totalHours, String(oh.ratePerHour ?? 0))
     : oh.method === 'rate_engine' ? await rateEngineOverhead(orgId, projectId, oh.rateEngine)
     : '0.0000'
+  const overheadAdjustment = oh.method === 'none'
+    ? '0.0000'
+    : await overheadAdjustments(orgId, projectId)
+  const overhead = add(calculatedOverhead, overheadAdjustment)
 
   // billable value: what's invoiceable across all work (time + cost lines).
-  const unbTimeBill = profile.billableValue.includeUnbilledTime ? amount(unbilledTimeRes.rows[0]?.bill) : '0.0000'
+  const totalTimeBill = profile.billableValue.timeRate === 'cost_times_markup'
+    ? add(amount(billableTimeRes.rows[0]?.total_cost), mulPercent(amount(billableTimeRes.rows[0]?.total_cost), projectMarkupPercent))
+    : amount(billableTimeRes.rows[0]?.total_bill)
+  const totalLineBill = profile.billableValue.timeRate === 'cost_times_markup'
+    ? add(amount(billableLineRes.rows[0]?.total_cost), mulPercent(amount(billableLineRes.rows[0]?.total_cost), projectMarkupPercent))
+    : amount(billableLineRes.rows[0]?.total_bill)
+  const unbTimeBill = profile.billableValue.includeUnbilledTime
+    ? (profile.billableValue.timeRate === 'cost_times_markup'
+        ? add(amount(billableTimeRes.rows[0]?.unbilled_cost), mulPercent(amount(billableTimeRes.rows[0]?.unbilled_cost), projectMarkupPercent))
+        : amount(billableTimeRes.rows[0]?.unbilled_bill))
+    : '0.0000'
   const unbLineBill = profile.billableValue.includeUnbilledCostLines
     ? (profile.billableValue.timeRate === 'cost_times_markup'
-        ? add(amount(unbilledLineRes.rows[0]?.cost), mulPercent(amount(unbilledLineRes.rows[0]?.cost), projectMarkupPercent))
-        : amount(unbilledLineRes.rows[0]?.bill))
+        ? add(amount(billableLineRes.rows[0]?.unbilled_cost), mulPercent(amount(billableLineRes.rows[0]?.unbilled_cost), projectMarkupPercent))
+        : amount(billableLineRes.rows[0]?.unbilled_bill))
     : '0.0000'
   const unbilledBillable = add(unbTimeBill, unbLineBill)
-  const billableValue = add(invoicedToDate, unbilledBillable)
+  const billableValue = add(totalTimeBill, totalLineBill)
 
   // total cost: only the configured components (labor stays inside actual_cost
   // unless split out, avoiding double count).
