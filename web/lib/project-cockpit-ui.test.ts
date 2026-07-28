@@ -54,6 +54,7 @@ test('project financials clarify included overhead and keep revenue recognition 
 
   assert.match(financials, /overheadIncludedInTotalCost/)
   assert.match(financials, /line\.measure === 'total_cost'/)
+  assert.match(financials, /overhead_informational/)
   assert.doesNotMatch(financials, /RecognitionCard/)
   assert.match(drawer, /setRecognitionOpen\(true\)/)
   assert.match(drawer, /<RecognitionCard\b/)

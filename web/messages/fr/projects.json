@@ -161,6 +161,7 @@
     },
     "transactions": "Transactions",
     "viewGeneralLedger": "Voir le grand livre du projet",
+    "informationalOnly": "À titre informatif",
     "allTransactionTypes": "Tous les types de transaction",
     "noTransactionsTitle": "Aucune transaction rattachée à ce chantier",
     "noTransactionsDescription": "Les factures fournisseurs, factures, notes de frais, commandes et écritures dont une ligne est rattachée à ce projet apparaissent ici.",
@@ -262,7 +263,8 @@
       "committed_cost": "Engagements de bons de commande ouverts.",
       "total_price": "Prix contractuel / de vente du projet.",
       "total_cost": "Total des coûts engagés et réels.",
-      "overhead": "Inclus dans le coût total du projet et donc déjà déduit de la marge brute."
+      "overhead": "Inclus dans le coût total du projet et donc déjà déduit de la marge brute.",
+      "overhead_informational": "Non inclus dans le coût total du projet et non déduit de la marge brute."
     },
     "overhead": "Frais généraux"
   },

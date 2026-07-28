@@ -95,20 +95,20 @@ export function FinancialsTab({ data }: {
   // visually implied a second deduction even though the calculation already
   // included it. Keep the tenant-authored line treatment, but place it inside
   // the cost block immediately before Total job cost.
-  const overheadLine = data.overheadIncludedInTotalCost
-    ? budgetAwareLayout.find((line) => line.measure === 'overhead')
-    : undefined
+  const overheadLine = budgetAwareLayout.find((line) => line.measure === 'overhead')
   const layoutWithoutIncludedOverhead = overheadLine
     ? budgetAwareLayout.filter((line) => line.measure !== 'overhead')
     : budgetAwareLayout
   const totalCostIndex = layoutWithoutIncludedOverhead.findIndex((line) => line.measure === 'total_cost')
-  const visibleLayout = overheadLine && totalCostIndex >= 0
+  const visibleLayout = overheadLine && data.overheadIncludedInTotalCost && totalCostIndex >= 0
     ? [
         ...layoutWithoutIncludedOverhead.slice(0, totalCostIndex),
         overheadLine,
         ...layoutWithoutIncludedOverhead.slice(totalCostIndex),
       ]
-    : budgetAwareLayout
+    : overheadLine && !data.overheadIncludedInTotalCost
+      ? layoutWithoutIncludedOverhead
+      : budgetAwareLayout
 
   return (
     <div className="space-y-6">
@@ -139,6 +139,25 @@ export function FinancialsTab({ data }: {
           </div>
         </CardContent>
       </Card>
+
+      {overheadLine && !data.overheadIncludedInTotalCost ? (
+        <Card>
+          <CardContent className="flex flex-wrap items-center justify-between gap-4 p-4">
+            <div className="min-w-0">
+              <div className="flex flex-wrap items-center gap-2">
+                <h2 className="text-sm font-semibold text-slate-900 dark:text-slate-100">
+                  {overheadLine.label ?? measureLabel('overhead')}
+                </h2>
+                <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[11px] font-medium text-slate-600 dark:bg-slate-800 dark:text-slate-300">
+                  {t('cockpit.informationalOnly')}
+                </span>
+              </div>
+              <p className="text-xs text-slate-500 dark:text-slate-400">{t('measures.hints.overhead_informational')}</p>
+            </div>
+            <div className="text-lg font-semibold tabular-nums text-slate-900 dark:text-slate-100">{money(m.overhead ?? 0)}</div>
+          </CardContent>
+        </Card>
+      ) : null}
 
       {/* A cost ceiling is meaningful only when the project type explicitly
           uses capped/not-to-exceed pricing. Other types still show their
