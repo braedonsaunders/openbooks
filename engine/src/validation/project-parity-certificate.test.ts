@@ -50,6 +50,11 @@ test("project financial certification is effective-dated and penny exact", () =>
 test("strict certification binds fresh artifacts to one complete source population", () => {
   assert.match(source, /connectorWatermark/);
   assert.match(source, /max-sync-lag-minutes/);
+  assert.match(
+    source,
+    /certificateStartedAt\.getTime\(\) - completedAt/,
+    "the 24-hour operational SLA is based on run completion, not a source-local watermark timestamp",
+  );
   assert.match(source, /latest connector attempt/);
   assert.match(source, /kind in \('incremental', 'full_migration'\)/);
   assert.match(source, /sourceSnapshotCoherence/);
@@ -71,6 +76,11 @@ test("invoice parity covers business identity and settlement state, not only tot
     assert.match(source, new RegExp(`\"${field}\"`));
   }
   assert.match(source, /foreignamountunpaid/);
+  assert.match(
+    source,
+    /sourceInvoicesWithLedgerImpact\.has\(sourceRef\)[\s\S]*"posted"[\s\S]*"approved"/,
+    "zero-ledger source invoices are finalized as approved without manufacturing a zero-value journal",
+  );
 });
 
 test("Field Ticket parity follows the labor source of truth for each lifecycle", () => {

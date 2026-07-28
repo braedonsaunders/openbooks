@@ -471,6 +471,19 @@ const sourceProjects = readJson(paths.sourceProjects);
 const sourceInvoices = readJson(paths.sourceInvoices);
 const sourceInvoiceLines = readJson(paths.sourceInvoiceLines);
 const sourceProjectGl = readJson(paths.sourceProjectGl);
+const sourceInvoicesWithLedgerImpact = new Set(
+  (sourceInvoiceLines ?? [])
+    .filter(
+      (row) => {
+        const sourceAmount =
+          row.foreignamount != null && String(row.foreignamount) !== ""
+            ? row.foreignamount
+            : row.netamount;
+        return toUnits(String(sourceAmount ?? "0")) !== 0n;
+      },
+    )
+    .map((row) => String(row.transaction)),
+);
 const sourceAccountingBooks = sourceProjectGl
   ? [
       ...new Set(
@@ -661,7 +674,7 @@ const target = await withOrgContext(orgId, async () => {
          and status = 'ok'
          and synced_through is not null
          ${connectionId ? sql`and connection_id = ${connectionId}` : sql``}
-       order by synced_through desc, finished_at desc
+       order by finished_at desc nulls last, synced_through desc
        limit 1
     `),
     ),
@@ -703,13 +716,13 @@ const gates: Record<string, GateResult> = {};
 {
   const success = target.latestSuccessfulSync;
   const latest = target.latestSyncAttempt;
-  const syncedThrough = success
-    ? Date.parse(String(success.synced_through ?? ""))
+  const completedAt = success
+    ? Date.parse(String(success.finished_at ?? ""))
     : Number.NaN;
-  const lagMinutes = Number.isFinite(syncedThrough)
+  const lagMinutes = Number.isFinite(completedAt)
     ? Math.max(
         0,
-        (certificateStartedAt.getTime() - syncedThrough) / 60_000,
+        (certificateStartedAt.getTime() - completedAt) / 60_000,
       )
     : Number.POSITIVE_INFINITY;
   const stats = (success?.stats ?? null) as JsonRow | null;
@@ -738,7 +751,7 @@ const gates: Record<string, GateResult> = {};
   }
   if (lagMinutes > maxSyncLagMinutes) {
     problems.push(
-      `connector watermark is older than the ${maxSyncLagMinutes}-minute SLA`,
+      `latest successful connector run completed more than ${maxSyncLagMinutes} minutes ago`,
     );
   }
   if (latest && !latestAttemptSucceeded) {
@@ -756,7 +769,9 @@ const gates: Record<string, GateResult> = {};
       problems.length === 0
         ? `Exact connector verification through ${String(
             success!.synced_through,
-          )}; lag ${lagMinutes.toFixed(1)} minutes within the ${maxSyncLagMinutes}-minute SLA`
+          )}; run completed ${String(success!.finished_at)} (${lagMinutes.toFixed(
+            1,
+          )} minutes ago, within the ${maxSyncLagMinutes}-minute SLA)`
         : problems.join("; "),
   };
 }
@@ -1008,7 +1023,11 @@ if (!sourceInvoices) {
       ],
       [
         "status",
-        String(source.voided).toUpperCase() === "T" ? "voided" : "posted",
+        String(source.voided).toUpperCase() === "T"
+          ? "voided"
+          : sourceInvoicesWithLedgerImpact.has(sourceRef)
+            ? "posted"
+            : "approved",
         String(found.status ?? ""),
       ],
       [

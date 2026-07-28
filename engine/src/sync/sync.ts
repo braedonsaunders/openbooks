@@ -1422,12 +1422,12 @@ export async function runSync(
 
     // -- 5. deletions at source: mirrored automatically ------------------------
     // The source is the system of record: a transaction deleted (or
-    // cancelled) upstream must vanish here too — never linger as a
-    // report-only divergence. Each candidate is removed through the engine's
-    // guarded delete (settlements released first, immutable audit tombstone
-    // written in the same transaction). A candidate that cannot be removed —
-    // controller-closed GL period, downstream posted conversion — stays
-    // flagged and fails verification honestly.
+    // cancelled) upstream must become financially absent here too — never
+    // linger as a report-only divergence. Each candidate is corrected through
+    // an original-period reversal and void; settlement evidence is soft-
+    // unapplied, never erased, and the complete before/after is audited in the
+    // same transaction. A controller-closed period stays flagged and fails
+    // verification honestly.
     // On a FULL sweep the pulled set is the complete source universe, so any
     // previously-imported ref that vanished was deleted at source (our books
     // only ever contain refs the source once returned). Already-voided

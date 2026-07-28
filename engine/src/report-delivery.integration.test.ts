@@ -53,18 +53,29 @@ test("scheduled reports materialize once and retain artifact and delivery eviden
     assert.deepEqual(runs.rows[0]!.filters, { combinator: "and", rules: [] });
 
     const queueJobs: string[] = [];
+    // next_attempt_at is written by PostgreSQL with microsecond precision,
+    // while JavaScript Date is millisecond precision. Use an explicit
+    // observation instant after the durable outbox write so an equal
+    // millisecond cannot make the just-created run appear not-yet-due.
+    const queueDispatchAsOf = new Date(Date.now() + 1_000);
     await assert.rejects(
-      dispatchQueuedReportRuns(async () => { throw new Error("queue unavailable"); }),
+      dispatchQueuedReportRuns(
+        async () => { throw new Error("queue unavailable"); },
+        queueDispatchAsOf,
+      ),
       /queue unavailable/,
     );
     const afterQueueFailure = (await db.execute(sql`
       select status, dispatch_count from report_runs where id=${runs.rows[0]!.id}
     `)) as unknown as { rows: { status: string; dispatch_count: number }[] };
     assert.deepEqual(afterQueueFailure.rows[0], { status: "queued", dispatch_count: 0 });
-    await dispatchQueuedReportRuns(async (_data, options) => {
-      queueJobs.push(String(options?.jobId));
-      return {} as never;
-    });
+    await dispatchQueuedReportRuns(
+      async (_data, options) => {
+        queueJobs.push(String(options?.jobId));
+        return {} as never;
+      },
+      queueDispatchAsOf,
+    );
     assert.deepEqual(queueJobs, [`report-run|${runs.rows[0]!.id}|0`]);
 
     const pdf = Buffer.from("%PDF-1.7\nimmutable report evidence");

@@ -9,12 +9,14 @@ const before: TransactionAuditSnapshot = {
   document: { id: "doc-1", total: "10.0000" },
   lines: [{ id: "line-1", amount: "10.0000" }],
   taxComponents: [{ id: "tax-1", taxAmount: "1.3000" }],
+  applications: [{ id: "app-1", amount: "10.0000", unappliedAt: null }],
   glImpact: {
     entry: { id: "entry-1", status: "posted" },
     lines: [
       { id: "gl-1", amount: "10.0000" },
       { id: "gl-2", amount: "-10.0000" },
     ],
+    reversals: [],
   },
 };
 
