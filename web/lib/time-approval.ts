@@ -1,4 +1,6 @@
 import 'server-only'
+import { sql } from 'drizzle-orm'
+import { db, withOrg } from '@openbooks/engine/src/db.ts'
 import { laborCostingSettings, snapshotLaborCostRates } from '@openbooks/engine/src/labor-costing.ts'
 import { applyOverheadForTime } from '@openbooks/engine/src/overhead-apply.ts'
 import { postProjectLaborCost } from '@openbooks/engine/src/project-recognition.ts'
@@ -25,4 +27,43 @@ export async function runTimeApprovalEffects(orgId: string, actorId: string, tim
   await snapshotTimeBillRates(orgId, timeEntryIds)
   if (settings.mode === 'post') await postProjectLaborCost(orgId, actorId, timeEntryIds)
   await applyOverheadForTime(orgId, actorId, timeEntryIds)
+}
+
+export interface ApproveSubmittedTimeEntriesOptions {
+  orgId: string
+  actorId: string
+  employeePartyId: string
+  from: string
+  to: string
+}
+
+/**
+ * Approve submitted time and materialize every configured accounting effect as
+ * one tenant-scoped unit. Any snapshot or posting failure rolls the status
+ * transition back, so approved time can never be committed without its
+ * required financial evidence.
+ */
+export async function approveSubmittedTimeEntries(
+  options: ApproveSubmittedTimeEntriesOptions,
+): Promise<string[]> {
+  return withOrg(options.orgId, async () => {
+    const approved = (await db.execute(sql`
+      update time_entries
+         set status = 'approved',
+             approved_by = ${options.actorId},
+             approved_at = now(),
+             updated_at = now(),
+             updated_by = ${options.actorId}
+       where org_id = ${options.orgId}
+         and employee_party_id = ${options.employeePartyId}
+         and worked_on >= ${options.from}
+         and worked_on <= ${options.to}
+         and status = 'submitted'
+       returning id
+    `)) as unknown as { rows: { id: string }[] }
+
+    const ids = approved.rows.map((row) => row.id)
+    await runTimeApprovalEffects(options.orgId, options.actorId, ids)
+    return ids
+  })
 }

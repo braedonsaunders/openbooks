@@ -1,7 +1,11 @@
 import { sql } from "drizzle-orm";
-import { db } from "./db.ts";
+import { db, inDbTransaction } from "./db.ts";
 import { add, cmp, divRate, mulPercent, mulRate, neg, isZero, normalizeMoney } from "./money.ts";
-import { postProjectGlEntry, reverseProjectGlEntry, recognitionAccounts } from "./project-recognition.ts";
+import {
+  postProjectGlEntryWithinTransaction,
+  recognitionAccounts,
+  reverseProjectGlEntryWithinTransaction,
+} from "./project-recognition.ts";
 
 /**
  * Labor costing — resolve an employee's standard cost rate for a work date and
@@ -325,45 +329,40 @@ export interface ClearingReconciliation {
   perProject: { projectId: string; name: string; standard: string }[];
 }
 
-/**
- * The wash: standard labor postings CREDIT the clearing account at approval;
- * the payroll journal (imported through data-io or entered manually) DEBITS
- * the same account when actuals land. This reads both sides for a period.
- * Doctrine: the estimated components dissolve here — after payroll posts, job
- * labor cost is anchored by real GL and the residue is the payroll variance.
- */
-export async function laborClearingReconciliation(
+type LaborTransaction = Parameters<Parameters<typeof db.transaction>[0]>[0];
+type LaborExecutor = Pick<LaborTransaction, "execute">;
+
+async function laborClearingReconciliationFrom(
+  executor: LaborExecutor,
   orgId: string,
   periodStart: string,
   periodEnd: string,
   subsidiaryId: string,
-): Promise<ClearingReconciliation | null> {
-  const accts = await recognitionAccounts(orgId);
-  if (!accts.laborClearing) return null;
+  laborClearingAccountId: string,
+): Promise<ClearingReconciliation> {
   // Reversed originals AND their posted mirrors are both included everywhere so
   // reversal pairs cancel instead of double- or half-counting.
-  const sums = (await db.execute(sql`
+  const sums = (await executor.execute(sql`
     select
       coalesce(-sum(l.amount) filter (where e.origin = 'labor_burden'), 0) as standard_posted,
       coalesce(sum(l.amount) filter (where e.origin is distinct from 'labor_burden'
                                        and e.origin is distinct from 'payroll_variance'), 0) as payroll_posted
       from journal_lines l
       join journal_entries e on e.id = l.entry_id and e.status in ('posted', 'reversed')
-     where l.org_id = ${orgId} and l.account_id = ${accts.laborClearing}
+     where l.org_id = ${orgId} and l.account_id = ${laborClearingAccountId}
        and l.subsidiary_id = ${subsidiaryId}
        and e.posting_date >= ${periodStart} and e.posting_date <= ${periodEnd}`)) as unknown as {
     rows: { standard_posted: string; payroll_posted: string }[];
   };
-  const open = (await db.execute(sql`
+  const open = (await executor.execute(sql`
     select coalesce(sum(l.amount), 0) as balance
       from journal_lines l
       join journal_entries e on e.id = l.entry_id and e.status in ('posted', 'reversed')
-     where l.org_id = ${orgId} and l.account_id = ${accts.laborClearing}
+     where l.org_id = ${orgId} and l.account_id = ${laborClearingAccountId}
        and l.subsidiary_id = ${subsidiaryId}`)) as unknown as {
     rows: { balance: string }[];
   };
-  const [perProject, subsidiary] = await Promise.all([
-    db.execute(sql`
+  const perProject = (await executor.execute(sql`
     select l.project_id, p.name, sum(l.amount) as standard
       from journal_lines l
       join journal_entries e on e.id = l.entry_id and e.status in ('posted', 'reversed') and e.origin = 'labor_burden'
@@ -374,12 +373,15 @@ export async function laborClearingReconciliation(
      group by l.project_id, p.name
      having sum(l.amount) <> 0
      order by sum(l.amount) desc
-     limit 25`),
-    db.execute(sql`select base_currency from subsidiaries where org_id = ${orgId} and id = ${subsidiaryId} and is_active`),
-  ]) as unknown as [
-    { rows: { project_id: string; name: string; standard: string }[] },
-    { rows: { base_currency: string }[] },
-  ];
+     limit 25`)) as unknown as {
+    rows: { project_id: string; name: string; standard: string }[];
+  };
+  const subsidiary = (await executor.execute(sql`
+    select base_currency
+      from subsidiaries
+     where org_id = ${orgId} and id = ${subsidiaryId} and is_active`)) as unknown as {
+    rows: { base_currency: string }[];
+  };
   const currency = subsidiary.rows[0]?.base_currency;
   if (!currency) throw new Error("labor reconciliation subsidiary is not available");
 
@@ -396,6 +398,31 @@ export async function laborClearingReconciliation(
 }
 
 /**
+ * The wash: standard labor postings CREDIT the clearing account at approval;
+ * the payroll journal (imported through data-io or entered manually) DEBITS
+ * the same account when actuals land. This reads both sides for a period.
+ * Doctrine: the estimated components dissolve here — after payroll posts, job
+ * labor cost is anchored by real GL and the residue is the payroll variance.
+ */
+export async function laborClearingReconciliation(
+  orgId: string,
+  periodStart: string,
+  periodEnd: string,
+  subsidiaryId: string,
+): Promise<ClearingReconciliation | null> {
+  const accts = await recognitionAccounts(orgId);
+  if (!accts.laborClearing) return null;
+  return laborClearingReconciliationFrom(
+    db,
+    orgId,
+    periodStart,
+    periodEnd,
+    subsidiaryId,
+    accts.laborClearing,
+  );
+}
+
+/**
  * Post the period's residue out of clearing into the payroll variance account
  * (Deltek's pattern): DR variance / CR clearing when standards exceeded
  * payroll, mirrored otherwise. Idempotent per period — re-posting reverses
@@ -409,40 +436,73 @@ export async function postPayrollVariance(opts: {
   subsidiaryId: string;
 }): Promise<{ entryId: string | null; variance: string }> {
   const { orgId, actorId, periodStart, periodEnd, subsidiaryId } = opts;
-  const accts = await recognitionAccounts(orgId);
-  const varianceAccount = (
-    (await db.execute(sql`select settings->'controlAccounts'->>'payrollVariance' as a from orgs where id = ${orgId}`)) as unknown as {
-      rows: { a: string | null }[];
+  const entryNumber = `PVAR-${periodEnd}-${subsidiaryId.slice(0, 8)}`;
+  return inDbTransaction(async (tx) => {
+    // The organization row is the stable serialization point even before the
+    // first variance journal exists. It also freezes both account mappings for
+    // the complete reverse/recompute/repost unit.
+    const config = (await tx.execute(sql`
+      select settings->'controlAccounts'->>'laborClearing' as labor_clearing,
+             settings->'controlAccounts'->>'payrollVariance' as payroll_variance
+        from orgs
+       where id = ${orgId}
+       for update`)) as unknown as {
+      rows: { labor_clearing: string | null; payroll_variance: string | null }[];
+    };
+    const laborClearing = config.rows[0]?.labor_clearing;
+    const varianceAccount = config.rows[0]?.payroll_variance;
+    if (!laborClearing || !varianceAccount) {
+      throw new Error("labor clearing and payroll variance accounts must be configured");
     }
-  ).rows[0]?.a;
-  if (!accts.laborClearing || !varianceAccount) throw new Error("labor clearing and payroll variance accounts must be configured");
 
-  const prior = (await db.execute(sql`
-    select id from journal_entries
-     where org_id = ${orgId} and origin = 'payroll_variance' and status = 'posted'
-       and subsidiary_id = ${subsidiaryId}
-       and entry_number = ${`PVAR-${periodEnd}-${subsidiaryId.slice(0, 8)}`} limit 1`)) as unknown as { rows: { id: string }[] };
-  if (prior.rows[0]) await reverseProjectGlEntry(orgId, actorId, prior.rows[0].id);
+    const prior = (await tx.execute(sql`
+      select id
+        from journal_entries
+       where org_id = ${orgId} and origin = 'payroll_variance' and status = 'posted'
+         and subsidiary_id = ${subsidiaryId}
+         and entry_number = ${entryNumber}
+       order by created_at desc, id desc
+       limit 1
+       for update`)) as unknown as { rows: { id: string }[] };
+    if (prior.rows[0]) {
+      const reversal = await reverseProjectGlEntryWithinTransaction(
+        tx,
+        orgId,
+        actorId,
+        prior.rows[0].id,
+      );
+      if (reversal.status !== "reversed") {
+        throw new Error(`payroll variance journal ${prior.rows[0].id} could not be reversed`);
+      }
+    }
 
-  const rec = await laborClearingReconciliation(orgId, periodStart, periodEnd, subsidiaryId);
-  const variance = rec?.periodVariance ?? "0";
-  if (isZero(variance)) return { entryId: null, variance: "0" };
+    const rec = await laborClearingReconciliationFrom(
+      tx,
+      orgId,
+      periodStart,
+      periodEnd,
+      subsidiaryId,
+      laborClearing,
+    );
+    const variance = rec.periodVariance;
+    if (isZero(variance)) return { entryId: null, variance: "0" };
 
-  // Standards credited more than payroll debited → clearing carries a credit
-  // residue for the period: DR clearing / CR variance clears it (and vice versa).
-  const entryId = await postProjectGlEntry({
-    orgId,
-    actorId,
-    origin: "payroll_variance",
-    entryNumber: `PVAR-${periodEnd}-${subsidiaryId.slice(0, 8)}`,
-    postingDate: periodEnd,
-    memo: `Payroll variance ${periodStart} → ${periodEnd} (standard − actuals)`,
-    subsidiaryId,
-    currency: rec!.currency,
-    lines: [
-      { accountId: accts.laborClearing, amount: variance, memo: "Clear labor clearing residue" },
-      { accountId: varianceAccount, amount: neg(variance), memo: "Payroll variance" },
-    ],
+    // Standards credited more than payroll debited → clearing carries a credit
+    // residue for the period: DR clearing / CR variance clears it (and vice versa).
+    const entryId = await postProjectGlEntryWithinTransaction(tx, {
+      orgId,
+      actorId,
+      origin: "payroll_variance",
+      entryNumber,
+      postingDate: periodEnd,
+      memo: `Payroll variance ${periodStart} → ${periodEnd} (standard − actuals)`,
+      subsidiaryId,
+      currency: rec.currency,
+      lines: [
+        { accountId: laborClearing, amount: variance, memo: "Clear labor clearing residue" },
+        { accountId: varianceAccount, amount: neg(variance), memo: "Payroll variance" },
+      ],
+    });
+    return { entryId, variance };
   });
-  return { entryId, variance };
 }
