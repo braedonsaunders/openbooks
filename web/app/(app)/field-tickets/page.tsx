@@ -75,6 +75,17 @@ export default async function FieldTicketsPage({
                     and te.field_ticket_id = ${openTicket.id}
                     and te.time_type_id = tt.id
                )
+               or exists (
+                 select 1
+                   from field_ticket_labor_lines line
+                   join field_ticket_labor_snapshots snapshot
+                     on snapshot.id = line.snapshot_id
+                    and snapshot.org_id = line.org_id
+                  where line.org_id = ${orgId}
+                    and line.field_ticket_id = ${openTicket.id}
+                    and line.time_type_id = tt.id
+                    and snapshot.superseded_at is null
+               )
              )
            order by tt.bill_multiplier, tt.name`),
         db.execute(sql`

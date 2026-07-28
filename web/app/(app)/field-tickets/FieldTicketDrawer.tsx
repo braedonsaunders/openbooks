@@ -47,7 +47,7 @@ interface EntryRow {
   employee_name: string
   item_id: string | null
   item_name: string | null
-  time_type_id: string
+  time_type_id: string | null
   project_task_id: string | null
   project_task_name: string | null
   worked_on: string
@@ -146,6 +146,9 @@ function ticketWindow(period: string, anchor: string): { start: string; end: str
 function buildGrid(entries: EntryRow[]): GridRow[] {
   const byKey = new Map<string, GridRow>()
   for (const e of entries) {
+    // Draft/native input always has a time type. A null can only be retained
+    // historic snapshot evidence; approved tickets are read-only.
+    if (!e.time_type_id) continue
     const k = `${e.employee_party_id}|${e.item_id ?? ''}|${e.project_task_id ?? ''}`
     let row = byKey.get(k)
     if (!row) {
