@@ -30,6 +30,7 @@ export default async function Projects({
 
   const authz = await requirePermission('projects.read')
   const canManage = can(authz, 'projects.manage')
+  const canViewGl = can(authz, 'gl.read')
   const orgId = authz.user.orgId
   await requireProjectsFeature(orgId)
   const canViewApplications = can(authz, 'ar.read')
@@ -118,6 +119,7 @@ export default async function Projects({
                 parties={parties.rows}
                 subsidiaries={subsidiaries}
                 canManage={canManage}
+                canViewGl={canViewGl}
                 layout={resolvedForm?.layout}
                 cockpit={cockpit}
                 projectTypes={projectTypes}

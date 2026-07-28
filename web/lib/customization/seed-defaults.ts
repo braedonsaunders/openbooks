@@ -70,7 +70,7 @@ export async function ensureCustomizationDefaults(args: {
           const refreshBaseline =
             meta.key === 'project' &&
             form.name === DEFAULT_FORM_NAME &&
-            form.layout?.defaultLayoutVersion !== 1
+            form.layout?.defaultLayoutVersion !== layout.defaultLayoutVersion
           if (revealBaseline || addActions || refreshBaseline) {
             let nextLayout = {
               ...form.layout,

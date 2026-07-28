@@ -284,7 +284,8 @@ export async function loadRelatedTransactionDrawerData({
   }
 
   const config = DOC_KINDS[kind]
-  if (!config || !can(authz, readPermission(kind))) return null
+  const readPerm = kind === 'project_charge' ? 'projects.read' : readPermission(kind)
+  if (!config || !can(authz, readPerm)) return null
   const payload = await loadDocument(id)
   if (!payload || !canSeeDocument(payload.doc as Record<string, any>, partyId, authz)) return null
   const [headerDefs, lineDefs] = await Promise.all([
@@ -331,10 +332,10 @@ export async function loadRelatedTransactionDrawerData({
       subsidiaries,
       headerDefs: headerDefs as any,
       lineDefs: lineDefs as any,
-      // Project charges are created through their rate-aware service. The
-      // universal drawer is deliberately read-only so generic line editing
-      // cannot discard immutable cost/bill rate snapshots.
-      canCreate: kind === 'project_charge' ? false : can(authz, createPermission(kind)),
+      // A project charge uses the same explicit Edit cycle as every native
+      // transaction. Its rate-aware line snapshot remains read-only in the
+      // universal drawer; governed header amendments preserve that evidence.
+      canCreate: kind === 'project_charge' ? can(authz, 'projects.manage') : can(authz, createPermission(kind)),
       canPost: kind === 'project_charge' ? false : can(authz, postPermission(kind)),
       layout: resolvedForm.layout,
       availableLayouts: resolvedForm.available,

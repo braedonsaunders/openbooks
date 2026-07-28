@@ -16,7 +16,7 @@ import { formatMoney, mulPercent, sum } from '@openbooks/engine/src/money.ts'
  */
 export async function loadProjectCockpit(orgId: string, projectId: string): Promise<ProjectCockpitData> {
   const projectType = await loadProjectType(orgId, projectId)
-  const [financials, time, unbilled, billingRequests, invoicing, chargeRes, itemRes, equipmentRes, recognizedRes] = await Promise.all([
+  const [financials, time, unbilled, billingRequests, invoicing, chargeRes, itemRes, equipmentRes, recognizedRes, glRangeRes] = await Promise.all([
     resolveProjectFinancials(orgId, projectId, projectType.financialProfile),
     projectTimeSummary(orgId, projectId),
     projectUnbilled(orgId, projectId),
@@ -49,8 +49,16 @@ export async function loadProjectCockpit(orgId: string, projectId: string): Prom
                         where s.obligation_id = o.id and l.journal_entry_id is not null), 0)::numeric(19,4) as recognized
         from projects p
         left join revenue_contracts c on c.org_id = p.org_id and c.project_id = p.id
-        left join performance_obligations o on o.contract_id = c.id
+       left join performance_obligations o on o.contract_id = c.id
        where p.id = ${projectId} and p.org_id = ${orgId}`),
+    db.execute(sql`
+      select coalesce(min(e.posting_date), current_date)::text as "from",
+             greatest(coalesce(max(e.posting_date), current_date), current_date)::text as "to"
+        from journal_lines l
+        join journal_entries e on e.id = l.entry_id and e.org_id = l.org_id
+       where l.org_id = ${orgId}
+         and l.project_id = ${projectId}
+         and e.status in ('posted', 'reversed')`),
   ])
 
   const charges = (chargeRes as unknown as { rows: any[] }).rows
@@ -87,6 +95,7 @@ export async function loadProjectCockpit(orgId: string, projectId: string): Prom
       costByAccount: financials.costByAccount,
       projectType: financials.projectType,
       costBudgetApplies: projectType.financialProfile.totalPrice.method === 'not_to_exceed',
+      overheadIncludedInTotalCost: projectType.financialProfile.totalCost.components.includes('overhead'),
     },
     projectType: { key: projectType.key, name: projectType.name },
     time,
@@ -109,6 +118,8 @@ export async function loadProjectCockpit(orgId: string, projectId: string): Prom
       billValue: formatMoney(sum(charges.map((c) => String(c.billValue))), 2),
     },
     recognition,
+    glRange: ((glRangeRes as unknown as { rows: { from: string; to: string }[] }).rows[0]
+      ?? { from: new Date().toISOString().slice(0, 10), to: new Date().toISOString().slice(0, 10) }),
     transactions: financials.documents as ProjectCockpitData['transactions'],
   }
 }

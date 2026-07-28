@@ -93,7 +93,7 @@ const formTabPlacementSchema = z.object({
 export const formLayoutConfigSchema = z.object({
   schemaVersion: z.literal(1),
   defaultVisibilityVersion: z.literal(1).optional(),
-  defaultLayoutVersion: z.literal(1).optional(),
+  defaultLayoutVersion: z.union([z.literal(1), z.literal(2)]).optional(),
   recordType: recordTypeSchema,
   header: z.object({ groups: z.array(headerGroupSchema).min(1).max(20) }),
   lines: z.object({ columns: z.array(lineColumnPlacementSchema).max(200) }),
@@ -392,7 +392,7 @@ export function defaultFormLayout(recordType: RecordTypeKey): FormLayoutConfig {
   return {
     schemaVersion: 1,
     defaultVisibilityVersion: 1,
-    defaultLayoutVersion: 1,
+    defaultLayoutVersion: recordType === 'project' ? 2 : 1,
     recordType,
     header: {
       groups: [
@@ -553,7 +553,13 @@ export function refreshDefaultFormLayout(layout: FormLayoutConfig): FormLayoutCo
   customOnlyGroups[0]!.fields = [...builtIns, ...customOnlyGroups[0]!.fields]
 
   layout.header.groups = customOnlyGroups.filter((group, index) => index === 0 || group.fields.length > 0)
-  layout.defaultLayoutVersion = 1
+  if (defaults.tabs?.length) {
+    const existingTabs = new Map((layout.tabs ?? []).map((tab) => [tab.key, tab]))
+    const builtIns = defaults.tabs.map((tab) => ({ ...tab, ...existingTabs.get(tab.key) }))
+    const customTabs = (layout.tabs ?? []).filter((tab) => isCustomTabKey(tab.key))
+    layout.tabs = [...builtIns, ...customTabs]
+  }
+  layout.defaultLayoutVersion = defaults.defaultLayoutVersion
   return mergeRegisteredFieldsIntoLayout(layout)
 }
 

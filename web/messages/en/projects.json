@@ -160,6 +160,7 @@
       "operating_expense": "Operating expense"
     },
     "transactions": "Transactions",
+    "viewGeneralLedger": "View project G/L",
     "allTransactionTypes": "All transaction types",
     "noTransactionsTitle": "No transactions tagged to this job",
     "noTransactionsDescription": "Bills, invoices, expenses, orders, and journals with a line tagged to this project appear here.",
@@ -261,7 +262,8 @@
       "could_be_invoiced": "Value that can still be invoiced.",
       "committed_cost": "Open purchase-order commitments.",
       "total_price": "Contract / selling price of the job.",
-      "total_cost": "All cost incurred and committed."
+      "total_cost": "All cost incurred and committed.",
+      "overhead": "Included in total job cost and therefore already deducted in gross profit."
     },
     "overhead": "Overhead"
   },

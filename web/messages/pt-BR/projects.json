@@ -160,6 +160,7 @@
       "operating_expense": "Despesa operacional"
     },
     "transactions": "Transações",
+    "viewGeneralLedger": "Ver razão do projeto",
     "allTransactionTypes": "Todos os tipos de transação",
     "noTransactionsTitle": "Nenhuma transação vinculada a esta obra",
     "noTransactionsDescription": "Contas a pagar, faturas, despesas, pedidos e lançamentos com uma linha vinculada a este projeto aparecem aqui.",
@@ -261,7 +262,8 @@
       "could_be_invoiced": "Valor que ainda pode ser faturado.",
       "committed_cost": "Compromissos de pedidos de compra em aberto.",
       "total_price": "Preço de contrato / venda da obra.",
-      "total_cost": "Todo o custo incorrido e comprometido."
+      "total_cost": "Todo o custo incorrido e comprometido.",
+      "overhead": "Incluído no custo total da obra e, portanto, já deduzido do lucro bruto."
     }
   },
   "invoicingPref": {

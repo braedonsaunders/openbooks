@@ -310,7 +310,11 @@ export async function resolveProjectFinancials(
     // documents on the project (transactions tab).
     db.execute(sql`
       select d.id, d.kind, d.document_number as "documentNumber", d.document_date::text as "documentDate",
-             d.status, pt.display_name as "partyName", coalesce(sum(dl.amount),0) as amount
+             d.status, pt.display_name as "partyName",
+             case when d.kind = 'project_charge'
+                  then coalesce(sum(coalesce(dl.bill_amount, dl.amount)), 0)
+                  else coalesce(sum(dl.amount), 0)
+              end as amount
         from documents d
         left join document_lines dl on dl.document_id = d.id and dl.org_id = d.org_id
         left join parties pt on pt.id = d.party_id and pt.org_id = d.org_id

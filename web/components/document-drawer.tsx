@@ -370,33 +370,37 @@ export function DocumentDrawer({
       billingMethod: billingMethod || null,
       isFinalInvoice,
       custom: customValues,
-      lines: rows
-        .filter((r) => r.accountId && positiveAmount(r.amount))
-        .map((r) => ({
-          accountId: r.accountId,
-          itemId: r.itemId || null,
-          description: r.description,
-          quantity: r.quantity !== '' ? r.quantity : null,
-          unit: r.unit || null,
-          unitPrice: r.unitPrice !== '' ? r.unitPrice : null,
-          amount: r.amount,
-          taxCodeId: config.hasTax && r.taxProfileId.startsWith('code:') ? r.taxProfileId.slice(5) : null,
-          taxGroupId: config.hasTax && r.taxProfileId.startsWith('group:') ? r.taxProfileId.slice(6) : null,
-          taxOverridden: config.hasTax ? r.taxOverridden : false,
-          taxAmount: config.hasTax && r.taxOverridden ? r.taxAmount : null,
-          departmentId: r.departmentId || null,
-          projectId: r.projectId || null,
-          locationId: r.locationId || null,
-          classId: r.classId || null,
-          extraDims: Object.fromEntries(
-            segments
-              .map((segment) => [segment.key, r[`seg_${segment.key}`]])
-              .filter(([, value]) => value !== '' && value != null),
-          ),
-          custom: Object.fromEntries(
-            lineDefs.map((d) => [d.key, r[`cf_${d.key}`]]).filter(([, v]) => v !== '' && v != null),
-          ),
-        })),
+      ...(config.kind === 'project_charge'
+        ? {}
+        : {
+            lines: rows
+              .filter((r) => r.accountId && positiveAmount(r.amount))
+              .map((r) => ({
+                accountId: r.accountId,
+                itemId: r.itemId || null,
+                description: r.description,
+                quantity: r.quantity !== '' ? r.quantity : null,
+                unit: r.unit || null,
+                unitPrice: r.unitPrice !== '' ? r.unitPrice : null,
+                amount: r.amount,
+                taxCodeId: config.hasTax && r.taxProfileId.startsWith('code:') ? r.taxProfileId.slice(5) : null,
+                taxGroupId: config.hasTax && r.taxProfileId.startsWith('group:') ? r.taxProfileId.slice(6) : null,
+                taxOverridden: config.hasTax ? r.taxOverridden : false,
+                taxAmount: config.hasTax && r.taxOverridden ? r.taxAmount : null,
+                departmentId: r.departmentId || null,
+                projectId: r.projectId || null,
+                locationId: r.locationId || null,
+                classId: r.classId || null,
+                extraDims: Object.fromEntries(
+                  segments
+                    .map((segment) => [segment.key, r[`seg_${segment.key}`]])
+                    .filter(([, value]) => value !== '' && value != null),
+                ),
+                custom: Object.fromEntries(
+                  lineDefs.map((d) => [d.key, r[`cf_${d.key}`]]).filter(([, v]) => v !== '' && v != null),
+                ),
+              })),
+          }),
     }
   }, [isTransfer, transfer, partyId, paymentCardId, documentDate, dueDate, referenceNumber, memo, postingDate, departmentId, projectIdHeader, locationId, classId, subsidiaryId, multiSub, expectedPayDate, paymentHoldReason, internalNotes, billingMethod, isFinalInvoice, customValues, extraDims, rows, lineDefs, segments, config])
 
@@ -877,7 +881,7 @@ export function DocumentDrawer({
         return (
           <>
             <FieldLabel fieldName={label}>{label}</FieldLabel>
-            {isEditable ? (
+            {isEditable && config.kind !== 'project_charge' ? (
               <SearchSelect options={(projects ?? []).map((pr) => ({ value: pr.id, label: pr.name ?? '' }))} value={projectIdHeader} onChange={(v) => setProjectIdHeader(v ?? '')} placeholder="—" />
             ) : (<p className="text-sm">{optName(projects, doc.project_id)}</p>)}
           </>
@@ -909,7 +913,7 @@ export function DocumentDrawer({
         return (
           <>
             <FieldLabel fieldName={label}>{label}</FieldLabel>
-            {isEditable && !isPosted ? (
+            {isEditable && !isPosted && config.kind !== 'project_charge' ? (
               <SearchSelect
                 options={subsidiaryOpts}
                 value={subsidiaryId}
@@ -1323,7 +1327,7 @@ export function DocumentDrawer({
               rows={rows}
               onRowsChange={setRows}
               emptyRow={emptyLine}
-              readOnly={!editable}
+              readOnly={!editable || config.kind === 'project_charge'}
             />
           </div>
         ) : null}

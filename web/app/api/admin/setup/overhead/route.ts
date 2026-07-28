@@ -80,9 +80,21 @@ export async function POST(req: Request) {
           const components = profile.totalCost.components.includes('overhead') || overhead.method === 'none'
             ? profile.totalCost.components
             : [...profile.totalCost.components, 'overhead' as const]
-          const layout = profile.layout.some((line) => line.measure === 'overhead') || overhead.method === 'none'
+          const layout = overhead.method === 'none'
             ? profile.layout
-            : [...profile.layout, { measure: 'overhead' as const, variant: 'line' as const }]
+            : (() => {
+                const overheadLine = profile.layout.find((line) => line.measure === 'overhead')
+                  ?? { measure: 'overhead' as const, variant: 'line' as const }
+                const withoutOverhead = profile.layout.filter((line) => line.measure !== 'overhead')
+                const totalCostIndex = withoutOverhead.findIndex((line) => line.measure === 'total_cost')
+                return totalCostIndex >= 0
+                  ? [
+                      ...withoutOverhead.slice(0, totalCostIndex),
+                      overheadLine,
+                      ...withoutOverhead.slice(totalCostIndex),
+                    ]
+                  : [...withoutOverhead, overheadLine]
+              })()
           await publishProjectFinancialProfileInTransaction(tx, {
             orgId,
             projectTypeId: id,

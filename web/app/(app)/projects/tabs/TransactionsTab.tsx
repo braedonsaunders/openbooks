@@ -93,12 +93,16 @@ export function TransactionsTab({
         showList={false}
       />
       <div className="space-y-2">
-        <div className="flex flex-wrap items-center justify-between gap-2">
-          <h2 className="text-sm font-semibold text-slate-900 dark:text-slate-100">{t('cockpit.transactions')}</h2>
+        <h2 className="text-sm font-semibold text-slate-900 dark:text-slate-100">{t('cockpit.transactions')}</h2>
+      <PagedTable
+        rows={visibleTransactions}
+        rowKey={(r) => r.id}
+        searchable
+        toolbarAfter={(
           <Select
             value={kind}
             onChange={(event) => setKind(event.target.value)}
-            className="w-auto min-w-44"
+            className="w-auto min-w-40"
             aria-label={tCommon('labels.type')}
           >
             <option value="">{t('cockpit.allTransactionTypes')}</option>
@@ -108,11 +112,7 @@ export function TransactionsTab({
               </option>
             ))}
           </Select>
-        </div>
-      <PagedTable
-        rows={visibleTransactions}
-        rowKey={(r) => r.id}
-        searchable
+        )}
         empty={<EmptyState title={t('cockpit.noTransactionsTitle')} description={t('cockpit.noTransactionsDescription')} />}
         columns={[
             { key: 'date', header: tCommon('labels.date'), cell: (r) => <span className="text-slate-500 dark:text-slate-400">{r.documentDate}</span> },

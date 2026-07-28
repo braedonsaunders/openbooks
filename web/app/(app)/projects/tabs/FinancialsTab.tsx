@@ -6,7 +6,6 @@ import { useTranslations } from 'next-intl'
 import { Card, CardContent, cn } from '@openbooks/ui'
 import type { PnlLine } from '@openbooks/schema'
 import { PagedTable } from '../../../../components/paged-table'
-import { RecognitionCard, type RecognitionStatus } from './RecognitionCard'
 import { add, cmp, neg } from '@openbooks/engine/src/money.ts'
 
 interface CategoryRow { category: string; amount: string }
@@ -22,12 +21,14 @@ export interface FinancialsData {
   projectType: string | null
   /** A tenant-configured capped project type owns cost-budget semantics. */
   costBudgetApplies: boolean
+  /** Whether statistical overhead is already a component of total job cost. */
+  overheadIncludedInTotalCost: boolean
 }
 
 /** Measures that read better as "good when positive, bad when negative". */
 const SIGNED_GOOD = new Set(['gross_profit', 'could_be_invoiced', 'remaining_budget'])
 /** Measures that carry an explanatory hint. */
-const HINTED = new Set(['invoiced_to_date', 'could_be_invoiced', 'committed_cost', 'total_price', 'total_cost'])
+const HINTED = new Set(['invoiced_to_date', 'could_be_invoiced', 'committed_cost', 'total_price', 'total_cost', 'overhead'])
 
 function Line({ label, hint, value, variant, tone }: {
   label: string; hint?: string; value: ReactNode; variant: 'line' | 'subtotal' | 'total'; tone?: 'good' | 'bad'
@@ -49,11 +50,8 @@ function Line({ label, hint, value, variant, tone }: {
   )
 }
 
-export function FinancialsTab({ data, projectId, recognition, canManage }: {
+export function FinancialsTab({ data }: {
   data: FinancialsData
-  projectId: string
-  recognition: RecognitionStatus | null
-  canManage: boolean
 }) {
   const { money } = useMoney()
   const t = useTranslations('projects')
@@ -89,46 +87,65 @@ export function FinancialsTab({ data, projectId, recognition, canManage }: {
     { key: 'category' as const, label: t('cockpit.costByCategory') },
     { key: 'account' as const, label: t('cockpit.costByAccount') },
   ]
-  const visibleLayout = data.costBudgetApplies
+  const budgetAwareLayout = data.costBudgetApplies
     ? data.layout
     : data.layout.filter((line) => line.measure !== 'cost_budget' && line.measure !== 'remaining_budget')
+  // Overhead is a component of total cost for profiles that opt into it. Some
+  // older saved profiles appended the display line after gross profit, which
+  // visually implied a second deduction even though the calculation already
+  // included it. Keep the tenant-authored line treatment, but place it inside
+  // the cost block immediately before Total job cost.
+  const overheadLine = data.overheadIncludedInTotalCost
+    ? budgetAwareLayout.find((line) => line.measure === 'overhead')
+    : undefined
+  const layoutWithoutIncludedOverhead = overheadLine
+    ? budgetAwareLayout.filter((line) => line.measure !== 'overhead')
+    : budgetAwareLayout
+  const totalCostIndex = layoutWithoutIncludedOverhead.findIndex((line) => line.measure === 'total_cost')
+  const visibleLayout = overheadLine && totalCostIndex >= 0
+    ? [
+        ...layoutWithoutIncludedOverhead.slice(0, totalCostIndex),
+        overheadLine,
+        ...layoutWithoutIncludedOverhead.slice(totalCostIndex),
+      ]
+    : budgetAwareLayout
 
   return (
     <div className="space-y-6">
-      <div className="grid gap-6 lg:grid-cols-2">
-        {/* Profile-driven P&L statement */}
-        <Card>
-          <CardContent className="p-0">
-            <div className="border-b border-slate-200 px-4 py-3 dark:border-slate-800">
-              <h2 className="text-sm font-semibold text-slate-900 dark:text-slate-100">{t('cockpit.pnlTitle')}</h2>
-            </div>
-            <div className="divide-y divide-slate-100 dark:divide-slate-800/60">
-              {visibleLayout.map((line, i) => {
-                const v = m[line.measure] ?? 0
-                if (line.hideWhenZero && v === 0) return null
-                return (
-                  <Line
-                    key={`${line.measure}-${i}`}
-                    label={line.label ?? measureLabel(line.measure)}
-                    hint={line.variant === 'line' ? measureHint(line.measure) : undefined}
-                    value={fmt(line.measure, v)}
-                    variant={line.variant}
-                    tone={line.variant === 'total' && line.measure === 'gross_profit'
-                      ? (cmp(String(v), '0') > 0 ? 'good' : cmp(String(v), '0') < 0 ? 'bad' : undefined)
-                      : measureTone(line.measure, v)}
-                  />
-                )
-              })}
-            </div>
-          </CardContent>
-        </Card>
+      {/* Profile-driven P&L statement. The full-width presentation keeps the
+          revenue → cost → profit sequence visually explicit. */}
+      <Card>
+        <CardContent className="p-0">
+          <div className="border-b border-slate-200 px-4 py-3 dark:border-slate-800">
+            <h2 className="text-sm font-semibold text-slate-900 dark:text-slate-100">{t('cockpit.pnlTitle')}</h2>
+          </div>
+          <div className="divide-y divide-slate-100 dark:divide-slate-800/60">
+            {visibleLayout.map((line, i) => {
+              const v = m[line.measure] ?? 0
+              if (line.hideWhenZero && v === 0) return null
+              return (
+                <Line
+                  key={`${line.measure}-${i}`}
+                  label={line.label ?? measureLabel(line.measure)}
+                  hint={line.variant === 'line' ? measureHint(line.measure) : undefined}
+                  value={fmt(line.measure, v)}
+                  variant={line.variant}
+                  tone={line.variant === 'total' && line.measure === 'gross_profit'
+                    ? (cmp(String(v), '0') > 0 ? 'good' : cmp(String(v), '0') < 0 ? 'bad' : undefined)
+                    : measureTone(line.measure, v)}
+                />
+              )
+            })}
+          </div>
+        </CardContent>
+      </Card>
 
-        {/* A cost ceiling is meaningful only when the project type explicitly
-            uses capped/not-to-exceed pricing. Other types still show their
-            actual and committed costs in the statement and breakdown below. */}
-        {data.costBudgetApplies ? (
-          <Card>
-            <CardContent className="space-y-3 p-4">
+      {/* A cost ceiling is meaningful only when the project type explicitly
+          uses capped/not-to-exceed pricing. Other types still show their
+          actual and committed costs in the statement and breakdown below. */}
+      {data.costBudgetApplies ? (
+        <Card>
+          <CardContent className="space-y-3 p-4">
             <div className="flex items-center justify-between">
               <h2 className="text-sm font-semibold text-slate-900 dark:text-slate-100">{t('cockpit.budgetBarTitle')}</h2>
               <span className={cn('text-sm font-medium tabular-nums', overBudget ? 'text-red-600 dark:text-red-400' : 'text-teal-700 dark:text-teal-300')}>
@@ -147,13 +164,8 @@ export function FinancialsTab({ data, projectId, recognition, canManage }: {
               <span className="flex items-center gap-1.5"><span className="inline-block h-2.5 w-2.5 rounded-sm bg-amber-400" /> {t('cockpit.committedAmount', { amount: money(committedCost) })}</span>
               <span className="flex items-center gap-1.5"><span className="inline-block h-3 w-0.5 bg-slate-900 dark:bg-white" /> {t('cockpit.costBudgetAmount', { amount: money(costBudget) })}</span>
             </div>
-            </CardContent>
-          </Card>
-        ) : null}
-      </div>
-
-      {recognition ? (
-        <RecognitionCard projectId={projectId} status={recognition} canManage={canManage} />
+          </CardContent>
+        </Card>
       ) : null}
 
       {/* Cost breakdown — subtabs, never side-by-side (repository conventions). */}
