@@ -160,13 +160,14 @@
       "operating_expense": "营业费用"
     },
     "transactions": "交易",
+    "allTransactionTypes": "所有交易类型",
     "noTransactionsTitle": "没有标记到此作业的交易",
     "noTransactionsDescription": "带有明细标记到此项目的应付账单、发票、费用、订单和日记账将显示在此处。",
     "tabs": {
       "overview": "概览",
       "work_breakdown": "工作分解",
       "financials": "财务与预算",
-      "cost_time": "成本与工时",
+      "cost_time": "小时与工时",
       "transactions": "交易",
       "billing": "开票",
       "charges": "计费项"

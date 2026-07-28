@@ -76,6 +76,8 @@ export const DOC_TYPE_META: Record<string, DocTypeMeta> = {
   transfer: meta('transfer', 'transfer', <ArrowLeftRight className={ICON} />, P.zinc),
   card_charge: meta('cardCharge', 'cardChargeShort', <CreditCard className={ICON} />, P.rose),
   card_refund: meta('cardRefund', 'cardRefundShort', <CreditCard className={ICON} />, P.pink),
+  project_charge: meta('projectCharge', 'projectChargeShort', <ReceiptText className={ICON} />, P.indigo),
+  field_ticket: meta('fieldTicket', 'fieldTicketShort', <ClipboardCheck className={ICON} />, P.cyan),
 }
 
 const humanize = (kind: string) => kind.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase())

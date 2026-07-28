@@ -173,7 +173,6 @@ test('the project cockpit ships a customizable tab list', () => {
     'schedule',
     'financials',
     'cost_time',
-    'charges',
     'billing',
     'transactions',
   ])
@@ -205,7 +204,6 @@ test('saved tab layouts keep their order, gain new tabs, and drop retired ones',
     'schedule',
     'financials',
     'cost_time',
-    'charges',
     'transactions',
   ])
   assert.equal(resolved.find((tab) => tab.key === 'work_breakdown')?.visible, false)

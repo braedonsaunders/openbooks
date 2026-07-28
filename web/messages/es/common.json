@@ -82,7 +82,11 @@
     "cardCharge": "Cargo de tarjeta",
     "cardChargeShort": "Tarjeta",
     "cardRefund": "Reembolso de tarjeta",
-    "cardRefundShort": "Reemb. tarjeta"
+    "cardRefundShort": "Reemb. tarjeta",
+    "projectCharge": "Cargo de proyecto",
+    "projectChargeShort": "Cargo",
+    "fieldTicket": "Parte de obra",
+    "fieldTicketShort": "Parte"
   },
   "labels": {
     "name": "Nombre",
@@ -102,6 +106,10 @@
     "currency": "Moneda",
     "quantity": "Cantidad",
     "rate": "Tarifa",
+    "costRate": "Tarifa de costo",
+    "billRate": "Tarifa de facturación",
+    "billAmount": "Importe facturable",
+    "billable": "Facturable",
     "number": "Número",
     "reference": "Referencia",
     "email": "Correo electrónico",

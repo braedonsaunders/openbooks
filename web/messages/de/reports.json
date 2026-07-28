@@ -904,6 +904,9 @@
     "noCustomer": "Nicht zugeordneter Kunde",
     "expandCustomer": "{customer} aufklappen",
     "collapseCustomer": "{customer} zuklappen",
+    "projectScope": "Projekte",
+    "activeProjects": "Aktive Projekte",
+    "allProjects": "Alle Projekte",
     "columns": {
       "customerJob": "Kunde / Auftrag",
       "project": "Projekt",

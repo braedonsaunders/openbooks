@@ -160,6 +160,7 @@
       "operating_expense": "Operating expense"
     },
     "transactions": "Transactions",
+    "allTransactionTypes": "All transaction types",
     "noTransactionsTitle": "No transactions tagged to this job",
     "noTransactionsDescription": "Bills, invoices, expenses, orders, and journals with a line tagged to this project appear here.",
     "tabs": {
@@ -167,7 +168,7 @@
       "work_breakdown": "Work breakdown",
       "schedule": "Schedule",
       "financials": "Financials & budget",
-      "cost_time": "Cost & Time",
+      "cost_time": "Hours & Time",
       "transactions": "Transactions",
       "billing": "Billing",
       "charges": "Charges"

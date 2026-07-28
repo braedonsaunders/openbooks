@@ -20,6 +20,7 @@
     "vendor": "Vendor",
     "employee": "Employee",
     "project": "Project",
+    "project_charge": "Project charge",
     "field_ticket": "Field ticket",
     "fixed_asset": "Fixed asset"
   },

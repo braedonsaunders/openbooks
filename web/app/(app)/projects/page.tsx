@@ -17,6 +17,7 @@ import { loadProjectCockpit } from './_cockpit-data'
 import { NewProjectButton } from './NewProjectButton'
 import { NewProjectRedirect } from './NewProjectRedirect'
 import { ProjectDrawer } from './ProjectDrawer'
+import { RelatedTransactionDrawer } from '../../../components/related-transaction-drawer'
 
 export const dynamic = 'force-dynamic'
 
@@ -35,6 +36,8 @@ export default async function Projects({
 
   const sp = await searchParams
   const projectId = typeof sp.project === 'string' ? sp.project : undefined
+  const projectTransactionId = pickString(sp.projectTxn)
+  const projectTransactionKind = pickString(sp.projectTxnKind)
 
   const openProject =
     projectId && projectId !== 'new' && isUuid(projectId) ? await loadProject(projectId, orgId) : null
@@ -120,6 +123,16 @@ export default async function Projects({
                 projectTypes={projectTypes}
                 schedulingEnabled={schedulingEnabled}
                 locale={locale}
+                initialTab={pickString(sp.projectTab) ?? 'overview'}
+              />
+            ) : null}
+            {openProject && projectTransactionId && isUuid(projectTransactionId) && projectTransactionKind ? (
+              <RelatedTransactionDrawer
+                id={projectTransactionId}
+                kind={projectTransactionKind}
+                projectId={String(openProject.project.id)}
+                authz={authz}
+                formLayoutId={pickString(sp.form)}
               />
             ) : null}
           </>

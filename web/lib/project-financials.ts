@@ -311,10 +311,12 @@ export async function resolveProjectFinancials(
     db.execute(sql`
       select d.id, d.kind, d.document_number as "documentNumber", d.document_date::text as "documentDate",
              d.status, pt.display_name as "partyName", coalesce(sum(dl.amount),0) as amount
-        from documents d join document_lines dl on dl.document_id = d.id
-        left join parties pt on pt.id = d.party_id
-       where dl.org_id = ${orgId} and dl.project_id = ${projectId}
-       group by d.id, pt.display_name order by d.document_date desc, d.document_number desc limit 500`),
+        from documents d
+        left join document_lines dl on dl.document_id = d.id and dl.org_id = d.org_id
+        left join parties pt on pt.id = d.party_id and pt.org_id = d.org_id
+       where d.org_id = ${orgId}
+         and (d.project_id = ${projectId} or dl.project_id = ${projectId})
+       group by d.id, pt.display_name order by d.document_date desc, d.document_number desc`),
   ]) as unknown as { rows: any[] }[]
 
   const adjustments = await financialAdjustmentsPromise

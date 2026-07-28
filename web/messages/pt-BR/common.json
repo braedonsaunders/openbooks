@@ -66,7 +66,9 @@
     "customerPayment": "Pagamento de cliente", "customerPaymentShort": "Pgto cliente",
     "check": "Cheque", "bankDeposit": "Depósito bancário", "deposit": "Depósito",
     "transfer": "Transferência", "cardCharge": "Débito no cartão", "cardChargeShort": "Cartão",
-    "cardRefund": "Estorno no cartão", "cardRefundShort": "Estorno cartão"
+    "cardRefund": "Estorno no cartão", "cardRefundShort": "Estorno cartão",
+    "projectCharge": "Apropriação de projeto", "projectChargeShort": "Apropriação",
+    "fieldTicket": "Boletim de campo", "fieldTicketShort": "Boletim"
   },
   "labels": {
     "name": "Nome",
@@ -86,6 +88,10 @@
     "currency": "Moeda",
     "quantity": "Quantidade",
     "rate": "Valor unitário",
+    "costRate": "Taxa de custo",
+    "billRate": "Taxa de faturamento",
+    "billAmount": "Valor faturável",
+    "billable": "Faturável",
     "number": "Número",
     "reference": "Referência",
     "email": "E-mail",

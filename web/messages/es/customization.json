@@ -20,6 +20,7 @@
     "vendor": "Proveedor",
     "employee": "Empleado",
     "project": "Proyecto",
+    "project_charge": "Cargo de proyecto",
     "field_ticket": "Parte de obra",
     "fixed_asset": "Activo fijo"
   },

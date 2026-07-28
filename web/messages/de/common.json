@@ -66,7 +66,9 @@
     "customerPayment": "Kundenzahlung", "customerPaymentShort": "Kd.-Zahlung",
     "check": "Scheck", "bankDeposit": "Bankeinzahlung", "deposit": "Einzahlung",
     "transfer": "Umbuchung", "cardCharge": "Kartenbelastung", "cardChargeShort": "Karte",
-    "cardRefund": "Kartenerstattung", "cardRefundShort": "Kartenerstattung"
+    "cardRefund": "Kartenerstattung", "cardRefundShort": "Kartenerstattung",
+    "projectCharge": "Projektbelastung", "projectChargeShort": "Belastung",
+    "fieldTicket": "Regiebericht", "fieldTicketShort": "Bericht"
   },
   "labels": {
     "name": "Name",
@@ -86,6 +88,10 @@
     "currency": "Währung",
     "quantity": "Menge",
     "rate": "Satz",
+    "costRate": "Kostensatz",
+    "billRate": "Abrechnungssatz",
+    "billAmount": "Abrechnungsbetrag",
+    "billable": "Abrechenbar",
     "number": "Nummer",
     "reference": "Referenz",
     "email": "E-Mail",

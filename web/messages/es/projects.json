@@ -160,13 +160,14 @@
       "operating_expense": "Gasto operativo"
     },
     "transactions": "Transacciones",
+    "allTransactionTypes": "Todos los tipos de transacción",
     "noTransactionsTitle": "No hay transacciones etiquetadas a esta obra",
     "noTransactionsDescription": "Las facturas de proveedor, facturas, gastos, órdenes y asientos con una línea etiquetada a este proyecto aparecerán aquí.",
     "tabs": {
       "overview": "Resumen",
       "work_breakdown": "Desglose del trabajo",
       "financials": "Finanzas y presupuesto",
-      "cost_time": "Costo y tiempo",
+      "cost_time": "Horas y tiempo",
       "transactions": "Transacciones",
       "billing": "Facturación",
       "charges": "Cargos"

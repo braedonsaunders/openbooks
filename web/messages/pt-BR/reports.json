@@ -904,6 +904,9 @@
     "noCustomer": "Cliente não atribuído",
     "expandCustomer": "Expandir {customer}",
     "collapseCustomer": "Recolher {customer}",
+    "projectScope": "Projetos",
+    "activeProjects": "Projetos ativos",
+    "allProjects": "Todos os projetos",
     "columns": {
       "customerJob": "Cliente / Projeto",
       "project": "Projeto",

@@ -82,7 +82,11 @@
     "cardCharge": "Dépense par carte",
     "cardChargeShort": "Carte",
     "cardRefund": "Remboursement par carte",
-    "cardRefundShort": "Remb. carte"
+    "cardRefundShort": "Remb. carte",
+    "projectCharge": "Charge de projet",
+    "projectChargeShort": "Charge",
+    "fieldTicket": "Bon de régie",
+    "fieldTicketShort": "Bon"
   },
   "labels": {
     "name": "Nom",
@@ -102,6 +106,10 @@
     "currency": "Devise",
     "quantity": "Quantité",
     "rate": "Taux",
+    "costRate": "Taux de coût",
+    "billRate": "Taux de facturation",
+    "billAmount": "Montant facturable",
+    "billable": "Facturable",
     "number": "Numéro",
     "reference": "Référence",
     "email": "Courriel",

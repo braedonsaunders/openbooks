@@ -904,6 +904,9 @@
     "noCustomer": "Unassigned customer",
     "expandCustomer": "Expand {customer}",
     "collapseCustomer": "Collapse {customer}",
+    "projectScope": "Projects",
+    "activeProjects": "Active projects",
+    "allProjects": "All projects",
     "columns": {
       "customerJob": "Customer / Job",
       "project": "Project",

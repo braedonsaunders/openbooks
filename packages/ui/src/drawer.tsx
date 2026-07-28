@@ -412,7 +412,7 @@ export function UrlDrawer({
     const closeParams = new URL(closeHref, window.location.origin).searchParams
     const isRelatedRecordHost = closeParams.has('drawerReturn')
     setNestedContext(safeReturn && !isRelatedRecordHost
-      ? { closeHref: safeReturn, stacked: currentParams.has('relatedParty') || currentParams.has('reportRecord') }
+      ? { closeHref: safeReturn, stacked: currentParams.has('relatedParty') || currentParams.has('reportRecord') || currentParams.has('projectTxn') }
       : null)
   }, [closeHref, contextualReturn])
   const resolvedCloseHref = nestedContext?.closeHref ?? closeHref

@@ -1310,6 +1310,8 @@ export async function transactionDetail(opts: {
   /** Project rows without a customer, kept separate from an unfiltered total. */
   unassignedProjectCustomer?: boolean
   projectSearch?: string
+  /** Restrict supporting entries to projects whose authoritative active flag is on. */
+  activeProjectsOnly?: boolean
   profitSigned?: boolean
   cashOnly?: boolean
   limit?: number
@@ -1360,8 +1362,14 @@ export async function transactionDetail(opts: {
            and (p.name ilike ${`%${opts.projectSearch.trim()}%`} or cu.display_name ilike ${`%${opts.projectSearch.trim()}%`})
       )`
     : sql``
+  const activeProjectFilter = opts.activeProjectsOnly
+    ? sql` and l.project_id in (
+        select p.id from projects p
+         where p.org_id = ${orgId} and p.is_active
+      )`
+    : sql``
 
-  const where = sql`l.org_id = ${orgId} and e.org_id = ${orgId} and a.org_id = ${orgId} and ${acctFilter} and ${dateFilter} and ${dimWhere(opts.dims)}${cashFilter}${partyFilter}${projectCustomerFilter}${projectSearchFilter}`
+  const where = sql`l.org_id = ${orgId} and e.org_id = ${orgId} and a.org_id = ${orgId} and ${acctFilter} and ${dateFilter} and ${dimWhere(opts.dims)}${cashFilter}${partyFilter}${projectCustomerFilter}${projectSearchFilter}${activeProjectFilter}`
   const readerNet = opts.profitSigned
     ? sql`-l.amount`
     : sql`case when a.type in ${[...CREDIT_NORMAL]} then -l.amount else l.amount end`
@@ -1514,7 +1522,7 @@ export function groupProjectProfitabilityRows(rows: ProjectProfitRow[]): Project
 export async function projectProfitability(
   from: string,
   to: string,
-  opts: { dims?: DimFilter; customerId?: string; search?: string; orgId?: string } = {},
+  opts: { dims?: DimFilter; customerId?: string; search?: string; projectScope?: 'active' | 'all'; orgId?: string } = {},
 ): Promise<ProjectProfitResult> {
   const orgId = await resolveOrgId(opts.orgId)
   const r = (await db.execute(sql`
@@ -1551,6 +1559,7 @@ export async function projectProfitability(
       left join parties cu on cu.id = p.customer_id and cu.org_id = p.org_id
      where p.org_id = ${orgId}
        and (pl.project_id is not null or hrs.project_id is not null)
+       ${opts.projectScope === 'all' ? sql`` : sql`and p.is_active`}
        ${opts.customerId ? sql`and p.customer_id = ${opts.customerId}` : sql``}
        ${opts.search?.trim() ? sql`and (p.name ilike ${`%${opts.search.trim()}%`} or cu.display_name ilike ${`%${opts.search.trim()}%`})` : sql``}
      order by (coalesce(pl.revenue, 0) - coalesce(pl.cogs, 0) - coalesce(pl.expenses, 0)) desc, p.name

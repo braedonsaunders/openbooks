@@ -66,7 +66,9 @@
     "customerPayment": "得意先入金", "customerPaymentShort": "得意先入金",
     "check": "小切手", "bankDeposit": "銀行預入", "deposit": "預入",
     "transfer": "振替", "cardCharge": "カード請求", "cardChargeShort": "カード",
-    "cardRefund": "カード返金", "cardRefundShort": "カード返金"
+    "cardRefund": "カード返金", "cardRefundShort": "カード返金",
+    "projectCharge": "プロジェクトチャージ", "projectChargeShort": "チャージ",
+    "fieldTicket": "作業票", "fieldTicketShort": "作業票"
   },
   "labels": {
     "name": "名前",
@@ -86,6 +88,10 @@
     "currency": "通貨",
     "quantity": "数量",
     "rate": "レート",
+    "costRate": "原価レート",
+    "billRate": "請求レート",
+    "billAmount": "請求金額",
+    "billable": "請求可能",
     "number": "番号",
     "reference": "参照",
     "email": "メール",

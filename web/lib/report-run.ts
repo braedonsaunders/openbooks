@@ -249,7 +249,13 @@ export async function resolveReport(kind: ReportKind, p: URLSearchParams, ctx: R
       return {
         render: 'data',
         data: projectProfitabilityExportData(
-          await projectProfitability(period.from, period.to, { dims, customerId: q.customerId, search: p.get('q') ?? undefined, orgId }),
+          await projectProfitability(period.from, period.to, {
+            dims,
+            customerId: q.customerId,
+            search: p.get('q') ?? undefined,
+            projectScope: q.projectScope,
+            orgId,
+          }),
           t,
         ),
       }

@@ -160,13 +160,14 @@
       "operating_expense": "Betriebsausgabe"
     },
     "transactions": "Transaktionen",
+    "allTransactionTypes": "Alle Transaktionstypen",
     "noTransactionsTitle": "Keine diesem Auftrag zugeordneten Transaktionen",
     "noTransactionsDescription": "Eingangsrechnungen, Ausgangsrechnungen, Ausgaben, Aufträge und Journale mit einer diesem Projekt zugeordneten Zeile erscheinen hier.",
     "tabs": {
       "overview": "Übersicht",
       "work_breakdown": "Projektstruktur",
       "financials": "Finanzen & Budget",
-      "cost_time": "Kosten & Zeit",
+      "cost_time": "Stunden & Zeit",
       "transactions": "Transaktionen",
       "billing": "Abrechnung",
       "charges": "Belastungen"

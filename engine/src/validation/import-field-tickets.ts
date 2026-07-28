@@ -5,10 +5,10 @@
  * many businesses the actual UNIT OF BILLING. Without them a migrated tenant can
  * neither reproduce how it bills nor produce the backup its customers expect.
  *
- * Reads two tab-separated exports (no live connection to any legacy system):
- *   /tmp/ft-head.tsv  id, TSNumber, JobID, EmpID, CustomerID, PPEBegin, PPEEnd,
+ * Reads two explicit tab-separated exports (no live connection to any legacy system):
+ *   --headers  id, TSNumber, JobID, EmpID, CustomerID, PPEBegin, PPEEnd,
  *                     Billed, FinalTimesheet, ApprovalStatus, ForemanID, PO, Description
- *   /tmp/ft-rows.tsv  TimesheetID, EmpID, ItemId, Shortform, then 7 days x
+ *   --rows     TimesheetID, EmpID, ItemId, Shortform, then 7 days x
  *                     (Reg, Over, Double)
  *
  * Creates one `field_ticket` document plus its native `field_tickets` header.
@@ -16,15 +16,36 @@
  * date/hour values. Exact line attachment is a separate source-identity
  * reconciliation (`link-field-ticket-time-by-source.ts`).
  *
- * Usage: npx tsx src/validation/import-field-tickets.ts [--apply]
+ * Usage: npx tsx src/validation/import-field-tickets.ts
+ *   --org=<uuid> --headers=/path/headers.tsv --rows=/path/rows.tsv
+ *   [--out=/path/report.json] [--apply --production]
  */
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { sql } from "drizzle-orm";
 import { db, withOrg } from "../db.ts";
 import { resolveTargetOrg } from "./target-org.ts";
 
-const ORG = process.env.TARGET_ORG ?? process.env.SANDBOX_ORG ?? "6d5799ad-a37c-4aea-9cd4-748e4dc59614";
-const APPLY = process.argv.includes("--apply");
+const args = new Map(
+  process.argv
+    .slice(2)
+    .filter((arg) => arg.startsWith("--"))
+    .map((arg) => {
+      const [key, ...value] = arg.slice(2).split("=");
+      return [key!, value.length ? value.join("=") : "true"];
+    }),
+);
+const ORG =
+  args.get("org") ??
+  process.env.TARGET_ORG ??
+  process.env.SANDBOX_ORG ??
+  "6d5799ad-a37c-4aea-9cd4-748e4dc59614";
+const APPLY = args.get("apply") === "true";
+const HEADERS = args.get("headers") ?? "/tmp/ft-head.tsv";
+const ROWS = args.get("rows") ?? "/tmp/ft-rows.tsv";
+const OUT = args.get("out") ?? null;
+if (!existsSync(HEADERS) || !existsSync(ROWS)) {
+  throw new Error("--headers and --rows source artifacts are required");
+}
 
 async function retry<T>(fn: () => Promise<T>, attempts = 8): Promise<T> {
   let last: unknown;
@@ -48,7 +69,7 @@ interface Ticket {
 interface Row { ticketId: string; empRef: string; itemRef: string; hours: { day: number; kind: string; h: number }[] }
 
 const parseTickets = (): Ticket[] =>
-  readFileSync("/tmp/ft-head.tsv", "utf8").split("\n").map((l) => l.split("\t")).filter((c) => c.length >= 13 && /^\d+$/.test(c[0]))
+  readFileSync(HEADERS, "utf8").split("\n").map((l) => l.split("\t")).filter((c) => c.length >= 13 && /^\d+$/.test(c[0]))
     .map((c) => ({
       legacyId: c[0], number: c[1], jobRef: c[2], empRef: c[3], customerRef: c[4],
       begin: c[5]!, end: c[6]!, billed: c[7] === "Yes", final: c[8] === "Yes", approval: c[9],
@@ -56,7 +77,7 @@ const parseTickets = (): Ticket[] =>
     }));
 
 const parseRows = (): Row[] =>
-  readFileSync("/tmp/ft-rows.tsv", "utf8").split("\n").map((l) => l.split("\t")).filter((c) => c.length >= 25 && /^\d+$/.test(c[0]))
+  readFileSync(ROWS, "utf8").split("\n").map((l) => l.split("\t")).filter((c) => c.length >= 25 && /^\d+$/.test(c[0]))
     .map((c) => {
       const hours: Row["hours"] = [];
       for (let d = 0; d < 7; d++) {
@@ -138,7 +159,17 @@ const parseRows = (): Row[] =>
     `));
     nativeCreated += native.rows.length;
   }
+  const report = {
+    mode: APPLY ? "apply" : "plan",
+    source: {
+      ticketHeaders: tickets.length,
+      crewRows: rows.length,
+      nonzeroHourCells: rows.reduce((total, row) => total + row.hours.length, 0),
+    },
+    result: { created, nativeCreated, existing, unmappedProjects: noProject },
+  };
   console.log(`${APPLY ? "imported" : "PLAN"}: tickets created ${created}, native headers added ${nativeCreated}, already present ${existing}, unmapped job ${noProject}`);
+  if (OUT) writeFileSync(OUT, `${JSON.stringify(report, null, 2)}\n`);
   if (APPLY) {
     const v = (await retry(() => db.execute(sql`
       select (select count(*) from documents where org_id = ${ORG} and kind = 'field_ticket')::int tickets,

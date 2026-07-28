@@ -160,13 +160,14 @@
       "operating_expense": "営業費用"
     },
     "transactions": "取引",
+    "allTransactionTypes": "すべての取引タイプ",
     "noTransactionsTitle": "この案件にタグ付けされた取引はありません",
     "noTransactionsDescription": "このプロジェクトにタグ付けされた明細を持つ仕入請求書、請求書、経費、注文、仕訳がここに表示されます。",
     "tabs": {
       "overview": "概要",
       "work_breakdown": "作業分解",
       "financials": "財務・予算",
-      "cost_time": "原価と時間",
+      "cost_time": "時間と工数",
       "transactions": "取引",
       "billing": "請求",
       "charges": "チャージ"

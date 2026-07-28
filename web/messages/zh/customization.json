@@ -17,6 +17,7 @@
     "sales_order": "销售订单",
     "purchase_order": "采购订单",
     "project": "项目",
+    "project_charge": "项目计费项",
     "fixed_asset": "固定资产"
   },
   "views": {

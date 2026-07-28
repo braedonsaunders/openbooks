@@ -904,6 +904,9 @@
     "noCustomer": "顧客未割り当て",
     "expandCustomer": "{customer}を展開",
     "collapseCustomer": "{customer}を折りたたむ",
+    "projectScope": "プロジェクト",
+    "activeProjects": "有効なプロジェクト",
+    "allProjects": "すべてのプロジェクト",
     "columns": {
       "customerJob": "顧客 / ジョブ",
       "project": "プロジェクト",

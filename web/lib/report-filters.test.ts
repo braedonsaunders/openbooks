@@ -20,3 +20,16 @@ test('project profitability customer scope round-trips through shared report par
 test('project profitability customer scope rejects malformed ids', () => {
   assert.equal(parseReportQuery(new URLSearchParams({ customer: "' or true --" })).customerId, undefined)
 })
+
+test('project profitability defaults to active projects and round-trips all projects explicitly', () => {
+  assert.equal(parseReportQuery(new URLSearchParams()).projectScope, 'active')
+  assert.equal(toSearchParams(parseReportQuery(new URLSearchParams())).has('projects'), false)
+
+  const all = parseReportQuery(new URLSearchParams({ projects: 'all' }))
+  assert.equal(all.projectScope, 'all')
+  assert.equal(toSearchParams(all).get('projects'), 'all')
+})
+
+test('project profitability rejects an unknown project population', () => {
+  assert.equal(parseReportQuery(new URLSearchParams({ projects: 'closed' })).projectScope, 'active')
+})

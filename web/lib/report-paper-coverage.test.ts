@@ -97,6 +97,8 @@ test('every collapsible report exposes shared expand-all and collapse-all contro
   const projects = source('app/(app)/reports/project-profitability/ProjectProfitabilityTable.tsx')
   assert.match(projects, /REPORT_SECTION_VISIBILITY_EVENT/)
   assert.match(projects, /new Set\(groups\.map/)
+  assert.doesNotMatch(projects, /<Pagination\b/)
+  assert.doesNotMatch(source('app/(app)/reports/project-profitability/page.tsx'), /\.slice\(/)
 
   for (const page of [
     'app/(app)/reports/pnl/page.tsx',

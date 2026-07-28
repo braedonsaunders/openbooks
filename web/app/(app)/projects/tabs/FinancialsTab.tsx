@@ -20,6 +20,8 @@ export interface FinancialsData {
   costByCategory: CategoryRow[]
   costByAccount: AccountRow[]
   projectType: string | null
+  /** A tenant-configured capped project type owns cost-budget semantics. */
+  costBudgetApplies: boolean
 }
 
 /** Measures that read better as "good when positive, bad when negative". */
@@ -87,6 +89,9 @@ export function FinancialsTab({ data, projectId, recognition, canManage }: {
     { key: 'category' as const, label: t('cockpit.costByCategory') },
     { key: 'account' as const, label: t('cockpit.costByAccount') },
   ]
+  const visibleLayout = data.costBudgetApplies
+    ? data.layout
+    : data.layout.filter((line) => line.measure !== 'cost_budget' && line.measure !== 'remaining_budget')
 
   return (
     <div className="space-y-6">
@@ -98,7 +103,7 @@ export function FinancialsTab({ data, projectId, recognition, canManage }: {
               <h2 className="text-sm font-semibold text-slate-900 dark:text-slate-100">{t('cockpit.pnlTitle')}</h2>
             </div>
             <div className="divide-y divide-slate-100 dark:divide-slate-800/60">
-              {data.layout.map((line, i) => {
+              {visibleLayout.map((line, i) => {
                 const v = m[line.measure] ?? 0
                 if (line.hideWhenZero && v === 0) return null
                 return (
@@ -118,9 +123,12 @@ export function FinancialsTab({ data, projectId, recognition, canManage }: {
           </CardContent>
         </Card>
 
-        {/* Budget bar */}
-        <Card>
-          <CardContent className="space-y-3 p-4">
+        {/* A cost ceiling is meaningful only when the project type explicitly
+            uses capped/not-to-exceed pricing. Other types still show their
+            actual and committed costs in the statement and breakdown below. */}
+        {data.costBudgetApplies ? (
+          <Card>
+            <CardContent className="space-y-3 p-4">
             <div className="flex items-center justify-between">
               <h2 className="text-sm font-semibold text-slate-900 dark:text-slate-100">{t('cockpit.budgetBarTitle')}</h2>
               <span className={cn('text-sm font-medium tabular-nums', overBudget ? 'text-red-600 dark:text-red-400' : 'text-teal-700 dark:text-teal-300')}>
@@ -139,8 +147,9 @@ export function FinancialsTab({ data, projectId, recognition, canManage }: {
               <span className="flex items-center gap-1.5"><span className="inline-block h-2.5 w-2.5 rounded-sm bg-amber-400" /> {t('cockpit.committedAmount', { amount: money(committedCost) })}</span>
               <span className="flex items-center gap-1.5"><span className="inline-block h-3 w-0.5 bg-slate-900 dark:bg-white" /> {t('cockpit.costBudgetAmount', { amount: money(costBudget) })}</span>
             </div>
-          </CardContent>
-        </Card>
+            </CardContent>
+          </Card>
+        ) : null}
       </div>
 
       {recognition ? (

@@ -76,7 +76,7 @@ export function TransactionDrawer({
     <UrlDrawer
       open
       closeHref={nestedReturn ?? closeHref}
-      stacked={nestedReturn != null && (searchParams.has('relatedParty') || searchParams.has('reportRecord'))}
+      stacked={nestedReturn != null && (searchParams.has('relatedParty') || searchParams.has('reportRecord') || searchParams.has('projectTxn'))}
       size="2xl"
       panelClassName={panelClassName}
       title={title}

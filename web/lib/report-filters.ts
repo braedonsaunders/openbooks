@@ -17,6 +17,7 @@ import type {
 import type { ReportDrillTarget } from './report-drill'
 
 export type ReportScale = 'actual' | 'thousands' | 'millions'
+export type ProjectReportScope = 'active' | 'all'
 
 export type ReportQuery = {
   /** Period preset id (see PERIOD_PRESETS); `custom` uses `from`/`to`. */
@@ -29,6 +30,8 @@ export type ReportQuery = {
   dims: StatementDimFilter
   /** Customer scope used by customer/job profitability reporting. */
   customerId?: string
+  /** Project population used by project profitability reporting. */
+  projectScope: ProjectReportScope
   /** Subsidiary context node; unset = the root (consolidated). */
   subsidiaryId?: string
   showZero: boolean
@@ -52,6 +55,7 @@ export const REPORT_PARAM_KEYS = {
   dept: 'dept',
   project: 'project',
   customer: 'customer',
+  projectScope: 'projects',
   location: 'location',
   class: 'class',
   sub: 'sub',
@@ -105,6 +109,7 @@ export function parseReportQuery(sp: ParamSource): ReportQuery {
       const value = read(sp, REPORT_PARAM_KEYS.customer)
       return value && UUID.test(value) ? value : undefined
     })(),
+    projectScope: oneOf(read(sp, REPORT_PARAM_KEYS.projectScope), ['active', 'all'], 'active'),
     subsidiaryId: read(sp, REPORT_PARAM_KEYS.sub) || undefined,
     showZero: read(sp, REPORT_PARAM_KEYS.zero) === '1',
     scale: oneOf(read(sp, REPORT_PARAM_KEYS.scale), SCALES, 'actual'),
@@ -128,6 +133,7 @@ export function toSearchParams(q: ReportQuery): URLSearchParams {
   if (q.dims.locationId) p.set(k.location, q.dims.locationId)
   if (q.dims.classId) p.set(k.class, q.dims.classId)
   if (q.customerId) p.set(k.customer, q.customerId)
+  if (q.projectScope !== 'active') p.set(k.projectScope, q.projectScope)
   for (const [key, value] of Object.entries(q.dims.segments ?? {}).sort(([a], [b]) => a.localeCompare(b))) {
     p.set(`seg_${key}`, value)
   }

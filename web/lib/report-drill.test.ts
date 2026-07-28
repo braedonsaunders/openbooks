@@ -18,6 +18,7 @@ test('report drill targets round-trip through URL state', () => {
     partyIds: [PARTY_ID],
     projectCustomerId: CUSTOMER_ID,
     projectSearch: 'dryer repair',
+    activeProjectsOnly: true,
     profitSigned: true,
     dims: { projectId: ACCOUNT_ID, segments: { region: PARTY_ID } },
   }
@@ -29,6 +30,7 @@ test('report drill targets round-trip through URL state', () => {
   assert.deepEqual(parsed.partyIds, [PARTY_ID])
   assert.equal(parsed.projectCustomerId, CUSTOMER_ID)
   assert.equal(parsed.projectSearch, 'dryer repair')
+  assert.equal(parsed.activeProjectsOnly, true)
   assert.equal(parsed.profitSigned, true)
   assert.equal(parsed.dims?.projectId, ACCOUNT_ID)
   assert.deepEqual(parsed.dims?.segments, { region: PARTY_ID })

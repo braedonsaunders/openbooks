@@ -66,7 +66,9 @@
     "customerPayment": "客户付款", "customerPaymentShort": "客户付款",
     "check": "支票", "bankDeposit": "银行存款", "deposit": "存款",
     "transfer": "转账", "cardCharge": "刷卡消费", "cardChargeShort": "刷卡",
-    "cardRefund": "刷卡退款", "cardRefundShort": "刷卡退款"
+    "cardRefund": "刷卡退款", "cardRefundShort": "刷卡退款",
+    "projectCharge": "项目计费项", "projectChargeShort": "计费项",
+    "fieldTicket": "现场工单", "fieldTicketShort": "工单"
   },
   "labels": {
     "name": "名称",
@@ -86,6 +88,10 @@
     "currency": "币种",
     "quantity": "数量",
     "rate": "单价",
+    "costRate": "成本费率",
+    "billRate": "计费费率",
+    "billAmount": "可计费金额",
+    "billable": "可计费",
     "number": "编号",
     "reference": "参考号",
     "email": "电子邮箱",
