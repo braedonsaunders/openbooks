@@ -6,6 +6,7 @@ import {
   CloseError,
   decidePeriodReopen,
   generateAccountingPeriods,
+  recloseApprovedReopen,
   requestPeriodReopen,
   setPeriodLockState,
   type CloseModule,
@@ -378,7 +379,11 @@ async function savePackage(orgId: string, actorId: string, body: Body) {
 export async function POST(req: Request) {
   const body = (await req.json().catch(() => ({}))) as Body;
   const action = typeof body.action === "string" ? body.action : "";
-  const permission = ["request-reopen", "decide-reopen"].includes(action)
+  const permission = [
+    "request-reopen",
+    "decide-reopen",
+    "reclose-reopen",
+  ].includes(action)
     ? "close.reopen"
     : "periods.manage";
   const gate = await guardPermission(permission);
@@ -501,6 +506,17 @@ export async function POST(req: Request) {
         actorId,
         approve: body.approve === true,
         hours: body.hours == null ? undefined : Number(body.hours),
+      });
+      return NextResponse.json({ ok: true });
+    }
+    if (action === "reclose-reopen") {
+      const requestId = text(body, "requestId", true)!;
+      if (!isUuid(requestId)) throw new CloseError("invalid reopen request");
+      await recloseApprovedReopen({
+        orgId,
+        requestId,
+        actorId,
+        reason: text(body, "reason", true)!,
       });
       return NextResponse.json({ ok: true });
     }
