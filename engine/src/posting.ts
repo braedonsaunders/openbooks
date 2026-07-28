@@ -244,6 +244,26 @@ const dims = (d: Doc, l?: DocLine) => ({
   },
 });
 
+/**
+ * Tax-control legs settle an amount with a tax authority; they are not
+ * project cost or revenue. Nonrecoverable purchase tax is already capitalized
+ * into the originating detail line by purchaseBaseAmount, so carrying the
+ * project onto the recoverable/output control leg would double-state project
+ * activity in balance-sheet categories. Preserve the other analytical context
+ * for statutory reporting, but explicitly clear project/equipment dimensions.
+ */
+const taxControlDims = (d: Doc, l: DocLine) => ({
+  departmentId: l.departmentId ?? d.departmentId,
+  projectId: null,
+  locationId: l.locationId ?? d.locationId,
+  classId: l.classId ?? d.classId,
+  equipmentUnitId: null,
+  extraDims: {
+    ...((d.extraDims ?? {}) as Record<string, string>),
+    ...((l.extraDims ?? {}) as Record<string, string>),
+  },
+});
+
 /** Pure GL projection for a financial equipment/resource charge. The debit is
  * job cost; the credit relieves a distinct recovery pool. Keeping this helper
  * exported makes the accounting invariant directly testable. */
@@ -380,7 +400,11 @@ function purchaseTaxLines(
   const out: KernelLine[] = [];
   for (const line of lines) {
     for (const component of componentsForLine(line, deps)) {
-      const common = { taxCodeId: component.taxCodeId, partyId: line.partyId ?? doc.partyId, ...dims(doc, line) };
+      const common = {
+        taxCodeId: component.taxCodeId,
+        partyId: line.partyId ?? doc.partyId,
+        ...taxControlDims(doc, line),
+      };
       if (component.calculationType === "withholding") {
         if (!component.withholdingAccountId) {
           throw new PostingError(`withholding tax ${component.taxCodeId} has no withholding account`);
@@ -417,7 +441,11 @@ function salesTaxLines(
   const out: KernelLine[] = [];
   for (const line of lines) {
     for (const component of componentsForLine(line, deps)) {
-      const common = { taxCodeId: component.taxCodeId, partyId: line.partyId ?? doc.partyId, ...dims(doc, line) };
+      const common = {
+        taxCodeId: component.taxCodeId,
+        partyId: line.partyId ?? doc.partyId,
+        ...taxControlDims(doc, line),
+      };
       if (component.calculationType === "reverse_charge") continue;
       if (component.calculationType === "withholding") {
         if (!component.withholdingAccountId) {

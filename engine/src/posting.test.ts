@@ -38,8 +38,26 @@ test("final posting proof rejects whole-entry and per-subsidiary imbalance", () 
 });
 
 test("purchase tax projection separates recoverable, nonrecoverable, withholding, and reverse charge", () => {
-  const doc = { id: "doc", kind: "vendor_bill", partyId: "vendor", subsidiaryId: "sub", currency: "CAD", fxRate: "1", custom: {} } as any;
-  const line = { id: "line", lineNumber: 1, accountId: "expense", amount: "100.0000", taxAmount: "7.0000", partyId: null, taxGroupId: "group" } as any;
+  const doc = {
+    id: "doc",
+    kind: "vendor_bill",
+    partyId: "vendor",
+    projectId: "header-project",
+    subsidiaryId: "sub",
+    currency: "CAD",
+    fxRate: "1",
+    custom: {},
+  } as any;
+  const line = {
+    id: "line",
+    lineNumber: 1,
+    accountId: "expense",
+    amount: "100.0000",
+    taxAmount: "7.0000",
+    partyId: null,
+    projectId: "line-project",
+    taxGroupId: "group",
+  } as any;
   const projected = RULES.vendor_bill!(doc, [line], {
     control: { ap: "ap", ar: "ar", bank: "bank" },
     taxComponentsByLine: new Map([["line", [
@@ -56,7 +74,65 @@ test("purchase tax projection separates recoverable, nonrecoverable, withholding
     ["output", "-5.0000"],
     ["ap", "-107.0000"],
   ]);
+  assert.equal(projected[0]!.projectId, "line-project");
+  assert.deepEqual(
+    projected
+      .filter((row) =>
+        ["input", "withholding", "output"].includes(row.accountId)
+      )
+      .map((row) => row.projectId),
+    [null, null, null, null],
+  );
   assert.doesNotThrow(() => assertFinalKernelBalance(projected.map((row) => ({ ...row, subsidiaryId: "sub" }))));
+});
+
+test("sales tax control lines never become project revenue or cost", () => {
+  const doc = {
+    id: "invoice",
+    kind: "customer_invoice",
+    partyId: "customer",
+    projectId: "header-project",
+    subsidiaryId: "sub",
+    currency: "CAD",
+    fxRate: "1",
+    custom: {},
+  } as any;
+  const line = {
+    id: "line",
+    lineNumber: 1,
+    accountId: "income",
+    amount: "100.0000",
+    taxAmount: "13.0000",
+    projectId: "line-project",
+    taxCodeId: "tax",
+  } as any;
+  const projected = RULES.customer_invoice!(doc, [line], {
+    control: { ap: "ap", ar: "ar", bank: "bank" },
+    taxComponentsByLine: new Map([["line", [{
+      taxCodeId: "tax",
+      sequence: 1,
+      taxAmount: "13.0000",
+      recoverableAmount: "0",
+      nonrecoverableAmount: "0",
+      calculationType: "standard",
+      collectedAccountId: "output",
+      paidAccountId: "input",
+      withholdingAccountId: null,
+    }]]]),
+  });
+  assert.equal(
+    projected.find((row) => row.accountId === "income")!.projectId,
+    "line-project",
+  );
+  assert.equal(
+    projected.find((row) => row.accountId === "output")!.projectId,
+    null,
+  );
+  assert.doesNotThrow(() =>
+    assertFinalKernelBalance(
+      projected.map((row) => ({ ...row, subsidiaryId: "sub" })),
+    )
+  );
 });
 
 test("tax profiles cannot post without cross-footing component evidence", () => {
