@@ -44,6 +44,10 @@ export const documents = pgTable(
     subsidiaryId: uuid("subsidiary_id"),
     documentDate: date("document_date").notNull(),
     postingDate: date("posting_date"),
+    /** Explicit accounting-period override. This is first-class because an
+     * accounting period is not always derivable from the transaction date
+     * (late postings and adjustment periods are ordinary ERP behavior). */
+    postingPeriodId: uuid("posting_period_id"),
     dueDate: date("due_date"),
     currency: currencyCode("currency").notNull(),
     fxRate: fxRate("fx_rate").notNull().default("1"),

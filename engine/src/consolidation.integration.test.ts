@@ -104,7 +104,7 @@ test("foreign-currency eliminations are exact, balanced, and safely rerunnable",
   }
 });
 
-test("ownership consolidation posts acquisition and NCI exactly and reverses reruns", { skip: !DB }, async () => {
+test("ownership consolidation uses exact period identity and reverses reruns", { skip: !DB }, async () => {
   const org = await createScratchOrg();
   try {
     const childId = randomUUID();
@@ -137,12 +137,31 @@ test("ownership consolidation posts acquisition and NCI exactly and reverses rer
     }
     const capital = randomUUID();
     const profit = randomUUID();
+    const adjustmentProfit = randomUUID();
+    const calendar = (await db.execute(sql`
+      select fiscal_calendar_id
+        from accounting_periods
+       where id = ${org.periodId}
+    `)) as unknown as { rows: { fiscal_calendar_id: string }[] };
+    const adjustmentPeriodId = randomUUID();
+    await db.execute(sql`
+      insert into accounting_periods
+        (id, org_id, fiscal_calendar_id, fiscal_year, period_number, name,
+         starts_on, ends_on, is_adjustment, custom)
+      values (
+        ${adjustmentPeriodId}, ${org.orgId},
+        ${calendar.rows[0]!.fiscal_calendar_id},
+        2026, 13, 'FY26 Adjustment', '2026-07-01', '2026-07-31', true,
+        '{}'::jsonb
+      )
+    `);
     await db.execute(sql`
       insert into journal_entries
         (id,org_id,book_id,subsidiary_id,entry_number,posting_date,period_id,memo,status,origin)
       values
         (${capital},${org.orgId},${org.bookId},${childId},'OWN-CAP','2026-07-01',${org.periodId},'Opening equity','draft','manual'),
-        (${profit},${org.orgId},${org.bookId},${childId},'OWN-PROFIT',${org.date},${org.periodId},'Period profit','draft','manual')
+        (${profit},${org.orgId},${org.bookId},${childId},'OWN-PROFIT',${org.date},${org.periodId},'Period profit','draft','manual'),
+        (${adjustmentProfit},${org.orgId},${org.bookId},${childId},'OWN-ADJUSTMENT',${org.date},${adjustmentPeriodId},'Adjustment-period profit','draft','manual')
     `);
     await db.execute(sql`
       insert into journal_lines
@@ -151,9 +170,15 @@ test("ownership consolidation posts acquisition and NCI exactly and reverses rer
         (${org.orgId},${capital},1,${org.accounts.bank},${childId},'1000','CAD','1000','1'),
         (${org.orgId},${capital},2,${accounts.get("childEquity")!},${childId},'-1000','CAD','-1000','1'),
         (${org.orgId},${profit},1,${org.accounts.bank},${childId},'100','CAD','100','1'),
-        (${org.orgId},${profit},2,${org.accounts.revenue},${childId},'-100','CAD','-100','1')
+        (${org.orgId},${profit},2,${org.accounts.revenue},${childId},'-100','CAD','-100','1'),
+        (${org.orgId},${adjustmentProfit},1,${org.accounts.bank},${childId},'900','CAD','900','1'),
+        (${org.orgId},${adjustmentProfit},2,${org.accounts.revenue},${childId},'-900','CAD','-900','1')
     `);
-    await db.execute(sql`update journal_entries set status='posted',posted_at=now() where id in (${capital},${profit})`);
+    await db.execute(sql`
+      update journal_entries
+         set status='posted', posted_at=now()
+       where id in (${capital}, ${profit}, ${adjustmentProfit})
+    `);
     const interestId = randomUUID();
     await db.execute(sql`
       insert into subsidiary_ownership_interests

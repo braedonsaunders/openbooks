@@ -253,7 +253,7 @@ export async function financialTrends(orgId: string, limit = 15): Promise<Financ
              coalesce(sum(l.amount) filter (where a.type in ('expense','expense_other','expense_deferred')), 0) as expenses
         from recent p
         left join journal_entries e on e.org_id = ${orgId} and e.status in ('posted', 'reversed')
-          and e.posting_date between p.starts_on and p.ends_on
+          and e.period_id = p.id
         left join journal_lines l on l.entry_id = e.id and l.org_id = e.org_id
         left join accounts a on a.id = l.account_id and a.org_id = l.org_id
        group by p.id

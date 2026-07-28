@@ -9,9 +9,11 @@ test("financial statements exclude draft and other unposted journals", { skip: !
   // report implementation rather than copying its aggregation logic here.
   const source = `
     import assert from "node:assert/strict";
+    import { randomUUID } from "node:crypto";
     import { sql } from "drizzle-orm";
     import { db, withOrg } from "./engine/src/db.ts";
     import { toUnits } from "./engine/src/money.ts";
+    import { createScratchOrg, dropScratchOrg } from "./engine/src/test-fixtures.ts";
     import { agingByParty, agingDetail, cashFlow, financialTrends, journalReport, profitAndLoss, projectProfitability, transactionDetail } from "./web/lib/reports.ts";
 
     // Exercise persistent application tenants only. Other DB-backed test files
@@ -134,6 +136,79 @@ test("financial statements exclude draft and other unposted journals", { skip: !
           );
         }
       });
+    }
+
+    // Adjustment periods can overlap a regular period's calendar dates.
+    // Period analytics must use the ledger's exact period identity, not infer
+    // it from posting_date.
+    const scratch = await createScratchOrg();
+    try {
+      const calendar = await db.execute(sql\`
+        select fiscal_calendar_id
+          from accounting_periods
+         where id = \${scratch.periodId}
+      \`);
+      await db.execute(sql\`
+        update accounting_periods
+           set fiscal_year = 2025, period_number = 6, name = '2025-06',
+               starts_on = '2025-06-01', ends_on = '2025-06-30'
+         where id = \${scratch.periodId}
+      \`);
+      const adjustmentPeriodId = randomUUID();
+      await db.execute(sql\`
+        insert into accounting_periods
+          (id, org_id, fiscal_calendar_id, fiscal_year, period_number, name,
+           starts_on, ends_on, is_adjustment, custom)
+        values (
+          \${adjustmentPeriodId}, \${scratch.orgId},
+          \${calendar.rows[0].fiscal_calendar_id},
+          2025, 13, 'FY25 Adjustment', '2025-06-01', '2025-06-30', true,
+          '{}'::jsonb
+        )
+      \`);
+      const regularEntryId = randomUUID();
+      const adjustmentEntryId = randomUUID();
+      await db.execute(sql\`
+        insert into journal_entries
+          (id, org_id, book_id, subsidiary_id, entry_number, posting_date,
+           period_id, memo, status, origin, posted_at)
+        values
+          (\${regularEntryId}, \${scratch.orgId}, \${scratch.bookId},
+           \${scratch.subsidiaryId}, 'REGULAR-ACTIVITY', '2025-06-30',
+           \${scratch.periodId}, 'Regular period revenue', 'draft', 'manual', null),
+          (\${adjustmentEntryId}, \${scratch.orgId}, \${scratch.bookId},
+           \${scratch.subsidiaryId}, 'ADJUSTMENT-ACTIVITY', '2025-06-30',
+           \${adjustmentPeriodId}, 'Adjustment period revenue', 'draft', 'manual', null)
+      \`);
+      await db.execute(sql\`
+        insert into journal_lines
+          (org_id, entry_id, line_number, account_id, subsidiary_id,
+           amount, currency, txn_amount, fx_rate)
+        values
+          (\${scratch.orgId}, \${regularEntryId}, 1, \${scratch.accounts.bank},
+           \${scratch.subsidiaryId}, '100.0000', 'CAD', '100.0000', '1'),
+          (\${scratch.orgId}, \${regularEntryId}, 2, \${scratch.accounts.revenue},
+           \${scratch.subsidiaryId}, '-100.0000', 'CAD', '-100.0000', '1'),
+          (\${scratch.orgId}, \${adjustmentEntryId}, 1, \${scratch.accounts.bank},
+           \${scratch.subsidiaryId}, '900.0000', 'CAD', '900.0000', '1'),
+          (\${scratch.orgId}, \${adjustmentEntryId}, 2, \${scratch.accounts.revenue},
+           \${scratch.subsidiaryId}, '-900.0000', 'CAD', '-900.0000', '1')
+      \`);
+      await db.execute(sql\`
+        update journal_entries
+           set status = 'posted', posted_at = now()
+         where id in (\${regularEntryId}, \${adjustmentEntryId})
+      \`);
+
+      await withOrg(scratch.orgId, async () => {
+        const trends = await financialTrends(scratch.orgId, 15);
+        const regularPeriod = trends.find((row) => row.id === scratch.periodId);
+        assert.ok(regularPeriod, "regular completed period appears in trends");
+        assert.equal(regularPeriod.revenue, "100.0000");
+        assert.equal(regularPeriod.net_income, "100.0000");
+      });
+    } finally {
+      await dropScratchOrg(scratch.orgId);
     }
   `;
   const result = spawnSync(

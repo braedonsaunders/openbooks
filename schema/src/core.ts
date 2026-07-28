@@ -140,6 +140,11 @@ export const accountingPeriods = pgTable(
     startsOn: date("starts_on").notNull(),
     endsOn: date("ends_on").notNull(),
     isAdjustment: boolean("is_adjustment").notNull().default(false),
+    /** Stable connector identities (for example an external posting-period id).
+     * A source transaction may post to a period other than the one containing
+     * its transaction date, so migration must resolve the exact source period
+     * instead of inferring it from a calendar month. */
+    custom: jsonb("custom").notNull().default({}),
     ...auditColumns,
   },
   (t) => [uniqueIndex("periods_calendar_year_num").on(t.orgId, t.fiscalCalendarId, t.fiscalYear, t.periodNumber)],

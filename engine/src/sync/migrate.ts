@@ -169,7 +169,7 @@ export async function loadEntities(
     const s: ResourceLoadStats = { created: 0, updated: 0, skipped: 0 };
 
     if (stream.resource === "accounting_periods") {
-      await loadAccountingPeriods(stream.records, ctx.orgId, s);
+      await loadAccountingPeriods(stream.records, ctx.orgId, ctx.refKey, s);
       stats[stream.resource] = s;
       continue;
     }
@@ -226,6 +226,7 @@ export async function loadEntities(
 async function loadAccountingPeriods(
   records: SourceEntity[],
   orgId: string,
+  refKey: string,
   s: ResourceLoadStats,
 ): Promise<void> {
   const defaults = await ensureCloseDefaults(orgId);
@@ -266,12 +267,14 @@ async function loadAccountingPeriods(
     const period = (await db.execute(sql`
       insert into accounting_periods
         (org_id, fiscal_calendar_id, fiscal_year, period_number, name,
-         starts_on, ends_on, is_adjustment)
+         starts_on, ends_on, is_adjustment, custom)
       values (${orgId}, ${defaults.calendarId}, ${fiscalYear}, ${periodNumber},
-              ${name}, ${startsOn}, ${endsOn}, ${f.isAdjustment === true})
+              ${name}, ${startsOn}, ${endsOn}, ${f.isAdjustment === true},
+              ${JSON.stringify({ [refKey]: rec.sourceRef })}::jsonb)
       on conflict (org_id, fiscal_calendar_id, fiscal_year, period_number)
       do update set name = excluded.name, starts_on = excluded.starts_on,
         ends_on = excluded.ends_on, is_adjustment = excluded.is_adjustment,
+        custom = accounting_periods.custom || excluded.custom,
         updated_at = now()
       returning id
     `)) as { rows: { id: string }[] };
@@ -324,7 +327,12 @@ export async function syncSourceAccountingPeriods(
   orgId: string,
 ): Promise<ResourceLoadStats> {
   const stats: ResourceLoadStats = { created: 0, updated: 0, skipped: 0 };
-  await loadAccountingPeriods(await source.accountingPeriods(), orgId, stats);
+  await loadAccountingPeriods(
+    await source.accountingPeriods(),
+    orgId,
+    source.refKey,
+    stats,
+  );
   return stats;
 }
 

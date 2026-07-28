@@ -514,7 +514,12 @@ export async function syncNetSuiteFixedAssets(
         subsidiaryId: sourceDoc.subsidiaryId ?? nativePreparation.nativeContext.rootSubsidiaryId,
       };
       if (!document.posting) throw new Error(`NetSuite FAM transaction ${document.sourceRef} is non-posting`);
-      if (!nativePreparation.nativeContext.periodFor(document.documentDate)) {
+      if (
+        !document.postingPeriodId &&
+        !nativePreparation.nativeContext.periodFor(
+          document.postingDate ?? document.documentDate,
+        )
+      ) {
         throw new Error(`NetSuite FAM transaction ${document.sourceRef} has no period for ${document.documentDate}`);
       }
       const existing = (await db.execute(sql`
@@ -530,6 +535,8 @@ export async function syncNetSuiteFixedAssets(
         subsidiaryId: document.subsidiaryId,
         extraDims: document.extraDims ?? {},
         documentDate: document.documentDate,
+        postingDate: document.postingDate ?? document.documentDate,
+        postingPeriodId: document.postingPeriodId ?? null,
         dueDate: document.dueDate,
         currency: document.currency ?? source.baseCurrency,
         fxRate: document.fxRate ?? "1",

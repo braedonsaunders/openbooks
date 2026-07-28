@@ -879,6 +879,45 @@ async function applySubsidiaries(
   }
 }
 
+/**
+ * Resolve the authoritative accounting period independently from transaction
+ * date when the document carries an explicit override. This is required for
+ * late postings and adjustment periods; the composite database FK guarantees
+ * the selected period belongs to the same organization.
+ */
+async function resolvePostingPeriod(
+  runner: Pick<typeof db, "execute">,
+  doc: Doc,
+  postingDate: string,
+): Promise<{ id: string }> {
+  const periodRes = doc.postingPeriodId
+    ? ((await runner.execute(sql`
+        select id
+          from accounting_periods
+         where id = ${doc.postingPeriodId}
+           and org_id = ${doc.orgId}
+         limit 1
+      `)) as unknown as { rows: { id: string }[] })
+    : ((await runner.execute(sql`
+        select id
+          from accounting_periods
+         where org_id = ${doc.orgId}
+           and starts_on <= ${postingDate}
+           and ends_on >= ${postingDate}
+           and is_adjustment = false
+         limit 1
+      `)) as unknown as { rows: { id: string }[] });
+  const period = periodRes.rows[0];
+  if (!period) {
+    throw new PostingError(
+      doc.postingPeriodId
+        ? `accounting period ${doc.postingPeriodId} is not available for this organization`
+        : `no accounting period covers ${postingDate}`,
+    );
+  }
+  return period;
+}
+
 export async function postDocument(
   documentId: string,
   deps: PostingDeps,
@@ -1019,13 +1058,7 @@ export async function postDocument(
   await validateRequiredDimensions(db, doc.orgId, subApplied.lines);
 
   const postingDate = effectiveDoc.postingDate ?? effectiveDoc.documentDate;
-  const periodRes = (await db.execute(sql`
-    select id from accounting_periods
-    where org_id = ${doc.orgId} and starts_on <= ${postingDate} and ends_on >= ${postingDate}
-      and is_adjustment = false
-    limit 1`)) as unknown as { rows: { id: string }[] };
-  const period = periodRes.rows[0];
-  if (!period) throw new PostingError(`no accounting period covers ${postingDate}`);
+  const period = await resolvePostingPeriod(db, effectiveDoc, postingDate);
 
   const [book] = await db
     .select()
@@ -1319,13 +1352,7 @@ export async function regenerateGlImpactTx(
   await validateRequiredDimensions(tx, doc.orgId, kernelLines);
   const postingDate = doc.postingDate ?? doc.documentDate;
 
-  const periodRes = (await tx.execute(sql`
-    select id from accounting_periods
-     where org_id = ${doc.orgId} and starts_on <= ${postingDate} and ends_on >= ${postingDate}
-       and is_adjustment = false
-     limit 1`)) as unknown as { rows: { id: string }[] };
-  const period = periodRes.rows[0];
-  if (!period) throw new PostingError(`no accounting period covers ${postingDate}`);
+  const period = await resolvePostingPeriod(tx, doc, postingDate);
 
   const [entry] = await tx
     .select()

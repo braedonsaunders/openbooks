@@ -303,6 +303,25 @@ export async function dropScratchOrg(orgId: string): Promise<void> {
       "report_schedules",
       "report_definitions",
       "email_log",
+      // Financial-close evidence is append-only in production. Delete it
+      // explicitly while the sandbox org still exists so the guarded
+      // teardown can verify the sandbox-wipe authorization before the final
+      // org delete cascades.
+      "close_events",
+      "close_signoffs",
+      "close_task_evidence",
+      "close_exceptions",
+      "close_automation_executions",
+      "close_run_tasks",
+      "close_reopen_requests",
+      "close_runs",
+      "close_blueprint_dependencies",
+      "close_blueprint_steps",
+      "close_automation_rules",
+      "close_reporting_packages",
+      "close_blueprints",
+      "close_policies",
+      "period_locks",
       "flow_run_effects",
       "flow_gates",
       "flow_runs",

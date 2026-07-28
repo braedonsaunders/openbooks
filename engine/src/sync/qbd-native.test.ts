@@ -13,7 +13,8 @@ function context(): NativeContext {
     ]),
     accountRefById: new Map(), partyByRef: new Map([["C:c1", "customer-id"]]), deptByRef: new Map(),
     projectByRef: new Map(), itemByRef: new Map(), subsidiaryByRef: new Map(), segmentValueByRef: new Map(),
-    rootSubsidiaryId: "sub", taxByRate: new Map(), taxCodeByRef: new Map(), periodFor: () => "period",
+    rootSubsidiaryId: "sub", taxByRate: new Map(), taxCodeByRef: new Map(),
+    periodByRef: new Map(), periodFor: () => "period",
   };
 }
 

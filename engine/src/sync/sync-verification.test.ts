@@ -128,6 +128,8 @@ const canonicalDocument = (
   currency: "CAD",
   fxRate: "1",
   documentDate: "2026-07-27",
+  postingDate: "2026-07-27",
+  postingPeriodId: "period-july",
   dueDate: "2026-08-27",
   memo: null,
   referenceNumber: "INV-1",
@@ -160,6 +162,16 @@ test("change detection includes currency and exact exchange rate", () => {
   assert.notEqual(
     baseline,
     canonicalNativeDocumentKey(canonicalDocument({ fxRate: "1.00000001" })),
+  );
+});
+
+test("change detection includes the exact accounting period", () => {
+  const baseline = canonicalNativeDocumentKey(canonicalDocument());
+  assert.notEqual(
+    baseline,
+    canonicalNativeDocumentKey(
+      canonicalDocument({ postingPeriodId: "period-adjustment" }),
+    ),
   );
 });
 

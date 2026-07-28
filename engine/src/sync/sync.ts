@@ -275,19 +275,27 @@ export async function verifyCurrentLedgerState(
   const periodTruth = await source.monthlyActivity();
   const periodMine = (await db.execute(sql`
     select a.custom->>${refKey} as "accountRef",
+           ap.custom->>${refKey} as "periodRef",
            to_char(e.posting_date, 'YYYY-MM') as month,
            sum(l.amount) as amount
       from journal_lines l
       join journal_entries e
         on e.id = l.entry_id and e.org_id = l.org_id
+      join accounting_periods ap
+        on ap.id = e.period_id and ap.org_id = e.org_id
       join accounts a
         on a.id = l.account_id and a.org_id = l.org_id
      where l.org_id = ${orgId}
        and e.status in ('posted', 'reversed')
        and a.custom->>${refKey} is not null
-     group by 1, 2
+     group by 1, 2, 3
   `)) as unknown as {
-    rows: { accountRef: string; month: string; amount: string }[];
+    rows: {
+      accountRef: string;
+      periodRef: string | null;
+      month: string;
+      amount: string;
+    }[];
   };
   const periods = verifyAccountMonths(periodTruth, periodMine.rows);
 
@@ -297,11 +305,14 @@ export async function verifyCurrentLedgerState(
     const projectMine = (await db.execute(sql`
       select p.custom->>${refKey} as "projectRef",
              a.custom->>${refKey} as "accountRef",
+             ap.custom->>${refKey} as "periodRef",
              to_char(e.posting_date, 'YYYY-MM') as month,
              sum(l.amount) as amount
         from journal_lines l
         join journal_entries e
           on e.id = l.entry_id and e.org_id = l.org_id
+        join accounting_periods ap
+          on ap.id = e.period_id and ap.org_id = e.org_id
         join projects p
           on p.id = l.project_id and p.org_id = l.org_id
         join accounts a
@@ -310,11 +321,12 @@ export async function verifyCurrentLedgerState(
          and e.status in ('posted', 'reversed')
          and p.custom->>${refKey} is not null
          and a.custom->>${refKey} is not null
-       group by 1, 2, 3
+       group by 1, 2, 3, 4
     `)) as unknown as {
       rows: {
         projectRef: string;
         accountRef: string;
+        periodRef: string | null;
         month: string;
         amount: string;
       }[];
@@ -406,6 +418,8 @@ export function canonicalNativeDocumentKey(d: NativeDocument): string {
     d.partyId,
     d.subsidiaryId,
     d.documentDate,
+    d.postingDate ?? d.documentDate,
+    d.postingPeriodId ?? null,
     d.dueDate,
     d.currency,
     normalizeDecimal(d.fxRate ?? "1", 8),
@@ -448,7 +462,9 @@ type StoredDocumentKeyRow = {
   kind: string;
   party_id: string | null;
   subsidiary_id: string | null;
-  ddate: string;
+  document_date: string;
+  posting_date: string | null;
+  posting_period_id: string | null;
   due: string | null;
   memo: string | null;
   reference_number: string | null;
@@ -490,7 +506,9 @@ function storedCanonicalKey(
     d.posted,
     d.party_id,
     d.subsidiary_id,
-    d.ddate,
+    d.document_date,
+    d.posting_date ?? d.document_date,
+    d.posting_period_id,
     d.due,
     d.currency,
     normalizeDecimal(d.fx_rate, 8),
@@ -526,7 +544,8 @@ async function storedKey(docId: string): Promise<string> {
   const [d] = (
     (await db.execute(sql`
       select kind, party_id, subsidiary_id,
-             coalesce(posting_date, document_date)::text as ddate,
+             document_date::text, posting_date::text,
+             posting_period_id,
              due_date::text as due,
              memo, reference_number, custom->>'controlAccountId' as ctrl, extra_dims, id,
              posted_entry_id is not null as posted, currency, fx_rate, subtotal, total
@@ -555,7 +574,8 @@ async function loadStoredKeys(
 ): Promise<Map<string, string>> {
   const documents = (await db.execute(sql`
     select id, kind, party_id, subsidiary_id,
-           coalesce(posting_date, document_date)::text as ddate,
+           document_date::text, posting_date::text,
+           posting_period_id,
            due_date::text as due,
            memo, reference_number, custom->>'controlAccountId' as ctrl, extra_dims,
            posted_entry_id is not null as posted, currency, fx_rate, subtotal, total
@@ -1145,7 +1165,11 @@ export async function runSync(
         const have = existing.get(doc.sourceRef);
         if (!have) {
           // ---- NEW: insert + post through the kernel -------------------------
-          if (doc.posting && !ctx.periodFor(doc.documentDate)) {
+          if (
+            doc.posting &&
+            !doc.postingPeriodId &&
+            !ctx.periodFor(doc.postingDate ?? doc.documentDate)
+          ) {
             docsFailed++;
             skipped.push(`${doc.sourceRef}: no period for ${doc.documentDate}`);
             continue;
@@ -1164,6 +1188,8 @@ export async function runSync(
                 subsidiaryId: doc.subsidiaryId,
                 extraDims: doc.extraDims ?? {},
                 documentDate: doc.documentDate,
+                postingDate: doc.postingDate ?? doc.documentDate,
+                postingPeriodId: doc.postingPeriodId ?? null,
                 dueDate: doc.dueDate,
                 currency: doc.currency ?? source.baseCurrency,
                 fxRate: doc.fxRate ?? "1",
@@ -1230,6 +1256,8 @@ export async function runSync(
             await db.execute(sql`
               update documents
                  set document_number = ${effectiveSourceDocumentNumber(doc)},
+                     posting_date = ${doc.postingDate ?? doc.documentDate},
+                     posting_period_id = ${doc.postingPeriodId ?? null},
                      updated_at = now()
                where id = ${have.id}
             `);
@@ -1337,7 +1365,9 @@ export async function runSync(
             update documents set
               kind = ${doc.kind}, party_id = ${doc.partyId}, subsidiary_id = ${doc.subsidiaryId},
               document_number = ${sourceDocumentNumber},
-              document_date = ${doc.documentDate}, posting_date = ${doc.documentDate}, due_date = ${doc.dueDate},
+              document_date = ${doc.documentDate},
+              posting_date = ${doc.postingDate ?? doc.documentDate},
+              posting_period_id = ${doc.postingPeriodId ?? null}, due_date = ${doc.dueDate},
               currency = ${doc.currency ?? source.baseCurrency}, fx_rate = ${doc.fxRate ?? "1"},
               memo = ${doc.memo}, reference_number = ${doc.referenceNumber},
               extra_dims = ${JSON.stringify(doc.extraDims ?? {})}::jsonb,
