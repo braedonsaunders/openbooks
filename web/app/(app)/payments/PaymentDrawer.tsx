@@ -249,6 +249,9 @@ export function PaymentDrawer({
     [allocs, openItems],
   )
   const hasInvalidRow = openItems.some((i) => !rowValid(i))
+  const displayedOpenItems = editable
+    ? openItems
+    : openItems.filter((item) => allocs[item.lineId] !== undefined)
   const total = sum(validAllocations.map((allocation) => allocation.sourceTransactionAmount))
 
   // -- explicit save (no autosave) -----------------------------------------
@@ -639,7 +642,7 @@ export function PaymentDrawer({
               </p>
             ) : loadingItems ? (
               <p className="px-3 py-6 text-center text-sm text-slate-500 dark:text-slate-400">{t('loadingOpenItems')}</p>
-            ) : openItems.length === 0 ? (
+            ) : displayedOpenItems.length === 0 ? (
               <p className="rounded-md border border-dashed border-slate-300 px-3 py-6 text-center text-sm text-slate-500 dark:border-slate-700 dark:text-slate-400">
                 {t('noOpenItems', { side })}
               </p>
@@ -648,7 +651,7 @@ export function PaymentDrawer({
                 <table className="w-full text-sm">
                   <thead>
                     <tr className="border-b border-slate-200 text-left text-xs text-slate-500 dark:border-slate-800 dark:text-slate-400">
-                      <th className="w-10 px-3 py-2" aria-label={t('columns.apply')} />
+                      {editable ? <th className="w-10 px-3 py-2" aria-label={t('columns.apply')} /> : null}
                       <th className="px-3 py-2">{t('columns.document')}</th>
                       <th className="px-3 py-2">{t('columns.due')}</th>
                       <th className="px-3 py-2 text-right">{t('columns.original')}</th>
@@ -658,7 +661,7 @@ export function PaymentDrawer({
                     </tr>
                   </thead>
                   <tbody>
-                    {openItems.map((item) => {
+                    {displayedOpenItems.map((item) => {
                       const checked = allocs[item.lineId] !== undefined
                       const invalid = !rowValid(item)
                       return (
@@ -666,16 +669,15 @@ export function PaymentDrawer({
                           key={item.lineId}
                           className="border-b border-slate-100 last:border-0 dark:border-slate-800/60"
                         >
-                          <td className="px-3 py-2">
+                          {editable ? <td className="px-3 py-2">
                             <input
                               type="checkbox"
                               className="h-4 w-4 accent-teal-600"
                               checked={checked}
-                              disabled={!editable}
                               onChange={() => toggle(item)}
                               aria-label={t('applyAriaLabel', { document: item.documentNumber ?? item.entryNumber })}
                             />
-                          </td>
+                          </td> : null}
                           <td className="px-3 py-2">
                             <span className="font-mono text-[13px] font-semibold">
                               {item.documentNumber ?? item.entryNumber}
@@ -693,14 +695,13 @@ export function PaymentDrawer({
                           <td className="px-3 py-2 text-right font-medium tabular-nums">{money(item.transactionOpen, { currency: item.currency })}</td>
                           <td className="px-3 py-2">
                             {checked ? (
-                              <div className="space-y-2">
+                              editable ? <div className="space-y-2">
                                 <div>
                                   <span className="mb-1 block text-[11px] text-slate-500">{t('targetAmount', { currency: item.currency })}</span>
                                   <Input
                                     inputMode="decimal"
                                     className={'h-8 text-right tabular-nums ' + (invalid ? 'border-red-400 focus-visible:ring-red-400 dark:border-red-600' : '')}
                                     value={allocs[item.lineId]!.targetTransactionAmount}
-                                    disabled={!editable}
                                     onChange={(event) => updateAllocation(item.lineId, { targetTransactionAmount: event.target.value })}
                                     aria-invalid={invalid}
                                   />
@@ -709,16 +710,15 @@ export function PaymentDrawer({
                                   <div className="space-y-2 rounded-md bg-slate-50 p-2 dark:bg-slate-900/60">
                                     <div>
                                       <span className="mb-1 block text-[11px] text-slate-500">{t('sourceAmount', { currency: doc.currency })}</span>
-                                      <Input inputMode="decimal" className="h-8 text-right tabular-nums" value={allocs[item.lineId]!.sourceTransactionAmount} disabled={!editable} onChange={(event) => updateAllocation(item.lineId, { sourceTransactionAmount: event.target.value })} />
+                                      <Input inputMode="decimal" className="h-8 text-right tabular-nums" value={allocs[item.lineId]!.sourceTransactionAmount} onChange={(event) => updateAllocation(item.lineId, { sourceTransactionAmount: event.target.value })} />
                                     </div>
                                     <div>
                                       <span className="mb-1 block text-[11px] text-slate-500">{t('settlementRate', { target: item.currency, source: doc.currency })}</span>
-                                      <Input inputMode="decimal" className="h-8 text-right tabular-nums" value={allocs[item.lineId]!.settlementRate} disabled={!editable || allocs[item.lineId]!.settlementRateSource === 'provider'} onChange={(event) => updateAllocation(item.lineId, { settlementRate: event.target.value })} />
+                                      <Input inputMode="decimal" className="h-8 text-right tabular-nums" value={allocs[item.lineId]!.settlementRate} disabled={allocs[item.lineId]!.settlementRateSource === 'provider'} onChange={(event) => updateAllocation(item.lineId, { settlementRate: event.target.value })} />
                                     </div>
                                     <select
                                       className="h-8 w-full rounded-md border border-slate-300 bg-white px-2 text-xs dark:border-slate-700 dark:bg-slate-950"
                                       value={allocs[item.lineId]!.settlementRateSource}
-                                      disabled={!editable}
                                       onChange={(event) => {
                                         const source = event.target.value as AllocationClient['settlementRateSource']
                                         if (source === 'provider') {
@@ -742,7 +742,6 @@ export function PaymentDrawer({
                                       <select
                                         className="h-8 w-full rounded-md border border-slate-300 bg-white px-2 text-xs dark:border-slate-700 dark:bg-slate-950"
                                         value={allocs[item.lineId]!.settlementFxRateId ?? ''}
-                                        disabled={!editable}
                                         onChange={(event) => {
                                           const evidence = settlementRates.find((rate) => rate.id === event.target.value)
                                           if (evidence) updateAllocation(item.lineId, {
@@ -756,11 +755,22 @@ export function PaymentDrawer({
                                         {settlementRates.filter((rate) => rate.toCurrency === item.currency).map((rate) => <option key={rate.id} value={rate.id}>{rate.asOf} · {rate.rate} · {rate.source}</option>)}
                                       </select>
                                     ) : (
-                                      <Input className="h-8" value={allocs[item.lineId]!.settlementRateReference} disabled={!editable} placeholder={t('rateReferencePlaceholder')} onChange={(event) => updateAllocation(item.lineId, { settlementRateReference: event.target.value })} />
+                                      <Input className="h-8" value={allocs[item.lineId]!.settlementRateReference} placeholder={t('rateReferencePlaceholder')} onChange={(event) => updateAllocation(item.lineId, { settlementRateReference: event.target.value })} />
                                     )}
                                   </div>
                                 ) : null}
-                              </div>
+                              </div> : (
+                                <div className="space-y-1 text-right tabular-nums">
+                                  <div>{money(allocs[item.lineId]!.targetTransactionAmount || '0', { currency: item.currency })}</div>
+                                  {item.currency !== doc.currency ? (
+                                    <>
+                                      <div className="text-xs text-slate-500 dark:text-slate-400">{money(allocs[item.lineId]!.sourceTransactionAmount || '0', { currency: doc.currency })}</div>
+                                      <div className="text-xs text-slate-500 dark:text-slate-400">{allocs[item.lineId]!.settlementRate} · {t(`rateSource.${allocs[item.lineId]!.settlementRateSource}`)}</div>
+                                      {allocs[item.lineId]!.settlementRateReference ? <div className="text-xs text-slate-500 dark:text-slate-400">{allocs[item.lineId]!.settlementRateReference}</div> : null}
+                                    </>
+                                  ) : null}
+                                </div>
+                              )
                             ) : null}
                           </td>
                         </tr>
@@ -770,7 +780,7 @@ export function PaymentDrawer({
                 </table>
               </div>
             )}
-            {hasInvalidRow ? (
+            {editable && hasInvalidRow ? (
               <p className="text-xs text-red-600 dark:text-red-400">{t('invalidAllocation')}</p>
             ) : null}
           </div>

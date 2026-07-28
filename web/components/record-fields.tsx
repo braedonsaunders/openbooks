@@ -25,6 +25,7 @@ import {
   withComputedFormulas,
 } from '../lib/record-schema'
 import { useMoney } from './money-provider'
+import { ReadOnlyValue } from './read-only-value'
 
 // --- /api/forms/options cache ------------------------------------------------
 
@@ -204,6 +205,14 @@ function EntityPicker({
       </p>
     )
   }
+  if (disabled) {
+    const selected = withSelected.find((option) => option.value === current)
+    return (
+      <ReadOnlyValue
+        value={current ? (selected?.label ?? (options ? t('inactiveSelected') : tCommon('feedback.loading'))) : ''}
+      />
+    )
+  }
   return (
     <SearchSelect
       options={withSelected}
@@ -336,7 +345,7 @@ function HeaderSection({
             <div key={field.id} className={cn('space-y-1.5', wide && 'sm:col-span-2')}>
               <FieldLabel help={field.helpText}>
                 {field.label}
-                {required ? <span className="ml-0.5 text-red-500">*</span> : null}
+                {required && !disabled ? <span className="ml-0.5 text-red-500">*</span> : null}
               </FieldLabel>
               <FieldInput
                 field={field}
@@ -430,7 +439,7 @@ function LineListEditor({
                         className="text-xs font-medium text-slate-600 dark:text-slate-300"
                       >
                         {f.label}
-                        {required ? <span className="ml-0.5 text-red-500">*</span> : null}
+                        {required && !disabled ? <span className="ml-0.5 text-red-500">*</span> : null}
                       </FieldLabel>
                     </th>
                   )
@@ -523,6 +532,17 @@ function FieldInput({
   const display = useMoney()
   const tCommon = useTranslations('common.labels')
   const invalidClass = invalid ? 'border-red-400 dark:border-red-700' : undefined
+  if (disabled && field.type !== 'gl_account' && field.type !== 'party') {
+    return (
+      <ReadOnlyValue
+        value={formatFieldValue(field, value, {}, display)}
+        className={cn(
+          isNumericField(field) && 'text-right tabular-nums',
+          field.type === 'long_text' && 'whitespace-pre-wrap',
+        )}
+      />
+    )
+  }
   switch (field.type) {
     case 'text':
       return (

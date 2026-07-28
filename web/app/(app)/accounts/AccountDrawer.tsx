@@ -7,6 +7,7 @@ import { toast } from 'sonner'
 import { Badge, Button, Input, Label, SearchSelect, Select, Textarea, UrlDrawer } from '@openbooks/ui'
 import { CustomFieldInputs, type CustomFieldDefClient } from '../../../components/custom-field-inputs'
 import type { AccountPayload } from '../../api/accounts/_lib'
+import { ReadOnlyValue } from '../../../components/read-only-value'
 
 type Option = { value: string; label: string }
 
@@ -211,16 +212,15 @@ export function AccountDrawer({
           </div> : null}
         </section>
 
-        <section className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+        {editable ? <section className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
           <label className="flex items-center gap-2">
-            <input type="checkbox" checked={form.isActive} disabled={!editable} onChange={(e) => set('isActive', e.target.checked)} className={checkboxClass} />
+            <input type="checkbox" checked={form.isActive} onChange={(e) => set('isActive', e.target.checked)} className={checkboxClass} />
             <span className="text-sm">{tc('labels.active')}</span>
           </label>
           <label className="flex items-center gap-2">
             <input
               type="checkbox"
               checked={form.isSummary}
-              disabled={!editable}
               onChange={(e) => setForm((current) => ({
                 ...current,
                 isSummary: e.target.checked,
@@ -231,29 +231,37 @@ export function AccountDrawer({
             <span className="text-sm">{t('drawer.summary')}</span>
           </label>
           <label className="flex items-center gap-2">
-            <input type="checkbox" checked={form.reconcilable} disabled={!editable || form.isSummary} onChange={(e) => set('reconcilable', e.target.checked)} className={checkboxClass} />
+            <input type="checkbox" checked={form.reconcilable} disabled={form.isSummary} onChange={(e) => set('reconcilable', e.target.checked)} className={checkboxClass} />
             <span className="text-sm">{t('drawer.reconcilable')}</span>
           </label>
           <label className="flex items-center gap-2">
-            <input type="checkbox" checked={form.eliminate} disabled={!editable} onChange={(e) => set('eliminate', e.target.checked)} className={checkboxClass} />
+            <input type="checkbox" checked={form.eliminate} onChange={(e) => set('eliminate', e.target.checked)} className={checkboxClass} />
             <span className="text-sm">{t('drawer.eliminate')}</span>
           </label>
           {subsidiaries.length > 0 ? <label className="flex items-center gap-2">
-            <input type="checkbox" checked={form.subsidiaryIncludeChildren} disabled={!editable || !form.subsidiaryId} onChange={(e) => set('subsidiaryIncludeChildren', e.target.checked)} className={checkboxClass} />
+            <input type="checkbox" checked={form.subsidiaryIncludeChildren} disabled={!form.subsidiaryId} onChange={(e) => set('subsidiaryIncludeChildren', e.target.checked)} className={checkboxClass} />
             <span className="text-sm">{t('drawer.includeSubsidiaries')}</span>
           </label> : null}
-        </section>
+        </section> : (
+          <section className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+            <div className={fieldClass}><Label>{tc('labels.active')}</Label><ReadOnlyValue value={form.isActive ? tc('labels.yes') : tc('labels.no')} /></div>
+            <div className={fieldClass}><Label>{t('drawer.summary')}</Label><ReadOnlyValue value={form.isSummary ? tc('labels.yes') : tc('labels.no')} /></div>
+            <div className={fieldClass}><Label>{t('drawer.reconcilable')}</Label><ReadOnlyValue value={form.reconcilable ? tc('labels.yes') : tc('labels.no')} /></div>
+            <div className={fieldClass}><Label>{t('drawer.eliminate')}</Label><ReadOnlyValue value={form.eliminate ? tc('labels.yes') : tc('labels.no')} /></div>
+            {subsidiaries.length > 0 ? <div className={fieldClass}><Label>{t('drawer.includeSubsidiaries')}</Label><ReadOnlyValue value={form.subsidiaryIncludeChildren ? tc('labels.yes') : tc('labels.no')} /></div> : null}
+          </section>
+        )}
 
         <section className={fieldClass}>
           <Label>{t('drawer.requiredDimensions')}</Label>
-          <div className="flex flex-wrap gap-x-6 gap-y-3">
+          {editable ? <div className="flex flex-wrap gap-x-6 gap-y-3">
             {[...segments, { key: 'party', name: t('drawer.dimensions.party') }].map((dimension) => (
               <label key={dimension.key} className="flex items-center gap-2">
-                <input type="checkbox" checked={form.requiredDimensions.includes(dimension.key)} disabled={!editable} onChange={(e) => toggleDimension(dimension.key, e.target.checked)} className={checkboxClass} />
+                <input type="checkbox" checked={form.requiredDimensions.includes(dimension.key)} onChange={(e) => toggleDimension(dimension.key, e.target.checked)} className={checkboxClass} />
                 <span className="text-sm">{dimension.name}</span>
               </label>
             ))}
-          </div>
+          </div> : <ReadOnlyValue value={[...segments, { key: 'party', name: t('drawer.dimensions.party') }].filter((dimension) => form.requiredDimensions.includes(dimension.key)).map((dimension) => dimension.name).join(', ')} />}
         </section>
 
         <CustomFieldInputs defs={fieldDefs} values={form.custom} onChange={(v) => set('custom', v)} readOnly={!editable} />

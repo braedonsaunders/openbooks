@@ -10,6 +10,7 @@ import { CustomFieldInputs, type CustomFieldDefClient } from '../../../component
 import { ItemRatesEditor } from './ItemRatesEditor'
 import { ItemCostingEditor } from './ItemCostingEditor'
 import { FairValuePricesEditor } from './FairValuePricesEditor'
+import { ReadOnlyValue } from '../../../components/read-only-value'
 
 interface AccountOpt {
   id: string
@@ -388,10 +389,10 @@ export function ItemDrawer({
           itemId={String(it.id)}
           itemPrice={defaultRate}
           itemCost={defaultCost}
-          canManage={canManage}
+          canManage={editable}
         />
 
-        <ItemCostingEditor itemId={String(it.id)} kind={kind} accounts={accounts} canManage={canManage} />
+        <ItemCostingEditor itemId={String(it.id)} kind={kind} accounts={accounts} canManage={editable} />
 
         {/* -- accounting ---------------------------------------------- */}
         <section className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
@@ -543,22 +544,21 @@ export function ItemDrawer({
           </div>
         </section>
 
-        <FairValuePricesEditor itemId={String(it.id)} canManage={canManage} />
+        <FairValuePricesEditor itemId={String(it.id)} canManage={editable} />
 
         <CustomFieldInputs defs={fieldDefs} values={customValues} onChange={setCustomValues} readOnly={ro} />
 
         {/* -- flags --------------------------------------------------- */}
-        <section className="flex flex-wrap items-center gap-6">
-          <label className="flex items-center gap-2">
+        <section className={editable ? 'flex flex-wrap items-center gap-6' : 'grid gap-4 sm:grid-cols-2'}>
+          {editable ? <label className="flex items-center gap-2">
             <input
               type="checkbox"
               checked={showOnTimesheet}
               onChange={(e) => setShowOnTimesheet(e.target.checked)}
-              disabled={ro}
               className={checkboxClass}
             />
             <span className="text-sm">{t('drawer.showOnTimesheet')}</span>
-          </label>
+          </label> : <div className={field}><Label>{t('drawer.showOnTimesheet')}</Label><ReadOnlyValue value={showOnTimesheet ? tCommon('labels.yes') : tCommon('labels.no')} /></div>}
         </section>
       </div>
     </UrlDrawer>

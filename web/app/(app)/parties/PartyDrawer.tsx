@@ -1,7 +1,7 @@
 'use client'
 
 import { useMoney } from '@/components/money-provider'
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import Link from 'next/link'
 import { usePathname, useRouter, useSearchParams } from 'next/navigation'
 import { useLocale, useTranslations } from 'next-intl'
@@ -43,6 +43,7 @@ import { RateBookAssignmentSection } from './RateBookAssignmentSection'
 import { ApprovalActions } from '../../../components/approval-actions'
 import { FlowManualButtons } from '../../../components/flow-manual-buttons'
 import { countryOptions } from '../../../lib/countries'
+import { ReadOnlyValue } from '../../../components/read-only-value'
 
 interface Opt {
   id: string
@@ -485,55 +486,64 @@ export function PartyDrawer({
   ], [t, tc, yesNo])
   const customDefByKey = useMemo(() => new Map(fieldDefs.map((definition) => [definition.key, definition])), [fieldDefs])
   const label = (placement: HeaderFieldPlacement, fallback: string) => placement.labelOverride?.trim() || fallback
+  const optionName = (options: Opt[], id: string) => {
+    const option = options.find((item) => item.id === id)
+    return option?.label ?? option?.name ?? ''
+  }
+  const partyValue = (value: ReactNode, className?: string) => <ReadOnlyValue value={value} className={className} />
   const renderPartyField = (placement: HeaderFieldPlacement) => {
     if (isCustomFieldKey(placement.key)) {
       const definition = customDefByKey.get(customFieldDefKey(placement.key))
       return definition ? <CustomFieldInput def={definition} value={customValues[definition.key]} onChange={(value) => setCustomValues((current) => ({ ...current, [definition.key]: value }))} readOnly={ro} /> : null
     }
     switch (placement.key) {
-      case 'kind': return <><Label>{label(placement, t('kind'))}</Label><Select value={kind} onChange={(event) => setKind(event.target.value)} disabled={ro}><option value="company">{t('kindCompany')}</option><option value="person">{t('kindPerson')}</option></Select></>
-      case 'display_name': return <><Label>{label(placement, t('displayName'))}<span className="text-red-500"> *</span></Label><Input value={displayName} onChange={(event) => setDisplayName(event.target.value)} placeholder={kind === 'person' ? t('personNamePlaceholder') : t('companyNamePlaceholder')} disabled={ro} /></>
-      case 'short_code': return <><Label>{label(placement, t('shortCode'))}</Label><Input value={shortCode} onChange={(event) => setShortCode(event.target.value)} className="font-mono" placeholder={t('shortCodePlaceholder')} disabled={ro} /></>
-      case 'legal_name': return <><Label>{label(placement, t('legalName'))}</Label><Input value={legalName} onChange={(event) => setLegalName(event.target.value)} disabled={ro} /></>
-      case 'email': return <><Label>{label(placement, tc('labels.email'))}</Label><Input type="email" value={email} onChange={(event) => setEmail(event.target.value)} disabled={ro} /></>
-      case 'phone': return <><Label>{label(placement, t('phone'))}</Label><Input type="tel" value={phone} onChange={(event) => setPhone(event.target.value)} disabled={ro} /></>
-      case 'website': return <><Label>{label(placement, t('website'))}</Label><Input value={website} onChange={(event) => setWebsite(event.target.value)} placeholder={t('websitePlaceholder')} disabled={ro} /></>
+      case 'kind': return <><Label>{label(placement, t('kind'))}</Label>{editable ? <Select value={kind} onChange={(event) => setKind(event.target.value)}><option value="company">{t('kindCompany')}</option><option value="person">{t('kindPerson')}</option></Select> : partyValue(kind === 'person' ? t('kindPerson') : t('kindCompany'))}</>
+      case 'display_name': return <><Label>{label(placement, t('displayName'))}{editable ? <span className="text-red-500"> *</span> : null}</Label>{editable ? <Input value={displayName} onChange={(event) => setDisplayName(event.target.value)} placeholder={kind === 'person' ? t('personNamePlaceholder') : t('companyNamePlaceholder')} /> : partyValue(displayName)}</>
+      case 'short_code': return <><Label>{label(placement, t('shortCode'))}</Label>{editable ? <Input value={shortCode} onChange={(event) => setShortCode(event.target.value)} className="font-mono" placeholder={t('shortCodePlaceholder')} /> : partyValue(shortCode, 'font-mono')}</>
+      case 'legal_name': return <><Label>{label(placement, t('legalName'))}</Label>{editable ? <Input value={legalName} onChange={(event) => setLegalName(event.target.value)} /> : partyValue(legalName)}</>
+      case 'email': return <><Label>{label(placement, tc('labels.email'))}</Label>{editable ? <Input type="email" value={email} onChange={(event) => setEmail(event.target.value)} /> : partyValue(email)}</>
+      case 'phone': return <><Label>{label(placement, t('phone'))}</Label>{editable ? <Input type="tel" value={phone} onChange={(event) => setPhone(event.target.value)} /> : partyValue(phone)}</>
+      case 'website': return <><Label>{label(placement, t('website'))}</Label>{editable ? <Input value={website} onChange={(event) => setWebsite(event.target.value)} placeholder={t('websitePlaceholder')} /> : partyValue(website)}</>
       case 'subsidiary_id':
         if (!multiSubsidiary) return null
-        return <><Label>{label(placement, t('primarySubsidiary'))}</Label><Select value={subsidiaryId} onChange={(event) => setSubsidiaryId(event.target.value)} disabled={ro}>{subsidiaries.filter((item) => !item.isElimination).map((item) => <option key={item.id} value={item.id}>{`${'— '.repeat(item.depth)}${item.name ?? ''}`}</option>)}</Select><p className="text-xs text-slate-500 dark:text-slate-400">{t('primarySubsidiaryHint')}</p></>
+        return <><Label>{label(placement, t('primarySubsidiary'))}</Label>{editable ? <Select value={subsidiaryId} onChange={(event) => setSubsidiaryId(event.target.value)}>{subsidiaries.filter((item) => !item.isElimination).map((item) => <option key={item.id} value={item.id}>{`${'— '.repeat(item.depth)}${item.name ?? ''}`}</option>)}</Select> : partyValue(optionName(subsidiaries, subsidiaryId))}<p className="text-xs text-slate-500 dark:text-slate-400">{t('primarySubsidiaryHint')}</p></>
       case 'additional_subsidiaries':
         if (!multiSubsidiary) return null
-        return <><Label>{label(placement, t('additionalSubsidiaries'))}</Label><div className="max-h-44 overflow-y-auto rounded-lg border border-slate-200 px-3 py-2 dark:border-slate-800">{subsidiaries.filter((item) => !item.isElimination && item.id !== subsidiaryId).map((item) => <label key={item.id} className="flex cursor-pointer items-center gap-2.5 py-1.5"><input type="checkbox" checked={additionalSubsidiaryIds.has(item.id)} disabled={ro} onChange={(event) => setAdditionalSubsidiaryIds((previous) => { const next = new Set(previous); if (event.target.checked) next.add(item.id); else next.delete(item.id); return next })} className={checkboxClass} /><span className="text-sm text-slate-800 dark:text-slate-200" style={{ paddingLeft: `${item.depth * 12}px` }}>{item.name}</span></label>)}</div><p className="text-xs text-slate-500 dark:text-slate-400">{t('additionalSubsidiariesHint')}</p></>
+        return <><Label>{label(placement, t('additionalSubsidiaries'))}</Label>{editable ? <div className="max-h-44 overflow-y-auto rounded-lg border border-slate-200 px-3 py-2 dark:border-slate-800">{subsidiaries.filter((item) => !item.isElimination && item.id !== subsidiaryId).map((item) => <label key={item.id} className="flex cursor-pointer items-center gap-2.5 py-1.5"><input type="checkbox" checked={additionalSubsidiaryIds.has(item.id)} onChange={(event) => setAdditionalSubsidiaryIds((previous) => { const next = new Set(previous); if (event.target.checked) next.add(item.id); else next.delete(item.id); return next })} className={checkboxClass} /><span className="text-sm text-slate-800 dark:text-slate-200" style={{ paddingLeft: `${item.depth * 12}px` }}>{item.name}</span></label>)}</div> : partyValue(subsidiaries.filter((item) => additionalSubsidiaryIds.has(item.id)).map((item) => item.name).filter(Boolean).join(', '))}<p className="text-xs text-slate-500 dark:text-slate-400">{t('additionalSubsidiariesHint')}</p></>
       case 'payment_terms_id': {
         const value = recordType === 'vendor' ? vendor.paymentTermsId : customer.paymentTermsId
-        return <><Label>{label(placement, t('paymentTerms'))}</Label><Select value={value} onChange={(event) => recordType === 'vendor' ? setVendor({ ...vendor, paymentTermsId: event.target.value }) : setCustomer({ ...customer, paymentTermsId: event.target.value })} disabled={ro}><option value="">—</option>{paymentTerms.map((term) => <option key={term.id} value={term.id}>{term.name}</option>)}</Select></>
+        return <><Label>{label(placement, t('paymentTerms'))}</Label>{editable ? <Select value={value} onChange={(event) => recordType === 'vendor' ? setVendor({ ...vendor, paymentTermsId: event.target.value }) : setCustomer({ ...customer, paymentTermsId: event.target.value })}><option value="">—</option>{paymentTerms.map((term) => <option key={term.id} value={term.id}>{term.name}</option>)}</Select> : partyValue(optionName(paymentTerms, value))}</>
       }
-      case 'credit_limit': return <><Label>{label(placement, t('creditLimit'))}</Label><Input inputMode="decimal" className="text-right tabular-nums" value={customer.creditLimit} onChange={(event) => setCustomer({ ...customer, creditLimit: event.target.value })} disabled={ro} /></>
+      case 'credit_limit': return <><Label>{label(placement, t('creditLimit'))}</Label>{editable ? <Input inputMode="decimal" className="text-right tabular-nums" value={customer.creditLimit} onChange={(event) => setCustomer({ ...customer, creditLimit: event.target.value })} /> : partyValue(customer.creditLimit, 'text-right tabular-nums')}</>
       case 'currency': {
         const value = recordType === 'vendor' ? vendor.currency : customer.currency
-        return <><Label>{label(placement, tc('labels.currency'))}</Label><Select value={value ?? ''} onChange={(event) => recordType === 'vendor' ? setVendor({ ...vendor, currency: event.target.value }) : setCustomer({ ...customer, currency: event.target.value })} disabled={ro}>{!value && <option value="">—</option>}{ISO_CURRENCIES.map((c) => <option key={c.code} value={c.code}>{c.code} · {c.name}</option>)}</Select></>
+        const currency = ISO_CURRENCIES.find((item) => item.code === value)
+        return <><Label>{label(placement, tc('labels.currency'))}</Label>{editable ? <Select value={value ?? ''} onChange={(event) => recordType === 'vendor' ? setVendor({ ...vendor, currency: event.target.value }) : setCustomer({ ...customer, currency: event.target.value })}>{!value && <option value="">—</option>}{ISO_CURRENCIES.map((c) => <option key={c.code} value={c.code}>{c.code} · {c.name}</option>)}</Select> : partyValue(currency ? `${currency.code} · ${currency.name}` : value)}</>
       }
-      case 'ar_account_id': return <><Label>{label(placement, t('receivableAccount'))}</Label><Select value={customer.arAccountId} onChange={(event) => setCustomer({ ...customer, arAccountId: event.target.value })} disabled={ro}><option value="">—</option>{accounts.filter((account) => account.type === 'asset_receivable').map((account) => <option key={account.id} value={account.id}>{account.label ?? account.name}</option>)}</Select></>
-      case 'sales_rep_id': return <><Label>{label(placement, t('salesRepresentative'))}</Label><Select value={customer.salesRepId} onChange={(event) => setCustomer({ ...customer, salesRepId: event.target.value })} disabled={ro}><option value="">—</option>{salesReps.map((rep) => <option key={rep.id} value={rep.id}>{rep.name}</option>)}</Select></>
+      case 'ar_account_id': return <><Label>{label(placement, t('receivableAccount'))}</Label>{editable ? <Select value={customer.arAccountId} onChange={(event) => setCustomer({ ...customer, arAccountId: event.target.value })}><option value="">—</option>{accounts.filter((account) => account.type === 'asset_receivable').map((account) => <option key={account.id} value={account.id}>{account.label ?? account.name}</option>)}</Select> : partyValue(optionName(accounts, customer.arAccountId))}</>
+      case 'sales_rep_id': return <><Label>{label(placement, t('salesRepresentative'))}</Label>{editable ? <Select value={customer.salesRepId} onChange={(event) => setCustomer({ ...customer, salesRepId: event.target.value })}><option value="">—</option>{salesReps.map((rep) => <option key={rep.id} value={rep.id}>{rep.name}</option>)}</Select> : partyValue(optionName(salesReps, customer.salesRepId))}</>
       case 'tax_code_id': {
         const value = recordType === 'vendor' ? vendor.taxCodeId : customer.taxCodeId
-        return <><Label>{label(placement, t('taxCode'))}</Label><Select value={value} onChange={(event) => recordType === 'vendor' ? setVendor({ ...vendor, taxCodeId: event.target.value }) : setCustomer({ ...customer, taxCodeId: event.target.value })} disabled={ro}><option value="">—</option>{taxCodes.map((code) => <option key={code.id} value={code.id}>{code.label ?? code.name}</option>)}</Select></>
+        return <><Label>{label(placement, t('taxCode'))}</Label>{editable ? <Select value={value} onChange={(event) => recordType === 'vendor' ? setVendor({ ...vendor, taxCodeId: event.target.value }) : setCustomer({ ...customer, taxCodeId: event.target.value })}><option value="">—</option>{taxCodes.map((code) => <option key={code.id} value={code.id}>{code.label ?? code.name}</option>)}</Select> : partyValue(optionName(taxCodes, value))}</>
       }
       // Invoicing preferences + labor pricing now live on dedicated subtabs, not
       // inline in the overview layout — see the 'invoicing' / 'pricing' tabs.
       case 'invoicing_preference': return null
       case 'labor_pricing': return null
-      case 'payment_method': return <><Label>{label(placement, t('paymentMethod'))}</Label><Select value={vendor.paymentMethod} onChange={(event) => setVendor({ ...vendor, paymentMethod: event.target.value })} disabled={ro}><option value="">—</option>{PAYMENT_METHOD_OPTIONS.map((option) => <option key={option.value} value={option.value}>{t(option.labelKey)}</option>)}</Select></>
-      case 'eft_notification_email': return <><Label>{label(placement, t('eftNotificationEmail'))}</Label><Input type="email" value={vendor.eftNotificationEmail} onChange={(event) => setVendor({ ...vendor, eftNotificationEmail: event.target.value })} disabled={ro} /></>
-      case 'is_1099_or_t4a': return <label className="flex items-center gap-2 pt-7"><input type="checkbox" checked={vendor.is1099OrT4a} onChange={(event) => setVendor({ ...vendor, is1099OrT4a: event.target.checked })} disabled={ro} className={checkboxClass} /><span className="text-sm">{label(placement, t('t4aReportable'))}</span></label>
-      case 'ap_account_id': return <><Label>{label(placement, t('payableAccount'))}</Label><Select value={vendor.apAccountId} onChange={(event) => setVendor({ ...vendor, apAccountId: event.target.value })} disabled={ro}><option value="">—</option>{accounts.filter((account) => account.type === 'liability_payable').map((account) => <option key={account.id} value={account.id}>{account.label ?? account.name}</option>)}</Select></>
-      case 'default_expense_account_id': return <><Label>{label(placement, t('defaultExpenseAccount'))}</Label><Select value={vendor.defaultExpenseAccountId} onChange={(event) => setVendor({ ...vendor, defaultExpenseAccountId: event.target.value })} disabled={ro}><option value="">—</option>{accounts.filter((account) => account.type === 'expense' || account.type === 'expense_other' || account.type === 'cogs').map((account) => <option key={account.id} value={account.id}>{account.label ?? account.name}</option>)}</Select></>
-      case 'employee_number': return <><Label>{label(placement, t('employeeNumber'))}</Label><Input value={employee.employeeNumber} onChange={(event) => setEmployee({ ...employee, employeeNumber: event.target.value })} disabled={ro} /></>
-      case 'job_title': return <><Label>{label(placement, t('jobTitle'))}</Label><Input value={employee.jobTitle} onChange={(event) => setEmployee({ ...employee, jobTitle: event.target.value })} disabled={ro} /></>
-      case 'department_id': return <><Label>{label(placement, tc('labels.department'))}</Label><Select value={employee.departmentId} onChange={(event) => setEmployee({ ...employee, departmentId: event.target.value })} disabled={ro}><option value="">—</option>{departments.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</Select></>
-      case 'trade_id': return <><Label>{label(placement, t('trade'))}</Label><Select value={employee.tradeId} onChange={(event) => setEmployee({ ...employee, tradeId: event.target.value })} disabled={ro}><option value="">—</option>{trades.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</Select></>
-      case 'worker_comp_group_id': return <><Label>{label(placement, t('workerCompGroup'))}</Label><Select value={employee.workerCompGroupId} onChange={(event) => setEmployee({ ...employee, workerCompGroupId: event.target.value })} disabled={ro}><option value="">—</option>{workerCompGroups.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</Select></>
-      case 'hired_on': return <><Label>{label(placement, t('hiredOn'))}</Label><Input type="date" value={employee.hiredOn} onChange={(event) => setEmployee({ ...employee, hiredOn: event.target.value })} disabled={ro} /></>
+      case 'payment_method': {
+        const method = PAYMENT_METHOD_OPTIONS.find((option) => option.value === vendor.paymentMethod)
+        return <><Label>{label(placement, t('paymentMethod'))}</Label>{editable ? <Select value={vendor.paymentMethod} onChange={(event) => setVendor({ ...vendor, paymentMethod: event.target.value })}><option value="">—</option>{PAYMENT_METHOD_OPTIONS.map((option) => <option key={option.value} value={option.value}>{t(option.labelKey)}</option>)}</Select> : partyValue(method ? t(method.labelKey) : '')}</>
+      }
+      case 'eft_notification_email': return <><Label>{label(placement, t('eftNotificationEmail'))}</Label>{editable ? <Input type="email" value={vendor.eftNotificationEmail} onChange={(event) => setVendor({ ...vendor, eftNotificationEmail: event.target.value })} /> : partyValue(vendor.eftNotificationEmail)}</>
+      case 'is_1099_or_t4a': return editable ? <label className="flex items-center gap-2 pt-7"><input type="checkbox" checked={vendor.is1099OrT4a} onChange={(event) => setVendor({ ...vendor, is1099OrT4a: event.target.checked })} className={checkboxClass} /><span className="text-sm">{label(placement, t('t4aReportable'))}</span></label> : <><Label>{label(placement, t('t4aReportable'))}</Label>{partyValue(vendor.is1099OrT4a ? tc('labels.yes') : tc('labels.no'))}</>
+      case 'ap_account_id': return <><Label>{label(placement, t('payableAccount'))}</Label>{editable ? <Select value={vendor.apAccountId} onChange={(event) => setVendor({ ...vendor, apAccountId: event.target.value })}><option value="">—</option>{accounts.filter((account) => account.type === 'liability_payable').map((account) => <option key={account.id} value={account.id}>{account.label ?? account.name}</option>)}</Select> : partyValue(optionName(accounts, vendor.apAccountId))}</>
+      case 'default_expense_account_id': return <><Label>{label(placement, t('defaultExpenseAccount'))}</Label>{editable ? <Select value={vendor.defaultExpenseAccountId} onChange={(event) => setVendor({ ...vendor, defaultExpenseAccountId: event.target.value })}><option value="">—</option>{accounts.filter((account) => account.type === 'expense' || account.type === 'expense_other' || account.type === 'cogs').map((account) => <option key={account.id} value={account.id}>{account.label ?? account.name}</option>)}</Select> : partyValue(optionName(accounts, vendor.defaultExpenseAccountId))}</>
+      case 'employee_number': return <><Label>{label(placement, t('employeeNumber'))}</Label>{editable ? <Input value={employee.employeeNumber} onChange={(event) => setEmployee({ ...employee, employeeNumber: event.target.value })} /> : partyValue(employee.employeeNumber, 'font-mono')}</>
+      case 'job_title': return <><Label>{label(placement, t('jobTitle'))}</Label>{editable ? <Input value={employee.jobTitle} onChange={(event) => setEmployee({ ...employee, jobTitle: event.target.value })} /> : partyValue(employee.jobTitle)}</>
+      case 'department_id': return <><Label>{label(placement, tc('labels.department'))}</Label>{editable ? <Select value={employee.departmentId} onChange={(event) => setEmployee({ ...employee, departmentId: event.target.value })}><option value="">—</option>{departments.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</Select> : partyValue(optionName(departments, employee.departmentId))}</>
+      case 'trade_id': return <><Label>{label(placement, t('trade'))}</Label>{editable ? <Select value={employee.tradeId} onChange={(event) => setEmployee({ ...employee, tradeId: event.target.value })}><option value="">—</option>{trades.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</Select> : partyValue(optionName(trades, employee.tradeId))}</>
+      case 'worker_comp_group_id': return <><Label>{label(placement, t('workerCompGroup'))}</Label>{editable ? <Select value={employee.workerCompGroupId} onChange={(event) => setEmployee({ ...employee, workerCompGroupId: event.target.value })}><option value="">—</option>{workerCompGroups.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</Select> : partyValue(optionName(workerCompGroups, employee.workerCompGroupId))}</>
+      case 'hired_on': return <><Label>{label(placement, t('hiredOn'))}</Label>{editable ? <Input type="date" value={employee.hiredOn} onChange={(event) => setEmployee({ ...employee, hiredOn: event.target.value })} /> : partyValue(employee.hiredOn)}</>
       default: return null
     }
   }
@@ -658,47 +668,45 @@ export function PartyDrawer({
         <section className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
           <div className={field}>
             <Label>{t('kind')}</Label>
-            <Select value={kind} onChange={(e) => setKind(e.target.value)} disabled={ro}>
+            {editable ? <Select value={kind} onChange={(e) => setKind(e.target.value)}>
               <option value="company">{t('kindCompany')}</option>
               <option value="person">{t('kindPerson')}</option>
-            </Select>
+            </Select> : partyValue(kind === 'person' ? t('kindPerson') : t('kindCompany'))}
           </div>
           <div className={`${field} lg:col-span-2`}>
             <Label>
-              {t('displayName')}<span className="text-red-500"> *</span>
+              {t('displayName')}{editable ? <span className="text-red-500"> *</span> : null}
             </Label>
-            <Input
+            {editable ? <Input
               value={displayName}
               onChange={(e) => setDisplayName(e.target.value)}
               placeholder={kind === 'person' ? t('personNamePlaceholder') : t('companyNamePlaceholder')}
-              disabled={ro}
-            />
+            /> : partyValue(displayName)}
           </div>
           <div className={field}>
             <Label>{t('shortCode')}</Label>
-            <Input
+            {editable ? <Input
               value={shortCode}
               onChange={(e) => setShortCode(e.target.value)}
               className="font-mono"
               placeholder={t('shortCodePlaceholder')}
-              disabled={ro}
-            />
+            /> : partyValue(shortCode, 'font-mono')}
           </div>
           <div className={`${field} lg:col-span-2`}>
             <Label>{t('legalName')}</Label>
-            <Input value={legalName} onChange={(e) => setLegalName(e.target.value)} disabled={ro} />
+            {editable ? <Input value={legalName} onChange={(e) => setLegalName(e.target.value)} /> : partyValue(legalName)}
           </div>
           <div className={field}>
             <Label>{tc('labels.email')}</Label>
-            <Input type="email" value={email} onChange={(e) => setEmail(e.target.value)} disabled={ro} />
+            {editable ? <Input type="email" value={email} onChange={(e) => setEmail(e.target.value)} /> : partyValue(email)}
           </div>
           <div className={field}>
             <Label>{t('phone')}</Label>
-            <Input type="tel" value={phone} onChange={(e) => setPhone(e.target.value)} disabled={ro} />
+            {editable ? <Input type="tel" value={phone} onChange={(e) => setPhone(e.target.value)} /> : partyValue(phone)}
           </div>
           <div className={`${field} lg:col-span-2`}>
             <Label>{t('website')}</Label>
-            <Input value={website} onChange={(e) => setWebsite(e.target.value)} placeholder={t('websitePlaceholder')} disabled={ro} />
+            {editable ? <Input value={website} onChange={(e) => setWebsite(e.target.value)} placeholder={t('websitePlaceholder')} /> : partyValue(website)}
           </div>
         </section>
 
@@ -712,22 +720,21 @@ export function PartyDrawer({
             <div className="grid gap-4 sm:grid-cols-2">
               <div className={field}>
                 <Label>{t('primarySubsidiary')}</Label>
-                <Select value={subsidiaryId} onChange={(e) => setSubsidiaryId(e.target.value)} disabled={ro}>
+                {editable ? <Select value={subsidiaryId} onChange={(e) => setSubsidiaryId(e.target.value)}>
                   {subsidiaries.filter((s) => !s.isElimination).map((s) => (
                     <option key={s.id} value={s.id}>{`${'— '.repeat(s.depth)}${s.name ?? ''}`}</option>
                   ))}
-                </Select>
+                </Select> : partyValue(optionName(subsidiaries, subsidiaryId))}
                 <p className="text-xs text-slate-500 dark:text-slate-400">{t('primarySubsidiaryHint')}</p>
               </div>
               <div className={field}>
                 <Label>{t('additionalSubsidiaries')}</Label>
-                <div className="max-h-44 overflow-y-auto rounded-lg border border-slate-200 px-3 py-2 dark:border-slate-800">
+                {editable ? <div className="max-h-44 overflow-y-auto rounded-lg border border-slate-200 px-3 py-2 dark:border-slate-800">
                   {subsidiaries.filter((s) => !s.isElimination && s.id !== subsidiaryId).map((s) => (
                     <label key={s.id} className="flex cursor-pointer items-center gap-2.5 py-1.5">
                       <input
                         type="checkbox"
                         checked={additionalSubsidiaryIds.has(s.id)}
-                        disabled={ro}
                         onChange={(e) => setAdditionalSubsidiaryIds((previous) => {
                           const next = new Set(previous)
                           if (e.target.checked) next.add(s.id)
@@ -741,7 +748,7 @@ export function PartyDrawer({
                       </span>
                     </label>
                   ))}
-                </div>
+                </div> : partyValue(subsidiaries.filter((item) => additionalSubsidiaryIds.has(item.id)).map((item) => item.name).filter(Boolean).join(', '))}
                 <p className="text-xs text-slate-500 dark:text-slate-400">{t('additionalSubsidiariesHint')}</p>
               </div>
             </div>
@@ -757,7 +764,53 @@ export function PartyDrawer({
              role's details render, with no enable checkbox — the multi-role
              party model is an internal abstraction. The unified /parties
              directory (no `role`) keeps the full checkbox view. */}
-        {tab === 'accounting' && (!effectiveLayout || !role) ? (
+        {tab === 'accounting' && (!effectiveLayout || !role) && ro ? (
+          <section className="space-y-5">
+            {(!role || role === 'customer') && customer.enabled ? (
+              <div className="space-y-3">
+                <h3 className="text-sm font-semibold text-slate-900 dark:text-slate-100">{tc('labels.customer')}</h3>
+                <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+                  <PartyReadOnlyField label={t('paymentTerms')} value={optionName(paymentTerms, customer.paymentTermsId)} />
+                  <PartyReadOnlyField label={t('creditLimit')} value={customer.creditLimit} className="tabular-nums" />
+                  <PartyReadOnlyField label={tc('labels.currency')} value={customer.currency} className="font-mono" />
+                  <PartyReadOnlyField label={t('receivableAccount')} value={optionName(accounts, customer.arAccountId)} />
+                  <PartyReadOnlyField label={t('salesRepresentative')} value={optionName(salesReps, customer.salesRepId)} />
+                  <PartyReadOnlyField label={t('taxCode')} value={optionName(taxCodes, customer.taxCodeId)} />
+                </div>
+              </div>
+            ) : null}
+            {(!role || role === 'vendor') && vendor.enabled ? (
+              <div className="space-y-3">
+                <h3 className="text-sm font-semibold text-slate-900 dark:text-slate-100">{tc('labels.vendor')}</h3>
+                <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+                  <PartyReadOnlyField label={t('paymentMethod')} value={vendor.paymentMethod ? t(PAYMENT_METHOD_OPTIONS.find((option) => option.value === vendor.paymentMethod)?.labelKey ?? 'paymentMethods.other') : ''} />
+                  <PartyReadOnlyField label={t('eftNotificationEmail')} value={vendor.eftNotificationEmail} />
+                  <PartyReadOnlyField label={t('paymentTerms')} value={optionName(paymentTerms, vendor.paymentTermsId)} />
+                  <PartyReadOnlyField label={tc('labels.currency')} value={vendor.currency} className="font-mono" />
+                  <PartyReadOnlyField label={t('t4aReportable')} value={vendor.is1099OrT4a ? tc('labels.yes') : tc('labels.no')} />
+                  <PartyReadOnlyField label={t('payableAccount')} value={optionName(accounts, vendor.apAccountId)} />
+                  <PartyReadOnlyField label={t('defaultExpenseAccount')} value={optionName(accounts, vendor.defaultExpenseAccountId)} />
+                  <PartyReadOnlyField label={t('taxCode')} value={optionName(taxCodes, vendor.taxCodeId)} />
+                </div>
+              </div>
+            ) : null}
+            {(!role || role === 'employee') && employee.enabled ? (
+              <div className="space-y-3">
+                <h3 className="text-sm font-semibold text-slate-900 dark:text-slate-100">{tc('labels.employee')}</h3>
+                <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+                  <PartyReadOnlyField label={t('employeeNumber')} value={employee.employeeNumber} className="font-mono" />
+                  <PartyReadOnlyField label={t('jobTitle')} value={employee.jobTitle} />
+                  <PartyReadOnlyField label={tc('labels.department')} value={optionName(departments, employee.departmentId)} />
+                  <PartyReadOnlyField label={t('trade')} value={optionName(trades, employee.tradeId)} />
+                  <PartyReadOnlyField label={t('workerCompGroup')} value={optionName(workerCompGroups, employee.workerCompGroupId)} />
+                  <PartyReadOnlyField label={t('hiredOn')} value={employee.hiredOn} />
+                </div>
+              </div>
+            ) : null}
+          </section>
+        ) : null}
+
+        {tab === 'accounting' && (!effectiveLayout || !role) && editable ? (
         <>
         <section className="space-y-3">
           <h3 className="text-sm font-semibold text-slate-900 dark:text-slate-100">
@@ -1053,7 +1106,7 @@ export function PartyDrawer({
           </section>
         ) : null}
         {tab === 'pricing' && role === 'customer' && !isPlaceholderName ? (
-          <RateBookAssignmentSection scope="customer" scopeId={String(p.id)} />
+          <RateBookAssignmentSection scope="customer" scopeId={String(p.id)} editable={editable} />
         ) : null}
 
         {tab === 'transactions' ? <TransactionSublist partyId={String(p.id)} role={role} /> : null}
@@ -1109,6 +1162,23 @@ export function PartyDrawer({
       </div>
       </TabContent>
     </TransactionDrawer>
+  )
+}
+
+function PartyReadOnlyField({
+  label,
+  value,
+  className,
+}: {
+  label: ReactNode
+  value: ReactNode
+  className?: string
+}) {
+  return (
+    <div className={field}>
+      <Label>{label}</Label>
+      <ReadOnlyValue value={value} className={className} />
+    </div>
   )
 }
 
