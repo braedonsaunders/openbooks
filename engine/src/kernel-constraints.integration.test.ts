@@ -93,6 +93,121 @@ test("posted status independently refuses entries with fewer than two lines", { 
   }
 });
 
+test(
+  "reversed ledger history is amendable only through the guarded open-period path",
+  { skip: !DB },
+  async () => {
+    const org = await createScratchOrg();
+    try {
+      const originalId = await draftEntry(org, "REV-AMEND-ORIGINAL");
+      const originalDebit = await line(
+        db,
+        org,
+        originalId,
+        1,
+        org.accounts.bank,
+        "10",
+      );
+      await line(db, org, originalId, 2, org.accounts.cogs, "-10");
+      await db.transaction(async (tx) => {
+        await tx.execute(
+          sql`update journal_entries set status = 'posted' where id = ${originalId}`,
+        );
+        await tx.execute(sql`set constraints all immediate`);
+      });
+
+      const reversalId = await draftEntry(org, "REV-AMEND-REVERSAL");
+      await db.execute(sql`
+        update journal_entries
+           set reverses_entry_id = ${originalId}
+         where id = ${reversalId}
+      `);
+      const reversalCredit = await line(
+        db,
+        org,
+        reversalId,
+        1,
+        org.accounts.bank,
+        "-10",
+      );
+      await line(db, org, reversalId, 2, org.accounts.cogs, "10");
+      await db.transaction(async (tx) => {
+        await tx.execute(
+          sql`update journal_entries set status = 'posted' where id = ${reversalId}`,
+        );
+        await tx.execute(
+          sql`update journal_entries set status = 'reversed' where id = ${originalId}`,
+        );
+        await tx.execute(sql`set constraints all immediate`);
+      });
+
+      await assert.rejects(
+        db.execute(
+          sql`update journal_lines set memo = 'unguarded' where id = ${originalDebit}`,
+        ),
+        /lines of a reversed journal entry are immutable/,
+      );
+
+      await db.execute(sql`
+        insert into period_locks
+          (org_id, period_id, book_id, subsidiary_id, module, state, reason)
+        values (
+          ${org.orgId}, ${org.periodId}, ${org.bookId}, ${org.subsidiaryId},
+          'gl', 'closed', 'Kernel reversed-history amendment test'
+        )
+      `);
+      await assert.rejects(
+        db.transaction(async (tx) => {
+          await tx.execute(sql`set local openbooks.amend = 'on'`);
+          await tx.execute(
+            sql`update journal_lines set memo = 'closed-period' where id = ${originalDebit}`,
+          );
+        }),
+        /period is closed for GL posting/,
+      );
+
+      await db.execute(sql`
+        update period_locks
+           set state = 'open', reopen_expires_at = now() + interval '1 hour'
+         where org_id = ${org.orgId}
+           and period_id = ${org.periodId}
+           and book_id = ${org.bookId}
+           and subsidiary_id = ${org.subsidiaryId}
+           and module = 'gl'
+      `);
+      await db.transaction(async (tx) => {
+        await tx.execute(sql`set local openbooks.amend = 'on'`);
+        await tx.execute(
+          sql`update journal_lines set memo = 'controlled-pair-amendment' where id in (${originalDebit}, ${reversalCredit})`,
+        );
+        await tx.execute(sql`set constraints all immediate`);
+      });
+
+      const amended = await db.execute(sql`
+        select je.status, jl.amount::text, jl.memo
+          from journal_lines jl
+          join journal_entries je on je.id = jl.entry_id
+         where jl.id in (${originalDebit}, ${reversalCredit})
+         order by jl.amount
+      `);
+      assert.deepEqual(amended.rows, [
+        {
+          status: "posted",
+          amount: "-10.0000",
+          memo: "controlled-pair-amendment",
+        },
+        {
+          status: "reversed",
+          amount: "10.0000",
+          memo: "controlled-pair-amendment",
+        },
+      ]);
+    } finally {
+      await dropScratchOrg(org.orgId);
+    }
+  },
+);
+
 test("applications enforce independent base and transaction caps at deferred commit", { skip: !DB }, async () => {
   const org = await createScratchOrg();
   try {

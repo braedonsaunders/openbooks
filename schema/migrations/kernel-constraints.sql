@@ -97,7 +97,8 @@ begin
 end $$;
 
 -- ---------------------------------------------------------------------------
--- 2. Posted entries are locked by default; posting requires an open period.
+-- 2. Posted ledger history (including reversed originals) is locked by
+--    default; posting requires an open period.
 --    A tightly scoped engine transaction may set openbooks.amend=on to
 --    re-materialize or delete a posted transaction in an OPEN period. Every
 --    such operation must write immutable before/after evidence to audit_log in
@@ -172,6 +173,11 @@ begin
        and coalesce(current_setting('openbooks.amend', true), 'off') <> 'on' then
       raise exception 'journal entry % is % and cannot be deleted', old.id, old.status;
     end if;
+    if old.status <> 'draft'
+       and period_module_is_closed(old.org_id, old.period_id, old.book_id,
+         nullif(to_jsonb(old)->>'subsidiary_id', '')::uuid, 'gl') then
+      raise exception 'period is closed for GL posting';
+    end if;
     return old;
   end if;
 
@@ -179,9 +185,10 @@ begin
   -- entry = postingRules(document), re-materialized on every save. When
   -- 'openbooks.amend' is on (set only by the engine's materialize path), a
   -- posted entry's header may be regenerated in place — but only into an OPEN
-  -- period (a GL change can't land in a closed period). Balance + summary-
-  -- account rules still apply to the regenerated lines.
-  if old.status = 'posted' and new.status = 'posted'
+  -- period (a GL change can't land in a closed period). A reversed original is
+  -- still posted ledger history, so it uses the same guarded path while
+  -- remaining reversed. Balance + summary-account rules still apply.
+  if old.status in ('posted', 'reversed') and new.status = old.status
      and coalesce(current_setting('openbooks.amend', true), 'off') = 'on' then
     if period_module_is_closed(old.org_id, old.period_id, old.book_id,
          nullif(to_jsonb(old)->>'subsidiary_id', '')::uuid, 'gl')
@@ -244,15 +251,14 @@ begin
     then
       return new;
     end if;
-    -- Re-materializing a posted entry's GL-Impact projection from its edited
-    -- source document (engine-only 'openbooks.amend' flag). The entry stays
-    -- posted; its lines are regenerated to match the transaction. Balance and
-    -- account guards still fire on the new lines.
-    if v_status = 'posted'
+    -- Re-materializing posted ledger history's GL-Impact projection from its
+    -- edited source document (engine-only 'openbooks.amend' flag). A reversed
+    -- original remains reversed; a posted entry remains posted. Balance and
+    -- account guards still fire on the amended lines.
+    if v_status in ('posted', 'reversed')
        and coalesce(current_setting('openbooks.amend', true), 'off') = 'on' then
-      if tg_op <> 'DELETE'
-         and period_module_is_closed(v_org, v_period, v_book,
-           nullif(to_jsonb(new)->>'subsidiary_id', '')::uuid, 'gl') then
+      if period_module_is_closed(v_org, v_period, v_book,
+           nullif(coalesce(to_jsonb(new), to_jsonb(old))->>'subsidiary_id', '')::uuid, 'gl') then
         raise exception 'period is closed for GL posting';
       end if;
       return coalesce(new, old);

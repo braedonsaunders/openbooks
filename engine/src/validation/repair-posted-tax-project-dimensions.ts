@@ -30,24 +30,10 @@ import {
   type TransactionAuditSnapshot,
 } from "../transaction-audit.ts";
 import { resolveTargetOrg } from "./target-org.ts";
-
-interface Candidate {
-  lineId: string;
-  entryId: string;
-  documentId: string;
-  documentNumber: string;
-  periodId: string;
-  bookId: string;
-  subsidiaryId: string;
-  projectId: string;
-  equipmentUnitId: string | null;
-  taxCodeId: string;
-  accountId: string;
-  amount: string;
-  currency: string;
-  txnAmount: string;
-  fxRate: string;
-}
+import {
+  reversalPairViolations,
+  type TaxProjectDimensionCandidate as Candidate,
+} from "./tax-project-dimension-repair-contract.ts";
 
 const args = new Map(
   process.argv
@@ -90,10 +76,58 @@ if (
 const stableHash = (value: unknown): string =>
   createHash("sha256").update(JSON.stringify(value)).digest("hex");
 
+function mapCandidate(row: Record<string, unknown>): Candidate {
+  return {
+    lineId: String(row.line_id),
+    entryId: String(row.entry_id),
+    entryStatus: String(row.entry_status) as Candidate["entryStatus"],
+    reversesEntryId: row.reverses_entry_id
+      ? String(row.reverses_entry_id)
+      : null,
+    reversalEntryId: row.reversal_entry_id
+      ? String(row.reversal_entry_id)
+      : null,
+    reversalEntryCount: Number(row.reversal_entry_count),
+    documentId: String(row.document_id),
+    documentNumber: String(row.document_number),
+    periodId: String(row.period_id),
+    bookId: String(row.book_id),
+    subsidiaryId: String(row.subsidiary_id),
+    projectId: String(row.project_id),
+    equipmentUnitId: row.equipment_unit_id
+      ? String(row.equipment_unit_id)
+      : null,
+    taxCodeId: String(row.tax_code_id),
+    accountId: String(row.account_id),
+    amount: String(row.amount),
+    currency: String(row.currency),
+    txnAmount: String(row.txn_amount),
+    fxRate: String(row.fx_rate),
+  };
+}
+
 async function candidates(): Promise<Candidate[]> {
   const result = await db.execute(sql`
     select jl.id as line_id,
            je.id as entry_id,
+           je.status as entry_status,
+           je.reverses_entry_id,
+           (
+             select reversal.id
+               from journal_entries reversal
+              where reversal.org_id = je.org_id
+                and reversal.reverses_entry_id = je.id
+                and reversal.status in ('posted', 'reversed')
+              order by reversal.id
+              limit 1
+           ) as reversal_entry_id,
+           (
+             select count(*)::int
+               from journal_entries reversal
+              where reversal.org_id = je.org_id
+                and reversal.reverses_entry_id = je.id
+                and reversal.status in ('posted', 'reversed')
+           ) as reversal_entry_count,
            d.id as document_id,
            d.document_number,
            je.period_id,
@@ -118,25 +152,7 @@ async function candidates(): Promise<Candidate[]> {
        and jl.project_id is not null
      order by d.id, jl.line_number, jl.id
   `);
-  return (result.rows as Array<Record<string, unknown>>).map((row) => ({
-    lineId: String(row.line_id),
-    entryId: String(row.entry_id),
-    documentId: String(row.document_id),
-    documentNumber: String(row.document_number),
-    periodId: String(row.period_id),
-    bookId: String(row.book_id),
-    subsidiaryId: String(row.subsidiary_id),
-    projectId: String(row.project_id),
-    equipmentUnitId: row.equipment_unit_id
-      ? String(row.equipment_unit_id)
-      : null,
-    taxCodeId: String(row.tax_code_id),
-    accountId: String(row.account_id),
-    amount: String(row.amount),
-    currency: String(row.currency),
-    txnAmount: String(row.txn_amount),
-    fxRate: String(row.fx_rate),
-  }));
+  return (result.rows as Array<Record<string, unknown>>).map(mapCandidate);
 }
 
 async function main(): Promise<void> {
@@ -145,6 +161,7 @@ async function main(): Promise<void> {
     throw new Error("--production is required for a live tenant");
   }
   const planned = await candidates();
+  const plannedReversalPairViolations = reversalPairViolations(planned);
   const populationFingerprint = stableHash(planned);
   const documentIds = [...new Set(planned.map((row) => row.documentId))];
   const entryIds = [...new Set(planned.map((row) => row.entryId))];
@@ -190,6 +207,7 @@ async function main(): Promise<void> {
   >;
   const blockingCount =
     unbalancedEntries.length +
+    plannedReversalPairViolations.length +
     (closedScopes.length > 0 && !controlledReopen ? closedScopes.length : 0);
 
   let updatedLines = 0;
@@ -275,6 +293,24 @@ async function main(): Promise<void> {
         const lockedResult = await tx.execute(sql`
         select jl.id as line_id,
                je.id as entry_id,
+               je.status as entry_status,
+               je.reverses_entry_id,
+               (
+                 select reversal.id
+                   from journal_entries reversal
+                  where reversal.org_id = je.org_id
+                    and reversal.reverses_entry_id = je.id
+                    and reversal.status in ('posted', 'reversed')
+                  order by reversal.id
+                  limit 1
+               ) as reversal_entry_id,
+               (
+                 select count(*)::int
+                   from journal_entries reversal
+                  where reversal.org_id = je.org_id
+                    and reversal.reverses_entry_id = je.id
+                    and reversal.status in ('posted', 'reversed')
+               ) as reversal_entry_count,
                d.id as document_id,
                d.document_number,
                je.period_id,
@@ -302,31 +338,16 @@ async function main(): Promise<void> {
       `);
         const locked = (
           lockedResult.rows as Array<Record<string, unknown>>
-        ).map(
-          (row) =>
-            ({
-              lineId: String(row.line_id),
-              entryId: String(row.entry_id),
-              documentId: String(row.document_id),
-              documentNumber: String(row.document_number),
-              periodId: String(row.period_id),
-              bookId: String(row.book_id),
-              subsidiaryId: String(row.subsidiary_id),
-              projectId: String(row.project_id),
-              equipmentUnitId: row.equipment_unit_id
-                ? String(row.equipment_unit_id)
-                : null,
-              taxCodeId: String(row.tax_code_id),
-              accountId: String(row.account_id),
-              amount: String(row.amount),
-              currency: String(row.currency),
-              txnAmount: String(row.txn_amount),
-              fxRate: String(row.fx_rate),
-            }) satisfies Candidate,
-        );
+        ).map(mapCandidate);
         if (stableHash(locked) !== populationFingerprint) {
           throw new Error(
             "candidate population changed after preflight; rerun the plan",
+          );
+        }
+        const lockedReversalPairViolations = reversalPairViolations(locked);
+        if (lockedReversalPairViolations.length > 0) {
+          throw new Error(
+            `${lockedReversalPairViolations.length} reversal-pair symmetry violations appeared after preflight`,
           );
         }
 
@@ -387,6 +408,10 @@ async function main(): Promise<void> {
                  as x(
                    "lineId" uuid,
                    "entryId" uuid,
+                   "entryStatus" text,
+                   "reversesEntryId" uuid,
+                   "reversalEntryId" uuid,
+                   "reversalEntryCount" integer,
                    "documentId" uuid,
                    "documentNumber" text,
                    "periodId" uuid,
@@ -507,6 +532,18 @@ async function main(): Promise<void> {
       populationFingerprint,
       closedScopes: closedScopes.length,
       unbalancedEntries: unbalancedEntries.length,
+      reversalPairs: new Set(
+        planned
+          .filter(
+            (row) => row.reversesEntryId || row.reversalEntryId,
+          )
+          .map((row) =>
+            [row.entryId, row.reversesEntryId ?? row.reversalEntryId!]
+              .sort()
+              .join(":"),
+          ),
+      ).size,
+      reversalPairViolations: plannedReversalPairViolations.length,
     },
     invariants: {
       documentValuesChanged: 0,
@@ -529,6 +566,7 @@ async function main(): Promise<void> {
     blocking: {
       closedScopes,
       unbalancedEntries,
+      reversalPairViolations: plannedReversalPairViolations,
     },
     blockingCount,
   };
@@ -545,6 +583,10 @@ async function main(): Promise<void> {
           unbalancedEntries: {
             count: unbalancedEntries.length,
             sample: unbalancedEntries.slice(0, 10),
+          },
+          reversalPairViolations: {
+            count: plannedReversalPairViolations.length,
+            sample: plannedReversalPairViolations.slice(0, 10),
           },
         },
       },
