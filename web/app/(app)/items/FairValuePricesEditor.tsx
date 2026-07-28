@@ -32,6 +32,9 @@ export function FairValuePricesEditor({ itemId, canManage }: { itemId: string; c
   const [prices, setPrices] = useState<Price[]>([])
   const [busy, setBusy] = useState(false)
   const [form, setForm] = useState<FormState | null>(null)
+  useEffect(() => {
+    if (!canManage) setForm(null)
+  }, [canManage])
 
   async function load() {
     const res = await fetch(`/api/items/${itemId}/fair-values`)

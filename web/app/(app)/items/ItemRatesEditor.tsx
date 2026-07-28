@@ -31,6 +31,9 @@ export function ItemRatesEditor({
   const common = useTranslations('common')
   const [data, setData] = useState<RateData | null>(null)
   const [editing, setEditing] = useState(false)
+  useEffect(() => {
+    if (!canManage) setEditing(false)
+  }, [canManage])
   const [busy, setBusy] = useState(false)
   const [rateBookId, setRateBookId] = useState('')
   const [effectiveFrom, setEffectiveFrom] = useState(new Date().toISOString().slice(0, 10))

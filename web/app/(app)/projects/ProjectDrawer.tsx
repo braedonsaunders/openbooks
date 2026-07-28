@@ -28,6 +28,7 @@ import { ChargesSection, type ChargeRow, type ChargeItemOption, type ChargeEquip
 import { BillingSection, type BillingRequestClient, type UnbilledClient, type EffectiveInvoicingClient } from './tabs/BillingSection'
 import { formatMoney } from '@openbooks/engine/src/money.ts'
 import { useMoney } from '@/components/money-provider'
+import { ReadOnlyValue } from '../../../components/read-only-value'
 
 interface PartyOpt {
   id: string
@@ -362,15 +363,15 @@ export function ProjectDrawer({
       case 'name':
         return (
           <>
-            <Label>{lbl || tCommon('labels.name')}<span className="text-red-500"> *</span></Label>
-            <Input value={name} onChange={(e) => setName(e.target.value)} placeholder={t('drawer.namePlaceholder')} disabled={ro} />
+            <Label>{lbl || tCommon('labels.name')}{editable ? <span className="text-red-500"> *</span> : null}</Label>
+            {editable ? <Input value={name} onChange={(e) => setName(e.target.value)} placeholder={t('drawer.namePlaceholder')} /> : <ReadOnlyValue value={name} />}
           </>
         )
       case 'code':
         return (
           <>
             <Label>{lbl || t('labels.code')}</Label>
-            <Input value={code} onChange={(e) => setCode(e.target.value)} className="font-mono" placeholder={t('drawer.codePlaceholder')} disabled={ro} />
+            {editable ? <Input value={code} onChange={(e) => setCode(e.target.value)} className="font-mono" placeholder={t('drawer.codePlaceholder')} /> : <ReadOnlyValue value={code} className="font-mono" />}
           </>
         )
       case 'project_type_id':
@@ -378,71 +379,71 @@ export function ProjectDrawer({
         return (
           <>
             <Label>{lbl || t('drawer.projectType')}</Label>
-            <Select value={projectTypeId} onChange={(e) => setProjectTypeId(e.target.value)} disabled={ro}>
+            {editable ? <Select value={projectTypeId} onChange={(e) => setProjectTypeId(e.target.value)}>
               <option value="">—</option>
               {projectTypes.map((projectType) => <option key={projectType.id} value={projectType.id}>{projectType.name}</option>)}
-            </Select>
+            </Select> : <ReadOnlyValue value={projectTypes.find((projectType) => projectType.id === projectTypeId)?.name ?? ''} />}
           </>
         )
       case 'customer_id':
         return (
           <>
             <Label>{lbl || tCommon('labels.customer')}</Label>
-            <SearchSelect value={customerId} onChange={setCustomerId} options={partyOptions} clearable emptyLabel={t('drawer.noCustomer')} placeholder={t('drawer.selectCustomer')} sheetTitle={tCommon('labels.customer')} ariaLabel={tCommon('labels.customer')} disabled={ro} />
+            {editable ? <SearchSelect value={customerId} onChange={setCustomerId} options={partyOptions} clearable emptyLabel={t('drawer.noCustomer')} placeholder={t('drawer.selectCustomer')} sheetTitle={tCommon('labels.customer')} ariaLabel={tCommon('labels.customer')} /> : <ReadOnlyValue value={partyOptions.find((option) => option.value === customerId)?.label ?? ''} />}
           </>
         )
       case 'status':
         return (
           <>
             <Label>{lbl || tCommon('labels.status')}</Label>
-            <Select value={status} onChange={(e) => setStatus(e.target.value)} disabled={ro}>
+            {editable ? <Select value={status} onChange={(e) => setStatus(e.target.value)}>
               {statusOptions.map((o) => (<option key={o.value} value={o.value}>{o.label}</option>))}
-            </Select>
+            </Select> : <ReadOnlyValue value={statusOptions.find((option) => option.value === status)?.label ?? status} />}
           </>
         )
       case 'contract_value':
         return (
           <>
             <Label>{lbl || t('labels.contractValue')}</Label>
-            <div className="flex items-center">
+            {editable ? <div className="flex items-center">
               <span className="mr-1 text-slate-500">{currency}</span>
-              <Input inputMode="decimal" className="text-right tabular-nums" value={contractValue} onChange={(e) => setContractValue(e.target.value)} disabled={ro} />
-            </div>
+              <Input inputMode="decimal" className="text-right tabular-nums" value={contractValue} onChange={(e) => setContractValue(e.target.value)} />
+            </div> : <ReadOnlyValue value={contractValue ? `${currency} ${contractValue}` : ''} className="text-right tabular-nums" />}
           </>
         )
       case 'foreman_id':
         return (
           <>
             <Label>{lbl || t('labels.foreman')}</Label>
-            <SearchSelect value={foremanId} onChange={setForemanId} options={partyOptions} clearable emptyLabel={t('drawer.noForeman')} placeholder={t('drawer.selectForeman')} sheetTitle={t('labels.foreman')} ariaLabel={t('labels.foreman')} disabled={ro} />
+            {editable ? <SearchSelect value={foremanId} onChange={setForemanId} options={partyOptions} clearable emptyLabel={t('drawer.noForeman')} placeholder={t('drawer.selectForeman')} sheetTitle={t('labels.foreman')} ariaLabel={t('labels.foreman')} /> : <ReadOnlyValue value={partyOptions.find((option) => option.value === foremanId)?.label ?? ''} />}
           </>
         )
       case 'manager_id':
         return (
           <>
             <Label>{lbl || t('labels.manager')}</Label>
-            <SearchSelect value={managerId} onChange={setManagerId} options={partyOptions} clearable emptyLabel={t('drawer.noManager')} placeholder={t('drawer.selectManager')} sheetTitle={t('labels.manager')} ariaLabel={t('labels.manager')} disabled={ro} />
+            {editable ? <SearchSelect value={managerId} onChange={setManagerId} options={partyOptions} clearable emptyLabel={t('drawer.noManager')} placeholder={t('drawer.selectManager')} sheetTitle={t('labels.manager')} ariaLabel={t('labels.manager')} /> : <ReadOnlyValue value={partyOptions.find((option) => option.value === managerId)?.label ?? ''} />}
           </>
         )
       case 'customer_po_number':
         return (
           <>
             <Label>{lbl || t('labels.customerPo')}</Label>
-            <Input value={customerPoNumber} onChange={(e) => setCustomerPoNumber(e.target.value)} className="font-mono" disabled={ro} />
+            {editable ? <Input value={customerPoNumber} onChange={(e) => setCustomerPoNumber(e.target.value)} className="font-mono" /> : <ReadOnlyValue value={customerPoNumber} className="font-mono" />}
           </>
         )
       case 'starts_on':
         return (
           <>
             <Label>{lbl || t('labels.startDate')}</Label>
-            <Input type="date" value={startsOn} onChange={(e) => setStartsOn(e.target.value)} disabled={ro} />
+            {editable ? <Input type="date" value={startsOn} onChange={(e) => setStartsOn(e.target.value)} /> : <ReadOnlyValue value={startsOn} />}
           </>
         )
       case 'ends_on':
         return (
           <>
             <Label>{lbl || t('labels.endDate')}</Label>
-            <Input type="date" value={endsOn} onChange={(e) => setEndsOn(e.target.value)} disabled={ro} />
+            {editable ? <Input type="date" value={endsOn} onChange={(e) => setEndsOn(e.target.value)} /> : <ReadOnlyValue value={endsOn} />}
           </>
         )
       case 'subsidiary_id':
@@ -450,23 +451,23 @@ export function ProjectDrawer({
         return (
           <>
             <Label>{lbl || t('drawer.subsidiaryRestriction')}</Label>
-            <Select value={subsidiaryId} onChange={(e) => setSubsidiaryId(e.target.value)} disabled={ro}>
+            {editable ? <Select value={subsidiaryId} onChange={(e) => setSubsidiaryId(e.target.value)}>
               <option value="">{t('drawer.allSubsidiaries')}</option>
               {subsidiaries.map((s) => (<option key={s.id} value={s.id}>{`${'— '.repeat(s.depth)}${s.name}`}</option>))}
-            </Select>
-            {subsidiaryId ? (
+            </Select> : <ReadOnlyValue value={subsidiaries.find((subsidiary) => subsidiary.id === subsidiaryId)?.name ?? t('drawer.allSubsidiaries')} />}
+            {subsidiaryId && editable ? (
               <label className="mt-1 flex items-center gap-2 text-xs text-slate-600 dark:text-slate-300">
-                <input type="checkbox" checked={subsidiaryIncludeChildren} onChange={(e) => setSubsidiaryIncludeChildren(e.target.checked)} disabled={ro} className="h-4 w-4 rounded border-slate-300 text-teal-600 focus:ring-teal-500" />
+                <input type="checkbox" checked={subsidiaryIncludeChildren} onChange={(e) => setSubsidiaryIncludeChildren(e.target.checked)} className="h-4 w-4 rounded border-slate-300 text-teal-600 focus:ring-teal-500" />
                 {t('drawer.includeChildSubsidiaries')}
               </label>
-            ) : null}
+            ) : subsidiaryId ? <ReadOnlyValue value={subsidiaryIncludeChildren ? tCommon('labels.yes') : tCommon('labels.no')} className="text-xs" /> : null}
           </>
         )
       case 'notes':
         return (
           <>
             <Label>{lbl || tCommon('labels.notes')}</Label>
-            <Textarea value={notes} onChange={(e) => setNotes(e.target.value)} disabled={ro} />
+            {editable ? <Textarea value={notes} onChange={(e) => setNotes(e.target.value)} /> : <ReadOnlyValue value={notes} className="whitespace-pre-wrap" />}
           </>
         )
       default: {
@@ -646,7 +647,7 @@ export function ProjectDrawer({
           </section>
 
           {!isPlaceholderName ? (
-            <RateBookAssignmentSection scope="project" scopeId={String(pr.id)} />
+            <RateBookAssignmentSection scope="project" scopeId={String(pr.id)} editable={editable} />
           ) : null}
 
         </div>

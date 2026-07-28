@@ -53,6 +53,9 @@ export function ItemCostingEditor({
   const [profile, setProfile] = useState<Profile | null>(null)
   const [loaded, setLoaded] = useState(false)
   const [editing, setEditing] = useState(false)
+  useEffect(() => {
+    if (!canManage) setEditing(false)
+  }, [canManage])
   const [busy, setBusy] = useState(false)
 
   const [costingMethod, setCostingMethod] = useState('moving_average')

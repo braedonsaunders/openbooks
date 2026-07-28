@@ -32,9 +32,12 @@ const field = 'space-y-1.5'
 export function RateBookAssignmentSection({
   scope,
   scopeId,
+  editable = true,
 }: {
   scope: 'customer' | 'project'
   scopeId: string
+  /** Parent drawer edit state. Permission alone must not make view mode editable. */
+  editable?: boolean
 }) {
   const t = useTranslations('parties.rateBookAssignments')
   const common = useTranslations('common')
@@ -81,6 +84,9 @@ export function RateBookAssignmentSection({
     return () => window.clearTimeout(timer)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [scopeId, q, status, page])
+  useEffect(() => {
+    if (!editable) setForm(null)
+  }, [editable])
 
   function startNew() {
     setForm({
@@ -150,6 +156,7 @@ export function RateBookAssignmentSection({
   }
 
   if (!visible) return null
+  const canEditAssignments = canManage && editable
   const pages = Math.max(1, Math.ceil(total / perPage))
   const pricingHref = (versionId: string) => {
     const returnQuery = searchParams.toString()
@@ -164,7 +171,7 @@ export function RateBookAssignmentSection({
           <h4 className="text-sm font-semibold text-slate-900 dark:text-slate-100">{t('title')}</h4>
           <p className="text-xs text-slate-500 dark:text-slate-400">{t(`hint.${scope}`)}</p>
         </div>
-        {!form && canManage ? (
+        {!form && canEditAssignments ? (
           <Button variant="outline" size="sm" onClick={startNew} disabled={rateBooks.length === 0}>
             {t('new')}
           </Button>
@@ -175,7 +182,7 @@ export function RateBookAssignmentSection({
         <p className="text-xs text-slate-500 dark:text-slate-400">{t('noBooks')}</p>
       ) : null}
 
-      <div className="flex flex-wrap gap-2">
+      {editable ? <div className="flex flex-wrap gap-2">
         <Input
           value={q}
           onChange={(event) => { setQ(event.target.value); setPage(1) }}
@@ -187,7 +194,7 @@ export function RateBookAssignmentSection({
           <option value="inactive">{t('status.inactive')}</option>
           <option value="all">{t('status.all')}</option>
         </Select>
-      </div>
+      </div> : null}
 
       {form ? (
         <Card>
@@ -255,8 +262,8 @@ export function RateBookAssignmentSection({
                   </td>
                   <td className="px-3 py-2 text-right">
                     {a.rate_version_id && canOpenPricing ? <Link href={pricingHref(a.rate_version_id) as never} className="text-xs font-medium text-teal-700 hover:underline dark:text-teal-300">{t('openPricing')}</Link> : null}
-                    {canManage ? <button type="button" onClick={() => startEdit(a)} className="ml-3 text-xs font-medium text-teal-700 hover:underline dark:text-teal-300">{common('actions.edit')}</button> : null}
-                    {canManage ? <button type="button" onClick={() => remove(a.id)} disabled={busy} className="ml-3 text-xs font-medium text-red-600 hover:underline dark:text-red-400">{common('actions.delete')}</button> : null}
+                    {canEditAssignments ? <button type="button" onClick={() => startEdit(a)} className="ml-3 text-xs font-medium text-teal-700 hover:underline dark:text-teal-300">{common('actions.edit')}</button> : null}
+                    {canEditAssignments ? <button type="button" onClick={() => remove(a.id)} disabled={busy} className="ml-3 text-xs font-medium text-red-600 hover:underline dark:text-red-400">{common('actions.delete')}</button> : null}
                   </td>
                 </tr>
               ))}
