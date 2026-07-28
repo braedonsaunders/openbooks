@@ -161,6 +161,7 @@
     },
     "transactions": "Transações",
     "viewGeneralLedger": "Ver razão do projeto",
+    "informationalOnly": "Somente informativo",
     "allTransactionTypes": "Todos os tipos de transação",
     "noTransactionsTitle": "Nenhuma transação vinculada a esta obra",
     "noTransactionsDescription": "Contas a pagar, faturas, despesas, pedidos e lançamentos com uma linha vinculada a este projeto aparecem aqui.",
@@ -263,7 +264,8 @@
       "committed_cost": "Compromissos de pedidos de compra em aberto.",
       "total_price": "Preço de contrato / venda da obra.",
       "total_cost": "Todo o custo incorrido e comprometido.",
-      "overhead": "Incluído no custo total da obra e, portanto, já deduzido do lucro bruto."
+      "overhead": "Incluído no custo total da obra e, portanto, já deduzido do lucro bruto.",
+      "overhead_informational": "Não incluído no custo total da obra nem deduzido do lucro bruto."
     }
   },
   "invoicingPref": {

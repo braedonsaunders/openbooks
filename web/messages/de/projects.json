@@ -161,6 +161,7 @@
     },
     "transactions": "Transaktionen",
     "viewGeneralLedger": "Projekt-Hauptbuch anzeigen",
+    "informationalOnly": "Nur zur Information",
     "allTransactionTypes": "Alle Transaktionstypen",
     "noTransactionsTitle": "Keine diesem Auftrag zugeordneten Transaktionen",
     "noTransactionsDescription": "Eingangsrechnungen, Ausgangsrechnungen, Ausgaben, Aufträge und Journale mit einer diesem Projekt zugeordneten Zeile erscheinen hier.",
@@ -263,7 +264,8 @@
       "committed_cost": "Offene Bestellverpflichtungen.",
       "total_price": "Vertrags-/Verkaufspreis des Auftrags.",
       "total_cost": "Alle angefallenen und gebundenen Kosten.",
-      "overhead": "In den gesamten Auftragskosten enthalten und daher bereits vom Bruttogewinn abgezogen."
+      "overhead": "In den gesamten Auftragskosten enthalten und daher bereits vom Bruttogewinn abgezogen.",
+      "overhead_informational": "Nicht in den gesamten Auftragskosten enthalten und nicht vom Bruttogewinn abgezogen."
     }
   },
   "invoicingPref": {
