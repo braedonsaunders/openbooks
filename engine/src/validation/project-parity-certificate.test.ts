@@ -25,3 +25,15 @@ test("multi-book source GL requires an explicit accounting-book choice", () => {
     /row\.accountingbook\) === sourceAccountingBook/,
   );
 });
+
+test("Field Ticket parity compares immutable commercial evidence, not time approval", () => {
+  assert.match(source, /join field_ticket_labor_snapshots snapshot/i);
+  assert.match(source, /join field_ticket_labor_lines line/i);
+  assert.match(source, /snapshot\.superseded_at is null/i);
+  assert.match(source, /snapshot\.evidence_basis = 'source_import'/i);
+  assert.doesNotMatch(
+    source,
+    /from time_entries te/i,
+    "commercial ticket evidence must not be inferred from operational time",
+  );
+});
