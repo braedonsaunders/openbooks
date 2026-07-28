@@ -17,6 +17,7 @@ import {
 import {
   Badge,
   Button,
+  Drawer,
   Input,
   Label,
   SearchSelect,
@@ -36,7 +37,7 @@ import { CustomFieldInputs, type CustomFieldDefClient } from '../../../component
 import { CustomFieldInput } from '../../../components/custom-field-input'
 import { HeaderFields } from '../../../components/transaction-form/header-fields'
 import { DocTypeBadge, docTypeMeta } from '../../../components/doc-type-badge'
-import { LineGrid, type LineGridColumn } from '../../../components/line-grid'
+import type { LineGridColumn } from '../../../components/line-grid'
 import { TransactionDrawer } from '../../../components/transaction-drawer'
 import { EmployeeWageRates } from './EmployeeWageRates'
 import { RateBookAssignmentSection } from './RateBookAssignmentSection'
@@ -73,6 +74,7 @@ interface SubsidiaryOpt extends Opt {
   isElimination: boolean
 }
 interface AddressRow extends Record<string, unknown> {
+  id: string | null
   label: string
   line1: string
   line2: string
@@ -84,6 +86,7 @@ interface AddressRow extends Record<string, unknown> {
   isDefaultShipping: string
 }
 interface ContactRow extends Record<string, unknown> {
+  id: string | null
   firstName: string
   lastName: string
   name: string
@@ -106,6 +109,7 @@ const PAYMENT_METHOD_OPTIONS = [
 ] as const
 
 const emptyAddress = (): AddressRow => ({
+  id: null,
   label: '',
   line1: '',
   line2: '',
@@ -118,9 +122,49 @@ const emptyAddress = (): AddressRow => ({
 })
 
 const emptyContact = (): ContactRow => ({
+  id: null,
   firstName: '', lastName: '', name: '', title: '', role: '', email: '', phone: '',
   mobilePhone: '', isPrimary: 'false', isActive: 'true',
 })
+
+const addressFromApi = (address: Record<string, any>): AddressRow => ({
+  id: address.id ? String(address.id) : null,
+  label: address.label ?? '',
+  line1: address.line1 ?? '',
+  line2: address.line2 ?? '',
+  city: address.city ?? '',
+  region: address.region ?? '',
+  postalCode: address.postal_code ?? '',
+  country: address.country ?? '',
+  isDefaultBilling: address.is_default_billing === true ? 'true' : 'false',
+  isDefaultShipping: address.is_default_shipping === true ? 'true' : 'false',
+})
+
+const contactFromApi = (contact: Record<string, any>): ContactRow => ({
+  id: contact.id ? String(contact.id) : null,
+  firstName: contact.first_name ?? '',
+  lastName: contact.last_name ?? '',
+  name: contact.name ?? '',
+  title: contact.title ?? '',
+  role: contact.role ?? '',
+  email: contact.email ?? '',
+  phone: contact.phone ?? '',
+  mobilePhone: contact.mobile_phone ?? '',
+  isPrimary: contact.is_primary === true ? 'true' : 'false',
+  isActive: contact.is_active === false ? 'false' : 'true',
+})
+
+const serializeAddresses = (rows: AddressRow[]) => rows.map(({ id: _id, ...address }) => ({
+  ...address,
+  isDefaultBilling: address.isDefaultBilling === 'true',
+  isDefaultShipping: address.isDefaultShipping === 'true',
+}))
+
+const serializeContacts = (rows: ContactRow[]) => rows.map(({ id: _id, ...contact }) => ({
+  ...contact,
+  isPrimary: contact.isPrimary === 'true',
+  isActive: contact.isActive === 'true',
+}))
 
 export type PartyTab = 'overview' | 'invoicing' | 'pricing' | 'transactions' | 'activities' | 'contacts' | 'addresses' | 'accounting' | 'wages'
 
@@ -246,26 +290,14 @@ export function PartyDrawer({
 
   // -- addresses ---------------------------------------------------------
   const [addresses, setAddresses] = useState<AddressRow[]>(
-    payload.addresses.map((a) => ({
-      label: a.label ?? '',
-      line1: a.line1 ?? '',
-      line2: a.line2 ?? '',
-      city: a.city ?? '',
-      region: a.region ?? '',
-      postalCode: a.postal_code ?? '',
-      country: a.country ?? '',
-      isDefaultBilling: a.is_default_billing === true ? 'true' : 'false',
-      isDefaultShipping: a.is_default_shipping === true ? 'true' : 'false',
-    })),
+    payload.addresses.map(addressFromApi),
   )
   const [contacts, setContacts] = useState<ContactRow[]>(
-    payload.contacts.map((contact) => ({
-      firstName: contact.first_name ?? '', lastName: contact.last_name ?? '', name: contact.name ?? '',
-      title: contact.title ?? '', role: contact.role ?? '', email: contact.email ?? '', phone: contact.phone ?? '',
-      mobilePhone: contact.mobile_phone ?? '', isPrimary: contact.is_primary === true ? 'true' : 'false',
-      isActive: contact.is_active === false ? 'false' : 'true',
-    })),
+    payload.contacts.map(contactFromApi),
   )
+  const [addressDraft, setAddressDraft] = useState<{ index: number | null; row: AddressRow } | null>(null)
+  const [contactDraft, setContactDraft] = useState<{ index: number | null; row: ContactRow } | null>(null)
+  const [relatedBusy, setRelatedBusy] = useState(false)
 
   const [saveState, setSaveState] = useState<'saved' | 'saving' | 'dirty' | 'error'>('saved')
   const [busy, setBusy] = useState(false)
@@ -325,25 +357,22 @@ export function PartyDrawer({
           hiredOn: employee.hiredOn || null,
         },
       },
-      addresses: addresses.map((address) => ({
-        ...address,
-        isDefaultBilling: address.isDefaultBilling === 'true',
-        isDefaultShipping: address.isDefaultShipping === 'true',
-      })),
-      contacts: contacts.map((contact) => ({
-        ...contact,
-        isPrimary: contact.isPrimary === 'true',
-        isActive: contact.isActive === 'true',
-      })),
+      addresses: serializeAddresses(addresses),
+      contacts: serializeContacts(contacts),
     }),
     [kind, displayName, legalName, shortCode, email, phone, website, customValues, invoicingPref, subsidiaryId, additionalSubsidiaryIds, multiSubsidiary, customer, vendor, employee, addresses, contacts, isActive, role],
   )
   // Track unsaved edits (no autosave — Save is an explicit button).
   const [dirty, setDirty] = useState(false)
   const first = useRef(true)
+  const skipDirty = useRef(false)
   useEffect(() => {
     if (first.current) {
       first.current = false
+      return
+    }
+    if (skipDirty.current) {
+      skipDirty.current = false
       return
     }
     if (editable) setDirty(true)
@@ -392,25 +421,60 @@ export function PartyDrawer({
       workerCompGroupId: payload.employee?.worker_comp_group_id ?? '',
       hiredOn: payload.employee?.hired_on ?? '',
     })
-    setAddresses(
-      payload.addresses.map((a) => ({
-        label: a.label ?? '',
-        line1: a.line1 ?? '',
-        line2: a.line2 ?? '',
-        city: a.city ?? '',
-        region: a.region ?? '',
-        postalCode: a.postal_code ?? '',
-        country: a.country ?? '',
-        isDefaultBilling: a.is_default_billing === true ? 'true' : 'false',
-        isDefaultShipping: a.is_default_shipping === true ? 'true' : 'false',
-      })),
-    )
-    setContacts(payload.contacts.map((contact) => ({
-      firstName: contact.first_name ?? '', lastName: contact.last_name ?? '', name: contact.name ?? '',
-      title: contact.title ?? '', role: contact.role ?? '', email: contact.email ?? '', phone: contact.phone ?? '',
-      mobilePhone: contact.mobile_phone ?? '', isPrimary: contact.is_primary === true ? 'true' : 'false',
-      isActive: contact.is_active === false ? 'false' : 'true',
-    })))
+    setAddresses(payload.addresses.map(addressFromApi))
+    setContacts(payload.contacts.map(contactFromApi))
+  }
+
+  async function saveRelatedRows(kind: 'addresses' | 'contacts') {
+    const draft = kind === 'addresses' ? addressDraft : contactDraft
+    if (!draft) return
+    const currentRows = kind === 'addresses' ? addresses : contacts
+    let nextRows = draft.index === null
+      ? [...currentRows, draft.row]
+      : currentRows.map((row, index) => index === draft.index ? draft.row : row)
+    // Selecting a new default is an explicit reassignment, not a request that
+    // can silently lose to whichever row happened to be serialized first.
+    if (kind === 'addresses') {
+      const nextAddress = draft.row as AddressRow
+      nextRows = (nextRows as AddressRow[]).map((row, index) => ({
+        ...row,
+        isDefaultBilling: nextAddress.isDefaultBilling === 'true' && index !== (draft.index ?? nextRows.length - 1) ? 'false' : row.isDefaultBilling,
+        isDefaultShipping: nextAddress.isDefaultShipping === 'true' && index !== (draft.index ?? nextRows.length - 1) ? 'false' : row.isDefaultShipping,
+      }))
+    } else if ((draft.row as ContactRow).isPrimary === 'true') {
+      nextRows = (nextRows as ContactRow[]).map((row, index) => ({
+        ...row,
+        isPrimary: index === (draft.index ?? nextRows.length - 1) ? 'true' : 'false',
+      }))
+    }
+    setRelatedBusy(true)
+    try {
+      const response = await fetch(`/api/parties/${p.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          [kind]: kind === 'addresses'
+            ? serializeAddresses(nextRows as AddressRow[])
+            : serializeContacts(nextRows as ContactRow[]),
+        }),
+      })
+      const result = await response.json().catch(() => ({}))
+      if (!response.ok) throw new Error(result.error ?? t('autosaveFailed'))
+      skipDirty.current = true
+      if (kind === 'addresses') {
+        setAddresses((result.addresses ?? []).map(addressFromApi))
+        setAddressDraft(null)
+      } else {
+        setContacts((result.contacts ?? []).map(contactFromApi))
+        setContactDraft(null)
+      }
+      toast.success(tc('feedback.saved'))
+      router.refresh()
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : t('autosaveFailed'))
+    } finally {
+      setRelatedBusy(false)
+    }
   }
 
   async function save() {
@@ -1114,20 +1178,22 @@ export function PartyDrawer({
 
         {tab === 'contacts' ? (
           <section className="space-y-3">
-            <SublistHeading title={t('contactsHeading')} description={t('contactsDescription')} icon={<Users size={16} />} />
-            {contacts.length === 0 && ro ? (
+            <div className="flex flex-wrap items-start justify-between gap-3">
+              <SublistHeading title={t('contactsHeading')} description={t('contactsDescription')} icon={<Users size={16} />} />
+              {canManage ? (
+                <Button variant="outline" size="sm" onClick={() => setContactDraft({ index: null, row: emptyContact() })}>
+                  <Plus size={14} />{t('addContact')}
+                </Button>
+              ) : null}
+            </div>
+            {contacts.length === 0 ? (
               <SublistEmpty icon={<Users size={22} />} text={t('noContacts')} />
-            ) : ro ? (
-              <ReadOnlyLineSublist columns={contactColumns} rows={contacts} searchPlaceholder={t('contactSearch')} />
             ) : (
-              <LineGrid<ContactRow>
+              <ReadOnlyLineSublist
                 columns={contactColumns}
                 rows={contacts}
-                onRowsChange={setContacts}
-                emptyRow={emptyContact}
-                minRows={0}
-                readOnly={ro}
-                addLabel={t('addContact')}
+                searchPlaceholder={t('contactSearch')}
+                onEdit={canManage ? (row, index) => setContactDraft({ index, row: { ...row } }) : undefined}
               />
             )}
           </section>
@@ -1135,20 +1201,22 @@ export function PartyDrawer({
 
         {tab === 'addresses' ? (
           <section className="space-y-3">
-            <SublistHeading title={t('addressesHeading')} description={t('addressesDescription')} icon={<Building2 size={16} />} />
-            {addresses.length === 0 && ro ? (
+            <div className="flex flex-wrap items-start justify-between gap-3">
+              <SublistHeading title={t('addressesHeading')} description={t('addressesDescription')} icon={<Building2 size={16} />} />
+              {canManage ? (
+                <Button variant="outline" size="sm" onClick={() => setAddressDraft({ index: null, row: emptyAddress() })}>
+                  <Plus size={14} />{t('addAddress')}
+                </Button>
+              ) : null}
+            </div>
+            {addresses.length === 0 ? (
               <SublistEmpty icon={<Building2 size={22} />} text={t('noAddresses')} />
-            ) : ro ? (
-              <ReadOnlyLineSublist columns={addressColumns} rows={addresses} searchPlaceholder={t('addressSearch')} />
             ) : (
-              <LineGrid<AddressRow>
+              <ReadOnlyLineSublist
                 columns={addressColumns}
                 rows={addresses}
-                onRowsChange={setAddresses}
-                emptyRow={emptyAddress}
-                minRows={0}
-                readOnly={ro}
-                addLabel={t('addAddress')}
+                searchPlaceholder={t('addressSearch')}
+                onEdit={canManage ? (row, index) => setAddressDraft({ index, row: { ...row } }) : undefined}
               />
             )}
           </section>
@@ -1160,6 +1228,88 @@ export function PartyDrawer({
 
         {tab === 'wages' && role === 'employee' && canManageWages ? <EmployeeWageRates partyId={String(p.id)} /> : null}
       </div>
+
+      <Drawer
+        open={contactDraft !== null}
+        onClose={() => { if (!relatedBusy) setContactDraft(null) }}
+        stacked
+        size="md"
+        title={contactDraft?.index === null ? t('addContact') : `${tc('actions.edit')} · ${contactDraft?.row.name || t('contactName')}`}
+        footer={contactDraft ? (
+          <>
+            <Button variant="outline" disabled={relatedBusy} onClick={() => setContactDraft(null)}>{tc('actions.cancel')}</Button>
+            <Button disabled={relatedBusy || !contactDraft.row.name.trim()} onClick={() => saveRelatedRows('contacts')}>
+              {relatedBusy ? tc('actions.saving') : tc('actions.save')}
+            </Button>
+          </>
+        ) : undefined}
+      >
+        {contactDraft ? (
+          <ContactForm
+            row={contactDraft.row}
+            onChange={(row) => setContactDraft({ ...contactDraft, row })}
+            yesNo={yesNo}
+            labels={{
+              name: t('contactName'),
+              title: t('contactTitle'),
+              role: t('contactRole'),
+              email: tc('labels.email'),
+              phone: t('phone'),
+              mobilePhone: t('mobilePhone'),
+              primary: t('primaryContact'),
+              active: tc('labels.active'),
+            }}
+          />
+        ) : null}
+      </Drawer>
+
+      <Drawer
+        open={addressDraft !== null}
+        onClose={() => { if (!relatedBusy) setAddressDraft(null) }}
+        stacked
+        size="md"
+        title={addressDraft?.index === null ? t('addAddress') : `${tc('actions.edit')} · ${addressDraft?.row.label || t('addressesHeading')}`}
+        footer={addressDraft ? (
+          <>
+            <Button variant="outline" disabled={relatedBusy} onClick={() => setAddressDraft(null)}>{tc('actions.cancel')}</Button>
+            <Button
+              disabled={relatedBusy || ![
+                addressDraft.row.label,
+                addressDraft.row.line1,
+                addressDraft.row.line2,
+                addressDraft.row.city,
+                addressDraft.row.region,
+                addressDraft.row.postalCode,
+                addressDraft.row.country,
+              ].some((value) => value.trim())}
+              onClick={() => saveRelatedRows('addresses')}
+            >
+              {relatedBusy ? tc('actions.saving') : tc('actions.save')}
+            </Button>
+          </>
+        ) : undefined}
+      >
+        {addressDraft ? (
+          <AddressForm
+            row={addressDraft.row}
+            onChange={(row) => setAddressDraft({ ...addressDraft, row })}
+            countries={countries}
+            yesNo={yesNo}
+            labels={{
+              label: t('addressLabel'),
+              labelPlaceholder: t('addressLabelPlaceholder'),
+              line1: t('line1'),
+              line2: t('line2'),
+              city: t('city'),
+              region: t('region'),
+              postalCode: t('postalCode'),
+              country: t('country'),
+              defaultBilling: t('defaultBilling'),
+              defaultShipping: t('defaultShipping'),
+            }}
+          />
+        ) : null}
+      </Drawer>
       </TabContent>
     </TransactionDrawer>
   )
@@ -1236,10 +1386,12 @@ function ReadOnlyLineSublist<Row extends Record<string, unknown>>({
   columns,
   rows,
   searchPlaceholder,
+  onEdit,
 }: {
   columns: LineGridColumn<Row>[]
   rows: Row[]
   searchPlaceholder: string
+  onEdit?: (row: Row, index: number) => void
 }) {
   const tc = useTranslations('common')
   const [q, setQ] = useState('')
@@ -1259,7 +1411,32 @@ function ReadOnlyLineSublist<Row extends Record<string, unknown>>({
         <Input value={q} onChange={(event) => { setQ(event.target.value); setPage(1) }} placeholder={searchPlaceholder} className="pl-8" />
       </div>
       {shown.length ? (
-        <LineGrid<Row> columns={columns} rows={shown} onRowsChange={() => undefined} emptyRow={() => ({} as Row)} readOnly minRows={0} />
+        <div className="overflow-x-auto rounded-lg border border-slate-200 dark:border-slate-800">
+          <Table>
+            <TableHeader>
+              <TableRow>
+                {columns.map((column) => <TableHead key={String(column.key)}>{column.label}</TableHead>)}
+                {onEdit ? <TableHead className="text-right">{tc('labels.actions')}</TableHead> : null}
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {shown.map((row, shownIndex) => (
+                <TableRow key={String(row.id ?? `${page}-${shownIndex}`)}>
+                  {columns.map((column) => {
+                    const value = String(row[column.key] ?? '')
+                    const option = column.options?.find((item) => item.value === value)
+                    return <TableCell key={String(column.key)}>{option?.label ?? (value || '—')}</TableCell>
+                  })}
+                  {onEdit ? (
+                    <TableCell className="text-right">
+                      <Button variant="ghost" size="sm" onClick={() => onEdit(row, rows.indexOf(row))}>{tc('actions.edit')}</Button>
+                    </TableCell>
+                  ) : null}
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        </div>
       ) : (
         <p className="rounded-lg border border-dashed border-slate-300 p-8 text-center text-sm text-slate-500 dark:border-slate-700 dark:text-slate-400">{tc('feedback.noResults')}</p>
       )}
@@ -1268,6 +1445,61 @@ function ReadOnlyLineSublist<Row extends Record<string, unknown>>({
         <span className="text-xs tabular-nums text-slate-500">{page} / {pages}</span>
         <Button variant="outline" size="sm" disabled={page >= pages} onClick={() => setPage((value) => value + 1)}>{tc('actions.next')}</Button>
       </div>
+    </div>
+  )
+}
+
+function ContactForm({
+  row,
+  onChange,
+  yesNo,
+  labels,
+}: {
+  row: ContactRow
+  onChange: (row: ContactRow) => void
+  yesNo: Array<{ value: string; label: string }>
+  labels: Record<'name' | 'title' | 'role' | 'email' | 'phone' | 'mobilePhone' | 'primary' | 'active', string>
+}) {
+  const set = (key: keyof ContactRow, value: string) => onChange({ ...row, [key]: value })
+  return (
+    <div className="grid gap-4 sm:grid-cols-2">
+      <div className={`${field} sm:col-span-2`}><Label>{labels.name} <span className="text-red-500">*</span></Label><Input value={row.name} onChange={(event) => set('name', event.target.value)} /></div>
+      <div className={field}><Label>{labels.title}</Label><Input value={row.title} onChange={(event) => set('title', event.target.value)} /></div>
+      <div className={field}><Label>{labels.role}</Label><Input value={row.role} onChange={(event) => set('role', event.target.value)} /></div>
+      <div className={`${field} sm:col-span-2`}><Label>{labels.email}</Label><Input type="email" value={row.email} onChange={(event) => set('email', event.target.value)} /></div>
+      <div className={field}><Label>{labels.phone}</Label><Input type="tel" value={row.phone} onChange={(event) => set('phone', event.target.value)} /></div>
+      <div className={field}><Label>{labels.mobilePhone}</Label><Input type="tel" value={row.mobilePhone} onChange={(event) => set('mobilePhone', event.target.value)} /></div>
+      <div className={field}><Label>{labels.primary}</Label><Select value={row.isPrimary} onChange={(event) => set('isPrimary', event.target.value)}>{yesNo.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}</Select></div>
+      <div className={field}><Label>{labels.active}</Label><Select value={row.isActive} onChange={(event) => set('isActive', event.target.value)}>{yesNo.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}</Select></div>
+    </div>
+  )
+}
+
+function AddressForm({
+  row,
+  onChange,
+  countries,
+  yesNo,
+  labels,
+}: {
+  row: AddressRow
+  onChange: (row: AddressRow) => void
+  countries: Array<{ value: string; label: string }>
+  yesNo: Array<{ value: string; label: string }>
+  labels: Record<'label' | 'labelPlaceholder' | 'line1' | 'line2' | 'city' | 'region' | 'postalCode' | 'country' | 'defaultBilling' | 'defaultShipping', string>
+}) {
+  const set = (key: keyof AddressRow, value: string) => onChange({ ...row, [key]: value })
+  return (
+    <div className="grid gap-4 sm:grid-cols-2">
+      <div className={`${field} sm:col-span-2`}><Label>{labels.label}</Label><Input value={row.label} placeholder={labels.labelPlaceholder} onChange={(event) => set('label', event.target.value)} /></div>
+      <div className={`${field} sm:col-span-2`}><Label>{labels.line1}</Label><Input value={row.line1} onChange={(event) => set('line1', event.target.value)} /></div>
+      <div className={`${field} sm:col-span-2`}><Label>{labels.line2}</Label><Input value={row.line2} onChange={(event) => set('line2', event.target.value)} /></div>
+      <div className={field}><Label>{labels.city}</Label><Input value={row.city} onChange={(event) => set('city', event.target.value)} /></div>
+      <div className={field}><Label>{labels.region}</Label><Input value={row.region} onChange={(event) => set('region', event.target.value)} /></div>
+      <div className={field}><Label>{labels.postalCode}</Label><Input value={row.postalCode} onChange={(event) => set('postalCode', event.target.value)} /></div>
+      <div className={field}><Label>{labels.country}</Label><SearchSelect value={row.country} onChange={(country) => set('country', country)} options={countries} sheetTitle={labels.country} clearable ariaLabel={labels.country} /></div>
+      <div className={field}><Label>{labels.defaultBilling}</Label><Select value={row.isDefaultBilling} onChange={(event) => set('isDefaultBilling', event.target.value)}>{yesNo.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}</Select></div>
+      <div className={field}><Label>{labels.defaultShipping}</Label><Select value={row.isDefaultShipping} onChange={(event) => set('isDefaultShipping', event.target.value)}>{yesNo.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}</Select></div>
     </div>
   )
 }
@@ -1397,16 +1629,26 @@ function BankAccountsPanel({
     <section className="space-y-3">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <SublistHeading title={t('bankAccountsHeading')} description={t('bankAccountsDescription')} icon={<Landmark size={16} />} />
-        {canManage && !draft ? <Button variant="outline" size="sm" onClick={() => setDraft(emptyBankDraft())}><Plus size={14} />{t('addBankAccount')}</Button> : null}
+        {canManage ? <Button variant="outline" size="sm" onClick={() => setDraft(emptyBankDraft())}><Plus size={14} />{t('addBankAccount')}</Button> : null}
       </div>
 
-      {draft ? (
-        <div className="space-y-4 rounded-lg border border-teal-200 bg-teal-50/40 p-4 dark:border-teal-900 dark:bg-teal-950/20">
-          <div className="flex items-center justify-between gap-3">
-            <h4 className="text-sm font-semibold">{draft.id ? t('editBankAccount') : t('addBankAccount')}</h4>
-            <Badge variant="warning">{tc('status.pendingApproval')}</Badge>
-          </div>
-          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+      <Drawer
+        open={draft !== null}
+        onClose={() => { if (!busy) setDraft(null) }}
+        stacked
+        size="md"
+        title={draft?.id ? t('editBankAccount') : t('addBankAccount')}
+        description={t('bankAccountApprovalNote')}
+        headerActions={<Badge variant="warning">{tc('status.pendingApproval')}</Badge>}
+        footer={draft ? (
+          <>
+            <Button variant="outline" disabled={busy} onClick={() => setDraft(null)}>{tc('actions.cancel')}</Button>
+            <Button disabled={busy} onClick={saveBankAccount}>{busy ? tc('actions.saving') : tc('actions.save')}</Button>
+          </>
+        ) : undefined}
+      >
+        {draft ? (
+          <div className="grid gap-4 sm:grid-cols-2">
             <div className={field}><Label>{t('bankName')}</Label><Input value={draft.bankName} onChange={(event) => setDraft({ ...draft, bankName: event.target.value })} /></div>
             <div className={field}><Label>{t('country')}</Label><SearchSelect value={draft.country} onChange={(country) => setDraft({ ...draft, country })} options={countries} sheetTitle={t('country')} clearable ariaLabel={t('country')} /></div>
             <div className={field}><Label>{tc('labels.currency')}</Label><Select value={draft.currency ?? ''} onChange={(event) => setDraft({ ...draft, currency: event.target.value })}>{!draft.currency && <option value="">—</option>}{ISO_CURRENCIES.map((c) => <option key={c.code} value={c.code}>{c.code} · {c.name}</option>)}</Select></div>
@@ -1417,13 +1659,8 @@ function BankAccountsPanel({
               <Input type="password" autoComplete="off" className="font-mono" value={draft.accountNumber} onChange={(event) => setDraft({ ...draft, accountNumber: event.target.value })} placeholder={draft.id ? t('accountNumberUnchanged', { lastFour: draft.lastFour }) : undefined} />
             </div>
           </div>
-          <p className="text-xs text-amber-700 dark:text-amber-300">{t('bankAccountApprovalNote')}</p>
-          <div className="flex justify-end gap-2">
-            <Button variant="outline" disabled={busy} onClick={() => setDraft(null)}>{tc('actions.cancel')}</Button>
-            <Button disabled={busy} onClick={saveBankAccount}>{busy ? tc('actions.saving') : tc('actions.save')}</Button>
-          </div>
-        </div>
-      ) : null}
+        ) : null}
+      </Drawer>
 
       {accounts.length === 0 ? (
         <SublistEmpty icon={<Landmark size={22} />} text={t('noBankAccounts')} />
