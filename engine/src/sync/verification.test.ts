@@ -1,6 +1,9 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { verifyAccountMonths } from "./verification.ts";
+import {
+  verifyAccountMonths,
+  verifyProjectAccountMonths,
+} from "./verification.ts";
 
 test("account-month verification uses identical exact aggregation for every connector", () => {
   const result = verifyAccountMonths(
@@ -56,4 +59,58 @@ test("account-month verification caps diagnostics without hiding the failed coun
   assert.equal(result.matches, 0);
   assert.equal(result.mismatches.length, 1);
   assert.equal(result.checked - result.matches, 2);
+});
+
+test("project-account-month verification is exact and bidirectional", () => {
+  const result = verifyProjectAccountMonths(
+    [
+      { projectRef: "job-1", accountRef: "4000", month: "2026-01", amount: "-8" },
+      { projectRef: "job-1", accountRef: "4000", month: "2026-01", amount: "-2" },
+      { projectRef: "job-2", accountRef: "5000", month: "2026-02", amount: "5" },
+    ],
+    [
+      { projectRef: "job-1", accountRef: "4000", month: "2026-01", amount: "-10" },
+      { projectRef: "job-3", accountRef: "5000", month: "2026-03", amount: "1" },
+    ],
+  );
+
+  assert.deepEqual(result, {
+    checked: 3,
+    matches: 1,
+    mismatches: [
+      {
+        projectRef: "job-2",
+        accountRef: "5000",
+        month: "2026-02",
+        ours: "0.0000",
+        theirs: "5.0000",
+      },
+      {
+        projectRef: "job-3",
+        accountRef: "5000",
+        month: "2026-03",
+        ours: "1.0000",
+        theirs: "0.0000",
+      },
+    ],
+  });
+});
+
+test("project-account-month verification rejects missing dimensions", () => {
+  assert.throws(
+    () =>
+      verifyProjectAccountMonths(
+        [{ projectRef: "", accountRef: "4000", month: "2026-01", amount: "1" }],
+        [],
+      ),
+    /no project reference/,
+  );
+  assert.throws(
+    () =>
+      verifyProjectAccountMonths(
+        [{ projectRef: "job", accountRef: "", month: "2026-01", amount: "1" }],
+        [],
+      ),
+    /no account reference/,
+  );
 });

@@ -6,6 +6,7 @@ export const MIGRATION_QUEUE = 'migration'
 /**
  * One external-system migration/mirror/attachment pass for a tenant connection.
  *   full_migration — master data + entire GL history, verified (the one click).
+ *   preflight      — read-only full-population document and ledger comparison.
  *   mirror         — incremental catch-up from the connection's cursor.
  *   attachments    — source-file inventory and idempotent object-storage import.
  * The heavy lifting runs on the worker so an 8-year backfill isn't hostage to
@@ -14,7 +15,7 @@ export const MIGRATION_QUEUE = 'migration'
 export type MigrationJobData = {
   orgId: string
   connectionId: string
-  mode: 'full_migration' | 'mirror' | 'attachments'
+  mode: 'full_migration' | 'preflight' | 'mirror' | 'attachments'
   triggeredBy?: string
 }
 

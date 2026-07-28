@@ -30,6 +30,7 @@ function result(overrides: Partial<SyncResult> = {}): SyncResult {
     tb: { accounts: 1, matches: 1, mismatches: [] },
     openItems: { checked: 1, matches: 1, mismatches: [] },
     periods: { checked: 1, matches: 1, mismatches: [] },
+    projectPeriods: null,
     syncedThrough: "2026-07-20T00:00:00.000Z",
     durationMs: 1,
     ...overrides,
@@ -50,6 +51,7 @@ test("financial cursor gate reports every independent divergence", () => {
         tb: { accounts: 7, matches: 6, mismatches: [] },
         openItems: { checked: 9, matches: 7, mismatches: [] },
         periods: { checked: 12, matches: 8, mismatches: [] },
+        projectPeriods: { checked: 20, matches: 14, mismatches: [] },
       }),
     ),
     [
@@ -59,6 +61,7 @@ test("financial cursor gate reports every independent divergence", () => {
       "1 trial-balance accounts differ",
       "2 open items differ",
       "4 account-month buckets differ",
+      "6 project-account-month buckets differ",
     ],
   );
 });

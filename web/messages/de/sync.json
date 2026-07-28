@@ -24,6 +24,7 @@
     "test": "Testen",
     "mirrorNow": "Jetzt spiegeln",
     "syncAttachments": "Anhänge synchronisieren",
+    "preflight": "Vor Synchronisierung prüfen",
     "runMigration": "Migration ausführen",
     "pauseMirror": "Spiegelung pausieren",
     "enableMirror": "Spiegelung aktivieren",
@@ -43,6 +44,8 @@
       "full_migration": "Vollständige Migration",
       "incremental": "Inkrementell",
       "attachments": "Anhänge",
+      "full_preflight": "Vollständige Vorprüfung",
+      "targeted_repair": "Gezielte Reparatur",
       "mirror": "Spiegelung"
     },
     "status": {
@@ -60,7 +63,11 @@
       "tb": "SB {matches}/{accounts}",
       "tbOff": "({count} abweichend)",
       "openItems": "offene Posten {matches}/{checked}",
-      "periods": "Perioden {matches}/{checked}"
+      "periods": "Perioden {matches}/{checked}",
+      "projectPeriods": "Projekt-/Kontoperioden {matches}/{checked}",
+      "preflightDocs": "{source} Quelldokumente · {new} neu · {amended} geändert · {unchanged} exakt",
+      "sourceBook": "{kind} {ref}",
+      "preflightBlockers": "{count} Blockierungen"
     }
   },
   "toast": {
@@ -69,9 +76,11 @@
     "authDenied": "Autorisierung wurde abgelehnt",
     "authFailed": "Autorisierung fehlgeschlagen ({status})",
     "queuingMigration": "Vollständige Migration wird eingereiht…",
+    "queuingPreflight": "Schreibgeschützte Gesamtprüfung wird eingereiht…",
     "queuingMirror": "Spiegelung wird eingereiht…",
     "queuingAttachments": "Anhangssynchronisierung wird eingereiht…",
     "migrationQueued": "Migration eingereiht — wir führen sie im Hintergrund aus",
+    "preflightQueued": "Prüfung eingereiht — Buchhaltung und Dokumente werden nicht geändert",
     "mirrorQueued": "Spiegelung eingereiht — läuft im Hintergrund",
     "attachmentsQueued": "Anhangssynchronisierung eingereiht — läuft im Hintergrund",
     "runFailed": "Der Lauf konnte nicht eingereiht werden (HTTP {status})",

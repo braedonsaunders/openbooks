@@ -45,6 +45,7 @@ interface GateResult {
   exactCount: number | null;
   mismatchCount: number | null;
   targetOnlyCount?: number;
+  retainedTargetOnlyCount?: number;
   detail?: string;
 }
 
@@ -379,6 +380,7 @@ const target = await withOrgContext(orgId, async () => {
     `)),
     retry(() => db.execute(sql`
       select d.custom->>'nsId' as source_document_id,
+             d.status as document_status,
              dl.custom->>'sourceLineRef' as source_line_id,
              dl.line_number, dl.quantity::text, dl.unit,
              dl.unit_price::text, dl.amount::text, dl.description,
@@ -838,10 +840,16 @@ if (!sourceInvoiceLines) {
     );
   }
   const targetByKey = new Map<string, JsonRow>();
-  let targetWithoutIdentity = 0;
+  let actionableTargetWithoutIdentity = 0;
+  let retainedTargetWithoutIdentity = 0;
   for (const row of target.invoiceLines) {
     if (!row.source_document_id || !row.source_line_id) {
-      targetWithoutIdentity++;
+      const isRetainedSourceDeletion =
+        String(row.document_status) === "voided" &&
+        Boolean(row.source_document_id) &&
+        !sourceByDocument.has(String(row.source_document_id));
+      if (isRetainedSourceDeletion) retainedTargetWithoutIdentity++;
+      else actionableTargetWithoutIdentity++;
       continue;
     }
     const key = `${String(row.source_document_id)}|${String(row.source_line_id)}`;
@@ -887,7 +895,7 @@ if (!sourceInvoiceLines) {
     const expectedAmount = fromUnits(sourceAmountUnits);
     const expectedRate =
       source.rate == null || source.rate === ""
-        ? expectedAmount
+        ? canonicalDecimal(expectedAmount)
         : canonicalDecimal(source.rate);
     const expectedAccount = String(
       source.expenseaccount ?? source.account ?? "",
@@ -913,21 +921,39 @@ if (!sourceInvoiceLines) {
       mismatchedSourceLines.add(key);
     }
   }
+  let actionableTargetWithIdentity = 0;
+  let retainedTargetWithIdentity = 0;
+  for (const [key, row] of targetByKey) {
+    if (sourceByKey.has(key)) continue;
+    const documentRef = key.split("|")[0]!;
+    if (
+      String(row.document_status) === "voided" &&
+      !sourceByDocument.has(documentRef)
+    ) {
+      retainedTargetWithIdentity++;
+    } else {
+      actionableTargetWithIdentity++;
+    }
+  }
+  const retainedTargetOnlyCount =
+    retainedTargetWithoutIdentity + retainedTargetWithIdentity;
+  const actionableTargetOnlyCount =
+    actionableTargetWithoutIdentity + actionableTargetWithIdentity;
   const targetOnlyCount =
-    targetWithoutIdentity +
-    [...targetByKey.keys()].filter((key) => !sourceByKey.has(key)).length;
+    retainedTargetOnlyCount + actionableTargetOnlyCount;
   gates.invoiceLines = {
     status:
-      mismatchedSourceLines.size === 0 && targetOnlyCount === 0
+      mismatchedSourceLines.size === 0 && actionableTargetOnlyCount === 0
         ? "exact"
         : "different",
     sourceCount: sourceByKey.size,
     targetCount: target.invoiceLines.length,
     exactCount: sourceByKey.size - mismatchedSourceLines.size,
-    mismatchCount: mismatchedSourceLines.size + targetOnlyCount,
+    mismatchCount: mismatchedSourceLines.size + actionableTargetOnlyCount,
     targetOnlyCount,
+    retainedTargetOnlyCount,
     detail:
-      "Every source customer-invoice detail line by stable identity, sequence, item, account, quantity, unit, rate, amount, and description",
+      `Every source customer-invoice detail line by stable identity, sequence, item, account, quantity, unit, rate, amount, and description; ${retainedTargetOnlyCount} target-only lines belong to controlled voided source-deletion tombstones`,
   };
 }
 if (!legacyCrew) {

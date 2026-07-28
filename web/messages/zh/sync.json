@@ -24,6 +24,7 @@
     "test": "测试",
     "mirrorNow": "立即镜像",
     "syncAttachments": "同步附件",
+    "preflight": "同步前验证",
     "runMigration": "运行迁移",
     "pauseMirror": "暂停镜像",
     "enableMirror": "启用镜像",
@@ -43,6 +44,8 @@
       "full_migration": "完整迁移",
       "incremental": "增量",
       "attachments": "附件",
+      "full_preflight": "完整预检",
+      "targeted_repair": "定向修复",
       "mirror": "镜像"
     },
     "status": {
@@ -60,7 +63,11 @@
       "tb": "试算平衡 {matches}/{accounts}",
       "tbOff": "（{count} 项不符）",
       "openItems": "未结项 {matches}/{checked}",
-      "periods": "期间 {matches}/{checked}"
+      "periods": "期间 {matches}/{checked}",
+      "projectPeriods": "项目/科目期间 {matches}/{checked}",
+      "preflightDocs": "{source} 个源文档 · {new} 个新增 · {amended} 个变更 · {unchanged} 个精确匹配",
+      "sourceBook": "{kind} {ref}",
+      "preflightBlockers": "{count} 个阻碍项"
     }
   },
   "toast": {
@@ -69,9 +76,11 @@
     "authDenied": "授权被拒绝",
     "authFailed": "授权失败（{status}）",
     "queuingMigration": "正在排队完整迁移…",
+    "queuingPreflight": "正在排队只读全量验证…",
     "queuingMirror": "正在排队镜像…",
     "queuingAttachments": "正在排队附件同步…",
     "migrationQueued": "迁移已排队——我们将在后台运行",
+    "preflightQueued": "验证已排队——不会更改会计数据或文档",
     "mirrorQueued": "镜像已排队——正在后台运行",
     "attachmentsQueued": "附件同步已排队——正在后台运行",
     "runFailed": "无法将运行加入队列（HTTP {status}）",

@@ -26,6 +26,8 @@ import type { MigrationSource, SourceOpenItem } from "./source.ts";
 import {
   verifyAccountMonths,
   type AccountMonthVerification,
+  verifyProjectAccountMonths,
+  type ProjectAccountMonthVerification,
 } from "./verification.ts";
 import {
   captureTransactionAuditSnapshot,
@@ -60,7 +62,7 @@ import type { ComputedTaxComponent } from "../tax.ts";
 
 export interface SyncResult {
   runId: string;
-  kind: "incremental" | "full_migration";
+  kind: "incremental" | "full_migration" | "targeted_repair";
   entities?: EntityLoadStats;
   docsNew: number;
   docsAmended: number;
@@ -88,17 +90,34 @@ export interface SyncResult {
   } | null;
   /** Mandatory month-bucketed activity gate (catches date-allocation drift). */
   periods: AccountMonthVerification;
+  /**
+   * Mandatory when the connector exposes project/job ledger dimensions.
+   * Verifies every project, posting account, and month exactly.
+   */
+  projectPeriods: ProjectAccountMonthVerification | null;
   syncedThrough: string;
   durationMs: number;
 }
 
+export interface SourceLedgerVerification {
+  tb: SyncResult["tb"];
+  openItems: SyncResult["openItems"];
+  periods: SyncResult["periods"];
+  projectPeriods: SyncResult["projectPeriods"];
+}
+
 export interface SyncOptions {
-  kind?: "incremental" | "full_migration";
+  kind?: "incremental" | "full_migration" | "targeted_repair";
   orgId?: string;
   connectionId?: string;
   /** "auto" resumes from the watermark; null = all history; Date = explicit. */
   since?: Date | null | "auto";
   loadEntitiesFirst?: boolean;
+  /**
+   * Explicit bounded source transaction population. Requires the adapter's
+   * nativeChangesByRefs capability and never advances the mirror cursor.
+   */
+  sourceRefs?: string[];
 }
 
 export function syncVerificationFailures(result: SyncResult): string[] {
@@ -121,6 +140,14 @@ export function syncVerificationFailures(result: SyncResult): string[] {
   if (openOff > 0) failures.push(`${openOff} open items differ`);
   const periodOff = result.periods.checked - result.periods.matches;
   if (periodOff > 0) failures.push(`${periodOff} account-month buckets differ`);
+  const projectPeriodOff = result.projectPeriods
+    ? result.projectPeriods.checked - result.projectPeriods.matches
+    : 0;
+  if (projectPeriodOff > 0) {
+    failures.push(
+      `${projectPeriodOff} project-account-month buckets differ`,
+    );
+  }
   return failures;
 }
 
@@ -187,6 +214,129 @@ export function verifyOpenItems(
   };
 }
 
+/**
+ * Read-only comparison of the currently materialized OpenBooks ledger against
+ * an adapter's authoritative source ledger. Full sync, mirror, and preflight
+ * all use this one implementation so the UI cannot certify a weaker contract
+ * than the write path enforces.
+ */
+export async function verifyCurrentLedgerState(
+  source: MigrationSource,
+  orgId: string,
+): Promise<SourceLedgerVerification> {
+  const refKey = source.refKey;
+  const theirs = await source.trialBalance();
+  const ours = (await db.execute(sql`
+    select a.custom->>${refKey} as ref, sum(l.amount) as bal
+      from journal_lines l
+      join journal_entries e
+        on e.id = l.entry_id and e.org_id = l.org_id
+      join accounts a
+        on a.id = l.account_id and a.org_id = l.org_id
+     where l.org_id = ${orgId}
+       and e.status in ('posted', 'reversed')
+       and a.custom->>${refKey} is not null
+     group by 1
+  `)) as unknown as { rows: { ref: string; bal: string }[] };
+  const oursByRef = new Map(ours.rows.map((row) => [row.ref, toUnits(row.bal)]));
+  const theirsByRef = new Map(
+    theirs.map((row) => [row.accountRef, toUnits(row.balance)]),
+  );
+  const tbMismatches: SyncResult["tb"]["mismatches"] = [];
+  let tbMatches = 0;
+  const trialBalanceRefs = new Set([
+    ...oursByRef.keys(),
+    ...theirsByRef.keys(),
+  ]);
+  for (const accountRef of trialBalanceRefs) {
+    const mine = oursByRef.get(accountRef) ?? 0n;
+    const sourceBalance = theirsByRef.get(accountRef) ?? 0n;
+    if (mine === sourceBalance) tbMatches++;
+    else {
+      tbMismatches.push({
+        accountRef,
+        ours: fromUnits(mine),
+        theirs: fromUnits(sourceBalance),
+      });
+    }
+  }
+
+  let openItems: SyncResult["openItems"] = null;
+  if (source.openItems) {
+    const truth = await source.openItems();
+    const mine = (await db.execute(sql`
+      select custom->>${refKey} as ref, coalesce(open_balance, 0) as unpaid
+        from documents
+       where org_id = ${orgId} and custom->>${refKey} is not null
+    `)) as unknown as { rows: SourceOpenItem[] };
+    openItems = verifyOpenItems(truth, mine.rows);
+  }
+
+  const periodTruth = await source.monthlyActivity();
+  const periodMine = (await db.execute(sql`
+    select a.custom->>${refKey} as "accountRef",
+           to_char(e.posting_date, 'YYYY-MM') as month,
+           sum(l.amount) as amount
+      from journal_lines l
+      join journal_entries e
+        on e.id = l.entry_id and e.org_id = l.org_id
+      join accounts a
+        on a.id = l.account_id and a.org_id = l.org_id
+     where l.org_id = ${orgId}
+       and e.status in ('posted', 'reversed')
+       and a.custom->>${refKey} is not null
+     group by 1, 2
+  `)) as unknown as {
+    rows: { accountRef: string; month: string; amount: string }[];
+  };
+  const periods = verifyAccountMonths(periodTruth, periodMine.rows);
+
+  let projectPeriods: SyncResult["projectPeriods"] = null;
+  if (source.projectMonthlyActivity) {
+    const projectTruth = await source.projectMonthlyActivity();
+    const projectMine = (await db.execute(sql`
+      select p.custom->>${refKey} as "projectRef",
+             a.custom->>${refKey} as "accountRef",
+             to_char(e.posting_date, 'YYYY-MM') as month,
+             sum(l.amount) as amount
+        from journal_lines l
+        join journal_entries e
+          on e.id = l.entry_id and e.org_id = l.org_id
+        join projects p
+          on p.id = l.project_id and p.org_id = l.org_id
+        join accounts a
+          on a.id = l.account_id and a.org_id = l.org_id
+       where l.org_id = ${orgId}
+         and e.status in ('posted', 'reversed')
+         and p.custom->>${refKey} is not null
+         and a.custom->>${refKey} is not null
+       group by 1, 2, 3
+    `)) as unknown as {
+      rows: {
+        projectRef: string;
+        accountRef: string;
+        month: string;
+        amount: string;
+      }[];
+    };
+    projectPeriods = verifyProjectAccountMonths(
+      projectTruth,
+      projectMine.rows,
+    );
+  }
+
+  return {
+    tb: {
+      accounts: trialBalanceRefs.size,
+      matches: tbMatches,
+      mismatches: tbMismatches.slice(0, 50),
+    },
+    openItems,
+    periods,
+    projectPeriods,
+  };
+}
+
 class SyncVerificationError extends Error {
   constructor(readonly result: SyncResult) {
     super(
@@ -206,6 +356,28 @@ export function runFullMigration(
     kind: "full_migration",
     since: null,
     loadEntitiesFirst: true,
+    ...ctxOpts,
+  });
+}
+
+/** Governed source-exact rematerialization of a bounded transaction set. */
+export function runTargetedRepair(
+  source: MigrationSource,
+  sourceRefs: string[],
+  triggeredBy: string,
+  ctxOpts: { orgId?: string; connectionId?: string } = {},
+): Promise<SyncResult> {
+  const refs = [...new Set(sourceRefs.map(String))];
+  if (refs.length === 0) {
+    throw new Error("targeted repair requires at least one source reference");
+  }
+  if (refs.length > 500) {
+    throw new Error("targeted repair is limited to 500 source references");
+  }
+  return runSync(source, triggeredBy, {
+    kind: "targeted_repair",
+    sourceRefs: refs,
+    loadEntitiesFirst: false,
     ...ctxOpts,
   });
 }
@@ -427,6 +599,12 @@ export interface FullSyncPreflight {
   duplicateSourceRefs: string[];
   acknowledgedSourceDeletions: string[];
   actionableSourceDeletions: string[];
+  ledgerContext: {
+    bookRef: string;
+    bookKind: string;
+  } | null;
+  /** Current target state versus source, before any writes are authorized. */
+  financialVerification: SourceLedgerVerification;
   samples: {
     newDocuments: string[];
     amendedDocuments: string[];
@@ -530,6 +708,10 @@ export async function preflightFullSync(
   const acknowledged = new Set(
     acknowledgedRows.map((row) => row.source_ref),
   );
+  const [ledgerContext, financialVerification] = await Promise.all([
+    source.ledgerContext ? source.ledgerContext() : Promise.resolve(null),
+    verifyCurrentLedgerState(source, opts.orgId),
+  ]);
 
   return {
     source: source.name,
@@ -550,6 +732,8 @@ export async function preflightFullSync(
     actionableSourceDeletions: deletionCandidates
       .filter((ref) => !acknowledged.has(ref))
       .sort(),
+    ledgerContext,
+    financialVerification,
     samples: {
       newDocuments: newRefs.slice(0, 50),
       amendedDocuments: amendedRefs.slice(0, 50),
@@ -698,6 +882,20 @@ export async function runSync(
 ): Promise<SyncResult> {
   const started = Date.now();
   const kind = opts.kind ?? "incremental";
+  const targetedRefs = opts.sourceRefs
+    ? [...new Set(opts.sourceRefs.map(String))]
+    : null;
+  if (kind === "targeted_repair" && !targetedRefs?.length) {
+    throw new Error("targeted repair requires explicit source references");
+  }
+  if (targetedRefs && kind !== "targeted_repair") {
+    throw new Error("sourceRefs are only valid for a targeted repair");
+  }
+  if (targetedRefs && !source.nativeChangesByRefs) {
+    throw new Error(
+      `${source.name} does not support targeted source rematerialization`,
+    );
+  }
   const refKey = source.refKey;
   const connectionId = opts.connectionId ?? null;
   const org = opts.orgId
@@ -823,7 +1021,22 @@ export async function runSync(
       { phase: "pull", message: "Pulling transactions…" },
       true,
     );
-    const changes = await source.nativeChanges(since, ctx);
+    const changes = targetedRefs
+      ? await source.nativeChangesByRefs!(targetedRefs, ctx)
+      : await source.nativeChanges(since, ctx);
+    if (targetedRefs) {
+      const accountedFor = new Set([
+        ...changes.documents.map((document) => document.sourceRef),
+        ...changes.unbuildable.map((row) => row.ref),
+        ...(changes.nonLedgerRefs ?? []),
+      ]);
+      const absent = targetedRefs.filter((ref) => !accountedFor.has(ref));
+      if (absent.length > 0) {
+        throw new Error(
+          `targeted source references were not returned: ${absent.join(", ")}`,
+        );
+      }
+    }
 
     // -- 4. existing documents by source ref -------------------------------------
     const existing = new Map<
@@ -842,16 +1055,18 @@ export async function runSync(
     // Older rate-keyed order imports retained a non-zero-rate code even when
     // no source tax existed. Zero tax has no unambiguous tax identity in this
     // adapter; remove that legacy promise before canonical change detection.
-    await db.execute(sql`
-      update document_lines dl set tax_code_id = null, updated_at = now()
-       where dl.tax_amount = 0 and dl.tax_code_id is not null
-         and not exists (
-           select 1 from document_line_tax_components c where c.document_line_id = dl.id
-         )
-         and exists (
-           select 1 from documents d where d.id = dl.document_id and d.org_id = ${org.id}
-             and d.custom->>${refKey} is not null
-         )`);
+    if (!targetedRefs) {
+      await db.execute(sql`
+        update document_lines dl set tax_code_id = null, updated_at = now()
+         where dl.tax_amount = 0 and dl.tax_code_id is not null
+           and not exists (
+             select 1 from document_line_tax_components c where c.document_line_id = dl.id
+           )
+           and exists (
+             select 1 from documents d where d.id = dl.document_id and d.org_id = ${org.id}
+               and d.custom->>${refKey} is not null
+           )`);
+    }
     const fullStoredKeys =
       since === null ? await loadStoredKeys(org.id, refKey) : null;
 
@@ -1208,7 +1423,7 @@ export async function runSync(
           rows: { on: boolean | null }[];
         }
       ).rows[0]?.on === true;
-    const trueUp = trueUpEnabled
+    const trueUp = trueUpEnabled && !targetedRefs
       ? await trueUpResidualGl(org.id, source)
       : null;
 
@@ -1218,74 +1433,22 @@ export async function runSync(
     // out-of-band edits can leave the denormalized column stale. Recompute it
     // set-based now so AR/AP aging and the open-item gate below reflect the real
     // applied state (only drifted rows are written).
-    await recomputeOpenBalances(org.id);
+    if (!targetedRefs) await recomputeOpenBalances(org.id);
 
-    // -- 7. verify: trial balance -------------------------------------------------
+    // -- 7. verify: authoritative source ledger ----------------------------------
     await setProgress(
       run!.id,
-      { phase: "verify", message: "Verifying trial balance & open items…" },
+      {
+        phase: "verify",
+        message:
+          "Verifying trial balance, open items, periods & project ledger…",
+      },
       true,
     );
-    const theirs = await source.trialBalance();
-    const ours = (await db.execute(sql`
-      select a.custom->>${refKey} as ref, sum(l.amount) as bal
-        from journal_lines l join accounts a on a.id = l.account_id
-       where l.org_id = ${org.id} and a.custom->>${refKey} is not null group by 1`)) as unknown as {
-      rows: { ref: string; bal: string }[];
-    };
-    const oursByRef = new Map(ours.rows.map((r) => [r.ref, toUnits(r.bal)]));
-    const theirsByRef = new Map(
-      theirs.map((r) => [r.accountRef, toUnits(r.balance)]),
+    const financialVerification = await verifyCurrentLedgerState(
+      source,
+      org.id,
     );
-    const tbMismatches: SyncResult["tb"]["mismatches"] = [];
-    let tbMatches = 0;
-    const trialBalanceRefs = new Set([
-      ...oursByRef.keys(),
-      ...theirsByRef.keys(),
-    ]);
-    for (const accountRef of trialBalanceRefs) {
-      const mine = oursByRef.get(accountRef) ?? 0n;
-      const sourceBalance = theirsByRef.get(accountRef) ?? 0n;
-      if (mine === sourceBalance) tbMatches++;
-      else
-        tbMismatches.push({
-          accountRef,
-          ours: fromUnits(mine),
-          theirs: fromUnits(sourceBalance),
-        });
-    }
-
-    // -- 8. verify: open items (AR/AP aging vs the live source) --------------------
-    let openItems: SyncResult["openItems"] = null;
-    if (source.openItems) {
-      const truth = await source.openItems();
-      const mine = (await db.execute(sql`
-        select custom->>${refKey} as ref, coalesce(open_balance, 0) as unpaid
-          from documents where org_id = ${org.id} and custom->>${refKey} is not null
-      `)) as unknown as {
-        rows: SourceOpenItem[];
-      };
-      openItems = verifyOpenItems(truth, mine.rows);
-    }
-
-    // -- 8b. verify: month-bucketed activity (period-allocation exactness) --------
-    // The cumulative TB proves totals; this proves WHEN. Together they subsume
-    // any statement check (P&L / BS are projections of per-period balances).
-    // This method is mandatory on MigrationSource, so a new adapter cannot ship
-    // a one-click migration or mirror that silently skips the period gate.
-    const truth = await source.monthlyActivity();
-    const mine = (await db.execute(sql`
-      select a.custom->>${refKey} as "accountRef",
-             to_char(e.posting_date, 'YYYY-MM') as month,
-             sum(l.amount) as amount
-        from journal_lines l
-        join journal_entries e on e.id = l.entry_id
-        join accounts a on a.id = l.account_id
-       where l.org_id = ${org.id} and a.custom->>${refKey} is not null
-       group by 1, 2`)) as unknown as {
-      rows: { accountRef: string; month: string; amount: string }[];
-    };
-    const periods = verifyAccountMonths(truth, mine.rows);
 
     const result: SyncResult = {
       runId: run!.id,
@@ -1302,13 +1465,7 @@ export async function runSync(
       autoResolvedDeletions: autoResolvedDeletions.sort(),
       applications,
       trueUp,
-      tb: {
-        accounts: trialBalanceRefs.size,
-        matches: tbMatches,
-        mismatches: tbMismatches.slice(0, 50),
-      },
-      openItems,
-      periods,
+      ...financialVerification,
       syncedThrough: changes.syncedThrough.toISOString(),
       durationMs: Date.now() - started,
     };
@@ -1322,12 +1479,12 @@ export async function runSync(
       .set({
         status: "ok",
         finishedAt: new Date(),
-        syncedThrough: changes.syncedThrough,
+        syncedThrough: targetedRefs ? null : changes.syncedThrough,
         stats: result as unknown as Record<string, unknown>,
       })
       .where(eq(schema.syncRuns.id, run!.id));
 
-    if (connectionId) {
+    if (connectionId && !targetedRefs) {
       await db.execute(sql`
         update connections
            set cursor = ${changes.syncedThrough}, last_run_at = now(),

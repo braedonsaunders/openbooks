@@ -8,7 +8,11 @@ import {
 } from "@openbooks/jobs";
 import { db } from "../db.ts";
 import { buildSource, getConnection } from "../sync/connection.ts";
-import { runFullMigration, runSync } from "../sync/sync.ts";
+import {
+  preflightFullSync,
+  runFullMigration,
+  runSync,
+} from "../sync/sync.ts";
 import {
   AttachmentImportError,
   importNetSuiteAttachments,
@@ -83,6 +87,54 @@ export function createMigrationWorker(): Worker<MigrationJobData> {
       }
 
       const source = buildSource(conn);
+      if (mode === "preflight") {
+        await db.execute(sql`
+          update sync_runs
+             set status = 'failed', finished_at = now(),
+                 error_message = 'Preflight was interrupted before the worker could finish it.'
+           where org_id = ${orgId} and connection_id = ${connectionId}
+             and kind = 'full_preflight' and status = 'running'
+        `);
+        const started = (await db.execute(sql`
+          insert into sync_runs
+            (org_id, connection_id, source, kind, status, triggered_by, progress)
+          values
+            (${orgId}, ${connectionId}, ${conn.source}, 'full_preflight',
+             'running', ${triggeredBy ?? "worker"},
+             ${JSON.stringify({
+               phase: "preflight",
+               message: "Comparing the complete source and target populations…",
+             })}::jsonb)
+          returning id
+        `)) as unknown as { rows: { id: string }[] };
+        const runId = started.rows[0]!.id;
+        try {
+          const plan = await preflightFullSync(source, {
+            orgId,
+            connectionId,
+          });
+          await db.execute(sql`
+            update sync_runs
+               set status = 'ok', finished_at = now(),
+                   stats = ${JSON.stringify(plan)}::jsonb,
+                   progress = ${JSON.stringify({ phase: "complete" })}::jsonb
+             where id = ${runId}
+          `);
+          return { runId, kind: "full_preflight", ...plan };
+        } catch (error) {
+          const message =
+            error instanceof Error ? error.message : String(error);
+          await db.execute(sql`
+            update sync_runs
+               set status = 'failed', finished_at = now(),
+                   error_message = ${message}
+             where id = ${runId}
+          `);
+          throw error;
+        } finally {
+          await source.dispose?.();
+        }
+      }
       const ctx = { orgId, connectionId };
       const result =
         mode === "full_migration"
@@ -104,6 +156,14 @@ export function createMigrationWorker(): Worker<MigrationJobData> {
           matches: result.periods.matches,
           mismatches: result.periods.checked - result.periods.matches,
         },
+        projectPeriods: result.projectPeriods
+          ? {
+              checked: result.projectPeriods.checked,
+              matches: result.projectPeriods.matches,
+              mismatches:
+                result.projectPeriods.checked - result.projectPeriods.matches,
+            }
+          : null,
         openItems: result.openItems
           ? {
               checked: result.openItems.checked,

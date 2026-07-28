@@ -113,6 +113,21 @@ interface Run {
       mismatches?: unknown[];
     } | null;
     periods?: { checked?: number; matches?: number } | null;
+    projectPeriods?: { checked?: number; matches?: number } | null;
+    sourceDocuments?: number;
+    targetDocuments?: number;
+    newDocuments?: number;
+    amendedDocuments?: number;
+    unchangedDocuments?: number;
+    sourceUnbuildable?: number;
+    actionableSourceDeletions?: unknown[];
+    ledgerContext?: { bookRef?: string; bookKind?: string } | null;
+    financialVerification?: {
+      tb?: { matches?: number; accounts?: number; mismatches?: unknown[] };
+      openItems?: { checked?: number; matches?: number } | null;
+      periods?: { checked?: number; matches?: number };
+      projectPeriods?: { checked?: number; matches?: number } | null;
+    };
     sourceFiles?: number;
     sourceLinks?: number;
     createdFiles?: number;
@@ -221,6 +236,48 @@ export function PlatformClient() {
         created: s.createdFiles ?? 0,
       });
     }
+    if (r.kind === "full_preflight") {
+      const financial = s.financialVerification;
+      const parts = [
+        t("runs.stats.preflightDocs", {
+          source: s.sourceDocuments ?? 0,
+          new: s.newDocuments ?? 0,
+          amended: s.amendedDocuments ?? 0,
+          unchanged: s.unchangedDocuments ?? 0,
+        }),
+      ];
+      if (s.ledgerContext?.bookRef) {
+        parts.push(
+          t("runs.stats.sourceBook", {
+            kind: s.ledgerContext.bookKind ?? "ledger",
+            ref: s.ledgerContext.bookRef,
+          }),
+        );
+      }
+      if (financial?.tb) {
+        parts.push(
+          t("runs.stats.tb", {
+            matches: financial.tb.matches ?? 0,
+            accounts: financial.tb.accounts ?? 0,
+          }),
+        );
+      }
+      if (financial?.projectPeriods) {
+        parts.push(
+          t("runs.stats.projectPeriods", {
+            matches: financial.projectPeriods.matches ?? 0,
+            checked: financial.projectPeriods.checked ?? 0,
+          }),
+        );
+      }
+      const blockers =
+        (s.sourceUnbuildable ?? 0) +
+        (s.actionableSourceDeletions?.length ?? 0);
+      if (blockers > 0) {
+        parts.push(t("runs.stats.preflightBlockers", { count: blockers }));
+      }
+      return parts.join(" · ");
+    }
     const parts = [
       t("runs.stats.docs", {
         new: s.docsNew ?? 0,
@@ -251,6 +308,13 @@ export function PlatformClient() {
         t("runs.stats.periods", {
           matches: s.periods.matches ?? 0,
           checked: s.periods.checked ?? 0,
+        }),
+      );
+    if (s.projectPeriods)
+      parts.push(
+        t("runs.stats.projectPeriods", {
+          matches: s.projectPeriods.matches ?? 0,
+          checked: s.projectPeriods.checked ?? 0,
         }),
       );
     return parts.join(" · ");
@@ -356,13 +420,15 @@ export function PlatformClient() {
 
   async function run(
     conn: Connection,
-    mode: "full_migration" | "mirror" | "attachments",
+    mode: "full_migration" | "preflight" | "mirror" | "attachments",
   ) {
     const key = `${conn.id}:${mode}`;
     setBusy(key);
     const tid = toast.loading(
       mode === "full_migration"
         ? t("toast.queuingMigration")
+        : mode === "preflight"
+          ? t("toast.queuingPreflight")
         : mode === "attachments"
           ? t("toast.queuingAttachments")
           : t("toast.queuingMirror"),
@@ -388,6 +454,8 @@ export function PlatformClient() {
       toast.success(
         mode === "full_migration"
           ? t("toast.migrationQueued")
+          : mode === "preflight"
+            ? t("toast.preflightQueued")
           : mode === "attachments"
             ? t("toast.attachmentsQueued")
             : t("toast.mirrorQueued"),
@@ -629,6 +697,14 @@ export function PlatformClient() {
                       <Paperclip size={14} /> {t("actions.syncAttachments")}
                     </Button>
                   ) : null}
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    disabled={busy === `${c.id}:preflight`}
+                    onClick={() => run(c, "preflight")}
+                  >
+                    <BookOpen size={14} /> {t("actions.preflight")}
+                  </Button>
                   <Button
                     size="sm"
                     disabled={busy === `${c.id}:full_migration`}

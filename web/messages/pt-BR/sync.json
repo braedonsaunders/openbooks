@@ -24,6 +24,7 @@
     "test": "Testar",
     "mirrorNow": "Espelhar agora",
     "syncAttachments": "Sincronizar anexos",
+    "preflight": "Verificar antes de sincronizar",
     "runMigration": "Executar migração",
     "pauseMirror": "Pausar espelhamento",
     "enableMirror": "Ativar espelhamento",
@@ -43,6 +44,8 @@
       "full_migration": "Migração completa",
       "incremental": "Incremental",
       "attachments": "Anexos",
+      "full_preflight": "Verificação completa",
+      "targeted_repair": "Reparo direcionado",
       "mirror": "Espelhamento"
     },
     "status": {
@@ -60,7 +63,11 @@
       "tb": "BV {matches}/{accounts}",
       "tbOff": "({count} com diferença)",
       "openItems": "itens em aberto {matches}/{checked}",
-      "periods": "períodos {matches}/{checked}"
+      "periods": "períodos {matches}/{checked}",
+      "projectPeriods": "períodos de projeto/conta {matches}/{checked}",
+      "preflightDocs": "{source} documentos de origem · {new} novos · {amended} alterados · {unchanged} exatos",
+      "sourceBook": "{kind} {ref}",
+      "preflightBlockers": "{count} bloqueios"
     }
   },
   "toast": {
@@ -69,9 +76,11 @@
     "authDenied": "A autorização foi recusada",
     "authFailed": "Falha na autorização ({status})",
     "queuingMigration": "Enfileirando migração completa…",
+    "queuingPreflight": "Enfileirando verificação completa somente leitura…",
     "queuingMirror": "Enfileirando espelhamento…",
     "queuingAttachments": "Enfileirando sincronização de anexos…",
     "migrationQueued": "Migração enfileirada — vamos executá-la em segundo plano",
+    "preflightQueued": "Verificação enfileirada — a contabilidade e os documentos não serão alterados",
     "mirrorQueued": "Espelhamento enfileirado — executando em segundo plano",
     "attachmentsQueued": "Sincronização de anexos enfileirada — executando em segundo plano",
     "runFailed": "Não foi possível enfileirar a execução (HTTP {status})",

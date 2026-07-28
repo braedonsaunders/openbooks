@@ -75,6 +75,12 @@ export const SOURCE_TYPES: SourceTypeManifest[] = [
       { key: "host", label: "SuiteTalk host", placeholder: "https://<acct>.suitetalk.api.netsuite.com", required: true },
       { key: "baseCurrency", label: "Base currency", kind: "select", optionsSource: "currencies" },
       {
+        key: "accountingBookId",
+        label: "Accounting book ID",
+        placeholder: "1",
+        help: "Authoritative NetSuite accounting book for GL verification. Optional only when the account exposes exactly one posted book; multi-book accounts must select one explicitly.",
+      },
+      {
         key: "bridgeScriptId",
         label: "Bridge script ID",
         placeholder: "customscript_openbooks_bridge_rl",
@@ -262,6 +268,10 @@ export function validateSourceConfig(manifest: SourceTypeManifest, config: Recor
     }
   }
   if (manifest.source === "netsuite") {
+    const accountingBookId = String(config.accountingBookId ?? "").trim();
+    if (accountingBookId && !/^\d+$/.test(accountingBookId)) {
+      return "Accounting book ID must be numeric";
+    }
     try {
       parseNetSuiteMappings(config.mappingJson);
     } catch (error) {
@@ -355,6 +365,7 @@ export function buildSource(conn: ConnectionRow): MigrationSource {
       bridgeScriptId?: string;
       bridgeDeploymentId?: string;
       mappingJson?: string;
+      accountingBookId?: string;
     };
     let creds: NetSuiteCreds | null = null;
     if (secret?.consumerKey && cfg.account && cfg.host) {
@@ -375,6 +386,7 @@ export function buildSource(conn: ConnectionRow): MigrationSource {
         deploymentId: cfg.bridgeDeploymentId || undefined,
       },
       mappings: cfg.mappingJson,
+      accountingBookId: cfg.accountingBookId,
     });
   }
 

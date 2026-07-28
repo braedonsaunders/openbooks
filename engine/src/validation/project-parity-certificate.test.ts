@@ -17,6 +17,13 @@ test("project GL parity uses NetSuite posted accounting lines", () => {
   );
 });
 
+test("invoice-line fallback rates use canonical commercial precision", () => {
+  assert.match(
+    source,
+    /source\.rate == null[\s\S]*canonicalDecimal\(expectedAmount\)/,
+  );
+});
+
 test("multi-book source GL requires an explicit accounting-book choice", () => {
   assert.match(source, /--source-accounting-book=<id> explicitly/);
   assert.match(source, /source project GL artifact spans accounting books/);

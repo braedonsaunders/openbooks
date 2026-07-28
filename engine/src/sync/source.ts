@@ -75,10 +75,31 @@ export interface SourceAccountMonthRow {
   amount: string; // signed decimal string, debit-positive, in home currency
 }
 
+/**
+ * Source-ledger activity for one project, account, and calendar posting month.
+ *
+ * This is deliberately a ledger projection rather than a commercial-document
+ * projection: connectors must read the source system's authoritative posted
+ * accounting lines, not infer GL impact from invoice/item lines.
+ */
+export interface SourceProjectAccountMonthRow {
+  projectRef: string;
+  accountRef: string;
+  month: string; // YYYY-MM
+  amount: string; // signed decimal string, debit-positive, in home currency
+}
+
 /** Source ground truth for one open item (invoice/bill): remaining unpaid. */
 export interface SourceOpenItem {
   ref: string;
   unpaid: string;
+}
+
+export interface SourceLedgerContext {
+  /** Source-native identifier of the authoritative ledger/book. */
+  bookRef: string;
+  /** Human-readable source-system terminology, e.g. "accounting book". */
+  bookKind: string;
 }
 
 // --- The adapter -----------------------------------------------------------------
@@ -121,6 +142,17 @@ export interface MigrationSource {
    */
   nativeChanges(since: Date | null, ctx: NativeContext): Promise<NativeChanges>;
 
+  /**
+   * Optional governed repair pull for an explicit, bounded set of source
+   * transaction references. The sync engine never advances the incremental
+   * cursor from this operation and still runs every financial verification
+   * gate after rematerialization.
+   */
+  nativeChangesByRefs?(
+    sourceRefs: string[],
+    ctx: NativeContext,
+  ): Promise<NativeChanges>;
+
   /** Live per-account trial balance for verification after sync. */
   trialBalance(): Promise<SourceTrialBalanceRow[]>;
 
@@ -132,6 +164,16 @@ export interface MigrationSource {
    * P&L / balance sheet). Values are source-ledger home-currency amounts.
    */
   monthlyActivity(): Promise<SourceAccountMonthRow[]>;
+
+  /** Ledger/book selected for authoritative verification, when applicable. */
+  ledgerContext?(): Promise<SourceLedgerContext>;
+
+  /**
+   * Optional project-ledger verification capability. Connectors whose source
+   * supports a project/job dimension return every posted project/account/month
+   * bucket. When present, the sync engine treats this as a mandatory gate.
+   */
+  projectMonthlyActivity?(): Promise<SourceProjectAccountMonthRow[]>;
 
   /** Live per-document unpaid balances (AR/AP aging verification). */
   openItems?(): Promise<SourceOpenItem[]>;
