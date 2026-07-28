@@ -26,7 +26,7 @@ test('general-ledger paper HTML mirrors ReportPaper typography and account hiera
       align: ['left', 'left', 'left', 'right', 'right', 'right'],
     }],
   }, {
-    orgName: 'Rassaun Services Inc',
+    orgName: 'Example Manufacturing Inc',
     baseCurrency: 'CAD',
     primaryColor: '#0f766e',
   }, 'en')
