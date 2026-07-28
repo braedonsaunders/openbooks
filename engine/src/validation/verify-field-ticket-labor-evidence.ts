@@ -181,6 +181,7 @@ async function main(): Promise<void> {
        where d.org_id = ${ORG}
          and d.kind = 'field_ticket'
          and d.status = 'approved'
+         and d.custom #>> '{legacy,id}' is not null
          and snapshot.evidence_basis = 'source_import'
          and snapshot.source_system = 'adminapp2'
     `),
@@ -214,6 +215,7 @@ async function main(): Promise<void> {
        where d.org_id = ${ORG}
          and d.kind = 'field_ticket'
          and d.status = 'approved'
+         and d.custom #>> '{legacy,id}' is not null
     `),
   ]);
   const snapshots = snapshotResult.rows as Array<Record<string, unknown>>;
