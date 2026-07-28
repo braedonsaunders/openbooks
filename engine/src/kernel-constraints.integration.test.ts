@@ -7,6 +7,18 @@ import { createScratchOrg, dropScratchOrg } from "./test-fixtures.ts";
 
 const DB = !!process.env.OPENBOOKS_DB_URL;
 
+function errorChainMatches(error: unknown, pattern: RegExp): boolean {
+  const messages: string[] = [];
+  for (
+    let current: unknown = error;
+    current && typeof current === "object";
+    current = (current as { cause?: unknown }).cause
+  ) {
+    messages.push(String((current as { message?: unknown }).message ?? ""));
+  }
+  return pattern.test(messages.join(" "));
+}
+
 async function draftEntry(org: Awaited<ReturnType<typeof createScratchOrg>>, number: string): Promise<string> {
   const id = randomUUID();
   await db.execute(sql`
@@ -100,16 +112,17 @@ test(
     const org = await createScratchOrg();
     try {
       const originalId = await draftEntry(org, "REV-AMEND-ORIGINAL");
-      const originalDebit = await line(
-        db,
-        org,
-        originalId,
-        1,
-        org.accounts.bank,
-        "10",
-      );
-      await line(db, org, originalId, 2, org.accounts.cogs, "-10");
+      let originalDebit = "";
       await db.transaction(async (tx) => {
+        originalDebit = await line(
+          tx,
+          org,
+          originalId,
+          1,
+          org.accounts.bank,
+          "10",
+        );
+        await line(tx, org, originalId, 2, org.accounts.cogs, "-10");
         await tx.execute(
           sql`update journal_entries set status = 'posted' where id = ${originalId}`,
         );
@@ -122,16 +135,17 @@ test(
            set reverses_entry_id = ${originalId}
          where id = ${reversalId}
       `);
-      const reversalCredit = await line(
-        db,
-        org,
-        reversalId,
-        1,
-        org.accounts.bank,
-        "-10",
-      );
-      await line(db, org, reversalId, 2, org.accounts.cogs, "10");
+      let reversalCredit = "";
       await db.transaction(async (tx) => {
+        reversalCredit = await line(
+          tx,
+          org,
+          reversalId,
+          1,
+          org.accounts.bank,
+          "-10",
+        );
+        await line(tx, org, reversalId, 2, org.accounts.cogs, "10");
         await tx.execute(
           sql`update journal_entries set status = 'posted' where id = ${reversalId}`,
         );
@@ -145,7 +159,11 @@ test(
         db.execute(
           sql`update journal_lines set memo = 'unguarded' where id = ${originalDebit}`,
         ),
-        /lines of a reversed journal entry are immutable/,
+        (error: unknown) =>
+          errorChainMatches(
+            error,
+            /lines of a reversed journal entry are immutable/,
+          ),
       );
 
       await db.execute(sql`
@@ -163,7 +181,8 @@ test(
             sql`update journal_lines set memo = 'closed-period' where id = ${originalDebit}`,
           );
         }),
-        /period is closed for GL posting/,
+        (error: unknown) =>
+          errorChainMatches(error, /period is closed for GL posting/),
       );
 
       await db.execute(sql`
