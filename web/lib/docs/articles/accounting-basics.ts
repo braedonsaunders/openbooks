@@ -61,6 +61,12 @@ Closed-period impact is immutable. Corrections require controlled reopening or a
 new reversal and correcting transaction. This preserves what was known and
 reported at the time of close.
 
+A journal marked **reversed** is still posted ledger history. Financial
+statements, project costing, tax, cash, close, and audit reports include both the
+original reversed entry and its linked posted reversal so the pair nets
+correctly. The status prevents a second reversal; it never removes the original
+from the books.
+
 ## Exact money
 
 Ledger amounts use fixed-precision decimal money with four fractional places.
@@ -145,6 +151,10 @@ Deleting a posted transaction is limited to authorized open-period scenarios and
 is fully audited. A reversal is a new transaction linked to the source and is
 the normal correction when the original must remain visible. Never use an
 unrelated manual journal to conceal the source error.
+
+Do not filter a financial report to the literal **posted** journal status.
+OpenBooks' ledger-history population is **posted** plus **reversed**; drafts remain
+excluded.
 `,
 }
 

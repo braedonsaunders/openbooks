@@ -62,7 +62,7 @@ async function accountBalances(where: ReturnType<typeof sql>, dims?: DimFilter, 
     select a.id, a.parent_id, a.number, a.name, a.type, a.is_summary,
            coalesce(sum(l.amount), 0) as raw
       from accounts a
-      left join (journal_lines l join journal_entries e on e.id = l.entry_id and e.status = 'posted')
+      left join (journal_lines l join journal_entries e on e.id = l.entry_id and e.status in ('posted', 'reversed'))
         on l.account_id = a.id and l.org_id = ${resolvedOrgId} and e.org_id = ${resolvedOrgId} and ${where} and ${dimWhere(dims)}
      where a.org_id = ${resolvedOrgId}
      group by a.id
@@ -147,7 +147,7 @@ export async function balanceSheet(asOf: string, orgId?: string) {
     select coalesce(sum(l.amount), 0) as s
       from journal_lines l
       join accounts a on a.id = l.account_id and a.org_id = l.org_id
-      join journal_entries e on e.id = l.entry_id and e.org_id = l.org_id and e.status = 'posted'
+      join journal_entries e on e.id = l.entry_id and e.org_id = l.org_id and e.status in ('posted', 'reversed')
      where a.org_id = ${resolvedOrgId} and l.org_id = ${resolvedOrgId} and e.org_id = ${resolvedOrgId}
        and a.type in ${PNL_TYPES} and e.posting_date <= ${asOf}
   `)) as any;
@@ -170,7 +170,7 @@ export async function trialBalance(asOf: string, dims?: DimFilter, orgId?: strin
            sum(l.amount) as balance
       from journal_lines l
       join accounts a on a.id = l.account_id and a.org_id = l.org_id
-      join journal_entries e on e.id = l.entry_id and e.org_id = l.org_id and e.status = 'posted'
+      join journal_entries e on e.id = l.entry_id and e.org_id = l.org_id and e.status in ('posted', 'reversed')
      where e.org_id = ${resolvedOrgId} and l.org_id = ${resolvedOrgId}
        and a.org_id = ${resolvedOrgId} and e.posting_date <= ${asOf} and ${dimWhere(dims)}
      group by a.id having abs(sum(l.amount)) >= 0.005
@@ -252,7 +252,7 @@ export async function financialTrends(orgId: string, limit = 15): Promise<Financ
              coalesce(sum(l.amount) filter (where a.type = 'cogs'), 0) as cogs,
              coalesce(sum(l.amount) filter (where a.type in ('expense','expense_other','expense_deferred')), 0) as expenses
         from recent p
-        left join journal_entries e on e.org_id = ${orgId} and e.status = 'posted'
+        left join journal_entries e on e.org_id = ${orgId} and e.status in ('posted', 'reversed')
           and e.posting_date between p.starts_on and p.ends_on
         left join journal_lines l on l.entry_id = e.id and l.org_id = e.org_id
         left join accounts a on a.id = l.account_id and a.org_id = l.org_id
@@ -266,7 +266,7 @@ export async function financialTrends(orgId: string, limit = 15): Promise<Financ
            coalesce((
              select sum(jl.amount)
                from journal_lines jl
-               join journal_entries je on je.id = jl.entry_id and je.org_id = jl.org_id and je.status = 'posted'
+               join journal_entries je on je.id = jl.entry_id and je.org_id = jl.org_id and je.status in ('posted', 'reversed')
                join accounts ba on ba.id = jl.account_id and ba.org_id = jl.org_id and ba.type = 'asset_bank'
               where jl.org_id = ${orgId} and je.posting_date <= p.ends_on
            ), 0)::text as closing_cash
@@ -434,7 +434,7 @@ export async function cashFlow(from: string, to: string, dims?: DimFilter, orgId
         from journal_entries e
         join journal_lines l on l.entry_id = e.id and l.org_id = e.org_id
         join accounts a on a.id = l.account_id and a.org_id = l.org_id
-       where e.org_id = ${resolvedOrgId} and a.type = 'asset_bank' and e.status = 'posted'
+       where e.org_id = ${resolvedOrgId} and a.type = 'asset_bank' and e.status in ('posted', 'reversed')
          and e.posting_date >= ${from} and e.posting_date <= ${to}
     )
     select a.type, -sum(l.amount) as cash_effect
@@ -470,7 +470,7 @@ export async function cashFlow(from: string, to: string, dims?: DimFilter, orgId
     select coalesce(sum(l.amount) filter (where e.posting_date < ${from}), 0) as opening,
            coalesce(sum(l.amount) filter (where e.posting_date <= ${to}), 0) as closing
       from journal_lines l
-      join journal_entries e on e.id = l.entry_id and e.org_id = l.org_id and e.status = 'posted'
+      join journal_entries e on e.id = l.entry_id and e.org_id = l.org_id and e.status in ('posted', 'reversed')
       join accounts a on a.id = l.account_id and a.org_id = l.org_id
      where l.org_id = ${resolvedOrgId} and a.type = 'asset_bank' and ${dimWhere(dims)}
   `)) as unknown as { rows: { opening: string; closing: string }[] };
@@ -596,7 +596,7 @@ export async function cashFlowIndirect(
         from journal_entries e
         join journal_lines l on l.entry_id = e.id and l.org_id = e.org_id
         join accounts a on a.id = l.account_id and a.org_id = l.org_id
-       where e.org_id = ${resolvedOrgId} and e.status = 'posted'
+       where e.org_id = ${resolvedOrgId} and e.status in ('posted', 'reversed')
          and e.posting_date >= ${from} and e.posting_date <= ${to}
        group by e.id
       having not bool_or(a.type = 'asset_bank')
@@ -609,7 +609,7 @@ export async function cashFlowIndirect(
       from journal_lines l
       join journal_entries e on e.id = l.entry_id and e.org_id = l.org_id
       join accounts a on a.id = l.account_id and a.org_id = l.org_id
-     where l.org_id = ${resolvedOrgId} and e.status = 'posted'
+     where l.org_id = ${resolvedOrgId} and e.status in ('posted', 'reversed')
        and e.posting_date >= ${from} and e.posting_date <= ${to}
        and a.type in ${PNL_TYPES} and ${dim}
   `)) as unknown as { rows: { ni: string }[] };
@@ -625,7 +625,7 @@ export async function cashFlowIndirect(
         from journal_lines l
         join journal_entries e on e.id = l.entry_id and e.org_id = l.org_id
         join accounts a on a.id = l.account_id and a.org_id = l.org_id
-       where l.org_id = ${resolvedOrgId} and e.status = 'posted'
+       where l.org_id = ${resolvedOrgId} and e.status in ('posted', 'reversed')
          and e.posting_date >= ${from} and e.posting_date <= ${to}
          and e.origin = 'revaluation' and a.type in ${PNL_TYPES} and ${dim}
     `)) as unknown as { rows: { impact: string }[] };
@@ -641,7 +641,7 @@ export async function cashFlowIndirect(
         from journal_lines l
         join journal_entries e on e.id = l.entry_id and e.org_id = l.org_id
         join accounts a on a.id = l.account_id and a.org_id = l.org_id
-       where l.org_id = ${resolvedOrgId} and e.status = 'posted'
+       where l.org_id = ${resolvedOrgId} and e.status in ('posted', 'reversed')
          and e.id in (select id from flagged)
          and e.origin <> 'revaluation'
          and a.type in ${PNL_TYPES} and ${dim}
@@ -674,7 +674,7 @@ export async function cashFlowIndirect(
       from journal_lines l
       join journal_entries e on e.id = l.entry_id and e.org_id = l.org_id
       join accounts a on a.id = l.account_id and a.org_id = l.org_id
-     where l.org_id = ${resolvedOrgId} and e.status = 'posted' and e.posting_date <= ${to}
+     where l.org_id = ${resolvedOrgId} and e.status in ('posted', 'reversed') and e.posting_date <= ${to}
        and a.type in ${[...CF_WC_ASSET_TYPES, ...CF_WC_LIABILITY_TYPES]} and ${dim}
      group by l.account_id, a.number, a.name, a.type
   `)) as unknown as {
@@ -708,7 +708,7 @@ export async function cashFlowIndirect(
         from journal_entries e
         join journal_lines l on l.entry_id = e.id and l.org_id = e.org_id
         join accounts a on a.id = l.account_id and a.org_id = l.org_id
-       where e.org_id = ${resolvedOrgId} and a.type = 'asset_bank' and e.status = 'posted'
+       where e.org_id = ${resolvedOrgId} and a.type = 'asset_bank' and e.status in ('posted', 'reversed')
          and e.posting_date >= ${from} and e.posting_date <= ${to}
          and e.origin <> 'translation'
     )
@@ -751,7 +751,7 @@ export async function cashFlowIndirect(
       from journal_lines l
       join journal_entries e on e.id = l.entry_id and e.org_id = l.org_id
       join accounts a on a.id = l.account_id and a.org_id = l.org_id
-     where l.org_id = ${resolvedOrgId} and e.status = 'posted'
+     where l.org_id = ${resolvedOrgId} and e.status in ('posted', 'reversed')
        and e.posting_date >= ${from} and e.posting_date <= ${to}
        and e.origin = 'translation' and a.type = 'asset_bank' and ${dim}
   `)) as unknown as { rows: { effect: string }[] };
@@ -769,7 +769,7 @@ export async function cashFlowIndirect(
     select coalesce(sum(l.amount) filter (where e.posting_date < ${from}), 0) as opening,
            coalesce(sum(l.amount) filter (where e.posting_date <= ${to}), 0) as closing
       from journal_lines l
-      join journal_entries e on e.id = l.entry_id and e.org_id = l.org_id and e.status = 'posted'
+      join journal_entries e on e.id = l.entry_id and e.org_id = l.org_id and e.status in ('posted', 'reversed')
       join accounts a on a.id = l.account_id and a.org_id = l.org_id
      where l.org_id = ${resolvedOrgId} and a.type = 'asset_bank' and ${dimWhere(dims)}
   `)) as unknown as { rows: { opening: string; closing: string }[] };
@@ -881,7 +881,7 @@ export async function generalLedger(
   const opening = (await db.execute(sql`
     select l.account_id, coalesce(sum(l.amount), 0) as bal
       from journal_lines l
-      join journal_entries e on e.id = l.entry_id and e.org_id = l.org_id and e.status = 'posted'
+      join journal_entries e on e.id = l.entry_id and e.org_id = l.org_id and e.status in ('posted', 'reversed')
       join accounts a on a.id = l.account_id and a.org_id = l.org_id
      where l.org_id = ${orgId} and e.posting_date < ${from} and ${dimWhere(opts.dims)}${acctFilter}
      group by l.account_id
@@ -894,7 +894,7 @@ export async function generalLedger(
            l.memo, p.display_name as party, l.amount,
            d.kind as doc_kind, d.id as doc_id
       from journal_lines l
-      join journal_entries e on e.id = l.entry_id and e.org_id = l.org_id and e.status = 'posted'
+      join journal_entries e on e.id = l.entry_id and e.org_id = l.org_id and e.status in ('posted', 'reversed')
       join accounts a on a.id = l.account_id and a.org_id = l.org_id
       left join parties p on p.id = l.party_id and p.org_id = l.org_id
       left join documents d on d.id = e.source_document_id and d.org_id = e.org_id
@@ -990,7 +990,7 @@ export async function journalReport(
       join accounts a on a.id = l.account_id and a.org_id = l.org_id
       left join parties p on p.id = l.party_id and p.org_id = l.org_id
       left join documents d on d.id = e.source_document_id and d.org_id = e.org_id
-     where e.org_id = ${orgId} and e.status = 'posted' and e.posting_date >= ${from} and e.posting_date <= ${to}
+     where e.org_id = ${orgId} and e.status in ('posted', 'reversed') and e.posting_date >= ${from} and e.posting_date <= ${to}
        and ${dimWhere(opts.dims)}
      order by e.posting_date desc, e.entry_number desc, e.id, l.line_number
      limit ${maxLines + 1}
@@ -1153,7 +1153,7 @@ export async function partyRegister(
   const opening = (await db.execute(sql`
     select l.party_id, coalesce(sum(l.amount), 0) as bal
       from journal_lines l
-      join journal_entries e on e.id = l.entry_id and e.org_id = l.org_id and e.status = 'posted'
+      join journal_entries e on e.id = l.entry_id and e.org_id = l.org_id and e.status in ('posted', 'reversed')
       join accounts a on a.id = l.account_id and a.org_id = l.org_id
      where a.type = ${acctType} and e.posting_date < ${opts.from}
        and l.org_id = ${resolvedOrgId} and ${dimWhere(opts.dims)}${partyFilter}
@@ -1166,7 +1166,7 @@ export async function partyRegister(
            e.id as entry_id, e.entry_number, e.posting_date::text as date, l.memo, l.amount,
            d.kind as doc_kind, d.id as doc_id
       from journal_lines l
-      join journal_entries e on e.id = l.entry_id and e.org_id = l.org_id and e.status = 'posted'
+      join journal_entries e on e.id = l.entry_id and e.org_id = l.org_id and e.status in ('posted', 'reversed')
       join accounts a on a.id = l.account_id and a.org_id = l.org_id
       left join parties pt on pt.id = l.party_id and pt.org_id = l.org_id
       left join documents d on d.id = e.source_document_id and d.org_id = e.org_id
@@ -1376,7 +1376,7 @@ export async function transactionDetail(opts: {
            coalesce(sum(case when l.amount < 0 then -l.amount else 0 end), 0) as credit,
            coalesce(sum(${readerNet}), 0) as net
       from journal_lines l
-      join journal_entries e on e.id = l.entry_id and e.org_id = l.org_id and e.status = 'posted'
+      join journal_entries e on e.id = l.entry_id and e.org_id = l.org_id and e.status in ('posted', 'reversed')
       join accounts a on a.id = l.account_id and a.org_id = l.org_id
      where ${where}
   `)) as unknown as { rows: { n: number; debit: string; credit: string; net: string }[] }
@@ -1388,7 +1388,7 @@ export async function transactionDetail(opts: {
            p.display_name as party, l.memo, l.amount,
            d.kind as doc_kind, d.id as doc_id
       from journal_lines l
-      join journal_entries e on e.id = l.entry_id and e.org_id = l.org_id and e.status = 'posted'
+      join journal_entries e on e.id = l.entry_id and e.org_id = l.org_id and e.status in ('posted', 'reversed')
       join accounts a on a.id = l.account_id and a.org_id = l.org_id
       left join parties p on p.id = l.party_id and p.org_id = l.org_id
       left join documents d on d.id = e.source_document_id and d.org_id = e.org_id
@@ -1524,7 +1524,7 @@ export async function projectProfitability(
              coalesce(sum(l.amount) filter (where a.type = 'cogs'), 0) as cogs,
              coalesce(sum(l.amount) filter (where a.type in ('expense','expense_other','expense_deferred')), 0) as expenses
         from journal_lines l
-        join journal_entries e on e.id = l.entry_id and e.org_id = l.org_id and e.status = 'posted'
+        join journal_entries e on e.id = l.entry_id and e.org_id = l.org_id and e.status in ('posted', 'reversed')
         join accounts a on a.id = l.account_id and a.org_id = l.org_id
        where l.project_id is not null
          and l.org_id = ${orgId}

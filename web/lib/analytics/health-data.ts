@@ -527,7 +527,7 @@ async function budgetVariance(orgId: string, from: string, to: string): Promise<
       select l.account_id,
         sum(case when acc.type in ('income','income_other') then -l.amount else l.amount end) as actual
       from journal_lines l
-      join journal_entries e on e.id = l.entry_id and e.org_id = l.org_id and e.status = 'posted'
+      join journal_entries e on e.id = l.entry_id and e.org_id = l.org_id and e.status in ('posted', 'reversed')
       join accounts acc on acc.id = l.account_id and acc.org_id = l.org_id
       where l.org_id = ${orgId} and e.book_id = ${s.book_id}
         and acc.type in ('income','income_other','cogs','expense','expense_other','expense_deferred')

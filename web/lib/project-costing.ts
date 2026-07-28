@@ -68,7 +68,7 @@ export async function projectCostSummary(orgId: string, projectId: string): Prom
       from journal_lines l
       join journal_entries e on e.id = l.entry_id
       join accounts a on a.id = l.account_id
-      where l.org_id = ${orgId} and l.project_id = ${projectId} and e.status = 'posted'
+      where l.org_id = ${orgId} and l.project_id = ${projectId} and e.status in ('posted', 'reversed')
     `) as any,
     // committed: open order remainders tagged to the project
     db.execute(sql`
@@ -87,7 +87,7 @@ export async function projectCostSummary(orgId: string, projectId: string): Prom
       from journal_lines l
       join journal_entries e on e.id = l.entry_id
       join accounts a on a.id = l.account_id
-      where l.org_id = ${orgId} and l.project_id = ${projectId} and e.status = 'posted'
+      where l.org_id = ${orgId} and l.project_id = ${projectId} and e.status in ('posted', 'reversed')
         and a.type in ${COST_SET}
       group by a.id, a.number, a.name, a.type
       having sum(l.amount) <> 0

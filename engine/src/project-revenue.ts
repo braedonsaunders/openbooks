@@ -151,7 +151,7 @@ export async function syncProjectRevenueContracts(
           coalesce((select sum(l.amount) from journal_lines l
                      join journal_entries e on e.id = l.entry_id
                      join accounts a on a.id = l.account_id
-                    where l.org_id = ${orgId} and l.project_id = ${p.id} and e.status = 'posted'
+                    where l.org_id = ${orgId} and l.project_id = ${p.id} and e.status in ('posted', 'reversed')
                       and a.type in ('expense','cogs','expense_other','expense_deferred')), 0) as actual`)) as unknown as {
         rows: { budget: string; actual: string }[];
       };
@@ -251,7 +251,7 @@ async function backfillHistoricalRecognition(
     select e.id, e.period_id, coalesce(-sum(l.amount), 0)::numeric(19,4) as recognized
       from journal_entries e
       join journal_lines l on l.entry_id = e.id
-     where e.org_id = ${orgId} and e.status = 'posted' and e.origin = 'revenue_recognition'
+     where e.org_id = ${orgId} and e.status in ('posted', 'reversed') and e.origin = 'revenue_recognition'
        and l.project_id = ${projectId} and l.account_id = ${projectRevenueAccountId}
        and not exists (select 1 from recognition_schedule_lines rl
                         where rl.org_id = ${orgId} and rl.journal_entry_id = e.id)

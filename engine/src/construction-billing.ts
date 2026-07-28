@@ -547,7 +547,7 @@ export async function releaseRetainage(
       select
         coalesce((select sum(jl.amount)
           from journal_lines jl join journal_entries je on je.id = jl.entry_id and je.org_id = jl.org_id
-         where jl.org_id = ${orgId} and jl.project_id = ${projectId} and jl.account_id = ${retAcct} and je.status = 'posted'), 0) as held,
+         where jl.org_id = ${orgId} and jl.project_id = ${projectId} and jl.account_id = ${retAcct} and je.status in ('posted', 'reversed')), 0) as held,
         coalesce((select sum(d.total)
           from pay_applications pa join documents d on d.id = pa.invoice_document_id and d.org_id = pa.org_id
          where pa.org_id = ${orgId} and pa.project_id = ${projectId} and pa.kind = 'retainage_release'

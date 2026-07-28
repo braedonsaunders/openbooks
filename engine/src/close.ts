@@ -1044,7 +1044,7 @@ async function readinessChecks(
           join journal_entries e on e.id = l.entry_id
           join accounts a on a.id = l.account_id
           join subsidiaries s on s.id = l.subsidiary_id
-         where l.org_id = ${orgId} and e.book_id = ${ctx.book_id} and e.status = 'posted'
+         where l.org_id = ${orgId} and e.book_id = ${ctx.book_id} and e.status in ('posted', 'reversed')
            and e.origin <> 'revaluation' and e.posting_date <= ${ctx.ends_on}
            and l.currency <> s.base_currency
            and a.type in ('asset_bank', 'asset_receivable', 'liability_payable')
@@ -1063,7 +1063,7 @@ async function readinessChecks(
           from journal_lines l
           join journal_entries e on e.id = l.entry_id
           join accounts a on a.id = l.account_id and a.eliminate
-         where e.org_id = ${orgId} and e.period_id = ${ctx.period_id} and e.book_id = ${ctx.book_id} and e.status = 'posted'
+         where e.org_id = ${orgId} and e.period_id = ${ctx.period_id} and e.book_id = ${ctx.book_id} and e.status in ('posted', 'reversed')
          group by a.id
         having sum(l.amount) <> 0
       ) residuals`),
@@ -1081,7 +1081,7 @@ async function readinessChecks(
     with current_activity as (
       select l.account_id, sum(l.amount) as amount
         from journal_lines l join journal_entries e on e.id = l.entry_id
-       where e.org_id = ${orgId} and e.period_id = ${ctx.period_id} and e.book_id = ${ctx.book_id} and e.status = 'posted'
+       where e.org_id = ${orgId} and e.period_id = ${ctx.period_id} and e.book_id = ${ctx.book_id} and e.status in ('posted', 'reversed')
        group by l.account_id
     ), prior_period as (
       select p2.id from accounting_periods p2
@@ -1091,7 +1091,7 @@ async function readinessChecks(
       select l.account_id, sum(l.amount) as amount
         from journal_lines l join journal_entries e on e.id = l.entry_id
        where e.org_id = ${orgId} and e.period_id = (select id from prior_period)
-         and e.book_id = ${ctx.book_id} and e.status = 'posted'
+         and e.book_id = ${ctx.book_id} and e.status in ('posted', 'reversed')
        group by l.account_id
     )
     select count(*) as count

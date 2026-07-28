@@ -46,7 +46,7 @@ test("indirect cash flow ties to bank balances and net income", { skip: !env.OPE
           const expected = await db.execute(sql\`
             select coalesce(-sum(l.amount), 0)::text as ni
               from journal_lines l
-              join journal_entries e on e.id = l.entry_id and e.status = 'posted'
+              join journal_entries e on e.id = l.entry_id and e.status in ('posted', 'reversed')
               join accounts a on a.id = l.account_id
              where l.org_id = \${org.id}
                and a.type in ('income','income_other','cogs','expense','expense_other','expense_deferred')

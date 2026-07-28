@@ -113,8 +113,7 @@ async function candidates(): Promise<Candidate[]> {
       join documents d
         on d.id = je.source_document_id and d.org_id = je.org_id
      where jl.org_id = ${orgId}
-       and je.status = 'posted'
-       and d.status = 'posted'
+       and je.status in ('posted', 'reversed')
        and jl.tax_code_id is not null
        and jl.project_id is not null
      order by d.id, jl.line_number, jl.id
@@ -295,8 +294,7 @@ async function main(): Promise<void> {
           join documents d
             on d.id = je.source_document_id and d.org_id = je.org_id
          where jl.org_id = ${orgId}
-           and je.status = 'posted'
-           and d.status = 'posted'
+           and je.status in ('posted', 'reversed')
            and jl.tax_code_id is not null
            and jl.project_id is not null
          order by d.id, jl.line_number, jl.id

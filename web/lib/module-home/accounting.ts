@@ -51,7 +51,7 @@ export async function accountingHome(orgId: string): Promise<AccountingHome> {
     db.execute(sql`
       select
         (select count(*) from journal_entries je where je.org_id = ${orgId} and je.status = 'draft') as draft_journals,
-        (select count(*) from journal_entries je where je.org_id = ${orgId} and je.status = 'posted'
+        (select count(*) from journal_entries je where je.org_id = ${orgId} and je.status in ('posted', 'reversed')
           and je.posting_date >= current_date - 7) as posted_7d,
         (select count(*) from accounts a where a.org_id = ${orgId} and not a.is_summary and a.is_active) as accounts,
         (select count(*) from budget_scenarios b where b.org_id = ${orgId}) as budgets,

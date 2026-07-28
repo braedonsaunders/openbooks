@@ -116,7 +116,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
                  ${selected.departmentId}, ${selected.projectId}, ${selected.locationId}, ${selected.classId},
                  sum(l.amount), ${user.id}, ${user.id}
             from journal_lines l
-            join journal_entries e on e.id = l.entry_id and e.org_id = ${user.orgId} and e.status = 'posted'
+            join journal_entries e on e.id = l.entry_id and e.org_id = ${user.orgId} and e.status in ('posted', 'reversed')
             join accounts a on a.id = l.account_id and a.org_id = ${user.orgId}
             join accounting_periods source_period on source_period.id = e.period_id and source_period.fiscal_year = ${Number(scenario.fiscal_year) - 1}
             join accounting_periods destination

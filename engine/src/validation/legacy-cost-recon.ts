@@ -53,7 +53,7 @@ async function openbooksCost(projectId: string) {
            coalesce(sum(l.amount) filter (where a.type in ('expense','expense_other')), 0)::text as expense,
            coalesce(sum(l.amount) filter (where a.type in ('cogs','expense','expense_other')), 0)::text as total
       from journal_lines l
-      join journal_entries e on e.id = l.entry_id and e.status = 'posted'
+      join journal_entries e on e.id = l.entry_id and e.status in ('posted', 'reversed')
       join accounts a on a.id = l.account_id
      where l.org_id = ${ORG} and l.project_id = ${projectId}`))) as any;
   const row = r.rows[0] ?? {};

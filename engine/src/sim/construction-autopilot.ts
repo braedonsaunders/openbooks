@@ -75,7 +75,7 @@ async function jobPostedCost(
   const purchase = new Set([a.materials, a.subcontractor, a.equipmentRental, a.jobTravel, a.cogs].filter(Boolean) as string[]);
   const r = (await db.execute(sql`
     select l.account_id as acct, coalesce(sum(l.amount), 0)::text as amt
-      from journal_lines l join journal_entries e on e.id = l.entry_id and e.status = 'posted'
+      from journal_lines l join journal_entries e on e.id = l.entry_id and e.status in ('posted', 'reversed')
      where l.org_id = ${world.orgId} and l.project_id = ${projectId}
        and to_char(e.posting_date, 'YYYY-MM') = ${month}
      group by l.account_id`)) as unknown as { rows: { acct: string; amt: string }[] };
@@ -169,7 +169,7 @@ export async function autopilotConstruction(
         } else if (sov > 0 && billed >= sov * 0.9) {
           const ret = (await db.execute(sql`
             select coalesce(sum(l.amount), 0)::text as bal from journal_lines l
-              join journal_entries e on e.id = l.entry_id and e.status = 'posted'
+              join journal_entries e on e.id = l.entry_id and e.status in ('posted', 'reversed')
              where l.org_id = ${world.orgId} and l.account_id = ${world.accounts.retainageReceivable}`)) as unknown as {
             rows: { bal: string }[];
           };

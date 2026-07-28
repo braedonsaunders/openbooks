@@ -226,7 +226,7 @@ async function pretaxBookIncome(orgId: string, from: string, to: string): Promis
   const r = (await db.execute(sql`
     select (-coalesce(sum(l.amount), 0))::text as pretax
       from journal_lines l
-      join journal_entries e on e.id = l.entry_id and e.org_id = l.org_id and e.status = 'posted'
+      join journal_entries e on e.id = l.entry_id and e.org_id = l.org_id and e.status in ('posted', 'reversed')
       join accounts a on a.id = l.account_id and a.org_id = l.org_id
       join accounting_books b on b.id = e.book_id and b.org_id = e.org_id
      where l.org_id = ${orgId} and b.is_primary

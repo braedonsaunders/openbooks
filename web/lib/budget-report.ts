@@ -144,7 +144,7 @@ export async function budgetVsActualView(
   const actualRows = (await db.execute(sql`
     select l.account_id, coalesce(sum(l.amount), 0) as amt
       from journal_lines l
-      join journal_entries e on e.id = l.entry_id and e.status = 'posted'
+      join journal_entries e on e.id = l.entry_id and e.status in ('posted', 'reversed')
       join accounts a on a.id = l.account_id
      where e.org_id = ${orgId} and a.org_id = ${orgId}
        and a.type in ${PNL_TYPES} and e.book_id = ${scenario.book_id}

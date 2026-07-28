@@ -318,7 +318,7 @@ async function budgetData(target: Extract<ReportDrillTarget, { kind: 'budget' }>
                case when a.type in ('income', 'income_other') then -l.amount else l.amount end as amount,
                e.id as entry_id, d.kind as doc_kind, d.id as doc_id
           from journal_lines l
-          join journal_entries e on e.id = l.entry_id and e.org_id = l.org_id and e.status = 'posted'
+          join journal_entries e on e.id = l.entry_id and e.org_id = l.org_id and e.status in ('posted', 'reversed')
           join accounts a on a.id = l.account_id and a.org_id = l.org_id
           left join documents d on d.id = e.source_document_id and d.org_id = e.org_id
          where l.org_id = ${authz.user.orgId} and e.book_id = ${row.book_id}

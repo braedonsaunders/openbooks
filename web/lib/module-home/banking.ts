@@ -70,7 +70,7 @@ export async function bankingHome(orgId: string, subIds?: string[]): Promise<Ban
         left join lateral (
           select sum(jl.amount) as balance
             from journal_lines jl
-            join journal_entries je on je.id = jl.entry_id and je.status = 'posted'
+            join journal_entries je on je.id = jl.entry_id and je.status in ('posted', 'reversed')
            where jl.account_id = a.id${lineScope}) bal on true
         left join lateral (
           select count(*) as n
@@ -102,7 +102,7 @@ export async function bankingHome(orgId: string, subIds?: string[]): Promise<Ban
              sum(jl.amount) as flow,
              sum(jl.amount) filter (where je.posting_date >= current_date - 7) as flow_7d
         from journal_lines jl
-        join journal_entries je on je.id = jl.entry_id and je.status = 'posted'
+        join journal_entries je on je.id = jl.entry_id and je.status in ('posted', 'reversed')
         join accounts a on a.id = jl.account_id
        where a.org_id = ${orgId} and a.reconcilable and a.is_active and not a.is_summary
          and a.type in ('asset_bank', 'liability_card')${acctScope}${lineScope}

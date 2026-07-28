@@ -71,7 +71,7 @@ export async function GET(req: Request) {
             from journal_lines jl
             join journal_entries je on je.id = jl.entry_id and je.org_id = jl.org_id
            where jl.org_id = ${orgId} and jl.account_id = ${retainageAccountId} and jl.project_id = ${projectId}
-             and je.status = 'posted'
+             and je.status in ('posted', 'reversed')
         `) as unknown as Promise<{ rows: { held: string }[] }>)
       : Promise.resolve({ rows: [{ held: "0" }] }),
     projectCostSummary(orgId, projectId).catch(() => null),

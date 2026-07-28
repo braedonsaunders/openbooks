@@ -252,7 +252,7 @@ export async function openItems(side: Side, asOf: string, subIds?: string[]): Pr
                 where (x.to_line_id = jl.id or x.from_line_id = jl.id) and x.unapplied_at is null
              ), 0) as remaining
         from journal_lines jl
-        join journal_entries je on je.id = jl.entry_id and je.status = 'posted'
+        join journal_entries je on je.id = jl.entry_id and je.status in ('posted', 'reversed')
         join accounts a on a.id = jl.account_id
        where jl.is_open_item and a.type = ${acctType} and ${signFilter}
          and je.posting_date <= ${asOf}${subScope(sql`jl.subsidiary_id`, subIds)}
@@ -545,7 +545,7 @@ export async function categoryWeekly(
              sum(case when l.amount < 0 then -l.amount else 0 end) as spend,
              sum(case when l.amount > 0 then l.amount else 0 end) as paid
       from journal_lines l
-      join journal_entries e on e.id = l.entry_id and e.status = 'posted'
+      join journal_entries e on e.id = l.entry_id and e.status in ('posted', 'reversed')
       where l.org_id = ${orgId} and l.account_id in (${ids})
         and e.posting_date >= ${toISO(historyStart)} and e.posting_date <= ${asOfIso}${subScope(sql`l.subsidiary_id`, context.subIds)}
       group by 1
@@ -553,7 +553,7 @@ export async function categoryWeekly(
     const balR = (await db.execute(sql`
       select coalesce(sum(l.amount), 0) as bal
       from journal_lines l
-      join journal_entries e on e.id = l.entry_id and e.status = 'posted'
+      join journal_entries e on e.id = l.entry_id and e.status in ('posted', 'reversed')
       where l.org_id = ${orgId} and l.account_id in (${ids}) and e.posting_date <= ${asOfIso}${subScope(sql`l.subsidiary_id`, context.subIds)}
     `)) as any;
     const totalCurrentBalance = Math.abs(Number(balR.rows[0]?.bal ?? 0));
@@ -809,7 +809,7 @@ export async function categoryWeekly(
              d.document_number as doc_number, coalesce(p.display_name, '') as party,
              coalesce(d.memo, e.memo, '') as memo, -l.amount as amount
       from journal_lines l
-      join journal_entries e on e.id = l.entry_id and e.status = 'posted'
+      join journal_entries e on e.id = l.entry_id and e.status in ('posted', 'reversed')
       left join documents d on d.id = e.source_document_id
       left join parties p on p.id = d.party_id
       where l.org_id = ${orgId} and l.account_id in (${ids}) and l.amount < 0

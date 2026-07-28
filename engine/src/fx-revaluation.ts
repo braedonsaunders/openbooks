@@ -143,7 +143,7 @@ async function loadPositions(
      where l.org_id = ${orgId}
        and l.subsidiary_id = ${subsidiaryId}
        and e.book_id = ${bookId}
-       and e.status = 'posted'
+       and e.status in ('posted', 'reversed')
        and e.origin <> 'revaluation'
        and e.posting_date <= ${asOfDate}
        and l.currency <> ${functionalCurrency}

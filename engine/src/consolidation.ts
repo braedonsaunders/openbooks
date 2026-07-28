@@ -127,7 +127,7 @@ export async function runOwnershipConsolidation(
                  coalesce(sum(l.amount) filter (where l.account_id=${interest.distribution_account_id}),0)::text as distributions
             from journal_lines l join journal_entries e on e.id=l.entry_id
             join accounts a on a.id=l.account_id
-           where e.org_id=${orgId} and e.status='posted' and l.subsidiary_id=${interest.subsidiary_id}
+           where e.org_id=${orgId} and e.status in ('posted','reversed') and l.subsidiary_id=${interest.subsidiary_id}
              and e.posting_date between ${period.starts_on} and ${period.ends_on}
         `)) as unknown as { rows: { profit: string; distributions: string }[] };
         const profit = periodActivity.rows[0]!.profit;
@@ -145,7 +145,7 @@ export async function runOwnershipConsolidation(
               select l.account_id,coalesce(sum(l.amount),0)::text as amount
                 from journal_lines l join journal_entries e on e.id=l.entry_id
                 join accounts a on a.id=l.account_id and a.type='equity'
-               where e.org_id=${orgId} and e.status='posted' and l.subsidiary_id=${interest.subsidiary_id}
+               where e.org_id=${orgId} and e.status in ('posted','reversed') and l.subsidiary_id=${interest.subsidiary_id}
                  and e.posting_date <= ${interest.acquisition_date}
                group by l.account_id having sum(l.amount)<>0
             `)) as unknown as { rows: { account_id: string; amount: string }[] };
@@ -318,7 +318,7 @@ export async function runAutoElimination(
        and consolidated.period_id = e.period_id
        and consolidated.from_currency = source_sub.base_currency
        and consolidated.to_currency = ${elim.baseCurrency}
-     where e.org_id = ${orgId} and e.period_id = ${periodId} and e.status = 'posted'
+     where e.org_id = ${orgId} and e.period_id = ${periodId} and e.status in ('posted', 'reversed')
        and a.eliminate and l.subsidiary_id <> ${elim.id}
      group by l.account_id, l.subsidiary_id
     having sum(l.amount) <> 0`)) as unknown as {

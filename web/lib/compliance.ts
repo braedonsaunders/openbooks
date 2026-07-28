@@ -584,7 +584,7 @@ export async function loadInformationReturnReadiness(orgId: string, taxYear: num
       join lateral (
         select coalesce(-sum(jl.amount) filter (where jl.amount < 0 and not jl.is_open_item), 0) as total
           from documents d
-          join journal_entries je on je.id = d.posted_entry_id and je.status = 'posted'
+          join journal_entries je on je.id = d.posted_entry_id and je.status in ('posted', 'reversed')
           join journal_lines jl on jl.entry_id = je.id
          where d.org_id = p.org_id and d.party_id = p.id
            and d.kind = 'vendor_payment' and d.status = 'posted'
