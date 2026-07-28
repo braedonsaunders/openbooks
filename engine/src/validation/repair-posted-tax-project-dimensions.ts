@@ -347,9 +347,7 @@ async function main(): Promise<void> {
         const changed = await tx.execute(sql`
         update journal_lines
            set project_id = null,
-               equipment_unit_id = null,
-               updated_at = now(),
-               updated_by = ${actorId}
+               equipment_unit_id = null
          where org_id = ${orgId}
            and id = any(${`{${locked.map((row) => row.lineId).join(",")}}`}::uuid[])
            and tax_code_id is not null
