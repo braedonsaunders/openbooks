@@ -37,6 +37,14 @@ export async function createScratchOrg(): Promise<ScratchOrg> {
   const orgId = randomUUID();
   const date = "2026-07-15";
 
+  // CI loads the schema without the product seed. Financial fixtures still
+  // need a valid ISO registry row before they can snapshot functional currency
+  // onto time, labor rates, documents, or journal lines.
+  await db.execute(sql`
+    insert into currencies (code, name, minor_units)
+    values ('CAD', 'Canadian Dollar', 2)
+    on conflict (code) do nothing`);
+
   await db.execute(sql`
     insert into orgs (id, name, base_currency, country, settings, env_kind)
     values (${orgId}, ${"Scratch " + orgId.slice(0, 8)}, 'CAD', 'CA', '{}'::jsonb, 'production')`);
