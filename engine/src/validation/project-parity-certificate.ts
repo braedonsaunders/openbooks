@@ -15,6 +15,8 @@
  *
  * Optional:
  *   --refresh-source
+ *   --refresh-project-gl-source
+ *   --source-accounting-book=<NetSuite accounting book id>
  *   --source-projects=/path/projects.json
  *   --source-invoices=/path/invoices.json
  *   --source-invoice-lines=/path/invoice-lines.json
@@ -68,6 +70,8 @@ const orgId = args.get("org") ?? process.env.TARGET_ORG;
 if (!orgId || !/^[0-9a-f-]{36}$/i.test(orgId)) {
   throw new Error("--org=<uuid> is required");
 }
+const requestedSourceAccountingBook =
+  args.get("source-accounting-book")?.trim() || null;
 
 const paths = {
   sourceProjects:
@@ -190,6 +194,59 @@ async function retry<T>(fn: () => Promise<T>, attempts = 7): Promise<T> {
   throw last;
 }
 
+async function refreshProjectGlSource(
+  client = sourceClient(),
+): Promise<string> {
+  // transactionline.netamount is not the posted amount for every NetSuite
+  // special item. For example, a posting Markup line can carry foreignamount
+  // while netamount is zero; transactionaccountingline is the authoritative
+  // book impact. Never infer the ledger from the commercial line projection.
+  const projectGlByBook = await client.query<JsonRow>(
+    `select tal.accountingbook, tl.entity as project,
+            a.accttype as accounttype, sum(tal.amount) as amount
+       from transactionaccountingline tal
+       join transactionline tl
+         on tl.transaction = tal.transaction
+        and tl.id = tal.transactionline
+       join account a on a.id = tal.account
+      where tl.entity in (select id from job)
+        and tl.posting = 'T'
+      group by tal.accountingbook, tl.entity, a.accttype`,
+  );
+  const books = [
+    ...new Set(
+      projectGlByBook
+        .map((row) => String(row.accountingbook ?? ""))
+        .filter(Boolean),
+    ),
+  ].sort();
+  const sourceAccountingBook =
+    requestedSourceAccountingBook ?? (books.length === 1 ? books[0]! : null);
+  if (!sourceAccountingBook) {
+    throw new Error(
+      `NetSuite project GL contains ${books.length} accounting books (${books.join(
+        ", ",
+      )}); pass --source-accounting-book=<id> explicitly`,
+    );
+  }
+  if (!books.includes(sourceAccountingBook)) {
+    throw new Error(
+      `NetSuite accounting book ${sourceAccountingBook} is absent; available books: ${books.join(
+        ", ",
+      )}`,
+    );
+  }
+  writeFileSync(
+    paths.sourceProjectGl,
+    JSON.stringify(
+      projectGlByBook.filter(
+        (row) => String(row.accountingbook) === sourceAccountingBook,
+      ),
+    ),
+  );
+  return sourceAccountingBook;
+}
+
 async function refreshSource(): Promise<void> {
   const client = sourceClient();
   const projects = await client.query<JsonRow>(
@@ -212,15 +269,7 @@ async function refreshSource(): Promise<void> {
       order by tl.transaction, tl.id`,
   );
   writeFileSync(paths.sourceInvoiceLines, JSON.stringify(invoiceLines));
-  const projectGl = await client.query<JsonRow>(
-    `select tl.entity as project, a.accttype as accounttype,
-            sum(tl.netamount) as amount
-       from transactionline tl
-       join account a on a.id = tl.account
-      where tl.entity in (select id from job) and tl.posting = 'T'
-      group by tl.entity, a.accttype`,
-  );
-  writeFileSync(paths.sourceProjectGl, JSON.stringify(projectGl));
+  await refreshProjectGlSource(client);
 }
 
 function parseLegacyTicketHeaders(path: string): JsonRow[] | null {
@@ -283,12 +332,32 @@ function parseLegacyCrew(
   return cells;
 }
 
-if (args.has("refresh-source")) await refreshSource();
+if (args.has("refresh-source")) {
+  await refreshSource();
+} else if (args.has("refresh-project-gl-source")) {
+  await refreshProjectGlSource();
+}
 
 const sourceProjects = readJson(paths.sourceProjects);
 const sourceInvoices = readJson(paths.sourceInvoices);
 const sourceInvoiceLines = readJson(paths.sourceInvoiceLines);
 const sourceProjectGl = readJson(paths.sourceProjectGl);
+const sourceAccountingBooks = sourceProjectGl
+  ? [
+      ...new Set(
+        sourceProjectGl
+          .map((row) => String(row.accountingbook ?? ""))
+          .filter(Boolean),
+      ),
+    ].sort()
+  : [];
+if (sourceAccountingBooks.length > 1) {
+  throw new Error(
+    `source project GL artifact spans accounting books ${sourceAccountingBooks.join(
+      ", ",
+    )}; provide a single-book artifact`,
+  );
+}
 const legacyTickets = parseLegacyTicketHeaders(paths.legacyTickets);
 const legacyCrew = parseLegacyCrew(paths.legacyCrew, legacyTickets);
 const legacyProjectFinancials = readJson(paths.legacyProjectFinancials);
@@ -880,6 +949,8 @@ const certificate = {
       .filter(([key]) => key !== "out")
       .map(([key, path]) => [key, { path, sha256: fileHash(path) }]),
   ),
+  sourceAccountingBook:
+    sourceAccountingBooks[0] ?? requestedSourceAccountingBook,
   gates,
   differences,
 };
