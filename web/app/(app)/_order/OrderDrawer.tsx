@@ -457,9 +457,9 @@ export function OrderDrawer({
         placeholder: t('columns.accountPlaceholder'),
       },
       description: { key: 'description', label: tCommon('labels.description'), width: 'minmax(150px,1.6fr)', type: 'text' },
-      quantity: { key: 'quantity', label: t('columns.qty'), width: '90px', type: 'amount', align: 'right', required: true },
+      quantity: { key: 'quantity', label: t('columns.qty'), width: '90px', type: 'decimal', decimalScale: 8, align: 'right', required: true },
       unit: { key: 'unit', label: tCommon('labels.unit'), width: '90px', type: 'text' },
-      unit_price: { key: 'unitPrice', label: t('columns.unitPrice'), width: '110px', type: 'amount', align: 'right', required: true },
+      unit_price: { key: 'unitPrice', label: t('columns.unitPrice'), width: '110px', type: 'decimal', decimalScale: 8, align: 'right', required: true },
       department_id: {
         key: 'departmentId', label: tCommon('labels.department'), width: '140px', type: 'select',
         options: [{ value: '', label: '—' }, ...departments.map((department) => ({ value: department.id, label: department.name ?? '' }))],
@@ -768,6 +768,7 @@ export function OrderDrawer({
             onRowsChange={onRowsChange}
             emptyRow={() => emptyLine(segments)}
             readOnly={!editable}
+            formatAmount={(value) => money(value, { currency: doc.currency })}
           />
         </div>
 

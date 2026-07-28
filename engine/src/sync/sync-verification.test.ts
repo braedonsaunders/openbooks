@@ -5,6 +5,7 @@ import {
   effectiveSourceDocumentNumber,
   effectiveLineSubsidiary,
   effectiveTaxCodeId,
+  requiresControlledPostingReversal,
   sourceDeletionCandidates,
   unresolvedSourceDeletionCandidates,
   syncVerificationFailures,
@@ -40,6 +41,12 @@ function result(overrides: Partial<SyncResult> = {}): SyncResult {
 
 test("financial cursor gate accepts only a completely proven run", () => {
   assert.deepEqual(syncVerificationFailures(result()), []);
+});
+
+test("a posted source transition requires a controlled reversal", () => {
+  assert.equal(requiresControlledPostingReversal(false, true), true);
+  assert.equal(requiresControlledPostingReversal(true, true), false);
+  assert.equal(requiresControlledPostingReversal(false, false), false);
 });
 
 test("financial cursor gate reports every independent divergence", () => {
@@ -197,6 +204,29 @@ test("change detection includes non-posting commercial totals only", () => {
       ...order,
       subtotal: "100",
       total: "100",
+    }),
+  );
+});
+
+test("change detection includes source lifecycle for non-posting documents", () => {
+  const pending = canonicalDocument({
+    posting: false,
+    kind: "expense_report",
+    lifecycleStatus: "pending_approval",
+  });
+  assert.notEqual(
+    canonicalNativeDocumentKey(pending),
+    canonicalNativeDocumentKey({
+      ...pending,
+      lifecycleStatus: "approved",
+    }),
+  );
+  const posting = canonicalDocument({ lifecycleStatus: "pending_approval" });
+  assert.equal(
+    canonicalNativeDocumentKey(posting),
+    canonicalNativeDocumentKey({
+      ...posting,
+      lifecycleStatus: "approved",
     }),
   );
 });

@@ -133,6 +133,149 @@ test("NetSuite posting transactions fail closed without an exact source period",
   );
 });
 
+test("pending NetSuite expense reports remain pending native expense reports", () => {
+  const expenseContext = {
+    ...context,
+    accountByRef: new Map([
+      ...context.accountByRef,
+      [
+        "448",
+        {
+          id: "card-control",
+          number: "2200",
+          name: "Corporate Card",
+          type: "liability_credit_card",
+        },
+      ],
+      [
+        "222",
+        {
+          id: "rental-expense",
+          number: "5055",
+          name: "Outside Equipment Rentals",
+          type: "expense",
+        },
+      ],
+    ]),
+    partyByRef: new Map([["501", "employee-1"]]),
+    projectByRef: new Map([["601", "project-1"]]),
+    taxCodeByRef: new Map([["2529", "hst-code"]]),
+    taxByRate: new Map([["13", { id: "hst-code", rate: "13" }]]),
+  } as unknown as NativeContext;
+  const lines: NsLine[] = [
+    {
+      transaction: "4001",
+      id: "0",
+      mainline: "T",
+      taxline: "F",
+      expenseaccount: "10",
+      foreignamount: "0",
+      entity: "501",
+      subsidiary: "1",
+    },
+    {
+      transaction: "4001",
+      id: "1",
+      mainline: "F",
+      taxline: "F",
+      expenseaccount: "448",
+      foreignamount: "-1311.15",
+      settlementamount: "-1311.15",
+      entity: "501",
+      subsidiary: "1",
+    },
+    {
+      transaction: "4001",
+      id: "2",
+      mainline: "F",
+      taxline: "F",
+      expenseaccount: "222",
+      foreignamount: "1160.31",
+      taxrate1: "0.13",
+      taxcode: "2529",
+      entity: "601",
+      subsidiary: "1",
+      isbillable: "T",
+      markup: "15",
+      memo: "Equipment rental",
+    },
+    {
+      transaction: "4001",
+      id: "6",
+      mainline: "F",
+      taxline: "T",
+      expenseaccount: "20",
+      foreignamount: "150.84",
+      subsidiary: "1",
+    },
+  ];
+
+  const built = buildNativeFromNetSuite(
+    expenseContext,
+    {
+      id: "4001",
+      tranid: "ER-42",
+      ttype: "ExpRept",
+      trandate: "07/27/2026",
+      entity: "501",
+      posting: "F",
+      approvalstatus: "1",
+      postingperiod: null,
+    },
+    lines,
+  );
+
+  assert.ok(!("skip" in built));
+  assert.equal(built.doc.kind, "expense_report");
+  assert.equal(built.doc.documentNumber, "ER-42");
+  assert.equal(built.doc.partyId, "employee-1");
+  assert.equal(built.doc.posting, false);
+  assert.equal(built.doc.lifecycleStatus, "pending_approval");
+  assert.equal(built.doc.postingPeriodId, null);
+  assert.equal(built.doc.controlAccountId, "card-control");
+  assert.equal(built.doc.subtotal, "1160.3100");
+  assert.equal(built.doc.total, "1311.1500");
+  assert.equal(built.doc.lines.length, 1);
+  assert.deepEqual(
+    {
+      sourceLineRef: built.doc.lines[0]?.sourceLineRef,
+      projectId: built.doc.lines[0]?.projectId,
+      amount: built.doc.lines[0]?.amount,
+      taxAmount: built.doc.lines[0]?.taxAmount,
+      isBillable: built.doc.lines[0]?.isBillable,
+      markupPercent: built.doc.lines[0]?.markupPercent,
+    },
+    {
+      sourceLineRef: "2",
+      projectId: "project-1",
+      amount: "1160.3100",
+      taxAmount: "150.8400",
+      isBillable: true,
+      markupPercent: "15.0000",
+    },
+  );
+
+  const posted = buildNativeFromNetSuite(
+    expenseContext,
+    {
+      id: "4001",
+      tranid: "ER-42",
+      ttype: "ExpRept",
+      trandate: "07/27/2026",
+      entity: "501",
+      posting: "T",
+      approvalstatus: "2",
+      postingperiod: "17",
+    },
+    lines,
+  );
+  assert.ok(!("skip" in posted));
+  assert.equal(posted.doc.posting, true);
+  assert.equal(posted.doc.lifecycleStatus, "approved");
+  assert.equal(posted.doc.controlAccountId, "card-control");
+  assert.equal(posted.doc.lines.length, 1);
+});
+
 test("NetSuite preserves source date independently from exact posting period", () => {
   const lines: NsLine[] = [
     {

@@ -277,12 +277,12 @@ export function normalizeNetSuiteTimeEntry(
 }
 const HEADER_COLS = `t.id, t.type AS ttype, t.tranid, TO_CHAR(t.trandate, 'MM/DD/YYYY') AS trandate,
   TO_CHAR(t.duedate, 'MM/DD/YYYY') AS duedate, t.entity, t.currency, t.memo, t.status,
-  t.otherrefnum, t.posting, t.postingperiod`;
+  t.approvalstatus, t.otherrefnum, t.posting, t.postingperiod`;
 const LINE_COLS = `tl.transaction, tl.id, tl.mainline, tl.taxline, tl.item, tl.account,
   tl.expenseaccount, tl.netamount, tl.foreignamount, tl.quantity, tl.rate,
   BUILTIN.DF(tl.units) AS units,
   tl.department, tl.entity, tl.subsidiary,
-  tl.memo, tl.taxrate1, tl.taxcode`;
+  tl.memo, tl.taxrate1, tl.taxcode, tl.settlementamount`;
 
 /** Line columns plus whatever optional fields this account has mapped. */
 export function netSuiteLineColumns(

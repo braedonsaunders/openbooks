@@ -10,14 +10,21 @@ export const MIGRATION_QUEUE = 'migration'
  *   mirror         — incremental catch-up from the connection's cursor.
  *   project_financials — full source billing-state reconciliation only.
  *   attachments    — source-file inventory and idempotent object-storage import.
+ *   targeted_repair — bounded source-document rematerialization (operator/API).
  * The heavy lifting runs on the worker so an 8-year backfill isn't hostage to
  * an HTTP request timeout.
  */
 export type MigrationJobData = {
   orgId: string
   connectionId: string
-  mode: 'full_migration' | 'preflight' | 'mirror' | 'project_financials' | 'attachments'
+  mode: 'full_migration' | 'preflight' | 'mirror' | 'project_financials' | 'attachments' | 'targeted_repair'
   triggeredBy?: string
+  /** Operationally retry only these upstream file identities. The worker
+   * accepts this scope solely for attachment jobs; ordinary UI-triggered
+   * attachment syncs omit it and retain full reconciliation semantics. */
+  sourceFileIds?: string[]
+  /** Exact upstream transaction identities for a bounded source repair. */
+  sourceRefs?: string[]
 }
 
 let migrationQueue: Queue<MigrationJobData> | undefined

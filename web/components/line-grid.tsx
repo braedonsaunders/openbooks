@@ -9,8 +9,9 @@
  *    at the bottom), Alt+↑/↓ moves the row, ⌘/Ctrl+D duplicates it,
  *    ⌘/Ctrl+Backspace deletes it, Tab walks cells naturally
  *  - per-row grip menu: insert above/below, duplicate, remove
- *  - amount cells edit raw, normalize to 2dp on blur, flag non-numeric input
- *  - column model is data: text / amount / select / search-select / readonly
+ *  - amount cells retain ledger scale; decimal cells preserve commercial
+ *    precision while hiding insignificant storage-scale zeroes
+ *  - column model is data: text / amount / decimal / select / search-select / readonly
  *    — custom-field columns are just more columns
  *  - controlled component: rows in, rows out; parent owns persistence
  *    (autosave) and computed values (tax, totals) via readonly columns
@@ -21,6 +22,11 @@ import { ArrowDown, ArrowUp, Copy, GripVertical, Plus, RotateCcw, Trash2 } from 
 import { useTranslations } from 'next-intl'
 import { Button, FieldLabel, Popover, SearchSelect, Select, cn } from '@openbooks/ui'
 import { cmp, normalizeMoney } from '@openbooks/engine/src/money.ts'
+import {
+  displayLineDecimal,
+  invalidLineDecimal,
+  normalizeLineDecimal,
+} from '../lib/line-grid-decimal'
 
 export interface LineGridOption {
   value: string
@@ -34,7 +40,9 @@ export interface LineGridColumn<Row extends Record<string, unknown>> {
   help?: React.ReactNode
   /** CSS grid track, e.g. 'minmax(180px,2fr)' or '110px'. */
   width: string
-  type: 'text' | 'amount' | 'select' | 'search-select' | 'readonly' | 'tax'
+  type: 'text' | 'amount' | 'decimal' | 'select' | 'search-select' | 'readonly' | 'tax'
+  /** Maximum exact scale for non-money decimal cells such as quantity/rate. */
+  decimalScale?: number
   align?: 'left' | 'right'
   options?: LineGridOption[]
   placeholder?: string
@@ -66,6 +74,46 @@ function invalidAmount(value: unknown): boolean {
   try { normalizeMoney(String(value)); return false } catch { return true }
 }
 
+function DecimalCell({
+  value,
+  scale,
+  inputBase,
+  onChange,
+}: {
+  value: unknown
+  scale: number
+  inputBase: string
+  onChange: (value: string) => void
+}) {
+  const [draft, setDraft] = useState<string | null>(null)
+  const shown = draft ?? displayLineDecimal(value, scale)
+  const invalid = invalidLineDecimal(shown, scale)
+
+  return (
+    <input
+      inputMode="decimal"
+      value={shown}
+      placeholder="0"
+      aria-invalid={invalid || undefined}
+      onFocus={() => setDraft(displayLineDecimal(value, scale))}
+      onChange={(event) => {
+        setDraft(event.target.value)
+        onChange(event.target.value)
+      }}
+      onBlur={(event) => {
+        const normalized = normalizeLineDecimal(event.target.value, scale)
+        setDraft(null)
+        onChange(normalized ?? event.target.value)
+      }}
+      className={cn(
+        inputBase,
+        'text-right tabular-nums',
+        invalid && 'text-red-600 focus:ring-red-500/60 dark:text-red-400',
+      )}
+    />
+  )
+}
+
 export function LineGrid<Row extends Record<string, unknown>>({
   columns,
   rows,
@@ -75,6 +123,7 @@ export function LineGrid<Row extends Record<string, unknown>>({
   minRows = 1,
   footer,
   addLabel,
+  formatAmount,
 }: {
   columns: LineGridColumn<Row>[]
   rows: Row[]
@@ -84,6 +133,11 @@ export function LineGrid<Row extends Record<string, unknown>>({
   minRows?: number
   footer?: React.ReactNode
   addLabel?: string
+  /**
+   * Currency-aware read-only presentation supplied by the owning transaction.
+   * Editable cells intentionally retain the exact ledger string.
+   */
+  formatAmount?: (value: string) => React.ReactNode
 }) {
   const t = useTranslations('ui.lineGrid')
   const containerRef = useRef<HTMLDivElement>(null)
@@ -230,6 +284,7 @@ export function LineGrid<Row extends Record<string, unknown>>({
               removeRow={removeRow}
               moveRow={moveRow}
               canRemove={rows.length > minRows}
+              formatAmount={formatAmount}
             />
           ))}
         </div>
@@ -355,6 +410,7 @@ function RowCells<Row extends Record<string, unknown>>({
   removeRow,
   moveRow,
   canRemove,
+  formatAmount,
 }: {
   row: Row
   index: number
@@ -371,6 +427,7 @@ function RowCells<Row extends Record<string, unknown>>({
   removeRow: (i: number) => void
   moveRow: (i: number, delta: number) => void
   canRemove: boolean
+  formatAmount?: (value: string) => React.ReactNode
 }) {
   const t = useTranslations('ui.lineGrid')
   const tCommon = useTranslations('common')
@@ -446,12 +503,16 @@ function RowCells<Row extends Record<string, unknown>>({
                     className="inline-block h-1.5 w-1.5 shrink-0 rounded-full bg-amber-500"
                   />
                 ) : null}
-                {cmp(shown, '0') !== 0 ? shown : ''}
+                {cmp(shown, '0') !== 0 ? (formatAmount?.(shown) ?? shown) : ''}
               </span>
             )
           } else if (c.render) display = c.render(row, i)
           else if ((c.type === 'select' || c.type === 'search-select') && value)
             display = c.options?.find((o) => o.value === value)?.label ?? ''
+          else if (c.type === 'decimal')
+            display = displayLineDecimal(value, c.decimalScale ?? 8)
+          else if (c.type === 'amount')
+            display = value == null || value === '' ? '' : (formatAmount?.(String(value)) ?? String(value))
           else display = (value as string) ?? ''
           return (
             <div
@@ -507,6 +568,13 @@ function RowCells<Row extends Record<string, unknown>>({
                   invalidAmount(value) &&
                     'text-red-600 focus:ring-red-500/60 dark:text-red-400',
                 )}
+              />
+            ) : c.type === 'decimal' ? (
+              <DecimalCell
+                value={value}
+                scale={c.decimalScale ?? 8}
+                inputBase={inputBase}
+                onChange={(next) => setCell(i, c.key, next)}
               />
             ) : c.type === 'tax' ? (
               <TaxCell

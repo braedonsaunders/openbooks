@@ -546,6 +546,7 @@ export function ExpenseDrawer({
             onRowsChange={setRows}
             emptyRow={emptyLine}
             readOnly={!editable}
+            formatAmount={(value) => money(value, { currency: doc.currency })}
           />
         </div>
 

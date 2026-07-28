@@ -12,6 +12,7 @@ import {
   preflightFullSync,
   runFullMigration,
   runSync,
+  runTargetedRepair,
 } from "../sync/sync.ts";
 import { syncProjectFinancialInputs } from "../sync/project-financial-inputs.ts";
 import {
@@ -32,7 +33,23 @@ export function createMigrationWorker(): Worker<MigrationJobData> {
   return new Worker<MigrationJobData>(
     MIGRATION_QUEUE,
     async (job) => {
-      const { orgId, connectionId, mode, triggeredBy } = job.data;
+      const {
+        orgId,
+        connectionId,
+        mode,
+        triggeredBy,
+        sourceFileIds,
+        sourceRefs,
+      } = job.data;
+      if (sourceFileIds?.length && mode !== "attachments") {
+        throw new Error("sourceFileIds are only valid for attachment jobs");
+      }
+      if (sourceRefs?.length && mode !== "targeted_repair") {
+        throw new Error("sourceRefs are only valid for targeted repair jobs");
+      }
+      if (mode === "targeted_repair" && !sourceRefs?.length) {
+        throw new Error("targeted repair jobs require sourceRefs");
+      }
       const conn = await getConnection(orgId, connectionId);
       if (!conn)
         throw new Error(
@@ -64,6 +81,7 @@ export function createMigrationWorker(): Worker<MigrationJobData> {
             connectionId,
             execute: true,
             concurrency: 4,
+            sourceFileIds,
           });
           await db.execute(sql`
             update sync_runs
@@ -192,6 +210,13 @@ export function createMigrationWorker(): Worker<MigrationJobData> {
       const result =
         mode === "full_migration"
           ? await runFullMigration(source, triggeredBy ?? "worker", ctx)
+          : mode === "targeted_repair"
+            ? await runTargetedRepair(
+                source,
+                sourceRefs!,
+                triggeredBy ?? "worker",
+                ctx,
+              )
           : await runSync(source, triggeredBy ?? "worker", ctx);
 
       return {

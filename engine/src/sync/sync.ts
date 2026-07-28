@@ -410,11 +410,20 @@ export function effectiveTaxCodeId(
   return toUnits(taxAmount) === 0n ? null : (taxCodeId ?? null);
 }
 
+/** A posted mirror cannot silently become non-posting without a reversal. */
+export function requiresControlledPostingReversal(
+  sourcePosting: boolean,
+  storedPosted: boolean,
+): boolean {
+  return storedPosted && !sourcePosting;
+}
+
 /** Canonical content key of a native document (change detection). */
 export function canonicalNativeDocumentKey(d: NativeDocument): string {
   return JSON.stringify([
     d.kind,
     d.posting,
+    d.posting ? null : (d.lifecycleStatus ?? "approved"),
     d.partyId,
     d.subsidiaryId,
     d.documentDate,
@@ -471,6 +480,7 @@ type StoredDocumentKeyRow = {
   ctrl: string | null;
   extra_dims: Record<string, string>;
   posted: boolean;
+  status: string;
   currency: string;
   fx_rate: string;
   subtotal: string;
@@ -504,6 +514,7 @@ function storedCanonicalKey(
   return JSON.stringify([
     d.kind,
     d.posted,
+    d.posted ? null : d.status,
     d.party_id,
     d.subsidiary_id,
     d.document_date,
@@ -548,7 +559,7 @@ async function storedKey(docId: string): Promise<string> {
              posting_period_id,
              due_date::text as due,
              memo, reference_number, custom->>'controlAccountId' as ctrl, extra_dims, id,
-             posted_entry_id is not null as posted, currency, fx_rate, subtotal, total
+             posted_entry_id is not null as posted, status, currency, fx_rate, subtotal, total
         from documents where id = ${docId}`)) as unknown as {
       rows: StoredDocumentKeyRow[];
     }
@@ -578,7 +589,7 @@ async function loadStoredKeys(
            posting_period_id,
            due_date::text as due,
            memo, reference_number, custom->>'controlAccountId' as ctrl, extra_dims,
-           posted_entry_id is not null as posted, currency, fx_rate, subtotal, total
+           posted_entry_id is not null as posted, status, currency, fx_rate, subtotal, total
       from documents
      where org_id = ${orgId} and custom->>${refKey} is not null
      order by id`)) as unknown as { rows: StoredDocumentKeyRow[] };
@@ -1214,9 +1225,14 @@ export async function runSync(
               doc.lines,
               taxEvidence,
             );
-            await db.execute(
-              sql`update documents set status = 'approved', updated_at = now() where id = ${row!.id}`,
-            );
+            const lifecycleStatus = doc.posting
+              ? "approved"
+              : (doc.lifecycleStatus ?? "approved");
+            await db.execute(sql`
+              update documents
+                 set status = ${lifecycleStatus}, updated_at = now()
+               where id = ${row!.id}
+            `);
             if (doc.posting) {
               await postDocument(row!.id, deps, { deferEffects: true });
               await setDocumentTotalsFromEntry(row!.id);
@@ -1239,7 +1255,9 @@ export async function runSync(
           }
           existing.set(doc.sourceRef, {
             id: docId,
-            status: doc.posting ? "posted" : "approved",
+            status: doc.posting
+              ? "posted"
+              : (doc.lifecycleStatus ?? "approved"),
             posted: doc.posting,
             documentNumber: effectiveSourceDocumentNumber(doc),
           });
@@ -1247,6 +1265,11 @@ export async function runSync(
         }
 
         // ---- EXISTS: heal orphan, then amend-if-changed ------------------------
+        if (requiresControlledPostingReversal(doc.posting, have.posted)) {
+          throw new Error(
+            "source transitioned from posting to non-posting; a controlled reversal is required",
+          );
+        }
         if (doc.posting && !have.posted && have.status !== "voided") {
           await withOrg(org.id, async () => {
             // Old importer versions could commit the approved document before
@@ -1258,6 +1281,7 @@ export async function runSync(
                  set document_number = ${effectiveSourceDocumentNumber(doc)},
                      posting_date = ${doc.postingDate ?? doc.documentDate},
                      posting_period_id = ${doc.postingPeriodId ?? null},
+                     status = 'approved',
                      updated_at = now()
                where id = ${have.id}
             `);
@@ -1370,6 +1394,10 @@ export async function runSync(
               posting_period_id = ${doc.postingPeriodId ?? null}, due_date = ${doc.dueDate},
               currency = ${doc.currency ?? source.baseCurrency}, fx_rate = ${doc.fxRate ?? "1"},
               memo = ${doc.memo}, reference_number = ${doc.referenceNumber},
+              status = case
+                when posted_entry_id is not null then status
+                else ${doc.lifecycleStatus ?? "approved"}
+              end,
               extra_dims = ${JSON.stringify(doc.extraDims ?? {})}::jsonb,
               custom = case
                 when ${doc.controlAccountId}::text is null

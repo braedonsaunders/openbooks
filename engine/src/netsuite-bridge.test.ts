@@ -4,7 +4,10 @@ import { dirname, join } from "node:path";
 import test from "node:test";
 import { fileURLToPath } from "node:url";
 import { NetSuiteBridgeClient } from "./netsuite-bridge.ts";
-import type { NetSuiteCreds } from "./netsuite.ts";
+import {
+  parseSoapTransactionSearchPage,
+  type NetSuiteCreds,
+} from "./netsuite.ts";
 
 const creds: NetSuiteCreds = {
   account: "test",
@@ -72,6 +75,34 @@ test("NetSuite bridge deletion feed preserves tombstone identity", async () => {
   assert.deepEqual(await client.deletedRecords(new Date("2026-07-19T00:00:00Z"), "transaction"), [
     { internalId: "42", deletedAt: "7/19/2026", recordType: "Invoice", name: "INV42", externalId: "" },
   ]);
+});
+
+test("SuiteTalk transaction search parsing returns only result records", () => {
+  const page = parseSoapTransactionSearchPage(`
+    <searchResult xmlns:platformCore="urn:core_2022_1.platform.webservices.netsuite.com">
+      <platformCore:status isSuccess="true"/>
+      <platformCore:totalPages>2</platformCore:totalPages>
+      <platformCore:searchId>SEARCH-123</platformCore:searchId>
+      <platformCore:recordList>
+        <platformCore:record internalId="4001" xsi:type="expenseReport">
+          <entity internalId="2654"/>
+        </platformCore:record>
+        <platformCore:record xsi:type="vendorBill" internalId="4002"/>
+      </platformCore:recordList>
+    </searchResult>
+  `);
+  assert.deepEqual(page, {
+    transactionIds: ["4001", "4002"],
+    searchId: "SEARCH-123",
+    totalPages: 2,
+  });
+  assert.throws(
+    () =>
+      parseSoapTransactionSearchPage(
+        `<status isSuccess="false"/><statusDetail><message>Denied</message></statusDetail>`,
+      ),
+    /Denied/,
+  );
 });
 
 test("NetSuite bulk export assembles partition chunks and always cleans up", async () => {
