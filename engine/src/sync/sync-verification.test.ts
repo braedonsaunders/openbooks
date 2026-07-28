@@ -6,6 +6,7 @@ import {
   effectiveLineSubsidiary,
   effectiveTaxCodeId,
   requiresControlledPostingReversal,
+  verifyTargetedDocumentKeys,
   sourceDeletionCandidates,
   unresolvedSourceDeletionCandidates,
   syncVerificationFailures,
@@ -47,6 +48,30 @@ test("a posted source transition requires a controlled reversal", () => {
   assert.equal(requiresControlledPostingReversal(false, true), true);
   assert.equal(requiresControlledPostingReversal(true, true), false);
   assert.equal(requiresControlledPostingReversal(false, false), false);
+});
+
+test("targeted verification certifies only exact requested documents", () => {
+  assert.deepEqual(
+    verifyTargetedDocumentKeys(
+      [
+        { sourceRef: "10", canonicalKey: "alpha" },
+        { sourceRef: "20", canonicalKey: "bravo" },
+        { sourceRef: "30", canonicalKey: "charlie" },
+      ],
+      new Map([
+        ["10", "alpha"],
+        ["20", "changed"],
+      ]),
+    ),
+    {
+      checked: 3,
+      matches: 1,
+      mismatches: [
+        { sourceRef: "20", reason: "canonical_content" },
+        { sourceRef: "30", reason: "missing_target" },
+      ],
+    },
+  );
 });
 
 test("financial cursor gate reports every independent divergence", () => {

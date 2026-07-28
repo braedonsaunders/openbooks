@@ -95,6 +95,20 @@ export interface SyncResult {
    * Verifies every project, posting account, and month exactly.
    */
   projectPeriods: ProjectAccountMonthVerification | null;
+  /**
+   * Present for a bounded repair. This is the authoritative gate for that
+   * operation: every requested buildable source document must have the exact
+   * canonical content stored after the write. A bounded repair intentionally
+   * does not claim that unrelated live ledger rows were globally reconciled.
+   */
+  targetedDocuments?: {
+    checked: number;
+    matches: number;
+    mismatches: {
+      sourceRef: string;
+      reason: "missing_target" | "canonical_content";
+    }[];
+  } | null;
   syncedThrough: string;
   durationMs: number;
 }
@@ -148,7 +162,44 @@ export function syncVerificationFailures(result: SyncResult): string[] {
       `${projectPeriodOff} project-account-month buckets differ`,
     );
   }
+  const targetedOff = result.targetedDocuments
+    ? result.targetedDocuments.checked - result.targetedDocuments.matches
+    : 0;
+  if (targetedOff > 0) {
+    failures.push(`${targetedOff} targeted source documents differ`);
+  }
   return failures;
+}
+
+export function verifyTargetedDocumentKeys(
+  expected: readonly { sourceRef: string; canonicalKey: string }[],
+  actual: ReadonlyMap<string, string>,
+): NonNullable<SyncResult["targetedDocuments"]> {
+  const mismatches: NonNullable<
+    SyncResult["targetedDocuments"]
+  >["mismatches"] = [];
+  let matches = 0;
+  for (const document of expected) {
+    const stored = actual.get(document.sourceRef);
+    if (stored == null) {
+      mismatches.push({
+        sourceRef: document.sourceRef,
+        reason: "missing_target",
+      });
+    } else if (stored !== document.canonicalKey) {
+      mismatches.push({
+        sourceRef: document.sourceRef,
+        reason: "canonical_content",
+      });
+    } else {
+      matches++;
+    }
+  }
+  return {
+    checked: expected.length,
+    matches,
+    mismatches: mismatches.slice(0, 200),
+  };
 }
 
 export function sourceDeletionCandidates(
@@ -351,8 +402,11 @@ export async function verifyCurrentLedgerState(
 
 class SyncVerificationError extends Error {
   constructor(readonly result: SyncResult) {
+    const samples = result.skipped.slice(0, 3);
     super(
-      `financial verification failed: ${syncVerificationFailures(result).join("; ")}`,
+      `financial verification failed: ${syncVerificationFailures(result).join("; ")}${
+        samples.length > 0 ? `; samples: ${samples.join(" | ")}` : ""
+      }`,
     );
     this.name = "SyncVerificationError";
   }
@@ -1596,15 +1650,50 @@ export async function runSync(
       run!.id,
       {
         phase: "verify",
-        message:
-          "Verifying trial balance, open items, periods & project ledger…",
+        message: targetedRefs
+          ? "Verifying targeted source documents…"
+          : "Verifying trial balance, open items, periods & project ledger…",
+        docsNew,
+        docsAmended,
+        docsUnchanged,
+        docsFailed,
+        ordersNew,
+        failureSamples: writeFailures,
       },
       true,
     );
-    const financialVerification = await verifyCurrentLedgerState(
-      source,
-      org.id,
-    );
+    let targetedDocuments: SyncResult["targetedDocuments"] = null;
+    if (targetedRefs) {
+      const expectedKeys = changes.documents.map((sourceDocument) => {
+        const document: NativeDocument = {
+          ...sourceDocument,
+          subsidiaryId:
+            sourceDocument.subsidiaryId ?? ctx.rootSubsidiaryId,
+          currency: sourceDocument.currency ?? source.baseCurrency,
+        };
+        return {
+          sourceRef: document.sourceRef,
+          canonicalKey: canonicalNativeDocumentKey(document),
+        };
+      });
+      const actualKeys = new Map<string, string>();
+      for (const expected of expectedKeys) {
+        const have = existing.get(expected.sourceRef);
+        if (have) actualKeys.set(expected.sourceRef, await storedKey(have.id));
+      }
+      targetedDocuments = verifyTargetedDocumentKeys(
+        expectedKeys,
+        actualKeys,
+      );
+    }
+    const financialVerification: SourceLedgerVerification = targetedRefs
+      ? {
+          tb: { accounts: 0, matches: 0, mismatches: [] },
+          openItems: null,
+          periods: { checked: 0, matches: 0, mismatches: [] },
+          projectPeriods: null,
+        }
+      : await verifyCurrentLedgerState(source, org.id);
 
     const result: SyncResult = {
       runId: run!.id,
@@ -1622,6 +1711,7 @@ export async function runSync(
       applications,
       trueUp,
       ...financialVerification,
+      targetedDocuments,
       syncedThrough: changes.syncedThrough.toISOString(),
       durationMs: Date.now() - started,
     };
