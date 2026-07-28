@@ -1765,6 +1765,7 @@
       "nextNumber": "下一编号",
       "padding": "补位",
       "gapless": "无间隔",
+      "classification": "分类",
       "costMultiplier": "成本乘数",
       "isBillableDefault": "默认可计费",
       "showOnFieldTicket": "在现场工单上显示",
@@ -1853,6 +1854,12 @@
       "gapless": "无间隔表示序列中的每个编号都必须有记录，不能跳号。仅在法律或审计要求必须连续编号时启用。"
     },
     "options": {
+      "timeClassification": {
+        "regular": "正常工时",
+        "overtime": "加班",
+        "doubleTime": "双倍工时",
+        "other": "其他"
+      },
       "taxDepreciationModel": {
         "pool": "Class pool",
         "macrs": "Per-asset MACRS"

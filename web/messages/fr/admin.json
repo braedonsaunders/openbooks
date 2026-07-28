@@ -1785,6 +1785,7 @@
       "nextNumber": "Next number",
       "padding": "Padding",
       "gapless": "Gapless",
+      "classification": "Classification",
       "costMultiplier": "Cost multiplier",
       "isBillableDefault": "Billable by default",
       "showOnFieldTicket": "Afficher sur les bons de régie",
@@ -1900,6 +1901,12 @@
       "informationReturnBox": "Les cases sont légales. Ce que vous configurez, c'est quel compte alimente quelle case."
     },
     "options": {
+      "timeClassification": {
+        "regular": "Heures normales",
+        "overtime": "Heures supplémentaires",
+        "doubleTime": "Heures doubles",
+        "other": "Autre"
+      },
       "taxDepreciationModel": {
         "pool": "Class pool",
         "macrs": "Per-asset MACRS"

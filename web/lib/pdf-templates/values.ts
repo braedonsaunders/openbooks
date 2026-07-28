@@ -265,17 +265,19 @@ async function loadFieldTicketValues(orgId: string, id: string): Promise<PdfReco
       cur.setUTCDate(cur.getUTCDate() + 1)
     }
   }
-  const tier = (mult: unknown): 'reg' | 'ot' | 'dt' => {
-    const n = Number(mult)
-    if (!Number.isFinite(n) || n < 1.25) return 'reg'
-    return n < 1.75 ? 'ot' : 'dt'
+  const tier = (
+    classification: 'regular' | 'overtime' | 'double_time' | 'other',
+  ): 'reg' | 'ot' | 'dt' | 'other' => {
+    if (classification === 'overtime') return 'ot'
+    if (classification === 'double_time') return 'dt'
+    return classification === 'other' ? 'other' : 'reg'
   }
 
   interface CrewAgg {
     employee_name: string
     labor_class: string
-    hours: Record<'reg' | 'ot' | 'dt', number>
-    rates: Record<'reg' | 'ot' | 'dt', string | null>
+    hours: Record<'reg' | 'ot' | 'dt' | 'other', number>
+    rates: Record<'reg' | 'ot' | 'dt' | 'other', string | null>
     perDay: Record<string, number>
     amount: number
   }
@@ -287,14 +289,14 @@ async function loadFieldTicketValues(orgId: string, id: string): Promise<PdfReco
       row = {
         employee_name: e.employee_name,
         labor_class: e.item_name ?? '',
-        hours: { reg: 0, ot: 0, dt: 0 },
-        rates: { reg: null, ot: null, dt: null },
+        hours: { reg: 0, ot: 0, dt: 0, other: 0 },
+        rates: { reg: null, ot: null, dt: null, other: null },
         perDay: {},
         amount: 0,
       }
       crewMap.set(k, row)
     }
-    const t = tier(e.bill_multiplier)
+    const t = tier(e.time_classification)
     const h = Number(e.hours) || 0
     row.hours[t] += h
     if (e.bill_rate != null) {
@@ -313,14 +315,16 @@ async function loadFieldTicketValues(orgId: string, id: string): Promise<PdfReco
       reg_hours: r.hours.reg ? r.hours.reg.toFixed(1) : '',
       ot_hours: r.hours.ot ? r.hours.ot.toFixed(1) : '',
       dt_hours: r.hours.dt ? r.hours.dt.toFixed(1) : '',
-      total_hours: (r.hours.reg + r.hours.ot + r.hours.dt).toFixed(1),
+      other_hours: r.hours.other ? r.hours.other.toFixed(1) : '',
+      total_hours: (r.hours.reg + r.hours.ot + r.hours.dt + r.hours.other).toFixed(1),
       reg_rate: r.rates.reg != null ? m(r.rates.reg) : '',
       ot_rate: r.rates.ot != null ? m(r.rates.ot) : '',
       dt_rate: r.rates.dt != null ? m(r.rates.dt) : '',
+      other_rate: r.rates.other != null ? m(r.rates.other) : '',
       amount: r.amount ? m(r.amount.toFixed(2)) : '',
     }
     for (let i = 1; i <= 7; i++) {
-      for (const t of ['reg', 'ot', 'dt'] as const) {
+      for (const t of ['reg', 'ot', 'dt', 'other'] as const) {
         const key = `day${i}_${t}`
         rowVals[key] = r.perDay[key] ? String(r.perDay[key]) : ''
       }

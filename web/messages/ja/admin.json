@@ -1765,6 +1765,7 @@
       "nextNumber": "次の番号",
       "padding": "桁埋め",
       "gapless": "連番（欠番なし）",
+      "classification": "分類",
       "costMultiplier": "コスト乗数",
       "isBillableDefault": "既定で請求可能",
       "showOnFieldTicket": "フィールドチケットに表示",
@@ -1853,6 +1854,12 @@
       "gapless": "欠番なしとは、連番のすべての番号が記録され、番号が飛ばないことを意味します。法令または監査要件で途切れない採番が必要な場合にのみ有効にしてください。"
     },
     "options": {
+      "timeClassification": {
+        "regular": "通常",
+        "overtime": "時間外",
+        "doubleTime": "倍時間",
+        "other": "その他"
+      },
       "taxDepreciationModel": {
         "pool": "Class pool",
         "macrs": "Per-asset MACRS"

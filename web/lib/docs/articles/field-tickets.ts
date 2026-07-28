@@ -26,6 +26,8 @@ Choose the hour categories shown in the crew grid with **Show on field tickets**
 on each record under **Setup → Workforce → Time Types**. This controls only the
 ticket grid; hidden types remain available to timesheets, pricing, imports, and
 labor costing. A typical tenant enables Regular, Overtime, and Double time.
+Set each type's **Classification** explicitly; classification controls its
+semantic column and remains independent from its cost and bill multipliers.
 
 ## Ticket period
 
@@ -59,15 +61,19 @@ straight to Approved.
 
 **Approved** — the ticket's commercial review is complete. Item lines
 materialize as a **posted project charge** so job cost and T&M billing see them.
-The gate decision, project charge, provenance, status, and audit evidence
-commit atomically; if a configured effect fails, the approval remains pending
-and can be retried safely.
+At the same boundary, OpenBooks captures a versioned commercial labor snapshot:
+the exact people, classes, dates, hour categories, hours, labels, rates, and
+source provenance the approval released. The gate decision, snapshot, project
+charge, provenance, status, and audit evidence commit atomically; if a
+configured effect fails, the approval remains pending and can be retried safely.
 
 Field Ticket approval does **not** approve, reject, or repost its time entries.
 Employee timesheet/payroll approval is an independent lifecycle with its own
 controls and posting effects. This preserves one authoritative status for each
 purpose and allows a ticket to contain lines that came from direct daily or
-weekly time entry.
+weekly time entry. Later operational-time corrections therefore cannot silently
+change a previously approved or signed customer artifact. A controlled
+commercial amendment appends a new snapshot revision and retains the prior one.
 
 **Signed** — send the ticket to the customer: they get the ticket PDF and a
 secure signing link (valid 14 days), draw their signature on any device, and
@@ -81,7 +87,9 @@ ticket refuses a second signature.
 Field Tickets are a first-class OpenBooks aggregate: common commercial fields
 live on the document, while period, foreman, submission, rejection, and charge
 linkage live on the one-to-one native Field Ticket header. Signatures and
-delivery requests have dedicated evidence tables. Tenant custom fields and
+delivery requests have dedicated evidence tables. Approved labor snapshots and
+their lines are append-only, tenant-scoped evidence; they never post labor,
+approve time, or become a parallel payroll ledger. Tenant custom fields and
 source-system provenance remain extensions; OpenBooks does not store its own
 Field Ticket state in a tenant custom-field payload.
 

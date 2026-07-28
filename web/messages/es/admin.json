@@ -1741,6 +1741,7 @@
       "nextNumber": "Next number",
       "padding": "Padding",
       "gapless": "Gapless",
+      "classification": "Clasificación",
       "costMultiplier": "Cost multiplier",
       "isBillableDefault": "Billable by default",
       "showOnFieldTicket": "Mostrar en partes de campo",
@@ -1856,6 +1857,12 @@
       "informationReturnBox": "Las casillas son legales. Lo que usted configura es qué cuenta suya alimenta qué casilla."
     },
     "options": {
+      "timeClassification": {
+        "regular": "Regular",
+        "overtime": "Horas extra",
+        "doubleTime": "Tiempo doble",
+        "other": "Otro"
+      },
       "taxDepreciationModel": {
         "pool": "Class pool",
         "macrs": "Per-asset MACRS"

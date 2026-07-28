@@ -1897,6 +1897,7 @@
       "nextNumber": "Next number",
       "padding": "Padding",
       "gapless": "Gapless",
+      "classification": "Classification",
       "costMultiplier": "Cost multiplier",
       "isBillableDefault": "Billable by default",
       "showOnFieldTicket": "Show on field tickets",
@@ -2032,6 +2033,12 @@
       "informationReturnBox": "Boxes are statutory. What you configure is which of your accounts feeds which box."
     },
     "options": {
+      "timeClassification": {
+        "regular": "Regular",
+        "overtime": "Overtime",
+        "doubleTime": "Double time",
+        "other": "Other"
+      },
       "sourceKind": {
         "builtin": "Built-in",
         "custom": "Custom"

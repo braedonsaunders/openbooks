@@ -1765,6 +1765,7 @@
       "nextNumber": "Nächste Nummer",
       "padding": "Auffüllung",
       "gapless": "Lückenlos",
+      "classification": "Klassifizierung",
       "costMultiplier": "Kostenmultiplikator",
       "isBillableDefault": "Standardmäßig fakturierbar",
       "showOnFieldTicket": "Auf Außendienstbelegen anzeigen",
@@ -1853,6 +1854,12 @@
       "gapless": "Lückenlos bedeutet, dass jede Nummer in der Folge belegt sein muss und keine Nummer übersprungen wird. Aktivieren Sie dies nur, wenn gesetzliche oder prüfungsbezogene Vorgaben eine ununterbrochene Nummerierung verlangen."
     },
     "options": {
+      "timeClassification": {
+        "regular": "Regulär",
+        "overtime": "Überstunden",
+        "doubleTime": "Doppelte Zeit",
+        "other": "Sonstige"
+      },
       "taxDepreciationModel": {
         "pool": "Class pool",
         "macrs": "Per-asset MACRS"

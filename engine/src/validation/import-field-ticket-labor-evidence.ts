@@ -297,7 +297,7 @@ async function main(): Promise<void> {
     if (blockingCount > 0) {
       throw new Error(`refusing source-evidence import: ${blockingCount} unresolved or ambiguous mappings`);
     }
-    for (const ticket of approvedTickets) {
+    for (const [ticketIndex, ticket] of approvedTickets.entries()) {
       const targetTicket = targetTicketByLegacyId.get(ticket.legacyId)!;
       const source = (cellsByTicket.get(ticket.legacyId) ?? [])
         .slice()
@@ -336,6 +336,7 @@ async function main(): Promise<void> {
           itemName: item.name,
           timeTypeId: timeType.id,
           timeTypeName: timeType.name,
+          timeClassification: cell.kind,
           workedOn: addDays(ticket.begin, cell.dayOffset),
           hours: cell.hours,
           sourceSystem: "adminapp2",
@@ -368,6 +369,15 @@ async function main(): Promise<void> {
         if (result.revision > 1) snapshotsSuperseded += 1;
       }
       linesCaptured += result.lineCount;
+      if (
+        (ticketIndex + 1) % 250 === 0 ||
+        ticketIndex + 1 === approvedTickets.length
+      ) {
+        console.log(
+          `captured ${ticketIndex + 1}/${approvedTickets.length} approved tickets ` +
+            `(${linesCaptured} source cells)`,
+        );
+      }
     }
   }
 

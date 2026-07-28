@@ -525,6 +525,7 @@ async function ensureFieldTicketLaborSnapshot(
     select te.id, te.employee_party_id, employee.display_name as employee_name,
            te.item_id, item.name as item_name,
            te.time_type_id, coalesce(time_type.name, 'Unclassified') as time_type_name,
+           coalesce(time_type.classification, 'regular') as time_classification,
            te.project_task_id, project_task.name as project_task_name,
            te.worked_on::text as worked_on, te.hours, te.status,
            te.cost_rate, te.cost_rate_currency,
@@ -556,6 +557,7 @@ async function ensureFieldTicketLaborSnapshot(
       item_name: string | null
       time_type_id: string | null
       time_type_name: string
+      time_classification: 'regular' | 'overtime' | 'double_time' | 'other'
       project_task_id: string | null
       project_task_name: string | null
       worked_on: string
@@ -597,6 +599,7 @@ async function ensureFieldTicketLaborSnapshot(
       itemName: entry.item_name,
       timeTypeId: entry.time_type_id,
       timeTypeName: entry.time_type_name,
+      timeClassification: entry.time_classification,
       projectTaskId: entry.project_task_id,
       projectTaskName: entry.project_task_name,
       workedOn: entry.worked_on,
@@ -852,6 +855,7 @@ export async function loadFieldTicket(orgId: string, ticketId: string) {
         select line.id, line.employee_party_id, line.employee_name,
                line.item_id, line.item_name,
                line.time_type_id, line.time_type_name,
+               line.time_classification,
                coalesce(time_type.bill_multiplier, '1') as bill_multiplier,
                line.project_task_id, line.project_task_name,
                line.worked_on::text as worked_on, line.hours, line.bill_rate,
@@ -871,6 +875,7 @@ export async function loadFieldTicket(orgId: string, ticketId: string) {
         select te.id, te.employee_party_id, p.display_name as employee_name,
                te.item_id, i.name as item_name,
                te.time_type_id, coalesce(tt.name, 'Unclassified') as time_type_name,
+               coalesce(tt.classification, 'regular') as time_classification,
                coalesce(tt.bill_multiplier, '1') as bill_multiplier,
                te.project_task_id, pt.name as project_task_name,
                te.worked_on::text as worked_on, te.hours, te.bill_rate, te.status,
@@ -1020,6 +1025,7 @@ export interface TicketEntryRow {
   item_name: string | null
   time_type_id: string | null
   time_type_name: string
+  time_classification: 'regular' | 'overtime' | 'double_time' | 'other'
   bill_multiplier: string
   project_task_id: string | null
   project_task_name: string | null

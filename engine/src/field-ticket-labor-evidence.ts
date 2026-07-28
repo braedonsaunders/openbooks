@@ -5,6 +5,11 @@ export type FieldTicketLaborEvidenceBasis =
   | "operational_time"
   | "source_import"
   | "controlled_amendment";
+export type TimeClassification =
+  | "regular"
+  | "overtime"
+  | "double_time"
+  | "other";
 
 export interface FieldTicketLaborEvidenceLine {
   employeePartyId: string;
@@ -13,6 +18,7 @@ export interface FieldTicketLaborEvidenceLine {
   itemName?: string | null;
   timeTypeId?: string | null;
   timeTypeName: string;
+  timeClassification: TimeClassification;
   projectTaskId?: string | null;
   projectTaskName?: string | null;
   workedOn: string;
@@ -96,6 +102,9 @@ function validateInput(args: CaptureFieldTicketLaborEvidenceArgs): void {
     }
     if (!line.timeTypeName.trim()) {
       throw new FieldTicketLaborEvidenceError(`labor line ${index + 1} needs a time-type label`);
+    }
+    if (!["regular", "overtime", "double_time", "other"].includes(line.timeClassification)) {
+      throw new FieldTicketLaborEvidenceError(`labor line ${index + 1} has an invalid time classification`);
     }
     if (
       !ISO_DATE.test(line.workedOn) ||
@@ -266,32 +275,49 @@ export async function captureFieldTicketLaborEvidence(
     `)) as unknown as { rows: { id: string; revision: number }[] };
     const snapshot = inserted.rows[0];
 
-    let sequence = 0;
-    for (const line of args.lines) {
-      sequence += 1;
+    if (args.lines.length > 0) {
+      const encodedLines = JSON.stringify(args.lines);
       await db.execute(sql`
         insert into field_ticket_labor_lines
           (org_id, snapshot_id, field_ticket_id, sequence,
            employee_party_id, employee_name, item_id, item_name,
-           time_type_id, time_type_name, project_task_id, project_task_name,
+           time_type_id, time_type_name, time_classification,
+           project_task_id, project_task_name,
            worked_on, hours, time_entry_id, time_entry_status,
            cost_rate, cost_rate_currency, bill_rate, bill_rate_currency,
            cost_amount, bill_amount, source_system, source_line_ref,
            source_payload_hash, created_by)
-        values
-          (${args.orgId}, ${snapshot.id}, ${args.fieldTicketId}, ${sequence},
-           ${line.employeePartyId}, ${line.employeeName.trim()},
-           ${line.itemId ?? null}, ${line.itemName?.trim() || null},
-           ${line.timeTypeId ?? null}, ${line.timeTypeName.trim()},
-           ${line.projectTaskId ?? null}, ${line.projectTaskName?.trim() || null},
-           ${line.workedOn}, ${line.hours},
-           ${line.timeEntryId ?? null}, ${line.timeEntryStatus ?? null},
-           ${line.costRate ?? null}, ${line.costRateCurrency ?? null},
-           ${line.billRate ?? null}, ${line.billRateCurrency ?? null},
-           ${line.costAmount ?? null}, ${line.billAmount ?? null},
-           ${line.sourceSystem?.trim() || args.sourceSystem?.trim() || null},
-           ${line.sourceLineRef ?? null}, ${line.sourcePayloadHash ?? null},
-           ${args.actorId})
+        select
+          ${args.orgId}, ${snapshot.id}, ${args.fieldTicketId},
+          source.ordinality::integer,
+          (source.value->>'employeePartyId')::uuid,
+          btrim(source.value->>'employeeName'),
+          nullif(source.value->>'itemId', '')::uuid,
+          nullif(btrim(source.value->>'itemName'), ''),
+          nullif(source.value->>'timeTypeId', '')::uuid,
+          btrim(source.value->>'timeTypeName'),
+          source.value->>'timeClassification',
+          nullif(source.value->>'projectTaskId', '')::uuid,
+          nullif(btrim(source.value->>'projectTaskName'), ''),
+          (source.value->>'workedOn')::date,
+          (source.value->>'hours')::numeric,
+          nullif(source.value->>'timeEntryId', '')::uuid,
+          nullif(source.value->>'timeEntryStatus', ''),
+          nullif(source.value->>'costRate', '')::numeric,
+          nullif(source.value->>'costRateCurrency', ''),
+          nullif(source.value->>'billRate', '')::numeric,
+          nullif(source.value->>'billRateCurrency', ''),
+          nullif(source.value->>'costAmount', '')::numeric,
+          nullif(source.value->>'billAmount', '')::numeric,
+          coalesce(
+            nullif(btrim(source.value->>'sourceSystem'), ''),
+            ${args.sourceSystem?.trim() || null}
+          ),
+          nullif(source.value->>'sourceLineRef', ''),
+          nullif(source.value->>'sourcePayloadHash', ''),
+          ${args.actorId}
+        from jsonb_array_elements(${encodedLines}::jsonb)
+          with ordinality as source(value, ordinality)
       `);
     }
     await db.execute(sql`
