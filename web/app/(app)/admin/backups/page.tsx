@@ -10,6 +10,15 @@ import { BackupManager, type BackupPolicyRow, type BackupRunRow } from "./Backup
 
 export const dynamic = "force-dynamic";
 
+function isoTimestamp(value: Date | string | null): string | null {
+  if (value === null) return null;
+  const date = value instanceof Date ? value : new Date(value);
+  if (Number.isNaN(date.getTime())) {
+    throw new Error(`invalid backup timestamp: ${String(value)}`);
+  }
+  return date.toISOString();
+}
+
 export default async function BackupsPage() {
   const authz = await requirePermission("admin.backups.manage");
   const tHub = await getTranslations("admin.hub");
@@ -26,8 +35,8 @@ export default async function BackupsPage() {
       day_of_week: number;
       day_of_month: number;
       max_keep: number;
-      last_run_at: Date | null;
-      next_run_at: Date | null;
+      last_run_at: Date | string | null;
+      next_run_at: Date | string | null;
     }[];
   };
   const p = policyRes.rows[0];
@@ -39,8 +48,8 @@ export default async function BackupsPage() {
         dayOfWeek: p.day_of_week,
         dayOfMonth: p.day_of_month,
         maxKeep: p.max_keep,
-        lastRunAt: p.last_run_at?.toISOString() ?? null,
-        nextRunAt: p.next_run_at?.toISOString() ?? null,
+        lastRunAt: isoTimestamp(p.last_run_at),
+        nextRunAt: isoTimestamp(p.next_run_at),
       }
     : null;
 
@@ -61,10 +70,10 @@ export default async function BackupsPage() {
       row_count: number | null;
       sha256: string | null;
       error: string | null;
-      purged_at: Date | null;
+      purged_at: Date | string | null;
       purge_reason: string | null;
-      created_at: Date;
-      completed_at: Date | null;
+      created_at: Date | string;
+      completed_at: Date | string | null;
     }[];
   };
   const runs: BackupRunRow[] = runsRes.rows.map((r) => ({
@@ -78,10 +87,10 @@ export default async function BackupsPage() {
     rowCount: r.row_count === null ? null : Number(r.row_count),
     sha256: r.sha256,
     error: r.error,
-    purgedAt: r.purged_at?.toISOString() ?? null,
+    purgedAt: isoTimestamp(r.purged_at),
     purgeReason: r.purge_reason as BackupRunRow["purgeReason"],
-    createdAt: r.created_at.toISOString(),
-    completedAt: r.completed_at?.toISOString() ?? null,
+    createdAt: isoTimestamp(r.created_at)!,
+    completedAt: isoTimestamp(r.completed_at),
   }));
 
   // Scheduled backups run on the background worker — surface when it's down.
