@@ -8,6 +8,7 @@ import {
 import {
   NETSUITE_TRANSACTION_WATERMARK_QUERY,
   netSuiteCreditOpenBalance,
+  netSuiteLineColumns,
   numericIdWindows,
   parseNetSuiteMappings,
   uniqueNetSuiteApplicationLinks,
@@ -383,6 +384,7 @@ test("NetSuite account mappings accept explicit custom IDs without connector con
     parseNetSuiteMappings(
       JSON.stringify({
         projectForemanField: "custentity_foreman",
+        lineBillableField: "custcol_billable_override",
         timeTypeRecord: "customrecord_time_type",
         timeEntryFieldTicketNumberField: "custcol_field_ticket",
         projectStatuses: { "Substantially Complete": "substantially_complete" },
@@ -391,6 +393,7 @@ test("NetSuite account mappings accept explicit custom IDs without connector con
     {
       projectForemanField: "custentity_foreman",
       lineMarkupField: undefined,
+      lineBillableField: "custcol_billable_override",
       projectPurchaseOrderField: undefined,
       itemCategoryField: undefined,
       customerShortCodeField: undefined,
@@ -407,8 +410,33 @@ test("NetSuite account mappings accept explicit custom IDs without connector con
     /invalid script ID/,
   );
   assert.throws(
+    () => parseNetSuiteMappings('{"lineBillableField":"x; DROP"}'),
+    /invalid script ID/,
+  );
+  assert.throws(
     () => parseNetSuiteMappings('{"projectStatuses":{"Won":"won"}}'),
     /invalid target/,
+  );
+});
+
+test("NetSuite line billability can use a mapped tenant field with a native fallback", () => {
+  assert.match(
+    netSuiteLineColumns({
+      lineBillableField: "custcol_billable_override",
+      lineMarkupField: "custcol_markup",
+    }),
+    /COALESCE\(custcol_billable_override, tl\.isbillable\) AS isbillable/,
+  );
+  assert.match(
+    netSuiteLineColumns({
+      lineBillableField: "custcol_billable_override",
+      lineMarkupField: "custcol_markup",
+    }),
+    /custcol_markup AS markup/,
+  );
+  assert.match(
+    netSuiteLineColumns({}),
+    /tl\.isbillable/,
   );
 });
 

@@ -5,7 +5,7 @@ import { db } from "../db.ts";
 import { fromUnits, roundDiv, toUnits } from "../money.ts";
 import { netsuiteRestlet, type NetSuiteCreds } from "../netsuite.ts";
 import { unsealJson } from "../secrets.ts";
-import { buildSource, getConnection } from "../sync/connection.ts";
+import { buildSource, getConnection } from "./connection.ts";
 import { loadProjectType } from "../../../web/lib/project-type.ts";
 import { resolveProjectFinancials } from "../../../web/lib/project-financials.ts";
 
@@ -290,9 +290,13 @@ async function main(): Promise<void> {
         [
           "actual_cost",
           "labor_cost",
+          "calculated_overhead",
+          "overhead_adjustment",
           "overhead",
           "committed_cost",
           "billable_value",
+          "billable_time_value",
+          "billable_cost_value",
           "unbilled_billable",
         ].map((measure) => [measure, money(financials.measures[measure])]),
       ),

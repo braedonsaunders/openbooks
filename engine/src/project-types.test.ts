@@ -51,3 +51,41 @@ test('project financial policy is effective-dated, immutable, and tenant isolate
   assert.match(resolver, /v\.effective_from <= \$\{asOf\}/)
   assert.match(resolver, /v\.effective_to is null or v\.effective_to >= \$\{asOf\}/)
 })
+
+test('project cost and selling-value evidence preserve canonical document direction', () => {
+  const financials = readFileSync('web/lib/project-financials.ts', 'utf8')
+  assert.match(
+    financials,
+    /d\.kind = 'vendor_credit'\s+then -dl\.amount else dl\.amount end/,
+  )
+  assert.doesNotMatch(
+    financials,
+    /d\.kind in \('sales_order','purchase_order'\) then -dl\.amount/,
+  )
+  assert.match(
+    financials,
+    /d\.kind = 'project_charge'\s+then coalesce\(dl\.cost_amount, dl\.amount\)/,
+  )
+  assert.match(
+    financials,
+    /d\.status = 'approved'[\s\S]*d\.kind = 'project_charge'/,
+  )
+  assert.match(
+    financials,
+    /sum\(round\(te\.hours \* coalesce\(te\.bill_rate, 0\), 4\)\)/,
+  )
+  assert.match(
+    financials,
+    /round\([\s\S]*dl\.markup_percent \/ 100[\s\S]*4[\s\S]*\)/,
+  )
+
+  const billing = readFileSync('web/lib/billing.ts', 'utf8')
+  assert.match(
+    billing,
+    /d\.kind = 'vendor_credit' then -dl\.amount else dl\.amount end/,
+  )
+  assert.doesNotMatch(
+    billing,
+    /d\.kind in \('sales_order','purchase_order'\) then -dl\.amount/,
+  )
+})
