@@ -654,7 +654,11 @@ export async function runRevenueRecognition(
            p.name           as period_name,
            p.ends_on        as period_ends_on,
            r.method         as method,
-           period_module_is_closed(${orgId}, p.id, s.book_id, coalesce(doc.subsidiary_id, prj.subsidiary_id), 'gl') as period_closed,
+           period_module_is_closed(
+             ${orgId}, p.id, s.book_id,
+             coalesce(dl.subsidiary_id, doc.subsidiary_id, prj.subsidiary_id, sub0.id),
+             'gl'
+           ) as period_closed,
            o.id             as obligation_id,
            o.description    as obligation_desc,
            o.deferred_account_id    as obl_deferred,
@@ -664,11 +668,15 @@ export async function runRevenueRecognition(
            r.deferred_account_id    as rule_deferred,
            r.recognized_account_id  as rule_recognized,
            c.contract_number as contract_number,
-           coalesce(doc.subsidiary_id, prj.subsidiary_id, sub0.id) as subsidiary_id,
+           coalesce(dl.subsidiary_id, doc.subsidiary_id, prj.subsidiary_id, sub0.id) as subsidiary_id,
            coalesce(sub.base_currency, psub.base_currency, sub0.base_currency) as base_currency,
-           dl.department_id as department_id,
-           coalesce(dl.project_id, c.project_id) as project_id,
-           dl.location_id   as location_id
+           coalesce(dl.department_id, doc.department_id) as department_id,
+           coalesce(dl.project_id, doc.project_id, c.project_id) as project_id,
+           coalesce(dl.location_id, doc.location_id) as location_id,
+           coalesce(dl.class_id, doc.class_id) as class_id,
+           dl.equipment_unit_id as equipment_unit_id,
+           coalesce(doc.extra_dims, '{}'::jsonb)
+             || coalesce(dl.extra_dims, '{}'::jsonb) as extra_dims
       from recognition_schedule_lines l
       join recognition_schedules s on s.id = l.schedule_id
       join accounting_books bk on bk.id = s.book_id and bk.posts_gl and bk.is_active
@@ -676,11 +684,11 @@ export async function runRevenueRecognition(
       join revenue_contracts c on c.id = o.contract_id
       join recognition_rules r on r.id = o.recognition_rule_id
       join accounting_periods p on p.id = l.period_id
-      left join document_lines dl on dl.id = o.document_line_id
-      left join documents doc on doc.id = dl.document_id
-      left join projects prj on prj.id = c.project_id
+      left join document_lines dl on dl.id = o.document_line_id and dl.org_id = o.org_id
+      left join documents doc on doc.id = dl.document_id and doc.org_id = dl.org_id
+      left join projects prj on prj.id = c.project_id and prj.org_id = c.org_id
       left join items it on it.id = o.item_id
-      left join subsidiaries sub on sub.id = doc.subsidiary_id
+      left join subsidiaries sub on sub.id = coalesce(dl.subsidiary_id, doc.subsidiary_id)
       left join subsidiaries psub on psub.id = prj.subsidiary_id
       left join lateral (
         select id, base_currency from subsidiaries where org_id = ${orgId} order by created_at limit 1
@@ -694,7 +702,7 @@ export async function runRevenueRecognition(
        and (p.ends_on <= ${asOfDate}
             or (r.method = 'percent_complete' and p.starts_on <= ${asOfDate}))
        ${obligationId ? sql`and o.id = ${obligationId}` : sql``}
-       ${allowedSubsidiaryIds ? sql`and coalesce(doc.subsidiary_id, prj.subsidiary_id, sub0.id) = any(${`{${allowedSubsidiaryIds.join(",")}}`}::uuid[])` : sql``}
+       ${allowedSubsidiaryIds ? sql`and coalesce(dl.subsidiary_id, doc.subsidiary_id, prj.subsidiary_id, sub0.id) = any(${`{${allowedSubsidiaryIds.join(",")}}`}::uuid[])` : sql``}
      order by c.contract_number, o.description, l.sequence`)) as unknown as { rows: any[] };
 
   const result: RunRecognitionResult = { posted: 0, skipped: 0, totalAmount: "0", entries: [], problems: [] };
@@ -737,6 +745,7 @@ export async function runRevenueRecognition(
           departmentId: row.department_id,
           projectId: row.project_id,
           locationId: row.location_id,
+          classId: row.class_id,
         })),
       });
     } catch (error) {
@@ -755,7 +764,28 @@ export async function runRevenueRecognition(
     const postingDate: string =
       row.method === "percent_complete" && asOfDate < row.period_ends_on ? asOfDate : row.period_ends_on;
     try {
-      const entryId = await db.transaction(async (tx) => {
+      const posted = await db.transaction(async (tx) => {
+        // Claim the schedule line at the aggregate root. Concurrent runners
+        // serialize here; after the winner commits, the loser no longer
+        // satisfies journal_entry_id is null and cannot create a second entry.
+        // Recheck the GL close under the same lock so a period cannot close
+        // between the preliminary scan and the actual ledger write.
+        const claim = (await tx.execute(sql`
+          select l.id,
+                 period_module_is_closed(
+                   ${orgId}, l.period_id, s.book_id, ${row.subsidiary_id}, 'gl'
+                 ) as period_closed
+            from recognition_schedule_lines l
+            join recognition_schedules s on s.id = l.schedule_id
+           where l.id = ${row.line_id}
+             and l.org_id = ${orgId}
+             and l.journal_entry_id is null
+           for update of l`)) as unknown as {
+          rows: { id: string; period_closed: boolean }[];
+        };
+        if (!claim.rows[0]) return { status: "already_posted" as const };
+        if (claim.rows[0].period_closed) return { status: "period_closed" as const };
+
         const entryRes = (await tx.execute(sql`
           insert into journal_entries
             (org_id, book_id, subsidiary_id, entry_number, posting_date, period_id, memo, status, origin, created_by, updated_by)
@@ -774,9 +804,10 @@ export async function runRevenueRecognition(
           await tx.execute(sql`
             insert into journal_lines
               (org_id, entry_id, line_number, account_id, subsidiary_id, amount, currency, txn_amount, fx_rate,
-               department_id, project_id, location_id, memo)
+               department_id, project_id, location_id, class_id, equipment_unit_id, extra_dims, memo)
             values (${orgId}, ${eid}, ${i + 1}, ${l.accountId}, ${row.subsidiary_id}, ${l.amount}, ${row.base_currency}, ${l.amount}, 1,
-                    ${row.department_id}, ${row.project_id}, ${row.location_id},
+                    ${row.department_id}, ${row.project_id}, ${row.location_id}, ${row.class_id},
+                    ${row.equipment_unit_id}, ${JSON.stringify(row.extra_dims ?? {})}::jsonb,
                     ${`Revenue recognition ${row.period_name}`})`);
         }
 
@@ -788,9 +819,18 @@ export async function runRevenueRecognition(
              set recognized_amount = ${planned}, journal_entry_id = ${eid}, updated_at = now(), updated_by = ${actorId}
            where id = ${row.line_id}`);
 
-        return eid;
+        return { status: "posted" as const, entryId: eid };
       });
 
+      if (posted.status === "already_posted") {
+        result.skipped++;
+        continue;
+      }
+      if (posted.status === "period_closed") {
+        result.skipped++;
+        result.problems.push(`${row.contract_number} ${row.period_name}: GL period closed`);
+        continue;
+      }
       result.posted++;
       result.totalAmount = add(result.totalAmount, planned);
       result.entries.push({
@@ -798,7 +838,7 @@ export async function runRevenueRecognition(
         obligation: row.obligation_desc,
         period: row.period_name,
         amount: planned,
-        entryId,
+        entryId: posted.entryId,
       });
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : String(e);
