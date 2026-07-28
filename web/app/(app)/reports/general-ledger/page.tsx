@@ -32,7 +32,7 @@ export default async function GeneralLedgerPage({
   const dims = q.dims
   const [gl, opts, org] = await Promise.all([
     generalLedger(period.from, period.to, { accountId: sp.account, dims }),
-    dimensionOptions(),
+    dimensionOptions(undefined, dims.projectId),
     orgInfo(),
   ])
   const m = (v: number) => money(v, { currency: org?.base_currency })

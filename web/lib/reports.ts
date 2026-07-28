@@ -1603,15 +1603,26 @@ export async function projectProfitabilityCustomerOptions(orgId?: string): Promi
   return result.rows
 }
 
-export async function dimensionOptions(orgId?: string) {
+export async function dimensionOptions(orgId?: string, selectedProjectId?: string) {
   const resolvedOrgId = await resolveOrgId(orgId);
   const [depts, projects, locations, classes, registry] = await Promise.all([
     db.execute(sql`select id, name from departments where org_id = ${resolvedOrgId} and is_active order by name`) as any,
     db.execute(sql`
-    select p.id, p.name from projects p
-     where p.org_id = ${resolvedOrgId}
-       and exists (select 1 from journal_lines l where l.org_id = ${resolvedOrgId} and l.project_id = p.id)
-     order by p.name limit 500`) as any,
+      with listed as (
+        select p.id, p.name
+          from projects p
+         where p.org_id = ${resolvedOrgId}
+           and exists (select 1 from journal_lines l where l.org_id = ${resolvedOrgId} and l.project_id = p.id)
+         order by p.name
+         limit 500
+      )
+      select id, name from listed
+      union
+      select p.id, p.name
+        from projects p
+       where p.org_id = ${resolvedOrgId}
+         and p.id = ${selectedProjectId ?? null}::uuid
+      order by name`) as any,
     db.execute(sql`select id, name from locations where org_id = ${resolvedOrgId} and is_active order by name`) as any,
     db.execute(sql`select id, name from classes where org_id = ${resolvedOrgId} and is_active order by name`) as any,
     segmentRegistry(resolvedOrgId),
