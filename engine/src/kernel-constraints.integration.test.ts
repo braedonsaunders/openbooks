@@ -227,6 +227,76 @@ test(
   },
 );
 
+test(
+  "source replay crosses only connector-owned historical locks",
+  { skip: !DB },
+  async () => {
+    const org = await createScratchOrg();
+    try {
+      const entryId = await draftEntry(org, "SOURCE-LOCK-REPLAY");
+      let debitId = "";
+      await db.transaction(async (tx) => {
+        debitId = await line(tx, org, entryId, 1, org.accounts.bank, "10");
+        await line(tx, org, entryId, 2, org.accounts.cogs, "-10");
+        await tx.execute(
+          sql`update journal_entries set status = 'posted' where id = ${entryId}`,
+        );
+        await tx.execute(sql`set constraints all immediate`);
+      });
+      await db.execute(sql`
+        insert into period_locks
+          (org_id, period_id, book_id, subsidiary_id, module, state, reason)
+        values (
+          ${org.orgId}, ${org.periodId}, ${org.bookId}, ${org.subsidiaryId},
+          'gl', 'closed', 'close.importedPeriodLockReason'
+        )
+      `);
+
+      await assert.rejects(
+        db.transaction(async (tx) => {
+          await tx.execute(sql`set local openbooks.amend = 'on'`);
+          await tx.execute(
+            sql`update journal_lines set memo = 'not-source-replay' where id = ${debitId}`,
+          );
+        }),
+        (error: unknown) =>
+          errorChainMatches(error, /period is closed for GL posting/),
+      );
+
+      await db.transaction(async (tx) => {
+        await tx.execute(sql`set local openbooks.amend = 'on'`);
+        await tx.execute(sql`set local openbooks.migration = 'on'`);
+        await tx.execute(
+          sql`update journal_lines set memo = 'exact-source-replay' where id = ${debitId}`,
+        );
+      });
+
+      await db.execute(sql`
+        update period_locks
+           set reason = 'controller_close'
+         where org_id = ${org.orgId}
+           and period_id = ${org.periodId}
+           and book_id = ${org.bookId}
+           and subsidiary_id = ${org.subsidiaryId}
+           and module = 'gl'
+      `);
+      await assert.rejects(
+        db.transaction(async (tx) => {
+          await tx.execute(sql`set local openbooks.amend = 'on'`);
+          await tx.execute(sql`set local openbooks.migration = 'on'`);
+          await tx.execute(
+            sql`update journal_lines set memo = 'controller-lock-bypass' where id = ${debitId}`,
+          );
+        }),
+        (error: unknown) =>
+          errorChainMatches(error, /period is closed for GL posting/),
+      );
+    } finally {
+      await dropScratchOrg(org.orgId);
+    }
+  },
+);
+
 test("applications enforce independent base and transaction caps at deferred commit", { skip: !DB }, async () => {
   const org = await createScratchOrg();
   try {

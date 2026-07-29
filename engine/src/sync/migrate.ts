@@ -1,7 +1,11 @@
 import { sql } from "drizzle-orm";
-import { db } from "../db.ts";
+import { db, withOrg } from "../db.ts";
 import { CLOSE_MODULES, ensureCloseDefaults } from "../close.ts";
-import type { MigrationSource, SourceEntity } from "./source.ts";
+import type {
+  EntityStream,
+  MigrationSource,
+  SourceEntity,
+} from "./source.ts";
 
 /**
  * Master-data loader for full migrations AND incremental mirrors. Drives the
@@ -120,8 +124,9 @@ export async function loadEntities(
   since: Date | null = null,
   onProgress?: (message: string, current: number, total: number) => void,
   audit?: Ctx["audit"],
+  providedStreams?: EntityStream[],
 ): Promise<EntityLoadStats> {
-  if (!source.entities) return {};
+  if (!source.entities && !providedStreams) return {};
   await ensureSchema();
   const refKey = source.refKey;
   const ctx: Ctx = {
@@ -148,10 +153,15 @@ export async function loadEntities(
   await ensureRootSubsidiary(orgId, source.baseCurrency);
 
   onProgress?.("Pulling master data from the source…", 0, 1);
-  const streams = [
-    { resource: "accounting_periods", records: await source.accountingPeriods() },
-    ...(await source.entities(since)),
-  ];
+  const streams =
+    providedStreams ??
+    [
+      {
+        resource: "accounting_periods",
+        records: await source.accountingPeriods(),
+      },
+      ...(await source.entities!(since)),
+    ];
   const stats: EntityLoadStats = {};
 
   let streamIndex = 0;
@@ -214,6 +224,19 @@ export async function loadEntities(
     stats[stream.resource] = s;
   }
   return stats;
+}
+
+/** Land only the connector's bounded-transaction reference dependencies. */
+export async function syncSourceTransactionReferenceEntities(
+  source: MigrationSource,
+  orgId: string,
+  audit?: Ctx["audit"],
+): Promise<EntityLoadStats> {
+  if (!source.transactionReferenceEntities) return {};
+  const streams = await source.transactionReferenceEntities();
+  return withOrg(orgId, () =>
+    loadEntities(source, orgId, null, undefined, audit, streams),
+  );
 }
 
 /**
@@ -326,12 +349,14 @@ export async function syncSourceAccountingPeriods(
   source: MigrationSource,
   orgId: string,
 ): Promise<ResourceLoadStats> {
+  const records = await source.accountingPeriods();
   const stats: ResourceLoadStats = { created: 0, updated: 0, skipped: 0 };
-  await loadAccountingPeriods(
-    await source.accountingPeriods(),
-    orgId,
-    source.refKey,
-    stats,
+  // Period identities and their per-book/module locks are one configuration
+  // unit. Commit them atomically so a failed refresh cannot leave only part of
+  // the source calendar mapped; the single commit also avoids one synchronous
+  // replication round trip per lock row on institutional deployments.
+  await withOrg(orgId, () =>
+    loadAccountingPeriods(records, orgId, source.refKey, stats),
   );
   return stats;
 }
@@ -502,6 +527,12 @@ async function upsert(resource: string, ctx: Ctx, rec: SourceEntity, s: Resource
     const name = String(f.name ?? code);
     const appliesTo = String(f.appliesTo ?? "both");
     const rate = String(f.ratePercent ?? "0");
+    const taxCustom = JSON.stringify({
+      [refKey]: rec.sourceRef,
+      ...(typeof f.sourceRecordKind === "string"
+        ? { sourceRecordKind: f.sourceRecordKind }
+        : {}),
+    });
     let id = await findByRef("tax_codes", orgId, refKey, rec.sourceRef);
     if (!id) {
       const byCode = (await db.execute(sql`select id from tax_codes where org_id=${orgId} and code=${code} limit 1`)) as { rows: { id: string }[] };
@@ -519,12 +550,13 @@ async function upsert(resource: string, ctx: Ctx, rec: SourceEntity, s: Resource
     if (id) {
       await db.execute(sql`update tax_codes set name=${name}, applies_to=${appliesTo}::text,
         collected_account_id=coalesce(${collected}, collected_account_id),
-        paid_account_id=coalesce(${paid}, paid_account_id), custom=${custom}::jsonb where id=${id}`);
+        paid_account_id=coalesce(${paid}, paid_account_id),
+        custom=tax_codes.custom || ${taxCustom}::jsonb where id=${id}`);
       await db.execute(sql`update tax_rates set rate_percent=${rate} where tax_code_id=${id}`);
       s.updated++; return id;
     }
     const ins = (await db.execute(sql`insert into tax_codes (org_id, code, name, applies_to, collected_account_id, paid_account_id, custom)
-      values (${orgId}, ${code}, ${name}, ${appliesTo}::text, ${collected}, ${paid}, ${custom}::jsonb) returning id`)) as { rows: { id: string }[] };
+      values (${orgId}, ${code}, ${name}, ${appliesTo}::text, ${collected}, ${paid}, ${taxCustom}::jsonb) returning id`)) as { rows: { id: string }[] };
     const newId = ins.rows[0]?.id ?? null;
     if (newId) {
       await db.execute(sql`insert into tax_rates (org_id, tax_code_id, rate_percent, effective_from)

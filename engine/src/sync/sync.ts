@@ -14,7 +14,12 @@ import {
   type NativeDocument,
   type SyncProgress,
 } from "./native.ts";
-import { loadEntities, type EntityLoadStats } from "./migrate.ts";
+import {
+  loadEntities,
+  syncSourceAccountingPeriods,
+  syncSourceTransactionReferenceEntities,
+  type EntityLoadStats,
+} from "./migrate.ts";
 import {
   reconcileApplications,
   recomputeOpenBalances,
@@ -200,6 +205,18 @@ export function verifyTargetedDocumentKeys(
     matches,
     mismatches: mismatches.slice(0, 200),
   };
+}
+
+/**
+ * A bounded repair deliberately avoids high-volume master-data streams, but
+ * exact posting-period identity is a mandatory transaction dependency. Refresh
+ * the source's small period catalog before constructing the native context.
+ */
+export function needsStandalonePeriodRefresh(
+  sourceRefs: readonly string[] | null,
+  loadEntitiesFirst: boolean,
+): boolean {
+  return sourceRefs !== null && sourceRefs.length > 0 && !loadEntitiesFirst;
 }
 
 export function sourceDeletionCandidates(
@@ -1039,7 +1056,41 @@ export async function runSync(
       true,
     );
     let entityStats: EntityLoadStats | undefined;
-    if ((opts.loadEntitiesFirst ?? true) && source.entities) {
+    const loadEntitiesFirst = opts.loadEntitiesFirst ?? true;
+    if (needsStandalonePeriodRefresh(targetedRefs, loadEntitiesFirst)) {
+      await setProgress(
+        run!.id,
+        {
+          phase: "entities",
+          message: "Refreshing source accounting periods…",
+        },
+        true,
+      );
+      const audit = {
+        connectionId,
+        runId: run!.id,
+        actorId: /^[0-9a-f-]{36}$/i.test(triggeredBy)
+          ? triggeredBy
+          : null,
+        sourceName: source.name,
+      };
+      const referenceStats =
+        await syncSourceTransactionReferenceEntities(source, org.id, audit);
+      const skippedReferences = Object.values(referenceStats).reduce(
+        (total, stats) => total + stats.skipped,
+        0,
+      );
+      if (skippedReferences > 0) {
+        throw new Error(
+          `${skippedReferences} source transaction reference records could not be loaded`,
+        );
+      }
+      entityStats = {
+        accounting_periods: await syncSourceAccountingPeriods(source, org.id),
+        ...referenceStats,
+      };
+    }
+    if (loadEntitiesFirst && source.entities) {
       await setProgress(
         run!.id,
         { phase: "entities", message: "Loading accounts, parties, items…" },

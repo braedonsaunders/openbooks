@@ -102,7 +102,8 @@ end $$;
 --    A tightly scoped engine transaction may set openbooks.amend=on to
 --    re-materialize or delete a posted transaction in an OPEN period. Every
 --    such operation must write immutable before/after evidence to audit_log in
---    the same transaction. Closed-period GL impact is never amended in place.
+--    the same transaction. Source replay may additionally cross a source-owned
+--    imported lock, but never a controller-owned close.
 -- ---------------------------------------------------------------------------
 create or replace function period_module_is_closed(
   p_org uuid,
@@ -122,6 +123,42 @@ language sql stable as $$
       where org_id = p_org and period_id = p_period and book_id = p_book
         and subsidiary_id = p_subsidiary and module = p_module),
     (select case
+       when state = 'closed' then true
+       when state = 'open' and reopen_expires_at is not null and reopen_expires_at <= now() then true
+       else false
+     end
+       from period_locks
+      where org_id = p_org and period_id = p_period and book_id = p_book
+        and subsidiary_id is null and module = p_module),
+    false
+  )
+$$;
+
+-- Historical source replay may cross only a source-owned imported lock. A
+-- controller-created close/reopen always remains authoritative. This function
+-- mirrors the application-layer close gate inside the database triggers so
+-- `openbooks.migration=on` cannot become a blanket closed-period bypass.
+create or replace function period_module_blocks_write(
+  p_org uuid,
+  p_period uuid,
+  p_book uuid,
+  p_subsidiary uuid,
+  p_module text,
+  p_allow_imported boolean
+) returns boolean
+language sql stable as $$
+  select coalesce(
+    (select case
+       when p_allow_imported and reason = 'close.importedPeriodLockReason' then false
+       when state = 'closed' then true
+       when state = 'open' and reopen_expires_at is not null and reopen_expires_at <= now() then true
+       else false
+     end
+       from period_locks
+      where org_id = p_org and period_id = p_period and book_id = p_book
+        and subsidiary_id = p_subsidiary and module = p_module),
+    (select case
+       when p_allow_imported and reason = 'close.importedPeriodLockReason' then false
        when state = 'closed' then true
        when state = 'open' and reopen_expires_at is not null and reopen_expires_at <= now() then true
        else false
@@ -184,16 +221,18 @@ begin
   -- A document-sourced entry is a DERIVED projection of its source document:
   -- entry = postingRules(document), re-materialized on every save. When
   -- 'openbooks.amend' is on (set only by the engine's materialize path), a
-  -- posted entry's header may be regenerated in place — but only into an OPEN
-  -- period (a GL change can't land in a closed period). A reversed original is
+  -- posted entry's header may be regenerated in place. It normally requires an
+  -- OPEN period; source replay can cross only source-owned imported locks. A reversed original is
   -- still posted ledger history, so it uses the same guarded path while
   -- remaining reversed. Balance + summary-account rules still apply.
   if old.status in ('posted', 'reversed') and new.status = old.status
      and coalesce(current_setting('openbooks.amend', true), 'off') = 'on' then
-    if period_module_is_closed(old.org_id, old.period_id, old.book_id,
-         nullif(to_jsonb(old)->>'subsidiary_id', '')::uuid, 'gl')
-       or period_module_is_closed(new.org_id, new.period_id, new.book_id,
-         nullif(to_jsonb(new)->>'subsidiary_id', '')::uuid, 'gl') then
+    if period_module_blocks_write(old.org_id, old.period_id, old.book_id,
+         nullif(to_jsonb(old)->>'subsidiary_id', '')::uuid, 'gl',
+         coalesce(current_setting('openbooks.migration', true), 'off') = 'on')
+       or period_module_blocks_write(new.org_id, new.period_id, new.book_id,
+         nullif(to_jsonb(new)->>'subsidiary_id', '')::uuid, 'gl',
+         coalesce(current_setting('openbooks.migration', true), 'off') = 'on') then
       raise exception 'period is closed for GL posting';
     end if;
     return new;
@@ -208,13 +247,15 @@ begin
 
   -- draft -> posted: period must be open for GL
   if old.status = 'draft' and new.status = 'posted' then
-    if period_module_is_closed(new.org_id, new.period_id, new.book_id,
-         nullif(to_jsonb(new)->>'subsidiary_id', '')::uuid, 'gl')
+    if period_module_blocks_write(new.org_id, new.period_id, new.book_id,
+         nullif(to_jsonb(new)->>'subsidiary_id', '')::uuid, 'gl',
+         coalesce(current_setting('openbooks.migration', true), 'off') = 'on')
        or exists (
          select 1 from journal_lines l
           where l.entry_id = new.id
-            and period_module_is_closed(new.org_id, new.period_id, new.book_id,
-              nullif(to_jsonb(l)->>'subsidiary_id', '')::uuid, 'gl')
+            and period_module_blocks_write(new.org_id, new.period_id, new.book_id,
+              nullif(to_jsonb(l)->>'subsidiary_id', '')::uuid, 'gl',
+              coalesce(current_setting('openbooks.migration', true), 'off') = 'on')
        ) then
       raise exception 'period is closed for GL posting';
     end if;
@@ -257,8 +298,9 @@ begin
     -- account guards still fire on the amended lines.
     if v_status in ('posted', 'reversed')
        and coalesce(current_setting('openbooks.amend', true), 'off') = 'on' then
-      if period_module_is_closed(v_org, v_period, v_book,
-           nullif(coalesce(to_jsonb(new), to_jsonb(old))->>'subsidiary_id', '')::uuid, 'gl') then
+      if period_module_blocks_write(v_org, v_period, v_book,
+           nullif(coalesce(to_jsonb(new), to_jsonb(old))->>'subsidiary_id', '')::uuid, 'gl',
+           coalesce(current_setting('openbooks.migration', true), 'off') = 'on') then
         raise exception 'period is closed for GL posting';
       end if;
       return coalesce(new, old);

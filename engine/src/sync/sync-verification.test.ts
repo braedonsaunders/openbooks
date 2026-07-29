@@ -5,6 +5,7 @@ import {
   effectiveSourceDocumentNumber,
   effectiveLineSubsidiary,
   effectiveTaxCodeId,
+  needsStandalonePeriodRefresh,
   requiresControlledPostingReversal,
   verifyTargetedDocumentKeys,
   sourceDeletionCandidates,
@@ -72,6 +73,13 @@ test("targeted verification certifies only exact requested documents", () => {
       ],
     },
   );
+});
+
+test("bounded repairs refresh exact source period identities without loading all entities", () => {
+  assert.equal(needsStandalonePeriodRefresh(["102458"], false), true);
+  assert.equal(needsStandalonePeriodRefresh(["102458"], true), false);
+  assert.equal(needsStandalonePeriodRefresh([], false), false);
+  assert.equal(needsStandalonePeriodRefresh(null, false), false);
 });
 
 test("financial cursor gate reports every independent divergence", () => {
