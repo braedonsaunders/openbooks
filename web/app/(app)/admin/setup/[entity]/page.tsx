@@ -588,7 +588,7 @@ export default async function SetupEntityPage({
                   <TableCell key={c.key}>
                     {i === 0 ? (
                       <Link
-                        href={`/admin/setup/${entity.key}?row=${row[idColumn]}`}
+                        href={mergeHref(`/admin/setup/${entity.key}`, sp, { row: String(row[idColumn]) }) as any}
                         className="font-medium text-teal-700 hover:underline dark:text-teal-300"
                       >
                         {renderCell(c, row, refLabels, t)}

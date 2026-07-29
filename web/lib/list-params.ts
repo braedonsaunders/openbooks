@@ -109,6 +109,31 @@ export function mergeHref(
 }
 
 /**
+ * Open a URL-backed record drawer without losing the list state underneath it.
+ *
+ * `drawerReturn` is an explicit snapshot of the list URL before the selector is
+ * added. UrlDrawer consumes it on close, so every query-backed list control
+ * (search, filters, saved view, sort, and pagination) returns exactly as it was.
+ * Removing a stale drawerReturn first also keeps repeated record-to-record
+ * navigation from nesting return URLs.
+ */
+export function buildListDrawerHref(
+  base: string,
+  current: Search,
+  drawerParam: string,
+  drawerValue: string,
+): string {
+  const returnHref = mergeHref(base, current, {
+    [drawerParam]: undefined,
+    drawerReturn: undefined,
+  })
+  return mergeHref(base, current, {
+    [drawerParam]: drawerValue,
+    drawerReturn: returnHref,
+  })
+}
+
+/**
  * Build an export URL that carries the current list filters but drops
  * pagination params (export is always "all visible rows that match").
  *

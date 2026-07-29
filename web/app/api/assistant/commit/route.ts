@@ -86,6 +86,6 @@ export async function POST(req: Request) {
     ok: true,
     id: doc.id,
     documentNumber: doc.documentNumber,
-    href: `/journal/${doc.id}`,
+    href: `/journal?entry=${doc.id}`,
   });
 }

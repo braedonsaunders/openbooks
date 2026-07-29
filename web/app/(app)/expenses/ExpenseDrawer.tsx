@@ -2,7 +2,6 @@
 
 import { useMoney } from '@/components/money-provider'
 import { useEffect, useMemo, useRef, useState } from 'react'
-import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { useTranslations } from 'next-intl'
 import { toast } from 'sonner'
@@ -13,6 +12,7 @@ import { CustomFieldInputs, customFieldColumns, type CustomFieldDefClient } from
 import { CustomFieldInput } from '../../../components/custom-field-input'
 import { HeaderFields } from '../../../components/transaction-form/header-fields'
 import { DocTypeBadge, docTypeMeta } from '../../../components/doc-type-badge'
+import { JournalEntryLink } from '../../../components/journal-entry-link'
 import { PdfButton } from '../../../components/pdf-button'
 import { cmp } from '@openbooks/engine/src/money.ts'
 import { computeLineTaxes, type TaxComponentConfig } from '@openbooks/engine/src/tax.ts'
@@ -442,7 +442,7 @@ export function ExpenseDrawer({
               ) : null}
               {doc.entry_id ? (
                 <Button variant="outline" asChild>
-                  <Link href={`/journal/${doc.entry_id}`}>{t('drawer.viewGlImpact')}</Link>
+                  <JournalEntryLink entryId={doc.entry_id}>{t('drawer.viewGlImpact')}</JournalEntryLink>
                 </Button>
               ) : null}
               {doc.status !== 'voided' && canSubmit ? (

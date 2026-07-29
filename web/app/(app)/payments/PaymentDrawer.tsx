@@ -2,7 +2,6 @@
 
 import { useMoney } from '@/components/money-provider'
 import { useEffect, useMemo, useRef, useState } from 'react'
-import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { useTranslations } from 'next-intl'
 import { toast } from 'sonner'
@@ -10,6 +9,7 @@ import { Wand2 } from 'lucide-react'
 import { Badge, Button, FieldLabel, Input, Label, SearchSelect } from '@openbooks/ui'
 import { TransactionDrawer } from '../../../components/transaction-drawer'
 import { DocTypeBadge, docTypeMeta } from '../../../components/doc-type-badge'
+import { JournalEntryLink } from '../../../components/journal-entry-link'
 import { PdfButton } from '../../../components/pdf-button'
 import { SendButton } from '../../../components/send-button'
 import { confirmDialog } from '../../../lib/confirm'
@@ -497,7 +497,7 @@ export function PaymentDrawer({
               ) : null}
               {doc.entry_id ? (
                 <Button variant="outline" asChild>
-                  <Link href={`/journal/${doc.entry_id}`}>{t('viewGlImpact')}</Link>
+                  <JournalEntryLink entryId={doc.entry_id}>{t('viewGlImpact')}</JournalEntryLink>
                 </Button>
               ) : null}
               {doc.status !== 'voided' ? (

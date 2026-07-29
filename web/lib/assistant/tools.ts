@@ -140,7 +140,7 @@ const accountRegisterTool: AssistantToolDef = {
   execute: async (raw, authz): Promise<ToolResult> => {
     const a = raw as { accountId: string; limit?: number };
     const limit = Math.min(a.limit ?? 25, 50);
-    const r = await accountRegister(authz.user.orgId, a.accountId, limit, 0);
+    const r = await accountRegister(authz.user.orgId, a.accountId, limit, 0, undefined, authz.allowedSubsidiaryIds);
     if (!r.account) return { ok: false, error: "account_not_found" };
     return {
       ok: true,

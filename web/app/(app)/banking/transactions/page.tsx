@@ -11,7 +11,7 @@ import { DateRangeFilter } from '../../../../components/date-range-filter'
 import { Pagination } from '../../../../components/pagination'
 import { SortTh } from '../../../../components/sortable-th'
 import { requirePermission, can } from '../../../../lib/authz'
-import { isUuid, parseListParams, pickString } from '../../../../lib/list-params'
+import { buildListDrawerHref, isUuid, parseListParams, pickString } from '../../../../lib/list-params'
 import {
   BANK_KINDS,
   DOC_KINDS,
@@ -253,7 +253,7 @@ export default async function BankingTransactions({
                 {txRows.rows.map((d: any) => (
                   <TableRow key={d.id}>
                     <TableCell>
-                      <Link href={`${basePath}?doc=${d.id}` as any} className="font-mono text-[13px] font-semibold text-teal-700 hover:underline dark:text-teal-300">
+                      <Link href={buildListDrawerHref(basePath, sp, 'doc', String(d.id)) as any} className="font-mono text-[13px] font-semibold text-teal-700 hover:underline dark:text-teal-300">
                         {d.document_number}
                       </Link>
                     </TableCell>

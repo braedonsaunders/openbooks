@@ -11,6 +11,7 @@ import { RelatedTransactionDrawerClient, type RelatedTransactionDrawerData } fro
 import { EntryFlyout } from '../app/(app)/reports/EntryFlyout'
 import { TxnLink } from '../app/(app)/reports/TxnLink'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '../app/(app)/reports/ReportTable'
+import { AccountRegisterDrawer } from './account-register-drawer'
 
 function hrefWithout(pathname: string, query: string, keys: string[]): string {
   const params = new URLSearchParams(query)
@@ -30,7 +31,6 @@ export function GlobalReportDrawerHost() {
   const page = Math.max(1, Number(params.get('reportDrillPage') ?? 1) || 1)
   const recordId = params.get('reportRecord')
   const recordKind = params.get('reportRecordKind')
-  const reporting = pathname.startsWith('/reports') || pathname.startsWith('/knowledge/views')
   const [data, setData] = useState<ReportDrillResponse | null>(null)
   const [loadedTarget, setLoadedTarget] = useState<string | null>(null)
   const [recordData, setRecordData] = useState<RelatedTransactionDrawerData | null>(null)
@@ -175,8 +175,9 @@ export function GlobalReportDrawerHost() {
           </div>
         )}
       </UrlDrawer>
-      {reporting ? <EntryFlyout /> : null}
+      <AccountRegisterDrawer />
       {recordData && loadedRecord === `${recordKind}:${recordId}` ? <RelatedTransactionDrawerClient data={recordData} /> : null}
+      <EntryFlyout />
     </>
   )
 }

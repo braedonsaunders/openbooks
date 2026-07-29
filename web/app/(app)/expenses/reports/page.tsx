@@ -9,7 +9,7 @@ import { SearchInput } from '../../../../components/search-input'
 import { FilterChips } from '../../../../components/filter-bar'
 import { Pagination } from '../../../../components/pagination'
 import { SortTh } from '../../../../components/sortable-th'
-import { parseListParams, pickString } from '../../../../lib/list-params'
+import { buildListDrawerHref, parseListParams, pickString } from '../../../../lib/list-params'
 import { can, requirePermission } from '../../../../lib/authz'
 import { ExpenseActions } from '../ExpenseActions'
 import { ExpenseDrawer } from '../ExpenseDrawer'
@@ -203,7 +203,7 @@ export default async function Expenses({
               {reports.rows.map((r: any) => (
                 <TableRow key={r.id}>
                   <TableCell className="font-mono text-[13px] font-semibold">
-                    <Link href={`/expenses/reports?expense=${r.id}`} className="text-teal-700 hover:underline dark:text-teal-300">
+                    <Link href={buildListDrawerHref('/expenses/reports', sp, 'expense', String(r.id)) as any} className="text-teal-700 hover:underline dark:text-teal-300">
                       {r.document_number}
                     </Link>
                   </TableCell>

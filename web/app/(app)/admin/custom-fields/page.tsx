@@ -8,7 +8,7 @@ import { ListPageLayout } from '../../../../components/page-layout'
 import { SearchInput } from '../../../../components/search-input'
 import { FilterChips } from '../../../../components/filter-bar'
 import { Pagination } from '../../../../components/pagination'
-import { parseListParams, pickString } from '../../../../lib/list-params'
+import { buildListDrawerHref, parseListParams, pickString } from '../../../../lib/list-params'
 import { FieldDrawer, NewFieldButton } from './FieldDrawer'
 
 export const dynamic = 'force-dynamic'
@@ -103,7 +103,7 @@ export default async function CustomFields({
           {defs.rows.map((d: any) => (
             <TableRow key={d.id}>
               <TableCell>
-                <Link href={`/admin/custom-fields?field=${d.id}`} className="font-medium text-teal-700 hover:underline dark:text-teal-300">
+                <Link href={buildListDrawerHref('/admin/custom-fields', sp, 'field', String(d.id)) as any} className="font-medium text-teal-700 hover:underline dark:text-teal-300">
                   {d.label}
                 </Link>
               </TableCell>

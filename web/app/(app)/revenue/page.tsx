@@ -20,7 +20,7 @@ import { FilterChips } from '../../../components/filter-bar'
 import { Pagination } from '../../../components/pagination'
 import { SortTh } from '../../../components/sortable-th'
 import { can, requirePermission } from '../../../lib/authz'
-import { isUuid, parseListParams, pickString } from '../../../lib/list-params'
+import { buildListDrawerHref, isUuid, parseListParams, pickString } from '../../../lib/list-params'
 import { RunRecognitionButton } from './RunRecognitionButton'
 import { ContractDrawer } from './ContractDrawer'
 import { loadContract } from './_lib'
@@ -172,7 +172,7 @@ export default async function Revenue({
                 return (
                   <TableRow key={c.id}>
                     <TableCell className="font-mono text-[13px]">
-                      <Link href={`/revenue?contract=${c.id}`} className="text-teal-700 hover:underline dark:text-teal-300">
+                      <Link href={buildListDrawerHref('/revenue', sp, 'contract', String(c.id)) as any} className="text-teal-700 hover:underline dark:text-teal-300">
                         {c.contract_number}
                       </Link>
                     </TableCell>

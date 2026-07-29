@@ -21,7 +21,7 @@ import { FilterChips } from '../../../../components/filter-bar'
 import { ShowInactivesToggle } from '../../../../components/show-inactives-toggle'
 import { Pagination } from '../../../../components/pagination'
 import { SortTh } from '../../../../components/sortable-th'
-import { parseListParams, pickString } from '../../../../lib/list-params'
+import { buildListDrawerHref, parseListParams, pickString } from '../../../../lib/list-params'
 import { dateTime } from '../../../../lib/format'
 import { can, requirePermission } from '../../../../lib/authz'
 import {
@@ -262,7 +262,7 @@ export default async function RecordModule({
                 <TableRow key={r.id}>
                   <TableCell className="font-mono text-[13px] font-semibold">
                     <Link
-                      href={`${basePath}?rec=${r.id}` as any}
+                      href={buildListDrawerHref(basePath, sp, 'rec', String(r.id)) as any}
                       className="text-teal-700 hover:underline dark:text-teal-300"
                     >
                       {r.record_number}

@@ -6,7 +6,7 @@ import { Badge, PageHeader, Table, TableBody, TableCell, TableHead, TableHeader,
 import { ListPageLayout } from '../../../../components/page-layout'
 import { SearchInput } from '../../../../components/search-input'
 import { Pagination } from '../../../../components/pagination'
-import { isUuid, parseListParams } from '../../../../lib/list-params'
+import { buildListDrawerHref, isUuid, parseListParams } from '../../../../lib/list-params'
 import { requirePermission } from '../../../../lib/authz'
 import { dateTime } from '../../../../lib/format'
 import { NewKeyButton, KeyDrawer } from './KeyDrawer'
@@ -95,7 +95,7 @@ export default async function ApiKeysPage({
           {keys.rows.map((k: any) => (
             <TableRow key={k.id}>
               <TableCell>
-                <Link href={`/admin/api-keys?key=${k.id}`} className="font-medium text-teal-700 hover:underline dark:text-teal-300">
+                <Link href={buildListDrawerHref('/admin/api-keys', sp, 'key', String(k.id)) as any} className="font-medium text-teal-700 hover:underline dark:text-teal-300">
                   {k.name}
                 </Link>
               </TableCell>

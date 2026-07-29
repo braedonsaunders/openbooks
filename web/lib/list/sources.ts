@@ -108,7 +108,7 @@ const SOURCES: Record<string, DocListSource> = {
     extraSelect: sql`d.party_id, ${PAYMENT_BANK_ID_EXPR} as bank_account_id`,
     links: {
       party_name: partyLink('vendor'),
-      bank_account: (row: any) => (row.bank_account_id ? `/accounts/${row.bank_account_id}` : null),
+      bank_account: (row: any) => (row.bank_account_id ? `/accounts?accountRegister=${row.bank_account_id}` : null),
     },
   },
   customer_payment: {
@@ -121,7 +121,7 @@ const SOURCES: Record<string, DocListSource> = {
     extraSelect: sql`d.party_id, ${PAYMENT_BANK_ID_EXPR} as bank_account_id`,
     links: {
       party_name: partyLink('customer'),
-      bank_account: (row: any) => (row.bank_account_id ? `/accounts/${row.bank_account_id}` : null),
+      bank_account: (row: any) => (row.bank_account_id ? `/accounts?accountRegister=${row.bank_account_id}` : null),
     },
   },
   // Orders — single kind, non-posting; edited via OrderDrawer (drawerParam set

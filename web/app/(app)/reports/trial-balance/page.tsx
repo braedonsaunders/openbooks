@@ -13,6 +13,7 @@ import { ExportMenu } from '../ExportMenu'
 import { SaveViewButton } from '../SaveViewButton'
 import { PaperView, type PaperCell } from '../PaperView'
 import type { ReportDrillTarget } from '../../../../lib/report-drill'
+import { mergeHref } from '../../../../lib/list-params'
 
 export const dynamic = 'force-dynamic'
 
@@ -35,7 +36,15 @@ export default async function TrialBalance({
   // The unified report shape: every value drills to the account register as of
   // the report date (five-cell rows share one href).
   const dataRows: PaperCell[][] = rows.map((r) => [r.number, r.name, r.debits, r.credits, r.balance])
-  const links = rows.map((r) => [`/accounts/${r.id}?to=${date}`, `/accounts/${r.id}?to=${date}`, null, null, null])
+  const links = rows.map((r) => {
+    const registerHref = mergeHref('/reports/trial-balance', sp, {
+      accountRegister: r.id,
+      accountRegisterPage: undefined,
+      accountRegisterFrom: undefined,
+      accountRegisterTo: date,
+    })
+    return [registerHref, registerHref, null, null, null]
+  })
   const drills: (ReportDrillTarget | null)[][] = rows.map((r) => {
     const target: ReportDrillTarget = {
       kind: 'ledger',

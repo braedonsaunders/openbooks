@@ -14,7 +14,7 @@ import { SortTh } from './sortable-th'
 import { ViewsMenu } from './views-menu'
 import { DocTypeBadge } from './doc-type-badge'
 import { docTypeMeta } from './doc-type-badge'
-import { parseListParams, pickString } from '../lib/list-params'
+import { buildListDrawerHref, parseListParams, pickString } from '../lib/list-params'
 import { allowedSubsidiaryIds } from '../lib/subsidiaries'
 import { loadFieldDefs } from '../lib/custom-fields'
 import { resolveListView } from '../lib/customization/resolve'
@@ -195,6 +195,9 @@ export async function RecordListView({
     }))
   }
 
+  const openHref = (id: string) =>
+    buildListDrawerHref(basePath, sp, source.drawerParam, id)
+
   const cell = (row: any, c: ListColDesc) => {
     const v = row[c.key]
     // Entity drill-through columns (party → vendor/customer/employee, funding
@@ -229,7 +232,7 @@ export async function RecordListView({
             <div className="flex items-center gap-2">
               {source.multiKind ? <DocTypeBadge kind={row.kind} /> : null}
               <Link
-                href={`${basePath}?${source.drawerParam}=${row.id}` as any}
+                href={openHref(String(row.id)) as any}
                 className="text-teal-700 hover:underline dark:text-teal-300"
               >
                 {String(v ?? '')}
@@ -262,7 +265,7 @@ export async function RecordListView({
           <TableCell key={c.key} className="w-px whitespace-nowrap px-2 text-center" style={{ width: 44 }}>
             {renderRowActions ? renderRowActions(row) : (
               <Link
-                href={`${basePath}?${source.drawerParam}=${row.id}` as any}
+                href={openHref(String(row.id)) as any}
                 className="inline-flex h-7 w-7 items-center justify-center rounded-md text-slate-500 transition-colors hover:bg-slate-100 hover:text-teal-700 dark:text-slate-400 dark:hover:bg-slate-800 dark:hover:text-teal-300"
                 aria-label={tCommon('actions.open')}
                 title={tCommon('actions.open')}

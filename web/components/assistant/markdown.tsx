@@ -3,7 +3,7 @@
 // Markdown renderer for assistant messages, ported from beaconhs. Sanitized
 // (no raw HTML), GFM tables + lists + code, styled with the app's prose tokens
 // incl. dark mode. Relative links (the model deep-links records like
-// /journal/<id>) open in the same tab; external links open in a new one.
+// /journal?entry=<id>) open in the same tab; external links open in a new one.
 
 import Markdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'

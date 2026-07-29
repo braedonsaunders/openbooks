@@ -2,7 +2,7 @@
 
 import Link from 'next/link'
 import { usePathname, useSearchParams } from 'next/navigation'
-import { moduleDrawerHref } from '../../../lib/txn-links'
+import { transactionDrawerHref } from '../../../lib/txn-links'
 
 /**
  * Opens a transaction in its REAL native flyout — never a read-only overlay,
@@ -14,9 +14,7 @@ import { moduleDrawerHref } from '../../../lib/txn-links'
  *   with the org's custom form applied). This works everywhere — reports,
  *   analytics drills, the cash/AP/AR cockpit flyouts.
  * - System-generated GL entries with no document (depreciation, closing, fx)
- *   open the read-only EntryFlyout in place on report surfaces (where it is
- *   mounted); elsewhere they fall back to the Journal module's ledger view
- *   (`/journal?txn=<entryId>`).
+ *   open the read-only EntryFlyout in place.
  */
 export function TxnLink({
   entryId,
@@ -33,28 +31,13 @@ export function TxnLink({
 }) {
   const pathname = usePathname() ?? '/'
   const current = useSearchParams()
-  const inReport = pathname.startsWith('/reports') || pathname.startsWith('/knowledge/views')
-  const hasDoc = !!(docKind && docId)
-  let href = moduleDrawerHref(docKind, docId) ?? `/journal?txn=${entryId}`
-  if (hasDoc || inReport) {
-    const params = new URLSearchParams(current.toString())
-    params.delete('reportRecord')
-    params.delete('reportRecordKind')
-    params.delete('txn')
-    params.delete('drawerReturn')
-    params.delete('form')
-    params.delete('transactionTab')
-    const baseQuery = params.toString()
-    const returnHref = baseQuery ? `${pathname}?${baseQuery}` : pathname
-    if (hasDoc) {
-      params.set('reportRecord', docId!)
-      params.set('reportRecordKind', docKind!)
-      params.set('drawerReturn', returnHref)
-    } else {
-      params.set('txn', entryId)
-    }
-    href = `${pathname}?${params}`
-  }
+  const href = transactionDrawerHref({
+    pathname,
+    query: current.toString(),
+    entryId,
+    docKind,
+    docId,
+  })
   return (
     <Link href={href as never} className={className} scroll={false}>
       {children}

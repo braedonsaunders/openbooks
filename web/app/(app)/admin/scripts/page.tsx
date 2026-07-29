@@ -7,7 +7,7 @@ import { ListPageLayout } from '../../../../components/page-layout'
 import { SearchInput } from '../../../../components/search-input'
 import { FilterChips } from '../../../../components/filter-bar'
 import { Pagination } from '../../../../components/pagination'
-import { parseListParams, pickString } from '../../../../lib/list-params'
+import { buildListDrawerHref, parseListParams, pickString } from '../../../../lib/list-params'
 import { requirePermission } from '../../../../lib/authz'
 import { dateTime } from '../../../../lib/format'
 import { BUILT_IN_SCRIPT_KINDS, customRecordTypeKey, isCustomRecordKind } from '../../../../lib/script-kinds'
@@ -125,7 +125,7 @@ export default async function Scripts({
           {scripts.rows.map((s: any) => (
             <TableRow key={s.id}>
               <TableCell>
-                <Link href={`/admin/scripts?script=${s.id}`} className="font-medium text-teal-700 hover:underline dark:text-teal-300">
+                <Link href={buildListDrawerHref('/admin/scripts', sp, 'script', String(s.id)) as any} className="font-medium text-teal-700 hover:underline dark:text-teal-300">
                   {s.name}
                 </Link>
               </TableCell>
