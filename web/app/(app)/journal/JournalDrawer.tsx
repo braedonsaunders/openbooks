@@ -15,6 +15,10 @@ import { DocTypeBadge, docTypeMeta } from '../../../components/doc-type-badge'
 import { JournalEntryLink } from '../../../components/journal-entry-link'
 import { PdfButton } from '../../../components/pdf-button'
 import { confirmDialog } from '../../../lib/confirm'
+import { promptDialog } from '../../../lib/prompt'
+import { FlowManualButtons } from '../../../components/flow-manual-buttons'
+import { ApprovalActions } from '../../../components/approval-actions'
+import { ApprovalHistory } from '../../../components/approval-history'
 import {
   customFieldDefKey,
   isCustomFieldKey,
@@ -58,6 +62,8 @@ interface JournalPayload {
 
 const STATUS_VARIANT: Record<string, 'success' | 'secondary' | 'warning' | 'outline'> = {
   posted: 'success',
+  approved: 'success',
+  pending_approval: 'warning',
   draft: 'secondary',
   voided: 'outline',
 }
@@ -65,6 +71,8 @@ const STATUS_VARIANT: Record<string, 'success' | 'secondary' | 'warning' | 'outl
 // documents.status enum → common.status.* key (unknown values render verbatim).
 const STATUS_KEYS: Record<string, string> = {
   draft: 'draft',
+  approved: 'approved',
+  pending_approval: 'pendingApproval',
   posted: 'posted',
   voided: 'voided',
   reversed: 'reversed',
@@ -141,7 +149,7 @@ export function JournalDrawer({
   // journals are both editable — saving a posted journal re-materializes its
   // GL-Impact projection (the server blocks only GL changes into a closed
   // period). voided journals are read-only. Save is EXPLICIT — no autosave.
-  const canEditStatus = doc.status === 'draft' || doc.status === 'posted'
+  const canEditStatus = doc.status === 'draft'
   const [mode, setMode] = useState<'view' | 'edit'>('view')
   const editable = mode === 'edit' && canEditStatus
 
@@ -285,19 +293,17 @@ export function JournalDrawer({
     })
     const data = await res.json()
     if (!res.ok) toast.error(data.error ?? t('postFailed'))
+    else if (data.pendingApproval) toast.success(tc('actions.submitForApproval'))
     else toast.success(t('postedToast'))
     setBusy(false)
     router.refresh()
   }
 
   async function remove() {
-    const posted = doc.status === 'posted'
     if (
       !(await confirmDialog({
         title: t('deleteTitle'),
-        message: posted
-          ? t('deletePostedBody')
-          : t('deleteDraftBody'),
+        message: t('deleteDraftBody'),
         confirmLabel: tc('actions.delete'),
         tone: 'danger',
       }))
@@ -313,6 +319,28 @@ export function JournalDrawer({
       toast.error((await res.json()).error ?? t('deleteFailed'))
       setBusy(false)
     }
+  }
+
+  async function voidJournal() {
+    const reason = await promptDialog({
+      title: tc('amendment.voidTitle'),
+      label: tc('amendment.reason'),
+      placeholder: tc('amendment.voidPlaceholder'),
+      confirmLabel: tc('actions.void'),
+    })
+    if (!reason) return
+    setBusy(true)
+    const res = await fetch(`/api/documents/${doc.id}/void`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ reason }),
+    })
+    const data = await res.json().catch(() => ({}))
+    if (!res.ok) toast.error(data.error ?? t('postFailed'))
+    else if (data.status === 'pending_approval') toast.success(tc('actions.submitForApproval'))
+    else toast.success(tc('status.voided'))
+    setBusy(false)
+    router.refresh()
   }
 
   // -- grid columns ----------------------------------------------------------
@@ -451,7 +479,9 @@ export function JournalDrawer({
           ) : (
             <>
               <PdfButton recordType="journal" recordId={String(doc.id)} />
-              {isDraft ? (
+              <FlowManualButtons subjectKind="journal" subjectId={String(doc.id)} />
+              <ApprovalActions subjectKind="journal" subjectId={String(doc.id)} />
+              {isDraft || doc.status === 'approved' ? (
                 <Button disabled={busy || !balanced || dirty} onClick={post}>
                   {tc('actions.post')}
                 </Button>
@@ -461,7 +491,12 @@ export function JournalDrawer({
                   <JournalEntryLink entryId={doc.entry_id}>{t('viewGlImpact')}</JournalEntryLink>
                 </Button>
               ) : null}
-              {doc.status !== 'voided' ? (
+              {doc.status === 'approved' || doc.status === 'posted' ? (
+                <Button variant="ghost" disabled={busy} onClick={voidJournal} className="text-red-600 hover:bg-red-50 hover:text-red-700 dark:text-red-400 dark:hover:bg-red-950/40">
+                  {tc('actions.void')}
+                </Button>
+              ) : null}
+              {doc.status === 'draft' ? (
                 <Button variant="ghost" disabled={busy} onClick={remove} className="text-red-600 hover:bg-red-50 hover:text-red-700 dark:text-red-400 dark:hover:bg-red-950/40">
                   {tc('actions.delete')}
                 </Button>
@@ -470,6 +505,13 @@ export function JournalDrawer({
           )}
         </>
       }
+      detailTabs={[
+        {
+          key: 'approvals',
+          label: tc('approvalFlow.historyTitle'),
+          content: <ApprovalHistory subjectKind="journal" subjectId={String(doc.id)} />,
+        },
+      ]}
       footer={
         <div className="flex w-full items-center gap-3">
           <span

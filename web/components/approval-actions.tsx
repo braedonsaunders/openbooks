@@ -79,6 +79,7 @@ export function ApprovalActions({
       const my = state?.approvalState.myActions
       if (!my) return
       let comment: string | undefined
+      let signature: string | undefined
       if (decision === 'rejected') {
         const reason = await promptDialog({
           title: t('approvalFlow.rejectTitle'),
@@ -87,13 +88,21 @@ export function ApprovalActions({
         })
         if (!reason) return
         comment = reason
+      } else if (my.signatureRequired) {
+        const signed = await promptDialog({
+          title: t('approvalFlow.signTitle'),
+          label: t('approvalFlow.signLabel'),
+          confirmLabel: t('actions.approve'),
+        })
+        if (!signed?.trim()) return
+        signature = signed.trim()
       }
       if (!my.gateId) return
       setBusy(true)
       const res = await fetch('/api/flows/gates/decide', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ gateId: my.gateId, decision, comment }),
+        body: JSON.stringify({ gateId: my.gateId, decision, comment, signature }),
       })
       const data = await res.json().catch(() => ({}))
       if (res.status === 409) {

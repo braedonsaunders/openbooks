@@ -1,4 +1,4 @@
-import { eq } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 import { db, schema } from "../db.ts";
 import { runTriggerScripts, type ScriptContext } from "../scripting.ts";
 import { runRecordFlows } from "./run.ts";
@@ -12,10 +12,10 @@ import { runRecordFlows } from "./run.ts";
  * document goes `pending_approval` and its flow run id is returned.
  *
  * When no flow gates the record, `submitForApproval` reports `gated: false`
- * WITHOUT changing status, and leaves the "does this kind still require an
- * approval that was never configured?" decision to the caller (the web layer,
- * which knows each kind's direct-post / credit-memo policy). There is no
- * fallback approval engine — Flows is the only path.
+ * without changing lifecycle status. Standard transaction callers use
+ * `submitAndReleaseIfUngated`, which treats that result as "no tenant approval
+ * policy applies" and releases the record to approved. There is no fallback
+ * approval engine or per-transaction approval policy — Flows is the only path.
  */
 export interface SubmitResult {
   /** A flow produced approval gates; the document is now `pending_approval`. */
@@ -30,6 +30,11 @@ export interface SubmitResult {
   flowError: string | null;
 }
 
+export interface SubmissionReleaseResult extends SubmitResult {
+  /** No approval gate applied, so the engine released the record to approved. */
+  autoApproved: boolean;
+}
+
 export async function submitForApproval(
   _targetKind: string,
   targetId: string,
@@ -38,6 +43,20 @@ export async function submitForApproval(
   const [doc] = await db.select().from(schema.documents).where(eq(schema.documents.id, targetId));
   if (!doc) throw new Error("target document not found");
   if (doc.status !== "draft") throw new Error(`document is ${doc.status}, not draft`);
+  const blockedCorrection = (await db.execute(sql`
+    select source.document_number
+      from document_links link
+      join documents source on source.id = link.to_document_id
+     where link.from_document_id = ${targetId}
+       and link.link_type = 'reverses'
+       and source.status <> 'voided'
+     limit 1
+  `)) as unknown as { rows: { document_number: string }[] };
+  if (blockedCorrection.rows[0]) {
+    throw new Error(
+      `the correction cannot be submitted until ${blockedCorrection.rows[0].document_number}'s void is approved and completed`,
+    );
+  }
 
   // -- user scripts: before_submit (veto / mutate) ------------------------
   const [org] = await db.select().from(schema.orgs).where(eq(schema.orgs.id, doc.orgId));
@@ -71,8 +90,7 @@ export async function submitForApproval(
   // A flow that produced approval gates OWNS this submit: the document goes
   // pending_approval and the flow run id stands in for the request id (the
   // caller only round-trips it as an opaque string). A flow that matched but
-  // created no gates (pure automation) already ran its actions; the caller
-  // decides whether this kind may proceed without an approval.
+  // created no gates (pure automation) already ran its actions.
   const flowResult = await runRecordFlows({ kind: "on_submit" }, doc.kind, doc.id, {
     orgId: doc.orgId,
     userId: actorId ?? doc.createdBy,
@@ -80,7 +98,13 @@ export async function submitForApproval(
   if (flowResult.gatesCreated > 0) {
     await db
       .update(schema.documents)
-      .set({ status: "pending_approval" })
+      .set({
+        status: "pending_approval",
+        submittedBy: actorId ?? doc.createdBy,
+        submittedAt: new Date(),
+        updatedBy: actorId ?? doc.createdBy,
+        updatedAt: new Date(),
+      })
       .where(eq(schema.documents.id, targetId));
     const gatedRun = flowResult.runs.find((r) => r.gatesCreated > 0);
     return { gated: true, runId: gatedRun?.runId ?? flowResult.runs[0]!.runId, flowError: null };
@@ -94,5 +118,44 @@ export async function submitForApproval(
     return { gated: false, runId: null, flowError: reason };
   }
 
+  await db
+    .update(schema.documents)
+    .set({
+      submittedBy: actorId ?? doc.createdBy,
+      submittedAt: new Date(),
+      updatedBy: actorId ?? doc.createdBy,
+      updatedAt: new Date(),
+    })
+    .where(eq(schema.documents.id, targetId));
   return { gated: false, runId: null, flowError: null };
+}
+
+/**
+ * Standard transaction submission primitive. Configured on_submit gates pause
+ * the record; when none applies, the absence of a gate means no tenant approval
+ * policy applies and the engine releases it to approved. Posting permission is
+ * still enforced by the calling API.
+ */
+export async function submitAndReleaseIfUngated(
+  targetKind: string,
+  targetId: string,
+  actorId: string,
+): Promise<SubmissionReleaseResult> {
+  const result = await submitForApproval(targetKind, targetId, actorId);
+  if (result.gated || result.flowError) {
+    return { ...result, autoApproved: false };
+  }
+  const released = await db
+    .update(schema.documents)
+    .set({
+      status: "approved",
+      updatedBy: actorId,
+      updatedAt: new Date(),
+    })
+    .where(sql`${schema.documents.id} = ${targetId} and ${schema.documents.status} = 'draft'`)
+    .returning({ id: schema.documents.id });
+  if (released.length !== 1) {
+    throw new Error("document changed while submission was being released");
+  }
+  return { ...result, autoApproved: true };
 }

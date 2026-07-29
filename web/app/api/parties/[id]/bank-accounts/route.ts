@@ -31,6 +31,9 @@ type Body = {
   routing?: Record<string, string>
   /** Plaintext on input only — stored envelope-encrypted with a last-four echo. */
   accountNumber?: string
+  expectedUpdatedAt?: string
+  changeReason?: string
+  retirementReason?: string
 }
 
 function validateBody(body: Body, creating: boolean): string | null {
@@ -73,11 +76,11 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
     insert into party_bank_accounts
       (org_id, party_id, bank_name, country, currency, routing,
        account_number_encrypted, account_last_four, approval_status, is_active,
-       approved_at, approved_by, created_by)
+       approved_at, approved_by, submitted_by, submitted_at, created_by)
     values (${user.orgId}, ${partyId}, ${body.bankName?.trim() ?? null}, ${country},
             ${body.currency?.trim().toUpperCase() || null}, ${JSON.stringify(body.routing ?? {})}::jsonb,
             ${encryptAccountNumber(accountNumber)}, ${accountNumber.slice(-4)},
-            'pending', false, null, null, ${user.id})
+            'pending', false, null, null, ${user.id}, now(), ${user.id})
     returning id
   `)) as unknown as { rows: { id: string }[] }
   const accountId = inserted.rows[0]!.id
@@ -103,9 +106,10 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     return NextResponse.json({ error: 'bad ids' }, { status: 400 })
   }
   const existing = (await db.execute(sql`
-    select approval_status as "approvalStatus" from party_bank_accounts
+    select approval_status as "approvalStatus", updated_at as "updatedAt"
+      from party_bank_accounts
      where id = ${accountId} and party_id = ${partyId} and org_id = ${user.orgId}
-  `)) as unknown as { rows: { approvalStatus: string }[] }
+  `)) as unknown as { rows: { approvalStatus: string; updatedAt: Date }[] }
   if (existing.rows.length === 0) return NextResponse.json({ error: 'not found' }, { status: 404 })
 
   const body = (await req.json().catch(() => ({}))) as Body
@@ -115,12 +119,22 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
   if (changedFields.length === 0) {
     return NextResponse.json({ error: 'nothing to update' }, { status: 400 })
   }
+  const reason = body.changeReason?.trim() ?? ''
+  if (reason.length < 5 || reason.length > 500) {
+    return NextResponse.json({ error: 'a change reason between 5 and 500 characters is required' }, { status: 422 })
+  }
+  if (!body.expectedUpdatedAt || new Date(body.expectedUpdatedAt).getTime() !== new Date(existing.rows[0].updatedAt).getTime()) {
+    return NextResponse.json(
+      { error: 'these bank details changed after you opened them; reload and review the latest revision' },
+      { status: 409 },
+    )
+  }
 
   const accountNumber = body.accountNumber?.trim()
   const country = body.country === undefined ? undefined : normalizeCountryCode(body.country)
   // Any material edit re-enters approval: pending + inactive + approval
   // cleared (the source platform workflow's @OLDRECORD@ comparison, done natively).
-  await db.execute(sql`
+  const updated = (await db.execute(sql`
     update party_bank_accounts set
       bank_name = ${body.bankName !== undefined ? body.bankName?.trim() || null : sql`bank_name`},
       country = ${body.country !== undefined ? country : sql`country`},
@@ -129,8 +143,54 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
       account_number_encrypted = ${accountNumber ? encryptAccountNumber(accountNumber) : sql`account_number_encrypted`},
       account_last_four = ${accountNumber ? accountNumber.slice(-4) : sql`account_last_four`},
       approval_status = 'pending', is_active = false, approved_at = null, approved_by = null,
+      submitted_by = ${user.id}, submitted_at = now(),
       updated_at = now(), updated_by = ${user.id}
     where id = ${accountId}
+      and party_id = ${partyId}
+      and org_id = ${user.orgId}
+      and updated_at = ${existing.rows[0].updatedAt}
+      and retired_at is null
+    returning id
+  `)) as unknown as { rows: { id: string }[] }
+  if (!updated.rows[0]) {
+    return NextResponse.json(
+      { error: 'these bank details changed or were retired; reload and review the latest revision' },
+      { status: 409 },
+    )
+  }
+  const cancelledRuns = (await db.execute(sql`
+    update flow_gates
+       set status = 'cancelled', updated_at = now()
+     where org_id = ${user.orgId}
+       and subject_kind = ${BANK_ACCOUNT_SUBJECT_KIND}
+       and subject_id = ${accountId}
+       and status in ('pending', 'escalated')
+     returning run_id
+  `)) as unknown as { rows: { run_id: string }[] }
+  const runIds = [...new Set(cancelledRuns.rows.map((row) => row.run_id))]
+  if (runIds.length > 0) {
+    await db.execute(sql`
+      update flow_runs
+         set status = 'completed',
+             error = null,
+             finished_at = now()
+       where id = any(${`{${runIds.join(',')}}`}::uuid[])
+         and status = 'waiting'
+    `)
+  }
+  await db.execute(sql`
+    insert into audit_log
+      (org_id, table_name, row_id, action, changes, actor_id, request_id)
+    values (
+      ${user.orgId}, 'party_bank_accounts', ${accountId}, 'update',
+      ${JSON.stringify({
+        mode: 'bank_detail_material_change',
+        reason,
+        changedFields,
+        approvalStatus: 'pending',
+      })}::jsonb,
+      ${user.id}, 'ui'
+    )
   `)
 
   await runRecordFlows(
@@ -140,4 +200,76 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     { orgId: user.orgId, userId: user.id },
   )
   return NextResponse.json({ id: accountId, approvalStatus: 'pending', changedFields })
+}
+
+/** Retire approved or rejected bank details without destroying fraud evidence. */
+export async function DELETE(req: Request, { params }: { params: Promise<{ id: string }> }) {
+  const gate = await guardPermission('parties.manage')
+  if (gate instanceof NextResponse) return gate
+  const { user } = gate
+  const { id: partyId } = await params
+  const accountId = new URL(req.url).searchParams.get('accountId') ?? ''
+  if (!isUuid(partyId) || !isUuid(accountId)) {
+    return NextResponse.json({ error: 'bad ids' }, { status: 400 })
+  }
+  const body = (await req.json().catch(() => ({}))) as Body
+  const reason = body.retirementReason?.trim() ?? ''
+  if (reason.length < 5 || reason.length > 500) {
+    return NextResponse.json({ error: 'a retirement reason between 5 and 500 characters is required' }, { status: 422 })
+  }
+  if (!body.expectedUpdatedAt) {
+    return NextResponse.json({ error: 'the bank-detail revision is required; reload and try again' }, { status: 409 })
+  }
+  const dependencies = (await db.execute(sql`
+    select
+      exists (
+        select 1
+          from payment_instructions instruction
+         where instruction.org_id = ${user.orgId}
+           and instruction.payee_bank_account_id = ${accountId}
+           and instruction.status in ('pending', 'approved', 'generated', 'sent')
+      ) as in_flight_payment,
+      exists (
+        select 1
+          from payment_mandates mandate
+         where mandate.org_id = ${user.orgId}
+           and mandate.party_bank_account_id = ${accountId}
+           and mandate.status in ('pending', 'active', 'suspended')
+      ) as live_mandate
+  `)) as unknown as { rows: { in_flight_payment: boolean; live_mandate: boolean }[] }
+  if (dependencies.rows[0]?.in_flight_payment || dependencies.rows[0]?.live_mandate) {
+    return NextResponse.json(
+      { error: 'cancel in-flight payment instructions and revoke live mandates before retiring these bank details' },
+      { status: 422 },
+    )
+  }
+  const updated = (await db.execute(sql`
+    update party_bank_accounts
+       set is_active = false,
+           retired_at = now(),
+           retired_by = ${user.id},
+           retirement_reason = ${reason},
+           updated_at = now(),
+           updated_by = ${user.id}
+     where id = ${accountId} and party_id = ${partyId} and org_id = ${user.orgId}
+       and retired_at is null
+       and updated_at = ${body.expectedUpdatedAt}
+     returning id
+  `)) as unknown as { rows: { id: string }[] }
+  if (!updated.rows[0]) {
+    return NextResponse.json(
+      { error: 'these bank details changed or were already retired; reload and review the latest revision' },
+      { status: 409 },
+    )
+  }
+  await db.execute(sql`
+    insert into audit_log
+      (org_id, table_name, row_id, action, changes, actor_id, request_id)
+    values (
+      ${user.orgId}, 'party_bank_accounts', ${accountId}, 'update',
+      ${JSON.stringify({ mode: 'bank_detail_retired', reason })}::jsonb,
+      ${user.id}, 'ui'
+    )
+  `)
+  return NextResponse.json({ ok: true })
 }

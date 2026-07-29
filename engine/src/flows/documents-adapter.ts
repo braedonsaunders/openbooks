@@ -145,7 +145,7 @@ export function createDocumentsFlowAdapter(kind: string): FlowSubjectAdapter {
       return {
         values,
         rows: { lines: lines as unknown as Array<Record<string, unknown>> },
-        submitterUserId: doc.createdBy ?? null,
+        submitterUserId: doc.submittedBy ?? doc.createdBy ?? null,
       };
     },
 
@@ -190,16 +190,40 @@ export function createDocumentsFlowAdapter(kind: string): FlowSubjectAdapter {
       subjectId: string,
       outcome: "approved" | "rejected",
       ctx: FlowExecCtx,
+      detail?: { comment?: string | null },
     ): Promise<void> {
       // Deterministic, engine-owned release — independent of any authored
       // change_status node. Only acts while the record is awaiting approval, so
       // it is idempotent and never fights a status a later action set.
       const doc = await loadDoc(subjectId);
+      if (
+        doc?.voidRequestedAt &&
+        (doc.status === "posted" || doc.status === "approved")
+      ) {
+        const { completeRequestedDocumentVoid, rejectRequestedDocumentVoid } =
+          await import("../document-void.ts");
+        if (outcome === "approved") {
+          await completeRequestedDocumentVoid(subjectId, ctx.orgId);
+        } else {
+          await rejectRequestedDocumentVoid(
+            subjectId,
+            ctx.orgId,
+            ctx.userId ?? null,
+            detail?.comment ?? null,
+          );
+        }
+        return;
+      }
       if (!doc || doc.status !== "pending_approval") return;
       const to = outcome === "approved" ? "approved" : "draft";
       await db
         .update(schema.documents)
-        .set({ status: to as DocRow["status"], updatedBy: ctx.userId ?? null, updatedAt: new Date() })
+        .set({
+          status: to as DocRow["status"],
+          ...(outcome === "rejected" ? { submittedBy: null, submittedAt: null } : {}),
+          updatedBy: ctx.userId ?? null,
+          updatedAt: new Date(),
+        })
         .where(and(eq(schema.documents.id, subjectId), eq(schema.documents.orgId, ctx.orgId)));
     },
 

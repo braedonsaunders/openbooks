@@ -41,6 +41,12 @@ export function lintFlowGraphForSubject(
   const errors = lintAutomationGraph(parsed.data, profileFieldIds(profile), profile);
 
   if (DOCUMENT_FLOW_KINDS.includes(subjectKind)) {
+    const outgoing = new Map<string, string[]>();
+    for (const edge of parsed.data.edges) {
+      const targets = outgoing.get(edge.source) ?? [];
+      targets.push(edge.target);
+      outgoing.set(edge.source, targets);
+    }
     for (const node of parsed.data.nodes) {
       if (
         node.data.kind === "action" &&
@@ -51,6 +57,29 @@ export function lintFlowGraphForSubject(
           `node "${node.id}": change_status to "${node.data.action.to}" is not allowed — ` +
             `document approval release is engine-enforced; remove this node`,
         );
+      }
+      if (
+        node.data.kind === "trigger" &&
+        node.data.trigger.trigger === "before_post"
+      ) {
+        const reachable = new Set<string>();
+        const queue = [...(outgoing.get(node.id) ?? [])];
+        while (queue.length > 0) {
+          const id = queue.shift()!;
+          if (reachable.has(id)) continue;
+          reachable.add(id);
+          queue.push(...(outgoing.get(id) ?? []));
+        }
+        const gateNode = parsed.data.nodes.find(
+          (candidate) =>
+            reachable.has(candidate.id) && candidate.data.kind === "gate",
+        );
+        if (gateNode) {
+          errors.push(
+            `node "${gateNode.id}": before_post cannot create approval gates — ` +
+              `configure posting approval on on_submit`,
+          );
+        }
       }
     }
   }

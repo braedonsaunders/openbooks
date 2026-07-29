@@ -20,19 +20,19 @@ const before: TransactionAuditSnapshot = {
   },
 };
 
-test("posted amendment evidence retains complete before and after snapshots", () => {
+test("controlled void evidence retains complete before and after snapshots", () => {
   const after: TransactionAuditSnapshot = {
     ...before,
     document: { id: "doc-1", total: "15.0000" },
   };
   assert.deepEqual(
     buildTransactionAuditChanges({
-      mode: "posted_amendment",
+      mode: "transaction_void",
       source: "ui",
       before,
       after,
     }),
-    { mode: "posted_amendment", source: "ui", before, after },
+    { mode: "transaction_void", source: "ui", before, after },
   );
 });
 

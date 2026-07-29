@@ -6,7 +6,7 @@ import { db } from "./db.ts";
 import { toUnits } from "./money.ts";
 import { postDocument } from "./posting.ts";
 import { applyInventoryIssuesForInvoice, applyInventoryReceiptsForBill, getOnHand } from "./inventory.ts";
-import { createObligationsFromInvoice, runRevenueRecognition } from "./revenue-recognition.ts";
+import { runRevenueRecognition } from "./revenue-recognition.ts";
 import { createScratchOrg, dropScratchOrg, type ScratchOrg } from "./test-fixtures.ts";
 
 const DB = !!process.env.OPENBOOKS_DB_URL;
@@ -44,7 +44,7 @@ async function draftDoc(
                            status, subtotal, tax_total, total, project_id, location_id,
                            is_final_invoice, custom, extra_dims)
     values (${docId}, ${org.orgId}, ${kind}, ${number}, ${line.partyId ?? null}, ${org.subsidiaryId}, ${org.date}, ${org.date}, 'CAD', 1,
-            'draft', ${line.amount}, '0', ${line.amount}, ${line.documentProjectId ?? null},
+            'approved', ${line.amount}, '0', ${line.amount}, ${line.documentProjectId ?? null},
             ${line.documentLocationId ?? null}, false, '{}'::jsonb, '{}'::jsonb)`);
   await db.execute(sql`
     insert into document_lines (id, org_id, document_id, line_number, item_id, account_id, quantity, unit_price, amount, tax_amount,
@@ -128,8 +128,15 @@ test("document posting drives inventory receipts, COGS, and revenue recognition"
     // Invoice posted to DEFERRED revenue (item carries a recognition rule).
     assert.equal(toUnits(await glBalance(org.orgId, org.accounts.deferred)), toUnits("-1200"));
 
-    const created = await createObligationsFromInvoice(subId, org.orgId, null);
-    assert.equal(created.created, 1);
+    const obligations = (await db.execute(sql`
+      select count(*)::int as n
+        from performance_obligations
+       where org_id = ${org.orgId}
+         and document_line_id in (
+           select id from document_lines where document_id = ${subId}
+         )
+    `)) as unknown as { rows: { n: number }[] };
+    assert.equal(obligations.rows[0]?.n, 1);
 
     // Only July has an accounting period in the fixture → one $100 schedule line.
     const concurrentRuns = await Promise.all([
@@ -191,17 +198,21 @@ test("document posting drives inventory receipts, COGS, and revenue recognition"
       lineLocationId: overrideLocationId,
     });
     await postDocument(overrideInvoiceId, deps);
-    const overrideCreated = await createObligationsFromInvoice(
-      overrideInvoiceId,
-      org.orgId,
-      null,
-    );
-    assert.equal(overrideCreated.created, 1);
+    const overrideObligation = (await db.execute(sql`
+      select id
+        from performance_obligations
+       where org_id = ${org.orgId}
+         and document_line_id in (
+           select id from document_lines where document_id = ${overrideInvoiceId}
+         )
+       limit 1
+    `)) as unknown as { rows: { id: string }[] };
+    assert.ok(overrideObligation.rows[0]?.id);
     const overrideRun = await runRevenueRecognition(
       org.orgId,
       "2026-07-31",
       null,
-      overrideCreated.obligationIds[0],
+      overrideObligation.rows[0]!.id,
     );
     assert.equal(overrideRun.posted, 1);
     const overrideDimensions = (await db.execute(sql`
@@ -209,7 +220,7 @@ test("document posting drives inventory receipts, COGS, and revenue recognition"
         from recognition_schedule_lines rsl
         join recognition_schedules s on s.id = rsl.schedule_id
         join journal_lines jl on jl.entry_id = rsl.journal_entry_id
-       where s.obligation_id = ${overrideCreated.obligationIds[0]}`)) as unknown as {
+       where s.obligation_id = ${overrideObligation.rows[0]!.id}`)) as unknown as {
       rows: { project_id: string | null; location_id: string | null }[];
     };
     assert.deepEqual(overrideDimensions.rows, [{

@@ -4,6 +4,7 @@ import { add, mul, mulRatio, neg, toUnits } from "./money.ts";
 import { computeLineTaxes } from "./tax.ts";
 import { loadTaxComponentConfig, persistLineTaxComponents } from "./tax-persist.ts";
 import { postDocument, type PostingDeps } from "./posting.ts";
+import { submitAndReleaseIfUngated } from "./flows/submit.ts";
 
 /**
  * Subscription billing engine. Each active subscription is billed when its
@@ -202,8 +203,18 @@ async function createSubscriptionInvoice(
 
   let posted = false;
   if (spec.autoPost) {
-    await postDocument(invoiceId, await controlDeps(spec.orgId));
-    posted = true;
+    const submission = await submitAndReleaseIfUngated(
+      "customer_invoice",
+      invoiceId,
+      spec.actorId,
+    );
+    if (submission.flowError) {
+      throw new SubscriptionError(`approval could not be routed: ${submission.flowError}`);
+    }
+    if (!submission.gated) {
+      await postDocument(invoiceId, await controlDeps(spec.orgId));
+      posted = true;
+    }
   }
   return { invoiceId, documentNumber, posted, total };
 }

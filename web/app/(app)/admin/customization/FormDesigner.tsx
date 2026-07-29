@@ -271,6 +271,7 @@ export function FormDesigner({
       edit: 'common.actions.edit',
       submit: 'common.actions.submitForApproval',
       post: 'common.actions.post',
+      void: 'common.actions.void',
       gl_impact: 'common.actions.glImpact',
       delete: 'common.actions.delete',
     }

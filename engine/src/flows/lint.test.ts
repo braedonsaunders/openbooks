@@ -60,3 +60,16 @@ test("accepts a gate-only document approval flow (engine releases it)", () => {
   const res = lintFlowGraphForSubject("vendor_bill", g);
   assert.equal(res.ok, true, res.ok ? "" : res.errors.join("; "));
 });
+
+test("rejects an approval gate reachable from before_post", () => {
+  const g = graph(
+    [
+      { id: "t", position: { x: 0, y: 0 }, data: { kind: "trigger", trigger: { trigger: "before_post" } } },
+      { id: "g", position: { x: 1, y: 0 }, data: gate },
+    ],
+    [{ id: "e1", source: "t", target: "g", sourceHandle: "next" }],
+  );
+  const res = lintFlowGraphForSubject("vendor_bill", g);
+  assert.equal(res.ok, false);
+  assert.ok(res.errors.some((error) => /before_post.*on_submit/i.test(error)));
+});

@@ -27,7 +27,7 @@ test("cross-currency payment, dual-amount application, realized FX, evidence, an
       insert into documents
         (id, org_id, kind, status, document_number, subsidiary_id, party_id,
          document_date, currency, fx_rate, subtotal, tax_total, total, created_by)
-      values (${invoiceId}, ${org.orgId}, 'customer_invoice', 'draft', 'INV-FX-1',
+      values (${invoiceId}, ${org.orgId}, 'customer_invoice', 'approved', 'INV-FX-1',
               ${org.subsidiaryId}, ${org.customerId}, ${org.date}, 'EUR', '1.2',
               '100', '0', '100', ${userId})`);
     await db.execute(sql`
@@ -64,6 +64,11 @@ test("cross-currency payment, dual-amount application, realized FX, evidence, an
       }],
       bankAccountId: org.accounts.bank,
     }, userId);
+    await db.execute(sql`
+      update documents
+         set status = 'approved', submitted_by = ${userId}, submitted_at = now()
+       where id = ${payment.id}
+    `);
 
     // A missing realized-FX account must roll back the payment itself, not
     // leave a posted-but-unapplied transaction behind.
@@ -75,7 +80,7 @@ test("cross-currency payment, dual-amount application, realized FX, evidence, an
              (select count(*) from journal_entries where source_document_id = ${payment.id})::int as entries
         from documents where id = ${payment.id}
     `)) as unknown as { rows: { status: string; posted_entry_id: string | null; entries: number }[] };
-    assert.deepEqual(afterFailure.rows[0], { status: "draft", posted_entry_id: null, entries: 0 });
+    assert.deepEqual(afterFailure.rows[0], { status: "approved", posted_entry_id: null, entries: 0 });
 
     await db.execute(sql`
       update orgs set settings = jsonb_set(settings, '{controlAccounts,fxRealizedGainLoss}', to_jsonb(${org.accounts.fxGainLoss}::text), true)
@@ -118,7 +123,7 @@ test("cross-currency payment, dual-amount application, realized FX, evidence, an
     });
 
     const fxEntryId = evidence.rows[0]!.fx_gain_loss_entry_id;
-    const reversalId = await reversePaymentForReturn(payment.id, org.orgId, "NSF");
+    const reversalId = await reversePaymentForReturn(payment.id, org.orgId, "NSF", userId, org.date);
     assert.ok(reversalId);
     const reversed = (await db.execute(sql`
       select

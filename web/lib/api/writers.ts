@@ -3,7 +3,7 @@ import { sql } from "drizzle-orm";
 import { db } from "@openbooks/engine/src/db.ts";
 import { runTriggerScripts } from "@openbooks/engine/src/scripting.ts";
 import { postDocument, PostingError } from "@openbooks/engine/src/posting.ts";
-import { submitForApproval } from "@openbooks/engine/src/flows/index.ts";
+import { submitAndReleaseIfUngated } from "@openbooks/engine/src/flows/index.ts";
 import { deleteDocument, DeleteError } from "@openbooks/engine/src/document-delete.ts";
 import { resolveDefaultValue, type FieldValueMap } from "@openbooks/forms-core";
 import type { SessionUser } from "../auth";
@@ -29,7 +29,6 @@ import {
   createDocumentDraft,
   DocumentEditError,
   loadDocument,
-  DOC_KINDS,
   type DocumentEditCurrent,
   type DocumentEditInput,
 } from "../documents";
@@ -343,24 +342,33 @@ async function runDocumentLifecycle(
   action: DocApiBody["action"],
 ): Promise<WriteResult | null> {
   if (action !== "submit" && action !== "post") return null;
-  const cfg = DOC_KINDS[kind]!;
   try {
-    if (action === "submit") {
-      const { gated, flowError } = await submitForApproval(kind, id);
-      if (!gated) {
-        // An approval flow matched but errored — fail closed, never auto-approve.
-        if (flowError) return err(422, `approval could not be routed: ${flowError}`);
-        // No flow gated this document: only direct-post kinds and credit memos
-        // may proceed straight to approved (mirrors the documents/actions route);
-        // other kinds require an approval flow to be configured.
-        if (!(cfg.directPost || kind === "vendor_credit" || kind === "customer_credit")) {
-          return err(422, `no approval flow is configured for ${kind}`);
-        }
-        await db.execute(sql`update documents set status = 'approved', updated_by = ${user.id} where id = ${id}`);
+    const status = (await db.execute(sql`
+      select status from documents
+       where id = ${id} and org_id = ${user.orgId}
+    `)) as unknown as { rows: { status: string }[] };
+    if (status.rows[0]?.status === "draft") {
+      const submission = await submitAndReleaseIfUngated(kind, id, user.id);
+      if (submission.flowError) {
+        return err(422, `approval could not be routed: ${submission.flowError}`);
       }
-    } else {
+      if (submission.gated) {
+        return {
+          status: 202,
+          body: {
+            ok: true,
+            pendingApproval: true,
+            requestId: submission.runId,
+            document: await loadDocument(id, user.orgId),
+          },
+        };
+      }
+    }
+    if (action === "post") {
       const deps = await controlDeps(user.orgId);
-      await postDocument(id, deps);
+      await postDocument(id, deps, {
+        audit: { actorId: user.id, source: "api" },
+      });
     }
     return null;
   } catch (e) {

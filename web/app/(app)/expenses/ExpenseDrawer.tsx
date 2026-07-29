@@ -17,6 +17,10 @@ import { PdfButton } from '../../../components/pdf-button'
 import { cmp } from '@openbooks/engine/src/money.ts'
 import { computeLineTaxes, type TaxComponentConfig } from '@openbooks/engine/src/tax.ts'
 import { confirmDialog } from '../../../lib/confirm'
+import { promptDialog } from '../../../lib/prompt'
+import { FlowManualButtons } from '../../../components/flow-manual-buttons'
+import { ApprovalActions } from '../../../components/approval-actions'
+import { ApprovalHistory } from '../../../components/approval-history'
 import {
   customFieldDefKey,
   isCustomFieldKey,
@@ -146,8 +150,7 @@ export function ExpenseDrawer({
   // expenses) — saving a posted report re-materializes its GL-Impact projection
   // (the server blocks only GL changes into a closed period). pending_approval
   // and voided reports are read-only. Save is EXPLICIT — no per-field autosave.
-  const canEditStatus =
-    (doc.status === 'draft' || doc.status === 'approved' || doc.status === 'posted') && canSubmit
+  const canEditStatus = doc.status === 'draft' && canSubmit
   const [mode, setMode] = useState<'view' | 'edit'>('view')
   const editable = mode === 'edit' && canEditStatus
 
@@ -264,19 +267,17 @@ export function ExpenseDrawer({
     })
     const data = await res.json()
     if (!res.ok) toast.error(data.error ?? t('toasts.actionFailed'))
+    else if (data.pendingApproval || (action === 'submit' && !data.autoApproved)) toast.success(t('toasts.submitted'))
     else toast.success(action === 'submit' ? t('toasts.submitted') : t('toasts.posted'))
     setBusy(false)
     router.refresh()
   }
 
   async function remove() {
-    const posted = doc.status === 'posted'
     if (
       !(await confirmDialog({
         title: t('drawer.deleteTitle'),
-        message: posted
-          ? t('drawer.deletePostedBody')
-          : t('drawer.deleteDraftBody'),
+        message: t('drawer.deleteDraftBody'),
         confirmLabel: tCommon('actions.delete'),
         tone: 'danger',
       }))
@@ -292,6 +293,28 @@ export function ExpenseDrawer({
       toast.error((await res.json()).error ?? t('toasts.deleteFailed'))
       setBusy(false)
     }
+  }
+
+  async function voidExpense() {
+    const reason = await promptDialog({
+      title: tCommon('amendment.voidTitle'),
+      label: tCommon('amendment.reason'),
+      placeholder: tCommon('amendment.voidPlaceholder'),
+      confirmLabel: tCommon('actions.void'),
+    })
+    if (!reason) return
+    setBusy(true)
+    const res = await fetch(`/api/documents/${doc.id}/void`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ reason }),
+    })
+    const data = await res.json().catch(() => ({}))
+    if (!res.ok) toast.error(data.error ?? t('toasts.actionFailed'))
+    else if (data.status === 'pending_approval') toast.success(t('toasts.submitted'))
+    else toast.success(tCommon('status.voided'))
+    setBusy(false)
+    router.refresh()
   }
 
   // -- grid columns ----------------------------------------------------------
@@ -430,6 +453,8 @@ export function ExpenseDrawer({
           ) : (
             <>
               <PdfButton recordType="expense_report" recordId={String(doc.id)} />
+              <FlowManualButtons subjectKind="expense_report" subjectId={String(doc.id)} />
+              <ApprovalActions subjectKind="expense_report" subjectId={String(doc.id)} />
               {isDraft && canSubmit ? (
                 <Button disabled={busy || !partyId || !positiveAmount(totals.total)} onClick={() => act('submit')}>
                   {t('actions.submitForApproval')}
@@ -445,7 +470,12 @@ export function ExpenseDrawer({
                   <JournalEntryLink entryId={doc.entry_id}>{t('drawer.viewGlImpact')}</JournalEntryLink>
                 </Button>
               ) : null}
-              {doc.status !== 'voided' && canSubmit ? (
+              {(doc.status === 'approved' || doc.status === 'posted') && canPost ? (
+                <Button variant="ghost" disabled={busy} onClick={voidExpense} className="text-red-600 hover:bg-red-50 hover:text-red-700 dark:text-red-400 dark:hover:bg-red-950/40">
+                  {tCommon('actions.void')}
+                </Button>
+              ) : null}
+              {doc.status === 'draft' && canSubmit ? (
                 <Button variant="ghost" disabled={busy} onClick={remove} className="text-red-600 hover:bg-red-50 hover:text-red-700 dark:text-red-400 dark:hover:bg-red-950/40">
                   {tCommon('actions.delete')}
                 </Button>
@@ -454,6 +484,13 @@ export function ExpenseDrawer({
           )}
         </>
       }
+      detailTabs={[
+        {
+          key: 'approvals',
+          label: tCommon('approvalFlow.historyTitle'),
+          content: <ApprovalHistory subjectKind="expense_report" subjectId={String(doc.id)} />,
+        },
+      ]}
       footer={
         <div className="flex w-full items-center gap-3">
           <span

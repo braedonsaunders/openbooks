@@ -243,7 +243,8 @@ export function DocumentDrawer({
   const isTransfer = config.kind === 'transfer'
 
   const canEditStatus =
-    (doc.status === 'draft' || doc.status === 'approved' || doc.status === 'posted') && canCreate
+    (doc.status === 'draft' && canCreate) ||
+    (doc.status === 'posted' && canCreate && canPost)
   // Record flyouts ALWAYS open read-only (source platform view-mode model); editing
   // is an explicit Edit → Save/Cancel cycle from the header.
   const [mode, setMode] = useState<'view' | 'edit'>('view')
@@ -466,8 +467,8 @@ export function DocumentDrawer({
       return
     }
     for (const w of gate.warnings) toast.warning(w)
-    const res = await fetch(`/api/documents/${doc.id}`, {
-      method: 'PATCH',
+    const res = await fetch(isPosted ? `/api/documents/${doc.id}/correct` : `/api/documents/${doc.id}`, {
+      method: isPosted ? 'POST' : 'PATCH',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         ...payload_,
@@ -480,7 +481,21 @@ export function DocumentDrawer({
       }),
     })
     if (res.ok) {
-      const data = (await res.json()) as DocPayload
+      const data = (await res.json()) as DocPayload & {
+        correctionId?: string
+        voidStatus?: 'voided' | 'pending_approval'
+      }
+      if (isPosted && data.correctionId) {
+        toast.success(
+          data.voidStatus === 'pending_approval'
+            ? t('toasts.submitted')
+            : tCommon('amendment.correctionCreated'),
+        )
+        setBusy(false)
+        router.push(`${basePath}?doc=${data.correctionId}`)
+        router.refresh()
+        return
+      }
       setTotals({ subtotal: data.doc.subtotal, taxTotal: data.doc.tax_total, total: data.doc.total })
       setSaveState('saved')
       setDirty(false)
@@ -509,6 +524,7 @@ export function DocumentDrawer({
     })
     const data = await res.json()
     if (!res.ok) toast.error(data.error ?? t('toasts.actionFailed'))
+    else if (data.pendingApproval) toast.success(t('toasts.submitted'))
     else toast.success(action === 'submit' ? t('toasts.submitted') : t('toasts.posted'))
     setBusy(false)
     router.refresh()
@@ -518,26 +534,15 @@ export function DocumentDrawer({
     if (
       !(await confirmDialog({
         title: t('drawer.deleteTitle'),
-        message: isPosted ? t('drawer.deletePostedBody') : t('drawer.deleteDraftBody'),
+        message: t('drawer.deleteDraftBody'),
         confirmLabel: tCommon('actions.delete'),
         tone: 'danger',
       }))
     )
       return
-    const reason = isPosted
-      ? await promptDialog({
-          title: tCommon('amendment.deleteTitle'),
-          label: tCommon('amendment.reason'),
-          placeholder: tCommon('amendment.deletePlaceholder'),
-          confirmLabel: tCommon('actions.delete'),
-        })
-      : null
-    if (isPosted && !reason) return
     setBusy(true)
     const res = await fetch(`/api/documents/${doc.id}`, {
       method: 'DELETE',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ reason }),
     })
     if (res.ok) {
       toast.success(t('toasts.deleted'))
@@ -547,6 +552,28 @@ export function DocumentDrawer({
       toast.error((await res.json()).error ?? t('toasts.deleteFailed'))
       setBusy(false)
     }
+  }
+
+  async function voidDocument() {
+    const reason = await promptDialog({
+      title: tCommon('amendment.voidTitle'),
+      label: tCommon('amendment.reason'),
+      placeholder: tCommon('amendment.voidPlaceholder'),
+      confirmLabel: tCommon('actions.void'),
+    })
+    if (!reason) return
+    setBusy(true)
+    const res = await fetch(`/api/documents/${doc.id}/void`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ reason }),
+    })
+    const data = await res.json().catch(() => ({}))
+    if (!res.ok) toast.error(data.error ?? t('toasts.actionFailed'))
+    else if (data.status === 'pending_approval') toast.success(t('toasts.submitted'))
+    else toast.success(tCommon('status.voided'))
+    setBusy(false)
+    router.refresh()
   }
 
   // -- grid columns (line-based kinds; transfer uses its own fields) --------
@@ -1038,9 +1065,7 @@ export function DocumentDrawer({
       case 'workflow':
         return <FlowManualButtons subjectKind={String(doc.kind)} subjectId={String(doc.id)} />
       case 'approval':
-        return doc.status === 'pending_approval' ? (
-          <ApprovalActions subjectKind={String(doc.kind)} subjectId={String(doc.id)} />
-        ) : null
+        return <ApprovalActions subjectKind={String(doc.kind)} subjectId={String(doc.id)} />
       case 'submit':
         return isDraft && canCreate && !config.directPost ? (
           <Button disabled={busy || (config.partyRole ? !partyId : false) || !positiveAmount(totals.total)} onClick={() => act('submit')}>
@@ -1053,6 +1078,12 @@ export function DocumentDrawer({
             {tCommon('actions.post')}
           </Button>
         ) : null
+      case 'void':
+        return (doc.status === 'approved' || doc.status === 'posted') && canPost ? (
+          <Button variant="ghost" disabled={busy} onClick={voidDocument} className="text-red-600 hover:bg-red-50 hover:text-red-700 dark:text-red-400 dark:hover:bg-red-950/40">
+            {tCommon('actions.void')}
+          </Button>
+        ) : null
       case 'gl_impact':
         return doc.entry_id ? (
           <Button variant="outline" asChild>
@@ -1060,7 +1091,7 @@ export function DocumentDrawer({
           </Button>
         ) : null
       case 'delete':
-        return doc.status !== 'voided' && canCreate ? (
+        return doc.status === 'draft' && canCreate ? (
           <Button variant="ghost" disabled={busy} onClick={remove} className="text-red-600 hover:bg-red-50 hover:text-red-700 dark:text-red-400 dark:hover:bg-red-950/40">
             {tCommon('actions.delete')}
           </Button>

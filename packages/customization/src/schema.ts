@@ -71,6 +71,7 @@ export const FORM_ACTION_KEYS = [
   "edit",
   "submit",
   "post",
+  "void",
   "gl_impact",
   "delete",
 ] as const;

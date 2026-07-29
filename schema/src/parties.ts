@@ -6,6 +6,7 @@ import {
   jsonb,
   pgTable,
   text,
+  timestamp,
   uniqueIndex,
   uuid,
 } from "drizzle-orm/pg-core";
@@ -61,6 +62,10 @@ export const customerRoles = pgTable("customer_roles", {
   currency: currencyCode("currency"),
   salesRepId: uuid("sales_rep_id"), // → parties (employee)
   taxCodeId: uuid("tax_code_id"),
+  isOnHold: boolean("is_on_hold").notNull().default(false),
+  holdReason: text("hold_reason"),
+  heldAt: timestamp("held_at", { withTimezone: true }),
+  heldBy: uuid("held_by"),
   isActive: boolean("is_active").notNull().default(true),
   custom: jsonb("custom").notNull().default({}),
   ...auditColumns,
@@ -117,6 +122,10 @@ export const vendorRoles = pgTable("vendor_roles", {
   tinType: text("tin_type", { enum: ["ssn", "ein", "itin", "atin", "sin", "bn", "unknown"] }),
   /** Under backup withholding (missing/incorrect TIN, IRS B-notice). */
   backupWithholding: boolean("backup_withholding").notNull().default(false),
+  isOnHold: boolean("is_on_hold").notNull().default(false),
+  holdReason: text("hold_reason"),
+  heldAt: timestamp("held_at", { withTimezone: true }),
+  heldBy: uuid("held_by"),
   isActive: boolean("is_active").notNull().default(true),
   custom: jsonb("custom").notNull().default({}),
   ...auditColumns,
@@ -244,6 +253,12 @@ export const partyBankAccounts = pgTable(
     approvalStatus: text("approval_status", { enum: ["pending", "approved", "rejected"] })
       .notNull()
       .default("approved"),
+    /** Actual maker for the current material revision (not original creator). */
+    submittedBy: uuid("submitted_by"),
+    submittedAt: timestamp("submitted_at", { withTimezone: true }),
+    retiredAt: timestamp("retired_at", { withTimezone: true }),
+    retiredBy: uuid("retired_by"),
+    retirementReason: text("retirement_reason"),
     isActive: boolean("is_active").notNull().default(true),
     ...auditColumns,
   },

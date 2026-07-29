@@ -98,6 +98,9 @@
     "salesRepresentative": "Sales representative",
     "taxCode": "Default tax code",
     "currencyPlaceholder": "CAD",
+    "creditHold": "Credit hold",
+    "paymentHold": "Payment hold",
+    "holdReason": "Hold reason",
     "paymentMethod": "Payment method",
     "paymentMethods": {
       "eft": "EFT",

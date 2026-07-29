@@ -28,7 +28,7 @@ test(
           (id, org_id, kind, status, document_number, subsidiary_id, party_id,
            document_date, currency, fx_rate, subtotal, tax_total, total, custom)
         values (
-          ${documentId}, ${org.orgId}, 'customer_invoice', 'draft', 'INV-SOURCE-DELETE',
+          ${documentId}, ${org.orgId}, 'customer_invoice', 'approved', 'INV-SOURCE-DELETE',
           ${org.subsidiaryId}, ${org.customerId}, ${org.date}, 'CAD', '1',
           '100', '0', '100', ${JSON.stringify({ nsId: sourceRef })}::jsonb
         )`);
@@ -60,6 +60,11 @@ test(
                original.status as original_status,
                count(distinct reversal.id)::int as reversal_count,
                coalesce(sum(reversal_line.amount), 0)::text as reversal_total,
+               bool_and(
+                 d.voided_by is not null
+                 and length(btrim(d.void_reason)) >= 5
+                 and d.reversal_entry_id = reversal.id
+               ) as void_evidence_complete,
                (
                  select jsonb_array_length(a.changes #> '{after,glImpact,reversals}')
                    from audit_log a
@@ -85,6 +90,7 @@ test(
           original_status: string;
           reversal_count: number;
           reversal_total: string;
+          void_evidence_complete: boolean;
           audited_reversal_count: number;
         }>;
       };
@@ -94,6 +100,7 @@ test(
         original_status: "reversed",
         reversal_count: 1,
         reversal_total: "0.0000",
+        void_evidence_complete: true,
         audited_reversal_count: 1,
       });
 
@@ -198,6 +205,8 @@ test(
                and d.status = 'voided'
                and d.open_balance is null
                and d.posted_entry_id is null
+               and d.voided_by is not null
+               and length(btrim(d.void_reason)) >= 5
           ) as voided_documents
           from audit_log a
          where a.org_id = ${org.orgId}

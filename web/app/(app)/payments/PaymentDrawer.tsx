@@ -14,6 +14,10 @@ import { PdfButton } from '../../../components/pdf-button'
 import { SendButton } from '../../../components/send-button'
 import { confirmDialog } from '../../../lib/confirm'
 import { HeaderFields } from '../../../components/transaction-form/header-fields'
+import { FlowManualButtons } from '../../../components/flow-manual-buttons'
+import { ApprovalActions } from '../../../components/approval-actions'
+import { ApprovalHistory } from '../../../components/approval-history'
+import { promptDialog } from '../../../lib/prompt'
 import type { FormLayoutConfig, HeaderFieldPlacement } from '@openbooks/customization'
 import { cmp, divRate, formatMoney, mulRate, normalizeMoney, sum } from '@openbooks/engine/src/money.ts'
 
@@ -324,19 +328,17 @@ export function PaymentDrawer({
     })
     const data = await res.json()
     if (!res.ok) toast.error(data.error ?? t('toasts.postFailed'))
+    else if (data.pendingApproval) toast.success(tCommon('actions.submitForApproval'))
     else toast.success(t('toasts.posted', { side }))
     setBusy(false)
     router.refresh()
   }
 
   async function remove() {
-    const posted = doc.status !== 'draft'
     if (
       !(await confirmDialog({
         title: 'Delete this payment?',
-        message: posted
-          ? 'This permanently deletes the payment, removes its ledger impact, and reopens any items it applied to. This cannot be undone.'
-          : 'This permanently deletes the draft payment. This cannot be undone.',
+        message: 'This permanently deletes the draft payment. This cannot be undone.',
         confirmLabel: 'Delete',
         tone: 'danger',
       }))
@@ -352,6 +354,28 @@ export function PaymentDrawer({
       toast.error((await res.json()).error ?? 'Delete failed')
       setBusy(false)
     }
+  }
+
+  async function voidPayment() {
+    const reason = await promptDialog({
+      title: tCommon('amendment.voidTitle'),
+      label: tCommon('amendment.reason'),
+      placeholder: tCommon('amendment.voidPlaceholder'),
+      confirmLabel: tCommon('actions.void'),
+    })
+    if (!reason) return
+    setBusy(true)
+    const res = await fetch(`/api/documents/${doc.id}/void`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ reason }),
+    })
+    const data = await res.json().catch(() => ({}))
+    if (!res.ok) toast.error(data.error ?? t('toasts.postFailed'))
+    else if (data.status === 'pending_approval') toast.success(tCommon('actions.submitForApproval'))
+    else toast.success(tCommon('status.voided'))
+    setBusy(false)
+    router.refresh()
   }
 
   function updateAllocation(lineId: string, patch: Partial<AllocationClient>) {
@@ -440,7 +464,7 @@ export function PaymentDrawer({
     }
   }
   const canPost =
-    isDraft &&
+    (isDraft || doc.status === 'approved') &&
     !busy &&
     !hasInvalidRow &&
     !dirty &&
@@ -490,7 +514,9 @@ export function PaymentDrawer({
                 recordType={String(doc.kind ?? (side === 'ap' ? 'vendor_payment' : 'customer_payment'))}
                 recordId={String(doc.id)}
               />
-              {isDraft ? (
+              <FlowManualButtons subjectKind={String(doc.kind)} subjectId={String(doc.id)} />
+              <ApprovalActions subjectKind={String(doc.kind)} subjectId={String(doc.id)} />
+              {isDraft || doc.status === 'approved' ? (
                 <Button disabled={!canPost} onClick={post}>
                   {busy ? tCommon('actions.posting') : t('postAction', { side })}
                 </Button>
@@ -500,7 +526,12 @@ export function PaymentDrawer({
                   <JournalEntryLink entryId={doc.entry_id}>{t('viewGlImpact')}</JournalEntryLink>
                 </Button>
               ) : null}
-              {doc.status !== 'voided' ? (
+              {doc.status === 'approved' || doc.status === 'posted' ? (
+                <Button variant="ghost" disabled={busy} onClick={voidPayment} className="text-red-600 hover:bg-red-50 hover:text-red-700 dark:text-red-400 dark:hover:bg-red-950/40">
+                  {tCommon('actions.void')}
+                </Button>
+              ) : null}
+              {doc.status === 'draft' ? (
                 <Button variant="ghost" disabled={busy} onClick={remove} className="text-red-600 hover:bg-red-50 hover:text-red-700 dark:text-red-400 dark:hover:bg-red-950/40">
                   {tCommon('actions.delete')}
                 </Button>
@@ -509,6 +540,13 @@ export function PaymentDrawer({
           )}
         </>
       }
+      detailTabs={[
+        {
+          key: 'approvals',
+          label: tCommon('approvalFlow.historyTitle'),
+          content: <ApprovalHistory subjectKind={String(doc.kind)} subjectId={String(doc.id)} />,
+        },
+      ]}
       footer={
         <div className="flex w-full items-center gap-3">
           <span

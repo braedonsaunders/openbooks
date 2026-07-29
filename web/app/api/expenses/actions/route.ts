@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server'
 import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/db.ts'
-import { submitForApproval } from '@openbooks/engine/src/flows/index.ts'
+import { submitAndReleaseIfUngated } from '@openbooks/engine/src/flows/index.ts'
 import { postDocument, PostingError } from '@openbooks/engine/src/posting.ts'
 import { can, getAuthz } from '../../../../lib/authz'
 
@@ -32,8 +32,8 @@ async function controlDeps(orgId: string) {
 /** The document must be an expense report in the caller's org. */
 async function expenseReport(id: string, orgId: string) {
   const r = (await db.execute(
-    sql`select id from documents where id = ${id} and kind = 'expense_report' and org_id = ${orgId}`,
-  )) as unknown as { rows: { id: string }[] }
+    sql`select id, status from documents where id = ${id} and kind = 'expense_report' and org_id = ${orgId}`,
+  )) as unknown as { rows: { id: string; status: string }[] }
   return r.rows[0] ?? null
 }
 
@@ -55,31 +55,35 @@ export async function POST(req: Request) {
         if (!body.documentId || !(await expenseReport(body.documentId, user.orgId))) {
           return NextResponse.json({ error: 'expense report not found' }, { status: 404 })
         }
-        const { gated, runId, flowError } = await submitForApproval('expense_report', body.documentId)
-        if (!gated) {
-          // Expense reports always require approval — an approver, not the
-          // filer, releases them. Whether no flow is configured or a matched
-          // flow errored, fail closed instead of silently self-approving.
+        const { gated, runId, flowError, autoApproved } =
+          await submitAndReleaseIfUngated('expense_report', body.documentId, user.id)
+        if (flowError) {
           return NextResponse.json(
-            {
-              error: flowError
-                ? `approval could not be routed: ${flowError}`
-                : 'no approval flow is configured for expense_report',
-            },
+            { error: `approval could not be routed: ${flowError}` },
             { status: 422 },
           )
         }
-        return NextResponse.json({ ok: true, requestId: runId })
+        return NextResponse.json({ ok: true, requestId: runId, autoApproved })
       }
       case 'post': {
         if (!can(authz, 'ap.post')) {
           return NextResponse.json({ error: 'missing permission: ap.post' }, { status: 403 })
         }
-        if (!body.documentId || !(await expenseReport(body.documentId, user.orgId))) {
+        if (!body.documentId) {
           return NextResponse.json({ error: 'expense report not found' }, { status: 404 })
         }
+        const expense = await expenseReport(body.documentId, user.orgId)
+        if (!expense) return NextResponse.json({ error: 'expense report not found' }, { status: 404 })
+        if (expense.status !== 'approved') {
+          return NextResponse.json(
+            { error: `expense report is ${expense.status}; only an approved report can be posted` },
+            { status: 422 },
+          )
+        }
         const deps = await controlDeps(user.orgId)
-        const entryId = await postDocument(body.documentId, deps)
+        const entryId = await postDocument(body.documentId, deps, {
+          audit: { actorId: user.id, source: 'ui' },
+        })
         return NextResponse.json({ ok: true, entryId })
       }
       default:

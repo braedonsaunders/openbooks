@@ -19,9 +19,8 @@ import { auditColumns, currencyCode, fxRate, id, money, orgRef } from "./helpers
  * Business documents — the mutable layer users touch. One supertype table +
  * lines; `kind` drives behavior via posting rules, not via 20 near-identical
  * tables. Posting produces exactly one journal entry (ledger.ts). Posted
- * documents remain editable while their accounting scope is open; the entry
- * is re-materialized in place and immutable before/after evidence is written
- * to audit_log. Closed-period changes require reopening or a reversal.
+ * documents are immutable; corrections are represented by linked reversal
+ * entries so the original business record and GL evidence are never rewritten.
  *
  * Kinds (initial set, from actual usage): vendor_bill, vendor_credit,
  * vendor_payment, expense_report, customer_invoice, customer_credit,
@@ -56,8 +55,19 @@ export const documents = pgTable(
     status: text("status", { enum: ["draft", "pending_approval", "approved", "posted", "voided"] })
       .notNull()
       .default("draft"),
+    /** The actual actor who last submitted this revision for approval. */
+    submittedBy: uuid("submitted_by"),
+    submittedAt: timestamp("submitted_at", { withTimezone: true }),
     postedEntryId: uuid("posted_entry_id"), // → journal_entries
     voidedAt: timestamp("voided_at", { withTimezone: true }),
+    voidedBy: uuid("voided_by"),
+    /** Required immutable business reason for the reversal/void. */
+    voidReason: text("void_reason"),
+    /** A posted document stays posted while its before_void flow gates wait. */
+    voidRequestedAt: timestamp("void_requested_at", { withTimezone: true }),
+    voidRequestedBy: uuid("void_requested_by"),
+    voidReversalDate: date("void_reversal_date"),
+    reversalEntryId: uuid("reversal_entry_id"),
 
     // Denormalized totals, recomputed from lines by trigger (fast lists).
     subtotal: money("subtotal").notNull().default("0"),
