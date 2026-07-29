@@ -59,11 +59,11 @@ const PRICE_METHODS = ['contract_field', 'billable_value', 'not_to_exceed', 'cos
 const CBI_FORMULAS = ['price_minus_invoiced', 'unbilled_billable']
 const BUDGET_SOURCES = ['wbs_estimates', 'none']
 const COMMIT_KINDS = ['purchase_order', 'sales_order', 'vendor_bill', 'expense_report', 'card_charge', 'card_refund', 'check', 'vendor_credit']
-const COMMITTED_COST_STATUSES = ['pending_approval', 'approved']
+const COMMITTED_COST_STATUSES = ['pending_approval', 'approved', 'rejected']
 const BASES = ['time_selection', 'date_range', 'draw_amount', 'milestone', 'field_ticket']
 /** Documents a tenant may treat as a source of rebillable job cost. */
 const COST_SOURCE_KINDS = ['vendor_bill', 'expense_report', 'vendor_credit', 'card_charge', 'card_refund', 'check', 'sales_order', 'purchase_order']
-const COST_SOURCE_STATUSES = ['pending_approval', 'approved', 'posted']
+const COST_SOURCE_STATUSES = ['pending_approval', 'approved', 'posted', 'rejected']
 const MARKUP_PRESENTATIONS = ['embedded', 'lump_sum']
 const LINE_BUILDERS = ['tm_actual', 'milestone', 'draw', 'cost_plus']
 const REVENUE_ACCTS = ['item_income', 'unbilled_receivable', 'fixed']

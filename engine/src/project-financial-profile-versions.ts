@@ -135,7 +135,8 @@ export function assertValidProjectFinancialProfile(
     const statuses = strings(committed.statuses, "committedCost.statuses");
     if (
       statuses.some(
-        (status) => !["pending_approval", "approved"].includes(status),
+        (status) =>
+          !["pending_approval", "approved", "rejected"].includes(status),
       )
     ) {
       throw new Error(
@@ -162,7 +163,9 @@ export function assertValidProjectFinancialProfile(
     if (
       statuses.some(
         (status) =>
-          !["pending_approval", "approved", "posted"].includes(status),
+          !["pending_approval", "approved", "posted", "rejected"].includes(
+            status,
+          ),
       )
     ) {
       throw new Error(
