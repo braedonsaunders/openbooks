@@ -2,6 +2,7 @@ import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
 import test from 'node:test'
 import { BUILTIN_PROJECT_TYPES } from '@openbooks/schema'
+import { assertValidProjectFinancialProfile } from './project-financial-profile-versions.ts'
 
 test('every built-in project type declares an explicit billing procedure', () => {
   assert.ok(BUILTIN_PROJECT_TYPES.length >= 5)
@@ -110,5 +111,34 @@ test('project cost and selling-value evidence preserve canonical document direct
   assert.doesNotMatch(
     billing,
     /d\.kind in \('sales_order','purchase_order'\) then -dl\.amount/,
+  )
+})
+
+test('tenant project forecasts may explicitly include source rejected documents', () => {
+  const builtIn = BUILTIN_PROJECT_TYPES.find(
+    (candidate) => candidate.key === 'time_and_materials',
+  )
+  if (!builtIn) throw new Error('time_and_materials built-in is missing')
+  const profile = structuredClone(builtIn.financialProfile)
+  profile.committedCost.statuses = [
+    'pending_approval',
+    'approved',
+    'rejected',
+  ]
+  profile.billableValue.costSourceStatuses = [
+    'pending_approval',
+    'approved',
+    'posted',
+    'rejected',
+  ]
+  assert.doesNotThrow(() => assertValidProjectFinancialProfile(profile))
+
+  const invalid = structuredClone(profile) as unknown as {
+    committedCost: { statuses: string[] }
+  }
+  invalid.committedCost.statuses = ['voided']
+  assert.throws(
+    () => assertValidProjectFinancialProfile(invalid),
+    /committedCost\.statuses contains an unsupported lifecycle/,
   )
 })

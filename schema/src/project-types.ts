@@ -114,10 +114,13 @@ export interface FinancialProfile {
   overhead: OverheadSource;
   /** Open commitments: eligible document kinds and lifecycle states whose
    * unbilled remainder is committed cost. Posted documents belong in actual
-   * cost and are intentionally not an allowed committed-cost lifecycle. */
+   * cost and are intentionally not an allowed committed-cost lifecycle.
+   * A tenant may include a source system's rejected state when that source
+   * continues to expose rejected documents in project forecast totals; this
+   * does not approve or post the document. */
   committedCost: {
     docKinds: string[];
-    statuses?: Array<"pending_approval" | "approved">;
+    statuses?: Array<"pending_approval" | "approved" | "rejected">;
   };
   /** Statistical billable value of all work (drives T&M price + could-be-invoiced). */
   billableValue: {
@@ -129,10 +132,12 @@ export interface FinancialProfile {
     /**
      * Source-document lifecycle states whose billable lines contribute to the
      * statistical selling value. Defaults to approved + posted. A tenant may
-     * include pending approval when its source ERP exposes unapproved work in
-     * project forecasts; this never makes the document posted accounting.
+     * include pending approval or rejected when its source ERP exposes those
+     * states in project forecasts; this never approves or posts the document.
      */
-    costSourceStatuses?: Array<"pending_approval" | "approved" | "posted">;
+    costSourceStatuses?: Array<
+      "pending_approval" | "approved" | "posted" | "rejected"
+    >;
   };
   /** Budgeted cost. */
   costBudget: { source: "wbs_estimates" | "none" };
