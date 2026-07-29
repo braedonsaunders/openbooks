@@ -19,6 +19,9 @@ interface TransactionDrawerProps {
   actionsMenuHeader?: ReactNode
   /** Record-specific work areas inserted between Details and Attachments. */
   detailTabs?: { key: string; label: ReactNode; content?: ReactNode }[]
+  /** Optional controlled tab state for record bodies that render tab-specific content themselves. */
+  activeTab?: string
+  onActiveTabChange?: (key: string) => void
   footer?: ReactNode
   children: ReactNode
   canEditAttachments?: boolean
@@ -44,6 +47,8 @@ export function TransactionDrawer({
   actions,
   actionsMenuHeader,
   detailTabs = [],
+  activeTab: controlledActiveTab,
+  onActiveTabChange,
   footer,
   children,
   canEditAttachments = false,
@@ -63,9 +68,10 @@ export function TransactionDrawer({
   // flyout (it visibly closes and reopens). The drawer is keyed per record upstream,
   // so this re-seeds correctly when a different record opens.
   const requestedTab = searchParams.get('transactionTab')
-  const [activeTab, setActiveTab] = useState(() =>
+  const [localActiveTab, setLocalActiveTab] = useState(() =>
     ['attachments', 'audit', ...detailTabs.map((d) => d.key)].includes(requestedTab ?? '') ? requestedTab! : 'details',
   )
+  const activeTab = controlledActiveTab ?? localActiveTab
   const hasActions = actions != null || actionsMenuHeader != null
   const requestedReturn = searchParams.get('drawerReturn')
   const nestedReturn = requestedReturn?.startsWith('/') && !requestedReturn.startsWith('//')
@@ -89,7 +95,10 @@ export function TransactionDrawer({
               type="button"
               role="tab"
               aria-selected={activeTab === tab.key}
-              onClick={() => setActiveTab(tab.key)}
+              onClick={() => {
+                setLocalActiveTab(tab.key)
+                onActiveTabChange?.(tab.key)
+              }}
               className={`border-b-2 px-3 py-3 text-sm font-medium transition-colors ${
                 activeTab === tab.key
                   ? 'border-teal-600 text-teal-700 dark:border-teal-400 dark:text-teal-300'

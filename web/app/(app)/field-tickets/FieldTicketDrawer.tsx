@@ -3,7 +3,7 @@
 import { useMoney } from '@/components/money-provider'
 import Link from 'next/link'
 import { Fragment, useEffect, useMemo, useState } from 'react'
-import { useRouter, useSearchParams } from 'next/navigation'
+import { usePathname, useRouter, useSearchParams } from 'next/navigation'
 import { useTranslations } from 'next-intl'
 import { toast } from 'sonner'
 import { Mail, Plus, Send, Trash2 } from 'lucide-react'
@@ -161,7 +161,7 @@ function buildGrid(entries: EntryRow[]): GridRow[] {
   return [...byKey.values()]
 }
 
-export function FieldTicketDrawer(props: {
+export interface FieldTicketDrawerProps {
   ticket: TicketPayload
   employees: Opt[]
   laborItems: Opt[]
@@ -176,12 +176,15 @@ export function FieldTicketDrawer(props: {
   currentLayoutId?: string | null
   canCustomize?: boolean
   canManage: boolean
-}) {
+}
+
+export function FieldTicketDrawer(props: FieldTicketDrawerProps) {
   const { money } = useMoney()
   const t = useTranslations('fieldTickets')
   const tCommon = useTranslations('common')
   const tNav = useTranslations('nav')
   const router = useRouter()
+  const pathname = usePathname() ?? '/field-tickets'
   const searchParams = useSearchParams()
   const [ticket, setTicket] = useState(props.ticket)
   // Record flyouts always open read-only. Draft editing is an explicit
@@ -234,9 +237,11 @@ export function FieldTicketDrawer(props: {
   const selectedItem = props.catalogItems.find((item) => item.id === lineItem)
   const equipmentOptions = props.equipmentUnits.filter((unit) => unit.chargeItemId === lineItem)
   const requestedSection = searchParams.get('transactionTab')
-  const activeSection = requestedSection === 'time' || requestedSection === 'items' || requestedSection === 'tasks'
-    ? requestedSection
-    : 'details'
+  const [activeSection, setActiveSection] = useState(() =>
+    requestedSection === 'time' || requestedSection === 'items' || requestedSection === 'tasks'
+      ? requestedSection
+      : 'details',
+  )
 
   useEffect(() => {
     if (!editable || !projectId || !lineItem) {
@@ -673,7 +678,7 @@ export function FieldTicketDrawer(props: {
             onChange={(event) => {
               const next = new URLSearchParams(searchParams.toString())
               next.set('form', event.target.value)
-              router.push(`/field-tickets?${next.toString()}`)
+              router.push(`${pathname}?${next.toString()}`)
             }}
             aria-label={t('editor.form.label')}
             triggerClassName="!h-8 !min-h-0 !px-2 !py-0 !text-xs"
@@ -698,6 +703,8 @@ export function FieldTicketDrawer(props: {
         { key: 'items', label: t('editor.tabs.items') },
         ...(projectTasks.length > 0 ? [{ key: 'tasks', label: t('editor.tabs.tasks') }] : []),
       ]}
+      activeTab={activeSection}
+      onActiveTabChange={setActiveSection}
       actions={
         <>
           {mode === 'edit' ? (

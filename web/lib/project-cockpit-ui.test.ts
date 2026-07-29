@@ -45,16 +45,33 @@ test('project transactions filter by native type and stack the transaction drawe
   const tab = source('app/(app)/projects/tabs/TransactionsTab.tsx')
   const page = source('app/(app)/projects/page.tsx')
   const drawer = source('app/(app)/projects/ProjectDrawer.tsx')
+  const related = source('components/related-transaction-drawer.tsx')
+  const relatedClient = source('components/related-transaction-drawer-client.tsx')
 
   assert.match(tab, /allTransactionTypes/)
   assert.match(tab, /transactions\.filter\(\(row\) => row\.kind === kind\)/)
   assert.match(tab, /toolbarAfter=/)
   assert.match(tab, /projectTxnKind/)
+  assert.doesNotMatch(tab, /\/field-tickets\?ticket=/)
   assert.match(tab, /<DocTypeBadge\b/)
   assert.match(page, /<RelatedTransactionDrawer\b/)
   assert.match(page, /projectId=\{String\(openProject\.project\.id\)\}/)
+  assert.match(related, /kind === 'field_ticket'/)
+  assert.match(related, /loadFieldTicketDrawerData/)
+  assert.match(relatedClient, /type: 'fieldTicket'/)
+  assert.match(relatedClient, /<FieldTicketDrawer\b/)
   assert.doesNotMatch(drawer, /tab === 'charges'/)
   assert.match(drawer, /setTab\('transactions'\); setChargeFormOpen\(true\)/)
+})
+
+test('field-ticket work tabs share the transaction drawer tab state', () => {
+  const fieldTicket = source('app/(app)/field-tickets/FieldTicketDrawer.tsx')
+  const transactionDrawer = source('components/transaction-drawer.tsx')
+
+  assert.match(fieldTicket, /activeTab=\{activeSection\}/)
+  assert.match(fieldTicket, /onActiveTabChange=\{setActiveSection\}/)
+  assert.match(transactionDrawer, /controlledActiveTab \?\? localActiveTab/)
+  assert.match(transactionDrawer, /onActiveTabChange\?\.\(tab\.key\)/)
 })
 
 test('cost-budget presentation follows capped project-type semantics', () => {

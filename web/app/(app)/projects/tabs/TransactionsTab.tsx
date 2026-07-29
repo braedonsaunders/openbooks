@@ -64,10 +64,6 @@ export function TransactionsTab({
     .sort((a, b) => kindLabel(a).localeCompare(kindLabel(b)))
   const visibleTransactions = kind ? transactions.filter((row) => row.kind === kind) : transactions
   const transactionHref = (row: TxnRow) => {
-    if (row.kind === 'field_ticket') {
-      const returnHref = `${pathname}?${searchParams.toString()}`
-      return `/field-tickets?ticket=${row.id}&drawerReturn=${encodeURIComponent(returnHref)}`
-    }
     const next = new URLSearchParams(searchParams.toString())
     next.set('projectTab', 'transactions')
     next.delete('projectTxn')
