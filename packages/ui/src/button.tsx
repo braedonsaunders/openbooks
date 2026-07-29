@@ -43,22 +43,37 @@ export type ButtonProps = React.ButtonHTMLAttributes<HTMLButtonElement> &
 
 export const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
   ({ className, variant, size, asChild = false, children, ...props }, ref) => {
-    const classes = cn(buttonVariants({ variant, size }), className)
+    const resolvedVariant = variant ?? 'default'
+    const resolvedSize = size ?? 'md'
+    const classes = cn(buttonVariants({ variant: resolvedVariant, size: resolvedSize }), className)
 
     if (asChild && React.isValidElement(children)) {
       const child = children as React.ReactElement<{
         className?: string
         ref?: React.Ref<HTMLElement>
+        'data-slot'?: string
+        'data-variant'?: string
+        'data-size'?: string
       }>
       return React.cloneElement(child, {
         ...props,
         ref: ref as React.Ref<HTMLElement>,
         className: cn(classes, child.props.className),
+        'data-slot': 'button',
+        'data-variant': resolvedVariant,
+        'data-size': resolvedSize,
       })
     }
 
     return (
-      <button ref={ref} className={classes} {...props}>
+      <button
+        ref={ref}
+        className={classes}
+        {...props}
+        data-slot="button"
+        data-variant={resolvedVariant}
+        data-size={resolvedSize}
+      >
         {children}
       </button>
     )

@@ -15,7 +15,6 @@ export function NewAccountButton({
   const router = useRouter()
   return (
     <Button
-      size="sm"
       onClick={() => router.push(mergeHref('/accounts', currentParams, {
         account: undefined,
         accountNew: '1',

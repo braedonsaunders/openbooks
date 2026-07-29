@@ -52,7 +52,7 @@ export default async function AppsLauncherPage({
                   </Link>
                 </Button>
                 {canManage ? (
-                  <Button size="sm" asChild>
+                  <Button asChild>
                     <Link href="/apps/library">
                       <Library size={15} /> {t('actions.library')}
                     </Link>
