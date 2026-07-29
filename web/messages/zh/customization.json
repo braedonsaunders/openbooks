@@ -38,6 +38,7 @@
     "title": "表单与视图",
     "description": "自定义每种交易表单和记录列表在本组织及个人的显示方式。",
     "allRecordTypes": "所有记录类型",
+    "recordTypeFilter": "记录类型",
     "searchPlaceholder": "搜索表单和视图…",
     "tabs": {
       "forms": "交易表单",

@@ -43,6 +43,7 @@
     "description": "Personaliza el aspecto de cada formulario de transacción y de cada lista de registros para esta organización y para ti.",
     "documentation": "Documentación",
     "allRecordTypes": "Todos los tipos de registro",
+    "recordTypeFilter": "Tipo de registro",
     "searchPlaceholder": "Buscar formularios y vistas…",
     "tabs": {
       "forms": "Formularios de transacción",

@@ -38,6 +38,7 @@
     "title": "フォームとビュー",
     "description": "各取引フォームとレコード一覧が、この組織および自分自身に対してどのように表示されるかをカスタマイズします。",
     "allRecordTypes": "すべてのレコードタイプ",
+    "recordTypeFilter": "レコードタイプ",
     "searchPlaceholder": "フォームとビューを検索…",
     "tabs": {
       "forms": "取引フォーム",
