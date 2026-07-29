@@ -112,8 +112,13 @@ export interface FinancialProfile {
   laborCost: { source: "in_actual_cost" | "time_rate" | "estimated_time_rate" | "payroll_je" | "account_group" | "none"; dimension?: string; groupKeys?: string[] };
   /** Overhead applied to the job (statistical allocation — see OverheadSource). */
   overhead: OverheadSource;
-  /** Open commitments: doc kinds whose unbilled remainder is "committed". */
-  committedCost: { docKinds: string[] };
+  /** Open commitments: eligible document kinds and lifecycle states whose
+   * unbilled remainder is committed cost. Posted documents belong in actual
+   * cost and are intentionally not an allowed committed-cost lifecycle. */
+  committedCost: {
+    docKinds: string[];
+    statuses?: Array<"pending_approval" | "approved">;
+  };
   /** Statistical billable value of all work (drives T&M price + could-be-invoiced). */
   billableValue: {
     includeUnbilledTime: boolean;

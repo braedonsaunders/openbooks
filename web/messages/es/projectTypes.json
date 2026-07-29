@@ -29,6 +29,7 @@
   "laborSource": "Origen del costo de mano de obra",
   "budgetSource": "Origen del presupuesto de costos",
   "committedKinds": "Costo comprometido de",
+  "committedStatuses": "Estados del ciclo de vida del costo comprometido",
   "totalCostComponents": "Componentes del costo total",
   "allowedBases": "Bases de facturación permitidas",
   "billingProcedure": "Procedimiento de facturación",

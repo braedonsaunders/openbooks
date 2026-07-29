@@ -31,6 +31,7 @@
   "burdenDimension": "间接费用科目组",
   "budgetSource": "成本预算来源",
   "committedKinds": "承诺成本来自",
+  "committedStatuses": "承诺成本生命周期状态",
   "totalCostComponents": "总成本构成",
   "allowedBases": "允许的计费基准",
   "billingProcedure": "计费程序",

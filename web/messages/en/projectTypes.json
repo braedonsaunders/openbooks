@@ -29,6 +29,7 @@
   "laborSource": "Labor cost source",
   "budgetSource": "Cost budget source",
   "committedKinds": "Committed cost from",
+  "committedStatuses": "Committed cost lifecycle states",
   "totalCostComponents": "Total cost components",
   "allowedBases": "Allowed billing bases",
   "billingProcedure": "Billing procedure",

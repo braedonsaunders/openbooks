@@ -1,6 +1,8 @@
 import {
+  add,
   fromUnits,
   mulDecimal,
+  mulPercent,
   normalizeDecimal,
   normalizeMoney,
   toUnits,
@@ -44,9 +46,39 @@ export interface NsHeader {
  */
 export function normalizeMarkupPercent(raw: unknown): string | null {
   if (raw == null || raw === "") return null;
-  const v = Number(raw);
-  if (!Number.isFinite(v) || v < 0) return null;
-  return (v > 1 ? v : v * 100).toFixed(4);
+  let normalized: string;
+  try {
+    normalized = normalizeDecimal(String(raw), 10);
+  } catch {
+    return null;
+  }
+  if (normalized.startsWith("-")) return null;
+  const [whole = "0", fraction = ""] = normalized.split(".");
+  const greaterThanOne =
+    BigInt(whole) > 1n ||
+    (BigInt(whole) === 1n && /[1-9]/.test(fraction));
+  return mulDecimal(greaterThanOne ? "1" : "100", normalized);
+}
+
+/** Source-backed selling value in document direction.
+ *
+ * NetSuite card refunds reverse the customer-facing amount at face value; the
+ * original cost-line markup is historical metadata and must not be applied a
+ * second time. Other rebillable cost documents use exact cost-plus-markup.
+ */
+export function netSuiteBillAmount(
+  kind: string,
+  amount: string,
+  isBillable: boolean,
+  markupPercent: string | null,
+): string | null {
+  if (!isBillable) return null;
+  const normalized = normalizeMoney(amount);
+  if (kind === "card_refund") return normalized;
+  return add(
+    normalized,
+    mulPercent(normalized, markupPercent ?? "0"),
+  );
 }
 
 export interface NsLine {
@@ -314,6 +346,8 @@ export function buildNativeFromNetSuite(
       ? sourceQuantity.slice(1)
       : sourceQuantity;
     const normalizedAmount = fromUnits(amtUnits);
+    const isBillable = String(l.isbillable ?? "").toUpperCase() === "T";
+    const markupPercent = normalizeMarkupPercent(l.markup);
     const row: NativeDocLine = {
       accountId,
       itemId: l.item ? (ctx.itemByRef.get(l.item) ?? null) : null,
@@ -335,9 +369,15 @@ export function buildNativeFromNetSuite(
       subsidiaryId: sub(l),
       // Rebillable job cost: carried from the source so migrated materials/subs/
       // expenses remain billable to the project's customer.
-      isBillable: String(l.isbillable ?? "").toUpperCase() === "T",
+      isBillable,
       sourceLineRef: l.id == null ? null : String(l.id),
-      markupPercent: normalizeMarkupPercent(l.markup),
+      markupPercent,
+      billAmount: netSuiteBillAmount(
+        effKind,
+        normalizedAmount,
+        isBillable,
+        markupPercent,
+      ),
     };
     lines.push(row);
     return row;
@@ -653,6 +693,9 @@ function buildOrder(
       baseByCode.set(code.id, (baseByCode.get(code.id) ?? 0n) + amountUnits);
       rateByCode.set(code.id, rateUnits);
     }
+    const normalizedOrderAmount = fromUnits(amountUnits);
+    const isBillable = String(l.isbillable ?? "").toUpperCase() === "T";
+    const markupPercent = normalizeMarkupPercent(l.markup);
     const row: NativeDocLine = {
       accountId,
       itemId,
@@ -676,7 +719,7 @@ function buildOrder(
       // NetSuite sales-order detail is the future credit side of the sale;
       // OpenBooks stores orders in document direction. Opposite-signed source
       // discount lines remain negative after the same normalization.
-      amount: fromUnits(amountUnits),
+      amount: normalizedOrderAmount,
       taxAmount: "0",
       taxOverridden: false,
       taxCodeId: code?.id ?? null,
@@ -690,9 +733,15 @@ function buildOrder(
         : null,
       description: l.memo ?? null,
       lineNumber: ++n,
-      isBillable: String(l.isbillable ?? "").toUpperCase() === "T",
+      isBillable,
       sourceLineRef: l.id == null ? null : String(l.id),
-      markupPercent: normalizeMarkupPercent(l.markup),
+      markupPercent,
+      billAmount: netSuiteBillAmount(
+        orderKind,
+        normalizedOrderAmount,
+        isBillable,
+        markupPercent,
+      ),
     };
     lines.push(row);
     detailRows.push({ row, codeId: code?.id ?? null });

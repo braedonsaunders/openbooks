@@ -215,6 +215,33 @@ test("change detection includes the exact accounting period", () => {
   );
 });
 
+test("change detection includes source commercial truth on every line", () => {
+  const baselineDocument = canonicalDocument();
+  const baselineLine = baselineDocument.lines[0]!;
+  const baseline = canonicalNativeDocumentKey({
+    ...baselineDocument,
+    lines: [{
+      ...baselineLine,
+      isBillable: true,
+      markupPercent: "15",
+      billAmount: "11.5",
+    }],
+  });
+  for (const line of [
+    { ...baselineLine, isBillable: false, markupPercent: "15", billAmount: "11.5" },
+    { ...baselineLine, isBillable: true, markupPercent: "12", billAmount: "11.5" },
+    { ...baselineLine, isBillable: true, markupPercent: "15", billAmount: "10" },
+  ]) {
+    assert.notEqual(
+      baseline,
+      canonicalNativeDocumentKey({
+        ...baselineDocument,
+        lines: [line],
+      }),
+    );
+  }
+});
+
 test("change detection includes non-posting commercial totals only", () => {
   const posting = canonicalDocument({ subtotal: "99", total: "99" });
   assert.equal(

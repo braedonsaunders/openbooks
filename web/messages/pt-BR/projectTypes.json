@@ -31,6 +31,7 @@
   "burdenDimension": "Grupo de contas de encargos",
   "budgetSource": "Fonte do orçamento de custo",
   "committedKinds": "Custo comprometido de",
+  "committedStatuses": "Estados do ciclo de vida do custo comprometido",
   "totalCostComponents": "Componentes do custo total",
   "allowedBases": "Bases de faturamento permitidas",
   "billingProcedure": "Procedimento de faturamento",
