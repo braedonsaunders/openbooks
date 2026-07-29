@@ -77,6 +77,7 @@ export async function PaymentsSection({
     drawer = (
       <PaymentDrawer
         payment={openPayment as any}
+        initialMode={pickString(sp.mode) === 'edit' ? 'edit' : 'view'}
         initialOpenItems={openItems}
         parties={parties.rows}
         bankAccounts={banks.rows}

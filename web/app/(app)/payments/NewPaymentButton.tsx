@@ -35,7 +35,7 @@ export function NewPaymentButton({
       setBusy(false)
       return
     }
-    router.push(`${basePath}?payment=${data.id}` as any)
+    router.push(`${basePath}?payment=${data.id}&mode=edit` as any)
     router.refresh()
     setBusy(false)
   }

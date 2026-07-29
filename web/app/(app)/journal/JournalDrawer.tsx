@@ -1,6 +1,7 @@
 'use client'
 
 import { useMoney } from '@/components/money-provider'
+import { initialDrawerMode, type DrawerMode } from '@/lib/drawer-mode'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { useTranslations } from 'next-intl'
@@ -115,6 +116,7 @@ function toRow(l: Record<string, any>, lineDefs: CustomFieldDefClient[], segment
 
 export function JournalDrawer({
   journal,
+  initialMode = 'view',
   parties,
   accounts,
   departments,
@@ -126,6 +128,7 @@ export function JournalDrawer({
   layout,
 }: {
   journal: JournalPayload
+  initialMode?: DrawerMode
   parties: Opt[]
   accounts: Opt[]
   departments: Opt[]
@@ -144,13 +147,15 @@ export function JournalDrawer({
   const router = useRouter()
   const doc = journal.doc
   const isDraft = doc.status === 'draft'
-  // source platform-style record model: the flyout ALWAYS opens READ-ONLY (view mode)
-  // — even for drafts — with an Edit button in the header. Draft and POSTED
+  // Existing records default to read-only; newly created drafts can explicitly
+  // request edit mode. Draft and POSTED
   // journals are both editable — saving a posted journal re-materializes its
   // GL-Impact projection (the server blocks only GL changes into a closed
   // period). voided journals are read-only. Save is EXPLICIT — no autosave.
   const canEditStatus = doc.status === 'draft'
-  const [mode, setMode] = useState<'view' | 'edit'>('view')
+  const [mode, setMode] = useState<DrawerMode>(
+    initialDrawerMode(initialMode, canEditStatus),
+  )
   const editable = mode === 'edit' && canEditStatus
 
   const [partyId, setPartyId] = useState<string>(doc.party_id ?? '')

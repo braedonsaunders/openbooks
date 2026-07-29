@@ -220,6 +220,7 @@ export default async function Parties({
           canReadActivities={can(authz, 'crm.activities.read')}
           canManageWages={can(authz, 'admin.setup.manage')}
           initialTab={partyTab}
+          initialMode={pickString(sp.mode) === 'edit' ? 'edit' : 'view'}
           role={role}
           layout={resolvedPartyForm?.layout}
           forms={resolvedPartyForm?.available ?? []}

@@ -41,7 +41,12 @@ export default async function FieldTicketsPage({
     <NewOrderButton apiPath={API} base={BASE} param={PARAM} label={t('list.new')} createFailedMessage={t('list.createFailed')} />
   ) : undefined
 
-  const drawer = drawerData ? <FieldTicketDrawer {...drawerData} /> : null
+  const drawer = drawerData ? (
+    <FieldTicketDrawer
+      {...drawerData}
+      initialMode={pickString(sp.mode) === 'edit' ? 'edit' : 'view'}
+    />
+  ) : null
 
   return (
     <ListPageLayout header={<PageHeader title={t('title')} description={t('description')} actions={newBtn} />}>

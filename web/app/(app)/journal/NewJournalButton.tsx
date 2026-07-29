@@ -23,7 +23,7 @@ export function NewJournalButton() {
       setBusy(false)
       return
     }
-    router.push(`/journal?entry=${data.id}`)
+    router.push(`/journal?entry=${data.id}&mode=edit`)
     router.refresh()
     setBusy(false)
   }

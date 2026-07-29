@@ -174,7 +174,7 @@ export function BillingSection({
     setBusy(false)
     if (res.ok && data.documentId) {
       toast.success(t('invoiceCreated', { number: data.documentNumber }))
-      router.push(`/ar?invoice=${data.documentId}`)
+      router.push(`/ar/invoices?doc=${data.documentId}&mode=edit`)
     } else {
       toast.error(data.error ?? t('invoiceFailed'))
     }

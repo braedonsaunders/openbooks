@@ -37,7 +37,7 @@ export function NewPartyRedirect({
         router.replace(basePath)
         return
       }
-      router.replace(`${basePath}?party=${data.id}`)
+      router.replace(`${basePath}?party=${data.id}&mode=edit`)
       router.refresh()
     })()
   }, [router, basePath, role, t])

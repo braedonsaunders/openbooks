@@ -105,6 +105,7 @@ export default async function EntityRole({
           canManageWages={can(authz, 'admin.setup.manage')}
           role={role}
           initialTab={partyTab}
+          initialMode={pickString(sp.mode) === 'edit' ? 'edit' : 'view'}
           basePath={basePath}
           paymentTerms={pickers[0].rows}
           departments={pickers[1].rows}

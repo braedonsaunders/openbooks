@@ -40,7 +40,7 @@ export function NewPartyButton({
       setBusy(false)
       return
     }
-    router.push(`${basePath}?party=${data.id}`)
+    router.push(`${basePath}?party=${data.id}&mode=edit`)
     router.refresh()
     setBusy(false)
   }

@@ -39,7 +39,7 @@ export function NewOrderButton({
       setBusy(false)
       return
     }
-    router.push(`${base}?${param}=${data.id}`)
+    router.push(`${base}?${param}=${data.id}&mode=edit`)
     router.refresh()
     setBusy(false)
   }

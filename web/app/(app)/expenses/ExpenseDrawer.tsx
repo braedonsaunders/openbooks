@@ -1,6 +1,7 @@
 'use client'
 
 import { useMoney } from '@/components/money-provider'
+import { initialDrawerMode, type DrawerMode } from '@/lib/drawer-mode'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { useTranslations } from 'next-intl'
@@ -110,6 +111,7 @@ function toRow(l: Record<string, any>, lineDefs: CustomFieldDefClient[], segment
 
 export function ExpenseDrawer({
   report,
+  initialMode = 'view',
   employees,
   accounts,
   taxCodes,
@@ -124,6 +126,7 @@ export function ExpenseDrawer({
   layout,
 }: {
   report: ExpensePayload
+  initialMode?: DrawerMode
   employees: Opt[]
   accounts: Opt[]
   taxCodes: Opt[]
@@ -144,14 +147,16 @@ export function ExpenseDrawer({
   const doc = report.doc
   const statusKey = STATUS_LABEL_KEYS[String(doc.status)]
   const isDraft = doc.status === 'draft'
-  // source platform-style record model: the flyout ALWAYS opens READ-ONLY (view mode)
-  // — even for drafts — with an Edit button in the header. Draft, approved,
+  // Existing records default to read-only; newly created drafts can explicitly
+  // request edit mode. Draft, approved,
   // and POSTED reports are all editable (provided the viewer can enter
   // expenses) — saving a posted report re-materializes its GL-Impact projection
   // (the server blocks only GL changes into a closed period). pending_approval
   // and voided reports are read-only. Save is EXPLICIT — no per-field autosave.
   const canEditStatus = doc.status === 'draft' && canSubmit
-  const [mode, setMode] = useState<'view' | 'edit'>('view')
+  const [mode, setMode] = useState<DrawerMode>(
+    initialDrawerMode(initialMode, canEditStatus),
+  )
   const editable = mode === 'edit' && canEditStatus
 
   const [partyId, setPartyId] = useState<string>(doc.party_id ?? '')

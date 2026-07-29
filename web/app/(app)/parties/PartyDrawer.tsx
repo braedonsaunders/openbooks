@@ -1,6 +1,7 @@
 'use client'
 
 import { useMoney } from '@/components/money-provider'
+import { initialDrawerMode, type DrawerMode } from '@/lib/drawer-mode'
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import Link from 'next/link'
 import { usePathname, useRouter, useSearchParams } from 'next/navigation'
@@ -189,6 +190,7 @@ export function PartyDrawer({
   canManageWages = false,
   role,
   initialTab = 'overview',
+  initialMode = 'view',
   basePath = '/parties',
   layout,
   forms = [],
@@ -216,6 +218,7 @@ export function PartyDrawer({
    *  keeps that role enabled. Omitted on the unified /parties directory. */
   role?: 'customer' | 'vendor' | 'employee'
   initialTab?: PartyTab
+  initialMode?: DrawerMode
   basePath?: string
   layout?: FormLayoutConfig
   forms?: { id: string; name: string }[]
@@ -308,10 +311,11 @@ export function PartyDrawer({
   const [saveState, setSaveState] = useState<'saved' | 'saving' | 'dirty' | 'error'>('saved')
   const [busy, setBusy] = useState(false)
 
-  // source platform-style record model: the flyout ALWAYS opens READ-ONLY (view mode)
-  // — even for drafts — with an Edit button in the header. Save is EXPLICIT —
-  // one Save button, no per-field autosave.
-  const [mode, setMode] = useState<'view' | 'edit'>('view')
+  // Existing parties default to read-only; creation flows can explicitly
+  // request edit mode. Permission checks remain authoritative.
+  const [mode, setMode] = useState<DrawerMode>(
+    initialDrawerMode(initialMode, canManage),
+  )
   const editable = mode === 'edit' && canManage
 
   const nameValid = displayName.trim().length > 0 && displayName.trim() !== 'New party'

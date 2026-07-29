@@ -1,6 +1,7 @@
 'use client'
 
 import { useMoney } from '@/components/money-provider'
+import { initialDrawerMode, type DrawerMode } from '@/lib/drawer-mode'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { useTranslations } from 'next-intl'
@@ -109,6 +110,7 @@ const STATUS_LABEL_KEY: Record<string, string> = {
 
 export function PaymentDrawer({
   payment,
+  initialMode = 'view',
   initialOpenItems,
   parties,
   bankAccounts,
@@ -117,6 +119,7 @@ export function PaymentDrawer({
   layout,
 }: {
   payment: PaymentPayload
+  initialMode?: DrawerMode
   initialOpenItems: OpenItemClient[]
   parties: Opt[]
   bankAccounts: Opt[]
@@ -130,12 +133,14 @@ export function PaymentDrawer({
   const router = useRouter()
   const doc = payment.doc
   const isDraft = doc.status === 'draft'
-  // source platform-style record model: the flyout ALWAYS opens READ-ONLY (view mode)
-  // — even for drafts — with an Edit button in the header. Only DRAFT payments
+  // Existing records default to read-only; newly created drafts can explicitly
+  // request edit mode. Only DRAFT payments
   // are editable (posting is terminal — applications become ledger state). Save
   // is EXPLICIT — one Save button, no per-field autosave.
   const canEditStatus = isDraft
-  const [mode, setMode] = useState<'view' | 'edit'>('view')
+  const [mode, setMode] = useState<DrawerMode>(
+    initialDrawerMode(initialMode, canEditStatus),
+  )
   const editable = mode === 'edit' && canEditStatus
   const partyLabel = side === 'ap' ? tCommon('labels.vendor') : tCommon('labels.customer')
   const kindLabel = (kind: string | null) => {

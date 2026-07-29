@@ -34,7 +34,7 @@ export function NewOrderRedirect({
         router.replace(base)
         return
       }
-      router.replace(`${base}?${param}=${data.id}`)
+      router.replace(`${base}?${param}=${data.id}&mode=edit`)
       router.refresh()
     })()
   }, [router, apiPath, base, param, createFailedMessage])

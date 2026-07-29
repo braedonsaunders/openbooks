@@ -1,6 +1,7 @@
 'use client'
 
 import { useMoney } from '@/components/money-provider'
+import { initialDrawerMode, type DrawerMode } from '@/lib/drawer-mode'
 import { Fragment, useEffect, useMemo, useRef, useState } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
@@ -187,6 +188,9 @@ export interface DocumentDrawerProps {
   lineDefs: CustomFieldDefClient[]
   canCreate: boolean
   canPost: boolean
+  /** Initial presentation mode. Creation flows request edit; existing records
+   *  continue to default to view. Status and permission checks still apply. */
+  initialMode?: DrawerMode
   /** Resolved transaction form layout; when present the header + line columns
    *  render from it (move/hide/rename/custom fields). Omitted only for the
    *  defensive legacy-free fallback used while a page is loading. */
@@ -226,6 +230,7 @@ export function DocumentDrawer({
   lineDefs,
   canCreate,
   canPost,
+  initialMode = 'view',
   layout,
   availableLayouts,
   currentLayoutId,
@@ -245,9 +250,11 @@ export function DocumentDrawer({
   const canEditStatus =
     (doc.status === 'draft' && canCreate) ||
     (doc.status === 'posted' && canCreate && canPost)
-  // Record flyouts ALWAYS open read-only (source platform view-mode model); editing
-  // is an explicit Edit → Save/Cancel cycle from the header.
-  const [mode, setMode] = useState<'view' | 'edit'>('view')
+  // Existing records default to read-only. A creation flow may request edit
+  // mode, but status and permission checks remain authoritative.
+  const [mode, setMode] = useState<DrawerMode>(
+    initialDrawerMode(initialMode, canEditStatus),
+  )
   const editable = mode === 'edit' && canEditStatus
   // Posted open-item docs that carry a balance resolve to open/paid from the
   // applications ledger (invoices). Credits post open items too but their
