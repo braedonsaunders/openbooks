@@ -3,6 +3,10 @@
     "title": "勘定科目表",
     "description": "自然符号の現在残高(貸借対照表は累計、損益は当会計年度)を集計勘定を通じてロールアップします。",
     "searchPlaceholder": "番号または名称を検索…",
+    "newAccount": "新規勘定",
+    "viewRegister": "元帳を表示",
+    "expand": "勘定を展開",
+    "collapse": "勘定を折りたたむ",
     "badges": {
       "inactive": "無効",
       "summary": "集計"
@@ -35,6 +39,10 @@
   },
   "drawer": {
     "saved": "勘定を保存しました",
+    "created": "勘定を作成しました",
+    "newTitle": "新規勘定",
+    "newDescription": "転記勘定または集計勘定を作成します。期首残高は貸借一致した仕訳で入力してください。",
+    "create": "勘定を作成",
     "typeLocked": "勘定に元帳の記録が発生した後は、種別を変更できません。",
     "parent": "親勘定",
     "currencyRestriction": "通貨制限",
@@ -58,6 +66,7 @@
       "type_has_transactions": "元帳の記録が存在した後は、勘定種別を変更できません。",
       "invalid_parent": "有効な親勘定を選択してください。",
       "parent_must_be_summary": "親勘定は集計勘定である必要があります。",
+      "parent_type_mismatch": "親勘定と子勘定は同じ勘定種別である必要があります。",
       "parent_cycle": "その親勘定は循環する勘定階層を作成してしまいます。",
       "summary_reconcilable_conflict": "集計勘定は消込対象にできません。",
       "summary_has_transactions": "元帳の記録がある勘定は集計勘定にできません。",
@@ -68,6 +77,8 @@
       "invalid_dimensions": "有効な必須ディメンションを選択してください。",
       "invalid_custom_fields": "カスタムフィールドの値を確認してください。",
       "number_in_use": "その勘定番号はすでに使用されています。",
+      "account_changed": "編集中に勘定が変更されました。開き直して再試行してください。",
+      "invalid_idempotency_key": "勘定の作成要求を安全に再試行できませんでした。",
       "save_failed": "勘定を保存できませんでした。"
     }
   },

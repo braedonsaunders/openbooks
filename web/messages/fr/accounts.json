@@ -3,6 +3,10 @@
     "title": "Plan comptable",
     "description": "Soldes courants en signe naturel (bilan en cumulatif, résultats de l’exercice en cours), consolidés dans les comptes sommaires.",
     "searchPlaceholder": "Rechercher un numéro ou un nom…",
+    "newAccount": "Nouveau compte",
+    "viewRegister": "Voir le registre",
+    "expand": "Développer le compte",
+    "collapse": "Réduire le compte",
     "badges": {
       "inactive": "inactif",
       "summary": "sommaire"
@@ -35,6 +39,10 @@
   },
   "drawer": {
     "saved": "Compte enregistré",
+    "created": "Compte créé",
+    "newTitle": "Nouveau compte",
+    "newDescription": "Créez un compte d’imputation ou récapitulatif. Les soldes d’ouverture doivent passer par une écriture équilibrée.",
+    "create": "Créer le compte",
     "typeLocked": "Le type ne peut plus être modifié après une activité au grand livre.",
     "parent": "Compte parent",
     "currencyRestriction": "Restriction de devise",
@@ -58,6 +66,7 @@
       "type_has_transactions": "Le type ne peut plus être modifié après une activité au grand livre.",
       "invalid_parent": "Choisissez un compte parent valide.",
       "parent_must_be_summary": "Le parent doit être un compte récapitulatif.",
+      "parent_type_mismatch": "Le parent et l’enfant doivent avoir le même type de compte.",
       "parent_cycle": "Ce parent créerait une hiérarchie circulaire.",
       "summary_reconcilable_conflict": "Un compte récapitulatif ne peut pas être rapprochable.",
       "summary_has_transactions": "Un compte ayant une activité ne peut pas devenir récapitulatif.",
@@ -68,6 +77,8 @@
       "invalid_dimensions": "Choisissez des dimensions obligatoires valides.",
       "invalid_custom_fields": "Vérifiez les valeurs des champs personnalisés.",
       "number_in_use": "Ce numéro de compte est déjà utilisé.",
+      "account_changed": "Ce compte a changé pendant votre modification. Rouvrez-le et réessayez.",
+      "invalid_idempotency_key": "La demande de compte n’a pas pu être relancée de façon sécuritaire.",
       "save_failed": "Le compte n’a pas pu être enregistré."
     }
   },

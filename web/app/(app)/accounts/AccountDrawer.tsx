@@ -1,6 +1,6 @@
 'use client'
 
-import { useMemo, useState } from 'react'
+import { useMemo, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { useTranslations } from 'next-intl'
 import { toast } from 'sonner'
@@ -9,7 +9,7 @@ import { CustomFieldInputs, type CustomFieldDefClient } from '../../../component
 import type { AccountPayload } from '../../api/accounts/_lib'
 import { ReadOnlyValue } from '../../../components/read-only-value'
 
-type Option = { value: string; label: string }
+type Option = { value: string; label: string; type?: string }
 
 const TYPE_VALUES = [
   'asset_bank',
@@ -50,6 +50,7 @@ export function AccountDrawer({
   segments,
   canManage,
   closeHref,
+  createMode = false,
 }: {
   payload: AccountPayload
   parents: Option[]
@@ -59,11 +60,13 @@ export function AccountDrawer({
   segments: { key: string; name: string }[]
   canManage: boolean
   closeHref: string
+  createMode?: boolean
 }) {
   const t = useTranslations('accounts')
   const tc = useTranslations('common')
   const router = useRouter()
   const account = payload.account as Record<string, any>
+  const requestIdRef = useRef<string | null>(null)
 
   const initial = useMemo(() => ({
     number: account.number ?? '',
@@ -72,7 +75,7 @@ export function AccountDrawer({
     description: account.description ?? '',
     parentId: account.parent_id ?? '',
     isSummary: account.is_summary === true,
-    isActive: account.is_active === true,
+    isActive: createMode ? true : account.is_active === true,
     currencyRestriction: account.currency_restriction ?? '',
     eliminate: account.eliminate === true,
     subsidiaryId: account.subsidiary_id ?? '',
@@ -80,20 +83,21 @@ export function AccountDrawer({
     reconcilable: account.reconcilable === true,
     requiredDimensions: Array.isArray(account.required_dimensions) ? account.required_dimensions as string[] : [],
     custom: (account.custom ?? {}) as Record<string, unknown>,
-  }), [account])
+  }), [account, createMode])
   const [form, setForm] = useState(initial)
-  const [mode, setMode] = useState<'view' | 'edit'>('view')
+  const [mode, setMode] = useState<'view' | 'edit'>(createMode ? 'edit' : 'view')
   const [busy, setBusy] = useState(false)
   const editable = canManage && mode === 'edit'
+  const compatibleParents = parents.filter((option) => option.type === form.type)
   const set = <K extends keyof typeof form>(key: K, value: (typeof form)[K]) => setForm((current) => ({ ...current, [key]: value }))
 
   function errorMessage(code: unknown) {
     const key = typeof code === 'string' ? code : 'save_failed'
     const known = new Set([
       'name_required', 'invalid_type', 'type_has_transactions', 'invalid_parent', 'parent_must_be_summary',
-      'parent_cycle', 'summary_reconcilable_conflict', 'summary_has_transactions', 'summary_has_children',
+      'parent_type_mismatch', 'parent_cycle', 'summary_reconcilable_conflict', 'summary_has_transactions', 'summary_has_children',
       'inactive_has_children', 'invalid_currency', 'invalid_subsidiary', 'invalid_dimensions',
-      'invalid_custom_fields', 'number_in_use', 'save_failed',
+      'invalid_custom_fields', 'number_in_use', 'account_changed', 'invalid_idempotency_key', 'save_failed',
     ])
     return t(`drawer.errors.${known.has(key) ? key : 'save_failed'}`)
   }
@@ -104,9 +108,13 @@ export function AccountDrawer({
       return
     }
     setBusy(true)
-    const response = await fetch(`/api/accounts/${account.id}`, {
-      method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
+    if (createMode && !requestIdRef.current) requestIdRef.current = crypto.randomUUID()
+    const response = await fetch(createMode ? '/api/accounts' : `/api/accounts/${account.id}`, {
+      method: createMode ? 'POST' : 'PATCH',
+      headers: {
+        'Content-Type': 'application/json',
+        ...(createMode ? { 'Idempotency-Key': requestIdRef.current! } : {}),
+      },
       body: JSON.stringify({
         ...form,
         number: form.number || null,
@@ -122,12 +130,23 @@ export function AccountDrawer({
       toast.error(errorMessage(data.error))
       return
     }
-    toast.success(t('drawer.saved'))
+    toast.success(t(createMode ? 'drawer.created' : 'drawer.saved'))
+    if (createMode) {
+      const createdId = data?.account?.id
+      const separator = closeHref.includes('?') ? '&' : '?'
+      router.replace((createdId ? `${closeHref}${separator}account=${createdId}` : closeHref) as never)
+      router.refresh()
+      return
+    }
     setMode('view')
     router.refresh()
   }
 
   function cancel() {
+    if (createMode) {
+      router.push(closeHref as never)
+      return
+    }
     setForm(initial)
     setMode('view')
   }
@@ -148,18 +167,22 @@ export function AccountDrawer({
       size="2xl"
       title={
         <span className="flex items-center gap-2.5">
-          <span>{`${form.number} ${form.name}`.trim()}</span>
-          <Badge variant={form.isActive ? 'success' : 'outline'}>
-            {form.isActive ? tc('status.active') : tc('status.inactive')}
-          </Badge>
+          <span>{createMode ? t('drawer.newTitle') : `${form.number} ${form.name}`.trim()}</span>
+          {!createMode ? (
+            <Badge variant={form.isActive ? 'success' : 'outline'}>
+              {form.isActive ? tc('status.active') : tc('status.inactive')}
+            </Badge>
+          ) : null}
         </span>
       }
-      description={mode === 'edit' ? tc('feedback.editingHint') : undefined}
+      description={createMode ? t('drawer.newDescription') : mode === 'edit' ? tc('feedback.editingHint') : undefined}
       headerActions={
         mode === 'edit' ? (
           <>
             <Button variant="outline" disabled={busy} onClick={cancel}>{tc('actions.cancel')}</Button>
-            <Button disabled={busy} onClick={save}>{busy ? tc('actions.saving') : tc('actions.save')}</Button>
+            <Button disabled={busy || !form.name.trim()} onClick={save}>
+              {busy ? tc('actions.saving') : createMode ? t('drawer.create') : tc('actions.save')}
+            </Button>
           </>
         ) : canManage ? (
           <Button variant="outline" onClick={() => setMode('edit')}>{tc('actions.edit')}</Button>
@@ -179,7 +202,11 @@ export function AccountDrawer({
           <div className={fieldClass}>
             <Label>{tc('labels.type')}</Label>
             {editable ? (
-              <Select value={form.type} disabled={payload.hasTransactions} onChange={(e) => set('type', e.target.value)}>
+              <Select
+                value={form.type}
+                disabled={payload.hasTransactions}
+                onChange={(e) => setForm((current) => ({ ...current, type: e.target.value, parentId: '' }))}
+              >
                 {TYPE_VALUES.map((type) => <option key={type} value={type}>{t(`types.${TYPE_KEYS[type]}`)}</option>)}
               </Select>
             ) : value(t(`types.${TYPE_KEYS[form.type]}`))}
@@ -195,7 +222,7 @@ export function AccountDrawer({
           <div className={fieldClass}>
             <Label>{t('drawer.parent')}</Label>
             {editable ? (
-              <SearchSelect value={form.parentId} onChange={(v) => set('parentId', v)} options={parents} clearable emptyLabel={tc('labels.none')} ariaLabel={t('drawer.parent')} />
+              <SearchSelect value={form.parentId} onChange={(v) => set('parentId', v)} options={compatibleParents} clearable emptyLabel={tc('labels.none')} ariaLabel={t('drawer.parent')} />
             ) : value(parents.find((option) => option.value === form.parentId)?.label ?? payload.parentName)}
           </div>
           <div className={fieldClass}>

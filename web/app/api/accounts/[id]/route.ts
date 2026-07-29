@@ -76,6 +76,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
   if (body.type !== undefined && body.type !== existing.type && existingPayload.hasTransactions) {
     return bad('type_has_transactions', 'type')
   }
+  const nextType = body.type ?? String(existing.type)
 
   let parentId: string | null | undefined
   if (body.parentId !== undefined) {
@@ -83,10 +84,11 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
     if (parentId) {
       if (!isUuid(parentId) || parentId === id) return bad('invalid_parent', 'parentId')
       const parent = (await db.execute(sql`
-        select is_summary from accounts
+        select is_summary, type from accounts
          where id = ${parentId} and org_id = ${gate.user.orgId}
-      `)) as unknown as { rows: { is_summary: boolean }[] }
+      `)) as unknown as { rows: { is_summary: boolean; type: string }[] }
       if (!parent.rows[0]?.is_summary) return bad('parent_must_be_summary', 'parentId')
+      if (parent.rows[0].type !== nextType) return bad('parent_type_mismatch', 'parentId')
       const cycle = (await db.execute(sql`
         with recursive descendants as (
           select id from accounts where id = ${id} and org_id = ${gate.user.orgId}
@@ -98,6 +100,16 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
         select 1 from descendants where id = ${parentId} limit 1
       `)) as unknown as { rows: unknown[] }
       if (cycle.rows[0]) return bad('parent_cycle', 'parentId')
+    }
+  }
+  const effectiveParentId = parentId !== undefined ? parentId : (existing.parent_id as string | null)
+  if (effectiveParentId && body.type !== undefined && body.parentId === undefined) {
+    const parent = (await db.execute(sql`
+      select type from accounts
+       where id = ${effectiveParentId} and org_id = ${gate.user.orgId}
+    `)) as unknown as { rows: { type: string }[] }
+    if (!parent.rows[0] || parent.rows[0].type !== nextType) {
+      return bad('parent_type_mismatch', 'type')
     }
   }
 
@@ -151,28 +163,44 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
   }
 
   try {
-    await db.execute(sql`
-      update accounts set
-        number = ${body.number !== undefined ? textOrNull(body.number) : sql`number`},
-        name = ${name !== undefined ? name : sql`name`},
-        type = ${body.type !== undefined ? body.type : sql`type`},
-        description = ${body.description !== undefined ? textOrNull(body.description) : sql`description`},
-        parent_id = ${parentId !== undefined ? parentId : sql`parent_id`},
-        is_summary = ${body.isSummary !== undefined ? body.isSummary : sql`is_summary`},
-        is_active = ${body.isActive !== undefined ? body.isActive : sql`is_active`},
-        currency_restriction = ${currencyRestriction !== undefined ? currencyRestriction : sql`currency_restriction`},
-        eliminate = ${body.eliminate !== undefined ? body.eliminate : sql`eliminate`},
-        subsidiary_id = ${subsidiaryId !== undefined ? subsidiaryId : sql`subsidiary_id`},
-        subsidiary_include_children = ${body.subsidiaryIncludeChildren !== undefined ? body.subsidiaryIncludeChildren : sql`subsidiary_include_children`},
-        reconcilable = ${body.reconcilable !== undefined ? body.reconcilable : sql`reconcilable`},
-        required_dimensions = ${requiredDimensions !== undefined ? JSON.stringify(requiredDimensions) : sql`required_dimensions`}::jsonb,
-        custom = ${custom !== undefined ? JSON.stringify(custom) : sql`custom`}::jsonb,
-        updated_at = now(), updated_by = ${gate.user.id}
-       where id = ${id} and org_id = ${gate.user.orgId}
-    `)
+    await db.transaction(async (tx) => {
+      const updated = (await tx.execute(sql`
+        update accounts set
+          number = ${body.number !== undefined ? textOrNull(body.number) : sql`number`},
+          name = ${name !== undefined ? name : sql`name`},
+          type = ${body.type !== undefined ? body.type : sql`type`},
+          description = ${body.description !== undefined ? textOrNull(body.description) : sql`description`},
+          parent_id = ${parentId !== undefined ? parentId : sql`parent_id`},
+          is_summary = ${body.isSummary !== undefined ? body.isSummary : sql`is_summary`},
+          is_active = ${body.isActive !== undefined ? body.isActive : sql`is_active`},
+          currency_restriction = ${currencyRestriction !== undefined ? currencyRestriction : sql`currency_restriction`},
+          eliminate = ${body.eliminate !== undefined ? body.eliminate : sql`eliminate`},
+          subsidiary_id = ${subsidiaryId !== undefined ? subsidiaryId : sql`subsidiary_id`},
+          subsidiary_include_children = ${body.subsidiaryIncludeChildren !== undefined ? body.subsidiaryIncludeChildren : sql`subsidiary_include_children`},
+          reconcilable = ${body.reconcilable !== undefined ? body.reconcilable : sql`reconcilable`},
+          required_dimensions = ${requiredDimensions !== undefined ? JSON.stringify(requiredDimensions) : sql`required_dimensions`}::jsonb,
+          custom = ${custom !== undefined ? JSON.stringify(custom) : sql`custom`}::jsonb,
+          updated_at = now(), updated_by = ${gate.user.id}
+         where id = ${id} and org_id = ${gate.user.orgId}
+           and updated_at = ${existing.updated_at}
+         returning *
+      `)) as unknown as { rows: Record<string, unknown>[] }
+      if (!updated.rows[0]) throw new Error('account_changed')
+      await tx.execute(sql`
+        insert into audit_log
+          (org_id, table_name, row_id, action, changes, actor_id, request_id)
+        values
+          (${gate.user.orgId}, 'accounts', ${id}, 'update',
+           ${JSON.stringify({ before: existing, after: updated.rows[0] })}::jsonb,
+           ${gate.user.id}, ${request.headers.get('X-Request-Id')})
+      `)
+    })
   } catch (error) {
     const message = error instanceof Error ? `${error.message} ${String((error as { cause?: unknown }).cause ?? '')}` : String(error)
     if (message.includes('accounts_org_number')) return bad('number_in_use', 'number')
+    if (message.includes('account_changed')) {
+      return NextResponse.json({ error: 'account_changed' }, { status: 409 })
+    }
     throw error
   }
 
