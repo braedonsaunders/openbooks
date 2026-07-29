@@ -135,6 +135,7 @@ export function SearchSelectFilter({
   options,
   allLabel,
   pageParamKey = 'page',
+  resetParamKeys = [],
   className,
 }: {
   paramKey: string
@@ -142,6 +143,8 @@ export function SearchSelectFilter({
   options: { value: string; label: string; hint?: string }[]
   allLabel?: string
   pageParamKey?: string
+  /** Additional URL state that becomes invalid when this filter changes. */
+  resetParamKeys?: string[]
   className?: string
 }) {
   const tLabels = useTranslations('common.labels')
@@ -155,6 +158,7 @@ export function SearchSelectFilter({
     if (v) next.set(paramKey, v)
     else next.delete(paramKey)
     next.delete(pageParamKey)
+    for (const key of resetParamKeys) next.delete(key)
     const qs = next.toString()
     router.replace((qs ? `${pathname}?${qs}` : pathname) as any)
   }

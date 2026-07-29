@@ -38,6 +38,7 @@
     "title": "Formulare & Ansichten",
     "description": "Passen Sie an, wie jedes Transaktionsformular und jede Datensatzliste für diese Organisation und für Sie selbst aussieht.",
     "allRecordTypes": "Alle Datensatztypen",
+    "recordTypeFilter": "Datensatztyp",
     "searchPlaceholder": "Formulare und Ansichten suchen…",
     "tabs": {
       "forms": "Transaktionsformulare",

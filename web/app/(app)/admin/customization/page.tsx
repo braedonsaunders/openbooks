@@ -6,6 +6,7 @@ import { db } from '@openbooks/engine/src/db.ts'
 import { Badge, Button, EmptyState, PageHeader, Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@openbooks/ui'
 import { ListPageLayout } from '../../../../components/page-layout'
 import { SearchInput } from '../../../../components/search-input'
+import { SearchSelectFilter } from '../../../../components/filter-bar'
 import { Pagination } from '../../../../components/pagination'
 import { parseListParams, pickString } from '../../../../lib/list-params'
 import { requirePermission } from '../../../../lib/authz'
@@ -33,6 +34,7 @@ export default async function CustomizationPage({
   const t = await getTranslations('customization')
   const tCommon = await getTranslations('common')
   const tHub = await getTranslations('admin.hub')
+  const tRoot = await getTranslations()
   const sp = await searchParams
   // Whitelist the record type — an unknown key must not reach the designer.
   const requestedType = pickString(sp.recordType)
@@ -90,7 +92,11 @@ export default async function CustomizationPage({
 
   // Copy source when creating a new form from an existing/standard baseline.
   const fromParam = pickString(sp.from)
-  const typeLabel = recordType ? t(`recordTypes.${recordType}` as never) : ''
+  const recordTypeLabel = (key: string) => {
+    const meta = RECORD_TYPE_BY_KEY[key]
+    return meta ? tRoot(meta.labelKey as never) : key.replaceAll('_', ' ')
+  }
+  const typeLabel = recordType ? recordTypeLabel(recordType) : ''
   let duplicateFrom: { name: string; layout: FormLayoutConfig } | null = null
   if (recordType && formId === 'new' && fromParam) {
     if (fromParam === 'standard') {
@@ -138,31 +144,6 @@ export default async function CustomizationPage({
               </>
             )}
           />
-          <div className="flex flex-wrap items-center gap-1.5">
-            <Link
-              href={`/admin/customization?tab=${tab}`}
-              className={`rounded-full border px-3 py-1 text-xs font-medium transition-colors ${
-                !recordType
-                  ? 'border-teal-500 bg-teal-50 text-teal-700 dark:border-teal-500 dark:bg-teal-950/40 dark:text-teal-300'
-                  : 'border-slate-200 text-slate-600 hover:border-slate-300 dark:border-slate-700 dark:text-slate-300'
-              }`}
-            >
-              {t('designer.allRecordTypes')}
-            </Link>
-            {RECORD_TYPES.map((rt) => (
-              <Link
-                key={rt.key}
-                href={`/admin/customization?recordType=${rt.key}&tab=${tab}`}
-                className={`rounded-full border px-3 py-1 text-xs font-medium transition-colors ${
-                  rt.key === recordType
-                    ? 'border-teal-500 bg-teal-50 text-teal-700 dark:border-teal-500 dark:bg-teal-950/40 dark:text-teal-300'
-                    : 'border-slate-200 text-slate-600 hover:border-slate-300 dark:border-slate-700 dark:text-slate-300'
-                }`}
-              >
-                {t(`recordTypes.${rt.key}` as never)}
-              </Link>
-            ))}
-          </div>
           <div className="flex flex-wrap items-center gap-2">
             <div className="flex rounded-lg border border-slate-200 p-0.5 dark:border-slate-800">
               {supportsForms ? (
@@ -180,6 +161,16 @@ export default async function CustomizationPage({
                 {t('designer.tabs.views')}
               </Link>
             </div>
+            <SearchSelectFilter
+              paramKey="recordType"
+              label={t('designer.recordTypeFilter')}
+              allLabel={t('designer.allRecordTypes')}
+              resetParamKeys={['form', 'view']}
+              options={RECORD_TYPES.map((rt) => ({
+                value: rt.key,
+                label: recordTypeLabel(rt.key),
+              }))}
+            />
             <SearchInput placeholder={t('designer.searchPlaceholder')} />
           </div>
         </>
@@ -205,7 +196,7 @@ export default async function CustomizationPage({
                       {f.name}
                     </Link>
                   </TableCell>
-                  <TableCell><Badge variant="secondary">{t(`recordTypes.${f.recordType}` as never)}</Badge></TableCell>
+                  <TableCell><Badge variant="secondary">{recordTypeLabel(f.recordType)}</Badge></TableCell>
                   <TableCell>
                     <Badge variant={f.isActive ? 'success' : 'outline'}>{f.isActive ? tCommon('labels.active') : tCommon('labels.inactive')}</Badge>
                   </TableCell>
@@ -249,7 +240,7 @@ export default async function CustomizationPage({
                       {v.name}
                     </Link>
                   </TableCell>
-                  <TableCell><Badge variant="secondary">{t(`recordTypes.${v.recordType}` as never)}</Badge></TableCell>
+                  <TableCell><Badge variant="secondary">{recordTypeLabel(v.recordType)}</Badge></TableCell>
                   <TableCell>
                     <Badge variant={v.scope === 'org' ? 'default' : 'secondary'}>
                       {v.scope === 'org' ? t('designer.list.scopeOrg') : t('designer.list.scopeUser')}

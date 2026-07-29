@@ -38,6 +38,7 @@
     "title": "Formulários e visualizações",
     "description": "Personalize a aparência de cada formulário de transação e lista de registros para esta organização e para você.",
     "allRecordTypes": "Todos os tipos de registro",
+    "recordTypeFilter": "Tipo de registro",
     "searchPlaceholder": "Buscar formulários e visualizações…",
     "tabs": {
       "forms": "Formulários de transação",

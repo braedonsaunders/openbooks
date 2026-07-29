@@ -43,6 +43,7 @@
     "description": "Customize how each transaction form and record list looks for this organization and for yourself.",
     "documentation": "Documentation",
     "allRecordTypes": "All record types",
+    "recordTypeFilter": "Record type",
     "searchPlaceholder": "Search forms and views…",
     "tabs": {
       "forms": "Transaction forms",

@@ -51,7 +51,7 @@ interface FieldDef {
 export function NewFormButton({ recordType }: { recordType: string }) {
   const t = useTranslations('customization')
   const router = useRouter()
-  // The transaction type is chosen by the record-type pills above the list;
+  // The record type is chosen by the dropdown above the list;
   // "New form" creates a blank form for the selected type (app convention).
   return (
     <Button onClick={() => router.push(`/admin/customization?recordType=${recordType}&tab=forms&form=new`)}>
@@ -155,7 +155,9 @@ export function FormDesigner({
   const router = useRouter()
   const creating = !def?.id
   const meta = getRecordType(recordType)
-  const typeLabel = t(`recordTypes.${recordType}` as never)
+  const typeLabel = meta && tRoot.has(meta.labelKey as never)
+    ? tRoot(meta.labelKey as never)
+    : recordType.replaceAll('_', ' ')
 
   // Custom-field defs live in state so an inline-created field appears in the
   // palette immediately without a round-trip/refresh.

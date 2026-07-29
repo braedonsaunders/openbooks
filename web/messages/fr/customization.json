@@ -43,6 +43,7 @@
     "description": "Personnalisez l’apparence de chaque formulaire de transaction et de chaque liste d’enregistrements pour cette organisation et pour vous-même.",
     "documentation": "Documentation",
     "allRecordTypes": "Tous les types d’enregistrements",
+    "recordTypeFilter": "Type d’enregistrement",
     "searchPlaceholder": "Rechercher des formulaires et des vues…",
     "tabs": {
       "forms": "Formulaires de transaction",
