@@ -46,8 +46,13 @@ export function PageHeader({
             </p>
           ) : null}
         </div>
+        {/* Primary page actions keep stable geometry when sibling routes use
+            different implementations (for example, a client create button on
+            one tab and an asChild link on another). */}
         {actions ? (
-          <div className="flex shrink-0 flex-wrap items-center justify-end gap-2">{actions}</div>
+          <div className="flex shrink-0 flex-wrap items-center justify-end gap-2 [&_[data-slot=button][data-variant=default]]:h-10 [&_[data-slot=button][data-variant=default]]:px-4">
+            {actions}
+          </div>
         ) : null}
       </header>
     </div>

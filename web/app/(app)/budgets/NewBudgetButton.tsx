@@ -49,7 +49,7 @@ export function NewBudgetButton({
     }
   }
 
-  return <Button size="sm" onClick={create} disabled={busy}>
+  return <Button onClick={create} disabled={busy}>
     <Plus size={16} />
     {busy ? tc('actions.creating') : t('list.new')}
   </Button>

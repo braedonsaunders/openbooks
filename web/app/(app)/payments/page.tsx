@@ -37,7 +37,7 @@ export default async function Payments({
               view === 'payments' ? (
                 <NewPaymentButton kind="vendor_payment" basePath="/payments" label={t('page.newPayment')} />
               ) : (
-                <Button asChild size="sm">
+                <Button asChild>
                   <Link href={mergeHref('/payments', sp, { view: 'runs', newRun: '1', run: undefined }) as any}>
                     <Plus size={16} />
                     {t('page.newRun')}
