@@ -798,7 +798,7 @@ export async function accountRegister(
   accountId: string,
   limit = 100,
   offset = 0,
-  period?: { from?: string; to?: string },
+  period?: { from?: string; to?: string; search?: string },
   allowedSubsidiaryIds?: ReadonlySet<string> | null,
 ) {
   const acct = (await db.execute(sql`
@@ -810,6 +810,18 @@ export async function accountRegister(
     period?.from || period?.to
       ? sql` and e.posting_date >= ${period?.from ?? '0001-01-01'} and e.posting_date <= ${period?.to ?? '9999-12-31'}`
       : sql``;
+  const search = period?.search?.trim().slice(0, 200) ?? '';
+  const like = `%${search.replace(/[%_\\]/g, (character) => `\\${character}`)}%`;
+  const searchFilter = search
+    ? sql` and (
+        coalesce(e.entry_number, '') ilike ${like}
+        or coalesce(e.memo, '') ilike ${like}
+        or coalesce(l.memo, '') ilike ${like}
+        or coalesce(p.display_name, '') ilike ${like}
+        or coalesce(d.document_number, '') ilike ${like}
+        or replace(coalesce(d.kind, 'journal'), '_', ' ') ilike ${like}
+      )`
+    : sql``;
   const subsidiaryFilter = allowedSubsidiaryIds
     ? allowedSubsidiaryIds.size > 0
       ? sql` and e.subsidiary_id in ${[...allowedSubsidiaryIds]}`
@@ -832,7 +844,7 @@ export async function accountRegister(
       left join parties p on p.id = l.party_id and p.org_id = l.org_id
       left join documents d on d.id = e.source_document_id and d.org_id = e.org_id
      where l.account_id in (select id from account_scope)
-       and l.org_id = ${orgId} and e.org_id = ${orgId} ${dateFilter} ${subsidiaryFilter}
+       and l.org_id = ${orgId} and e.org_id = ${orgId} ${dateFilter} ${searchFilter} ${subsidiaryFilter}
      order by e.posting_date desc, e.entry_number desc, l.line_number
      limit ${limit} offset ${offset}
   `)) as any;
@@ -846,9 +858,12 @@ export async function accountRegister(
        where child.org_id = ${orgId}
     )
     select count(*) as n, coalesce(sum(amount),0) as bal
-      from journal_lines l join journal_entries e on e.id = l.entry_id and e.org_id = l.org_id
+      from journal_lines l
+      join journal_entries e on e.id = l.entry_id and e.org_id = l.org_id
+      left join parties p on p.id = l.party_id and p.org_id = l.org_id
+      left join documents d on d.id = e.source_document_id and d.org_id = e.org_id
      where l.account_id in (select id from account_scope)
-       and l.org_id = ${orgId} and e.org_id = ${orgId} ${dateFilter} ${subsidiaryFilter}
+       and l.org_id = ${orgId} and e.org_id = ${orgId} ${dateFilter} ${searchFilter} ${subsidiaryFilter}
   `)) as any;
   return { account: acct.rows[0], lines: r.rows, total: Number(c.rows[0].n), balance: c.rows[0].bal };
 }

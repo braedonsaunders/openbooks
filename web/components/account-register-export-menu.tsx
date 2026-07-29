@@ -13,15 +13,17 @@ export function AccountRegisterExportMenu({
   accountId,
   from,
   to,
+  search,
 }: {
   accountId: string
   from?: string | null
   to?: string | null
+  search?: string | null
 }) {
   const t = useTranslations('reports.export')
   const [open, setOpen] = useState(false)
   const href = (format: AccountRegisterExportFormat) =>
-    accountRegisterExportHref(accountId, format, { from, to })
+    accountRegisterExportHref(accountId, format, { from, to, search })
   const item =
     'flex w-full items-center gap-2 rounded-md px-2.5 py-1.5 text-sm text-slate-700 hover:bg-slate-100 dark:text-slate-200 dark:hover:bg-slate-800'
 

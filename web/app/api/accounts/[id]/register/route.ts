@@ -38,6 +38,11 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
   const page = Math.max(1, Math.min(100_000, Number(query.get('page')) || 1))
   const from = query.get('from')
   const to = query.get('to')
+  const rawSearch = query.get('q')?.trim()
+  if (rawSearch && rawSearch.length > 200) {
+    return NextResponse.json({ error: 'search_too_long' }, { status: 400 })
+  }
+  const search = rawSearch || undefined
   if ((from && !DATE.test(from)) || (to && !DATE.test(to))) {
     return NextResponse.json({ error: 'invalid_period' }, { status: 400 })
   }
@@ -47,7 +52,9 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
     if (!EXPORT_FORMATS.has(requestedFormat as AccountRegisterExportFormat)) {
       return NextResponse.json({ error: 'invalid_format' }, { status: 422 })
     }
-    const period = from || to ? { from: from || undefined, to: to || undefined } : undefined
+    const period = from || to || search
+      ? { from: from || undefined, to: to || undefined, search }
+      : undefined
     const result = await accountRegister(
       gate.user.orgId,
       id,
@@ -127,7 +134,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
     id,
     PER_PAGE,
     (page - 1) * PER_PAGE,
-    from || to ? { from: from || undefined, to: to || undefined } : undefined,
+    from || to || search ? { from: from || undefined, to: to || undefined, search } : undefined,
     gate.allowedSubsidiaryIds,
   )
   if (!result.account) return NextResponse.json({ error: 'not_found' }, { status: 404 })
