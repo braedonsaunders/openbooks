@@ -95,8 +95,50 @@ export async function DELETE(_req: Request, { params }: { params: Promise<{ id: 
     )
   }
 
-  // Schedules + runs cascade via the FK (report_schedules ON DELETE CASCADE,
-  // report_runs.definition_id ON DELETE CASCADE).
-  await db.execute(sql`delete from report_definitions where id = ${id} and org_id = ${user.orgId}`)
+  // Schedules + runs cascade via their FKs. Capture their counts and the exact
+  // deleted definition in the immutable audit log in the same transaction so
+  // a deletion can never occur without its evidence.
+  const deleted = await db.transaction(async (tx) => {
+    const dependents = (await tx.execute(sql`
+      select
+        (select count(*)::text from report_schedules
+          where org_id = ${user.orgId} and definition_id = ${id}) as schedule_count,
+        (select count(*)::text from report_runs
+          where org_id = ${user.orgId} and definition_id = ${id}) as run_count
+    `)) as unknown as {
+      rows: { schedule_count: string; run_count: string }[]
+    }
+
+    const result = (await tx.execute(sql`
+      delete from report_definitions
+       where id = ${id} and org_id = ${user.orgId} and kind = 'custom'
+       returning id, kind, report_type, slug, name, description, query, statement,
+                 system, layout, created_at, updated_at, created_by, updated_by
+    `)) as unknown as { rows: Record<string, unknown>[] }
+    const snapshot = result.rows[0]
+    if (!snapshot) return null
+
+    await tx.execute(sql`
+      insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
+      values (
+        ${user.orgId},
+        'report_definitions',
+        ${id},
+        'delete',
+        ${JSON.stringify({
+          before: snapshot,
+          after: null,
+          cascaded: {
+            schedules: Number(dependents.rows[0]?.schedule_count ?? 0),
+            runs: Number(dependents.rows[0]?.run_count ?? 0),
+          },
+        })}::jsonb,
+        ${user.id}
+      )
+    `)
+    return snapshot
+  })
+
+  if (!deleted) return NextResponse.json({ error: 'not found' }, { status: 404 })
   return NextResponse.json({ ok: true })
 }

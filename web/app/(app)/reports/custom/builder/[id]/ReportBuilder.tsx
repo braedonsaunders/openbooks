@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
-import { Filter, Play, Settings2, Table2 } from 'lucide-react'
+import { Filter, Play, Settings2, Table2, Trash2 } from 'lucide-react'
 import { toast } from 'sonner'
 import { useTranslations } from 'next-intl'
 import { Badge, Button, Input, Label, Select, cn } from '@openbooks/ui'
@@ -18,6 +18,7 @@ import {
   type ReportRunResult,
 } from '@openbooks/reports'
 import { DetailPageLayout } from '../../../../../../components/page-layout'
+import { confirmDialog } from '../../../../../../lib/confirm'
 import { FilterTree } from '../../FilterTree'
 import { PaperView, type PaperData } from '../../../PaperView'
 import { RowsConfig, SummarizeConfig } from '../../../query-config'
@@ -40,6 +41,7 @@ export function ReportBuilder({
 }) {
   const t = useTranslations('reports.custom.builder')
   const tk = useTranslations('reports.custom')
+  const ta = useTranslations('reports.custom.actions')
   const tc = useTranslations('common')
   const tReports = useTranslations('reports')
   const router = useRouter()
@@ -53,6 +55,7 @@ export function ReportBuilder({
   const [preview, setPreview] = useState<ReportRunResult | null>(null)
   const [previewError, setPreviewError] = useState<string | null>(null)
   const [previewing, setPreviewing] = useState(false)
+  const [deleting, setDeleting] = useState(false)
   const [tab, setTab] = useState<Tab>('data')
 
   const entity = REPORT_ENTITY_MAP[query.entity] ?? REPORT_ENTITY_MAP.ledger_lines!
@@ -139,6 +142,29 @@ export function ReportBuilder({
 
   const selectableColumns = useMemo(() => entity.columns.filter(isOperationalColumn), [entity])
 
+  async function removeReport() {
+    const confirmed = await confirmDialog({
+      message: ta('deleteConfirm'),
+      tone: 'danger',
+    })
+    if (!confirmed) return
+
+    setDeleting(true)
+    const res = await fetch(`/api/reports/definitions/${definition.id}`, {
+      method: 'DELETE',
+    })
+    const data = await res.json().catch(() => ({}))
+    if (!res.ok) {
+      toast.error(data.error ?? ta('deleteFailed'))
+      setDeleting(false)
+      return
+    }
+
+    toast.success(ta('deleted'))
+    router.push('/reports/custom')
+    router.refresh()
+  }
+
   // ReportRunResult → the unified PaperView shape (same contract statements use).
   const paper: PaperData | null = preview
     ? {
@@ -201,6 +227,18 @@ export function ReportBuilder({
             <Button variant="outline" asChild>
               <Link href={`/reports/custom/run/${definition.id}`}>{t('runAndSchedule')}</Link>
             </Button>
+            {definition.kind === 'custom' ? (
+              <Button
+                type="button"
+                variant="destructive"
+                size="sm"
+                disabled={deleting}
+                onClick={removeReport}
+              >
+                <Trash2 size={14} />
+                {deleting ? tc('actions.deleting') : tc('actions.delete')}
+              </Button>
+            ) : null}
           </div>
         </div>
       }
