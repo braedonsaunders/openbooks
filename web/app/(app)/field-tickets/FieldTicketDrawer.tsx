@@ -1,6 +1,7 @@
 'use client'
 
 import { useMoney } from '@/components/money-provider'
+import { initialDrawerMode, type DrawerMode } from '@/lib/drawer-mode'
 import Link from 'next/link'
 import { Fragment, useEffect, useMemo, useState } from 'react'
 import { usePathname, useRouter, useSearchParams } from 'next/navigation'
@@ -213,6 +214,7 @@ export interface FieldTicketDrawerProps {
   currentLayoutId?: string | null
   canCustomize?: boolean
   canManage: boolean
+  initialMode?: DrawerMode
 }
 
 export function FieldTicketDrawer(props: FieldTicketDrawerProps) {
@@ -224,9 +226,12 @@ export function FieldTicketDrawer(props: FieldTicketDrawerProps) {
   const pathname = usePathname() ?? '/field-tickets'
   const searchParams = useSearchParams()
   const [ticket, setTicket] = useState(props.ticket)
-  // Record flyouts always open read-only. Draft editing is an explicit
-  // Edit -> Save/Cancel cycle, consistent with the other transaction drawers.
-  const [mode, setMode] = useState<'view' | 'edit'>('view')
+  const initialCanEdit = props.ticket.status === 'draft' && props.canManage
+  // Existing records default to read-only; newly created drafts can explicitly
+  // request edit mode. Permissions and lifecycle state remain authoritative.
+  const [mode, setMode] = useState<DrawerMode>(
+    initialDrawerMode(props.initialMode, initialCanEdit),
+  )
   const [grid, setGrid] = useState<GridRow[]>(() => buildGrid(props.ticket.entries))
   const [gridDirty, setGridDirty] = useState(false)
   const [busy, setBusy] = useState(false)

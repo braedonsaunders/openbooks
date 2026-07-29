@@ -77,6 +77,7 @@ export default async function Estimates({
       {openOrder && pickers ? (
         <OrderDrawer
           order={openOrder as any}
+          initialMode={pickString(sp.mode) === 'edit' ? 'edit' : 'view'}
           kind={KIND}
           parties={pickers[0].rows}
           accounts={pickers[1].rows}

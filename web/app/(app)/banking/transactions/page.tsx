@@ -282,6 +282,7 @@ export default async function BankingTransactions({
           payload={openDoc as any}
           config={cfg}
           basePath={basePath}
+          initialMode={pickString(sp.mode) === 'edit' ? 'edit' : 'view'}
           accounts={pickers[0] as any}
           taxCodes={pickers[1] as any}
           taxGroups={pickers[2] as any}

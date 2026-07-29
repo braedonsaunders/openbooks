@@ -122,6 +122,7 @@ export default async function ApBills({
         payload={openDoc as any}
         config={DOC_KINDS[openKind]!}
         basePath="/ap/bills"
+        initialMode={pickString(sp.mode) === 'edit' ? 'edit' : 'view'}
         parties={pickers[0] as any}
         accounts={pickers[1] as any}
         taxCodes={pickers[2] as any}

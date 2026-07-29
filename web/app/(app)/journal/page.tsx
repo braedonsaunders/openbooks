@@ -92,7 +92,7 @@ export default async function Journal({
     // deep-linkable instant draft: create it server-side, land on its drawer
     if (!can(authz, 'gl.post')) redirect('/journal')
     const draft = await createDraftJournal(authz.user.orgId, authz.user.id)
-    redirect(`/journal?entry=${draft.id}`)
+    redirect(`/journal?entry=${draft.id}&mode=edit`)
   }
 
   // The Journal list shows ONLY actual journal entries — never the GL posting
@@ -299,6 +299,7 @@ export default async function Journal({
       {openJournal && pickers ? (
         <JournalDrawer
           journal={openJournal as any}
+          initialMode={pickString(sp.mode) === 'edit' ? 'edit' : 'view'}
           parties={pickers[0].rows}
           accounts={pickers[1].rows}
           departments={pickers[2].rows}

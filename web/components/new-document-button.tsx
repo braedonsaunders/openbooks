@@ -14,7 +14,7 @@ export interface NewDocumentItem {
 /**
  * "New <transaction>" dropdown: lists the creatable kinds for a module. Each
  * item mints an instant draft server-side (POST /api/documents/draft) and
- * opens it in the flyout at `?doc=<id>` over the module's list page.
+ * opens it in edit mode at `?doc=<id>&mode=edit` over the module's list page.
  */
 export function NewDocumentButton({
   items,
@@ -51,7 +51,7 @@ export function NewDocumentButton({
         setBusyKind(null)
         return
       }
-      router.push(`${basePath}?${paramKey}=${data.id}`)
+      router.push(`${basePath}?${paramKey}=${data.id}&mode=edit`)
       router.refresh()
       setBusyKind(null)
     }
@@ -76,7 +76,7 @@ export function NewDocumentButton({
       setBusyKind(null)
       return
     }
-    router.push(`${basePath}?${paramKey}=${data.id}`)
+    router.push(`${basePath}?${paramKey}=${data.id}&mode=edit`)
     router.refresh()
     setBusyKind(null)
   }

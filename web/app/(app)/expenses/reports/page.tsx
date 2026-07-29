@@ -239,6 +239,7 @@ export default async function Expenses({
       {openReport && pickers ? (
         <ExpenseDrawer
           report={openReport as any}
+          initialMode={pickString(sp.mode) === 'edit' ? 'edit' : 'view'}
           employees={pickers[0].rows}
           accounts={pickers[1].rows}
           taxCodes={pickers[2] as any}

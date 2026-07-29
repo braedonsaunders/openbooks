@@ -1,6 +1,7 @@
 'use client'
 
 import { useMoney } from '@/components/money-provider'
+import { initialDrawerMode, type DrawerMode } from '@/lib/drawer-mode'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
@@ -104,9 +105,27 @@ const toStatusKey = (status: string) => status.replace(/_([a-z])/g, (_, c: strin
 function targetHref(kind: string, id: string): string {
   switch (kind) {
     case 'customer_invoice':
-      return `/ar?invoice=${id}`
+      return `/ar/invoices?doc=${id}&mode=edit`
     case 'vendor_bill':
-      return `/ap?bill=${id}`
+      return `/ap/bills?doc=${id}&mode=edit`
+    case 'sales_order':
+      return `/sales-orders?order=${id}&mode=edit`
+    case 'purchase_order':
+      return `/purchase-orders?order=${id}&mode=edit`
+    case 'quote':
+      return `/estimates?estimate=${id}&mode=edit`
+    default:
+      return '/'
+  }
+}
+
+/** Where an existing linked document opens (used by the links section). */
+function docHref(kind: string, id: string): string {
+  switch (kind) {
+    case 'customer_invoice':
+      return `/ar/invoices?doc=${id}`
+    case 'vendor_bill':
+      return `/ap/bills?doc=${id}`
     case 'sales_order':
       return `/sales-orders?order=${id}`
     case 'purchase_order':
@@ -116,11 +135,6 @@ function targetHref(kind: string, id: string): string {
     default:
       return '/'
   }
-}
-
-/** Where an existing linked document opens (used by the links section). */
-function docHref(kind: string, id: string): string {
-  return targetHref(kind, id)
 }
 
 const emptyLine = (segments: SegmentOption[] = []): LineRow => ({
@@ -153,6 +167,7 @@ function toRow(l: Record<string, any>, segments: SegmentOption[]): LineRow {
 
 export function OrderDrawer({
   order,
+  initialMode = 'view',
   kind,
   parties,
   accounts,
@@ -167,6 +182,7 @@ export function OrderDrawer({
   layout,
 }: {
   order: OrderPayload
+  initialMode?: DrawerMode
   kind: OrderKind
   parties: Opt[]
   accounts: Opt[]
@@ -192,12 +208,14 @@ export function OrderDrawer({
   const meta = KIND_META[kind]
   const isDraft = doc.status === 'draft'
   const isApproved = doc.status === 'approved'
-  // source platform-style record model: the flyout ALWAYS opens READ-ONLY (view mode)
-  // — even for drafts — with an Edit button in the header. Only DRAFT orders
+  // Existing records default to read-only; newly created drafts can explicitly
+  // request edit mode. Only DRAFT orders
   // are editable (Issue is terminal for the header). Save is EXPLICIT — one Save
   // button, no per-field autosave.
   const canEditStatus = isDraft && canManage
-  const [mode, setMode] = useState<'view' | 'edit'>('view')
+  const [mode, setMode] = useState<DrawerMode>(
+    initialDrawerMode(initialMode, canEditStatus),
+  )
   const editable = mode === 'edit' && canEditStatus
 
   const [partyId, setPartyId] = useState<string>(doc.party_id ?? '')

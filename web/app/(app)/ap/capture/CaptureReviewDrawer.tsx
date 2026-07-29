@@ -121,7 +121,7 @@ export function CaptureReviewDrawer({ initial, vendors, accounts, purchaseOrders
       const body = (await response.json()) as { documentId?: string; error?: string }
       if (!response.ok || !body.documentId) throw new Error(body.error ?? 'create_failed')
       toast.success(t('draftCreated'))
-      router.push(`/ap?doc=${body.documentId}`)
+      router.push(`/ap/bills?doc=${body.documentId}&mode=edit`)
     } catch {
       toast.error(t('actionFailed'))
     } finally {
