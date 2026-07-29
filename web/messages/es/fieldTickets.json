@@ -38,7 +38,7 @@
     "createFailed": "No se pudo crear el parte"
   },
   "editor": {
-    "tabs": { "time": "Tiempo", "items": "Artículos", "tasks": "Tareas" },
+    "tabs": { "time": "Tiempo", "items": "Artículos", "tasks": "Tareas", "related": "Relacionados" },
     "periodLocked": "Elimine las horas ingresadas antes de cambiar el período.",
     "back": "Partes de obra",
     "submit": "Enviar",
@@ -64,6 +64,19 @@
     "work": {
       "title": "Resumen del trabajo",
       "hint": "Referencia del cliente y una descripción clara del trabajo realizado."
+    },
+    "related": {
+      "title": "Registros relacionados",
+      "hint": "Vínculos auditables entre este parte, cargos, solicitudes de facturación y facturas.",
+      "billingRequests": "Solicitudes de facturación",
+      "noBillingRequests": "Este parte no ha sido seleccionado para facturación.",
+      "selectedOn": "Seleccionado {date}",
+      "documents": "Transacciones vinculadas",
+      "noDocuments": "Aún no hay transacciones vinculadas.",
+      "linkType": {
+        "created_from": "Cargo creado",
+        "bills": "Facturado por"
+      }
     },
     "form": {
       "label": "Formulario del registro",

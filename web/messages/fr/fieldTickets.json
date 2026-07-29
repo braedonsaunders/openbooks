@@ -38,7 +38,7 @@
     "createFailed": "Impossible de créer le bon"
   },
   "editor": {
-    "tabs": { "time": "Temps", "items": "Articles", "tasks": "Tâches" },
+    "tabs": { "time": "Temps", "items": "Articles", "tasks": "Tâches", "related": "Associés" },
     "periodLocked": "Supprimez les heures saisies avant de modifier la période.",
     "back": "Bons de régie",
     "submit": "Soumettre",
@@ -64,6 +64,19 @@
     "work": {
       "title": "Résumé des travaux",
       "hint": "Référence client et description claire des travaux réalisés."
+    },
+    "related": {
+      "title": "Fiches associées",
+      "hint": "Liens auditables entre ce bon, les frais, les demandes de facturation et les factures.",
+      "billingRequests": "Demandes de facturation",
+      "noBillingRequests": "Ce bon n’a pas été sélectionné pour la facturation.",
+      "selectedOn": "Sélectionné le {date}",
+      "documents": "Transactions liées",
+      "noDocuments": "Aucune transaction liée pour le moment.",
+      "linkType": {
+        "created_from": "Frais créé",
+        "bills": "Facturé par"
+      }
     },
     "form": {
       "label": "Formulaire de la fiche",

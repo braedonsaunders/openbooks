@@ -176,16 +176,25 @@ async function sourceSubtotals(invoices: Inv[]): Promise<Map<string, number>> {
           delete from document_lines where document_id in (
             select id from documents where org_id = ${ORG} and kind = 'customer_invoice'
               and status = 'draft' and memo = ${"Replay of " + inv.tranid})`));
-        await retry(() => db.execute(sql`
-          delete from documents where org_id = ${ORG} and kind = 'customer_invoice'
-            and status = 'draft' and memo = ${"Replay of " + inv.tranid}`));
-        const rid = randomUUID();
-        await retry(() => db.execute(sql`
-          insert into billing_requests (id, org_id, project_id, request_number, invoice_type, basis, status, invoice_description, custom, created_by)
-          values (${rid}, ${ORG}, ${pid}, ${"FTB-" + randomUUID().slice(0, 8)},
-                  ${finalInvoices.has(String(inv.id)) ? "final" : "progress"}, 'field_ticket', 'open',
-                  ${"Replay of " + inv.tranid}, ${JSON.stringify({ fieldTicketIds: ids, sourceDocumentIds: orderIds })}::jsonb, ${actor})`));
-        const out = await retry(() => generateInvoiceFromBillingRequest(ORG, actor, rid));
+	        await retry(() => db.execute(sql`
+	          delete from documents where org_id = ${ORG} and kind = 'customer_invoice'
+	            and status = 'draft' and memo = ${"Replay of " + inv.tranid}`));
+	        const rid = randomUUID();
+	        await retry(() => db.transaction(async (tx) => {
+	          await tx.execute(sql`
+	            insert into billing_requests (id, org_id, project_id, request_number, invoice_type, basis, status, invoice_description, custom, created_by)
+	            values (${rid}, ${ORG}, ${pid}, ${"FTB-" + randomUUID().slice(0, 8)},
+	                    ${finalInvoices.has(String(inv.id)) ? "final" : "progress"}, 'field_ticket', 'open',
+	                    ${"Replay of " + inv.tranid}, ${JSON.stringify({ sourceDocumentIds: orderIds })}::jsonb, ${actor})`);
+	          await tx.execute(sql`
+	            insert into billing_request_field_tickets (
+	              org_id, billing_request_id, field_ticket_id, selection_source, selected_by
+	            )
+	            select ${ORG}, ${rid}, ticket_id, 'validation_replay', ${actor}
+	              from unnest(${`{${ids.join(",")}}`}::uuid[]) ticket_id
+	            on conflict (org_id, billing_request_id, field_ticket_id) do nothing`);
+	        }));
+	        const out = await retry(() => generateInvoiceFromBillingRequest(ORG, actor, rid));
         const d = (await retry(() => db.execute(sql`select subtotal::numeric s from documents where id = ${out.id}`))) as any;
         replay = Number(d.rows[0]?.s ?? 0);
       }

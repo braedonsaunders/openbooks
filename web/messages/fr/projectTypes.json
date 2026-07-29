@@ -32,6 +32,8 @@
   "committedStatuses": "États du cycle de vie des coûts engagés",
   "totalCostComponents": "Composantes du coût total",
   "allowedBases": "Bases de facturation autorisées",
+  "fieldTicketsDisabled": "La facturation par fiches de chantier est indisponible tant que la fonctionnalité est désactivée.",
+  "manageFeatures": "Gérer les fonctionnalités",
   "billingProcedure": "Procédure de facturation",
   "billingProcedureHint": "La facturation standard utilise les demandes du projet. Les demandes de paiement utilisent une ventilation des valeurs, des décomptes cumulatifs, des avenants et des retenues.",
   "applicationProcedureControls": "Procédure contrôlée : méthode à prix fixe, base au montant du décompte et lignes générées à partir du décompte approuvé. Ces contrôles ne peuvent pas diverger.",

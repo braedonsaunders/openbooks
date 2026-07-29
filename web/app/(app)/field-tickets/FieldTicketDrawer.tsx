@@ -105,6 +105,24 @@ export interface TicketPayload {
   laborTotal: string
   linesTotal: string
   grandTotal: string
+  links: {
+    direction: 'from' | 'to'
+    link_type: string
+    id: string
+    kind: string
+    document_number: string
+    status: string
+  }[]
+  billingRequests: {
+    id: string
+    requestNumber: string
+    status: string
+    selectionSource: string
+    selectedAt: string
+    invoiceDocumentId: string | null
+    invoiceNumber: string | null
+    invoiceStatus: string | null
+  }[]
 }
 
 interface GridRow {
@@ -159,6 +177,25 @@ function buildGrid(entries: EntryRow[]): GridRow[] {
     row.cells[`${e.time_type_id}|${e.worked_on}`] = String(Number(e.hours))
   }
   return [...byKey.values()]
+}
+
+function relatedDocumentHref(kind: string, id: string, projectId: string | null): string | null {
+  if (kind === 'customer_invoice') return `/ar?invoice=${id}`
+  if (kind === 'vendor_bill') return `/ap?bill=${id}`
+  if (kind === 'sales_order') return `/sales-orders?order=${id}`
+  if (kind === 'purchase_order') return `/purchase-orders?order=${id}`
+  if (kind === 'quote') return `/estimates?estimate=${id}`
+  if (kind === 'field_ticket') return `/field-tickets?ticket=${id}`
+  if (projectId) {
+    const params = new URLSearchParams({
+      project: projectId,
+      projectTab: 'transactions',
+      projectTxn: id,
+      projectTxnKind: kind,
+    })
+    return `/projects?${params.toString()}`
+  }
+  return null
 }
 
 export interface FieldTicketDrawerProps {
@@ -238,7 +275,7 @@ export function FieldTicketDrawer(props: FieldTicketDrawerProps) {
   const equipmentOptions = props.equipmentUnits.filter((unit) => unit.chargeItemId === lineItem)
   const requestedSection = searchParams.get('transactionTab')
   const [activeSection, setActiveSection] = useState(() =>
-    requestedSection === 'time' || requestedSection === 'items' || requestedSection === 'tasks'
+    requestedSection === 'time' || requestedSection === 'items' || requestedSection === 'tasks' || requestedSection === 'related'
       ? requestedSection
       : 'details',
   )
@@ -702,6 +739,7 @@ export function FieldTicketDrawer(props: FieldTicketDrawerProps) {
         { key: 'time', label: t('editor.tabs.time') },
         { key: 'items', label: t('editor.tabs.items') },
         ...(projectTasks.length > 0 ? [{ key: 'tasks', label: t('editor.tabs.tasks') }] : []),
+        { key: 'related', label: t('editor.tabs.related') },
       ]}
       activeTab={activeSection}
       onActiveTabChange={setActiveSection}
@@ -1101,6 +1139,90 @@ export function FieldTicketDrawer(props: FieldTicketDrawerProps) {
                   </tr>
                 ))}</tbody>
               </table>
+            </div>
+          </section>
+        ) : null}
+
+        {activeSection === 'related' ? (
+          <section className="space-y-5">
+            <div>
+              <h3 className="text-sm font-semibold text-slate-900 dark:text-slate-100">{t('editor.related.title')}</h3>
+              <p className="text-xs text-slate-500 dark:text-slate-400">{t('editor.related.hint')}</p>
+            </div>
+
+            <div className="space-y-2">
+              <h4 className="text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
+                {t('editor.related.billingRequests')}
+              </h4>
+              {ticket.billingRequests.length === 0 ? (
+                <p className="rounded-lg border border-dashed border-slate-300 p-4 text-sm text-slate-500 dark:border-slate-700 dark:text-slate-400">
+                  {t('editor.related.noBillingRequests')}
+                </p>
+              ) : (
+                <div className="divide-y divide-slate-100 rounded-lg border border-slate-200 dark:divide-slate-800 dark:border-slate-800">
+                  {ticket.billingRequests.map((request) => (
+                    <div key={request.id} className="flex flex-wrap items-center gap-3 px-3 py-2.5 text-sm">
+                      <Link
+                        href={ticket.projectId ? `/projects?project=${ticket.projectId}&projectTab=billing` : '/projects'}
+                        className="font-mono font-semibold text-teal-700 hover:underline dark:text-teal-300"
+                      >
+                        {request.requestNumber}
+                      </Link>
+                      <Badge variant={STATUS_VARIANT[request.status] ?? 'secondary'}>{request.status.replaceAll('_', ' ')}</Badge>
+                      <span className="text-xs text-slate-500 dark:text-slate-400">
+                        {t('editor.related.selectedOn', { date: request.selectedAt.slice(0, 10) })}
+                      </span>
+                      <span className="flex-1" />
+                      {request.invoiceDocumentId && request.invoiceNumber ? (
+                        <Link
+                          href={`/ar?invoice=${request.invoiceDocumentId}`}
+                          className="font-mono text-teal-700 hover:underline dark:text-teal-300"
+                        >
+                          {request.invoiceNumber}
+                        </Link>
+                      ) : null}
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            <div className="space-y-2">
+              <h4 className="text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
+                {t('editor.related.documents')}
+              </h4>
+              {ticket.links.length === 0 ? (
+                <p className="rounded-lg border border-dashed border-slate-300 p-4 text-sm text-slate-500 dark:border-slate-700 dark:text-slate-400">
+                  {t('editor.related.noDocuments')}
+                </p>
+              ) : (
+                <div className="divide-y divide-slate-100 rounded-lg border border-slate-200 dark:divide-slate-800 dark:border-slate-800">
+                  {ticket.links.map((link) => {
+                    const href = relatedDocumentHref(link.kind, link.id, ticket.projectId)
+                    return (
+                      <div key={`${link.direction}-${link.link_type}-${link.id}`} className="flex items-center gap-3 px-3 py-2.5 text-sm">
+                        <span className="w-24 shrink-0 text-xs text-slate-500 dark:text-slate-400">
+                          {link.link_type === 'created_from'
+                            ? t('editor.related.linkType.created_from')
+                            : link.link_type === 'bills'
+                              ? t('editor.related.linkType.bills')
+                              : link.link_type.replaceAll('_', ' ')}
+                        </span>
+                        {href ? (
+                          <Link href={href} className="font-mono font-semibold text-teal-700 hover:underline dark:text-teal-300">
+                            {link.document_number}
+                          </Link>
+                        ) : (
+                          <span className="font-mono font-semibold">{link.document_number}</span>
+                        )}
+                        <span className="text-xs text-slate-400">{link.kind.replaceAll('_', ' ')}</span>
+                        <span className="flex-1" />
+                        <Badge variant={STATUS_VARIANT[link.status] ?? 'secondary'}>{link.status.replaceAll('_', ' ')}</Badge>
+                      </div>
+                    )
+                  })}
+                </div>
+              )}
             </div>
           </section>
         ) : null}

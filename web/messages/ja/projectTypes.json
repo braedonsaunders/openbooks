@@ -34,6 +34,8 @@
   "committedStatuses": "コミット済み原価のライフサイクル状態",
   "totalCostComponents": "総原価の構成要素",
   "allowedBases": "許可される請求基準",
+  "fieldTicketsDisabled": "フィールドチケット機能がオフの間は、フィールドチケット請求を利用できません。",
+  "manageFeatures": "機能を管理",
   "billingProcedure": "請求手続",
   "billingProcedureHint": "標準請求はプロジェクト請求依頼を使用します。支払申請は工事内訳、累計出来高、変更契約、保留金を使用します。",
   "applicationProcedureControls": "統制された手続です。請求方法は固定価格、請求基準は出来高額、請求明細は承認済み出来高から生成され、これらの設定は分離できません。",

@@ -53,6 +53,14 @@
     "invoice": "請求書",
     "createInvoice": "請求書を作成",
     "downloadBackup": "証憑をダウンロード",
+    "fieldTickets": "フィールドチケット",
+    "fieldTicketHint": "この請求書に含める作業と関連費用の承認済みチケットを選択します。",
+    "noBillableFieldTickets": "請求可能な承認済みフィールドチケットはありません。",
+    "noAvailableBasis": "現在利用できる請求基準がありません。プロジェクトタイプと会社設定 → 機能を確認してください。",
+    "customerSigned": "顧客署名済み",
+    "customerUnsigned": "顧客署名なし",
+    "selectAll": "すべて選択",
+    "ticketCount": "{count} 件",
     "type": {
       "progress": "進捗",
       "final": "最終"
@@ -61,7 +69,8 @@
       "date_range": "期間",
       "draw_amount": "出来高請求額",
       "time_selection": "時間の選択",
-      "milestone": "マイルストーン"
+      "milestone": "マイルストーン",
+      "field_ticket": "フィールドチケット"
     },
     "backup": {
       "none": "なし",

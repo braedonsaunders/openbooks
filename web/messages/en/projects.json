@@ -53,6 +53,14 @@
     "invoice": "Invoice",
     "createInvoice": "Create invoice",
     "downloadBackup": "Download backup",
+    "fieldTickets": "Field Tickets",
+    "fieldTicketHint": "Select the approved tickets whose labor and linked charges belong on this invoice.",
+    "noBillableFieldTickets": "No approved, unbilled Field Tickets are available.",
+    "noAvailableBasis": "No billing basis is currently available. Review the project type and Company Settings → Features.",
+    "customerSigned": "Customer signed",
+    "customerUnsigned": "No customer signature",
+    "selectAll": "Select all",
+    "ticketCount": "{count, plural, one {# ticket} other {# tickets}}",
     "type": {
       "progress": "Progress",
       "final": "Final"
@@ -61,7 +69,8 @@
       "date_range": "Date range",
       "draw_amount": "Draw amount",
       "time_selection": "Time selection",
-      "milestone": "Milestone"
+      "milestone": "Milestone",
+      "field_ticket": "Field Tickets"
     },
     "backup": {
       "none": "None",

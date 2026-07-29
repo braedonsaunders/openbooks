@@ -53,6 +53,14 @@
     "invoice": "Fatura",
     "createInvoice": "Criar fatura",
     "downloadBackup": "Baixar comprovação",
+    "fieldTickets": "Boletins de campo",
+    "fieldTicketHint": "Selecione os boletins aprovados cujo trabalho e cobranças vinculadas pertencem a esta fatura.",
+    "noBillableFieldTickets": "Não há boletins de campo aprovados e não faturados.",
+    "noAvailableBasis": "Nenhuma base de faturamento está disponível. Revise o tipo de projeto e Configurações da empresa → Recursos.",
+    "customerSigned": "Assinado pelo cliente",
+    "customerUnsigned": "Sem assinatura do cliente",
+    "selectAll": "Selecionar tudo",
+    "ticketCount": "{count, plural, one {# boletim} other {# boletins}}",
     "type": {
       "progress": "Progressiva",
       "final": "Final"
@@ -61,7 +69,8 @@
       "date_range": "Período",
       "draw_amount": "Valor da medição",
       "time_selection": "Seleção de horas",
-      "milestone": "Marco"
+      "milestone": "Marco",
+      "field_ticket": "Boletins de campo"
     },
     "backup": {
       "none": "Nenhuma",

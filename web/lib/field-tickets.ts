@@ -389,11 +389,12 @@ export async function addTicketLine(
   const inserted = (await db.execute(sql`
     insert into document_lines (org_id, document_id, line_number, item_id, description, quantity, unit, unit_price, amount,
                                 project_id, is_billable, equipment_unit_id, rate_version_id, rate_presentation,
-                                base_quantity, base_unit, cost_rate, bill_rate, cost_amount, bill_amount, created_by, updated_by)
+                                base_quantity, base_unit, cost_rate, bill_rate, cost_amount, bill_amount,
+                                field_ticket_id, created_by, updated_by)
     values (${orgId}, ${ticketId}, ${next.rows[0].n}, ${input.itemId}, ${input.description ?? item.rows[0].name},
             ${quantity}, ${transactionUnit}, ${billRate}, ${billAmount}, ${doc.project_id}, true, ${input.equipmentUnitId ?? null},
             ${resolved?.rateVersionId ?? null}, ${resolved?.invoicePresentation ?? 'summary'}, ${baseQuantity}, ${baseUnit},
-            ${costRate}, ${billRate}, ${costAmount}, ${billAmount}, ${userId}, ${userId}) returning id`)) as unknown as {
+            ${costRate}, ${billRate}, ${costAmount}, ${billAmount}, ${ticketId}, ${userId}, ${userId}) returning id`)) as unknown as {
     rows: { id: string }[]
   }
   const components = [
@@ -771,6 +772,7 @@ export async function releaseFieldTicketApproval(
       userId,
       {
         projectId: doc.project_id,
+        fieldTicketId: ticketId,
         referenceNumber: doc.document_number,
         documentDate: doc.fieldTicket.periodEnd,
         lines: lines.rows.map((l) => {
@@ -828,7 +830,11 @@ export async function releaseFieldTicketApproval(
 }
 
 /** Full ticket payload for the editor and the PDF. */
-export async function loadFieldTicket(orgId: string, ticketId: string) {
+export async function loadFieldTicket(
+  orgId: string,
+  ticketId: string,
+  opts: { includeRelated?: boolean } = {},
+) {
   const doc = await loadHeader(orgId, ticketId)
   const snapshotResult = (await db.execute(sql`
     select id, revision, evidence_basis, reason, source_system, currency,
@@ -899,13 +905,13 @@ export async function loadFieldTicket(orgId: string, ticketId: string) {
          order by p.display_name, i.name nulls first,
                   tt.bill_multiplier, te.worked_on
       `)
-  const [customer, project, foreman, entries, lines, signatureRows, requestRows] = await Promise.all([
+  const [customer, project, foreman, entries, lines, signatureRows, requestRows, linkRows, billingRequestRows] = await Promise.all([
     db.execute(sql`
       select display_name, email from parties
        where id = coalesce(${doc.party_id}, (select customer_id from projects where id = ${doc.project_id} and org_id = ${orgId}))
          and org_id = ${orgId}`) as unknown as Promise<{ rows: { display_name: string; email: string | null }[] }>,
-    db.execute(sql`select code, name from projects where id = ${doc.project_id}`) as unknown as Promise<{ rows: { code: string | null; name: string }[] }>,
-    db.execute(sql`select display_name from parties where id = ${doc.fieldTicket.foremanPartyId}`) as unknown as Promise<{ rows: { display_name: string }[] }>,
+    db.execute(sql`select code, name from projects where id = ${doc.project_id} and org_id = ${orgId}`) as unknown as Promise<{ rows: { code: string | null; name: string }[] }>,
+    db.execute(sql`select display_name from parties where id = ${doc.fieldTicket.foremanPartyId} and org_id = ${orgId}`) as unknown as Promise<{ rows: { display_name: string }[] }>,
     entriesQuery as unknown as Promise<{ rows: TicketEntryRow[] }>,
     db.execute(sql`
       select dl.id, dl.item_id, i.name as item_name, dl.description, dl.quantity, dl.unit, dl.unit_price, dl.amount,
@@ -954,6 +960,62 @@ export async function loadFieldTicket(orgId: string, ticketId: string) {
          expires_at: string
          responded_at: string | null
        }> }>,
+    (opts.includeRelated === false ? Promise.resolve({ rows: [] }) : db.execute(sql`
+      select 'from'::text as direction, link.link_type, related.id, related.kind,
+             related.document_number, related.status
+        from document_links link
+        join documents related
+          on related.id = link.from_document_id
+         and related.org_id = link.org_id
+       where link.to_document_id = ${ticketId}
+         and link.org_id = ${orgId}
+      union all
+      select 'to'::text as direction, link.link_type, related.id, related.kind,
+             related.document_number, related.status
+        from document_links link
+        join documents related
+          on related.id = link.to_document_id
+         and related.org_id = link.org_id
+       where link.from_document_id = ${ticketId}
+         and link.org_id = ${orgId}
+       order by 1, 5
+    `)) as unknown as Promise<{ rows: Array<{
+      direction: 'from' | 'to'
+      link_type: string
+      id: string
+      kind: string
+      document_number: string
+      status: string
+    }> }>,
+    (opts.includeRelated === false ? Promise.resolve({ rows: [] }) : db.execute(sql`
+      select request.id,
+             request.request_number as "requestNumber",
+             request.status,
+             selected.selection_source as "selectionSource",
+             selected.selected_at::text as "selectedAt",
+             invoice.id as "invoiceDocumentId",
+             invoice.document_number as "invoiceNumber",
+             invoice.status as "invoiceStatus"
+        from billing_request_field_tickets selected
+        join billing_requests request
+          on request.id = selected.billing_request_id
+         and request.org_id = selected.org_id
+        left join documents invoice
+          on invoice.id = request.invoice_document_id
+         and invoice.org_id = request.org_id
+       where selected.org_id = ${orgId}
+         and selected.field_ticket_id = ${ticketId}
+       order by selected.selected_at desc, request.request_number desc
+    `)) as unknown as Promise<{ rows: Array<{
+      id: string
+      requestNumber: string
+      status: string
+      selectionSource: string
+      selectedAt: string
+      invoiceDocumentId: string | null
+      invoiceNumber: string | null
+      invoiceStatus: string | null
+    }> }>,
   ])
   // Only live draft/pending entries receive a rate preview. Approved/signed
   // tickets render their captured values and never reinterpret history.
@@ -1014,6 +1076,8 @@ export async function loadFieldTicket(orgId: string, ticketId: string) {
     laborTotal,
     linesTotal,
     grandTotal: add(laborTotal, linesTotal),
+    links: linkRows.rows,
+    billingRequests: billingRequestRows.rows,
   }
 }
 

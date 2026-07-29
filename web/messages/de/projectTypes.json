@@ -34,6 +34,8 @@
   "committedStatuses": "Lebenszyklusstatus der Bindungskosten",
   "totalCostComponents": "Gesamtkostenbestandteile",
   "allowedBases": "Zulässige Abrechnungsbasen",
+  "fieldTicketsDisabled": "Die Abrechnung nach Baustellenberichten ist bei deaktivierter Funktion nicht verfügbar.",
+  "manageFeatures": "Funktionen verwalten",
   "billingProcedure": "Abrechnungsverfahren",
   "billingProcedureHint": "Die Standardabrechnung verwendet Projekt-Abrechnungsanforderungen. Zahlungsanträge verwenden ein Leistungsverzeichnis, kumulative Abschläge, Nachträge und Einbehalte.",
   "applicationProcedureControls": "Gesteuertes Verfahren: Abrechnungsmethode Festpreis, Abrechnungsbasis Abschlagsbetrag und Rechnungszeilen aus dem genehmigten Abschlag. Diese Vorgaben können nicht voneinander abweichen.",

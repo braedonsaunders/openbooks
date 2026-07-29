@@ -49,6 +49,8 @@ export interface ChargeLineInput {
 
 export interface ChargeInput {
   projectId: string
+  /** Field Ticket that authorized and originated this charge. */
+  fieldTicketId?: string | null
   referenceNumber?: string | null
   documentDate?: string | null
   lines: ChargeLineInput[]
@@ -70,6 +72,20 @@ export async function createProjectCharge(
       select id, subsidiary_id from projects where id = ${input.projectId} and org_id = ${orgId}
     `)) as unknown as { rows: { id: string; subsidiary_id: string | null }[] }
     if (!proj.rows[0]) throw new ChargeError('Project not found')
+    if (input.fieldTicketId) {
+      const ticket = (await tx.execute(sql`
+        select id
+          from documents
+         where id = ${input.fieldTicketId}
+           and org_id = ${orgId}
+           and project_id = ${input.projectId}
+           and kind = 'field_ticket'
+         for update
+      `)) as unknown as { rows: { id: string }[] }
+      if (!ticket.rows[0]) {
+        throw new ChargeError('The source Field Ticket does not belong to this project')
+      }
+    }
     const subsidiaryId = proj.rows[0].subsidiary_id
     const org = (await tx.execute(sql`select base_currency from orgs where id = ${orgId}`)) as unknown as {
       rows: { base_currency: string }[]
@@ -130,12 +146,14 @@ export async function createProjectCharge(
       const [insertedLine] = (await tx.execute(sql`
         insert into document_lines (org_id, document_id, line_number, item_id, account_id, description,
               quantity, unit, unit_price, amount, is_billable, project_id, equipment_unit_id, rate_version_id,
-              rate_presentation, base_quantity, base_unit, cost_rate, bill_rate, cost_amount, bill_amount, recovery_account_id, created_by)
+              rate_presentation, base_quantity, base_unit, cost_rate, bill_rate, cost_amount, bill_amount,
+              recovery_account_id, field_ticket_id, created_by)
         values (${orgId}, ${docId}, ${lineNo}, ${line.itemId}, ${accountId}, ${line.description ?? it.name},
               ${line.quantity}, ${resolved?.transactionUnitCode ?? resolved?.baseUnit ?? it.unit ?? null}, ${costRate}, ${costAmount}, ${isBillable}, ${input.projectId},
               ${line.equipmentUnitId ?? null}, ${resolved?.rateVersionId ?? null}, ${resolved?.invoicePresentation ?? 'summary'},
               ${resolved?.baseQuantity ?? line.quantity}, ${resolved?.baseUnit ?? it.unit ?? null},
-              ${costRate}, ${billRate}, ${costAmount}, ${billAmount}, ${it.cost_recovery_account_id ?? null}, ${userId})
+              ${costRate}, ${billRate}, ${costAmount}, ${billAmount}, ${it.cost_recovery_account_id ?? null},
+              ${input.fieldTicketId ?? null}, ${userId})
         returning id
       `)).rows as { id: string }[]
 

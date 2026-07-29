@@ -36,6 +36,7 @@ export function ChargesSection({
   absorption,
   formOpen,
   onFormOpenChange,
+  showKpis = true,
   showList = true,
 }: {
   projectId: string
@@ -47,7 +48,9 @@ export function ChargesSection({
    *  secondary creates live behind the Actions menu, not a bolted-on section). */
   formOpen: boolean
   onFormOpenChange: (open: boolean) => void
-  /** Transactions owns the canonical list; false keeps only KPIs + creation. */
+  /** Project summary surfaces may opt into charge recovery metrics. */
+  showKpis?: boolean
+  /** Transactions owns the canonical list; false keeps only creation controls. */
   showList?: boolean
 }) {
   const { money } = useMoney()
@@ -107,13 +110,15 @@ export function ChargesSection({
 
   return (
     <div className="space-y-6">
-      <KpiStrip
-        items={[
-          { label: t('costRecovered'), value: money(absorption.recovered), tone: 'good' },
-          { label: t('billValue'), value: money(absorption.billValue) },
-          { label: t('count'), value: String(charges.length) },
-        ]}
-      />
+      {showKpis ? (
+        <KpiStrip
+          items={[
+            { label: t('costRecovered'), value: money(absorption.recovered), tone: 'good' },
+            { label: t('billValue'), value: money(absorption.billValue) },
+            { label: t('count'), value: String(charges.length) },
+          ]}
+        />
+      ) : null}
 
       {/* Add-charge form — opened from the Actions menu, not always-on. */}
       {formOpen ? (

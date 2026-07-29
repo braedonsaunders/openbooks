@@ -53,6 +53,7 @@ test('project transactions filter by native type and stack the transaction drawe
   assert.match(tab, /toolbarAfter=/)
   assert.match(tab, /projectTxnKind/)
   assert.doesNotMatch(tab, /\/field-tickets\?ticket=/)
+  assert.match(tab, /showKpis=\{false\}/)
   assert.match(tab, /<DocTypeBadge\b/)
   assert.match(page, /<RelatedTransactionDrawer\b/)
   assert.match(page, /projectId=\{String\(openProject\.project\.id\)\}/)

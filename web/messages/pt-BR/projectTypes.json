@@ -34,6 +34,8 @@
   "committedStatuses": "Estados do ciclo de vida do custo comprometido",
   "totalCostComponents": "Componentes do custo total",
   "allowedBases": "Bases de faturamento permitidas",
+  "fieldTicketsDisabled": "O faturamento por boletins de campo fica indisponível enquanto o recurso estiver desativado.",
+  "manageFeatures": "Gerenciar recursos",
   "billingProcedure": "Procedimento de faturamento",
   "billingProcedureHint": "O faturamento padrão usa solicitações do projeto. As solicitações de pagamento usam um cronograma de valores, medições acumuladas, aditivos e retenções.",
   "applicationProcedureControls": "Procedimento controlado: método de preço fixo, base no valor da medição e linhas geradas a partir da medição aprovada. Esses controles não podem divergir.",
