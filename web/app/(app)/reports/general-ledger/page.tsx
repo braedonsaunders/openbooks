@@ -1,5 +1,4 @@
 import { getMoneyFormatter } from '@/lib/money-server'
-import Link from 'next/link'
 import { getTranslations } from 'next-intl/server'
 import { PageHeader, cn } from '@openbooks/ui'
 import { ListPageLayout } from '../../../../components/page-layout'
@@ -15,6 +14,7 @@ import { SaveViewButton } from '../SaveViewButton'
 import { ReportPaper } from '../ReportPaper'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow, reportTotalRowClass } from '../ReportTable'
 import { ReportDrillLink } from '../ReportDrillLink'
+import { AccountRegisterLink } from '../../../../components/account-register-link'
 
 export const dynamic = 'force-dynamic'
 
@@ -65,10 +65,10 @@ export default async function GeneralLedgerPage({
           {gl.accounts.map((a) => (
             <div key={a.id}>
               <h3 className="mb-1 flex items-baseline gap-2 text-sm font-semibold">
-                <Link href={`/accounts/${a.id}`} className="hover:text-teal-700 dark:hover:text-teal-300">
+                <AccountRegisterLink accountId={a.id} from={period.from} to={period.to} className="hover:text-teal-700 dark:hover:text-teal-300">
                   <span className="mr-1.5 font-mono text-xs text-slate-500 dark:text-slate-400">{a.number}</span>
                   {a.name}
-                </Link>
+                </AccountRegisterLink>
               </h3>
               <Table>
                 <TableHeader>

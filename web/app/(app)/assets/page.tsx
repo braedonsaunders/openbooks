@@ -24,7 +24,7 @@ import { FilterChips } from '../../../components/filter-bar'
 import { Pagination } from '../../../components/pagination'
 import { SortTh } from '../../../components/sortable-th'
 import { can, requirePermission } from '../../../lib/authz'
-import { isUuid, parseListParams, pickString } from '../../../lib/list-params'
+import { buildListDrawerHref, isUuid, parseListParams, pickString } from '../../../lib/list-params'
 import { loadAsset } from '../../api/assets/_lib'
 import { NewAssetButton } from './NewAssetButton'
 import { NewAssetRedirect } from './NewAssetRedirect'
@@ -284,7 +284,7 @@ export default async function Assets({
                   <TableRow key={a.id}>
                     <TableCell className="font-mono text-[13px]">{a.asset_number}</TableCell>
                     <TableCell className="font-semibold">
-                      <Link href={`/assets?asset=${a.id}`} className="text-teal-700 hover:underline dark:text-teal-300">
+                      <Link href={buildListDrawerHref('/assets', sp, 'asset', String(a.id)) as any} className="text-teal-700 hover:underline dark:text-teal-300">
                         {a.name}
                       </Link>
                     </TableCell>

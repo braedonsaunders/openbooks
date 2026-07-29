@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server'
-import { guardPermission } from '../../../../lib/authz'
+import { getAuthz } from '../../../../lib/authz'
 import { loadRelatedTransactionDrawerData } from '../../../../components/related-transaction-drawer'
 
 export const runtime = 'nodejs'
@@ -8,8 +8,8 @@ const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-
 const KIND = /^[a-z][a-z0-9_]{0,63}$/
 
 export async function GET(request: Request) {
-  const gate = await guardPermission('reports.read')
-  if (gate instanceof NextResponse) return gate
+  const gate = await getAuthz()
+  if (!gate) return NextResponse.json({ error: 'unauthorized' }, { status: 401 })
   const url = new URL(request.url)
   const id = url.searchParams.get('id') ?? ''
   const kind = url.searchParams.get('kind') ?? ''

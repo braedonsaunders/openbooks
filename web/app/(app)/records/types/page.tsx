@@ -18,7 +18,7 @@ import { SearchInput } from '../../../../components/search-input'
 import { FilterChips } from '../../../../components/filter-bar'
 import { Pagination } from '../../../../components/pagination'
 import { SortTh } from '../../../../components/sortable-th'
-import { parseListParams, pickString } from '../../../../lib/list-params'
+import { buildListDrawerHref, parseListParams, pickString } from '../../../../lib/list-params'
 import { dateTime } from '../../../../lib/format'
 import { requirePermission } from '../../../../lib/authz'
 import { loadRecordTypeById, type RecordTypeRow } from '../../../../lib/records'
@@ -154,7 +154,7 @@ export default async function RecordTypes({
                 <TableRow key={row.id}>
                   <TableCell className="font-medium">
                     <Link
-                      href={`/records/types?type=${row.id}` as any}
+                      href={buildListDrawerHref('/records/types', sp, 'type', String(row.id)) as any}
                       className="text-teal-700 hover:underline dark:text-teal-300"
                     >
                       {row.name}

@@ -2,12 +2,12 @@
 
 import { useMoney } from '@/components/money-provider'
 import { useEffect, useState } from 'react'
-import Link from 'next/link'
 import { usePathname, useRouter, useSearchParams } from 'next/navigation'
 import { useTranslations } from 'next-intl'
 import { ArrowUpRight } from 'lucide-react'
 import { Badge, Button, Drawer, Skeleton, Table, TableBody, TableCell, TableHead, TableHeader, TableRow, cn } from '@openbooks/ui'
 import { TxnLink } from './TxnLink'
+import { AccountRegisterLink } from '../../../components/account-register-link'
 
 type EntryData = {
   entry: {
@@ -107,7 +107,10 @@ export function EntryFlyout() {
               .join(' · ')
           : undefined
       }
-      stacked={params.has('reportDrill')}
+      stacked={[
+        'reportDrill', 'accountRegister', 'reportRecord', 'doc', 'entry',
+        'payment', 'expense', 'order', 'estimate', 'party', 'project', 'asset',
+      ].some((key) => params.has(key))}
       headerActions={
         entry?.doc_kind && entry.doc_id ? (
           <Button asChild variant="outline" size="sm">
@@ -143,10 +146,10 @@ export function EntryFlyout() {
                 <TableRow key={l.line_number}>
                   <TableCell className="text-slate-400">{l.line_number}</TableCell>
                   <TableCell>
-                    <Link href={`/accounts/${l.account_id}`} className="hover:text-teal-700 dark:hover:text-teal-300">
+                    <AccountRegisterLink accountId={l.account_id} className="hover:text-teal-700 dark:hover:text-teal-300">
                       <span className="mr-1.5 font-mono text-xs text-slate-500 dark:text-slate-400">{l.account_number}</span>
                       {l.account_name}
-                    </Link>
+                    </AccountRegisterLink>
                     {(l.memo || l.project) && (
                       <span className="mt-0.5 block text-xs text-slate-400 dark:text-slate-500">
                         {[l.project, l.memo].filter(Boolean).join(' · ')}

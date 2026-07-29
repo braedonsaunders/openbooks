@@ -10,7 +10,7 @@ import { ShowInactivesToggle } from '../../../components/show-inactives-toggle'
 import { Pagination } from '../../../components/pagination'
 import { SortTh } from '../../../components/sortable-th'
 import { can, requirePermission } from '../../../lib/authz'
-import { isUuid, parseListParams, pickString } from '../../../lib/list-params'
+import { buildListDrawerHref, isUuid, parseListParams, pickString } from '../../../lib/list-params'
 import { loadFieldDefs } from '../../../lib/custom-fields'
 import { loadParty } from '../../api/parties/_lib'
 import { subsidiaryUiOptions } from '../../../lib/subsidiaries'
@@ -176,7 +176,7 @@ export default async function Parties({
               {parties.rows.map((p: any) => (
                 <TableRow key={p.id}>
                   <TableCell className="font-semibold">
-                    <Link href={`/parties?party=${p.id}`} className="text-teal-700 hover:underline dark:text-teal-300">
+                    <Link href={buildListDrawerHref('/parties', sp, 'party', String(p.id)) as any} className="text-teal-700 hover:underline dark:text-teal-300">
                       {p.display_name}
                     </Link>
                   </TableCell>

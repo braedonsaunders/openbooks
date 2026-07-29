@@ -12,7 +12,7 @@ import { ShowInactivesToggle } from '../../../components/show-inactives-toggle'
 import { Pagination } from '../../../components/pagination'
 import { SortTh } from '../../../components/sortable-th'
 import { can, requirePermission } from '../../../lib/authz'
-import { isUuid, parseListParams, pickString } from '../../../lib/list-params'
+import { buildListDrawerHref, isUuid, parseListParams, pickString } from '../../../lib/list-params'
 import { loadFieldDefs } from '../../../lib/custom-fields'
 import { SETUP_ENTITY_BY_KEY } from '../../../lib/setup/registry'
 import { SetupEntitySection } from '../admin/setup/[entity]/SetupEntitySection'
@@ -212,7 +212,7 @@ export default async function Items({
                 <TableRow key={i.id}>
                   <TableCell className="font-mono text-[13px]">{i.code}</TableCell>
                   <TableCell className="font-semibold">
-                    <Link href={`/items?item=${i.id}`} className="text-teal-700 hover:underline dark:text-teal-300">
+                    <Link href={buildListDrawerHref('/items', sp, 'item', String(i.id)) as any} className="text-teal-700 hover:underline dark:text-teal-300">
                       {i.name}
                     </Link>
                   </TableCell>

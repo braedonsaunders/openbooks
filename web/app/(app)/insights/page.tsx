@@ -20,7 +20,7 @@ import { FilterChips } from '../../../components/filter-bar'
 import { Pagination } from '../../../components/pagination'
 import { SortTh } from '../../../components/sortable-th'
 import { can, requirePermission } from '../../../lib/authz'
-import { isUuid, parseListParams, pickString } from '../../../lib/list-params'
+import { buildListDrawerHref, isUuid, parseListParams, pickString } from '../../../lib/list-params'
 import { loadCard } from '../../api/insights/_lib'
 import { InsightsTabs } from './InsightsTabs'
 import { NewCardButton } from './NewCardButton'
@@ -135,7 +135,7 @@ export default async function InsightsCards({
                 return (
                   <TableRow key={row.id}>
                     <TableCell className="font-semibold">
-                      <Link href={`/insights?card=${row.id}`} className="text-teal-700 hover:underline dark:text-teal-300">
+                      <Link href={buildListDrawerHref('/insights', sp, 'card', String(row.id)) as any} className="text-teal-700 hover:underline dark:text-teal-300">
                         {row.name}
                       </Link>
                       {row.description ? (

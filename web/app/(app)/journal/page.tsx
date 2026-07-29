@@ -11,7 +11,7 @@ import { SearchInput } from '../../../components/search-input'
 import { FilterChips } from '../../../components/filter-bar'
 import { Pagination } from '../../../components/pagination'
 import { SortTh } from '../../../components/sortable-th'
-import { parseListParams, pickString } from '../../../lib/list-params'
+import { buildListDrawerHref, parseListParams, pickString } from '../../../lib/list-params'
 import { can, requirePermission } from '../../../lib/authz'
 import { loadFieldDefs } from '../../../lib/custom-fields'
 import { isMultiSubsidiary, subsidiaryOptions } from '../../../lib/subsidiaries'
@@ -213,7 +213,7 @@ export default async function Journal({
             {draftDocs.rows.map((d: any) => (
               <Link
                 key={d.id}
-                href={`/journal?entry=${d.id}`}
+                href={buildListDrawerHref('/journal', sp, 'entry', String(d.id)) as any}
                 className="flex items-center gap-3 rounded px-1.5 py-1 text-sm hover:bg-white dark:hover:bg-slate-800/60"
               >
                 <span className="font-mono text-[13px] font-semibold text-teal-700 dark:text-teal-300">
@@ -249,7 +249,11 @@ export default async function Journal({
                     GL-native entries with no source document open the read-only
                     entry flyout (?txn=<entryId>) — never the bare full page. */}
                 <Link
-                  href={e.source_document_id ? `/journal?entry=${e.source_document_id}` : `/journal?txn=${e.id}`}
+                  href={
+                    e.source_document_id
+                      ? buildListDrawerHref('/journal', sp, 'entry', String(e.source_document_id))
+                      : buildListDrawerHref('/journal', sp, 'txn', String(e.id))
+                  }
                   className="text-teal-700 hover:underline dark:text-teal-300"
                   scroll={false}
                 >
@@ -272,7 +276,11 @@ export default async function Journal({
               <TableCell className="w-11">
                 <Button variant="ghost" size="icon" className="h-7 w-7" asChild>
                   <Link
-                    href={e.source_document_id ? `/journal?entry=${e.source_document_id}` : `/journal?txn=${e.id}`}
+                    href={
+                      e.source_document_id
+                        ? buildListDrawerHref('/journal', sp, 'entry', String(e.source_document_id))
+                        : buildListDrawerHref('/journal', sp, 'txn', String(e.id))
+                    }
                     aria-label={tc('actions.open')}
                     title={tc('actions.open')}
                     scroll={false}

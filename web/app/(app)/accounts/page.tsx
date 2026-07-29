@@ -17,6 +17,7 @@ import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/db.ts'
 import { segmentRegistry } from '../../../lib/segments'
 import { subsidiaryFeatureEnabled } from '../../../lib/features'
+import { AccountRegisterLink } from '../../../components/account-register-link'
 
 export const dynamic = 'force-dynamic'
 
@@ -175,7 +176,7 @@ export default async function Accounts({
               return (
                 <TableRow key={a.id}>
                   <TableCell className="font-mono text-xs">
-                    <Link href={`/accounts/${a.id}`} className="text-teal-700 hover:underline dark:text-teal-300">{a.number ?? tc('labels.notSet')}</Link>
+                    <AccountRegisterLink accountId={a.id} className="text-teal-700 hover:underline dark:text-teal-300">{a.number ?? tc('labels.notSet')}</AccountRegisterLink>
                   </TableCell>
                   <TableCell>
                     <Link href={mergeHref('/accounts', sp, { account: a.id }) as any} className={cn('hover:text-teal-700 dark:hover:text-teal-300', a.is_summary && 'font-semibold')}>
@@ -185,7 +186,7 @@ export default async function Accounts({
                   </TableCell>
                   <TableCell className="text-slate-500 dark:text-slate-400">{typeLabel(a.type)}</TableCell>
                   <TableCell className={cn('text-right tabular-nums', bal < 0 && 'text-red-600 dark:text-red-400')}>
-                    <Link href={`/accounts/${a.id}`} className="hover:underline">{money(bal)}</Link>
+                    <AccountRegisterLink accountId={a.id} className="hover:underline">{money(bal)}</AccountRegisterLink>
                   </TableCell>
                 </TableRow>
               )
@@ -240,7 +241,7 @@ export default async function Accounts({
               ) : null,
               <TableRow key={a.id}>
                 <TableCell className="font-mono text-xs">
-                  <Link href={`/accounts/${a.id}`} className="text-teal-700 hover:underline dark:text-teal-300">{a.number ?? tc('labels.notSet')}</Link>
+                  <AccountRegisterLink accountId={a.id} className="text-teal-700 hover:underline dark:text-teal-300">{a.number ?? tc('labels.notSet')}</AccountRegisterLink>
                 </TableCell>
                 <TableCell className={cn(d === 1 && 'pl-8', d === 2 && 'pl-12')}>
                   <Link href={mergeHref('/accounts', sp, { account: a.id }) as any} className={cn('hover:text-teal-700 dark:hover:text-teal-300', a.is_summary && 'font-semibold')}>
@@ -250,7 +251,7 @@ export default async function Accounts({
                   {a.is_summary ? <Badge variant="secondary" className="ml-2">{t('list.badges.summary')}</Badge> : null}
                 </TableCell>
                 <TableCell className={cn('text-right tabular-nums', bal < 0 && 'text-red-600 dark:text-red-400')}>
-                  <Link href={`/accounts/${a.id}`} className="hover:underline">{money(bal)}</Link>
+                  <AccountRegisterLink accountId={a.id} className="hover:underline">{money(bal)}</AccountRegisterLink>
                 </TableCell>
               </TableRow>,
             ]

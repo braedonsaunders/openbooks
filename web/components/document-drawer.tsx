@@ -13,6 +13,7 @@ import { CustomFieldInputs, customFieldColumns, type CustomFieldDefClient } from
 import { CustomFieldInput } from './custom-field-input'
 import { HeaderFields } from './transaction-form/header-fields'
 import { DocTypeBadge, docTypeMeta } from './doc-type-badge'
+import { JournalEntryLink } from './journal-entry-link'
 import { PdfButton } from './pdf-button'
 import { FlowManualButtons } from './flow-manual-buttons'
 import { ApprovalActions } from './approval-actions'
@@ -1055,7 +1056,7 @@ export function DocumentDrawer({
       case 'gl_impact':
         return doc.entry_id ? (
           <Button variant="outline" asChild>
-            <Link href={`/journal/${doc.entry_id}`}>{t('drawer.viewGlImpact')}</Link>
+            <JournalEntryLink entryId={doc.entry_id}>{t('drawer.viewGlImpact')}</JournalEntryLink>
           </Button>
         ) : null
       case 'delete':

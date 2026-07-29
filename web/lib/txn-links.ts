@@ -29,3 +29,39 @@ export function moduleDrawerHref(docKind: string | null | undefined, docId: stri
   const m = DOC_MODULE[docKind]
   return m ? `${m.path}?${m.param}=${docId}` : null
 }
+
+/**
+ * Builds the app-wide, in-context drawer URL for a posted GL entry. Source
+ * documents open their native drawer; GL-only entries open the ledger drawer.
+ */
+export function transactionDrawerHref({
+  pathname,
+  query,
+  entryId,
+  docKind,
+  docId,
+}: {
+  pathname: string
+  query: string
+  entryId: string
+  docKind?: string | null
+  docId?: string | null
+}) {
+  const params = new URLSearchParams(query)
+  params.delete('reportRecord')
+  params.delete('reportRecordKind')
+  params.delete('txn')
+  params.delete('drawerReturn')
+  params.delete('form')
+  params.delete('transactionTab')
+  const baseQuery = params.toString()
+  const returnHref = baseQuery ? `${pathname}?${baseQuery}` : pathname
+  if (docKind && docId) {
+    params.set('reportRecord', docId)
+    params.set('reportRecordKind', docKind)
+    params.set('drawerReturn', returnHref)
+  } else {
+    params.set('txn', entryId)
+  }
+  return `${pathname}?${params}`
+}

@@ -200,7 +200,7 @@ async function searchAccounts(orgId: string, q: string, like: string): Promise<S
     type: 'account',
     title: `${row.number ? `${row.number} · ` : ''}${row.name}`,
     subtitle: row.type,
-    href: `/accounts/${row.id}`,
+    href: `/accounts?accountRegister=${row.id}`,
     iconKey: 'layers',
   }))
 }

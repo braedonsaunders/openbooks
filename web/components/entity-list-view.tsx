@@ -13,7 +13,7 @@ import { ShowInactivesToggle } from './show-inactives-toggle'
 import { Pagination } from './pagination'
 import { SortTh } from './sortable-th'
 import { ViewsMenu } from './views-menu'
-import { parseListParams, pickString, mergeHref } from '../lib/list-params'
+import { buildListDrawerHref, parseListParams, pickString } from '../lib/list-params'
 import { allowedSubsidiaryIds } from '../lib/subsidiaries'
 import { loadFieldDefs } from '../lib/custom-fields'
 import { resolveListView } from '../lib/customization/resolve'
@@ -174,9 +174,8 @@ export async function EntityListView({
     label: o.labelKey ? label(o.labelKey) : o.value,
   }))
 
-  // Opening a record keeps the list's current filters/sort/search/page — it
-  // just adds the drawer param, never resets the view.
-  const openHref = (id: string) => mergeHref(basePath, sp, { [source.drawerParam]: id })
+  const openHref = (id: string) =>
+    buildListDrawerHref(basePath, sp, source.drawerParam, id)
 
   const cell = (row: any, c: ListColDesc) => {
     const v = row[c.key]

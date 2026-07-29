@@ -3,7 +3,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useFormatter } from 'next-intl'
 import { useMoney } from '@/components/money-provider'
-import Link from 'next/link'
 import { useTranslations } from 'next-intl'
 import { ChevronDown, ChevronRight } from 'lucide-react'
 import { cn } from '@openbooks/ui'
@@ -13,6 +12,7 @@ import { buildDrillTarget, type ReportScale } from '../../../lib/report-filters'
 import { decimalIsMaterial, decimalScale, decimalToNumber, isNegative, scaleDivisor, type StatementValue } from '../../../lib/statement-format'
 import { ReportDrillLink } from './ReportDrillLink'
 import { REPORT_SECTION_VISIBILITY_EVENT, type ReportSectionVisibility } from './report-section-events'
+import { AccountRegisterLink } from '../../../components/account-register-link'
 
 /**
  * Renders a multi-column statement view (P&L, Balance Sheet, …) as a clean,
@@ -226,10 +226,10 @@ export function StatementMatrixTable({
                   <span className="inline-flex items-baseline">
                     {l.kind === 'account' ? chevron : null}
                     {l.kind === 'account' && l.accountId ? (
-                      <Link href={`/accounts/${l.accountId}`} className="hover:text-teal-700 dark:hover:text-teal-300">
+                      <AccountRegisterLink accountId={l.accountId} className="hover:text-teal-700 dark:hover:text-teal-300">
                         {l.number && <span className="mr-1.5 font-mono text-xs text-slate-400 dark:text-slate-500">{l.number}</span>}
                         {l.label}
-                      </Link>
+                      </AccountRegisterLink>
                     ) : (
                       l.label
                     )}

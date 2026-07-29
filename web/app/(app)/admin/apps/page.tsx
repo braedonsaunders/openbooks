@@ -8,7 +8,7 @@ import { ListPageLayout } from '../../../../components/page-layout'
 import { SearchInput } from '../../../../components/search-input'
 import { FilterChips } from '../../../../components/filter-bar'
 import { Pagination } from '../../../../components/pagination'
-import { parseListParams, pickString } from '../../../../lib/list-params'
+import { buildListDrawerHref, parseListParams, pickString } from '../../../../lib/list-params'
 import { requirePermission } from '../../../../lib/authz'
 import { dateTime } from '../../../../lib/format'
 import { isAppPublished, listAppFiles } from '../../../../lib/apps/store'
@@ -152,7 +152,7 @@ export default async function AppsAdminPage({
               <TableRow key={a.key}>
                 <TableCell>
                   <Link
-                    href={`/admin/apps?app=${encodeURIComponent(a.key)}`}
+                    href={buildListDrawerHref('/admin/apps', sp, 'app', String(a.key)) as any}
                     className="font-medium text-teal-700 hover:underline dark:text-teal-300"
                   >
                     {a.name}

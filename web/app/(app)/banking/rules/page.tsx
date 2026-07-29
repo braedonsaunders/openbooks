@@ -9,7 +9,7 @@ import { FilterChips } from '../../../../components/filter-bar'
 import { Pagination } from '../../../../components/pagination'
 import { SortTh } from '../../../../components/sortable-th'
 import { requirePermission } from '../../../../lib/authz'
-import { parseListParams, pickString, isUuid } from '../../../../lib/list-params'
+import { buildListDrawerHref, parseListParams, pickString, isUuid } from '../../../../lib/list-params'
 import { summarizeGroup, type FieldDef } from '../../../../lib/conditions'
 import { RuleDrawer, NewRuleButton, RunRulesButton } from './RuleDrawer'
 
@@ -199,7 +199,7 @@ export default async function BankingRules({
                     <TableRow key={r.id}>
                       <TableCell className="text-right tabular-nums text-slate-500 dark:text-slate-400">{r.priority}</TableCell>
                       <TableCell className="font-medium">
-                        <Link href={`/banking/rules?rule=${r.id}` as any} className="text-teal-700 hover:underline dark:text-teal-300">{r.name}</Link>
+                        <Link href={buildListDrawerHref('/banking/rules', sp, 'rule', String(r.id)) as any} className="text-teal-700 hover:underline dark:text-teal-300">{r.name}</Link>
                       </TableCell>
                       <TableCell className="max-w-xs truncate text-slate-600 dark:text-slate-300">{whenSummary(r.criteria)}</TableCell>
                       <TableCell className="max-w-xs truncate text-slate-600 dark:text-slate-300">

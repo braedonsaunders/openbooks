@@ -33,6 +33,7 @@ import { AttachmentPanel } from '../../../components/attachment-panel'
 import { SearchInput } from '../../../components/search-input'
 import { FilterChips } from '../../../components/filter-bar'
 import { Pagination } from '../../../components/pagination'
+import { JournalEntryLink } from '../../../components/journal-entry-link'
 import { confirmDialog } from '../../../lib/confirm'
 import { DisposeButton } from './DisposeButton'
 import { RemeasureButton } from './RemeasureButton'
@@ -402,7 +403,7 @@ export function AssetDrawer({
       <TableHeader><TableRow><TableHead>{t('run.book')}</TableHead><TableHead>{t('drawer.period')}</TableHead><TableHead className="text-right">{t('drawer.planned')}</TableHead><TableHead className="text-right">{t('drawer.postedAmount')}</TableHead><TableHead>{t('drawer.evidence')}</TableHead><TableHead className="text-right">{t('labels.accumulated')}</TableHead><TableHead className="text-right">{t('labels.nbv')}</TableHead></TableRow></TableHeader>
       <TableBody>{payload.schedule.map((line) => <TableRow key={line.id}>
         <TableCell><Badge variant="outline">{line.bookCode}</Badge></TableCell>
-        <TableCell className="font-mono text-[13px]">{line.journalEntryId ? <Link href={`/journal/${line.journalEntryId}`} className="text-teal-700 hover:underline dark:text-teal-300">{line.periodName}</Link> : line.periodName}</TableCell>
+        <TableCell className="font-mono text-[13px]">{line.journalEntryId ? <JournalEntryLink entryId={line.journalEntryId} className="text-teal-700 hover:underline dark:text-teal-300">{line.periodName}</JournalEntryLink> : line.periodName}</TableCell>
         <TableCell className="text-right tabular-nums">{money(line.plannedAmount)}</TableCell>
         <TableCell className="text-right tabular-nums">{line.postedAmount != null ? <Badge variant="success">{money(line.postedAmount)}</Badge> : <span className="text-slate-400">—</span>}</TableCell>
         <TableCell className="max-w-56 text-xs">{line.input ? <div><a href={`/api/file-cabinet/files/${line.input.evidenceFileId}/download`} className="font-medium text-teal-700 hover:underline dark:text-teal-300">{line.input.evidenceFileName}</a><p className="truncate text-slate-500 dark:text-slate-400">{line.input.memo}</p>{line.input.productionUnits ? <p className="tabular-nums text-slate-500">{t('drawer.productionUnits', { units: line.input.productionUnits })}</p> : null}</div> : line.source === 'imported' ? <span className="text-slate-500 dark:text-slate-400">{t('drawer.importedEvidence')}</span> : <span className="text-slate-400">{t('drawer.formulaGenerated')}</span>}</TableCell>
