@@ -527,6 +527,13 @@ export function canonicalNativeDocumentKey(d: NativeDocument): string {
       effectiveLineSubsidiary(l.subsidiaryId, d.subsidiaryId),
       l.extraDims ?? {},
       l.description,
+      l.isBillable ?? false,
+      l.markupPercent == null
+        ? null
+        : normalizeDecimal(l.markupPercent, 4),
+      l.billAmount == null
+        ? null
+        : toUnits(l.billAmount).toString(),
     ]),
   ]);
 }
@@ -576,6 +583,9 @@ type StoredLineKeyRow = {
   subsidiary_id: string | null;
   extra_dims: Record<string, string>;
   description: string | null;
+  is_billable: boolean;
+  markup_percent: string | null;
+  bill_amount: string | null;
 };
 
 function storedCanonicalKey(
@@ -618,6 +628,13 @@ function storedCanonicalKey(
       effectiveLineSubsidiary(l.subsidiary_id, d.subsidiary_id),
       l.extra_dims ?? {},
       l.description,
+      l.is_billable,
+      l.markup_percent == null
+        ? null
+        : normalizeDecimal(l.markup_percent, 4),
+      l.bill_amount == null
+        ? null
+        : toUnits(l.bill_amount).toString(),
     ]),
   ]);
 }
@@ -640,7 +657,8 @@ async function storedKey(docId: string): Promise<string> {
       select line_number, custom->>'sourceLineRef' as source_line_ref,
              account_id, item_id, quantity, unit, unit_price,
              amount, tax_amount, tax_overridden, tax_code_id,
-             party_id, department_id, project_id, subsidiary_id, extra_dims, description
+             party_id, department_id, project_id, subsidiary_id, extra_dims, description,
+             is_billable, markup_percent, bill_amount
         from document_lines where document_id = ${docId} order by line_number`)) as unknown as {
       rows: StoredLineKeyRow[];
     }
@@ -670,7 +688,8 @@ async function loadStoredKeys(
            dl.account_id, dl.item_id, dl.quantity, dl.unit, dl.unit_price,
            dl.amount, dl.tax_amount, dl.tax_overridden,
            dl.tax_code_id, dl.party_id, dl.department_id, dl.project_id, dl.subsidiary_id,
-           dl.extra_dims, dl.description
+           dl.extra_dims, dl.description,
+           dl.is_billable, dl.markup_percent, dl.bill_amount
       from document_lines dl
       join documents d on d.id = dl.document_id and d.org_id = dl.org_id
      where d.org_id = ${orgId} and d.custom->>${refKey} is not null
@@ -971,6 +990,7 @@ async function insertImportedLines(
         description: line.description,
         isBillable: line.isBillable ?? false,
         markupPercent: line.markupPercent ?? null,
+        billAmount: line.billAmount ?? null,
         // Line identity from the source system, so a migrated document can be
         // reconciled and re-synced line by line rather than only as a whole.
         custom: line.sourceLineRef ? { sourceLineRef: line.sourceLineRef } : {},

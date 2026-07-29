@@ -170,6 +170,7 @@ export async function resolveProjectFinancials(
   const creditKinds = profile.invoicedToDate.creditKinds
   const kindList = (ks: string[]) => sql.join(ks.map((k) => sql`${k}`), sql`, `)
   const committedKinds = profile.committedCost.docKinds
+  const committedStatuses = profile.committedCost.statuses ?? ['approved']
   const billableCostKinds = profile.billableValue.costSourceKinds?.length
     ? profile.billableValue.costSourceKinds
     : ['vendor_bill', 'expense_report', 'card_charge', 'check']
@@ -203,7 +204,9 @@ export async function resolveProjectFinancials(
                case when d.kind = 'project_charge'
                     then coalesce(dl.cost_amount, dl.amount)
                     else round(
-                      dl.amount * case when coalesce(dl.quantity,0) > 0
+                      (case when d.kind = 'vendor_credit'
+                            then -dl.amount else dl.amount end)
+                      * case when coalesce(dl.quantity,0) > 0
                         then greatest(0, (dl.quantity - coalesce(dl.quantity_billed,0)) / dl.quantity)
                         else 1
                       end,
@@ -214,7 +217,7 @@ export async function resolveProjectFinancials(
         from document_lines dl join documents d on d.id = dl.document_id
        where dl.org_id = ${orgId}
          and coalesce(dl.project_id, d.project_id) = ${projectId}
-         and d.status = 'approved'
+         and d.status in (${kindList(committedStatuses.length ? committedStatuses : ['__none__'])})
          and (
            d.kind = 'project_charge'
            or (
@@ -239,18 +242,21 @@ export async function resolveProjectFinancials(
     // retained separately for invoicing/backlog presentation.
     db.execute(sql`
       select coalesce(sum(
-               case when d.kind = 'project_charge'
-                    then coalesce(dl.bill_amount, 0)
-                    else
-                      round(
-                        (case when d.kind = 'vendor_credit'
-                              then -dl.amount else dl.amount end)
-                        * case when dl.markup_percent is not null
-                               then 1 + dl.markup_percent / 100
-                               else coalesce(nullif(dl.cost_multiplier, 0), 1)
-                          end,
-                        4
-                      )
+               case
+                 when d.kind = 'project_charge' then coalesce(dl.bill_amount, 0)
+                 when dl.bill_amount is not null then
+                   case when d.kind = 'vendor_credit'
+                        then -dl.bill_amount else dl.bill_amount end
+                 else
+                   round(
+                     (case when d.kind = 'vendor_credit'
+                           then -dl.amount else dl.amount end)
+                     * case when dl.markup_percent is not null
+                            then 1 + dl.markup_percent / 100
+                            else coalesce(nullif(dl.cost_multiplier, 0), 1)
+                       end,
+                     4
+                   )
                end
              ), 0) as total_bill,
              coalesce(sum(
@@ -258,18 +264,21 @@ export async function resolveProjectFinancials(
                     then -dl.amount else dl.amount end
              ), 0) as total_cost,
              coalesce(sum(
-               case when d.kind = 'project_charge'
-                    then coalesce(dl.bill_amount, 0)
-                    else
-                      round(
-                        (case when d.kind = 'vendor_credit'
-                              then -dl.amount else dl.amount end)
-                        * case when dl.markup_percent is not null
-                               then 1 + dl.markup_percent / 100
-                               else coalesce(nullif(dl.cost_multiplier, 0), 1)
-                          end,
-                        4
-                      )
+               case
+                 when d.kind = 'project_charge' then coalesce(dl.bill_amount, 0)
+                 when dl.bill_amount is not null then
+                   case when d.kind = 'vendor_credit'
+                        then -dl.bill_amount else dl.bill_amount end
+                 else
+                   round(
+                     (case when d.kind = 'vendor_credit'
+                           then -dl.amount else dl.amount end)
+                     * case when dl.markup_percent is not null
+                            then 1 + dl.markup_percent / 100
+                            else coalesce(nullif(dl.cost_multiplier, 0), 1)
+                       end,
+                     4
+                   )
                end
              ) filter (where dl.billed_by_line_id is null), 0) as unbilled_bill,
              coalesce(sum(

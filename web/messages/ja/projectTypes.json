@@ -31,6 +31,7 @@
   "burdenDimension": "間接費の勘定グループ",
   "budgetSource": "原価予算のソース",
   "committedKinds": "コミット済み原価の取得元",
+  "committedStatuses": "コミット済み原価のライフサイクル状態",
   "totalCostComponents": "総原価の構成要素",
   "allowedBases": "許可される請求基準",
   "billingProcedure": "請求手続",

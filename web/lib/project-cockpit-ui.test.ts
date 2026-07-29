@@ -85,6 +85,8 @@ test('project transaction amounts use project-charge bill value and expose gover
   const document = source('components/document-drawer.tsx')
 
   assert.match(financials, /d\.kind = 'project_charge'[\s\S]*dl\.bill_amount/)
+  assert.match(financials, /when dl\.bill_amount is not null/)
+  assert.match(financials, /profile\.committedCost\.statuses \?\? \['approved'\]/)
   assert.match(related, /kind === 'project_charge' \? can\(authz, 'projects\.manage'\)/)
   assert.match(document, /config\.kind === 'project_charge'[\s\S]*\\? \{\}/)
   assert.match(document, /readOnly=\{!editable \|\| config\.kind === 'project_charge'\}/)

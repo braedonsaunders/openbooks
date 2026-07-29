@@ -29,6 +29,7 @@
   "laborSource": "Source du coût de main-d’œuvre",
   "budgetSource": "Source du budget de coûts",
   "committedKinds": "Coût engagé depuis",
+  "committedStatuses": "États du cycle de vie des coûts engagés",
   "totalCostComponents": "Composantes du coût total",
   "allowedBases": "Bases de facturation autorisées",
   "billingProcedure": "Procédure de facturation",

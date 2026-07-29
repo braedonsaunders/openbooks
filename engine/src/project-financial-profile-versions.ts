@@ -129,7 +129,20 @@ export function assertValidProjectFinancialProfile(
     }
   }
 
-  strings(object(profile.committedCost, "committedCost").docKinds, "committedCost.docKinds");
+  const committed = object(profile.committedCost, "committedCost");
+  strings(committed.docKinds, "committedCost.docKinds");
+  if (committed.statuses !== undefined) {
+    const statuses = strings(committed.statuses, "committedCost.statuses");
+    if (
+      statuses.some(
+        (status) => !["pending_approval", "approved"].includes(status),
+      )
+    ) {
+      throw new Error(
+        "committedCost.statuses contains an unsupported lifecycle",
+      );
+    }
+  }
   const billable = object(profile.billableValue, "billableValue");
   if (
     typeof billable.includeUnbilledTime !== "boolean" ||

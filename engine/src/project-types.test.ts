@@ -83,7 +83,15 @@ test('project cost and selling-value evidence preserve canonical document direct
   )
   assert.match(
     financials,
-    /d\.status = 'approved'[\s\S]*d\.kind = 'project_charge'/,
+    /profile\.committedCost\.statuses \?\? \['approved'\]/,
+  )
+  assert.match(
+    financials,
+    /d\.status in \(\$\{kindList\(committedStatuses/,
+  )
+  assert.match(
+    financials,
+    /when dl\.bill_amount is not null/,
   )
   assert.match(
     financials,

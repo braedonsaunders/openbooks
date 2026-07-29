@@ -2,6 +2,8 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import {
   buildNativeFromNetSuite,
+  netSuiteBillAmount,
+  normalizeMarkupPercent,
   type NsHeader,
   type NsLine,
 } from "./netsuite-native.ts";
@@ -244,6 +246,7 @@ test("pending NetSuite expense reports remain pending native expense reports", (
       taxAmount: built.doc.lines[0]?.taxAmount,
       isBillable: built.doc.lines[0]?.isBillable,
       markupPercent: built.doc.lines[0]?.markupPercent,
+      billAmount: built.doc.lines[0]?.billAmount,
     },
     {
       sourceLineRef: "2",
@@ -252,6 +255,7 @@ test("pending NetSuite expense reports remain pending native expense reports", (
       taxAmount: "150.8400",
       isBillable: true,
       markupPercent: "15.0000",
+      billAmount: "1334.3565",
     },
   );
 
@@ -274,6 +278,25 @@ test("pending NetSuite expense reports remain pending native expense reports", (
   assert.equal(posted.doc.lifecycleStatus, "approved");
   assert.equal(posted.doc.controlAccountId, "card-control");
   assert.equal(posted.doc.lines.length, 1);
+});
+
+test("NetSuite commercial amounts use exact percentages and refund face value", () => {
+  assert.equal(normalizeMarkupPercent("15"), "15.0000");
+  assert.equal(normalizeMarkupPercent("0.15"), "15.0000");
+  assert.equal(normalizeMarkupPercent("1"), "100.0000");
+  assert.equal(normalizeMarkupPercent("-0.15"), null);
+  assert.equal(
+    netSuiteBillAmount("expense_report", "1160.3100", true, "15.0000"),
+    "1334.3565",
+  );
+  assert.equal(
+    netSuiteBillAmount("card_refund", "-118.5300", true, "15.0000"),
+    "-118.5300",
+  );
+  assert.equal(
+    netSuiteBillAmount("expense_report", "1160.3100", false, "15.0000"),
+    null,
+  );
 });
 
 test("NetSuite preserves source date independently from exact posting period", () => {

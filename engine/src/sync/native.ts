@@ -47,6 +47,13 @@ export interface NativeDocLine {
   /** Markup over cost when this line is rebilled, as a PERCENTAGE (15 = 15%). */
   markupPercent?: string | null;
   /**
+   * Authoritative customer-facing value in document direction when the source
+   * exposes or deterministically defines it. This is distinct from cost
+   * amount: refunds, credits, negotiated prices, and source rounding cannot
+   * always be reconstructed from cost × markup later.
+   */
+  billAmount?: string | null;
+  /**
    * Stable id of this line in the source system. Without it a migrated document
    * can only ever be reconciled or re-synced as a whole, so a line-level
    * correction has nothing to match on and provenance stops at the header.
