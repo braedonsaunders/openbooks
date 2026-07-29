@@ -1,6 +1,9 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { normalizeNetSuiteAccountingPeriods } from "./netsuite-source.ts";
+import {
+  normalizeNetSuiteAccountingPeriods,
+  normalizeNetSuiteTaxCodes,
+} from "./netsuite-source.ts";
 
 test("NetSuite fiscal periods retain the source close flags", () => {
   const periods = normalizeNetSuiteAccountingPeriods([
@@ -29,4 +32,42 @@ test("NetSuite fiscal periods retain the source close flags", () => {
   assert.equal(periods[1]?.fields.closed, false);
   assert.equal(periods[1]?.fields.apLocked, true);
   assert.equal(periods[1]?.fields.arLocked, false);
+});
+
+test("NetSuite transaction tax identities remain exact when item and group labels collide", () => {
+  const taxCodes = normalizeNetSuiteTaxCodes(
+    [{ id: "2525", itemid: "HST", rate: "0.13", isinactive: "F" }],
+    [
+      { id: "2529", itemid: "HST", rate: "0.13", isinactive: "F" },
+      { id: "2823", itemid: "HST_NB", rate: "0.15", isinactive: "F" },
+    ],
+  );
+  assert.deepEqual(
+    taxCodes.map((code) => ({
+      sourceRef: code.sourceRef,
+      code: code.fields.code,
+      name: code.fields.name,
+      ratePercent: code.fields.ratePercent,
+    })),
+    [
+      {
+        sourceRef: "2525",
+        code: "HST",
+        name: "HST",
+        ratePercent: "13.0000",
+      },
+      {
+        sourceRef: "2529",
+        code: "HST [grp:2529]",
+        name: "HST",
+        ratePercent: "13.0000",
+      },
+      {
+        sourceRef: "2823",
+        code: "HST_NB [grp:2823]",
+        name: "HST_NB",
+        ratePercent: "15.0000",
+      },
+    ],
+  );
 });

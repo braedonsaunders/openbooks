@@ -186,6 +186,13 @@ export interface MigrationSource {
   entities?(since?: Date | null): Promise<EntityStream[]>;
 
   /**
+   * Small reference-data streams required to interpret a bounded transaction
+   * pull exactly (for example connector tax-code identities). This must never
+   * include high-volume operational streams such as parties or time entries.
+   */
+  transactionReferenceEntities?(): Promise<EntityStream[]>;
+
+  /**
    * Native transactions created/modified after `since` (null = everything),
    * built against the provided context's id maps, plus the application graph.
    */

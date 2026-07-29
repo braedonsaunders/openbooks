@@ -1,6 +1,6 @@
 import { NetSuiteBridgeClient, type NetSuiteBridgeConfig } from "../netsuite-bridge.ts";
 import type { NetSuiteCreds } from "../netsuite.ts";
-import { fromUnits, toUnits } from "../money.ts";
+import { fromUnits, mulDecimal, normalizeMoney, toUnits } from "../money.ts";
 import { buildNativeFromNetSuite, type NsHeader, type NsLine } from "./netsuite-native.ts";
 import type { NativeContext, NativeDocument } from "./native.ts";
 import type {
@@ -339,6 +339,42 @@ export function normalizeNetSuiteAccountingPeriods(
   });
 }
 
+export function normalizeNetSuiteTaxCodes(
+  salesTaxItems: Record<string, string>[],
+  taxGroups: Record<string, string>[],
+): SourceEntity[] {
+  const normalize = (
+    row: Record<string, string>,
+    recordKind: "salestaxitem" | "taxgroup",
+  ): SourceEntity => {
+    const sourceRef = String(row.id);
+    const sourceCode = s(row.itemid) ?? `TAX-${sourceRef}`;
+    return {
+      sourceRef,
+      fields: {
+        // NetSuite permits a tax item and a tax group to share the same visible
+        // name. Tax groups therefore receive a deterministic suffix so the
+        // target code remains unique without changing the source identity.
+        code:
+          recordKind === "taxgroup"
+            ? `${sourceCode} [grp:${sourceRef}]`
+            : sourceCode,
+        name: sourceCode,
+        ratePercent: normalizeMoney(
+          mulDecimal(String(row.rate ?? "0"), "100"),
+        ),
+        appliesTo: "both",
+        isActive: !isT(row.isinactive),
+        sourceRecordKind: recordKind,
+      },
+    };
+  };
+  return [
+    ...salesTaxItems.map((row) => normalize(row, "salestaxitem")),
+    ...taxGroups.map((row) => normalize(row, "taxgroup")),
+  ];
+}
+
 export class NetSuiteSource implements MigrationSource {
   readonly name = "netsuite";
   readonly refKey = "nsId";
@@ -538,6 +574,7 @@ export class NetSuiteSource implements MigrationSource {
     return [
       { resource: "subsidiaries", records: await this.subsidiaries() },
       { resource: "accounts", records: await this.accounts() },
+      { resource: "tax_codes", records: await this.taxCodes() },
       { resource: "departments", records: await this.departments() },
       { resource: "payment_terms", records: await this.paymentTerms() },
       { resource: "time_types", records: await this.timeTypes() },
@@ -548,6 +585,22 @@ export class NetSuiteSource implements MigrationSource {
       { resource: "contacts", records: await this.contacts(since) },
       { resource: "time_entries", records: await this.timeEntries(since ?? null) },
     ];
+  }
+
+  async transactionReferenceEntities(): Promise<EntityStream[]> {
+    return [{ resource: "tax_codes", records: await this.taxCodes() }];
+  }
+
+  private async taxCodes(): Promise<SourceEntity[]> {
+    const [salesTaxItems, taxGroups] = await Promise.all([
+      this.q<Record<string, string>>(
+        "SELECT id, itemid, rate, isinactive FROM salestaxitem",
+      ),
+      this.q<Record<string, string>>(
+        "SELECT id, itemid, rate, isinactive FROM taxgroup",
+      ),
+    ]);
+    return normalizeNetSuiteTaxCodes(salesTaxItems, taxGroups);
   }
 
   async accountingPeriods(): Promise<SourceEntity[]> {
