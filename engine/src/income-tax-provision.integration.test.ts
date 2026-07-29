@@ -64,7 +64,7 @@ test("income tax provision computes, posts, and reposts with reversal", { skip: 
       insert into documents
         (id, org_id, kind, status, document_number, subsidiary_id, party_id,
          document_date, currency, fx_rate, subtotal, tax_total, total, created_by)
-      values (${invoiceId}, ${org.orgId}, 'customer_invoice', 'draft', 'INV-TAX-1',
+      values (${invoiceId}, ${org.orgId}, 'customer_invoice', 'approved', 'INV-TAX-1',
               ${org.subsidiaryId}, ${org.customerId}, ${org.date}, 'CAD', '1',
               '1000000', '0', '1000000', ${userId})`);
     await db.execute(sql`

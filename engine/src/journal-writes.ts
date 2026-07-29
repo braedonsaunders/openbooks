@@ -2,6 +2,7 @@ import { sql } from "drizzle-orm";
 import { db, schema } from "./db.ts";
 import { abs, cmp, isZero, normalizeMoney, sum } from "./money.ts";
 import { postDocument } from "./posting.ts";
+import { submitAndReleaseIfUngated } from "./flows/submit.ts";
 
 /**
  * Governed journal writes for sandboxed code (App backends + user scripts).
@@ -41,6 +42,8 @@ export interface ScriptJournalResult {
   documentNumber: string;
   /** Present only when post=true succeeded. */
   entryId?: string;
+  /** A configured flow accepted the request and is awaiting approval. */
+  approvalPending?: boolean;
 }
 
 export class JournalWriteError extends Error {
@@ -191,6 +194,16 @@ export async function createScriptJournal(
 
   // Posting runs OUTSIDE the creation transaction, exactly like the UI action
   // route — a posting failure leaves a valid draft behind, never half a post.
+  if (!actorId) {
+    throw new JournalWriteError("posting a script journal requires an attributable actor");
+  }
+  const submission = await submitAndReleaseIfUngated("journal", docId.id, actorId);
+  if (submission.flowError) {
+    throw new JournalWriteError(`approval could not be routed: ${submission.flowError}`);
+  }
+  if (submission.gated) {
+    return { ...docId, approvalPending: true };
+  }
   const entryId = await postDocument(docId.id, await controlDeps(orgId));
   return { ...docId, entryId: String(entryId) };
 }

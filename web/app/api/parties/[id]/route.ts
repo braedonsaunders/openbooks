@@ -67,6 +67,8 @@ interface CustomerRoleInput {
   arAccountId?: string | null
   salesRepId?: string | null
   taxCodeId?: string | null
+  isOnHold?: boolean
+  holdReason?: string | null
 }
 interface VendorRoleInput {
   enabled?: boolean
@@ -78,6 +80,8 @@ interface VendorRoleInput {
   apAccountId?: string | null
   defaultExpenseAccountId?: string | null
   taxCodeId?: string | null
+  isOnHold?: boolean
+  holdReason?: string | null
 }
 interface EmployeeRoleInput {
   enabled?: boolean
@@ -135,6 +139,8 @@ interface PatchBody {
   /** Full replacement of the ADDITIONAL subsidiaries the party transacts with
    *  (party_subsidiaries, diff-and-synced). Only sent by multi-subsidiary orgs. */
   additionalSubsidiaryIds?: string[]
+  expectedUpdatedAt?: string
+  changeReason?: string
 }
 
 export async function GET(_req: Request, { params }: { params: Promise<{ id: string }> }) {
@@ -161,11 +167,85 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
   if (!isUuid(id)) return NextResponse.json({ error: 'not found' }, { status: 404 })
 
   const existing = (await db.execute(sql`
-    select display_name, is_active from parties where id = ${id} and org_id = ${user.orgId}
-  `)) as unknown as { rows: { display_name: string; is_active: boolean }[] }
+    select p.display_name, p.is_active, p.updated_at,
+           coalesce(cr.is_on_hold, false) as customer_hold,
+           cr.hold_reason as customer_hold_reason,
+           coalesce(vr.is_on_hold, false) as vendor_hold,
+           vr.hold_reason as vendor_hold_reason,
+           jsonb_build_object(
+             'party', to_jsonb(p),
+             'customerRole', case when cr.id is null then null else to_jsonb(cr) end,
+             'vendorRole', case when vr.id is null then null else to_jsonb(vr) end
+           ) as before
+      from parties p
+      left join customer_roles cr on cr.party_id = p.id and cr.org_id = p.org_id
+      left join vendor_roles vr on vr.party_id = p.id and vr.org_id = p.org_id
+     where p.id = ${id} and p.org_id = ${user.orgId}
+  `)) as unknown as { rows: {
+    display_name: string
+    is_active: boolean
+    updated_at: Date
+    customer_hold: boolean
+    customer_hold_reason: string | null
+    vendor_hold: boolean
+    vendor_hold_reason: string | null
+    before: Record<string, unknown>
+  }[] }
   if (!existing.rows[0]) return NextResponse.json({ error: 'not found' }, { status: 404 })
 
   const body = (await req.json()) as PatchBody
+  if (
+    !body.expectedUpdatedAt ||
+    new Date(body.expectedUpdatedAt).getTime() !== new Date(existing.rows[0].updated_at).getTime()
+  ) {
+    return NextResponse.json(
+      { error: 'this party changed after you opened it; reload and review the latest revision' },
+      { status: 409 },
+    )
+  }
+  const materialControlChange =
+    (body.isActive !== undefined && body.isActive !== existing.rows[0].is_active) ||
+    (body.roles?.customer?.isOnHold !== undefined &&
+      body.roles.customer.isOnHold !== existing.rows[0].customer_hold) ||
+    (body.roles?.customer?.holdReason !== undefined &&
+      strOrNull(body.roles.customer.holdReason) !== existing.rows[0].customer_hold_reason) ||
+    (body.roles?.vendor?.isOnHold !== undefined &&
+      body.roles.vendor.isOnHold !== existing.rows[0].vendor_hold) ||
+    (body.roles?.vendor?.holdReason !== undefined &&
+      strOrNull(body.roles.vendor.holdReason) !== existing.rows[0].vendor_hold_reason)
+  const changeReason = body.changeReason?.trim() ?? ''
+  if (materialControlChange && (changeReason.length < 5 || changeReason.length > 500)) {
+    return bad('a reason between 5 and 500 characters is required for status and hold changes')
+  }
+  if (
+    body.roles?.customer?.isOnHold === true &&
+    (strOrNull(body.roles.customer.holdReason)?.length ?? 0) < 5
+  ) {
+    return bad('Customer credit hold requires a reason of at least 5 characters')
+  }
+  if (
+    body.roles?.vendor?.isOnHold === true &&
+    (strOrNull(body.roles.vendor.holdReason)?.length ?? 0) < 5
+  ) {
+    return bad('Vendor payment hold requires a reason of at least 5 characters')
+  }
+  if (body.isActive === false && existing.rows[0].is_active) {
+    const live = (await db.execute(sql`
+      select
+        count(*) filter (
+          where status in ('pending_approval', 'approved')
+        )::int as in_flight,
+        count(*) filter (
+          where status = 'posted' and coalesce(open_balance, 0) <> 0
+        )::int as open_balance_count
+        from documents
+       where org_id = ${user.orgId} and party_id = ${id}
+    `)) as unknown as { rows: { in_flight: number; open_balance_count: number }[] }
+    const row = live.rows[0]
+    if ((row?.in_flight ?? 0) > 0 || (row?.open_balance_count ?? 0) > 0) {
+      return bad('resolve in-flight transactions and open balances before deactivating this party')
+    }
+  }
 
   // -- identity ------------------------------------------------------------
   if (body.kind !== undefined && !PARTY_KINDS.includes(body.kind as (typeof PARTY_KINDS)[number])) {
@@ -227,7 +307,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
   }
 
   try {
-    await db.execute(sql`
+    const updatedParty = (await db.execute(sql`
       update parties set
         kind = coalesce(${body.kind ?? null}, kind),
         invoicing_preference = ${invoicingPref !== undefined ? (invoicingPref === null ? sql`null` : sql`${JSON.stringify(invoicingPref)}::jsonb`) : sql`invoicing_preference`},
@@ -242,7 +322,15 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
         is_active = ${body.isActive !== undefined ? body.isActive : sql`is_active`},
         updated_at = now(), updated_by = ${user.id}
       where id = ${id} and org_id = ${user.orgId}
-    `)
+        and updated_at = ${existing.rows[0].updated_at}
+      returning id
+    `)) as unknown as { rows: { id: string }[] }
+    if (!updatedParty.rows[0]) {
+      return NextResponse.json(
+        { error: 'this party changed while you were saving; reload and review the latest revision' },
+        { status: 409 },
+      )
+    }
   } catch (e: unknown) {
     const msg = e instanceof Error ? `${e.message} ${String((e as { cause?: unknown }).cause ?? '')}` : String(e)
     if (msg.includes('parties_org_shortcode')) {
@@ -276,6 +364,9 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
         update customer_roles set is_active = false, updated_at = now(), updated_by = ${user.id}
         where party_id = ${id} and org_id = ${user.orgId}`)
     } else if (c.enabled === true) {
+      if (c.isOnHold && (strOrNull(c.holdReason)?.length ?? 0) < 5) {
+        return bad('Customer credit hold requires a reason of at least 5 characters')
+      }
       const paymentTermsId = uuidOrNull(c.paymentTermsId)
       if (paymentTermsId === 'invalid') return bad('Invalid customer payment terms')
       const arAccountId = uuidOrNull(c.arAccountId)
@@ -298,9 +389,14 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
       if (currency && !CURRENCY_RE.test(currency)) return bad('Customer currency must be a 3-letter code')
       await db.execute(sql`
         insert into customer_roles (org_id, party_id, payment_terms_id, credit_limit, currency,
-                                    ar_account_id, sales_rep_id, tax_code_id, created_by, updated_by)
+                                    ar_account_id, sales_rep_id, tax_code_id,
+                                    is_on_hold, hold_reason, held_at, held_by,
+                                    created_by, updated_by)
         values (${user.orgId}, ${id}, ${paymentTermsId}, ${creditLimit}, ${currency},
-                ${arAccountId}, ${salesRepId}, ${taxCodeId}, ${user.id}, ${user.id})
+                ${arAccountId}, ${salesRepId}, ${taxCodeId},
+                ${c.isOnHold === true}, ${c.isOnHold ? strOrNull(c.holdReason) : null},
+                ${c.isOnHold ? sql`now()` : null}, ${c.isOnHold ? user.id : null},
+                ${user.id}, ${user.id})
         on conflict (party_id) do update set
           payment_terms_id = excluded.payment_terms_id,
           credit_limit = excluded.credit_limit,
@@ -308,6 +404,20 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
           ar_account_id = excluded.ar_account_id,
           sales_rep_id = excluded.sales_rep_id,
           tax_code_id = excluded.tax_code_id,
+          is_on_hold = excluded.is_on_hold,
+          hold_reason = excluded.hold_reason,
+          held_at = case
+            when customer_roles.is_on_hold = excluded.is_on_hold
+             and customer_roles.hold_reason is not distinct from excluded.hold_reason
+            then customer_roles.held_at
+            else excluded.held_at
+          end,
+          held_by = case
+            when customer_roles.is_on_hold = excluded.is_on_hold
+             and customer_roles.hold_reason is not distinct from excluded.hold_reason
+            then customer_roles.held_by
+            else excluded.held_by
+          end,
           is_active = true,
           updated_at = now(), updated_by = ${user.id}
       `)
@@ -321,6 +431,9 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
         update vendor_roles set is_active = false, updated_at = now(), updated_by = ${user.id}
         where party_id = ${id} and org_id = ${user.orgId}`)
     } else if (v.enabled === true) {
+      if (v.isOnHold && (strOrNull(v.holdReason)?.length ?? 0) < 5) {
+        return bad('Vendor payment hold requires a reason of at least 5 characters')
+      }
       const paymentMethod = strOrNull(v.paymentMethod)
       if (paymentMethod && !PAYMENT_METHODS.includes(paymentMethod as (typeof PAYMENT_METHODS)[number])) {
         return bad('Invalid vendor payment method')
@@ -342,10 +455,15 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
       await db.execute(sql`
         insert into vendor_roles (org_id, party_id, payment_method, eft_notification_email,
                                   payment_terms_id, currency, is_t4a, ap_account_id,
-                                  default_expense_account_id, tax_code_id, created_by, updated_by)
+                                  default_expense_account_id, tax_code_id,
+                                  is_on_hold, hold_reason, held_at, held_by,
+                                  created_by, updated_by)
         values (${user.orgId}, ${id}, ${paymentMethod}, ${strOrNull(v.eftNotificationEmail)},
                 ${paymentTermsId}, ${currency}, ${v.is1099OrT4a === true}, ${apAccountId},
-                ${defaultExpenseAccountId}, ${taxCodeId}, ${user.id}, ${user.id})
+                ${defaultExpenseAccountId}, ${taxCodeId},
+                ${v.isOnHold === true}, ${v.isOnHold ? strOrNull(v.holdReason) : null},
+                ${v.isOnHold ? sql`now()` : null}, ${v.isOnHold ? user.id : null},
+                ${user.id}, ${user.id})
         on conflict (party_id) do update set
           payment_method = excluded.payment_method,
           eft_notification_email = excluded.eft_notification_email,
@@ -355,6 +473,20 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
           ap_account_id = excluded.ap_account_id,
           default_expense_account_id = excluded.default_expense_account_id,
           tax_code_id = excluded.tax_code_id,
+          is_on_hold = excluded.is_on_hold,
+          hold_reason = excluded.hold_reason,
+          held_at = case
+            when vendor_roles.is_on_hold = excluded.is_on_hold
+             and vendor_roles.hold_reason is not distinct from excluded.hold_reason
+            then vendor_roles.held_at
+            else excluded.held_at
+          end,
+          held_by = case
+            when vendor_roles.is_on_hold = excluded.is_on_hold
+             and vendor_roles.hold_reason is not distinct from excluded.hold_reason
+            then vendor_roles.held_by
+            else excluded.held_by
+          end,
           is_active = true,
           updated_at = now(), updated_by = ${user.id}
       `)
@@ -483,5 +615,32 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
   }
 
   const payload = await loadParty(id, user.orgId)
+  await db.execute(sql`
+    insert into audit_log
+      (org_id, table_name, row_id, action, changes, actor_id, request_id)
+    values (
+      ${user.orgId}, 'parties', ${id}, 'update',
+      ${JSON.stringify({
+        mode: 'party_update',
+        reason: changeReason || null,
+        before: existing.rows[0].before,
+        materialControlChange,
+      })}::jsonb ||
+        jsonb_build_object('after', (
+          select jsonb_build_object(
+            'party', to_jsonb(party),
+            'customerRole', case when customer_role.id is null then null else to_jsonb(customer_role) end,
+            'vendorRole', case when vendor_role.id is null then null else to_jsonb(vendor_role) end
+          )
+            from parties party
+            left join customer_roles customer_role
+              on customer_role.party_id = party.id and customer_role.org_id = party.org_id
+            left join vendor_roles vendor_role
+              on vendor_role.party_id = party.id and vendor_role.org_id = party.org_id
+           where party.id = ${id} and party.org_id = ${user.orgId}
+        )),
+      ${user.id}, 'ui'
+    )
+  `)
   return NextResponse.json(payload)
 }

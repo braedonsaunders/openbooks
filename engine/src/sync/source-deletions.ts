@@ -23,6 +23,14 @@ export class SourceDeletionResolutionError extends Error {
   readonly name = "SourceDeletionResolutionError";
 }
 
+// Reserved principal for deterministic connector automation. Human controller
+// decisions always retain the actual user id instead.
+const SYSTEM_ACTOR_ID = "00000000-0000-0000-0000-000000000000";
+
+function boundedVoidReason(value: string): string {
+  return value.trim().slice(0, 500);
+}
+
 /**
  * Mirror a source deletion automatically. The source is the system of
  * record, but OpenBooks retains institutional-grade evidence: touching
@@ -67,11 +75,15 @@ export async function mirrorSourceDeletion(input: {
           "source-deleted document disappeared while being corrected",
         );
       }
+      const voidReason = boundedVoidReason(
+        `Source deleted: ${input.source}:${input.sourceRef}`,
+      );
       if (!document.posted_entry_id) {
         await tx.execute(sql`
           update documents
              set status = 'voided', voided_at = now(), open_balance = null,
-                 updated_at = now()
+                 voided_by = ${SYSTEM_ACTOR_ID}, void_reason = ${voidReason},
+                 updated_at = now(), updated_by = ${SYSTEM_ACTOR_ID}
            where id = ${document.id}`);
         const after = await captureTransactionAuditSnapshot(tx, document.id);
         if (!after) {
@@ -185,7 +197,9 @@ export async function mirrorSourceDeletion(input: {
       await tx.execute(sql`
         update documents
            set status = 'voided', voided_at = now(), open_balance = null,
-               updated_at = now()
+               voided_by = ${SYSTEM_ACTOR_ID}, void_reason = ${voidReason},
+               reversal_entry_id = ${reversal.id},
+               updated_at = now(), updated_by = ${SYSTEM_ACTOR_ID}
          where id = ${document.id}`);
       const after = await captureTransactionAuditSnapshot(tx, document.id);
       if (!after) {
@@ -273,6 +287,9 @@ export async function resolveSourceDeletion(input: {
           "the imported document no longer exists",
         );
       if (document.status !== "voided" && document.posted_entry_id) {
+        const voidReason = boundedVoidReason(
+          `${source}:${input.sourceRef} deleted at source${input.note ? ` — ${input.note}` : ""}`,
+        );
         const applications = (await db.execute(sql`
           select 1
             from applications a
@@ -369,7 +386,11 @@ export async function resolveSourceDeletion(input: {
           .set({ status: "reversed" })
           .where(eq(schema.journalEntries.id, entry.id));
         await db.execute(sql`
-          update documents set status = 'voided', voided_at = now(), updated_at = now(), updated_by = ${input.actorId}
+          update documents
+             set status = 'voided', voided_at = now(),
+                 voided_by = ${input.actorId}, void_reason = ${voidReason},
+                 reversal_entry_id = ${reversal.id},
+                 updated_at = now(), updated_by = ${input.actorId}
            where id = ${document.id}`);
         await db.execute(
           sql`select recompute_document_open_balance(${document.id})`,
@@ -391,6 +412,9 @@ export async function resolveSourceDeletion(input: {
         });
         reversalEntryId = reversal.id;
       } else if (document.status !== "voided") {
+        const voidReason = boundedVoidReason(
+          `${source}:${input.sourceRef} deleted at source${input.note ? ` — ${input.note}` : ""}`,
+        );
         const before = await captureTransactionAuditSnapshot(db, document.id);
         if (!before)
           throw new SourceDeletionResolutionError(
@@ -399,6 +423,7 @@ export async function resolveSourceDeletion(input: {
         await db.execute(sql`
           update documents
              set status = 'voided', voided_at = now(), open_balance = null,
+                 voided_by = ${input.actorId}, void_reason = ${voidReason},
                  updated_at = now(), updated_by = ${input.actorId}
            where id = ${document.id}`);
         const after = await captureTransactionAuditSnapshot(db, document.id);

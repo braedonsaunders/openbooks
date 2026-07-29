@@ -13,6 +13,10 @@ import { DocTypeBadge, docTypeMeta } from '../../../components/doc-type-badge'
 import { PdfButton } from '../../../components/pdf-button'
 import { SendButton } from '../../../components/send-button'
 import { confirmDialog } from '../../../lib/confirm'
+import { promptDialog } from '../../../lib/prompt'
+import { FlowManualButtons } from '../../../components/flow-manual-buttons'
+import { ApprovalActions } from '../../../components/approval-actions'
+import { ApprovalHistory } from '../../../components/approval-history'
 import { CONVERSION_TARGETS, type OrderKind } from '../../../lib/order-kinds'
 import { HeaderFields } from '../../../components/transaction-form/header-fields'
 import type { FormLayoutConfig, HeaderFieldPlacement } from '@openbooks/customization'
@@ -67,6 +71,7 @@ export interface OrderPayload {
 
 const STATUS_VARIANT: Record<string, 'default' | 'success' | 'secondary' | 'warning' | 'outline'> = {
   approved: 'success',
+  pending_approval: 'warning',
   draft: 'secondary',
   voided: 'outline',
 }
@@ -355,12 +360,12 @@ export function OrderDrawer({
     setMode('view')
   }
 
-  async function setStatus(status: 'approved' | 'voided') {
+  async function setStatus(status: 'approved' | 'voided', reason?: string) {
     setBusy(true)
     const res = await fetch(`${apiBase}/${doc.id}`, {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ status }),
+      body: JSON.stringify({ status, reason }),
     })
     const data = await res.json()
     setBusy(false)
@@ -368,7 +373,11 @@ export function OrderDrawer({
       toast.error(data.error ?? t('actionFailed'))
       return
     }
-    toast.success(status === 'approved' ? t('toastIssued') : t('toastVoided'))
+    if (data.approvalPending || data.voidPending) {
+      toast.success(tCommon('actions.submitForApproval'))
+    } else {
+      toast.success(status === 'approved' ? t('toastIssued') : t('toastVoided'))
+    }
     router.refresh()
   }
 
@@ -392,7 +401,14 @@ export function OrderDrawer({
       }))
     )
       return
-    await setStatus('voided')
+    const reason = await promptDialog({
+      title: tCommon('amendment.voidTitle'),
+      label: tCommon('amendment.reason'),
+      placeholder: tCommon('amendment.voidPlaceholder'),
+      confirmLabel: tCommon('actions.void'),
+    })
+    if (!reason) return
+    await setStatus('voided', reason)
   }
 
   async function remove() {
@@ -592,6 +608,8 @@ export function OrderDrawer({
           <>
             <PdfButton recordType={kind} recordId={String(doc.id)} />
             <SendButton recordType={kind} recordId={String(doc.id)} />
+            <FlowManualButtons subjectKind={kind} subjectId={String(doc.id)} />
+            <ApprovalActions subjectKind={kind} subjectId={String(doc.id)} />
             {isDraft ? (
               <Button disabled={busy || !canIssue} onClick={issue} title={!canIssue ? t('issueHint') : undefined}>
                 {t('issue')}
@@ -613,7 +631,7 @@ export function OrderDrawer({
                 {tCommon('actions.void')}
               </Button>
             ) : null}
-            {doc.status !== 'voided' ? (
+            {doc.status === 'draft' ? (
               <Button variant="ghost" disabled={busy} onClick={remove} className="text-red-600 hover:bg-red-50 hover:text-red-700 dark:text-red-400 dark:hover:bg-red-950/40">
                 {tCommon('actions.delete')}
               </Button>
@@ -621,6 +639,13 @@ export function OrderDrawer({
           </>
         ) : null
       }
+      detailTabs={[
+        {
+          key: 'approvals',
+          label: tCommon('approvalFlow.historyTitle'),
+          content: <ApprovalHistory subjectKind={kind} subjectId={String(doc.id)} />,
+        },
+      ]}
       footer={
         <div className="flex w-full items-center gap-3">
           <span

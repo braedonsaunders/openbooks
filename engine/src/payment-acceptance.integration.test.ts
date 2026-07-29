@@ -33,7 +33,7 @@ test("payment link settles a signed webhook into an applied receipt with a surch
       insert into documents
         (id, org_id, kind, status, document_number, subsidiary_id, party_id,
          document_date, currency, fx_rate, subtotal, tax_total, total, created_by)
-      values (${invoiceId}, ${org.orgId}, 'customer_invoice', 'draft', 'INV-PAY-1',
+      values (${invoiceId}, ${org.orgId}, 'customer_invoice', 'approved', 'INV-PAY-1',
               ${org.subsidiaryId}, ${org.customerId}, ${org.date}, 'CAD', '1',
               '100', '0', '100', ${userId})`);
     await db.execute(sql`

@@ -2,7 +2,6 @@ import { NextResponse } from 'next/server'
 import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/db.ts'
 import { fromUnits, sum, toUnits } from '@openbooks/engine/src/money.ts'
-import { regenerateGlImpactTx, ClosedPeriodError } from '@openbooks/engine/src/posting.ts'
 import { deleteDocument, DeleteError } from '@openbooks/engine/src/document-delete.ts'
 import { captureTransactionAuditSnapshot, recordTransactionAudit } from '@openbooks/engine/src/transaction-audit.ts'
 import { guardPermission } from '../../../../lib/authz'
@@ -12,40 +11,6 @@ import { isUuid } from '../../../../lib/list-params'
 import { segmentRegistry, validateExtraDims } from '../../../../lib/segments'
 
 export const runtime = 'nodejs'
-
-async function controlDeps(orgId: string) {
-  const r = (await db.execute(sql`select settings->'controlAccounts' as c from orgs where id = ${orgId}`)) as any
-  const c = r.rows[0]?.c ?? {}
-  return { control: { ar: c.ar, ap: c.ap, bank: c.bank, taxCollected: c.taxCollected, taxPaid: c.taxPaid } }
-}
-
-/**
- * A document-layer signature of everything that shapes a manual journal's GL
- * impact. Journals carry no party/item/tax on their lines — the GL is the
- * header date/currency plus each line's account, signed amount, and dimensions.
- * Comparing this before vs after a save tells us whether the edit was
- * GL-affecting — WITHOUT assuming the stored entry came from our own posting
- * rules (migrated journals carry source platform's GL). Non-GL edits (memo, reference #)
- * leave this unchanged and never touch the ledger.
- */
-async function glSignature(tx: { execute: (q: ReturnType<typeof sql>) => Promise<unknown> }, id: string, orgId: string): Promise<string> {
-  const r = (await tx.execute(sql`
-    select md5(
-      coalesce(d.party_id::text,'') || '~' || coalesce(d.document_date::text,'') || '~' ||
-      coalesce(d.posting_date::text,'') || '~' || coalesce(d.currency,'') || '~' || coalesce(d.fx_rate::text,'') || '~' ||
-      coalesce(d.subsidiary_id::text,'') || '~' ||
-      coalesce(d.extra_dims::text,'{}') || '~' ||
-      coalesce((select string_agg(
-        coalesce(account_id::text,'') || ':' || amount::text || ':' ||
-        coalesce(party_id::text,'') || ':' ||
-        coalesce(department_id::text,'') || ':' || coalesce(project_id::text,'') || ':' ||
-        coalesce(subsidiary_id::text,'') || ':' || coalesce(extra_dims::text,'{}'),
-        '|' order by line_number)
-        from document_lines where document_id = d.id and org_id = d.org_id), '')
-    ) as sig
-    from documents d where d.id = ${id} and d.org_id = ${orgId}`)) as { rows: { sig: string }[] }
-  return r.rows[0]?.sig ?? ''
-}
 
 export async function GET(_req: Request, { params }: { params: Promise<{ id: string }> }) {
   const gate = await guardPermission('gl.read')
@@ -72,11 +37,8 @@ interface JournalLineInput {
 }
 
 /**
- * Autosave a manual journal. Draft journals edit freely (no GL yet). A POSTED
- * journal is editable in place, source platform-style: its journal entry is a derived
- * projection re-materialized on save (regenerateGlImpactTx) — a non-GL change
- * (memo, reference #) is a no-op on the ledger; a GL change regenerates the
- * entry's lines and is blocked only if the posting period is closed.
+ * Autosave a manual-journal draft. Once it enters approval or posts, the
+ * original is preserved and the user creates a separate correcting journal.
  */
 export async function PATCH(req: Request, { params }: { params: Promise<{ id: string }> }) {
   const gate = await guardPermission('gl.post')
@@ -88,11 +50,12 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     sql`select status from documents where id = ${id} and kind = 'journal' and org_id = ${user.orgId}`,
   )) as unknown as { rows: { status: string }[] }
   if (!existing.rows[0]) return NextResponse.json({ error: 'not found' }, { status: 404 })
-  if (existing.rows[0].status === 'voided') {
-    return NextResponse.json({ error: 'a voided journal cannot be edited' }, { status: 422 })
+  if (existing.rows[0].status !== 'draft') {
+    return NextResponse.json(
+      { error: `a ${existing.rows[0].status} journal cannot be edited — create a correcting journal instead` },
+      { status: 422 },
+    )
   }
-  const deps = await controlDeps(user.orgId)
-
   const body = (await req.json()) as {
     partyId?: string | null
     documentDate?: string
@@ -178,14 +141,9 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     }
   }
 
-  // All writes + the GL-Impact re-materialization happen in one transaction, so
-  // a GL edit into a closed period rolls the whole edit back (nothing partial).
-  try {
-    await db.transaction(async (tx) => {
-      await tx.execute(sql`select set_config('openbooks.amend', 'on', true)`)
+  await db.transaction(async (tx) => {
       const auditBefore = await captureTransactionAuditSnapshot(tx, id)
-      if (!auditBefore) throw new Error(`journal ${id} disappeared before amendment`)
-      const sigBefore = await glSignature(tx, id, user.orgId)
+      if (!auditBefore) throw new Error(`journal ${id} disappeared before update`)
 
       if (preparedLines) {
         await tx.execute(sql`delete from document_lines where document_id = ${id} and org_id = ${user.orgId}`)
@@ -217,14 +175,8 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
         where id = ${id} and org_id = ${user.orgId}
       `)
 
-      // Re-materialize the GL-Impact projection only when the edit actually
-      // changed GL-relevant fields (no-op for draft journals and for non-GL
-      // edits like memo/reference #, which preserves migrated GL).
-      if ((await glSignature(tx, id, user.orgId)) !== sigBefore) {
-        await regenerateGlImpactTx(tx, id, deps, user.id)
-      }
       const auditAfter = await captureTransactionAuditSnapshot(tx, id)
-      if (!auditAfter) throw new Error(`journal ${id} disappeared during amendment`)
+      if (!auditAfter) throw new Error(`journal ${id} disappeared during update`)
       await recordTransactionAudit(tx, {
         orgId: user.orgId,
         documentId: id,
@@ -234,11 +186,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
         before: auditBefore,
         after: auditAfter,
       })
-    })
-  } catch (e) {
-    if (e instanceof ClosedPeriodError) return NextResponse.json({ error: e.message }, { status: 422 })
-    throw e
-  }
+  })
 
   const journal = await loadJournalDoc(id, user.orgId)
   return NextResponse.json(journal)

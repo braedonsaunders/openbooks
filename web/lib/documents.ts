@@ -3,7 +3,6 @@ import { sql } from 'drizzle-orm'
 import { db, schema } from '@openbooks/engine/src/db.ts'
 import { cmp } from '@openbooks/engine/src/money.ts'
 import { runRecordFlows } from '@openbooks/engine/src/flows/index.ts'
-import { regenerateGlImpactTx, ClosedPeriodError } from '@openbooks/engine/src/posting.ts'
 import { captureTransactionAuditSnapshot, recordTransactionAudit } from '@openbooks/engine/src/transaction-audit.ts'
 import { promoteCrmAccount } from '@openbooks/engine/src/crm.ts'
 import { computeBillTotals, nextDocumentNumber, persistLineTaxComponents, taxProfileMap, taxRateMap, type BillLineInput } from './bills'
@@ -73,7 +72,12 @@ export async function controlDeps(orgId: string) {
 }
 
 /** Instant-into-draft: mint an empty draft document for a kind, return id + number. */
-export async function createDocumentDraft(orgId: string, userId: string, kind: string) {
+export async function createDocumentDraft(
+  orgId: string,
+  userId: string,
+  kind: string,
+  options: { runFlows?: boolean } = {},
+) {
   const cfg = docKindConfig(kind)
   if (!cfg) throw new Error(`unknown document kind "${kind}"`)
   const currency = await orgBaseCurrency(orgId)
@@ -101,8 +105,114 @@ export async function createDocumentDraft(orgId: string, userId: string, kind: s
   // on_create flows fire AFTER the insert commits. runRecordFlows never
   // throws into the caller (failures land on the flow_runs row), and it is
   // awaited — not detached — so it runs inside this request's RLS org scope.
-  await runRecordFlows({ kind: 'on_create', source: 'ui' }, kind, doc.id, { orgId, userId })
+  if (options.runFlows !== false) {
+    await runRecordFlows({ kind: 'on_create', source: 'ui' }, kind, doc.id, { orgId, userId })
+  }
   return doc
+}
+
+/**
+ * Materialize the user's edited replacement as a draft while preserving the
+ * posted source. A `reverses` link blocks submission until the source's
+ * controlled void completes.
+ */
+export async function createPostedCorrectionDraft(
+  sourceId: string,
+  body: DocumentEditInput,
+  ctx: DocumentEditContext,
+): Promise<{ id: string; documentNumber: string }> {
+  const [source] = await db
+    .select()
+    .from(schema.documents)
+    .where(sql`${schema.documents.id} = ${sourceId} and ${schema.documents.orgId} = ${ctx.orgId}`)
+  if (!source || source.status !== 'posted') {
+    throw new DocumentEditError(422, 'only a posted document can create a correcting replacement')
+  }
+  const reason = body.amendmentReason?.trim() ?? ''
+  if (reason.length < 5 || reason.length > 500) {
+    throw new DocumentEditError(422, 'A correction reason between 5 and 500 characters is required')
+  }
+
+  const replacement = await createDocumentDraft(ctx.orgId, ctx.userId, source.kind, {
+    runFlows: false,
+  })
+  try {
+    const [current] = await db
+      .select({
+        kind: schema.documents.kind,
+        status: schema.documents.status,
+        total: schema.documents.total,
+        taxTotal: schema.documents.taxTotal,
+        partyId: schema.documents.partyId,
+        documentDate: schema.documents.documentDate,
+        updatedAt: schema.documents.updatedAt,
+      })
+      .from(schema.documents)
+      .where(sql`${schema.documents.id} = ${replacement.id}`)
+    await applyDocumentEdit(replacement.id, {
+      ...current,
+      updatedAt: current.updatedAt?.toISOString(),
+    }, body, {
+      ...ctx,
+      source: 'posted_correction',
+      runFlows: false,
+    })
+    await db.transaction(async (tx) => {
+      await tx.execute(sql`
+        update documents
+           set custom = coalesce(custom, '{}'::jsonb) ||
+             ${JSON.stringify({
+               correctionOf: sourceId,
+               correctionReason: reason,
+             })}::jsonb,
+               updated_at = now(),
+               updated_by = ${ctx.userId}
+         where id = ${replacement.id} and org_id = ${ctx.orgId}
+      `)
+      await tx.insert(schema.documentLinks).values({
+        orgId: ctx.orgId,
+        fromDocumentId: replacement.id,
+        toDocumentId: sourceId,
+        linkType: 'reverses',
+        createdBy: ctx.userId,
+      })
+      await tx.execute(sql`
+        insert into audit_log
+          (org_id, table_name, row_id, action, changes, actor_id, request_id)
+        values (
+          ${ctx.orgId}, 'documents', ${replacement.id}, 'insert',
+          ${JSON.stringify({
+            mode: 'posted_correction_draft',
+            sourceDocumentId: sourceId,
+            reason,
+          })}::jsonb,
+          ${ctx.userId}, 'posted_correction'
+        )
+      `)
+    })
+    await runRecordFlows(
+      { kind: 'on_create', source: 'ui' },
+      source.kind,
+      replacement.id,
+      { orgId: ctx.orgId, userId: ctx.userId },
+    )
+    return replacement
+  } catch (error) {
+    await db.execute(sql`
+      delete from document_links
+       where from_document_id = ${replacement.id}
+          or to_document_id = ${replacement.id}
+    `)
+    await db.execute(sql`
+      delete from document_line_tax_components
+       where document_line_id in (
+         select id from document_lines where document_id = ${replacement.id}
+       )
+    `)
+    await db.execute(sql`delete from document_lines where document_id = ${replacement.id}`)
+    await db.execute(sql`delete from documents where id = ${replacement.id}`)
+    throw error
+  }
 }
 
 /**
@@ -213,7 +323,7 @@ export interface DocumentEditContext {
   orgId: string
   userId: string
   /** Provenance recorded on the transaction audit + flow events. */
-  source: 'ui' | 'api'
+  source: 'ui' | 'api' | 'posted_correction'
   /** Fire on_update record flows after the edit commits (default true). */
   runFlows?: boolean
 }
@@ -237,47 +347,10 @@ export class DocumentEditError extends Error {
  * posting rules (migrated docs carry the source system's GL). Non-GL edits
  * (memo, reference #) leave this unchanged and never touch the ledger.
  */
-async function glSignature(
-  tx: { execute: (q: ReturnType<typeof sql>) => Promise<unknown> },
-  id: string,
-  orgId: string,
-): Promise<string> {
-  const r = (await tx.execute(sql`
-    select md5(
-      coalesce(d.party_id::text,'') || '~' || coalesce(d.payment_card_id::text,'') || '~' ||
-      coalesce(d.document_date::text,'') || '~' || coalesce(d.posting_date::text,'') || '~' ||
-      coalesce(d.currency,'') || '~' || coalesce(d.fx_rate::text,'') || '~' ||
-      coalesce(d.subsidiary_id::text,'') || '~' ||
-      coalesce(d.extra_dims::text,'{}') || '~' ||
-      coalesce((select string_agg(
-        coalesce(account_id::text,'') || ':' || coalesce(item_id::text,'') || ':' || amount::text || ':' ||
-        coalesce(tax_code_id::text,'') || ':' || coalesce(tax_group_id::text,'') || ':' ||
-        coalesce(tax_input_amount::text,'') || ':' || tax_amount::text || ':' ||
-        coalesce((select string_agg(
-          c.tax_code_id::text || ':' || c.sequence::text || ':' || c.tax_amount::text || ':' ||
-          c.recoverable_amount::text || ':' || c.nonrecoverable_amount::text || ':' ||
-          c.calculation_type || ':' || coalesce(c.collected_account_id::text,'') || ':' ||
-          coalesce(c.paid_account_id::text,'') || ':' || coalesce(c.withholding_account_id::text,''),
-          ',' order by c.sequence)
-          from document_line_tax_components c where c.document_line_id = document_lines.id), '') || ':' ||
-        coalesce(party_id::text,'') || ':' ||
-        coalesce(department_id::text,'') || ':' || coalesce(project_id::text,'') || ':' ||
-        coalesce(location_id::text,'') || ':' || coalesce(class_id::text,'') || ':' ||
-        coalesce(subsidiary_id::text,'') || ':' || coalesce(extra_dims::text,'{}'),
-        '|' order by line_number)
-        from document_lines where org_id = d.org_id and document_id = d.id), '')
-    ) as sig
-    from documents d where d.id = ${id} and d.org_id = ${orgId}`)) as { rows: { sig: string }[] }
-  return r.rows[0]?.sig ?? ''
-}
-
 /**
- * Apply a header + lines edit to a posting document. Draft/approved docs edit
- * freely (no GL yet). A POSTED doc is editable in place, source platform-style: its
- * journal entry is a derived projection re-materialized on save
- * (regenerateGlImpactTx) — a non-GL change is a ledger no-op; a GL change
- * regenerates the entry's lines and is blocked only if the period is closed.
- * Throws DocumentEditError (422) on validation / closed-period failures.
+ * Apply a header + lines edit to a draft posting document. Approval snapshots
+ * and posted history are immutable; rejected records return to draft before
+ * editing, and posted corrections use controlled reversals/adjustments.
  *
  * Callers own auth + status/lock guards; this owns validation, the write, GL,
  * audit, and flows.
@@ -290,6 +363,12 @@ export async function applyDocumentEdit(
 ): Promise<void> {
   const cfg = docKindConfig(current.kind)
   if (!cfg) throw new DocumentEditError(422, `kind "${current.kind}" is not editable`)
+  if (current.status !== 'draft') {
+    throw new DocumentEditError(
+      422,
+      `a ${current.status} document cannot be edited — return it to draft or create a controlled correction`,
+    )
+  }
   const { orgId, userId } = ctx
 
   // Kinds with a party role (vendor/customer) must keep a party — an explicit
@@ -376,32 +455,11 @@ export async function applyDocumentEdit(
       from document_lines where document_id = ${id} order by line_number
   `)) as unknown as { rows: { lineNumber: number; accountId: string | null; departmentId: string | null; projectId: string | null; amount: string }[] }).rows
 
-  const deps = await controlDeps(orgId)
-
   // All writes + the GL-Impact re-materialization happen in one transaction, so
   // a GL edit into a closed period rolls the whole edit back (nothing partial).
   try {
     await db.transaction(async (tx) => {
-      await tx.execute(sql`select set_config('openbooks.amend', 'on', true)`)
       const auditBefore = await captureTransactionAuditSnapshot(tx, id)
-      if (auditBefore?.document.status === 'posted') {
-        const reason = body.amendmentReason?.trim() ?? ''
-        if (reason.length < 5 || reason.length > 500) {
-          throw new DocumentEditError(422, 'A posted-document amendment requires a reason between 5 and 500 characters')
-        }
-        if (!body.expectedUpdatedAt) {
-          throw new DocumentEditError(409, 'This posted document must be reloaded before it can be amended')
-        }
-        const actualUpdatedAt = String(auditBefore.document.updated_at ?? '')
-        const expectedUpdatedAt = String(body.expectedUpdatedAt)
-        if (
-          !actualUpdatedAt ||
-          new Date(actualUpdatedAt).toISOString() !== new Date(expectedUpdatedAt).toISOString()
-        ) {
-          throw new DocumentEditError(409, 'This document changed after you opened it. Reload it and review the newer revision before saving')
-        }
-      }
-      const sigBefore = await glSignature(tx, id, orgId)
 
       if (preparedLines) {
         await tx.execute(sql`delete from document_lines where document_id = ${id} and org_id = ${orgId}`)
@@ -468,9 +526,6 @@ export async function applyDocumentEdit(
         })
       }
 
-      if ((await glSignature(tx, id, orgId)) !== sigBefore) {
-        await regenerateGlImpactTx(tx, id, deps, userId)
-      }
       if (auditBefore) {
         const auditAfter = await captureTransactionAuditSnapshot(tx, id)
         if (!auditAfter) throw new Error(`document ${id} disappeared during amendment`)
@@ -487,7 +542,6 @@ export async function applyDocumentEdit(
       }
     })
   } catch (e) {
-    if (e instanceof ClosedPeriodError) throw new DocumentEditError(422, e.message)
     throw e
   }
 
@@ -522,7 +576,7 @@ export async function applyDocumentEdit(
   await runRecordFlows(
     {
       kind: 'on_update',
-      source: ctx.source,
+      source: ctx.source === 'posted_correction' ? 'ui' : ctx.source,
       previousTotal: current.total,
       totalChanged: cmp(newTotal, current.total) !== 0,
       changedFields,

@@ -1,8 +1,7 @@
 import { NextResponse } from 'next/server'
 import { sql } from 'drizzle-orm'
 import { db, withOrgContext } from '@openbooks/engine/src/db.ts'
-import { getFlowAdapter } from '@openbooks/engine/src/flows/index.ts'
-import { userRoleKeys } from '@openbooks/engine/src/flows/targets.ts'
+import { gateDecisionCapability, getFlowAdapter } from '@openbooks/engine/src/flows/index.ts'
 import { getAuthz } from '../../../../lib/authz'
 import { isUuid } from '../../../../lib/list-params'
 
@@ -64,6 +63,7 @@ export interface RecordApprovalState {
     pendingWith: PendingWithEntry[]
     myActions: {
       gateId?: string
+      signatureRequired?: boolean
     } | null
   }
   history: ApprovalHistoryEntry[]
@@ -92,7 +92,7 @@ export async function GET(req: Request) {
   const status = await withOrgContext(orgId, () => adapter.getStatus(subjectId))
   if (status === null) return NextResponse.json({ error: 'record not found' }, { status: 404 })
 
-  const [gates, runs, roleRows, viewerRoles] = await Promise.all([
+  const [gates, runs, roleRows] = await Promise.all([
     db.execute(sql`
       select g.id, g.status, g.title, g.comment,
              g.assignee_user_id as "assigneeUserId", g.assignee_role as "assigneeRole",
@@ -121,15 +121,12 @@ export async function GET(req: Request) {
     db.execute(sql`
       select key, name from app_roles where org_id = ${orgId}
     `) as unknown as Promise<Rows<{ key: string; name: string }>>,
-    userRoleKeys(orgId, authz.user.id),
   ])
 
   const roleLabel = (key: string | null): string | null => {
     if (!key) return null
     return roleRows.rows.find((r) => r.key === key)?.name ?? key
   }
-  const isAdmin = viewerRoles.has('admin')
-
   // --- pendingWith + myActions ---------------------------------------------
   const pendingWith: PendingWithEntry[] = []
   const myActions: RecordApprovalState['approvalState']['myActions'] = {}
@@ -138,12 +135,13 @@ export async function GET(req: Request) {
     if (g.status !== 'pending') continue
     const name = (g.assigneeName as string | null) ?? roleLabel(g.assigneeRole as string | null) ?? '—'
     pendingWith.push({ name, gateId: String(g.id), since: iso(g.createdAt) })
-    // Engine canActOnGate semantics: direct assignee, admin, or role holder.
-    const mine =
-      g.assigneeUserId === authz.user.id ||
-      isAdmin ||
-      (!!g.assigneeRole && viewerRoles.has(String(g.assigneeRole)))
-    if (mine && !myActions.gateId) myActions.gateId = String(g.id)
+    const capability = await withOrgContext(orgId, () =>
+      gateDecisionCapability(String(g.id), authz.user.id),
+    )
+    if (capability.canAct && !myActions.gateId) {
+      myActions.gateId = String(g.id)
+      myActions.signatureRequired = capability.signatureRequired
+    }
   }
 
   // --- history --------------------------------------------------------------

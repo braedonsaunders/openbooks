@@ -26,7 +26,7 @@ export interface TransactionAuditSnapshot {
 }
 
 export interface TransactionAuditChanges {
-  mode: "record_update" | "record_post" | "posted_amendment" | "transaction_delete";
+  mode: "record_update" | "record_post" | "transaction_void" | "transaction_delete";
   source: string;
   reason?: string;
   before: TransactionAuditSnapshot;
@@ -123,7 +123,7 @@ export async function recordTransactionAudit(
   input: {
     orgId: string;
     documentId: string;
-    action: "update" | "delete" | "post";
+    action: "update" | "delete" | "post" | "void";
     actorId?: string | null;
     source: string;
     reason?: string;
@@ -134,11 +134,11 @@ export async function recordTransactionAudit(
   const changes = buildTransactionAuditChanges({
     mode: input.action === "delete"
       ? "transaction_delete"
+      : input.action === "void"
+        ? "transaction_void"
       : input.action === "post"
         ? "record_post"
-        : input.before.document.status === "posted"
-          ? "posted_amendment"
-          : "record_update",
+        : "record_update",
     source: input.source,
     reason: input.reason,
     before: input.before,

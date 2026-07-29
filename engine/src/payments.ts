@@ -3,14 +3,17 @@ import { db, inDbTransaction, schema, withOrg } from "./db.ts";
 import { add, cmp, divRate, formatMoney, fromUnits, isZero, mulRate, mulRatio, neg, sum, toUnits } from "./money.ts";
 import { postDocument, runPostDocumentEffects, type PostingDeps } from "./posting.ts";
 import { assertNotSandbox } from "./sandbox/guard.ts";
-import { runTriggerScripts, type ScriptContext } from "./scripting.ts";
-import { emitStatusChange, runRecordFlows } from "./flows/run.ts";
+import { submitAndReleaseIfUngated } from "./flows/submit.ts";
 import { sealSecret, unsealJson, unsealSecret } from "./secrets.ts";
 import {
   evaluateBillsForRelease,
   recordReleaseCheck,
   type BillReleaseDecision,
 } from "./compliance.ts";
+import {
+  captureTransactionAuditSnapshot,
+  recordTransactionAudit,
+} from "./transaction-audit.ts";
 
 /**
  * Payments: vendor payments and customer receipts with open-item application,
@@ -656,9 +659,29 @@ export async function postPaymentWithApplications(
     await db.execute(sql`select id from documents where id = ${paymentDocId} for update`);
     const [doc] = await db.select().from(schema.documents).where(eq(schema.documents.id, paymentDocId));
     if (!doc || !isPaymentKind(doc.kind)) throw new PaymentError("payment document not found");
-    if (doc.status === "posted") throw new PaymentError(`${doc.documentNumber} is already posted`);
-    if (doc.status === "voided") throw new PaymentError(`${doc.documentNumber} is voided`);
+    if (doc.status !== "approved") {
+      throw new PaymentError(
+        `${doc.documentNumber} is ${doc.status}; it must complete the approval submission lifecycle before posting`,
+      );
+    }
     if (!doc.partyId) throw new PaymentError("select a party before posting");
+    const auditBefore = userId
+      ? await captureTransactionAuditSnapshot(db, paymentDocId)
+      : null;
+    if (doc.kind === "vendor_payment") {
+      const hold = (await db.execute(sql`
+        select hold_reason
+          from vendor_roles
+         where org_id = ${doc.orgId} and party_id = ${doc.partyId}
+           and is_active and is_on_hold
+         limit 1
+      `)) as unknown as { rows: { hold_reason: string | null }[] };
+      if (hold.rows[0]) {
+        throw new PaymentError(
+          `vendor is on payment hold${hold.rows[0].hold_reason ? ` — ${hold.rows[0].hold_reason}` : ""}`,
+        );
+      }
+    }
 
     const custom = (doc.custom ?? {}) as {
       bankAccountId?: string;
@@ -889,6 +912,19 @@ export async function postPaymentWithApplications(
         createdBy: userId ?? doc.createdBy,
       })));
     }
+    if (userId && auditBefore) {
+      const auditAfter = await captureTransactionAuditSnapshot(db, paymentDocId);
+      if (!auditAfter) throw new PaymentError("payment disappeared while posting");
+      await recordTransactionAudit(db, {
+        orgId: doc.orgId,
+        documentId: doc.id,
+        action: "post",
+        actorId: userId,
+        source: "ui",
+        before: auditBefore,
+        after: auditAfter,
+      });
+    }
     return { entryId };
   });
 
@@ -896,153 +932,13 @@ export async function postPaymentWithApplications(
   return result;
 }
 
-/** Reverse a payment and every realized-FX entry tied to its applications. */
-async function reversePostedEntry(
-  entryId: string,
-  documentId: string,
-  orgId: string,
-  memo: string,
-  unapplySourceEntry = false,
-): Promise<string | null> {
-  const [entry] = await db
-    .select()
-    .from(schema.journalEntries)
-    .where(eq(schema.journalEntries.id, entryId));
-  if (!entry) return null;
-  const lines = await db
-    .select()
-    .from(schema.journalLines)
-    .where(eq(schema.journalLines.entryId, entryId));
-
-  // -- user scripts: before_void (veto) -----------------------------------
-  const [doc] = await db.select().from(schema.documents).where(eq(schema.documents.id, documentId));
-  const [org] = await db.select().from(schema.orgs).where(eq(schema.orgs.id, orgId));
-  if (doc && org) {
-    const docLines = await db
-      .select()
-      .from(schema.documentLines)
-      .where(eq(schema.documentLines.documentId, documentId));
-    const scriptCtx: ScriptContext = {
-      trigger: "before_void",
-      document: doc as unknown as Record<string, unknown>,
-      lines: docLines as unknown as Record<string, unknown>[],
-      org: { id: org.id, name: org.name, baseCurrency: org.baseCurrency },
-    };
-    const outcomes = await runTriggerScripts("before_void", scriptCtx, documentId);
-    const bad = outcomes.find((o) => o.status !== "ok");
-    if (bad) {
-      throw new PaymentError(
-        bad.status === "aborted"
-          ? `voiding vetoed by script "${bad.name}": ${bad.abortReason}`
-          : `script "${bad.name}" ${bad.status}: ${bad.abortReason ?? ""}`,
-      );
-    }
-
-    // -- flows: before_void (automation only, never a veto) ----------------
-    await runRecordFlows({ kind: "before_void" }, doc.kind, documentId, { orgId });
-  }
-
-  let reversalId: string | null = null;
-  await inDbTransaction(async (tx) => {
-    const fxRows = unapplySourceEntry
-      ? ((await tx.execute(sql`
-          select distinct a.fx_gain_loss_entry_id as id
-            from applications a
-            join journal_lines jl on jl.id = a.from_line_id
-           where jl.entry_id = ${entryId} and a.unapplied_at is null
-             and a.fx_gain_loss_entry_id is not null
-        `)) as unknown as { rows: { id: string }[] }).rows
-      : [];
-    if (unapplySourceEntry) {
-      await tx.execute(sql`
-        update applications a set unapplied_at = now()
-         where a.unapplied_at is null and exists (
-           select 1 from journal_lines jl where jl.id = a.from_line_id and jl.entry_id = ${entryId})
-      `);
-    }
-    const insertReversal = async (
-      sourceEntry: typeof schema.journalEntries.$inferSelect,
-      sourceLines: (typeof schema.journalLines.$inferSelect)[],
-      reversalMemo: string,
-    ): Promise<string> => {
-      const [rev] = await tx
-      .insert(schema.journalEntries)
-      .values({
-        orgId,
-        bookId: sourceEntry.bookId,
-        subsidiaryId: sourceEntry.subsidiaryId,
-        entryNumber: `${sourceEntry.entryNumber}-R`,
-        postingDate: sourceEntry.postingDate,
-        periodId: sourceEntry.periodId,
-        memo: reversalMemo,
-        status: "draft",
-        sourceDocumentId: sourceEntry.sourceDocumentId,
-        origin: sourceEntry.origin,
-        reversesEntryId: sourceEntry.id,
-      })
-      .returning({ id: schema.journalEntries.id });
-      await tx.insert(schema.journalLines).values(
-      sourceLines.map((l) => ({
-        orgId,
-        entryId: rev.id,
-        lineNumber: l.lineNumber,
-        accountId: l.accountId,
-        subsidiaryId: l.subsidiaryId,
-        amount: negStr(l.amount),
-        currency: l.currency,
-        txnAmount: negStr(l.txnAmount),
-        fxRate: l.fxRate,
-        partyId: l.partyId,
-        departmentId: l.departmentId,
-        projectId: l.projectId,
-        locationId: l.locationId,
-        classId: l.classId,
-        equipmentUnitId: l.equipmentUnitId,
-        extraDims: l.extraDims,
-        paymentCardId: l.paymentCardId,
-        taxCodeId: l.taxCodeId,
-        memo: l.memo,
-        dueDate: null,
-        isOpenItem: false,
-      })),
-    );
-      await tx
-      .update(schema.journalEntries)
-      .set({ status: "posted", postedAt: new Date() })
-      .where(eq(schema.journalEntries.id, rev.id));
-      await tx
-      .update(schema.journalEntries)
-      .set({ status: "reversed" })
-      .where(eq(schema.journalEntries.id, sourceEntry.id));
-      return rev.id;
-    };
-
-    reversalId = await insertReversal(entry, lines, memo);
-    for (const fxRow of fxRows) {
-      const [fxEntry] = await tx.select().from(schema.journalEntries).where(eq(schema.journalEntries.id, fxRow.id));
-      if (!fxEntry || fxEntry.status !== "posted") {
-        throw new PaymentError("realized FX evidence is missing or is not posted");
-      }
-      const fxLines = await tx.select().from(schema.journalLines).where(eq(schema.journalLines.entryId, fxEntry.id));
-      await insertReversal(fxEntry, fxLines, `${memo} — realized FX`);
-    }
-    await tx.execute(sql`
-      update documents set status = 'voided', voided_at = now() where id = ${documentId}
-    `);
-  });
-
-  // -- flows: the posted → voided status transition (never throws) ----------
-  if (doc) {
-    await emitStatusChange(doc.kind, documentId, { from: doc.status, to: "voided" }, { orgId });
-  }
-  return reversalId;
-}
-
 /** Reverse a posted payment after a bank return and reopen its applications. */
 export async function reversePaymentForReturn(
   paymentDocumentId: string,
   orgId: string,
   reason: string,
+  actorId: string,
+  reversalDate?: string,
 ): Promise<string> {
   const reversalId = await withOrg(orgId, async () => {
     const row = (await db.execute(sql`
@@ -1054,13 +950,20 @@ export async function reversePaymentForReturn(
     `)) as unknown as { rows: { id: string; posted_entry_id: string; document_number: string }[] };
     const payment = row.rows[0];
     if (!payment?.posted_entry_id) throw new PaymentError("returned payment is not posted");
-    return reversePostedEntry(
-      payment.posted_entry_id,
-      payment.id,
-      orgId,
-      `bank return: ${reason.trim() || payment.document_number}`,
-      true,
-    );
+    const voidReason = `Bank return: ${reason.trim() || payment.document_number}`;
+    await db.execute(sql`
+      update documents
+         set void_reason = ${voidReason},
+             void_requested_at = now(),
+             void_requested_by = ${actorId},
+             void_reversal_date = ${reversalDate ?? new Date().toISOString().slice(0, 10)},
+             updated_at = now(),
+             updated_by = ${actorId}
+       where id = ${payment.id} and org_id = ${orgId}
+         and status = 'posted' and void_requested_at is null
+    `);
+    const { completeRequestedDocumentVoid } = await import("./document-void.ts");
+    return completeRequestedDocumentVoid(payment.id, orgId);
   });
   if (!reversalId) throw new PaymentError("payment reversal could not be created");
   return reversalId;
@@ -1790,6 +1693,27 @@ export async function postPaymentRun(
       }
       // Already posted individually from its own flyout — just mark it sent.
       if (ins.document_status !== "posted") {
+        if (ins.document_status === "draft") {
+          const submission = await submitAndReleaseIfUngated(
+            "vendor_payment",
+            ins.payment_document_id,
+            userId,
+          );
+          if (submission.flowError) {
+            throw new PaymentError(
+              `approval could not be routed: ${submission.flowError}`,
+            );
+          }
+          if (submission.gated) {
+            throw new PaymentError(
+              "the payment was submitted for transaction approval and has not been sent",
+            );
+          }
+        } else if (ins.document_status !== "approved") {
+          throw new PaymentError(
+            `the payment document is ${ins.document_status}; only an approved payment can be sent`,
+          );
+        }
         await postPaymentWithApplications(ins.payment_document_id, undefined, userId);
       }
       await db

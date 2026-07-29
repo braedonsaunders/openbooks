@@ -64,6 +64,9 @@ test("component tax evidence posts exact recoverability, withholding, and revers
                   ${component.collectedAccountId}, ${component.paidAccountId},
                   ${component.withholdingAccountId}, false)`);
       }
+      await tx.execute(sql`
+        update documents set status = 'approved' where id = ${documentId}
+      `);
     });
 
     const entryId = await postDocument(documentId, {

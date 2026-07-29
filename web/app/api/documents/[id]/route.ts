@@ -70,17 +70,10 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
   if (!can(authz, editPerm)) {
     return NextResponse.json({ error: `missing permission: ${editPerm}` }, { status: 403 })
   }
-  if (row.status === 'voided') {
-    return NextResponse.json({ error: 'a voided document cannot be edited' }, { status: 422 })
-  }
-  // Pending-approval lock (source platform parity): while approvers are deciding, the
-  // record they were shown must not shift underneath them. Editing resumes
-  // after the decision (approve → approved, reject → draft); flow admins may
-  // override.
-  if (row.status === 'pending_approval' && !can(authz, 'flows.manage')) {
+  if (row.status !== 'draft') {
     return NextResponse.json(
-      { error: 'this document is locked while its approval is pending — wait for the decision or ask a flow administrator' },
-      { status: 409 },
+      { error: `a ${row.status} document cannot be edited — return it to draft or create a controlled correction` },
+      { status: 422 },
     )
   }
   // Flow-managed lock (the lock_record action — source platform "Lock Record" with

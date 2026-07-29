@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/db.ts'
 import { postDocument, PostingError } from '@openbooks/engine/src/posting.ts'
+import { submitAndReleaseIfUngated } from '@openbooks/engine/src/flows/index.ts'
 import { guardPermission } from '../../../../lib/authz'
 
 export const runtime = 'nodejs'
@@ -29,10 +30,34 @@ export async function POST(req: Request) {
           return NextResponse.json({ error: 'documentId required' }, { status: 400 })
         }
         const owned = (await db.execute(sql`
-          select id from documents
+          select id, status from documents
            where id = ${body.documentId} and kind = 'journal' and org_id = ${gate.user.orgId}
-        `)) as unknown as { rows: { id: string }[] }
+        `)) as unknown as { rows: { id: string; status: string }[] }
         if (!owned.rows[0]) return NextResponse.json({ error: 'not found' }, { status: 404 })
+        if (owned.rows[0].status === 'draft') {
+          const submission = await submitAndReleaseIfUngated(
+            'journal',
+            body.documentId,
+            gate.user.id,
+          )
+          if (submission.flowError) {
+            return NextResponse.json(
+              { error: `approval could not be routed: ${submission.flowError}` },
+              { status: 422 },
+            )
+          }
+          if (submission.gated) {
+            return NextResponse.json(
+              { ok: true, pendingApproval: true, requestId: submission.runId },
+              { status: 202 },
+            )
+          }
+        } else if (owned.rows[0].status !== 'approved') {
+          return NextResponse.json(
+            { error: `journal is ${owned.rows[0].status}; only an approved journal can be posted` },
+            { status: 422 },
+          )
+        }
 
         // postDocument enforces balance (kernel + rule check) and throws on failure
         const entryId = await postDocument(

@@ -10,12 +10,18 @@ export {
   type RecordFlowsResult,
 } from "./run.ts";
 export { executeFlowPlan, type ExecuteFlowPlanResult } from "./execute.ts";
-export { submitForApproval, type SubmitResult } from "./submit.ts";
+export {
+  submitForApproval,
+  submitAndReleaseIfUngated,
+  type SubmitResult,
+  type SubmissionReleaseResult,
+} from "./submit.ts";
 export {
   decideGate,
   delegateGate,
   processGateTimers,
   worklistGates,
+  gateDecisionCapability,
   GateError,
   type DecideGateResult,
   type WorklistGate,

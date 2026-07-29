@@ -1,4 +1,4 @@
-import { and, asc, eq, sql } from "drizzle-orm";
+import { and, asc, eq, inArray, sql } from "drizzle-orm";
 import { db, inDbTransaction, schema } from "./db.ts";
 import { add, cmp, isZero, mulRate, neg, sum, toUnits } from "./money.ts";
 import { runTriggerScripts, type ScriptContext } from "./scripting.ts";
@@ -10,7 +10,12 @@ import {
   validateSubsidiaryRestrictions,
 } from "./subsidiaries.ts";
 import { assertPeriodModulesOpen, closeModuleForDocument, CloseError } from "./close.ts";
-import { resolveBillInventoryAccounts } from "./inventory.ts";
+import {
+  applyInventoryIssuesForInvoice,
+  applyInventoryReceiptsForBill,
+  resolveBillInventoryAccounts,
+} from "./inventory.ts";
+import { createObligationsFromInvoice } from "./revenue-recognition.ts";
 import { captureTransactionAuditSnapshot, recordTransactionAudit } from "./transaction-audit.ts";
 import { assertBillPostingAllowed, ComplianceError } from "./compliance.ts";
 
@@ -930,6 +935,11 @@ export async function postDocument(
   if (!doc) throw new PostingError(`document ${documentId} not found`);
   if (doc.status === "posted") throw new PostingError(`document ${doc.documentNumber} already posted`);
   if (doc.status === "voided") throw new PostingError(`document ${doc.documentNumber} is voided`);
+  if (doc.status !== "approved") {
+    throw new PostingError(
+      `document ${doc.documentNumber} is ${doc.status}; it must complete the approval submission lifecycle before posting`,
+    );
+  }
   if ((doc.kind === "journal" || doc.kind === "deposit") && !deps.openItemAccountIds) {
     deps = { ...deps, openItemAccountIds: await resolveOpenItemAccounts(db, doc.orgId) };
   }
@@ -999,6 +1009,35 @@ export async function postDocument(
   const beforePostFlows = await runRecordFlows({ kind: "before_post" }, doc.kind, doc.id, {
     orgId: doc.orgId,
   });
+  if (beforePostFlows.gatesCreated > 0 || beforePostFlows.failed) {
+    const runIds = beforePostFlows.runs.map((run) => run.runId);
+    if (runIds.length > 0) {
+      await db
+        .update(schema.flowGates)
+        .set({ status: "cancelled", updatedAt: new Date() })
+        .where(
+          and(
+            inArray(schema.flowGates.runId, runIds),
+            inArray(schema.flowGates.status, ["pending", "escalated"]),
+          ),
+        );
+      await db
+        .update(schema.flowRuns)
+        .set({
+          status: "failed",
+          error: beforePostFlows.failed
+            ? "before-post automation failed"
+            : "approval gates must be configured on on_submit",
+          finishedAt: new Date(),
+        })
+        .where(inArray(schema.flowRuns.id, runIds));
+    }
+    throw new PostingError(
+      beforePostFlows.failed
+        ? "a before-post flow failed; posting stopped"
+        : "before-post approval gates are not a posting release — configure approval gates on on_submit",
+    );
+  }
   if (beforePostFlows.runs.length > 0) {
     const [refreshed] = await db
       .select()
@@ -1049,6 +1088,25 @@ export async function postDocument(
     } catch (error) {
       if (error instanceof ComplianceError) throw new PostingError(error.message);
       throw error;
+    }
+  }
+
+  if (
+    !deps.migration &&
+    effectiveDoc.partyId &&
+    effectiveDoc.kind === "customer_invoice"
+  ) {
+    const hold = (await db.execute(sql`
+      select hold_reason
+        from customer_roles
+       where org_id = ${effectiveDoc.orgId} and party_id = ${effectiveDoc.partyId}
+         and is_active and is_on_hold
+       limit 1
+    `)) as unknown as { rows: { hold_reason: string | null }[] };
+    if (hold.rows[0]) {
+      throw new PostingError(
+        `customer is on credit hold${hold.rows[0].hold_reason ? ` — ${hold.rows[0].hold_reason}` : ""}`,
+      );
     }
   }
 
@@ -1147,7 +1205,7 @@ export async function postDocument(
       .where(
         and(
           eq(schema.documents.id, doc.id),
-          sql`${schema.documents.status} not in ('posted', 'voided')`,
+          eq(schema.documents.status, "approved"),
         ),
       )
       .returning({ id: schema.documents.id });
@@ -1171,6 +1229,33 @@ export async function postDocument(
 
     return entry.id;
   });
+
+  // Product subledgers are part of posting semantics regardless of whether
+  // posting was initiated by the UI, API, a flow action, or a scheduler.
+  // Each service is idempotent by document line, so a retry repairs a
+  // post-commit interruption without duplicating inventory or obligations.
+  const effectActorId = options.audit?.actorId ?? null;
+  if (doc.kind === "customer_invoice") {
+    await createObligationsFromInvoice(doc.id, doc.orgId, effectActorId);
+    if (effectiveDoc.subsidiaryId) {
+      await applyInventoryIssuesForInvoice(
+        doc.orgId,
+        effectActorId,
+        doc.id,
+        postingDate,
+        effectiveDoc.subsidiaryId,
+      );
+    }
+  } else if (doc.kind === "vendor_bill" && effectiveDoc.subsidiaryId) {
+    await applyInventoryReceiptsForBill(
+      doc.orgId,
+      effectActorId,
+      doc.id,
+      entryId,
+      postingDate,
+      effectiveDoc.subsidiaryId,
+    );
+  }
 
   if (!options.deferEffects) {
     await runTriggerScripts("after_post", { ...scriptCtx, trigger: "after_post" }, doc.id);
@@ -1208,19 +1293,21 @@ export async function runPostDocumentEffects(
   await runTriggerScripts("after_post", ctx, doc.id);
   await runRecordFlows({ kind: "after_post" }, doc.kind, doc.id, { orgId: doc.orgId });
   await emitStatusChange(doc.kind, doc.id, { from: previousStatus, to: "posted" }, { orgId: doc.orgId });
+  if (doc.kind === "customer_payment") {
+    const { finalizePaymentAcceptanceForDocument } =
+      await import("./payment-acceptance.ts");
+    await finalizePaymentAcceptanceForDocument(doc.id);
+  }
 }
 
 // ---------------------------------------------------------------------------
-// GL Impact as a derived projection.
+// Historical source-mirror GL replay.
 //
-// For a document-sourced entry the DOCUMENT is the system of record; its
-// journal entry is a derived projection — entry = postingRules(document) —
-// re-materialized on every save (source platform's model). `postDocument` above is
-// the first materialization; `regenerateGlImpactTx` re-materializes a posted
-// document's entry in place after an edit. A non-GL edit (memo, reference #)
-// produces an identical projection and is a no-op on the ledger; a GL edit
-// produces a different projection and regenerates the entry's lines, blocked
-// only if the posting period is closed.
+// This is not an interactive edit path. Ordinary posted transactions are
+// immutable and use controlled reversal plus a correcting document. The
+// projection helper below is retained only for connector-owned historical
+// replay, where `deps.migration` is explicit and the source snapshot remains
+// the authoritative imported evidence.
 // ---------------------------------------------------------------------------
 
 /** Raised when a GL-affecting edit would land in a closed accounting period. */
@@ -1295,9 +1382,9 @@ function glKey(
 }
 
 /**
- * Re-materialize a POSTED document's GL-Impact projection in place, from its
- * (already-updated) source document + lines, inside the caller's transaction.
- * The caller MUST have run `set local openbooks.amend = on`.
+ * Re-materialize an imported POSTED document's GL projection during controlled
+ * source replay. The caller MUST set `deps.migration` and must have run
+ * `set local openbooks.amend = on`.
  *
  * Returns `{ changed: false }` when the projection is unchanged (a non-GL edit)
  * — no ledger write happens, so it is allowed even in a closed period. When the
@@ -1311,6 +1398,11 @@ export async function regenerateGlImpactTx(
   deps: PostingDeps,
   _userId: string,
 ): Promise<{ entryId: string | null; changed: boolean }> {
+  if (!deps.migration) {
+    throw new PostingError(
+      "posted GL replay is restricted to controlled historical migration",
+    );
+  }
   const [doc] = await tx.select().from(schema.documents).where(eq(schema.documents.id, documentId));
   if (!doc) throw new PostingError(`document ${documentId} not found`);
   // Only posted documents have a materialized projection to regenerate.

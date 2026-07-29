@@ -2,7 +2,6 @@ import { NextResponse } from 'next/server'
 import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/db.ts'
 import { cmp } from '@openbooks/engine/src/money.ts'
-import { regenerateGlImpactTx, ClosedPeriodError } from '@openbooks/engine/src/posting.ts'
 import { deleteDocument, DeleteError } from '@openbooks/engine/src/document-delete.ts'
 import { captureTransactionAuditSnapshot, recordTransactionAudit } from '@openbooks/engine/src/transaction-audit.ts'
 import { guardPermission } from '../../../../lib/authz'
@@ -12,48 +11,6 @@ import { loadFieldDefs, validateCustomValues } from '../../../../lib/custom-fiel
 import { segmentRegistry, validateExtraDims } from '../../../../lib/segments'
 
 export const runtime = 'nodejs'
-
-async function controlDeps(orgId: string) {
-  const r = (await db.execute(sql`select settings->'controlAccounts' as c from orgs where id = ${orgId}`)) as any
-  const c = r.rows[0]?.c ?? {}
-  return {
-    control: {
-      ar: c.ar,
-      ap: c.ap,
-      bank: c.bank,
-      taxCollected: c.taxCollected,
-      taxPaid: c.taxPaid,
-      employeePayable: c.employeePayable,
-    },
-  }
-}
-
-/**
- * A document-layer signature of everything that shapes an expense report's GL
- * impact (party, posting/document date, currency, and each line's account/item/
- * amount/tax/dimensions). Comparing this before vs after a save tells us whether
- * the edit was GL-affecting — WITHOUT assuming the stored entry was produced by
- * our own posting rules. Non-GL edits (memo) leave this unchanged and never
- * touch the ledger.
- */
-async function glSignature(tx: { execute: (q: ReturnType<typeof sql>) => Promise<unknown> }, id: string, orgId: string): Promise<string> {
-  const r = (await tx.execute(sql`
-    select md5(
-      coalesce(d.party_id::text,'') || '~' || coalesce(d.document_date::text,'') || '~' ||
-      coalesce(d.posting_date::text,'') || '~' || coalesce(d.currency,'') || '~' || coalesce(d.fx_rate::text,'') || '~' ||
-      coalesce(d.extra_dims::text,'{}') || '~' ||
-      coalesce((select string_agg(
-        coalesce(account_id::text,'') || ':' || coalesce(item_id::text,'') || ':' || amount::text || ':' ||
-        coalesce(tax_code_id::text,'') || ':' || coalesce(tax_group_id::text,'') || ':' ||
-        coalesce(tax_input_amount::text,'') || ':' || tax_amount::text || ':' ||
-        coalesce(department_id::text,'') || ':' || coalesce(project_id::text,'') || ':' ||
-        coalesce(location_id::text,'') || ':' || coalesce(class_id::text,'') || ':' || coalesce(extra_dims::text,'{}'),
-        '|' order by line_number)
-        from document_lines where document_id = d.id), '')
-    ) as sig
-    from documents d where d.id = ${id} and d.org_id = ${orgId}`)) as { rows: { sig: string }[] }
-  return r.rows[0]?.sig ?? ''
-}
 
 export async function GET(_req: Request, { params }: { params: Promise<{ id: string }> }) {
   const gate = await guardPermission('expenses.read')
@@ -65,11 +22,8 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
 }
 
 /**
- * Autosave an expense report. Draft/approved reports edit freely (no GL yet). A
- * POSTED report is editable in place, source platform-style: its journal entry is a
- * derived projection re-materialized on save (regenerateGlImpactTx) — a non-GL
- * change (memo) is a no-op on the ledger; a GL change regenerates the entry's
- * lines and is blocked only if the posting period is closed.
+ * Autosave an expense-report draft. Approval and posted states preserve the
+ * submitted evidence; corrections are represented by a separate report.
  */
 export async function PATCH(req: Request, { params }: { params: Promise<{ id: string }> }) {
   const gate = await guardPermission('expenses.create')
@@ -81,11 +35,12 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     sql`select status, document_date from documents where id = ${id} and kind = 'expense_report' and org_id = ${user.orgId}`,
   )) as unknown as { rows: { status: string; document_date: string }[] }
   if (!existing.rows[0]) return NextResponse.json({ error: 'not found' }, { status: 404 })
-  if (existing.rows[0].status === 'voided') {
-    return NextResponse.json({ error: 'a voided expense report cannot be edited' }, { status: 422 })
+  if (existing.rows[0].status !== 'draft') {
+    return NextResponse.json(
+      { error: `a ${existing.rows[0].status} expense report cannot be edited — create a correcting report instead` },
+      { status: 422 },
+    )
   }
-  const deps = await controlDeps(user.orgId)
-
   const body = (await req.json()) as {
     partyId?: string | null
     documentDate?: string
@@ -161,14 +116,9 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     }
   }
 
-  // All writes + the GL-Impact re-materialization happen in one transaction, so
-  // a GL edit into a closed period rolls the whole edit back (nothing partial).
-  try {
-    await db.transaction(async (tx) => {
-      await tx.execute(sql`select set_config('openbooks.amend', 'on', true)`)
-      const auditCandidate = await captureTransactionAuditSnapshot(tx, id)
-      const auditBefore = auditCandidate?.document.status === 'posted' ? auditCandidate : null
-      const sigBefore = await glSignature(tx, id, user.orgId)
+  await db.transaction(async (tx) => {
+      const auditBefore = await captureTransactionAuditSnapshot(tx, id)
+      if (!auditBefore) throw new Error(`expense report ${id} disappeared before update`)
 
       if (preparedLines) {
         await tx.execute(sql`delete from document_lines where document_id = ${id} and org_id = ${user.orgId}`)
@@ -208,30 +158,18 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
         where id = ${id} and org_id = ${user.orgId}
       `)
 
-      // Re-materialize the GL-Impact projection only when the edit actually
-      // changed GL-relevant fields (no-op for draft/approved reports and for
-      // non-GL edits like memo, which preserves migrated GL).
-      if ((await glSignature(tx, id, user.orgId)) !== sigBefore) {
-        await regenerateGlImpactTx(tx, id, deps, user.id)
-      }
-      if (auditBefore) {
-        const auditAfter = await captureTransactionAuditSnapshot(tx, id)
-        if (!auditAfter) throw new Error(`expense report ${id} disappeared during amendment`)
-        await recordTransactionAudit(tx, {
-          orgId: user.orgId,
-          documentId: id,
-          action: 'update',
-          actorId: user.id,
-          source: 'ui',
-          before: auditBefore,
-          after: auditAfter,
-        })
-      }
-    })
-  } catch (e) {
-    if (e instanceof ClosedPeriodError) return NextResponse.json({ error: e.message }, { status: 422 })
-    throw e
-  }
+      const auditAfter = await captureTransactionAuditSnapshot(tx, id)
+      if (!auditAfter) throw new Error(`expense report ${id} disappeared during update`)
+      await recordTransactionAudit(tx, {
+        orgId: user.orgId,
+        documentId: id,
+        action: 'update',
+        actorId: user.id,
+        source: 'ui',
+        before: auditBefore,
+        after: auditAfter,
+      })
+  })
 
   const report = await loadExpenseReport(id, user.orgId)
   return NextResponse.json(report)

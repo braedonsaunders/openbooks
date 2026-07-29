@@ -15,6 +15,7 @@
     "running": "Running…",
     "add": "Add",
     "remove": "Remove",
+    "retire": "Retire",
     "search": "Search",
     "clear": "Clear",
     "apply": "Apply",
@@ -242,6 +243,7 @@
       "delete": "Deleted",
       "post": "Posted",
       "void": "Voided",
+      "retired": "Retired",
       "approve": "Approved",
       "reject": "Rejected"
     }
@@ -249,14 +251,19 @@
   "amendment": {
     "title": "Explain this posted-document amendment",
     "deleteTitle": "Explain why this posted document is being deleted",
+    "voidTitle": "Void this transaction?",
+    "correctionCreated": "Correction draft created",
     "reason": "Reason for change",
     "placeholder": "Describe what changed and why",
-    "deletePlaceholder": "Describe why deleting the posted transaction is necessary"
+    "deletePlaceholder": "Describe why deleting the posted transaction is necessary",
+    "voidPlaceholder": "Describe why the transaction must be reversed"
   },
   "approvalFlow": {
     "pendingWith": "Pending with {names}",
     "rejectTitle": "Reject this document?",
     "rejectReasonLabel": "Rejection reason",
+    "signTitle": "Sign this approval",
+    "signLabel": "Type your name as your approval attestation",
     "waitingOthers": "Recorded — waiting on the other approvers",
     "alreadyDecided": "This approval was already decided — refreshing",
     "decisionFailed": "Decision failed",

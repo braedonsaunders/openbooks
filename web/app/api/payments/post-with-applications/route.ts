@@ -6,6 +6,7 @@ import {
   type AllocationInput,
   type PaymentKind,
 } from '@openbooks/engine/src/payments.ts'
+import { submitAndReleaseIfUngated } from '@openbooks/engine/src/flows/index.ts'
 import { can, getAuthz } from '../../../../lib/authz'
 import { isUuid } from '../../../../lib/list-params'
 import { paymentErrorResponse, paymentPermission } from '../lib'
@@ -27,10 +28,10 @@ export async function POST(req: Request) {
   }
 
   const r = (await db.execute(sql`
-    select kind from documents
+    select kind, status from documents
      where id = ${body.documentId} and kind in ('vendor_payment', 'customer_payment')
        and org_id = ${authz.user.orgId}
-  `)) as unknown as { rows: { kind: PaymentKind }[] }
+  `)) as unknown as { rows: { kind: PaymentKind; status: string }[] }
   if (!r.rows[0]) return NextResponse.json({ error: 'not found' }, { status: 404 })
   const perm = paymentPermission(r.rows[0].kind)
   if (!can(authz, perm)) {
@@ -38,6 +39,30 @@ export async function POST(req: Request) {
   }
 
   try {
+    if (r.rows[0].status === 'draft') {
+      const submission = await submitAndReleaseIfUngated(
+        r.rows[0].kind,
+        body.documentId,
+        authz.user.id,
+      )
+      if (submission.flowError) {
+        return NextResponse.json(
+          { error: `approval could not be routed: ${submission.flowError}` },
+          { status: 422 },
+        )
+      }
+      if (submission.gated) {
+        return NextResponse.json(
+          { ok: true, pendingApproval: true, requestId: submission.runId },
+          { status: 202 },
+        )
+      }
+    } else if (r.rows[0].status !== 'approved') {
+      return NextResponse.json(
+        { error: `payment is ${r.rows[0].status}; only an approved payment can be posted` },
+        { status: 422 },
+      )
+    }
     const result = await postPaymentWithApplications(body.documentId, body.allocations, authz.user.id)
     return NextResponse.json({ ok: true, ...result })
   } catch (e) {

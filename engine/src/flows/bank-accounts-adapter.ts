@@ -122,7 +122,7 @@ export const bankAccountsFlowAdapter: FlowSubjectAdapter = {
         // Routing keys flattened for {{interpolation}} (institution/transit/…).
         ...Object.fromEntries(Object.entries(routing).map(([k, v]) => [`routing_${k}`, v])),
       },
-      submitterUserId: row.createdBy ?? null,
+      submitterUserId: row.submittedBy ?? row.createdBy ?? null,
     };
   },
 
@@ -181,6 +181,53 @@ export const bankAccountsFlowAdapter: FlowSubjectAdapter = {
           eq(schema.partyBankAccounts.orgId, ctx.orgId),
         ),
       );
+  },
+
+  async releaseApproval(subjectId, outcome, ctx): Promise<void> {
+    const row = await loadRow(subjectId);
+    if (!row || row.retiredAt || row.approvalStatus !== "pending") return;
+    const today = new Date().toISOString().slice(0, 10);
+    await db
+      .update(schema.partyBankAccounts)
+      .set(
+        outcome === "approved"
+          ? {
+              approvalStatus: "approved",
+              approvedAt: today,
+              approvedBy: ctx.userId ?? null,
+              isActive: true,
+              updatedAt: new Date(),
+              updatedBy: ctx.userId ?? null,
+            }
+          : {
+              approvalStatus: "rejected",
+              approvedAt: null,
+              approvedBy: null,
+              isActive: false,
+              updatedAt: new Date(),
+              updatedBy: ctx.userId ?? null,
+            },
+      )
+      .where(
+        and(
+          eq(schema.partyBankAccounts.id, subjectId),
+          eq(schema.partyBankAccounts.orgId, ctx.orgId),
+        ),
+      );
+    await db.execute(sql`
+      insert into audit_log
+        (org_id, table_name, row_id, action, changes, actor_id, request_id)
+      values (
+        ${ctx.orgId}, 'party_bank_accounts', ${subjectId},
+        ${outcome === "approved" ? "approve" : "reject"},
+        ${JSON.stringify({
+          mode: "bank_detail_approval",
+          outcome,
+          submittedBy: row.submittedBy ?? row.createdBy,
+        })}::jsonb,
+        ${ctx.userId ?? null}, 'flows'
+      )
+    `);
   },
 
   async setField(): Promise<void> {

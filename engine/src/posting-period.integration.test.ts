@@ -43,7 +43,7 @@ test(
         values (
           ${documentId}, ${org.orgId}, 'vendor_bill', 'BILL-ADJ',
           ${org.vendorId}, ${org.subsidiaryId}, '2026-06-30', '2026-06-30',
-          ${adjustmentPeriodId}, 'CAD', 1, 'draft', '100', '0', '100', false,
+          ${adjustmentPeriodId}, 'CAD', 1, 'approved', '100', '0', '100', false,
           '{}'::jsonb, '{}'::jsonb
         )
       `);

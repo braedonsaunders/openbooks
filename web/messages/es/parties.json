@@ -98,6 +98,9 @@
     "salesRepresentative": "Representante de ventas",
     "taxCode": "Código fiscal predeterminado",
     "currencyPlaceholder": "CAD",
+    "creditHold": "Bloqueo de crédito",
+    "paymentHold": "Bloqueo de pagos",
+    "holdReason": "Motivo del bloqueo",
     "paymentMethod": "Método de pago",
     "paymentMethods": {
       "eft": "Transferencia electrónica",

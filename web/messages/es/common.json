@@ -15,6 +15,7 @@
     "running": "Ejecutando…",
     "add": "Agregar",
     "remove": "Quitar",
+    "retire": "Retirar",
     "search": "Buscar",
     "clear": "Limpiar",
     "apply": "Aplicar",
@@ -242,6 +243,7 @@
       "delete": "Eliminado",
       "post": "Contabilizado",
       "void": "Anulado",
+      "retired": "Retirado",
       "approve": "Aprobado",
       "reject": "Rechazado"
     }
@@ -249,14 +251,19 @@
   "amendment": {
     "title": "Explique la modificación del documento contabilizado",
     "deleteTitle": "Explique por qué se elimina este documento contabilizado",
+    "voidTitle": "¿Anular esta transacción?",
+    "correctionCreated": "Borrador de corrección creado",
     "reason": "Motivo del cambio",
     "placeholder": "Describa qué cambió y por qué",
-    "deletePlaceholder": "Describa por qué es necesario eliminar la transacción contabilizada"
+    "deletePlaceholder": "Describa por qué es necesario eliminar la transacción contabilizada",
+    "voidPlaceholder": "Describa por qué debe revertirse la transacción"
   },
   "approvalFlow": {
     "pendingWith": "Pendiente de {names}",
     "rejectTitle": "¿Rechazar este documento?",
     "rejectReasonLabel": "Motivo del rechazo",
+    "signTitle": "Firmar esta aprobación",
+    "signLabel": "Escriba su nombre como constancia de aprobación",
     "waitingOthers": "Registrado — a la espera de los demás aprobadores",
     "alreadyDecided": "Esta aprobación ya fue decidida — actualizando",
     "decisionFailed": "La decisión falló",

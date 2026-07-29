@@ -42,9 +42,11 @@ import { TransactionDrawer } from '../../../components/transaction-drawer'
 import { EmployeeWageRates } from './EmployeeWageRates'
 import { RateBookAssignmentSection } from './RateBookAssignmentSection'
 import { ApprovalActions } from '../../../components/approval-actions'
+import { ApprovalHistory } from '../../../components/approval-history'
 import { FlowManualButtons } from '../../../components/flow-manual-buttons'
 import { countryOptions } from '../../../lib/countries'
 import { ReadOnlyValue } from '../../../components/read-only-value'
+import { promptDialog } from '../../../lib/prompt'
 
 interface Opt {
   id: string
@@ -266,6 +268,8 @@ export function PartyDrawer({
     arAccountId: payload.customer?.ar_account_id ?? '',
     salesRepId: payload.customer?.sales_rep_id ?? '',
     taxCodeId: payload.customer?.tax_code_id ?? '',
+    isOnHold: payload.customer?.is_on_hold === true,
+    holdReason: payload.customer?.hold_reason ?? '',
   })
   const [vendor, setVendor] = useState({
     enabled: !!payload.vendor && payload.vendor.is_active !== false,
@@ -277,6 +281,8 @@ export function PartyDrawer({
     apAccountId: payload.vendor?.ap_account_id ?? '',
     defaultExpenseAccountId: payload.vendor?.default_expense_account_id ?? '',
     taxCodeId: payload.vendor?.tax_code_id ?? '',
+    isOnHold: payload.vendor?.is_on_hold === true,
+    holdReason: payload.vendor?.hold_reason ?? '',
   })
   const [employee, setEmployee] = useState({
     enabled: !!payload.employee && payload.employee.is_active !== false,
@@ -335,6 +341,8 @@ export function PartyDrawer({
           arAccountId: customer.arAccountId || null,
           salesRepId: customer.salesRepId || null,
           taxCodeId: customer.taxCodeId || null,
+          isOnHold: customer.isOnHold,
+          holdReason: customer.isOnHold ? customer.holdReason : null,
         },
         vendor: {
           enabled: role === 'vendor' ? true : vendor.enabled,
@@ -346,6 +354,8 @@ export function PartyDrawer({
           apAccountId: vendor.apAccountId || null,
           defaultExpenseAccountId: vendor.defaultExpenseAccountId || null,
           taxCodeId: vendor.taxCodeId || null,
+          isOnHold: vendor.isOnHold,
+          holdReason: vendor.isOnHold ? vendor.holdReason : null,
         },
         employee: {
           enabled: role === 'employee' ? true : employee.enabled,
@@ -357,6 +367,7 @@ export function PartyDrawer({
           hiredOn: employee.hiredOn || null,
         },
       },
+      expectedUpdatedAt: p.updated_at,
       addresses: serializeAddresses(addresses),
       contacts: serializeContacts(contacts),
     }),
@@ -400,6 +411,8 @@ export function PartyDrawer({
       arAccountId: payload.customer?.ar_account_id ?? '',
       salesRepId: payload.customer?.sales_rep_id ?? '',
       taxCodeId: payload.customer?.tax_code_id ?? '',
+      isOnHold: payload.customer?.is_on_hold === true,
+      holdReason: payload.customer?.hold_reason ?? '',
     })
     setVendor({
       enabled: !!payload.vendor && payload.vendor.is_active !== false,
@@ -411,6 +424,8 @@ export function PartyDrawer({
       apAccountId: payload.vendor?.ap_account_id ?? '',
       defaultExpenseAccountId: payload.vendor?.default_expense_account_id ?? '',
       taxCodeId: payload.vendor?.tax_code_id ?? '',
+      isOnHold: payload.vendor?.is_on_hold === true,
+      holdReason: payload.vendor?.hold_reason ?? '',
     })
     setEmployee({
       enabled: !!payload.employee && payload.employee.is_active !== false,
@@ -453,6 +468,7 @@ export function PartyDrawer({
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
+          expectedUpdatedAt: p.updated_at,
           [kind]: kind === 'addresses'
             ? serializeAddresses(nextRows as AddressRow[])
             : serializeContacts(nextRows as ContactRow[]),
@@ -478,12 +494,28 @@ export function PartyDrawer({
   }
 
   async function save() {
+    const materialControlChange =
+      customer.isOnHold !== (payload.customer?.is_on_hold === true) ||
+      vendor.isOnHold !== (payload.vendor?.is_on_hold === true) ||
+      (customer.isOnHold && customer.holdReason.trim() !== String(payload.customer?.hold_reason ?? '').trim()) ||
+      (vendor.isOnHold && vendor.holdReason.trim() !== String(payload.vendor?.hold_reason ?? '').trim())
+    let changeReason: string | undefined
+    if (materialControlChange) {
+      const reason = await promptDialog({
+        title: tc('amendment.title'),
+        label: tc('amendment.reason'),
+        placeholder: tc('amendment.placeholder'),
+        confirmLabel: tc('actions.save'),
+      })
+      if (!reason) return
+      changeReason = reason
+    }
     setBusy(true)
     setSaveState('saving')
     const res = await fetch(`/api/parties/${p.id}`, {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(savePayload),
+      body: JSON.stringify({ ...savePayload, changeReason }),
     })
     if (res.ok) {
       setSaveState('saved')
@@ -505,11 +537,22 @@ export function PartyDrawer({
   }
 
   async function setActiveState(next: boolean) {
+    const reason = await promptDialog({
+      title: next ? t('activate') : t('deactivate'),
+      label: tc('amendment.reason'),
+      placeholder: tc('amendment.placeholder'),
+      confirmLabel: next ? t('activate') : t('deactivate'),
+    })
+    if (!reason) return
     setBusy(true)
     const res = await fetch(`/api/parties/${p.id}`, {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ isActive: next }),
+      body: JSON.stringify({
+        isActive: next,
+        expectedUpdatedAt: p.updated_at,
+        changeReason: reason,
+      }),
     })
     const data = await res.json()
     if (!res.ok) toast.error(data.error ?? t('updateFailed'))
@@ -955,6 +998,22 @@ export function PartyDrawer({
                     {taxCodes.map((code) => <option key={code.id} value={code.id}>{code.label ?? code.name}</option>)}
                   </Select>
                 </div>
+                <label className="flex items-center gap-2 self-end pb-2">
+                  <input
+                    type="checkbox"
+                    checked={customer.isOnHold}
+                    onChange={(event) => setCustomer({ ...customer, isOnHold: event.target.checked })}
+                    disabled={ro}
+                    className={checkboxClass}
+                  />
+                  <span className="text-sm">{t('creditHold')}</span>
+                </label>
+                {customer.isOnHold ? (
+                  <div className={`${field} sm:col-span-2`}>
+                    <Label>{t('holdReason')}</Label>
+                    <Input value={customer.holdReason} onChange={(event) => setCustomer({ ...customer, holdReason: event.target.value })} disabled={ro} />
+                  </div>
+                ) : null}
               </div>
               </>
             ) : null}
@@ -1058,6 +1117,22 @@ export function PartyDrawer({
                     {taxCodes.map((code) => <option key={code.id} value={code.id}>{code.label ?? code.name}</option>)}
                   </Select>
                 </div>
+                <label className="flex items-center gap-2 self-end pb-2">
+                  <input
+                    type="checkbox"
+                    checked={vendor.isOnHold}
+                    onChange={(event) => setVendor({ ...vendor, isOnHold: event.target.checked })}
+                    disabled={ro}
+                    className={checkboxClass}
+                  />
+                  <span className="text-sm">{t('paymentHold')}</span>
+                </label>
+                {vendor.isOnHold ? (
+                  <div className={`${field} sm:col-span-2`}>
+                    <Label>{t('holdReason')}</Label>
+                    <Input value={vendor.holdReason} onChange={(event) => setVendor({ ...vendor, holdReason: event.target.value })} disabled={ro} />
+                  </div>
+                ) : null}
               </div>
             ) : null}
           </div>
@@ -1514,11 +1589,12 @@ interface BankAccountDraft {
   accountNumber: string
   routingBase: Record<string, string>
   lastFour: string
+  updatedAt: string
 }
 
 const emptyBankDraft = (): BankAccountDraft => ({
   id: null, bankName: '', country: '', currency: '', routingNumber: '', branchNumber: '',
-  accountNumber: '', routingBase: {}, lastFour: '',
+  accountNumber: '', routingBase: {}, lastFour: '', updatedAt: '',
 })
 
 function BankAccountsPanel({
@@ -1536,6 +1612,7 @@ function BankAccountsPanel({
   const router = useRouter()
   const [accounts, setAccounts] = useState(initialAccounts)
   const [draft, setDraft] = useState<BankAccountDraft | null>(null)
+  const [historyAccount, setHistoryAccount] = useState<Record<string, any> | null>(null)
   const [q, setQ] = useState('')
   const [page, setPage] = useState(1)
   const [busy, setBusy] = useState(false)
@@ -1559,6 +1636,7 @@ function BankAccountsPanel({
       routingNumber: routing.routingNumber ?? routing.institution ?? '',
       branchNumber: routing.branchNumber ?? routing.transit ?? '',
       accountNumber: '', routingBase: routing, lastFour: account.account_last_four ?? '',
+      updatedAt: account.updated_at ?? '',
     })
   }
 
@@ -1591,10 +1669,22 @@ function BankAccountsPanel({
     delete routing.branchNumber
     if (draft.routingNumber.trim()) routing.routingNumber = draft.routingNumber.trim()
     if (draft.branchNumber.trim()) routing.branchNumber = draft.branchNumber.trim()
+    let changeReason: string | undefined
+    if (draft.id) {
+      const reason = await promptDialog({
+        title: tc('amendment.title'),
+        label: tc('amendment.reason'),
+        placeholder: tc('amendment.placeholder'),
+        confirmLabel: tc('actions.save'),
+      })
+      if (!reason) return
+      changeReason = reason
+    }
     const body = {
       bankName: draft.bankName.trim(), country: draft.country.trim() || null,
       currency: draft.currency.trim().toUpperCase() || null, routing,
       ...(draft.accountNumber.trim() ? { accountNumber: draft.accountNumber.trim() } : {}),
+      ...(draft.id ? { expectedUpdatedAt: draft.updatedAt, changeReason } : {}),
     }
     setBusy(true)
     try {
@@ -1618,7 +1708,37 @@ function BankAccountsPanel({
     }
   }
 
+  async function retire(account: Record<string, any>) {
+    const reason = await promptDialog({
+      title: tc('actions.retire'),
+      label: tc('amendment.reason'),
+      placeholder: tc('amendment.voidPlaceholder'),
+      confirmLabel: tc('actions.retire'),
+    })
+    if (!reason) return
+    setBusy(true)
+    const response = await fetch(
+      `/api/parties/${partyId}/bank-accounts?accountId=${encodeURIComponent(String(account.id))}`,
+      {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          retirementReason: reason,
+          expectedUpdatedAt: account.updated_at,
+        }),
+      },
+    )
+    const result = await response.json().catch(() => ({}))
+    if (!response.ok) toast.error(result.error ?? t('bankAccountSaveFailed'))
+    else {
+      await refreshAccounts()
+      toast.success(tc('actions.retire'))
+    }
+    setBusy(false)
+  }
+
   const statusLabel = (account: Record<string, any>) => {
+    if (account.retired_at) return tc('status.retired')
     const status = String(account.approval_status ?? (account.approved_at ? 'approved' : 'pending'))
     if (status === 'approved') return tc('status.approved')
     if (status === 'rejected') return tc('status.rejected')
@@ -1662,6 +1782,22 @@ function BankAccountsPanel({
         ) : null}
       </Drawer>
 
+      <Drawer
+        open={historyAccount !== null}
+        onClose={() => setHistoryAccount(null)}
+        stacked
+        size="md"
+        title={tc('approvalFlow.historyTitle')}
+        description={historyAccount?.bank_name ?? t('bankAccountFallback')}
+      >
+        {historyAccount ? (
+          <ApprovalHistory
+            subjectKind="party_bank_account"
+            subjectId={String(historyAccount.id)}
+          />
+        ) : null}
+      </Drawer>
+
       {accounts.length === 0 ? (
         <SublistEmpty icon={<Landmark size={22} />} text={t('noBankAccounts')} />
       ) : (
@@ -1683,12 +1819,16 @@ function BankAccountsPanel({
                   <TableCell className="font-mono text-xs text-slate-500 dark:text-slate-400">{Object.values(account.routing ?? {}).filter(Boolean).join(' · ') || '—'}</TableCell>
                   <TableCell className="font-mono">•••• {account.account_last_four || '—'}</TableCell>
                   <TableCell className="font-mono text-xs">{account.currency || '—'}</TableCell>
-                  <TableCell><Badge variant={account.approval_status === 'approved' || account.approved_at ? 'success' : account.approval_status === 'rejected' ? 'outline' : 'warning'}>{statusLabel(account)}</Badge></TableCell>
+                  <TableCell><Badge variant={account.retired_at ? 'outline' : account.approval_status === 'approved' || account.approved_at ? 'success' : account.approval_status === 'rejected' ? 'outline' : 'warning'}>{statusLabel(account)}</Badge></TableCell>
                   <TableCell>
                     <div className="flex flex-wrap items-center justify-end gap-2">
                       <FlowManualButtons subjectKind="party_bank_account" subjectId={String(account.id)} />
                       <ApprovalActions subjectKind="party_bank_account" subjectId={String(account.id)} />
-                      {canManage ? <Button variant="ghost" size="sm" onClick={() => edit(account)}>{tc('actions.edit')}</Button> : null}
+                      <Button variant="ghost" size="sm" onClick={() => setHistoryAccount(account)}>
+                        {tc('approvalFlow.historyTitle')}
+                      </Button>
+                      {canManage && !account.retired_at ? <Button variant="ghost" size="sm" onClick={() => edit(account)}>{tc('actions.edit')}</Button> : null}
+                      {canManage && !account.retired_at ? <Button variant="ghost" size="sm" onClick={() => retire(account)}>{tc('actions.retire')}</Button> : null}
                     </div>
                   </TableCell>
                 </TableRow>

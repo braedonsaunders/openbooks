@@ -98,6 +98,9 @@
     "salesRepresentative": "Représentant commercial",
     "taxCode": "Code fiscal par défaut",
     "currencyPlaceholder": "CAD",
+    "creditHold": "Blocage de crédit",
+    "paymentHold": "Blocage des paiements",
+    "holdReason": "Motif du blocage",
     "paymentMethod": "Mode de paiement",
     "paymentMethods": {
       "eft": "TEF",

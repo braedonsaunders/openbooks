@@ -746,6 +746,8 @@ export async function recordPaymentSettlement(opts: {
       instruction.payment_document_id,
       opts.orgId,
       opts.returnReason ?? opts.returnCode ?? "payment returned by bank",
+      opts.userId,
+      opts.effectiveOn,
     );
   }
   await db.transaction(async (tx) => {

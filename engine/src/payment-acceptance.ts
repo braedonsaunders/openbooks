@@ -11,6 +11,7 @@ import {
   updateDraftPayment,
   type AllocationInput,
 } from "./payments.ts";
+import { submitAndReleaseIfUngated } from "./flows/submit.ts";
 
 /**
  * Customer payment acceptance — hosted checkout links on posted invoices.
@@ -816,27 +817,104 @@ async function settleAttempt(orgId: string, attemptId: string): Promise<void> {
     },
     actorId,
   );
-  const { entryId } = await postPaymentWithApplications(payment.id, allocations, actorId);
-
   await db.execute(sql`
     update payment_attempts
-       set status = 'succeeded', payment_document_id = ${payment.id}, journal_entry_id = ${entryId}, updated_at = now()
+       set payment_document_id = ${payment.id}, updated_at = now()
      where id = ${attemptId}
   `);
-  const remaining = (await db.execute(sql`
-    select open_balance from documents where id = ${invoice.id}
-  `)) as unknown as { rows: { open_balance: string }[] };
-  if (cmp(remaining.rows[0]?.open_balance ?? "0", "0.005") <= 0) {
+  const submission = await submitAndReleaseIfUngated(
+    "customer_payment",
+    payment.id,
+    actorId,
+  );
+  if (submission.flowError) {
+    throw new PaymentAcceptanceError(
+      `receipt approval could not be routed: ${submission.flowError}`,
+    );
+  }
+  if (submission.gated) {
+    return;
+  }
+  await postPaymentWithApplications(payment.id, allocations, actorId);
+  await finalizePaymentAcceptanceForDocument(payment.id);
+}
+
+/**
+ * Close the provider attempt after its receipt posts. This is also invoked by
+ * post-payment effects when a configured approval flow posts the receipt later.
+ */
+export async function finalizePaymentAcceptanceForDocument(
+  paymentDocumentId: string,
+): Promise<void> {
+  const result = (await db.execute(sql`
+    select attempt.id as attempt_id,
+           attempt.org_id,
+           attempt.amount,
+           attempt.surcharge_amount,
+           link.id as link_id,
+           link.document_id as invoice_id,
+           invoice.document_number as invoice_number,
+           invoice.open_balance,
+           payment.posted_entry_id
+      from payment_attempts attempt
+      join payment_links link
+        on link.id = attempt.link_id and link.org_id = attempt.org_id
+      join documents invoice
+        on invoice.id = link.document_id and invoice.org_id = attempt.org_id
+      join documents payment
+        on payment.id = attempt.payment_document_id and payment.org_id = attempt.org_id
+     where attempt.payment_document_id = ${paymentDocumentId}
+       and attempt.status = 'initiated'
+       and payment.status = 'posted'
+     for update of attempt
+  `)) as unknown as {
+    rows: {
+      attempt_id: string;
+      org_id: string;
+      amount: string | null;
+      surcharge_amount: string | null;
+      link_id: string;
+      invoice_id: string;
+      invoice_number: string;
+      open_balance: string;
+      posted_entry_id: string;
+    }[];
+  };
+  const row = result.rows[0];
+  if (!row) return;
+  const closed = (await db.execute(sql`
+    update payment_attempts
+       set status = 'succeeded',
+           journal_entry_id = ${row.posted_entry_id},
+           updated_at = now()
+     where id = ${row.attempt_id} and status = 'initiated'
+     returning id
+  `)) as unknown as { rows: { id: string }[] };
+  if (!closed.rows[0]) return;
+  if (cmp(row.open_balance ?? "0", "0.005") <= 0) {
     await db.execute(sql`
       update payment_links
-         set status = 'paid', paid_payment_document_id = ${payment.id}, paid_at = now(), updated_at = now()
-       where id = ${a.link_id} and status = 'active'
+         set status = 'paid',
+             paid_payment_document_id = ${paymentDocumentId},
+             paid_at = now(),
+             updated_at = now()
+       where id = ${row.link_id} and status = 'active'
     `);
   }
   await db.execute(sql`
     insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
-    values (${orgId}, 'payment_attempts', ${attemptId}, 'post',
-            ${JSON.stringify({ after: { paymentDocumentId: payment.id, journalEntryId: entryId, invoice: invoice.document_number, allocated: invoicePortion, fee: feeAmount } })}::jsonb, null)
+    values (
+      ${row.org_id}, 'payment_attempts', ${row.attempt_id}, 'post',
+      ${JSON.stringify({
+        after: {
+          paymentDocumentId,
+          invoice: row.invoice_number,
+          amount: row.amount,
+          surcharge: row.surcharge_amount,
+        },
+      })}::jsonb,
+      null
+    )
   `);
 }
 

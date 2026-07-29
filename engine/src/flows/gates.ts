@@ -50,6 +50,39 @@ async function canActOnGate(gate: GateRow, userId: string): Promise<boolean> {
   return !!gate.assigneeRole && roles.has(gate.assigneeRole);
 }
 
+/** Viewer-aware decision capability for contextual record drawers. */
+export async function gateDecisionCapability(
+  gateId: string,
+  userId: string,
+): Promise<{ canAct: boolean; signatureRequired: boolean }> {
+  const gate = await loadGate(gateId);
+  if (!gate || gate.status !== "pending") {
+    return { canAct: false, signatureRequired: false };
+  }
+  let authorized = await canActOnGate(gate, userId);
+  if (!authorized && gate.assigneeUserId) {
+    authorized =
+      (await activeDelegationPrincipal(gate.orgId, gate.assigneeUserId, userId)) !== null;
+  }
+  if (!authorized) {
+    return { canAct: false, signatureRequired: gate.signatureRequired };
+  }
+  const adapter = getFlowAdapter(gate.subjectKind);
+  const submitterUserId =
+    (await adapter?.loadContext(gate.subjectId))?.submitterUserId ?? null;
+  if (submitterUserId === userId) {
+    const node = await gateNodeData(gate.flowId, gate.nodeId);
+    if (
+      adapter?.selfApprovalPolicy === "forbidden" ||
+      !node ||
+      node.preventSelfApproval !== false
+    ) {
+      return { canAct: false, signatureRequired: gate.signatureRequired };
+    }
+  }
+  return { canAct: true, signatureRequired: gate.signatureRequired };
+}
+
 /** The gate node's authored GateData, for escalation targets. */
 async function gateNodeData(flowId: string, nodeId: string): Promise<GateData | null> {
   const [flow] = await db.select().from(schema.flows).where(eq(schema.flows.id, flowId));
@@ -233,6 +266,31 @@ export async function decideGate(args: {
       console.error(`[flows] gate ${gateId} submitter notification failed:`, e);
     }
 
+    // Release a fully-approved aggregate before executing its approve branch.
+    // This makes an authored post_document action consume an APPROVED record;
+    // the action can never use its flow context to bypass lifecycle controls.
+    let releasedBeforeActions = false;
+    if (
+      subject &&
+      outcome.resume === "approve" &&
+      adapter.releaseApproval &&
+      (await subjectOpenGateCount(gate.orgId, gate.subjectKind, gate.subjectId)) === 0
+    ) {
+      try {
+        await adapter.releaseApproval(gate.subjectId, "approved", ctx, {
+          comment: args.comment?.trim() || null,
+        });
+        releasedBeforeActions = true;
+      } catch (e) {
+        await finalizeRunStatus(
+          gate.runId,
+          true,
+          e instanceof Error ? e.message : String(e),
+        );
+        return { ok: true, resumed: outcome.resume, runStatus: "failed" };
+      }
+    }
+
     let hadFailure = false;
     let error: string | null = null;
     if (!subject) {
@@ -268,7 +326,10 @@ export async function decideGate(args: {
           await adapter.releaseApproval(gate.subjectId, "rejected", ctx, {
             comment: args.comment?.trim() || null,
           });
-        } else if ((await subjectOpenGateCount(gate.orgId, gate.subjectKind, gate.subjectId)) === 0) {
+        } else if (
+          !releasedBeforeActions &&
+          (await subjectOpenGateCount(gate.orgId, gate.subjectKind, gate.subjectId)) === 0
+        ) {
           await adapter.releaseApproval(gate.subjectId, "approved", ctx, {
             comment: args.comment?.trim() || null,
           });

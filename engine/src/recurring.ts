@@ -2,6 +2,7 @@ import { sql } from "drizzle-orm";
 import { db, withBypass, withOrg } from "./db.ts";
 import { add, sum } from "./money.ts";
 import { postDocument, type PostingDeps } from "./posting.ts";
+import { submitAndReleaseIfUngated } from "./flows/submit.ts";
 import { computeNextRunAt } from "./scripting.ts";
 
 /**
@@ -317,9 +318,19 @@ async function generateFromTemplate(
 
   let posted = false;
   if (autoPost) {
-    const deps = await controlDeps(orgId);
-    await postDocument(newId, deps);
-    posted = true;
+    if (!tpl.created_by) {
+      throw new Error("recurring template has no attributable creator");
+    }
+    const actorId = String(tpl.created_by);
+    const submission = await submitAndReleaseIfUngated(tpl.kind, newId, actorId);
+    if (submission.flowError) {
+      throw new Error(`approval could not be routed: ${submission.flowError}`);
+    }
+    if (!submission.gated) {
+      const deps = await controlDeps(orgId);
+      await postDocument(newId, deps);
+      posted = true;
+    }
   }
   return { documentId: newId, documentNumber, posted };
 }

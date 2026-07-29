@@ -10,6 +10,11 @@ import { persistLineTaxComponents } from '../../../lib/bills'
 import { segmentRegistry, validateExtraDims } from '../../../lib/segments'
 import { promoteCrmAccount } from '@openbooks/engine/src/crm.ts'
 import { subsidiaryFeatureEnabled } from '../../../lib/features'
+import { submitAndReleaseIfUngated } from '@openbooks/engine/src/flows/index.ts'
+import {
+  DocumentVoidError,
+  requestDocumentVoid,
+} from '@openbooks/engine/src/document-void.ts'
 
 /**
  * Shared GET / PATCH / convert handlers for the three order-cycle modules.
@@ -48,6 +53,8 @@ interface OrderPatchBody {
   extraDims?: Record<string, string | null>
   lines?: OrderLineInput[]
   status?: 'approved' | 'voided'
+  reason?: string
+  reversalDate?: string | null
 }
 
 /**
@@ -103,18 +110,69 @@ export function makePATCH(cfg: OrderHandlerConfig) {
             { status: 422 },
           )
         }
-        await db.execute(
-          sql`update documents set status = 'approved', updated_at = now(), updated_by = ${user.id}
-               where id = ${id} and org_id = ${user.orgId}`,
-        )
+        if (cfg.kind === 'sales_order') {
+          const hold = (await db.execute(sql`
+            select hold_reason
+              from customer_roles
+             where org_id = ${user.orgId} and party_id = ${d.party_id}
+               and is_active and is_on_hold
+             limit 1
+          `)) as unknown as { rows: { hold_reason: string | null }[] }
+          if (hold.rows[0]) {
+            return NextResponse.json(
+              {
+                error: `customer is on credit hold${hold.rows[0].hold_reason ? ` — ${hold.rows[0].hold_reason}` : ''}`,
+              },
+              { status: 422 },
+            )
+          }
+        }
+        const submission = await submitAndReleaseIfUngated(cfg.kind, id, user.id)
+        if (submission.flowError) {
+          return NextResponse.json(
+            { error: `approval could not be routed: ${submission.flowError}` },
+            { status: 422 },
+          )
+        }
+        if (submission.gated) {
+          const order = await loadOrder(id, user.orgId, cfg.kind)
+          return NextResponse.json(
+            { ...order, approvalPending: true, requestId: submission.runId },
+            { status: 202 },
+          )
+        }
       } else if (body.status === 'voided') {
         if (status === 'voided') {
           return NextResponse.json({ error: 'already voided' }, { status: 422 })
         }
-        await db.execute(
-          sql`update documents set status = 'voided', voided_at = now(), updated_at = now(), updated_by = ${user.id}
-               where id = ${id} and org_id = ${user.orgId}`,
-        )
+        if (status !== 'approved') {
+          return NextResponse.json(
+            { error: 'only an issued order can be voided; discard a draft instead' },
+            { status: 422 },
+          )
+        }
+        try {
+          const result = await requestDocumentVoid({
+            documentId: id,
+            orgId: user.orgId,
+            actorId: user.id,
+            reason: body.reason ?? '',
+            reversalDate: body.reversalDate,
+            source: 'ui',
+          })
+          if (result.status === 'pending_approval') {
+            const order = await loadOrder(id, user.orgId, cfg.kind)
+            return NextResponse.json(
+              { ...order, voidPending: true, requestId: result.runId },
+              { status: 202 },
+            )
+          }
+        } catch (error) {
+          if (error instanceof DocumentVoidError) {
+            return NextResponse.json({ error: error.message }, { status: 422 })
+          }
+          throw error
+        }
       }
       const order = await loadOrder(id, user.orgId, cfg.kind)
       return NextResponse.json(order)

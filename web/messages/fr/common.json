@@ -15,6 +15,7 @@
     "running": "Exécution…",
     "add": "Ajouter",
     "remove": "Retirer",
+    "retire": "Mettre hors service",
     "search": "Rechercher",
     "clear": "Effacer",
     "apply": "Appliquer",
@@ -242,6 +243,7 @@
       "delete": "Supprimé",
       "post": "Comptabilisé",
       "void": "Annulé",
+      "retired": "Mis hors service",
       "approve": "Approuvé",
       "reject": "Rejeté"
     }
@@ -249,14 +251,19 @@
   "amendment": {
     "title": "Justifier la modification du document comptabilisé",
     "deleteTitle": "Justifier la suppression du document comptabilisé",
+    "voidTitle": "Annuler cette transaction ?",
+    "correctionCreated": "Brouillon de correction créé",
     "reason": "Motif de la modification",
     "placeholder": "Décrivez ce qui a changé et pourquoi",
-    "deletePlaceholder": "Expliquez pourquoi la suppression de l’écriture comptabilisée est nécessaire"
+    "deletePlaceholder": "Expliquez pourquoi la suppression de l’écriture comptabilisée est nécessaire",
+    "voidPlaceholder": "Expliquez pourquoi la transaction doit être contrepassée"
   },
   "approvalFlow": {
     "pendingWith": "En attente de {names}",
     "rejectTitle": "Rejeter ce document ?",
     "rejectReasonLabel": "Motif du rejet",
+    "signTitle": "Signer cette approbation",
+    "signLabel": "Saisissez votre nom comme attestation d’approbation",
     "waitingOthers": "Enregistré — en attente des autres approbateurs",
     "alreadyDecided": "Cette approbation a déjà été traitée — actualisation",
     "decisionFailed": "Échec de la décision",

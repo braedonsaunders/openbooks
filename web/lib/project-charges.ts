@@ -2,6 +2,7 @@ import 'server-only'
 import { sql } from 'drizzle-orm'
 import { db, inDbTransaction } from '@openbooks/engine/src/db.ts'
 import { postDocument } from '@openbooks/engine/src/posting.ts'
+import { submitAndReleaseIfUngated } from '@openbooks/engine/src/flows/index.ts'
 import { cmp, divRate, isZero, mul, sum } from '@openbooks/engine/src/money.ts'
 import { nextDocumentNumber } from './bills'
 import { controlDeps } from './documents'
@@ -60,7 +61,7 @@ export async function createProjectCharge(
   userId: string,
   input: ChargeInput,
   opts: { post?: boolean } = { post: true },
-): Promise<{ id: string; documentNumber: string }> {
+): Promise<{ id: string; documentNumber: string; approvalPending: boolean }> {
   if (!(await isFeatureEnabled(orgId, 'projects'))) throw new ChargeError('Projects feature is disabled')
   if (!input.lines?.length) throw new ChargeError('A charge needs at least one line')
 
@@ -159,14 +160,19 @@ export async function createProjectCharge(
     return { id: docId, documentNumber, totalCost: subtotal }
   })
 
+  let approvalPending = false
+  if (opts.post !== false) {
+    const submission = await submitAndReleaseIfUngated('project_charge', created.id, userId)
+    if (submission.flowError) {
+      throw new ChargeError(`approval could not be routed: ${submission.flowError}`)
+    }
+    approvalPending = submission.gated
+  }
+
   // Post outside the create transaction (postDocument runs on the shared pool).
-  if (opts.post !== false && !isZero(created.totalCost)) {
+  if (opts.post !== false && !approvalPending && !isZero(created.totalCost)) {
     const deps = await controlDeps(orgId)
     await postDocument(created.id, deps)
-  } else if (opts.post !== false) {
-    // A zero-cost, positive-bill charge is deliberately non-posting. It is
-    // approved for T&M billing without fabricating zero-value journal lines.
-    await db.execute(sql`update documents set status = 'approved', updated_by = ${userId} where id = ${created.id}`)
   }
-  return { id: created.id, documentNumber: created.documentNumber }
+  return { id: created.id, documentNumber: created.documentNumber, approvalPending }
 }

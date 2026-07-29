@@ -234,10 +234,29 @@ export async function executeFlowPlan(
       }
 
       case "post_document": {
-        // Break the static import cycle (posting.ts dispatches flows).
-        const { postDocument } = await import("../posting.ts");
-        const deps = await postingDeps(ctx.orgId);
-        const entryId = await postDocument(subjectId, deps);
+        let entryId: string;
+        if (
+          adapter.subjectKind === "vendor_payment" ||
+          adapter.subjectKind === "customer_payment"
+        ) {
+          // Payment posting is a larger accounting unit than its GL entry:
+          // applications, realized FX and provenance links must commit with it.
+          const { postPaymentWithApplications } = await import("../payments.ts");
+          entryId = (
+            await postPaymentWithApplications(
+              subjectId,
+              undefined,
+              ctx.userId ?? undefined,
+            )
+          ).entryId;
+        } else {
+          // Break the static import cycle (posting.ts dispatches flows).
+          const { postDocument } = await import("../posting.ts");
+          const deps = await postingDeps(ctx.orgId);
+          entryId = await postDocument(subjectId, deps, {
+            audit: { actorId: ctx.userId ?? null, source: "flows" },
+          });
+        }
         Object.defineProperty(values, "status", {
           value: "posted",
           configurable: true,

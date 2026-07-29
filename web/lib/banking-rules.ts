@@ -2,6 +2,7 @@ import 'server-only'
 import { sql } from 'drizzle-orm'
 import { db, schema } from '@openbooks/engine/src/db.ts'
 import { postDocument } from '@openbooks/engine/src/posting.ts'
+import { submitAndReleaseIfUngated } from '@openbooks/engine/src/flows/index.ts'
 import { startReconciliation, createMatch } from '@openbooks/engine/src/banking.ts'
 import { controlDeps } from './documents'
 import { nextDocumentNumber } from './bills'
@@ -406,6 +407,15 @@ export async function createCategorizingJournal(
   ])
 
   const deps = await controlDeps(orgId)
+  const submission = await submitAndReleaseIfUngated('journal', doc!.id, userId)
+  if (submission.flowError) {
+    throw new Error(`approval could not be routed: ${submission.flowError}`)
+  }
+  if (submission.gated) {
+    throw new Error(
+      'the categorizing journal was submitted for approval; match it after approval',
+    )
+  }
   const entryId = await postDocument(doc!.id, deps)
 
   const jl = (await db.execute(sql`
