@@ -3,6 +3,10 @@
     "title": "Chart of Accounts",
     "description": "Natural-sign current balances (balance-sheet cumulative, P&L this fiscal year), rolled up through summary accounts.",
     "searchPlaceholder": "Search number or name…",
+    "newAccount": "New account",
+    "viewRegister": "View register",
+    "expand": "Expand account",
+    "collapse": "Collapse account",
     "badges": {
       "inactive": "inactive",
       "summary": "summary"
@@ -35,6 +39,10 @@
   },
   "drawer": {
     "saved": "Account saved",
+    "created": "Account created",
+    "newTitle": "New account",
+    "newDescription": "Create a posting or summary account. Opening balances must be entered through a balanced journal entry.",
+    "create": "Create account",
     "typeLocked": "The type cannot change after the account has ledger activity.",
     "parent": "Parent account",
     "currencyRestriction": "Currency restriction",
@@ -58,6 +66,7 @@
       "type_has_transactions": "The account type cannot change after ledger activity exists.",
       "invalid_parent": "Choose a valid parent account.",
       "parent_must_be_summary": "The parent must be a summary account.",
+      "parent_type_mismatch": "The parent and child must use the same account type.",
       "parent_cycle": "That parent would create a circular account hierarchy.",
       "summary_reconcilable_conflict": "A summary account cannot be reconcilable.",
       "summary_has_transactions": "An account with ledger activity cannot become a summary account.",
@@ -68,6 +77,8 @@
       "invalid_dimensions": "Choose valid required dimensions.",
       "invalid_custom_fields": "Review the custom field values.",
       "number_in_use": "That account number is already in use.",
+      "account_changed": "This account changed while you were editing it. Reopen it and try again.",
+      "invalid_idempotency_key": "The account request could not be safely retried.",
       "save_failed": "The account could not be saved."
     }
   },

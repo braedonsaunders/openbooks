@@ -1,6 +1,7 @@
 import { getMoneyFormatter } from '@/lib/money-server'
 import Link from 'next/link'
 import { getTranslations } from 'next-intl/server'
+import { BookOpenText } from 'lucide-react'
 import { Badge, PageHeader, Table, TableBody, TableCell, TableHead, TableHeader, TableRow, cn } from '@openbooks/ui'
 import { ListPageLayout } from '../../../components/page-layout'
 import { SearchInput } from '../../../components/search-input'
@@ -18,6 +19,9 @@ import { db } from '@openbooks/engine/src/db.ts'
 import { segmentRegistry } from '../../../lib/segments'
 import { subsidiaryFeatureEnabled } from '../../../lib/features'
 import { AccountRegisterLink } from '../../../components/account-register-link'
+import { NewAccountButton } from './NewAccountButton'
+import { AccountsHierarchyTable, type HierarchyAccountGroup } from './AccountsHierarchyTable'
+import { accountParentPath, orderAccountHierarchy } from '../../../lib/account-hierarchy'
 
 export const dynamic = 'force-dynamic'
 
@@ -50,6 +54,7 @@ const CLASS_OF: Record<string, string> = {
 }
 // statement class → message key under accounts.classes.* (unknown values render verbatim).
 const CLASS_KEYS: Record<string, string> = { asset: 'asset', liability: 'liability', equity: 'equity', income: 'income', expense: 'expense' }
+const CLASS_ORDER = ['asset', 'liability', 'equity', 'income', 'expense'] as const
 const FLAT_PER_PAGE = 50
 
 export default async function Accounts({
@@ -68,26 +73,23 @@ export default async function Accounts({
   const cls = pickString(sp.class)
   const showInactive = pickString(sp.showInactive) === 'true'
   const accountId = pickString(sp.account)
-  const filtering = !!q || !!cls
+  const canManageAccounts = can(authz, 'gl.manage')
+  const creating = pickString(sp.accountNew) === '1' && canManageAccounts
 
   const accounts = await accountsWithBalances(authz.user.orgId)
   const visibleAccounts = showInactive ? accounts : accounts.filter((account) => account.is_active)
 
   // roll balances up through summary parents (needed in both modes)
   const byId = new Map(accounts.map((a) => [a.id, a]))
-  const visibleById = new Map(visibleAccounts.map((a) => [a.id, a]))
   const rolled = new Map<string, number>(accounts.map((a) => [a.id, Number(a.balance)]))
   for (const a of accounts) {
     let p = a.parent_id
-    while (p) {
+    const visited = new Set<string>()
+    while (p && !visited.has(p)) {
+      visited.add(p)
       rolled.set(p, (rolled.get(p) ?? 0) + Number(a.balance))
       p = byId.get(p)?.parent_id ?? null
     }
-  }
-  const depth = (a: (typeof accounts)[number]) => {
-    let d = 0, p = a.parent_id
-    while (p && visibleById.has(p)) { d++; p = visibleById.get(p)?.parent_id ?? null }
-    return Math.min(d, 2)
   }
 
   const classCounts = Object.entries(
@@ -100,10 +102,10 @@ export default async function Accounts({
 
   const [openAccount, drawerOptions, subsidiaryUiEnabled] = await Promise.all([
     accountId && isUuid(accountId) ? loadAccount(accountId, authz.user.orgId) : null,
-    accountId
+    accountId || creating
       ? Promise.all([
           db.execute(sql`
-            select id, number, name from accounts
+            select id, number, name, type from accounts
              where org_id = ${authz.user.orgId} and is_summary
              order by number nulls last, name
           `) as any,
@@ -119,22 +121,47 @@ export default async function Accounts({
       : null,
     subsidiaryFeatureEnabled(authz.user.orgId),
   ])
-  const closeHref = mergeHref('/accounts', sp, { account: undefined })
-  const drawer = openAccount && drawerOptions ? (
+  const closeHref = mergeHref('/accounts', sp, { account: undefined, accountNew: undefined })
+  const drawerPayload = creating ? {
+    account: {
+      id: '',
+      number: '',
+      name: '',
+      type: 'expense',
+      description: '',
+      parent_id: null,
+      is_summary: false,
+      is_active: true,
+      currency_restriction: null,
+      eliminate: false,
+      subsidiary_id: null,
+      subsidiary_include_children: true,
+      reconcilable: false,
+      required_dimensions: [],
+      custom: {},
+    },
+    parentName: null,
+    subsidiaryName: null,
+    hasTransactions: false,
+    childCount: 0,
+    activeChildCount: 0,
+  } : openAccount
+  const drawer = drawerPayload && drawerOptions ? (
     <AccountDrawer
-      key={String(openAccount.account.id)}
-      payload={openAccount}
+      key={creating ? 'new-account' : String(drawerPayload.account.id)}
+      payload={drawerPayload}
       parents={drawerOptions[0].rows
-        .filter((option: any) => option.id !== openAccount.account.id)
-        .map((option: any) => ({ value: option.id, label: `${option.number ?? ''} ${option.name}`.trim() }))}
+        .filter((option: any) => option.id !== drawerPayload.account.id)
+        .map((option: any) => ({ value: option.id, label: `${option.number ?? ''} ${option.name}`.trim(), type: option.type }))}
       currencies={drawerOptions[1].rows.map((option: any) => ({ value: option.code, label: `${option.code} · ${option.name}` }))}
       subsidiaries={(subsidiaryUiEnabled ? drawerOptions[2].rows : []).map((option: any) => ({ value: option.id, label: option.name }))}
       fieldDefs={drawerOptions[3] as any}
       segments={(drawerOptions[4] as Awaited<ReturnType<typeof segmentRegistry>>)
         .filter((segment) => segment.allowAccountRequirement)
         .map((segment) => ({ key: segment.key, name: segment.name }))}
-      canManage={can(authz, 'gl.manage')}
+      canManage={canManageAccounts}
       closeHref={closeHref}
+      createMode={creating}
     />
   ) : null
 
@@ -143,6 +170,7 @@ export default async function Accounts({
       <PageHeader
         title={t('list.title')}
         description={t('list.description')}
+        actions={canManageAccounts ? <NewAccountButton currentParams={sp} label={t('list.newAccount')} /> : undefined}
       />
       <div className="flex flex-wrap items-center gap-2">
         <SearchInput placeholder={t('list.searchPlaceholder')} />
@@ -152,8 +180,8 @@ export default async function Accounts({
     </>
   )
 
-  // ---- filtered/searched → flat, paginated list ---------------------------
-  if (filtering) {
+  // ---- searched → flat, paginated results with hierarchy context ----------
+  if (q) {
     const matches = visibleAccounts
       .filter((a) => (!cls || CLASS_OF[a.type] === cls) && (!q || (a.number ?? '').toLowerCase().includes(q) || a.name.toLowerCase().includes(q)))
       .sort((a, b) => (a.number ?? '').localeCompare(b.number ?? ''))
@@ -163,11 +191,11 @@ export default async function Accounts({
       <ListPageLayout header={header}>
         <Table>
           <TableHeader>
-            <TableRow>
-              <TableHead className="w-24">{tc('labels.number')}</TableHead>
+            <TableRow noAnimate>
               <TableHead>{tc('labels.account')}</TableHead>
               <TableHead>{tc('labels.type')}</TableHead>
               <TableHead className="text-right">{tc('labels.balance')}</TableHead>
+              <TableHead className="w-14"><span className="sr-only">{tc('labels.actions')}</span></TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -175,18 +203,33 @@ export default async function Accounts({
               const bal = rolled.get(a.id) ?? 0
               return (
                 <TableRow key={a.id}>
-                  <TableCell className="font-mono text-xs">
-                    <AccountRegisterLink accountId={a.id} className="text-teal-700 hover:underline dark:text-teal-300">{a.number ?? tc('labels.notSet')}</AccountRegisterLink>
-                  </TableCell>
                   <TableCell>
-                    <Link href={mergeHref('/accounts', sp, { account: a.id }) as any} className={cn('hover:text-teal-700 dark:hover:text-teal-300', a.is_summary && 'font-semibold')}>
-                      {a.name}
-                    </Link>
-                    {!a.is_active ? <Badge variant="outline" className="ml-2">{t('list.badges.inactive')}</Badge> : null}
+                    <div className="flex min-w-0 items-start">
+                      <span className="mr-3 w-20 shrink-0 pt-0.5 font-mono text-xs text-slate-500 dark:text-slate-400">
+                        {a.number ?? tc('labels.notSet')}
+                      </span>
+                      <div className="min-w-0">
+                        <Link href={mergeHref('/accounts', sp, { account: a.id }) as any} className={cn('hover:text-teal-700 hover:underline dark:hover:text-teal-300', a.is_summary && 'font-semibold')}>
+                          {a.name}
+                        </Link>
+                        {!a.is_active ? <Badge variant="outline" className="ml-2">{t('list.badges.inactive')}</Badge> : null}
+                        {accountParentPath(a, byId) ? <p className="mt-0.5 truncate text-xs text-slate-400 dark:text-slate-500">{accountParentPath(a, byId)}</p> : null}
+                      </div>
+                    </div>
                   </TableCell>
                   <TableCell className="text-slate-500 dark:text-slate-400">{typeLabel(a.type)}</TableCell>
                   <TableCell className={cn('text-right tabular-nums', bal < 0 && 'text-red-600 dark:text-red-400')}>
-                    <AccountRegisterLink accountId={a.id} className="hover:underline">{money(bal)}</AccountRegisterLink>
+                    {money(bal)}
+                  </TableCell>
+                  <TableCell className="text-right">
+                    <AccountRegisterLink
+                      accountId={a.id}
+                      className="inline-flex h-8 w-8 items-center justify-center rounded-md text-slate-400 hover:bg-slate-100 hover:text-teal-700 dark:hover:bg-slate-800 dark:hover:text-teal-300"
+                      ariaLabel={`${t('list.viewRegister')}: ${a.number ?? ''} ${a.name}`.trim()}
+                      title={t('list.viewRegister')}
+                    >
+                      <BookOpenText size={15} />
+                    </AccountRegisterLink>
                   </TableCell>
                 </TableRow>
               )
@@ -201,63 +244,52 @@ export default async function Accounts({
     )
   }
 
-  // ---- default → the hierarchy tree, grouped by type ----------------------
-  const children = new Map<string | null, typeof visibleAccounts>()
-  for (const a of visibleAccounts) {
-    const visibleParent = a.parent_id && visibleById.has(a.parent_id) ? a.parent_id : null
-    if (!children.has(visibleParent)) children.set(visibleParent, [])
-    children.get(visibleParent)!.push(a)
-  }
-  const ordered: typeof visibleAccounts = []
-  const walk = (parent: string | null) => {
-    for (const a of children.get(parent) ?? []) { ordered.push(a); walk(a.id) }
-  }
-  walk(null)
-  let currentType = ''
+  // ---- default → five statement classes containing the account hierarchy --
+  const groups: HierarchyAccountGroup[] = CLASS_ORDER
+    .filter((classKey) => !cls || cls === classKey)
+    .map((classKey) => {
+      const { members: classAccounts, ordered, parentIds } = orderAccountHierarchy(visibleAccounts, classKey, CLASS_OF)
+      const classBalance = classAccounts.reduce((sum, account) => sum + Number(account.balance), 0)
+      return {
+        key: classKey,
+        label: t(`classes.${CLASS_KEYS[classKey]}`),
+        count: classAccounts.length,
+        balance: money(classBalance),
+        balanceNegative: classBalance < 0,
+        rows: ordered.map((account) => {
+          const balance = rolled.get(account.id) ?? 0
+          return {
+            id: account.id,
+            parentId: parentIds.get(account.id) ?? null,
+            number: account.number ?? tc('labels.notSet'),
+            name: account.name,
+            typeLabel: typeLabel(account.type),
+            isSummary: account.is_summary,
+            isActive: account.is_active,
+            balance: money(balance),
+            balanceNegative: balance < 0,
+            detailHref: mergeHref('/accounts', sp, { account: account.id, accountNew: undefined }),
+          }
+        }),
+      }
+    })
+    .filter((group) => group.count > 0)
 
   return (
     <ListPageLayout header={header}>
-      <Table>
-        <TableHeader>
-          <TableRow>
-            <TableHead className="w-24">{tc('labels.number')}</TableHead>
-            <TableHead>{tc('labels.account')}</TableHead>
-            <TableHead className="text-right">{tc('labels.balance')}</TableHead>
-          </TableRow>
-        </TableHeader>
-        <TableBody>
-          {ordered.map((a) => {
-            const bal = rolled.get(a.id) ?? 0
-            const showHeader = a.type !== currentType && (!a.parent_id || !visibleById.has(a.parent_id))
-            if (showHeader) currentType = a.type
-            const d = depth(a)
-            return [
-              showHeader ? (
-                <TableRow key={`${a.id}-h`}>
-                  <TableCell colSpan={3} className="bg-slate-50 text-xs font-semibold tracking-wide text-slate-600 uppercase dark:bg-slate-900 dark:text-slate-300">
-                    {typeLabel(a.type)}
-                  </TableCell>
-                </TableRow>
-              ) : null,
-              <TableRow key={a.id}>
-                <TableCell className="font-mono text-xs">
-                  <AccountRegisterLink accountId={a.id} className="text-teal-700 hover:underline dark:text-teal-300">{a.number ?? tc('labels.notSet')}</AccountRegisterLink>
-                </TableCell>
-                <TableCell className={cn(d === 1 && 'pl-8', d === 2 && 'pl-12')}>
-                  <Link href={mergeHref('/accounts', sp, { account: a.id }) as any} className={cn('hover:text-teal-700 dark:hover:text-teal-300', a.is_summary && 'font-semibold')}>
-                    {a.name}
-                  </Link>
-                  {!a.is_active ? <Badge variant="outline" className="ml-2">{t('list.badges.inactive')}</Badge> : null}
-                  {a.is_summary ? <Badge variant="secondary" className="ml-2">{t('list.badges.summary')}</Badge> : null}
-                </TableCell>
-                <TableCell className={cn('text-right tabular-nums', bal < 0 && 'text-red-600 dark:text-red-400')}>
-                  <AccountRegisterLink accountId={a.id} className="hover:underline">{money(bal)}</AccountRegisterLink>
-                </TableCell>
-              </TableRow>,
-            ]
-          })}
-        </TableBody>
-      </Table>
+      <AccountsHierarchyTable
+        groups={groups}
+        labels={{
+          account: tc('labels.account'),
+          type: tc('labels.type'),
+          balance: tc('labels.balance'),
+          actions: tc('labels.actions'),
+          inactive: t('list.badges.inactive'),
+          viewRegister: t('list.viewRegister'),
+          expand: t('list.expand'),
+          collapse: t('list.collapse'),
+        }}
+      />
       {drawer}
     </ListPageLayout>
   )
