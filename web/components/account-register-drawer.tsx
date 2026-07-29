@@ -19,6 +19,7 @@ import { DocTypeBadge } from './doc-type-badge'
 import { Pagination } from './pagination'
 import { TxnLink } from '../app/(app)/reports/TxnLink'
 import { accountRegisterCloseHref } from '../lib/account-register-navigation'
+import { AccountRegisterExportMenu } from './account-register-export-menu'
 
 interface RegisterResponse {
   account: { id: string; number: string | null; name: string; type: string }
@@ -106,6 +107,9 @@ export function AccountRegisterDrawer() {
       size="2xl"
       stacked={params.has('reportDrill') || params.has('account')}
       contextualReturn={false}
+      headerActions={ready ? (
+        <AccountRegisterExportMenu accountId={accountId!} from={from} to={to} />
+      ) : undefined}
     >
       {!ready ? (
         <div className="space-y-3">
