@@ -86,6 +86,7 @@ export function TransactionsTab({
         absorption={absorption}
         formOpen={chargeFormOpen}
         onFormOpenChange={onChargeFormOpenChange}
+        showKpis={false}
         showList={false}
       />
       <div className="space-y-2">

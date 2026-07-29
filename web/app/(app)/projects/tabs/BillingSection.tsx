@@ -28,6 +28,16 @@ export interface EffectiveInvoicingClient {
   source: { basis: string; backupRequired: string; backupType: string; template: string }
 }
 
+export interface BillableFieldTicketClient {
+  id: string
+  documentNumber: string
+  documentDate: string
+  periodStart: string
+  periodEnd: string
+  customerSigned: boolean
+  unbilledHours: string
+}
+
 export interface BillingRequestClient {
   id: string
   requestNumber: string
@@ -43,6 +53,7 @@ export interface BillingRequestClient {
   invoiceNumber: string | null
   invoiceStatus: string | null
   invoiceTotal: string | null
+  fieldTicketCount: number
 }
 
 const STATUS_VARIANT: Record<string, 'success' | 'secondary' | 'warning' | 'outline'> = {
@@ -58,6 +69,7 @@ export function BillingSection({
   projectId,
   unbilled,
   requests,
+  fieldTickets,
   invoicing,
   canManage,
   formOpen,
@@ -66,6 +78,7 @@ export function BillingSection({
   projectId: string
   unbilled: UnbilledClient
   requests: BillingRequestClient[]
+  fieldTickets: BillableFieldTicketClient[]
   invoicing: EffectiveInvoicingClient
   canManage: boolean
   /** Request-billing form is opened from the flyout Actions menu. */
@@ -88,14 +101,25 @@ export function BillingSection({
   const [customerPo, setCustomerPo] = useState('')
   const [backupRequired, setBackupRequired] = useState(invoicing.backupRequired)
   const [backupType, setBackupType] = useState(invoicing.backupType)
+  const [selectedFieldTicketIds, setSelectedFieldTicketIds] = useState<Set<string>>(new Set())
 
   // The project type constrains which backup formats are offered; fall back to the
   // full catalog if it didn't restrict them. 'none' is handled by the required toggle.
   const ALL_BACKUP_TYPES = ['costed_timesheets', 'timesheets_purchases', 'purchases', 'purchases_shop_time', 'quote_only']
   const allowed = invoicing.allowedBackupTypes.filter((b) => b !== 'none')
   const backupTypeOptions = allowed.length ? allowed : ALL_BACKUP_TYPES
-  const ALL_BASES = ['date_range', 'draw_amount', 'time_selection', 'milestone']
-  const basisOptions = invoicing.allowedBases.length ? invoicing.allowedBases : ALL_BASES
+  // Fail closed when setup resolves to no available basis (for example, the
+  // type only allows Field Tickets while that subordinate feature is off).
+  const basisOptions = invoicing.allowedBases
+
+  function toggleFieldTicket(id: string) {
+    setSelectedFieldTicketIds((current) => {
+      const next = new Set(current)
+      if (next.has(id)) next.delete(id)
+      else next.add(id)
+      return next
+    })
+  }
 
   if (invoicing.billingProcedure === 'application_for_payment') {
     return (
@@ -129,10 +153,12 @@ export function BillingSection({
         customerPo: customerPo || null,
         backupRequired,
         backupType: backupRequired ? backupType : 'none',
+        fieldTicketIds: basis === 'field_ticket' ? [...selectedFieldTicketIds] : [],
       }),
     })
     if (res.ok) {
       toast.success(t('requestCreated'))
+      setSelectedFieldTicketIds(new Set())
       onFormOpenChange(false)
       router.refresh()
     } else {
@@ -237,6 +263,61 @@ export function BillingSection({
                   </div>
                 </>
               ) : null}
+              {basis === 'field_ticket' ? (
+                <div className={`${field} sm:col-span-2 lg:col-span-4`}>
+                  <div className="flex items-end justify-between gap-4">
+                    <div>
+                      <Label>{t('fieldTickets')}</Label>
+                      <p className="text-xs text-slate-500 dark:text-slate-400">{t('fieldTicketHint')}</p>
+                    </div>
+                    {fieldTickets.length > 0 ? (
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="ghost"
+                        onClick={() => setSelectedFieldTicketIds(
+                          selectedFieldTicketIds.size === fieldTickets.length
+                            ? new Set()
+                            : new Set(fieldTickets.map((ticket) => ticket.id)),
+                        )}
+                      >
+                        {selectedFieldTicketIds.size === fieldTickets.length
+                          ? tCommon('actions.clear')
+                          : t('selectAll')}
+                      </Button>
+                    ) : null}
+                  </div>
+                  {fieldTickets.length === 0 ? (
+                    <div className="rounded-md border border-dashed border-slate-300 p-4 text-sm text-slate-500 dark:border-slate-700 dark:text-slate-400">
+                      {t('noBillableFieldTickets')}
+                    </div>
+                  ) : (
+                    <div className="max-h-64 divide-y divide-slate-200 overflow-y-auto rounded-md border border-slate-200 dark:divide-slate-800 dark:border-slate-800">
+                      {fieldTickets.map((ticket) => (
+                        <label key={ticket.id} className="flex cursor-pointer items-center gap-3 px-3 py-2.5 hover:bg-slate-50 dark:hover:bg-slate-900/60">
+                          <input
+                            type="checkbox"
+                            checked={selectedFieldTicketIds.has(ticket.id)}
+                            onChange={() => toggleFieldTicket(ticket.id)}
+                            className="h-4 w-4 rounded border-slate-300 text-teal-600 focus:ring-teal-500"
+                          />
+                          <span className="min-w-0 flex-1">
+                            <span className="block font-mono text-sm font-semibold text-slate-900 dark:text-slate-100">
+                              {ticket.documentNumber}
+                            </span>
+                            <span className="block text-xs text-slate-500 dark:text-slate-400">
+                              {ticket.periodStart} – {ticket.periodEnd} · {Number(ticket.unbilledHours).toFixed(1)}h
+                            </span>
+                          </span>
+                          <Badge variant={ticket.customerSigned ? 'success' : 'outline'}>
+                            {ticket.customerSigned ? t('customerSigned') : t('customerUnsigned')}
+                          </Badge>
+                        </label>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              ) : null}
               <div className={`${field} lg:col-span-2`}>
                 <Label>{t('description')}</Label>
                 <Input value={invoiceDescription} onChange={(e) => setInvoiceDescription(e.target.value)} />
@@ -263,7 +344,19 @@ export function BillingSection({
                 </div>
               ) : null}
             </div>
-            <Button onClick={submit} disabled={busy}>
+            {basisOptions.length === 0 ? (
+              <p className="rounded-md border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800 dark:border-amber-900 dark:bg-amber-950/40 dark:text-amber-200">
+                {t('noAvailableBasis')}
+              </p>
+            ) : null}
+            <Button
+              onClick={submit}
+              disabled={
+                busy
+                || !basisOptions.includes(basis)
+                || (basis === 'field_ticket' && selectedFieldTicketIds.size === 0)
+              }
+            >
               {busy ? tCommon('actions.saving') : t('createRequest')}
             </Button>
           </CardContent>
@@ -281,7 +374,16 @@ export function BillingSection({
           columns={[
             { key: 'number', header: tCommon('labels.number'), cell: (r) => <span className="font-mono text-[13px] font-semibold">{r.requestNumber}</span>, search: (r) => r.requestNumber },
             { key: 'type', header: t('invoiceType'), cell: (r) => t(`type.${r.invoiceType}`) },
-            { key: 'basis', header: t('basis'), cell: (r) => <span className="text-slate-600 dark:text-slate-300">{t(`basisOpt.${r.basis}`)}</span> },
+            {
+              key: 'basis',
+              header: t('basis'),
+              cell: (r) => (
+                <span className="text-slate-600 dark:text-slate-300">
+                  {t(`basisOpt.${r.basis}`)}
+                  {r.basis === 'field_ticket' ? ` · ${t('ticketCount', { count: r.fieldTicketCount })}` : ''}
+                </span>
+              ),
+            },
             { key: 'backup', header: t('backupType'), cell: (r) => <span className="text-slate-600 dark:text-slate-300">{r.backupRequired ? t(`backup.${r.backupType}`) : '—'}</span> },
             { key: 'status', header: tCommon('labels.status'), cell: (r) => <Badge variant={STATUS_VARIANT[r.status] ?? 'secondary'}>{statusLabel(r.status)}</Badge> },
             {

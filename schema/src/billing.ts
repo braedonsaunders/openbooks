@@ -30,7 +30,7 @@ export const billingRequests = pgTable(
     invoiceType: text("invoice_type", { enum: ["progress", "final"] }).notNull().default("progress"),
     /** How the invoice lines are derived. */
     basis: text("basis", {
-      enum: ["date_range", "draw_amount", "time_selection", "milestone"],
+      enum: ["date_range", "draw_amount", "time_selection", "milestone", "field_ticket"],
     }).notNull().default("date_range"),
     drawAmount: money("draw_amount"),
     startDate: date("start_date"),
@@ -64,6 +64,36 @@ export const billingRequests = pgTable(
   (t) => [
     index("billing_requests_project").on(t.orgId, t.projectId, t.status),
     uniqueIndex("billing_requests_org_number").on(t.orgId, t.requestNumber),
+  ],
+);
+
+/**
+ * Immutable Field Ticket selections captured by a billing request.
+ *
+ * A request is a workflow record rather than a document, so this relationship
+ * does not belong in document_links. Once the request generates an invoice,
+ * document_links records the separate Field Ticket → invoice business edge.
+ */
+export const billingRequestFieldTickets = pgTable(
+  "billing_request_field_tickets",
+  {
+    id: id(),
+    orgId: orgRef(),
+    billingRequestId: uuid("billing_request_id").notNull(),
+    fieldTicketId: uuid("field_ticket_id").notNull(),
+    selectionSource: text("selection_source", {
+      enum: ["request_creation", "legacy_json_migration", "validation_replay"],
+    }).notNull().default("request_creation"),
+    selectedAt: timestamp("selected_at", { withTimezone: true }).notNull().defaultNow(),
+    selectedBy: uuid("selected_by"),
+  },
+  (t) => [
+    uniqueIndex("billing_request_field_tickets_request_ticket").on(
+      t.orgId,
+      t.billingRequestId,
+      t.fieldTicketId,
+    ),
+    index("billing_request_field_tickets_ticket").on(t.orgId, t.fieldTicketId),
   ],
 );
 

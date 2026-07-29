@@ -22,7 +22,7 @@ export default async function SignFieldTicketPage({ params }: { params: Promise<
       if (!(await validateSigningRequest(token, verified, { allowResponded: true }))) {
         throw new Error('Signing request is not valid')
       }
-      return loadFieldTicket(verified.orgId, verified.ticketId)
+      return loadFieldTicket(verified.orgId, verified.ticketId, { includeRelated: false })
     })
   } catch {
     notFound()

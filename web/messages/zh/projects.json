@@ -53,6 +53,14 @@
     "invoice": "发票",
     "createInvoice": "创建发票",
     "downloadBackup": "下载单据",
+    "fieldTickets": "现场工单",
+    "fieldTicketHint": "选择其工时和关联费用应计入此发票的已批准现场工单。",
+    "noBillableFieldTickets": "没有可开票的已批准现场工单。",
+    "noAvailableBasis": "当前没有可用的计费基准。请检查项目类型和公司设置 → 功能。",
+    "customerSigned": "客户已签字",
+    "customerUnsigned": "无客户签字",
+    "selectAll": "全选",
+    "ticketCount": "{count} 张工单",
     "type": {
       "progress": "进度款",
       "final": "结算款"
@@ -61,7 +69,8 @@
       "date_range": "日期范围",
       "draw_amount": "支取金额",
       "time_selection": "工时选择",
-      "milestone": "里程碑"
+      "milestone": "里程碑",
+      "field_ticket": "现场工单"
     },
     "backup": {
       "none": "无",

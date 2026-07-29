@@ -13,11 +13,19 @@ const GOLD=Number(process.argv.find(a=>a.startsWith("--golden="))?.split("=")[1]
   const ids=t.rows.map((x:any)=>x.id);
   const te:any=await db.execute(sql`select count(*)::int n, coalesce(sum(hours),0)::text h, coalesce(sum(hours*coalesce(bill_rate,0)),0)::text v from time_entries where org_id=${O} and field_ticket_id = any(${`{${ids.join(",")}}`}::uuid[])`);
   console.log("labor on these tickets:", JSON.stringify(te.rows[0]));
-  const actor=((await db.execute(sql`select id from users where org_id=${O} order by created_at limit 1`)) as any).rows[0].id;
-  const rid=randomUUID();
-  await db.execute(sql`insert into billing_requests (id,org_id,project_id,request_number,invoice_type,basis,status,invoice_description,custom,created_by)
-    values (${rid},${O},${pid},${"FT-"+randomUUID().slice(0,6)},'progress','field_ticket','open','Field-ticket basis test',${JSON.stringify({fieldTicketIds:ids})}::jsonb,${actor})`);
-  const out=await generateInvoiceFromBillingRequest(O,actor,rid);
+	  const actor=((await db.execute(sql`select id from users where org_id=${O} order by created_at limit 1`)) as any).rows[0].id;
+	  const rid=randomUUID();
+	  await db.transaction(async (tx) => {
+	    await tx.execute(sql`insert into billing_requests (id,org_id,project_id,request_number,invoice_type,basis,status,invoice_description,custom,created_by)
+	      values (${rid},${O},${pid},${"FT-"+randomUUID().slice(0,6)},'progress','field_ticket','open','Field-ticket basis test','{}'::jsonb,${actor})`);
+	    await tx.execute(sql`
+	      insert into billing_request_field_tickets (
+	        org_id, billing_request_id, field_ticket_id, selection_source, selected_by
+	      )
+	      select ${O}, ${rid}, ticket_id, 'validation_replay', ${actor}
+	        from unnest(${`{${ids.join(",")}}`}::uuid[]) ticket_id`);
+	  });
+	  const out=await generateInvoiceFromBillingRequest(O,actor,rid);
   const d:any=await db.execute(sql`select subtotal::text s, (select count(*) from document_lines where document_id=${out.id})::int n from documents where id=${out.id}`);
   const sub=Number(d.rows[0].s);
   console.log(`replay invoice: $${sub.toFixed(2)} across ${d.rows[0].n} lines`);

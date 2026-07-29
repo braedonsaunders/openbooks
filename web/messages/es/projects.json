@@ -53,6 +53,14 @@
     "invoice": "Factura",
     "createInvoice": "Crear factura",
     "downloadBackup": "Descargar respaldo",
+    "fieldTickets": "Partes de campo",
+    "fieldTicketHint": "Seleccione los partes aprobados cuyo trabajo y cargos vinculados pertenecen a esta factura.",
+    "noBillableFieldTickets": "No hay partes de campo aprobados y pendientes de facturar.",
+    "noAvailableBasis": "No hay una base de facturación disponible. Revise el tipo de proyecto y Configuración de la empresa → Funciones.",
+    "customerSigned": "Firmado por el cliente",
+    "customerUnsigned": "Sin firma del cliente",
+    "selectAll": "Seleccionar todo",
+    "ticketCount": "{count, plural, one {# parte} other {# partes}}",
     "type": {
       "progress": "Progreso",
       "final": "Final"
@@ -61,7 +69,8 @@
       "date_range": "Rango de fechas",
       "draw_amount": "Monto de anticipo",
       "time_selection": "Selección de tiempo",
-      "milestone": "Hito"
+      "milestone": "Hito",
+      "field_ticket": "Partes de campo"
     },
     "backup": {
       "none": "Ninguno",

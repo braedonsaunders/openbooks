@@ -5,13 +5,19 @@ import { publishProjectFinancialProfileInTransaction } from '@openbooks/engine/s
 import { guardPermission } from '../../../../../lib/authz'
 import { isUuid } from '../../../../../lib/list-params'
 import { guardProjectsFeature } from '../../../../../lib/projects-gate'
+import { isFeatureEnabled } from '../../../../../lib/features'
 
 export const runtime = 'nodejs'
 
 function validateInvoicingProfile(profile: any, billingMethod: unknown): string | null {
+  const validBases = new Set(['date_range', 'draw_amount', 'time_selection', 'milestone', 'field_ticket'])
   const procedure = profile?.billingProcedure ?? 'standard'
   if (!['standard', 'application_for_payment'].includes(procedure)) return 'Invalid billing procedure'
   if (!Array.isArray(profile?.allowedBases) || profile.allowedBases.length === 0) return 'At least one billing basis is required'
+  if (profile.allowedBases.some((basis: unknown) => typeof basis !== 'string' || !validBases.has(basis))) {
+    return 'Invalid billing basis'
+  }
+  if (new Set(profile.allowedBases).size !== profile.allowedBases.length) return 'Billing bases must be unique'
   if (!profile.allowedBases.includes(profile.defaultBasis)) return 'Default billing basis must be allowed'
   if (procedure === 'application_for_payment') {
     if (billingMethod !== 'fixed_price') return 'Applications for payment require the fixed-price compatibility classifier'
@@ -42,6 +48,15 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: 'Missing profile' }, { status: 422 })
   const profileError = validateInvoicingProfile(b.invoicingProfile, b.billingMethod)
   if (profileError) return NextResponse.json({ error: profileError }, { status: 422 })
+  if (
+    b.invoicingProfile.allowedBases.includes('field_ticket')
+    && !(await isFeatureEnabled(orgId, 'fieldTickets'))
+  ) {
+    return NextResponse.json(
+      { error: 'Enable Field Tickets in Company Settings → Features before adding Field Ticket billing' },
+      { status: 422 },
+    )
+  }
   try {
     const id = await db.transaction(async (tx) => {
       const r = (await tx.execute(sql`
@@ -88,6 +103,9 @@ export async function PATCH(req: Request) {
     const profileError = validateInvoicingProfile(b.invoicingProfile, b.billingMethod)
     if (profileError) return NextResponse.json({ error: profileError }, { status: 422 })
   }
+  const fieldTicketsEnabled = b.invoicingProfile
+    ? await isFeatureEnabled(orgId, 'fieldTickets')
+    : false
   const sets = [
     sql`name = ${String(b.name ?? '').trim()}`,
     sql`description = ${b.description ?? null}`,
@@ -121,6 +139,14 @@ export async function PATCH(req: Request) {
          for update of pt
       `)) as unknown as { rows: (Record<string, unknown> & { financial_profile: unknown })[] }
       if (!before.rows[0]) return false
+      const beforeInvoicing = before.rows[0].invoicing_profile as { allowedBases?: string[] } | null
+      if (
+        b.invoicingProfile?.allowedBases?.includes('field_ticket')
+        && !fieldTicketsEnabled
+        && !beforeInvoicing?.allowedBases?.includes('field_ticket')
+      ) {
+        throw new Error('Enable Field Tickets in Company Settings → Features before adding Field Ticket billing')
+      }
 
       let financialVersion: { id: string; effectiveFrom: string; effectiveTo: string | null } | null = null
       if (b.financialProfile) {

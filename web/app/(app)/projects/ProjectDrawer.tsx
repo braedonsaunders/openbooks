@@ -25,7 +25,13 @@ import { TransactionsTab } from './tabs/TransactionsTab'
 import { WorkBreakdownTab } from './tabs/WorkBreakdownTab'
 import { ScheduleTab } from './tabs/ScheduleTab'
 import type { ChargeRow, ChargeItemOption, ChargeEquipmentOption } from './tabs/ChargesSection'
-import { BillingSection, type BillingRequestClient, type UnbilledClient, type EffectiveInvoicingClient } from './tabs/BillingSection'
+import {
+  BillingSection,
+  type BillableFieldTicketClient,
+  type BillingRequestClient,
+  type UnbilledClient,
+  type EffectiveInvoicingClient,
+} from './tabs/BillingSection'
 import { formatMoney } from '@openbooks/engine/src/money.ts'
 import { useMoney } from '@/components/money-provider'
 import { ReadOnlyValue } from '../../../components/read-only-value'
@@ -64,6 +70,7 @@ export interface ProjectCockpitData {
   time: CostTimeData
   unbilled: UnbilledClient
   billingRequests: BillingRequestClient[]
+  billableFieldTickets: BillableFieldTicketClient[]
   /** Effective invoicing/backup defaults after the type←customer←project cascade. */
   invoicing: EffectiveInvoicingClient
   charges: ChargeRow[]
@@ -669,6 +676,7 @@ export function ProjectDrawer({
           projectId={pr.id}
           unbilled={cockpit.unbilled}
           requests={cockpit.billingRequests}
+          fieldTickets={cockpit.billableFieldTickets}
           invoicing={cockpit.invoicing}
           canManage={canManage}
           formOpen={billingFormOpen}

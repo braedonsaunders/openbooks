@@ -53,6 +53,14 @@
     "invoice": "Facture",
     "createInvoice": "Créer la facture",
     "downloadBackup": "Télécharger le justificatif",
+    "fieldTickets": "Fiches de chantier",
+    "fieldTicketHint": "Sélectionnez les fiches approuvées dont le travail et les frais liés doivent figurer sur cette facture.",
+    "noBillableFieldTickets": "Aucune fiche de chantier approuvée et non facturée n’est disponible.",
+    "noAvailableBasis": "Aucune base de facturation n’est disponible. Vérifiez le type de projet et Paramètres de l’entreprise → Fonctionnalités.",
+    "customerSigned": "Signé par le client",
+    "customerUnsigned": "Sans signature client",
+    "selectAll": "Tout sélectionner",
+    "ticketCount": "{count, plural, one {# fiche} other {# fiches}}",
     "type": {
       "progress": "Progression",
       "final": "Finale"
@@ -61,7 +69,8 @@
       "date_range": "Plage de dates",
       "draw_amount": "Montant du tirage",
       "time_selection": "Sélection de temps",
-      "milestone": "Jalon"
+      "milestone": "Jalon",
+      "field_ticket": "Fiches de chantier"
     },
     "backup": {
       "none": "Aucun",

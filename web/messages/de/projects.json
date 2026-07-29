@@ -53,6 +53,14 @@
     "invoice": "Ausgangsrechnung",
     "createInvoice": "Ausgangsrechnung erstellen",
     "downloadBackup": "Nachweis herunterladen",
+    "fieldTickets": "Baustellenberichte",
+    "fieldTicketHint": "Wählen Sie die genehmigten Berichte aus, deren Arbeit und verknüpfte Kosten auf diese Rechnung gehören.",
+    "noBillableFieldTickets": "Keine genehmigten, noch nicht abgerechneten Baustellenberichte verfügbar.",
+    "noAvailableBasis": "Derzeit ist keine Abrechnungsbasis verfügbar. Prüfen Sie Projekttyp und Unternehmenseinstellungen → Funktionen.",
+    "customerSigned": "Vom Kunden unterschrieben",
+    "customerUnsigned": "Keine Kundenunterschrift",
+    "selectAll": "Alle auswählen",
+    "ticketCount": "{count, plural, one {# Bericht} other {# Berichte}}",
     "type": {
       "progress": "Teilabrechnung",
       "final": "Schlussabrechnung"
@@ -61,7 +69,8 @@
       "date_range": "Datumsbereich",
       "draw_amount": "Abrufbetrag",
       "time_selection": "Zeitauswahl",
-      "milestone": "Meilenstein"
+      "milestone": "Meilenstein",
+      "field_ticket": "Baustellenberichte"
     },
     "backup": {
       "none": "Keiner",

@@ -244,7 +244,7 @@ export async function loadPdfRecordValues(
 async function loadFieldTicketValues(orgId: string, id: string): Promise<PdfRecordValues | null> {
   let ticket: Awaited<ReturnType<typeof loadFieldTicket>>
   try {
-    ticket = await loadFieldTicket(orgId, id)
+    ticket = await loadFieldTicket(orgId, id, { includeRelated: false })
   } catch {
     return null
   }

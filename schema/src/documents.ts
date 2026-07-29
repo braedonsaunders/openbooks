@@ -247,6 +247,12 @@ export const documentLinks = pgTable(
   (t) => [
     index("doc_links_from").on(t.fromDocumentId),
     index("doc_links_to").on(t.toDocumentId),
+    uniqueIndex("document_links_unique_edge").on(
+      t.orgId,
+      t.fromDocumentId,
+      t.toDocumentId,
+      t.linkType,
+    ),
   ],
 );
 

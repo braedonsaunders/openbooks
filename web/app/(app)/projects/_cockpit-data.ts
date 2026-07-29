@@ -4,8 +4,9 @@ import { recognitionAccounts } from '@openbooks/engine/src/project-recognition.t
 import { projectTimeSummary, projectUnbilled } from '../../../lib/project-costing'
 import { resolveProjectFinancials } from '../../../lib/project-financials'
 import { loadProjectType } from '../../../lib/project-type'
-import { listBillingRequests } from '../../../lib/billing-requests'
+import { listBillableFieldTickets, listBillingRequests } from '../../../lib/billing-requests'
 import { resolveInvoicingPreference } from '../../../lib/invoicing-preference'
+import { isFeatureEnabled } from '../../../lib/features'
 import type { ProjectCockpitData } from './ProjectDrawer'
 import { formatMoney, mulPercent, sum } from '@openbooks/engine/src/money.ts'
 
@@ -15,12 +16,16 @@ import { formatMoney, mulPercent, sum } from '@openbooks/engine/src/money.ts'
  * definitions + layout, and resolveProjectFinancials computes the measures.
  */
 export async function loadProjectCockpit(orgId: string, projectId: string): Promise<ProjectCockpitData> {
-  const projectType = await loadProjectType(orgId, projectId)
-  const [financials, time, unbilled, billingRequests, invoicing, chargeRes, itemRes, equipmentRes, recognizedRes, glRangeRes] = await Promise.all([
+  const [projectType, fieldTicketsEnabled] = await Promise.all([
+    loadProjectType(orgId, projectId),
+    isFeatureEnabled(orgId, 'fieldTickets'),
+  ])
+  const [financials, time, unbilled, billingRequests, billableFieldTickets, invoicing, chargeRes, itemRes, equipmentRes, recognizedRes, glRangeRes] = await Promise.all([
     resolveProjectFinancials(orgId, projectId, projectType.financialProfile),
     projectTimeSummary(orgId, projectId),
     projectUnbilled(orgId, projectId),
     listBillingRequests(orgId, projectId),
+    fieldTicketsEnabled ? listBillableFieldTickets(orgId, projectId) : Promise.resolve([]),
     resolveInvoicingPreference(orgId, projectId),
     db.execute(sql`
       select d.id, d.document_number as "documentNumber", d.document_date as "documentDate", d.status,
@@ -101,10 +106,13 @@ export async function loadProjectCockpit(orgId: string, projectId: string): Prom
     time,
     unbilled,
     billingRequests: billingRequests as ProjectCockpitData['billingRequests'],
+    billableFieldTickets: billableFieldTickets as ProjectCockpitData['billableFieldTickets'],
     invoicing: {
       billingProcedure: invoicing.billingProcedure,
-      allowedBases: invoicing.allowedBases,
-      defaultBasis: invoicing.defaultBasis,
+      allowedBases: invoicing.allowedBases.filter((basis) => basis !== 'field_ticket' || fieldTicketsEnabled),
+      defaultBasis: invoicing.defaultBasis === 'field_ticket' && !fieldTicketsEnabled
+        ? invoicing.allowedBases.find((basis) => basis !== 'field_ticket') ?? 'date_range'
+        : invoicing.defaultBasis,
       backupRequired: invoicing.backupRequired,
       backupType: invoicing.backupType,
       allowedBackupTypes: invoicing.allowedBackupTypes,

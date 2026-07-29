@@ -141,7 +141,16 @@ function stableJson(value: unknown): string {
   return JSON.stringify(value) ?? 'undefined'
 }
 
-export function ProjectTypesWorkspace({ types, dimensions }: { types: ProjectTypeRow[]; dimensions: string[]; incomeAccounts: { id: string; number: string; name: string }[] }) {
+export function ProjectTypesWorkspace({
+  types,
+  dimensions,
+  fieldTicketsEnabled,
+}: {
+  types: ProjectTypeRow[]
+  dimensions: string[]
+  incomeAccounts: { id: string; number: string; name: string }[]
+  fieldTicketsEnabled: boolean
+}) {
   const t = useTranslations('projectTypes')
   const tCommon = useTranslations('common')
   const tMeasures = useTranslations('projects.measures')
@@ -165,6 +174,7 @@ export function ProjectTypesWorkspace({ types, dimensions }: { types: ProjectTyp
   }
 
   const fp = draft.financialProfile, ip = draft.invoicingProfile, bp = draft.backupProfile
+  const availableBases = fieldTicketsEnabled ? BASES : BASES.filter((basis) => basis !== 'field_ticket')
   const financialChanged = draft.id !== 'new' && stableJson(fp) !== stableJson(selected?.financialProfile)
   const setFp = (patch: Partial<FinancialProfile>) => setDraft({ ...draft, financialProfile: { ...fp, ...patch } })
   const setIp = (patch: Partial<InvoicingProfile>) => setDraft({ ...draft, invoicingProfile: { ...ip, ...patch } })
@@ -413,8 +423,26 @@ export function ProjectTypesWorkspace({ types, dimensions }: { types: ProjectTyp
                 </div>
               ) : (
                 <>
-                  <div className="sm:col-span-2"><Chips label={t('allowedBases')} all={BASES} selected={ip.allowedBases} onToggle={(v) => setIp({ allowedBases: toggle(ip.allowedBases, v) })} /></div>
-                  <EnumField label={t('defaultBasis')} value={ip.defaultBasis} options={ip.allowedBases} onChange={(v) => setIp({ defaultBasis: v })} />
+                  <div className="space-y-1.5 sm:col-span-2">
+                    <Chips label={t('allowedBases')} all={availableBases} selected={ip.allowedBases} onToggle={(v) => setIp({ allowedBases: toggle(ip.allowedBases, v) })} />
+                    {!fieldTicketsEnabled ? (
+                      <p className="text-xs text-slate-500 dark:text-slate-400">
+                        {t('fieldTicketsDisabled')}{' '}
+                        <Link href="/admin/setup/features" className="text-teal-700 hover:underline dark:text-teal-300">
+                          {t('manageFeatures')}
+                        </Link>
+                      </p>
+                    ) : null}
+                  </div>
+                  <EnumField
+                    label={t('defaultBasis')}
+                    value={ip.defaultBasis}
+                    options={availableBases.includes(ip.defaultBasis)
+                      ? ip.allowedBases.filter((basis) => availableBases.includes(basis))
+                      : [ip.defaultBasis]}
+                    onChange={(v) => setIp({ defaultBasis: v })}
+                    disabled={!availableBases.includes(ip.defaultBasis)}
+                  />
                   <EnumField label={t('lineBuilder')} value={ip.lineBuilder} options={LINE_BUILDERS} onChange={(v) => setIp({ lineBuilder: v as any })} />
                 </>
               )}

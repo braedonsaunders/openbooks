@@ -38,7 +38,7 @@
     "createFailed": "Could not create the ticket"
   },
   "editor": {
-    "tabs": { "time": "Time", "items": "Items", "tasks": "Tasks" },
+    "tabs": { "time": "Time", "items": "Items", "tasks": "Tasks", "related": "Related" },
     "periodLocked": "Remove entered hours before changing the ticket period.",
     "back": "Field tickets",
     "submit": "Submit",
@@ -64,6 +64,19 @@
     "work": {
       "title": "Work summary",
       "hint": "Customer reference and a clear description of the work performed."
+    },
+    "related": {
+      "title": "Related records",
+      "hint": "Auditable links from this ticket to charges, billing requests, and invoices.",
+      "billingRequests": "Billing requests",
+      "noBillingRequests": "This ticket has not been selected for billing.",
+      "selectedOn": "Selected {date}",
+      "documents": "Linked transactions",
+      "noDocuments": "No linked transactions yet.",
+      "linkType": {
+        "created_from": "Created charge",
+        "bills": "Billed by"
+      }
     },
     "form": {
       "label": "Record form",

@@ -37,6 +37,7 @@ function timeKindOf(name: unknown): 'regular' | 'overtime' | 'double_time' | nul
 import { recognitionAccounts } from '@openbooks/engine/src/project-recognition.ts'
 import { loadProjectType } from './project-type'
 import { nextDocumentNumber } from './bills'
+import { featureEnabled, type FeatureState } from './features'
 
 /**
  * Project billing engine — turns a billing_request (a pre-invoice work order)
@@ -79,10 +80,11 @@ export async function generateInvoiceFromBillingRequest(
 ): Promise<GenerateResult> {
   return db.transaction(async (tx) => {
     const projectGate = (await tx.execute(sql`
-      select coalesce((settings->'features'->>'projects')::boolean, true) as enabled
+      select settings->'features' as features
         from orgs where id = ${orgId}
-    `)) as unknown as { rows: { enabled: boolean }[] }
-    if (!projectGate.rows[0]?.enabled) throw new BillingError('Projects feature is disabled')
+    `)) as unknown as { rows: { features: FeatureState | null }[] }
+    const featureState = projectGate.rows[0]?.features ?? {}
+    if (!featureEnabled(featureState, 'projects')) throw new BillingError('Projects feature is disabled')
     // Lock the request; only an open request can be invoiced.
     const reqRes = (await tx.execute(sql`
       select * from billing_requests where id = ${requestId} and org_id = ${orgId} for update
@@ -90,6 +92,22 @@ export async function generateInvoiceFromBillingRequest(
     const req = reqRes.rows[0]
     if (!req) throw new BillingError('Billing request not found')
     if (req.status !== 'open') throw new BillingError('This billing request has already been invoiced')
+    if (req.basis === 'field_ticket' && !featureEnabled(featureState, 'fieldTickets')) {
+      throw new BillingError('Field Ticket billing is disabled')
+    }
+    const selectedFieldTickets = req.basis === 'field_ticket'
+      ? (await tx.execute(sql`
+          select field_ticket_id as id
+            from billing_request_field_tickets
+           where org_id = ${orgId}
+             and billing_request_id = ${requestId}
+           order by selected_at, id
+        `)) as unknown as { rows: { id: string }[] }
+      : { rows: [] as { id: string }[] }
+    const selectedFieldTicketIds = selectedFieldTickets.rows.map((ticket) => ticket.id)
+    if (req.basis === 'field_ticket' && selectedFieldTicketIds.length === 0) {
+      throw new BillingError('The Field Ticket billing request has no selected tickets')
+    }
 
     const projRes = (await tx.execute(sql`
       select p.id, p.customer_id, p.customer_po_number, p.subsidiary_id, p.custom,
@@ -226,9 +244,10 @@ export async function generateInvoiceFromBillingRequest(
         req.basis === 'time_selection' && Array.isArray(req.selected_time_entry_ids)
           ? (req.selected_time_entry_ids as string[])
           : null
-      // A FINAL invoice closes the job: everything still unbilled goes on it, so
-      // the ticket and period windows are dropped for both labor and cost.
-      // Anything they would exclude would otherwise never be billed at all.
+      // A FINAL invoice without an explicit source selection closes the job and
+      // bills all remaining work. An explicit Field Ticket selection remains an
+      // immutable scope even on a final invoice; silently widening it would bill
+      // work the approver did not select.
       const isFinal = req.invoice_type === 'final'
       const dateFilter = sql.join(
         [
@@ -241,14 +260,9 @@ export async function generateInvoiceFromBillingRequest(
         selected && selected.length
           ? sql` and te.id = any(${`{${selected.join(',')}}`}::uuid[])`
           : sql``
-      // A field-ticket basis bills a SELECTION OF SIGNED CREW TICKETS as the unit
-      // of work — the crew's week, approved and signed by the customer — rather
-      // than an arbitrary date window. The tickets carry the labor; their span
-      // scopes the cost billed alongside it.
-      const ticketIds: string[] =
-        req.basis === 'field_ticket' && Array.isArray((req.custom ?? {}).fieldTicketIds)
-          ? ((req.custom as { fieldTicketIds: string[] }).fieldTicketIds ?? [])
-          : []
+      // Field Ticket selection is relational, immutable, tenant-scoped, and
+      // validated at request creation. It is the exact unit of work to invoice.
+      const ticketIds = selectedFieldTicketIds
       const ticketFilter = ticketIds.length
         ? sql` and te.field_ticket_id = any(${`{${ticketIds.join(',')}}`}::uuid[])`
         : sql``
@@ -264,7 +278,7 @@ export async function generateInvoiceFromBillingRequest(
          where te.org_id = ${orgId} and te.project_id = ${req.project_id}
            and te.status = 'approved' and te.is_billable
            and te.billing_status = 'unbilled'
-           ${isFinal ? sql`` : sql`${dateFilter}${ticketFilter}`}${selFilter}
+           ${isFinal && ticketIds.length === 0 ? sql`` : sql`${dateFilter}${ticketFilter}`}${selFilter}
          order by te.worked_on
       `)) as unknown as { rows: any[] }
 
@@ -299,9 +313,10 @@ export async function generateInvoiceFromBillingRequest(
       // Cost is billed for the SAME period as the labor. Without this a progress
       // invoice cut for one month would sweep in every later month's unbilled
       // materials, because only the time query honoured the request's range.
-      // On a field-ticket basis the cost billed alongside the labor is scoped by
-      // the selected tickets' own span, so a ticket's materials travel with it.
-      // Crews attach materials and equipment to the ticket they were consumed on,
+      // On a field-ticket basis, cost follows the explicit field_ticket_id on
+      // the charge line. Date-span inference is intentionally prohibited: it can
+      // pull unrelated materials into an invoice and cannot produce an auditable
+      // source-to-invoice reconciliation.
       // A request may name cost documents it bills — bills, expense reports or
       // orders explicitly chosen for this invoice. Those are always in scope: the
       // period and ticket windows exist to GUESS what was chosen, so they widen
@@ -310,19 +325,8 @@ export async function generateInvoiceFromBillingRequest(
         ? ((req.custom as { sourceDocumentIds: string[] }).sourceDocumentIds ?? [])
             .filter((id) => /^[0-9a-f-]{36}$/i.test(id))
         : []
-      const chosenDocuments = sourceDocumentIds.length
-        ? sql` and dl.document_id = any(${`{${sourceDocumentIds.join(',')}}`}::uuid[])`
-        : sql``
-
-      // so follow that link. Only fall back to the tickets' date span for lines
-      // that carry no ticket of their own, or a ticket's own costs would be lost.
-      const ticketSpan = isFinal ? sql`` : ticketIds.length
-        ? invoicing.ticketCostScope === 'ticket_or_period'
-          ? sql` and (dl.field_ticket_id = any(${`{${ticketIds.join(',')}}`}::uuid[])
-                or (dl.field_ticket_id is null and d.document_date between
-                      (select min(document_date) from documents where org_id = ${orgId} and id = any(${`{${ticketIds.join(',')}}`}::uuid[]))
-                  and (select max(document_date) from documents where org_id = ${orgId} and id = any(${`{${ticketIds.join(',')}}`}::uuid[]))))`
-          : sql` and dl.field_ticket_id = any(${`{${ticketIds.join(',')}}`}::uuid[])`
+      const ticketScope = ticketIds.length
+        ? sql` and dl.field_ticket_id = any(${`{${ticketIds.join(',')}}`}::uuid[])`
         : sql``
       const costDateFilter = sql.join(
         [
@@ -337,6 +341,11 @@ export async function generateInvoiceFromBillingRequest(
       const costKinds = invoicing.costSourceKinds?.length
         ? invoicing.costSourceKinds
         : ["vendor_bill", "expense_report", "card_charge", "check"]
+      const automaticCostScope = ticketIds.length
+        ? ticketScope
+        : isFinal
+          ? sql``
+          : costDateFilter
 
       const costRows = (await tx.execute(sql`
         select dl.id,
@@ -370,7 +379,7 @@ export async function generateInvoiceFromBillingRequest(
            -- dropped every consumable and equipment charge staged on an order.
            and (dl.is_billable or d.kind in ('sales_order', 'purchase_order'))
            and dl.billed_by_line_id is null
-           and ((true ${isFinal ? sql`` : costDateFilter}${ticketSpan}) ${sourceDocumentIds.length ? sql`or dl.document_id = any(${`{${sourceDocumentIds.join(',')}}`}::uuid[])` : sql``})
+           and ((true ${automaticCostScope}) ${sourceDocumentIds.length ? sql`or dl.document_id = any(${`{${sourceDocumentIds.join(',')}}`}::uuid[])` : sql``})
            and ((d.kind = 'project_charge' and d.status in ('approved','posted'))
              or (d.status in ('posted','approved') and d.kind = any(${`{${costKinds.join(",")}}`}::text[])))
       `)) as unknown as { rows: any[] }
@@ -677,6 +686,19 @@ export async function generateInvoiceFromBillingRequest(
       where id = ${invoiceId}
     `)
 
+    // Match the order-cycle architecture: preserve a document-level edge from
+    // every selected source ticket to the resulting customer invoice. Line-level
+    // provenance remains on time_entries/document_lines for exact reconciliation.
+    for (const fieldTicketId of selectedFieldTicketIds) {
+      await tx.execute(sql`
+        insert into document_links (
+          org_id, from_document_id, to_document_id, link_type, created_by
+        )
+        values (${orgId}, ${fieldTicketId}, ${invoiceId}, 'bills', ${userId})
+        on conflict (org_id, from_document_id, to_document_id, link_type) do nothing
+      `)
+    }
+
     // Advance milestone schedules consumed by this request.
     if (req.basis === 'milestone' || (invoicing.lineBuilder === 'milestone' && !billsActualWork)) {
       await tx.execute(sql`
@@ -688,6 +710,21 @@ export async function generateInvoiceFromBillingRequest(
     await tx.execute(sql`
       update billing_requests set status = 'invoiced', invoice_document_id = ${invoiceId}, updated_by = ${userId}
       where id = ${requestId}
+    `)
+    await tx.execute(sql`
+      insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
+      values (
+        ${orgId},
+        'billing_requests',
+        ${requestId},
+        'update',
+        ${JSON.stringify({
+          before: { status: 'open', invoiceDocumentId: null },
+          after: { status: 'invoiced', invoiceDocumentId: invoiceId },
+          fieldTicketIds: selectedFieldTicketIds,
+        })}::jsonb,
+        ${userId}
+      )
     `)
 
     return { id: invoiceId, documentNumber, kind: 'customer_invoice' }
