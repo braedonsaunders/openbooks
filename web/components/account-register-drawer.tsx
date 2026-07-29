@@ -20,6 +20,7 @@ import { Pagination } from './pagination'
 import { TxnLink } from '../app/(app)/reports/TxnLink'
 import { accountRegisterCloseHref } from '../lib/account-register-navigation'
 import { AccountRegisterExportMenu } from './account-register-export-menu'
+import { SearchInput } from './search-input'
 
 interface RegisterResponse {
   account: { id: string; number: string | null; name: string; type: string }
@@ -53,12 +54,13 @@ export function AccountRegisterDrawer() {
   const page = Math.max(1, Number(params.get('accountRegisterPage')) || 1)
   const from = params.get('accountRegisterFrom')
   const to = params.get('accountRegisterTo')
+  const registerSearch = params.get('accountRegisterQ')
   const query = params.toString()
   const [data, setData] = useState<RegisterResponse | null>(null)
   const [loadedKey, setLoadedKey] = useState<string | null>(null)
 
   const closeHref = useMemo(() => accountRegisterCloseHref(pathname, query), [pathname, query])
-  const requestKey = `${accountId ?? ''}:${page}:${from ?? ''}:${to ?? ''}`
+  const requestKey = `${accountId ?? ''}:${page}:${from ?? ''}:${to ?? ''}:${registerSearch ?? ''}`
 
   useEffect(() => {
     if (!accountId) {
@@ -67,12 +69,13 @@ export function AccountRegisterDrawer() {
       return
     }
     const controller = new AbortController()
-    const search = new URLSearchParams({ page: String(page) })
-    if (from) search.set('from', from)
-    if (to) search.set('to', to)
+    const requestParams = new URLSearchParams({ page: String(page) })
+    if (from) requestParams.set('from', from)
+    if (to) requestParams.set('to', to)
+    if (registerSearch) requestParams.set('q', registerSearch)
     setData(null)
     setLoadedKey(null)
-    fetch(`/api/accounts/${accountId}/register?${search}`, { signal: controller.signal })
+    fetch(`/api/accounts/${accountId}/register?${requestParams}`, { signal: controller.signal })
       .then(async (response) => {
         if (!response.ok) throw new Error(tc('feedback.loadFailed'))
         return response.json() as Promise<RegisterResponse>
@@ -87,7 +90,7 @@ export function AccountRegisterDrawer() {
         router.replace(closeHref as never, { scroll: false })
       })
     return () => controller.abort()
-  }, [accountId, closeHref, from, page, requestKey, router, tc, to])
+  }, [accountId, closeHref, from, page, registerSearch, requestKey, router, tc, to])
 
   const ready = data && loadedKey === requestKey
   const periodLabel = from || to ? `${from ?? ''} → ${to ?? ''}` : null
@@ -108,18 +111,25 @@ export function AccountRegisterDrawer() {
       stacked={params.has('reportDrill') || params.has('account')}
       contextualReturn={false}
       headerActions={ready ? (
-        <AccountRegisterExportMenu accountId={accountId!} from={from} to={to} />
+        <AccountRegisterExportMenu accountId={accountId!} from={from} to={to} search={registerSearch} />
       ) : undefined}
     >
-      {!ready ? (
-        <div className="space-y-3">
-          <Skeleton className="h-12 w-full" />
-          <Skeleton className="h-8 w-full" />
-          <Skeleton className="h-8 w-full" />
-          <Skeleton className="h-8 w-2/3" />
-        </div>
-      ) : (
-        <div className="space-y-3">
+      <div className="space-y-3">
+        <SearchInput
+          paramKey="accountRegisterQ"
+          pageParamKey="accountRegisterPage"
+          placeholder={tc('actions.search')}
+          className="max-w-md"
+        />
+        {!ready ? (
+          <div className="space-y-3">
+            <Skeleton className="h-12 w-full" />
+            <Skeleton className="h-8 w-full" />
+            <Skeleton className="h-8 w-full" />
+            <Skeleton className="h-8 w-2/3" />
+          </div>
+        ) : (
+          <div className="space-y-3">
           <Table>
             <TableHeader>
               <TableRow>
@@ -169,8 +179,9 @@ export function AccountRegisterDrawer() {
             perPage={data.perPage}
             pageParamKey="accountRegisterPage"
           />
-        </div>
-      )}
+          </div>
+        )}
+      </div>
     </UrlDrawer>
   )
 }

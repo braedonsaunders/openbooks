@@ -11,8 +11,9 @@ test('account register export href carries scope but never the visible page', ()
     accountRegisterExportHref('account/id', 'xlsx', {
       from: '2026-01-01',
       to: '2026-07-31',
+      search: 'vendor 50%',
     }),
-    '/api/accounts/account%2Fid/register?format=xlsx&from=2026-01-01&to=2026-07-31',
+    '/api/accounts/account%2Fid/register?format=xlsx&from=2026-01-01&to=2026-07-31&q=vendor+50%25',
   )
 })
 

@@ -54,11 +54,12 @@ export function accountRegisterDocTypeLabel(kind: string | null, t: Translator):
 export function accountRegisterExportHref(
   accountId: string,
   format: AccountRegisterExportFormat,
-  period: { from?: string | null; to?: string | null } = {},
+  period: { from?: string | null; to?: string | null; search?: string | null } = {},
 ): string {
   const query = new URLSearchParams({ format })
   if (period.from) query.set('from', period.from)
   if (period.to) query.set('to', period.to)
+  if (period.search) query.set('q', period.search)
   return `/api/accounts/${encodeURIComponent(accountId)}/register?${query}`
 }
 
