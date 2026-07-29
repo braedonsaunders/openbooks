@@ -18,6 +18,7 @@ import type { OrderKind } from '../lib/order-kinds'
 import { can, type Authz } from '../lib/authz'
 import { loadFieldDefs } from '../lib/custom-fields'
 import { resolveFormLayout } from '../lib/customization/resolve'
+import { loadFieldTicketDrawerData } from '../lib/field-ticket-drawer-data'
 import {
   DOC_KINDS,
   accountOptions,
@@ -97,6 +98,10 @@ export async function loadRelatedTransactionDrawerData({
            : sql``}
     `)) as unknown as { rows: { id: string }[] }
     if (!related.rows[0]) return null
+  }
+  if (kind === 'field_ticket') {
+    const props = await loadFieldTicketDrawerData({ authz, ticketId: id, formLayoutId })
+    return props ? { type: 'fieldTicket', props } : null
   }
   if (PAYMENT_KINDS.has(kind)) {
     const permission = kind === 'vendor_payment' ? 'ap.read' : 'ar.read'
