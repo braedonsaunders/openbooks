@@ -28,6 +28,11 @@ const organizationPatterns = [new RegExp(["Ras", "saun"].join(""), "i")];
 
 const connectorPaths = [
   /^\.gitignore$/,
+  // Public interoperability documentation may name supported source systems.
+  // Product/UI behavior remains vendor-neutral; these files are reviewed copy,
+  // not executable defaults or tenant identity.
+  /^README\.md$/,
+  /^CHANGELOG\.md$/,
   /^scripts\/check-product-neutrality\.mjs$/,
   /^engine\/src\/(?:netsuite|qbo\.ts$|xero\.ts$|odoo\.ts$|erpnext\.ts$|dynamics\.ts$|qbd\/|sync\/)/,
   /^engine\/src\/worker\/migration-worker\.ts$/,

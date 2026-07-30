@@ -3,6 +3,7 @@ import { sql } from 'drizzle-orm'
 import { getAuthz, can } from '../../../../../lib/authz'
 import { db } from '@openbooks/engine/src/db.ts'
 import { INDUSTRIES, canSwitchIndustry } from '../../../../../lib/industries'
+import { FEATURES, featureEnabled, resolvedFeatureState } from '../../../../../lib/features'
 import { SetupWizard } from './SetupWizard'
 
 export const dynamic = 'force-dynamic'
@@ -18,11 +19,12 @@ export default async function WizardPage() {
   if (!can(authz, 'admin.setup.manage')) redirect('/')
 
   const orgId = authz.user.orgId
-  const [org, switchable] = await Promise.all([
+  const [org, switchable, features] = await Promise.all([
     db.execute(sql`
       select name, legal_name, base_currency, country, settings
         from orgs where id = ${orgId}`),
     canSwitchIndustry(orgId),
+    resolvedFeatureState(orgId),
   ])
   const row = (org as unknown as { rows: { name: string; legal_name: string | null; base_currency: string; country: string; settings: Record<string, unknown> }[] }).rows[0]
   const settings = row?.settings ?? {}
@@ -38,6 +40,17 @@ export default async function WizardPage() {
         baseCurrency: row?.base_currency ?? '',
         fiscalYearStartMonth: typeof settings.fiscalYearStartMonth === 'number' ? settings.fiscalYearStartMonth : 1,
         industry: (settings.industry as string) ?? null,
+        features: {
+          inventory: featureEnabled(features, 'inventory'),
+          timeTracking: featureEnabled(features, 'timeTracking'),
+          multiSubsidiary: featureEnabled(features, 'multiSubsidiary'),
+          multiCurrency: featureEnabled(features, 'multiCurrency'),
+          projects: featureEnabled(features, 'projects'),
+          subscriptionBilling: featureEnabled(features, 'subscriptionBilling'),
+        },
+        allFeatures: Object.fromEntries(
+          FEATURES.map((feature) => [feature.key, featureEnabled(features, feature.key)]),
+        ),
       }}
       canSwitchIndustry={switchable}
       isRerun

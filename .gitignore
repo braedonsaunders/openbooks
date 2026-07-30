@@ -1,12 +1,16 @@
-.env.*
-extraction/*-sdf/project.json
 .env
+.env.*
+!.env.example
+!.env.compose.example
+.env.compose
+extraction/*-sdf/project.json
 node_modules/
 gl-dump/
 web/.env.local
 
 web/.next/
 .next/
+*.tsbuildinfo
 
 # large connector extraction data dumps (regenerate via extraction scripts)
 extraction/account-data/
@@ -49,3 +53,16 @@ tmp/
 engine/harness-checkpoints/
 engine/sim-runs/
 .playwright-cli/
+playwright-report/
+test-results/
+objects-list.txt
+
+# local agent/editor instructions and launch state
+.claude/
+AGENTS.md
+
+# design-stage simulation notes and persona prompts; the maintained public
+# harness documentation lives at engine/src/sim/README.md
+engine/src/sim/PLAN.md
+engine/src/sim/OPERATOR.md
+engine/src/sim/personas/

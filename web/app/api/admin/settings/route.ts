@@ -5,6 +5,7 @@ import { guardPermission } from "../../../../lib/authz";
 import { isUuid } from "../../../../lib/list-params";
 import { DEFAULT_LOCALE, isLocale } from "../../../../i18n/config";
 import { normalizeCountryCode } from "../../../../lib/countries";
+import { periodDerivationSql } from "../../../../lib/fiscal-periods";
 
 export const runtime = "nodejs";
 
@@ -111,29 +112,6 @@ export async function GET() {
       gapless: boolean;
     }[],
   });
-}
-
-/**
- * Re-derive every (non-adjustment) accounting period's fiscal_year,
- * period_number and name for the org from its start date, using the new start
- * month. Runs inside `tx`; the caller wraps this in a transaction that has
- * already dropped the unique index so the migration can't trip the
- * (org_id, fiscal_year, period_number) constraint mid-update.
- *
- *   period_number = ((month - startMonth + 12) % 12) + 1
- *   fiscal_year   = year, +1 when the month is on/after startMonth and the
- *                   year does not start in January (a Jan start means the
- *                   fiscal year equals the calendar year).
- */
-function periodDerivationSql(orgId: string, startMonth: number): SQL {
-  const janOffset = startMonth === 1 ? sql`0` : sql`1`;
-  return sql`
-    update accounting_periods
-       set period_number = ((extract(month from starts_on)::int - ${startMonth} + 12) % 12) + 1,
-           fiscal_year = extract(year from starts_on)::int
-             + case when extract(month from starts_on)::int >= ${startMonth} then ${janOffset} else 0 end,
-           name = to_char(starts_on, 'Mon YYYY')
-     where org_id = ${orgId} and not is_adjustment`;
 }
 
 export async function PUT(req: Request) {
@@ -371,6 +349,10 @@ export async function PUT(req: Request) {
       // in-flight re-labelling can't collide, re-derive, then recreate it.
       await tx.execute(sql`drop index if exists periods_org_year_num`);
       await tx.execute(periodDerivationSql(orgId, effectiveStart));
+      await tx.execute(sql`
+        update fiscal_calendars
+           set year_start_month = ${effectiveStart}, updated_at = now(), updated_by = ${actor.id}
+         where org_id = ${orgId} and is_default`);
       await tx.execute(sql`
         create unique index periods_org_year_num
           on accounting_periods (org_id, fiscal_year, period_number)`);

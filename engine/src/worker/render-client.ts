@@ -5,7 +5,9 @@
  * since the worker has no user session.
  */
 export function appBaseUrl(): string {
-  return process.env.OPENBOOKS_APP_URL || "http://localhost:4780";
+  return process.env.OPENBOOKS_INTERNAL_URL
+    || process.env.OPENBOOKS_APP_URL
+    || "http://localhost:4780";
 }
 
 export async function renderReportPdf(

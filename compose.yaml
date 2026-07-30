@@ -1,0 +1,133 @@
+name: openbooks
+
+x-openbooks-environment: &openbooks-environment
+  NODE_ENV: production
+  HOSTNAME: 0.0.0.0
+  PORT: "3000"
+  OPENBOOKS_DB_URL: postgres://openbooks:${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}@postgres:5432/openbooks
+  OPENBOOKS_REDIS_URL: redis://:${REDIS_PASSWORD:?REDIS_PASSWORD is required}@redis:6379
+  SESSION_SECRET: ${SESSION_SECRET:?SESSION_SECRET is required}
+  OPENBOOKS_DATA_KEY: ${OPENBOOKS_DATA_KEY:?OPENBOOKS_DATA_KEY is required}
+  OPENBOOKS_INTERNAL_TOKEN: ${OPENBOOKS_INTERNAL_TOKEN:?OPENBOOKS_INTERNAL_TOKEN is required}
+  OPENBOOKS_APP_URL: ${OPENBOOKS_APP_URL:-http://localhost:4780}
+  APP_BASE_URL: ${OPENBOOKS_APP_URL:-http://localhost:4780}
+  S3_ENDPOINT: http://minio:9000
+  S3_REGION: us-east-1
+  S3_ACCESS_KEY_ID: ${MINIO_ROOT_USER:?MINIO_ROOT_USER is required}
+  S3_SECRET_ACCESS_KEY: ${MINIO_ROOT_PASSWORD:?MINIO_ROOT_PASSWORD is required}
+  S3_BUCKET: openbooks
+  ORG_NAME: ${ORG_NAME:-OpenBooks}
+  ORG_CURRENCY: ${ORG_CURRENCY:-CAD}
+  ORG_COUNTRY: ${ORG_COUNTRY:-CA}
+  ADMIN_EMAIL: ${ADMIN_EMAIL:-admin@openbooks.local}
+  ADMIN_NAME: ${ADMIN_NAME:-Administrator}
+  ADMIN_PASSWORD: ${ADMIN_PASSWORD:?ADMIN_PASSWORD is required}
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: openbooks
+      POSTGRES_USER: openbooks
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U openbooks -d openbooks"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+    restart: unless-stopped
+
+  redis:
+    image: redis:7-alpine
+    command:
+      - redis-server
+      - --appendonly
+      - "yes"
+      - --requirepass
+      - ${REDIS_PASSWORD}
+    volumes:
+      - redis-data:/data
+    healthcheck:
+      test: ["CMD-SHELL", "redis-cli -a \"$${REDIS_PASSWORD}\" ping | grep PONG"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+    environment:
+      REDIS_PASSWORD: ${REDIS_PASSWORD}
+    restart: unless-stopped
+
+  minio:
+    image: minio/minio:latest
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD}
+    volumes:
+      - minio-data:/data
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://127.0.0.1:9000/minio/health/live"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+    restart: unless-stopped
+
+  minio-init:
+    image: minio/mc:latest
+    depends_on:
+      minio:
+        condition: service_healthy
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD}
+    entrypoint:
+      - /bin/sh
+      - -ec
+      - |
+        mc alias set local http://minio:9000 "$${MINIO_ROOT_USER}" "$${MINIO_ROOT_PASSWORD}"
+        mc mb --ignore-existing local/openbooks
+    restart: "no"
+
+  web:
+    image: ghcr.io/braedonsaunders/openbooks:${OPENBOOKS_IMAGE_TAG:-latest}
+    pull_policy: missing
+    environment:
+      <<: *openbooks-environment
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      minio-init:
+        condition: service_completed_successfully
+    ports:
+      - "${OPENBOOKS_PORT:-4780}:3000"
+    healthcheck:
+      test:
+        - CMD
+        - node
+        - -e
+        - "fetch('http://127.0.0.1:3000/api/v1/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"
+      interval: 10s
+      timeout: 5s
+      retries: 20
+      start_period: 90s
+    restart: unless-stopped
+
+  worker:
+    image: ghcr.io/braedonsaunders/openbooks:${OPENBOOKS_IMAGE_TAG:-latest}
+    pull_policy: missing
+    command: ["node", "scripts/worker.mjs"]
+    environment:
+      <<: *openbooks-environment
+      OPENBOOKS_INTERNAL_URL: http://web:3000
+    depends_on:
+      web:
+        condition: service_healthy
+    restart: unless-stopped
+
+volumes:
+  postgres-data:
+  redis-data:
+  minio-data:

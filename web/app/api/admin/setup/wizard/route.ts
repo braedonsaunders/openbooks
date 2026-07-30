@@ -5,6 +5,8 @@ import { guardPermission } from '../../../../../lib/authz'
 import { FEATURE_BY_KEY } from '../../../../../lib/features'
 import { INDUSTRY_BY_KEY, canSwitchIndustry } from '../../../../../lib/industries'
 import { normalizeCountryCode } from '../../../../../lib/countries'
+import { periodDerivationSql } from '../../../../../lib/fiscal-periods'
+import { ONBOARDING_SCHEMA_VERSION, onboardingRecord } from '../../../../../lib/onboarding'
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
@@ -18,9 +20,9 @@ export const dynamic = 'force-dynamic'
  *   5. Stores orgs.settings.industry and orgs.settings.onboarding.setupComplete.
  *
  * Safety:
- *   - Industry switch is blocked once journal_lines exist (canSwitchIndustry probe).
- *   - Feature presets that conflict with a hard-blocked disable are silently skipped
- *     (the user can always toggle features individually on the Features page).
+ *   - Industry, base currency, and fiscal-calendar changes are blocked once
+ *     journal_lines exist (canSwitchIndustry probe).
+ *   - Feature input is allowlisted and parent/child dependencies are enforced.
  *   - COA rows use `on conflict (org_id, number) do nothing` so re-running never
  *     duplicates accounts; control-account mapping uses `lookup by number` so it
  *     picks up existing accounts on re-run.
@@ -51,26 +53,93 @@ export async function PUT(req: Request) {
     skipCoa?: boolean
   }
 
+  if (typeof inputName !== 'string' || !inputName.trim()) {
+    return NextResponse.json({ error: 'company-name-required' }, { status: 422 })
+  }
+  if (inputLegalName !== undefined && typeof inputLegalName !== 'string') {
+    return NextResponse.json({ error: 'legal-name-must-be-text' }, { status: 422 })
+  }
+  if (typeof inputCountry !== 'string' || !normalizeCountryCode(inputCountry)) {
+    return NextResponse.json({ error: 'invalid-country' }, { status: 422 })
+  }
+  if (typeof inputCurrency !== 'string' || !/^[A-Z]{3}$/.test(inputCurrency)) {
+    return NextResponse.json({ error: 'invalid-base-currency' }, { status: 422 })
+  }
+  if (
+    typeof inputFiscalMonth !== 'number'
+    || !Number.isInteger(inputFiscalMonth)
+    || inputFiscalMonth < 1
+    || inputFiscalMonth > 12
+  ) {
+    return NextResponse.json({ error: 'invalid-fiscal-year-start-month' }, { status: 422 })
+  }
+  if (
+    inputFeatureOverrides === null
+    || typeof inputFeatureOverrides !== 'object'
+    || Array.isArray(inputFeatureOverrides)
+  ) {
+    return NextResponse.json({ error: 'invalid-feature-overrides' }, { status: 422 })
+  }
+  for (const [key, value] of Object.entries(inputFeatureOverrides)) {
+    if (!FEATURE_BY_KEY.has(key) || typeof value !== 'boolean') {
+      return NextResponse.json({ error: 'invalid-feature-override', key }, { status: 422 })
+    }
+  }
+  if (skipCoa !== undefined && typeof skipCoa !== 'boolean') {
+    return NextResponse.json({ error: 'invalid-skip-coa' }, { status: 422 })
+  }
+
   const industry = typeof inputIndustry === 'string' ? INDUSTRY_BY_KEY.get(inputIndustry) : undefined
-  if (inputIndustry && !industry) {
+  if (!industry) {
     return NextResponse.json({ error: 'unknown-industry', key: inputIndustry }, { status: 422 })
   }
 
-  // Block industry switch once postings exist.
-  if (industry) {
-    const ok = await canSwitchIndustry(orgId)
-    if (!ok) {
-      // Still allow non-industry fields (name, currency, etc.) but reject industry/COA change.
-      const existing = (await db.execute(sql`
-        select settings->>'industry' as industry from orgs where id = ${orgId}`)) as unknown as {
-        rows: { industry: string | null }[]
-      }
-      if (existing.rows[0]?.industry && existing.rows[0].industry !== industry.key) {
-        return NextResponse.json(
-          { error: 'industry-locked', message: 'Cannot switch industry after postings exist.' },
-          { status: 409 },
-        )
-      }
+  // Accounting-foundation fields stop being mutable once postings exist.
+  // Re-running setup can still update identity and feature choices, but cannot
+  // reinterpret historical books through a new industry, currency, or fiscal
+  // calendar.
+  const accountingFoundationMutable = await canSwitchIndustry(orgId)
+  if (!accountingFoundationMutable) {
+    const existing = (await db.execute(sql`
+      select base_currency, settings->>'industry' as industry,
+             coalesce((settings->>'fiscalYearStartMonth')::int, 1) as fiscal_year_start_month
+        from orgs where id = ${orgId}`)) as unknown as {
+      rows: {
+        base_currency: string
+        industry: string | null
+        fiscal_year_start_month: number
+      }[]
+    }
+    const current = existing.rows[0]
+    if (!current) {
+      return NextResponse.json({ error: 'org-not-found' }, { status: 404 })
+    }
+    if (industry && current.industry !== industry.key) {
+      return NextResponse.json(
+        { error: 'industry-locked', message: 'Cannot change industry after postings exist.' },
+        { status: 409 },
+      )
+    }
+    if (
+      typeof inputCurrency === 'string'
+      && /^[A-Z]{3}$/.test(inputCurrency)
+      && inputCurrency !== current.base_currency
+    ) {
+      return NextResponse.json(
+        { error: 'base-currency-locked', message: 'Cannot change base currency after postings exist.' },
+        { status: 409 },
+      )
+    }
+    if (
+      typeof inputFiscalMonth === 'number'
+      && inputFiscalMonth >= 1
+      && inputFiscalMonth <= 12
+      && inputFiscalMonth !== current.fiscal_year_start_month
+    ) {
+      return NextResponse.json(
+        { error: 'fiscal-calendar-locked', message: 'Cannot change the fiscal calendar after postings exist.' },
+        { status: 409 },
+      )
     }
   }
 
@@ -91,6 +160,10 @@ export async function PUT(req: Request) {
 
     nextSettings = { ...(cur.settings ?? {}) }
     const settingsChanges: Record<string, unknown> = {}
+    const currentIndustry = typeof nextSettings.industry === 'string' ? nextSettings.industry : null
+    const industryChanged = Boolean(industry && industry.key !== currentIndustry)
+    let effectiveBaseCurrency = cur.base_currency
+    let fiscalStartChanged = false
 
     // 1. Org identity fields ------------------------------------------------
     if (inputName !== undefined && typeof inputName === 'string' && inputName.trim() && inputName.trim() !== cur.name) {
@@ -125,22 +198,26 @@ export async function PUT(req: Request) {
       }
       orgSets.push(sql`base_currency = ${inputCurrency}`)
       changes.baseCurrency = [cur.base_currency, inputCurrency]
+      effectiveBaseCurrency = inputCurrency
     }
     if (inputFiscalMonth !== undefined && typeof inputFiscalMonth === 'number' && inputFiscalMonth >= 1 && inputFiscalMonth <= 12) {
       const curMonth = typeof nextSettings!.fiscalYearStartMonth === 'number' ? nextSettings!.fiscalYearStartMonth : 1
       if (inputFiscalMonth !== curMonth) {
         nextSettings!.fiscalYearStartMonth = inputFiscalMonth
         settingsChanges.fiscalYearStartMonth = [curMonth, inputFiscalMonth]
+        fiscalStartChanged = true
       }
     }
 
     // 2. Insert COA template (idempotent) ---------------------------------
-    if (industry && !skipCoa) {
+    if (industry && industryChanged && !skipCoa) {
       const inserted = (await tx.execute(sql`
         with ins as (
-          insert into accounts (id, org_id, number, name, type, is_summary, is_active, reconcilable, required_dimensions, created_at, created_by, updated_at, updated_by)
-          select uuid_generate_v7(), ${orgId}::uuid, t.number, t.name, t.type::text, t.is_summary, true, t.reconcilable, t.required_dimensions, now(), ${actorId}::uuid, now(), ${actorId}::uuid
-            from (select * from jsonb_array_elements(${JSON.stringify(
+          insert into accounts (id, org_id, number, name, type, is_summary, is_active, currency_restriction, reconcilable, required_dimensions, created_at, created_by, updated_at, updated_by)
+          select uuid_generate_v7(), ${orgId}::uuid, t.number, t.name, t.type::text, t.is_summary, true,
+                 case when t.reconcilable then ${effectiveBaseCurrency} else null end,
+                 t.reconcilable, t.required_dimensions, now(), ${actorId}::uuid, now(), ${actorId}::uuid
+            from jsonb_to_recordset(${JSON.stringify(
               industry.coa.map((a) => ({
                 number: a.number,
                 name: a.name,
@@ -149,16 +226,16 @@ export async function PUT(req: Request) {
                 reconcilable: a.reconcilable ?? false,
                 required_dimensions: a.requiredDimensions ?? [],
               })),
-            )}::jsonb) as t(number text, name text, type text, is_summary boolean, reconcilable boolean, required_dimensions jsonb))
+            )}::jsonb) as t(number text, name text, type text, is_summary boolean, reconcilable boolean, required_dimensions jsonb)
           on conflict (org_id, number) do nothing
           returning id, number
         )
         select id, number from ins
         union all
-        select id, number from accounts where org_id = ${orgId} and number in ${sql.join(
+        select id, number from accounts where org_id = ${orgId} and number in (${sql.join(
           industry.coa.map((a) => sql`${a.number}`),
           sql`, `,
-        )}`)) as unknown as { rows: { id: string; number: string }[] }
+        )})`)) as unknown as { rows: { id: string; number: string }[] }
 
       // Build number→id map.
       const acctMap = new Map(inserted.rows.map((r) => [r.number, r.id]))
@@ -180,28 +257,41 @@ export async function PUT(req: Request) {
       }
     }
 
-    // 4. Feature presets (merged — never overrides a hard-blocked disable) -
-    if (industry || inputFeatureOverrides) {
+    // 4. Feature presets (merged through the authoritative feature model) --
+    if (industryChanged || inputFeatureOverrides) {
       const curFeatures = (nextSettings!.features ?? {}) as Record<string, boolean>
       const nextFeatures = { ...curFeatures }
 
       // Industry defaults first, then explicit user overrides win.
-      if (industry) {
+      if (industryChanged && industry) {
         for (const [key, val] of Object.entries(industry.features)) {
           if (!FEATURE_BY_KEY.has(key)) continue
           nextFeatures[key] = val
         }
       }
       if (inputFeatureOverrides && typeof inputFeatureOverrides === 'object') {
-        for (const [key, val] of Object.entries(inputFeatureOverrides)) {
-          if (!FEATURE_BY_KEY.has(key) || typeof val !== 'boolean') continue
-          // Respect parent dependency: a child can't be on while parent is off.
+        const overrides = Object.entries(inputFeatureOverrides).filter(
+          (entry): entry is [string, boolean] => FEATURE_BY_KEY.has(entry[0]) && typeof entry[1] === 'boolean',
+        )
+        // Apply parent gates first so child validation uses the final requested
+        // parent state rather than object-property order from the client.
+        for (const [key, val] of overrides) {
+          if (!FEATURE_BY_KEY.get(key)?.parentKey) nextFeatures[key] = val
+        }
+        for (const [key, val] of overrides) {
           const def = FEATURE_BY_KEY.get(key)!
-          if (val && def.parentKey) {
-            const parentVal = nextFeatures[def.parentKey] ?? FEATURE_BY_KEY.get(def.parentKey)?.defaultEnabled ?? false
-            if (!parentVal) continue // skip — parent is off
-          }
-          nextFeatures[key] = val
+          if (!def.parentKey) continue
+          const parentEnabled = nextFeatures[def.parentKey]
+            ?? FEATURE_BY_KEY.get(def.parentKey)?.defaultEnabled
+            ?? false
+          nextFeatures[key] = parentEnabled ? val : false
+        }
+      }
+      // Industry presets can also include children. Normalize the complete
+      // result so no stored child gate remains on beneath a disabled parent.
+      for (const def of FEATURE_BY_KEY.values()) {
+        if (def.parentKey && nextFeatures[def.parentKey] === false) {
+          nextFeatures[def.key] = false
         }
       }
 
@@ -212,7 +302,7 @@ export async function PUT(req: Request) {
     }
 
     // 5. Store industry + onboarding flag ----------------------------------
-    if (industry) {
+    if (industryChanged && industry) {
       const curIndustry = (nextSettings!.industry ?? null) as string | null
       if (curIndustry !== industry.key) {
         nextSettings!.industry = industry.key
@@ -221,11 +311,20 @@ export async function PUT(req: Request) {
     }
 
     // Onboarding mark
-    const curOnboarding = (nextSettings!.onboarding ?? {}) as Record<string, unknown>
+    const curOnboarding = onboardingRecord(nextSettings)
+    const {
+      deferredAt: _deferredAt,
+      deferredBy: _deferredBy,
+      skippedAt: _skippedAt,
+      skippedBy: _skippedBy,
+      ...retainedOnboarding
+    } = curOnboarding
     const nextOnboarding = {
-      ...curOnboarding,
+      ...retainedOnboarding,
+      schemaVersion: ONBOARDING_SCHEMA_VERSION,
       setupComplete: true,
       completedAt: new Date().toISOString(),
+      completedBy: actorId,
       startedAt: curOnboarding.startedAt ?? new Date().toISOString(),
     }
     nextSettings!.onboarding = nextOnboarding
@@ -240,6 +339,17 @@ export async function PUT(req: Request) {
     }
     if (orgSets.length > 0) {
       await tx.execute(sql`update orgs set ${sql.join(orgSets, sql`, `)} where id = ${orgId}`)
+    }
+    if (fiscalStartChanged) {
+      await tx.execute(sql`drop index if exists periods_org_year_num`)
+      await tx.execute(periodDerivationSql(orgId, inputFiscalMonth!))
+      await tx.execute(sql`
+        update fiscal_calendars
+           set year_start_month = ${inputFiscalMonth!}, updated_at = now(), updated_by = ${actorId}
+         where org_id = ${orgId} and is_default`)
+      await tx.execute(sql`
+        create unique index periods_org_year_num
+          on accounting_periods (org_id, fiscal_year, period_number)`)
     }
 
     // Audit
@@ -257,26 +367,54 @@ export async function PUT(req: Request) {
 }
 
 /**
- * Skip the wizard — marks onboarding as complete without changing anything.
- * Used by the "Skip for now" button on first login.
+ * Defer first-run setup without claiming it was completed. The automatic
+ * overlay closes, while Company Settings → Setup wizard remains the explicit
+ * resume path. The before/after state and actor are recorded atomically.
  */
 export async function POST(req: Request) {
   const gate = await guardPermission('admin.setup.manage')
   if (gate instanceof NextResponse) return gate
   const { orgId, id: actorId } = gate.user
 
-  await db.execute(sql`
-    update orgs
-       set settings = jsonb_set(coalesce(settings, '{}'::jsonb), '{onboarding}', ${JSON.stringify({
-         setupComplete: true,
-         skippedAt: new Date().toISOString(),
-         startedAt: new Date().toISOString(),
-       })}::jsonb)
-     where id = ${orgId}`)
+  await db.transaction(async (tx) => {
+    const current = (await tx.execute(sql`
+      select settings from orgs where id = ${orgId} for update
+    `)) as unknown as { rows: { settings: Record<string, unknown> }[] }
+    const settings = current.rows[0]?.settings
+    if (!settings) {
+      throw new Error('org not found')
+    }
 
-  await db.execute(sql`
-    insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
-    values (${orgId}, 'orgs', ${orgId}, 'update', ${JSON.stringify({ wizard: 'skipped' })}, ${actorId})`)
+    const before = onboardingRecord(settings)
+    const deferredAt = new Date().toISOString()
+    const after = {
+      ...before,
+      schemaVersion: ONBOARDING_SCHEMA_VERSION,
+      setupComplete: false,
+      startedAt: before.startedAt ?? deferredAt,
+      deferredAt,
+      deferredBy: actorId,
+    }
+    const nextSettings = { ...settings, onboarding: after }
+
+    await tx.execute(sql`
+      update orgs
+         set settings = ${JSON.stringify(nextSettings)}::jsonb,
+             updated_at = now(),
+             updated_by = ${actorId}::uuid
+       where id = ${orgId}`)
+
+    await tx.execute(sql`
+      insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
+      values (
+        ${orgId},
+        'orgs',
+        ${orgId},
+        'update',
+        ${JSON.stringify({ onboarding: { before, after }, reason: 'first-run setup deferred' })},
+        ${actorId}
+      )`)
+  })
 
   return NextResponse.json({ ok: true })
 }

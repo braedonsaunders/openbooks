@@ -1,6 +1,7 @@
 import { sql } from "drizzle-orm";
 import { db, schema } from "../../db.ts";
 import { postDocument, type PostingDeps } from "../../posting.ts";
+import { submitAndReleaseIfUngated } from "../../flows/submit.ts";
 import { sum } from "../../money.ts";
 import type { SimOrg } from "../world.ts";
 
@@ -79,9 +80,52 @@ export async function createDraftDocument(world: SimOrg, input: CreateDocInput):
   return { documentId: doc!.id, total };
 }
 
-/** Post an existing draft document through the real posting kernel. */
+/**
+ * Submit a simulated draft through the real approval-routing boundary.
+ *
+ * The deterministic autopilot can proceed only when no tenant approval gate
+ * applies. A configured gate remains pending for an actual approver; the
+ * harness never writes an approved status or bypasses segregation of duties.
+ */
+export async function releaseDraftIfUngated(
+  world: SimOrg,
+  documentId: string,
+  actorId?: string,
+): Promise<string> {
+  const [doc] = await db
+    .select({
+      kind: schema.documents.kind,
+      status: schema.documents.status,
+      createdBy: schema.documents.createdBy,
+    })
+    .from(schema.documents)
+    .where(sql`${schema.documents.id} = ${documentId} and ${schema.documents.orgId} = ${world.orgId}`);
+  if (!doc) throw new Error("simulation document not found");
+  if (doc.status === "approved") return actorId ?? doc.createdBy ?? world.actors.admin;
+  if (doc.status !== "draft") {
+    throw new Error(`simulation document is ${doc.status}; expected draft or approved`);
+  }
+
+  const submittingActor = actorId ?? doc.createdBy ?? world.actors.admin;
+  const submitted = await submitAndReleaseIfUngated(doc.kind, documentId, submittingActor);
+  if (submitted.flowError) {
+    throw new Error(`approval routing failed: ${submitted.flowError}`);
+  }
+  if (submitted.gated) {
+    throw new Error("document requires a human approval decision before posting");
+  }
+  if (!submitted.autoApproved) {
+    throw new Error("document was not released for posting");
+  }
+  return submittingActor;
+}
+
+/** Submit, release when ungated, and post through the real accounting kernel. */
 export async function postDraftDocument(world: SimOrg, documentId: string): Promise<string> {
-  return postDocument(documentId, postingDeps(world));
+  const actorId = await releaseDraftIfUngated(world, documentId);
+  return postDocument(documentId, postingDeps(world), {
+    audit: { actorId, source: "simulation_autopilot" },
+  });
 }
 
 /** Convenience: create a draft and immediately post it (used for JEs / credits). */

@@ -6,7 +6,7 @@ import 'server-only'
  * feature toggles, a chart-of-accounts template, and default control-account
  * mappings. The bundle is a *starting point, not a gate* — every feature
  * remains individually toggleable on the Features page (the authoritative
- * switchboard per AGENTS.md), and every account is editable at /accounts.
+ * switchboard), and every account is editable at /accounts.
  *
  * Applying an industry:
  *   1. Inserts the COA template rows into `accounts` (idempotent by account number).

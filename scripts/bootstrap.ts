@@ -526,8 +526,8 @@ async function main(): Promise<void> {
   const lockClient = await pool.connect();
   let locked = false;
   try {
-    // Dokploy/rolling deployments can start more than one container against
-    // the same database. Serialize the entire migrate+seed unit so one
+    // Rolling deployments can start more than one container against the same
+    // database. Serialize the entire migrate+seed unit so one
     // bootstrap cannot seed a relation while another is changing its policy
     // or constraint definition.
     await lockClient.query("set statement_timeout = 0");
