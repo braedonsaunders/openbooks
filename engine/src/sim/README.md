@@ -1,96 +1,61 @@
-# OpenBooks Business Simulation Harness
+# Business simulation harness
 
-A deterministic, resumable simulator that runs **realistic multi-team businesses
-over time** through the *real* OpenBooks accounting engine — bills arrive and get
-paid, projects run, invoices go out and get collected, months close — while a
-team of **LLM personas** operate the business like humans and an **invariant
-oracle** turns any product defect into a hard halt.
+The simulation harness exercises OpenBooks through the real database, posting
+engine, subledgers, close controls, and invariant checks. It is intended for
+repeatable engineering verification—not for seeding production companies.
 
-This is a *hybrid* harness:
-
-- A **seeded generator** injects each day's raw economic reality (bills arriving,
-  work becoming billable, customer money landing). Deterministic per `(profile, seed)`.
-- A **team of LLM personas** — AP clerk, AR specialist, controller, CFO — makes
-  the judgment calls (approve, dispute, prioritize, apply cash, reconcile, close),
-  driven as Claude Code subagents. See `personas/`.
-- The **operator** (Claude Code) supervises: on any invariant break or persona-
-  reported bug, it **stops and fixes the product**, then deterministically
-  resumes. See `OPERATOR.md`.
-
-Nothing here writes ledger rows directly — every action flows through the posting
-kernel, the payment-application engine, and the close/period-lock engine.
-
-## Quick start
-
-```bash
-# 1. Throwaway Postgres (never point this at real data).
-docker compose -f engine/src/sim/docker-compose.yml up -d
-
-# 2. Load the OpenBooks schema into openbooks_sim (same schema as a dev DB).
-#    Apply the repo's migrations against OPENBOOKS_DB_URL below.
-
-# 3. Provision a company for a 6-month run.
-export OPENBOOKS_SIM=1
-export OPENBOOKS_DB_URL=postgres://openbooks:openbooks@localhost:5433/openbooks_sim
-npm --prefix engine run sim -- provision \
-  --profile general-contractor --seed 1 --start 2026-01-01 --end 2026-06-30
-```
-
-`provision` prints a `runDir`. From there, follow **`OPERATOR.md`** — the daily
-loop (`day-start` → dispatch persona subagents → `day-end`) and the stop-and-fix
-protocol.
+The harness can provision a synthetic company, advance a deterministic clock,
+generate business events, run the built-in autopilot, and stop with a defect
+bundle when an invariant fails.
 
 ## Safety
 
-The CLI refuses to run unless **both**:
+The harness refuses to run unless:
 
-- `OPENBOOKS_SIM=1` is set, and
-- the database name contains `sim`/`test`/`sandbox`/`scratch`.
+- `OPENBOOKS_SIM=1` is set; and
+- `OPENBOOKS_DB_URL` points to a database whose name is clearly isolated for
+  simulation.
 
-The harness provisions and (on `reset`) wipes whole orgs, so this interlock is not
-optional.
+Never point it at a production or shared development database.
 
-## CLI
+## Run
 
-| Command | Purpose |
-|---|---|
-| `provision --profile --seed --start --end` | Stand up an org for a run |
-| `day-start <RUN>` | Advance a day, inject seeded events, cheap checks |
-| `observe <screen> <RUN>` | Read a screen (`ap-inbox`, `ap-open`, `ar-inbox`, `ar-receipts`, `ar-aging`, `trial-balance`, `period-status`) |
-| `act <action> <RUN> --flags` | Do work (`post-bill`, `dispute-bill`, `pay-vendor`, `issue-invoice`, `apply-receipt`, `post-journal`, `close-month`) |
-| `day-end <RUN>` | Run the oracle; HALT on any invariant failure |
-| `verify <RUN>` | Re-run the oracle without advancing (confirm a fix) |
-| `status` / `coverage <RUN>` | Run state / capability coverage |
-| `reset <RUN>` | Wipe the run's org |
-| `list-profiles` | Available industry profiles |
+```bash
+export OPENBOOKS_SIM=1
+export OPENBOOKS_DB_URL=postgres://openbooks:openbooks@localhost:5433/openbooks_sim
 
-## Layout
+npx tsx scripts/bootstrap.ts
 
-```
-sim/
-  PLAN.md            the design + roadmap
-  OPERATOR.md        the stop-and-fix runbook (start here to drive a run)
-  README.md          this file
-  clock.ts           (../clock.ts) injectable simulated clock
-  rng.ts             seeded, splittable, serializable PRNG
-  manifest.ts        resumable run state + world snapshot + date helpers
-  db-guard.ts        the sim-database interlock
-  profiles/          industry profiles (config; add your own here)
-  world.ts           org provisioning + reset
-  generator.ts       the seeded daily event backbone
-  observe.ts         read-only screens
-  ops.ts             the action surface (routes through the real engine)
-  activities/        the create-and-post document primitive
-  invariants/        the oracle + defect-bundle emitter
-  runner.ts          day-loop primitives (day-start / day-end / verify)
-  cli.ts             the command surface
-  personas/          LLM persona playbooks (AP, AR, controller, CFO)
+# Create a deterministic run directory.
+npm --prefix engine run --silent sim -- provision \
+  --profile general-contractor \
+  --seed 1 \
+  --start 2026-01-01 \
+  --end 2026-02-28
+
+# Use the runDir printed by provision.
+npm --prefix engine run --silent sim -- run <runDir>
+npm --prefix engine run --silent sim -- coverage <runDir>
 ```
 
-## Determinism
+Available commands and flags are defined by `cli.ts`. The CI smoke workflow
+demonstrates the supported non-interactive path.
 
-The *environment* is deterministic and seeded (Tier A: same `(profile, seed)` →
-same raw event stream, checkpointed by value). The *humans* are the LLM — realism
-comes from their judgment; a full decision log lives in the run dir. Byte-
-identical structural replay (Tier B, via the sandbox UUID-rebase engine) is an
-optional future add. See `PLAN.md`.
+## Evidence
+
+Each run writes its state beneath `engine/sim-runs/`, which is intentionally
+git-ignored. When an invariant fails, the harness records a defect bundle with
+the run context needed to reproduce the failure.
+
+The invariant oracle checks accounting properties such as:
+
+- balanced journal entries;
+- subledger-to-general-ledger agreement;
+- payment and open-item consistency;
+- period-close immutability;
+- inventory valuation consistency; and
+- deterministic replay.
+
+Simulation coverage supplements unit, database-integration, and browser tests.
+It is not an independent audit or a substitute for review by qualified
+accounting and security professionals.

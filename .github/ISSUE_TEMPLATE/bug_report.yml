@@ -1,0 +1,69 @@
+name: Bug report
+description: Report a reproducible defect that is not a security vulnerability
+title: "[Bug]: "
+labels:
+  - bug
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Do not include production financial data, credentials, personal data, or security vulnerabilities. Report vulnerabilities through the private process in SECURITY.md.
+  - type: input
+    id: version
+    attributes:
+      label: OpenBooks version
+      description: Release tag, image tag, or commit SHA
+      placeholder: v0.1.0-alpha.1
+    validations:
+      required: true
+  - type: dropdown
+    id: deployment
+    attributes:
+      label: Deployment
+      options:
+        - Docker Compose
+        - Source development
+        - Custom container/orchestrator
+        - Other
+    validations:
+      required: true
+  - type: textarea
+    id: workflow
+    attributes:
+      label: Affected workflow
+      description: Describe the business/accounting workflow and lifecycle state.
+    validations:
+      required: true
+  - type: textarea
+    id: reproduce
+    attributes:
+      label: Reproduction steps
+      description: Use synthetic or fully anonymized data.
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected result
+    validations:
+      required: true
+  - type: textarea
+    id: actual
+    attributes:
+      label: Actual result
+    validations:
+      required: true
+  - type: textarea
+    id: evidence
+    attributes:
+      label: Safe diagnostic evidence
+      description: Redacted logs, screenshots, journal totals, or stack traces
+  - type: checkboxes
+    id: safety
+    attributes:
+      label: Data-safety confirmation
+      options:
+        - label: I removed credentials, personal data, and real financial records.
+          required: true
+        - label: This report is not a security vulnerability.
+          required: true

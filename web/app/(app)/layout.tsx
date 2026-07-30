@@ -12,6 +12,7 @@ import { userLocalePreference } from '../../lib/locale'
 import { resolveNavMode, userNavModePreference } from '../../lib/nav-mode-resolve'
 import { orgInfo } from '../../lib/data'
 import { MoneyProvider } from '../../components/money-provider'
+import { OnboardingWizard } from '../../components/onboarding-wizard'
 
 export const dynamic = 'force-dynamic'
 
@@ -83,6 +84,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
             )}
             {children}
           </AppShell>
+          {can(authz, 'admin.setup.manage') && <OnboardingWizard authz={authz} />}
         </NavigationProvider>
       </ThemeProvider>
     </MoneyProvider>

@@ -52,7 +52,7 @@ jobs:
       - name: Provision + run (autopilot)
         run: |
           RUN=$(npm --prefix engine run --silent sim -- provision \
-            --profile general-contractor --seed 1 --start 2026-01-01 --end 2026-02-28 \
+            --profile general-contractor --seed 1 --start 2026-01-01 --end 2026-03-31 \
             | node -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>console.log(JSON.parse(s).runDir))')
           echo "run dir: $RUN"
           npm --prefix engine run --silent sim -- run "$RUN"

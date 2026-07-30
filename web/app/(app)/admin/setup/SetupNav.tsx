@@ -23,6 +23,7 @@ import {
   Receipt,
   Server,
   Shield,
+  Sparkles,
   Tag,
   Timer,
   TrendingUp,
@@ -59,6 +60,7 @@ const ICONS: Record<string, ReactNode> = {
   upload: <Upload size={15} />,
   history: <History size={15} />,
   payments: <WalletCards size={15} />,
+  sparkles: <Sparkles size={15} />,
 }
 
 type NavItem = { href: string; label: string; iconKey: string }
@@ -127,6 +129,7 @@ export function SetupNav({
                 ]
               : group.key === 'company'
               ? [
+                  { href: '/admin/setup/wizard', label: t('features.runWizard'), iconKey: 'sparkles' },
                   { href: '/admin/setup/company', label: t('entities.company.title'), iconKey: 'building' },
                   { href: '/admin/setup/features', label: t('features.navTitle'), iconKey: 'layers' },
                   ...(byGroup.get(group.key) ?? []).map((e) => ({

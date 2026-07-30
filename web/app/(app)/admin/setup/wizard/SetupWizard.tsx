@@ -66,12 +66,15 @@ export function SetupWizard(props: {
     baseCurrency: string
     fiscalYearStartMonth: number
     industry: string | null
+    features: Record<ToggleKey, boolean>
+    allFeatures: Record<string, boolean>
   }
   canSwitchIndustry: boolean
   isRerun: boolean
   onClose?: () => void
 }) {
   const t = useTranslations('admin.setup.wizard')
+  const tAdmin = useTranslations('admin')
   const router = useRouter()
   const reduceMotion = useReducedMotion()
   const [stepIdx, setStepIdx] = useState(0)
@@ -85,14 +88,7 @@ export function SetupWizard(props: {
   const [fiscalMonth, setFiscalMonth] = useState(props.initial.fiscalYearStartMonth)
   const [industryKey, setIndustryKey] = useState<string | null>(props.initial.industry)
   const [search, setSearch] = useState('')
-  const [toggles, setToggles] = useState<Record<ToggleKey, boolean>>({
-    inventory: false,
-    timeTracking: true,
-    multiSubsidiary: false,
-    multiCurrency: false,
-    projects: true,
-    subscriptionBilling: false,
-  })
+  const [toggles, setToggles] = useState<Record<ToggleKey, boolean>>(props.initial.features)
 
   const step = STEPS[stepIdx]
 
@@ -112,6 +108,22 @@ export function SetupWizard(props: {
     })
   }, [props.industries, search, t])
 
+  const reviewFeatureKeys = useMemo(() => {
+    const effective = { ...props.initial.allFeatures }
+    if (selectedIndustry && selectedIndustry.key !== props.initial.industry) {
+      Object.assign(effective, selectedIndustry.features)
+    }
+    Object.assign(effective, toggles)
+    if (!effective.projects) {
+      effective.fieldTickets = false
+      effective.projectScheduling = false
+    }
+    return Object.entries(effective)
+      .filter(([, enabled]) => enabled)
+      .map(([key]) => key)
+      .sort((a, b) => tAdmin(`features.${a}.title`).localeCompare(tAdmin(`features.${b}.title`)))
+  }, [props.initial.allFeatures, props.initial.industry, selectedIndustry, tAdmin, toggles])
+
   if (!props.open) return null
 
   // Close: if an onClose callback was provided (overlay mode), call it;
@@ -128,6 +140,10 @@ export function SetupWizard(props: {
   // ─── Actions ──────────────────────────────────────────────────────────
 
   async function skip() {
+    if (props.isRerun) {
+      close()
+      return
+    }
     setBusy(true)
     try {
       const res = await fetch('/api/admin/setup/wizard', { method: 'POST' })
@@ -300,7 +316,8 @@ export function SetupWizard(props: {
                     country={country}
                     currency={currency}
                     industry={selectedIndustry}
-                    toggles={toggles}
+                    featureKeys={reviewFeatureKeys}
+                    featureTitle={(key) => tAdmin(`features.${key}.title`)}
                   />
                 )}
                 {step === 'applying' && <ApplyingStep t={t} />}
@@ -310,16 +327,20 @@ export function SetupWizard(props: {
           </div>
 
           {/* Footer navigation */}
-          {stepIdx > 0 && stepIdx < STEPS.indexOf('applying') && stepIdx < STEPS.indexOf('done') && (
+          {stepIdx < STEPS.indexOf('applying') && stepIdx < STEPS.indexOf('done') && (
             <div className="flex items-center justify-between border-t border-slate-200 px-6 py-4 dark:border-slate-800 sm:px-10">
-              <button
-                type="button"
-                onClick={back}
-                disabled={busy || stepIdx === 0}
-                className="flex items-center gap-1.5 rounded-lg px-3 py-2 text-sm font-medium text-slate-600 transition-colors hover:bg-slate-100 disabled:opacity-50 dark:text-slate-300 dark:hover:bg-slate-800"
-              >
-                <ArrowLeft size={16} /> {t('back')}
-              </button>
+              {stepIdx > 0 ? (
+                <button
+                  type="button"
+                  onClick={back}
+                  disabled={busy}
+                  className="flex items-center gap-1.5 rounded-lg px-3 py-2 text-sm font-medium text-slate-600 transition-colors hover:bg-slate-100 disabled:opacity-50 dark:text-slate-300 dark:hover:bg-slate-800"
+                >
+                  <ArrowLeft size={16} /> {t('back')}
+                </button>
+              ) : (
+                <span aria-hidden="true" />
+              )}
               {step === 'review' ? (
                 <button
                   type="button"
@@ -517,7 +538,7 @@ function IndustryStep(props: {
         {industries.map((ind, i) => {
           const Icon = INDUSTRY_ICONS[ind.key] ?? Building2
           const isSelected = selected === ind.key
-          const isLocked = Boolean(!canSwitch && currentIndustry && currentIndustry !== ind.key)
+          const isLocked = !canSwitch && currentIndustry !== ind.key
           return (
             <motion.button
               key={ind.key}
@@ -611,7 +632,12 @@ function OperationsStep(props: {
             label={t(`operations.${key}.title`)}
             description={t(`operations.${key}.description`)}
             on={toggles[key]}
-            onToggle={() => setToggles((p) => ({ ...p, [key]: !p[key] }))}
+            onToggle={() => setToggles((previous) => {
+              const next = { ...previous, [key]: !previous[key] }
+              if (key === 'projects' && !next.projects) next.timeTracking = false
+              if (key === 'timeTracking' && next.timeTracking) next.projects = true
+              return next
+            })}
           />
         ))}
       </div>
@@ -674,10 +700,10 @@ function ReviewStep(props: {
   country: string
   currency: string
   industry?: IndustryDef
-  toggles: Record<ToggleKey, boolean>
+  featureKeys: string[]
+  featureTitle: (key: string) => string
 }) {
-  const { t, name, country, currency, industry, toggles } = props
-  const activeToggles = (Object.keys(toggles) as ToggleKey[]).filter((k) => toggles[k])
+  const { t, name, country, currency, industry, featureKeys, featureTitle } = props
   return (
     <div className="space-y-5">
       <div>
@@ -700,18 +726,18 @@ function ReviewStep(props: {
           </>
         )}
       </div>
-      {activeToggles.length > 0 && (
+      {featureKeys.length > 0 && (
         <div>
           <p className="mb-2 text-xs font-semibold uppercase tracking-wider text-slate-500">
             {t('review.features')}
           </p>
           <div className="flex flex-wrap gap-2">
-            {activeToggles.map((k) => (
+            {featureKeys.map((key) => (
               <span
-                key={k}
+                key={key}
                 className="rounded-full bg-teal-50 px-3 py-1 text-xs font-medium text-teal-700 dark:bg-teal-950/40 dark:text-teal-300"
               >
-                {t(`operations.${k}.title`)}
+                {featureTitle(key)}
               </span>
             ))}
           </div>

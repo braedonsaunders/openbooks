@@ -1,275 +1,479 @@
 <p align="center">
   <picture>
     <source media="(prefers-color-scheme: dark)" srcset=".github/assets/openbooks-logo-dark.svg" />
-    <img src=".github/assets/openbooks-logo.svg" alt="openbooks" width="440" />
+    <img src=".github/assets/openbooks-logo.svg" alt="OpenBooks" width="440" />
   </picture>
 </p>
 
 <p align="center">
-  <img src=".github/codeflow-card.svg" alt="CodeFlow card — codebase scale and structure snapshot" width="100%" />
-</p>
-
-<p align="center">
   <strong>The open business suite. Run on open books.</strong><br />
-  An open-source ERP built on a double-entry general-ledger kernel: dimensions,
-  subledgers, multi-entity, multi-currency, period close, real-JavaScript
-  scripting, and a real-SQL reporting engine — with an open schema you can always
-  get your data out of.
+  Accounting-first ERP for project-based, multi-entity organizations—open
+  source, self-hosted, and built around a PostgreSQL-enforced double-entry
+  ledger.
 </p>
 
 <p align="center">
-  <a href="#what-is-openbooks">What</a> ·
-  <a href="#why-openbooks-is-different">Why</a> ·
-  <a href="#features">Features</a> ·
-  <a href="#the-kernel">The Kernel</a> ·
+  <a href="https://github.com/braedonsaunders/openbooks/actions/workflows/test.yml"><img alt="Tests" src="https://github.com/braedonsaunders/openbooks/actions/workflows/test.yml/badge.svg" /></a>
+  <a href="https://github.com/braedonsaunders/openbooks/releases"><img alt="Release" src="https://img.shields.io/github/v/release/braedonsaunders/openbooks?include_prereleases&color=0f766e" /></a>
+  <a href="https://github.com/braedonsaunders/openbooks/pkgs/container/openbooks"><img alt="Container" src="https://img.shields.io/badge/GHCR-multi--arch-2496ED?logo=docker&logoColor=white" /></a>
+  <a href="LICENSE"><img alt="License: AGPL-3.0-or-later" src="https://img.shields.io/badge/License-AGPL--3.0--or--later-0f766e" /></a>
+  <img alt="Alpha software" src="https://img.shields.io/badge/status-alpha-f59e0b" />
+</p>
+
+<p align="center">
+  <a href="#run-it">Run it</a> ·
+  <a href="#what-is-implemented">Features</a> ·
+  <a href="#accounting-kernel">Accounting kernel</a> ·
   <a href="#architecture">Architecture</a> ·
-  <a href="#quick-start">Quick start</a>
+  <a href="#project-status">Status</a> ·
+  <a href="CONTRIBUTING.md">Contribute</a>
 </p>
 
 <p align="center">
-  <a href="LICENSE"><img alt="License: AGPL v3" src="https://img.shields.io/badge/License-AGPL_v3-0f766e" /></a>
-  <img alt="Next.js" src="https://img.shields.io/badge/Next.js-16-000?logo=next.js&logoColor=white" />
-  <img alt="React" src="https://img.shields.io/badge/React-19-149ECA?logo=react&logoColor=white" />
-  <img alt="TypeScript" src="https://img.shields.io/badge/TypeScript-5.9-3178C6?logo=typescript&logoColor=white" />
-  <img alt="PostgreSQL" src="https://img.shields.io/badge/PostgreSQL-16-4169E1?logo=postgresql&logoColor=white" />
-  <img alt="Drizzle" src="https://img.shields.io/badge/Drizzle-ORM-C5F74F?logo=drizzle&logoColor=black" />
-  <a href="https://github.com/braedonsaunders/openbooks/stargazers"><img alt="Stars" src="https://img.shields.io/github/stars/braedonsaunders/openbooks?style=flat&color=f5a623" /></a>
+  <img src=".github/codeflow-card.svg" alt="CodeFlow card—codebase scale and structure snapshot" width="100%" />
 </p>
 
 ---
 
-## What is openbooks?
+## Open accounting infrastructure—not another spreadsheet
 
-openbooks is an open-source business suite with the discipline of a real
-accounting system at its core: a **double-entry general-ledger kernel** where
-every posted entry balances to zero, closed-period rows are immutable, and
-controlled open-period amendments preserve immutable before/after document and
-GL-impact evidence — invariants enforced by **PostgreSQL triggers**, not by
-hopeful application code.
+OpenBooks is an AGPL-licensed business suite with a double-entry general ledger
+at its center. Documents, subledgers, projects, inventory, assets, banking,
+reporting, and workflow all project into the same accounting model.
 
-On top of that kernel sit the workflows a company actually runs on — payables,
-receivables, payments, expenses, banking, period close — plus an app-builder,
-real-JavaScript scripting, and a real-SQL reporting surface that make it
-extensible without a proprietary DSL in sight.
+The differentiator is not a long checklist. It is how the checklist is built:
 
-openbooks is AGPL-3.0-licensed — **self-host it, extend it, or run your whole
-back office on it.** The copyleft is deliberate: improvements stay open, and
-anyone who offers it as a hosted service has to share their changes.
+- PostgreSQL rejects unbalanced journal entries and postings into closed
+  periods.
+- Financial amounts use `numeric(19,4)` storage and BigInt-based decimal
+  arithmetic instead of floating point.
+- Organization-owned data is protected by PostgreSQL row-level security as
+  well as application authorization.
+- Material actions carry explicit lifecycle, permission, concurrency, and audit
+  behavior.
+- Posting and external-event paths are designed to be idempotent.
+- Feature switches preserve data and are enforced at navigation, page, API, and
+  service boundaries.
+- The schema, REST API, reporting surface, and extension model remain open.
 
-## Why openbooks is different
+OpenBooks is intended for people who need more than entry-level bookkeeping,
+especially project businesses, contractors, professional services firms,
+multi-entity groups, and technical finance teams that want control of their
+software and data.
 
-- **A kernel, not a spreadsheet with steps.** Documents are strictly separated
-  from their ledger projection. Posting produces exactly one journal entry;
-  authorized edits in an open period re-materialize that entry in place and
-  atomically record its old/new business and GL state. Closed-period impact is
-  immutable, and the database physically refuses unbalanced entries.
-- **Real tools, not sanitized brands.** User scripting is **real JavaScript** in
-  a QuickJS sandbox. The query surface is **real PostgreSQL** through a
-  SELECT-only role. No invented mini-language you have to relearn.
-- **Reporting as data.** Financial statements are layouts — group / subtotal /
-  formula rows, first-match account claiming, an automatic catch-all — that
-  render to first-class **PDF** (pure-JS, no Chromium), **Excel**, and **CSV**,
-  and every account line drills straight into its register.
-- **Your data stays yours.** A source-adapter registry can pull a full ledger
-  in, and the SQL surface plus open schema make getting your data back out
-  straightforward. No lock-in by design.
-- **Vendor-neutral by construction.** No hardcoded org or vendor names in the
-  product — identity comes from the database and the adapter registry, so the
-  same build runs anyone's books.
-- **Internationalized to the last string.** Every user-facing string flows
-  through next-intl in **English, French, Spanish, German, Brazilian Portuguese,
-  Chinese, and Japanese** — copy, placeholders, aria-labels, toasts, and empty
-  states. Locale selection is available per tenant and per user.
+> [!IMPORTANT]
+> OpenBooks is alpha software. Evaluate it with test or parallel books before
+> placing production financial records on it. It has extensive automated tests,
+> but it has not yet completed an independent accounting audit, security audit,
+> or broad production validation.
 
-## Features
+## Run it
 
-Every module is permission-aware, audited, and org-scoped. The sidebar itself is
-editable per tenant — modules are **registered, not hard-coded** — and every list
-ships with search, filters, and pagination as a non-negotiable.
+### One-command Docker Compose installation
 
-### Payables & spend
+Requirements: Git and Docker with Docker Compose.
 
-- **Vendor bills** — line editor, tax codes with dated rates,
-  auto-numbering, draft → submit → approve → post lifecycle.
-- **Purchase orders**, **expense reports** (instant-draft flyout → line grid →
-  approval → posting to employee payable), and an **approval engine** with
-  policy-driven amount-threshold routing, role worklists, and approve/reject.
-- **Payment runs** → Canadian **EFT (CPA-005)** file export, with atomic
-  open-item payment application and an auto-reversal safety net.
+```bash
+git clone https://github.com/braedonsaunders/openbooks.git &&
+cd openbooks &&
+./scripts/compose-up.sh
+```
 
-### Receivables & revenue
+The installer:
 
-- **Customer invoices** — instant-draft flyout, line grid, approval, posting
-  (DR AR / CR income + tax).
-- **Estimates & sales orders**, **receipts**, and **payment application** from any
-  crediting document to any open item — open balances clear atomically.
+1. creates `.env.compose` with random database, Redis, object-storage, session,
+   encryption, internal-service, and administrator credentials;
+2. pulls the public `ghcr.io/braedonsaunders/openbooks:latest` image;
+3. starts PostgreSQL 16, Redis 7, MinIO, the OpenBooks web application, and its
+   background worker;
+4. applies every migration and database control through the idempotent
+   deployment bootstrap; and
+5. waits for the application to become healthy before printing the URL and
+   first administrator login.
 
-### Banking & close
+Open <http://localhost:4780>. Credentials remain in `.env.compose`, which is
+created with mode `600` and ignored by Git.
 
-- **Bank reconciliation** — OFX/CSV import → dedupe → auto-match → two-pane
-  workspace → zero-difference sign-off, with reusable **reconciliation rules**
-  and SFTP statement drops.
-- **Journal entries**, a **chart of accounts** with dimensions
-  (department / project), and **period close** — per-module AR/AP/GL close and
-  reopen with ordering rules; the kernel refuses to post into a closed period.
+At the first administrator sign-in, OpenBooks opens a guided company setup for
+identity, fiscal calendar, industry chart of accounts, and authoritative feature
+switches. Setup can be deferred without being recorded as complete and resumed
+from **Company Settings → Setup wizard**; completion and deferral are audited.
 
-### Insight
+Useful operations:
 
-- **Financial statements** — trial balance, P&L (period ranges, FY presets,
-  prior-year comparatives with Δ / Δ%), balance sheet (as-of, computed retained
-  earnings), AR/AP position by party — all **drillable to the register**.
-- **Reports** — a report library plus a custom report builder, exported to
-  **PDF / Excel / CSV** with per-report page setup, and saved report views.
-- **Analytics** — a native BI hub, **Insights** (a BHQL card studio), and
-  **Saved Searches** — named, shareable queries over the ledger, documents,
-  parties, and accounts.
-- **SQL** — an ad-hoc query surface over a read-only role, and a **Documents**
-  file cabinet.
+```bash
+# Status and health
+docker compose --env-file .env.compose ps
+curl http://localhost:4780/api/v1/health?include=worker
 
-### Platform
+# Follow application logs
+docker compose --env-file .env.compose logs -f web worker
 
-- **RBAC** — roles, a permission catalogue with wildcards, per-user overrides,
-  admin Users/Roles UI, and a permission gate on every mutation.
-- **App builder** — custom fields (header + line, any module), **custom record
-  types** (auto-generated modules + dynamic sidebar), and a forms engine.
-- **User scripting** (real JavaScript, QuickJS sandbox), **navigation
-  customization**, an append-only **audit log** (including complete old/new
-  document and GL snapshots for posted amendments and deletion tombstones),
-  **API keys**, and a **data import/export** adapter registry.
+# Pull a new published image and apply forward migrations
+./scripts/compose-up.sh
 
-## The Kernel
+# Stop without deleting data
+docker compose --env-file .env.compose down
+```
 
-The general-ledger kernel is the part you can't fake, so openbooks doesn't.
+PostgreSQL, Redis, and MinIO data live in named Docker volumes. `docker compose
+down -v` permanently deletes those volumes and must not be used unless data
+destruction is intended.
 
-- **Balanced by construction.** A Postgres trigger rejects any journal entry
-  whose lines don't sum to zero. There is no code path that writes an unbalanced
-  entry — not an admin override, not a migration.
-- **Audited open-period amendments.** Posted transactions are locked by default,
-  but the engine may re-materialize or delete them while every affected scope is
-  open and dependency checks pass. The same transaction stores immutable old/new
-  document and GL snapshots; closed-period corrections use controlled reopening
-  or reversals (`reverses_entry_id`).
-- **Money is exact.** Amounts are `numeric(19,4)` and computed with BigInt units
-  (`engine/src/money.ts`) — never floats, never rounding drift, handles
-  scientific notation.
-- **Guardrails in the database.** No posting to summary or inactive accounts, no
-  posting into a closed period, application caps enforced — all in
-  `schema/migrations/kernel-constraints.sql`. The amendment GUC is engine-only
-  and transaction-scoped; the separate migration-mode GUC exists only for
-  historical replays.
+For internet exposure, configure TLS, backups, monitoring, email, secret
+management, retention, and network policy appropriate to your environment. See
+[SECURITY.md](SECURITY.md).
+
+## What is implemented
+
+The following capabilities are backed by application routes, services, schema,
+migrations, and tests in this repository. Some are optional organization
+features and remain disabled until an administrator enables them at **Company
+Settings → Features**.
+
+### General ledger, controls, and close
+
+- Chart of accounts, account hierarchy, departments, projects, subsidiaries,
+  books, currencies, and other accounting dimensions
+- Journal entries and source-document posting
+- Open-item subledgers and atomic payment application
+- Monthly accounting periods plus AR, AP, and GL module-close sequencing
+- Controlled reopen, reversal, void, and correction workflows
+- Budgets, scenarios, budget-to-actual analysis, and variance controls
+- Continuous-close findings and configurable accounting/finance detectors
+- Append-oriented audit evidence for transactions and material configuration
+- Income-tax provision calculations and posting support
+
+### Receivables, sales, and revenue
+
+- Customers, prospects, leads, opportunities, activities, forecasts, and CRM
+  lifecycle
+- Estimates, sales orders, customer invoices, receipts, collections, and
+  payment application
+- Items, dated prices, taxes, discounts, and document-level approvals
+- Revenue contracts, performance obligations, recognition schedules, point-in-
+  time and over-time recognition, catch-up entries, and cancellation handling
+- Optional subscriptions, recurring invoicing, dunning, hosted payment links,
+  payment-provider webhooks, and PSP settlement accounting
+
+### Payables, purchasing, and spend
+
+- Vendors, purchase orders, vendor bills, payment runs, payments, and employee
+  expense reports
+- Canadian CPA-005 EFT file generation
+- AP document capture with optional OCR adapters and purchase-order matching
+- Approval policies, amount routing, worklists, quorum, delegation, escalation,
+  and prevention of self-approval
+- Vendor compliance classes, certificates and evidence, lien waivers, payment
+  release controls, and 1099/T4A information-return workpapers
+
+### Banking and cash
+
+- Bank and cash accounts
+- OFX and CSV statement import with duplicate detection
+- Reconciliation rules, automatic matching, manual matching, adjustments, and
+  zero-difference sign-off
+- Reconciliation immutability after sign-off
+- Optional SFTP statement ingestion and configurable live-feed connections
+- Payment-service-provider settlement, fee, refund, and FX reconciliation
+
+### Projects and construction
+
+- Project types and feature profiles
+- Project dimensions, job costing, budgets, profitability, and project
+  financial drill-down
+- Employee time, approval, labor cost evidence, labor pricing, overtime, and
+  billable time
+- Work breakdown structures, working calendars, baselines, critical-path/Gantt
+  scheduling, and optimistic concurrency
+- Schedule-of-values billing, progress billing, stored materials, applications
+  for payment, retainage, and overbilling controls
+- Change orders and project billing requests
+- Field tickets with approval/signature workflows and immutable billing lineage
+- Equipment usage charges, overhead costing, subcontractor compliance, and lien
+  waivers
+- Percentage-complete revenue recognition
+
+### Inventory, fixed assets, and equipment
+
+- Inventory receipts, issues, transfers, returns, warehouses, lots, batches,
+  serial tracking, and stock availability controls
+- FIFO, moving-average, and standard-cost valuation
+- Purchase-price variance, landed-cost allocation, COGS, and inventory-to-GL
+  reconciliation
+- Concurrency controls that prevent overselling
+- Fixed-asset registers, categories, alternate depreciation books, and tax
+  pools
+- Straight-line, declining-balance, double-declining,
+  sum-of-years-digits, units-of-production, and custom-formula depreciation
+- Remeasurement, impairment, disposal, proceeds, gain/loss, reversal, and
+  correction evidence
+
+### Multi-entity and multi-currency
+
+- Legal entities/subsidiaries with organization-level isolation
+- Multiple accounting books and entity currencies
+- Intercompany configuration and eliminations
+- Foreign-currency transactions, exact exchange-rate evidence, realized and
+  unrealized gain/loss, and period revaluation
+- Ownership interests, ownership-based consolidation, non-controlling-interest
+  and goodwill configuration
+- Consolidated financial reporting across entities and currencies
+
+### Tax and statutory workpapers
+
+- Effective-dated tax codes and rates
+- Sales-tax nexus monitoring
+- Tax filings, return boxes, mappings, adjustments, review states, exports, and
+  filing evidence
+- A 24-pack return-workpaper library covering examples for Canada, the United
+  States, the United Kingdom, Australia, New Zealand, several EU countries,
+  India, Singapore, South Africa, the UAE, and Japan
+- Official-PDF field mapping where a compatible AcroForm is supplied
+
+Tax packs are configurable calculation and preparation workpapers. They are not
+a promise of direct electronic filing, government approval, or complete local
+statutory compliance in every jurisdiction.
+
+### Reporting, automation, and extension
+
+- Trial balance, profit and loss, balance sheet, cash flow, general ledger,
+  aging, position, project, inventory, asset, tax, and operational reports
+- Drill-through from financial statements to registers and source transactions
+- Custom report definitions, saved views, schedules, PDF, Excel, and CSV
+  output
+- Analytics dashboards, chart/card insights, saved searches, and a read-only
+  PostgreSQL workbench
+- PDFKit financial-report output plus a Chromium renderer for HTML-authored
+  reports, forms, and templates
+- Custom fields, custom record types, configurable forms, PDF templates, and
+  customizable navigation
+- Audited first-run company setup with industry chart-of-accounts presets,
+  feature dependencies, deferral, and an explicit resume path
+- Real JavaScript in a QuickJS sandbox
+- Visual flows with triggers, conditions, gates, approvals, actions, schedules,
+  locks, and run history
+- Installable OpenBooks app bundles with manifest validation, content security
+  policy, isolated bridge calls, and permission-aware record APIs
+- API keys, REST endpoints, generated OpenAPI documentation, file cabinet,
+  stored backups, sandboxes, clone/masking support, and change sets
+- Optional AI assistant with administrator-configured providers and
+  confirmation-gated write proposals
+
+### Migration tooling
+
+Source connectors and migration services exist for:
+
+- NetSuite
+- QuickBooks Online
+- QuickBooks Desktop Web Connector
+- Xero
+- ERPNext
+- Odoo
+- Microsoft Dynamics
+
+Connector coverage differs by source and record type. Treat migrations as
+controlled projects: use an isolated target, review exceptions, reconcile
+subledgers and statements, and retain signed migration evidence before cutover.
+
+### Languages
+
+The interface includes locale catalogs for:
+
+- English
+- French
+- Spanish
+- German
+- Brazilian Portuguese
+- Chinese
+- Japanese
+
+## What OpenBooks does not currently claim to be
+
+OpenBooks does not currently include a complete:
+
+- payroll calculation and remittance engine;
+- human-capital-management suite;
+- manufacturing/MRP, bill-of-materials, or production-order module;
+- point-of-sale or e-commerce storefront;
+- native iOS or Android application;
+- offline-first client; or
+- universally certified direct tax/e-invoice filing service.
+
+It also does not yet claim SOC 2, ISO 27001, PCI DSS, government filing
+certification, independent penetration testing, or independent accounting
+certification.
+
+## Accounting kernel
+
+Documents and journal entries are separate records. Posting projects an
+approved source document into exactly one balanced journal entry and records
+source lineage.
+
+The database control layer enforces:
+
+- debit/credit balance at the journal-entry boundary;
+- valid active posting accounts;
+- closed-period restrictions;
+- document/application amount caps;
+- tenant ownership and foreign-key integrity;
+- immutable signed-off reconciliations;
+- exactly-once source posting; and
+- controlled amendment, reversal, and migration scopes.
+
+Authorized open-period corrections may re-materialize a source document's
+journal projection only while dependency and period controls pass. The change
+records before/after document and GL evidence. Closed-period corrections use a
+controlled reopen or a reversing/adjusting entry according to the applicable
+workflow.
+
+Financial calculations use decimal strings and BigInt-scaled units. Currency
+amounts are stored at four decimal places; exchange rates retain additional
+precision. Request, service, posting, reporting, and display tests guard against
+crossing the binary floating-point boundary.
+
+## Security and tenant isolation
+
+OpenBooks combines:
+
+- signed-cookie sessions with scrypt password hashes;
+- RBAC roles, wildcard permissions, explicit user overrides, and subsidiary
+  restrictions;
+- PostgreSQL row-level security on organization-owned tables;
+- scoped and hashed API keys;
+- AES-256-GCM protection for stored connection/provider secrets;
+- sandbox and app content-security policies;
+- audit logs and workflow evidence; and
+- server-side feature, permission, state-transition, and concurrency checks.
+
+OpenBooks does not currently ship first-party MFA or enterprise SAML/OIDC SSO.
+See [SECURITY.md](SECURITY.md) for the support policy, private reporting channel,
+and deployment responsibilities.
 
 ## Architecture
 
-openbooks is an npm-workspaces monorepo: a Next.js app over a shared schema, a
-posting engine, and a set of focused packages.
+OpenBooks is an npm-workspaces monorepo:
 
-```
-schema/     Drizzle schema (one domain per file) + generated migrations
-            + hand-written kernel/FK SQL — org-scoped
-engine/     Posting rules, approvals runtime, money math, QuickJS scripting,
-            SQL API, and the source-adapter registry (ledger migration in)
-web/        Next.js 16 App Router app — authenticated shell in app/(app),
-            login + API outside; flyout-first, instant-into-draft records
+```text
+schema/       Drizzle schema, generated migrations, referential integrity,
+              row-level security, and accounting-kernel SQL
+engine/       Posting, subledgers, money math, close, assets, inventory,
+              workflow runtime, workers, migration adapters, and simulation
+web/          Next.js App Router application, REST routes, reports, admin,
+              documentation, authentication, and organization context
 packages/
-  ui/           Design system — buttons, inputs, tables, drawers, page headers
-  analytics/    BHQL insight query engine (AST → SQL → viz spec)
-  reports/      Custom report definitions, filters, schedules, runs
-  pdf/          Pure-JS PDF renderer (pdfkit; no Chromium)
-  office/       Excel (ExcelJS) + CSV export
-  forms-core/   App-builder form schema, evaluator, field registry
-  customization/ Custom fields + custom record types
-  jobs/         Background job runtime
-  emails/       Transactional email templates
+  ui/             shared design system
+  analytics/      insight query engine and visualizations
+  reports/        custom-report definitions and scheduling
+  pdf/            PDFKit and Chromium-backed document rendering
+  office/         Excel and CSV output
+  forms-core/     form schema, automation model, and evaluator
+  customization/ custom fields and record types
+  jobs/           BullMQ queues and worker heartbeat
+  emails/         provider-neutral transactional email
 ```
 
-Every change lands complete: UI, permission key, route, migration, FK, and
-grants ship together — no orphaned schema and no unreachable UI.
+| Layer | Implementation |
+| --- | --- |
+| Web | Next.js 16, React 19, Tailwind CSS 4 |
+| Language | TypeScript 5.9 in application workspaces |
+| Database | PostgreSQL 16, Drizzle ORM, handwritten control SQL |
+| Queues | Redis 7 and BullMQ |
+| Object storage | S3-compatible storage; MinIO in the Compose stack |
+| Money | `numeric(19,4)` plus BigInt decimal helpers |
+| Scripting | QuickJS sandbox |
+| Reporting | SQL, custom report AST, PDFKit, Chromium, ExcelJS, CSV |
+| Localization | next-intl with seven locale catalogs |
+| Authentication | scrypt passwords, signed cookies, RBAC |
+| Packaging | Multi-stage Docker image with web, bootstrap, and worker |
 
-## Tech stack
+The production image starts by taking a database advisory lock and running the
+idempotent bootstrap. The bootstrap applies tracked migrations and constraints,
+refreshes row-level security, verifies the catalog, ensures base roles and
+periods, and creates the first administrator only when none exists.
 
-| Layer      | Choice                                                         |
-| ---------- | -------------------------------------------------------------- |
-| Framework  | Next.js 16 (App Router) + React 19                             |
-| Language   | TypeScript 5.9 (strict)                                        |
-| Database   | PostgreSQL 16 on a Patroni HA cluster                          |
-| ORM        | Drizzle — with hand-written kernel & FK SQL                    |
-| Money      | `numeric(19,4)` + BigInt math (no floats)                      |
-| Scripting  | Real JavaScript in a QuickJS sandbox                           |
-| Query      | Real PostgreSQL through a SELECT-only role                     |
-| PDF        | Pure-JS pdfkit pipeline (no Chromium)                          |
-| Office     | ExcelJS + CSV                                                  |
-| i18n       | next-intl (English · French · Spanish)                         |
-| Styling    | Tailwind CSS 4 (class-based dark mode) + shared component library |
-| Auth       | scrypt + signed-cookie sessions, middleware gate, RBAC        |
-
-## Quick start
-
-You'll need **Node 24+**, **npm**, and a **PostgreSQL 16** database.
+## Development
 
 ```bash
-# 1. Install workspace dependencies
-npm install
-
-# 2. Point openbooks at your database
-#    Set OPENBOOKS_DB_URL in a .env at the repo root
-#    (web/.env.local symlinks it for Next middleware)
-
-# 3. Create the schema — apply migrations, integrity, and kernel rules in order
-#    schema/migrations/generated/*.sql
-#    → schema/migrations/referential-integrity.sql
-#    → schema/migrations/kernel-constraints.sql
-#    then: grant select on <tables> to openbooks_read
-
-# 4. Seed your first user
-npx tsx engine/src/seed-user.ts you@example.com "Your Name" admin
-
-# 5. Run the app
+npm ci
+cp .env.example .env
+# Replace the examples and point OPENBOOKS_DB_URL at a disposable database.
+npx tsx scripts/bootstrap.ts
 npm run dev -w web
 ```
 
-Then open **http://localhost:4780** and sign in.
+The source development server listens on <http://localhost:4780>.
 
-## Contributing
+Release verification:
 
-Contributions are welcome — issues, discussions, and PRs all help.
+```bash
+npm run verify:release
+```
 
-1. Fork the repo and follow the [Quick start](#quick-start).
-2. Keep changes type-safe: `npx tsc -p web --noEmit`, `npx tsc -p engine
-   --noEmit`, and a clean `cd web && npx next build`. **Never commit on red.**
-3. Keep changes tested. `npm test` runs the full `node:test` suite (unit plus
-   DB-backed integration tests — set `OPENBOOKS_DB_URL` to a scratch database
-   and run `npx tsx scripts/bootstrap.ts` first; without it, integration tests
-   skip). `npm run test:coverage` adds a coverage report, and `npm run
-   test:e2e` runs the Playwright browser smoke suite. The `test` workflow
-   gates all of it on every push and PR.
-4. Respect the non-negotiables: kernel discipline, complete i18n across every
-   shipped locale, flyout-first records, and search/filter/pagination on every
-   list.
-5. Open a PR describing the change and the workflow it improves.
+The gate type-checks every workspace, runs unit and database-integration tests
+when a database is configured, and creates a production build. GitHub Actions
+also runs a PostgreSQL-backed integration canary, full integration suite,
+coverage, and Playwright browser smoke tests.
 
-If you run a real back office and something here doesn't match how your books
-actually work, that feedback is gold —
-[open an issue](https://github.com/braedonsaunders/openbooks/issues).
+At the first alpha release, the full release suite contains **826 tests**
+covering ledger, posting, payment, banking, close, tax, fixed-asset, inventory,
+project, workflow, reporting, security-boundary, and customization behavior.
+
+## Project status
+
+`v0.1.0-alpha.1` is the first packaged community release.
+
+Good uses today:
+
+- evaluation and accounting workflow review;
+- local or isolated self-hosted trials;
+- migration rehearsals;
+- parallel-book pilots;
+- development and contribution; and
+- building reproducible accounting test cases.
+
+Before relying on OpenBooks as a system of record, validate configuration,
+opening balances, tax treatment, reports, permissions, backup restoration,
+upgrade behavior, and jurisdiction-specific requirements with qualified
+professionals.
+
+## Community
+
+- [GitHub Discussions](https://github.com/braedonsaunders/openbooks/discussions)
+  for questions, ideas, implementation experiences, and design proposals
+- [GitHub Issues](https://github.com/braedonsaunders/openbooks/issues) for
+  reproducible defects and scoped feature requests
+- [CONTRIBUTING.md](CONTRIBUTING.md) for setup, tests, financial integrity
+  requirements, and pull-request expectations
+- [SECURITY.md](SECURITY.md) for private vulnerability reporting
+- [CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md) for community standards
+
+The most valuable contributions are accounting edge cases, anonymized workflow
+descriptions, migration reconciliation cases, translations, deployment testing,
+accessibility review, security review, and complete fixes with deterministic
+tests.
 
 ## License
 
-openbooks is licensed under the **[GNU Affero General Public License v3.0](LICENSE)**
-— use it, modify it, self-host it, ship it. Because it's AGPL, if you run a
-modified version as a network service you must make your source available to its
-users under the same license. That keeps the project open for everyone and keeps
-hosting-as-a-business honest.
+OpenBooks is licensed under the
+**[GNU Affero General Public License v3.0 or later](LICENSE)**.
 
-Copyright © 2026 the openbooks contributors.
+You may use, inspect, modify, and self-host it. If you provide a modified version
+as a network service, the AGPL requires you to offer the corresponding source to
+users of that service under the same license.
+
+Copyright © 2026 OpenBooks contributors.
 
 ---
 
 <p align="center">
   <a href="https://star-history.com/#braedonsaunders/openbooks&Date">
-    <img alt="Star history" src="https://api.star-history.com/svg?repos=braedonsaunders/openbooks&type=Date" width="600" />
+    <img alt="OpenBooks star history" src="https://api.star-history.com/svg?repos=braedonsaunders/openbooks&type=Date" width="600" />
   </a>
 </p>
 
 <p align="center">
   <em>The open business suite. Run on open books.</em><br />
-  If openbooks is useful to you, consider giving it a ⭐.
+  If OpenBooks is useful or interesting, star the repository and join the
+  discussion.
 </p>
