@@ -71,7 +71,12 @@ export const itemInventoryProfiles = pgTable("item_inventory_profiles", {
     .notNull().default("last_receipt"),
   provisionalUnitCost: money("provisional_unit_cost"),
   ...auditColumns,
-});
+}, (t) => [
+  check(
+    "item_inventory_profiles_tracking_costing",
+    sql`${t.tracking} = 'none' or ${t.costingMethod} <> 'moving_average'`,
+  ),
+]);
 
 export const lots = pgTable(
   "lots",
@@ -93,13 +98,20 @@ export const serials = pgTable(
     orgId: orgRef(),
     itemId: uuid("item_id").notNull(),
     serialNumber: text("serial_number").notNull(),
-    status: text("status", { enum: ["in_stock", "committed", "shipped", "returned", "scrapped"] })
+    status: text("status", { enum: ["registered", "in_stock", "committed", "shipped", "returned", "scrapped"] })
       .notNull()
       .default("in_stock"),
     currentStockLocationId: uuid("current_stock_location_id"),
     ...auditColumns,
   },
-  (t) => [uniqueIndex("serials_item_number").on(t.itemId, t.serialNumber)],
+  (t) => [
+    uniqueIndex("serials_item_number").on(t.itemId, t.serialNumber),
+    check(
+      "serials_status_location",
+      sql`(${t.status} = 'in_stock' and ${t.currentStockLocationId} is not null)
+          or (${t.status} <> 'in_stock' and ${t.currentStockLocationId} is null)`,
+    ),
+  ],
 );
 
 /**
@@ -129,6 +141,10 @@ export const inventoryMovements = pgTable(
     documentLineId: uuid("document_line_id"),
     journalEntryId: uuid("journal_entry_id"),
     pairedMovementId: uuid("paired_movement_id"), // transfer_out ↔ transfer_in
+    /** Append-only correction lineage. Exactly one posted movement may reverse
+     *  a source movement; the source row itself remains immutable. */
+    reversesMovementId: uuid("reverses_movement_id"),
+    reversalReason: text("reversal_reason"),
     status: text("status", { enum: ["pending", "posted"] }).notNull().default("pending"),
     memo: text("memo"),
     ...auditColumns,
@@ -136,7 +152,19 @@ export const inventoryMovements = pgTable(
   (t) => [
     index("inv_moves_item_loc").on(t.itemId, t.stockLocationId),
     index("inv_moves_doc_line").on(t.documentLineId),
+    uniqueIndex("inv_moves_one_reversal")
+      .on(t.reversesMovementId)
+      .where(sql`${t.reversesMovementId} is not null`),
     check("inv_moves_qty_nonzero", sql`${t.quantity} <> 0`),
+    check(
+      "inv_moves_reversal_evidence",
+      sql`(${t.reversesMovementId} is null and ${t.reversalReason} is null)
+          or (${t.reversesMovementId} is not null
+              and ${t.reversesMovementId} <> ${t.id}
+              and ${t.reversalReason} is not null
+              and length(btrim(${t.reversalReason})) between 5 and 500
+              and ${t.createdBy} is not null)`,
+    ),
   ],
 );
 
@@ -271,10 +299,17 @@ export const landedCostAllocations = pgTable(
     /** The cost source: a bill line for freight/duty/etc. Null for a manual
      *  landed-cost entry not tied to a document line. */
     sourceDocumentLineId: uuid("source_document_line_id"),
+    /** Present for multi-target voucher allocations; null for the legacy
+     * single-target allocation service. */
+    voucherId: uuid("voucher_id"),
     targetCostLayerId: uuid("target_cost_layer_id").notNull(),
     basis: text("basis", { enum: ["value", "quantity", "weight", "manual"] }).notNull(),
     amount: money("amount").notNull(),
     journalEntryId: uuid("journal_entry_id"),
+    /** Append-only cancellation evidence. A reversal row carries a negative
+     * amount and points to the positive allocation it reverses. */
+    reversesAllocationId: uuid("reverses_allocation_id"),
+    reversalReason: text("reversal_reason"),
     ...auditColumns,
   },
   (t) => [index("landed_cost_source").on(t.sourceDocumentLineId)],

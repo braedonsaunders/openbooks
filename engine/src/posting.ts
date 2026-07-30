@@ -1,6 +1,15 @@
 import { and, asc, eq, inArray, sql } from "drizzle-orm";
 import { db, inDbTransaction, schema } from "./db.ts";
-import { add, cmp, isZero, mulRate, neg, sum, toUnits } from "./money.ts";
+import {
+  add,
+  cmp,
+  isZero,
+  mulRate,
+  neg,
+  normalizeDecimal,
+  sum,
+  toUnits,
+} from "./money.ts";
 import { runTriggerScripts, type ScriptContext } from "./scripting.ts";
 import { emitStatusChange, runRecordFlows } from "./flows/run.ts";
 import {
@@ -9,14 +18,21 @@ import {
   SubsidiaryError,
   validateSubsidiaryRestrictions,
 } from "./subsidiaries.ts";
-import { assertPeriodModulesOpen, closeModuleForDocument, CloseError } from "./close.ts";
+import {
+  assertPeriodModulesOpen,
+  closeModuleForDocument,
+  CloseError,
+} from "./close.ts";
 import {
   applyInventoryIssuesForInvoice,
   applyInventoryReceiptsForBill,
   resolveBillInventoryAccounts,
 } from "./inventory.ts";
 import { createObligationsFromInvoice } from "./revenue-recognition.ts";
-import { captureTransactionAuditSnapshot, recordTransactionAudit } from "./transaction-audit.ts";
+import {
+  captureTransactionAuditSnapshot,
+  recordTransactionAudit,
+} from "./transaction-audit.ts";
 import { assertBillPostingAllowed, ComplianceError } from "./compliance.ts";
 
 /**
@@ -158,12 +174,17 @@ async function resolveTaxAccounts(
   const r = (await runner.execute(sql`
     select id, collected_account_id, paid_account_id from tax_codes
      where org_id = ${orgId} and (collected_account_id is not null or paid_account_id is not null)`)) as unknown as {
-    rows: { id: string; collected_account_id: string | null; paid_account_id: string | null }[];
+    rows: {
+      id: string;
+      collected_account_id: string | null;
+      paid_account_id: string | null;
+    }[];
   };
   const collected = new Map<string, string>();
   const paid = new Map<string, string>();
   for (const row of r.rows) {
-    if (row.collected_account_id) collected.set(row.id, row.collected_account_id);
+    if (row.collected_account_id)
+      collected.set(row.id, row.collected_account_id);
     if (row.paid_account_id) paid.set(row.id, row.paid_account_id);
   }
   return { collected, paid };
@@ -224,7 +245,8 @@ const cardRule: RuleFn = (doc, lines, deps) => {
   const tax = purchaseTaxLines(doc, lines, deps, 1);
   const total = sum([...expense, ...tax].map((l) => l.amount));
   const cardLiability = controlOverride(doc) ?? deps.cardLiabilityAccountId;
-  if (!cardLiability) throw new PostingError("card_charge requires a payment card");
+  if (!cardLiability)
+    throw new PostingError("card_charge requires a payment card");
   return [
     ...expense,
     ...tax,
@@ -272,15 +294,27 @@ const taxControlDims = (d: Doc, l: DocLine) => ({
 /** Pure GL projection for a financial equipment/resource charge. The debit is
  * job cost; the credit relieves a distinct recovery pool. Keeping this helper
  * exported makes the accounting invariant directly testable. */
-export function projectChargeKernelLines(doc: Doc, lines: DocLine[]): KernelLine[] {
+export function projectChargeKernelLines(
+  doc: Doc,
+  lines: DocLine[],
+): KernelLine[] {
   const out: KernelLine[] = [];
   for (const line of lines) {
-    if (!line.accountId) throw new PostingError("project charge requires a cost account");
-    if (!line.recoveryAccountId) throw new PostingError("project charge requires a cost recovery account");
+    if (!line.accountId)
+      throw new PostingError("project charge requires a cost account");
+    if (!line.recoveryAccountId)
+      throw new PostingError("project charge requires a cost recovery account");
     if (line.recoveryAccountId === line.accountId) {
-      throw new PostingError("project charge cost and recovery accounts must be different");
+      throw new PostingError(
+        "project charge cost and recovery accounts must be different",
+      );
     }
-    out.push({ accountId: line.accountId, amount: line.amount, memo: line.description, ...dims(doc, line) });
+    out.push({
+      accountId: line.accountId,
+      amount: line.amount,
+      memo: line.description,
+      ...dims(doc, line),
+    });
     out.push({
       accountId: line.recoveryAccountId,
       amount: neg(line.amount),
@@ -311,7 +345,13 @@ async function validateRequiredDimensions(
        and a.id = any(${`{${accountIds.join(",")}}`}::uuid[])
      group by a.id
   `)) as unknown as {
-    rows: { id: string; number: string | null; name: string; required_dimensions: string[]; segment_names: Record<string, string> }[];
+    rows: {
+      id: string;
+      number: string | null;
+      name: string;
+      required_dimensions: string[];
+      segment_names: Record<string, string>;
+    }[];
   };
   const byAccount = new Map(rows.rows.map((row) => [row.id, row]));
   const builtin: Record<string, keyof KernelLine> = {
@@ -329,7 +369,8 @@ async function validateRequiredDimensions(
         ? Boolean(line[builtin[key]!])
         : Boolean(line.extraDims?.[key]);
       if (!present) {
-        const label = account?.segment_names?.[key] ?? (key === "party" ? "Party" : key);
+        const label =
+          account?.segment_names?.[key] ?? (key === "party" ? "Party" : key);
         throw new PostingError(
           `${label} is required for account ${account?.number ? `${account.number} · ` : ""}${account?.name ?? line.accountId}`,
         );
@@ -353,16 +394,29 @@ const controlOverride = (doc: Doc): string | undefined => {
 };
 
 function componentSettlementTotal(components: TaxPostingComponent[]): string {
-  const standard = sum(components.filter((c) => c.calculationType === "standard").map((c) => c.taxAmount));
-  const withholding = sum(components.filter((c) => c.calculationType === "withholding").map((c) => c.taxAmount));
+  const standard = sum(
+    components
+      .filter((c) => c.calculationType === "standard")
+      .map((c) => c.taxAmount),
+  );
+  const withholding = sum(
+    components
+      .filter((c) => c.calculationType === "withholding")
+      .map((c) => c.taxAmount),
+  );
   return add(standard, neg(withholding));
 }
 
-function componentsForLine(line: DocLine, deps: PostingDeps): TaxPostingComponent[] {
+function componentsForLine(
+  line: DocLine,
+  deps: PostingDeps,
+): TaxPostingComponent[] {
   const components = deps.taxComponentsByLine?.get(line.id) ?? [];
   const hasTaxProfile = Boolean(line.taxCodeId || line.taxGroupId);
   if (hasTaxProfile && components.length === 0) {
-    throw new PostingError(`line ${line.lineNumber} has a tax profile but no calculation evidence`);
+    throw new PostingError(
+      `line ${line.lineNumber} has a tax profile but no calculation evidence`,
+    );
   }
   if (components.length > 0) {
     const settlement = componentSettlementTotal(components);
@@ -412,22 +466,39 @@ function purchaseTaxLines(
       };
       if (component.calculationType === "withholding") {
         if (!component.withholdingAccountId) {
-          throw new PostingError(`withholding tax ${component.taxCodeId} has no withholding account`);
+          throw new PostingError(
+            `withholding tax ${component.taxCodeId} has no withholding account`,
+          );
         }
-        out.push({ ...common, accountId: component.withholdingAccountId, amount: signed(neg(component.taxAmount), direction) });
+        out.push({
+          ...common,
+          accountId: component.withholdingAccountId,
+          amount: signed(neg(component.taxAmount), direction),
+        });
         continue;
       }
       if (!isZero(component.recoverableAmount)) {
         out.push({
           ...common,
-          accountId: component.paidAccountId ?? deps.taxPaidByCode?.get(component.taxCodeId) ?? deps.control.taxPaid ?? deps.control.ap,
+          accountId:
+            component.paidAccountId ??
+            deps.taxPaidByCode?.get(component.taxCodeId) ??
+            deps.control.taxPaid ??
+            deps.control.ap,
           amount: signed(component.recoverableAmount, direction),
         });
       }
-      if (component.calculationType === "reverse_charge" && !isZero(component.taxAmount)) {
+      if (
+        component.calculationType === "reverse_charge" &&
+        !isZero(component.taxAmount)
+      ) {
         out.push({
           ...common,
-          accountId: component.collectedAccountId ?? deps.taxCollectedByCode?.get(component.taxCodeId) ?? deps.control.taxCollected ?? deps.control.ap,
+          accountId:
+            component.collectedAccountId ??
+            deps.taxCollectedByCode?.get(component.taxCodeId) ??
+            deps.control.taxCollected ??
+            deps.control.ap,
           amount: signed(neg(component.taxAmount), direction),
         });
       }
@@ -454,13 +525,23 @@ function salesTaxLines(
       if (component.calculationType === "reverse_charge") continue;
       if (component.calculationType === "withholding") {
         if (!component.withholdingAccountId) {
-          throw new PostingError(`withholding tax ${component.taxCodeId} has no withholding account`);
+          throw new PostingError(
+            `withholding tax ${component.taxCodeId} has no withholding account`,
+          );
         }
-        out.push({ ...common, accountId: component.withholdingAccountId, amount: signed(component.taxAmount, direction) });
+        out.push({
+          ...common,
+          accountId: component.withholdingAccountId,
+          amount: signed(component.taxAmount, direction),
+        });
       } else {
         out.push({
           ...common,
-          accountId: component.collectedAccountId ?? deps.taxCollectedByCode?.get(component.taxCodeId) ?? deps.control.taxCollected ?? deps.control.ar,
+          accountId:
+            component.collectedAccountId ??
+            deps.taxCollectedByCode?.get(component.taxCodeId) ??
+            deps.control.taxCollected ??
+            deps.control.ar,
           amount: signed(neg(component.taxAmount), direction),
         });
       }
@@ -525,20 +606,43 @@ export const RULES: Record<string, RuleFn> = {
   vendor_payment: (doc, lines, deps) => {
     const cash = sum(lines.map(lineTotal));
     const custom = (doc.custom ?? {}) as Record<string, unknown>;
-    const discount = typeof custom.discountAmount === "string" ? custom.discountAmount : "0";
-    const discountAccountId = typeof custom.discountAccountId === "string" ? custom.discountAccountId : null;
-    if (toUnits(discount) < 0n) throw new Error("vendor payment discount cannot be negative");
-    if (!isZero(discount) && !discountAccountId) throw new Error("vendor payment discount account is required");
+    const discount =
+      typeof custom.discountAmount === "string" ? custom.discountAmount : "0";
+    const discountAccountId =
+      typeof custom.discountAccountId === "string"
+        ? custom.discountAccountId
+        : null;
+    if (toUnits(discount) < 0n)
+      throw new Error("vendor payment discount cannot be negative");
+    if (!isZero(discount) && !discountAccountId)
+      throw new Error("vendor payment discount account is required");
     const payable = add(cash, discount);
     return [
       // The AP leg is an OPEN ITEM: it settles against the bills it paid, so it
       // must carry is_open_item to be a valid application source (from_line).
       // controlOverride: a payment against a non-default payable account (a
       // financing sub-account, or a source system with several AP accounts).
-      { accountId: controlOverride(doc) ?? deps.control.ap, amount: payable, partyId: doc.partyId, isOpenItem: true, ...dims(doc) }, // debit AP
-      { accountId: lines[0]?.accountId ?? deps.control.bank, amount: neg(cash), ...dims(doc) }, // credit bank
+      {
+        accountId: controlOverride(doc) ?? deps.control.ap,
+        amount: payable,
+        partyId: doc.partyId,
+        isOpenItem: true,
+        ...dims(doc),
+      }, // debit AP
+      {
+        accountId: lines[0]?.accountId ?? deps.control.bank,
+        amount: neg(cash),
+        ...dims(doc),
+      }, // credit bank
       ...(!isZero(discount)
-        ? [{ accountId: discountAccountId!, amount: neg(discount), partyId: doc.partyId, ...dims(doc) }]
+        ? [
+            {
+              accountId: discountAccountId!,
+              amount: neg(discount),
+              partyId: doc.partyId,
+              ...dims(doc),
+            },
+          ]
         : []),
     ];
   },
@@ -550,16 +654,34 @@ export const RULES: Record<string, RuleFn> = {
     // total = invoice portion + fee; the fee leg credits a fee-income account
     // instead of AR, so the AR leg cross-foots to the open-item applications.
     const fee = typeof custom.feeAmount === "string" ? custom.feeAmount : "0";
-    const feeAccountId = typeof custom.feeIncomeAccountId === "string" ? custom.feeIncomeAccountId : null;
-    if (toUnits(fee) < 0n) throw new Error("customer payment fee cannot be negative");
-    if (cmp(fee, total) > 0) throw new Error("customer payment fee exceeds the receipt");
-    if (!isZero(fee) && !feeAccountId) throw new Error("customer payment fee income account is required");
+    const feeAccountId =
+      typeof custom.feeIncomeAccountId === "string"
+        ? custom.feeIncomeAccountId
+        : null;
+    if (toUnits(fee) < 0n)
+      throw new Error("customer payment fee cannot be negative");
+    if (cmp(fee, total) > 0)
+      throw new Error("customer payment fee exceeds the receipt");
+    if (!isZero(fee) && !feeAccountId)
+      throw new Error("customer payment fee income account is required");
     const receivable = add(total, neg(fee));
     return [
-      { accountId: lines[0]?.accountId ?? deps.control.bank, amount: total, ...dims(doc) }, // debit bank
+      {
+        accountId: lines[0]?.accountId ?? deps.control.bank,
+        amount: total,
+        ...dims(doc),
+      }, // debit bank
       // The AR leg is an OPEN ITEM: it settles the invoices it paid (from_line).
-      { accountId: controlOverride(doc) ?? deps.control.ar, amount: neg(receivable), partyId: doc.partyId, isOpenItem: true, ...dims(doc) }, // credit AR
-      ...(!isZero(fee) ? [{ accountId: feeAccountId!, amount: neg(fee), ...dims(doc) }] : []), // credit fee income
+      {
+        accountId: controlOverride(doc) ?? deps.control.ar,
+        amount: neg(receivable),
+        partyId: doc.partyId,
+        isOpenItem: true,
+        ...dims(doc),
+      }, // credit AR
+      ...(!isZero(fee)
+        ? [{ accountId: feeAccountId!, amount: neg(fee), ...dims(doc) }]
+        : []), // credit fee income
     ];
   },
 
@@ -577,7 +699,10 @@ export const RULES: Record<string, RuleFn> = {
       ...expense,
       ...tax,
       {
-        accountId: controlOverride(doc) ?? deps.control.employeePayable ?? deps.control.ap,
+        accountId:
+          controlOverride(doc) ??
+          deps.control.employeePayable ??
+          deps.control.ap,
         amount: neg(total),
         partyId: doc.partyId,
         isOpenItem: true,
@@ -608,7 +733,11 @@ export const RULES: Record<string, RuleFn> = {
         // Entity-bearing AR/AP journal legs are open items. A party-less leg is
         // a direct GL control-account posting and intentionally stays outside
         // aging; manufacturing an anonymous subledger balance would be false.
-        isOpenItem: controlLineIsOpenItem(l.accountId!, partyId, deps.openItemAccountIds),
+        isOpenItem: controlLineIsOpenItem(
+          l.accountId!,
+          partyId,
+          deps.openItemAccountIds,
+        ),
         ...dims(doc, l),
       };
     }),
@@ -655,13 +784,21 @@ export const RULES: Record<string, RuleFn> = {
         // A deposit can settle an AR/AP credit (for example cash received for
         // a vendor credit). Preserve that entity-bearing control leg as an
         // application source; ordinary income/clearing sources stay non-open.
-        isOpenItem: controlLineIsOpenItem(l.accountId!, partyId, deps.openItemAccountIds),
+        isOpenItem: controlLineIsOpenItem(
+          l.accountId!,
+          partyId,
+          deps.openItemAccountIds,
+        ),
         ...dims(doc, l),
       };
     });
     const total = sum(lines.map((l) => l.amount)); // positive = money in
     return [
-      { accountId: controlOverride(doc) ?? deps.control.bank, amount: total, ...dims(doc) }, // debit bank
+      {
+        accountId: controlOverride(doc) ?? deps.control.bank,
+        amount: total,
+        ...dims(doc),
+      }, // debit bank
       ...sources,
     ];
   },
@@ -670,8 +807,16 @@ export const RULES: Record<string, RuleFn> = {
   transfer: (doc, lines, deps) => {
     const total = sum(lines.map((l) => l.amount));
     return [
-      { accountId: lines[0]?.accountId ?? deps.control.bank, amount: total, ...dims(doc) }, // debit destination
-      { accountId: lines[1]?.accountId ?? deps.control.bank, amount: neg(total), ...dims(doc) }, // credit source
+      {
+        accountId: lines[0]?.accountId ?? deps.control.bank,
+        amount: total,
+        ...dims(doc),
+      }, // debit destination
+      {
+        accountId: lines[1]?.accountId ?? deps.control.bank,
+        amount: neg(total),
+        ...dims(doc),
+      }, // credit source
     ];
   },
 
@@ -752,9 +897,13 @@ export class PostingError extends Error {}
 export function assertFinalKernelBalance(
   lines: readonly { amount: string; subsidiaryId: string }[],
 ): void {
-  if (lines.length < 2) throw new PostingError("posting produced fewer than 2 lines");
+  if (lines.length < 2)
+    throw new PostingError("posting produced fewer than 2 lines");
   const total = sum(lines.map((line) => line.amount));
-  if (!isZero(total)) throw new PostingError(`functional-currency journal does not balance (sum=${total})`);
+  if (!isZero(total))
+    throw new PostingError(
+      `functional-currency journal does not balance (sum=${total})`,
+    );
   const bySubsidiary = new Map<string, string[]>();
   for (const line of lines) {
     const amounts = bySubsidiary.get(line.subsidiaryId) ?? [];
@@ -798,7 +947,12 @@ async function applySubsidiaries(
   doc: Doc,
   kernelLines: KernelLine[],
 ): Promise<{
-  lines: (KernelLine & { subsidiaryId: string; currency: string; txnAmount: string; fxRate: string })[];
+  lines: (KernelLine & {
+    subsidiaryId: string;
+    currency: string;
+    txnAmount: string;
+    fxRate: string;
+  })[];
   docSubId: string;
   multi: boolean;
 }> {
@@ -806,7 +960,8 @@ async function applySubsidiaries(
     const ctx = await loadSubsidiaryContext(runner, doc.orgId);
     const docSubId = doc.subsidiaryId ?? ctx.rootId;
     const origin = ctx.byId.get(docSubId);
-    if (!origin) throw new SubsidiaryError(`subsidiary ${docSubId} does not exist`);
+    if (!origin)
+      throw new SubsidiaryError(`subsidiary ${docSubId} does not exist`);
     const postingDate = doc.postingDate ?? doc.documentDate;
     const rateCache = new Map<string, string>();
 
@@ -826,7 +981,9 @@ async function applySubsidiaries(
            where org_id = ${doc.orgId} and from_currency = ${targetCurrency}
              and to_currency = ${doc.currency} and rate_type = 'spot'
              and as_of <= ${postingDate}
-        ) candidates order by as_of desc limit 1`)) as unknown as { rows: { rate: string }[] };
+        ) candidates order by as_of desc limit 1`)) as unknown as {
+        rows: { rate: string }[];
+      };
       const rate = r.rows[0]?.rate;
       if (!rate) {
         throw new SubsidiaryError(
@@ -837,20 +994,31 @@ async function applySubsidiaries(
       return rate;
     };
 
-    const stamped = await Promise.all(kernelLines.map(async (line) => {
+    // The runner can be a transaction-scoped database handle backed by one
+    // PostgreSQL client. Resolve rates in a deterministic sequence instead of
+    // issuing concurrent queries on that client. This also makes the cache
+    // authoritative when several lines share a target currency.
+    const stamped: (KernelLine & {
+      subsidiaryId: string;
+      currency: string;
+      txnAmount: string;
+      fxRate: string;
+    })[] = [];
+    for (const line of kernelLines) {
       const subsidiaryId = line.subsidiaryId ?? docSubId;
       const subsidiary = ctx.byId.get(subsidiaryId);
-      if (!subsidiary) throw new SubsidiaryError(`subsidiary ${subsidiaryId} does not exist`);
+      if (!subsidiary)
+        throw new SubsidiaryError(`subsidiary ${subsidiaryId} does not exist`);
       const fxRate = await functionalRate(subsidiary.baseCurrency);
-      return {
+      stamped.push({
         ...line,
         subsidiaryId,
         amount: mulRate(line.amount, fxRate),
         currency: doc.currency,
         txnAmount: line.amount,
         fxRate,
-      };
-    }));
+      });
+    }
     const legs = await intercompanyBalancingLegs(runner, {
       orgId: doc.orgId,
       ctx,
@@ -877,7 +1045,11 @@ async function applySubsidiaries(
       partyId: doc.partyId,
       docSubsidiaryId: docSubId,
     });
-    return { lines: all, docSubId, multi: new Set(all.map((l) => l.subsidiaryId)).size > 1 };
+    return {
+      lines: all,
+      docSubId,
+      multi: new Set(all.map((l) => l.subsidiaryId)).size > 1,
+    };
   } catch (err) {
     if (err instanceof SubsidiaryError) throw new PostingError(err.message);
     throw err;
@@ -931,30 +1103,58 @@ export async function postDocument(
     audit?: { actorId: string | null; source: string };
   } = {},
 ): Promise<string> {
-  const [doc] = await db.select().from(schema.documents).where(eq(schema.documents.id, documentId));
+  const [doc] = await db
+    .select()
+    .from(schema.documents)
+    .where(eq(schema.documents.id, documentId));
   if (!doc) throw new PostingError(`document ${documentId} not found`);
-  if (doc.status === "posted") throw new PostingError(`document ${doc.documentNumber} already posted`);
-  if (doc.status === "voided") throw new PostingError(`document ${doc.documentNumber} is voided`);
+  if (doc.status === "posted")
+    throw new PostingError(`document ${doc.documentNumber} already posted`);
+  if (doc.status === "voided")
+    throw new PostingError(`document ${doc.documentNumber} is voided`);
   if (doc.status !== "approved") {
     throw new PostingError(
       `document ${doc.documentNumber} is ${doc.status}; it must complete the approval submission lifecycle before posting`,
     );
   }
-  if ((doc.kind === "journal" || doc.kind === "deposit") && !deps.openItemAccountIds) {
-    deps = { ...deps, openItemAccountIds: await resolveOpenItemAccounts(db, doc.orgId) };
+  if (
+    (doc.kind === "journal" || doc.kind === "deposit") &&
+    !deps.openItemAccountIds
+  ) {
+    deps = {
+      ...deps,
+      openItemAccountIds: await resolveOpenItemAccounts(db, doc.orgId),
+    };
   }
   if (!deps.taxCollectedByCode && doc.kind !== "journal") {
     const tax = await resolveTaxAccounts(db, doc.orgId);
-    deps = { ...deps, taxCollectedByCode: tax.collected, taxPaidByCode: tax.paid };
+    deps = {
+      ...deps,
+      taxCollectedByCode: tax.collected,
+      taxPaidByCode: tax.paid,
+    };
   }
   if (!deps.taxComponentsByLine && doc.kind !== "journal") {
-    deps = { ...deps, taxComponentsByLine: await resolveTaxComponents(db, doc.id) };
+    deps = {
+      ...deps,
+      taxComponentsByLine: await resolveTaxComponents(db, doc.id),
+    };
   }
   if (doc.kind === "customer_invoice" && !deps.deferralAccountByLine) {
-    deps = { ...deps, deferralAccountByLine: await resolveDeferralAccounts(db, doc.id) };
+    deps = {
+      ...deps,
+      deferralAccountByLine: await resolveDeferralAccounts(db, doc.id),
+    };
   }
   if (doc.kind === "vendor_bill" && !deps.inventoryAssetByLine) {
-    deps = { ...deps, inventoryAssetByLine: await resolveBillInventoryAccounts(db, doc.orgId, doc.id) };
+    deps = {
+      ...deps,
+      inventoryAssetByLine: await resolveBillInventoryAccounts(
+        db,
+        doc.orgId,
+        doc.id,
+      ),
+    };
   }
 
   const lines = await db
@@ -964,17 +1164,22 @@ export async function postDocument(
     .orderBy(asc(schema.documentLines.lineNumber));
 
   const rule = RULES[doc.kind];
-  if (!rule) throw new PostingError(`no posting rule for document kind "${doc.kind}"`);
+  if (!rule)
+    throw new PostingError(`no posting rule for document kind "${doc.kind}"`);
 
   if (doc.paymentCardId && !deps.cardLiabilityAccountId) {
     const [card] = await db
       .select()
       .from(schema.paymentCards)
       .where(eq(schema.paymentCards.id, doc.paymentCardId));
-    if (card) deps = { ...deps, cardLiabilityAccountId: card.liabilityAccountId };
+    if (card)
+      deps = { ...deps, cardLiabilityAccountId: card.liabilityAccountId };
   }
 
-  const [org] = await db.select().from(schema.orgs).where(eq(schema.orgs.id, doc.orgId));
+  const [org] = await db
+    .select()
+    .from(schema.orgs)
+    .where(eq(schema.orgs.id, doc.orgId));
   const scriptCtx: ScriptContext = {
     trigger: "before_post",
     document: doc as unknown as Record<string, unknown>,
@@ -1006,9 +1211,14 @@ export async function postDocument(
   // -- flows: before_post (automation only, never a veto) ------------------
   // A before_post flow may set_field whitelisted headers; re-read the
   // document so its projection reflects them.
-  const beforePostFlows = await runRecordFlows({ kind: "before_post" }, doc.kind, doc.id, {
-    orgId: doc.orgId,
-  });
+  const beforePostFlows = await runRecordFlows(
+    { kind: "before_post" },
+    doc.kind,
+    doc.id,
+    {
+      orgId: doc.orgId,
+    },
+  );
   if (beforePostFlows.gatesCreated > 0 || beforePostFlows.failed) {
     const runIds = beforePostFlows.runs.map((run) => run.runId);
     if (runIds.length > 0) {
@@ -1047,11 +1257,16 @@ export async function postDocument(
   }
 
   // -- build + validate kernel lines --------------------------------------
-  const kernelLines = rule(effectiveDoc, lines, deps).filter((l) => !isZero(l.amount));
-  if (kernelLines.length < 2) throw new PostingError("posting produced fewer than 2 lines");
+  const kernelLines = rule(effectiveDoc, lines, deps).filter(
+    (l) => !isZero(l.amount),
+  );
+  if (kernelLines.length < 2)
+    throw new PostingError("posting produced fewer than 2 lines");
   const total = sum(kernelLines.map((l) => l.amount));
   if (!isZero(total)) {
-    throw new PostingError(`posting rule for ${doc.kind} does not balance (sum=${total})`);
+    throw new PostingError(
+      `posting rule for ${doc.kind} does not balance (sum=${total})`,
+    );
   }
 
   // -- open-item lines must carry a subledger party (AR/AP faithfulness) ----
@@ -1075,7 +1290,8 @@ export async function postDocument(
   if (
     !deps.migration &&
     effectiveDoc.partyId &&
-    (effectiveDoc.kind === "vendor_bill" || effectiveDoc.kind === "expense_report")
+    (effectiveDoc.kind === "vendor_bill" ||
+      effectiveDoc.kind === "expense_report")
   ) {
     try {
       await assertBillPostingAllowed({
@@ -1086,7 +1302,8 @@ export async function postDocument(
         asOf: effectiveDoc.postingDate ?? effectiveDoc.documentDate,
       });
     } catch (error) {
-      if (error instanceof ComplianceError) throw new PostingError(error.message);
+      if (error instanceof ComplianceError)
+        throw new PostingError(error.message);
       throw error;
     }
   }
@@ -1121,8 +1338,11 @@ export async function postDocument(
   const [book] = await db
     .select()
     .from(schema.accountingBooks)
-    .where(sql`${schema.accountingBooks.orgId} = ${doc.orgId} and ${schema.accountingBooks.isPrimary} = true`);
-  if (!book) throw new PostingError("primary accounting book is not configured");
+    .where(
+      sql`${schema.accountingBooks.orgId} = ${doc.orgId} and ${schema.accountingBooks.isPrimary} = true`,
+    );
+  if (!book)
+    throw new PostingError("primary accounting book is not configured");
   try {
     await assertPeriodModulesOpen(db, {
       orgId: doc.orgId,
@@ -1139,12 +1359,15 @@ export async function postDocument(
 
   // -- write entry + lines + flip document, atomically ---------------------
   const entryId = await inDbTransaction(async (tx) => {
-    if (deps.migration) await tx.execute(sql`set local openbooks.migration = on`);
+    if (deps.migration)
+      await tx.execute(sql`set local openbooks.migration = on`);
     const auditBefore = options.audit
       ? await captureTransactionAuditSnapshot(tx, documentId)
       : null;
     if (options.audit && !auditBefore) {
-      throw new PostingError(`document ${documentId} disappeared before posting`);
+      throw new PostingError(
+        `document ${documentId} disappeared before posting`,
+      );
     }
     const [entry] = await tx
       .insert(schema.journalEntries)
@@ -1210,12 +1433,17 @@ export async function postDocument(
       )
       .returning({ id: schema.documents.id });
     if (flipped.length === 0) {
-      throw new PostingError(`document ${doc.documentNumber} was already posted or voided`);
+      throw new PostingError(
+        `document ${doc.documentNumber} was already posted or voided`,
+      );
     }
 
     if (options.audit && auditBefore) {
       const auditAfter = await captureTransactionAuditSnapshot(tx, documentId);
-      if (!auditAfter) throw new PostingError(`document ${documentId} disappeared during posting`);
+      if (!auditAfter)
+        throw new PostingError(
+          `document ${documentId} disappeared during posting`,
+        );
       await recordTransactionAudit(tx, {
         orgId: doc.orgId,
         documentId,
@@ -1258,10 +1486,21 @@ export async function postDocument(
   }
 
   if (!options.deferEffects) {
-    await runTriggerScripts("after_post", { ...scriptCtx, trigger: "after_post" }, doc.id);
+    await runTriggerScripts(
+      "after_post",
+      { ...scriptCtx, trigger: "after_post" },
+      doc.id,
+    );
     // -- flows: after_post + the status transition (never throws) -----------
-    await runRecordFlows({ kind: "after_post" }, doc.kind, doc.id, { orgId: doc.orgId });
-    await emitStatusChange(doc.kind, doc.id, { from: doc.status, to: "posted" }, { orgId: doc.orgId });
+    await runRecordFlows({ kind: "after_post" }, doc.kind, doc.id, {
+      orgId: doc.orgId,
+    });
+    await emitStatusChange(
+      doc.kind,
+      doc.id,
+      { from: doc.status, to: "posted" },
+      { orgId: doc.orgId },
+    );
   }
   return entryId;
 }
@@ -1275,14 +1514,20 @@ export async function runPostDocumentEffects(
   documentId: string,
   previousStatus = "draft",
 ): Promise<void> {
-  const [doc] = await db.select().from(schema.documents).where(eq(schema.documents.id, documentId));
+  const [doc] = await db
+    .select()
+    .from(schema.documents)
+    .where(eq(schema.documents.id, documentId));
   if (!doc || doc.status !== "posted") return;
   const lines = await db
     .select()
     .from(schema.documentLines)
     .where(eq(schema.documentLines.documentId, documentId))
     .orderBy(asc(schema.documentLines.lineNumber));
-  const [org] = await db.select().from(schema.orgs).where(eq(schema.orgs.id, doc.orgId));
+  const [org] = await db
+    .select()
+    .from(schema.orgs)
+    .where(eq(schema.orgs.id, doc.orgId));
   if (!org) return;
   const ctx: ScriptContext = {
     trigger: "after_post",
@@ -1291,8 +1536,15 @@ export async function runPostDocumentEffects(
     org: { id: org.id, name: org.name, baseCurrency: org.baseCurrency },
   };
   await runTriggerScripts("after_post", ctx, doc.id);
-  await runRecordFlows({ kind: "after_post" }, doc.kind, doc.id, { orgId: doc.orgId });
-  await emitStatusChange(doc.kind, doc.id, { from: previousStatus, to: "posted" }, { orgId: doc.orgId });
+  await runRecordFlows({ kind: "after_post" }, doc.kind, doc.id, {
+    orgId: doc.orgId,
+  });
+  await emitStatusChange(
+    doc.kind,
+    doc.id,
+    { from: previousStatus, to: "posted" },
+    { orgId: doc.orgId },
+  );
   if (doc.kind === "customer_payment") {
     const { finalizePaymentAcceptanceForDocument } =
       await import("./payment-acceptance.ts");
@@ -1319,15 +1571,24 @@ export function glProjectionScopeUnchanged(
   existing: { periodId: string; postingDate: string },
   next: { periodId: string; postingDate: string },
 ): boolean {
-  return existing.periodId === next.periodId && existing.postingDate === next.postingDate;
+  return (
+    existing.periodId === next.periodId &&
+    existing.postingDate === next.postingDate
+  );
 }
 
 /** Build + validate the GL-Impact projection (kernel lines) for a document. */
-function buildProjection(doc: Doc, lines: DocLine[], deps: PostingDeps): KernelLine[] {
+function buildProjection(
+  doc: Doc,
+  lines: DocLine[],
+  deps: PostingDeps,
+): KernelLine[] {
   const rule = RULES[doc.kind];
-  if (!rule) throw new PostingError(`no posting rule for document kind "${doc.kind}"`);
+  if (!rule)
+    throw new PostingError(`no posting rule for document kind "${doc.kind}"`);
   const kl = rule(doc, lines, deps).filter((l) => !isZero(l.amount));
-  if (kl.length < 2) throw new PostingError("posting produced fewer than 2 lines");
+  if (kl.length < 2)
+    throw new PostingError("posting produced fewer than 2 lines");
   if (!isZero(sum(kl.map((l) => l.amount)))) {
     throw new PostingError(`posting rule for ${doc.kind} does not balance`);
   }
@@ -1359,6 +1620,9 @@ function glKey(
     paymentCardId?: string | null;
     dueDate?: string | null;
     isOpenItem?: boolean | null;
+    currency?: string | null;
+    txnAmount?: string | null;
+    fxRate?: string | null;
   }[],
 ): string {
   return JSON.stringify(
@@ -1372,11 +1636,20 @@ function glKey(
       l.locationId ?? null,
       l.classId ?? null,
       l.equipmentUnitId ?? null,
-      JSON.stringify(Object.fromEntries(Object.entries(l.extraDims ?? {}).sort(([a], [b]) => a.localeCompare(b)))),
+      JSON.stringify(
+        Object.fromEntries(
+          Object.entries(l.extraDims ?? {}).sort(([a], [b]) =>
+            a.localeCompare(b),
+          ),
+        ),
+      ),
       l.taxCodeId ?? null,
       l.paymentCardId ?? null,
       l.dueDate ?? null,
       !!l.isOpenItem,
+      l.currency ?? null,
+      l.txnAmount == null ? null : toUnits(l.txnAmount).toString(),
+      l.fxRate == null ? null : normalizeDecimal(l.fxRate, 10),
     ]),
   );
 }
@@ -1388,9 +1661,10 @@ function glKey(
  *
  * Returns `{ changed: false }` when the projection is unchanged (a non-GL edit)
  * — no ledger write happens, so it is allowed even in a closed period. When the
- * projection differs it regenerates the entry's lines in place (the entry keeps
- * its id and stays posted) and throws `ClosedPeriodError` if the old or new
- * period is closed.
+ * projection differs it fails closed. Posted accounting history is immutable;
+ * a financial source correction must use a dedicated append-only
+ * reversal/replacement workflow that also controls applications, bank
+ * reconciliation, inventory, tax, and revenue-recognition side effects.
  */
 export async function regenerateGlImpactTx(
   tx: Tx,
@@ -1403,33 +1677,61 @@ export async function regenerateGlImpactTx(
       "posted GL replay is restricted to controlled historical migration",
     );
   }
-  const [doc] = await tx.select().from(schema.documents).where(eq(schema.documents.id, documentId));
+  const [doc] = await tx
+    .select()
+    .from(schema.documents)
+    .where(eq(schema.documents.id, documentId));
   if (!doc) throw new PostingError(`document ${documentId} not found`);
   // Only posted documents have a materialized projection to regenerate.
-  if (doc.status !== "posted" || !doc.postedEntryId) return { entryId: null, changed: false };
+  if (doc.status !== "posted" || !doc.postedEntryId)
+    return { entryId: null, changed: false };
 
   if (doc.paymentCardId && !deps.cardLiabilityAccountId) {
     const [card] = await tx
       .select()
       .from(schema.paymentCards)
       .where(eq(schema.paymentCards.id, doc.paymentCardId));
-    if (card) deps = { ...deps, cardLiabilityAccountId: card.liabilityAccountId };
+    if (card)
+      deps = { ...deps, cardLiabilityAccountId: card.liabilityAccountId };
   }
-  if ((doc.kind === "journal" || doc.kind === "deposit") && !deps.openItemAccountIds) {
-    deps = { ...deps, openItemAccountIds: await resolveOpenItemAccounts(tx, doc.orgId) };
+  if (
+    (doc.kind === "journal" || doc.kind === "deposit") &&
+    !deps.openItemAccountIds
+  ) {
+    deps = {
+      ...deps,
+      openItemAccountIds: await resolveOpenItemAccounts(tx, doc.orgId),
+    };
   }
   if (!deps.taxCollectedByCode && doc.kind !== "journal") {
     const tax = await resolveTaxAccounts(tx, doc.orgId);
-    deps = { ...deps, taxCollectedByCode: tax.collected, taxPaidByCode: tax.paid };
+    deps = {
+      ...deps,
+      taxCollectedByCode: tax.collected,
+      taxPaidByCode: tax.paid,
+    };
   }
   if (!deps.taxComponentsByLine && doc.kind !== "journal") {
-    deps = { ...deps, taxComponentsByLine: await resolveTaxComponents(tx, doc.id) };
+    deps = {
+      ...deps,
+      taxComponentsByLine: await resolveTaxComponents(tx, doc.id),
+    };
   }
   if (doc.kind === "customer_invoice" && !deps.deferralAccountByLine) {
-    deps = { ...deps, deferralAccountByLine: await resolveDeferralAccounts(tx, doc.id) };
+    deps = {
+      ...deps,
+      deferralAccountByLine: await resolveDeferralAccounts(tx, doc.id),
+    };
   }
   if (doc.kind === "vendor_bill" && !deps.inventoryAssetByLine) {
-    deps = { ...deps, inventoryAssetByLine: await resolveBillInventoryAccounts(tx, doc.orgId, doc.id) };
+    deps = {
+      ...deps,
+      inventoryAssetByLine: await resolveBillInventoryAccounts(
+        tx,
+        doc.orgId,
+        doc.id,
+      ),
+    };
   }
 
   const lines = await tx
@@ -1439,7 +1741,11 @@ export async function regenerateGlImpactTx(
     .orderBy(asc(schema.documentLines.lineNumber));
 
   const projection = buildProjection(doc, lines, deps);
-  const { lines: kernelLines, docSubId } = await applySubsidiaries(tx, doc, projection);
+  const { lines: kernelLines, docSubId } = await applySubsidiaries(
+    tx,
+    doc,
+    projection,
+  );
   assertFinalKernelBalance(kernelLines);
   await validateRequiredDimensions(tx, doc.orgId, kernelLines);
   const postingDate = doc.postingDate ?? doc.documentDate;
@@ -1464,88 +1770,12 @@ export async function regenerateGlImpactTx(
       { periodId: entry.periodId, postingDate: entry.postingDate },
       { periodId: period.id, postingDate },
     ) &&
-    glKey(kernelLines) === glKey(existing as unknown as Parameters<typeof glKey>[0]);
+    glKey(kernelLines) ===
+      glKey(existing as unknown as Parameters<typeof glKey>[0]);
   if (unchanged) return { entryId: entry.id, changed: false };
 
-  // GL projection changed → both its old and new book/entity scopes must be open.
-  try {
-    await assertPeriodModulesOpen(tx, {
-      orgId: doc.orgId,
-      periodId: period.id,
-      bookId: entry.bookId,
-      subsidiaryIds: kernelLines.map((line) => line.subsidiaryId),
-      modules: [closeModuleForDocument(doc.kind)],
-      allowImportedLocks: deps.migration,
-    });
-    await assertPeriodModulesOpen(tx, {
-      orgId: doc.orgId,
-      periodId: entry.periodId,
-      bookId: entry.bookId,
-      subsidiaryIds: existing.map((line) => line.subsidiaryId),
-      modules: [closeModuleForDocument(doc.kind)],
-      allowImportedLocks: deps.migration,
-    });
-  } catch (error) {
-    if (error instanceof CloseError) throw new ClosedPeriodError(error.message);
-    throw error;
-  }
-
-  // Regenerate the entry's lines IN PLACE, preserving line identity so payment
-  // applications and bank-reconciliation matches (which FK to journal_line ids)
-  // stay linked. Overlapping lines are UPDATEd by position; extra new lines are
-  // inserted; surplus old lines are deleted (a delete of a still-referenced line
-  // FK-fails and rolls the whole edit back — you can't drop an applied line).
-  const vals = (
-    l: KernelLine & { subsidiaryId: string; currency: string; txnAmount: string; fxRate: string },
-    i: number,
-  ) => ({
-    orgId: doc.orgId,
-    entryId: entry.id,
-    lineNumber: i + 1,
-    accountId: l.accountId,
-    subsidiaryId: l.subsidiaryId,
-    amount: l.amount,
-    currency: l.currency,
-    txnAmount: l.txnAmount,
-    fxRate: l.fxRate,
-    partyId: l.partyId ?? null,
-    departmentId: l.departmentId ?? null,
-    projectId: l.projectId ?? null,
-    locationId: l.locationId ?? null,
-    classId: l.classId ?? null,
-    equipmentUnitId: l.equipmentUnitId ?? null,
-    extraDims: l.extraDims ?? {},
-    paymentCardId: l.paymentCardId ?? null,
-    taxCodeId: l.taxCodeId ?? null,
-    memo: l.memo ?? null,
-    dueDate: l.dueDate ?? null,
-    isOpenItem: l.isOpenItem ?? false,
-  });
-  // Park every existing line out of the (entry_id, line_number) namespace
-  // first: when the regenerated projection reorders or renumbers lines, the
-  // per-position updates below would otherwise collide with a not-yet-updated
-  // sibling's line_number.
-  await tx.execute(
-    sql`update journal_lines set line_number = line_number + 100000 where entry_id = ${entry.id}`,
+  void docSubId;
+  throw new PostingError(
+    "posted GL projection changed; in-place regeneration is forbidden — use a controlled append-only reversal/replacement workflow",
   );
-  const overlap = Math.min(existing.length, kernelLines.length);
-  for (let i = 0; i < overlap; i++) {
-    const { orgId: _o, entryId: _e, ...set } = vals(kernelLines[i]!, i);
-    await tx.update(schema.journalLines).set(set).where(eq(schema.journalLines.id, existing[i]!.id));
-  }
-  if (kernelLines.length > existing.length) {
-    await tx
-      .insert(schema.journalLines)
-      .values(kernelLines.slice(existing.length).map((l, k) => vals(l, existing.length + k)));
-  } else if (existing.length > kernelLines.length) {
-    for (let i = kernelLines.length; i < existing.length; i++) {
-      await tx.delete(schema.journalLines).where(eq(schema.journalLines.id, existing[i]!.id));
-    }
-  }
-  await tx
-    .update(schema.journalEntries)
-    .set({ postingDate, periodId: period.id, memo: doc.memo, subsidiaryId: docSubId })
-    .where(eq(schema.journalEntries.id, entry.id));
-
-  return { entryId: entry.id, changed: true };
 }

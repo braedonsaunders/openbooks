@@ -45,8 +45,9 @@ type AdjustmentLine = { accountId: string; amount: string; memo: string };
 export async function runOwnershipConsolidation(
   orgId: string,
   periodId: string,
-  userId?: string,
+  userId: string,
 ): Promise<{ runId: string; entryIds: string[] }> {
+  if (!userId) throw new ConsolidationError("an attributable actor is required");
   try {
     return await db.transaction(async (tx) => {
       await tx.execute(sql`select pg_advisory_xact_lock(hashtextextended(${`ownership:${orgId}:${periodId}`},0))`);
@@ -99,7 +100,14 @@ export async function runOwnershipConsolidation(
                     ${elimination.baseCurrency},${line.amount},1,${line.memo})
           `);
         }
-        await tx.execute(sql`update journal_entries set status='posted',posted_at=now(),posted_by=${userId ?? null} where id=${entryId}`);
+        await tx.execute(sql`update journal_entries set status='posted',posted_at=now(),posted_by=${userId} where id=${entryId}`);
+        if (reverses) {
+          await tx.execute(sql`
+            update journal_entries
+               set status='reversed', updated_at=now(), updated_by=${userId}
+             where id=${reverses} and org_id=${orgId} and status='posted'
+          `);
+        }
         await tx.execute(sql`
           insert into ownership_consolidation_entries (org_id,run_id,interest_id,kind,journal_entry_id,created_by,updated_by)
           values (${orgId},${runId},${interestId},${kind},${entryId},${userId ?? null},${userId ?? null})
@@ -286,8 +294,9 @@ export async function deriveConsolidatedRates(orgId: string, periodId: string): 
 export async function runAutoElimination(
   orgId: string,
   periodId: string,
-  userId?: string,
+  userId: string,
 ): Promise<{ entryId: string | null; lineCount: number }> {
+  if (!userId) throw new ConsolidationError("an attributable actor is required");
   const ctx = await loadSubsidiaryContext(db, orgId);
   const elim = [...ctx.byId.values()].find((s) => s.isElimination && s.isActive);
   if (!elim) {
@@ -399,8 +408,13 @@ export async function runAutoElimination(
                currency, -txn_amount, fx_rate, ${`Reversal of ${p.entryNumber}`}
           from journal_lines where entry_id = ${p.id}`);
       await tx.execute(sql`
-        update journal_entries set status = 'posted', posted_at = now(), posted_by = ${userId ?? null}
+        update journal_entries set status = 'posted', posted_at = now(), posted_by = ${userId}
          where id = ${reversalId}`);
+      await tx.execute(sql`
+        update journal_entries
+           set status = 'reversed', updated_at = now(), updated_by = ${userId}
+         where id = ${p.id} and org_id = ${orgId} and status = 'posted'
+      `);
       lastReversalId = reversalId;
     }
     if (translatedActivity.length === 0) return { entryId: lastReversalId, lineCount: 0 };
@@ -426,8 +440,21 @@ export async function runAutoElimination(
                 ${`Eliminates ${ctx.byId.get(row.subsidiaryId)?.name ?? row.subsidiaryId}`})`);
     }
     await tx.execute(sql`
-      update journal_entries set status = 'posted', posted_at = now(), posted_by = ${userId ?? null}
+      update journal_entries set status = 'posted', posted_at = now(), posted_by = ${userId}
        where id = ${entryId}`);
+    await tx.execute(sql`
+      insert into audit_log
+        (org_id, table_name, row_id, action, changes, actor_id, request_id)
+      values (
+        ${orgId}, 'journal_entries', ${entryId}, 'insert',
+        ${JSON.stringify({
+          mode: "auto_elimination",
+          periodId,
+          lineCount: translatedActivity.length,
+        })}::jsonb,
+        ${userId}, 'auto_elimination'
+      )
+    `);
     return { entryId, lineCount: n };
   });
 }

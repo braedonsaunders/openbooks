@@ -1,5 +1,6 @@
 import { sql } from "drizzle-orm";
 import { db } from "./db.ts";
+import { buildScheduleWithRunner } from "./depreciation.ts";
 import { add, cmp, fromUnits, isZero, neg, toUnits } from "./money.ts";
 
 /**
@@ -217,6 +218,244 @@ export interface RemeasureResult {
   delta: string;
   kind: "revalued" | "impaired";
   rebuiltLines: number;
+}
+
+export interface ReverseAssetEventResult {
+  assetId: string;
+  sourceEventId: string;
+  reversalEventId: string;
+  reversalEntryId: string;
+  restoredStatus: "in_service" | "fully_depreciated" | null;
+  created: boolean;
+}
+
+/**
+ * Reverse the latest posted disposal or remeasurement without changing its
+ * retained event or journal.  The reversal is an exact negated journal linked
+ * through both journal_entries.reverses_entry_id and
+ * asset_events.reverses_event_id.  Remeasurement reversals rebuild only the
+ * still-unposted formula plan from the asset's original policy; posted
+ * depreciation evidence remains untouched.
+ */
+export async function reverseAssetLifecycleEvent(
+  orgId: string,
+  eventId: string,
+  opts: { date: string; actorId: string; reason: string },
+): Promise<ReverseAssetEventResult> {
+  const reason = opts.reason.trim();
+  if (reason.length < 8 || reason.length > 500) {
+    throw new AssetLifecycleError(
+      "a reversal reason between 8 and 500 characters is required",
+    );
+  }
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(opts.date)) {
+    throw new AssetLifecycleError("reversal date must be YYYY-MM-DD");
+  }
+  if (!opts.actorId) {
+    throw new AssetLifecycleError("an attributable reversal actor is required");
+  }
+
+  return db.transaction(async (tx) => {
+    const sourceResult = (await tx.execute(sql`
+      select event.id, event.asset_id, event.kind, event.journal_entry_id,
+             event.created_at, asset.asset_number, asset.status,
+             asset.subsidiary_id, asset.acquisition_cost, asset.salvage_value,
+             entry.book_id, entry.entry_number, entry.origin, entry.status as entry_status
+        from asset_events event
+        join fixed_assets asset
+          on asset.id = event.asset_id and asset.org_id = event.org_id
+        join journal_entries entry
+          on entry.id = event.journal_entry_id and entry.org_id = event.org_id
+       where event.id = ${eventId} and event.org_id = ${orgId}
+       for update of event, asset, entry
+    `)) as unknown as {
+      rows: Array<{
+        id: string;
+        asset_id: string;
+        kind: string;
+        journal_entry_id: string;
+        created_at: string;
+        asset_number: string;
+        status: string;
+        subsidiary_id: string;
+        acquisition_cost: string;
+        salvage_value: string;
+        book_id: string;
+        entry_number: string;
+        origin: "disposal" | "revaluation";
+        entry_status: string;
+      }>;
+    };
+    const source = sourceResult.rows[0];
+    if (!source) throw new AssetLifecycleError("asset lifecycle event not found");
+
+    const prior = (await tx.execute(sql`
+      select event.id, event.journal_entry_id,
+             case
+               when asset.status = 'fully_depreciated' then 'fully_depreciated'
+               when asset.status = 'in_service' then 'in_service'
+               else null
+             end as restored_status
+        from asset_events event
+        join fixed_assets asset on asset.id = event.asset_id
+       where event.org_id = ${orgId}
+         and event.reverses_event_id = ${source.id}
+       limit 1
+    `)) as unknown as {
+      rows: Array<{
+        id: string;
+        journal_entry_id: string;
+        restored_status: "in_service" | "fully_depreciated" | null;
+      }>;
+    };
+    if (prior.rows[0]) {
+      return {
+        assetId: source.asset_id,
+        sourceEventId: source.id,
+        reversalEventId: prior.rows[0].id,
+        reversalEntryId: prior.rows[0].journal_entry_id,
+        restoredStatus: prior.rows[0].restored_status,
+        created: false,
+      };
+    }
+
+    if (
+      !["revalued", "impaired", "disposed", "written_off"].includes(
+        source.kind,
+      )
+    ) {
+      throw new AssetLifecycleError(
+        `${source.kind} asset events do not have a financial reversal workflow`,
+      );
+    }
+    if (source.entry_status !== "posted") {
+      throw new AssetLifecycleError(
+        "the source asset journal is not an unreversed posted entry",
+      );
+    }
+    const later = (await tx.execute(sql`
+      select kind
+        from asset_events
+       where org_id = ${orgId}
+         and asset_id = ${source.asset_id}
+         and id <> ${source.id}
+         and reverses_event_id is null
+         and created_at > ${source.created_at}
+       order by created_at
+       limit 1
+    `)) as unknown as { rows: { kind: string }[] };
+    if (later.rows[0]) {
+      throw new AssetLifecycleError(
+        `reverse the later ${later.rows[0].kind} asset event first`,
+      );
+    }
+    const period = (await tx.execute(sql`
+      select id from accounting_periods
+       where org_id = ${orgId} and not is_adjustment
+         and starts_on <= ${opts.date} and ends_on >= ${opts.date}
+       limit 1
+    `)) as unknown as { rows: { id: string }[] };
+    if (!period.rows[0]) {
+      throw new AssetLifecycleError(
+        `no accounting period covers ${opts.date}`,
+      );
+    }
+
+    const reversalEntry = (await tx.execute(sql`
+      insert into journal_entries
+        (org_id, book_id, subsidiary_id, entry_number, posting_date, period_id,
+         memo, status, origin, reverses_entry_id, created_by, updated_by)
+      values
+        (${orgId}, ${source.book_id}, ${source.subsidiary_id},
+         ${`${source.entry_number}-REV`}, ${opts.date}, ${period.rows[0].id},
+         ${`Reversal — ${reason}`}, 'draft', ${source.origin},
+         ${source.journal_entry_id}, ${opts.actorId}, ${opts.actorId})
+      returning id
+    `)) as unknown as { rows: { id: string }[] };
+    const reversalEntryId = reversalEntry.rows[0]!.id;
+    await tx.execute(sql`
+      insert into journal_lines
+        (org_id, entry_id, line_number, account_id, subsidiary_id, amount,
+         currency, txn_amount, fx_rate, memo, party_id, department_id,
+         project_id, location_id, class_id, equipment_unit_id, payment_card_id,
+           extra_dims, tax_code_id, quantity, unit, due_date, is_open_item,
+           custom)
+      select org_id, ${reversalEntryId}, line_number, account_id, subsidiary_id,
+             -amount, currency, -txn_amount, fx_rate,
+             ${`Reversal — ${reason}`}, party_id, department_id, project_id,
+             location_id, class_id, equipment_unit_id, payment_card_id,
+             extra_dims, tax_code_id,
+             case when quantity is null then null else -quantity end,
+             unit, null, false, custom
+        from journal_lines
+       where entry_id = ${source.journal_entry_id}
+       order by line_number
+    `);
+    await tx.execute(sql`
+      update journal_entries
+         set status = 'posted', posted_at = now(), posted_by = ${opts.actorId},
+             updated_at = now(), updated_by = ${opts.actorId}
+       where id = ${reversalEntryId}
+    `);
+    await tx.execute(sql`
+      update journal_entries
+         set status = 'reversed', updated_at = now(), updated_by = ${opts.actorId}
+       where id = ${source.journal_entry_id}
+    `);
+
+    let restoredStatus: "in_service" | "fully_depreciated" | null = null;
+    if (source.kind === "disposed" || source.kind === "written_off") {
+      const depreciation = (await tx.execute(sql`
+        select coalesce(sum(line.posted_amount), 0)::text as accumulated
+          from depreciation_schedule_lines line
+          join depreciation_schedules schedule
+            on schedule.id = line.schedule_id
+         where schedule.asset_id = ${source.asset_id}
+           and schedule.book_id = ${source.book_id}
+      `)) as unknown as { rows: { accumulated: string }[] };
+      restoredStatus =
+        toUnits(depreciation.rows[0]?.accumulated ?? "0") >=
+        toUnits(source.acquisition_cost) - toUnits(source.salvage_value)
+          ? "fully_depreciated"
+          : "in_service";
+      await tx.execute(sql`
+        update fixed_assets
+           set status = ${restoredStatus}, updated_at = now(),
+               updated_by = ${opts.actorId}
+         where id = ${source.asset_id} and org_id = ${orgId}
+      `);
+    }
+
+    const reversalEvent = (await tx.execute(sql`
+      insert into asset_events
+        (org_id, asset_id, kind, occurred_on, amount, journal_entry_id,
+         reverses_event_id, reversal_reason, memo, created_by, updated_by)
+      values
+        (${orgId}, ${source.asset_id}, 'reversed', ${opts.date}, null,
+         ${reversalEntryId}, ${source.id}, ${reason},
+         ${`Reversal of ${source.kind} for ${source.asset_number}`},
+         ${opts.actorId}, ${opts.actorId})
+      returning id
+    `)) as unknown as { rows: { id: string }[] };
+
+    if (source.kind === "revalued" || source.kind === "impaired") {
+      await buildScheduleWithRunner(
+        tx,
+        source.asset_id,
+        orgId,
+        opts.actorId,
+        source.book_id,
+      );
+    }
+    return {
+      assetId: source.asset_id,
+      sourceEventId: source.id,
+      reversalEventId: reversalEvent.rows[0]!.id,
+      reversalEntryId,
+      restoredStatus,
+      created: true,
+    };
+  });
 }
 
 /**

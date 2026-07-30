@@ -8,6 +8,7 @@ import {
   parseRecurlySettlement,
   parseStripeBalanceTransactions,
   postSettlementBatch,
+  reverseSettlementBatch,
   savePspProviderConfig,
   summarizeSettlement,
   type PspProvider,
@@ -24,6 +25,8 @@ export async function GET() {
     db.execute(sql`
       select id, provider, external_ref as "externalRef", status, currency, net_amount as "netAmount",
              fee_amount as "feeAmount", settlement_date as "settlementDate", journal_entry_id as "journalEntryId",
+             reversal_entry_id as "reversalEntryId", reversal_reason as "reversalReason",
+             reversed_at as "reversedAt", reversed_by as "reversedBy",
              memo, line_count as "lineCount"
         from psp_settlement_batches where org_id = ${orgId}
        order by settlement_date desc, created_at desc limit 50
@@ -73,16 +76,25 @@ export async function POST(req: Request) {
           parsed = parseStripeBalanceTransactions(
             body.transactions ?? [],
             String(body.externalRef ?? body.payoutId ?? ""),
-            String(body.settlementDate ?? new Date().toISOString().slice(0, 10)),
+            String(
+              body.settlementDate ?? new Date().toISOString().slice(0, 10),
+            ),
           );
         } else if (provider === "recurly") {
           parsed = parseRecurlySettlement(body.payload ?? body);
         } else if (provider === "chargebee") {
           parsed = parseChargebeeSettlement(body.payload ?? body);
         } else {
-          return NextResponse.json({ error: "unknown provider" }, { status: 422 });
+          return NextResponse.json(
+            { error: "unknown provider" },
+            { status: 422 },
+          );
         }
-        if (!parsed.externalRef) return NextResponse.json({ error: "externalRef required" }, { status: 422 });
+        if (!parsed.externalRef)
+          return NextResponse.json(
+            { error: "externalRef required" },
+            { status: 422 },
+          );
         const result = await importSettlementBatch(orgId, userId, parsed, {
           bankAccountId: body.bankAccountId,
           feeAccountId: body.feeAccountId,
@@ -91,18 +103,55 @@ export async function POST(req: Request) {
           clearingAccountId: body.clearingAccountId,
           subsidiaryId: body.subsidiaryId,
         });
-        return NextResponse.json({ ...result, totals: summarizeSettlement(parsed.lines) });
+        return NextResponse.json({
+          ...result,
+          totals: summarizeSettlement(parsed.lines),
+        });
       }
       case "post": {
-        if (!body.batchId) return NextResponse.json({ error: "batchId required" }, { status: 422 });
+        if (!body.batchId)
+          return NextResponse.json(
+            { error: "batchId required" },
+            { status: 422 },
+          );
         const posted = await postSettlementBatch(orgId, body.batchId, userId);
         return NextResponse.json(posted);
+      }
+      case "reverse": {
+        if (!body.batchId)
+          return NextResponse.json(
+            { error: "batchId required" },
+            { status: 422 },
+          );
+        if (!body.reversalDate)
+          return NextResponse.json(
+            { error: "reversalDate required" },
+            { status: 422 },
+          );
+        if (!body.reason)
+          return NextResponse.json(
+            { error: "reason required" },
+            { status: 422 },
+          );
+        const reversed = await reverseSettlementBatch(
+          orgId,
+          body.batchId,
+          userId,
+          {
+            reversalDate: String(body.reversalDate),
+            reason: String(body.reason),
+          },
+        );
+        return NextResponse.json(reversed);
       }
       default:
         return NextResponse.json({ error: "unknown action" }, { status: 400 });
     }
   } catch (e) {
     const status = e instanceof PspSettlementError ? 422 : 500;
-    return NextResponse.json({ error: e instanceof Error ? e.message : String(e) }, { status });
+    return NextResponse.json(
+      { error: e instanceof Error ? e.message : String(e) },
+      { status },
+    );
   }
 }

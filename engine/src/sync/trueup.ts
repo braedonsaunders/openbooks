@@ -1,5 +1,7 @@
+import { randomUUID } from "node:crypto";
 import { sql } from "drizzle-orm";
-import { db } from "../db.ts";
+import { assertPeriodModulesOpen } from "../close.ts";
+import { db, withOrg } from "../db.ts";
 import { fromUnits, toUnits } from "../money.ts";
 import type { MigrationSource } from "./source.ts";
 
@@ -28,6 +30,13 @@ export interface TrueUpStats {
   byAccount: { account: string; amount: string }[];
 }
 
+export interface TrueUpControlContext {
+  /** Human actor when a user launched the sync; null means connector/system. */
+  actorId?: string | null;
+  /** Immutable sync-run attribution for connector-initiated adjustments. */
+  syncRunId?: string | null;
+}
+
 const MONTH_END = (m: string): string => {
   const [y, mo] = m.split("-").map(Number);
   return new Date(Date.UTC(y!, mo!, 0)).toISOString().slice(0, 10);
@@ -36,105 +45,223 @@ const MONTH_END = (m: string): string => {
 export async function trueUpResidualGl(
   orgId: string,
   source: MigrationSource,
+  control: TrueUpControlContext = {},
 ): Promise<TrueUpStats> {
   const refKey = source.refKey;
   const empty: TrueUpStats = { entries: 0, lines: 0, byAccount: [] };
-  if (!source.monthlyActivity) return empty;
-
-  // -- source GL per (accountRef, month), debit-positive, home currency --------
   const srcRows = await source.monthlyActivity();
-  const bookRow = (await db.execute(sql`
-    select id from accounting_books where org_id = ${orgId} and is_primary limit 1`)) as any;
-  const bookId = bookRow.rows[0]?.id;
-  const subRow = (await db.execute(sql`
-    select id from subsidiaries where org_id = ${orgId} and parent_id is null limit 1`)) as any;
-  const subsidiaryId = subRow.rows[0]?.id;
-  if (!bookId || !subsidiaryId) return empty;
+  if (srcRows.length === 0) return empty;
 
-  // accountRef → openbooks account id
-  const accRows = (await db.execute(sql`
-    select id, custom->>${refKey} as ref from accounts where org_id = ${orgId} and custom->>${refKey} is not null`)) as any;
-  const idByRef = new Map<string, string>(accRows.rows.map((r: any) => [r.ref as string, r.id as string]));
+  return withOrg(orgId, async () => {
+    await db.execute(sql`
+      select pg_advisory_xact_lock(
+        hashtextextended(${`migration-gl-trueup:${orgId}:${source.name}`}, 0)
+      )
+    `);
+    const org = (await db.execute(sql`
+      select base_currency
+        from orgs
+       where id = ${orgId}
+    `)) as unknown as { rows: { base_currency: string }[] };
+    if (!org.rows[0]) throw new Error("true-up organization not found");
+    if (org.rows[0].base_currency !== source.baseCurrency) {
+      throw new Error(
+        `true-up source currency ${source.baseCurrency} does not match organization base currency ${org.rows[0].base_currency}`,
+      );
+    }
+    const bookRow = (await db.execute(sql`
+      select id
+        from accounting_books
+       where org_id = ${orgId} and is_primary
+       limit 1
+    `)) as unknown as { rows: { id: string }[] };
+    const bookId = bookRow.rows[0]?.id;
+    if (!bookId) throw new Error("true-up requires a primary accounting book");
+    const subRow = (await db.execute(sql`
+      select id
+        from subsidiaries
+       where org_id = ${orgId} and parent_id is null
+       limit 1
+    `)) as unknown as { rows: { id: string }[] };
+    const subsidiaryId = subRow.rows[0]?.id;
+    if (!subsidiaryId) throw new Error("true-up requires a root subsidiary");
 
-  // -- our posted GL per (accountId, month), debit-positive --------------------
-  const oursRows = (await db.execute(sql`
-    select jl.account_id as account_id, to_char(e.posting_date, 'YYYY-MM') as m, sum(jl.amount) as amt
-      from journal_lines jl
-      join journal_entries e on e.id = jl.entry_id
-     where jl.org_id = ${orgId} and e.status = 'posted'
-     group by 1, 2`)) as any;
-  const ours = new Map<string, bigint>(); // `${accountId}|${month}` → units
-  for (const r of oursRows.rows) ours.set(`${r.account_id}|${r.m}`, toUnits(r.amt));
+    const accRows = (await db.execute(sql`
+      select id, custom->>${refKey} as ref
+        from accounts
+       where org_id = ${orgId}
+         and custom->>${refKey} is not null
+    `)) as unknown as { rows: { id: string; ref: string }[] };
+    const idByRef = new Map(
+      accRows.rows.map((row) => [row.ref, row.id] as const),
+    );
+    const missingRefs = [
+      ...new Set(
+        srcRows
+          .map((row) => row.accountRef)
+          .filter((accountRef) => !idByRef.has(accountRef)),
+      ),
+    ].sort();
+    if (missingRefs.length > 0) {
+      throw new Error(
+        `true-up cannot silently omit ${missingRefs.length} unmapped source account(s): ${missingRefs.join(", ")}`,
+      );
+    }
+    for (const row of srcRows) {
+      if (!/^\d{4}-(0[1-9]|1[0-2])$/.test(row.month)) {
+        throw new Error(`invalid true-up source month ${row.month}`);
+      }
+    }
 
-  // -- residual per (accountId, month) = source − ours -------------------------
-  const residualByMonth = new Map<string, Map<string, bigint>>(); // month → accountId → units
-  const seen = new Set<string>();
-  const bump = (month: string, accountId: string, units: bigint) => {
-    if (units === 0n) return;
-    const m = residualByMonth.get(month) ?? new Map<string, bigint>();
-    m.set(accountId, (m.get(accountId) ?? 0n) + units);
-    residualByMonth.set(month, m);
-  };
-  for (const s of srcRows) {
-    const accountId = idByRef.get(s.accountRef);
-    if (!accountId) continue; // account not migrated — skipped, surfaced by the gate
-    const key = `${accountId}|${s.month}`;
-    seen.add(key);
-    bump(s.month, accountId, toUnits(s.amount) - (ours.get(key) ?? 0n));
-  }
-  // accounts we posted to that the source's monthly set didn't mention → remove our extra
-  for (const [key, amt] of ours) {
-    if (seen.has(key) || amt === 0n) continue;
-    const [accountId, month] = key.split("|");
-    bump(month!, accountId!, -amt);
-  }
+    const oursRows = (await db.execute(sql`
+      select jl.account_id, to_char(e.posting_date, 'YYYY-MM') as month,
+             sum(jl.amount)::text as amount
+        from journal_lines jl
+        join journal_entries e
+          on e.id = jl.entry_id and e.org_id = jl.org_id
+       where jl.org_id = ${orgId}
+         and e.status in ('posted', 'reversed')
+       group by jl.account_id, to_char(e.posting_date, 'YYYY-MM')
+    `)) as unknown as {
+      rows: { account_id: string; month: string; amount: string }[];
+    };
+    const ours = new Map<string, bigint>();
+    for (const row of oursRows.rows) {
+      ours.set(
+        `${row.account_id}|${row.month}`,
+        toUnits(row.amount),
+      );
+    }
 
-  // -- post one adjusting entry per month --------------------------------------
-  const byAccountTotal = new Map<string, bigint>();
-  let entries = 0;
-  let lines = 0;
-  await db.transaction(async (tx) => {
-    await tx.execute(sql`select set_config('openbooks.migration', 'on', true)`);
-    for (const [month, accs] of [...residualByMonth.entries()].sort()) {
-      const entryLines = [...accs.entries()].filter(([, u]) => u !== 0n);
+    const residualByMonth = new Map<string, Map<string, bigint>>();
+    const seen = new Set<string>();
+    const bump = (month: string, accountId: string, units: bigint) => {
+      if (units === 0n) return;
+      const monthRows =
+        residualByMonth.get(month) ?? new Map<string, bigint>();
+      monthRows.set(accountId, (monthRows.get(accountId) ?? 0n) + units);
+      residualByMonth.set(month, monthRows);
+    };
+    for (const sourceRow of srcRows) {
+      const accountId = idByRef.get(sourceRow.accountRef)!;
+      const key = `${accountId}|${sourceRow.month}`;
+      // Multiple source rows for one account/month contribute to one source
+      // total. Subtract our total once, after source aggregation.
+      const monthRows =
+        residualByMonth.get(sourceRow.month) ?? new Map<string, bigint>();
+      monthRows.set(
+        accountId,
+        (monthRows.get(accountId) ?? 0n) + toUnits(sourceRow.amount),
+      );
+      residualByMonth.set(sourceRow.month, monthRows);
+      seen.add(key);
+    }
+    for (const [key, amount] of ours) {
+      const [accountId, month] = key.split("|") as [string, string];
+      if (seen.has(key)) bump(month, accountId, -amount);
+      else if (amount !== 0n) bump(month, accountId, -amount);
+    }
+
+    const byAccountTotal = new Map<string, bigint>();
+    let entries = 0;
+    let lines = 0;
+    await db.execute(sql`select set_config('openbooks.migration', 'on', true)`);
+    for (const [month, accounts] of [...residualByMonth.entries()].sort()) {
+      const entryLines = [...accounts.entries()].filter(
+        ([, units]) => units !== 0n,
+      );
       if (entryLines.length === 0) continue;
-      // Force exact balance: nudge any sub-cent drift onto the largest line.
-      let net = entryLines.reduce((a, [, u]) => a + u, 0n);
+      const net = entryLines.reduce(
+        (total, [, units]) => total + units,
+        0n,
+      );
       if (net !== 0n) {
-        entryLines.sort((a, b) => (b[1] < 0n ? -b[1] : b[1]) > (a[1] < 0n ? -a[1] : a[1]) ? 1 : -1);
-        entryLines[0]![1] -= net;
+        throw new Error(
+          `source residual for ${month} is unbalanced by ${fromUnits(net)}; true-up refused instead of silently changing a source amount`,
+        );
       }
       const endOn = MONTH_END(month);
-      const per = (await tx.execute(sql`
-        select id from accounting_periods where org_id = ${orgId} and starts_on <= ${endOn} and ends_on >= ${endOn}
-         and is_adjustment = false order by starts_on limit 1`)) as any;
-      const periodId = per.rows[0]?.id;
-      if (!periodId) continue;
+      const period = (await db.execute(sql`
+        select id
+          from accounting_periods
+         where org_id = ${orgId}
+           and starts_on <= ${endOn}
+           and ends_on >= ${endOn}
+           and not is_adjustment
+         order by starts_on
+         limit 1
+      `)) as unknown as { rows: { id: string }[] };
+      const periodId = period.rows[0]?.id;
+      if (!periodId) {
+        throw new Error(`no accounting period covers true-up month ${month}`);
+      }
+      await assertPeriodModulesOpen(db, {
+        orgId,
+        periodId,
+        bookId,
+        subsidiaryIds: [subsidiaryId],
+        modules: ["gl"],
+      });
 
-      const eRes = (await tx.execute(sql`
-        insert into journal_entries (org_id, book_id, subsidiary_id, entry_number, posting_date, period_id, memo, status, origin)
-        values (${orgId}, ${bookId}, ${subsidiaryId}, ${`TRUEUP-${month}`}, ${endOn}, ${periodId},
-                ${`Migration GL trueup ${month}`}, 'draft', 'migration')
-        returning id`)) as any;
-      const entryId = eRes.rows[0].id;
-      let ln = 0;
+      const entryId = randomUUID();
+      await db.execute(sql`
+        insert into journal_entries
+          (id, org_id, book_id, subsidiary_id, entry_number, posting_date,
+           period_id, memo, status, origin, created_by, updated_by)
+        values
+          (${entryId}, ${orgId}, ${bookId}, ${subsidiaryId},
+           ${`TRUEUP-${month}-${entryId.slice(0, 8)}`}, ${endOn}, ${periodId},
+           ${`Migration GL true-up ${source.name} ${month}`}, 'draft',
+           'migration', ${control.actorId ?? null}, ${control.actorId ?? null})
+      `);
+      let lineNumber = 0;
       for (const [accountId, units] of entryLines) {
-        if (units === 0n) continue;
-        await tx.execute(sql`
-          insert into journal_lines (org_id, entry_id, line_number, account_id, subsidiary_id, amount, currency, txn_amount, fx_rate, is_open_item)
-          values (${orgId}, ${entryId}, ${++ln}, ${accountId}, ${subsidiaryId}, ${fromUnits(units)},
-                  (select base_currency from orgs where id = ${orgId}), ${fromUnits(units)}, 1, false)`);
-        byAccountTotal.set(accountId, (byAccountTotal.get(accountId) ?? 0n) + units);
+        await db.execute(sql`
+          insert into journal_lines
+            (org_id, entry_id, line_number, account_id, subsidiary_id,
+             amount, currency, txn_amount, fx_rate, is_open_item)
+          values
+            (${orgId}, ${entryId}, ${++lineNumber}, ${accountId},
+             ${subsidiaryId}, ${fromUnits(units)},
+             ${org.rows[0].base_currency}, ${fromUnits(units)}, 1, false)
+        `);
+        byAccountTotal.set(
+          accountId,
+          (byAccountTotal.get(accountId) ?? 0n) + units,
+        );
         lines++;
       }
-      await tx.execute(sql`update journal_entries set status = 'posted', posted_at = now() where id = ${entryId}`);
+      await db.execute(sql`
+        update journal_entries
+           set status = 'posted', posted_at = now(),
+               posted_by = ${control.actorId ?? null},
+               updated_at = now(), updated_by = ${control.actorId ?? null}
+         where id = ${entryId}
+      `);
+      await db.execute(sql`
+        insert into audit_log
+          (org_id, table_name, row_id, action, changes, actor_id, request_id)
+        values
+          (${orgId}, 'journal_entries', ${entryId}, 'insert',
+           ${JSON.stringify({
+             mode: "migration_gl_trueup",
+             source: source.name,
+             month,
+             syncRunId: control.syncRunId ?? null,
+             lineCount: entryLines.length,
+           })}::jsonb,
+           ${control.actorId ?? null},
+           ${control.syncRunId ?? "migration_gl_trueup"})
+      `);
       entries++;
     }
+    return {
+      entries,
+      lines,
+      byAccount: [...byAccountTotal.entries()].map(([account, units]) => ({
+        account,
+        amount: fromUnits(units),
+      })),
+    };
   });
-
-  return {
-    entries,
-    lines,
-    byAccount: [...byAccountTotal.entries()].map(([account, units]) => ({ account, amount: fromUnits(units) })),
-  };
 }

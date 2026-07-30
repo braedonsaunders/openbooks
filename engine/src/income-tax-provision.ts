@@ -1,7 +1,16 @@
 import { createHash, randomUUID } from "node:crypto";
 import { sql } from "drizzle-orm";
 import { db, withOrg } from "./db.ts";
-import { add, cmp, fromUnits, isZero, mulPercent, neg, sum, toUnits } from "./money.ts";
+import {
+  add,
+  cmp,
+  fromUnits,
+  isZero,
+  mulPercent,
+  neg,
+  sum,
+  toUnits,
+} from "./money.ts";
 import { assertPeriodModulesOpen } from "./close.ts";
 import { assertFinalKernelBalance } from "./posting.ts";
 
@@ -39,7 +48,9 @@ export async function orgTaxFramework(orgId: string): Promise<TaxFramework> {
 
 /** Framework-aware name for the DTA-reduction input. */
 export function deferredAssetAdjustmentLabel(framework: TaxFramework): string {
-  return framework === "ias12" ? "Deferred tax asset recognition adjustment" : "Valuation allowance";
+  return framework === "ias12"
+    ? "Deferred tax asset recognition adjustment"
+    : "Valuation allowance";
 }
 
 // ---------------------------------------------------------------------------
@@ -53,7 +64,12 @@ export interface PermanentDifference {
 }
 
 export interface DifferenceInput {
-  category: "fixed_assets" | "revenue_recognition" | "provisions" | "loss_carryforward" | "other";
+  category:
+    | "fixed_assets"
+    | "revenue_recognition"
+    | "provisions"
+    | "loss_carryforward"
+    | "other";
   description: string;
   subsidiaryId?: string | null;
   bookBasis?: string;
@@ -121,10 +137,15 @@ function percentOf(amount: string, base: string): string | null {
 }
 
 /** Pure: the entire provision computation, side-effect free. */
-export function buildProvision(input: ProvisionComputationInput): ProvisionComputation {
+export function buildProvision(
+  input: ProvisionComputationInput,
+): ProvisionComputation {
   const rate = input.enactedRatePercent;
   const permanentTotal = sum(input.permanentDifferences.map((p) => p.amount));
-  const taxableIncome = add(add(input.pretaxBookIncome, permanentTotal), neg(input.lossCarryforwardUsed));
+  const taxableIncome = add(
+    add(input.pretaxBookIncome, permanentTotal),
+    neg(input.lossCarryforwardUsed),
+  );
   const currentTax = maxZero(mulPercent(maxZero(taxableIncome), rate, 4));
 
   // Temporary differences → gross DTA / DTL at the enacted rate.
@@ -140,41 +161,83 @@ export function buildProvision(input: ProvisionComputationInput): ProvisionCompu
   const dtlGross = fromUnits(dtl);
   const valuationAllowance = maxZero(input.valuationAllowance);
   if (cmp(valuationAllowance, dtaGross) > 0) {
-    throw new IncomeTaxProvisionError("valuation allowance cannot exceed gross deferred tax assets");
+    throw new IncomeTaxProvisionError(
+      "valuation allowance cannot exceed gross deferred tax assets",
+    );
   }
 
-  const prior = input.prior ?? { dtaGross: "0", dtlGross: "0", valuationAllowance: "0" };
+  const prior = input.prior ?? {
+    dtaGross: "0",
+    dtlGross: "0",
+    valuationAllowance: "0",
+  };
   const movement = {
     dtaGross: fromUnits(toUnits(dtaGross) - toUnits(prior.dtaGross)),
     dtlGross: fromUnits(toUnits(dtlGross) - toUnits(prior.dtlGross)),
-    valuationAllowance: fromUnits(toUnits(valuationAllowance) - toUnits(prior.valuationAllowance)),
+    valuationAllowance: fromUnits(
+      toUnits(valuationAllowance) - toUnits(prior.valuationAllowance),
+    ),
   };
   // Deferred expense = ΔDTL − ΔDTA(gross) + ΔVA.
-  const deferredExpense = fromUnits(toUnits(movement.dtlGross) - toUnits(movement.dtaGross) + toUnits(movement.valuationAllowance));
+  const deferredExpense = fromUnits(
+    toUnits(movement.dtlGross) -
+      toUnits(movement.dtaGross) +
+      toUnits(movement.valuationAllowance),
+  );
   const totalExpense = add(currentTax, deferredExpense);
 
   // Rate reconciliation: statutory → permanent → loss benefit → deferred → total.
   const steps: RateReconStep[] = [];
   const expected = mulPercent(input.pretaxBookIncome, rate, 4);
-  steps.push({ key: "statutory", label: "Expected tax at the statutory rate", amount: expected, percent: percentOf(expected, input.pretaxBookIncome) });
+  steps.push({
+    key: "statutory",
+    label: "Expected tax at the statutory rate",
+    amount: expected,
+    percent: percentOf(expected, input.pretaxBookIncome),
+  });
   for (const p of input.permanentDifferences) {
     const effect = mulPercent(p.amount, rate, 4);
-    steps.push({ key: `permanent:${p.description}`, label: p.description, amount: effect, percent: percentOf(effect, input.pretaxBookIncome) });
+    steps.push({
+      key: `permanent:${p.description}`,
+      label: p.description,
+      amount: effect,
+      percent: percentOf(effect, input.pretaxBookIncome),
+    });
   }
   if (!isZero(input.lossCarryforwardUsed)) {
     const benefit = neg(mulPercent(input.lossCarryforwardUsed, rate, 4));
-    steps.push({ key: "lossCarryforward", label: "Loss carryforward benefit used", amount: benefit, percent: percentOf(benefit, input.pretaxBookIncome) });
+    steps.push({
+      key: "lossCarryforward",
+      label: "Loss carryforward benefit used",
+      amount: benefit,
+      percent: percentOf(benefit, input.pretaxBookIncome),
+    });
   }
   if (cmp(taxableIncome, "0") < 0) {
     // Current tax floored at zero: the not-recognized current benefit of the loss.
     const unrecognized = neg(mulPercent(taxableIncome, rate, 4));
-    steps.push({ key: "currentLossNotRecognized", label: "Current-year loss with no current tax", amount: unrecognized, percent: percentOf(unrecognized, input.pretaxBookIncome) });
+    steps.push({
+      key: "currentLossNotRecognized",
+      label: "Current-year loss with no current tax",
+      amount: unrecognized,
+      percent: percentOf(unrecognized, input.pretaxBookIncome),
+    });
   }
   if (!isZero(deferredExpense)) {
     const vaLabel = deferredAssetAdjustmentLabel(input.framework ?? "asc740");
-    steps.push({ key: "deferredMovement", label: `Change in deferred taxes (incl. ${vaLabel.toLowerCase()})`, amount: deferredExpense, percent: percentOf(deferredExpense, input.pretaxBookIncome) });
+    steps.push({
+      key: "deferredMovement",
+      label: `Change in deferred taxes (incl. ${vaLabel.toLowerCase()})`,
+      amount: deferredExpense,
+      percent: percentOf(deferredExpense, input.pretaxBookIncome),
+    });
   }
-  steps.push({ key: "total", label: "Total income tax expense", amount: totalExpense, percent: percentOf(totalExpense, input.pretaxBookIncome) });
+  steps.push({
+    key: "total",
+    label: "Total income tax expense",
+    amount: totalExpense,
+    percent: percentOf(totalExpense, input.pretaxBookIncome),
+  });
 
   return {
     taxableIncome,
@@ -193,26 +256,37 @@ export function buildProvision(input: ProvisionComputationInput): ProvisionCompu
 // Org data
 // ---------------------------------------------------------------------------
 
-async function fiscalYearRange(orgId: string, fiscalYear: number): Promise<{ from: string; to: string }> {
+async function fiscalYearRange(
+  orgId: string,
+  fiscalYear: number,
+): Promise<{ from: string; to: string }> {
   const r = (await db.execute(sql`
     select min(starts_on)::text as "from", max(ends_on)::text as "to"
       from accounting_periods
      where org_id = ${orgId} and fiscal_year = ${fiscalYear} and not is_adjustment
   `)) as unknown as { rows: { from: string | null; to: string | null }[] };
-  if (!r.rows[0]?.from || !r.rows[0].to) throw new IncomeTaxProvisionError(`no accounting periods for fiscal year ${fiscalYear}`);
+  if (!r.rows[0]?.from || !r.rows[0].to)
+    throw new IncomeTaxProvisionError(
+      `no accounting periods for fiscal year ${fiscalYear}`,
+    );
   return { from: r.rows[0].from, to: r.rows[0].to };
 }
 
 /** Blended enacted rate at a date: subsidiary-scoped rows win when present,
  *  else org-wide rows; stacked jurisdictions sum. */
-export async function enactedRatePercent(orgId: string, subsidiaryId: string | null, onDate: string): Promise<string> {
+export async function enactedRatePercent(
+  orgId: string,
+  subsidiaryId: string | null,
+  onDate: string,
+): Promise<string> {
   const scoped = (await db.execute(sql`
     select coalesce(sum(rate_percent), 0)::text as rate from income_tax_rates
      where org_id = ${orgId} and is_active
        and effective_from <= ${onDate} and (effective_to is null or effective_to >= ${onDate})
        and subsidiary_id = ${subsidiaryId}
   `)) as unknown as { rows: { rate: string }[] };
-  if (subsidiaryId && cmp(scoped.rows[0]?.rate ?? "0", "0") > 0) return scoped.rows[0].rate;
+  if (subsidiaryId && cmp(scoped.rows[0]?.rate ?? "0", "0") > 0)
+    return scoped.rows[0].rate;
   const wide = (await db.execute(sql`
     select coalesce(sum(rate_percent), 0)::text as rate from income_tax_rates
      where org_id = ${orgId} and is_active
@@ -222,7 +296,11 @@ export async function enactedRatePercent(orgId: string, subsidiaryId: string | n
   return wide.rows[0]?.rate ?? "0";
 }
 
-async function pretaxBookIncome(orgId: string, from: string, to: string): Promise<string> {
+async function pretaxBookIncome(
+  orgId: string,
+  from: string,
+  to: string,
+): Promise<string> {
   const r = (await db.execute(sql`
     select (-coalesce(sum(l.amount), 0))::text as pretax
       from journal_lines l
@@ -243,7 +321,10 @@ async function pretaxBookIncome(orgId: string, from: string, to: string): Promis
  * subsidiary. Positive difference (tax depreciation ahead of book) is a
  * taxable temporary difference → DTL.
  */
-export async function computeFixedAssetDifferences(orgId: string, fyEnd: string): Promise<DifferenceInput[]> {
+export async function computeFixedAssetDifferences(
+  orgId: string,
+  fyEnd: string,
+): Promise<DifferenceInput[]> {
   const r = (await db.execute(sql`
     with books as (
       select (select id from accounting_books where org_id = ${orgId} and is_primary) as primary_id,
@@ -262,7 +343,13 @@ export async function computeFixedAssetDifferences(orgId: string, fyEnd: string)
        and (select tax_id from books) is not null
      group by a.subsidiary_id, sub.name
   `)) as unknown as {
-    rows: { subsidiary_id: string; subsidiary_name: string; cost: string; book_dep: string; tax_dep: string }[];
+    rows: {
+      subsidiary_id: string;
+      subsidiary_name: string;
+      cost: string;
+      book_dep: string;
+      tax_dep: string;
+    }[];
   };
   const out: DifferenceInput[] = [];
   for (const row of r.rows) {
@@ -298,7 +385,9 @@ export interface ProvisionRunRow {
   createdAt: string;
 }
 
-export async function listProvisionRuns(orgId: string): Promise<ProvisionRunRow[]> {
+export async function listProvisionRuns(
+  orgId: string,
+): Promise<ProvisionRunRow[]> {
   const r = (await db.execute(sql`
     select id, fiscal_year as "fiscalYear", period_from::text as "periodFrom", period_to::text as "periodTo",
            status, version, payload->>'totalExpense' as "totalExpense",
@@ -314,12 +403,22 @@ export interface ProvisionRunDetail extends ProvisionRunRow {
   snapshotHash: string;
   payload: Record<string, unknown>;
   differences: {
-    id: string; category: string; description: string; bookBasis: string; taxBasis: string;
-    difference: string; ratePercent: string; taxEffect: string; source: string;
+    id: string;
+    category: string;
+    description: string;
+    bookBasis: string;
+    taxBasis: string;
+    difference: string;
+    ratePercent: string;
+    taxEffect: string;
+    source: string;
   }[];
 }
 
-export async function getProvisionRun(orgId: string, runId: string): Promise<ProvisionRunDetail | null> {
+export async function getProvisionRun(
+  orgId: string,
+  runId: string,
+): Promise<ProvisionRunDetail | null> {
   const runs = (await db.execute(sql`
     select id, fiscal_year as "fiscalYear", period_from::text as "periodFrom", period_to::text as "periodTo",
            status, version, payload->>'totalExpense' as "totalExpense",
@@ -350,17 +449,29 @@ export async function getProvisionRun(orgId: string, runId: string): Promise<Pro
 async function latestPostedBalances(
   orgId: string,
   beforeFiscalYear: number,
-): Promise<{ runId: string | null; dtaGross: string; dtlGross: string; valuationAllowance: string }> {
+): Promise<{
+  runId: string | null;
+  dtaGross: string;
+  dtlGross: string;
+  valuationAllowance: string;
+}> {
   const r = (await db.execute(sql`
     select id, payload->'balances'->>'dtaGross' as dta, payload->'balances'->>'dtlGross' as dtl,
            payload->'balances'->>'valuationAllowance' as va
       from tax_provision_runs
      where org_id = ${orgId} and status = 'posted' and fiscal_year < ${beforeFiscalYear}
      order by fiscal_year desc, version desc limit 1
-  `)) as unknown as { rows: { id: string; dta: string; dtl: string; va: string }[] };
+  `)) as unknown as {
+    rows: { id: string; dta: string; dtl: string; va: string }[];
+  };
   const row = r.rows[0];
   return row
-    ? { runId: row.id, dtaGross: row.dta, dtlGross: row.dtl, valuationAllowance: row.va }
+    ? {
+        runId: row.id,
+        dtaGross: row.dta,
+        dtlGross: row.dtl,
+        valuationAllowance: row.va,
+      }
     : { runId: null, dtaGross: "0", dtlGross: "0", valuationAllowance: "0" };
 }
 
@@ -379,21 +490,44 @@ export async function computeProvisionRun(
   orgId: string,
   fiscalYear: number,
   opts: ComputeProvisionOptions,
-  actorId: string | null,
+  actorId: string,
 ): Promise<string> {
+  if (!actorId) {
+    throw new IncomeTaxProvisionError(
+      "an attributable provision actor is required",
+    );
+  }
   return await withOrg(orgId, async () => {
+    await db.execute(sql`
+      select pg_advisory_xact_lock(
+        hashtextextended(${`income-tax-provision:${orgId}:${fiscalYear}`}, 0)
+      )
+    `);
     const range = await fiscalYearRange(orgId, fiscalYear);
-    const subsidiaryId = opts.subsidiaryId ?? ((await db.execute(sql`
+    const subsidiaryId =
+      opts.subsidiaryId ??
+      (
+        (await db.execute(sql`
       select id from subsidiaries where org_id = ${orgId} and parent_id is null limit 1
-    `)) as unknown as { rows: { id: string }[] }).rows[0]?.id ?? null;
-    const [pretax, rate, autoDiffs, prior, framework] = await Promise.all([
-      pretaxBookIncome(orgId, range.from, range.to),
-      enactedRatePercent(orgId, subsidiaryId ?? null, range.to),
-      computeFixedAssetDifferences(orgId, range.to),
-      latestPostedBalances(orgId, fiscalYear),
-      orgTaxFramework(orgId),
-    ]);
-    if (cmp(rate, "0") <= 0) throw new IncomeTaxProvisionError("no enacted income tax rate covers the fiscal year end — configure income tax rates first");
+    `)) as unknown as { rows: { id: string }[] }
+      ).rows[0]?.id ??
+      null;
+    // withOrg pins one PostgreSQL client for the whole provision run. Keep
+    // queries sequential on that client: concurrent client.query calls rely on
+    // pg's deprecated implicit queueing and make execution order ambiguous.
+    const pretax = await pretaxBookIncome(orgId, range.from, range.to);
+    const rate = await enactedRatePercent(
+      orgId,
+      subsidiaryId ?? null,
+      range.to,
+    );
+    const autoDiffs = await computeFixedAssetDifferences(orgId, range.to);
+    const prior = await latestPostedBalances(orgId, fiscalYear);
+    const framework = await orgTaxFramework(orgId);
+    if (cmp(rate, "0") <= 0)
+      throw new IncomeTaxProvisionError(
+        "no enacted income tax rate covers the fiscal year end — configure income tax rates first",
+      );
 
     const differences = [...autoDiffs, ...(opts.additionalDifferences ?? [])];
     const computation = buildProvision({
@@ -404,7 +538,11 @@ export async function computeProvisionRun(
       valuationAllowance: opts.valuationAllowance ?? "0",
       differences,
       framework,
-      prior: { dtaGross: prior.dtaGross, dtlGross: prior.dtlGross, valuationAllowance: prior.valuationAllowance },
+      prior: {
+        dtaGross: prior.dtaGross,
+        dtlGross: prior.dtlGross,
+        valuationAllowance: prior.valuationAllowance,
+      },
     });
 
     const payload = {
@@ -424,15 +562,26 @@ export async function computeProvisionRun(
       rateReconciliation: computation.rateReconciliation,
       priorPostedRunId: prior.runId,
     };
-    const snapshotHash = createHash("sha256").update(JSON.stringify(payload)).digest("hex");
+    const snapshotHash = createHash("sha256")
+      .update(JSON.stringify(payload))
+      .digest("hex");
 
-    // Replace prior draft runs for the FY.
+    // An identical retry returns the existing draft. A changed recomputation
+    // preserves the prior draft as discarded audit evidence; draft financial
+    // workpapers are never physically deleted.
     const priorDrafts = (await db.execute(sql`
-      select id from tax_provision_runs where org_id = ${orgId} and fiscal_year = ${fiscalYear} and status = 'draft'
-    `)) as unknown as { rows: { id: string }[] };
-    for (const d of priorDrafts.rows) {
-      await db.execute(sql`delete from temporary_differences where org_id = ${orgId} and run_id = ${d.id}`);
-      await db.execute(sql`delete from tax_provision_runs where org_id = ${orgId} and id = ${d.id}`);
+      select id, snapshot_hash
+        from tax_provision_runs
+       where org_id = ${orgId} and fiscal_year = ${fiscalYear}
+         and status = 'draft'
+       order by version desc
+       for update
+    `)) as unknown as { rows: { id: string; snapshot_hash: string }[] };
+    const identical = priorDrafts.rows.find(
+      (draft) => draft.snapshot_hash === snapshotHash,
+    );
+    if (identical) {
+      return identical.id;
     }
     const versionRow = (await db.execute(sql`
       select coalesce(max(version), 0)::int as v from tax_provision_runs where org_id = ${orgId} and fiscal_year = ${fiscalYear}
@@ -440,6 +589,24 @@ export async function computeProvisionRun(
     const version = (versionRow.rows[0]?.v ?? 0) + 1;
 
     const runId = randomUUID();
+    for (const draft of priorDrafts.rows) {
+      await db.execute(sql`
+        update tax_provision_runs
+           set status = 'discarded', updated_at = now(), updated_by = ${actorId}
+         where org_id = ${orgId} and id = ${draft.id} and status = 'draft'
+      `);
+      await db.execute(sql`
+        insert into audit_log
+          (org_id, table_name, row_id, action, changes, actor_id)
+        values
+          (${orgId}, 'tax_provision_runs', ${draft.id}, 'discard',
+           ${JSON.stringify({
+             reason: "recomputed before posting",
+             replacedByRunId: runId,
+           })}::jsonb,
+           ${actorId})
+      `);
+    }
     await db.execute(sql`
       insert into tax_provision_runs
         (id, org_id, fiscal_year, period_from, period_to, status, version, snapshot_hash, payload, created_by, updated_by)
@@ -478,11 +645,43 @@ interface IncomeTaxControlAccounts {
  * post the MOVEMENT vs the last posted run as one balanced journal. The run
  * becomes the FY's posted provision; the superseded run keeps its payload.
  */
-export async function postProvisionRun(orgId: string, runId: string, actorId: string): Promise<{ entryId: string }> {
+export async function postProvisionRun(
+  orgId: string,
+  runId: string,
+  actorId: string,
+): Promise<{ entryId: string }> {
+  if (!actorId) {
+    throw new IncomeTaxProvisionError(
+      "an attributable provision actor is required",
+    );
+  }
   return await withOrg(orgId, async () => {
+    const scope = (await db.execute(sql`
+      select fiscal_year
+        from tax_provision_runs
+       where org_id = ${orgId} and id = ${runId}
+    `)) as unknown as { rows: { fiscal_year: number }[] };
+    if (!scope.rows[0]) {
+      throw new IncomeTaxProvisionError("provision run not found");
+    }
+    await db.execute(sql`
+      select pg_advisory_xact_lock(
+        hashtextextended(
+          ${`income-tax-provision:${orgId}:${scope.rows[0].fiscal_year}`},
+          0
+        )
+      )
+    `);
     const run = await getProvisionRun(orgId, runId);
     if (!run) throw new IncomeTaxProvisionError("provision run not found");
-    if (run.status !== "draft") throw new IncomeTaxProvisionError(`provision run is ${run.status}`);
+    if (
+      (run.status === "posted" || run.status === "superseded") &&
+      run.journalEntryId
+    ) {
+      return { entryId: run.journalEntryId };
+    }
+    if (run.status !== "draft")
+      throw new IncomeTaxProvisionError(`provision run is ${run.status}`);
     // Postings must be chronological: a later posted year would strand its
     // movement baseline if an earlier year changed underneath it.
     const later = (await db.execute(sql`
@@ -498,54 +697,111 @@ export async function postProvisionRun(orgId: string, runId: string, actorId: st
       currentTax: string;
       totalExpense: string;
       balances: DeferredBalances;
-      movement: { dtaGross: string; dtlGross: string; valuationAllowance: string };
+      movement: {
+        dtaGross: string;
+        dtlGross: string;
+        valuationAllowance: string;
+      };
       priorPostedRunId: string | null;
     };
 
-    const c = ((await db.execute(sql`
+    const c =
+      (
+        (await db.execute(sql`
       select settings->'controlAccounts' as c from orgs where id = ${orgId}
-    `)) as unknown as { rows: { c: IncomeTaxControlAccounts | null }[] }).rows[0]?.c ?? {};
-    const need = (key: keyof IncomeTaxControlAccounts, amount: string): string | null => {
+    `)) as unknown as { rows: { c: IncomeTaxControlAccounts | null }[] }
+      ).rows[0]?.c ?? {};
+    const need = (
+      key: keyof IncomeTaxControlAccounts,
+      amount: string,
+    ): string | null => {
       if (isZero(amount)) return null;
       const account = c[key];
-      if (!account) throw new IncomeTaxProvisionError(`income tax control account '${key}' is not configured (Company Settings)`);
+      if (!account)
+        throw new IncomeTaxProvisionError(
+          `income tax control account '${key}' is not configured (Company Settings)`,
+        );
       return account;
     };
 
-    const bookId = ((await db.execute(sql`
+    const bookId = (
+      (await db.execute(sql`
       select id from accounting_books where org_id = ${orgId} and is_primary limit 1
-    `)) as unknown as { rows: { id: string }[] }).rows[0]?.id;
-    if (!bookId) throw new IncomeTaxProvisionError("no primary accounting book");
-    const periodId = ((await db.execute(sql`
+    `)) as unknown as { rows: { id: string }[] }
+    ).rows[0]?.id;
+    if (!bookId)
+      throw new IncomeTaxProvisionError("no primary accounting book");
+    const periodId = (
+      (await db.execute(sql`
       select id from accounting_periods
        where org_id = ${orgId} and is_adjustment = false and starts_on <= ${run.periodTo} and ends_on >= ${run.periodTo}
        limit 1
-    `)) as unknown as { rows: { id: string }[] }).rows[0]?.id;
-    if (!periodId) throw new IncomeTaxProvisionError(`no accounting period covers ${run.periodTo}`);
-    const subsidiaryId = ((await db.execute(sql`
+    `)) as unknown as { rows: { id: string }[] }
+    ).rows[0]?.id;
+    if (!periodId)
+      throw new IncomeTaxProvisionError(
+        `no accounting period covers ${run.periodTo}`,
+      );
+    const subsidiaryId = (
+      (await db.execute(sql`
       select id from subsidiaries where org_id = ${orgId} and parent_id is null limit 1
-    `)) as unknown as { rows: { id: string }[] }).rows[0]?.id;
+    `)) as unknown as { rows: { id: string }[] }
+    ).rows[0]?.id;
     if (!subsidiaryId) throw new IncomeTaxProvisionError("no root subsidiary");
-    const currency = ((await db.execute(sql`
+    const currency =
+      (
+        (await db.execute(sql`
       select base_currency as c from subsidiaries where org_id = ${orgId} and id = ${subsidiaryId}
-    `)) as unknown as { rows: { c: string }[] }).rows[0]?.c ?? "USD";
+    `)) as unknown as { rows: { c: string }[] }
+      ).rows[0]?.c ?? "USD";
 
     // The journal is the MOVEMENT vs the last posted run, posted at FY end.
     const payable = need("incomeTaxPayable", payload.currentTax);
     const expenseAccount = need("incomeTaxExpense", payload.totalExpense);
     const dtaAccount = need("deferredTaxAsset", payload.movement.dtaGross);
     const dtlAccount = need("deferredTaxLiability", payload.movement.dtlGross);
-    const vaAccount = need("valuationAllowance", payload.movement.valuationAllowance);
+    const vaAccount = need(
+      "valuationAllowance",
+      payload.movement.valuationAllowance,
+    );
 
     const lines: { accountId: string; amount: string; memo: string }[] = [];
-    if (payable) lines.push({ accountId: payable, amount: neg(payload.currentTax), memo: `Current income tax FY${run.fiscalYear}` });
-    if (dtaAccount) lines.push({ accountId: dtaAccount, amount: payload.movement.dtaGross, memo: "Movement in deferred tax assets" });
-    if (dtlAccount) lines.push({ accountId: dtlAccount, amount: neg(payload.movement.dtlGross), memo: "Movement in deferred tax liabilities" });
-    if (vaAccount) lines.push({ accountId: vaAccount, amount: neg(payload.movement.valuationAllowance), memo: "Movement in valuation allowance" });
-    if (expenseAccount) lines.push({ accountId: expenseAccount, amount: payload.totalExpense, memo: `Income tax expense FY${run.fiscalYear}` });
+    if (payable)
+      lines.push({
+        accountId: payable,
+        amount: neg(payload.currentTax),
+        memo: `Current income tax FY${run.fiscalYear}`,
+      });
+    if (dtaAccount)
+      lines.push({
+        accountId: dtaAccount,
+        amount: payload.movement.dtaGross,
+        memo: "Movement in deferred tax assets",
+      });
+    if (dtlAccount)
+      lines.push({
+        accountId: dtlAccount,
+        amount: neg(payload.movement.dtlGross),
+        memo: "Movement in deferred tax liabilities",
+      });
+    if (vaAccount)
+      lines.push({
+        accountId: vaAccount,
+        amount: neg(payload.movement.valuationAllowance),
+        memo: "Movement in valuation allowance",
+      });
+    if (expenseAccount)
+      lines.push({
+        accountId: expenseAccount,
+        amount: payload.totalExpense,
+        memo: `Income tax expense FY${run.fiscalYear}`,
+      });
     const nonzero = lines.filter((l) => !isZero(l.amount));
-    if (nonzero.length === 0) throw new IncomeTaxProvisionError("provision is zero — nothing to post");
-    assertFinalKernelBalance(nonzero.map((l) => ({ amount: l.amount, subsidiaryId })));
+    if (nonzero.length === 0)
+      throw new IncomeTaxProvisionError("provision is zero — nothing to post");
+    assertFinalKernelBalance(
+      nonzero.map((l) => ({ amount: l.amount, subsidiaryId })),
+    );
 
     await assertPeriodModulesOpen(db, {
       orgId,
@@ -560,7 +816,9 @@ export async function postProvisionRun(orgId: string, runId: string, actorId: st
       select id, journal_entry_id from tax_provision_runs
        where org_id = ${orgId} and fiscal_year = ${run.fiscalYear} and status = 'posted' and id <> ${runId}
        order by version desc limit 1
-    `)) as unknown as { rows: { id: string; journal_entry_id: string | null }[] };
+    `)) as unknown as {
+      rows: { id: string; journal_entry_id: string | null }[];
+    };
     let reversalEntryId: string | null = null;
     if (priorPosted.rows[0]?.journal_entry_id) {
       reversalEntryId = randomUUID();
@@ -578,10 +836,32 @@ export async function postProvisionRun(orgId: string, runId: string, actorId: st
                'Reversal — ' || coalesce(memo, '')
           from journal_lines where org_id = ${orgId} and entry_id = ${priorPosted.rows[0].journal_entry_id}
       `);
-      await db.execute(sql`update journal_entries set status = 'posted', posted_at = now(), posted_by = ${actorId} where id = ${reversalEntryId}`);
+      await db.execute(
+        sql`update journal_entries set status = 'posted', posted_at = now(), posted_by = ${actorId} where id = ${reversalEntryId}`,
+      );
+      await db.execute(sql`
+        update journal_entries
+           set status = 'reversed', updated_at = now(), updated_by = ${actorId}
+         where org_id = ${orgId}
+           and id = ${priorPosted.rows[0].journal_entry_id}
+           and status = 'posted'
+      `);
       await db.execute(sql`
         update tax_provision_runs set status = 'superseded', updated_at = now(), updated_by = ${actorId}
          where id = ${priorPosted.rows[0].id}
+      `);
+      await db.execute(sql`
+        insert into audit_log
+          (org_id, table_name, row_id, action, changes, actor_id)
+        values
+          (${orgId}, 'tax_provision_runs', ${priorPosted.rows[0].id},
+           'supersede',
+           ${JSON.stringify({
+             reason: "recomputed income tax provision",
+             replacementRunId: runId,
+             reversalEntryId,
+           })}::jsonb,
+           ${actorId})
       `);
     }
 
@@ -601,7 +881,9 @@ export async function postProvisionRun(orgId: string, runId: string, actorId: st
         values (${orgId}, ${entryId}, ${i + 1}, ${l.accountId}, ${subsidiaryId}, ${l.amount}, ${currency}, ${l.amount}, 1, ${l.memo})
       `);
     }
-    await db.execute(sql`update journal_entries set status = 'posted', posted_at = now(), posted_by = ${actorId} where id = ${entryId}`);
+    await db.execute(
+      sql`update journal_entries set status = 'posted', posted_at = now(), posted_by = ${actorId} where id = ${entryId}`,
+    );
     await db.execute(sql`
       update tax_provision_runs
          set status = 'posted', journal_entry_id = ${entryId}, posted_at = now(), posted_by = ${actorId},

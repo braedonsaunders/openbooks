@@ -3,7 +3,7 @@ import { sql } from 'drizzle-orm'
 import { db, schema } from '@openbooks/engine/src/db.ts'
 import { postDocument } from '@openbooks/engine/src/posting.ts'
 import { submitAndReleaseIfUngated } from '@openbooks/engine/src/flows/index.ts'
-import { startReconciliation, createMatch } from '@openbooks/engine/src/banking.ts'
+import { startReconciliation, createMatch, excludeStatementLine } from '@openbooks/engine/src/banking.ts'
 import { controlDeps } from './documents'
 import { nextDocumentNumber } from './bills'
 import {
@@ -132,11 +132,11 @@ export async function applyRulesToAccount(orgId: string, userId: string, account
     if (!rule) continue
     const outcome = rule.outcome
     if (outcome.action === 'exclude') {
-      await db.execute(sql`
-        update bank_statement_lines
-           set match_status = 'excluded', updated_at = now(), updated_by = ${userId}
-         where id = ${line.id} and org_id = ${orgId}
-      `)
+      await excludeStatementLine(
+        line.id,
+        `Excluded automatically by bank rule "${rule.name}" (${rule.id})`,
+        ctx,
+      )
       result.excluded++
       continue
     }
@@ -180,10 +180,11 @@ export async function applyRuleToLine(
   const line = lineRes.rows[0]
   if (!line) throw new Error('Statement line not found or already matched')
   if (rule.outcome.action === 'exclude') {
-    await db.execute(sql`
-      update bank_statement_lines set match_status = 'excluded', updated_at = now(), updated_by = ${userId}
-       where id = ${line.id} and org_id = ${orgId}
-    `)
+    await excludeStatementLine(
+      line.id,
+      `Excluded by bank rule "${rule.name}" (${rule.id})`,
+      ctx,
+    )
     return
   }
   const recId = opts.reconciliationId ?? (await ensureOpenReconciliation(orgId, userId, line.account_id))

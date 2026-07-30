@@ -4,13 +4,18 @@ import test from "node:test";
 import { sql } from "drizzle-orm";
 import { runAutoElimination, runOwnershipConsolidation } from "./consolidation.ts";
 import { db } from "./db.ts";
-import { createScratchOrg, dropScratchOrg } from "./test-fixtures.ts";
+import {
+  createScratchOrg,
+  dropScratchOrg,
+  seedFlowActors,
+} from "./test-fixtures.ts";
 
 const DB = !!process.env.OPENBOOKS_DB_URL;
 
 test("foreign-currency eliminations are exact, balanced, and safely rerunnable", { skip: !DB }, async () => {
   const org = await createScratchOrg();
   try {
+    const actorId = (await seedFlowActors(org.orgId)).adminId;
     const foreignSubsidiaryId = randomUUID();
     const eliminationSubsidiaryId = randomUUID();
     await db.execute(sql`
@@ -45,7 +50,7 @@ test("foreign-currency eliminations are exact, balanced, and safely rerunnable",
         (${org.orgId}, ${usdEntry}, 2, ${org.accounts.bank}, ${foreignSubsidiaryId}, '100.0000', 'USD', '100.0000', '1')`);
     await db.execute(sql`update journal_entries set status = 'posted', posted_at = now() where id in (${cadEntry}, ${usdEntry})`);
 
-    const first = await runAutoElimination(org.orgId, org.periodId);
+    const first = await runAutoElimination(org.orgId, org.periodId, actorId);
     assert.equal(first.lineCount, 2);
     const firstLines = (await db.execute(sql`
       select a.number, l.amount
@@ -57,7 +62,7 @@ test("foreign-currency eliminations are exact, balanced, and safely rerunnable",
       { number: "2000", amount: "120.0000" },
     ]);
 
-    const second = await runAutoElimination(org.orgId, org.periodId);
+    const second = await runAutoElimination(org.orgId, org.periodId, actorId);
     assert.equal(second.lineCount, 2);
     assert.notEqual(second.entryId, first.entryId);
     const proof = (await db.execute(sql`
@@ -69,7 +74,7 @@ test("foreign-currency eliminations are exact, balanced, and safely rerunnable",
       from journal_entries e
       join journal_lines l on l.entry_id = e.id
       where e.org_id = ${org.orgId} and e.subsidiary_id = ${eliminationSubsidiaryId}
-        and e.status = 'posted' and e.origin = 'intercompany'`)) as unknown as {
+        and e.status in ('posted', 'reversed') and e.origin = 'intercompany'`)) as unknown as {
       rows: { reversals: number; effective_balance: string; ar_elimination: string; ap_elimination: string }[];
     };
     assert.deepEqual(proof.rows[0], {
@@ -93,11 +98,14 @@ test("foreign-currency eliminations are exact, balanced, and safely rerunnable",
         (${org.orgId}, ${brokenEntry}, 1, ${org.accounts.ar}, ${org.subsidiaryId}, '0.0001', 'CAD', '0.0001', '1'),
         (${org.orgId}, ${brokenEntry}, 2, ${org.accounts.bank}, ${org.subsidiaryId}, '-0.0001', 'CAD', '-0.0001', '1')`);
     await db.execute(sql`update journal_entries set status = 'posted', posted_at = now() where id = ${brokenEntry}`);
-    await assert.rejects(runAutoElimination(org.orgId, org.periodId), /residual 0\.0001/);
+    await assert.rejects(
+      runAutoElimination(org.orgId, org.periodId, actorId),
+      /residual 0\.0001/,
+    );
     const afterFailure = (await db.execute(sql`
       select count(*)::int as n from journal_entries
        where org_id = ${org.orgId} and subsidiary_id = ${eliminationSubsidiaryId}
-         and origin = 'intercompany' and status = 'posted'`)) as unknown as { rows: { n: number }[] };
+         and origin = 'intercompany' and status in ('posted', 'reversed')`)) as unknown as { rows: { n: number }[] };
     assert.equal(afterFailure.rows[0]!.n, 3);
   } finally {
     await dropScratchOrg(org.orgId);
@@ -107,6 +115,7 @@ test("foreign-currency eliminations are exact, balanced, and safely rerunnable",
 test("ownership consolidation uses exact period identity and reverses reruns", { skip: !DB }, async () => {
   const org = await createScratchOrg();
   try {
+    const actorId = (await seedFlowActors(org.orgId)).adminId;
     const childId = randomUUID();
     const eliminationId = randomUUID();
     await db.execute(sql`
@@ -192,7 +201,11 @@ test("ownership consolidation uses exact period identity and reverses reruns", {
               ${accounts.get("goodwill")!},${accounts.get("fairValue")!})
     `);
 
-    const first = await runOwnershipConsolidation(org.orgId, org.periodId);
+    const first = await runOwnershipConsolidation(
+      org.orgId,
+      org.periodId,
+      actorId,
+    );
     assert.equal(first.entryIds.length, 2);
     const firstBalances = (await db.execute(sql`
       select a.number,coalesce(sum(l.amount),0)::text amount
@@ -214,7 +227,11 @@ test("ownership consolidation uses exact period identity and reverses reruns", {
     `)) as unknown as { rows: unknown[] };
     assert.equal(firstUnbalanced.rows.length, 0);
 
-    const second = await runOwnershipConsolidation(org.orgId, org.periodId);
+    const second = await runOwnershipConsolidation(
+      org.orgId,
+      org.periodId,
+      actorId,
+    );
     assert.equal(second.entryIds.length, 4);
     const rerun = (await db.execute(sql`
       select

@@ -25,7 +25,7 @@ async function validSignature(token: string, secret: string): Promise<boolean> {
   return expected === sig;
 }
 
-export async function middleware(req: NextRequest) {
+export async function proxy(req: NextRequest) {
   const { pathname } = req.nextUrl;
   if (PUBLIC.some((p) => pathname.startsWith(p)) || pathname.startsWith("/_next")) {
     return NextResponse.next();

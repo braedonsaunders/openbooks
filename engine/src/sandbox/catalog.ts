@@ -117,17 +117,35 @@ export async function loadCatalog(): Promise<Catalog> {
      order by c.table_name, c.ordinal_position`)) as any;
 
   // Foreign-key edges: (table, column) → referenced table + delete behavior.
+  // Use pg_catalog OIDs, not the information_schema constraint-name joins.
+  // Constraint names are only table-local; joining them by name multiplies
+  // common generated names across a large ERP catalog and made sandbox
+  // provisioning spend minutes in introspection.
   const fkRes = (await db.execute(sql`
-    select tc.table_name, kcu.column_name, ccu.table_name as ref_table,
-           rc.delete_rule, tc.is_deferrable
-      from information_schema.table_constraints tc
-      join information_schema.key_column_usage kcu
-        on kcu.constraint_name = tc.constraint_name and kcu.table_schema = tc.table_schema
-      join information_schema.constraint_column_usage ccu
-        on ccu.constraint_name = tc.constraint_name and ccu.table_schema = tc.table_schema
-      join information_schema.referential_constraints rc
-        on rc.constraint_name = tc.constraint_name and rc.constraint_schema = tc.table_schema
-     where tc.constraint_type = 'FOREIGN KEY' and tc.table_schema = 'public'`)) as any;
+    select source.relname as table_name,
+           source_column.attname as column_name,
+           target.relname as ref_table,
+           case con.confdeltype
+             when 'a' then 'NO ACTION'
+             when 'r' then 'RESTRICT'
+             when 'c' then 'CASCADE'
+             when 'n' then 'SET NULL'
+             when 'd' then 'SET DEFAULT'
+           end as delete_rule,
+           case when con.condeferrable then 'YES' else 'NO' end
+             as is_deferrable
+      from pg_constraint con
+      join pg_class source on source.oid = con.conrelid
+      join pg_namespace source_namespace
+        on source_namespace.oid = source.relnamespace
+      join pg_class target on target.oid = con.confrelid
+      cross join lateral generate_subscripts(con.conkey, 1) position
+      join pg_attribute source_column
+        on source_column.attrelid = con.conrelid
+       and source_column.attnum = con.conkey[position]
+     where con.contype = 'f'
+       and source_namespace.nspname = 'public'
+     order by source.relname, con.conname, position`)) as any;
 
   const byTable = new Map<string, TableInfo>();
   for (const r of colsRes.rows as any[]) {

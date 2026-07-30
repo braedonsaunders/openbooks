@@ -1,4 +1,16 @@
-import { boolean, date, index, integer, jsonb, pgTable, text, timestamp, uniqueIndex, uuid } from "drizzle-orm/pg-core";
+import { sql } from "drizzle-orm";
+import {
+  boolean,
+  date,
+  index,
+  integer,
+  jsonb,
+  pgTable,
+  text,
+  timestamp,
+  uniqueIndex,
+  uuid,
+} from "drizzle-orm/pg-core";
 import { auditColumns, currencyCode, id, money, orgRef } from "./helpers";
 
 /**
@@ -7,9 +19,19 @@ import { auditColumns, currencyCode, id, money, orgRef } from "./helpers";
  * refunds, disputes, and FX adjustments that post through the kernel as a
  * single balanced journal (origin payment-ops style) with immutable evidence.
  */
-export const PSP_PROVIDERS = ["stripe", "adyen", "gocardless", "recurly", "chargebee"] as const;
+export const PSP_PROVIDERS = [
+  "stripe",
+  "adyen",
+  "gocardless",
+  "recurly",
+  "chargebee",
+] as const;
 /** Providers that support hosted customer payment acceptance (checkout + webhooks). */
-export const PSP_ACCEPTANCE_PROVIDERS = ["stripe", "adyen", "gocardless"] as const;
+export const PSP_ACCEPTANCE_PROVIDERS = [
+  "stripe",
+  "adyen",
+  "gocardless",
+] as const;
 
 export const pspSettlementBatches = pgTable(
   "psp_settlement_batches",
@@ -19,7 +41,9 @@ export const pspSettlementBatches = pgTable(
     provider: text("provider", { enum: PSP_PROVIDERS }).notNull(),
     /** Provider payout / settlement id — unique per org for idempotent import. */
     externalRef: text("external_ref").notNull(),
-    status: text("status", { enum: ["draft", "posted", "void"] }).notNull().default("draft"),
+    status: text("status", { enum: ["draft", "posted", "void"] })
+      .notNull()
+      .default("draft"),
     currency: currencyCode().notNull(),
     /** Gross charges in settlement currency. */
     grossAmount: money("gross_amount").notNull().default("0"),
@@ -38,6 +62,11 @@ export const pspSettlementBatches = pgTable(
     clearingAccountId: uuid("clearing_account_id"),
     subsidiaryId: uuid("subsidiary_id"),
     journalEntryId: uuid("journal_entry_id"),
+    /** Exact append-only reversal of journalEntryId for a controlled void. */
+    reversalEntryId: uuid("reversal_entry_id"),
+    reversalReason: text("reversal_reason"),
+    reversedAt: timestamp("reversed_at", { withTimezone: true }),
+    reversedBy: uuid("reversed_by"),
     sourcePayload: jsonb("source_payload").$type<Record<string, unknown>>(),
     lineCount: integer("line_count").notNull().default(0),
     postedAt: timestamp("posted_at", { withTimezone: true }),
@@ -45,7 +74,14 @@ export const pspSettlementBatches = pgTable(
     ...auditColumns,
   },
   (t) => [
-    uniqueIndex("psp_settlement_batches_org_ext").on(t.orgId, t.provider, t.externalRef),
+    uniqueIndex("psp_settlement_batches_org_ext").on(
+      t.orgId,
+      t.provider,
+      t.externalRef,
+    ),
+    uniqueIndex("psp_settlement_batches_one_reversal")
+      .on(t.reversalEntryId)
+      .where(sql`${t.reversalEntryId} is not null`),
     index("psp_settlement_batches_org_date").on(t.orgId, t.settlementDate),
   ],
 );
@@ -58,7 +94,16 @@ export const pspSettlementLines = pgTable(
     batchId: uuid("batch_id").notNull(),
     lineNumber: integer("line_number").notNull(),
     kind: text("kind", {
-      enum: ["charge", "refund", "fee", "dispute", "dispute_reversal", "fx_adjustment", "transfer", "other"],
+      enum: [
+        "charge",
+        "refund",
+        "fee",
+        "dispute",
+        "dispute_reversal",
+        "fx_adjustment",
+        "transfer",
+        "other",
+      ],
     }).notNull(),
     externalRef: text("external_ref"),
     description: text("description"),
@@ -70,7 +115,10 @@ export const pspSettlementLines = pgTable(
     meta: jsonb("meta").$type<Record<string, unknown>>().notNull().default({}),
     ...auditColumns,
   },
-  (t) => [index("psp_settlement_lines_batch").on(t.batchId), index("psp_settlement_lines_doc").on(t.documentId)],
+  (t) => [
+    index("psp_settlement_lines_batch").on(t.batchId),
+    index("psp_settlement_lines_doc").on(t.documentId),
+  ],
 );
 
 export const pspProviderConfigs = pgTable(
@@ -91,13 +139,18 @@ export const pspProviderConfigs = pgTable(
     acceptanceEnabled: boolean("acceptance_enabled").notNull().default(false),
     publishableKey: text("publishable_key"),
     /** Provider-specific extras (e.g. Adyen merchantAccount, GoCardless creditor id). */
-    settings: jsonb("settings").$type<Record<string, unknown>>().notNull().default({}),
+    settings: jsonb("settings")
+      .$type<Record<string, unknown>>()
+      .notNull()
+      .default({}),
     surchargeRuleId: uuid("surcharge_rule_id"),
     lastImportAt: timestamp("last_import_at", { withTimezone: true }),
     lastError: text("last_error"),
     ...auditColumns,
   },
-  (t) => [uniqueIndex("psp_provider_configs_org_provider").on(t.orgId, t.provider)],
+  (t) => [
+    uniqueIndex("psp_provider_configs_org_provider").on(t.orgId, t.provider),
+  ],
 );
 
 /** Effective-dated customer payment surcharge (card/convenience fee) rules. */
@@ -107,7 +160,9 @@ export const paymentSurchargeRules = pgTable(
     id: id(),
     orgId: orgRef(),
     name: text("name").notNull(),
-    calculation: text("calculation", { enum: ["percent", "fixed", "percent_plus_fixed"] }).notNull(),
+    calculation: text("calculation", {
+      enum: ["percent", "fixed", "percent_plus_fixed"],
+    }).notNull(),
     percent: money("percent"),
     fixedAmount: money("fixed_amount"),
     capAmount: money("cap_amount"),
@@ -115,13 +170,23 @@ export const paymentSurchargeRules = pgTable(
     feeIncomeAccountId: uuid("fee_income_account_id").notNull(),
     /** Null = every acceptance provider. */
     provider: text("provider", { enum: PSP_ACCEPTANCE_PROVIDERS }),
-    paymentMethod: text("payment_method", { enum: ["all", "card", "bank_debit"] }).notNull().default("all"),
+    paymentMethod: text("payment_method", {
+      enum: ["all", "card", "bank_debit"],
+    })
+      .notNull()
+      .default("all"),
     effectiveFrom: date("effective_from").notNull(),
     effectiveTo: date("effective_to"),
     isActive: boolean("is_active").notNull().default(true),
     ...auditColumns,
   },
-  (t) => [index("payment_surcharge_rules_org").on(t.orgId, t.isActive, t.effectiveFrom)],
+  (t) => [
+    index("payment_surcharge_rules_org").on(
+      t.orgId,
+      t.isActive,
+      t.effectiveFrom,
+    ),
+  ],
 );
 
 /**
@@ -144,14 +209,19 @@ export const paymentLinks = pgTable(
     amount: money("amount").notNull(),
     surchargeAmount: money("surcharge_amount").notNull().default("0"),
     currency: currencyCode().notNull(),
-    status: text("status", { enum: ["active", "paid", "void", "expired"] }).notNull().default("active"),
+    status: text("status", { enum: ["active", "paid", "void", "expired"] })
+      .notNull()
+      .default("active"),
     expiresOn: date("expires_on"),
     memo: text("memo"),
     paidPaymentDocumentId: uuid("paid_payment_document_id"),
     paidAt: timestamp("paid_at", { withTimezone: true }),
     ...auditColumns,
   },
-  (t) => [uniqueIndex("payment_links_token").on(t.token), index("payment_links_doc").on(t.orgId, t.documentId, t.status)],
+  (t) => [
+    uniqueIndex("payment_links_token").on(t.token),
+    index("payment_links_doc").on(t.orgId, t.documentId, t.status),
+  ],
 );
 
 /** One row per provider checkout attempt; (org, provider, externalRef) is the webhook idempotency key. */
@@ -163,7 +233,9 @@ export const paymentAttempts = pgTable(
     linkId: uuid("link_id").notNull(),
     provider: text("provider").notNull(),
     externalRef: text("external_ref").notNull(),
-    status: text("status", { enum: ["initiated", "succeeded", "failed", "cancelled", "refunded"] })
+    status: text("status", {
+      enum: ["initiated", "succeeded", "failed", "cancelled", "refunded"],
+    })
       .notNull()
       .default("initiated"),
     amount: money("amount"),
@@ -175,7 +247,11 @@ export const paymentAttempts = pgTable(
     ...auditColumns,
   },
   (t) => [
-    uniqueIndex("payment_attempts_org_ext").on(t.orgId, t.provider, t.externalRef),
+    uniqueIndex("payment_attempts_org_ext").on(
+      t.orgId,
+      t.provider,
+      t.externalRef,
+    ),
     index("payment_attempts_link").on(t.linkId),
   ],
 );

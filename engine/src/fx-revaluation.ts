@@ -144,7 +144,7 @@ async function loadPositions(
        and l.subsidiary_id = ${subsidiaryId}
        and e.book_id = ${bookId}
        and e.status in ('posted', 'reversed')
-       and e.origin <> 'revaluation'
+       and e.origin <> 'fx_revaluation'
        and e.posting_date <= ${asOfDate}
        and l.currency <> ${functionalCurrency}
        and a.type in ('asset_bank', 'asset_receivable', 'liability_payable')
@@ -239,7 +239,7 @@ export async function runRevaluation(
     const existing = (await db.execute(sql`
       select 1 from journal_entries
        where org_id = ${orgId} and period_id = ${periodId} and book_id = ${bookId}
-         and subsidiary_id = ${subsidiaryId} and origin = 'revaluation'
+         and subsidiary_id = ${subsidiaryId} and origin = 'fx_revaluation'
          and reverses_entry_id is null limit 1`)) as unknown as { rows: unknown[] };
     if (existing.rows.length > 0) {
       result.skipped.push({ subsidiaryId, reason: "already revalued for this period" });
@@ -315,7 +315,7 @@ async function postRevaluationEntry(
           (org_id, book_id, subsidiary_id, entry_number, posting_date, period_id, memo,
            status, origin, reverses_entry_id, created_by, updated_by)
         values (${orgId}, ${bookId}, ${subsidiaryId}, ${entryNumber}, ${postingDate}, ${periodIdForEntry},
-                ${memo}, 'draft', 'revaluation', ${reversesEntryId}, ${actorId}, ${actorId})
+                ${memo}, 'draft', 'fx_revaluation', ${reversesEntryId}, ${actorId}, ${actorId})
         returning id`)) as unknown as { rows: { id: string }[] };
       const eid = entryRes.rows[0].id;
       for (let i = 0; i < entryLines.length; i++) {

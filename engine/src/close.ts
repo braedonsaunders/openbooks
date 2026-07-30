@@ -1073,7 +1073,7 @@ async function readinessChecks(
           join accounts a on a.id = l.account_id
           join subsidiaries s on s.id = l.subsidiary_id
          where l.org_id = ${orgId} and e.book_id = ${ctx.book_id} and e.status in ('posted', 'reversed')
-           and e.origin <> 'revaluation'
+           and e.origin <> 'fx_revaluation'
            and (
              ep.ends_on < ${ctx.ends_on}
              or ep.id = ${ctx.period_id}
@@ -1096,7 +1096,7 @@ async function readinessChecks(
         select 1 from journal_entries r
          where r.org_id = ${orgId} and r.period_id = ${ctx.period_id} and r.book_id = ${ctx.book_id}
            and r.subsidiary_id = positions.subsidiary_id
-           and r.origin = 'revaluation' and r.reverses_entry_id is null
+           and r.origin = 'fx_revaluation' and r.reverses_entry_id is null
       )`),
       db.execute(sql`
       select count(*) as count from (

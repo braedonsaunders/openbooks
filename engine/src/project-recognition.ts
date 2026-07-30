@@ -91,6 +91,7 @@ export async function postProjectGlEntryWithinTransaction(
   opts: ProjectGlEntryOptions,
 ): Promise<string | null> {
   const { orgId, actorId, origin, entryNumber, postingDate, memo, subsidiaryId, lines } = opts;
+  if (!actorId) throw new Error("an attributable actor is required");
   if (lines.length === 0) return null;
   const bal = sum(lines.map((l) => l.amount));
   if (!isZero(bal)) throw new Error(`unbalanced project GL entry (${bal})`);
@@ -100,11 +101,6 @@ export async function postProjectGlEntryWithinTransaction(
      order by is_primary desc, code limit 1`)) as unknown as { rows: { id: string }[] };
   const bookId = book.rows[0]?.id;
   if (!bookId) throw new Error("no active GL book");
-  const per = (await tx.execute(sql`
-    select id from accounting_periods where org_id = ${orgId} and is_adjustment = false
-     and starts_on <= ${postingDate} and ends_on >= ${postingDate} limit 1`)) as unknown as { rows: { id: string }[] };
-  const periodId = per.rows[0]?.id;
-  if (!periodId) throw new Error(`no accounting period covers ${postingDate}`);
   const org = (await tx.execute(sql`select base_currency from orgs where id = ${orgId}`)) as unknown as {
     rows: { base_currency: string }[];
   };
@@ -129,7 +125,24 @@ export async function postProjectGlEntryWithinTransaction(
     if (opts.currency && opts.currency !== functionalCurrency) {
       throw new Error(`project GL currency ${opts.currency} does not match subsidiary functional currency ${functionalCurrency}`);
     }
-    currency = opts.currency ?? orgCurrency;
+    currency = opts.currency ?? functionalCurrency;
+  }
+  const per = (await tx.execute(sql`
+    select period.id,
+           period_module_is_closed(
+             ${orgId}, period.id, ${bookId}, ${subId}, 'gl'
+           ) as is_closed
+      from accounting_periods period
+     where period.org_id = ${orgId} and period.is_adjustment = false
+       and period.starts_on <= ${postingDate}
+       and period.ends_on >= ${postingDate}
+     limit 1`)) as unknown as {
+    rows: { id: string; is_closed: boolean }[];
+  };
+  const periodId = per.rows[0]?.id;
+  if (!periodId) throw new Error(`no accounting period covers ${postingDate}`);
+  if (per.rows[0]!.is_closed) {
+    throw new Error(`the GL period covering ${postingDate} is closed`);
   }
   const [entry] = (await tx.execute(sql`
     insert into journal_entries
@@ -153,6 +166,20 @@ export async function postProjectGlEntryWithinTransaction(
        set status = 'posted', posted_at = now(), posted_by = ${actorId},
            updated_at = now(), updated_by = ${actorId}
      where id = ${eid}`);
+  await tx.execute(sql`
+    insert into audit_log
+      (org_id, table_name, row_id, action, changes, actor_id, request_id)
+    values (
+      ${orgId}, 'journal_entries', ${eid}, 'insert',
+      ${JSON.stringify({
+        mode: "project_gl_post",
+        origin,
+        entryNumber,
+        postingDate,
+      })}::jsonb,
+      ${actorId}, 'project_gl_post'
+    )
+  `);
   return eid;
 }
 
@@ -170,7 +197,22 @@ export async function reverseProjectGlEntryWithinTransaction(
   orgId: string,
   actorId: string,
   entryId: string,
+  reasonInput: string,
+  reversalDateInput?: string,
 ): Promise<ReverseProjectGlResult> {
+  if (!actorId) throw new Error("an attributable actor is required");
+  const reason = reasonInput.trim();
+  if (reason.length < 5 || reason.length > 500) {
+    throw new Error("a reversal reason between 5 and 500 characters is required");
+  }
+  const reversalDate =
+    reversalDateInput ?? new Date().toISOString().slice(0, 10);
+  if (
+    !/^\d{4}-\d{2}-\d{2}$/.test(reversalDate) ||
+    Number.isNaN(Date.parse(`${reversalDate}T00:00:00Z`))
+  ) {
+    throw new Error("reversalDate must be a valid YYYY-MM-DD date");
+  }
   const head = (await tx.execute(sql`
     select entry_number, book_id, subsidiary_id, period_id, posting_date, origin, status
       from journal_entries
@@ -193,14 +235,35 @@ export async function reverseProjectGlEntryWithinTransaction(
   if (h.status !== "posted") {
     throw new Error(`project GL entry ${entryId} is ${h.status} and cannot be reversed`);
   }
+  const period = (await tx.execute(sql`
+    select accounting_period.id,
+           period_module_is_closed(
+             ${orgId}, accounting_period.id, ${h.book_id},
+             ${h.subsidiary_id}, 'gl'
+           ) as is_closed
+      from accounting_periods accounting_period
+     where accounting_period.org_id = ${orgId}
+       and not accounting_period.is_adjustment
+       and accounting_period.starts_on <= ${reversalDate}
+       and accounting_period.ends_on >= ${reversalDate}
+     limit 1
+  `)) as unknown as {
+    rows: { id: string; is_closed: boolean }[];
+  };
+  if (!period.rows[0]) {
+    throw new Error(`no accounting period covers ${reversalDate}`);
+  }
+  if (period.rows[0].is_closed) {
+    throw new Error(`the GL period covering ${reversalDate} is closed`);
+  }
   const lines = (await tx.execute(sql`
     select account_id, amount, currency, txn_amount, project_id, party_id, memo, subsidiary_id
       from journal_lines where entry_id = ${entryId} order by line_number`)) as unknown as { rows: any[] };
   const [rev] = (await tx.execute(sql`
     insert into journal_entries
       (org_id, book_id, subsidiary_id, entry_number, posting_date, period_id, memo, status, origin, reverses_entry_id, created_by, updated_by)
-    values (${orgId}, ${h.book_id}, ${h.subsidiary_id}, ${h.entry_number + "-R"}, ${h.posting_date}, ${h.period_id},
-            ${"Reversal of " + h.entry_number}, 'draft', ${h.origin}, ${entryId}, ${actorId}, ${actorId})
+    values (${orgId}, ${h.book_id}, ${h.subsidiary_id}, ${h.entry_number + "-R"}, ${reversalDate}, ${period.rows[0].id},
+            ${`Reversal of ${h.entry_number} — ${reason}`}, 'draft', ${h.origin}, ${entryId}, ${actorId}, ${actorId})
     returning id`)).rows as any[];
   let n = 1;
   for (const l of lines.rows) {
@@ -220,13 +283,39 @@ export async function reverseProjectGlEntryWithinTransaction(
     update journal_entries
        set status = 'reversed', updated_at = now(), updated_by = ${actorId}
      where id = ${entryId}`);
+  await tx.execute(sql`
+    insert into audit_log
+      (org_id, table_name, row_id, action, changes, actor_id, request_id)
+    values (
+      ${orgId}, 'journal_entries', ${entryId}, 'update',
+      ${JSON.stringify({
+        mode: "project_gl_reversal",
+        reason,
+        reversalDate,
+      })}::jsonb,
+      ${actorId}, 'project_gl_reversal'
+    )
+  `);
   return { status: "reversed", reversalId: rev.id };
 }
 
 /** Reverse a posted origin-tagged entry (negated mirror, reverses_entry_id). */
-export async function reverseProjectGlEntry(orgId: string, actorId: string, entryId: string): Promise<string | null> {
+export async function reverseProjectGlEntry(
+  orgId: string,
+  actorId: string,
+  entryId: string,
+  reason: string,
+  reversalDate?: string,
+): Promise<string | null> {
   const result = await inDbTransaction((tx) =>
-    reverseProjectGlEntryWithinTransaction(tx, orgId, actorId, entryId)
+    reverseProjectGlEntryWithinTransaction(
+      tx,
+      orgId,
+      actorId,
+      entryId,
+      reason,
+      reversalDate,
+    )
   );
   return result.status === "reversed" ? result.reversalId : null;
 }
@@ -353,7 +442,13 @@ export async function postProjectLaborCost(orgId: string, actorId: string, timeE
 }
 
 /** Release labor-cost entries for time (reverse + clear the linkage). */
-export async function reverseProjectLaborCost(orgId: string, actorId: string, timeEntryIds: string[]): Promise<void> {
+export async function reverseProjectLaborCost(
+  orgId: string,
+  actorId: string,
+  timeEntryIds: string[],
+  reason: string,
+  reversalDate?: string,
+): Promise<void> {
   if (timeEntryIds.length === 0) return;
   await inDbTransaction(async (tx) => {
     const idArr = `{${timeEntryIds.join(",")}}`;
@@ -371,7 +466,14 @@ export async function reverseProjectLaborCost(orgId: string, actorId: string, ti
       // Lock the journal before any member rows. Two callers may request
       // different entries carried by the same journal; row-first locking would
       // let each hold one member while waiting on the other (a deadlock).
-      const reversal = await reverseProjectGlEntryWithinTransaction(tx, orgId, actorId, entryId);
+      const reversal = await reverseProjectGlEntryWithinTransaction(
+        tx,
+        orgId,
+        actorId,
+        entryId,
+        reason,
+        reversalDate,
+      );
       if (reversal.status === "missing") {
         throw new Error(`labor posting journal ${entryId} is missing`);
       }

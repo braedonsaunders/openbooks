@@ -7,7 +7,6 @@
 // disabled in the print page and subresource loading is restricted to images,
 // fonts and stylesheets.
 
-import { existsSync } from 'node:fs'
 import puppeteer, { type Browser, type Page } from 'puppeteer-core'
 import type { PdfPaperSize } from './types'
 
@@ -15,24 +14,21 @@ export type PdfOrientation = 'portrait' | 'landscape'
 
 const HTML_BYTE_LIMIT = 16 * 1024 * 1024
 
-/** Well-known Chromium/Chrome locations, tried after PUPPETEER_EXECUTABLE_PATH. */
-const CHROME_PATHS = [
-  '/usr/local/bin/chrome-headless-shell',
-  '/usr/bin/chromium',
-  '/usr/bin/chromium-browser',
-  '/usr/bin/google-chrome',
-  '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome',
-  '/Applications/Chromium.app/Contents/MacOS/Chromium',
-]
-
 function resolveExecutable(): string {
   const fromEnv = process.env.PUPPETEER_EXECUTABLE_PATH
-  if (fromEnv && existsSync(fromEnv)) return fromEnv
-  for (const p of CHROME_PATHS) {
-    if (existsSync(p)) return p
+  if (fromEnv) return fromEnv
+
+  // Production images install Chromium at this fixed path (see Dockerfile).
+  // Keep local development deterministic too, without probing arbitrary
+  // filesystem paths that would make Next output tracing crawl the host.
+  if (process.platform === 'linux') {
+    return '/usr/bin/chromium'
+  }
+  if (process.platform === 'darwin') {
+    return '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome'
   }
   throw new Error(
-    'No Chromium executable found for PDF rendering. Install Chrome/Chromium or set PUPPETEER_EXECUTABLE_PATH.',
+    'Set PUPPETEER_EXECUTABLE_PATH to the approved Chrome/Chromium executable.',
   )
 }
 

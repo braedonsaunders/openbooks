@@ -1,5 +1,7 @@
+import { sql } from "drizzle-orm";
 import {
   boolean,
+  check,
   date,
   index,
   integer,
@@ -7,6 +9,7 @@ import {
   pgTable,
   text,
   timestamp,
+  uniqueIndex,
   uuid,
 } from "drizzle-orm/pg-core";
 import { auditColumns, currencyCode, id, money, orgRef } from "./helpers";
@@ -40,6 +43,8 @@ export const bankStatementLines = pgTable(
     id: id(),
     orgId: orgRef(),
     statementId: uuid("statement_id").notNull(),
+    /** Denormalized from the statement and DB-constrained for per-account source-id uniqueness. */
+    accountId: uuid("account_id").notNull(),
     lineNumber: integer("line_number").notNull(),
     postedOn: date("posted_on").notNull(),
     amount: money("amount").notNull(), // signed from the bank's perspective
@@ -50,11 +55,32 @@ export const bankStatementLines = pgTable(
     matchStatus: text("match_status", { enum: ["unmatched", "matched", "excluded"] })
       .notNull()
       .default("unmatched"),
+    exclusionReason: text("exclusion_reason"),
+    excludedAt: timestamp("excluded_at", { withTimezone: true }),
+    excludedBy: uuid("excluded_by"),
     ...auditColumns,
   },
   (t) => [
     index("stmt_lines_statement").on(t.statementId),
     index("stmt_lines_match_status").on(t.orgId, t.matchStatus),
+    uniqueIndex("stmt_lines_account_bank_transaction")
+      .on(t.orgId, t.accountId, t.bankTransactionId)
+      .where(sql`${t.bankTransactionId} is not null`),
+    check(
+      "bank_statement_lines_exclusion_evidence",
+      sql`(
+        ${t.matchStatus} = 'excluded'
+        and ${t.exclusionReason} is not null
+        and length(btrim(${t.exclusionReason})) between 5 and 500
+        and ${t.excludedAt} is not null
+        and ${t.excludedBy} is not null
+      ) or (
+        ${t.matchStatus} <> 'excluded'
+        and ${t.exclusionReason} is null
+        and ${t.excludedAt} is null
+        and ${t.excludedBy} is null
+      )`,
+    ),
   ],
 );
 
@@ -66,6 +92,8 @@ export const reconciliations = pgTable(
     orgId: orgRef(),
     accountId: uuid("account_id").notNull(),
     throughDate: date("through_date").notNull(),
+    /** Currency of the bank statement and journal-line transaction amounts. */
+    currency: currencyCode("currency").notNull(),
     statementBalance: money("statement_balance").notNull(),
     status: text("status", { enum: ["in_progress", "balanced", "signed_off"] })
       .notNull()
@@ -74,7 +102,24 @@ export const reconciliations = pgTable(
     signedOffAt: timestamp("signed_off_at", { withTimezone: true }),
     ...auditColumns,
   },
-  (t) => [index("recons_account").on(t.accountId)],
+  (t) => [
+    index("recons_account").on(t.accountId),
+    uniqueIndex("reconciliations_one_open_account")
+      .on(t.orgId, t.accountId)
+      .where(sql`${t.status} <> 'signed_off'`),
+    check(
+      "reconciliations_signoff_evidence",
+      sql`(
+        ${t.status} = 'signed_off'
+        and ${t.signedOffBy} is not null
+        and ${t.signedOffAt} is not null
+      ) or (
+        ${t.status} <> 'signed_off'
+        and ${t.signedOffBy} is null
+        and ${t.signedOffAt} is null
+      )`,
+    ),
+  ],
 );
 
 /**
@@ -87,7 +132,7 @@ export const reconciliationMatches = pgTable(
   {
     id: id(),
     orgId: orgRef(),
-    reconciliationId: uuid("reconciliation_id"),
+    reconciliationId: uuid("reconciliation_id").notNull(),
     statementLineId: uuid("statement_line_id").notNull(),
     journalLineId: uuid("journal_line_id").notNull(),
     matchedBy: text("matched_by", { enum: ["auto", "manual", "rule"] }).notNull(),
@@ -97,6 +142,7 @@ export const reconciliationMatches = pgTable(
   (t) => [
     index("recon_matches_stmt_line").on(t.statementLineId),
     index("recon_matches_journal_line").on(t.journalLineId),
+    uniqueIndex("recon_matches_one_journal_claim").on(t.journalLineId),
   ],
 );
 

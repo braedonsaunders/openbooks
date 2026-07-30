@@ -114,11 +114,15 @@ const outputPath =
   `/tmp/openbooks-invoice-line-commercial-provenance-${orgId}-${Date.now()}.json`;
 const apply = args.get("apply") === "true";
 const reason = args.get("reason")?.trim() ?? "";
+const correctionActorId = args.get("actor") ?? "";
 if (!existsSync(sourcePath)) {
   throw new Error(`missing source invoice-line artifact: ${sourcePath}`);
 }
 if (apply && (reason.length < 10 || reason.length > 500)) {
   throw new Error("--reason must be 10-500 characters when applying");
+}
+if (apply && !/^[0-9a-f-]{36}$/i.test(correctionActorId)) {
+  throw new Error("--actor=<uuid> is required when applying");
 }
 
 const stableHash = (value: unknown): string =>
@@ -574,12 +578,16 @@ async function main(): Promise<void> {
     const requestId = randomUUID();
     const actor = await db.execute(sql`
       select id from users
-       where org_id = ${orgId} and is_active
-       order by case when email ilike '%verify%' then 0 else 1 end, created_at
-       limit 1
+       where org_id = ${orgId}
+         and id = ${correctionActorId}
+         and is_active
     `);
     const actorId = String((actor.rows[0] as JsonRow | undefined)?.id ?? "");
-    if (!actorId) throw new Error("target organization has no active audit actor");
+    if (!actorId) {
+      throw new Error(
+        "correction actor is not an active user in the target organization",
+      );
+    }
     await db.transaction(async (tx) => {
       await tx.execute(sql`
         select pg_advisory_xact_lock(

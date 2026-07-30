@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import { db } from "./db.ts";
+import { db, withOrg } from "./db.ts";
 import { add, cmp, fromUnits, isZero, mul, mulPercent, neg, sum, toUnits } from "./money.ts";
 import { loadSubsidiaryContext, validateSubsidiaryRestrictions } from "./subsidiaries.ts";
 
@@ -875,4 +875,346 @@ export async function runRevenueRecognition(
       ${obligationId ? sql`and s.obligation_id = ${obligationId}` : sql``}`);
 
   return result;
+}
+
+// ---------------------------------------------------------------------------
+// Controlled invoice cancellation
+// ---------------------------------------------------------------------------
+
+export class RevenueRecognitionCancellationError extends Error {}
+
+export interface CancelRevenueRecognitionResult {
+  status: "cancelled" | "pending_approval";
+  recognitionReversalEntryIds: string[];
+  invoiceReversalEntryId: string | null;
+  runId: string | null;
+}
+
+function cancellationReason(value: string): string {
+  const reason = value.trim();
+  if (reason.length < 5 || reason.length > 500) {
+    throw new RevenueRecognitionCancellationError(
+      "a cancellation reason between 5 and 500 characters is required",
+    );
+  }
+  return reason;
+}
+
+function cancellationDate(value: string): string {
+  if (
+    !/^\d{4}-\d{2}-\d{2}$/.test(value) ||
+    Number.isNaN(Date.parse(`${value}T00:00:00Z`))
+  ) {
+    throw new RevenueRecognitionCancellationError(
+      "reversalDate must be a valid YYYY-MM-DD date",
+    );
+  }
+  return value;
+}
+
+/**
+ * Cancel all revenue-recognition activity sourced by an invoice, then route the
+ * invoice through the normal controlled-void workflow.
+ *
+ * Posted recognition journals are never edited or detached. Each receives one
+ * exact, row-locked compensating journal and the schedule line stores both ids.
+ * Unposted schedule lines remain as historical plan evidence but are made
+ * ineligible by the cancelled obligation. Retries and concurrent callers return
+ * the same lineage.
+ */
+export async function cancelRevenueRecognitionForInvoice(input: {
+  documentId: string;
+  orgId: string;
+  actorId: string;
+  reason: string;
+  reversalDate: string;
+}): Promise<CancelRevenueRecognitionResult> {
+  if (!input.actorId) {
+    throw new RevenueRecognitionCancellationError(
+      "an attributable actor is required",
+    );
+  }
+  const reason = cancellationReason(input.reason);
+  const reversalDate = cancellationDate(input.reversalDate);
+
+  const recognitionReversalEntryIds = await withOrg(input.orgId, () =>
+    db.transaction(async (tx) => {
+      const document = (await tx.execute(sql`
+        select id, status
+          from documents
+         where id = ${input.documentId}
+           and org_id = ${input.orgId}
+           and kind = 'customer_invoice'
+         for update
+      `)) as unknown as { rows: { id: string; status: string }[] };
+      const doc = document.rows[0];
+      if (!doc) {
+        throw new RevenueRecognitionCancellationError(
+          "customer invoice not found",
+        );
+      }
+      if (!["posted", "voided"].includes(doc.status)) {
+        throw new RevenueRecognitionCancellationError(
+          `customer invoice is ${doc.status}; only a posted invoice can be cancelled`,
+        );
+      }
+
+      const obligations = (await tx.execute(sql`
+        select obligation.id, obligation.contract_id, obligation.status
+          from performance_obligations obligation
+          join document_lines line
+            on line.id = obligation.document_line_id
+           and line.org_id = obligation.org_id
+         where obligation.org_id = ${input.orgId}
+           and line.document_id = ${input.documentId}
+         order by obligation.created_at, obligation.id
+         for update of obligation
+      `)) as unknown as {
+        rows: { id: string; contract_id: string; status: string }[];
+      };
+      if (obligations.rows.length === 0) {
+        throw new RevenueRecognitionCancellationError(
+          "invoice has no revenue-recognition obligations",
+        );
+      }
+
+      const obligationIds = obligations.rows.map((row) => row.id);
+      const sources = (await tx.execute(sql`
+        select schedule_line.id as line_id,
+               schedule_line.journal_entry_id,
+               schedule_line.reversal_journal_entry_id,
+               entry.entry_number,
+               entry.book_id,
+               entry.subsidiary_id,
+               entry.status as entry_status
+          from recognition_schedule_lines schedule_line
+          join recognition_schedules schedule
+            on schedule.id = schedule_line.schedule_id
+          join journal_entries entry
+            on entry.id = schedule_line.journal_entry_id
+         where schedule_line.org_id = ${input.orgId}
+           and schedule.obligation_id =
+             any(${`{${obligationIds.join(",")}}`}::uuid[])
+         order by schedule_line.created_at, schedule_line.id
+         for update of schedule_line, entry
+      `)) as unknown as {
+        rows: {
+          line_id: string;
+          journal_entry_id: string;
+          reversal_journal_entry_id: string | null;
+          entry_number: string;
+          book_id: string;
+          subsidiary_id: string;
+          entry_status: string;
+        }[];
+      };
+
+      const reversalIds: string[] = [];
+      for (const source of sources.rows) {
+        if (source.reversal_journal_entry_id) {
+          reversalIds.push(source.reversal_journal_entry_id);
+          continue;
+        }
+        if (source.entry_status !== "posted") {
+          throw new RevenueRecognitionCancellationError(
+            `${source.entry_number} is ${source.entry_status} without recorded cancellation lineage`,
+          );
+        }
+        const period = (await tx.execute(sql`
+          select period.id,
+                 period_module_is_closed(
+                   ${input.orgId}, period.id, ${source.book_id},
+                   ${source.subsidiary_id}, 'gl'
+                 ) as is_closed
+            from accounting_periods period
+           where period.org_id = ${input.orgId}
+             and period.starts_on <= ${reversalDate}
+             and period.ends_on >= ${reversalDate}
+           order by period.is_adjustment, period.starts_on
+           limit 1
+        `)) as unknown as {
+          rows: { id: string; is_closed: boolean }[];
+        };
+        if (!period.rows[0]) {
+          throw new RevenueRecognitionCancellationError(
+            `no accounting period covers ${reversalDate}`,
+          );
+        }
+        if (period.rows[0].is_closed) {
+          throw new RevenueRecognitionCancellationError(
+            `the GL period covering ${reversalDate} is closed`,
+          );
+        }
+
+        const inserted = (await tx.execute(sql`
+          insert into journal_entries
+            (org_id, book_id, subsidiary_id, entry_number, posting_date,
+             period_id, memo, status, origin, reverses_entry_id,
+             created_by, updated_by)
+          values
+            (${input.orgId}, ${source.book_id}, ${source.subsidiary_id},
+             ${`${source.entry_number}-CANCEL`}, ${reversalDate},
+             ${period.rows[0].id}, ${`Revenue recognition cancellation — ${reason}`},
+             'draft', 'revenue_recognition', ${source.journal_entry_id},
+             ${input.actorId}, ${input.actorId})
+          returning id
+        `)) as unknown as { rows: { id: string }[] };
+        const reversalId = inserted.rows[0]!.id;
+
+        await tx.execute(sql`
+          insert into journal_lines
+            (org_id, entry_id, line_number, account_id, subsidiary_id, amount,
+             currency, txn_amount, fx_rate, memo, party_id, department_id,
+             project_id, location_id, class_id, equipment_unit_id,
+             payment_card_id, extra_dims, tax_code_id, quantity, unit,
+             due_date, is_open_item, custom)
+          select org_id, ${reversalId}, line_number, account_id, subsidiary_id,
+                 -amount, currency, -txn_amount, fx_rate,
+                 ${`Revenue recognition cancellation — ${reason}`},
+                 party_id, department_id, project_id, location_id, class_id,
+                 equipment_unit_id, payment_card_id, extra_dims, tax_code_id,
+                 case when quantity is null then null else -quantity end,
+                 unit, null, false, custom
+            from journal_lines
+           where entry_id = ${source.journal_entry_id}
+           order by line_number
+        `);
+        await tx.execute(sql`
+          update journal_entries
+             set status = 'posted', posted_at = now(),
+                 posted_by = ${input.actorId}, updated_at = now(),
+                 updated_by = ${input.actorId}
+           where id = ${reversalId}
+        `);
+        await tx.execute(sql`
+          update journal_entries
+             set status = 'reversed', updated_at = now(),
+                 updated_by = ${input.actorId}
+           where id = ${source.journal_entry_id}
+        `);
+        await tx.execute(sql`
+          update recognition_schedule_lines
+             set reversal_journal_entry_id = ${reversalId},
+                 updated_at = now(), updated_by = ${input.actorId}
+           where id = ${source.line_id}
+        `);
+        reversalIds.push(reversalId);
+      }
+
+      await tx.execute(sql`
+        update performance_obligations
+           set status = 'cancelled',
+               cancellation_reason = coalesce(cancellation_reason, ${reason}),
+               cancelled_at = coalesce(cancelled_at, now()),
+               cancelled_by = coalesce(cancelled_by, ${input.actorId}),
+               updated_at = now(), updated_by = ${input.actorId}
+         where id = any(${`{${obligationIds.join(",")}}`}::uuid[])
+           and status <> 'cancelled'
+      `);
+      await tx.execute(sql`
+        update recognition_schedules
+           set status = 'cancelled', updated_at = now(),
+               updated_by = ${input.actorId}
+         where obligation_id =
+           any(${`{${obligationIds.join(",")}}`}::uuid[])
+           and status <> 'cancelled'
+      `);
+      const contractIds = [...new Set(obligations.rows.map((row) => row.contract_id))];
+      await tx.execute(sql`
+        update revenue_contracts contract
+           set status = 'cancelled', updated_at = now(),
+               updated_by = ${input.actorId}
+         where contract.id = any(${`{${contractIds.join(",")}}`}::uuid[])
+           and not exists (
+             select 1
+               from performance_obligations obligation
+              where obligation.contract_id = contract.id
+                and obligation.status <> 'cancelled'
+           )
+      `);
+      await tx.execute(sql`
+        insert into audit_log
+          (org_id, table_name, row_id, action, changes, actor_id, request_id)
+        values (
+          ${input.orgId}, 'performance_obligations', ${input.documentId},
+          'update',
+          ${JSON.stringify({
+            mode: "revenue_recognition_cancellation",
+            reason,
+            reversalDate,
+            obligationIds,
+          })}::jsonb,
+          ${input.actorId}, 'revenue_recognition_cancellation'
+        )
+      `);
+      return reversalIds;
+    }),
+  );
+
+  // The normal void path owns document reversal, approval routing, audit
+  // snapshots, applications, and period controls. Handle an overlapping retry
+  // by observing or completing the stored request instead of creating another.
+  const {
+    completeRequestedDocumentVoid,
+    requestDocumentVoid,
+  } = await import("./document-void.ts");
+  for (let attempt = 0; attempt < 3; attempt++) {
+    const current = (await db.execute(sql`
+      select status, reversal_entry_id, void_requested_at
+        from documents
+       where id = ${input.documentId} and org_id = ${input.orgId}
+    `)) as unknown as {
+      rows: {
+        status: string;
+        reversal_entry_id: string | null;
+        void_requested_at: Date | null;
+      }[];
+    };
+    const doc = current.rows[0];
+    if (!doc) {
+      throw new RevenueRecognitionCancellationError(
+        "customer invoice disappeared during cancellation",
+      );
+    }
+    if (doc.status === "voided") {
+      return {
+        status: "cancelled",
+        recognitionReversalEntryIds,
+        invoiceReversalEntryId: doc.reversal_entry_id,
+        runId: null,
+      };
+    }
+    try {
+      if (doc.void_requested_at) {
+        const invoiceReversalEntryId =
+          await completeRequestedDocumentVoid(input.documentId, input.orgId);
+        return {
+          status: "cancelled",
+          recognitionReversalEntryIds,
+          invoiceReversalEntryId,
+          runId: null,
+        };
+      }
+      const requested = await requestDocumentVoid({
+        documentId: input.documentId,
+        orgId: input.orgId,
+        actorId: input.actorId,
+        reason,
+        reversalDate,
+        source: "api",
+      });
+      return {
+        status:
+          requested.status === "voided" ? "cancelled" : "pending_approval",
+        recognitionReversalEntryIds,
+        invoiceReversalEntryId: requested.reversalEntryId,
+        runId: requested.runId,
+      };
+    } catch (error) {
+      if (attempt === 2) throw error;
+    }
+  }
+  throw new RevenueRecognitionCancellationError(
+    "invoice cancellation could not be finalized",
+  );
 }

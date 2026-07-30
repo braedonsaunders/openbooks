@@ -252,7 +252,7 @@ export interface BuildScheduleResult {
  *
  * Called from the asset save path and by "Run depreciation".
  */
-async function buildScheduleWithRunner(
+export async function buildScheduleWithRunner(
   runner: any,
   assetId: string,
   orgId: string,

@@ -228,7 +228,12 @@ async function migrate(): Promise<void> {
         on conflict do nothing
       `);
     }
-    for (const f of ["referential-integrity.sql", "kernel-constraints.sql"]) {
+    for (const f of [
+      "referential-integrity.sql",
+      "referential-integrity-v2.sql",
+      "referential-integrity-v3.sql",
+      "kernel-constraints.sql",
+    ]) {
       const content = readFileSync(join(migrationsDir, f), "utf8");
       await db.execute(sql`
         insert into _applied_migrations (filename, sha256) values (${f}, ${sha256(content)})
@@ -242,7 +247,12 @@ async function migrate(): Promise<void> {
     await adoptCompleteLegacyMigration(filename, content);
     await applyTracked("migration", filename, content);
   }
-  for (const f of ["referential-integrity.sql", "kernel-constraints.sql"]) {
+  for (const f of [
+    "referential-integrity.sql",
+    "referential-integrity-v2.sql",
+    "referential-integrity-v3.sql",
+    "kernel-constraints.sql",
+  ]) {
     await applyTracked(
       "constraints",
       f,
@@ -250,6 +260,14 @@ async function migrate(): Promise<void> {
     );
   }
   await applyRowLevelSecurity();
+  await applyTracked(
+    "constraints",
+    "referential-integrity-v4.sql",
+    readFileSync(
+      join(migrationsDir, "referential-integrity-v4.sql"),
+      "utf8",
+    ),
+  );
 }
 
 /**

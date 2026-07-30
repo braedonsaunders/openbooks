@@ -55,11 +55,15 @@ const outputPath =
   `/tmp/openbooks-tax-project-dimension-repair-${orgId}-${Date.now()}.json`;
 const apply = args.get("apply") === "true";
 const reason = args.get("reason")?.trim() ?? "";
+const correctionActorId = args.get("actor") ?? "";
 const controlledReopen = args.get("controlled-reopen") === "true";
 const reopenRequesterId = args.get("reopen-requester") ?? "";
 const reopenApproverId = args.get("reopen-approver") ?? "";
 if (apply && (reason.length < 10 || reason.length > 500)) {
   throw new Error("--reason must be 10-500 characters when applying");
+}
+if (apply && !/^[0-9a-f-]{36}$/i.test(correctionActorId)) {
+  throw new Error("--actor=<uuid> is required when applying");
 }
 if (
   apply &&
@@ -155,6 +159,53 @@ async function candidates(): Promise<Candidate[]> {
   return (result.rows as Array<Record<string, unknown>>).map(mapCandidate);
 }
 
+async function protectedFinancialFingerprint(
+  documentIds: string[],
+  entryIds: string[],
+): Promise<string> {
+  if (documentIds.length === 0 && entryIds.length === 0) {
+    return stableHash([]);
+  }
+  const documents = documentIds.length
+    ? await db.execute(sql`
+        select id, kind, status, document_number, document_date::text,
+               posting_date::text, posting_period_id, currency, fx_rate::text,
+               subtotal::text, tax_total::text, total::text,
+               open_balance::text, posted_entry_id, reversal_entry_id,
+               voided_at, voided_by, void_reason
+          from documents
+         where org_id = ${orgId}
+           and id = any(${`{${documentIds.join(",")}}`}::uuid[])
+         order by id
+      `)
+    : { rows: [] };
+  const ledger = entryIds.length
+    ? await db.execute(sql`
+        select entry.id as entry_id, entry.status as entry_status,
+               entry.book_id, entry.subsidiary_id as entry_subsidiary_id,
+               entry.posting_date::text, entry.period_id, entry.origin,
+               entry.source_document_id, entry.reverses_entry_id,
+               line.id as line_id, line.line_number, line.account_id,
+               line.subsidiary_id, line.amount::text, line.currency,
+               line.txn_amount::text, line.fx_rate::text, line.party_id,
+               line.department_id, line.location_id, line.class_id,
+               line.payment_card_id, line.tax_code_id, line.due_date::text,
+               line.is_open_item, line.quantity::text, line.unit,
+               line.extra_dims, line.custom
+          from journal_entries entry
+          join journal_lines line
+            on line.entry_id = entry.id and line.org_id = entry.org_id
+         where entry.org_id = ${orgId}
+           and entry.id = any(${`{${entryIds.join(",")}}`}::uuid[])
+         order by entry.id, line.id
+      `)
+    : { rows: [] };
+  return stableHash({
+    documents: documents.rows,
+    ledger: ledger.rows,
+  });
+}
+
 async function main(): Promise<void> {
   const target = await resolveTargetOrg(orgId);
   if (apply && target.isProduction && !process.argv.includes("--production")) {
@@ -185,8 +236,8 @@ async function main(): Promise<void> {
       select id
         from users
        where org_id = ${orgId}
-       order by case when email ilike '%verify%' then 0 else 1 end, created_at
-       limit 1
+         and id = ${correctionActorId || null}
+         and is_active
     `),
     entryIds.length
       ? db.execute(sql`
@@ -214,6 +265,11 @@ async function main(): Promise<void> {
   let auditedDocuments = 0;
   let auditedLines = 0;
   let afterFingerprint = populationFingerprint;
+  const protectedBefore = await protectedFinancialFingerprint(
+    documentIds,
+    entryIds,
+  );
+  let protectedAfter = protectedBefore;
   const reopenRequests: Array<{
     requestId: string;
     periodId: string;
@@ -280,7 +336,11 @@ async function main(): Promise<void> {
       const actorId = String(
         (actorResult.rows[0] as { id?: unknown } | undefined)?.id ?? "",
       );
-      if (!actorId) throw new Error("target organization has no audit actor");
+      if (!actorId) {
+        throw new Error(
+          "correction actor is not an active user in the target organization",
+        );
+      }
       const requestId = randomUUID();
       await db.transaction(async (tx) => {
         await tx.execute(sql`
@@ -342,6 +402,15 @@ async function main(): Promise<void> {
         if (stableHash(locked) !== populationFingerprint) {
           throw new Error(
             "candidate population changed after preflight; rerun the plan",
+          );
+        }
+        const protectedLockedBefore = await protectedFinancialFingerprint(
+          documentIds,
+          entryIds,
+        );
+        if (protectedLockedBefore !== protectedBefore) {
+          throw new Error(
+            "protected document or GL state changed after preflight; rerun the plan",
           );
         }
         const lockedReversalPairViolations = reversalPairViolations(locked);
@@ -479,6 +548,15 @@ async function main(): Promise<void> {
             `${imbalances.rows.length} entries became unbalanced during dimension correction`,
           );
         }
+        protectedAfter = await protectedFinancialFingerprint(
+          documentIds,
+          entryIds,
+        );
+        if (protectedAfter !== protectedBefore) {
+          throw new Error(
+            "protected document or GL state changed; rolling back",
+          );
+        }
       });
       const remaining = await candidates();
       afterFingerprint = stableHash(remaining);
@@ -560,6 +638,10 @@ async function main(): Promise<void> {
       auditedLines,
       remainingCandidates: apply ? 0 : planned.length,
       afterFingerprint,
+      protectedFinancialFingerprintBefore: protectedBefore,
+      protectedFinancialFingerprintAfter: protectedAfter,
+      protectedFinancialFieldsChanged:
+        protectedBefore === protectedAfter ? 0 : 1,
       controlledReopenUsed: reopenRequests.length > 0,
       controlledReopenRequests: reopenRequests,
     },

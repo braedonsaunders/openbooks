@@ -296,6 +296,7 @@ export async function dropScratchOrg(orgId: string): Promise<void> {
       "temporary_differences",
       "tax_provision_runs",
       "income_tax_rates",
+      "orphaned_tax_component_evidence",
       // Payment acceptance + PSP settlement (no FK enforcement, but keep
       // scratch tenants hermetic — leftover provider configs would let other
       // tests' webhook signatures resolve the wrong org).
@@ -305,6 +306,12 @@ export async function dropScratchOrg(orgId: string): Promise<void> {
       "psp_settlement_lines",
       "psp_settlement_batches",
       "psp_provider_configs",
+      // Banking evidence references users, reconciliations, and journal lines.
+      "reconciliation_matches",
+      "bank_statement_lines",
+      "bank_statements",
+      "reconciliations",
+      "bank_match_rules",
       "report_delivery_outbox",
       "report_run_artifacts",
       "report_runs",
@@ -342,8 +349,15 @@ export async function dropScratchOrg(orgId: string): Promise<void> {
       "inventory_provisional_settlements",
       "inventory_provisional_costs",
       "landed_cost_allocations",
+      "landed_cost_voucher_targets",
+      "landed_cost_vouchers",
+      "cost_layer_weights",
       "cost_layers",
       "inventory_movements",
+      "transfer_order_lines",
+      "transfer_orders",
+      "serials",
+      "lots",
       "charge_rate_components",
       "recognition_schedule_lines",
       "recognition_schedules",

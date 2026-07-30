@@ -68,6 +68,7 @@ export const journalEntries = pgTable(
         "allocation",
         "intercompany",
         "fx_settlement",
+        "fx_revaluation",
         "translation",
         "closing",
         "migration",

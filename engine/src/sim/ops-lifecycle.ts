@@ -28,7 +28,12 @@ export async function voidDocument(
 
 /** Post a negated reversing entry for a posted journal entry (flips the original to reversed). */
 export async function reverseEntry(world: SimOrg, entryId: string, actorId: string): Promise<{ reversalId: string | null }> {
-  const reversalId = await reverseProjectGlEntry(world.orgId, actorId, entryId);
+  const reversalId = await reverseProjectGlEntry(
+    world.orgId,
+    actorId,
+    entryId,
+    "Adversarial lifecycle simulation reversal",
+  );
   return { reversalId };
 }
 

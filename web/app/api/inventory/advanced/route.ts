@@ -99,6 +99,9 @@ export async function POST(req: Request) {
           subsidiaryId = r.rows[0]?.id;
         }
         if (!subsidiaryId) return NextResponse.json({ error: "no subsidiary" }, { status: 422 });
+        if (gate.allowedSubsidiaryIds && !gate.allowedSubsidiaryIds.has(subsidiaryId)) {
+          return NextResponse.json({ error: "subsidiary not permitted" }, { status: 403 });
+        }
         const res = await createTransferOrder(orgId, userId, {
           fromStockLocationId: body.fromStockLocationId,
           toStockLocationId: body.toStockLocationId,
@@ -125,6 +128,10 @@ export async function POST(req: Request) {
             sql`select id from subsidiaries where org_id = ${orgId} order by created_at limit 1`,
           )) as unknown as { rows: { id: string }[] };
           subsidiaryId = r.rows[0]?.id;
+        }
+        if (!subsidiaryId) return NextResponse.json({ error: "no subsidiary" }, { status: 422 });
+        if (gate.allowedSubsidiaryIds && !gate.allowedSubsidiaryIds.has(subsidiaryId)) {
+          return NextResponse.json({ error: "subsidiary not permitted" }, { status: 403 });
         }
         const res = await postLandedCostVoucher(orgId, userId, {
           amount: String(body.amount),

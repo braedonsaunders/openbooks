@@ -56,9 +56,9 @@ import type { ComputedTaxComponent } from "../tax.ts";
  * trial balance AND per-document open items against the LIVE source.
  *
  *  - new source txn      → insert document + lines, post through the kernel
- *  - changed source txn  → amend in place (document updated, GL projection
- *    re-materialized via regenerateGlImpactTx — entry keeps its identity so
- *    applications and bank matches stay linked)
+ *  - changed source txn  → non-financial source edits may update in place;
+ *    any posted GL projection change fails closed until a controlled
+ *    append-only correction is explicitly created
  *  - unchanged           → skip (canonical content compare)
  *  - deleted at source   → mirrored: removed through the engine's guarded
  *    delete (settlements released, immutable audit tombstone) — the source
@@ -1496,9 +1496,9 @@ export async function runSync(
           docsAmended++;
           continue;
         }
-        // AMEND: document is the system of record; its GL projection follows.
-        // `migration` flag too: a mirror amend re-materializes HISTORY — an
-        // account deactivated since must not block its own past postings.
+        // AMEND: the document may accept non-financial source changes. Posted
+        // GL is immutable: regenerateGlImpactTx proves the projection unchanged
+        // or throws, rolling this entire transaction back.
         await db.transaction(async (tx) => {
           await tx.execute(sql`set local openbooks.amend = on`);
           await tx.execute(sql`set local openbooks.migration = on`);
@@ -1547,10 +1547,9 @@ export async function runSync(
           );
           if (have.posted)
             await regenerateGlImpactTx(tx, have.id, deps, "mirror");
-          // The open-balance trigger fires only on posted_entry_id/status change;
-          // an amend keeps the entry identity (to preserve applications), so the
-          // trigger never sees the changed open lines. Recompute explicitly from
-          // the freshly regenerated journal lines (applications are preserved).
+          // The open-balance trigger fires only on posted_entry_id/status
+          // changes. Recompute after an accepted non-financial amendment;
+          // financial projection changes have already failed and rolled back.
           if (have.posted)
             await tx.execute(
               sql`select recompute_document_open_balance(${have.id})`,
@@ -1705,7 +1704,12 @@ export async function runSync(
         }
       ).rows[0]?.on === true;
     const trueUp = trueUpEnabled && !targetedRefs
-      ? await trueUpResidualGl(org.id, source)
+      ? await trueUpResidualGl(org.id, source, {
+          actorId: /^[0-9a-f-]{36}$/i.test(triggeredBy)
+            ? triggeredBy
+            : null,
+          syncRunId: run!.id,
+        })
       : null;
 
     // -- 6c. authoritative open-balance sweep -------------------------------------
