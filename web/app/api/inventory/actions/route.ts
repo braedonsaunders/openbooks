@@ -8,10 +8,12 @@ import {
   buildAssembly,
   issueInventory,
   receiveInventory,
+  reverseInventoryMovement,
   transferInventory,
   InventoryError,
 } from '@openbooks/engine/src/inventory.ts'
 import { guardPermission } from '../../../../lib/authz'
+import { isFeatureEnabled } from '../../../../lib/features'
 import { isUuid } from '../../../../lib/list-params'
 
 export const runtime = 'nodejs'
@@ -19,7 +21,8 @@ export const runtime = 'nodejs'
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/
 
 interface Body {
-  action?: 'receive' | 'issue' | 'adjust' | 'transfer' | 'build' | 'landed'
+  action?: 'receive' | 'issue' | 'adjust' | 'transfer' | 'build' | 'landed' | 'reverse'
+  movementId?: string
   itemId?: string
   stockLocationId?: string
   toStockLocationId?: string
@@ -30,6 +33,8 @@ interface Body {
   subsidiaryId?: string
   date?: string
   memo?: string
+  lotId?: string
+  serialId?: string
 }
 
 function num(v: unknown): string | null {
@@ -50,10 +55,35 @@ export async function POST(req: Request) {
   const gate = await guardPermission('items.manage')
   if (gate instanceof NextResponse) return gate
   const user = gate.user
+  if (!(await isFeatureEnabled(user.orgId, 'inventory'))) {
+    return NextResponse.json({ error: 'feature disabled' }, { status: 404 })
+  }
 
   const body = (await req.json().catch(() => ({}))) as Body
-  if (!body.action || !['receive', 'issue', 'adjust', 'transfer', 'build', 'landed'].includes(body.action)) {
+  if (!body.action || !['receive', 'issue', 'adjust', 'transfer', 'build', 'landed', 'reverse'].includes(body.action)) {
     return NextResponse.json({ error: 'invalid action' }, { status: 422 })
+  }
+  if (body.action === 'reverse') {
+    if (!body.movementId || !isUuid(body.movementId)) {
+      return NextResponse.json({ error: 'movement required' }, { status: 422 })
+    }
+    if (!body.date || !DATE_RE.test(body.date)) {
+      return NextResponse.json({ error: 'reversal date required' }, { status: 422 })
+    }
+    if (typeof body.memo !== 'string' || body.memo.trim().length < 5 || body.memo.trim().length > 500) {
+      return NextResponse.json({ error: 'reversal reason must be between 5 and 500 characters' }, { status: 422 })
+    }
+    try {
+      const res = await reverseInventoryMovement(user.orgId, user.id, {
+        movementId: body.movementId,
+        reversalDate: body.date,
+        reason: body.memo,
+      })
+      return NextResponse.json({ ok: true, ...res })
+    } catch (e: unknown) {
+      const status = e instanceof InventoryError ? 422 : 500
+      return NextResponse.json({ error: e instanceof Error ? e.message : String(e) }, { status })
+    }
   }
   if (!body.itemId || !isUuid(body.itemId)) return NextResponse.json({ error: 'item required' }, { status: 422 })
   if (!body.stockLocationId || !isUuid(body.stockLocationId)) {
@@ -93,6 +123,8 @@ export async function POST(req: Request) {
         subsidiaryId,
         offsetAccountId: body.offsetAccountId,
         date,
+        lotId: body.lotId && isUuid(body.lotId) ? body.lotId : undefined,
+        serialId: body.serialId && isUuid(body.serialId) ? body.serialId : undefined,
         memo: body.memo ?? null,
       })
       return NextResponse.json({ ok: true, ...res })
@@ -133,6 +165,8 @@ export async function POST(req: Request) {
         fromStockLocationId: body.stockLocationId,
         toStockLocationId: body.toStockLocationId,
         quantity,
+        lotId: body.lotId && isUuid(body.lotId) ? body.lotId : undefined,
+        serialId: body.serialId && isUuid(body.serialId) ? body.serialId : undefined,
         subsidiaryId,
         date,
         memo: body.memo ?? null,
@@ -147,6 +181,8 @@ export async function POST(req: Request) {
         subsidiaryId,
         offsetAccountId: body.offsetAccountId && isUuid(body.offsetAccountId) ? body.offsetAccountId : undefined,
         date,
+        lotId: body.lotId && isUuid(body.lotId) ? body.lotId : undefined,
+        serialId: body.serialId && isUuid(body.serialId) ? body.serialId : undefined,
         memo: body.memo ?? null,
       })
       return NextResponse.json({ ok: true, ...res })
@@ -156,6 +192,8 @@ export async function POST(req: Request) {
       itemId: body.itemId,
       stockLocationId: body.stockLocationId,
       quantityDelta: quantity,
+      lotId: body.lotId && isUuid(body.lotId) ? body.lotId : undefined,
+      serialId: body.serialId && isUuid(body.serialId) ? body.serialId : undefined,
       subsidiaryId,
       date,
       unitCost: num(body.unitCost) ?? undefined,

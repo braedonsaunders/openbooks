@@ -72,7 +72,11 @@ export const taxProvisionRuns = pgTable(
     fiscalYear: integer("fiscal_year").notNull(),
     periodFrom: date("period_from").notNull(),
     periodTo: date("period_to").notNull(),
-    status: text("status", { enum: ["draft", "posted", "superseded"] }).notNull().default("draft"),
+    status: text("status", {
+      enum: ["draft", "discarded", "posted", "superseded"],
+    })
+      .notNull()
+      .default("draft"),
     version: integer("version").notNull().default(1),
     /** tamper-evident hash of the computed payload. */
     snapshotHash: text("snapshot_hash").notNull(),

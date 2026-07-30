@@ -242,6 +242,10 @@ export const documentLinks = pgTable(
     linkType: text("link_type", {
       enum: ["created_from", "fulfills", "bills", "pays", "reverses", "renews"],
     }).notNull(),
+    /** Mandatory, immutable controller evidence for a correction edge. */
+    reason: text("reason"),
+    requestedBy: uuid("requested_by"),
+    requestedAt: timestamp("requested_at", { withTimezone: true }),
     ...auditColumns,
   },
   (t) => [

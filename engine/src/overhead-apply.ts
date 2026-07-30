@@ -268,7 +268,13 @@ export async function backfillOverhead(orgId: string, actorId: string): Promise<
 
 /** Reverse the overhead pairs carrying these entries (mirror of
  * reverseProjectLaborCost — for unapproval flows). */
-export async function reverseOverheadForTime(orgId: string, actorId: string, timeEntryIds: string[]): Promise<void> {
+export async function reverseOverheadForTime(
+  orgId: string,
+  actorId: string,
+  timeEntryIds: string[],
+  reason: string,
+  reversalDate?: string,
+): Promise<void> {
   if (timeEntryIds.length === 0) return;
   await inDbTransaction(async (tx) => {
     const idArr = `{${timeEntryIds.join(",")}}`;
@@ -285,7 +291,14 @@ export async function reverseOverheadForTime(orgId: string, actorId: string, tim
     for (const entryId of entryIds) {
       // The journal is the group serialization point. Lock it before updating
       // member rows so disjoint requests for one carried group cannot deadlock.
-      const reversal = await reverseProjectGlEntryWithinTransaction(tx, orgId, actorId, entryId);
+      const reversal = await reverseProjectGlEntryWithinTransaction(
+        tx,
+        orgId,
+        actorId,
+        entryId,
+        reason,
+        reversalDate,
+      );
       if (reversal.status === "missing") {
         throw new Error(`overhead posting journal ${entryId} is missing`);
       }

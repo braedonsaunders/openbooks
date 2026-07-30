@@ -2,8 +2,10 @@
   "name": "@openbooks/web",
   "version": "0.0.1",
   "private": true,
+  "type": "module",
   "scripts": {
     "dev": "next dev -p 4780",
+    "typecheck": "tsc --noEmit",
     "build": "next build",
     "start": "next start -p 4780"
   },

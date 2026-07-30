@@ -1,6 +1,15 @@
 import { sql } from "drizzle-orm";
 import { db, inDbTransaction } from "./db.ts";
-import { add, cmp, divRate, mulPercent, mulRate, neg, isZero, normalizeMoney } from "./money.ts";
+import {
+  add,
+  cmp,
+  divRate,
+  mulPercent,
+  mulRate,
+  neg,
+  isZero,
+  normalizeMoney,
+} from "./money.ts";
 import {
   postProjectGlEntryWithinTransaction,
   recognitionAccounts,
@@ -49,8 +58,12 @@ export const DEFAULT_LABOR_COSTING: LaborCostingSettings = {
   components: [],
 };
 
-export async function laborCostingSettings(orgId: string): Promise<LaborCostingSettings> {
-  const r = (await db.execute(sql`select settings->'laborCosting' as c from orgs where id = ${orgId}`)) as unknown as {
+export async function laborCostingSettings(
+  orgId: string,
+): Promise<LaborCostingSettings> {
+  const r = (await db.execute(
+    sql`select settings->'laborCosting' as c from orgs where id = ${orgId}`,
+  )) as unknown as {
     rows: { c: Partial<LaborCostingSettings> | null }[];
   };
   const c = r.rows[0]?.c ?? {};
@@ -58,7 +71,9 @@ export async function laborCostingSettings(orgId: string): Promise<LaborCostingS
     mode: c.mode === "post" ? "post" : "off",
     hoursPerDay: Number(c.hoursPerDay) > 0 ? Number(c.hoursPerDay) : 8,
     annualHours: Number(c.annualHours) > 0 ? Number(c.annualHours) : 2080,
-    components: Array.isArray(c.components) ? (c.components as LaborCostComponent[]) : [],
+    components: Array.isArray(c.components)
+      ? (c.components as LaborCostComponent[])
+      : [],
   };
 }
 
@@ -66,7 +81,8 @@ export interface ResolvedWage {
   /** Hourly wage (annual rates already divided by annualHours). */
   wage: string;
   currency: string;
-  scope: "employee" | "job_title" | "trade" | "department" | "subsidiary" | "org";
+  scope:
+    "employee" | "job_title" | "trade" | "department" | "subsidiary" | "org";
   rateId: string;
 }
 
@@ -92,19 +108,36 @@ export async function resolveWage(
   let tradeId = opts?.tradeId;
   let departmentId = opts?.departmentId;
   let subsidiaryId = opts?.subsidiaryId;
-  if (jobTitle === undefined || tradeId === undefined || departmentId === undefined || subsidiaryId === undefined) {
+  if (
+    jobTitle === undefined ||
+    tradeId === undefined ||
+    departmentId === undefined ||
+    subsidiaryId === undefined
+  ) {
     const t = (await db.execute(sql`
       select er.job_title, er.trade_id, er.department_id, p.subsidiary_id
         from employee_roles er
         join parties p on p.id = er.party_id and p.org_id = er.org_id
        where er.org_id = ${orgId} and er.party_id = ${employeePartyId}`)) as unknown as {
-      rows: { job_title: string | null; trade_id: string | null; department_id: string | null; subsidiary_id: string | null }[];
+      rows: {
+        job_title: string | null;
+        trade_id: string | null;
+        department_id: string | null;
+        subsidiary_id: string | null;
+      }[];
     };
     const employee = t.rows[0];
-    jobTitle = jobTitle === undefined ? employee?.job_title ?? null : jobTitle;
-    tradeId = tradeId === undefined ? employee?.trade_id ?? null : tradeId;
-    departmentId = departmentId === undefined ? employee?.department_id ?? null : departmentId;
-    subsidiaryId = subsidiaryId === undefined ? employee?.subsidiary_id ?? null : subsidiaryId;
+    jobTitle =
+      jobTitle === undefined ? (employee?.job_title ?? null) : jobTitle;
+    tradeId = tradeId === undefined ? (employee?.trade_id ?? null) : tradeId;
+    departmentId =
+      departmentId === undefined
+        ? (employee?.department_id ?? null)
+        : departmentId;
+    subsidiaryId =
+      subsidiaryId === undefined
+        ? (employee?.subsidiary_id ?? null)
+        : subsidiaryId;
   }
   const r = (await db.execute(sql`
     select id, rate, basis, annual_hours, currency,
@@ -131,13 +164,25 @@ export async function resolveWage(
                    when subsidiary_id is not null then 4 else 5 end,
               effective_from desc
      limit 1`)) as unknown as {
-    rows: { id: string; rate: string; basis: string; annual_hours: string; currency: string; scope: ResolvedWage["scope"] }[];
+    rows: {
+      id: string;
+      rate: string;
+      basis: string;
+      annual_hours: string;
+      currency: string;
+      scope: ResolvedWage["scope"];
+    }[];
   };
   const row = r.rows[0];
   if (!row) return null;
   const wage =
     row.basis === "year"
-      ? divRate(String(row.rate), cmp(String(row.annual_hours), "0") > 0 ? String(row.annual_hours) : String(opts?.annualHoursDefault ?? 2080))
+      ? divRate(
+          String(row.rate),
+          cmp(String(row.annual_hours), "0") > 0
+            ? String(row.annual_hours)
+            : String(opts?.annualHoursDefault ?? 2080),
+        )
       : String(row.rate);
   return { wage, currency: row.currency, scope: row.scope, rateId: row.id };
 }
@@ -154,12 +199,20 @@ export function convertFixedLaborComponents(
 ): LaborCostComponent[] {
   return components.map((component) =>
     component.kind === "per_hour" || component.kind === "per_day"
-      ? { ...component, value: convertLaborWage(String(component.value), fxRate) }
+      ? {
+          ...component,
+          value: convertLaborWage(String(component.value), fxRate),
+        }
       : component,
   );
 }
 
-async function laborFxRate(orgId: string, from: string, to: string, workedOn: string): Promise<string | null> {
+async function laborFxRate(
+  orgId: string,
+  from: string,
+  to: string,
+  workedOn: string,
+): Promise<string | null> {
   if (from === to) return "1";
   const result = (await db.execute(sql`
     select rate::text from (
@@ -170,7 +223,9 @@ async function laborFxRate(orgId: string, from: string, to: string, workedOn: st
       select (1 / rate)::numeric(19,10) as rate, as_of, 1 as priority from fx_rates
        where org_id = ${orgId} and from_currency = ${to} and to_currency = ${from}
          and rate_type = 'spot' and as_of <= ${workedOn}
-    ) candidates order by as_of desc, priority asc limit 1`)) as unknown as { rows: { rate: string }[] };
+    ) candidates order by as_of desc, priority asc limit 1`)) as unknown as {
+    rows: { rate: string }[];
+  };
   return result.rows[0]?.rate ?? null;
 }
 
@@ -193,22 +248,36 @@ export function computeCostRate(
       // fallback value. A 0% group means no worker comp for that person.
       const pct = String(opts.workerCompPercent ?? c.value);
       let exactPercent: string;
-      try { exactPercent = normalizeMoney(pct); } catch { continue; }
+      try {
+        exactPercent = normalizeMoney(pct);
+      } catch {
+        continue;
+      }
       if (cmp(exactPercent, "0") === 0) continue;
       const on = c.scaleWithOvertime ? base : wage;
       rate = add(rate, mulPercent(on, exactPercent));
       continue;
     }
     let value: string;
-    try { value = normalizeMoney(c.value); } catch { continue; }
+    try {
+      value = normalizeMoney(c.value);
+    } catch {
+      continue;
+    }
     if (isZero(value)) continue;
     if (c.kind === "percent_of_wage") {
       const on = c.scaleWithOvertime ? base : wage;
       rate = add(rate, mulPercent(on, value));
     } else if (c.kind === "per_hour") {
-      rate = add(rate, c.scaleWithOvertime ? mulRate(value, costMultiplier) : value);
+      rate = add(
+        rate,
+        c.scaleWithOvertime ? mulRate(value, costMultiplier) : value,
+      );
     } else if (c.kind === "per_day") {
-      const perDay = settings.hoursPerDay > 0 ? divRate(value, String(settings.hoursPerDay)) : "0.0000";
+      const perDay =
+        settings.hoursPerDay > 0
+          ? divRate(value, String(settings.hoursPerDay))
+          : "0.0000";
       rate = add(rate, perDay);
     }
   }
@@ -221,12 +290,16 @@ export function computeCostRate(
  * touched). Safe to call for any id set; skips silently when the org has no
  * covering wage. Returns the number of entries stamped.
  */
-export async function snapshotLaborCostRates(orgId: string, timeEntryIds: string[]): Promise<number> {
+export async function snapshotLaborCostRates(
+  orgId: string,
+  timeEntryIds: string[],
+): Promise<number> {
   if (timeEntryIds.length === 0) return 0;
   const settings = await laborCostingSettings(orgId);
   const idArr = `{${timeEntryIds.join(",")}}`;
-  const [rows, org] = await Promise.all([
-    db.execute(sql`
+  // Approval executes this helper inside a withOrg transaction, which pins one
+  // PostgreSQL client. Do not dispatch parallel queries on that client.
+  const rows = (await db.execute(sql`
     select te.id, te.employee_party_id, te.worked_on,
            coalesce(tt.cost_multiplier, '1') as cost_multiplier,
            er.job_title, er.trade_id, er.department_id, employee.subsidiary_id,
@@ -241,19 +314,33 @@ export async function snapshotLaborCostRates(orgId: string, timeEntryIds: string
       left join projects project on project.id = te.project_id and project.org_id = te.org_id
       left join subsidiaries project_sub on project_sub.id = project.subsidiary_id and project_sub.org_id = te.org_id
       left join worker_comp_groups wcg on wcg.id = er.worker_comp_group_id
-     where te.org_id = ${orgId} and te.id = any(${idArr}::uuid[]) and te.cost_rate is null`),
-    db.execute(sql`
+     where te.org_id = ${orgId} and te.id = any(${idArr}::uuid[]) and te.cost_rate is null`)) as unknown as {
+    rows: {
+      id: string;
+      employee_party_id: string;
+      worked_on: string;
+      cost_multiplier: string;
+      job_title: string | null;
+      trade_id: string | null;
+      department_id: string | null;
+      subsidiary_id: string | null;
+      target_currency: string | null;
+      target_subsidiary_id: string | null;
+      worker_comp_percent: string | null;
+    }[];
+  };
+  const org = (await db.execute(sql`
       select o.base_currency,
              (select id from subsidiaries where org_id = o.id and parent_id is null and is_active limit 1) as root_subsidiary_id
-        from orgs o where o.id = ${orgId}`),
-  ]) as unknown as [
-    { rows: { id: string; employee_party_id: string; worked_on: string; cost_multiplier: string; job_title: string | null; trade_id: string | null; department_id: string | null; subsidiary_id: string | null; target_currency: string | null; target_subsidiary_id: string | null; worker_comp_percent: string | null }[] },
-    { rows: { base_currency: string; root_subsidiary_id: string | null }[] },
-  ];
+        from orgs o where o.id = ${orgId}`)) as unknown as {
+    rows: { base_currency: string; root_subsidiary_id: string | null }[];
+  };
   const orgCurrency = org.rows[0]?.base_currency;
-  if (!orgCurrency) throw new Error("organization base currency is not configured");
+  if (!orgCurrency)
+    throw new Error("organization base currency is not configured");
   const rootSubsidiaryId = org.rows[0]?.root_subsidiary_id;
-  if (!rootSubsidiaryId) throw new Error("organization root subsidiary is not configured");
+  if (!rootSubsidiaryId)
+    throw new Error("organization root subsidiary is not configured");
   let stamped = 0;
   // Cache wage resolution per employee+date (a week of entries shares both).
   const cache = new Map<string, ResolvedWage | null>();
@@ -277,24 +364,47 @@ export async function snapshotLaborCostRates(orgId: string, timeEntryIds: string
     const fxKey = `${wage.currency}|${targetCurrency}|${r.worked_on}`;
     let fxRate = fxCache.get(fxKey);
     if (!fxRate) {
-      fxRate = (await laborFxRate(orgId, wage.currency, targetCurrency, r.worked_on)) ?? undefined;
-      if (!fxRate) throw new Error(`no spot rate for labor wage ${wage.currency}→${targetCurrency} on or before ${r.worked_on}`);
+      fxRate =
+        (await laborFxRate(
+          orgId,
+          wage.currency,
+          targetCurrency,
+          r.worked_on,
+        )) ?? undefined;
+      if (!fxRate)
+        throw new Error(
+          `no spot rate for labor wage ${wage.currency}→${targetCurrency} on or before ${r.worked_on}`,
+        );
       fxCache.set(fxKey, fxRate);
     }
     const functionalWage = convertLaborWage(wage.wage, fxRate);
     const componentFxKey = `${orgCurrency}|${targetCurrency}|${r.worked_on}`;
     let componentFxRate = fxCache.get(componentFxKey);
     if (!componentFxRate) {
-      componentFxRate = (await laborFxRate(orgId, orgCurrency, targetCurrency, r.worked_on)) ?? undefined;
-      if (!componentFxRate) throw new Error(`no spot rate for labor components ${orgCurrency}→${targetCurrency} on or before ${r.worked_on}`);
+      componentFxRate =
+        (await laborFxRate(orgId, orgCurrency, targetCurrency, r.worked_on)) ??
+        undefined;
+      if (!componentFxRate)
+        throw new Error(
+          `no spot rate for labor components ${orgCurrency}→${targetCurrency} on or before ${r.worked_on}`,
+        );
       fxCache.set(componentFxKey, componentFxRate);
     }
     const functionalSettings = {
       ...settings,
-      components: convertFixedLaborComponents(settings.components, componentFxRate),
+      components: convertFixedLaborComponents(
+        settings.components,
+        componentFxRate,
+      ),
     };
-    const workerCompPercent = r.worker_comp_percent != null ? String(r.worker_comp_percent) : undefined;
-    const rate = computeCostRate(functionalWage, String(r.cost_multiplier), functionalSettings, { workerCompPercent });
+    const workerCompPercent =
+      r.worker_comp_percent != null ? String(r.worker_comp_percent) : undefined;
+    const rate = computeCostRate(
+      functionalWage,
+      String(r.cost_multiplier),
+      functionalSettings,
+      { workerCompPercent },
+    );
     await db.execute(sql`
       update time_entries
          set cost_rate = ${rate},
@@ -383,7 +493,8 @@ async function laborClearingReconciliationFrom(
     rows: { base_currency: string }[];
   };
   const currency = subsidiary.rows[0]?.base_currency;
-  if (!currency) throw new Error("labor reconciliation subsidiary is not available");
+  if (!currency)
+    throw new Error("labor reconciliation subsidiary is not available");
 
   const s = sums.rows[0] ?? { standard_posted: "0", payroll_posted: "0" };
   return {
@@ -391,9 +502,16 @@ async function laborClearingReconciliationFrom(
     currency,
     standardPosted: String(s.standard_posted),
     payrollPosted: String(s.payroll_posted),
-    periodVariance: add(String(s.standard_posted), neg(String(s.payroll_posted))),
+    periodVariance: add(
+      String(s.standard_posted),
+      neg(String(s.payroll_posted)),
+    ),
     openBalance: String(open.rows[0]?.balance ?? "0"),
-    perProject: perProject.rows.map((r) => ({ projectId: r.project_id, name: r.name, standard: String(r.standard) })),
+    perProject: perProject.rows.map((r) => ({
+      projectId: r.project_id,
+      name: r.name,
+      standard: String(r.standard),
+    })),
   };
 }
 
@@ -447,12 +565,17 @@ export async function postPayrollVariance(opts: {
         from orgs
        where id = ${orgId}
        for update`)) as unknown as {
-      rows: { labor_clearing: string | null; payroll_variance: string | null }[];
+      rows: {
+        labor_clearing: string | null;
+        payroll_variance: string | null;
+      }[];
     };
     const laborClearing = config.rows[0]?.labor_clearing;
     const varianceAccount = config.rows[0]?.payroll_variance;
     if (!laborClearing || !varianceAccount) {
-      throw new Error("labor clearing and payroll variance accounts must be configured");
+      throw new Error(
+        "labor clearing and payroll variance accounts must be configured",
+      );
     }
 
     const prior = (await tx.execute(sql`
@@ -470,9 +593,13 @@ export async function postPayrollVariance(opts: {
         orgId,
         actorId,
         prior.rows[0].id,
+        "Superseded by recalculated payroll variance",
+        periodEnd,
       );
       if (reversal.status !== "reversed") {
-        throw new Error(`payroll variance journal ${prior.rows[0].id} could not be reversed`);
+        throw new Error(
+          `payroll variance journal ${prior.rows[0].id} could not be reversed`,
+        );
       }
     }
 
@@ -499,8 +626,16 @@ export async function postPayrollVariance(opts: {
       subsidiaryId,
       currency: rec.currency,
       lines: [
-        { accountId: laborClearing, amount: variance, memo: "Clear labor clearing residue" },
-        { accountId: varianceAccount, amount: neg(variance), memo: "Payroll variance" },
+        {
+          accountId: laborClearing,
+          amount: variance,
+          memo: "Clear labor clearing residue",
+        },
+        {
+          accountId: varianceAccount,
+          amount: neg(variance),
+          memo: "Payroll variance",
+        },
       ],
     });
     return { entryId, variance };

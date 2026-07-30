@@ -262,11 +262,14 @@ export const assetEvents = pgTable(
     orgId: orgRef(),
     assetId: uuid("asset_id").notNull(),
     kind: text("kind", {
-      enum: ["acquired", "placed_in_service", "revalued", "impaired", "transferred", "disposed", "written_off"],
+      enum: ["acquired", "placed_in_service", "revalued", "impaired", "transferred", "disposed", "written_off", "reversed"],
     }).notNull(),
     occurredOn: date("occurred_on").notNull(),
     amount: money("amount"), // proceeds for disposal, delta for revaluation
     journalEntryId: uuid("journal_entry_id"),
+    /** Append-only correction lineage for a lifecycle posting. */
+    reversesEventId: uuid("reverses_event_id"),
+    reversalReason: text("reversal_reason"),
     memo: text("memo"),
     ...auditColumns,
   },

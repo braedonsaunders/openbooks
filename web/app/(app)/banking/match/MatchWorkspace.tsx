@@ -14,6 +14,7 @@ import {
 import { SearchInput } from '../../../../components/search-input'
 import { Pagination } from '../../../../components/pagination'
 import { confirmDialog } from '../../../../lib/confirm'
+import { promptDialog } from '../../../../lib/prompt'
 type Search = Record<string, string | string[] | undefined>
 interface Opt { id: string; label: string; unmatched?: number }
 interface Account { id: string; label: string }
@@ -143,7 +144,14 @@ export function MatchWorkspace({
   }
 
   async function exclude(id: string) {
-    const d = await call('PATCH', `/api/banking/statement-lines/${id}`, { action: 'exclude' })
+    const reason = await promptDialog({
+      title: t('excludeReasonTitle'),
+      label: t('excludeReasonLabel'),
+      placeholder: t('excludeReasonPlaceholder'),
+      confirmLabel: t('exclude'),
+    })
+    if (!reason) return
+    const d = await call('PATCH', `/api/banking/statement-lines/${id}`, { action: 'exclude', reason })
     if (!d) return
     toast.success(t('excludedToast')); if (selectedStmt === id) setSelectedStmt(null); router.refresh()
   }

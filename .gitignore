@@ -29,6 +29,7 @@ engine/*.log
 dump.rdb
 .sftp-data/
 .backups/
+.local/
 
 # regenerable time-entry dump
 extraction/account-data/timebill.ndjson

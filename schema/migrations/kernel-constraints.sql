@@ -283,14 +283,39 @@ begin
     where id = coalesce(new.entry_id, old.entry_id);
   if v_status is distinct from 'draft' then
     -- Bank-reconciliation sign-off stamps reconciled_at / reconciliation_id
-    -- on posted lines. That is bookkeeping METADATA, not accounting content:
-    -- allow an UPDATE that changes nothing else. Every other write to a
-    -- non-draft entry's lines stays blocked.
+    -- on posted lines. That is bookkeeping metadata, but it is still permanent
+    -- financial-control evidence: it may only transition once from entirely
+    -- unset to an extant unsigned reconciliation that already claims the line.
+    -- Clearing, retargeting, or partially stamping the evidence is forbidden.
     if tg_op = 'UPDATE'
        and to_jsonb(new) - 'reconciled_at' - 'reconciliation_id'
          = to_jsonb(old) - 'reconciled_at' - 'reconciliation_id'
     then
-      return new;
+      if new.reconciled_at is not distinct from old.reconciled_at
+         and new.reconciliation_id is not distinct from old.reconciliation_id then
+        return new;
+      end if;
+      if old.reconciled_at is null
+         and old.reconciliation_id is null
+         and new.reconciled_at is not null
+         and new.reconciliation_id is not null
+         and exists (
+           select 1
+             from reconciliations r
+            where r.id = new.reconciliation_id
+              and r.org_id = new.org_id
+              and r.status <> 'signed_off'
+         )
+         and exists (
+           select 1
+             from reconciliation_matches m
+            where m.reconciliation_id = new.reconciliation_id
+              and m.journal_line_id = new.id
+              and m.org_id = new.org_id
+         ) then
+        return new;
+      end if;
+      raise exception 'journal-line reconciliation evidence is append-only';
     end if;
     -- Re-materializing posted ledger history's GL-Impact projection from its
     -- edited source document (engine-only 'openbooks.amend' flag). A reversed

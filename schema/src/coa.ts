@@ -1,5 +1,7 @@
+import { sql } from "drizzle-orm";
 import {
   boolean,
+  check,
   index,
   jsonb,
   pgTable,
@@ -70,5 +72,9 @@ export const accounts = pgTable(
     uniqueIndex("accounts_org_number").on(t.orgId, t.number),
     index("accounts_org_type").on(t.orgId, t.type),
     index("accounts_parent").on(t.parentId),
+    check(
+      "accounts_reconcilable_currency_required",
+      sql`not ${t.reconcilable} or ${t.currencyRestriction} is not null`,
+    ),
   ],
 );

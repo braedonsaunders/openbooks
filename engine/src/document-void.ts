@@ -246,6 +246,7 @@ export async function completeRequestedDocumentVoid(
                where obligation.document_line_id in (
                  select id from document_lines where document_id = ${documentId}
                )
+                 and obligation.status <> 'cancelled'
             ) as revenue
         `)) as unknown as { rows: { inventory: boolean; revenue: boolean }[] };
         if (dependentSubledger.rows[0]?.inventory || dependentSubledger.rows[0]?.revenue) {

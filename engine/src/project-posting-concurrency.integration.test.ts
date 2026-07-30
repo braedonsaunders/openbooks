@@ -174,8 +174,20 @@ test("project labor and overhead posting are exactly-once under concurrency and 
     );
 
     const reversalRace = await Promise.all([
-      reverseProjectGlEntry(org.orgId, actorId, overheadEntryId),
-      reverseProjectGlEntry(org.orgId, actorId, overheadEntryId),
+      reverseProjectGlEntry(
+        org.orgId,
+        actorId,
+        overheadEntryId,
+        "Concurrent project overhead reversal test",
+        org.date,
+      ),
+      reverseProjectGlEntry(
+        org.orgId,
+        actorId,
+        overheadEntryId,
+        "Concurrent project overhead reversal test",
+        org.date,
+      ),
     ]);
     assert.equal(reversalRace.filter(Boolean).length, 1, "one source journal receives one reversal");
     const reversalCount = (await db.execute(sql`
@@ -187,12 +199,36 @@ test("project labor and overhead posting are exactly-once under concurrency and 
     assert.equal(reversalCount.rows[0]?.count, 1);
 
     await Promise.all([
-      reverseProjectLaborCost(org.orgId, actorId, [timeEntryIds[0]]),
-      reverseProjectLaborCost(org.orgId, actorId, [timeEntryIds[1]]),
+      reverseProjectLaborCost(
+        org.orgId,
+        actorId,
+        [timeEntryIds[0]],
+        "Concurrent labor release test",
+        org.date,
+      ),
+      reverseProjectLaborCost(
+        org.orgId,
+        actorId,
+        [timeEntryIds[1]],
+        "Concurrent labor release test",
+        org.date,
+      ),
     ]);
     await Promise.all([
-      reverseOverheadForTime(org.orgId, actorId, [timeEntryIds[0]]),
-      reverseOverheadForTime(org.orgId, actorId, [timeEntryIds[1]]),
+      reverseOverheadForTime(
+        org.orgId,
+        actorId,
+        [timeEntryIds[0]],
+        "Concurrent overhead release test",
+        org.date,
+      ),
+      reverseOverheadForTime(
+        org.orgId,
+        actorId,
+        [timeEntryIds[1]],
+        "Concurrent overhead release test",
+        org.date,
+      ),
     ]);
     const released = (await db.execute(sql`
       select cost_journal_entry_id, overhead_journal_entry_id

@@ -5,6 +5,7 @@ import {
   integer,
   pgTable,
   text,
+  timestamp,
   uniqueIndex,
   uuid,
 } from "drizzle-orm/pg-core";
@@ -160,6 +161,9 @@ export const performanceObligations = pgTable(
     status: text("status", { enum: ["open", "satisfied", "cancelled"] })
       .notNull()
       .default("open"),
+    cancellationReason: text("cancellation_reason"),
+    cancelledAt: timestamp("cancelled_at", { withTimezone: true }),
+    cancelledBy: uuid("cancelled_by"),
     ...auditColumns,
   },
   (t) => [index("obligations_contract").on(t.contractId), index("obligations_doc_line").on(t.documentLineId)],
@@ -177,7 +181,9 @@ export const recognitionSchedules = pgTable(
     orgId: orgRef(),
     obligationId: uuid("obligation_id").notNull(),
     bookId: uuid("book_id").notNull(),
-    status: text("status", { enum: ["planned", "in_progress", "complete"] })
+    status: text("status", {
+      enum: ["planned", "in_progress", "complete", "cancelled"],
+    })
       .notNull()
       .default("planned"),
     totalAmount: money("total_amount").notNull(),
@@ -197,6 +203,8 @@ export const recognitionScheduleLines = pgTable(
     plannedAmount: money("planned_amount").notNull(),
     recognizedAmount: money("recognized_amount"),
     journalEntryId: uuid("journal_entry_id"), // set when posted
+    /** Exact compensating journal; the original journal id is never replaced. */
+    reversalJournalEntryId: uuid("reversal_journal_entry_id"),
     ...auditColumns,
   },
   (t) => [
