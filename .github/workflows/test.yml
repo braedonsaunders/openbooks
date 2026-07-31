@@ -39,10 +39,11 @@ jobs:
       - run: npm ci
       - name: Unit tests (no database)
         # OPENBOOKS_DB_URL deliberately unset/empty: *.integration.test.ts
-        # files self-skip, everything else must pass.
+        # files self-skip, everything else must pass. Keep file-level fan-out
+        # bounded so a larger dependency graph cannot exhaust runner resources.
         env:
           OPENBOOKS_DB_URL: ""
-        run: npm test
+        run: npm test -- --test-concurrency=4
 
   integration:
     runs-on: ubuntu-latest
