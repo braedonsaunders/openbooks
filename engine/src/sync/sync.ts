@@ -139,6 +139,21 @@ export interface SyncOptions {
   sourceRefs?: string[];
 }
 
+export function syncErrorMessage(error: unknown, limit = 300): string {
+  const messages: string[] = [];
+  let current: unknown = error;
+  while (current instanceof Error && messages.length < 4) {
+    const message = current.message.trim().split("\n", 1)[0] ?? "";
+    if (message && !messages.includes(message)) messages.push(message);
+    current = (current as Error & { cause?: unknown }).cause;
+  }
+  return (
+    messages.length > 1
+      ? [...messages].reverse().join(" — wrapped by: ")
+      : messages[0] || String(error)
+  ).slice(0, limit);
+}
+
 export function syncVerificationFailures(result: SyncResult): string[] {
   const failures: string[] = [];
   if (result.docsFailed > 0)
@@ -357,6 +372,7 @@ export async function verifyCurrentLedgerState(
        and e.status in ('posted', 'reversed')
        and a.custom->>${refKey} is not null
      group by 1, 2, 3
+    having sum(l.amount) <> 0
   `)) as unknown as {
     rows: {
       accountRef: string;
@@ -390,6 +406,7 @@ export async function verifyCurrentLedgerState(
          and p.custom->>${refKey} is not null
          and a.custom->>${refKey} is not null
        group by 1, 2, 3, 4
+      having sum(l.amount) <> 0
     `)) as unknown as {
       rows: {
         projectRef: string;
@@ -541,6 +558,46 @@ export function canonicalNativeDocumentKey(d: NativeDocument): string {
 /** Human-facing source number, kept separate from the immutable sourceRef. */
 export function effectiveSourceDocumentNumber(d: NativeDocument): string {
   return d.documentNumber?.trim() || d.sourceRef;
+}
+
+/**
+ * Preserve the source's human-facing number while making a genuine number
+ * collision deterministic and visibly traceable to its immutable source id.
+ */
+export function collisionSafeSourceDocumentNumber(
+  d: NativeDocument,
+  sourceName: string,
+): string {
+  const suffix = ` [${sourceName}:${d.sourceRef}]`;
+  return `${effectiveSourceDocumentNumber(d)}${suffix}`;
+}
+
+function documentNumberOwnerKey(kind: string, documentNumber: string): string {
+  return `${kind}\u0000${documentNumber}`;
+}
+
+function resolveSourceDocumentNumber(
+  d: NativeDocument,
+  sourceName: string,
+  currentDocumentId: string | undefined,
+  numberOwners: ReadonlyMap<string, string>,
+): string {
+  const preferred = effectiveSourceDocumentNumber(d);
+  const preferredOwner = numberOwners.get(
+    documentNumberOwnerKey(d.kind, preferred),
+  );
+  if (!preferredOwner || preferredOwner === currentDocumentId) return preferred;
+
+  const alternate = collisionSafeSourceDocumentNumber(d, sourceName);
+  const alternateOwner = numberOwners.get(
+    documentNumberOwnerKey(d.kind, alternate),
+  );
+  if (alternateOwner && alternateOwner !== currentDocumentId) {
+    throw new Error(
+      `${d.kind} document number ${preferred} and collision-safe number ${alternate} are both owned by other documents`,
+    );
+  }
+  return alternate;
 }
 
 /** The same canonical key computed from the stored document. */
@@ -759,20 +816,28 @@ export async function preflightFullSync(
   );
   const changes = await source.nativeChanges(null, ctx);
   const existingRows = (await db.execute(sql`
-    select id, status, document_number, custom->>${source.refKey} as ref
+    select id, kind, status, document_number, custom->>${source.refKey} as ref
       from documents
      where org_id = ${opts.orgId}
-       and custom->>${source.refKey} is not null
   `)) as unknown as {
     rows: {
       id: string;
+      kind: string;
       status: string;
       document_number: string;
-      ref: string;
+      ref: string | null;
     }[];
   };
   const existingByRef = new Map(
-    existingRows.rows.map((row) => [row.ref, row]),
+    existingRows.rows
+      .filter((row): row is typeof row & { ref: string } => row.ref !== null)
+      .map((row) => [row.ref, row]),
+  );
+  const numberOwners = new Map(
+    existingRows.rows.map((row) => [
+      documentNumberOwnerKey(row.kind, row.document_number),
+      row.id,
+    ]),
   );
   const storedKeys = await loadStoredKeys(opts.orgId, source.refKey);
 
@@ -799,12 +864,18 @@ export async function preflightFullSync(
       currency: sourceDocument.currency ?? source.baseCurrency,
     };
     const existing = existingByRef.get(document.sourceRef);
+    const sourceDocumentNumber = resolveSourceDocumentNumber(
+      document,
+      source.name,
+      existing?.id,
+      numberOwners,
+    );
     if (!existing) {
       newRefs.push(document.sourceRef);
       continue;
     }
     if (
-      existing.document_number === effectiveSourceDocumentNumber(document) &&
+      existing.document_number === sourceDocumentNumber &&
       canonicalNativeDocumentKey(document)
       === storedKeys.get(existing.id)
     ) {
@@ -822,6 +893,7 @@ export async function preflightFullSync(
   const deletionCandidates = sourceDeletionCandidates(
     true,
     existingRows.rows
+      .filter((row): row is typeof row & { ref: string } => row.ref !== null)
       .filter((row) => row.status !== "voided")
       .map((row) => row.ref),
     currentSourceRefs,
@@ -851,7 +923,7 @@ export async function preflightFullSync(
     connectionId: opts.connectionId ?? null,
     generatedAt: new Date().toISOString(),
     sourceDocuments: changes.documents.length,
-    targetDocuments: existingRows.rows.length,
+    targetDocuments: existingByRef.size,
     newDocuments: newRefs.length,
     amendedDocuments: amendedRefs.length,
     unchangedDocuments,
@@ -1021,6 +1093,16 @@ export async function runSync(
   if (kind === "targeted_repair" && !targetedRefs?.length) {
     throw new Error("targeted repair requires explicit source references");
   }
+  if (
+    kind === "targeted_repair" &&
+    !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(
+      triggeredBy,
+    )
+  ) {
+    throw new Error(
+      "targeted repair requires the active organization user UUID that authorized the correction",
+    );
+  }
   if (targetedRefs && kind !== "targeted_repair") {
     throw new Error("sourceRefs are only valid for a targeted repair");
   }
@@ -1139,8 +1221,11 @@ export async function runSync(
       );
     }
 
-    // Fresh org: derive control accounts from the source so posting rules
-    // route AR/AP/bank/tax to exactly the accounts the source used.
+    // Derive connector-owned control accounts from source identities on every
+    // run, not only on a fresh org. This both tracks an intentional source
+    // control-account change and heals a sandbox clone whose JSON settings
+    // predate deterministic rebasing. A UUID from another tenant is never
+    // accepted merely because it is syntactically valid.
     if (source.controlAccounts) {
       const existingCtrl = (
         (await db.execute(
@@ -1149,27 +1234,79 @@ export async function runSync(
           rows: { ctrl: Record<string, string> | null }[];
         }
       ).rows[0]?.ctrl;
-      if (!existingCtrl?.ar || !existingCtrl?.ap) {
-        const refs = await source.controlAccounts();
-        const resolved: Record<string, string> = { ...(existingCtrl ?? {}) };
-        for (const [key, ref] of Object.entries(refs)) {
-          if (!ref) continue;
-          const row = (
-            (await db.execute(sql`
-              select id from accounts where org_id = ${org.id} and custom->>${refKey} = ${ref} limit 1`)) as unknown as {
-              rows: { id: string }[];
-            }
-          ).rows[0];
-          if (row) resolved[key] = row.id;
+      const refs = await source.controlAccounts();
+      const resolved: Record<string, string> = { ...(existingCtrl ?? {}) };
+      const sourceControlledKeys = [
+        "ar",
+        "ap",
+        "bank",
+        "taxCollected",
+        "taxPaid",
+      ] as const;
+      const owned = await db.execute(sql`
+        select id::text as id
+          from accounts
+         where org_id = ${org.id}
+           and id = any(${`{${Object.values(existingCtrl ?? {})
+             .filter((value) => /^[0-9a-f-]{36}$/i.test(value))
+             .join(",")}}`}::uuid[])
+      `);
+      const ownedIds = new Set(
+        (owned.rows as Array<{ id: string }>).map((row) => row.id),
+      );
+      for (const key of sourceControlledKeys) {
+        const current = resolved[key];
+        if (current && !ownedIds.has(current)) delete resolved[key];
+      }
+      for (const [key, ref] of Object.entries(refs)) {
+        if (!ref) continue;
+        const matches = (await db.execute(sql`
+          select id
+            from accounts
+           where org_id = ${org.id}
+             and custom->>${refKey} = ${ref}
+           order by id
+           limit 2
+        `)) as unknown as { rows: { id: string }[] };
+        if (matches.rows.length !== 1) {
+          throw new Error(
+            `${source.name} control account ${key} reference ${ref} resolved to ${matches.rows.length} organization accounts`,
+          );
         }
-        // Write whatever resolved (partial is fine): a source that exposes AR
-        // but not AP still lets its customer documents post. Missing legs just
-        // fall back to org defaults per document kind.
-        if (resolved.ar || resolved.ap || resolved.bank) {
-          await db.execute(sql`
-            update orgs set settings = settings || ${JSON.stringify({ controlAccounts: resolved })}::jsonb
-             where id = ${org.id}`);
-        }
+        resolved[key] = matches.rows[0]!.id;
+      }
+      const before = existingCtrl ?? {};
+      if (JSON.stringify(before) !== JSON.stringify(resolved)) {
+        const requestId = run!.id;
+        await db.transaction(async (tx) => {
+          await tx.execute(sql`
+            update orgs
+               set settings = jsonb_set(
+                     coalesce(settings, '{}'::jsonb),
+                     '{controlAccounts}',
+                     ${JSON.stringify(resolved)}::jsonb,
+                     true
+                   ),
+                   updated_at = now(),
+                   updated_by = ${/^[0-9a-f-]{36}$/i.test(triggeredBy) ? triggeredBy : null}
+             where id = ${org.id}
+          `);
+          await tx.execute(sql`
+            insert into audit_log
+              (org_id, table_name, row_id, action, changes, actor_id, request_id)
+            values (
+              ${org.id}, 'orgs', ${org.id}, 'update',
+              ${JSON.stringify({
+                mode: "connector_control_account_reconciliation",
+                source: source.name,
+                before,
+                after: resolved,
+              })}::jsonb,
+              ${/^[0-9a-f-]{36}$/i.test(triggeredBy) ? triggeredBy : null},
+              ${requestId}
+            )
+          `);
+        });
       }
     }
 
@@ -1223,27 +1360,37 @@ export async function runSync(
         documentNumber: string;
       }
     >();
-    for (const r of (
+    const allDocumentRows = (
       (await db.execute(sql`
-        select id, status, document_number,
+        select id, kind, status, document_number,
                posted_entry_id is not null as posted, custom->>${refKey} as ref
-          from documents where org_id = ${org.id} and custom->>${refKey} is not null`)) as unknown as {
+          from documents where org_id = ${org.id}`)) as unknown as {
         rows: {
           id: string;
+          kind: string;
           status: string;
           document_number: string;
           posted: boolean;
-          ref: string;
+          ref: string | null;
         }[];
       }
-    ).rows) {
-      existing.set(r.ref, {
-        id: r.id,
-        status: r.status,
-        posted: r.posted,
-        documentNumber: r.document_number,
-      });
+    ).rows;
+    for (const r of allDocumentRows) {
+      if (r.ref !== null) {
+        existing.set(r.ref, {
+          id: r.id,
+          status: r.status,
+          posted: r.posted,
+          documentNumber: r.document_number,
+        });
+      }
     }
+    const numberOwners = new Map(
+      allDocumentRows.map((r) => [
+        documentNumberOwnerKey(r.kind, r.document_number),
+        r.id,
+      ]),
+    );
     // Older rate-keyed order imports retained a non-zero-rate code even when
     // no source tax existed. Zero tax has no unambiguous tax identity in this
     // adapter; remove that legacy promise before canonical change detection.
@@ -1299,6 +1446,12 @@ export async function runSync(
           doc.lines,
         );
         const have = existing.get(doc.sourceRef);
+        const sourceDocumentNumber = resolveSourceDocumentNumber(
+          doc,
+          source.name,
+          have?.id,
+          numberOwners,
+        );
         if (!have) {
           // ---- NEW: insert + post through the kernel -------------------------
           if (
@@ -1319,7 +1472,7 @@ export async function runSync(
               .values({
                 orgId: org.id,
                 kind: doc.kind,
-                documentNumber: effectiveSourceDocumentNumber(doc),
+                documentNumber: sourceDocumentNumber,
                 partyId: doc.partyId,
                 subsidiaryId: doc.subsidiaryId,
                 extraDims: doc.extraDims ?? {},
@@ -1359,7 +1512,10 @@ export async function runSync(
                where id = ${row!.id}
             `);
             if (doc.posting) {
-              await postDocument(row!.id, deps, { deferEffects: true });
+              await postDocument(row!.id, deps, {
+                deferEffects: true,
+                suppressAutomation: true,
+              });
               await setDocumentTotalsFromEntry(row!.id);
             }
             return row!.id;
@@ -1367,7 +1523,9 @@ export async function runSync(
           if (doc.posting) {
             // Automation effects observe only a fully committed document.
             try {
-              await runPostDocumentEffects(docId, "approved");
+              await runPostDocumentEffects(docId, "approved", {
+                suppressAutomation: true,
+              });
             } catch (effectError) {
               console.error(
                 `[sync:${source.name}] post-commit effects failed for ${doc.sourceRef}:`,
@@ -1384,8 +1542,12 @@ export async function runSync(
               ? "posted"
               : (doc.lifecycleStatus ?? "approved"),
             posted: doc.posting,
-            documentNumber: effectiveSourceDocumentNumber(doc),
+            documentNumber: sourceDocumentNumber,
           });
+          numberOwners.set(
+            documentNumberOwnerKey(doc.kind, sourceDocumentNumber),
+            docId,
+          );
           continue;
         }
 
@@ -1403,7 +1565,7 @@ export async function runSync(
             await db.execute(sql`set local openbooks.amend = on`);
             await db.execute(sql`
               update documents
-                 set document_number = ${effectiveSourceDocumentNumber(doc)},
+                 set document_number = ${sourceDocumentNumber},
                      posting_date = ${doc.postingDate ?? doc.documentDate},
                      posting_period_id = ${doc.postingPeriodId ?? null},
                      status = 'approved',
@@ -1420,11 +1582,16 @@ export async function runSync(
               doc.lines,
               taxEvidence,
             );
-            await postDocument(have.id, deps, { deferEffects: true });
+            await postDocument(have.id, deps, {
+              deferEffects: true,
+              suppressAutomation: true,
+            });
             await setDocumentTotalsFromEntry(have.id);
           });
           try {
-            await runPostDocumentEffects(have.id, have.status);
+            await runPostDocumentEffects(have.id, have.status, {
+              suppressAutomation: true,
+            });
           } catch (effectError) {
             console.error(
               `[sync:${source.name}] post-commit effects failed for ${doc.sourceRef}:`,
@@ -1433,17 +1600,56 @@ export async function runSync(
           }
           have.posted = true;
           have.status = "posted";
-          have.documentNumber = effectiveSourceDocumentNumber(doc);
+          if (
+            numberOwners.get(
+              documentNumberOwnerKey(doc.kind, have.documentNumber),
+            ) === have.id
+          ) {
+            numberOwners.delete(
+              documentNumberOwnerKey(doc.kind, have.documentNumber),
+            );
+          }
+          have.documentNumber = sourceDocumentNumber;
+          numberOwners.set(
+            documentNumberOwnerKey(doc.kind, sourceDocumentNumber),
+            have.id,
+          );
           docsNew++;
           continue;
         }
-        const sourceDocumentNumber = effectiveSourceDocumentNumber(doc);
         const canonicalContentUnchanged =
           canonicalNativeDocumentKey(doc) ===
           (fullStoredKeys?.get(have.id) ?? (await storedKey(have.id)));
         if (canonicalContentUnchanged) {
+          // A bounded repair is also an explicit request to prove the stored
+          // GL projection against the current posting rules. Canonical source
+          // content alone cannot prove that: an older importer may have
+          // materialized different period, dimension, or open-item semantics.
+          // Replaying here is append-only when the projection differs and is
+          // a no-op (including in a closed period) when it is already exact.
+          let projectionChanged = false;
+          if (kind === "targeted_repair" && have.posted) {
+            projectionChanged = await db.transaction(async (tx) => {
+              await tx.execute(sql`set local openbooks.amend = on`);
+              await tx.execute(sql`set local openbooks.migration = on`);
+              const result = await regenerateGlImpactTx(
+                tx,
+                have.id,
+                deps,
+                triggeredBy,
+                {
+                  actorId: triggeredBy,
+                  requestId: run!.id,
+                  reason: `Authorized ${source.name} stored-projection validation for transaction ${doc.sourceRef}`,
+                },
+              );
+              return result.changed;
+            });
+            if (projectionChanged) await setDocumentTotalsFromEntry(have.id);
+          }
           if (have.documentNumber === sourceDocumentNumber) {
-            docsUnchanged++;
+            if (projectionChanged) docsAmended++;
+            else docsUnchanged++;
             continue;
           }
           await db.transaction(async (tx) => {
@@ -1492,7 +1698,14 @@ export async function runSync(
               after: auditAfter,
             });
           });
+          numberOwners.delete(
+            documentNumberOwnerKey(doc.kind, have.documentNumber),
+          );
           have.documentNumber = sourceDocumentNumber;
+          numberOwners.set(
+            documentNumberOwnerKey(doc.kind, sourceDocumentNumber),
+            have.id,
+          );
           docsAmended++;
           continue;
         }
@@ -1545,8 +1758,21 @@ export async function runSync(
             doc.lines,
             taxEvidence,
           );
-          if (have.posted)
-            await regenerateGlImpactTx(tx, have.id, deps, "mirror");
+          if (have.posted) {
+            await regenerateGlImpactTx(
+              tx,
+              have.id,
+              deps,
+              triggeredBy,
+              kind === "targeted_repair"
+                ? {
+                    actorId: triggeredBy,
+                    requestId: run!.id,
+                    reason: `Authorized ${source.name} source-exact correction for transaction ${doc.sourceRef}`,
+                  }
+                : undefined,
+            );
+          }
           // The open-balance trigger fires only on posted_entry_id/status
           // changes. Recompute after an accepted non-financial amendment;
           // financial projection changes have already failed and rolled back.
@@ -1576,11 +1802,18 @@ export async function runSync(
           }
         });
         if (have.posted) await setDocumentTotalsFromEntry(have.id);
+        numberOwners.delete(
+          documentNumberOwnerKey(doc.kind, have.documentNumber),
+        );
         have.documentNumber = sourceDocumentNumber;
+        numberOwners.set(
+          documentNumberOwnerKey(doc.kind, sourceDocumentNumber),
+          have.id,
+        );
         docsAmended++;
       } catch (e) {
         docsFailed++;
-        const failure = `${doc.sourceRef}: ${(e as Error).message.slice(0, 300)}`;
+        const failure = `${doc.sourceRef}: ${syncErrorMessage(e)}`;
         skipped.push(failure);
         if (writeFailures.length < 20) writeFailures.push(failure);
         await setProgress(

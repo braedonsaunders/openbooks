@@ -17,7 +17,7 @@ import { db } from "../db.ts";
 import { sourceClient } from "../sync/source-client.ts";
 
 const ORG = process.argv.find((a) => a.startsWith("--org="))?.split("=")[1]
-  ?? process.env.RECONCILE_ORG ?? "019f5ea3-44c5-72c0-ad3b-ef34c19c8763";
+  ?? process.env.RECONCILE_ORG ?? (process.env.PROD_ORG ?? (() => { throw new Error("PROD_ORG is required"); })());
 const SINCE = process.argv.find((a) => a.startsWith("--since="))?.split("=")[1] ?? "2024-06-01";
 
 /** P&L role, read from the account's type — a chart may say cogs or expense. */

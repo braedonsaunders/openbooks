@@ -23,7 +23,7 @@ import { readFileSync, writeFileSync, existsSync } from "node:fs";
 import { sql } from "drizzle-orm";
 import { db } from "../db.ts";
 
-const ORG = process.env.SANDBOX_ORG ?? "6d5799ad-a37c-4aea-9cd4-748e4dc59614";
+const ORG = process.env.SANDBOX_ORG ?? (() => { throw new Error("SANDBOX_ORG is required"); })();
 const GOLDEN_COST = "/tmp/golden-cost.json";
 const JOBSET = "/tmp/jobset.json";
 const OUT = "/tmp/cost-recon.json";

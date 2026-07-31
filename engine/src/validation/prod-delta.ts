@@ -13,8 +13,8 @@
 import { sql } from "drizzle-orm";
 import { db } from "../db.ts";
 
-const PROD = process.env.PROD_ORG ?? "019f5ea3-44c5-72c0-ad3b-ef34c19c8763";
-const SBX = process.env.SANDBOX_ORG ?? "6d5799ad-a37c-4aea-9cd4-748e4dc59614";
+const PROD = process.env.PROD_ORG ?? (process.env.PROD_ORG ?? (() => { throw new Error("PROD_ORG is required"); })());
+const SBX = process.env.SANDBOX_ORG ?? (() => { throw new Error("SANDBOX_ORG is required"); })();
 
 async function retry<T>(fn: () => Promise<T>, n = 8): Promise<T> {
   let last: unknown;

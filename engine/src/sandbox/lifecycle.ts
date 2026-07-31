@@ -30,6 +30,111 @@ export interface CreateSandboxInput {
   createdBy?: string | null;
 }
 
+const UUID_VALUE =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+/**
+ * Rebase account identities embedded in the org-level settings document.
+ * Relational sandbox rows are rebased by the clone engine, but JSON values do
+ * not participate in FK introspection. Leaving production account UUIDs in a
+ * sandbox would be a silent cross-tenant configuration reference.
+ *
+ * Only identities proven to be production-owned accounts and to have an exact
+ * cloned counterpart survive. A customization-only sandbox has no cloned
+ * accounts, so its control map is intentionally empty instead of dangling.
+ */
+export async function rebaseSandboxControlAccounts(args: {
+  productionOrgId: string;
+  sandboxOrgId: string;
+  seed: string;
+  actorId?: string | null;
+}): Promise<Record<string, string>> {
+  const state = await db.execute(sql`
+    select production.settings -> 'controlAccounts' as production_controls,
+           sandbox.settings -> 'controlAccounts' as sandbox_controls
+      from orgs production
+      join orgs sandbox on sandbox.id = ${args.sandboxOrgId}
+     where production.id = ${args.productionOrgId}
+  `);
+  const row = state.rows[0] as
+    | {
+        production_controls: Record<string, unknown> | null;
+        sandbox_controls: Record<string, unknown> | null;
+      }
+    | undefined;
+  if (!row) throw new Error("sandbox control-account rebase target not found");
+
+  const sourceControls = row.production_controls ?? {};
+  const sourceIds = [
+    ...new Set(
+      Object.values(sourceControls).filter(
+        (value): value is string =>
+          typeof value === "string" && UUID_VALUE.test(value),
+      ),
+    ),
+  ];
+  const mapped = new Map<string, string>();
+  if (sourceIds.length > 0) {
+    const result = await db.execute(sql`
+      select source.id::text as source_id,
+             target.id::text as sandbox_id
+        from accounts source
+        join accounts target
+          on target.id = ob_rebase(source.id, ${args.seed}::uuid)
+         and target.org_id = ${args.sandboxOrgId}
+       where source.org_id = ${args.productionOrgId}
+         and source.id = any(${`{${sourceIds.join(",")}}`}::uuid[])
+    `);
+    for (const account of result.rows as Array<{
+      source_id: string;
+      sandbox_id: string;
+    }>) {
+      mapped.set(account.source_id, account.sandbox_id);
+    }
+  }
+
+  const rebased = Object.fromEntries(
+    Object.entries(sourceControls).flatMap(([key, value]) => {
+      if (typeof value !== "string" || !UUID_VALUE.test(value)) return [];
+      const sandboxId = mapped.get(value);
+      return sandboxId ? [[key, sandboxId]] : [];
+    }),
+  );
+  const before = row.sandbox_controls ?? {};
+  if (JSON.stringify(before) === JSON.stringify(rebased)) return rebased;
+
+  const requestId = randomUUID();
+  await db.transaction(async (tx) => {
+    await tx.execute(sql`
+      update orgs
+         set settings = jsonb_set(
+               coalesce(settings, '{}'::jsonb),
+               '{controlAccounts}',
+               ${JSON.stringify(rebased)}::jsonb,
+               true
+             ),
+             updated_at = now(),
+             updated_by = ${args.actorId ?? null}
+       where id = ${args.sandboxOrgId}
+    `);
+    await tx.execute(sql`
+      insert into audit_log
+        (org_id, table_name, row_id, action, changes, actor_id, request_id)
+      values (
+        ${args.sandboxOrgId}, 'orgs', ${args.sandboxOrgId}, 'update',
+        ${JSON.stringify({
+          mode: "sandbox_control_account_rebase",
+          productionOrgId: args.productionOrgId,
+          before,
+          after: rebased,
+        })}::jsonb,
+        ${args.actorId ?? null}, ${requestId}
+      )
+    `);
+  });
+  return rebased;
+}
+
 async function asOfPeriodOf(
   periodId: string | null | undefined,
 ): Promise<{ fiscalYear: number; periodNumber: number } | null> {
@@ -142,6 +247,12 @@ export async function createSandbox(input: CreateSandboxInput): Promise<{
       masked,
       asOfPeriod: await asOfPeriodOf(input.asOfPeriodId),
     });
+    await rebaseSandboxControlAccounts({
+      productionOrgId: input.productionOrgId,
+      sandboxOrgId,
+      seed,
+      actorId: input.createdBy ?? null,
+    });
     await neuterSandbox(sandboxOrgId);
     await db.execute(sql`
       update sandboxes
@@ -204,6 +315,11 @@ export async function refreshSandbox(
       masked: s.masked,
       asOfPeriod: await asOfPeriodOf(s.as_of_period_id),
       onlyTables: target,
+    });
+    await rebaseSandboxControlAccounts({
+      productionOrgId: s.production_org_id,
+      sandboxOrgId: s.org_id,
+      seed: sandboxSeed,
     });
 
     await db.execute(sql`

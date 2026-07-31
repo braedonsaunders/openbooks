@@ -28,7 +28,7 @@ import { resolveTargetOrg } from "./target-org.ts";
 const ORG =
   process.env.TARGET_ORG ??
   process.env.SANDBOX_ORG ??
-  "6d5799ad-a37c-4aea-9cd4-748e4dc59614";
+  (process.env.SANDBOX_ORG ?? (() => { throw new Error("SANDBOX_ORG is required"); })());
 const args = new Map(
   process.argv
     .slice(2)

@@ -119,3 +119,31 @@ test(
     }
   },
 );
+
+test(
+  "connector control accounts fail closed on a cross-tenant UUID",
+  { skip: !DB },
+  async () => {
+    const target = await createScratchOrg();
+    const other = await createScratchOrg();
+    try {
+      await db.execute(sql`
+        update orgs
+           set settings = jsonb_set(
+             settings,
+             '{controlAccounts,ap}',
+             to_jsonb(${other.accounts.ap}::text),
+             true
+           )
+         where id = ${target.orgId}
+      `);
+      await assert.rejects(
+        buildNativeContext(target.orgId, "nsId", "CAD"),
+        /control account ap does not belong to organization/,
+      );
+    } finally {
+      await dropScratchOrg(target.orgId);
+      await dropScratchOrg(other.orgId);
+    }
+  },
+);

@@ -120,6 +120,15 @@ export interface PostingDeps {
   inventoryAssetByLine?: Map<string, string>;
 }
 
+export interface SourceCorrectionAuthorization {
+  /** Active organization user who explicitly authorized the bounded repair. */
+  actorId: string;
+  /** Immutable sync-run/request identity tying the ledger chain to its evidence. */
+  requestId: string;
+  /** Human-readable business reason retained with the correction chain. */
+  reason: string;
+}
+
 export interface TaxPostingComponent {
   taxCodeId: string;
   sequence: number;
@@ -695,17 +704,25 @@ export const RULES: Record<string, RuleFn> = {
     }));
     const tax = purchaseTaxLines(doc, lines, deps, 1);
     const total = sum([...expense, ...tax].map((l) => l.amount));
+    const controlAccountId =
+      controlOverride(doc) ??
+      deps.control.employeePayable ??
+      deps.control.ap;
     return [
       ...expense,
       ...tax,
       {
-        accountId:
-          controlOverride(doc) ??
-          deps.control.employeePayable ??
-          deps.control.ap,
+        accountId: controlAccountId,
         amount: neg(total),
         partyId: doc.partyId,
-        isOpenItem: true,
+        // Expense reports can be charged directly to a corporate-card
+        // liability. Only a genuine AR/AP control account belongs in aging;
+        // card liabilities remain GL/card-subledger balances.
+        isOpenItem: controlLineIsOpenItem(
+          controlAccountId,
+          doc.partyId,
+          deps.openItemAccountIds,
+        ),
         ...dims(doc),
       },
     ];
@@ -1100,6 +1117,9 @@ export async function postDocument(
   deps: PostingDeps,
   options: {
     deferEffects?: boolean;
+    /** Source-authoritative replay runs the accounting kernel and product
+     * subledgers without re-firing tenant-authored UI scripts or flows. */
+    suppressAutomation?: boolean;
     audit?: { actorId: string | null; source: string };
   } = {},
 ): Promise<string> {
@@ -1118,7 +1138,9 @@ export async function postDocument(
     );
   }
   if (
-    (doc.kind === "journal" || doc.kind === "deposit") &&
+    (doc.kind === "journal" ||
+      doc.kind === "deposit" ||
+      doc.kind === "expense_report") &&
     !deps.openItemAccountIds
   ) {
     deps = {
@@ -1188,7 +1210,9 @@ export async function postDocument(
   };
 
   // -- user scripts: before_post (veto / mutate) --------------------------
-  const outcomes = await runTriggerScripts("before_post", scriptCtx, doc.id);
+  const outcomes = options.suppressAutomation
+    ? []
+    : await runTriggerScripts("before_post", scriptCtx, doc.id);
   const bad = outcomes.find((o) => o.status !== "ok");
   if (bad) {
     throw new PostingError(
@@ -1211,14 +1235,16 @@ export async function postDocument(
   // -- flows: before_post (automation only, never a veto) ------------------
   // A before_post flow may set_field whitelisted headers; re-read the
   // document so its projection reflects them.
-  const beforePostFlows = await runRecordFlows(
-    { kind: "before_post" },
-    doc.kind,
-    doc.id,
-    {
-      orgId: doc.orgId,
-    },
-  );
+  const beforePostFlows = options.suppressAutomation
+    ? { runs: [], gatesCreated: 0, failed: false }
+    : await runRecordFlows(
+        { kind: "before_post" },
+        doc.kind,
+        doc.id,
+        {
+          orgId: doc.orgId,
+        },
+      );
   if (beforePostFlows.gatesCreated > 0 || beforePostFlows.failed) {
     const runIds = beforePostFlows.runs.map((run) => run.runId);
     if (runIds.length > 0) {
@@ -1485,7 +1511,7 @@ export async function postDocument(
     );
   }
 
-  if (!options.deferEffects) {
+  if (!options.deferEffects && !options.suppressAutomation) {
     await runTriggerScripts(
       "after_post",
       { ...scriptCtx, trigger: "after_post" },
@@ -1513,6 +1539,7 @@ export async function postDocument(
 export async function runPostDocumentEffects(
   documentId: string,
   previousStatus = "draft",
+  options: { suppressAutomation?: boolean } = {},
 ): Promise<void> {
   const [doc] = await db
     .select()
@@ -1535,16 +1562,18 @@ export async function runPostDocumentEffects(
     lines: lines as unknown as Record<string, unknown>[],
     org: { id: org.id, name: org.name, baseCurrency: org.baseCurrency },
   };
-  await runTriggerScripts("after_post", ctx, doc.id);
-  await runRecordFlows({ kind: "after_post" }, doc.kind, doc.id, {
-    orgId: doc.orgId,
-  });
-  await emitStatusChange(
-    doc.kind,
-    doc.id,
-    { from: previousStatus, to: "posted" },
-    { orgId: doc.orgId },
-  );
+  if (!options.suppressAutomation) {
+    await runTriggerScripts("after_post", ctx, doc.id);
+    await runRecordFlows({ kind: "after_post" }, doc.kind, doc.id, {
+      orgId: doc.orgId,
+    });
+    await emitStatusChange(
+      doc.kind,
+      doc.id,
+      { from: previousStatus, to: "posted" },
+      { orgId: doc.orgId },
+    );
+  }
   if (doc.kind === "customer_payment") {
     const { finalizePaymentAcceptanceForDocument } =
       await import("./payment-acceptance.ts");
@@ -1660,17 +1689,19 @@ function glKey(
  * `set local openbooks.amend = on`.
  *
  * Returns `{ changed: false }` when the projection is unchanged (a non-GL edit)
- * — no ledger write happens, so it is allowed even in a closed period. When the
- * projection differs it fails closed. Posted accounting history is immutable;
- * a financial source correction must use a dedicated append-only
- * reversal/replacement workflow that also controls applications, bank
- * reconciliation, inventory, tax, and revenue-recognition side effects.
+ * — no ledger write happens, so it is allowed even in a closed period. A
+ * changed projection fails closed unless the caller supplies an explicit,
+ * attributable `SourceCorrectionAuthorization`. That bounded repair retains
+ * the original, appends an exact reversal and replacement, transfers live
+ * application evidence, and refuses dependencies that require a dedicated
+ * bank, inventory, revenue, or downstream-document workflow.
  */
 export async function regenerateGlImpactTx(
   tx: Tx,
   documentId: string,
   deps: PostingDeps,
   _userId: string,
+  correction?: SourceCorrectionAuthorization,
 ): Promise<{ entryId: string | null; changed: boolean }> {
   if (!deps.migration) {
     throw new PostingError(
@@ -1695,7 +1726,9 @@ export async function regenerateGlImpactTx(
       deps = { ...deps, cardLiabilityAccountId: card.liabilityAccountId };
   }
   if (
-    (doc.kind === "journal" || doc.kind === "deposit") &&
+    (doc.kind === "journal" ||
+      doc.kind === "deposit" ||
+      doc.kind === "expense_report") &&
     !deps.openItemAccountIds
   ) {
     deps = {
@@ -1741,11 +1774,12 @@ export async function regenerateGlImpactTx(
     .orderBy(asc(schema.documentLines.lineNumber));
 
   const projection = buildProjection(doc, lines, deps);
-  const { lines: kernelLines, docSubId } = await applySubsidiaries(
+  const subApplied = await applySubsidiaries(
     tx,
     doc,
     projection,
   );
+  const kernelLines = subApplied.lines;
   assertFinalKernelBalance(kernelLines);
   await validateRequiredDimensions(tx, doc.orgId, kernelLines);
   const postingDate = doc.postingDate ?? doc.documentDate;
@@ -1756,6 +1790,11 @@ export async function regenerateGlImpactTx(
     .select()
     .from(schema.journalEntries)
     .where(eq(schema.journalEntries.id, doc.postedEntryId));
+  if (!entry || entry.status !== "posted") {
+    throw new PostingError(
+      "the imported document's current journal entry is missing or not posted",
+    );
+  }
   const existing = await tx
     .select()
     .from(schema.journalLines)
@@ -1774,8 +1813,452 @@ export async function regenerateGlImpactTx(
       glKey(existing as unknown as Parameters<typeof glKey>[0]);
   if (unchanged) return { entryId: entry.id, changed: false };
 
-  void docSubId;
-  throw new PostingError(
-    "posted GL projection changed; in-place regeneration is forbidden — use a controlled append-only reversal/replacement workflow",
+  if (!correction) {
+    throw new PostingError(
+      "posted GL projection changed; in-place regeneration is forbidden — use a controlled append-only reversal/replacement workflow",
+    );
+  }
+
+  const reason = correction.reason.trim();
+  if (reason.length < 10 || reason.length > 500) {
+    throw new PostingError(
+      "a source correction reason between 10 and 500 characters is required",
+    );
+  }
+  if (!/^[0-9a-f-]{36}$/i.test(correction.actorId)) {
+    throw new PostingError(
+      "an attributable organization user is required for a source correction",
+    );
+  }
+  if (!correction.requestId.trim()) {
+    throw new PostingError("a source correction request identity is required");
+  }
+
+  const control = (await tx.execute(sql`
+    select
+      exists (
+        select 1 from users
+         where id = ${correction.actorId}
+           and org_id = ${doc.orgId}
+           and is_active
+      ) as actor_valid,
+      exists (
+        select 1 from journal_entries reversal
+         where reversal.org_id = ${doc.orgId}
+           and reversal.reverses_entry_id = ${entry.id}
+           and reversal.status in ('posted', 'reversed')
+      ) as already_reversed,
+      exists (
+        select 1 from reconciliation_matches match
+         where match.org_id = ${doc.orgId}
+           and match.journal_line_id in (
+             select id from journal_lines where entry_id = ${entry.id}
+           )
+      ) as reconciled,
+      exists (
+        select 1 from applications application
+         where application.org_id = ${doc.orgId}
+           and application.unapplied_at is null
+           and (
+             application.from_line_id in (
+               select id from journal_lines where entry_id = ${entry.id}
+             )
+             or application.to_line_id in (
+               select id from journal_lines where entry_id = ${entry.id}
+             )
+           )
+      ) as applied,
+      exists (
+        select 1 from inventory_movements movement
+         where movement.org_id = ${doc.orgId}
+           and movement.document_line_id in (
+             select id from document_lines where document_id = ${doc.id}
+           )
+      ) as inventory,
+      exists (
+        select 1 from performance_obligations obligation
+         where obligation.org_id = ${doc.orgId}
+           and obligation.document_line_id in (
+             select id from document_lines where document_id = ${doc.id}
+           )
+           and obligation.status <> 'cancelled'
+      ) as revenue,
+      exists (
+        select 1 from document_links link
+         join documents downstream
+           on downstream.id = link.to_document_id
+          and downstream.org_id = link.org_id
+         where link.org_id = ${doc.orgId}
+           and link.from_document_id = ${doc.id}
+           and link.link_type <> 'pays'
+           and downstream.status in ('approved', 'posted')
+      ) as downstream
+  `)) as unknown as {
+    rows: Array<{
+      actor_valid: boolean;
+      already_reversed: boolean;
+      reconciled: boolean;
+      applied: boolean;
+      inventory: boolean;
+      revenue: boolean;
+      downstream: boolean;
+    }>;
+  };
+  const gates = control.rows[0];
+  if (!gates?.actor_valid) {
+    throw new PostingError(
+      "the source correction actor is not an active organization user",
+    );
+  }
+  if (gates.already_reversed) {
+    throw new PostingError(
+      "the current journal already has a reversal; resolve its existing correction lineage before retrying",
+    );
+  }
+  const blockers = [
+    gates.reconciled ? "bank reconciliation" : null,
+    gates.inventory ? "inventory movements" : null,
+    gates.revenue ? "revenue-recognition obligations" : null,
+    gates.downstream ? "downstream documents" : null,
+  ].filter((value): value is string => value !== null);
+  if (blockers.length > 0) {
+    throw new PostingError(
+      `source correction is blocked by ${blockers.join(", ")}; reverse or transfer those dependent subledgers first`,
+    );
+  }
+
+  // Applications are append-preserved settlement evidence. A correction may
+  // move the document's open-item line, so retain each old application through
+  // its one legal unapply transition and append an equivalent application to
+  // the replacement endpoint. Bank reconciliation, inventory, revenue, and
+  // downstream-document evidence remain hard blockers because their dedicated
+  // transfer/cancellation workflows carry additional accounting semantics.
+  const activeApplications = await tx
+    .select()
+    .from(schema.applications)
+    .where(sql`
+      ${schema.applications.orgId} = ${doc.orgId}
+      and ${schema.applications.unappliedAt} is null
+      and (
+        ${schema.applications.fromLineId} in (
+          select id from journal_lines where entry_id = ${entry.id}
+        )
+        or ${schema.applications.toLineId} in (
+          select id from journal_lines where entry_id = ${entry.id}
+        )
+      )
+    `);
+
+  const module = closeModuleForDocument(doc.kind);
+  await assertPeriodModulesOpen(tx, {
+    orgId: doc.orgId,
+    periodId: entry.periodId,
+    bookId: entry.bookId,
+    subsidiaryIds: existing.map((line) => line.subsidiaryId),
+    modules: [module],
+    allowImportedLocks: true,
+  });
+  await assertPeriodModulesOpen(tx, {
+    orgId: doc.orgId,
+    periodId: period.id,
+    bookId: entry.bookId,
+    subsidiaryIds: kernelLines.map((line) => line.subsidiaryId),
+    modules: [module],
+    allowImportedLocks: true,
+  });
+
+  const evidence = {
+    mode: "append_only_source_correction",
+    reason,
+    requestId: correction.requestId,
+    documentId: doc.id,
+    originalEntryId: entry.id,
+    before: {
+      postingDate: entry.postingDate,
+      periodId: entry.periodId,
+    },
+    after: {
+      postingDate,
+      periodId: period.id,
+    },
+  };
+  const [reversal] = await tx
+    .insert(schema.journalEntries)
+    .values({
+      orgId: doc.orgId,
+      bookId: entry.bookId,
+      subsidiaryId: entry.subsidiaryId,
+      entryNumber: `${entry.entryNumber}-SOURCE-REV`,
+      postingDate: entry.postingDate,
+      periodId: entry.periodId,
+      memo: `Source correction reversal: ${reason}`,
+      status: "draft",
+      sourceDocumentId: doc.id,
+      origin: "migration",
+      reversesEntryId: entry.id,
+      custom: evidence,
+      createdBy: correction.actorId,
+      updatedBy: correction.actorId,
+    })
+    .returning({ id: schema.journalEntries.id });
+  await tx.insert(schema.journalLines).values(
+    existing.map((line) => ({
+      orgId: doc.orgId,
+      entryId: reversal.id,
+      lineNumber: line.lineNumber,
+      accountId: line.accountId,
+      subsidiaryId: line.subsidiaryId,
+      amount: neg(line.amount),
+      currency: line.currency,
+      txnAmount: neg(line.txnAmount),
+      fxRate: line.fxRate,
+      partyId: line.partyId,
+      departmentId: line.departmentId,
+      projectId: line.projectId,
+      locationId: line.locationId,
+      classId: line.classId,
+      equipmentUnitId: line.equipmentUnitId,
+      extraDims: line.extraDims,
+      paymentCardId: line.paymentCardId,
+      taxCodeId: line.taxCodeId,
+      memo: line.memo,
+      quantity: line.quantity == null ? null : neg(line.quantity),
+      unit: line.unit,
+      dueDate: null,
+      isOpenItem: false,
+      custom: line.custom,
+    })),
   );
+  await tx
+    .update(schema.journalEntries)
+    .set({
+      status: "posted",
+      postedAt: new Date(),
+      postedBy: correction.actorId,
+      updatedBy: correction.actorId,
+    })
+    .where(eq(schema.journalEntries.id, reversal.id));
+  await tx
+    .update(schema.journalEntries)
+    .set({
+      status: "reversed",
+      updatedAt: new Date(),
+      updatedBy: correction.actorId,
+    })
+    .where(eq(schema.journalEntries.id, entry.id));
+
+  const [replacement] = await tx
+    .insert(schema.journalEntries)
+    .values({
+      orgId: doc.orgId,
+      bookId: entry.bookId,
+      subsidiaryId: subApplied.docSubId,
+      entryNumber: `${doc.documentNumber}-SOURCE-CORR`,
+      postingDate,
+      periodId: period.id,
+      memo: doc.memo,
+      status: "draft",
+      sourceDocumentId: doc.id,
+      origin: subApplied.multi ? "intercompany" : "migration",
+      custom: {
+        ...evidence,
+        reversalEntryId: reversal.id,
+      },
+      createdBy: correction.actorId,
+      updatedBy: correction.actorId,
+    })
+    .returning({ id: schema.journalEntries.id });
+  const replacementLines = await tx
+    .insert(schema.journalLines)
+    .values(kernelLines.map((line, index) => ({
+      orgId: doc.orgId,
+      entryId: replacement.id,
+      lineNumber: index + 1,
+      accountId: line.accountId,
+      subsidiaryId: line.subsidiaryId,
+      amount: line.amount,
+      currency: line.currency,
+      txnAmount: line.txnAmount,
+      fxRate: line.fxRate,
+      partyId: line.partyId ?? null,
+      departmentId: line.departmentId ?? null,
+      projectId: line.projectId ?? null,
+      locationId: line.locationId ?? null,
+      classId: line.classId ?? null,
+      equipmentUnitId: line.equipmentUnitId ?? null,
+      extraDims: line.extraDims ?? {},
+      paymentCardId: line.paymentCardId ?? null,
+      taxCodeId: line.taxCodeId ?? null,
+      memo: line.memo ?? null,
+      dueDate: line.dueDate ?? null,
+      isOpenItem: line.isOpenItem ?? false,
+    })))
+    .returning();
+  await tx
+    .update(schema.journalEntries)
+    .set({
+      status: "posted",
+      postedAt: new Date(),
+      postedBy: correction.actorId,
+      updatedBy: correction.actorId,
+    })
+    .where(eq(schema.journalEntries.id, replacement.id));
+  const updated = await tx
+    .update(schema.documents)
+    .set({
+      postedEntryId: replacement.id,
+      updatedAt: new Date(),
+      updatedBy: correction.actorId,
+    })
+    .where(
+      and(
+        eq(schema.documents.id, doc.id),
+        eq(schema.documents.postedEntryId, entry.id),
+        eq(schema.documents.status, "posted"),
+      ),
+    )
+    .returning({ id: schema.documents.id });
+  if (updated.length !== 1) {
+    throw new PostingError(
+      "the imported document changed while its source correction was being posted",
+    );
+  }
+  const priorLineIds = new Set(existing.map((line) => line.id));
+  const transferredApplications: Array<{
+    priorApplicationId: string;
+    replacementApplicationId: string;
+    priorFromLineId: string;
+    replacementFromLineId: string;
+    priorToLineId: string;
+    replacementToLineId: string;
+  }> = [];
+  const replacementEndpoint = (lineId: string): string => {
+    if (!priorLineIds.has(lineId)) return lineId;
+    const prior = existing.find((line) => line.id === lineId)!;
+    const exact = replacementLines.filter(
+      (line) =>
+        line.isOpenItem &&
+        line.accountId === prior.accountId &&
+        line.partyId === prior.partyId &&
+        line.subsidiaryId === prior.subsidiaryId &&
+        line.currency === prior.currency,
+    );
+    const candidates = exact.length
+      ? exact
+      : replacementLines.filter(
+          (line) =>
+            line.isOpenItem &&
+            line.partyId === prior.partyId &&
+            line.subsidiaryId === prior.subsidiaryId &&
+            line.currency === prior.currency,
+        );
+    if (candidates.length !== 1) {
+      throw new PostingError(
+        `cannot transfer application endpoint ${lineId}: expected one replacement open-item line, found ${candidates.length}`,
+      );
+    }
+    return candidates[0]!.id;
+  };
+  const correctedAt = new Date();
+  for (const application of activeApplications) {
+    const fromLineId = replacementEndpoint(application.fromLineId);
+    const toLineId = replacementEndpoint(application.toLineId);
+    const released = await tx
+      .update(schema.applications)
+      .set({
+        unappliedAt: correctedAt,
+        updatedAt: correctedAt,
+        updatedBy: correction.actorId,
+      })
+      .where(
+        and(
+          eq(schema.applications.id, application.id),
+          sql`${schema.applications.unappliedAt} is null`,
+        ),
+      )
+      .returning({ id: schema.applications.id });
+    if (released.length !== 1) {
+      throw new PostingError(
+        `application ${application.id} changed during source correction`,
+      );
+    }
+    const [replacementApplication] = await tx
+      .insert(schema.applications)
+      .values({
+        orgId: application.orgId,
+        fromLineId,
+        toLineId,
+        amount: application.amount,
+        sourceAmount: application.sourceAmount,
+        sourceTransactionAmount: application.sourceTransactionAmount,
+        sourceTransactionCurrency: application.sourceTransactionCurrency,
+        targetTransactionAmount: application.targetTransactionAmount,
+        targetTransactionCurrency: application.targetTransactionCurrency,
+        settlementRate: application.settlementRate,
+        settlementRateSource: application.settlementRateSource,
+        settlementRateReference: application.settlementRateReference,
+        settlementFxRateId: application.settlementFxRateId,
+        appliedOn: application.appliedOn,
+        fxGainLossEntryId: application.fxGainLossEntryId,
+        createdBy: correction.actorId,
+        updatedBy: correction.actorId,
+      })
+      .returning({ id: schema.applications.id });
+    transferredApplications.push({
+      priorApplicationId: application.id,
+      replacementApplicationId: replacementApplication.id,
+      priorFromLineId: application.fromLineId,
+      replacementFromLineId: fromLineId,
+      priorToLineId: application.toLineId,
+      replacementToLineId: toLineId,
+    });
+    await tx.execute(sql`
+      insert into audit_log
+        (org_id, table_name, row_id, action, changes, actor_id, request_id)
+      values
+        (
+          ${doc.orgId}, 'applications', ${application.id}, 'update',
+          ${JSON.stringify({
+            mode: "append_only_source_correction",
+            reason,
+            replacementApplicationId: replacementApplication.id,
+            before: { unappliedAt: null },
+            after: { unappliedAt: correctedAt.toISOString() },
+          })}::jsonb,
+          ${correction.actorId}, ${correction.requestId}
+        ),
+        (
+          ${doc.orgId}, 'applications', ${replacementApplication.id}, 'insert',
+          ${JSON.stringify({
+            mode: "append_only_source_correction",
+            reason,
+            priorApplicationId: application.id,
+            fromLineId,
+            toLineId,
+          })}::jsonb,
+          ${correction.actorId}, ${correction.requestId}
+        )
+    `);
+  }
+  await tx.execute(sql`
+    insert into audit_log
+      (org_id, table_name, row_id, action, changes, actor_id, request_id)
+    values (
+      ${doc.orgId}, 'documents', ${doc.id}, 'update',
+      ${JSON.stringify({
+        ...evidence,
+        reversalEntryId: reversal.id,
+        replacementEntryId: replacement.id,
+        dependencyChecks: {
+          bankReconciliation: false,
+          transferredApplications,
+          inventoryMovements: false,
+          revenueRecognition: false,
+          downstreamDocuments: false,
+        },
+      })}::jsonb,
+      ${correction.actorId}, ${correction.requestId}
+    )
+  `);
+  return { entryId: replacement.id, changed: true };
 }

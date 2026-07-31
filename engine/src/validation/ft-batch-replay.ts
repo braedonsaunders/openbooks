@@ -20,7 +20,7 @@ import { fromUnits, toUnits } from "../money.ts";
 import { sourceClient } from "../sync/source-client.ts";
 import { generateInvoiceFromBillingRequest } from "../../../web/lib/billing.ts";
 
-const ORG = process.env.SANDBOX_ORG ?? "6d5799ad-a37c-4aea-9cd4-748e4dc59614";
+const ORG = process.env.SANDBOX_ORG ?? (() => { throw new Error("SANDBOX_ORG is required"); })();
 const APPLY = process.argv.includes("--apply");
 const SCORE_EXISTING = process.argv.includes("--score-existing");
 const LIMIT = Number(process.argv.find((a) => a.startsWith("--limit="))?.split("=")[1] ?? "0");

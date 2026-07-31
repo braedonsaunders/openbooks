@@ -21,7 +21,7 @@ import { sql } from "drizzle-orm";
 import { db } from "../db.ts";
 import { resolveTargetOrg } from "./target-org.ts";
 
-const ORG = process.env.TARGET_ORG ?? process.env.SANDBOX_ORG ?? "6d5799ad-a37c-4aea-9cd4-748e4dc59614";
+const ORG = process.env.TARGET_ORG ?? process.env.SANDBOX_ORG ?? (() => { throw new Error("SANDBOX_ORG is required"); })();
 const APPLY = process.argv.includes("--apply");
 const LIMIT = Number(process.argv.find((a) => a.startsWith("--limit="))?.split("=")[1] ?? "0");
 
