@@ -1,0 +1,152 @@
+name: CI + Deploy (dev)
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: deploy-dev
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+  packages: write
+
+env:
+  IMAGE_NAME: ghcr.io/${{ github.repository }}
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - name: Typecheck web
+        run: cd web && node_modules/.bin/tsc --noEmit -p tsconfig.json
+      - name: Typecheck engine
+        run: cd engine && ../web/node_modules/.bin/tsc --noEmit -p tsconfig.json
+      - name: Typecheck schema
+        run: cd schema && ../web/node_modules/.bin/tsc --noEmit -p tsconfig.json
+
+  build:
+    needs: check
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    outputs:
+      tag: ${{ github.sha }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - uses: docker/build-push-action@v6
+        with:
+          context: .
+          platforms: linux/amd64
+          push: true
+          tags: |
+            ${{ env.IMAGE_NAME }}:${{ github.sha }}
+            ${{ env.IMAGE_NAME }}:dev
+          cache-from: type=gha
+          cache-to: type=gha,mode=max,ignore-error=true
+
+  deploy:
+    needs: build
+    runs-on: [self-hosted, linux, x64, dokploy]
+    timeout-minutes: 20
+    environment: dev
+    steps:
+      - name: Select image and deploy
+        env:
+          DOKPLOY_URL: ${{ secrets.DOKPLOY_URL }}
+          DOKPLOY_TOKEN: ${{ secrets.DOKPLOY_TOKEN }}
+          COMPOSE_ID: ${{ secrets.DOKPLOY_COMPOSE_ID }}
+          NEW_TAG: ${{ needs.build.outputs.tag }}
+        run: |
+          set -euo pipefail
+          base="${DOKPLOY_URL%/}"
+          current="$(curl -sS --fail -H "x-api-key: $DOKPLOY_TOKEN" \
+            -G "$base/api/compose.one" --data-urlencode "composeId=$COMPOSE_ID")"
+          env_text="$(jq -r '.env // ""' <<<"$current")"
+          if grep -q '^OPENBOOKS_TAG=' <<<"$env_text"; then
+            new_env="$(sed "s|^OPENBOOKS_TAG=.*|OPENBOOKS_TAG=${NEW_TAG}|" <<<"$env_text")"
+          else
+            new_env="$(printf '%s\nOPENBOOKS_TAG=%s\n' "$env_text" "$NEW_TAG")"
+          fi
+          compose_file="$(jq -r '.composeFile // empty' <<<"$current")"
+          if [ -z "$compose_file" ]; then
+            echo "::error::The configured deployment has no compose source"
+            exit 1
+          fi
+          jq -n --arg id "$COMPOSE_ID" --arg env "$new_env" --arg composeFile "$compose_file" \
+            '{composeId:$id, env:$env, composeFile:$composeFile}' \
+            | curl -sS --fail -H "x-api-key: $DOKPLOY_TOKEN" \
+                -H 'content-type: application/json' \
+                -X POST "$base/api/compose.update" --data @- > /dev/null
+          curl -sS --fail -H "x-api-key: $DOKPLOY_TOKEN" \
+            -H 'content-type: application/json' \
+            -X POST "$base/api/compose.deploy" \
+            --data "{\"composeId\":\"$COMPOSE_ID\"}"
+          echo "Deployment queued for immutable image tag ${NEW_TAG}"
+
+      - name: Wait for deployment
+        env:
+          DOKPLOY_URL: ${{ secrets.DOKPLOY_URL }}
+          DOKPLOY_TOKEN: ${{ secrets.DOKPLOY_TOKEN }}
+          COMPOSE_ID: ${{ secrets.DOKPLOY_COMPOSE_ID }}
+        run: |
+          set -euo pipefail
+          base="${DOKPLOY_URL%/}"
+          for i in $(seq 1 60); do
+            sleep 10
+            latest="$(curl -sS --fail -H "x-api-key: $DOKPLOY_TOKEN" \
+              -G "$base/api/deployment.allByCompose" --data-urlencode "composeId=$COMPOSE_ID" \
+              | jq -r 'sort_by(.createdAt) | last | .status // "unknown"')"
+            echo "deployment status: $latest (poll $i)"
+            case "$latest" in
+              done) exit 0 ;;
+              error) echo "::error::Deployment failed"; exit 1 ;;
+            esac
+          done
+          echo "::error::Timed out waiting for deployment"
+          exit 1
+
+      - name: Verify web and worker health
+        env:
+          DOKPLOY_URL: ${{ secrets.DOKPLOY_URL }}
+          DOKPLOY_TOKEN: ${{ secrets.DOKPLOY_TOKEN }}
+          COMPOSE_ID: ${{ secrets.DOKPLOY_COMPOSE_ID }}
+          APP_URL: ${{ vars.OPENBOOKS_APP_URL }}
+        run: |
+          set -euo pipefail
+          if [ -z "$APP_URL" ]; then
+            base="${DOKPLOY_URL%/}"
+            compose="$(curl -sS --fail -H "x-api-key: $DOKPLOY_TOKEN" \
+              -G "$base/api/compose.one" --data-urlencode "composeId=$COMPOSE_ID")"
+            host="$(jq -r '[.domains[]? | select((.host // "") != "")] | first | .host // empty' <<<"$compose")"
+            use_https="$(jq -r '[.domains[]? | select((.host // "") != "")] | first | .https // false' <<<"$compose")"
+            [ -n "$host" ] || { echo "::error::No application URL is configured"; exit 1; }
+            if [ "$use_https" = "true" ]; then APP_URL="https://$host"; else APP_URL="http://$host"; fi
+          fi
+          app_url="${APP_URL%/}"
+          for i in $(seq 1 30); do
+            code="$(curl -s -o /dev/null -w '%{http_code}' --max-time 10 \
+              "$app_url/api/v1/health?include=worker" || true)"
+            echo "web + worker health: HTTP $code (poll $i)"
+            if [ "$code" = "200" ]; then
+              echo "OpenBooks dev is healthy at $app_url"
+              exit 0
+            fi
+            sleep 10
+          done
+          echo "::error::Application never became healthy"
+          exit 1
