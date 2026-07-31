@@ -14,9 +14,9 @@ async function controlDeps(orgId: string) {
 }
 
 /**
- * Manual-journal actions. v1 posts straight from draft (no approval policy);
- * the switch mirrors the bills actions route so submit/decide can slot in
- * when a journal approval policy exists.
+ * Manual-journal actions. A draft is submitted through the tenant's active
+ * Flow configuration: no gate releases it immediately, while any authored
+ * single- or multi-leg gate topology leaves it pending until Flow resolves.
  */
 export async function POST(req: Request) {
   const body = (await req.json()) as { action: string; documentId?: string }
