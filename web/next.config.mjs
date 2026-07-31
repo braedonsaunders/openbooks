@@ -8,7 +8,7 @@ import { fileURLToPath } from "node:url";
 /** @type {import('next').NextConfig} */
 const config = {
   transpilePackages: ["@openbooks/engine", "@openbooks/schema"],
-  serverExternalPackages: ["quickjs-emscripten", "pg", "pdfkit", "exceljs"],
+  serverExternalPackages: ["quickjs-emscripten", "pg", "pdfkit", "exceljs", "ssh2"],
   // Docker image: self-contained server bundle. The tracing root is the
   // monorepo root so workspace deps (@openbooks/*) land in the output.
   output: "standalone",
