@@ -21,6 +21,7 @@
 </p>
 
 <p align="center">
+  <a href="#see-openbooks-in-action">Screenshots</a> ·
   <a href="#run-it">Run it</a> ·
   <a href="#what-is-implemented">Features</a> ·
   <a href="#accounting-kernel">Accounting kernel</a> ·
@@ -35,13 +36,80 @@
 
 ---
 
-## Open accounting infrastructure—not another spreadsheet
+## Your books. Your server. Your roadmap.
 
-OpenBooks is an AGPL-licensed business suite with a double-entry general ledger
-at its center. Documents, subledgers, projects, inventory, assets, banking,
-reporting, and workflow all project into the same accounting model.
+OpenBooks is a free, open-source accounting and ERP suite for organizations that
+have outgrown basic bookkeeping—and outgrown paying more every time their team,
+entities, or requirements grow. Run it on infrastructure you control, keep your
+financial data in your hands, add users and companies without software licensing
+tiers, and adapt the code to the way your business actually works.
 
-The differentiator is not a long checklist. It is how the checklist is built:
+This is more than a general ledger with a few add-ons. Customer invoices,
+vendor bills, projects and job costing, inventory, assets, banking, reporting,
+approvals, and audit history operate as one connected business system.
+
+## See OpenBooks in action
+
+<p align="center">
+  <img src=".github/assets/screenshots/executive-dashboard.jpg" alt="OpenBooks executive dashboard showing cash, receivables, payables, approvals, quick actions, and recent journal activity" width="100%" />
+</p>
+<p align="center"><sub>See cash, receivables, payables, approvals, and recent accounting activity at a glance.</sub></p>
+
+<table>
+  <tr>
+    <td width="50%">
+      <img src=".github/assets/screenshots/financial-health.jpg" alt="OpenBooks financial health dashboard with score, KPIs, trends, issues, and recommendations" width="100%" /><br />
+      <sub><strong>Financial health:</strong> KPIs, trends, issues, and practical recommendations in one view.</sub>
+    </td>
+    <td width="50%">
+      <img src=".github/assets/screenshots/profit-and-loss.jpg" alt="OpenBooks profit and loss statement for Summit Ridge Construction" width="100%" /><br />
+      <sub><strong>Financial reporting:</strong> Drillable statements with dimensions, saved views, comparisons, and exports.</sub>
+    </td>
+  </tr>
+  <tr>
+    <td width="50%">
+      <img src=".github/assets/screenshots/project-profitability.jpg" alt="OpenBooks project profitability report grouped by customer and job" width="100%" /><br />
+      <sub><strong>Project profitability:</strong> Revenue, cost, margin, profit, and hours from customer down to job.</sub>
+    </td>
+    <td width="50%">
+      <img src=".github/assets/screenshots/project-financials.jpg" alt="OpenBooks project financial cockpit showing job price, invoicing, costs, and gross profit" width="100%" /><br />
+      <sub><strong>Project cockpit:</strong> Contract value, billable balance, actual and committed costs, and gross profit.</sub>
+    </td>
+  </tr>
+  <tr>
+    <td colspan="2">
+      <img src=".github/assets/screenshots/construction-billing.jpg" alt="OpenBooks construction progress billing with schedule of values and retainage" width="100%" /><br />
+      <sub><strong>Construction billing:</strong> Schedules of values, cumulative applications for payment, change orders, and retainage.</sub>
+    </td>
+  </tr>
+</table>
+
+<p align="center"><sub>Light mode is shown above. Screenshots use the built-in synthetic Summit Ridge Construction demo; no customer data is shown.</sub></p>
+
+<details>
+<summary><strong>Prefer dark mode?</strong> View the same workflows in OpenBooks dark mode.</summary>
+<br />
+<p align="center">
+  <img src=".github/assets/screenshots/executive-dashboard-dark.jpg" alt="OpenBooks executive dashboard in dark mode" width="100%" />
+</p>
+<table>
+  <tr>
+    <td width="50%"><img src=".github/assets/screenshots/financial-health-dark.jpg" alt="OpenBooks financial health dashboard in dark mode" width="100%" /></td>
+    <td width="50%"><img src=".github/assets/screenshots/profit-and-loss-dark.jpg" alt="OpenBooks profit and loss statement in dark mode" width="100%" /></td>
+  </tr>
+  <tr>
+    <td width="50%"><img src=".github/assets/screenshots/project-profitability-dark.jpg" alt="OpenBooks project profitability report in dark mode" width="100%" /></td>
+    <td width="50%"><img src=".github/assets/screenshots/project-financials-dark.jpg" alt="OpenBooks project financial cockpit in dark mode" width="100%" /></td>
+  </tr>
+  <tr>
+    <td colspan="2"><img src=".github/assets/screenshots/construction-billing-dark.jpg" alt="OpenBooks construction progress billing in dark mode" width="100%" /></td>
+  </tr>
+</table>
+</details>
+
+### Built for real books, not just easy demos
+
+The feature surface is broad. The accounting foundation is the point:
 
 - PostgreSQL rejects unbalanced journal entries and postings into closed
   periods.
@@ -56,10 +124,9 @@ The differentiator is not a long checklist. It is how the checklist is built:
   service boundaries.
 - The schema, REST API, reporting surface, and extension model remain open.
 
-OpenBooks is intended for people who need more than entry-level bookkeeping,
-especially project businesses, contractors, professional services firms,
-multi-entity groups, and technical finance teams that want control of their
-software and data.
+OpenBooks is for project businesses, contractors, professional services firms,
+multi-entity groups, and technical finance teams that need more than
+entry-level bookkeeping and want lasting control of their software and data.
 
 > [!IMPORTANT]
 > OpenBooks is alpha software. Evaluate it with test or parallel books before
