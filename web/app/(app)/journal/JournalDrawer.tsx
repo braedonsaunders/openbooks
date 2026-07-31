@@ -510,13 +510,6 @@ export function JournalDrawer({
           )}
         </>
       }
-      detailTabs={[
-        {
-          key: 'approvals',
-          label: tc('approvalFlow.historyTitle'),
-          content: <ApprovalHistory subjectKind="journal" subjectId={String(doc.id)} />,
-        },
-      ]}
       footer={
         <div className="flex w-full items-center gap-3">
           <span
@@ -653,6 +646,9 @@ export function JournalDrawer({
           />
         </div>
 
+        {mode === 'view' ? (
+          <ApprovalHistory subjectKind="journal" subjectId={String(doc.id)} />
+        ) : null}
       </div>
     </TransactionDrawer>
   )
