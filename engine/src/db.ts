@@ -96,7 +96,7 @@ export { longPool };
 type OrgCtx = {
   orgId: string | null;
   bypass: boolean;
-  txDb?: NodePgDatabase<typeof schema>;
+  txDb?: NodePgDatabase;
 };
 type DbRuntime = typeof globalThis & {
   __openbooksOrgContext?: AsyncLocalStorage<OrgCtx>;
@@ -166,7 +166,7 @@ const origConnectDescriptor = pg.Pool.prototype.connect;
 void origConnectDescriptor;
 
 export const pool = basePool;
-const poolDb = drizzle(basePool, { schema });
+const poolDb = drizzle({ client: basePool });
 
 /**
  * Run `fn` with every `db` query scoped to `orgId` at the database (RLS). Used
@@ -195,7 +195,7 @@ export async function withOrg<T>(orgId: string | null, fn: () => Promise<T>): Pr
       "select set_config('app.current_org', $1, true), set_config('app.bypass_rls', $2, true)",
       [bypass ? "" : orgId, bypass ? "on" : "off"],
     );
-    const txDb = drizzle(client, { schema }) as unknown as NodePgDatabase<typeof schema>;
+    const txDb = drizzle({ client });
     const result = await orgContext.run({ orgId, bypass, txDb }, fn);
     await client.query("commit");
     return result;
