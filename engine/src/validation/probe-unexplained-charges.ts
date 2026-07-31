@@ -13,7 +13,7 @@ import { sql } from "drizzle-orm";
 import { db } from "../db.ts";
 import { findLapsedRateCard, resolveRateAdjustments } from "../../../web/lib/rate-adjustments.ts";
 
-const ORG = process.env.SANDBOX_ORG ?? "6d5799ad-a37c-4aea-9cd4-748e4dc59614";
+const ORG = process.env.SANDBOX_ORG ?? (() => { throw new Error("SANDBOX_ORG is required"); })();
 const named = process.argv.slice(2).filter((arg) => /^INV\d+$/i.test(arg));
 
 async function retry<T>(fn: () => Promise<T>, attempts = 8): Promise<T> {

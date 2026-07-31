@@ -2,7 +2,7 @@ import { randomUUID } from "node:crypto";
 import { sql } from "drizzle-orm";
 import { db } from "../db.ts";
 import { generateInvoiceFromBillingRequest } from "../../../web/lib/billing.ts";
-const O="6d5799ad-a37c-4aea-9cd4-748e4dc59614";
+const O=(process.env.SANDBOX_ORG ?? (() => { throw new Error("SANDBOX_ORG is required"); })());
 const NUMS=(process.argv.find(a=>a.startsWith("--tickets="))?.split("=")[1] ?? "").split(",").filter(Boolean);
 const GOLD=Number(process.argv.find(a=>a.startsWith("--golden="))?.split("=")[1] ?? "0");
 (async()=>{

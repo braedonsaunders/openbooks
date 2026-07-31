@@ -13,7 +13,7 @@
 import { readFileSync } from "node:fs";
 import { sql } from "drizzle-orm";
 import { db } from "../db.ts";
-const ORG = "6d5799ad-a37c-4aea-9cd4-748e4dc59614";
+const ORG = (process.env.SANDBOX_ORG ?? (() => { throw new Error("SANDBOX_ORG is required"); })());
 const load=(f:string)=>{const d=JSON.parse(readFileSync(f,"utf8"));return Array.isArray(d)?d:Object.values(d)[0] as any[];};
 const ts=load("/tmp/ns-tslines.json");
 const byTid=new Map<string,number>(); for(const r of ts) byTid.set(String(r.tid),(byTid.get(String(r.tid))??0)+1);

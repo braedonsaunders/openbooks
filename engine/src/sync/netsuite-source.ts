@@ -1106,6 +1106,7 @@ export class NetSuiteSource implements MigrationSource {
 
     const headers: NsHeader[] = [];
     const linesByTxn = new Map<string, NsLine[]>();
+    const links: NsApplicationLink[] = [];
     for (let index = 0; index < ids.length; index += 150) {
       const chunk = ids.slice(index, index + 150);
       headers.push(...await this.q<NsHeader>(
@@ -1117,6 +1118,9 @@ export class NetSuiteSource implements MigrationSource {
         const key = String(line.transaction);
         linesByTxn.set(key, [...(linesByTxn.get(key) ?? []), line]);
       }
+      links.push(...await this.q<NsApplicationLink>(
+        `SELECT previousdoc, previousline, nextdoc, nextline, foreignamount FROM nexttransactionlinelink WHERE linktype = 'Payment' AND (nextdoc IN (${chunk.join(",")}) OR previousdoc IN (${chunk.join(",")})) ORDER BY previousdoc, previousline, nextdoc, nextline`,
+      ));
     }
     for (const [transactionId, rows] of linesByTxn) {
       linesByTxn.set(transactionId, uniqueNetSuiteTransactionLines(rows).sort((a, b) => Number(a.id) - Number(b.id)));
@@ -1135,7 +1139,14 @@ export class NetSuiteSource implements MigrationSource {
         documents.push(built.doc);
       }
     }
-    return { documents, applications: [], deletedRefs: [], syncedThrough, unbuildable, nonLedgerRefs };
+    const applications = uniqueNetSuiteApplicationLinks(links)
+      .filter((link) => link.foreignamount != null && toUnits(link.foreignamount) > 0n)
+      .map((link) => ({
+        paymentRef: String(link.nextdoc),
+        appliedRef: String(link.previousdoc),
+        amount: String(link.foreignamount),
+      }));
+    return { documents, applications, deletedRefs: [], syncedThrough, unbuildable, nonLedgerRefs };
   }
 
   nativeChangesByRefs(

@@ -38,7 +38,7 @@ const ORG =
   args.get("org") ??
   process.env.TARGET_ORG ??
   process.env.SANDBOX_ORG ??
-  "6d5799ad-a37c-4aea-9cd4-748e4dc59614";
+  (process.env.SANDBOX_ORG ?? (() => { throw new Error("SANDBOX_ORG is required"); })());
 const APPLY = args.get("apply") === "true";
 const HEADERS = args.get("headers") ?? "/tmp/ft-head.tsv";
 const ROWS = args.get("rows") ?? "/tmp/ft-rows.tsv";

@@ -2,7 +2,7 @@ import { readFileSync } from "node:fs";
 import { sql } from "drizzle-orm";
 import { db } from "../db.ts";
 import { resolveRateAdjustments } from "../../../web/lib/rate-adjustments.ts";
-const ORG = "6d5799ad-a37c-4aea-9cd4-748e4dc59614";
+const ORG = (process.env.SANDBOX_ORG ?? (() => { throw new Error("SANDBOX_ORG is required"); })());
 async function retry<T>(fn:()=>Promise<T>,n=8):Promise<T>{let l:unknown;for(let i=0;i<n;i++){try{return await fn()}catch(e){l=e;await new Promise(r=>setTimeout(r,2500*(i+1)))}}throw l}
 const invs=JSON.parse(readFileSync("/tmp/ft-invoices.json","utf8"));
 for (const t of ["INV1472"]) {

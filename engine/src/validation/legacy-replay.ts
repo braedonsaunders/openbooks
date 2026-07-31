@@ -24,7 +24,7 @@ import { db } from "../db.ts";
 import { deleteDocument } from "../document-delete.ts";
 import { generateInvoiceFromBillingRequest } from "../../../web/lib/billing.ts";
 
-const SANDBOX_ORG = process.env.SANDBOX_ORG ?? "6d5799ad-a37c-4aea-9cd4-748e4dc59614";
+const SANDBOX_ORG = process.env.SANDBOX_ORG ?? (() => { throw new Error("SANDBOX_ORG is required"); })();
 const GOLDEN = "/tmp/golden-invoices.json";
 const JOBSET = "/tmp/jobset.json";
 const RESULTS = "/tmp/replay-results.json";

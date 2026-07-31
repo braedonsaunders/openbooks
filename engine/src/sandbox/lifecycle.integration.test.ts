@@ -40,6 +40,27 @@ test("a clean-schema full sandbox clones tenant evidence without pre-seed collis
     assert.equal(state.rows[0]?.env_kind, "sandbox");
     assert.equal(state.rows[0]?.sandbox_of, org.orgId);
 
+    const controls = (await db.execute(sql`
+      select control.key, control.value as account_id, account.org_id
+        from orgs sandbox
+        cross join lateral jsonb_each_text(
+          sandbox.settings -> 'controlAccounts'
+        ) control
+        left join accounts account on account.id = control.value::uuid
+       where sandbox.id = ${sandboxOrgId}
+       order by control.key
+    `)) as unknown as {
+      rows: Array<{ key: string; account_id: string; org_id: string | null }>;
+    };
+    assert.ok(controls.rows.length >= 3);
+    assert.ok(
+      controls.rows.every(
+        (row) =>
+          row.org_id === sandboxOrgId &&
+          !Object.values(org.accounts).includes(row.account_id),
+      ),
+    );
+
     const segments = (await db.execute(sql`
       select source.key,
              source.id as source_id,
@@ -68,6 +89,21 @@ test("a clean-schema full sandbox clones tenant evidence without pre-seed collis
       rows: Array<{ status: string; last_error: string | null }>;
     };
     assert.deepEqual(refreshed.rows, [{ status: "ready", last_error: null }]);
+    const refreshedControls = await db.execute(sql`
+      select count(*)::int as count
+        from orgs sandbox
+        cross join lateral jsonb_each_text(
+          sandbox.settings -> 'controlAccounts'
+        ) control
+        join accounts account
+          on account.id = control.value::uuid
+         and account.org_id = sandbox.id
+       where sandbox.id = ${sandboxOrgId}
+    `);
+    assert.equal(
+      Number((refreshedControls.rows[0] as { count: number }).count),
+      controls.rows.length,
+    );
 
     await deleteSandbox(sandboxId);
     sandboxId = null;

@@ -4,7 +4,7 @@
 import { readFileSync } from "node:fs";
 import { sql } from "drizzle-orm";
 import { db } from "../db.ts";
-const ORG=process.env.SANDBOX_ORG ?? "6d5799ad-a37c-4aea-9cd4-748e4dc59614";
+const ORG=process.env.SANDBOX_ORG ?? (() => { throw new Error("SANDBOX_ORG is required"); })();
 const APPLY=process.argv.includes("--apply");
 async function retry<T>(fn:()=>Promise<T>,n=8):Promise<T>{let last:unknown;for(let i=0;i<n;i++){try{return await fn()}catch(e){last=e;const c:string[]=[];for(let x:any=e;x;x=x.cause)c.push(String(x?.message??""));if(!/timeout|terminated|ECONN|ETIMEDOUT|Connection/i.test(c.join(" ")))throw e;await new Promise(r=>setTimeout(r,1000*(i+1)))}}throw last}
 /** Sources write markup either as a percent (15) or a fraction (0.15). */

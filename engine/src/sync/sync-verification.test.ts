@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import {
   canonicalNativeDocumentKey,
+  collisionSafeSourceDocumentNumber,
   effectiveSourceDocumentNumber,
   effectiveLineSubsidiary,
   effectiveTaxCodeId,
@@ -154,6 +155,23 @@ test("source display number is distinct from immutable source identity", () => {
       canonicalDocument({ sourceRef: "667706", documentNumber: "  " }),
     ),
     "667706",
+  );
+});
+
+test("colliding source display numbers retain visible and immutable identities", () => {
+  assert.equal(
+    collisionSafeSourceDocumentNumber(
+      canonicalDocument({ sourceRef: "670369", documentNumber: "121284" }),
+      "netsuite",
+    ),
+    "121284 [netsuite:670369]",
+  );
+  assert.equal(
+    collisionSafeSourceDocumentNumber(
+      canonicalDocument({ sourceRef: "670369", documentNumber: "  " }),
+      "netsuite",
+    ),
+    "670369 [netsuite:670369]",
   );
 });
 

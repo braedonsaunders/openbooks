@@ -182,15 +182,26 @@ export async function buildNativeContext(
 
   const accountByRef = new Map<string, { id: string; number: string | null; name: string; type: string }>();
   const accountRefById = new Map<string, string>();
+  const ownedAccountIds = new Set<string>();
   for (const r of (
     (await db.execute(sql`
       select id, number, name, type, custom->>${refKey} as ref
-        from accounts where org_id = ${orgId} and custom->>${refKey} is not null`)) as unknown as {
-      rows: { id: string; number: string | null; name: string; type: string; ref: string }[];
+        from accounts where org_id = ${orgId}`)) as unknown as {
+      rows: { id: string; number: string | null; name: string; type: string; ref: string | null }[];
     }
   ).rows) {
-    accountByRef.set(r.ref, { id: r.id, number: r.number, name: r.name, type: r.type });
-    accountRefById.set(r.id, r.ref);
+    ownedAccountIds.add(r.id);
+    if (r.ref) {
+      accountByRef.set(r.ref, { id: r.id, number: r.number, name: r.name, type: r.type });
+      accountRefById.set(r.id, r.ref);
+    }
+  }
+  for (const [key, accountId] of Object.entries(control)) {
+    if (accountId && !ownedAccountIds.has(accountId)) {
+      throw new Error(
+        `control account ${key} does not belong to organization ${orgId}`,
+      );
+    }
   }
 
   const idMap = async (table: string): Promise<Map<string, string>> => {

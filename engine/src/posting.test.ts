@@ -14,6 +14,41 @@ test("party-less control-account journals remain direct GL activity", () => {
   assert.equal(controlLineIsOpenItem("expense", "vendor", controlAccounts), false);
 });
 
+test("expense reports age only genuine AP control balances", () => {
+  const doc = {
+    id: "expense-report",
+    kind: "expense_report",
+    partyId: "employee",
+    subsidiaryId: "sub",
+    currency: "CAD",
+    fxRate: "1",
+    custom: { controlAccountId: "card-liability" },
+  } as any;
+  const line = {
+    id: "line",
+    lineNumber: 1,
+    accountId: "travel",
+    amount: "120.0000",
+    taxAmount: "0",
+  } as any;
+  const cardProjection = RULES.expense_report!(doc, [line], {
+    control: { ap: "ap", ar: "ar", bank: "bank" },
+    openItemAccountIds: new Set(["ar", "ap"]),
+  });
+  assert.equal(cardProjection.at(-1)!.accountId, "card-liability");
+  assert.equal(cardProjection.at(-1)!.isOpenItem, false);
+
+  const apProjection = RULES.expense_report!(
+    { ...doc, custom: { controlAccountId: "ap" } },
+    [line],
+    {
+      control: { ap: "ap", ar: "ar", bank: "bank" },
+      openItemAccountIds: new Set(["ar", "ap"]),
+    },
+  );
+  assert.equal(apProjection.at(-1)!.isOpenItem, true);
+});
+
 test("final posting proof rejects whole-entry and per-subsidiary imbalance", () => {
   assert.doesNotThrow(() =>
     assertFinalKernelBalance([

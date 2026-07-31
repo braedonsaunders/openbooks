@@ -18,7 +18,7 @@ import { sql } from "drizzle-orm";
 import { db } from "../db.ts";
 import { sourceClient } from "../sync/source-client.ts";
 
-const ORG = process.env.SANDBOX_ORG ?? "6d5799ad-a37c-4aea-9cd4-748e4dc59614";
+const ORG = process.env.SANDBOX_ORG ?? (() => { throw new Error("SANDBOX_ORG is required"); })();
 const CACHE = "/tmp/ns-job-lines.json";
 const REFRESH = process.argv.includes("--refresh");
 
