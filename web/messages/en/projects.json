@@ -36,6 +36,7 @@
     "unbilledDetail": "{entries} time entries · {hours}h · {lines} cost lines",
     "requestCreated": "Billing request created",
     "requestFailed": "Could not create billing request",
+    "applicationsPermissionRequired": "Accounts receivable access is required to view this project's applications for payment.",
     "invoiceCreated": "Invoice {number} created",
     "invoiceFailed": "Could not create invoice",
     "invoiceType": "Invoice stage",

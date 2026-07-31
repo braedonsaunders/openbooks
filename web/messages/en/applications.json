@@ -3,6 +3,9 @@
   "description": "Project billing through schedules of values, cumulative applications, change orders, and retainage.",
   "project": "Project",
   "loading": "Loading controlled billing data…",
+  "workspace": {
+    "sectionsAria": "Application billing sections"
+  },
   "errors": {
     "load": "Could not load applications for payment",
     "action": "Action failed"
@@ -24,18 +27,23 @@
     "description": "Description",
     "scheduledValue": "Scheduled value",
     "retainagePercent": "Retainage %",
+    "incomeAccount": "Income account",
     "default": "default",
     "delete": "Delete",
     "deleteConfirm": "Delete schedule line “{description}”?",
     "empty": "No schedule-of-values lines yet.",
     "defaultIncomeAccount": "Default income account",
-    "addLine": "Add line"
+    "addLine": "Add line",
+    "workspaceHint": "The contract schedule that controls cumulative billing for this project.",
+    "formHint": "Add one contract line without leaving the project billing workspace.",
+    "cancel": "Cancel"
   },
   "changeOrders": {
     "title": "Change orders",
     "number": "CO number",
     "description": "Description",
     "amount": "Amount",
+    "statusLabel": "Status",
     "applyTo": "Apply to",
     "newScheduleLine": "New schedule line (additive change)",
     "deductiveHint": "Deductive changes must reduce an existing schedule line.",
@@ -46,6 +54,9 @@
     "voidConfirm": "Void change order {number}? Its audit history will be retained.",
     "add": "Add change order",
     "empty": "No change orders.",
+    "workspaceHint": "Approved changes revise the contract schedule without rewriting its history.",
+    "formHint": "Record an additive or deductive contract change for independent approval.",
+    "cancel": "Cancel",
     "status": {
       "draft": "Draft",
       "approved": "Approved",
@@ -54,6 +65,7 @@
   },
   "payApplications": {
     "title": "Applications for Payment",
+    "application": "Application",
     "applicationNumber": "App #{number}",
     "retainage": "Retainage",
     "enterDraws": "Enter draws",
@@ -72,6 +84,15 @@
     "empty": "No applications yet.",
     "periodEnding": "Period ending",
     "newApplication": "New application",
+    "workspaceHint": "Each application progresses from draw entry through approval to its linked customer invoice.",
+    "newHint": "Start the next cumulative application for this project's billing period.",
+    "drawHint": "Enter cumulative billing activity for the period ending {periodEnd}.",
+    "statusLabel": "Status",
+    "invoice": "Invoice",
+    "openInvoice": "Open invoice",
+    "amount": "Amount",
+    "create": "Create",
+    "cancel": "Cancel",
     "status": {
       "draft": "Draft",
       "submitted": "Submitted",
@@ -86,7 +107,11 @@
     "title": "Release retainage",
     "description": "Bills held retainage into collectible AR. Held: {held}",
     "amount": "Amount",
+    "periodEnding": "Period ending",
     "release": "Release",
-    "createdMessage": "Retainage release invoice {number} for {amount} created"
+    "createdMessage": "Retainage release invoice {number} for {amount} created",
+    "heldLabel": "Retainage held",
+    "workspaceHint": "Release retained amounts through a controlled customer invoice when the contract permits.",
+    "cancel": "Cancel"
   }
 }

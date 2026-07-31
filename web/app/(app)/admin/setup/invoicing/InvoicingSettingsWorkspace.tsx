@@ -144,7 +144,7 @@ export function InvoicingSettingsWorkspace({
               </Button>
               {projectsEnabled && applicationProjectTypes > 0 ? (
                 <Button asChild variant="outline" size="sm">
-                  <Link href="/construction">Open applications for payment</Link>
+                  <Link href="/projects">Open projects</Link>
                 </Button>
               ) : null}
             </div>
