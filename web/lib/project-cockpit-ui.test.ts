@@ -41,6 +41,22 @@ test('project planning is grouped under a customizable project-management tab', 
   assert.doesNotMatch(drawer, /tab === 'schedule'/)
 })
 
+test('applications for payment stay inside project billing and use subtabs plus stacked flyouts', () => {
+  const billing = source('app/(app)/projects/tabs/BillingSection.tsx')
+  const workspace = source('app/(app)/construction/ConstructionClient.tsx')
+  const legacyRoute = source('app/(app)/construction/page.tsx')
+  const projectsPage = source('app/(app)/projects/page.tsx')
+
+  assert.match(billing, /<ApplicationsBillingWorkspace\b/)
+  assert.match(workspace, /type BillingTab = "applications" \| "schedule" \| "changes" \| "retainage"/)
+  assert.match(workspace, /role="tablist"/)
+  assert.match(workspace, /<DrawEntryDrawer\b/)
+  assert.match(workspace, /stacked/)
+  assert.match(workspace, /\/ar\/invoices\?doc=/)
+  assert.match(legacyRoute, /redirect\(`\/projects\?project=/)
+  assert.doesNotMatch(projectsPage, /href=.*\/construction/)
+})
+
 test('project transactions filter by native type and stack the transaction drawer', () => {
   const tab = source('app/(app)/projects/tabs/TransactionsTab.tsx')
   const page = source('app/(app)/projects/page.tsx')

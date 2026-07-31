@@ -516,16 +516,6 @@ export const NAV_MODULES: NavModule[] = [
     requiredPermission: 'projects.read',
   },
   {
-    key: 'construction-billing',
-    href: '/construction',
-    label: 'Applications for Payment',
-    iconKey: 'clipboard-check',
-    group: 'operations',
-    subgroup: 'delivery',
-    requiredPermission: 'ar.read',
-    featureKey: 'projects',
-  },
-  {
     key: 'employees',
     href: '/entities/employees',
     label: 'Employees',
@@ -776,7 +766,6 @@ export const DEFAULT_NAV_ORDER: Record<NavGroupKey, readonly string[]> = {
   purchasing: ['purchase-orders', 'ap', 'ap-bills', 'payments', 'expenses', 'vendors', 'compliance', 'compliance-vendors', 'lien-waivers', 'information-returns'],
   operations: [
     'projects',
-    'construction-billing',
     'timesheets',
     'field-tickets',
     'items',

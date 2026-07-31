@@ -15,12 +15,16 @@ import { formatMoney, mulPercent, sum } from '@openbooks/engine/src/money.ts'
  * now profile-driven: the project's project type supplies the P&L measure
  * definitions + layout, and resolveProjectFinancials computes the measures.
  */
-export async function loadProjectCockpit(orgId: string, projectId: string): Promise<ProjectCockpitData> {
+export async function loadProjectCockpit(
+  orgId: string,
+  projectId: string,
+  options: { includeApplicationBilling?: boolean } = {},
+): Promise<ProjectCockpitData> {
   const [projectType, fieldTicketsEnabled] = await Promise.all([
     loadProjectType(orgId, projectId),
     isFeatureEnabled(orgId, 'fieldTickets'),
   ])
-  const [financials, time, unbilled, billingRequests, billableFieldTickets, invoicing, chargeRes, itemRes, equipmentRes, recognizedRes, glRangeRes] = await Promise.all([
+  const [financials, time, unbilled, billingRequests, billableFieldTickets, invoicing, chargeRes, itemRes, equipmentRes, recognizedRes, glRangeRes, incomeAccountRes] = await Promise.all([
     resolveProjectFinancials(orgId, projectId, projectType.financialProfile),
     projectTimeSummary(orgId, projectId),
     projectUnbilled(orgId, projectId),
@@ -64,6 +68,15 @@ export async function loadProjectCockpit(orgId: string, projectId: string): Prom
        where l.org_id = ${orgId}
          and l.project_id = ${projectId}
          and e.status in ('posted', 'reversed')`),
+    options.includeApplicationBilling
+      ? db.execute(sql`
+          select id, number, name
+            from accounts
+           where org_id = ${orgId}
+             and type in ('income', 'income_other')
+             and is_active
+           order by number nulls last, name`)
+      : Promise.resolve({ rows: [] }),
   ])
 
   const charges = (chargeRes as unknown as { rows: any[] }).rows
@@ -118,6 +131,10 @@ export async function loadProjectCockpit(orgId: string, projectId: string): Prom
       allowedBackupTypes: invoicing.allowedBackupTypes,
       source: invoicing.source,
     },
+    applicationIncomeAccounts: (incomeAccountRes as unknown as { rows: { id: string; number: string | null; name: string }[] }).rows.map((account) => ({
+      id: account.id,
+      label: [account.number, account.name].filter(Boolean).join(' · '),
+    })),
     charges: charges as ProjectCockpitData['charges'],
     items: items as ProjectCockpitData['items'],
     equipment: equipment as ProjectCockpitData['equipment'],

@@ -45,7 +45,7 @@ export const FEATURES: FeatureDef[] = [
   // Operations
   // Projects is a parent gate on the centralized Features page.
   // Schedule-of-values billing remains a project-type procedure, not a gate.
-  { key: 'projects', defaultEnabled: true, category: 'operations', navModules: ['projects', 'construction-billing', 'field-tickets', 'lien-waivers'] },
+  { key: 'projects', defaultEnabled: true, category: 'operations', navModules: ['projects', 'field-tickets', 'lien-waivers'] },
   { key: 'timeTracking', defaultEnabled: true, category: 'operations', navModules: ['timesheets'] },
   { key: 'fieldTickets', defaultEnabled: false, category: 'operations', navModules: ['field-tickets'], parentKey: 'projects' },
   // Project scheduling: critical-path Gantt, work-breakdown outline, working

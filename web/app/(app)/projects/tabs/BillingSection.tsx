@@ -8,6 +8,10 @@ import { useTranslations } from 'next-intl'
 import { toast } from 'sonner'
 import { Badge, Button, Card, CardContent, Input, Label, Select } from '@openbooks/ui'
 import { PagedTable } from '../../../../components/paged-table'
+import {
+  ApplicationsBillingWorkspace,
+  type ApplicationIncomeAccount,
+} from '../../construction/ConstructionClient'
 export interface UnbilledClient {
   revenue: string
   cost: string
@@ -72,6 +76,8 @@ export function BillingSection({
   fieldTickets,
   invoicing,
   canManage,
+  applicationPermissions,
+  applicationIncomeAccounts,
   formOpen,
   onFormOpenChange,
 }: {
@@ -81,6 +87,13 @@ export function BillingSection({
   fieldTickets: BillableFieldTicketClient[]
   invoicing: EffectiveInvoicingClient
   canManage: boolean
+  applicationPermissions: {
+    canRead: boolean
+    canCreate: boolean
+    canApprove: boolean
+    canInvoice: boolean
+  }
+  applicationIncomeAccounts: ApplicationIncomeAccount[]
   /** Request-billing form is opened from the flyout Actions menu. */
   formOpen: boolean
   onFormOpenChange: (open: boolean) => void
@@ -122,18 +135,17 @@ export function BillingSection({
   }
 
   if (invoicing.billingProcedure === 'application_for_payment') {
+    if (!applicationPermissions.canRead) {
+      return <p className="py-10 text-center text-sm text-slate-500 dark:text-slate-400">{t('applicationsPermissionRequired')}</p>
+    }
     return (
-      <div className="space-y-4">
-        <Card>
-          <CardContent className="p-5">
-            <h3 className="text-sm font-semibold text-slate-900 dark:text-slate-100">Applications for payment</h3>
-            <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
-              This project bills from a Schedule of Values using cumulative applications, change orders, and retainage. Interim and final are application stages, not separate billing methods.
-            </p>
-            <Button asChild className="mt-4"><Link href={`/construction?projectId=${projectId}`}>Open applications for payment</Link></Button>
-          </CardContent>
-        </Card>
-      </div>
+      <ApplicationsBillingWorkspace
+        projectId={projectId}
+        incomeAccounts={applicationIncomeAccounts}
+        canCreate={applicationPermissions.canCreate}
+        canApprove={applicationPermissions.canApprove}
+        canInvoice={applicationPermissions.canInvoice}
+      />
     )
   }
 

@@ -73,6 +73,7 @@ export interface ProjectCockpitData {
   billableFieldTickets: BillableFieldTicketClient[]
   /** Effective invoicing/backup defaults after the type←customer←project cascade. */
   invoicing: EffectiveInvoicingClient
+  applicationIncomeAccounts: { id: string; label: string }[]
   charges: ChargeRow[]
   items: ChargeItemOption[]
   equipment: ChargeEquipmentOption[]
@@ -119,6 +120,7 @@ export function ProjectDrawer({
   schedulingEnabled = false,
   locale,
   initialTab = 'overview',
+  applicationPermissions,
 }: {
   payload: ProjectPayload
   parties: PartyOpt[]
@@ -138,6 +140,13 @@ export function ProjectDrawer({
   locale?: string
   /** Stable URL state used when a related transaction is stacked over the project. */
   initialTab?: TabKey
+  /** Accounting permissions for the project-contained application-for-payment workflow. */
+  applicationPermissions: {
+    canRead: boolean
+    canCreate: boolean
+    canApprove: boolean
+    canInvoice: boolean
+  }
 }) {
   const { currency } = useMoney()
   const t = useTranslations('projects')
@@ -612,9 +621,9 @@ export function ProjectDrawer({
                 <>
                   <div className="my-1 border-t border-slate-200 dark:border-slate-800" />
                   {menuItem(<Plus className="h-3.5 w-3.5" aria-hidden />, t('charges.addTitle'), () => { setTab('transactions'); setChargeFormOpen(true) })}
-                  {cockpit.invoicing.billingProcedure === 'application_for_payment'
-                    ? menuItem(<Receipt className="h-3.5 w-3.5" aria-hidden />, 'Applications for payment', () => { setTab('billing'); setBillingFormOpen(false) })
-                    : menuItem(<Receipt className="h-3.5 w-3.5" aria-hidden />, t('billing.requestBilling'), () => { setTab('billing'); setBillingFormOpen(true) })}
+                  {cockpit.invoicing.billingProcedure !== 'application_for_payment'
+                    ? menuItem(<Receipt className="h-3.5 w-3.5" aria-hidden />, t('billing.requestBilling'), () => { setTab('billing'); setBillingFormOpen(true) })
+                    : null}
                   <div className="my-1 border-t border-slate-200 dark:border-slate-800" />
                   {isActive
                     ? menuItem(<Trash2 className="h-3.5 w-3.5" aria-hidden />, t('drawer.deactivate'), () => setActiveState(false))
@@ -679,6 +688,8 @@ export function ProjectDrawer({
           fieldTickets={cockpit.billableFieldTickets}
           invoicing={cockpit.invoicing}
           canManage={canManage}
+          applicationPermissions={applicationPermissions}
+          applicationIncomeAccounts={cockpit.applicationIncomeAccounts}
           formOpen={billingFormOpen}
           onFormOpenChange={setBillingFormOpen}
         />

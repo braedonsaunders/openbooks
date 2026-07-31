@@ -77,9 +77,13 @@ approvals, and audit history operate as one connected business system.
     </td>
   </tr>
   <tr>
-    <td colspan="2">
+    <td width="50%">
       <img src=".github/assets/screenshots/construction-billing.jpg" alt="OpenBooks construction progress billing with schedule of values and retainage" width="100%" /><br />
-      <sub><strong>Construction billing:</strong> Schedules of values, cumulative applications for payment, change orders, and retainage.</sub>
+      <sub><strong>Project billing:</strong> Applications, schedules of values, change orders, and retainage stay inside the project record.</sub>
+    </td>
+    <td width="50%">
+      <img src=".github/assets/screenshots/application-invoice.jpg" alt="OpenBooks customer invoice created from an application for payment" width="100%" /><br />
+      <sub><strong>Connected invoices:</strong> Approved applications become regular customer invoices with project, line, posting, and audit context.</sub>
     </td>
   </tr>
 </table>
@@ -102,7 +106,8 @@ approvals, and audit history operate as one connected business system.
     <td width="50%"><img src=".github/assets/screenshots/project-financials-dark.jpg" alt="OpenBooks project financial cockpit in dark mode" width="100%" /></td>
   </tr>
   <tr>
-    <td colspan="2"><img src=".github/assets/screenshots/construction-billing-dark.jpg" alt="OpenBooks construction progress billing in dark mode" width="100%" /></td>
+    <td width="50%"><img src=".github/assets/screenshots/construction-billing-dark.jpg" alt="OpenBooks project-contained application billing in dark mode" width="100%" /></td>
+    <td width="50%"><img src=".github/assets/screenshots/application-invoice-dark.jpg" alt="OpenBooks customer invoice created from an application for payment in dark mode" width="100%" /></td>
   </tr>
 </table>
 </details>

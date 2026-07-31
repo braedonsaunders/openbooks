@@ -1,7 +1,6 @@
 import { getLocale, getTranslations } from 'next-intl/server'
 import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/db.ts'
-import Link from 'next/link'
 import { PageHeader } from '@openbooks/ui'
 import { requireProjectsFeature } from '../../../lib/projects-gate'
 import { isFeatureEnabled } from '../../../lib/features'
@@ -33,7 +32,12 @@ export default async function Projects({
   const canViewGl = can(authz, 'gl.read')
   const orgId = authz.user.orgId
   await requireProjectsFeature(orgId)
-  const canViewApplications = can(authz, 'ar.read')
+  const applicationPermissions = {
+    canRead: can(authz, 'ar.read'),
+    canCreate: can(authz, 'ar.create'),
+    canApprove: can(authz, 'ar.approve'),
+    canInvoice: can(authz, 'ar.post'),
+  }
 
   const sp = await searchParams
   const projectId = typeof sp.project === 'string' ? sp.project : undefined
@@ -52,7 +56,9 @@ export default async function Projects({
            where org_id = ${orgId} and is_active
            order by display_name limit 2000`) as any,
         subsidiaryUiOptions(orgId),
-        loadProjectCockpit(orgId, openProject.project.id as string),
+        loadProjectCockpit(orgId, openProject.project.id as string, {
+          includeApplicationBilling: applicationPermissions.canRead,
+        }),
         db.execute(sql`
           select id, name, billing_method as "billingMethod",
                  coalesce(invoicing_profile->>'billingProcedure', 'standard') as "billingProcedure"
@@ -86,19 +92,7 @@ export default async function Projects({
         <PageHeader
           title={t('list.title')}
           description={t('list.description')}
-          actions={
-            <div className="flex items-center gap-2">
-              {canViewApplications && (
-                <Link
-                  href={(openProject ? `/construction?projectId=${openProject.project.id}` : '/construction') as never}
-                  className="rounded-lg border border-slate-200 px-3 py-1.5 text-sm font-medium text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:text-slate-200 dark:hover:bg-slate-800"
-                >
-                  Applications for Payment
-                </Link>
-              )}
-              {canManage ? <NewProjectButton /> : null}
-            </div>
-          }
+          actions={canManage ? <NewProjectButton /> : null}
         />
       }
     >
@@ -126,6 +120,7 @@ export default async function Projects({
                 schedulingEnabled={schedulingEnabled}
                 locale={locale}
                 initialTab={pickString(sp.projectTab) ?? 'overview'}
+                applicationPermissions={applicationPermissions}
               />
             ) : null}
             {openProject && projectTransactionId && isUuid(projectTransactionId) && projectTransactionKind ? (
