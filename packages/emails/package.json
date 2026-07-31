@@ -13,10 +13,10 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "nodemailer": "^6.9.16"
+    "nodemailer": "^9.0.1"
   },
   "devDependencies": {
-    "@types/nodemailer": "^6.4.16",
+    "@types/nodemailer": "^8.0.1",
     "typescript": "^7.0.2"
   }
 }
