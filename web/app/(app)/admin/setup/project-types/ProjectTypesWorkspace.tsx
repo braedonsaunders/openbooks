@@ -37,6 +37,8 @@ const LABELS: Record<string, string> = {
   in_actual_cost: 'From actual cost',
   time_and_materials: 'Time & materials',
   rate_engine: 'Department rate card',
+  bill_rate: 'Snapshotted bill rate',
+  cost_times_markup: 'Cost plus project markup',
   percent_of_labor: '% of labor cost',
   per_labor_hour: '$ per labor hour',
   account_group_actual: 'Posted GL (account group)',
@@ -64,6 +66,7 @@ const BASES = ['time_selection', 'date_range', 'draw_amount', 'milestone', 'fiel
 /** Documents a tenant may treat as a source of rebillable job cost. */
 const COST_SOURCE_KINDS = ['vendor_bill', 'expense_report', 'vendor_credit', 'card_charge', 'card_refund', 'check', 'sales_order', 'purchase_order']
 const COST_SOURCE_STATUSES = ['pending_approval', 'approved', 'posted', 'rejected']
+const TIME_RATE_METHODS = ['bill_rate', 'cost_times_markup']
 const MARKUP_PRESENTATIONS = ['embedded', 'lump_sum']
 const LINE_BUILDERS = ['tm_actual', 'milestone', 'draw', 'cost_plus']
 const REVENUE_ACCTS = ['item_income', 'unbilled_receivable', 'fixed']
@@ -331,7 +334,11 @@ export function ProjectTypesWorkspace({
                 </div>
               ) : null}
               <EnumField label={t('priceMethod')} value={fp.totalPrice.method} options={PRICE_METHODS} onChange={(v) => setFp({ totalPrice: { ...fp.totalPrice, method: v as any } })} />
+              {fp.totalPrice.method === 'cost_plus' ? <div className="space-y-1.5"><Label>{t('defaultMarkupPercent')}</Label><Input type="number" min="0" step="0.01" value={fp.totalPrice.defaultMarkupPercent ?? ''} onChange={(e) => setFp({ totalPrice: { ...fp.totalPrice, defaultMarkupPercent: e.target.value === '' ? undefined : Number(e.target.value) } })} /></div> : null}
               <EnumField label={t('cbiFormula')} value={fp.couldBeInvoiced.formula} options={CBI_FORMULAS} onChange={(v) => setFp({ couldBeInvoiced: { formula: v as any } })} />
+              <EnumField label={t('timeRateMethod')} value={fp.billableValue.timeRate} options={TIME_RATE_METHODS} onChange={(v) => setFp({ billableValue: { ...fp.billableValue, timeRate: v as FinancialProfile['billableValue']['timeRate'] } })} />
+              <label className="flex items-center gap-2 rounded-md border border-slate-200 px-3 py-2 text-sm dark:border-slate-800"><input type="checkbox" className="h-4 w-4 rounded border-slate-300 accent-teal-600" checked={fp.billableValue.includeUnbilledTime} onChange={(e) => setFp({ billableValue: { ...fp.billableValue, includeUnbilledTime: e.target.checked } })} />{t('includeUnbilledTime')}</label>
+              <label className="flex items-center gap-2 rounded-md border border-slate-200 px-3 py-2 text-sm dark:border-slate-800"><input type="checkbox" className="h-4 w-4 rounded border-slate-300 accent-teal-600" checked={fp.billableValue.includeUnbilledCostLines} onChange={(e) => setFp({ billableValue: { ...fp.billableValue, includeUnbilledCostLines: e.target.checked } })} />{t('includeUnbilledCostLines')}</label>
               <EnumField label={t('costSource')} value={fp.actualCost.source} options={COST_SOURCES} onChange={(v) => setFp({ actualCost: { ...fp.actualCost, source: v as any } })} />
               {fp.actualCost.source === 'account_group' ? <EnumField label={t('costDimension')} value={fp.actualCost.dimension ?? ''} options={['', ...dimensions]} onChange={(v) => setFp({ actualCost: { ...fp.actualCost, dimension: v || undefined } })} /> : <div />}
               <EnumField label={t('laborSource')} value={fp.laborCost.source} options={LABOR_SOURCES} onChange={(v) => setFp({ laborCost: { ...fp.laborCost, source: v as any } })} />

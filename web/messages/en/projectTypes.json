@@ -66,6 +66,10 @@
   "overheadRateEngineHint": "Costs overhead from the published, effective-dated Overhead Rates card (per-department $/hour × this project’s labor hours). Manage rates in the Overhead Model workspace.",
   "costSourceKinds": "Billable cost sources",
   "costSourceStatuses": "Billable cost lifecycle states",
+  "includeUnbilledTime": "Include unbilled time in WIP",
+  "includeUnbilledCostLines": "Include unbilled cost lines in WIP",
+  "timeRateMethod": "WIP pricing basis",
+  "defaultMarkupPercent": "Default markup %",
   "markupPresentation": "Markup presentation",
   "notToExceed": "Not to exceed"
 }

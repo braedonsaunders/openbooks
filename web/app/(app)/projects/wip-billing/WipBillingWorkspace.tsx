@@ -30,7 +30,7 @@ import {
 import { useMoney } from '../../../../components/money-provider'
 import type { PrebillDetail, PrebillLineRow, PrebillListRow, WipAnalytics } from '../../../../lib/wip-billing'
 
-type ProjectOption = { id: string; name: string; customerName: string | null }
+type ProjectOption = { id: string; name: string; customerName: string | null; projectTypeName: string; lineBuilder: string }
 
 const STATUS_VARIANT = {
   draft: 'secondary',
@@ -160,11 +160,8 @@ export function WipBillingWorkspace({
           </div>
           {canManage ? <Button disabled={projects.length === 0} onClick={() => setCreating((value) => !value)}><Plus className="mr-2 size-4" />New prebill</Button> : null}
         </div>
-        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
           <MetricCard label="Available WIP" value={money(agingTotal)} note="Not held" />
-          <MetricCard label="1–30 days" value={money(Number(analytics.aging.days1to30))} />
-          <MetricCard label="31–60 days" value={money(Number(analytics.aging.days31to60))} />
-          <MetricCard label="61–90 days" value={money(Number(analytics.aging.days61to90))} tone="warning" />
           <MetricCard label="Over 90 days" value={money(Number(analytics.aging.over90))} tone="danger" />
           <MetricCard label="Realization" value={analytics.realization.percent == null ? '—' : `${(analytics.realization.percent * 100).toFixed(1)}%`} note={`${money(Number(analytics.realization.billed))} billed`} />
           <MetricCard label="Leakage" value={money(Number(analytics.leakage.total))} note={`${money(Number(analytics.leakage.heldOver90))} held >90d`} tone={Number(analytics.leakage.total) > 0 ? 'danger' : 'default'} />
@@ -178,8 +175,9 @@ export function WipBillingWorkspace({
             <div className="space-y-1.5 xl:col-span-2">
               <Label htmlFor="wip-project">Project</Label>
               <Select id="wip-project" value={projectId} onChange={(event) => setProjectId(event.target.value)}>
-                {projects.map((project) => <option key={project.id} value={project.id}>{project.name}{project.customerName ? ` · ${project.customerName}` : ''}</option>)}
+                {projects.map((project) => <option key={project.id} value={project.id}>{project.name}{project.customerName ? ` · ${project.customerName}` : ''} · {project.projectTypeName}</option>)}
               </Select>
+              <p className="text-xs text-slate-500 dark:text-slate-400">Only active project types using standard T&amp;M or Cost-Plus source billing are listed. <Link href="/admin/setup/project-types" className="font-medium text-teal-700 hover:underline dark:text-teal-300">Configure project types</Link></p>
             </div>
             <div className="space-y-1.5"><Label htmlFor="wip-start">Start (optional)</Label><Input id="wip-start" type="date" value={periodStart} onChange={(event) => setPeriodStart(event.target.value)} /></div>
             <div className="space-y-1.5"><Label htmlFor="wip-end">Cutoff</Label><Input id="wip-end" type="date" value={periodEnd} onChange={(event) => setPeriodEnd(event.target.value)} /></div>
@@ -290,6 +288,8 @@ function PrebillLine({ line, prebill, editable, onChanged, money }: { line: Preb
   const [holdReason, setHoldReason] = useState('')
   const [holdEvidence, setHoldEvidence] = useState('')
   const changed = Number(amount) !== Number(line.originalBillAmount)
+  const pricing = line.pricingSnapshot as { pricingMode?: string; directCostAmount?: string; overheadAmount?: string; markupPercent?: string }
+  const overhead = Number(pricing.overheadAmount ?? 0)
 
   async function save() {
     setSaving(true)
@@ -338,8 +338,8 @@ function PrebillLine({ line, prebill, editable, onChanged, money }: { line: Preb
       <TableCell><Badge variant={line.disposition === 'hold' ? 'warning' : 'outline'}>{line.disposition === 'hold' ? 'Held' : line.sourceType === 'time_entry' ? 'Time' : 'Cost'}</Badge></TableCell>
       <TableCell className="whitespace-nowrap">{line.sourceDate}</TableCell>
       <TableCell><p className="max-w-80 truncate">{line.description ?? '—'}</p>{line.holdReason ? <p className="mt-1 text-xs text-amber-700 dark:text-amber-300">{line.holdReason}</p> : null}</TableCell>
-      <TableCell className="text-right tabular-nums">{money(Number(line.costAmount))}</TableCell>
-      <TableCell className="text-right tabular-nums">{money(Number(line.originalBillAmount))}</TableCell>
+      <TableCell className="text-right tabular-nums"><p>{money(Number(line.costAmount))}</p>{overhead !== 0 ? <p className="mt-1 text-xs text-slate-500">{money(overhead)} overhead</p> : null}</TableCell>
+      <TableCell className="text-right tabular-nums"><p>{money(Number(line.originalBillAmount))}</p><p className="mt-1 text-xs text-slate-500">{pricing.pricingMode === 'cost_times_markup' ? `Cost + ${Number(pricing.markupPercent ?? 0).toFixed(2)}%` : 'Bill rate'}</p></TableCell>
       <TableCell>
         {editable && line.disposition === 'bill' ? <div className="space-y-2">
           <div className="flex gap-2"><Input aria-label="Proposed billing amount" inputMode="decimal" value={amount} onChange={(event) => setAmount(event.target.value)} className="max-w-36 text-right tabular-nums" />{changed ? Number(amount) > Number(line.originalBillAmount) ? <ArrowUpRight className="mt-2 size-4 text-amber-600" /> : <ArrowDownRight className="mt-2 size-4 text-red-600" /> : <Check className="mt-2 size-4 text-emerald-600" />}</div>

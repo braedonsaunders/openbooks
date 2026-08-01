@@ -59,6 +59,10 @@
   "help": "文档",
   "costSourceKinds": "可计费成本来源",
   "costSourceStatuses": "可计费成本生命周期状态",
+  "includeUnbilledTime": "在在制品中包含未开票工时",
+  "includeUnbilledCostLines": "在在制品中包含未开票成本行",
+  "timeRateMethod": "在制品定价基础",
+  "defaultMarkupPercent": "默认加价 %",
   "markupPresentation": "加价显示方式",
   "notToExceed": "不得超出"
 }

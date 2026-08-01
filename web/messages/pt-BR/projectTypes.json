@@ -59,6 +59,10 @@
   "help": "Documentação",
   "costSourceKinds": "Fontes de custo faturável",
   "costSourceStatuses": "Estados do ciclo de vida do custo faturável",
+  "includeUnbilledTime": "Incluir tempo não faturado no WIP",
+  "includeUnbilledCostLines": "Incluir linhas de custo não faturadas no WIP",
+  "timeRateMethod": "Base de preço do WIP",
+  "defaultMarkupPercent": "Margem padrão %",
   "markupPresentation": "Apresentação da margem",
   "notToExceed": "Não exceder"
 }

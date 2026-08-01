@@ -66,6 +66,10 @@
   "overheadRateEngineHint": "Calcule les frais généraux à partir de la grille de taux publiée et datée ($/heure par département × heures du projet). Gérez les taux dans l’espace Modèle de frais généraux.",
   "costSourceKinds": "Sources de coûts facturables",
   "costSourceStatuses": "États du cycle de vie des coûts facturables",
+  "includeUnbilledTime": "Inclure le temps non facturé dans les TEC",
+  "includeUnbilledCostLines": "Inclure les coûts non facturés dans les TEC",
+  "timeRateMethod": "Base de tarification des TEC",
+  "defaultMarkupPercent": "Marge par défaut %",
   "markupPresentation": "Présentation de la majoration",
   "notToExceed": "Ne pas dépasser"
 }

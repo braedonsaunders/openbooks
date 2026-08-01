@@ -59,6 +59,10 @@
   "help": "ドキュメント",
   "costSourceKinds": "請求可能なコスト元",
   "costSourceStatuses": "請求可能原価のライフサイクル状態",
+  "includeUnbilledTime": "未請求時間をWIPに含める",
+  "includeUnbilledCostLines": "未請求コスト明細をWIPに含める",
+  "timeRateMethod": "WIP価格基準",
+  "defaultMarkupPercent": "既定マークアップ %",
   "markupPresentation": "マークアップの表示",
   "notToExceed": "上限超過なし"
 }

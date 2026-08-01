@@ -91,6 +91,8 @@ export const wipPrebillLines = pgTable(
     adjustmentReason: text("adjustment_reason"),
     /** File-cabinet ids, links, or concise controller evidence references. */
     adjustmentEvidence: jsonb("adjustment_evidence").notNull().default([]),
+    /** Effective project policy and direct/overhead pricing evidence frozen with the line. */
+    pricingSnapshot: jsonb("pricing_snapshot").notNull().default({}),
     disposition: text("disposition", { enum: ["bill", "hold"] }).notNull().default("bill"),
     ...auditColumns,
   },

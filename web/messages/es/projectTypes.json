@@ -66,6 +66,10 @@
   "overheadRateEngineHint": "Calcula los gastos generales desde la tarjeta de tasas publicada con fecha de vigencia ($/hora por departamento × horas del proyecto). Gestione las tasas en el Modelo de gastos generales.",
   "costSourceKinds": "Fuentes de costo facturable",
   "costSourceStatuses": "Estados del ciclo de vida del costo facturable",
+  "includeUnbilledTime": "Incluir tiempo no facturado en WIP",
+  "includeUnbilledCostLines": "Incluir líneas de costo no facturadas en WIP",
+  "timeRateMethod": "Base de precios de WIP",
+  "defaultMarkupPercent": "Margen predeterminado %",
   "markupPresentation": "Presentación del margen",
   "notToExceed": "No exceder"
 }
