@@ -24,6 +24,7 @@ export default async function CollectionsPage() {
   if (!authz) redirect("/dashboard");
 
   const subscriptionsEnabled = await isFeatureEnabled(authz.user.orgId, "subscriptionBilling");
+  const advancedSubscriptionsEnabled = subscriptionsEnabled && await isFeatureEnabled(authz.user.orgId, "advancedSubscriptions");
   const [customers, incomeAccounts] = subscriptionsEnabled
     ? await Promise.all([
         db.execute(sql`
@@ -48,6 +49,7 @@ export default async function CollectionsPage() {
       />
       <CollectionsClient
         subscriptionsEnabled={subscriptionsEnabled}
+        advancedSubscriptionsEnabled={advancedSubscriptionsEnabled}
         customers={customers.rows.map((c) => ({ id: c.id, name: c.name }))}
         incomeAccounts={incomeAccounts.rows.map((a) => ({ id: a.id, label: [a.number, a.name].filter(Boolean).join(" · ") }))}
       />

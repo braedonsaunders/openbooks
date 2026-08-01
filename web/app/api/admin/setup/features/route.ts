@@ -2,7 +2,13 @@ import { NextResponse } from 'next/server'
 import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/db.ts'
 import { guardPermission } from '../../../../../lib/authz'
-import { FEATURE_BY_KEY, featureDisableBlocked, featureEnabled } from '../../../../../lib/features'
+import {
+  FEATURES,
+  FEATURE_BY_KEY,
+  featureDisableBlocked,
+  featureEnabled,
+  featureRequirements,
+} from '../../../../../lib/features'
 
 export const dynamic = 'force-dynamic'
 
@@ -41,14 +47,23 @@ export async function PUT(req: Request) {
         from orgs where id = ${orgId} for update`)) as unknown as { rows: { features: Record<string, boolean> }[] }
     if (!before.rows[0]) return { error: 'not-found' }
     const currentState = before.rows[0].features ?? {}
-    for (const [key, value] of Object.entries(clean)) {
-      const parentKey = FEATURE_BY_KEY.get(key)?.parentKey
-      const parentWillBeEnabled = parentKey
-        ? (clean[parentKey] ?? featureEnabled(currentState, parentKey))
-        : true
-      if (value && parentKey && !parentWillBeEnabled) return { error: 'feature-dependency', key, parentKey }
-    }
     const after = { ...currentState, ...clean }
+    for (const [key, value] of Object.entries(clean)) {
+      if (!value) continue
+      const missing = featureRequirements(FEATURE_BY_KEY.get(key)!)
+        .filter((requiredKey) => !featureEnabled(after, requiredKey))
+      if (missing.length > 0) return { error: 'feature-dependency', key, requiredKeys: missing }
+    }
+    // Do not leave a stored-on child silently suppressed by switching off one
+    // of its requirements. Administrators must make that scope change explicit.
+    for (const [key, value] of Object.entries(clean)) {
+      if (value) continue
+      const dependents = FEATURES.filter((candidate) =>
+        featureRequirements(candidate).includes(key)
+        && (typeof after[candidate.key] === 'boolean' ? after[candidate.key] : candidate.defaultEnabled),
+      ).map((candidate) => candidate.key)
+      if (dependents.length > 0) return { error: 'feature-dependents-enabled', key, dependentKeys: dependents }
+    }
     await tx.execute(sql`
       update orgs set settings = jsonb_set(coalesce(settings, '{}'::jsonb), '{features}', ${JSON.stringify(after)}::jsonb)
        where id = ${orgId}`)

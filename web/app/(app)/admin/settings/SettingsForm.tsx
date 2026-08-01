@@ -35,6 +35,7 @@ type ControlAccounts = {
   employeePayable: string
   fxUnrealizedGainLoss: string
   fxRealizedGainLoss: string
+  retainagePayable?: string
   laborWip?: string
   laborClearing?: string
   unbilledReceivable?: string
@@ -76,6 +77,7 @@ const CONTROL_FIELDS: { key: keyof ControlAccounts }[] = [
   { key: 'employeePayable' },
   { key: 'fxUnrealizedGainLoss' },
   { key: 'fxRealizedGainLoss' },
+  { key: 'retainagePayable' },
   { key: 'laborWip' },
   { key: 'laborClearing' },
   { key: 'unbilledReceivable' },

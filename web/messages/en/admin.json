@@ -654,6 +654,10 @@
           "label": "Realized FX gain/loss",
           "hint": "Where settlement-rate differences from foreign-currency payment applications are booked"
         },
+        "retainagePayable": {
+          "label": "Retainage payable",
+          "hint": "Vendor progress-billing retainage held until an approved release"
+        },
         "laborWip": {
           "label": "Labor WIP / cost",
           "hint": "Approved labor cost debits here (per project)"
@@ -2596,6 +2600,7 @@
         "assets": "{count, plural, one {# fixed asset} other {# fixed assets}}",
         "inventoryMovements": "{count, plural, one {# inventory movement} other {# inventory movements}}",
         "activeSubscriptions": "{count, plural, one {# active subscription} other {# active subscriptions}}",
+        "advancedSubscriptionContracts": "{count, plural, one {# active versioned subscription contract} other {# active versioned subscription contracts}}",
         "projects": "{count, plural, one {# project} other {# projects}}",
         "activeProjects": "{count, plural, one {# active project} other {# active projects}}",
         "openProjectBillingRequests": "{count, plural, one {# open project billing request} other {# open project billing requests}}",
@@ -2606,6 +2611,11 @@
         "openProjectDocuments": "{count, plural, one {# unposted project document} other {# unposted project documents}}",
         "openProjectTimeEntries": "{count, plural, one {# unapproved project time entry} other {# unapproved project time entries}}",
         "openChangeOrders": "{count, plural, one {# draft change order} other {# draft change orders}}",
+        "activeSubcontracts": "{count, plural, one {# active subcontract} other {# active subcontracts}}",
+        "openVendorPayApplications": "{count, plural, one {# vendor pay application in progress} other {# vendor pay applications in progress}}",
+        "activeSubcontractPaymentControls": "{count, plural, one {# active subcontract payment control} other {# active subcontract payment controls}}",
+        "openPrebills": "{count, plural, one {# prebill awaiting completion} other {# prebills awaiting completion}}",
+        "activeWipHolds": "{count, plural, one {# active WIP hold} other {# active WIP holds}}",
         "revenueSchedules": "{count, plural, one {# deferred-revenue schedule} other {# deferred-revenue schedules}}",
         "controlCheckUnavailable": "an integrity check that could not be completed",
         "trackedVendors": "{count, plural, one {# tracked subcontractor} other {# tracked subcontractors}}",
@@ -2616,7 +2626,9 @@
         "unfiledInformationReturns": "{count, plural, one {# finalized information return that has not been filed} other {# finalized information returns that have not been filed}}"
       },
       "errors": {
-        "blocked": "This feature can't be turned off — its data is load-bearing for the ledger."
+        "blocked": "This feature can't be turned off — its data is load-bearing for the ledger.",
+        "dependency": "Turn on the required feature first: {features}.",
+        "dependents": "Turn off the dependent feature first: {features}."
       },
       "categories": {
         "sales": "Sales & customers",
@@ -3133,6 +3145,18 @@
     "subscriptionBilling": {
       "title": "Subscription Billing",
       "description": "Plans and subscriptions that auto-generate recurring invoices (SaaS / retainer)."
+    },
+    "advancedSubscriptions": {
+      "title": "Advanced subscription lifecycle",
+      "description": "Versioned plans, multiple components, trials, renewals, co-terming, amendments, and advance or arrears billing."
+    },
+    "subcontracts": {
+      "title": "Subcontracts & AP progress billing",
+      "description": "Vendor commitments, subcontract changes, vendor SOVs and pay applications, retainage payable, releases, joint checks, and payment holds."
+    },
+    "wipBilling": {
+      "title": "WIP & prebilling",
+      "description": "Review billable project work, hold or adjust lines with evidence, approve prebills, and monitor WIP aging, realization, and leakage."
     },
     "onlinePayments": {
       "title": "Online Payments",

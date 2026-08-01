@@ -23,6 +23,10 @@ export interface FeatureDef {
   /** Optional authoritative parent module. A child can never resolve enabled
    *  while its parent is disabled, regardless of stale stored overrides. */
   parentKey?: string
+  /** Every listed feature must resolve on before this capability can resolve. */
+  requiresAll?: string[]
+  /** Helpful companions shown without preventing independent enablement. */
+  recommends?: string[]
 }
 
 /** The full feature switchboard:
@@ -37,6 +41,7 @@ export const FEATURES: FeatureDef[] = [
   // invoices (SaaS/retainer style). Off by default — recurring document
   // schedules + dunning work without it; this adds the plan/subscription model.
   { key: 'subscriptionBilling', defaultEnabled: false, category: 'sales' },
+  { key: 'advancedSubscriptions', defaultEnabled: false, category: 'sales', requiresAll: ['subscriptionBilling'] },
   // Online customer payments: hosted payment links on invoices (Stripe /
   // Adyen / GoCardless bank debit), surcharge rules, provider webhooks that
   // auto-apply receipts to open items. Off by default — manual receipts and
@@ -53,6 +58,8 @@ export const FEATURES: FeatureDef[] = [
   // a planning instrument, not an accounting one, and orgs that only job-cost
   // projects should not carry it. Subordinate to the Projects parent gate.
   { key: 'projectScheduling', defaultEnabled: false, category: 'operations', parentKey: 'projects' },
+  { key: 'subcontracts', defaultEnabled: false, category: 'operations', navModules: ['subcontracts'], requiresAll: ['projects'], recommends: ['orders', 'subcontractorCompliance'] },
+  { key: 'wipBilling', defaultEnabled: false, category: 'operations', navModules: ['wip-billing'], requiresAll: ['projects'], recommends: ['timeTracking'] },
   // Subcontractor compliance: certificates of insurance, lien waivers, and
   // year-end information returns (1099-NEC/MISC, T4A) for the people you pay.
   // Off by default and deliberately NOT a child of `projects`: COI tracking and
@@ -90,11 +97,21 @@ export const FEATURE_BY_KEY = new Map(FEATURES.map((f) => [f.key, f]))
 
 export type FeatureState = Record<string, boolean>
 
+export function featureRequirements(def: FeatureDef): string[] {
+  return [...new Set([...(def.parentKey ? [def.parentKey] : []), ...(def.requiresAll ?? [])])]
+}
+
 /** Pure: resolve one feature from a settings.features object. */
-export function featureEnabled(state: FeatureState | null | undefined, key: string): boolean {
+export function featureEnabled(
+  state: FeatureState | null | undefined,
+  key: string,
+  resolving: Set<string> = new Set(),
+): boolean {
   const def = FEATURE_BY_KEY.get(key)
   if (!def) return false
-  if (def.parentKey && !featureEnabled(state, def.parentKey)) return false
+  if (resolving.has(key)) return false
+  const nextResolving = new Set(resolving).add(key)
+  if (featureRequirements(def).some((required) => !featureEnabled(state, required, nextResolving))) return false
   const v = state?.[key]
   return typeof v === 'boolean' ? v : def.defaultEnabled
 }
@@ -224,6 +241,15 @@ const FEATURE_DISABLE_CHECKS: Record<string, (orgId: string) => Promise<FeatureD
     // preference. Administrators must pause or cancel active contracts first.
     return { blocked: n > 0, impacts: n ? [{ labelKey: 'activeSubscriptions', count: n }] : [] }
   },
+  advancedSubscriptions: async (orgId) => {
+    const n = await countRows(sql`
+      select count(*)::int as n
+        from subscription_lifecycles lifecycle
+        join subscriptions subscription
+          on subscription.id = lifecycle.subscription_id and subscription.org_id = lifecycle.org_id
+       where lifecycle.org_id = ${orgId} and subscription.status = 'active'`)
+    return { blocked: n > 0, impacts: n ? [{ labelKey: 'advancedSubscriptionContracts', count: n }] : [] }
+  },
   fixedAssets: async (orgId) => {
     const n = await countRows(sql`select count(*)::int as n from fixed_assets where org_id = ${orgId}`)
     return { blocked: false, impacts: n ? [{ labelKey: 'assets', count: n }] : [] }
@@ -281,6 +307,28 @@ const FEATURE_DISABLE_CHECKS: Record<string, (orgId: string) => Promise<FeatureD
     if (projectTime) impacts.push({ labelKey: 'openProjectTimeEntries', count: projectTime })
     if (changeOrders) impacts.push({ labelKey: 'openChangeOrders', count: changeOrders })
     return { blocked: active + billingRequests + payApplications + retainage + fieldTickets + projectDocuments + projectTime + changeOrders > 0, impacts }
+  },
+  subcontracts: async (orgId) => {
+    const [contracts, applications, controls] = await Promise.all([
+      countRows(sql`select count(*)::int as n from subcontracts where org_id = ${orgId} and status not in ('closed', 'void')`),
+      countRows(sql`select count(*)::int as n from vendor_pay_applications where org_id = ${orgId} and status in ('draft', 'submitted', 'approved')`),
+      countRows(sql`select count(*)::int as n from subcontract_payment_controls where org_id = ${orgId} and status = 'active'`),
+    ])
+    const impacts: FeatureImpact[] = []
+    if (contracts) impacts.push({ labelKey: 'activeSubcontracts', count: contracts })
+    if (applications) impacts.push({ labelKey: 'openVendorPayApplications', count: applications })
+    if (controls) impacts.push({ labelKey: 'activeSubcontractPaymentControls', count: controls })
+    return { blocked: contracts + applications + controls > 0, impacts }
+  },
+  wipBilling: async (orgId) => {
+    const [worksheets, holds] = await Promise.all([
+      countRows(sql`select count(*)::int as n from wip_prebills where org_id = ${orgId} and status in ('draft', 'review', 'approved')`),
+      countRows(sql`select count(*)::int as n from wip_holds where org_id = ${orgId} and released_at is null`),
+    ])
+    const impacts: FeatureImpact[] = []
+    if (worksheets) impacts.push({ labelKey: 'openPrebills', count: worksheets })
+    if (holds) impacts.push({ labelKey: 'activeWipHolds', count: holds })
+    return { blocked: worksheets + holds > 0, impacts }
   },
   // A schedule is planning data, never posted history, so turning it off is
   // always safe — but say how much plan goes dark before it happens.

@@ -87,6 +87,7 @@ const LABOR_CLR = 'laborClearing'
 const UNBILLED_AR = 'unbilledReceivable'
 const PROJECT_REV = 'projectRevenue'
 const RETAINAGE = 'retainageReceivable'
+const RETAINAGE_PAYABLE = 'retainagePayable'
 
 // ---------------------------------------------------------------------------
 // Shared COA building blocks (composed per industry to stay DRY)
@@ -183,6 +184,7 @@ export const INDUSTRIES: IndustryDef[] = [
       // A general contractor cannot release a subcontractor's money without
       // current insurance and a signed waiver, and files 1099-NEC every January.
       subcontractorCompliance: true,
+      subcontracts: true,
     },
     coa: [
       { number: '1000', name: 'Operating Account', type: 'asset_bank', reconcilable: true },
@@ -201,6 +203,7 @@ export const INDUSTRIES: IndustryDef[] = [
       { number: '2110', name: 'Payroll Deductions', type: 'liability_current_other' },
       { number: '2120', name: "Workers' Comp Payable", type: 'liability_current_other' },
       { number: '2130', name: 'Subcontractor Payable', type: 'liability_payable' },
+      { number: '2140', name: 'Retainage Payable', type: 'liability_current_other' },
       { number: '2200', name: 'Sales Tax Payable', type: 'liability_current_other' },
       { number: '2300', name: 'Employee Payable', type: 'liability_current_other' },
       { number: '2500', name: 'Credit Card', type: 'liability_card', reconcilable: true },
@@ -233,6 +236,7 @@ export const INDUSTRIES: IndustryDef[] = [
       [TAX_PAID]: '2200',
       [EMPLOYEE_PAYABLE]: '2300',
       [RETAINAGE]: '1110',
+      [RETAINAGE_PAYABLE]: '2140',
       [LABOR_WIP]: '1300',
       [UNBILLED_AR]: '1300',
       [PROJECT_REV]: '4200',
@@ -252,6 +256,7 @@ export const INDUSTRIES: IndustryDef[] = [
       equipment: false,
       subscriptionBilling: true,
       revenueRecognition: true,
+      wipBilling: true,
     },
     coa: [
       ...standardBank(),
@@ -311,6 +316,8 @@ export const INDUSTRIES: IndustryDef[] = [
       // Design firms sub out geotechnical, survey and specialty engineering:
       // same certificate-of-insurance and 1099 obligations as a contractor.
       subcontractorCompliance: true,
+      subcontracts: true,
+      wipBilling: true,
     },
     coa: [
       { number: '1000', name: 'Operating Account', type: 'asset_bank', reconcilable: true },
@@ -326,6 +333,7 @@ export const INDUSTRIES: IndustryDef[] = [
       { number: '2000', name: 'Accounts Payable', type: 'liability_payable' },
       { number: '2100', name: 'Accrued Wages', type: 'liability_current_other' },
       { number: '2110', name: 'Payroll Deductions', type: 'liability_current_other' },
+      { number: '2120', name: 'Retainage Payable', type: 'liability_current_other' },
       { number: '2200', name: 'Sales Tax Payable', type: 'liability_current_other' },
       { number: '2300', name: 'Employee Payable', type: 'liability_current_other' },
       { number: '2500', name: 'Credit Card', type: 'liability_card', reconcilable: true },
@@ -358,6 +366,7 @@ export const INDUSTRIES: IndustryDef[] = [
       [TAX_PAID]: '2200',
       [EMPLOYEE_PAYABLE]: '2300',
       [RETAINAGE]: '1110',
+      [RETAINAGE_PAYABLE]: '2120',
       [LABOR_WIP]: '1300',
       [UNBILLED_AR]: '1200',
       [PROJECT_REV]: '4100',
@@ -371,6 +380,7 @@ export const INDUSTRIES: IndustryDef[] = [
     category: 'services',
     features: {
       subscriptionBilling: true,
+      advancedSubscriptions: true,
       revenueRecognition: true,
       projects: true,
       timeTracking: true,
@@ -436,6 +446,7 @@ export const INDUSTRIES: IndustryDef[] = [
       equipment: false,
       subscriptionBilling: false,
       revenueRecognition: true,
+      wipBilling: true,
     },
     coa: [
       ...standardBank(),

@@ -17,6 +17,8 @@ export default async function FeaturesSetup() {
     key: f.key,
     category: f.category,
     parentKey: f.parentKey,
+    requiresAll: f.requiresAll,
+    recommends: f.recommends,
     enabled: featureEnabled(state, f.key),
   }))
   // What turning each ENABLED feature off would affect (impacts + hard blocks).

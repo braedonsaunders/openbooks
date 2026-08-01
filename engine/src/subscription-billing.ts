@@ -5,6 +5,11 @@ import { computeLineTaxes } from "./tax.ts";
 import { loadTaxComponentConfig, persistLineTaxComponents } from "./tax-persist.ts";
 import { postDocument, type PostingDeps } from "./posting.ts";
 import { submitAndReleaseIfUngated } from "./flows/submit.ts";
+import {
+  advancedBillingSnapshot,
+  prepareAdvancedSubscriptionBilling,
+  type AdvancedBillingLine,
+} from "./advanced-subscriptions.ts";
 
 /**
  * Subscription billing engine. Each active subscription is billed when its
@@ -106,6 +111,9 @@ interface SubRow {
   intervalCount: number;
   subsidiaryId: string | null;
   baseCurrency: string;
+  nextBillOn: string;
+  currentPeriodStart: string | null;
+  createdBy: string | null;
 }
 
 /** Whole-day count b − a (both ISO). */
@@ -155,30 +163,53 @@ interface InvoiceSpec {
   autoPost: boolean;
   /** When false, tax is skipped even if a tax code is present (proration credits). */
   applyTax?: boolean;
+  /** Advanced lifecycle supplies an immutable component snapshot. */
+  lines?: AdvancedBillingLine[];
 }
 
 /**
- * Create a single-line customer_invoice for a subscription charge, computing and
- * persisting tax the same way the interactive path does (so it can be posted).
+ * Create a customer invoice for a subscription charge. Legacy subscriptions
+ * supply the scalar fields and remain one line; advanced subscriptions supply
+ * the effective-dated component snapshot and receive an itemized invoice.
  */
 async function createSubscriptionInvoice(
   spec: InvoiceSpec,
 ): Promise<{ invoiceId: string; documentNumber: string; posted: boolean; total: string }> {
-  const netAmount = mul(spec.quantity, spec.unitPrice);
-  const applyTax = spec.applyTax !== false && spec.taxCodeId && toUnits(netAmount) > 0n;
-
+  const invoiceLines: AdvancedBillingLine[] = spec.lines?.length ? spec.lines : [{
+    description: spec.description,
+    quantity: spec.quantity,
+    unitPrice: spec.unitPrice,
+    incomeAccountId: spec.incomeAccountId,
+    itemId: spec.itemId,
+    taxCodeId: spec.taxCodeId,
+  }];
+  let netAmount = "0.0000";
   let taxTotal = "0.0000";
-  let components: Awaited<ReturnType<typeof computeLineTaxes>>["components"] = [];
-  if (applyTax) {
-    const cfg = await loadTaxComponentConfig(spec.orgId, spec.taxCodeId!, spec.invoiceDate);
-    if (cfg.length) {
-      const res = computeLineTaxes(netAmount, cfg, {});
-      taxTotal = res.taxTotal;
-      components = res.components;
+  const prepared: Array<{
+    input: AdvancedBillingLine;
+    amount: string;
+    taxAmount: string;
+    accountId: string;
+    taxComponents: Awaited<ReturnType<typeof computeLineTaxes>>["components"];
+  }> = [];
+  for (const input of invoiceLines) {
+    const amount = mul(input.quantity, input.unitPrice);
+    const applyTax = spec.applyTax !== false && input.taxCodeId && toUnits(amount) > 0n;
+    let lineTax = "0.0000";
+    let taxComponents: Awaited<ReturnType<typeof computeLineTaxes>>["components"] = [];
+    if (applyTax) {
+      const cfg = await loadTaxComponentConfig(spec.orgId, input.taxCodeId!, spec.invoiceDate);
+      if (cfg.length) {
+        const res = computeLineTaxes(amount, cfg, {});
+        lineTax = res.taxTotal;
+        taxComponents = res.components;
+      }
     }
+    netAmount = add(netAmount, amount);
+    taxTotal = add(taxTotal, lineTax);
+    prepared.push({ input, amount, taxAmount: lineTax, accountId: await resolveIncomeAccount(spec.orgId, input.incomeAccountId), taxComponents });
   }
   const total = add(netAmount, taxTotal);
-  const incomeAccountId = await resolveIncomeAccount(spec.orgId, spec.incomeAccountId);
 
   const documentNumber = await nextNumber(spec.orgId, "customer_invoice", spec.subsidiaryId, "INV-");
   const created = (await db.execute(sql`
@@ -190,15 +221,18 @@ async function createSubscriptionInvoice(
   `)) as unknown as { rows: { id: string }[] };
   const invoiceId = created.rows[0]!.id;
 
-  const line = (await db.execute(sql`
-    insert into document_lines (org_id, document_id, line_number, item_id, account_id, description, quantity,
-          unit_price, amount, tax_code_id, tax_amount, is_billable, created_by)
-    values (${spec.orgId}, ${invoiceId}, 1, ${spec.itemId}, ${incomeAccountId}, ${spec.description},
-          ${spec.quantity}, ${spec.unitPrice}, ${netAmount}, ${applyTax ? spec.taxCodeId : null}, ${taxTotal}, true, ${spec.actorId})
-    returning id
-  `)) as unknown as { rows: { id: string }[] };
-  if (components.length) {
-    await persistLineTaxComponents(spec.orgId, line.rows[0]!.id, components, spec.actorId);
+  for (const [index, preparedLine] of prepared.entries()) {
+    const line = (await db.execute(sql`
+      insert into document_lines (org_id, document_id, line_number, item_id, account_id, description, quantity,
+            unit_price, amount, tax_code_id, tax_amount, is_billable, created_by)
+      values (${spec.orgId}, ${invoiceId}, ${index + 1}, ${preparedLine.input.itemId}, ${preparedLine.accountId},
+            ${preparedLine.input.description}, ${preparedLine.input.quantity}, ${preparedLine.input.unitPrice},
+            ${preparedLine.amount}, ${preparedLine.input.taxCodeId}, ${preparedLine.taxAmount}, true, ${spec.actorId})
+      returning id
+    `)) as unknown as { rows: { id: string }[] };
+    if (preparedLine.taxComponents.length) {
+      await persistLineTaxComponents(spec.orgId, line.rows[0]!.id, preparedLine.taxComponents, spec.actorId);
+    }
   }
 
   let posted = false;
@@ -219,9 +253,31 @@ async function createSubscriptionInvoice(
   return { invoiceId, documentNumber, posted, total };
 }
 
-async function billOne(sub: SubRow, invoiceDate: string): Promise<{ invoiceId: string; documentNumber: string; posted: boolean }> {
+async function billOne(
+  sub: SubRow,
+  invoiceDate: string,
+  billingDate = invoiceDate,
+  periodStartOverride?: string | null,
+): Promise<{ invoiceId: string; documentNumber: string; posted: boolean }> {
+  // Serialize every invoice attempt for one subscription. This makes the
+  // period/revision lookup + document creation + guard insert one atomic claim;
+  // a concurrent caller waits, then replays the committed invoice instead of
+  // leaving an orphan duplicate document.
+  await db.execute(sql`select id from subscriptions where id = ${sub.id} and org_id = ${sub.orgId} for update`);
   const price = sub.priceOverride ?? sub.planAmount;
-  return createSubscriptionInvoice({
+  const advanced = await advancedBillingSnapshot(sub.id, billingDate, periodStartOverride);
+  if (advanced && !advanced.lines.length) throw new SubscriptionError("subscription has no billable components for this period");
+  if (advanced) {
+    const prior = (await db.execute(sql`
+      select d.id as "invoiceId", d.document_number as "documentNumber", d.status
+        from subscription_period_invoices pi join documents d on d.id = pi.invoice_id and d.org_id = pi.org_id
+       where pi.subscription_id = ${sub.id} and pi.period_starts_on = ${advanced.periodStartsOn}
+         and pi.period_ends_on = ${advanced.periodEndsOn} and pi.contract_revision = ${advanced.contractRevision}
+       limit 1
+    `)) as unknown as { rows: { invoiceId: string; documentNumber: string; status: string }[] };
+    if (prior.rows[0]) return { invoiceId: prior.rows[0].invoiceId, documentNumber: prior.rows[0].documentNumber, posted: prior.rows[0].status === "posted" };
+  }
+  const generated = await createSubscriptionInvoice({
     orgId: sub.orgId,
     actorId: sub.id,
     customerId: sub.customerId,
@@ -236,7 +292,17 @@ async function billOne(sub: SubRow, invoiceDate: string): Promise<{ invoiceId: s
     memo: sub.planName,
     invoiceDate,
     autoPost: sub.autoPost,
+    lines: advanced?.lines,
   });
+  if (advanced) {
+    await db.execute(sql`
+      insert into subscription_period_invoices
+        (org_id, subscription_id, period_starts_on, period_ends_on, contract_revision, invoice_id, created_by, updated_by)
+      values (${sub.orgId}, ${sub.id}, ${advanced.periodStartsOn}, ${advanced.periodEndsOn},
+              ${advanced.contractRevision}, ${generated.invoiceId}, ${sub.createdBy}, ${sub.createdBy})
+    `);
+  }
+  return generated;
 }
 
 const SUB_SELECT = sql`
@@ -244,11 +310,14 @@ const SUB_SELECT = sql`
          s.price_override as "priceOverride", s.auto_post as "autoPost",
          p.name as "planName", p.amount as "planAmount", p.currency_code as "planCurrency",
          p.income_account_id as "incomeAccountId", p.item_id as "itemId", p.tax_code_id as "taxCodeId",
-         p.interval, p.interval_count as "intervalCount",
+         coalesce(v.interval, p.interval) as interval, coalesce(v.interval_count, p.interval_count) as "intervalCount",
          (select id from subsidiaries where org_id = s.org_id and parent_id is null limit 1) as "subsidiaryId",
-         o.base_currency as "baseCurrency"
+         o.base_currency as "baseCurrency", s.next_bill_on as "nextBillOn", s.current_period_start as "currentPeriodStart",
+         s.created_by as "createdBy"
     from subscriptions s
     join subscription_plans p on p.id = s.plan_id and p.org_id = s.org_id
+    left join subscription_lifecycles l on l.subscription_id = s.id and l.org_id = s.org_id
+    left join subscription_plan_versions v on v.id = l.plan_version_id and v.org_id = s.org_id
     join orgs o on o.id = s.org_id`;
 
 export interface SubscriptionRunResult {
@@ -268,18 +337,36 @@ export async function runDueSubscriptions(asOf?: string): Promise<SubscriptionRu
   const due = await withBypass(async () =>
     (await db.execute(sql`
       select s.id, s.org_id as "orgId", s.next_bill_on as "nextBillOn",
-             p.interval, p.interval_count as "intervalCount"
+             s.current_period_start as "currentPeriodStart",
+             coalesce(v.interval, p.interval) as interval, coalesce(v.interval_count, p.interval_count) as "intervalCount"
         from subscriptions s
         join subscription_plans p on p.id = s.plan_id and p.org_id = s.org_id
+        left join subscription_lifecycles l on l.subscription_id = s.id and l.org_id = s.org_id
+        left join subscription_plan_versions v on v.id = l.plan_version_id and v.org_id = s.org_id
         join orgs o on o.id = s.org_id
        where s.status = 'active' and s.next_bill_on <= ${today}
          and coalesce((o.settings->'features'->>'subscriptionBilling')::boolean, false)
+         and (l.id is null or coalesce((o.settings->'features'->>'advancedSubscriptions')::boolean, false))
     `)) as unknown as {
-      rows: { id: string; orgId: string; nextBillOn: string; interval: Interval; intervalCount: number }[];
+      rows: { id: string; orgId: string; nextBillOn: string; currentPeriodStart: string | null; interval: Interval; intervalCount: number }[];
     },
   );
 
   for (const row of due.rows) {
+    try {
+      const canBill = await prepareAdvancedSubscriptionBilling(row.orgId, row.id, row.nextBillOn);
+      if (!canBill) {
+        await withBypass(async () => db.execute(sql`
+          update subscriptions set last_error = 'Contract term ended — renewal required' where id = ${row.id}
+        `));
+        continue;
+      }
+    } catch (e) {
+      result.failed += 1;
+      const message = e instanceof Error ? e.message : String(e);
+      await withBypass(async () => db.execute(sql`update subscriptions set last_error = ${message} where id = ${row.id}`));
+      continue;
+    }
     const advanced = advanceSubscription(row.nextBillOn, row.interval, row.intervalCount);
     const claimed = await withBypass(async () =>
       (await db.execute(sql`
@@ -296,7 +383,7 @@ export async function runDueSubscriptions(asOf?: string): Promise<SubscriptionRu
         const r = (await db.execute(sql`${SUB_SELECT} where s.id = ${row.id} limit 1`)) as unknown as { rows: SubRow[] };
         const s = r.rows[0];
         if (!s) throw new SubscriptionError("subscription vanished");
-        return billOne(s, row.nextBillOn);
+        return billOne(s, row.nextBillOn, row.nextBillOn, row.currentPeriodStart);
       });
       result.billed += 1;
       if (sub.posted) result.posted += 1;
@@ -321,17 +408,24 @@ export async function runDueSubscriptions(asOf?: string): Promise<SubscriptionRu
 export async function billSubscriptionNow(subscriptionId: string, asOf?: string): Promise<{ invoiceId: string; documentNumber: string; posted: boolean }> {
   const today = asOf ?? toIso(new Date());
   const meta = await withBypass(async () =>
-    (await db.execute(sql`select org_id as "orgId" from subscriptions where id = ${subscriptionId}`)) as unknown as {
-      rows: { orgId: string }[];
+    (await db.execute(sql`
+      select s.org_id as "orgId", l.id is not null as "advancedLifecycle",
+             coalesce((o.settings->'features'->>'advancedSubscriptions')::boolean, false) as "advancedEnabled"
+        from subscriptions s join orgs o on o.id = s.org_id
+        left join subscription_lifecycles l on l.subscription_id = s.id and l.org_id = s.org_id
+       where s.id = ${subscriptionId}
+    `)) as unknown as {
+      rows: { orgId: string; advancedLifecycle: boolean; advancedEnabled: boolean }[];
     },
   );
   const orgId = meta.rows[0]?.orgId;
   if (!orgId) throw new SubscriptionError("subscription not found");
+  if (meta.rows[0]!.advancedLifecycle && !meta.rows[0]!.advancedEnabled) throw new SubscriptionError("advanced subscription lifecycle is disabled");
   const gen = await withOrg(orgId, async () => {
     const r = (await db.execute(sql`${SUB_SELECT} where s.id = ${subscriptionId} limit 1`)) as unknown as { rows: SubRow[] };
     const s = r.rows[0];
     if (!s) throw new SubscriptionError("subscription not found");
-    return billOne(s, today);
+    return billOne(s, today, s.nextBillOn, s.currentPeriodStart);
   });
   await withBypass(async () => {
     await db.execute(sql`
@@ -348,6 +442,7 @@ interface SubDetail extends SubRow {
   currentPeriodStart: string | null;
   startOn: string;
   status: string;
+  advancedLifecycle: boolean;
 }
 
 async function loadSubDetail(subscriptionId: string): Promise<{ orgId: string; row: SubDetail }> {
@@ -367,7 +462,8 @@ async function loadSubDetail(subscriptionId: string): Promise<{ orgId: string; r
              p.interval, p.interval_count as "intervalCount",
              (select id from subsidiaries where org_id = s.org_id and parent_id is null limit 1) as "subsidiaryId",
              o.base_currency as "baseCurrency", s.next_bill_on as "nextBillOn",
-             s.current_period_start as "currentPeriodStart", s.start_on as "startOn", s.status
+             s.current_period_start as "currentPeriodStart", s.start_on as "startOn", s.status, s.created_by as "createdBy",
+             exists(select 1 from subscription_lifecycles l where l.subscription_id = s.id and l.org_id = s.org_id) as "advancedLifecycle"
         from subscriptions s
         join subscription_plans p on p.id = s.plan_id and p.org_id = s.org_id
         join orgs o on o.id = s.org_id
@@ -394,6 +490,7 @@ export async function changeSubscription(
   const today = asOf ?? toIso(new Date());
   const { orgId, row } = await loadSubDetail(subscriptionId);
   if (row.status === "canceled") throw new SubscriptionError("subscription is canceled");
+  if (row.advancedLifecycle) throw new SubscriptionError("use an advanced contract amendment to change subscription components");
 
   const oldQty = row.quantity;
   const oldPrice = row.priceOverride ?? row.planAmount;
