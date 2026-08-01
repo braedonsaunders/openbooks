@@ -211,6 +211,54 @@ export async function withOrg<T>(orgId: string | null, fn: () => Promise<T>): Pr
   }
 }
 
+/**
+ * Run a normal request-sized unit of work in one tenant-scoped transaction.
+ *
+ * `withOrg` intentionally uses the timeout-free long-running pool for backups,
+ * clones, and destructive maintenance. Interactive application commands need
+ * the opposite contract: the regular pool's connection/query/statement
+ * timeouts, one pinned connection, and transaction-local RLS settings. This
+ * helper is the authoritative boundary for API/MCP idempotency and other
+ * multi-step financial commands.
+ */
+export async function withOrgTransaction<T>(
+  orgId: string,
+  fn: () => Promise<T>,
+): Promise<T> {
+  const active = orgContext.getStore();
+  if (active?.txDb && !active.bypass) {
+    if (orgId !== active.orgId) {
+      throw new Error("cannot change organization inside an active tenant transaction");
+    }
+    return fn();
+  }
+
+  const client = await rawConnect();
+  try {
+    await client.query("begin");
+    await client.query(
+      "select set_config('app.current_org', $1, true), set_config('app.bypass_rls', 'off', true)",
+      [orgId],
+    );
+    const txDb = drizzle({ client });
+    const result = await orgContext.run(
+      { orgId, bypass: false, txDb },
+      fn,
+    );
+    await client.query("commit");
+    return result;
+  } catch (error) {
+    try {
+      await client.query("rollback");
+    } catch {
+      // A broken connection is discarded by pg when released.
+    }
+    throw error;
+  } finally {
+    client.release();
+  }
+}
+
 /** Trusted, org-spanning bypass block (seeds, cross-org maintenance). */
 export function withBypass<T>(fn: () => Promise<T>): Promise<T> {
   return withOrg(null, fn);

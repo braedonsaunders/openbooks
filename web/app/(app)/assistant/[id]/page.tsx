@@ -39,7 +39,7 @@ export default async function AssistantConversationPage({
         content: m.content,
         data: (m.data ?? null) as { parts?: unknown[] } | null,
       }))}
-      canWrite={can(authz, 'assistant.write') && can(authz, 'gl.post')}
+      canWrite={can(authz, 'assistant.write')}
       aiEnabled={getModel(aiConfig, 'smart') !== null}
     />
   )

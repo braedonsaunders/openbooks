@@ -97,7 +97,7 @@ export async function POST(req: Request): Promise<Response> {
     baseCurrency: org.rows[0]?.base_currency ?? null,
     userName: authz.user.name,
     today: new Date().toISOString().slice(0, 10),
-    canWrite: can(authz, "assistant.write") && can(authz, "gl.post"),
+    canWrite: can(authz, "assistant.write"),
   });
 
   if (!conversationId) {

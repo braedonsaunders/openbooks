@@ -32,6 +32,13 @@ export function buildOpenApiSpec(
 ): OpenApiSpec {
   const paths: Record<string, any> = {};
   const schemas: Record<string, any> = {};
+  const idempotencyParameter = {
+    name: "Idempotency-Key",
+    in: "header",
+    required: true,
+    description: "Unique 8-200 character retry key for this exact mutation. Reuse only after an uncertain outcome with identical input.",
+    schema: { type: "string", minLength: 8, maxLength: 200, pattern: "^[A-Za-z0-9._:-]+$" },
+  };
 
   // Error response schema (shared).
   schemas.Error = {
@@ -105,6 +112,7 @@ export function buildOpenApiSpec(
             { name: "q", in: "query", schema: { type: "string" }, description: "Search query" },
             { name: "page", in: "query", schema: { type: "integer", default: 1, minimum: 1 } },
             { name: "perPage", in: "query", schema: { type: "integer", default: 25, minimum: 5, maximum: 100 } },
+            { name: "subsidiaryId", in: "query", schema: { type: "string", format: "uuid" }, description: "Optional subsidiary filter; actor restrictions still apply." },
           ],
           responses: {
             "200": {
@@ -162,6 +170,7 @@ export function buildOpenApiSpec(
           description: rt.description,
           tags: [rt.dynamic ? "Custom Records" : "Records"],
           security: [{ BearerAuth: [] }],
+          parameters: [idempotencyParameter],
           requestBody: {
             required: true,
             content: { "application/json": { schema: { $ref: `#/components/schemas/${writeModelKey}` } } },
@@ -188,6 +197,7 @@ export function buildOpenApiSpec(
           security: [{ BearerAuth: [] }],
           parameters: [
             { name: "id", in: "path", required: true, schema: { type: "string", format: "uuid" } },
+            idempotencyParameter,
           ],
           requestBody: {
             required: true,
@@ -215,6 +225,7 @@ export function buildOpenApiSpec(
           security: [{ BearerAuth: [] }],
           parameters: [
             { name: "id", in: "path", required: true, schema: { type: "string", format: "uuid" } },
+            idempotencyParameter,
           ],
           responses: {
             "200": {
@@ -263,7 +274,7 @@ export function buildOpenApiSpec(
     info: {
       title: "openbooks REST API",
       description:
-        "The versioned REST API for openbooks. Authenticate with a bearer token (Authorization: Bearer ob_live_…) or X-API-Key header. API keys carry scoped permissions — a request is allowed only when both the key's scopes and the key owner's effective permissions cover the required permission.",
+        "The versioned REST API for openbooks. Authenticate with a bearer token (Authorization: Bearer ob_live_…) or X-API-Key header. API keys carry scoped permissions — a request is allowed only when both the key's scopes and the key owner's effective permissions cover the required permission. Every mutation requires Idempotency-Key and uses the same application command layer as MCP.",
       version: "1.0.0",
     },
     servers: [{ url: baseUrl, description: "This instance" }],

@@ -7,6 +7,10 @@
 import { ChatMarkdown } from './markdown'
 import { ToolUseCard } from './tool-use-card'
 import { ProposalCard, proposalFromOutput } from './proposal-card'
+import {
+  ApplicationCommandCard,
+  applicationCommandFromOutput,
+} from './application-command-card'
 
 type AnyPart = { type: string; [k: string]: unknown }
 
@@ -37,10 +41,12 @@ function PartView({ part }: { part: AnyPart }) {
     const state = (part.state as 'input-streaming' | 'output-available') ?? 'output-available'
     // A draft_* tool that produced a proposal renders a confirm card too.
     const proposal = proposalFromOutput(part.output)
+    const applicationCommand = applicationCommandFromOutput(part.output)
     return (
       <div className="space-y-2">
         <ToolUseCard name={name} state={state} input={part.input} output={part.output} />
         {proposal ? <ProposalCard proposal={proposal} /> : null}
+        {applicationCommand ? <ApplicationCommandCard proposal={applicationCommand} /> : null}
       </div>
     )
   }

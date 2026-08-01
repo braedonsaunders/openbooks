@@ -651,6 +651,7 @@ export async function postPaymentWithApplications(
   paymentDocId: string,
   allocations?: AllocationInput[],
   userId?: string,
+  auditSource: "ui" | "api" | "mcp" | "assistant" = "ui",
 ): Promise<{ entryId: string }> {
   const [preflight] = await db.select().from(schema.documents).where(eq(schema.documents.id, paymentDocId));
   if (!preflight || !isPaymentKind(preflight.kind)) throw new PaymentError("payment document not found");
@@ -927,7 +928,7 @@ export async function postPaymentWithApplications(
         documentId: doc.id,
         action: "post",
         actorId: userId,
-        source: "ui",
+        source: auditSource,
         before: auditBefore,
         after: auditAfter,
       });
