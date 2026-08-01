@@ -57,7 +57,7 @@ export default async function Expenses({
         orgId: authz.user.orgId,
         userId: authz.user.id,
         recordType: 'expense_report',
-        userRoles: authz.user.roles.map(({ key }) => key),
+        userRoles: (authz.user as any).roles?.map(({ key }: { key: string }) => key) ?? [authz.user.role],
         headerDefs: pickers[6] as any,
         lineDefs: pickers[7] as any,
         explicitLayoutId: pickString(sp.form),

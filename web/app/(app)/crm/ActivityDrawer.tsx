@@ -6,7 +6,7 @@ import { useTranslations } from 'next-intl'
 import { Badge, Button, Input, Label, Select, Textarea, UrlDrawer } from '@openbooks/ui'
 import { toast } from 'sonner'
 
-export function ActivityDrawer({ data, owners, accounts, opportunities, canManage }: { data: any; owners: any[]; accounts: any[]; opportunities: any[]; canManage: boolean }) {
+export function ActivityDrawer({ data, owners, accounts, opportunities, closeHref, canManage }: { data: any; owners: any[]; accounts: any[]; opportunities: any[]; closeHref: string; canManage: boolean }) {
   const t = useTranslations('crm')
   const tc = useTranslations('common')
   const router = useRouter()
@@ -25,7 +25,7 @@ export function ActivityDrawer({ data, owners, accounts, opportunities, canManag
     } catch { toast.error(tc('feedback.saveFailed')) } finally { setBusy(false) }
   }
   const related = form.subjectKind === 'opportunity' ? opportunities : accounts
-  return <UrlDrawer open closeHref="/crm/activities" size="lg" title={<span className="flex items-center gap-2">{form.subject || t('activities.newFallback')}<Badge>{t(`activityKinds.${form.kind}`)}</Badge></span>} headerActions={canManage ? <Button onClick={save} disabled={busy}>{busy ? tc('actions.saving') : tc('actions.save')}</Button> : undefined}>
+  return <UrlDrawer open closeHref={closeHref} size="lg" title={<span className="flex items-center gap-2">{form.subject || t('activities.newFallback')}<Badge>{t(`activityKinds.${form.kind}`)}</Badge></span>} headerActions={canManage ? <Button onClick={save} disabled={busy}>{busy ? tc('actions.saving') : tc('actions.save')}</Button> : undefined}>
     <div className="grid gap-4 sm:grid-cols-2">
       <Field label={t('fields.activityType')}><Select value={form.kind} onChange={(e) => set('kind', e.target.value)} disabled={!canManage}>{['task','call','event','email','note'].map((v) => <option key={v} value={v}>{t(`activityKinds.${v}`)}</option>)}</Select></Field>
       <Field label={t('fields.status')}><Select value={form.status} onChange={(e) => set('status', e.target.value)} disabled={!canManage}>{['planned','in_progress','completed','cancelled'].map((v) => <option key={v} value={v}>{t(`activityStatuses.${v}`)}</option>)}</Select></Field>

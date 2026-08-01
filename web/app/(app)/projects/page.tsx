@@ -79,7 +79,7 @@ export default async function Projects({
         orgId,
         userId: authz.user.id,
         recordType: 'project',
-        userRoles: authz.user.roles.map(({ key }) => key),
+        userRoles: (authz.user as any).roles?.map(({ key }: { key: string }) => key) ?? [authz.user.role],
         headerDefs: await loadFieldDefs('projects'),
         lineDefs: [],
         explicitLayoutId: pickString(sp.form),

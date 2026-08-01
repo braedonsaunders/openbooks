@@ -105,7 +105,7 @@ export default async function Journal({
         orgId: authz.user.orgId,
         userId: authz.user.id,
         recordType: 'journal',
-        userRoles: authz.user.roles.map(({ key }) => key),
+        userRoles: (authz.user as any).roles?.map(({ key }: { key: string }) => key) ?? [authz.user.role],
         headerDefs: pickers[4] as any,
         lineDefs: pickers[5] as any,
         explicitLayoutId: pickString(sp.form),
