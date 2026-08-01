@@ -22,7 +22,37 @@
     "project": "Proyecto",
     "project_charge": "Cargo de proyecto",
     "field_ticket": "Parte de obra",
-    "fixed_asset": "Activo fijo"
+    "fixed_asset": "Activo fijo",
+    "property": "Propiedad"
+  },
+  "property": {
+    "tabs": {
+      "overview": "Resumen",
+      "units": "Unidades",
+      "leases": "Arrendamientos"
+    },
+    "fields": {
+      "code": "Código de propiedad",
+      "propertyType": "Tipo de propiedad",
+      "fixedAsset": "Activo fijo",
+      "street": "Calle",
+      "city": "Ciudad",
+      "region": "Estado / provincia",
+      "postalCode": "Código postal",
+      "rentIncomeAccount": "Cuenta de ingresos por alquiler",
+      "camIncomeAccount": "Cuenta de ingresos CAM",
+      "depositLiabilityAccount": "Cuenta de pasivo de depósitos",
+      "defaultBankAccount": "Cuenta bancaria predeterminada",
+      "occupancy": "Ocupación"
+    },
+    "status": { "sold": "Vendida" },
+    "types": {
+      "residential": "Residencial",
+      "commercial": "Comercial",
+      "mixed_use": "Uso mixto",
+      "industrial": "Industrial",
+      "other": "Otra"
+    }
   },
   "views": {
     "defaultName": "Vista predeterminada",

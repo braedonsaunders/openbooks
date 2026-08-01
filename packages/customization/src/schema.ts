@@ -373,6 +373,17 @@ const HEADER_SPAN_BY_TYPE: Record<string, Record<string, number>> = {
     description: 4,
     subsidiary_id: 2,
   },
+  property: {
+    name: 3,
+    subsidiary_id: 2,
+    fixed_asset_id: 2,
+    street: 2,
+    city: 2,
+    rent_income_account_id: 2,
+    cam_income_account_id: 2,
+    deposit_liability_account_id: 2,
+    default_bank_account_id: 2,
+  },
   field_ticket: {
     project_id: 1,
     party_id: 2,

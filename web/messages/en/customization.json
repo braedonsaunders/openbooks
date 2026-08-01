@@ -22,7 +22,33 @@
     "project": "Project",
     "project_charge": "Project charge",
     "field_ticket": "Field ticket",
-    "fixed_asset": "Fixed asset"
+    "fixed_asset": "Fixed asset",
+    "property": "Property"
+  },
+  "property": {
+    "tabs": { "overview": "Overview", "units": "Units", "leases": "Leases" },
+    "fields": {
+      "code": "Property code",
+      "propertyType": "Property type",
+      "fixedAsset": "Fixed asset",
+      "street": "Street",
+      "city": "City",
+      "region": "State / province",
+      "postalCode": "Postal code",
+      "rentIncomeAccount": "Rent income account",
+      "camIncomeAccount": "CAM income account",
+      "depositLiabilityAccount": "Deposit liability account",
+      "defaultBankAccount": "Default bank account",
+      "occupancy": "Occupancy"
+    },
+    "status": { "sold": "Sold" },
+    "types": {
+      "residential": "Residential",
+      "commercial": "Commercial",
+      "mixed_use": "Mixed use",
+      "industrial": "Industrial",
+      "other": "Other"
+    }
   },
   "views": {
     "defaultName": "Default view",

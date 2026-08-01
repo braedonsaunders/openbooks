@@ -28,6 +28,7 @@ const FIELD_TARGETS = [
   },
   { table: 'parties', kinds: [] },
   { table: 'projects', kinds: [] },
+  { table: 'managed_properties', kinds: [] },
   { table: 'item_rate_versions', kinds: [] },
   { table: 'accounts', kinds: [] },
   { table: 'items', kinds: [] },

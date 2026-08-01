@@ -208,6 +208,10 @@
         "label": "Projects",
         "description": "Jobs / projects."
       },
+      "managedProperties": {
+        "label": "Properties",
+        "description": "Managed real-estate properties."
+      },
       "accounts": {
         "label": "Accounts",
         "description": "Chart of accounts."

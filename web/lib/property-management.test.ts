@@ -51,7 +51,14 @@ test("property-management workspace keeps exactly four KPIs in one desktop row",
   assert.match(health, /lg:grid-cols-4/);
   assert.equal((health.match(/<Metric\b/g) ?? []).length, 4);
   assert.match(workspace, /min-w-0 overflow-hidden/);
-  assert.match(workspace, /className="flex min-w-0 overflow-x-auto"/);
+  assert.match(
+    workspace,
+    /className="-mb-px flex min-w-0 gap-1 overflow-x-auto"/,
+  );
+  assert.match(
+    workspace,
+    /"border-b-2 px-3 py-3 text-sm font-medium capitalize transition-colors"/,
+  );
   assert.match(workspace, /charge\.effectiveFrom <= today/);
   assert.match(workspace, /overdueInvoices = new Map/);
   assert.match(workspace, /line\.invoiceStatus === "posted"/);
@@ -76,7 +83,30 @@ test("property-management UI exposes the complete operator entry points", () => 
     assert.match(workspace, new RegExp(label));
   }
   assert.match(workspace, /aria-label="Property management sections"/);
-  assert.match(workspace, /aria-label="Lease details"/);
+  assert.match(workspace, /label="Lease details"/);
   assert.match(workspace, /onKeyDown=\{\(event\)/);
+  const propertiesTable = workspace.slice(
+    workspace.indexOf("function PropertiesTable"),
+  );
+  assert.match(propertiesTable, /role="button"/);
+  assert.match(propertiesTable, /onOpen\(property\.id\)/);
+  assert.doesNotMatch(propertiesTable, /onAddUnit/);
+  assert.match(workspace, /defaultFormLayout\("property"\)/);
+  assert.match(workspace, /recordType=property&tab=forms/);
+  assert.match(workspace, /<HeaderFields\s+layout=\{overviewLayout\}/);
   assert.doesNotMatch(workspace, /window\.prompt/);
+});
+
+test("property customization provisions form, view, and custom-field persistence", () => {
+  const page = source("app/(app)/property-management/page.tsx");
+  const route = source("app/api/property-management/route.ts");
+  const schema = source("../schema/src/property-management.ts");
+
+  assert.match(page, /recordType: "property"/);
+  assert.match(page, /resolveFormLayout/);
+  assert.match(page, /resolveListView/);
+  assert.match(page, /loadFieldDefs\("managed_properties"\)/);
+  assert.match(route, /case "updateProperty"/);
+  assert.match(route, /validateCustomValues/);
+  assert.match(schema, /custom: jsonb\("custom"\)/);
 });

@@ -18,7 +18,33 @@
     "purchase_order": "采购订单",
     "project": "项目",
     "project_charge": "项目计费项",
-    "fixed_asset": "固定资产"
+    "fixed_asset": "固定资产",
+    "property": "物业"
+  },
+  "property": {
+    "tabs": { "overview": "概览", "units": "单元", "leases": "租约" },
+    "fields": {
+      "code": "物业代码",
+      "propertyType": "物业类型",
+      "fixedAsset": "固定资产",
+      "street": "街道",
+      "city": "城市",
+      "region": "省 / 州",
+      "postalCode": "邮政编码",
+      "rentIncomeAccount": "租金收入科目",
+      "camIncomeAccount": "CAM收入科目",
+      "depositLiabilityAccount": "押金负债科目",
+      "defaultBankAccount": "默认银行账户",
+      "occupancy": "入住率"
+    },
+    "status": { "sold": "已售" },
+    "types": {
+      "residential": "住宅",
+      "commercial": "商业",
+      "mixed_use": "混合用途",
+      "industrial": "工业",
+      "other": "其他"
+    }
   },
   "views": {
     "defaultName": "默认视图",

@@ -204,6 +204,10 @@
         "label": "Projets",
         "description": "Travaux / projets."
       },
+      "managedProperties": {
+        "label": "Propriétés",
+        "description": "Propriétés immobilières gérées."
+      },
       "accounts": {
         "label": "Comptes",
         "description": "Plan comptable."

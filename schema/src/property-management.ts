@@ -29,6 +29,7 @@ export const managedProperties = pgTable(
     status: text("status", { enum: ["active", "inactive", "sold"] }).notNull().default("active"),
     currency: currencyCode("currency").notNull(),
     address: jsonb("address").$type<Record<string, string>>().notNull().default({}),
+    custom: jsonb("custom").$type<Record<string, unknown>>().notNull().default({}),
     rentIncomeAccountId: uuid("rent_income_account_id"),
     camIncomeAccountId: uuid("cam_income_account_id"),
     depositLiabilityAccountId: uuid("deposit_liability_account_id"),

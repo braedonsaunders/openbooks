@@ -18,7 +18,33 @@
     "purchase_order": "発注書",
     "project": "プロジェクト",
     "project_charge": "プロジェクトチャージ",
-    "fixed_asset": "固定資産"
+    "fixed_asset": "固定資産",
+    "property": "物件"
+  },
+  "property": {
+    "tabs": { "overview": "概要", "units": "ユニット", "leases": "賃貸契約" },
+    "fields": {
+      "code": "物件コード",
+      "propertyType": "物件タイプ",
+      "fixedAsset": "固定資産",
+      "street": "住所",
+      "city": "市区町村",
+      "region": "都道府県",
+      "postalCode": "郵便番号",
+      "rentIncomeAccount": "賃料収益勘定",
+      "camIncomeAccount": "CAM収益勘定",
+      "depositLiabilityAccount": "保証金負債勘定",
+      "defaultBankAccount": "既定の銀行口座",
+      "occupancy": "稼働率"
+    },
+    "status": { "sold": "売却済み" },
+    "types": {
+      "residential": "住宅",
+      "commercial": "商業",
+      "mixed_use": "複合用途",
+      "industrial": "工業",
+      "other": "その他"
+    }
   },
   "views": {
     "defaultName": "既定ビュー",

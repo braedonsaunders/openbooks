@@ -167,6 +167,10 @@
         "label": "项目",
         "description": "作业 / 项目。"
       },
+      "managedProperties": {
+        "label": "物业",
+        "description": "管理的房地产物业。"
+      },
       "accounts": {
         "label": "科目",
         "description": "会计科目表。"

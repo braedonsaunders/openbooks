@@ -3,15 +3,26 @@ import { db } from "@openbooks/engine/src/db.ts";
 import { PageHeader } from "@openbooks/ui";
 import { ListPageLayout } from "../../../components/page-layout";
 import { can, requirePermission } from "../../../lib/authz";
+import { pickString } from "../../../lib/list-params";
+import { loadFieldDefs } from "../../../lib/custom-fields";
+import {
+  resolveFormLayout,
+  resolveListView,
+} from "../../../lib/customization/resolve";
 import { requirePropertyManagementFeature } from "../../../lib/property-management-gate";
 import { PropertyManagementWorkspace } from "./PropertyManagementWorkspace";
 
 export const dynamic = "force-dynamic";
 
-export default async function PropertyManagementPage() {
+export default async function PropertyManagementPage({
+  searchParams,
+}: {
+  searchParams: Promise<Record<string, string | string[] | undefined>>;
+}) {
   const authz = await requirePermission("ar.read");
   await requirePropertyManagementFeature(authz.user.orgId);
   const orgId = authz.user.orgId;
+  const sp = await searchParams;
   const allowed = authz.allowedSubsidiaryIds
     ? [...authz.allowedSubsidiaryIds]
     : null;
@@ -23,6 +34,25 @@ export default async function PropertyManagementPage() {
     allowed === null
       ? sql``
       : sql`and d.subsidiary_id = any(${`{${allowed.join(",")}}`}::uuid[])`;
+  const fieldDefs = await loadFieldDefs("managed_properties");
+  const [resolvedForm, resolvedView] = await Promise.all([
+    resolveFormLayout({
+      orgId,
+      userId: authz.user.id,
+      recordType: "property",
+      userRoles: [authz.user.role],
+      headerDefs: fieldDefs,
+      lineDefs: [],
+      explicitLayoutId: pickString(sp.form),
+    }),
+    resolveListView({
+      orgId,
+      userId: authz.user.id,
+      recordType: "property",
+      viewId: pickString(sp.view),
+      showInListDefs: fieldDefs.filter((def) => def.config.showInList),
+    }),
+  ]);
   const [
     subsidiaries,
     locations,
@@ -72,6 +102,13 @@ export default async function PropertyManagementPage() {
       }
     >
       <PropertyManagementWorkspace
+        customization={{
+          layout: resolvedForm.layout,
+          forms: resolvedForm.available.map(({ id, name }) => ({ id, name })),
+          currentFormId: resolvedForm.row?.id ?? null,
+          fieldDefs: fieldDefs as any,
+          listView: resolvedView.view,
+        }}
         options={{
           subsidiaries: subsidiaries.rows,
           locations: locations.rows,
@@ -88,6 +125,7 @@ export default async function PropertyManagementPage() {
           bill: can(authz, "ar.create"),
           account: can(authz, "gl.post"),
           bulk: authz.allowedSubsidiaryIds === null,
+          customize: can(authz, "admin.customization.manage"),
         }}
       />
     </ListPageLayout>
