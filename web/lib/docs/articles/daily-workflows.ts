@@ -60,8 +60,8 @@ receivables control-account reconciliation as part of the close.
 
 ## Accounts Receivable cockpit
 
-Open **Accounts Receivable** for the daily collections cockpit. Its single-row
-vitals show open and overdue receivables, near-term expected cash, and days
+Open **Accounts Receivable** for the daily collections workspace. Its summary
+metrics show open and overdue receivables, near-term expected cash, and days
 sales outstanding. The collections worklist prioritizes the longest-overdue
 invoices and preselects them for follow-up; review the selection before using
 **Build collection run** to continue into the governed receipt workflow.

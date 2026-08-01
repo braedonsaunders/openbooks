@@ -24,8 +24,8 @@ export const laborPricing: DocArticle = {
   body: `# Labor Pricing
 
 **Administration → Labor Pricing** is the selling-price workspace for labor
-and project work. It is separate from **Labor costing**, which answers what an
-hour costs the company through wages, burden, posting, and payroll true-up.
+and project work. It is separate from **Labor costing**, which calculates the
+company's hourly cost from wages, burden, posting, and payroll reconciliation.
 The workspace is available when the **Projects** feature is enabled.
 
 Every rate card is an effective-dated version of a shared item price book. The

@@ -28,7 +28,7 @@ export const scriptingEngine: DocArticle = {
 **Settings → Extend → Scripts** (route **/admin/scripts**) lets an administrator
 attach server-side automation to the platform. Scripts run in an isolated
 WebAssembly JavaScript sandbox with no filesystem, network, or database
-connection — they touch data only through the governed **ob** host API. Authoring
+connection. Data access is available only through the governed **ob** host API. Authoring
 requires the **Manage scripts** permission.
 
 ## Script kinds
@@ -40,13 +40,13 @@ context object.
 | Kind | Runs | Typical use |
 | --- | --- | --- |
 | **before_submit** | When a document (or custom record) is submitted | Validate or default fields before save |
-| **before_post** | Just before a document posts to the ledger | Enforce a posting rule; veto a bad post |
+| **before_post** | Immediately before a document posts to the ledger | Validate posting requirements and reject a noncompliant transaction |
 | **after_post** | After a document has posted | Side effects — logging, notifications, follow-on data |
-| **before_void** | Before a document is voided | Guard against voiding the wrong thing |
+| **before_void** | Before a document is voided | Validate whether the document may be voided |
 | **scheduled** | On a cron schedule | Recurring maintenance and reports |
-| **endpoint** | On an HTTP call to /api/scripts/e/&lt;slug&gt; | A small custom API |
+| **endpoint** | On an HTTP call to /api/scripts/e/&lt;slug&gt; | Expose a scoped custom endpoint |
 | **bulk** | On demand via Run now | One-off batch processing |
-| **client** | In the browser as a record is saved | Fast inline validation and warnings |
+| **client** | In the browser as a record is saved | Provide inline validation and warnings |
 
 A script can be scoped to **all kinds**, a specific document kind (for example a
 vendor bill), or a custom record type. Active scripts for the same trigger run in
@@ -62,7 +62,7 @@ document-less — they get **trigger** and **org** only. The context is frozen, 
 scripts read it and describe their intended changes rather than mutating it
 directly.
 
-## Changing a document
+## Returning document changes
 
 A **before_** trigger returns its changes as data:
 
@@ -77,13 +77,13 @@ function main(ctx) {
 Only a whitelist of fields may be set: **memo**, **internalNotes**,
 **expectedPayDate**, **paymentHoldReason**, **dueDate**, **departmentId**,
 **projectId**, **locationId**, **classId**, and **custom**. Attempting to set any
-other field fails the run. To veto the operation outright, call **ob.abort(reason)**
-— the submit, post, or void is refused and the reason is recorded.
+other field fails the run. To reject the operation, call **ob.abort(reason)**.
+The submit, post, or void action is rejected and the reason is recorded.
 
-## Client scripts are different
+## Client script execution
 
-Client scripts run in the browser as the user saves a record. Their context is
-just **{ kind, doc }**, and there is **no ob API** — only the data passed in.
+Client scripts run in the browser as the user saves a record. Their context
+contains only **{ kind, doc }**; the **ob** API is not available.
 Return **{ abort: "reason" }** to block the save or **{ warnings: [...] }** to
 warn and continue. Client scripts fail open: if one throws or times out, the save
 proceeds. Use them for fast feedback, and enforce anything that must not be
@@ -108,7 +108,7 @@ are capped in rows and time. Exceeding a limit ends the run as a timeout or erro
 
 Every run is written to the script log with its status (**ok**, **aborted**,
 **error**, or **timeout**), duration, and the lines the script emitted with
-**ob.log(...)**. Review the log to see why a trigger vetoed an operation or why a
+**ob.log(...)**. Review the log to determine why a trigger rejected an operation or why a
 scheduled job failed.
 
 For the complete host API, the available language features, and the exact
@@ -142,7 +142,7 @@ export const scriptingApiReference: DocArticle = {
   related: ['scripting-engine', 'app-builder'],
   body: `# Scripting API Reference
 
-Scripts and app backends run in a bare JavaScript sandbox with a single injected
+Scripts and app backends run in an isolated JavaScript sandbox with a single injected
 global, **ob**. This page enumerates what **ob** exposes, the language features
 available, and the exact entry-point contracts.
 
@@ -158,14 +158,13 @@ do not assume a method from one exists in the other:
 
 The sandbox is a current-standard JavaScript engine (roughly ES2023). The only
 globals are the language built-ins — **Object**, **Array**, **Map**, **Set**,
-**JSON**, **Math**, **Date**, **Promise**, string and number methods, and so on —
+**JSON**, **Math**, **Date**, **Promise**, and standard string and number methods —
 plus the injected **ob** object.
 
-**No third-party libraries are provided, and there is deliberately no way to add
-them.** There is no **fetch**, no network, no filesystem, no **crypto**, no module
-loader, and no date or utility library such as lodash. Everything a script needs
-comes through **ob**. This is what keeps a script from reaching outside its
-organization's data or making unauthorized calls.
+Third-party libraries cannot be installed in the runtime. The sandbox does not
+provide **fetch**, network access, filesystem access, **crypto**, a module
+loader, or third-party date and utility libraries. All external operations pass
+through the **ob** host API, which enforces organization scope and authorization.
 
 ## User-script entry point
 
@@ -182,14 +181,14 @@ Return values by kind: **before_** triggers may return **{ set: {...} }** (see t
 field whitelist in **Scripting Engine**); **endpoint** scripts return any
 JSON-serializable value, which becomes the response body; **after_post**,
 **scheduled**, and **bulk** returns are logged but otherwise ignored. Call
-**ob.abort(reason)** to veto a **before_** operation.
+**ob.abort(reason)** to reject a **before_** operation.
 
 ## The ob host API — user scripts
 
-| Method | Signature | What it does |
+| Method | Signature | Description |
 | --- | --- | --- |
 | **ob.log** | log(...args) | Append a log line (stored on the run) |
-| **ob.abort** | abort(reason) | Veto the current before_ operation |
+| **ob.abort** | abort(reason) | Reject the current before_ operation |
 | **ob.runtime** | property { org, trigger, user } | Frozen context info |
 | **ob.query** | query(sqlText) → rows[] | Run a read-only **SELECT** and return rows |
 | **ob.record.load** | record.load(table, id) → row \\| null | Load one row by id |
@@ -199,7 +198,7 @@ JSON-serializable value, which becomes the response body; **after_post**,
 **ob.query** runs raw PostgreSQL through a read-only database role inside a
 read-only transaction — standard SQL, no proprietary dialect — and is capped in
 rows and statement time. **ob.record.load** and **ob.search** validate the table
-name and scope reads to your organization.
+name and restrict reads to the current organization.
 
 ## Governed journal writes
 
@@ -231,7 +230,7 @@ App endpoint handlers receive a frozen **request** of
 **{ method, endpoint, path, query, body, user }** and return either a bare value
 (HTTP 200) or **{ status, body }**. Their **ob** API differs from user scripts:
 
-| Method | Signature | Capability | What it does |
+| Method | Signature | Capability | Description |
 | --- | --- | --- | --- |
 | **ob.log** | log(...args) | — | Append a log line |
 | **ob.request** | property | — | The frozen request |
@@ -241,38 +240,46 @@ App endpoint handlers receive a frozen **request** of
 | **ob.storage.delete** | delete(key, ns?) | — | Delete an entry |
 | **ob.records.list** | list(typeKey, filters?) | records.read | Read custom records |
 | **ob.records.get** | get(typeKey, id) | records.read | Read one custom record |
-| **ob.journal.create** | create(input, opts?) | gl.post | Governed journal (same rules as above) |
+| **ob.platform.schema** | schema() | Type-specific read or write permission | Return the effective live record schema |
+| **ob.platform.list** | list(typeKey, options?) | Type-specific read permission | Search, filter, sort, and paginate records |
+| **ob.platform.get** | get(typeKey, id) | Type-specific read permission | Read one platform record |
+| **ob.platform.create** | create(typeKey, body) | Type-specific write permission | Create through the registered domain writer |
+| **ob.platform.update** | update(typeKey, id, body) | Type-specific write permission | Update through the registered domain writer |
+| **ob.platform.delete** | delete(typeKey, id) | Type-specific write permission | Delete through the registered domain writer |
+| **ob.journal.create** | create(input, opts?) | gl.post | Create or post a governed journal |
 
-The private storage methods are always available. The records and journal methods
-work only when the app was granted the matching capability **and** the calling
-user holds the same permission; otherwise the call is forbidden.
+The private storage methods are always available. Protected record, platform,
+and journal methods require both the matching App grant and the calling user's
+permission; otherwise the call is forbidden.
 
 ## App frontend SDK
 
-An app's frontend talks to its backend through an injected **window.openbooks**
+An app's frontend communicates with its backend through an injected **window.openbooks**
 object (not **ob**): **openbooks.getContext()**, **openbooks.callBackend(endpoint,
-payload)**, and read-only **openbooks.records.list / get**. The frontend cannot
-reach the database or network directly — every call is relayed and re-checked on
-the server.
+payload)**, **openbooks.records.list / get**, and the self-describing
+**openbooks.platform.schema / list / get / create / update / delete** API. The
+frontend cannot reach the database or network directly; every host call is
+relayed to the server and revalidated.
 
 ## Governance units (app backends)
 
-App endpoints run under a per-run **unit budget** (default 1000). Each host call
-costs units — a log line costs 1, a storage read 5, a storage write 10, a record
-list 10, creating a draft journal 100, and posting one 200. Exceeding the budget
-ends the run. The **Runs** tab shows units consumed per call, which is the signal
-to watch when an app does more work than expected. User scripts have no unit
-budget — they are bounded by time, memory, and row caps instead.
+App endpoints run under a per-run **unit budget** of 1,000 by default. Host calls
+consume units according to operation type. Platform reads cost 10–20 units,
+platform writes cost 50, draft journal creation costs 100, and a journal post
+request costs 200. Exceeding the budget ends the run. The **Runs** tab reports
+units consumed per call and supports capacity and performance analysis. See
+**App API Reference** for the complete function-level cost table. User scripts
+have no unit budget; time, memory, and row limits govern their execution.
 
 ## Error outcomes
 
 - **User scripts** end as **ok**, **aborted**, **error**, or **timeout**. An
   endpoint script maps a timeout to HTTP 504 and other failures to 422; a trigger
-  failure vetoes the underlying operation.
+  failure rejects the underlying operation.
 - **App backends** end as **ok**, **error**, **timeout**, or **forbidden**, which
   the bridge maps to HTTP 400, 504, and 403 respectively.
 
-Every outcome, along with the script's log lines, is recorded on the run so you
-can diagnose it after the fact.
+Every outcome and associated log line is recorded on the run for subsequent
+diagnosis.
 `,
 }

@@ -31,8 +31,8 @@ administrator authors, packages, secures, and publishes apps. It requires the
 
 An app bundles a **sandboxed frontend** (HTML, JS, and CSS that render in an
 isolated iframe) with a **governed backend** (server-side endpoint scripts that
-run in the same sandbox the scripting engine uses). Together they let you ship a
-custom screen backed by safe, permission-checked server actions.
+run in the same sandbox the scripting engine uses). Together, these components
+support custom screens backed by permission-checked server actions.
 
 ## The app package
 
@@ -47,10 +47,10 @@ An app is a package of a **manifest** plus its **files**. The manifest declares:
 - **nav** — whether the app shows in navigation, and its label and icon.
 
 When **nav.show** is enabled, the host initially places the app in **My Work**.
-An administrator can later move that first-class shortcut to any navigation
+An administrator can later move that app shortcut to any navigation
 workspace without changing the package. Every active app is also available as
-a dashboard launcher card and as a Quick action; these host surfaces keep the
-app's sandbox and permission boundary intact.
+a dashboard launcher card and as a Quick action. Placement on these host
+surfaces does not alter the app's sandbox or permission boundary.
 
 A typical bundle looks like:
 
@@ -69,12 +69,13 @@ is frontend, endpoint files are backend, and everything else is an asset.
 
 From the App Builder toolbar:
 
-- **New app** scaffolds a starter app (a frontend entry, a stylesheet, and one
-  backend endpoint) so you can edit immediately.
+- **New app** creates a starter app containing a frontend entry, a stylesheet,
+  and one backend endpoint for immediate editing.
 - **Import .zip** installs a package from a zip archive. The **manifest.json**
-  must sit at the archive root (a single wrapping folder is unwrapped for you).
-  Editor cruft such as **__MACOSX** and **.DS_Store** is ignored. Archives are
-  bounded (file count and size) so an import cannot exhaust resources.
+  must be at the archive root. A single enclosing directory is removed during
+  import. Operating-system metadata such as **__MACOSX** and **.DS_Store** is
+  ignored. Archives are bounded by file count and size so an import cannot
+  exhaust resources.
 
 ## Edit files
 
@@ -82,23 +83,25 @@ The **Files** tab is a file tree with a code editor (JavaScript, HTML, CSS, and
 JSON syntax). Create, upload, edit, and delete files, and save with Cmd/Ctrl-S.
 Two files are structural and protected: **manifest.json** is edited through the
 Overview form rather than as raw text, and the frontend entry and endpoint files
-cannot be deleted out from under the manifest.
+cannot be deleted while the manifest references them.
 
 ## Configure capabilities and endpoints
 
-The **Overview** tab is a form — you never edit JSON by hand. It sets the name,
+The **Overview** tab manages manifest settings through a form rather than direct
+JSON editing. It sets the name,
 description, navigation visibility, the **Backend endpoints** list, and the
 app's **Capabilities**. Capabilities cover the self-describing platform record
 API: ledger, payables, receivables, parties, items, projects, assets, and custom
 records each expose their relevant read and write permission. **Create & post
 journals** adds the dedicated balanced-journal writer.
 
-Everything else is denied by default. Grant only what the app needs. Every
-backend and bridge call is checked against these grants **intersected with the
-calling user's own permissions**, so an app can never exceed the authority of
-the person using it. The App API filters its live schema and operations to that
-intersection. The app's private key-value store is always available and needs
-no capability.
+Capabilities not listed in the grant are denied by default. Grant only the
+permissions required by the app. Every backend and bridge call is checked
+against these grants **intersected with the
+calling user's own permissions**. The resulting authority cannot exceed the
+calling user's authority. The App API filters its live schema and operations to
+that intersection. The app's private key-value store is available without a
+capability grant.
 
 ## Provision records and fields
 
@@ -112,9 +115,9 @@ installs. Two kinds are supported:
 
 Provisioning runs inside the install transaction. An app may create new objects
 and update objects it provisioned before, but a name collision with a
-user-authored object or another app's object stops the install. Provisioned
-record types and fields hold live business data, so **uninstalling an app keeps
-them** — removing the app does not delete the records people created in it.
+user-authored object or another app's object causes installation to fail.
+Provisioned record types and fields hold live business data, so **uninstalling an app keeps
+them**. Removing the app does not delete existing records.
 
 ## Run history
 
@@ -151,17 +154,17 @@ version string is rejected rather than overwriting history.
 where other organizations can install it. There is one listing per app key
 across the deployment, and only the original publisher can update it. Installing
 from the library runs the same validation, capability-grant, and provisioning
-path as any other install, so a marketplace install never reaches the
+path as any other installation. The installed copy has no access to the
 publisher's live data.
 
 ## App Builder versus Scripts
 
 The **Scripts** area (**Settings → Extend → Scripts**) and the App Builder share
-the same sandbox engine and the same governed ledger-write path, but they solve
-different problems. Scripts are trigger-driven automation — they run on document
+the same sandbox engine and the same governed ledger-write path, but they support
+different extension models. Scripts are trigger-driven automation. They run on document
 lifecycle events (submit, post, void), on a schedule, or as standalone endpoints,
 and ship no user interface. Apps are packaged extensions with a frontend, backend
-endpoints, provisioned objects, and a distribution channel. Reach for a script to
-automate a rule on existing records; reach for an app to ship a whole feature.
+endpoints, provisioned objects, and a distribution channel. Use a script to
+automate rules on existing records. Use an app to deliver a packaged feature.
 `,
 }

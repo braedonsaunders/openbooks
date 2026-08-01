@@ -12,8 +12,8 @@ export const fixedAssetsDepreciation: DocArticle = {
 
 The fixed-asset register separates the asset record, each accounting book's
 depreciation schedule, the accountant input supporting a period, and the posted
-journal. This keeps a manual amount or production reading from becoming an
-unexplained edit to a future schedule.
+journal. Manual amounts and production readings are retained as explicit
+evidence rather than applied as unexplained changes to future schedules.
 
 Configure category defaults under **Settings → Company Setup → Assets → Asset
 categories**. Create reusable formulas under **Settings → Company Setup →
@@ -36,7 +36,8 @@ asset's accumulated-depreciation and net-book-value summary.
 **Straight-line**, **declining balance**, and **double declining balance** build
 period plans when the asset is saved. A configured depreciation formula appears
 in the same method selector and is snapshotted onto each schedule that uses it.
-This makes a formula operational rather than merely stored setup data. Formula
+Snapshotting applies the formula to schedule calculations and preserves the
+definition used by each schedule. Formula
 definitions are validated before they can be saved. Use these variables:
 
 - **OC** original cost, **CC** current cost, **NB** opening net book value, and

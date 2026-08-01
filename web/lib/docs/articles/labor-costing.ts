@@ -6,7 +6,7 @@ export const laborCosting: DocArticle = {
   category: "projects",
   order: 3,
   summary:
-    "What an hour of labor costs and how it reaches your jobs: effective-dated wages, estimate components that anticipate payroll, standard-cost posting, and the payroll true-up.",
+    "Configure labor cost using effective-dated wages, payroll estimates, standard-cost posting, and payroll variance reconciliation.",
   updated: "2026-07-21",
   keywords: [
     "labor",
@@ -26,33 +26,33 @@ export const laborCosting: DocArticle = {
   related: ["overhead-costing", "labor-pricing", "project-types"],
   body: `# Labor Costing
 
-An hour of job labor carries three numbers with three different fates:
+Job labor cost consists of three components with distinct accounting treatment:
 
-1. **The wage** — real money you pay the employee. It posts to the job as real
-   GL cost, first at a standard rate that *anticipates* payroll, then anchored
-   by payroll actuals.
+1. **The wage** — employee compensation. It posts to the job as general-ledger
+   cost, initially at a standard rate and subsequently reconciled to payroll
+   actuals.
 2. **Estimated direct payroll burden** — employer statutory costs the wage
    causes (CPP, EI, WSIB, EHT and vacation pay in Canada; FICA, FUTA, SUTA and
-   workers comp in the US). This is an *estimating input only*: it makes
-   pre-payroll job cost realistic, and it **dissolves** when the payroll
-   journal posts the real employer costs.
-3. **Overhead** — the job's fair share of running the company. That is a
-   separate, permanent layer configured in the **Overhead Model** — it is
+   workers comp in the US). This is an *estimating input only* used to estimate
+   pre-payroll job cost. Payroll journals replace the estimate with actual
+   employer costs.
+3. **Overhead** — the allocated share of indirect company costs. This is a
+   separate, permanent layer configured in the **Overhead Model** and is
    never part of the labor rate. See *Setting Up Overhead Costing*.
 
 Company-wide fallbacks and posting configuration live at **Setup → Workforce
 → Labor Costing**. Each employee's confidential wage history lives on the
 employee record under **Wage rates**.
 
-The workspace always opens on the ordinary settings page. Choose **Setup
-guide** when you want the optional guided flow for burden, wage fallback, and
-posting choices; the guide opens in a drawer and never launches on its own.
+The workspace opens on the settings page. Choose **Setup guide** to use the
+optional guided flow for burden, wage fallback, and posting choices. The guide
+opens in a drawer only when selected.
 
 ## Wage rates
 
 Rates are effective-dated and resolve most-specific-wins:
 
-| Scope | Wins when |
+| Scope | Applies when |
 |---|---|
 | **Employee** | A rate exists for the person on the work date |
 | **Job title** | No employee rate; the employee's job title has one |
@@ -61,16 +61,16 @@ Rates are effective-dated and resolve most-specific-wins:
 | **Subsidiary** | No higher-priority rate; the employee's primary subsidiary has one |
 | **Org default** | None of the above |
 
-Starting a new rate automatically closes the previous one the day before — no
-overlaps, ever. Salaried staff use the *per year* basis; the hourly wage is
-salary ÷ annual hours (2080 by default, configurable).
+Starting a new rate automatically closes the previous one on the preceding day,
+which prevents overlapping effective periods. Salaried staff use the *per year*
+basis; the hourly wage is salary ÷ annual hours (2080 by default, configurable).
 
 Each rate keeps its own **Currency**. When the organization and its active
 subsidiaries use more than one configured base currency, the rate drawer and
 employee wage editor show a currency selector. A subsidiary-scoped rate
 defaults to that subsidiary's base currency; employee rates default to the
 employee's primary subsidiary currency. Single-currency organizations do not
-see a redundant selector.
+display the selector.
 
 At approval, a wage is converted to the project's subsidiary functional
 currency using the latest **spot FX rate on or before the work date**. Entries
@@ -91,29 +91,29 @@ employee, and open **Wage rates**. The table keeps the complete effective-dated
 history; the current row is highlighted. You can end the current rate today or
 delete an incorrect rate. Access requires the **Manage setup** permission.
 
-Wage data is confidential: project screens only ever show the blended
-standard cost rate, never anyone's pay.
+Wage data is confidential. Project screens display the blended standard cost
+rate and do not expose individual compensation.
 
 ## Estimate components
 
 Components stack on top of the wage to form the standard cost rate:
 
-- **% of wage** — the typical statutory-burden estimate (Canadian shops often
-  land near 12–15%; US construction 25–40%). Choose whether it scales with
-  overtime.
+- **% of wage** — a statutory-burden estimate based on the organization's
+  applicable payroll obligations. Choose whether it scales with overtime.
 - **Amount per hour** — flat hourly adders configured in the organization base
   currency and converted to the applicable subsidiary functional currency.
 - **Amount per day** — per-diem style allowances configured in the organization
   base currency, converted to functional currency, and prorated by your
   hours-per-day.
 
-The live example under the editor shows the resulting regular / overtime /
-double-time rates as you type, so the math is never a mystery:
+The live example under the editor calculates regular, overtime, and double-time
+rates from the following formula:
 
     cost/hr = wage × time-type multiplier + components
 
 Time types (Setup → Workforce → Time Types) carry the cost and bill
-multipliers (overtime ×1.5, double ×2 — yours to define).
+multipliers, such as overtime ×1.5 and double time ×2. These values are
+configurable.
 
 ## Posting standard cost to jobs
 
@@ -128,8 +128,9 @@ Approvals containing more than one subsidiary produce separate balanced labor
 journals per subsidiary and functional currency. Amounts are never combined
 into a journal belonging to another legal entity or currency.
 
-Everything is inert until you configure it, and posting problems never block
-an approval — entries stay re-postable.
+Posting remains inactive until the required accounts and options are configured.
+A posting failure does not block timesheet approval; affected entries remain
+eligible for a subsequent posting attempt.
 
 Selling rates now live in the separate **Administration → Labor Pricing**
 workspace. See *Labor Pricing* for multi-currency rate cards, overtime tiers,
@@ -142,18 +143,18 @@ as an ordinary journal — imported through **Data → Import** or entered
 manually — debiting the **labor clearing** account (and the real statutory
 burden accounts) that the standard postings credited.
 
-The **Payroll reconciliation** card shows the wash for any period and
-subsidiary. Each subsidiary is reconciled and variance-posted in its own
+The **Payroll reconciliation** card shows the clearing-account reconciliation
+for any period and subsidiary. Each subsidiary is reconciled and variance-posted in its own
 functional currency; unlike currencies are never summed together:
 
 - **Standard labor posted** — what approvals credited to clearing
 - **Payroll actuals matched** — what payroll debited
-- **Period variance** — the residue (standard − actual)
+- **Period variance** — standard cost less payroll actuals
 - **Clearing balance** — all-time; should trend to zero
 
-One click posts the period's variance out of clearing to the **payroll
-variance account** — re-runnable safely if payroll lands late (each re-post
-reverses the prior one first).
+The **Post variance** action transfers the period variance from clearing to the
+**payroll variance account**. Repeating the action reverses the prior variance
+entry before posting the replacement.
 
 ## Worked example
 
@@ -168,6 +169,6 @@ diem, 8-hour days:
 | **Cost rate** | **50.82** | **72.48** | **94.14** |
 
 Bill-out from the customer's rate card: $102 regular, $130 overtime
-(explicit), so margin is visible per tier before payroll ever runs.
+(explicit), so margin is available by tier before payroll processing.
 `,
 };

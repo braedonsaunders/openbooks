@@ -6,7 +6,7 @@ export const migrateWithAConnector: DocArticle = {
   category: 'integrations',
   order: 0,
   summary:
-    'The easy path: connect your existing accounting system, migrate its history in one click, then mirror it daily to run both in parallel until cutover.',
+    'Connect an existing accounting system, migrate its history, and mirror daily activity for parallel validation before cutover.',
   updated: '2026-07-21',
   keywords: [
     'migration',
@@ -14,7 +14,7 @@ export const migrateWithAConnector: DocArticle = {
     'sync',
     'mirror',
     'parallel run',
-    'one click',
+    'initial migration',
     'NetSuite',
     'QuickBooks',
     'Xero',
@@ -31,17 +31,15 @@ export const migrateWithAConnector: DocArticle = {
   ],
   body: `# Migrate with a Connector
 
-The easiest way to move onto OpenBooks is to let a connector do it. Instead of
-exporting spreadsheets and hand-mapping columns, you connect your existing
-accounting system, migrate its history in one click, then keep both systems in
-step with a daily **mirror** while you check the results. When the books
-reconcile, you cut over.
+A connector can replace spreadsheet exports and manual column mapping for a
+supported source system. It imports historical data and then uses a daily
+**mirror** to support parallel reconciliation before cutover.
 
 Manual, file-based loading is still available for systems without a connector —
-see **Data Imports** and **Migration and Cutover** — but reach for a connector
-first whenever one exists for your source.
+see **Data Imports** and **Migration and Cutover**. Use a connector when one is
+available for the source system.
 
-## Where it lives
+## Workspace location
 
 Open **Settings → Administration → Migrations & Mirror**. This workspace is where
 you add a source connection, run the initial migration, watch reconciliation, and
@@ -78,7 +76,7 @@ back to, changes, or deletes anything in your current system.
 NetSuite and QuickBooks Desktop have their own detailed setup guides — see
 **NetSuite Extraction Bridge** and **QuickBooks Desktop Connector**.
 
-## Migrate in one click
+## Run the initial migration
 
 Choose **Run migration** on the connection card. The connector reads your
 configured history and rebuilds it as native OpenBooks activity: the chart of
@@ -92,10 +90,10 @@ diagnostics for you to resolve.
 
 ## Mirror daily and run in parallel
 
-Once the first migration looks right, choose **Enable mirror**. A mirror keeps
-OpenBooks in step with the source on a schedule so you can run both systems side
-by side (an A/B or parallel run) and compare them on real activity before you
-commit. Use **Mirror now** to pull on demand, and **Pause mirror** to stop it.
+After the initial migration passes validation, choose **Enable mirror**. A mirror
+keeps OpenBooks aligned with the source on a schedule and supports parallel
+comparison using current activity before cutover. Use **Mirror now** to run an
+on-demand pull and **Pause mirror** to stop it.
 
 Each mirror run:
 
@@ -120,12 +118,12 @@ retry recognizes the same source records instead of creating duplicates.
 
 ## Reconcile and cut over
 
-The mirror does the day-to-day work of keeping the systems aligned; **you** still
-own the sign-off. Before go-live, work through the evidence in **Reconciliation
+The mirror maintains source alignment, but accountable owners retain
+responsibility for cutover approval. Before go-live, review the evidence in **Reconciliation
 Before Cutover** — ledger gates, subledger gates, and record-level sampling — and
 have the accountable owners approve.
 
-When the books are proven:
+When all reconciliation gates pass:
 
 1. announce and enforce the source posting cutoff;
 2. run a final **Mirror now** to capture the last delta;
@@ -134,7 +132,7 @@ When the books are proven:
 5. **Pause mirror** and begin production entry in OpenBooks; and
 6. retain the source read-only per your policy.
 
-Deleting a connection removes only the link — the migrated data stays. Keep the
-connection until you are certain you will not need another delta.
+Deleting a connection removes only the link; migrated data is retained. Keep the
+connection until no further source deltas are required.
 `,
 }

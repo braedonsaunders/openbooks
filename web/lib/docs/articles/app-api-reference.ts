@@ -23,9 +23,9 @@ export const appApiReference: DocArticle = {
   related: ['app-builder', 'apps', 'scripting-api-reference', 'rest-api'],
   body: `# App API Reference
 
-This is the complete public programming contract for installed Apps. It covers
-the **openbooks** SDK injected into an App frontend and the **ob** host object
-injected into an App backend endpoint.
+This article defines the complete public programming contract for installed
+Apps. It covers the **openbooks** SDK injected into an App frontend and the
+**ob** host object injected into an App backend endpoint.
 
 ## Complete host surface
 
@@ -47,10 +47,9 @@ The host surface includes:
 - balanced journal creation and governed posting; and
 - permission intersection, audit/run history, limits, and unit governance.
 
-Direct database, filesystem, process, environment, and network access remain
-deliberately unavailable. Those are not alternate APIs: all platform access
-must use the documented host functions so tenant scope, validation, audit, and
-accounting invariants cannot be bypassed.
+Direct database, filesystem, process, environment, and network access are not
+available. All platform access uses the documented host functions, which enforce
+tenant scope, validation, audit requirements, and accounting invariants.
 
 ## Execution model
 
@@ -117,8 +116,8 @@ Access is the intersection of three gates:
 2. the capability granted by the installing administrator; and
 3. the effective permissions of the user making the call.
 
-An App never borrows an administrator's authority merely because an
-administrator installed it. A frontend records call and the same records call
+Installation by an administrator does not transfer the administrator's
+authority to the App. A frontend records call and the same records call
 inside a backend endpoint both require the App grant and the calling user's
 permission.
 
@@ -265,7 +264,8 @@ if (!request) showNotFound();
 # Frontend platform record API: openbooks.platform
 
 The platform record API is the primary integration surface. Record type keys
-and writable fields must come from **schema()** rather than being guessed.
+and writable fields must come from **schema()** rather than being inferred or
+hard-coded.
 
 ## openbooks.platform.schema()
 
@@ -549,8 +549,9 @@ ob.log('processing', request.endpoint, { actor: request.user.id });
 
 # Backend storage API: ob.storage
 
-Storage is scoped to the current organization and App. One App cannot read or
-overwrite another App's keys. It requires no manifest capability.
+Storage is scoped to the current organization and App. This isolation prevents
+one App from reading or overwriting another App's keys. Storage requires no
+manifest capability.
 
 The optional **namespace** argument defaults to **default**. Values must be
 JSON-serializable.
@@ -801,8 +802,8 @@ the result contains **approvalPending: true**. Otherwise the real posting
 engine validates open periods, balance, accounts, and other invariants and the
 result contains **entryId**. This costs 200 governance units.
 
-A posting failure can leave the already-created balanced draft in place; it
-never creates a half-posted ledger entry.
+A posting failure can leave the already-created balanced draft in place, but it
+does not produce a partially posted ledger entry.
 
 Example:
 
@@ -898,8 +899,8 @@ Each backend invocation records:
 - Every protected call is rechecked against the active App grants and current
   user permissions.
 
-These constraints are part of the API contract, not implementation details to
-work around. New platform capabilities extend the governed host surface with
+These constraints are part of the API contract. New platform capabilities
+extend the governed host surface with
 explicit record types, operations, permissions, schemas, audit behavior, and
 unit costs rather than granting sandbox code ambient access.
 `,

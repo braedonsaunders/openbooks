@@ -53,8 +53,7 @@ administrative work is not.
 
 Load customers, vendors, employees, items and services, bank accounts, projects,
 and opening fixed assets. Archive duplicates before importing transactions.
-Stable external IDs are valuable during migration because they make repeated
-imports and reconciliation easier to explain.
+Stable external IDs make repeated imports traceable and support reconciliation.
 
 ## 5. Prove one complete workflow
 
@@ -100,8 +99,8 @@ export const navigationAndRecords: DocArticle = {
   body: `# Navigation, Lists, and Record Drawers
 
 OpenBooks uses the same interaction model across accounting, sales, purchases,
-projects, and administration. Learning these patterns once makes the rest of
-the system predictable.
+projects, and administration. Consistent patterns reduce variation between
+workspaces.
 
 ## Navigation
 
@@ -113,7 +112,7 @@ and your permissions determine which destinations you can see.
 Larger workspace menus use labeled sections. For example, **Customers** keeps
 relationship records, pipeline work, and the sell-to-collect flow together;
 **Accounting** separates ledger, revenue, assets, planning, compliance, and
-close work without scattering them across unrelated menus.
+close work in separate labeled sections.
 
 The top menu is the default layout. Each workspace opens as a menu, keeping the
 full page width available for lists, reports, and record drawers. If you prefer
@@ -155,13 +154,12 @@ router, so moving between records does not reload the entire application shell.
 
 ## New records and drafts
 
-Choosing **New** immediately creates a real draft on the server and opens it in
+Choosing **New** immediately creates a persisted draft on the server and opens it in
 the drawer. Draft fields autosave after a short delay. Posting, submitting, or
 approving remains an explicit action; autosave never posts a transaction.
 
-Because a draft is real, leaving the drawer does not discard it. Find it again
-with the **Draft** status filter. Delete unwanted drafts rather than assuming
-they vanished.
+Leaving the drawer does not discard a persisted draft. Locate it with the
+**Draft** status filter and delete it when it is no longer required.
 
 ## Status and actions
 

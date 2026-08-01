@@ -71,9 +71,9 @@ before posting.
 
 Those component snapshots are permanent accounting evidence after posting.
 Changing a tax code or an effective rate later does **not** rewrite the
-calculation that supported an existing transaction. This is why you archive an
-obsolete code rather than repurpose one already used on posted activity — changing
-its meaning would silently disagree with the evidence behind old transactions.
+calculation that supported an existing transaction. Archive an obsolete code
+rather than repurposing one already used on posted activity. Changing its meaning
+would conflict with the evidence retained for prior transactions.
 
 ## Where codes fit
 

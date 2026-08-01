@@ -31,7 +31,7 @@ flow watches one kind of record and runs a graph of steps when something happens
 to it. Flows is an optional feature; when it is off, the menu and routes are
 hidden.
 
-## What a flow is made of
+## Flow components
 
 You build a flow on a canvas from four kinds of node:
 
@@ -41,7 +41,7 @@ You build a flow on a canvas from four kinds of node:
   value** condition, or from a **manual** button placed on the record.
 - **Condition** — branches the flow **then** or **else** based on a rule over the
   record's fields.
-- **Action** — does something: **send email**, **notify** in-app, **set a field**,
+- **Action** — performs an operation: **send email**, **notify** in-app, **set a field**,
   **change status**, **post the document**, or **lock / unlock** the record.
 - **Gate** — pauses for human **approval**.
 
@@ -54,30 +54,30 @@ A **gate** routes the record to approvers. Assignees can be a specific **user**,
 a **role**, the **submitter's supervisor**, or a user named in a field. A gate
 sets its quorum — **any** approver or **all** of them — and can require
 **separation of duties** (the submitter cannot approve their own record), demand
-a typed **e-signature** to approve, send **reminders**, and **escalate** to
-someone else after a set time. A signature-required gate must be approved in the
-app, one at a time — it cannot be cleared by bulk approve or a one-click email
-link.
+a typed **e-signature** to approve, send **reminders**, and **escalate** to an
+alternate assignee after a configured interval. A signature-required gate must be approved in the
+application, one at a time. Bulk approval and approval from a notification link
+are unavailable for that gate.
 
 When a record is submitted and a flow produces gates, the flow takes ownership of
 the submission and moves the record to **pending approval**. Approvers act from
-the **Approvals** worklist or from one-click links in their notification emails.
+the **Approvals** worklist or from approval links in notification emails.
 A rejection returns the record to draft and cancels the sibling gates; the record
 is released only once every gate across the flow is approved. Approval routing
-**fails closed** — if a flow cannot resolve an approver, the record stays in draft
-rather than slipping through unapproved.
+**fails closed**. If a flow cannot resolve an approver, the record remains in
+draft and cannot proceed without approval.
 
 ## Build and enable
 
 Create a flow, pick the record kind it watches, and lay out the graph. Drafts
-save with non-blocking warnings so you can work incrementally, but **turning a
+save with non-blocking warnings to support incremental authoring, but **turning a
 flow on requires a clean validation** — the wiring must be complete and valid
-before it can run. Each flow's run history is available from the builder so you
-can see what fired and why.
+before it can run. Each flow's run history identifies the triggering event,
+executed steps, and outcome.
 
-Flows and the **Scripting Engine** overlap in when they run; reach for a flow when
-you want a visual, approval-centric process, and a script when you need arbitrary
-server-side logic.
+Flows and the **Scripting Engine** support overlapping trigger points. Use a flow
+for a visual, approval-oriented process and a script for custom server-side
+logic.
 `,
 }
 
@@ -93,17 +93,15 @@ export const queryConsole: DocArticle = {
   body: `# Query Console
 
 **Settings → Extend → Query Console** (route **/query**, permission **Run SQL**)
-is a read-only SQL workbench for ad-hoc questions the standard reports do not
-answer. It is safe by construction — the safety comes from the database, not from
-a text filter.
+is a read-only SQL workbench for ad-hoc analysis not covered by standard reports.
+Read restrictions are enforced by the database in addition to request validation.
 
-## How it stays safe
+## Security controls
 
 - Every query runs as a **read-only database role** inside a **read-only
   transaction**, so inserts, updates, and schema changes are refused by the
   database itself.
-- The connection is scoped to your organization by row-level security, so you can
-  only ever see your own organization's data.
+- Row-level security restricts the connection to the current organization's data.
 - A query must be a single **SELECT** (or **WITH**) statement; anything else is
   rejected before it runs.
 - Results are capped (up to 5,000 rows per run) and a query is stopped if it runs
@@ -111,11 +109,12 @@ a text filter.
 
 ## Working in the console
 
-Write a query and run it with Cmd/Ctrl-Enter, or run just the selected text.
+Write a query and run it with Cmd/Ctrl-Enter, or run only the selected text.
 Choose the row limit (100 to 5,000). The **schema browser** lists the tables and
-columns your role can see, so you can explore the model without guessing names.
+columns available to the current role, which supports schema discovery without
+prior knowledge of object names.
 Save reusable **snippets** and revisit recent queries from **history** — both are
-kept in your browser. Export a result with **Copy CSV** or **Download CSV**.
+stored in the browser. Export a result with **Copy CSV** or **Download CSV**.
 
 The Query Console is for reading. To write data safely from automation, use the
 **Scripting Engine** or a **Flow**, both of which post through the governed
@@ -142,17 +141,17 @@ endpoints and includes an interactive console.
 ## Create and scope a key
 
 Create a key with a name and, optionally, an expiry and a set of **scopes**.
-Scopes are chosen from the permission catalogue — the same permissions that gate
-the app. Two rules keep keys safe:
+Scopes are chosen from the permission catalogue, which is also used for app
+authorization. Effective access follows two rules:
 
-- a key's effective access is always its **scopes intersected with its owner's own
-  permissions**, so a key can never do more than the person who created it; and
+- a key's effective access is its **scopes intersected with its owner's own
+  permissions**, so the key cannot exceed its owner's authority; and
 - a key left with **no scopes inherits the owner's full permissions** — grant
   explicit scopes for anything that should be limited.
 
-The full key value (an **ob_live_** token) is shown **once** at creation — copy it
-then, because only a hash is stored afterward. The list shows each key's prefix,
-owner, scope count, and last use. Revoking a key deactivates it while preserving
+The full key value (an **ob_live_** token) is shown **once**, at creation. Store
+it securely because only a hash is retained afterward. The list shows each key's
+prefix, owner, scope count, and last use. Revoking a key deactivates it while preserving
 its history, and every key change is recorded in the audit log.
 
 ## Authenticate and call the API
@@ -169,8 +168,8 @@ types you have published. Writes go through the same domain rules as the app
 invariants. A generated **OpenAPI** description is served for tooling.
 
 Keep integration keys narrowly scoped, rotate them on a schedule, and revoke any
-key that is no longer in use. Note that keys are automatically disabled inside a
-**Sandbox**, so integrations never fire from a test environment.
+key that is no longer in use. Keys are automatically disabled inside a
+**Sandbox**, which prevents integrations from running in a test environment.
 
 ## Rate limits
 
@@ -201,11 +200,11 @@ refresh one from inside a sandbox.
 
 ## Choose a tier
 
-A sandbox is a full tenant of its own, isolated by row-level security. Pick a tier
-for what you need:
+A sandbox is a separate tenant isolated by row-level security. Select a tier
+based on data and testing requirements:
 
-- **Dev** — copies only the customization layer (scripts, custom fields, forms,
-  roles, and the like). Fast, with no business data.
+- **Dev** — copies only the customization layer, including scripts, custom
+  fields, forms, and roles, with no business data.
 - **Masked** — a full copy with personal information masked. The recommended
   default for most testing.
 - **Full** — a complete, unmasked copy for user-acceptance testing.
@@ -216,21 +215,21 @@ for what you need:
 and bank details — deterministically, so a value masks the same way on every
 refresh but cannot be reversed.
 
-## Safe by isolation
+## Isolation controls
 
-A newly cloned sandbox is **neutered**: outbound email, payment files, SFTP, and
-exchange-rate credentials are stripped, and any copied API keys are disabled. On
-top of that, every outbound side effect checks that it is not running in a
-sandbox. Together this guarantees a sandbox cannot email a customer, move money,
-or reach an external system.
+A newly cloned sandbox is **restricted**: outbound email, payment files, SFTP,
+and exchange-rate credentials are removed, and copied API keys are disabled.
+Outbound operations also verify the environment before execution. These controls
+prevent a sandbox from emailing customers, initiating payments, or connecting to
+external systems.
 
 ## Create, enter, refresh, and remove
 
 Creating or refreshing a sandbox runs in the background; its status moves through
 **provisioning** to **ready**. From the sandbox list you can:
 
-- **Enter** a ready sandbox — you switch into it for your session and switch back
-  out when done;
+- **Enter** a ready sandbox — changes the active organization for the current
+  session until the user exits the sandbox;
 - **Refresh** it — re-copy business data while, by default, keeping the
   customizations you have been testing;
 - **Reset** it — a full re-clone that discards sandbox changes;
@@ -239,8 +238,8 @@ Creating or refreshing a sandbox runs in the background; its status moves throug
 
 ## Promote configuration back
 
-When a configuration change tests well in a sandbox, **Promote** captures the
-differences in the promotable configuration (scripts, custom fields, forms, list
+After a configuration change has been validated in a sandbox, **Promote**
+captures the differences in the promotable configuration (scripts, custom fields, forms, list
 views, saved reports, account groups, roles, and similar) into a change set to
 apply to production. Only configuration flows upward — business and ledger data
 never promote from a sandbox to production.
