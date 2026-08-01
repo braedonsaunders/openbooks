@@ -6,6 +6,7 @@ import { ListPageLayout } from '../../../components/page-layout'
 import { RecordListView } from '../../../components/record-list-view'
 import { pickString } from '../../../lib/list-params'
 import { requirePermission, can } from '../../../lib/authz'
+import { requireFeatureEnabled } from '../../../lib/feature-gates'
 import { loadOrder } from '../../api/_order/lib'
 import { OrderDrawer } from '../_order/OrderDrawer'
 import { NewOrderButton } from '../_order/NewOrderButton'
@@ -33,6 +34,7 @@ export default async function SalesOrders({
   searchParams: Promise<Record<string, string | string[] | undefined>>
 }) {
   const authz = await requirePermission('ar.read')
+  await requireFeatureEnabled(authz.user.orgId, 'orders')
   const canManage = can(authz, 'ar.create')
   const t = await getTranslations('salesOrders')
   const sp = await searchParams
@@ -45,8 +47,10 @@ export default async function SalesOrders({
           db.execute(sql`
             select id, display_name from parties
              where org_id = ${authz.user.orgId}
-               and (custom->>'nsKind' = 'customer'
-                    or exists (select 1 from customer_roles cr where cr.org_id = ${authz.user.orgId} and cr.party_id = parties.id))
+               and exists (
+                 select 1 from customer_roles cr
+                  where cr.org_id = ${authz.user.orgId} and cr.party_id = parties.id and cr.is_active
+               )
                and is_active
              order by display_name limit 2000`) as any,
           db.execute(sql`select id, number, name from accounts where org_id = ${authz.user.orgId} and type in ('income','income_other') and is_active and not is_summary order by number nulls last`) as any,
@@ -62,7 +66,7 @@ export default async function SalesOrders({
   ])
   const resolvedForm = openOrder && pickers ? await resolveFormLayout({
     orgId: authz.user.orgId, userId: authz.user.id, recordType: KIND,
-    userRoles: [authz.user.role], headerDefs: [], lineDefs: [], explicitLayoutId: pickString(sp.form),
+    userRoles: authz.user.roles.map(({ key }) => key), headerDefs: [], lineDefs: [], explicitLayoutId: pickString(sp.form),
   }) : null
 
   const newBtn = canManage ? (

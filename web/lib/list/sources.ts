@@ -1,5 +1,7 @@
 import 'server-only'
 import { sql, type SQL } from 'drizzle-orm'
+import { db } from '@openbooks/engine/src/db.ts'
+import type { ListViewConfig } from '@openbooks/customization'
 import { AP_KINDS, AR_KINDS } from '../document-kinds'
 import {
   DOCUMENT_BUILT_IN_EXPR,
@@ -7,6 +9,9 @@ import {
   PAYMENT_BANK_ID_EXPR,
   PAYMENT_BUILT_IN_EXPR,
   PAYMENT_SORTS,
+  BANK_TRANSACTION_ACCOUNT_MATCH,
+  bankTransactionWhere,
+  type AdhocFilters,
 } from '../customization/list-query'
 
 /**
@@ -39,6 +44,27 @@ export interface DocListSource {
   extraSelect?: SQL
   /** Column key → row→href builder for entity drill-through. */
   links?: Record<string, (row: any) => string | RelatedPartyTarget | null>
+  /** Additional record-specific quick filters beyond kind and status. */
+  quickFilters?: DocQuickFilter[]
+  /** URL key for the mixed-kind picker (default `kind`). */
+  kindParamKey?: string
+  /** Render and apply the common `from` / `to` date range controls. */
+  dateRange?: boolean
+  /** Source-specific WHERE extension for list-only aggregates. */
+  where?: (
+    kinds: readonly string[],
+    view: ListViewConfig,
+    adhoc: AdhocFilters,
+    orgId: string,
+    allowedSubsidiaryIds?: Set<string> | null,
+  ) => SQL
+}
+
+export interface DocQuickFilter {
+  paramKey: string
+  filterKey: string
+  loadOptions?: (orgId: string) => Promise<{ value: string; label: string; count?: number }[]>
+  searchSelect?: boolean
 }
 
 export interface RelatedPartyTarget {
@@ -65,6 +91,7 @@ function documentSource(cfg: {
   joins?: SQL
   extraSelect?: SQL
   links?: Record<string, (row: any) => string | null>
+  quickFilters?: DocQuickFilter[]
 }): DocListSource {
   return {
     recordType: cfg.recordType,
@@ -79,6 +106,7 @@ function documentSource(cfg: {
       ...(cfg.partyRole ? { party_name: partyLink(cfg.partyRole) } : {}),
       ...(cfg.links ?? {}),
     },
+    quickFilters: cfg.quickFilters,
   }
 }
 
@@ -124,6 +152,25 @@ const SOURCES: Record<string, DocListSource> = {
       bank_account: (row: any) => (row.bank_account_id ? `/accounts?accountRegister=${row.bank_account_id}` : null),
     },
   },
+  expense_report: documentSource({
+    recordType: 'expense_report',
+    kinds: ['expense_report'],
+    drawerParam: 'expense',
+    partyRole: 'employee',
+    quickFilters: [{
+      paramKey: 'employee',
+      filterKey: 'party_id',
+      loadOptions: async (orgId) => {
+        const result = await db.execute(sql`
+          select p.id::text as value, p.display_name as label, count(*)::int as count
+            from documents d join parties p on p.id = d.party_id
+           where d.org_id = ${orgId} and d.kind = 'expense_report'
+           group by p.id, p.display_name
+           order by p.display_name`) as any
+        return result.rows
+      },
+    }],
+  }),
   // Orders — single kind, non-posting; edited via OrderDrawer (drawerParam set
   // per page's URL param). Conversion progress lives in a report, not here.
   quote: documentSource({ recordType: 'quote', kinds: ['quote'], drawerParam: 'estimate', partyRole: 'customer' }),
@@ -142,6 +189,49 @@ const SOURCES: Record<string, DocListSource> = {
     },
   }),
   purchase_order: documentSource({ recordType: 'purchase_order', kinds: ['purchase_order'], drawerParam: 'order', partyRole: 'vendor' }),
+  bank_transaction: {
+    recordType: 'bank_transaction',
+    kinds: ['card_charge', 'card_refund', 'check', 'deposit', 'transfer'],
+    drawerParam: 'doc',
+    multiKind: true,
+    kindParamKey: 'txKind',
+    dateRange: true,
+    joins: sql`left join lateral (
+      select string_agg(distinct trim(coalesce(a.number || ' ', '') || a.name), ' · ') as names,
+             min(trim(coalesce(a.number || ' ', '') || a.name)) as sort_name
+        from accounts a
+       where ${BANK_TRANSACTION_ACCOUNT_MATCH}
+    ) bank_accounts on true`,
+    builtInExpr: {
+      document_number: sql`d.document_number`,
+      transaction_kind: sql`d.kind`,
+      account_names: sql`bank_accounts.names`,
+      document_date: sql`d.document_date`,
+      memo: sql`d.memo`,
+      reference_number: sql`d.reference_number`,
+      total: sql`d.total`,
+      status: sql`d.status`,
+    },
+    sorts: {
+      ...DOCUMENT_SORTS,
+      kind: sql`d.kind`,
+      account: sql`bank_accounts.sort_name`,
+    },
+    where: bankTransactionWhere,
+    quickFilters: [{
+      paramKey: 'account',
+      filterKey: 'bank_account_id',
+      searchSelect: true,
+      loadOptions: async (orgId) => {
+        const result = await db.execute(sql`
+          select id::text as value, trim(coalesce(number || ' ', '') || name) as label
+            from accounts
+           where org_id=${orgId} and is_active and not is_summary and reconcilable
+           order by number nulls last, name`) as any
+        return result.rows
+      },
+    }],
+  },
 }
 
 export function listSource(recordType: string): DocListSource | undefined {

@@ -358,15 +358,40 @@ const JOURNAL: RecordTypeMeta = {
   ],
   lineFields: JOURNAL_LINE_FIELDS,
   listColumns: [
-    { key: "document_number", labelKey: "common.labels.number", kind: "reference", sortable: true, sortKey: "number", locked: true },
-    { key: "document_date", labelKey: "common.labels.date", kind: "date", sortable: true, sortKey: "date" },
-    { key: "reference_number", labelKey: "common.labels.reference", kind: "text" },
+    { key: "posting_date", labelKey: "common.labels.date", kind: "date", sortable: true, sortKey: "date" },
+    { key: "entry_number", labelKey: "journal.list.columns.entry", kind: "reference", sortable: true, sortKey: "number", locked: true },
     { key: "memo", labelKey: "common.labels.memo", kind: "text" },
-    { key: "total", labelKey: "common.labels.total", kind: "amount", sortable: true, sortKey: "total", defaultWidth: 120 },
+    { key: "origin", labelKey: "journal.list.columns.origin", kind: "text", sortable: true, sortKey: "origin" },
+    { key: "line_count", labelKey: "common.labels.lines", kind: "text", sortable: true, sortKey: "lines", defaultWidth: 90 },
+    { key: "total_debits", labelKey: "journal.list.columns.debits", kind: "amount", sortable: true, sortKey: "debits", defaultWidth: 120 },
     { key: "status", labelKey: "common.labels.status", kind: "status", sortable: true, sortKey: "status", defaultWidth: 120 },
     { key: "_actions", labelKey: "common.labels.actions", kind: "actions", defaultWidth: 44 },
   ],
-  listFilters: [DIRECT_POST_STATUS_FILTER, DATE_FILTER],
+  listFilters: [
+    {
+      key: "origin",
+      labelKey: "journal.list.columns.origin",
+      kind: "select",
+      operators: OPERATORS_BY_KIND.select,
+      options: [
+        ["manual", "manual"], ["closing", "closing"], ["allocation", "allocation"],
+        ["revaluation", "revaluation"], ["labor_burden", "laborBurden"],
+        ["depreciation", "depreciation"], ["revenue_recognition", "revenueRecognition"],
+        ["fx_settlement", "fxSettlement"], ["translation", "translation"],
+      ].map(([value, key]) => ({ value: value!, labelKey: `journal.origins.${key}` })),
+    },
+    {
+      key: "status",
+      labelKey: "common.labels.status",
+      kind: "select",
+      operators: OPERATORS_BY_KIND.select,
+      options: [
+        { value: "posted", labelKey: "common.status.posted" },
+        { value: "reversed", labelKey: "common.status.reversed" },
+      ],
+    },
+    { key: "posting_date", labelKey: "common.labels.date", kind: "date", operators: OPERATORS_BY_KIND.date },
+  ],
 };
 
 function bankDocumentRecordType(key: "deposit" | "transfer"): RecordTypeMeta {
@@ -553,6 +578,525 @@ const CUSTOMER: RecordTypeMeta = {
   listFilters: [CUSTOMER_STATUS_FILTER],
 };
 
+/** CRM opportunities use the universal saved-list-view renderer while their
+ * rich pipeline editor remains a purpose-built drawer. */
+const OPPORTUNITY: RecordTypeMeta = {
+  key: "opportunity",
+  labelKey: "customization.recordTypes.opportunity",
+  category: "entity",
+  supportsForms: false,
+  customFieldTable: "crm_opportunities",
+  customFieldLineTable: null,
+  headerFields: [],
+  lineFields: [],
+  listColumns: [
+    { key: "opportunity_number", labelKey: "crm.fields.number", kind: "text", sortable: true, sortKey: "number" },
+    { key: "title", labelKey: "crm.fields.title", kind: "reference", sortable: true, sortKey: "title", locked: true },
+    { key: "account_name", labelKey: "crm.fields.account", kind: "text", sortable: true, sortKey: "account" },
+    { key: "status", labelKey: "crm.fields.status", kind: "status", sortable: true, sortKey: "status", defaultWidth: 120 },
+    { key: "owner_name", labelKey: "crm.fields.owner", kind: "text", sortable: true, sortKey: "owner" },
+    { key: "expected_close_date", labelKey: "crm.fields.expectedClose", kind: "date", sortable: true, sortKey: "close", defaultWidth: 130 },
+    { key: "projected_amount", labelKey: "crm.fields.projectedAmount", kind: "amount", sortable: true, sortKey: "amount", defaultWidth: 140 },
+    { key: "forecast_category", labelKey: "crm.fields.forecastCategory", kind: "text", sortable: true, sortKey: "category", defaultHidden: true },
+    { key: "probability", labelKey: "crm.fields.probability", kind: "text", sortable: true, sortKey: "probability", defaultHidden: true },
+    { key: "weighted_amount", labelKey: "crm.fields.weightedAmount", kind: "amount", sortable: true, sortKey: "weighted", defaultHidden: true, defaultWidth: 140 },
+    { key: "_actions", labelKey: "common.labels.actions", kind: "actions", defaultWidth: 44 },
+  ],
+  listFilters: [
+    { key: "status_id", labelKey: "crm.fields.status", kind: "entity_ref", operators: OPERATORS_BY_KIND.entity_ref, entitySource: "crm_opportunity_status" },
+    { key: "owner_user_id", labelKey: "crm.fields.owner", kind: "entity_ref", operators: OPERATORS_BY_KIND.entity_ref, entitySource: "user" },
+    {
+      key: "forecast_category",
+      labelKey: "crm.fields.forecastCategory",
+      kind: "select",
+      operators: OPERATORS_BY_KIND.select,
+      options: ["omitted", "worst_case", "most_likely", "upside"].map((value) => ({
+        value,
+        labelKey: `crm.forecastCategories.${value}`,
+      })),
+    },
+    { key: "party_id", labelKey: "crm.fields.account", kind: "entity_ref", operators: OPERATORS_BY_KIND.entity_ref, entitySource: "customer" },
+    { key: "expected_close_date", labelKey: "crm.fields.expectedClose", kind: "date", operators: OPERATORS_BY_KIND.date },
+    { key: "title", labelKey: "crm.fields.title", kind: "text", operators: OPERATORS_BY_KIND.text },
+  ],
+};
+
+function crmAccountRecordType(key: "lead" | "prospect"): RecordTypeMeta {
+  return {
+    key,
+    labelKey: `customization.recordTypes.${key}`,
+    category: "entity",
+    supportsForms: false,
+    customFieldTable: "parties",
+    customFieldLineTable: null,
+    headerFields: [],
+    lineFields: [],
+    listColumns: [
+      { key: "account_name", labelKey: "crm.fields.accountName", kind: "reference", sortable: true, sortKey: "name", locked: true },
+      { key: "status", labelKey: "crm.fields.status", kind: "status", sortable: true, sortKey: "status", defaultWidth: 120 },
+      { key: "owner_name", labelKey: "crm.fields.owner", kind: "text", sortable: true, sortKey: "owner" },
+      { key: "territory_name", labelKey: "crm.fields.territory", kind: "text", sortable: true, sortKey: "territory", defaultHidden: true },
+      { key: "qualification_score", labelKey: "crm.fields.qualificationScore", kind: "text", sortable: true, sortKey: "score" },
+      { key: "last_activity", labelKey: "crm.fields.lastActivity", kind: "date", sortable: true, sortKey: "activity" },
+      { key: "email", labelKey: "common.labels.email", kind: "text", defaultHidden: true },
+      { key: "phone", labelKey: "crm.fields.phone", kind: "text", defaultHidden: true },
+      { key: "_actions", labelKey: "common.labels.actions", kind: "actions", defaultWidth: 44 },
+    ],
+    listFilters: [
+      { key: "status_id", labelKey: "crm.fields.status", kind: "entity_ref", operators: OPERATORS_BY_KIND.entity_ref, entitySource: `crm_account_status_${key}` },
+      { key: "owner_user_id", labelKey: "crm.fields.owner", kind: "entity_ref", operators: OPERATORS_BY_KIND.entity_ref, entitySource: "user" },
+      { key: "territory_id", labelKey: "crm.fields.territory", kind: "entity_ref", operators: OPERATORS_BY_KIND.entity_ref, entitySource: "crm_sales_territory" },
+    ],
+  };
+}
+
+const LEAD = crmAccountRecordType("lead");
+const PROSPECT = crmAccountRecordType("prospect");
+
+const ACTIVITY: RecordTypeMeta = {
+  key: "activity",
+  labelKey: "customization.recordTypes.activity",
+  category: "entity",
+  supportsForms: false,
+  customFieldTable: "crm_activities",
+  customFieldLineTable: null,
+  headerFields: [],
+  lineFields: [],
+  listColumns: [
+    { key: "subject", labelKey: "crm.fields.subject", kind: "reference", sortable: true, sortKey: "subject", locked: true },
+    { key: "customer_name", labelKey: "crm.fields.customer", kind: "text", sortable: true, sortKey: "customer" },
+    { key: "kind", labelKey: "crm.fields.activityType", kind: "text", sortable: true, sortKey: "type" },
+    { key: "status", labelKey: "crm.fields.status", kind: "status", sortable: true, sortKey: "status", defaultWidth: 120 },
+    { key: "assigned_name", labelKey: "crm.fields.assignedTo", kind: "text", sortable: true, sortKey: "owner" },
+    { key: "activity_date", labelKey: "crm.fields.date", kind: "date", sortable: true, sortKey: "date", defaultWidth: 150 },
+    { key: "priority", labelKey: "crm.fields.priority", kind: "text", defaultHidden: true },
+    { key: "_actions", labelKey: "common.labels.actions", kind: "actions", defaultWidth: 44 },
+  ],
+  listFilters: [
+    {
+      key: "kind", labelKey: "crm.fields.activityType", kind: "select", operators: OPERATORS_BY_KIND.select,
+      options: ["task", "call", "event", "email", "note"].map((value) => ({ value, labelKey: `crm.activityKinds.${value}` })),
+    },
+    {
+      key: "status", labelKey: "crm.fields.status", kind: "select", operators: OPERATORS_BY_KIND.select,
+      options: ["planned", "in_progress", "completed", "cancelled"].map((value) => ({ value, labelKey: `crm.activityStatuses.${value}` })),
+    },
+    { key: "assigned_user_id", labelKey: "crm.fields.assignedTo", kind: "entity_ref", operators: OPERATORS_BY_KIND.entity_ref, entitySource: "user" },
+    {
+      key: "priority", labelKey: "crm.fields.priority", kind: "select", operators: OPERATORS_BY_KIND.select,
+      options: ["low", "normal", "high", "urgent"].map((value) => ({ value, labelKey: `crm.priorities.${value}` })),
+    },
+  ],
+};
+
+/** Catalog items keep their purpose-built pricing/costing drawer, while their
+ * register participates in the universal saved-view and custom-column system. */
+const ITEM: RecordTypeMeta = {
+  key: "item",
+  labelKey: "customization.recordTypes.item",
+  category: "entity",
+  supportsForms: false,
+  customFieldTable: "items",
+  customFieldLineTable: null,
+  headerFields: [],
+  lineFields: [],
+  listColumns: [
+    { key: "code", labelKey: "items.labels.code", kind: "text", sortable: true, sortKey: "code" },
+    { key: "name", labelKey: "common.labels.name", kind: "reference", sortable: true, sortKey: "name", locked: true },
+    { key: "kind", labelKey: "items.labels.kind", kind: "status", sortable: true, sortKey: "kind" },
+    { key: "category", labelKey: "items.labels.category", kind: "text", sortable: true, sortKey: "category" },
+    { key: "default_rate", labelKey: "items.labels.defaultRate", kind: "amount", sortable: true, sortKey: "rate", defaultWidth: 120 },
+    { key: "default_cost", labelKey: "items.labels.defaultCost", kind: "amount", sortable: true, sortKey: "cost", defaultHidden: true, defaultWidth: 120 },
+    { key: "unit", labelKey: "items.labels.unit", kind: "text" },
+    { key: "status", labelKey: "common.labels.status", kind: "status", sortable: true, sortKey: "status", defaultWidth: 100 },
+    { key: "_actions", labelKey: "common.labels.actions", kind: "actions", defaultWidth: 44 },
+  ],
+  listFilters: [
+    {
+      key: "kind",
+      labelKey: "items.labels.kind",
+      kind: "select",
+      operators: OPERATORS_BY_KIND.select,
+      options: ["service", "non_inventory", "inventory", "assembly", "kit", "other_charge", "equipment_charge", "labor", "absence", "discount"].map((value) => ({
+        value,
+        labelKey: `items.kinds.${value}`,
+      })),
+    },
+    { key: "category", labelKey: "items.labels.category", kind: "text", operators: OPERATORS_BY_KIND.text },
+    {
+      key: "status",
+      labelKey: "common.labels.status",
+      kind: "select",
+      operators: OPERATORS_BY_KIND.select,
+      options: [
+        { value: "active", labelKey: "common.status.active" },
+        { value: "inactive", labelKey: "common.status.inactive" },
+      ],
+    },
+  ],
+};
+
+const ACCOUNT_TYPE_OPTIONS = [
+  ["asset_bank", "assetBank"],
+  ["asset_receivable", "assetReceivable"],
+  ["asset_current_other", "assetCurrentOther"],
+  ["asset_fixed", "assetFixed"],
+  ["asset_other", "assetOther"],
+  ["liability_payable", "liabilityPayable"],
+  ["liability_card", "liabilityCard"],
+  ["liability_current_other", "liabilityCurrentOther"],
+  ["liability_long_term", "liabilityLongTerm"],
+  ["equity", "equity"],
+  ["income", "income"],
+  ["income_other", "incomeOther"],
+  ["cogs", "cogs"],
+  ["expense", "expense"],
+  ["expense_other", "expenseOther"],
+  ["expense_deferred", "expenseDeferred"],
+] as const;
+
+/** The chart keeps its hierarchy presentation as an alternate view, but its
+ * searchable flat register uses the same saved-view contract as other data. */
+const ACCOUNT: RecordTypeMeta = {
+  key: "account",
+  labelKey: "customization.recordTypes.account",
+  category: "entity",
+  supportsForms: false,
+  customFieldTable: "accounts",
+  customFieldLineTable: null,
+  headerFields: [],
+  lineFields: [],
+  listColumns: [
+    { key: "number", labelKey: "common.labels.number", kind: "text", sortable: true, sortKey: "number", defaultWidth: 100 },
+    { key: "name", labelKey: "common.labels.name", kind: "reference", sortable: true, sortKey: "name", locked: true },
+    { key: "type", labelKey: "common.labels.type", kind: "text", sortable: true, sortKey: "type" },
+    { key: "class", labelKey: "common.labels.class", kind: "text", sortable: true, sortKey: "class", defaultHidden: true },
+    { key: "parent_name", labelKey: "accounts.drawer.parent", kind: "text", sortable: true, sortKey: "parent", defaultHidden: true },
+    { key: "balance", labelKey: "common.labels.balance", kind: "amount", sortable: true, sortKey: "balance", defaultWidth: 140 },
+    { key: "is_summary", labelKey: "accounts.list.badges.summary", kind: "text", defaultHidden: true },
+    { key: "status", labelKey: "common.labels.status", kind: "status", sortable: true, sortKey: "status", defaultWidth: 100 },
+    { key: "_actions", labelKey: "common.labels.actions", kind: "actions", defaultWidth: 44 },
+  ],
+  listFilters: [
+    {
+      key: "class",
+      labelKey: "common.labels.class",
+      kind: "select",
+      operators: OPERATORS_BY_KIND.select,
+      options: ["asset", "liability", "equity", "income", "expense"].map((value) => ({ value, labelKey: `accounts.classes.${value}` })),
+    },
+    {
+      key: "type",
+      labelKey: "common.labels.type",
+      kind: "select",
+      operators: OPERATORS_BY_KIND.select,
+      options: ACCOUNT_TYPE_OPTIONS.map(([value, key]) => ({ value, labelKey: `accounts.types.${key}` })),
+    },
+    { key: "parent_id", labelKey: "accounts.drawer.parent", kind: "entity_ref", operators: OPERATORS_BY_KIND.entity_ref, entitySource: "account" },
+    {
+      key: "status",
+      labelKey: "common.labels.status",
+      kind: "select",
+      operators: OPERATORS_BY_KIND.select,
+      options: [
+        { value: "active", labelKey: "common.status.active" },
+        { value: "inactive", labelKey: "common.status.inactive" },
+      ],
+    },
+  ],
+};
+
+/** Consolidated cash/card activity is a list-only record type over several
+ * document kinds. Individual documents retain their kind-specific forms. */
+const BANK_TRANSACTION: RecordTypeMeta = {
+  key: "bank_transaction",
+  labelKey: "customization.recordTypes.bank_transaction",
+  category: "transaction",
+  supportsForms: false,
+  customFieldTable: "documents",
+  customFieldLineTable: null,
+  headerFields: [],
+  lineFields: [],
+  listColumns: [
+    { key: "document_number", labelKey: "common.labels.number", kind: "reference", sortable: true, sortKey: "number", locked: true },
+    { key: "transaction_kind", labelKey: "common.labels.type", kind: "text", sortable: true, sortKey: "kind" },
+    { key: "account_names", labelKey: "common.labels.account", kind: "text", sortable: true, sortKey: "account" },
+    { key: "document_date", labelKey: "common.labels.date", kind: "date", sortable: true, sortKey: "date" },
+    { key: "memo", labelKey: "common.labels.memo", kind: "text" },
+    { key: "reference_number", labelKey: "common.labels.reference", kind: "text", defaultHidden: true },
+    { key: "total", labelKey: "common.labels.total", kind: "amount", sortable: true, sortKey: "total", defaultWidth: 120 },
+    { key: "status", labelKey: "common.labels.status", kind: "status", sortable: true, sortKey: "status", defaultWidth: 120 },
+    { key: "_actions", labelKey: "common.labels.actions", kind: "actions", defaultWidth: 44 },
+  ],
+  listFilters: [
+    {
+      key: "transaction_kind",
+      labelKey: "common.labels.type",
+      kind: "select",
+      operators: OPERATORS_BY_KIND.select,
+      options: ["check", "deposit", "card_charge", "card_refund", "transfer"].map((value) => ({ value, labelKey: `banking.txKinds.${value}` })),
+    },
+    APPROVAL_STATUS_FILTER,
+    { key: "bank_account_id", labelKey: "common.labels.account", kind: "entity_ref", operators: OPERATORS_BY_KIND.entity_ref, entitySource: "bank_account" },
+    DATE_FILTER,
+    { key: "reference_number", labelKey: "common.labels.reference", kind: "text", operators: OPERATORS_BY_KIND.text },
+  ],
+};
+
+const INVENTORY_ONHAND: RecordTypeMeta = {
+  key: "inventory_onhand",
+  labelKey: "customization.recordTypes.inventory_onhand",
+  category: "entity",
+  supportsForms: false,
+  customFieldTable: "items",
+  customFieldLineTable: null,
+  headerFields: [],
+  lineFields: [],
+  listColumns: [
+    { key: "item_name", labelKey: "inventory.labels.item", kind: "reference", sortable: true, sortKey: "item", locked: true },
+    { key: "location_code", labelKey: "inventory.labels.location", kind: "text", sortable: true, sortKey: "location" },
+    { key: "quantity", labelKey: "inventory.labels.quantity", kind: "text", sortable: true, sortKey: "quantity" },
+    { key: "average_cost", labelKey: "inventory.labels.avgCost", kind: "amount", sortable: true, sortKey: "average_cost", defaultWidth: 120 },
+    { key: "value", labelKey: "inventory.labels.value", kind: "amount", sortable: true, sortKey: "value", defaultWidth: 120 },
+  ],
+  listFilters: [
+    { key: "item_id", labelKey: "inventory.labels.item", kind: "entity_ref", operators: OPERATORS_BY_KIND.entity_ref, entitySource: "item" },
+    { key: "stock_location_id", labelKey: "inventory.labels.location", kind: "entity_ref", operators: OPERATORS_BY_KIND.entity_ref, entitySource: "stock_location" },
+  ],
+};
+
+const INVENTORY_MOVEMENT_KINDS = ["receipt", "issue", "transfer_out", "transfer_in", "adjustment", "count", "assembly_build", "assembly_consume", "return"];
+
+const INVENTORY_MOVEMENT: RecordTypeMeta = {
+  key: "inventory_movement",
+  labelKey: "customization.recordTypes.inventory_movement",
+  category: "entity",
+  supportsForms: false,
+  customFieldTable: "items",
+  customFieldLineTable: null,
+  headerFields: [],
+  lineFields: [],
+  listColumns: [
+    { key: "movement_date", labelKey: "inventory.labels.date", kind: "date", sortable: true, sortKey: "date" },
+    { key: "kind", labelKey: "inventory.labels.kind", kind: "status", sortable: true, sortKey: "kind" },
+    { key: "item_name", labelKey: "inventory.labels.item", kind: "reference", sortable: true, sortKey: "item", locked: true },
+    { key: "location_code", labelKey: "inventory.labels.location", kind: "text", sortable: true, sortKey: "location" },
+    { key: "quantity", labelKey: "inventory.labels.quantity", kind: "text", sortable: true, sortKey: "quantity" },
+    { key: "unit_cost", labelKey: "inventory.labels.unitCost", kind: "amount", sortable: true, sortKey: "unit_cost", defaultHidden: true, defaultWidth: 120 },
+    { key: "total_value", labelKey: "inventory.labels.value", kind: "amount", sortable: true, sortKey: "value", defaultWidth: 120 },
+    { key: "status", labelKey: "common.labels.status", kind: "status", sortable: true, sortKey: "status", defaultHidden: true },
+    { key: "memo", labelKey: "common.labels.memo", kind: "text", defaultHidden: true },
+  ],
+  listFilters: [
+    {
+      key: "kind", labelKey: "inventory.labels.kind", kind: "select", operators: OPERATORS_BY_KIND.select,
+      options: INVENTORY_MOVEMENT_KINDS.map((value) => ({ value, labelKey: `inventory.kind.${value}` })),
+    },
+    { key: "item_id", labelKey: "inventory.labels.item", kind: "entity_ref", operators: OPERATORS_BY_KIND.entity_ref, entitySource: "item" },
+    { key: "stock_location_id", labelKey: "inventory.labels.location", kind: "entity_ref", operators: OPERATORS_BY_KIND.entity_ref, entitySource: "stock_location" },
+    { key: "moved_at", labelKey: "inventory.labels.date", kind: "date", operators: OPERATORS_BY_KIND.date },
+  ],
+};
+
+const BUDGET_SCENARIO: RecordTypeMeta = {
+  key: "budget_scenario",
+  labelKey: "customization.recordTypes.budget_scenario",
+  category: "entity",
+  supportsForms: false,
+  customFieldTable: "budget_scenarios",
+  customFieldLineTable: null,
+  headerFields: [],
+  lineFields: [],
+  listColumns: [
+    { key: "name", labelKey: "budgets.columns.name", kind: "reference", sortable: true, sortKey: "name", locked: true },
+    { key: "book_name", labelKey: "budgets.columns.book", kind: "text", sortable: true, sortKey: "book" },
+    { key: "fiscal_year", labelKey: "budgets.columns.fiscalYear", kind: "text", sortable: true, sortKey: "year" },
+    { key: "kind", labelKey: "budgets.columns.kind", kind: "status", sortable: true, sortKey: "kind" },
+    { key: "status", labelKey: "budgets.columns.status", kind: "status", sortable: true, sortKey: "status" },
+    { key: "total_amount", labelKey: "budgets.columns.total", kind: "amount", sortable: true, sortKey: "total", defaultWidth: 130 },
+    { key: "updated", labelKey: "budgets.columns.updated", kind: "date", sortable: true, sortKey: "updated", defaultWidth: 150 },
+    { key: "_actions", labelKey: "common.labels.actions", kind: "actions", defaultWidth: 44 },
+  ],
+  listFilters: [
+    {
+      key: "status", labelKey: "budgets.list.statusFilter", kind: "select", operators: OPERATORS_BY_KIND.select,
+      options: ["draft", "pending_approval", "approved", "archived"].map((value) => ({ value, labelKey: `budgets.status.${value}` })),
+    },
+    {
+      key: "kind", labelKey: "budgets.list.kindFilter", kind: "select", operators: OPERATORS_BY_KIND.select,
+      options: ["budget", "forecast"].map((value) => ({ value, labelKey: `budgets.kind.${value}` })),
+    },
+    { key: "fiscal_year", labelKey: "budgets.list.yearFilter", kind: "select", operators: OPERATORS_BY_KIND.select },
+    { key: "book_id", labelKey: "budgets.list.bookFilter", kind: "entity_ref", operators: OPERATORS_BY_KIND.entity_ref, entitySource: "accounting_book" },
+  ],
+};
+
+const REVENUE_CONTRACT: RecordTypeMeta = {
+  key: "revenue_contract",
+  labelKey: "customization.recordTypes.revenue_contract",
+  category: "entity",
+  supportsForms: false,
+  customFieldTable: "revenue_contracts",
+  customFieldLineTable: null,
+  headerFields: [],
+  lineFields: [],
+  listColumns: [
+    { key: "contract_number", labelKey: "revenue.labels.contract", kind: "reference", sortable: true, sortKey: "number", locked: true },
+    { key: "customer_name", labelKey: "revenue.labels.customer", kind: "text", sortable: true, sortKey: "customer" },
+    { key: "total_price", labelKey: "revenue.labels.total", kind: "amount", sortable: true, sortKey: "total", defaultWidth: 130 },
+    { key: "recognized", labelKey: "revenue.labels.recognized", kind: "amount", sortable: true, sortKey: "recognized", defaultWidth: 130 },
+    { key: "deferred", labelKey: "revenue.labels.deferred", kind: "amount", sortable: true, sortKey: "deferred", defaultWidth: 130 },
+    { key: "starts_on", labelKey: "common.labels.date", kind: "date", sortable: true, sortKey: "start", defaultHidden: true },
+    { key: "ends_on", labelKey: "common.labels.date", kind: "date", sortable: true, sortKey: "end", defaultHidden: true },
+    { key: "status", labelKey: "common.labels.status", kind: "status", sortable: true, sortKey: "status" },
+    { key: "_actions", labelKey: "common.labels.actions", kind: "actions", defaultWidth: 44 },
+  ],
+  listFilters: [
+    {
+      key: "status", labelKey: "common.labels.status", kind: "select", operators: OPERATORS_BY_KIND.select,
+      options: ["draft", "active", "complete", "cancelled"].map((value) => ({ value, labelKey: `revenue.status.${value}` })),
+    },
+    { key: "customer_id", labelKey: "revenue.labels.customer", kind: "entity_ref", operators: OPERATORS_BY_KIND.entity_ref, entitySource: "customer" },
+    { key: "starts_on", labelKey: "common.labels.date", kind: "date", operators: OPERATORS_BY_KIND.date },
+    { key: "ends_on", labelKey: "common.labels.date", kind: "date", operators: OPERATORS_BY_KIND.date },
+  ],
+};
+
+const EQUIPMENT_UNIT: RecordTypeMeta = {
+  key: "equipment_unit",
+  labelKey: "customization.recordTypes.equipment_unit",
+  category: "entity",
+  supportsForms: false,
+  customFieldTable: "equipment_units",
+  customFieldLineTable: null,
+  headerFields: [],
+  lineFields: [],
+  listColumns: [
+    { key: "unit_number", labelKey: "assets.equipment.number", kind: "text", sortable: true, sortKey: "number" },
+    { key: "name", labelKey: "common.labels.name", kind: "reference", sortable: true, sortKey: "name", locked: true },
+    { key: "charge_item", labelKey: "assets.equipment.chargeItem", kind: "text", sortable: true, sortKey: "item" },
+    { key: "serial_number", labelKey: "assets.equipment.serial", kind: "text", defaultHidden: true },
+    { key: "purchase_price", labelKey: "assets.equipment.purchasePrice", kind: "amount", sortable: true, sortKey: "purchase", defaultWidth: 130 },
+    { key: "recovery", labelKey: "assets.equipment.metrics.recovery", kind: "amount", sortable: true, sortKey: "recovery", defaultWidth: 130 },
+    { key: "billable", labelKey: "assets.equipment.metrics.billable", kind: "amount", sortable: true, sortKey: "billable", defaultWidth: 130 },
+    { key: "status", labelKey: "common.labels.status", kind: "status", sortable: true, sortKey: "status" },
+    { key: "_actions", labelKey: "common.labels.actions", kind: "actions", defaultWidth: 44 },
+  ],
+  listFilters: [
+    {
+      key: "status", labelKey: "common.labels.status", kind: "select", operators: OPERATORS_BY_KIND.select,
+      options: ["draft", "active", "inactive", "retired"].map((value) => ({ value, labelKey: `assets.equipment.statuses.${value}` })),
+    },
+    { key: "charge_item_id", labelKey: "assets.equipment.chargeItem", kind: "entity_ref", operators: OPERATORS_BY_KIND.entity_ref, entitySource: "equipment_item" },
+    { key: "fixed_asset_id", labelKey: "assets.equipment.fixedAsset", kind: "entity_ref", operators: OPERATORS_BY_KIND.entity_ref, entitySource: "fixed_asset" },
+  ],
+};
+
+const TIMESHEET_WEEK: RecordTypeMeta = {
+  key: "timesheet_week",
+  labelKey: "customization.recordTypes.timesheet_week",
+  category: "entity",
+  supportsForms: false,
+  customFieldTable: "timesheet_weeks",
+  customFieldLineTable: null,
+  headerFields: [],
+  lineFields: [],
+  listColumns: [
+    { key: "employee_name", labelKey: "common.labels.employee", kind: "reference", sortable: true, sortKey: "employee", locked: true },
+    { key: "week_start", labelKey: "timesheets.list.week", kind: "date", sortable: true, sortKey: "week" },
+    { key: "status", labelKey: "common.labels.status", kind: "status", sortable: true, sortKey: "status" },
+    { key: "total_hours", labelKey: "timesheets.labels.totalHours", kind: "text", sortable: true, sortKey: "total" },
+    { key: "billable_hours", labelKey: "timesheets.labels.billableHours", kind: "text", sortable: true, sortKey: "billable" },
+  ],
+  listFilters: [
+    {
+      key: "status", labelKey: "common.labels.status", kind: "select", operators: OPERATORS_BY_KIND.select,
+      options: [
+        { value: "draft", labelKey: "common.status.draft" },
+        { value: "submitted", labelKey: "timesheets.status.submitted" },
+        { value: "approved", labelKey: "common.status.approved" },
+        { value: "rejected", labelKey: "common.status.rejected" },
+      ],
+    },
+    { key: "employee_party_id", labelKey: "common.labels.employee", kind: "entity_ref", operators: OPERATORS_BY_KIND.entity_ref, entitySource: "employee" },
+  ],
+};
+
+const BANK_RECONCILIATION: RecordTypeMeta = {
+  key: "bank_reconciliation",
+  labelKey: "customization.recordTypes.bank_reconciliation",
+  category: "entity",
+  supportsForms: false,
+  customFieldLineTable: null,
+  headerFields: [], lineFields: [],
+  listColumns: [
+    { key: "account_name", labelKey: "common.labels.account", kind: "reference", sortable: true, sortKey: "account", locked: true },
+    { key: "through_date", labelKey: "banking.account.columns.throughDate", kind: "date", sortable: true, sortKey: "through" },
+    { key: "statement_balance", labelKey: "banking.labels.statementBalance", kind: "amount", sortable: true, sortKey: "balance" },
+    { key: "status", labelKey: "common.labels.status", kind: "status", sortable: true, sortKey: "status" },
+    { key: "started", labelKey: "banking.account.columns.started", kind: "date", sortable: true, sortKey: "created" },
+    { key: "signed_off", labelKey: "banking.account.columns.signedOff", kind: "date", sortable: true, sortKey: "signed_off" },
+  ],
+  listFilters: [
+    {
+      key: "status", labelKey: "common.labels.status", kind: "select", operators: OPERATORS_BY_KIND.select,
+      options: ["signed_off", "balanced", "in_progress"].map((value) => ({ value, labelKey: `banking.reconStatus.${value}` })),
+    },
+    { key: "account_id", labelKey: "common.labels.account", kind: "entity_ref", operators: OPERATORS_BY_KIND.entity_ref, entitySource: "bank_account" },
+    { key: "through_date", labelKey: "banking.account.columns.throughDate", kind: "date", operators: OPERATORS_BY_KIND.date },
+  ],
+};
+
+const BANK_STATEMENT: RecordTypeMeta = {
+  key: "bank_statement",
+  labelKey: "customization.recordTypes.bank_statement",
+  category: "entity",
+  supportsForms: false,
+  customFieldLineTable: null,
+  headerFields: [], lineFields: [],
+  listColumns: [
+    { key: "statement_date", labelKey: "banking.labels.statementDate", kind: "reference", sortable: true, sortKey: "date", locked: true },
+    { key: "account_name", labelKey: "common.labels.account", kind: "text", sortable: true, sortKey: "account" },
+    { key: "source", labelKey: "banking.labels.source", kind: "status", sortable: true, sortKey: "source" },
+    { key: "line_count", labelKey: "common.labels.lines", kind: "text", sortable: true, sortKey: "lines" },
+    { key: "unmatched_count", labelKey: "banking.account.columns.unmatched", kind: "text", sortable: true, sortKey: "unmatched" },
+    { key: "opening_balance", labelKey: "banking.account.columns.opening", kind: "amount", sortable: true, sortKey: "opening" },
+    { key: "closing_balance", labelKey: "banking.account.columns.closing", kind: "amount", sortable: true, sortKey: "closing" },
+    { key: "imported", labelKey: "banking.account.columns.imported", kind: "date", sortable: true, sortKey: "imported" },
+  ],
+  listFilters: [
+    { key: "source", labelKey: "banking.labels.source", kind: "select", operators: OPERATORS_BY_KIND.select },
+    { key: "account_id", labelKey: "common.labels.account", kind: "entity_ref", operators: OPERATORS_BY_KIND.entity_ref, entitySource: "bank_account" },
+    { key: "statement_date", labelKey: "banking.labels.statementDate", kind: "date", operators: OPERATORS_BY_KIND.date },
+  ],
+};
+
+const BANK_RULE: RecordTypeMeta = {
+  key: "bank_rule",
+  labelKey: "customization.recordTypes.bank_rule",
+  category: "entity",
+  supportsForms: false,
+  customFieldLineTable: null,
+  headerFields: [], lineFields: [],
+  listColumns: [
+    { key: "priority", labelKey: "banking.rules.priority", kind: "text", sortable: true, sortKey: "priority", defaultWidth: 90 },
+    { key: "name", labelKey: "common.labels.name", kind: "reference", sortable: true, sortKey: "name", locked: true },
+    { key: "criteria_summary", labelKey: "banking.rules.whenLabel", kind: "text" },
+    { key: "outcome_summary", labelKey: "banking.rules.thenLabel", kind: "text" },
+    { key: "status", labelKey: "common.labels.status", kind: "status" },
+    { key: "created", labelKey: "common.labels.created", kind: "date", sortable: true, sortKey: "created", defaultHidden: true },
+  ],
+  listFilters: [
+    {
+      key: "is_active", labelKey: "common.labels.status", kind: "select", operators: OPERATORS_BY_KIND.select,
+      options: [
+        { value: "true", labelKey: "common.labels.active" },
+        { value: "false", labelKey: "banking.rules.inactive" },
+      ],
+    },
+  ],
+};
+
 const VENDOR: RecordTypeMeta = {
   key: "vendor",
   labelKey: "customization.recordTypes.vendor",
@@ -714,8 +1258,32 @@ const FIXED_ASSET: RecordTypeMeta = {
     { key: "depreciation_expense_account_id", labelKey: "assets.labels.expenseAccount", level: "header", kind: "entity_ref" },
   ],
   lineFields: [],
-  listColumns: [],
-  listFilters: [],
+  listColumns: [
+    { key: "asset_number", labelKey: "assets.labels.number", kind: "text", sortable: true, sortKey: "number" },
+    { key: "name", labelKey: "common.labels.name", kind: "reference", sortable: true, sortKey: "name", locked: true },
+    { key: "category_name", labelKey: "assets.labels.category", kind: "text", sortable: true, sortKey: "category" },
+    { key: "acquisition_cost", labelKey: "assets.labels.cost", kind: "amount", sortable: true, sortKey: "cost", defaultWidth: 130 },
+    { key: "accumulated", labelKey: "assets.labels.accumulated", kind: "amount", sortable: true, sortKey: "accumulated", defaultWidth: 130 },
+    { key: "net_book_value", labelKey: "assets.labels.nbv", kind: "amount", sortable: true, sortKey: "nbv", defaultWidth: 130 },
+    { key: "serial_number", labelKey: "assets.labels.serialNumber", kind: "text", defaultHidden: true },
+    { key: "status", labelKey: "common.labels.status", kind: "status", sortable: true, sortKey: "status", defaultWidth: 130 },
+    { key: "_actions", labelKey: "common.labels.actions", kind: "actions", defaultWidth: 44 },
+  ],
+  listFilters: [
+    {
+      key: "status",
+      labelKey: "common.labels.status",
+      kind: "select",
+      operators: OPERATORS_BY_KIND.select,
+      options: ["draft", "in_service", "fully_depreciated", "disposed", "written_off"].map((value) => ({
+        value,
+        labelKey: `assets.status.${value}`,
+      })),
+    },
+    { key: "category_id", labelKey: "assets.labels.category", kind: "entity_ref", operators: OPERATORS_BY_KIND.entity_ref, entitySource: "asset_category" },
+    { key: "acquired_on", labelKey: "assets.labels.acquiredOn", kind: "date", operators: OPERATORS_BY_KIND.date },
+    { key: "serial_number", labelKey: "assets.labels.serialNumber", kind: "text", operators: OPERATORS_BY_KIND.text },
+  ],
 };
 
 /** Labor Pricing rate cards use the same configurable form-layout system as
@@ -816,6 +1384,22 @@ export const RECORD_TYPES: RecordTypeMeta[] = [
   SALES_ORDER,
   PURCHASE_ORDER,
   CUSTOMER,
+  OPPORTUNITY,
+  LEAD,
+  PROSPECT,
+  ACTIVITY,
+  ITEM,
+  ACCOUNT,
+  BANK_TRANSACTION,
+  INVENTORY_ONHAND,
+  INVENTORY_MOVEMENT,
+  BUDGET_SCENARIO,
+  REVENUE_CONTRACT,
+  EQUIPMENT_UNIT,
+  TIMESHEET_WEEK,
+  BANK_RECONCILIATION,
+  BANK_STATEMENT,
+  BANK_RULE,
   VENDOR,
   EMPLOYEE,
   FIELD_TICKET,

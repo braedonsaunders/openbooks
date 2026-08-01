@@ -297,8 +297,12 @@ export function JournalDrawer({
       body: JSON.stringify({ action: 'post', documentId: doc.id }),
     })
     const data = await res.json()
-    if (!res.ok) toast.error(data.error ?? t('postFailed'))
-    else if (data.pendingApproval) toast.success(tc('actions.submitForApproval'))
+    if (!res.ok) {
+      toast.error(data.error ?? t('postFailed'))
+      setBusy(false)
+      return
+    }
+    if (data.pendingApproval) toast.success(tc('actions.submitForApproval'))
     else toast.success(t('postedToast'))
     setBusy(false)
     router.refresh()

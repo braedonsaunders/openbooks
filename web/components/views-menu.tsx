@@ -13,7 +13,8 @@ import type { ListViewRow } from '../lib/customization/resolve'
 /**
  * Saved-list-view picker for a record list page. Lists the views available to
  * the user (org-shared + personal), loads one via ?view=<id>, sets the user's
- * default, and links admins to the view designer.
+ * default, and links every user to their personal view designer. Organization
+ * view scope remains permission-gated inside the designer and API.
  */
 export function ViewsMenu({
   available,
@@ -37,6 +38,7 @@ export function ViewsMenu({
   const [open, setOpen] = useState(false)
   const [busy, setBusy] = useState(false)
   const q = pickString(currentParams.q)
+  const manageScope = canManage ? 'all' : 'user'
 
   const setDefault = async (viewId: string | null) => {
     setBusy(true)
@@ -114,24 +116,20 @@ export function ViewsMenu({
           >
             {t('useSystemDefault')}
           </button>
-          {canManage ? (
-            <>
-              <Link
-                href={`/admin/customization?recordType=${encodeURIComponent(recordType)}&tab=views&view=new`}
-                onClick={() => setOpen(false)}
-                className="block px-3 py-1.5 text-teal-700 hover:bg-slate-50 dark:text-teal-300 dark:hover:bg-slate-800/60"
-              >
-                {t('newView')}
-              </Link>
-              <Link
-                href={`/admin/customization?recordType=${encodeURIComponent(recordType)}&tab=views`}
-                onClick={() => setOpen(false)}
-                className="block px-3 py-1.5 text-teal-700 hover:bg-slate-50 dark:text-teal-300 dark:hover:bg-slate-800/60"
-              >
-                {t('manage')}
-              </Link>
-            </>
-          ) : null}
+          <Link
+            href={`/admin/customization?recordType=${encodeURIComponent(recordType)}&tab=views&view=new&scope=${manageScope}`}
+            onClick={() => setOpen(false)}
+            className="block px-3 py-1.5 text-teal-700 hover:bg-slate-50 dark:text-teal-300 dark:hover:bg-slate-800/60"
+          >
+            {t('newView')}
+          </Link>
+          <Link
+            href={`/admin/customization?recordType=${encodeURIComponent(recordType)}&tab=views&scope=${manageScope}`}
+            onClick={() => setOpen(false)}
+            className="block px-3 py-1.5 text-teal-700 hover:bg-slate-50 dark:text-teal-300 dark:hover:bg-slate-800/60"
+          >
+            {t('manage')}
+          </Link>
         </div>
       </div>
     </Popover>

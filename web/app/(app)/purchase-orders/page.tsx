@@ -6,6 +6,7 @@ import { ListPageLayout } from '../../../components/page-layout'
 import { RecordListView } from '../../../components/record-list-view'
 import { pickString } from '../../../lib/list-params'
 import { requirePermission, can } from '../../../lib/authz'
+import { requireFeatureEnabled } from '../../../lib/feature-gates'
 import { loadOrder } from '../../api/_order/lib'
 import { OrderDrawer } from '../_order/OrderDrawer'
 import { NewOrderButton } from '../_order/NewOrderButton'
@@ -33,6 +34,7 @@ export default async function PurchaseOrders({
   searchParams: Promise<Record<string, string | string[] | undefined>>
 }) {
   const authz = await requirePermission('ap.read')
+  await requireFeatureEnabled(authz.user.orgId, 'orders')
   const canManage = can(authz, 'ap.create')
   const t = await getTranslations('purchaseOrders')
   const sp = await searchParams
@@ -42,7 +44,14 @@ export default async function PurchaseOrders({
     openId && openId !== 'new' ? loadOrder(openId, authz.user.orgId, KIND) : null,
     openId && openId !== 'new'
       ? Promise.all([
-          db.execute(sql`select id, display_name from parties where org_id = ${authz.user.orgId} and custom->>'nsKind' = 'vendor' and is_active order by display_name limit 2000`) as any,
+          db.execute(sql`
+            select p.id, p.display_name from parties p
+             where p.org_id = ${authz.user.orgId} and p.is_active
+               and exists (
+                 select 1 from vendor_roles role
+                  where role.org_id = p.org_id and role.party_id = p.id and role.is_active
+               )
+             order by p.display_name limit 2000`) as any,
           db.execute(sql`select id, number, name from accounts where org_id = ${authz.user.orgId} and is_active and not is_summary order by number nulls last`) as any,
           db.execute(sql`select id, code, name, default_rate, income_account_id, expense_account_id, tax_code_id, unit from items where org_id = ${authz.user.orgId} and is_active order by name limit 2000`) as any,
           taxCodeOptions(authz.user.orgId),
@@ -56,7 +65,7 @@ export default async function PurchaseOrders({
   ])
   const resolvedForm = openOrder && pickers ? await resolveFormLayout({
     orgId: authz.user.orgId, userId: authz.user.id, recordType: KIND,
-    userRoles: [authz.user.role], headerDefs: [], lineDefs: [], explicitLayoutId: pickString(sp.form),
+    userRoles: authz.user.roles.map(({ key }) => key), headerDefs: [], lineDefs: [], explicitLayoutId: pickString(sp.form),
   }) : null
 
   const newBtn = canManage ? (
