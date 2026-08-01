@@ -547,6 +547,7 @@ export const INDUSTRIES: IndustryDef[] = [
     icon: 'Home',
     category: 'property',
     features: {
+      propertyManagement: true,
       multiSubsidiary: true,
       fixedAssets: true,
       subscriptionBilling: true,

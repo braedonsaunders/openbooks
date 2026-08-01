@@ -128,6 +128,15 @@ export async function tick(): Promise<void> {
       console.error("[scheduler] subscription billing scan failed:", e);
     }
 
+    // Property management: extend active lease schedules, assess governed late
+    // fees, and create native tenant invoices for every due charge.
+    try {
+      const { runDuePropertyBilling } = await import("./property-management.ts");
+      await runDuePropertyBilling();
+    } catch (e) {
+      console.error("[scheduler] property billing scan failed:", e);
+    }
+
     // Flows: scheduled triggers (cron cursor on flows.last_scheduled_run_at).
     try {
       const { runDueScheduledFlows } = await import("./flows/scheduled.ts");

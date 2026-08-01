@@ -15,6 +15,7 @@ import { subcontractorCompliance } from './articles/subcontractor-compliance'
 import { itemRates } from './articles/item-rates'
 import { fixedAssetsDepreciation } from './articles/fixed-assets-depreciation'
 import { revenueRecognition } from './articles/revenue-recognition'
+import { propertyManagement } from './articles/property-management'
 import { apps } from './articles/apps'
 import { appBuilder } from './articles/app-builder'
 import { appApiReference } from './articles/app-api-reference'
@@ -164,6 +165,7 @@ const ARTICLE_SECTION_BY_SLUG: Record<string, string> = {
   'sales-workflow': 'transactions-daily',
   'purchasing-workflow': 'transactions-daily',
   'payments-and-applications': 'transactions-daily',
+  'property-management': 'transactions-daily',
   'financial-reports': 'reporting-guides',
   'analytics-and-saved-views': 'reporting-guides',
   'migrate-with-a-connector': 'integrations-migration',
@@ -221,6 +223,7 @@ const RAW_DOC_ARTICLES: DocArticle[] = [
   salesWorkflow,
   purchasingWorkflow,
   paymentsAndApplications,
+  propertyManagement,
   bankingAndReconciliation,
   periodClose,
   projectTypes, overheadCosting, laborCosting, laborPricing, fieldTickets, subcontractorCompliance,

@@ -55,6 +55,7 @@ const ICONS: Record<string, LucideIcon> = {
   fieldTickets: ClipboardList,
   subcontracts: ClipboardList,
   wipBilling: CircleDollarSign,
+  propertyManagement: Building2,
   inventory: Package,
   equipment: Wrench,
   expenses: Receipt,

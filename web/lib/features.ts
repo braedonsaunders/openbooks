@@ -60,6 +60,10 @@ export const FEATURES: FeatureDef[] = [
   { key: 'projectScheduling', defaultEnabled: false, category: 'operations', parentKey: 'projects' },
   { key: 'subcontracts', defaultEnabled: false, category: 'operations', navModules: ['subcontracts'], requiresAll: ['projects'], recommends: ['orders', 'subcontractorCompliance'] },
   { key: 'wipBilling', defaultEnabled: false, category: 'operations', navModules: ['wip-billing'], requiresAll: ['projects'], recommends: ['timeTracking'] },
+  // Lease, rent, CAM, and deposit operations. A third-party manager may not
+  // own the buildings or use separate legal entities, so adjacent accounting
+  // capabilities are recommendations rather than hard dependencies.
+  { key: 'propertyManagement', defaultEnabled: false, category: 'operations', navModules: ['property-management'], recommends: ['fixedAssets', 'multiSubsidiary', 'onlinePayments', 'revenueRecognition'] },
   // Subcontractor compliance: certificates of insurance, lien waivers, and
   // year-end information returns (1099-NEC/MISC, T4A) for the people you pay.
   // Off by default and deliberately NOT a child of `projects`: COI tracking and
@@ -329,6 +333,16 @@ const FEATURE_DISABLE_CHECKS: Record<string, (orgId: string) => Promise<FeatureD
     if (worksheets) impacts.push({ labelKey: 'openPrebills', count: worksheets })
     if (holds) impacts.push({ labelKey: 'activeWipHolds', count: holds })
     return { blocked: worksheets + holds > 0, impacts }
+  },
+  propertyManagement: async (orgId) => {
+    const [leases, deposits] = await Promise.all([
+      countRows(sql`select count(*)::int as n from property_leases where org_id=${orgId} and status in ('active','notice')`),
+      countRows(sql`select count(*)::int as n from security_deposit_transactions where org_id=${orgId}`),
+    ])
+    const impacts: FeatureImpact[] = []
+    if (leases) impacts.push({ labelKey: 'activePropertyLeases', count: leases })
+    if (deposits) impacts.push({ labelKey: 'securityDepositTransactions', count: deposits })
+    return { blocked: leases > 0, impacts }
   },
   // A schedule is planning data, never posted history, so turning it off is
   // always safe — but say how much plan goes dark before it happens.

@@ -2616,6 +2616,8 @@
         "activeSubcontractPaymentControls": "{count, plural, one {# active subcontract payment control} other {# active subcontract payment controls}}",
         "openPrebills": "{count, plural, one {# prebill awaiting completion} other {# prebills awaiting completion}}",
         "activeWipHolds": "{count, plural, one {# active WIP hold} other {# active WIP holds}}",
+        "activePropertyLeases": "{count, plural, one {# active property lease} other {# active property leases}}",
+        "securityDepositTransactions": "{count, plural, one {# security-deposit transaction} other {# security-deposit transactions}}",
         "revenueSchedules": "{count, plural, one {# deferred-revenue schedule} other {# deferred-revenue schedules}}",
         "controlCheckUnavailable": "an integrity check that could not be completed",
         "trackedVendors": "{count, plural, one {# tracked subcontractor} other {# tracked subcontractors}}",
@@ -3157,6 +3159,10 @@
     "wipBilling": {
       "title": "WIP & prebilling",
       "description": "Review billable project work, hold or adjust lines with evidence, approve prebills, and monitor WIP aging, realization, and leakage."
+    },
+    "propertyManagement": {
+      "title": "Property management",
+      "description": "Properties, units, tenant leases, recurring rent, escalations, late fees, security deposits, and CAM reconciliation."
     },
     "onlinePayments": {
       "title": "Online Payments",

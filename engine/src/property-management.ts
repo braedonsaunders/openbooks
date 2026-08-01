@@ -1,0 +1,679 @@
+import { sql } from "drizzle-orm";
+import { db, withBypass, withOrg, withOrgTransaction } from "./db.ts";
+import { add, cmp, mulPercent, mulRatio, neg, normalizeMoney, sum, toUnits } from "./money.ts";
+import { createSubscriptionInvoice } from "./subscription-billing.ts";
+import type { AdvancedBillingLine } from "./advanced-subscriptions.ts";
+
+export class PropertyManagementError extends Error {}
+
+const isoDate = /^\d{4}-\d{2}-\d{2}$/;
+function validDate(value: string | null | undefined, label: string): string | null {
+  if (value == null || value === "") return null;
+  if (!isoDate.test(value)) throw new PropertyManagementError(`${label} is invalid`);
+  const parsed = new Date(`${value}T00:00:00Z`);
+  if (Number.isNaN(parsed.getTime()) || toIso(parsed) !== value) throw new PropertyManagementError(`${label} is invalid`);
+  return value;
+}
+function utc(iso: string): Date { return new Date(`${iso}T00:00:00Z`); }
+function toIso(date: Date): string { return date.toISOString().slice(0, 10); }
+function addDays(iso: string, days: number): string { const d = utc(iso); d.setUTCDate(d.getUTCDate() + days); return toIso(d); }
+function startOfMonth(iso: string): string { return `${iso.slice(0, 7)}-01`; }
+function addMonths(iso: string, months: number): string {
+  const d = utc(startOfMonth(iso)); d.setUTCMonth(d.getUTCMonth() + months); return toIso(d);
+}
+function endOfMonth(iso: string): string { return addDays(addMonths(startOfMonth(iso), 1), -1); }
+function dayCount(a: string, b: string): number { return Math.round((utc(b).getTime() - utc(a).getTime()) / 86_400_000) + 1; }
+function clampDue(month: string, billingDay: number): string {
+  const last = Number(endOfMonth(month).slice(8, 10));
+  return `${month.slice(0, 8)}${String(Math.min(Math.max(1, billingDay), last)).padStart(2, "0")}`;
+}
+function maxDate(...dates: string[]): string { return dates.reduce((a, b) => a > b ? a : b); }
+function minDate(...dates: string[]): string { return dates.reduce((a, b) => a < b ? a : b); }
+
+/** Inclusive overlap used for occupancy-weighted CAM allocations. */
+export function overlapDayCount(aStart: string, aEnd: string, bStart: string, bEnd: string): number {
+  const start = maxDate(aStart, bStart);
+  const end = minDate(aEnd, bEnd);
+  return end < start ? 0 : dayCount(start, end);
+}
+
+export interface SchedulePeriod {
+  periodStartsOn: string;
+  periodEndsOn: string;
+  dueOn: string;
+  amount: string;
+}
+
+/** Exact, inclusive-day proration for partial first/last rental periods. */
+export function prorateLeaseCharge(amount: string, nominalStart: string, nominalEnd: string, activeStart: string, activeEnd: string): string {
+  const total = dayCount(nominalStart, nominalEnd);
+  const active = Math.max(0, dayCount(maxDate(nominalStart, activeStart), minDate(nominalEnd, activeEnd)));
+  if (active <= 0 || total <= 0) return "0.0000";
+  return mulRatio(normalizeMoney(amount), BigInt(active), BigInt(total));
+}
+
+/** Deterministic charge schedule used by activation, amendments, and tests. */
+export function leaseChargeSchedule(input: {
+  amount: string; frequency: "monthly" | "quarterly" | "annually" | "one_time";
+  effectiveFrom: string; effectiveTo?: string | null; leaseStartsOn: string; leaseEndsOn?: string | null;
+  throughOn: string; billingDay: number;
+}): SchedulePeriod[] {
+  const start = maxDate(input.effectiveFrom, input.leaseStartsOn);
+  const end = minDate(input.effectiveTo ?? input.throughOn, input.leaseEndsOn ?? input.throughOn, input.throughOn);
+  if (end < start) return [];
+  if (input.frequency === "one_time") return [{ periodStartsOn: start, periodEndsOn: start, dueOn: start, amount: normalizeMoney(input.amount) }];
+  const step = input.frequency === "monthly" ? 1 : input.frequency === "quarterly" ? 3 : 12;
+  const rows: SchedulePeriod[] = [];
+  for (let nominalStart = startOfMonth(start); nominalStart <= end; nominalStart = addMonths(nominalStart, step)) {
+    const nominalEnd = addDays(addMonths(nominalStart, step), -1);
+    const activeStart = maxDate(nominalStart, start);
+    const activeEnd = minDate(nominalEnd, end);
+    if (activeEnd < activeStart) continue;
+    const amount = prorateLeaseCharge(input.amount, nominalStart, nominalEnd, activeStart, activeEnd);
+    if (cmp(amount, "0") > 0) rows.push({ periodStartsOn: activeStart, periodEndsOn: activeEnd, dueOn: clampDue(nominalStart, input.billingDay), amount });
+  }
+  return rows;
+}
+
+export function escalatedRent(current: string, method: "percent" | "fixed" | "new_amount", value: string): string {
+  const base = normalizeMoney(current); const v = normalizeMoney(value);
+  const next = method === "percent" ? add(base, mulPercent(base, v)) : method === "fixed" ? add(base, v) : v;
+  if (cmp(next, "0") <= 0) throw new PropertyManagementError("Escalated rent must be positive");
+  return next;
+}
+
+export type DepositKind = "received" | "interest" | "applied" | "refunded" | "adjustment_increase" | "adjustment_decrease";
+const DEPOSIT_KINDS = new Set<DepositKind>(["received", "interest", "applied", "refunded", "adjustment_increase", "adjustment_decrease"]);
+function asDepositKind(value: string): DepositKind {
+  if (!DEPOSIT_KINDS.has(value as DepositKind)) throw new PropertyManagementError("Unsupported deposit transaction type");
+  return value as DepositKind;
+}
+
+/** Accounting-side contract for the security-deposit subledger. */
+export function depositPostingShape(kindValue: string): {
+  kind: DepositKind;
+  liabilitySide: "debit" | "credit";
+  offsetSide: "debit" | "credit";
+  offsetIsArOpenItem: boolean;
+} {
+  const kind = asDepositKind(kindValue);
+  const increase = kind === "received" || kind === "interest" || kind === "adjustment_increase";
+  return {
+    kind,
+    liabilitySide: increase ? "credit" : "debit",
+    offsetSide: increase ? "debit" : "credit",
+    offsetIsArOpenItem: kind === "applied",
+  };
+}
+
+export function depositBalance(transactions: Array<{ kind: string; amount: string }>): string {
+  return sum(transactions.map((row) => depositPostingShape(row.kind).liabilitySide === "credit" ? row.amount : neg(row.amount)));
+}
+
+async function assertEnabled(runner: Pick<typeof db, "execute">, orgId: string): Promise<void> {
+  const result = (await runner.execute(sql`
+    select coalesce((settings->'features'->>'propertyManagement')::boolean,false) as enabled from orgs where id=${orgId}
+  `)) as unknown as { rows: { enabled: boolean }[] };
+  if (!result.rows[0]?.enabled) throw new PropertyManagementError("Property management feature is disabled");
+}
+
+async function audit(tx: Pick<typeof db, "execute">, orgId: string, table: string, rowId: string, action: string, actorId: string, changes: unknown) {
+  await tx.execute(sql`insert into audit_log(org_id,table_name,row_id,action,changes,actor_id)
+    values(${orgId},${table},${rowId},${action},${JSON.stringify(changes)}::jsonb,${actorId})`);
+}
+
+export async function createManagedProperty(input: {
+  orgId: string; actorId: string; subsidiaryId: string; locationId?: string | null; fixedAssetId?: string | null;
+  code: string; name: string; propertyType: string; currency?: string | null; address?: Record<string, string>;
+  rentIncomeAccountId?: string | null; camIncomeAccountId?: string | null; depositLiabilityAccountId?: string | null; defaultBankAccountId?: string | null;
+}): Promise<{ id: string }> {
+  const code = input.code.trim(); const name = input.name.trim();
+  if (!code || !name) throw new PropertyManagementError("Property code and name are required");
+  const requestedCurrency = (input.currency ?? "").trim().toUpperCase();
+  if (requestedCurrency && !/^[A-Z]{3}$/.test(requestedCurrency)) throw new PropertyManagementError("Property currency must be a three-letter ISO code");
+  return db.transaction(async (tx) => {
+    await assertEnabled(tx, input.orgId);
+    const scope = (await tx.execute(sql`
+      select s.base_currency as currency,
+        (${input.locationId ?? null}::uuid is null or exists(select 1 from locations where org_id=${input.orgId} and id=${input.locationId ?? null})) as location_ok,
+        (${input.fixedAssetId ?? null}::uuid is null or exists(select 1 from fixed_assets where org_id=${input.orgId} and id=${input.fixedAssetId ?? null} and subsidiary_id=s.id)) as asset_ok,
+        (${input.rentIncomeAccountId ?? null}::uuid is null or exists(select 1 from accounts where org_id=${input.orgId} and id=${input.rentIncomeAccountId ?? null} and type in ('income','income_other') and is_active and not is_summary)) as rent_account_ok,
+        (${input.camIncomeAccountId ?? null}::uuid is null or exists(select 1 from accounts where org_id=${input.orgId} and id=${input.camIncomeAccountId ?? null} and type in ('income','income_other') and is_active and not is_summary)) as cam_account_ok,
+        (${input.depositLiabilityAccountId ?? null}::uuid is null or exists(select 1 from accounts where org_id=${input.orgId} and id=${input.depositLiabilityAccountId ?? null} and type in ('liability_current_other','liability_long_term') and is_active and not is_summary)) as deposit_account_ok,
+        (${input.defaultBankAccountId ?? null}::uuid is null or exists(select 1 from accounts where org_id=${input.orgId} and id=${input.defaultBankAccountId ?? null} and type='asset_bank' and is_active and not is_summary)) as bank_account_ok
+      from subsidiaries s where s.org_id=${input.orgId} and s.id=${input.subsidiaryId}
+    `)) as unknown as { rows: { currency: string; location_ok: boolean; asset_ok: boolean; rent_account_ok: boolean; cam_account_ok: boolean; deposit_account_ok: boolean; bank_account_ok: boolean }[] };
+    const row = scope.rows[0];
+    if (!row) throw new PropertyManagementError("Subsidiary not found");
+    if (!row.location_ok || !row.asset_ok) throw new PropertyManagementError("Property dimensions do not belong to this organization");
+    if (!row.rent_account_ok || !row.cam_account_ok || !row.deposit_account_ok || !row.bank_account_ok) throw new PropertyManagementError("Property control accounts have incompatible account types");
+    const inserted = (await tx.execute(sql`
+      insert into managed_properties(org_id,subsidiary_id,location_id,fixed_asset_id,code,name,property_type,currency,address,
+        rent_income_account_id,cam_income_account_id,deposit_liability_account_id,default_bank_account_id,created_by,updated_by)
+      values(${input.orgId},${input.subsidiaryId},${input.locationId ?? null},${input.fixedAssetId ?? null},${code},${name},${input.propertyType},
+        ${requestedCurrency || row.currency},${JSON.stringify(input.address ?? {})}::jsonb,${input.rentIncomeAccountId ?? null},${input.camIncomeAccountId ?? null},
+        ${input.depositLiabilityAccountId ?? null},${input.defaultBankAccountId ?? null},${input.actorId},${input.actorId}) returning id
+    `)) as unknown as { rows: { id: string }[] };
+    const id = inserted.rows[0]!.id;
+    await audit(tx, input.orgId, "managed_properties", id, "insert", input.actorId, { code, name });
+    return { id };
+  });
+}
+
+export async function createPropertyUnit(input: { orgId: string; actorId: string; propertyId: string; code: string; name?: string | null; unitType?: string | null; rentableArea?: string | null; bedrooms?: number | null }): Promise<{ id: string }> {
+  if (!input.code.trim()) throw new PropertyManagementError("Unit code is required");
+  return db.transaction(async (tx) => {
+    await assertEnabled(tx, input.orgId);
+    const result = (await tx.execute(sql`
+      insert into property_units(org_id,property_id,code,name,unit_type,rentable_area,bedrooms,created_by,updated_by)
+      select ${input.orgId},id,${input.code.trim()},${input.name ?? null},${input.unitType ?? null},${input.rentableArea ?? null},${input.bedrooms ?? null},${input.actorId},${input.actorId}
+        from managed_properties where org_id=${input.orgId} and id=${input.propertyId} and status='active' returning id
+    `)) as unknown as { rows: { id: string }[] };
+    if (!result.rows[0]) throw new PropertyManagementError("Active property not found");
+    await audit(tx, input.orgId, "property_units", result.rows[0].id, "insert", input.actorId, { propertyId: input.propertyId, code: input.code.trim() });
+    return { id: result.rows[0].id };
+  });
+}
+
+export async function createPropertyLease(input: {
+  orgId: string; actorId: string; propertyId: string; unitId?: string | null; tenantId: string; leaseNumber: string;
+  startsOn: string; endsOn?: string | null; baseRent: string; billingDay?: number; paymentTermsDays?: number;
+  securityDepositRequired?: string; camMethod?: "none" | "fixed" | "pro_rata"; camSharePercent?: string | null;
+  lateFeeType?: "none" | "fixed" | "percent"; lateFeeValue?: string; graceDays?: number; autoInvoice?: boolean; autoPost?: boolean;
+}): Promise<{ id: string }> {
+  const leaseNumber = input.leaseNumber.trim(); const startsOn = validDate(input.startsOn, "Lease start")!;
+  const endsOn = validDate(input.endsOn, "Lease end"); const baseRent = normalizeMoney(input.baseRent);
+  if (!leaseNumber || !startsOn || cmp(baseRent, "0") <= 0) throw new PropertyManagementError("Lease number, start date, and positive base rent are required");
+  if (endsOn && endsOn < startsOn) throw new PropertyManagementError("Lease end cannot precede start");
+  return db.transaction(async (tx) => {
+    await assertEnabled(tx, input.orgId);
+    const scope = (await tx.execute(sql`
+      select p.id,p.rent_income_account_id,
+        exists(select 1 from customer_roles cr where cr.org_id=p.org_id and cr.party_id=${input.tenantId} and cr.is_active) as tenant_ok,
+        (${input.unitId ?? null}::uuid is null or exists(select 1 from property_units u where u.org_id=p.org_id and u.id=${input.unitId ?? null} and u.property_id=p.id and u.status<>'offline')) as unit_ok
+      from managed_properties p where p.org_id=${input.orgId} and p.id=${input.propertyId} and p.status='active'
+    `)) as unknown as { rows: { id: string; rent_income_account_id: string | null; tenant_ok: boolean; unit_ok: boolean }[] };
+    const property = scope.rows[0];
+    if (!property) throw new PropertyManagementError("Active property not found");
+    if (!property.tenant_ok) throw new PropertyManagementError("Tenant must be an active customer");
+    if (!property.unit_ok) throw new PropertyManagementError("Unit does not belong to this property");
+    if (!property.rent_income_account_id) throw new PropertyManagementError("Configure the property rent income account first");
+    const inserted = (await tx.execute(sql`
+      insert into property_leases(org_id,property_id,unit_id,tenant_id,lease_number,starts_on,ends_on,billing_day,payment_terms_days,
+        security_deposit_required,cam_method,cam_share_percent,late_fee_type,late_fee_value,grace_days,auto_invoice,auto_post,created_by,updated_by)
+      values(${input.orgId},${input.propertyId},${input.unitId ?? null},${input.tenantId},${leaseNumber},${startsOn},${endsOn},${input.billingDay ?? 1},
+        ${input.paymentTermsDays ?? 0},${normalizeMoney(input.securityDepositRequired ?? "0")},${input.camMethod ?? "none"},${input.camSharePercent ?? null},
+        ${input.lateFeeType ?? "none"},${normalizeMoney(input.lateFeeValue ?? "0")},${input.graceDays ?? 0},${input.autoInvoice ?? true},${input.autoPost ?? false},${input.actorId},${input.actorId}) returning id
+    `)) as unknown as { rows: { id: string }[] };
+    const id = inserted.rows[0]!.id;
+    await tx.execute(sql`insert into lease_charges(org_id,lease_id,charge_type,description,amount,frequency,effective_from,effective_to,income_account_id,created_by,updated_by)
+      values(${input.orgId},${id},'base_rent','Base rent',${baseRent},'monthly',${startsOn},${endsOn},${property.rent_income_account_id},${input.actorId},${input.actorId})`);
+    await audit(tx, input.orgId, "property_leases", id, "insert", input.actorId, { leaseNumber, propertyId: input.propertyId, tenantId: input.tenantId, baseRent });
+    return { id };
+  });
+}
+
+export async function addLeaseCharge(input: { orgId: string; actorId: string; leaseId: string; chargeType: string; description: string; amount: string; frequency: string; effectiveFrom: string; effectiveTo?: string | null; incomeAccountId?: string | null; itemId?: string | null; taxCodeId?: string | null }): Promise<{ id: string }> {
+  const amount = normalizeMoney(input.amount); if (!input.description.trim() || cmp(amount, "0") <= 0) throw new PropertyManagementError("Charge description and positive amount are required");
+  const result = (await db.execute(sql`
+    insert into lease_charges(org_id,lease_id,charge_type,description,amount,frequency,effective_from,effective_to,income_account_id,item_id,tax_code_id,created_by,updated_by)
+    select ${input.orgId},l.id,${input.chargeType},${input.description.trim()},${amount},${input.frequency},${input.effectiveFrom},${input.effectiveTo ?? null},
+      coalesce(${input.incomeAccountId ?? null},case when ${input.chargeType}='cam' then p.cam_income_account_id else p.rent_income_account_id end),
+      ${input.itemId ?? null},${input.taxCodeId ?? null},${input.actorId},${input.actorId}
+      from property_leases l join managed_properties p on p.id=l.property_id and p.org_id=l.org_id
+     where l.org_id=${input.orgId} and l.id=${input.leaseId} and l.status in ('draft','active') returning id
+  `)) as unknown as { rows: { id: string }[] };
+  if (!result.rows[0]) throw new PropertyManagementError("Editable lease not found");
+  return { id: result.rows[0].id };
+}
+
+export async function scheduleLeaseCharges(orgId: string, actorId: string, leaseId: string, throughOn?: string): Promise<{ created: number }> {
+  const leaseResult = (await db.execute(sql`select starts_on as "startsOn",ends_on as "endsOn",billing_day as "billingDay",status from property_leases where org_id=${orgId} and id=${leaseId}`)) as unknown as { rows: any[] };
+  const lease = leaseResult.rows[0]; if (!lease || !["active", "notice"].includes(lease.status)) throw new PropertyManagementError("Active lease not found");
+  const horizon = throughOn ?? addDays(addMonths(startOfMonth(new Date().toISOString().slice(0, 10)), 13), -1);
+  const charges = (await db.execute(sql`select id,amount,frequency,effective_from as "effectiveFrom",effective_to as "effectiveTo" from lease_charges where org_id=${orgId} and lease_id=${leaseId} order by effective_from`)) as unknown as { rows: any[] };
+  let created = 0;
+  for (const charge of charges.rows) {
+    for (const period of leaseChargeSchedule({ ...charge, leaseStartsOn: lease.startsOn, leaseEndsOn: lease.endsOn, throughOn: horizon, billingDay: lease.billingDay })) {
+      const result = (await db.execute(sql`
+        insert into lease_schedule_lines(org_id,lease_id,charge_id,period_starts_on,period_ends_on,due_on,amount,created_by,updated_by)
+        values(${orgId},${leaseId},${charge.id},${period.periodStartsOn},${period.periodEndsOn},${period.dueOn},${period.amount},${actorId},${actorId})
+        on conflict(org_id,charge_id,period_starts_on) do nothing returning id
+      `)) as unknown as { rows: unknown[] };
+      created += result.rows.length;
+    }
+  }
+  return { created };
+}
+
+export async function activatePropertyLease(orgId: string, actorId: string, leaseId: string): Promise<{ scheduled: number }> {
+  await db.transaction(async (tx) => {
+    await assertEnabled(tx, orgId);
+    const lease = (await tx.execute(sql`select * from property_leases where org_id=${orgId} and id=${leaseId} for update`)) as unknown as { rows: any[] };
+    const row = lease.rows[0]; if (!row || row.status !== "draft") throw new PropertyManagementError("Draft lease not found");
+    if (row.unit_id) {
+      const conflict = (await tx.execute(sql`select 1 from property_leases where org_id=${orgId} and unit_id=${row.unit_id} and id<>${leaseId} and status in ('active','notice')`)) as unknown as { rows: unknown[] };
+      if (conflict.rows.length) throw new PropertyManagementError("Unit already has an active lease");
+      await tx.execute(sql`update property_units set status='occupied',updated_at=now(),updated_by=${actorId} where org_id=${orgId} and id=${row.unit_id}`);
+    }
+    await tx.execute(sql`update property_leases set status='active',activated_at=now(),activated_by=${actorId},updated_at=now(),updated_by=${actorId} where id=${leaseId}`);
+    await audit(tx, orgId, "property_leases", leaseId, "activate", actorId, { after: { status: "active" } });
+  });
+  return { scheduled: (await scheduleLeaseCharges(orgId, actorId, leaseId)).created };
+}
+
+export async function terminatePropertyLease(orgId: string, actorId: string, leaseId: string, terminatedOn: string, reason: string): Promise<void> {
+  if (!reason.trim()) throw new PropertyManagementError("Termination reason is required");
+  const effectiveOn = validDate(terminatedOn, "Termination date")!;
+  await db.transaction(async (tx) => {
+    await assertEnabled(tx, orgId);
+    const lease = (await tx.execute(sql`select starts_on,unit_id from property_leases where org_id=${orgId} and id=${leaseId} and status in ('active','notice') for update`)) as unknown as { rows: { starts_on: string; unit_id: string | null }[] };
+    const row = lease.rows[0];
+    if (!row) throw new PropertyManagementError("Active lease not found");
+    if (effectiveOn < row.starts_on) throw new PropertyManagementError("Termination date cannot precede the lease start");
+    const partials = (await tx.execute(sql`select id,period_starts_on,period_ends_on,amount from lease_schedule_lines
+      where org_id=${orgId} and lease_id=${leaseId} and status='scheduled' and period_starts_on<=${effectiveOn} and period_ends_on>${effectiveOn} for update`)) as unknown as { rows: { id: string; period_starts_on: string; period_ends_on: string; amount: string }[] };
+    for (const period of partials.rows) {
+      const prorated = mulRatio(period.amount, BigInt(dayCount(period.period_starts_on, effectiveOn)), BigInt(dayCount(period.period_starts_on, period.period_ends_on)));
+      await tx.execute(sql`update lease_schedule_lines set period_ends_on=${effectiveOn},amount=${prorated},updated_at=now(),updated_by=${actorId} where org_id=${orgId} and id=${period.id} and status='scheduled'`);
+    }
+    await tx.execute(sql`update lease_schedule_lines set status='cancelled',updated_at=now(),updated_by=${actorId} where org_id=${orgId} and lease_id=${leaseId} and status='scheduled' and period_starts_on>${effectiveOn}`);
+    await tx.execute(sql`update property_leases set status='terminated',ends_on=least(coalesce(ends_on,${effectiveOn}),${effectiveOn}),move_out_on=${effectiveOn},terminated_at=now(),terminated_by=${actorId},termination_reason=${reason.trim()},updated_at=now(),updated_by=${actorId} where org_id=${orgId} and id=${leaseId}`);
+    if (row.unit_id) await tx.execute(sql`update property_units set status='vacant',updated_at=now(),updated_by=${actorId} where org_id=${orgId} and id=${row.unit_id}`);
+    await audit(tx, orgId, "property_leases", leaseId, "terminate", actorId, { terminatedOn: effectiveOn, reason: reason.trim() });
+  });
+}
+
+export async function addLeaseEscalation(input: { orgId: string; actorId: string; leaseId: string; effectiveOn: string; method: "percent" | "fixed" | "new_amount"; value: string }): Promise<{ id: string }> {
+  const effectiveOn = validDate(input.effectiveOn, "Escalation date")!;
+  const value = normalizeMoney(input.value);
+  if (cmp(value, "0") <= 0) throw new PropertyManagementError("Escalation value must be positive");
+  await assertEnabled(db, input.orgId);
+  const result = (await db.execute(sql`insert into lease_escalations(org_id,lease_id,effective_on,method,value,created_by,updated_by)
+    select ${input.orgId},id,${effectiveOn},${input.method},${value},${input.actorId},${input.actorId}
+      from property_leases where org_id=${input.orgId} and id=${input.leaseId} and status in ('draft','active','notice') returning id`)) as unknown as { rows: { id: string }[] };
+  if (!result.rows[0]) throw new PropertyManagementError("Lease not found"); return { id: result.rows[0].id };
+}
+
+export async function applyLeaseEscalation(orgId: string, actorId: string, escalationId: string): Promise<{ chargeId: string; newAmount: string }> {
+  const applied = await db.transaction(async (tx) => {
+    await assertEnabled(tx, orgId);
+    const escalation = (await tx.execute(sql`select * from lease_escalations where org_id=${orgId} and id=${escalationId} for update`)) as unknown as { rows: any[] };
+    const e = escalation.rows[0]; if (!e || e.status !== "scheduled") throw new PropertyManagementError("Scheduled escalation not found");
+    const chargeResult = (await tx.execute(sql`select * from lease_charges where org_id=${orgId} and lease_id=${e.lease_id} and charge_type='base_rent' and effective_from<=${e.effective_on} and (effective_to is null or effective_to>=${e.effective_on}) order by effective_from desc limit 1 for update`)) as unknown as { rows: any[] };
+    const charge = chargeResult.rows[0]; if (!charge) throw new PropertyManagementError("Effective base-rent charge not found");
+    if (e.effective_on <= charge.effective_from) throw new PropertyManagementError("Escalation must begin after the current rent charge starts");
+    const alreadyBilled = (await tx.execute(sql`select 1 from lease_schedule_lines where org_id=${orgId} and charge_id=${charge.id}
+      and status in ('invoiced','credited') and period_ends_on>=${e.effective_on} limit 1`)) as unknown as { rows: unknown[] };
+    if (alreadyBilled.rows.length) throw new PropertyManagementError("Affected rent is already billed; credit or void it before applying this escalation");
+    const next = escalatedRent(charge.amount, e.method, e.value);
+    const scheduled = (await tx.execute(sql`select id,period_starts_on,period_ends_on,amount from lease_schedule_lines
+      where org_id=${orgId} and charge_id=${charge.id} and status='scheduled' and period_ends_on>=${e.effective_on} for update`)) as unknown as { rows: { id: string; period_starts_on: string; period_ends_on: string; amount: string }[] };
+    for (const period of scheduled.rows) {
+      if (period.period_starts_on >= e.effective_on) {
+        await tx.execute(sql`update lease_schedule_lines set status='cancelled',updated_at=now(),updated_by=${actorId} where org_id=${orgId} and id=${period.id}`);
+      } else {
+        const oldEnd = addDays(e.effective_on, -1);
+        const amount = mulRatio(period.amount, BigInt(dayCount(period.period_starts_on, oldEnd)), BigInt(dayCount(period.period_starts_on, period.period_ends_on)));
+        await tx.execute(sql`update lease_schedule_lines set period_ends_on=${oldEnd},amount=${amount},updated_at=now(),updated_by=${actorId} where org_id=${orgId} and id=${period.id}`);
+      }
+    }
+    await tx.execute(sql`update lease_charges set effective_to=(${e.effective_on}::date-interval '1 day')::date,updated_at=now(),updated_by=${actorId} where id=${charge.id}`);
+    const inserted = (await tx.execute(sql`insert into lease_charges(org_id,lease_id,charge_type,description,amount,frequency,effective_from,effective_to,income_account_id,item_id,tax_code_id,created_by,updated_by)
+      values(${orgId},${e.lease_id},'base_rent',${charge.description},${next},${charge.frequency},${e.effective_on},${charge.effective_to},${charge.income_account_id},${charge.item_id},${charge.tax_code_id},${actorId},${actorId}) returning id`)) as unknown as { rows: { id: string }[] };
+    await tx.execute(sql`update lease_escalations set status='applied',previous_amount=${charge.amount},new_amount=${next},applied_at=now(),applied_by=${actorId},updated_at=now(),updated_by=${actorId} where id=${escalationId}`);
+    await audit(tx, orgId, "lease_escalations", escalationId, "apply", actorId, { previousAmount: charge.amount, newAmount: next, effectiveOn: e.effective_on });
+    return { chargeId: inserted.rows[0]!.id, newAmount: next, leaseId: e.lease_id };
+  });
+  await scheduleLeaseCharges(orgId, actorId, applied.leaseId);
+  return { chargeId: applied.chargeId, newAmount: applied.newAmount };
+}
+
+function billingKey(leaseId: string, scheduleIds: string[]): string { return `rent:${leaseId}:${[...scheduleIds].sort().join(",")}`; }
+export async function billDueLeaseCharges(orgId: string, actorId: string | null, asOf?: string, onlyLeaseId?: string): Promise<{ billed: number; invoices: string[] }> {
+  const through = asOf ?? new Date().toISOString().slice(0, 10);
+  await assertEnabled(db, orgId);
+  const due = (await db.execute(sql`
+    select s.id,s.lease_id as "leaseId",s.due_on as "dueOn",s.amount,s.period_starts_on as "periodStartsOn",s.period_ends_on as "periodEndsOn",
+      c.description,c.income_account_id as "incomeAccountId",c.item_id as "itemId",c.tax_code_id as "taxCodeId",
+      l.tenant_id as "tenantId",l.lease_number as "leaseNumber",l.payment_terms_days as "paymentTermsDays",l.auto_post as "autoPost",l.created_by as "createdBy",
+      p.subsidiary_id as "subsidiaryId",p.location_id as "locationId",p.currency
+    from lease_schedule_lines s join lease_charges c on c.id=s.charge_id and c.org_id=s.org_id
+    join property_leases l on l.id=s.lease_id and l.org_id=s.org_id join managed_properties p on p.id=l.property_id and p.org_id=l.org_id
+    where s.org_id=${orgId} and s.status='scheduled' and s.due_on<=${through} and l.status in ('active','notice')
+      and l.auto_invoice and (${onlyLeaseId ?? null}::uuid is null or l.id=${onlyLeaseId ?? null}) order by l.id,s.due_on,s.id
+  `)) as unknown as { rows: any[] };
+  const groups = new Map<string, any[]>(); for (const row of due.rows) groups.set(row.leaseId, [...(groups.get(row.leaseId) ?? []), row]);
+  const invoices: string[] = [];
+  for (const [leaseId, rows] of groups) {
+    await withOrgTransaction(orgId, async () => {
+      const candidateIds = rows.map((row) => row.id);
+      const locked = (await db.execute(sql`
+        select id from lease_schedule_lines
+        where org_id=${orgId} and status='scheduled'
+          and id::text in (select jsonb_array_elements_text(${JSON.stringify(candidateIds)}::jsonb))
+        order by id for update
+      `)) as unknown as { rows: { id: string }[] };
+      const lockedIds = new Set(locked.rows.map((row) => row.id));
+      const billRows = rows.filter((row) => lockedIds.has(row.id));
+      if (!billRows.length) return;
+      const ids = billRows.map((row) => row.id);
+      const key = billingKey(leaseId, ids);
+      const first = billRows[0]!;
+      const prior = (await db.execute(sql`select id from documents where org_id=${orgId} and custom->'propertyManagement'->>'billingKey'=${key}`)) as unknown as { rows: { id: string }[] };
+      let invoiceId = prior.rows[0]?.id;
+      if (!invoiceId) {
+        const lines: AdvancedBillingLine[] = billRows.map((row) => ({ description: `${row.description} · ${row.periodStartsOn}–${row.periodEndsOn}`, quantity: "1", unitPrice: row.amount, incomeAccountId: row.incomeAccountId, itemId: row.itemId, taxCodeId: row.taxCodeId }));
+        const actor = actorId ?? first.createdBy; if (!actor) throw new PropertyManagementError(`Lease ${first.leaseNumber} has no billing owner`);
+        const generated = await createSubscriptionInvoice({ orgId, actorId: actor, customerId: first.tenantId, subsidiaryId: first.subsidiaryId,
+          locationId: first.locationId, currency: first.currency, incomeAccountId: null, itemId: null, taxCodeId: null,
+          description: `Lease ${first.leaseNumber}`, quantity: "1", unitPrice: "0", memo: `Lease ${first.leaseNumber}`,
+          invoiceDate: through, dueDate: addDays(through, first.paymentTermsDays), autoPost: first.autoPost, lines,
+          custom: { propertyManagement: { billingKey: key, leaseId, scheduleIds: ids, kind: "rent" } } });
+        invoiceId = generated.invoiceId;
+      }
+      await db.execute(sql`update lease_schedule_lines set status='invoiced',invoice_document_id=${invoiceId},updated_at=now(),updated_by=${actorId ?? first.createdBy}
+        where org_id=${orgId} and status='scheduled' and id::text in (select jsonb_array_elements_text(${JSON.stringify(ids)}::jsonb))`);
+      invoices.push(invoiceId);
+    });
+  }
+  const billed = invoices.length
+    ? (await db.execute(sql`select count(*)::int as n from lease_schedule_lines where org_id=${orgId} and invoice_document_id::text in (select jsonb_array_elements_text(${JSON.stringify(invoices)}::jsonb))`)) as unknown as { rows: { n: number }[] }
+    : { rows: [{ n: 0 }] };
+  return { billed: billed.rows[0]?.n ?? 0, invoices };
+}
+
+export async function assessLeaseLateFees(orgId: string, actorId: string, asOf?: string): Promise<{ created: number }> {
+  const date = validDate(asOf ?? new Date().toISOString().slice(0, 10), "Late-fee date")!;
+  await assertEnabled(db, orgId);
+  const overdue = (await db.execute(sql`
+    select (array_agg(s.id order by s.id))[1] as source_schedule_id,s.lease_id,
+      l.late_fee_type,l.late_fee_value,p.rent_income_account_id,oi.transaction_open
+    from lease_schedule_lines s join property_leases l on l.id=s.lease_id and l.org_id=s.org_id
+    join managed_properties p on p.id=l.property_id and p.org_id=l.org_id join documents d on d.id=s.invoice_document_id and d.org_id=s.org_id
+    join lateral (
+      select greatest(abs(jl.txn_amount)-coalesce(sum(a.target_transaction_amount) filter(where a.unapplied_at is null),0),0)::text as transaction_open
+      from journal_lines jl left join applications a on a.to_line_id=jl.id
+      where jl.entry_id=d.posted_entry_id and jl.org_id=d.org_id and jl.is_open_item and jl.amount>0
+      group by jl.id
+    ) oi on true
+    where s.org_id=${orgId} and s.status='invoiced' and l.status in ('active','notice') and l.late_fee_type<>'none'
+      and d.kind='customer_invoice' and d.status='posted' and d.due_date is not null and d.due_date + l.grace_days < ${date}
+      and oi.transaction_open::numeric>0
+    group by d.id,s.lease_id,l.late_fee_type,l.late_fee_value,p.rent_income_account_id,oi.transaction_open
+  `)) as unknown as { rows: any[] };
+  let created = 0;
+  for (const row of overdue.rows) {
+    const amount = row.late_fee_type === "fixed" ? normalizeMoney(row.late_fee_value) : mulPercent(row.transaction_open, row.late_fee_value);
+    if (cmp(amount, "0") <= 0) continue;
+    const result = (await db.execute(sql`
+      with charge as (insert into lease_charges(org_id,lease_id,charge_type,description,amount,frequency,effective_from,effective_to,income_account_id,created_by,updated_by)
+        select ${orgId},${row.lease_id},'late_fee','Late fee',${amount},'one_time',${date},${date},${row.rent_income_account_id},${actorId},${actorId}
+        where not exists(select 1 from lease_schedule_lines where org_id=${orgId} and source_schedule_id=${row.source_schedule_id}) returning id)
+      insert into lease_schedule_lines(org_id,lease_id,charge_id,period_starts_on,period_ends_on,due_on,amount,source_schedule_id,created_by,updated_by)
+      select ${orgId},${row.lease_id},id,${date},${date},${date},${amount},${row.source_schedule_id},${actorId},${actorId} from charge returning id
+    `)) as unknown as { rows: unknown[] };
+    created += result.rows.length;
+  }
+  return { created };
+}
+
+export async function recordSecurityDeposit(input: { orgId: string; actorId: string; leaseId: string; kind: string; occurredOn: string; amount: string; bankAccountId?: string | null; offsetAccountId?: string | null; appliedDocumentId?: string | null; memo?: string | null }): Promise<{ id: string; entryId: string; balance: string }> {
+  const shape = depositPostingShape(input.kind);
+  const occurredOn = validDate(input.occurredOn, "Deposit date")!;
+  const amount = normalizeMoney(input.amount);
+  if (cmp(amount, "0") <= 0) throw new PropertyManagementError("Deposit amount must be positive");
+  if ((input.kind === "applied") !== Boolean(input.appliedDocumentId)) {
+    throw new PropertyManagementError("An applied deposit must identify exactly one tenant invoice");
+  }
+  if (["interest", "adjustment_increase", "adjustment_decrease"].includes(input.kind) && !input.offsetAccountId) {
+    throw new PropertyManagementError("Interest and adjustments require an offset account");
+  }
+
+  return db.transaction(async (tx) => {
+    await assertEnabled(tx, input.orgId);
+    // The lease lock serializes balance-changing deposit activity. Journal,
+    // application, and append-only subledger evidence commit as one unit.
+    const ctx = (await tx.execute(sql`
+      select l.tenant_id,p.subsidiary_id,p.location_id,p.currency,s.base_currency,p.deposit_liability_account_id,p.default_bank_account_id,
+        da.type as deposit_account_type,
+        (select id from accounting_books where org_id=l.org_id and is_primary order by id limit 1) as book_id,
+        (select id from accounting_periods where org_id=l.org_id and not is_adjustment and starts_on<=${occurredOn} and ends_on>=${occurredOn}
+          and not period_module_is_closed(l.org_id,id,(select id from accounting_books where org_id=l.org_id and is_primary order by id limit 1),p.subsidiary_id,'gl')
+          order by starts_on desc limit 1) as period_id
+      from property_leases l join managed_properties p on p.id=l.property_id and p.org_id=l.org_id
+      join subsidiaries s on s.id=p.subsidiary_id and s.org_id=p.org_id
+      left join accounts da on da.id=p.deposit_liability_account_id and da.org_id=p.org_id
+      where l.org_id=${input.orgId} and l.id=${input.leaseId}
+      for update of l
+    `)) as unknown as { rows: any[] };
+    const row = ctx.rows[0];
+    if (!row) throw new PropertyManagementError("Lease not found");
+    if (!row.deposit_liability_account_id || !["liability_current_other", "liability_long_term"].includes(row.deposit_account_type)) {
+      throw new PropertyManagementError("Configure a liability account for property security deposits");
+    }
+    if (row.currency !== row.base_currency) {
+      throw new PropertyManagementError("Security-deposit journals require the property currency to match the subsidiary functional currency");
+    }
+    if (!row.book_id || !row.period_id) throw new PropertyManagementError("A primary book and open GL period are required");
+
+    const prior = (await tx.execute(sql`select kind,amount from security_deposit_transactions where org_id=${input.orgId} and lease_id=${input.leaseId}`)) as unknown as { rows: { kind: string; amount: string }[] };
+    const nextBalance = depositBalance([...prior.rows, { kind: input.kind, amount }]);
+    if (cmp(nextBalance, "0") < 0) throw new PropertyManagementError("Deposit transaction exceeds the tenant balance");
+
+    const increase = shape.liabilitySide === "credit";
+    const applied = shape.offsetIsArOpenItem;
+    const bankId = ["received", "refunded"].includes(input.kind) ? input.bankAccountId ?? row.default_bank_account_id : null;
+    if (["received", "refunded"].includes(input.kind) && !bankId) throw new PropertyManagementError("A bank account is required");
+    if (bankId) {
+      const bank = (await tx.execute(sql`select type from accounts where org_id=${input.orgId} and id=${bankId} and is_active and not is_summary`)) as unknown as { rows: { type: string }[] };
+      if (bank.rows[0]?.type !== "asset_bank") throw new PropertyManagementError("Security-deposit cash must use an active bank account");
+    }
+
+    let targetLineId: string | null = null;
+    let offsetId: string | null = applied ? null : input.offsetAccountId ?? bankId;
+    if (applied) {
+      const target = (await tx.execute(sql`
+        select jl.id,jl.account_id
+        from documents d join journal_lines jl on jl.entry_id=d.posted_entry_id and jl.org_id=d.org_id and jl.is_open_item
+        join accounts a on a.id=jl.account_id and a.org_id=jl.org_id and a.type='asset_receivable'
+        where d.org_id=${input.orgId} and d.id=${input.appliedDocumentId!} and d.kind='customer_invoice'
+          and d.party_id=${row.tenant_id} and d.status='posted' and coalesce(d.open_balance,0)>=${amount}
+        order by jl.line_number limit 1 for update of jl
+      `)) as unknown as { rows: { id: string; account_id: string }[] };
+      targetLineId = target.rows[0]?.id ?? null;
+      offsetId = target.rows[0]?.account_id ?? null;
+      if (!targetLineId || !offsetId) throw new PropertyManagementError("Posted tenant invoice with sufficient open balance not found");
+    } else if (!offsetId) {
+      throw new PropertyManagementError("An offset account is required");
+    }
+
+    const entryNumber = `DEP-${occurredOn}-${input.leaseId.slice(0, 8)}-${crypto.randomUUID().slice(0, 8)}`;
+    const entry = (await tx.execute(sql`insert into journal_entries(org_id,book_id,subsidiary_id,entry_number,posting_date,period_id,memo,status,origin,custom,created_by,updated_by)
+      values(${input.orgId},${row.book_id},${row.subsidiary_id},${entryNumber},${occurredOn},${row.period_id},
+        ${input.memo ?? `Security deposit ${input.kind}`},'draft','manual',${JSON.stringify({ propertyManagement: { leaseId: input.leaseId, kind: input.kind } })}::jsonb,
+        ${input.actorId},${input.actorId}) returning id`)) as unknown as { rows: { id: string }[] };
+    const entryId = entry.rows[0]!.id;
+    const debitAccount = increase ? offsetId : row.deposit_liability_account_id;
+    const creditAccount = increase ? row.deposit_liability_account_id : offsetId;
+    // Party belongs on the deposit-liability leg. Cash/expense offsets do not
+    // carry the tenant; an AR application additionally carries it on AR.
+    const debitParty = increase ? null : row.tenant_id;
+    const creditParty = increase || applied ? row.tenant_id : null;
+    await tx.execute(sql`insert into journal_lines(org_id,entry_id,line_number,account_id,subsidiary_id,amount,currency,txn_amount,fx_rate,location_id,party_id,is_open_item,memo)
+      values(${input.orgId},${entryId},1,${debitAccount},${row.subsidiary_id},${amount},${row.currency},${amount},1,${row.location_id},${debitParty},false,${input.memo ?? "Security deposit"})`);
+    const credit = (await tx.execute(sql`insert into journal_lines(org_id,entry_id,line_number,account_id,subsidiary_id,amount,currency,txn_amount,fx_rate,location_id,party_id,is_open_item,memo)
+      values(${input.orgId},${entryId},2,${creditAccount},${row.subsidiary_id},${neg(amount)},${row.currency},${neg(amount)},1,${row.location_id},${creditParty},${applied},${input.memo ?? "Security deposit"}) returning id`)) as unknown as { rows: { id: string }[] };
+    await tx.execute(sql`update journal_entries set status='posted',posted_at=now(),posted_by=${input.actorId},updated_at=now(),updated_by=${input.actorId} where org_id=${input.orgId} and id=${entryId}`);
+    if (applied && targetLineId) {
+      await tx.execute(sql`insert into applications(org_id,from_line_id,to_line_id,amount,source_amount,source_transaction_amount,source_transaction_currency,
+        target_transaction_amount,target_transaction_currency,settlement_rate,settlement_rate_source,settlement_rate_reference,applied_on,created_by,updated_by)
+        values(${input.orgId},${credit.rows[0]!.id},${targetLineId},${amount},${amount},${amount},${row.currency},${amount},${row.currency},1,'same_currency','Security deposit application',${occurredOn},${input.actorId},${input.actorId})`);
+    }
+    const inserted = (await tx.execute(sql`insert into security_deposit_transactions(org_id,lease_id,kind,occurred_on,amount,bank_account_id,offset_account_id,applied_document_id,journal_entry_id,memo,created_by,updated_by)
+      values(${input.orgId},${input.leaseId},${input.kind},${occurredOn},${amount},${bankId},${offsetId},${input.appliedDocumentId ?? null},${entryId},${input.memo ?? null},${input.actorId},${input.actorId}) returning id`)) as unknown as { rows: { id: string }[] };
+    return { id: inserted.rows[0]!.id, entryId, balance: nextBalance };
+  });
+}
+
+export async function createCamPool(input: { orgId: string; actorId: string; propertyId: string; name: string; fiscalYear: number; periodStartsOn: string; periodEndsOn: string; allocationBasis: "rentable_area" | "equal" | "custom"; budgetAmount: string; expenseAccountIds: string[] }): Promise<{ id: string }> {
+  const name = input.name.trim();
+  const startsOn = validDate(input.periodStartsOn, "CAM period start")!;
+  const endsOn = validDate(input.periodEndsOn, "CAM period end")!;
+  const expenseAccountIds = [...new Set(input.expenseAccountIds)];
+  if (!name || !Number.isInteger(input.fiscalYear) || endsOn < startsOn) throw new PropertyManagementError("CAM name, fiscal year, and a valid period are required");
+  if (!expenseAccountIds.length) throw new PropertyManagementError("Select at least one CAM expense account");
+  return db.transaction(async (tx) => {
+    await assertEnabled(tx, input.orgId);
+    const accounts = (await tx.execute(sql`select count(*)::int as n from accounts where org_id=${input.orgId} and id::text in
+      (select jsonb_array_elements_text(${JSON.stringify(expenseAccountIds)}::jsonb)) and type in ('expense','expense_other') and is_active and not is_summary`)) as unknown as { rows: { n: number }[] };
+    if (accounts.rows[0]?.n !== expenseAccountIds.length) throw new PropertyManagementError("CAM accounts must be active posting expense accounts");
+    const result = (await tx.execute(sql`insert into cam_pools(org_id,property_id,name,fiscal_year,period_starts_on,period_ends_on,allocation_basis,budget_amount,expense_account_ids,status,created_by,updated_by)
+      select ${input.orgId},id,${name},${input.fiscalYear},${startsOn},${endsOn},${input.allocationBasis},${normalizeMoney(input.budgetAmount)},${JSON.stringify(expenseAccountIds)}::jsonb,'open',${input.actorId},${input.actorId}
+        from managed_properties where org_id=${input.orgId} and id=${input.propertyId} and status='active' returning id`)) as unknown as { rows: { id: string }[] };
+    if (!result.rows[0]) throw new PropertyManagementError("Active property not found");
+    return { id: result.rows[0].id };
+  });
+}
+
+export async function finalizeCamPool(orgId: string, actorId: string, poolId: string): Promise<{ actualAmount: string; allocations: number }> {
+  return db.transaction(async (tx) => {
+    const poolResult = (await tx.execute(sql`select cp.*,p.location_id from cam_pools cp join managed_properties p on p.id=cp.property_id and p.org_id=cp.org_id where cp.org_id=${orgId} and cp.id=${poolId} for update`)) as unknown as { rows: any[] };
+    const pool = poolResult.rows[0]; if (!pool || !["draft","open"].includes(pool.status)) throw new PropertyManagementError("Open CAM pool not found");
+    if (!pool.location_id) throw new PropertyManagementError("Property needs a location dimension before CAM actuals can be calculated");
+    const actual = (await tx.execute(sql`select coalesce(sum(jl.amount),0)::text as amount from journal_lines jl join journal_entries je on je.id=jl.entry_id and je.org_id=jl.org_id
+      where jl.org_id=${orgId} and je.status='posted' and je.posting_date between ${pool.period_starts_on} and ${pool.period_ends_on} and jl.location_id=${pool.location_id}
+        and jl.account_id::text in(select jsonb_array_elements_text(${JSON.stringify(pool.expense_account_ids)}::jsonb))`)) as unknown as { rows: { amount: string }[] };
+    const actualAmount = normalizeMoney(actual.rows[0]?.amount ?? "0");
+    if (cmp(actualAmount, "0") < 0) throw new PropertyManagementError("CAM expense activity is net-negative; review the selected accounts before finalizing");
+    const leases = (await tx.execute(sql`select l.id,l.cam_share_percent,u.rentable_area,
+      greatest(l.starts_on,coalesce(l.move_in_on,l.starts_on),${pool.period_starts_on}::date)::text as overlap_start,
+      least(coalesce(l.move_out_on,l.ends_on,${pool.period_ends_on}::date),${pool.period_ends_on}::date)::text as overlap_end,
+      coalesce((select sum(s.amount) from lease_schedule_lines s join lease_charges c on c.id=s.charge_id and c.org_id=s.org_id
+        join documents d on d.id=s.invoice_document_id and d.org_id=s.org_id and d.status<>'voided'
+        where s.org_id=l.org_id and s.lease_id=l.id and c.charge_type='cam' and s.status='invoiced'
+          and s.period_starts_on<=${pool.period_ends_on} and s.period_ends_on>=${pool.period_starts_on}),0)::text as billed
+      from property_leases l left join property_units u on u.id=l.unit_id and u.org_id=l.org_id where l.org_id=${orgId} and l.property_id=${pool.property_id}
+        and l.cam_method='pro_rata' and l.status not in ('draft','cancelled') and l.starts_on<=${pool.period_ends_on}
+        and coalesce(l.move_out_on,l.ends_on,${pool.period_ends_on})>=${pool.period_starts_on}`)) as unknown as { rows: any[] };
+    if (!leases.rows.length) throw new PropertyManagementError("No pro-rata CAM leases overlap this period");
+    const poolDays = dayCount(pool.period_starts_on, pool.period_ends_on);
+    const weighted = leases.rows.map((lease) => {
+      const days = overlapDayCount(lease.overlap_start, lease.overlap_end, pool.period_starts_on, pool.period_ends_on);
+      const basis = pool.allocation_basis === "equal" ? 10_000n
+        : pool.allocation_basis === "rentable_area" ? toUnits(lease.rentable_area ?? "0")
+          : toUnits(lease.cam_share_percent ?? "0");
+      return { ...lease, days, weight: basis * BigInt(days) };
+    }).filter((lease) => lease.days > 0 && lease.weight > 0n);
+    if (!weighted.length) throw new PropertyManagementError(pool.allocation_basis === "rentable_area"
+      ? "Overlapping CAM leases need positive rentable area" : "Overlapping CAM leases need a positive allocation weight");
+    const totalWeight = weighted.reduce((total, lease) => total + lease.weight, 0n);
+    const shares: string[] = [];
+    for (const [index, lease] of weighted.entries()) {
+      if (pool.allocation_basis === "custom") {
+        shares.push(mulRatio(normalizeMoney(lease.cam_share_percent), BigInt(lease.days), BigInt(poolDays)));
+      } else if (index === weighted.length - 1) {
+        shares.push(add("100", neg(sum(shares))));
+      } else {
+        shares.push(mulRatio("100", lease.weight, totalWeight));
+      }
+    }
+    if (pool.allocation_basis === "custom" && cmp(sum(shares), "100") > 0) {
+      throw new PropertyManagementError("Time-weighted custom CAM shares exceed 100%");
+    }
+    const budgetAllocations: string[] = [];
+    const actualAllocations: string[] = [];
+    for (const [index, share] of shares.entries()) {
+      const forceResidual = pool.allocation_basis !== "custom" && index === shares.length - 1;
+      budgetAllocations.push(forceResidual ? add(pool.budget_amount, neg(sum(budgetAllocations))) : mulPercent(pool.budget_amount, share));
+      actualAllocations.push(forceResidual ? add(actualAmount, neg(sum(actualAllocations))) : mulPercent(actualAmount, share));
+    }
+    await tx.execute(sql`delete from cam_allocations where org_id=${orgId} and pool_id=${poolId}`);
+    for (const [index, lease] of weighted.entries()) {
+      const share = shares[index]!;
+      const budgetAllocation = budgetAllocations[index]!; const actualAllocation = actualAllocations[index]!;
+      await tx.execute(sql`insert into cam_allocations(org_id,pool_id,lease_id,share_percent,budget_allocation,actual_allocation,billed_estimate,reconciliation_amount,created_by,updated_by)
+        values(${orgId},${poolId},${lease.id},${share},${budgetAllocation},${actualAllocation},${lease.billed},${add(actualAllocation,neg(lease.billed))},${actorId},${actorId})`);
+    }
+    await tx.execute(sql`update cam_pools set actual_amount=${actualAmount},status='finalized',finalized_at=now(),finalized_by=${actorId},updated_at=now(),updated_by=${actorId} where org_id=${orgId} and id=${poolId}`);
+    return { actualAmount, allocations: weighted.length };
+  });
+}
+
+export async function billCamReconciliation(orgId: string, actorId: string, poolId: string, invoiceDate?: string): Promise<{ documents: string[] }> {
+  const date = validDate(invoiceDate ?? new Date().toISOString().slice(0, 10), "CAM invoice date")!;
+  await assertEnabled(db, orgId);
+  const allocations = (await db.execute(sql`select a.id,a.reconciliation_amount as amount,a.lease_id,l.tenant_id,l.lease_number,l.payment_terms_days,
+    p.subsidiary_id,p.location_id,p.currency,p.cam_income_account_id,cp.name from cam_allocations a join cam_pools cp on cp.id=a.pool_id and cp.org_id=a.org_id
+    join property_leases l on l.id=a.lease_id and l.org_id=a.org_id join managed_properties p on p.id=l.property_id and p.org_id=l.org_id
+    where a.org_id=${orgId} and a.pool_id=${poolId} and cp.status='finalized' and a.invoice_document_id is null and a.reconciliation_amount<>0 order by l.lease_number`)) as unknown as { rows: any[] };
+  const documents: string[] = [];
+  for (const row of allocations.rows) {
+    await withOrgTransaction(orgId, async () => {
+      const locked = (await db.execute(sql`select id from cam_allocations where org_id=${orgId} and id=${row.id} and invoice_document_id is null for update`)) as unknown as { rows: { id: string }[] };
+      if (!locked.rows[0]) return;
+      if (!row.cam_income_account_id) throw new PropertyManagementError("Configure the property CAM income account first");
+      const credit = cmp(row.amount, "0") < 0; const amount = credit ? neg(row.amount) : row.amount; const key = `cam:${poolId}:${row.id}`;
+      const prior = (await db.execute(sql`select id from documents where org_id=${orgId} and custom->'propertyManagement'->>'billingKey'=${key}`)) as unknown as { rows: { id: string }[] };
+      let documentId = prior.rows[0]?.id;
+      if (!documentId) {
+        const generated = await createSubscriptionInvoice({ orgId, actorId, customerId: row.tenant_id, subsidiaryId: row.subsidiary_id, locationId: row.location_id,
+          currency: row.currency, incomeAccountId: row.cam_income_account_id, itemId: null, taxCodeId: null, description: `${row.name} CAM reconciliation`,
+          quantity: "1", unitPrice: amount, memo: `${row.lease_number} · ${row.name}`, invoiceDate: date,
+          dueDate: credit ? null : addDays(date, row.payment_terms_days), autoPost: false, applyTax: false, documentKind: credit ? "customer_credit" : "customer_invoice",
+          custom: { propertyManagement: { billingKey: key, poolId, allocationId: row.id, leaseId: row.lease_id, kind: "cam_reconciliation" } } });
+        documentId = generated.invoiceId;
+      }
+      await db.execute(sql`update cam_allocations set invoice_document_id=${documentId},updated_at=now(),updated_by=${actorId} where org_id=${orgId} and id=${row.id} and invoice_document_id is null`);
+      documents.push(documentId);
+    });
+  }
+  await db.execute(sql`update cam_pools cp set status='invoiced',updated_at=now(),updated_by=${actorId}
+    where cp.org_id=${orgId} and cp.id=${poolId} and cp.status='finalized'
+      and not exists(select 1 from cam_allocations a where a.org_id=cp.org_id and a.pool_id=cp.id and a.reconciliation_amount<>0 and a.invoice_document_id is null)`);
+  return { documents };
+}
+
+export async function propertyManagementWorkspace(orgId: string) {
+  const [properties, units, leases, charges, escalations, schedules, deposits, pools, allocations] = await Promise.all([
+    db.execute(sql`select p.id,p.code,p.name,p.property_type as "propertyType",p.status,p.currency,p.subsidiary_id as "subsidiaryId",s.name as "subsidiaryName",p.location_id as "locationId",l.name as "locationName",
+      p.rent_income_account_id as "rentIncomeAccountId",p.cam_income_account_id as "camIncomeAccountId",p.deposit_liability_account_id as "depositLiabilityAccountId",p.default_bank_account_id as "defaultBankAccountId",
+      count(u.id)::int as "unitCount",count(u.id) filter(where u.status='occupied')::int as "occupiedUnits" from managed_properties p join subsidiaries s on s.id=p.subsidiary_id and s.org_id=p.org_id
+      left join locations l on l.id=p.location_id and l.org_id=p.org_id left join property_units u on u.property_id=p.id and u.org_id=p.org_id where p.org_id=${orgId} group by p.id,s.name,l.name order by p.name`),
+    db.execute(sql`select id,property_id as "propertyId",code,name,unit_type as "unitType",rentable_area as "rentableArea",bedrooms,status from property_units where org_id=${orgId} order by property_id,code`),
+    db.execute(sql`select l.id,l.property_id as "propertyId",l.unit_id as "unitId",l.tenant_id as "tenantId",l.lease_number as "leaseNumber",l.status,l.starts_on as "startsOn",l.ends_on as "endsOn",
+      l.security_deposit_required as "securityDepositRequired",l.cam_method as "camMethod",l.cam_share_percent as "camSharePercent",l.late_fee_type as "lateFeeType",l.late_fee_value as "lateFeeValue",l.grace_days as "graceDays",
+      p.name as "propertyName",u.code as "unitCode",t.display_name as "tenantName",p.currency,
+      coalesce((select sum(case when d.kind in ('received','interest','adjustment_increase') then d.amount else -d.amount end) from security_deposit_transactions d where d.org_id=l.org_id and d.lease_id=l.id),0)::text as "depositBalance"
+      from property_leases l join managed_properties p on p.id=l.property_id and p.org_id=l.org_id left join property_units u on u.id=l.unit_id and u.org_id=l.org_id
+      join parties t on t.id=l.tenant_id and t.org_id=l.org_id where l.org_id=${orgId} order by case l.status when 'active' then 0 when 'notice' then 1 when 'draft' then 2 else 3 end,l.lease_number`),
+    db.execute(sql`select id,lease_id as "leaseId",charge_type as "chargeType",description,amount,frequency,effective_from as "effectiveFrom",effective_to as "effectiveTo" from lease_charges where org_id=${orgId} order by effective_from`),
+    db.execute(sql`select id,lease_id as "leaseId",effective_on as "effectiveOn",method,value,previous_amount as "previousAmount",new_amount as "newAmount",status from lease_escalations where org_id=${orgId} order by effective_on desc`),
+    db.execute(sql`select s.id,s.lease_id as "leaseId",s.period_starts_on as "periodStartsOn",s.period_ends_on as "periodEndsOn",s.due_on as "dueOn",s.amount,s.status,s.invoice_document_id as "invoiceDocumentId",d.document_number as "invoiceNumber",
+      d.status as "invoiceStatus",d.due_date as "invoiceDueOn",d.open_balance as "invoiceOpenBalance",c.charge_type as "chargeType",c.description
+      from lease_schedule_lines s join lease_charges c on c.id=s.charge_id and c.org_id=s.org_id
+      left join documents d on d.id=s.invoice_document_id and d.org_id=s.org_id where s.org_id=${orgId} order by s.due_on desc limit 2000`),
+    db.execute(sql`select d.id,d.lease_id as "leaseId",d.kind,d.occurred_on as "occurredOn",d.amount,d.applied_document_id as "appliedDocumentId",d.journal_entry_id as "journalEntryId",d.memo from security_deposit_transactions d where d.org_id=${orgId} order by d.occurred_on desc,d.created_at desc`),
+    db.execute(sql`select id,property_id as "propertyId",name,fiscal_year as "fiscalYear",period_starts_on as "periodStartsOn",period_ends_on as "periodEndsOn",allocation_basis as "allocationBasis",budget_amount as "budgetAmount",actual_amount as "actualAmount",expense_account_ids as "expenseAccountIds",status from cam_pools where org_id=${orgId} order by fiscal_year desc,name`),
+    db.execute(sql`select id,pool_id as "poolId",lease_id as "leaseId",share_percent as "sharePercent",budget_allocation as "budgetAllocation",actual_allocation as "actualAllocation",billed_estimate as "billedEstimate",reconciliation_amount as "reconciliationAmount",invoice_document_id as "invoiceDocumentId" from cam_allocations where org_id=${orgId} order by created_at`),
+  ]) as unknown as Array<{ rows: any[] }>;
+  return { properties: properties.rows, units: units.rows, leases: leases.rows, charges: charges.rows, escalations: escalations.rows, schedules: schedules.rows, deposits: deposits.rows, camPools: pools.rows, camAllocations: allocations.rows };
+}
+
+/** Scheduler entry point. Each org/lease is idempotent through invoice billing keys and schedule status. */
+export async function runDuePropertyBilling(asOf?: string): Promise<{ billed: number; invoices: number; lateFees: number }> {
+  const date = asOf ?? new Date().toISOString().slice(0, 10); const result = { billed: 0, invoices: 0, lateFees: 0 };
+  const orgs = await withBypass(async () => (await db.execute(sql`select id from orgs where coalesce((settings->'features'->>'propertyManagement')::boolean,false)`)) as unknown as { rows: { id: string }[] });
+  for (const org of orgs.rows) await withOrg(org.id, async () => {
+    const leases = (await db.execute(sql`select id,coalesce(updated_by,created_by) as actor from property_leases where org_id=${org.id} and status in ('active','notice') and auto_invoice`)) as unknown as { rows: { id: string; actor: string | null }[] };
+    for (const lease of leases.rows) {
+      if (!lease.actor) continue;
+      await scheduleLeaseCharges(org.id, lease.actor, lease.id);
+    }
+    const feeActor = leases.rows.find((lease) => lease.actor)?.actor;
+    const fees = feeActor ? await assessLeaseLateFees(org.id, feeActor, date) : { created: 0 };
+    const billed = await billDueLeaseCharges(org.id, null, date);
+    result.billed += billed.billed; result.invoices += billed.invoices.length; result.lateFees += fees.created;
+  });
+  return result;
+}
