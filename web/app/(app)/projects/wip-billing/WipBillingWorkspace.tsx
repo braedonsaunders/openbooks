@@ -160,7 +160,7 @@ export function WipBillingWorkspace({
           </div>
           {canManage ? <Button disabled={projects.length === 0} onClick={() => setCreating((value) => !value)}><Plus className="mr-2 size-4" />New prebill</Button> : null}
         </div>
-        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-7">
+        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
           <MetricCard label="Available WIP" value={money(agingTotal)} note="Not held" />
           <MetricCard label="1–30 days" value={money(Number(analytics.aging.days1to30))} />
           <MetricCard label="31–60 days" value={money(Number(analytics.aging.days31to60))} />
