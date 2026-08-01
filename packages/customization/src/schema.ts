@@ -98,8 +98,6 @@ const formTabPlacementSchema = formTabPlacementBaseSchema.extend({
 
 export const formLayoutConfigSchema = z.object({
   schemaVersion: z.literal(1),
-  defaultVisibilityVersion: z.literal(1).optional(),
-  defaultLayoutVersion: z.union([z.literal(1), z.literal(2), z.literal(3)]).optional(),
   recordType: recordTypeSchema,
   header: z.object({ groups: z.array(headerGroupSchema).min(1).max(20) }),
   lines: z.object({ columns: z.array(lineColumnPlacementSchema).max(200) }),
@@ -397,8 +395,6 @@ export function defaultFormLayout(recordType: RecordTypeKey): FormLayoutConfig {
   const spanMap = HEADER_SPAN_BY_TYPE[recordType] ?? VENDOR_BILL_HEADER_SPAN
   return {
     schemaVersion: 1,
-    defaultVisibilityVersion: 1,
-    defaultLayoutVersion: recordType === 'project' ? 3 : 1,
     recordType,
     header: {
       groups: [
@@ -467,43 +463,6 @@ function resolveRegisteredSubtabs(
 }
 
 /**
- * Convert the pre-v3 flat project planning tabs into the nested placement
- * without discarding tenant-authored order, visibility, or labels. This runs
- * during resolution for every form (including named custom forms), while only
- * the tenant baseline receives the separate placement-default refresh.
- */
-function collapseLegacyProjectPlanningTabs(
-  layout: FormLayoutConfig,
-  tabs: FormTabPlacement[],
-): FormTabPlacement[] {
-  if (layout.recordType !== 'project') return tabs
-  const legacyKeys = new Set(['work_breakdown', 'schedule'])
-  const legacy = tabs.filter((tab) => legacyKeys.has(tab.key))
-  if (legacy.length === 0) return tabs
-
-  const firstLegacyIndex = tabs.findIndex((tab) => legacyKeys.has(tab.key))
-  const existingParent = tabs.find((tab) => tab.key === 'project_management')
-  const parent: FormTabPlacement = {
-    ...(existingParent ?? {
-      key: 'project_management',
-      // If a child did not exist when this form was saved, its newly
-      // registered visible default must remain discoverable.
-      visible: legacy.some((tab) => tab.visible) || legacy.length < legacyKeys.size,
-    }),
-    subtabs: existingParent?.subtabs?.length ? existingParent.subtabs : legacy,
-  }
-  const withoutLegacyOrParent = tabs.filter(
-    (tab) => !legacyKeys.has(tab.key) && tab.key !== 'project_management',
-  )
-  withoutLegacyOrParent.splice(
-    Math.min(firstLegacyIndex, withoutLegacyOrParent.length),
-    0,
-    parent,
-  )
-  return withoutLegacyOrParent
-}
-
-/**
  * The tabs a layout should render, in order.
  *
  * Anything the registry has gained since the layout was saved is appended
@@ -517,8 +476,7 @@ export function resolveFormTabs(layout: FormLayoutConfig): FormTabPlacement[] {
   if (registered.length === 0 && !layout.tabs?.length) return []
 
   const registeredKeys = new Set(registered.map((tab) => tab.key))
-  const normalizedTabs = collapseLegacyProjectPlanningTabs(layout, layout.tabs ?? [])
-  const placed = normalizedTabs.filter(
+  const placed = (layout.tabs ?? []).filter(
     (tab) => registeredKeys.has(tab.key) || isCustomTabKey(tab.key),
   )
   const placedKeys = new Set(placed.map((tab) => tab.key))
@@ -611,43 +569,6 @@ export function mergeRegisteredFieldsIntoLayout(layout: FormLayoutConfig): FormL
   return layout
 }
 
-/**
- * Apply the current system placement to a tenant's baseline form exactly once.
- * Built-in fields return to registry order and current spans, while visibility,
- * label, and required overrides survive. Custom fields remain in their chosen
- * groups. Named custom forms never pass through this baseline-only migration.
- */
-export function refreshDefaultFormLayout(layout: FormLayoutConfig): FormLayoutConfig {
-  const defaults = defaultFormLayout(layout.recordType)
-  const defaultBuiltIns = defaults.header.groups.flatMap((group) => group.fields)
-  const existingByKey = new Map(
-    layout.header.groups.flatMap((group) => group.fields).map((field) => [field.key, field]),
-  )
-  const customOnlyGroups = layout.header.groups.map((group) => ({
-    ...group,
-    fields: group.fields.filter((field) => isCustomFieldKey(field.key)),
-  }))
-  if (customOnlyGroups.length === 0) customOnlyGroups.push({ id: "primary", label: null, fields: [] })
-
-  const builtIns = defaultBuiltIns.map((placement) => {
-    const existing = existingByKey.get(placement.key)
-    return existing
-      ? { ...existing, colSpan: placement.colSpan ?? null }
-      : { ...placement }
-  })
-  customOnlyGroups[0]!.fields = [...builtIns, ...customOnlyGroups[0]!.fields]
-
-  layout.header.groups = customOnlyGroups.filter((group, index) => index === 0 || group.fields.length > 0)
-  if (defaults.tabs?.length) {
-    const existingTabs = new Map(resolveFormTabs(layout).map((tab) => [tab.key, tab]))
-    const builtIns = defaults.tabs.map((tab) => ({ ...tab, ...existingTabs.get(tab.key) }))
-    const customTabs = (layout.tabs ?? []).filter((tab) => isCustomTabKey(tab.key))
-    layout.tabs = [...builtIns, ...customTabs]
-  }
-  layout.defaultLayoutVersion = defaults.defaultLayoutVersion
-  return mergeRegisteredFieldsIntoLayout(layout)
-}
-
 /** The system-default list view: all columns (registry order), no filters. */
 export function defaultListView(recordType: RecordTypeKey): ListViewConfig {
   const meta = RECORD_TYPE_BY_KEY[recordType]
@@ -655,7 +576,7 @@ export function defaultListView(recordType: RecordTypeKey): ListViewConfig {
   // Prefer date-desc (transaction date or created-at) for lists; otherwise the
   // first sortable column.
   const sortable =
-    meta.listColumns.find((c) => c.sortable && (c.sortKey === "date" || c.sortKey === "created")) ??
+    meta.listColumns.find((c) => c.sortable && (c.sortKey === "date" || c.sortKey === "created" || c.sortKey === "close")) ??
     meta.listColumns.find((c) => c.sortable)
   return {
     schemaVersion: 1,
@@ -667,7 +588,9 @@ export function defaultListView(recordType: RecordTypeKey): ListViewConfig {
       labelOverride: null,
     })),
     filters: [],
-    sort: sortable ? { column: sortable.key, dir: "desc" } : null,
+    sort: sortable
+      ? { column: sortable.key, dir: ["date", "created", "close"].includes(sortable.sortKey ?? "") ? "desc" : "asc" }
+      : null,
     perPage: DEFAULT_PER_PAGE,
   }
 }

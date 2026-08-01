@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict'
-import { readFileSync } from 'node:fs'
+import { existsSync, readFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import test from 'node:test'
@@ -44,7 +44,6 @@ test('project planning is grouped under a customizable project-management tab', 
 test('applications for payment stay inside project billing and use subtabs plus stacked flyouts', () => {
   const billing = source('app/(app)/projects/tabs/BillingSection.tsx')
   const workspace = source('app/(app)/construction/ConstructionClient.tsx')
-  const legacyRoute = source('app/(app)/construction/page.tsx')
   const projectsPage = source('app/(app)/projects/page.tsx')
 
   assert.match(billing, /<ApplicationsBillingWorkspace\b/)
@@ -53,7 +52,7 @@ test('applications for payment stay inside project billing and use subtabs plus 
   assert.match(workspace, /<DrawEntryDrawer\b/)
   assert.match(workspace, /stacked/)
   assert.match(workspace, /\/ar\/invoices\?doc=/)
-  assert.match(legacyRoute, /redirect\(`\/projects\?project=/)
+  assert.equal(existsSync(join(webRoot, 'app/(app)/construction/page.tsx')), false)
   assert.doesNotMatch(projectsPage, /href=.*\/construction/)
 })
 

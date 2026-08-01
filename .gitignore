@@ -47,6 +47,7 @@ docs/*-workflows-*.md
 
 # generated report/pdf output
 output/
+/Deposit Detail Report, July 31, 2026.pdf
 
 # scratch/test artifacts
 tmp/

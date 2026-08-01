@@ -259,6 +259,16 @@ export const NAV_MODULES: NavModule[] = [
     requiredPermission: 'ap.read',
   },
   {
+    key: 'subcontracts',
+    href: '/subcontracts',
+    label: 'Subcontracts',
+    iconKey: 'clipboard-check',
+    group: 'purchasing',
+    subgroup: 'buy',
+    requiredPermission: 'ap.read',
+    featureKey: 'subcontracts',
+  },
+  {
     key: 'ap',
     href: '/ap',
     label: 'Accounts Payable',
@@ -516,6 +526,16 @@ export const NAV_MODULES: NavModule[] = [
     requiredPermission: 'projects.read',
   },
   {
+    key: 'wip-billing',
+    href: '/projects/wip-billing',
+    label: 'WIP & Prebilling',
+    iconKey: 'clipboard-check',
+    group: 'operations',
+    subgroup: 'delivery',
+    requiredPermission: 'projects.read',
+    featureKey: 'wipBilling',
+  },
+  {
     key: 'employees',
     href: '/entities/employees',
     label: 'Employees',
@@ -728,6 +748,11 @@ export const ADMIN_HUB_PERMISSIONS = [
   'admin.sandboxes.manage',
   'admin.backups.manage',
   'admin.customization.manage',
+  'scripts.manage',
+  'flows.manage',
+  'apps.manage',
+  'api.keys.manage',
+  'sql.execute',
   'sync.run',
 ] as const
 
@@ -763,9 +788,10 @@ export const DEFAULT_NAV_ORDER: Record<NavGroupKey, readonly string[]> = {
     'ar-invoices',
     'receipts',
   ],
-  purchasing: ['purchase-orders', 'ap', 'ap-bills', 'payments', 'expenses', 'vendors', 'compliance', 'compliance-vendors', 'lien-waivers', 'information-returns'],
+  purchasing: ['purchase-orders', 'subcontracts', 'ap', 'ap-bills', 'payments', 'expenses', 'vendors', 'compliance', 'compliance-vendors', 'lien-waivers', 'information-returns'],
   operations: [
     'projects',
+    'wip-billing',
     'timesheets',
     'field-tickets',
     'items',

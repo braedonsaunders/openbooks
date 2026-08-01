@@ -33,7 +33,7 @@ export type PlatformUser = {
   name: string;
   orgId: string;
   orgName: string;
-  role: string;
+  roles: string[];
   isSuperAdmin: boolean;
   isActive: boolean;
   lastLoginAt: string | Date | null;
@@ -200,7 +200,7 @@ export async function platformUsers(
       sql`u.name`,
       sql`u.email`,
       sql`o.name`,
-      sql`u.role`,
+      sql`coalesce((select string_agg(r.name, ' ') from role_assignments a join app_roles r on r.id = a.role_id and r.org_id = a.org_id where a.user_id = u.id and a.org_id = u.org_id), '')`,
     ]);
     const status =
       input.status === "active"
@@ -217,7 +217,7 @@ export async function platformUsers(
         : input.sort === "organization"
           ? sql`o.name ${dir}, u.name asc`
           : input.sort === "role"
-            ? sql`u.role ${dir}, u.name asc`
+            ? sql`coalesce((select string_agg(r.name, ', ' order by r.name) from role_assignments a join app_roles r on r.id = a.role_id and r.org_id = a.org_id where a.user_id = u.id and a.org_id = u.org_id), '') ${dir}, u.name asc`
             : input.sort === "lastLogin"
               ? sql`u.last_login_at ${dir} nulls last, u.name asc`
               : input.sort === "grants"
@@ -226,7 +226,8 @@ export async function platformUsers(
     const offset = (input.page - 1) * input.perPage;
     const [rowsResult, totalResult, countsResult] = await Promise.all([
       db.execute(sql`
-        select u.id, u.email, u.name, u.org_id as "orgId", o.name as "orgName", u.role,
+        select u.id, u.email, u.name, u.org_id as "orgId", o.name as "orgName",
+               coalesce((select array_agg(r.name order by r.name) from role_assignments a join app_roles r on r.id = a.role_id and r.org_id = a.org_id where a.user_id = u.id and a.org_id = u.org_id), '{}'::text[]) as roles,
                u.is_super_admin as "isSuperAdmin", u.is_active as "isActive",
                u.last_login_at as "lastLoginAt", u.created_at as "createdAt",
                (select count(*) from user_org_access a where a.member_user_id = u.id and a.is_active)::int as "grantCount"
@@ -345,7 +346,8 @@ export async function platformUser(
 ): Promise<{ user: PlatformUser; grants: PlatformGrant[] } | null> {
   return withBypassContext(async () => {
     const usersResult = (await db.execute(sql`
-      select u.id, u.email, u.name, u.org_id as "orgId", o.name as "orgName", u.role,
+      select u.id, u.email, u.name, u.org_id as "orgId", o.name as "orgName",
+             coalesce((select array_agg(r.name order by r.name) from role_assignments a join app_roles r on r.id = a.role_id and r.org_id = a.org_id where a.user_id = u.id and a.org_id = u.org_id), '{}'::text[]) as roles,
              u.is_super_admin as "isSuperAdmin", u.is_active as "isActive",
              u.last_login_at as "lastLoginAt", u.created_at as "createdAt",
              (select count(*) from user_org_access a where a.member_user_id = u.id and a.is_active)::int as "grantCount"

@@ -418,7 +418,11 @@ export async function runBridgeMethod(opts: {
       endpoint: endpointName,
       query: {},
       body: opts.payload?.payload ?? null,
-      user: opts.user,
+      user: {
+        id: opts.user.id,
+        name: opts.user.name,
+        roles: opts.user.roles.map(({ key }) => key),
+      },
     }
     const run = await runAppEndpoint({ source: src[0].content, request, adapters })
 

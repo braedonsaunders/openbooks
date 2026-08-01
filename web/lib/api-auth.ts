@@ -10,6 +10,8 @@ import {
   resolveEffectivePermissions,
 } from "./permissions";
 import type { SessionUser } from "./auth";
+import { allowedSubsidiaryIds } from "./subsidiaries";
+import { isFeatureEnabled } from "./features";
 
 /**
  * API-key authentication for the versioned REST API (`/api/v1/*`).
@@ -67,6 +69,8 @@ export interface ApiKeyAuth {
   permissions: Set<string>;
   /** Requests-per-minute ceiling for this key; null = unlimited. */
   rateLimitPerMin: number | null;
+  /** Subsidiary visibility inherited from the owning user's role assignments. */
+  allowedSubsidiaryIds: Set<string> | null;
 }
 
 /**
@@ -101,7 +105,7 @@ export async function resolveApiKeyAuth(req: Request): Promise<ApiKeyAuth | null
         (await db.execute(sql`
       select k.id, k.org_id, k.user_id, k.scopes, k.is_active, k.expires_at,
              k.rate_limit_per_min,
-             u.email, u.name, u.role, u.is_active as user_active
+             u.email, u.name, u.is_active as user_active
         from api_keys k
         join users u on u.id = k.user_id
        where k.key_hash = ${keyHash}
@@ -116,9 +120,9 @@ export async function resolveApiKeyAuth(req: Request): Promise<ApiKeyAuth | null
   setRequestOrg(keyRow.org_id);
 
   // Resolve the owner's effective permissions (same logic as authz.getAuthz).
-  const [assignments, overrides] = (await Promise.all([
+  const [assignments, overrides, allowedSubs] = (await Promise.all([
     db.execute(sql`
-      select r.permissions
+      select r.key, r.name, r.permissions
         from role_assignments a
         join app_roles r on r.id = a.role_id
        where a.user_id = ${keyRow.user_id} and a.org_id = ${keyRow.org_id}`),
@@ -126,13 +130,13 @@ export async function resolveApiKeyAuth(req: Request): Promise<ApiKeyAuth | null
       select permission, effect
         from user_permission_overrides
        where user_id = ${keyRow.user_id} and org_id = ${keyRow.org_id}`),
+    allowedSubsidiaryIds(keyRow.user_id),
   ])) as any[];
 
   const ownerPerms = resolveEffectivePermissions({
     rolePermissionSets: assignments.rows.map((r: any) =>
       Array.isArray(r.permissions) ? r.permissions : [],
     ),
-    legacyRole: keyRow.role,
     overrides: overrides.rows,
   });
 
@@ -154,7 +158,7 @@ export async function resolveApiKeyAuth(req: Request): Promise<ApiKeyAuth | null
     id: keyRow.user_id,
     email: keyRow.email,
     name: keyRow.name,
-    role: keyRow.role,
+    roles: assignments.rows.map((row: any) => ({ key: row.key, name: row.name })),
     orgId: keyRow.org_id,
     // API keys are always bound to their production org — no sandbox entry.
     envKind: "production",
@@ -174,6 +178,7 @@ export async function resolveApiKeyAuth(req: Request): Promise<ApiKeyAuth | null
     keyId: keyRow.id,
     permissions: scopedSet,
     rateLimitPerMin: keyRow.rate_limit_per_min == null ? null : Number(keyRow.rate_limit_per_min),
+    allowedSubsidiaryIds: allowedSubs,
   };
 }
 
@@ -238,12 +243,24 @@ export async function guardApiKey(
   if (!auth) {
     return NextResponse.json({ error: "invalid or missing API key" }, { status: 401 });
   }
+  const featureGate = await guardApiKeyFeature(auth, "apiAccess");
+  if (featureGate) return featureGate;
   const limited = await enforceRateLimit(auth, req, Date.now());
   if (limited) return limited;
   if (!canApi(auth, perm)) {
     return NextResponse.json({ error: `missing permission: ${perm}` }, { status: 403 });
   }
   return auth;
+}
+
+/** Fail closed at transport boundaries when a tenant disables an API-backed capability. */
+export async function guardApiKeyFeature(
+  auth: ApiKeyAuth,
+  featureKey: string,
+): Promise<NextResponse | null> {
+  return (await isFeatureEnabled(auth.user.orgId, featureKey))
+    ? null
+    : NextResponse.json({ error: "not found" }, { status: 404 });
 }
 
 /**

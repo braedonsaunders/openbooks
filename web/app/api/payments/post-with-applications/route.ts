@@ -1,12 +1,13 @@
 import { NextResponse } from 'next/server'
 import { sql } from 'drizzle-orm'
-import { db } from '@openbooks/engine/src/db.ts'
+import { db, withOrgTransaction } from '@openbooks/engine/src/db.ts'
 import {
   postPaymentWithApplications,
   type AllocationInput,
   type PaymentKind,
 } from '@openbooks/engine/src/payments.ts'
 import { submitAndReleaseIfUngated } from '@openbooks/engine/src/flows/index.ts'
+import { runPostDocumentEffects } from '@openbooks/engine/src/posting.ts'
 import { can, getAuthz } from '../../../../lib/authz'
 import { isUuid } from '../../../../lib/list-params'
 import { paymentErrorResponse, paymentPermission } from '../lib'
@@ -39,32 +40,63 @@ export async function POST(req: Request) {
   }
 
   try {
-    if (r.rows[0].status === 'draft') {
-      const submission = await submitAndReleaseIfUngated(
-        r.rows[0].kind,
-        body.documentId,
+    const outcome = await withOrgTransaction(authz.user.orgId, async () => {
+      const locked = (await db.execute(sql`
+        select kind, status from documents
+         where id = ${body.documentId} and org_id = ${authz.user.orgId}
+           and kind in ('vendor_payment', 'customer_payment')
+         for update
+      `)) as unknown as { rows: Array<{ kind: PaymentKind; status: string }> }
+      const payment = locked.rows[0]
+      if (!payment) return { kind: 'not_found' as const }
+      const previousStatus = payment.status
+      if (previousStatus === 'draft') {
+        const submission = await submitAndReleaseIfUngated(
+          payment.kind,
+          body.documentId!,
+          authz.user.id,
+        )
+        if (submission.flowError) {
+          return { kind: 'flow_error' as const, error: submission.flowError }
+        }
+        if (submission.gated) {
+          return { kind: 'pending' as const, requestId: submission.runId }
+        }
+      } else if (previousStatus !== 'approved') {
+        return { kind: 'invalid_status' as const, status: previousStatus }
+      }
+      const result = await postPaymentWithApplications(
+        body.documentId!,
+        body.allocations,
         authz.user.id,
+        'ui',
+        { deferEffects: true },
       )
-      if (submission.flowError) {
-        return NextResponse.json(
-          { error: `approval could not be routed: ${submission.flowError}` },
-          { status: 422 },
-        )
-      }
-      if (submission.gated) {
-        return NextResponse.json(
-          { ok: true, pendingApproval: true, requestId: submission.runId },
-          { status: 202 },
-        )
-      }
-    } else if (r.rows[0].status !== 'approved') {
+      return { kind: 'posted' as const, result, previousStatus }
+    })
+    if (outcome.kind === 'not_found') {
+      return NextResponse.json({ error: 'not found' }, { status: 404 })
+    }
+    if (outcome.kind === 'flow_error') {
       return NextResponse.json(
-        { error: `payment is ${r.rows[0].status}; only an approved payment can be posted` },
+        { error: `approval could not be routed: ${outcome.error}` },
         { status: 422 },
       )
     }
-    const result = await postPaymentWithApplications(body.documentId, body.allocations, authz.user.id)
-    return NextResponse.json({ ok: true, ...result })
+    if (outcome.kind === 'pending') {
+      return NextResponse.json(
+        { ok: true, pendingApproval: true, requestId: outcome.requestId },
+        { status: 202 },
+      )
+    }
+    if (outcome.kind === 'invalid_status') {
+      return NextResponse.json(
+        { error: `payment is ${outcome.status}; only an approved payment can be posted` },
+        { status: 422 },
+      )
+    }
+    await runPostDocumentEffects(body.documentId, outcome.previousStatus)
+    return NextResponse.json({ ok: true, ...outcome.result })
   } catch (e) {
     return paymentErrorResponse(e)
   }

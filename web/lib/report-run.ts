@@ -261,7 +261,7 @@ export async function resolveReport(kind: ReportKind, p: URLSearchParams, ctx: R
       }
   }
 
-  // --- Legacy single-column statements --------------------------------------
+  // --- Standard scalar statements --------------------------------------------
   const asOf = p.get('asOf') ?? period.to
   const from = p.get('from') ?? period.from
   const to = p.get('to') ?? period.to

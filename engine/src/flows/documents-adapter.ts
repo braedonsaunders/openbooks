@@ -48,16 +48,16 @@ const STATUS_TRANSITIONS: Record<string, readonly string[]> = {
  * route or drawer param changes.
  */
 const RECORD_ROUTES: Record<string, (id: string) => string> = {
-  vendor_bill: (id) => `/ap?doc=${id}`,
-  vendor_credit: (id) => `/ap?doc=${id}`,
-  customer_invoice: (id) => `/ar?doc=${id}`,
-  customer_credit: (id) => `/ar?doc=${id}`,
+  vendor_bill: (id) => `/ap/bills?doc=${id}`,
+  vendor_credit: (id) => `/ap/bills?doc=${id}`,
+  customer_invoice: (id) => `/ar/invoices?doc=${id}`,
+  customer_credit: (id) => `/ar/invoices?doc=${id}`,
   card_charge: (id) => `/banking/transactions?doc=${id}`,
   card_refund: (id) => `/banking/transactions?doc=${id}`,
   check: (id) => `/banking/transactions?doc=${id}`,
   deposit: (id) => `/banking/transactions?doc=${id}`,
   transfer: (id) => `/banking/transactions?doc=${id}`,
-  expense_report: (id) => `/expenses?expense=${id}`,
+  expense_report: (id) => `/expenses/reports?expense=${id}`,
   journal: (id) => `/journal?entry=${id}`,
   vendor_payment: (id) => `/payments?payment=${id}`,
   customer_payment: (id) => `/receipts?payment=${id}`,

@@ -165,6 +165,7 @@ export async function runDueRecurringSchedules(asOf?: string): Promise<Recurring
              rs.cadence, rs.cron, rs.next_run_on as "nextRunOn", rs.ends_on as "endsOn",
              rs.auto_post as "autoPost"
         from recurring_schedules rs
+        join orgs o on o.id = rs.org_id and o.env_kind = 'production'
        where rs.is_active and rs.next_run_on <= ${today}
        order by rs.next_run_on
     `)) as unknown as {

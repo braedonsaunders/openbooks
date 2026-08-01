@@ -14,6 +14,7 @@ import {
   captureTransactionAuditSnapshot,
   recordTransactionAudit,
 } from "./transaction-audit.ts";
+import { assertSubcontractPaymentCleared } from "./subcontracts.ts";
 
 /**
  * Payments: vendor payments and customer receipts with open-item application,
@@ -650,6 +651,8 @@ export async function postPaymentWithApplications(
   paymentDocId: string,
   allocations?: AllocationInput[],
   userId?: string,
+  auditSource: "ui" | "api" | "mcp" | "assistant" = "ui",
+  options: { deferEffects?: boolean } = {},
 ): Promise<{ entryId: string }> {
   const [preflight] = await db.select().from(schema.documents).where(eq(schema.documents.id, paymentDocId));
   if (!preflight || !isPaymentKind(preflight.kind)) throw new PaymentError("payment document not found");
@@ -707,6 +710,12 @@ export async function postPaymentWithApplications(
     for (const allocation of allocs) {
       const item = byLine.get(allocation.openLineId);
       if (!item) throw new PaymentError("an allocated item is no longer open for this party");
+      if (doc.kind === "vendor_payment" && item.documentId) {
+        // A joint-check instruction is intentionally incompatible with an
+        // ordinary one-payee payment. The control must be released or handled
+        // through a dedicated joint-check disbursement before cash can move.
+        await assertSubcontractPaymentCleared(doc.orgId, item.documentId, allocation.targetTransactionAmount);
+      }
       validateSettlementEvidence(allocation, doc.currency, item.currency);
       if (cmp(allocation.targetTransactionAmount, item.transactionOpen) > 0) {
         throw new PaymentError(`application exceeds ${item.documentNumber ?? item.entryNumber}'s open transaction balance`);
@@ -920,7 +929,7 @@ export async function postPaymentWithApplications(
         documentId: doc.id,
         action: "post",
         actorId: userId,
-        source: "ui",
+        source: auditSource,
         before: auditBefore,
         after: auditAfter,
       });
@@ -928,7 +937,9 @@ export async function postPaymentWithApplications(
     return { entryId };
   });
 
-  await runPostDocumentEffects(paymentDocId, preflight.status);
+  if (!options.deferEffects) {
+    await runPostDocumentEffects(paymentDocId, preflight.status);
+  }
   return result;
 }
 
@@ -1132,6 +1143,13 @@ export async function createPaymentRun(opts: {
   }
   const payable = bills.rows.filter((b) => cmp(b.open, "0") > 0);
   if (payable.length === 0) throw new PaymentError("all selected bills are already fully paid");
+
+  // Apply subcontract holds and joint-check instructions before creating any
+  // payment documents or instructions. A later control is caught again by the
+  // final postPaymentWithApplications gate above.
+  for (const bill of payable) {
+    await assertSubcontractPaymentCleared(opts.orgId, bill.document_id, bill.open);
+  }
 
   // --- subcontractor compliance -------------------------------------------
   // A bill whose vendor fails a blocking requirement (lapsed insurance, missing

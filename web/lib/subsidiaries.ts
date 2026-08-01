@@ -98,8 +98,8 @@ export function subtreeIds(all: Pick<SubsidiaryOption, "id" | "parentId">[], sub
 
 /**
  * The subsidiaries this user may SEE, from the union of their roles'
- * restrictions (an unrestricted role, no roles at all, or super-admin ⇒ null
- * = everything). Feed the result to list/report WHERE clauses:
+ * restrictions (an unrestricted role or super-admin ⇒ null = everything).
+ * A user without a role receives an empty set. Feed the result to list/report WHERE clauses:
  * `and subsidiary_id = any(...)` only when non-null.
  */
 export async function allowedSubsidiaryIds(userId: string): Promise<Set<string> | null> {
@@ -109,7 +109,7 @@ export async function allowedSubsidiaryIds(userId: string): Promise<Set<string> 
      where a.user_id = ${userId}`)) as unknown as {
     rows: { restriction: SubsidiaryRestriction | null }[];
   };
-  if (r.rows.length === 0) return null; // legacy-role fallback users see all
+  if (r.rows.length === 0) return new Set();
   const restrictions = r.rows.map((row) => row.restriction ?? { mode: "all" as const });
   if (restrictions.some((x) => x.mode === "all")) return null;
 

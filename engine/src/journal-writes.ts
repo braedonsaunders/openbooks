@@ -1,7 +1,7 @@
 import { sql } from "drizzle-orm";
-import { db, schema } from "./db.ts";
+import { db, schema, withOrgTransaction } from "./db.ts";
 import { abs, cmp, isZero, normalizeMoney, sum } from "./money.ts";
-import { postDocument } from "./posting.ts";
+import { postDocument, runPostDocumentEffects } from "./posting.ts";
 import { submitAndReleaseIfUngated } from "./flows/submit.ts";
 
 /**
@@ -192,19 +192,25 @@ export async function createScriptJournal(
 
   if (!opts.post) return docId;
 
-  // Posting runs OUTSIDE the creation transaction, exactly like the UI action
-  // route — a posting failure leaves a valid draft behind, never half a post.
   if (!actorId) {
     throw new JournalWriteError("posting a script journal requires an attributable actor");
   }
-  const submission = await submitAndReleaseIfUngated("journal", docId.id, actorId);
-  if (submission.flowError) {
-    throw new JournalWriteError(`approval could not be routed: ${submission.flowError}`);
-  }
-  if (submission.gated) {
-    return { ...docId, approvalPending: true };
-  }
-  const entryId = await postDocument(docId.id, await controlDeps(orgId));
+  const outcome = await withOrgTransaction(orgId, async () => {
+    const submission = await submitAndReleaseIfUngated("journal", docId.id, actorId);
+    if (submission.flowError) {
+      throw new JournalWriteError(`approval could not be routed: ${submission.flowError}`);
+    }
+    if (submission.gated) return { approvalPending: true as const };
+    const entryId = await postDocument(
+      docId.id,
+      await controlDeps(orgId),
+      { deferEffects: true },
+    );
+    return { approvalPending: false as const, entryId };
+  });
+  if (outcome.approvalPending) return { ...docId, approvalPending: true };
+  await runPostDocumentEffects(docId.id, "draft");
+  const entryId = outcome.entryId;
   return { ...docId, entryId: String(entryId) };
 }
 

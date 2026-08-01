@@ -14,7 +14,7 @@
   "financialChangeReasonPlaceholder": "Descreva a alteração da política contábil",
   "financialChangeReasonRequired": "Informe um motivo significativo para a alteração da política financeira",
   "financialVersionNotice": "Ao salvar, uma nova política com data de vigência é publicada. Os períodos anteriores mantêm a política original.",
-  "legacySeed": "valor inicial legado",
+  "initialPolicy": "política inicial",
   "deleteConfirm": "Excluir ou arquivar “{name}”?",
   "tabs": {
     "general": "Geral",

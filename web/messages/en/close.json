@@ -69,8 +69,10 @@
     "approve": "Approve",
     "requestChanges": "Request changes",
     "addEvidence": "Add evidence",
+    "resolveException": "Open work area",
     "takeAction": "Take action",
     "requestApproval": "Request approval",
+    "attest": "Attest and approve close",
     "reviewApprovals": "Review approvals",
     "configureApprovalFlow": "Configure approval flow",
     "documentation": "Documentation",
@@ -84,6 +86,7 @@
   "messages": {
     "refresh": "Close state refreshed",
     "request_approval": "Close submitted for approval",
+    "attest": "Owner attestation recorded",
     "close": "Period locked",
     "publish": "Close package published",
     "taskUpdated": "Task updated",
@@ -130,6 +133,10 @@
     "drafts-open": {
       "title": "Unposted activity remains",
       "message": "{count, plural, one {# draft or pending transaction remains in the period.} other {# draft or pending transactions remain in the period.}}"
+    },
+    "posting-period-missing": {
+      "title": "Transactions need an accounting period",
+      "message": "{count, plural, one {# transaction has no exact accounting-period reference. Assign it before closing any period.} other {# transactions have no exact accounting-period reference. Assign them before closing any period.}}"
     },
     "bank-unreconciled": {
       "title": "Cash accounts need reconciliation",
@@ -201,6 +208,11 @@
     "blockedDescription": "{count, plural, one {# hard-gated task remains} other {# hard-gated tasks remain}}.",
     "approvalTitle": "Independent approval and lock",
     "approvalDescription": "The run initiator cannot provide final approval. Any ledger change after approval reopens review.",
+    "ownerTitle": "Owner attestation and lock",
+    "ownerDescription": "For an owner-managed close, review the statements and record why the period is ready. The attestation is fingerprinted to this exact ledger state.",
+    "attestationLabel": "Why are these books ready to close?",
+    "attestationPlaceholder": "Example: Trial balance, balance sheet, and income statement reviewed; bank activity is reconciled and all known period transactions are posted.",
+    "confirmLock": "Lock AR, AP, banking, assets, tax, and the general ledger for this period? New postings will be rejected until a controlled reopening is approved.",
     "complete": "Period locked by {name}"
   },
   "lockStates": {
@@ -211,6 +223,7 @@
   "publish": {
     "package": "Close reporting package",
     "description": "Review the configured outputs, then freeze the evidence binder and publish the package.",
+    "confirm": "Publish and freeze this close package and its immutable audit binder?",
     "complete": "Package published by {name}",
     "lockFirst": "Apply the approved period locks before publishing.",
     "awaitingApproval": "Complete the close review and approval flow before publishing."
@@ -225,6 +238,7 @@
       "started": "Close run started",
       "data_changed": "Ledger change invalidated prior work",
       "approval_requested": "Close approval requested",
+      "owner_attested": "Owner attested that the books are ready",
       "approval_rejected": "Close approval rejected",
       "approved": "Close received final approval",
       "closed": "Period locks applied",
@@ -323,6 +337,10 @@
       "title": "Controller sign-off",
       "description": "Independently review readiness, exceptions, evidence, and reporting outputs."
     },
+    "financial-review": {
+      "title": "Review the financial statements",
+      "description": "Review the trial balance, balance sheet, and income statement for completeness and unexpected balances before attesting."
+    },
     "lock-subledgers": {
       "title": "Lock operational subledgers",
       "description": "Lock AR, AP, banking, assets, and tax before GL."
@@ -339,6 +357,8 @@
   "setup": {
     "title": "Periods & Close",
     "description": "Design fiscal calendars, generate periods, govern locks and reopenings, version close blueprints, and configure controls, automation, and reporting packages.",
+    "simpleMode": "Owner-managed close is active. Calendars, periods, locks, attestations, and immutable publication remain available without enterprise workflow overhead.",
+    "enableAdvanced": "Review Advanced Close",
     "tabs": {
       "calendars": "Calendars",
       "periods": "Periods",

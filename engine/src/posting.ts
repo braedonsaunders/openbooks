@@ -1450,7 +1450,12 @@ export async function postDocument(
     // entry + lines just inserted. A document can never produce two entries.
     const flipped = await tx
       .update(schema.documents)
-      .set({ status: "posted", postedEntryId: entry.id, postingDate })
+      .set({
+        status: "posted",
+        postedEntryId: entry.id,
+        postingDate,
+        postingPeriodId: period.id,
+      })
       .where(
         and(
           eq(schema.documents.id, doc.id),

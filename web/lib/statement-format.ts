@@ -122,7 +122,7 @@ export function scaleDivisor(scale: ReportScale): number {
 }
 
 /** Whether a cell should read as "negative" for red-text styling. Accepts exact
- *  decimal strings (statement matrix) or numbers (legacy numeric reports). */
+ * decimal strings for money or presentation-only numbers for ratios/counts. */
 export function isNegative(value: StatementValue | number, kind: StatementColumnKind): boolean {
   if (value === null || value === undefined) return false
   if (typeof value === 'number') {

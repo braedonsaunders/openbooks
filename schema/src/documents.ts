@@ -105,11 +105,14 @@ export const documents = pgTable(
     index("documents_org_kind_status").on(t.orgId, t.kind, t.status),
     index("documents_party").on(t.partyId),
     index("documents_project").on(t.projectId),
-    // Product-owned Field Ticket state is relational. Reserve the former JSON
-    // key permanently so no importer, API, or future compatibility path can
-    // recreate the retired parallel source of truth.
     check(
-      "documents_no_legacy_field_ticket_custom",
+      "documents_posted_period_required",
+      sql`${t.status} <> 'posted' or (${t.postedEntryId} is not null and ${t.postingPeriodId} is not null)`,
+    ),
+    // Product-owned Field Ticket state is relational. Reserve its old JSON key
+    // so no importer or API can create a parallel source of truth.
+    check(
+      "documents_no_field_ticket_custom",
       sql`not (${t.custom} ? 'fieldTicket')`,
     ),
   ],

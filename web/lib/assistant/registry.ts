@@ -1,8 +1,15 @@
 import "server-only";
+import { randomUUID } from "node:crypto";
 import { tool, type ToolSet } from "ai";
 import type { Authz } from "../authz";
-import { ForbiddenError } from "../authz";
+import { can, ForbiddenError } from "../authz";
+import { applicationContextFromSession } from "../application/context";
+import {
+  APPLICATION_TOOLS,
+  executeApplicationTool,
+} from "../application/tool-catalog";
 import { canRunTool } from "./gate";
+import { signApplicationCommand } from "./application-proposals";
 import { READ_TOOLS } from "./tools";
 import { WRITE_TOOLS } from "./tools-write";
 import type { AssistantToolDef, ToolResult } from "./types";
@@ -14,7 +21,7 @@ import type { AssistantToolDef, ToolResult } from "./types";
  * time in /api/assistant/commit.
  */
 
-const ASSISTANT_TOOLS: AssistantToolDef[] = [...READ_TOOLS, ...WRITE_TOOLS];
+export const ASSISTANT_TOOLS: readonly AssistantToolDef[] = [...READ_TOOLS, ...WRITE_TOOLS];
 
 function safeErrorMessage(e: unknown): string {
   // Never surface raw error text to the model — it could carry secrets/PII.
@@ -49,5 +56,44 @@ export function buildToolRegistry(authz: Authz): ToolSet {
       tool({ description: t.description, inputSchema: t.inputSchema, execute }),
     ] as const;
   });
-  return Object.fromEntries(entries);
+  const applicationEntries = APPLICATION_TOOLS
+    .filter((definition) =>
+      definition.visibleTo(authz)
+      && (definition.readOnly || can(authz, "assistant.write")))
+    .map((definition) => {
+      const execute = async (input: unknown): Promise<ToolResult> => {
+        try {
+          const parsed = definition.inputSchema.parse(input);
+          if (definition.assistantConfirmation === "always") {
+            return {
+              ok: true,
+              data: {
+                proposedApplicationCommand: {
+                  toolName: definition.name,
+                  title: definition.title,
+                  destructive: definition.destructive,
+                  input: parsed,
+                  confirmToken: signApplicationCommand(definition.name, parsed, authz),
+                },
+              },
+              note: "Awaiting explicit user confirmation. Nothing has been changed.",
+            };
+          }
+          const context = applicationContextFromSession(
+            authz,
+            "assistant",
+            `assistant:${randomUUID()}`,
+          );
+          return { ok: true, data: await executeApplicationTool(definition, context, parsed) };
+        } catch (error) {
+          console.warn(`[assistant] application tool ${definition.name} failed`, error);
+          return { ok: false, error: safeErrorMessage(error) };
+        }
+      };
+      return [
+        definition.name,
+        tool({ description: definition.description, inputSchema: definition.inputSchema, execute }),
+      ] as const;
+    });
+  return Object.fromEntries([...entries, ...applicationEntries]);
 }

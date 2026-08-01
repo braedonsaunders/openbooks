@@ -26,7 +26,16 @@ async function main() {
 
   const ap = await acct("accounts payable");
   const expense = await acct("consumable");
-  const vendor = (await db.execute(sql`select id, display_name from parties where custom->>'nsKind'='vendor' limit 1`) as any).rows[0];
+  const vendor = (await db.execute(sql`
+    select p.id, p.display_name
+      from parties p
+     where p.org_id = ${orgId}
+       and exists (
+         select 1 from vendor_roles role
+          where role.org_id = p.org_id and role.party_id = p.id and role.is_active
+       )
+     limit 1
+  `) as any).rows[0];
 
   const deps: PostingDeps = { control: { ap: ap.id, ar: ap.id, bank: ap.id } };
 
@@ -103,14 +112,14 @@ async function main() {
       join journal_entries e on e.id = l.entry_id
      where e.entry_number = '${demoNumber}'
      order by l.line_number
-  `);
+  `, { orgId });
   console.table(q1.rows);
 
   const q2 = await runUserSql(`
     select a.number, a.name, sum(l.amount) as balance
       from journal_lines l join accounts a on a.id = l.account_id
      group by 1, 2 order by abs(sum(l.amount)) desc limit 8
-  `);
+  `, { orgId });
   console.log(`-- top balances across the replayed ledger (${q2.durationMs}ms):`);
   console.table(q2.rows);
 
@@ -120,7 +129,7 @@ async function main() {
     "select 1; drop table journal_lines",
   ]) {
     try {
-      await runUserSql(evil);
+      await runUserSql(evil, { orgId });
       console.log(`  !! allowed: ${evil}`);
     } catch (e) {
       console.log(`  refused (${(e as Error).message}): ${evil.slice(0, 40)}`);
@@ -128,7 +137,7 @@ async function main() {
   }
   // and even a SELECT that sneaks DML via CTE is stopped by the read-only txn+role
   try {
-    await runUserSql("with x as (update documents set memo='h4x' returning 1) select * from x");
+    await runUserSql("with x as (update documents set memo='h4x' returning 1) select * from x", { orgId });
     console.log("  !! CTE write allowed");
   } catch (e) {
     console.log(`  refused by Postgres itself: CTE write -> ${(e as Error).message.slice(0, 60)}`);

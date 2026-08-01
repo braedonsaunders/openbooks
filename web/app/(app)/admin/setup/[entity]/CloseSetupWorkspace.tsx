@@ -84,6 +84,7 @@ type Props = {
   reopenPage: number;
   reopenTotal: number;
   reopenPerPage: number;
+  advancedClose: boolean;
 };
 
 const BASE = "/admin/setup/period-close";
@@ -176,8 +177,7 @@ function pruneEmpty(obj: Record<string, unknown>): Record<string, unknown> {
 
 /** One report attached to a reporting package, with the author's overrides for
  * the date range, break-out dimension, and dimension filters it should run
- * with when the package is delivered. Legacy packages stored bare slug strings;
- * those normalize to `{ slug }` on load. */
+ * with when the package is delivered. */
 type ReportAttachment = {
   slug: string;
   period?: string;
@@ -194,7 +194,7 @@ type ReportAttachment = {
 function normalizeAttachments(raw: unknown): ReportAttachment[] {
   if (!Array.isArray(raw)) return [];
   return raw
-    .map((item) => (typeof item === "string" ? { slug: item } : item && typeof item === "object" ? { ...(item as ReportAttachment) } : null))
+    .map((item) => item && typeof item === "object" ? { ...(item as ReportAttachment) } : null)
     .filter((item): item is ReportAttachment => Boolean(item && item.slug));
 }
 
@@ -233,11 +233,13 @@ function RowLink({ href, children }: { href: string; children: React.ReactNode }
 
 export function CloseSetupWorkspace(props: Props) {
   const t = useTranslations("close.setup");
+  const visibleTabs: readonly Tab[] = props.advancedClose ? TABS : ["calendars", "periods"];
   const rawTab = pickString(props.currentParams.tab);
-  const tab: Tab = TABS.includes(rawTab as Tab) ? rawTab as Tab : "calendars";
+  const tab: Tab = visibleTabs.includes(rawTab as Tab) ? rawTab as Tab : "calendars";
   return <div className="space-y-5">
     <div><h2 className="text-lg font-semibold text-slate-900 dark:text-slate-100">{t("title")}</h2><p className="max-w-3xl text-sm text-slate-500 dark:text-slate-400">{t("description")}</p></div>
-    <div className="flex gap-1 overflow-x-auto border-b border-slate-200 dark:border-slate-800">{TABS.map((key) => <Link key={key} href={mergeHref(BASE, props.currentParams, { tab: key }) as any} className={cn("whitespace-nowrap border-b-2 px-3 py-2 text-sm font-medium transition-colors", tab === key ? "border-teal-600 text-teal-700 dark:border-teal-400 dark:text-teal-300" : "border-transparent text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-slate-100")}>{t(`tabs.${key}`)}</Link>)}</div>
+    {!props.advancedClose ? <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-teal-200 bg-teal-50/70 p-4 text-sm text-teal-900 dark:border-teal-900 dark:bg-teal-950/30 dark:text-teal-200"><span>{t("simpleMode")}</span><Button variant="outline" size="sm" asChild><Link href="/admin/setup/features">{t("enableAdvanced")}</Link></Button></div> : null}
+    <div className="flex gap-1 overflow-x-auto border-b border-slate-200 dark:border-slate-800">{visibleTabs.map((key) => <Link key={key} href={mergeHref(BASE, props.currentParams, { tab: key }) as any} className={cn("whitespace-nowrap border-b-2 px-3 py-2 text-sm font-medium transition-colors", tab === key ? "border-teal-600 text-teal-700 dark:border-teal-400 dark:text-teal-300" : "border-transparent text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-slate-100")}>{t(`tabs.${key}`)}</Link>)}</div>
     {tab === "calendars" ? <CalendarsTab {...props} /> : null}
     {tab === "periods" ? <PeriodsTab {...props} /> : null}
     {tab === "blueprints" ? <BlueprintsTab {...props} /> : null}

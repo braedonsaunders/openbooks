@@ -93,8 +93,11 @@ export async function runDueScheduledFlows(now: Date = new Date()): Promise<{
   // Cheap prefilter in SQL: only flows whose graph mentions a scheduled
   // trigger at all (the jsonb containment is broad; the parse below decides).
   const candidates = (await db.execute(sql`
-    select id from flows
-     where enabled and graph::text like '%"scheduled"%'
+    select flow.id
+      from flows flow
+      join orgs organization on organization.id = flow.org_id
+     where flow.enabled and organization.env_kind = 'production'
+       and flow.graph::text like '%"scheduled"%'
   `)) as unknown as { rows: { id: string }[] };
 
   for (const { id } of candidates.rows) {

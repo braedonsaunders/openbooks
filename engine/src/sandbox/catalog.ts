@@ -21,6 +21,17 @@ export const SANDBOX_CYCLE_BREAKERS: Record<string, readonly string[]> = {
   time_entries: ["invoiced_by_line_id"],
 };
 
+/**
+ * Trigger-enforced ownership references that are intentionally not backed by
+   * ordinary foreign keys. They still constrain bulk INSERT order because the
+ * BEFORE trigger resolves the referenced row immediately. Keep this map small
+ * and explicit: inferred references without an enforcing trigger must not
+ * reintroduce the deferrable documents↔journal_entries cycle.
+ */
+const TRIGGER_INSERT_PARENTS: Readonly<Record<string, string>> = {
+  subsidiary_id: "subsidiaries",
+};
+
 /** Tables never copied into a sandbox: sandbox-management tables, real-world
  * logs (would carry production PII/history), and the org row itself (created
  * explicitly by the clone). */
@@ -299,8 +310,12 @@ export function deletionOrder(cat: Catalog): string[] {
  * NON-DEFERRABLE, so `set constraints all deferred` can't save an out-of-order
  * insert — the check fires immediately. Unlike deletionOrder this considers ALL FK
  * edges (delete rule is irrelevant to an INSERT check), excluding self-references
- * and declared cycle-breakers. Genuine cycles (documents↔journal_entries, all
- * deferrable) are appended last and resolved by the deferred checks at commit.
+ * and declared cycle-breakers. Inferred UUID references also participate: a
+ * growing number are enforced by ownership triggers rather than foreign keys,
+ * and those BEFORE triggers require their parent to exist at statement time.
+ * The declared breaker on documents.posted_entry_id opens the intentional
+ * documents↔journal_entries cycle; the deferred constraint validates it at
+ * commit after both sides exist.
  */
 export function insertionOrder(cat: Catalog): string[] {
   const names = cat.tables.map((t) => t.name);
@@ -312,14 +327,20 @@ export function insertionOrder(cat: Catalog): string[] {
     indeg.set(n, 0);
   }
   for (const t of cat.tables) {
-    // Only REAL non-deferrable FKs constrain insert order — deferrable ones (the
-    // documents↔journal_entries cycle) resolve at commit, and inferred references
-    // have no constraint. Using t.fks here would trap document_lines behind the
-    // deferrable cycle and copy its non-deferrable children (charge_rate_components)
-    // before it.
-    for (const [column, ref] of Object.entries(t.hardFks)) {
+    // Include inferred references as well as real FKs. Trigger-enforced tenant
+    // ownership is just as immediate as a non-deferrable FK during bulk copy.
+    // Explicit cycle breakers are the only references intentionally deferred.
+    for (const [column, ref] of Object.entries(t.fks)) {
       if (ref === t.name || !inSet.has(ref)) continue;
       if (SANDBOX_CYCLE_BREAKERS[t.name]?.includes(column)) continue;
+      if (!children.get(ref)!.has(t.name)) {
+        children.get(ref)!.add(t.name);
+        indeg.set(t.name, (indeg.get(t.name) ?? 0) + 1);
+      }
+    }
+    for (const column of t.columns) {
+      const ref = TRIGGER_INSERT_PARENTS[column.name];
+      if (!ref || ref === t.name || !inSet.has(ref)) continue;
       if (!children.get(ref)!.has(t.name)) {
         children.get(ref)!.add(t.name);
         indeg.set(t.name, (indeg.get(t.name) ?? 0) + 1);

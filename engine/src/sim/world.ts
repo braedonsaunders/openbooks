@@ -326,9 +326,22 @@ export async function provisionOrg(profile: Profile, window: { startDate: string
     // Role-scoped actors (provenance for who did what).
     const mkUser = async (name: string, role: string): Promise<string> => {
       const id = randomUUID();
-      await db.execute(sql`
-        insert into users (id, org_id, email, name, password_hash, role, is_active)
-        values (${id}, ${orgId}, ${`${role}-${id.slice(0, 8)}@sim.test`}, ${name}, 'x', ${role}, true)`);
+      await db.transaction(async (tx) => {
+        const assignedRole = (await tx.execute(sql`
+          insert into app_roles (org_id, key, name, is_built_in, permissions)
+          values (${orgId}, ${role}, ${role.replaceAll('_', ' ')}, false, '[]'::jsonb)
+          on conflict (org_id, key) do update set updated_at = now()
+          returning id
+        `)) as unknown as { rows: { id: string }[] };
+        await tx.execute(sql`
+          insert into users (id, org_id, email, name, password_hash, is_active)
+          values (${id}, ${orgId}, ${`${role}-${id.slice(0, 8)}@sim.test`}, ${name}, 'x', true)
+        `);
+        await tx.execute(sql`
+          insert into role_assignments (org_id, user_id, role_id)
+          values (${orgId}, ${id}, ${assignedRole.rows[0]!.id})
+        `);
+      });
       return id;
     };
     const actors = {

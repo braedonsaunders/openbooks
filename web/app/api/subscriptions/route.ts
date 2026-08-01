@@ -40,6 +40,7 @@ export async function GET() {
              s.price_override as "priceOverride", s.status, s.start_on as "startOn",
              s.next_bill_on as "nextBillOn", s.auto_post as "autoPost", s.run_count as "runCount",
              s.last_invoice_id as "lastInvoiceId", s.last_error as "lastError",
+             exists(select 1 from subscription_lifecycles l where l.subscription_id = s.id and l.org_id = s.org_id) as "advancedLifecycle",
              c.display_name as "customerName", p.name as "planName", p.amount as "planAmount",
              p.interval, p.interval_count as "intervalCount", p.currency_code as "planCurrency"
         from subscriptions s

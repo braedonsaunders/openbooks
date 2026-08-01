@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server'
 import { remeasureAsset } from '@openbooks/engine/src/asset-lifecycle.ts'
-import { guardPermission } from '../../../../../lib/authz'
+import { guardFeaturePermission } from '../../../../../lib/feature-gates'
 import { isUuid } from '../../../../../lib/list-params'
 
 export const runtime = 'nodejs'
@@ -11,7 +11,7 @@ const AMOUNT_RE = /^\d+(\.\d+)?$/
 /** Revalue or impair an asset to a new carrying value: posts the adjustment and
  *  rebuilds the remaining depreciation schedule on the new basis. */
 export async function POST(req: Request, { params }: { params: Promise<{ id: string }> }) {
-  const gate = await guardPermission('assets.manage')
+  const gate = await guardFeaturePermission('assets.manage', 'fixedAssets')
   if (gate instanceof NextResponse) return gate
   const { id } = await params
   if (!isUuid(id)) return NextResponse.json({ error: 'invalid asset' }, { status: 422 })

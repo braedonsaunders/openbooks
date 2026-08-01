@@ -13,7 +13,7 @@ import {
   type StatementPdfStyle,
 } from '@openbooks/pdf'
 import type { StatementView } from './statement-matrix'
-import { decimalScale } from './statement-format'
+import { decimalIsMaterial, decimalScale, decimalSum, type ExactDecimal } from './statement-format'
 import {
   reportResultToXlsx,
   reportResultToCsv,
@@ -186,6 +186,7 @@ export function exportDataToCsv(data: ExportData, opts: { sectionHeader?: string
 
 // --- financial-statement adapters ------------------------------------------
 // Each returns an ExportData with numeric cells (so Excel stays numeric).
+// Financial aggregation remains exact; conversion happens once per final cell.
 // Section/group titles and column headers come through the reports translator
 // (keys under reports.* — see web/messages/<locale>/reports.json).
 
@@ -194,7 +195,7 @@ type StatementRow = {
   number: string | null
   name: string
   type: string
-  balance: number
+  balance: ExactDecimal
   depth: number
   isSummary: boolean
 }
@@ -211,12 +212,12 @@ function statementGroup(
   sectionTitle: string,
   items: StatementRow[],
   types: string[],
-  total: number,
+  total: ExactDecimal,
 ): PdfTableGroup {
   const rows = items
     .filter((r) => types.includes(r.type))
-    .map((r) => [r.number ?? '', `${indent(r.depth)}${r.name}`, r.balance] as (string | number)[])
-  rows.push(['', t('statement.sectionTotal', { section: sectionTitle }), total])
+    .map((r) => [r.number ?? '', `${indent(r.depth)}${r.name}`, Number(r.balance)] as (string | number)[])
+  rows.push(['', t('statement.sectionTotal', { section: sectionTitle }), Number(total)])
   return {
     kind: 'section',
     title: sectionTitle,
@@ -227,7 +228,7 @@ function statementGroup(
 }
 
 export function pnlExportData(
-  pl: { items: StatementRow[]; revenue: number; cogs: number; grossProfit: number; expenses: number; netIncome: number },
+  pl: { items: StatementRow[]; revenue: ExactDecimal; cogs: ExactDecimal; grossProfit: ExactDecimal; expenses: ExactDecimal; netIncome: ExactDecimal },
   from: string,
   to: string,
   t: Translator,
@@ -239,9 +240,9 @@ export function pnlExportData(
     title: t('pnl.title'),
     dateRangeLabel: t('pnl.dateRange', { from, to }),
     summary: [
-      { label: revenueTitle, value: pl.revenue },
-      { label: t('pnl.grossProfit'), value: pl.grossProfit },
-      { label: t('pnl.netIncome'), value: pl.netIncome },
+      { label: revenueTitle, value: Number(pl.revenue) },
+      { label: t('pnl.grossProfit'), value: Number(pl.grossProfit) },
+      { label: t('pnl.netIncome'), value: Number(pl.netIncome) },
     ],
     groups: [
       statementGroup(t, 'revenue', revenueTitle, pl.items, ['income', 'income_other'], pl.revenue),
@@ -251,7 +252,7 @@ export function pnlExportData(
         kind: 'summary',
         title: t('pnl.netIncome'),
         columns: [t('export.columns.accountName'), t('export.columns.amount')],
-        rows: [[t('pnl.netIncome'), pl.netIncome]],
+        rows: [[t('pnl.netIncome'), Number(pl.netIncome)]],
         align: ['left', 'right'],
       },
     ],
@@ -259,22 +260,22 @@ export function pnlExportData(
 }
 
 export function balanceSheetExportData(
-  bs: { assets: StatementRow[]; liabilities: StatementRow[]; equity: StatementRow[]; totalAssets: number; totalLiabilities: number; totalEquity: number },
+  bs: { assets: StatementRow[]; liabilities: StatementRow[]; equity: StatementRow[]; totalAssets: ExactDecimal; totalLiabilities: ExactDecimal; totalEquity: ExactDecimal },
   asOf: string,
   t: Translator,
 ): ExportData {
   const assetsTitle = t('balanceSheet.assets')
   const liabTitle = t('balanceSheet.liabilities')
   const equityTitle = t('balanceSheet.equity')
-  const groupFor = (title: string, items: StatementRow[], total: number) =>
+  const groupFor = (title: string, items: StatementRow[], total: ExactDecimal) =>
     statementGroup(t, title, title, items, items.map((i) => i.type), total)
   return {
     title: t('balanceSheet.title'),
     dateRangeLabel: t('balanceSheet.asOf', { date: asOf }),
     summary: [
-      { label: assetsTitle, value: bs.totalAssets },
-      { label: liabTitle, value: bs.totalLiabilities },
-      { label: equityTitle, value: bs.totalEquity },
+      { label: assetsTitle, value: Number(bs.totalAssets) },
+      { label: liabTitle, value: Number(bs.totalLiabilities) },
+      { label: equityTitle, value: Number(bs.totalEquity) },
     ],
     groups: [
       groupFor(assetsTitle, bs.assets, bs.totalAssets),
@@ -288,23 +289,24 @@ export function projectProfitabilityExportData(
   result: {
     rows: {
       projectName: string; customerName: string | null
-      revenue: number; cogs: number; grossProfit: number; expenses: number; net: number; margin: number | null; hours: number
+      revenue: ExactDecimal; cogs: ExactDecimal; grossProfit: ExactDecimal; expenses: ExactDecimal; net: ExactDecimal; margin: ExactDecimal | null; hours: number
     }[]
     customers: {
       customerName: string | null
       rows: {
         projectName: string
-        revenue: number; cogs: number; grossProfit: number; expenses: number; net: number; margin: number | null; hours: number
+        revenue: ExactDecimal; cogs: ExactDecimal; grossProfit: ExactDecimal; expenses: ExactDecimal; net: ExactDecimal; margin: ExactDecimal | null; hours: number
       }[]
-      totals: { revenue: number; cogs: number; grossProfit: number; expenses: number; net: number; margin: number | null; hours: number }
+      totals: { revenue: ExactDecimal; cogs: ExactDecimal; grossProfit: ExactDecimal; expenses: ExactDecimal; net: ExactDecimal; margin: ExactDecimal | null; hours: number }
     }[]
-    totals: { revenue: number; cogs: number; grossProfit: number; expenses: number; net: number; margin: number | null; hours: number }
+    totals: { revenue: ExactDecimal; cogs: ExactDecimal; grossProfit: ExactDecimal; expenses: ExactDecimal; net: ExactDecimal; margin: ExactDecimal | null; hours: number }
     from: string
     to: string
   },
   t: Translator,
 ): ExportData {
-  const pct = (m: number | null) => (m === null ? '' : `${(m * 100).toFixed(1)}%`)
+  const pct = (m: ExactDecimal | null) => (m === null ? '' : `${(Number(m) * 100).toFixed(1)}%`)
+  const amountCells = (values: readonly ExactDecimal[]) => values.map(Number)
   const cols = [
     t('projectProfitability.columns.customerJob'),
     t('projectProfitability.columns.revenue'),
@@ -318,25 +320,25 @@ export function projectProfitabilityExportData(
   const data = result.customers.flatMap((customer) => [
     [
       customer.customerName ?? t('projectProfitability.noCustomer'),
-      customer.totals.revenue, customer.totals.cogs, customer.totals.grossProfit,
-      customer.totals.expenses, customer.totals.net, pct(customer.totals.margin), customer.totals.hours,
+      ...amountCells([customer.totals.revenue, customer.totals.cogs, customer.totals.grossProfit,
+        customer.totals.expenses, customer.totals.net]), pct(customer.totals.margin), customer.totals.hours,
     ],
     ...customer.rows.map((row) => [
       `  ${row.projectName}`,
-      row.revenue, row.cogs, row.grossProfit, row.expenses, row.net, pct(row.margin), row.hours,
+      ...amountCells([row.revenue, row.cogs, row.grossProfit, row.expenses, row.net]), pct(row.margin), row.hours,
     ]),
   ] as (string | number)[][])
   data.push([
     t('trialBalance.totals'),
-    result.totals.revenue, result.totals.cogs, result.totals.grossProfit,
-    result.totals.expenses, result.totals.net, pct(result.totals.margin), result.totals.hours,
+    ...amountCells([result.totals.revenue, result.totals.cogs, result.totals.grossProfit,
+      result.totals.expenses, result.totals.net]), pct(result.totals.margin), result.totals.hours,
   ])
   return {
     title: t('projectProfitability.title'),
     dateRangeLabel: t('pnl.dateRange', { from: result.from, to: result.to }),
     summary: [
-      { label: t('projectProfitability.columns.revenue'), value: result.totals.revenue },
-      { label: t('projectProfitability.columns.net'), value: result.totals.net },
+      { label: t('projectProfitability.columns.revenue'), value: Number(result.totals.revenue) },
+      { label: t('projectProfitability.columns.net'), value: Number(result.totals.net) },
     ],
     groups: [
       {
@@ -357,16 +359,16 @@ export function trialBalanceExportData(
 ): ExportData {
   const num = (s: string) => Number(s)
   const data = rows.map((r) => [r.number ?? '', r.name, num(r.debits), num(r.credits), num(r.balance)] as (string | number)[])
-  const totalDebits = rows.reduce((a, r) => a + num(r.debits), 0)
-  const totalCredits = rows.reduce((a, r) => a + num(r.credits), 0)
-  const totalBalance = rows.reduce((a, r) => a + num(r.balance), 0)
-  data.push(['', t('trialBalance.totals'), totalDebits, totalCredits, totalBalance])
+  const totalDebits = decimalSum(rows.map((row) => row.debits))
+  const totalCredits = decimalSum(rows.map((row) => row.credits))
+  const totalBalance = decimalSum(rows.map((row) => row.balance))
+  data.push(['', t('trialBalance.totals'), num(totalDebits), num(totalCredits), num(totalBalance)])
   return {
     title: t('trialBalance.title'),
     dateRangeLabel: t('trialBalance.description', { date: asOf, count: rows.length }),
     summary: [
-      { label: t('trialBalance.columns.debits'), value: totalDebits },
-      { label: t('trialBalance.columns.credits'), value: totalCredits },
+      { label: t('trialBalance.columns.debits'), value: num(totalDebits) },
+      { label: t('trialBalance.columns.credits'), value: num(totalCredits) },
     ],
     groups: [
       {
@@ -392,7 +394,7 @@ export function partnersExportData(
   t: Translator,
 ): ExportData {
   const title = kind === 'receivable' ? t('partners.receivablesTitle') : t('partners.payablesTitle')
-  const total = rows.reduce((a, r) => a + Number(r.balance), 0)
+  const total = decimalSum(rows.map((row) => row.balance))
   const data = rows.map((r) => [
     r.display_name ?? t('partners.noPartyOnLines'),
     Number(r.balance),
@@ -403,7 +405,7 @@ export function partnersExportData(
     title,
     dateRangeLabel: t('partners.description'),
     summary: [
-      { label: t('partners.totalOutstanding'), value: total },
+      { label: t('partners.totalOutstanding'), value: Number(total) },
       { label: t('partners.partiesWithBalance'), value: rows.length },
     ],
     groups: [
@@ -421,8 +423,8 @@ export function partnersExportData(
 export function agingExportData(
   side: 'ar' | 'ap',
   result: {
-    rows: { partyName: string | null; current: number; b1: number; b2: number; b3: number; b4: number; total: number }[]
-    totals: { current: number; b1: number; b2: number; b3: number; b4: number; total: number }
+    rows: { partyName: string | null; current: ExactDecimal; b1: ExactDecimal; b2: ExactDecimal; b3: ExactDecimal; b4: ExactDecimal; total: ExactDecimal }[]
+    totals: { current: ExactDecimal; b1: ExactDecimal; b2: ExactDecimal; b3: ExactDecimal; b4: ExactDecimal; total: ExactDecimal }
     asOf: string
   },
   t: Translator,
@@ -439,16 +441,16 @@ export function agingExportData(
   ]
   const data = result.rows.map((r) => [
     r.partyName ?? t('aging.noParty'),
-    r.current, r.b1, r.b2, r.b3, r.b4, r.total,
+    ...[r.current, r.b1, r.b2, r.b3, r.b4, r.total].map(Number),
   ] as (string | number)[])
   data.push([
     t('trialBalance.totals'),
-    result.totals.current, result.totals.b1, result.totals.b2, result.totals.b3, result.totals.b4, result.totals.total,
+    ...[result.totals.current, result.totals.b1, result.totals.b2, result.totals.b3, result.totals.b4, result.totals.total].map(Number),
   ])
   return {
     title,
     dateRangeLabel: t('aging.asOf', { date: result.asOf }),
-    summary: [{ label: t('aging.columns.total'), value: result.totals.total }],
+    summary: [{ label: t('aging.columns.total'), value: Number(result.totals.total) }],
     groups: [
       {
         kind: 'results',
@@ -463,10 +465,10 @@ export function agingExportData(
 
 export function cashFlowExportData(
   cf: {
-    sections: { section: string; lines: { type: string; label: string; amount: number }[]; subtotal: number }[]
-    netChange: number
-    openingCash: number
-    closingCash: number
+    sections: { section: string; lines: { type: string; label: string; amount: ExactDecimal }[]; subtotal: ExactDecimal }[]
+    netChange: ExactDecimal
+    openingCash: ExactDecimal
+    closingCash: ExactDecimal
   },
   from: string,
   to: string,
@@ -481,8 +483,8 @@ export function cashFlowExportData(
       title: label,
       columns: [t('export.columns.type'), t('export.columns.amount')],
       rows: [
-        ...s.lines.map((l) => [l.label, l.amount] as (string | number)[]),
-        [t('cashFlow.subtotal', { section: label }), s.subtotal] as (string | number)[],
+        ...s.lines.map((l) => [l.label, Number(l.amount)] as (string | number)[]),
+        [t('cashFlow.subtotal', { section: label }), Number(s.subtotal)] as (string | number)[],
       ],
       align: ['left', 'right'],
     }
@@ -491,9 +493,9 @@ export function cashFlowExportData(
     title: t('cashFlow.title'),
     dateRangeLabel: t('cashFlow.dateRange', { from, to }),
     summary: [
-      { label: t('cashFlow.openingCash'), value: cf.openingCash },
-      { label: t('cashFlow.netChange'), value: cf.netChange },
-      { label: t('cashFlow.closingCash'), value: cf.closingCash },
+      { label: t('cashFlow.openingCash'), value: Number(cf.openingCash) },
+      { label: t('cashFlow.netChange'), value: Number(cf.netChange) },
+      { label: t('cashFlow.closingCash'), value: Number(cf.closingCash) },
     ],
     groups,
   }
@@ -501,35 +503,35 @@ export function cashFlowExportData(
 
 export function cashFlowIndirectExportData(
   cf: {
-    netIncome: number
-    adjustments: { key: string; label?: string; amount: number }[]
-    workingCapital: { name: string; number: string | null; amount: number }[]
-    operating: number
-    investing: { name: string; number: string | null; amount: number }[]
-    investingTotal: number
-    financing: { name: string; number: string | null; amount: number }[]
-    financingTotal: number
-    fxEffectOnCash: number
-    netChange: number
-    openingCash: number
-    closingCash: number
+    netIncome: ExactDecimal
+    adjustments: { key: string; label?: string; amount: ExactDecimal }[]
+    workingCapital: { name: string; number: string | null; amount: ExactDecimal }[]
+    operating: ExactDecimal
+    investing: { name: string; number: string | null; amount: ExactDecimal }[]
+    investingTotal: ExactDecimal
+    financing: { name: string; number: string | null; amount: ExactDecimal }[]
+    financingTotal: ExactDecimal
+    fxEffectOnCash: ExactDecimal
+    netChange: ExactDecimal
+    openingCash: ExactDecimal
+    closingCash: ExactDecimal
   },
   from: string,
   to: string,
   t: Translator,
 ): ExportData {
-  const line = (l: { name: string; number: string | null; amount: number }) =>
-    [`${l.number ? `${l.number} · ` : ''}${l.name}`, l.amount] as (string | number)[]
+  const line = (l: { name: string; number: string | null; amount: ExactDecimal }) =>
+    [`${l.number ? `${l.number} · ` : ''}${l.name}`, Number(l.amount)] as (string | number)[]
   const groups: PdfTableGroup[] = [
     {
       kind: 'section',
       title: t('cashFlowIndirect.sections.operating'),
       columns: [t('export.columns.accountName'), t('export.columns.amount')],
       rows: [
-        [t('cashFlowIndirect.netIncome'), cf.netIncome],
-        ...cf.adjustments.map((a) => [a.label ?? t(`cashFlowIndirect.adjustments.${a.key}`), a.amount] as (string | number)[]),
+        [t('cashFlowIndirect.netIncome'), Number(cf.netIncome)],
+        ...cf.adjustments.map((a) => [a.label ?? t(`cashFlowIndirect.adjustments.${a.key}`), Number(a.amount)] as (string | number)[]),
         ...cf.workingCapital.map(line),
-        [t('cashFlowIndirect.subtotals.operating'), cf.operating],
+        [t('cashFlowIndirect.subtotals.operating'), Number(cf.operating)],
       ],
       align: ['left', 'right'],
     },
@@ -537,7 +539,7 @@ export function cashFlowIndirectExportData(
       kind: 'section',
       title: t('cashFlowIndirect.sections.investing'),
       columns: [t('export.columns.accountName'), t('export.columns.amount')],
-      rows: [...cf.investing.map(line), [t('cashFlowIndirect.subtotals.investing'), cf.investingTotal]],
+      rows: [...cf.investing.map(line), [t('cashFlowIndirect.subtotals.investing'), Number(cf.investingTotal)]],
       align: ['left', 'right'],
     },
     {
@@ -546,10 +548,10 @@ export function cashFlowIndirectExportData(
       columns: [t('export.columns.accountName'), t('export.columns.amount')],
       rows: [
         ...cf.financing.map(line),
-        ...(Math.abs(cf.fxEffectOnCash) >= 0.005
-          ? [[t('cashFlowIndirect.fxEffect'), cf.fxEffectOnCash] as (string | number)[]]
+        ...(decimalIsMaterial(cf.fxEffectOnCash)
+          ? [[t('cashFlowIndirect.fxEffect'), Number(cf.fxEffectOnCash)] as (string | number)[]]
           : []),
-        [t('cashFlowIndirect.subtotals.financing'), cf.financingTotal],
+        [t('cashFlowIndirect.subtotals.financing'), Number(cf.financingTotal)],
       ],
       align: ['left', 'right'],
     },
@@ -558,9 +560,9 @@ export function cashFlowIndirectExportData(
     title: t('cashFlowIndirect.title'),
     dateRangeLabel: t('cashFlowIndirect.dateRange', { from, to }),
     summary: [
-      { label: t('cashFlowIndirect.openingCash'), value: cf.openingCash },
-      { label: t('cashFlowIndirect.netChange'), value: cf.netChange },
-      { label: t('cashFlowIndirect.closingCash'), value: cf.closingCash },
+      { label: t('cashFlowIndirect.openingCash'), value: Number(cf.openingCash) },
+      { label: t('cashFlowIndirect.netChange'), value: Number(cf.netChange) },
+      { label: t('cashFlowIndirect.closingCash'), value: Number(cf.closingCash) },
     ],
     groups,
   }

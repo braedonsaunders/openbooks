@@ -32,7 +32,12 @@ export async function GET(
   }
   return new Response(
     JSON.stringify(
-      { hash: binder.binder_hash, binder: binder.binder_snapshot },
+      {
+        hashAlgorithm: "sha256",
+        canonicalization: "openbooks.canonical-json.v1",
+        hash: binder.binder_hash,
+        binder: binder.binder_snapshot,
+      },
       null,
       2,
     ),
@@ -41,6 +46,7 @@ export async function GET(
         "Content-Type": "application/json; charset=utf-8",
         "Content-Disposition": `attachment; filename="close-binder-${id}.json"`,
         "X-Content-SHA256": binder.binder_hash,
+        "X-Content-Canonicalization": "openbooks.canonical-json.v1",
         "Cache-Control": "private, immutable, max-age=31536000",
       },
     },

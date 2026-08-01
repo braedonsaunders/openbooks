@@ -8,6 +8,7 @@ import { ArrowUpRight } from 'lucide-react'
 import { Badge, Button, Drawer, Skeleton, Table, TableBody, TableCell, TableHead, TableHeader, TableRow, cn } from '@openbooks/ui'
 import { TxnLink } from './TxnLink'
 import { AccountRegisterLink } from '../../../components/account-register-link'
+import { decimalCmp, decimalNeg, decimalSum } from '../../../lib/statement-format'
 
 type EntryData = {
   entry: {
@@ -81,7 +82,7 @@ export function EntryFlyout() {
   const entry = data?.entry
   const origin = entry?.origin ? (t.has(`origins.${entry.origin}`) ? t(`origins.${entry.origin}`) : entry.origin) : ''
 
-  const totalDebit = (data?.lines ?? []).reduce((a, l) => a + Math.max(0, Number(l.amount)), 0)
+  const totalDebit = decimalSum((data?.lines ?? []).filter((line) => decimalCmp(line.amount, '0') > 0).map((line) => line.amount))
 
   return (
     <Drawer
@@ -141,7 +142,8 @@ export function EntryFlyout() {
           </TableHeader>
           <TableBody>
             {data.lines.map((l) => {
-              const amt = Number(l.amount)
+              const isDebit = decimalCmp(l.amount, '0') > 0
+              const isCredit = decimalCmp(l.amount, '0') < 0
               return (
                 <TableRow key={l.line_number}>
                   <TableCell className="text-slate-400">{l.line_number}</TableCell>
@@ -163,8 +165,8 @@ export function EntryFlyout() {
                   </TableCell>
                   <TableCell className="text-slate-500 dark:text-slate-400">{l.party}</TableCell>
                   <TableCell className="text-slate-500 dark:text-slate-400">{l.department}</TableCell>
-                  <TableCell className="text-right tabular-nums">{amt > 0 ? money(amt) : ''}</TableCell>
-                  <TableCell className="text-right tabular-nums">{amt < 0 ? money(-amt) : ''}</TableCell>
+                  <TableCell className="text-right tabular-nums">{isDebit ? money(Number(l.amount)) : ''}</TableCell>
+                  <TableCell className="text-right tabular-nums">{isCredit ? money(Number(decimalNeg(l.amount))) : ''}</TableCell>
                 </TableRow>
               )
             })}
@@ -172,8 +174,8 @@ export function EntryFlyout() {
               <TableCell colSpan={4} className="font-semibold">
                 {t('detail.totals')}
               </TableCell>
-              <TableCell className={cn('text-right font-semibold tabular-nums')}>{money(totalDebit)}</TableCell>
-              <TableCell className="text-right font-semibold tabular-nums">{money(totalDebit)}</TableCell>
+              <TableCell className={cn('text-right font-semibold tabular-nums')}>{money(Number(totalDebit))}</TableCell>
+              <TableCell className="text-right font-semibold tabular-nums">{money(Number(totalDebit))}</TableCell>
             </TableRow>
           </TableBody>
         </Table>

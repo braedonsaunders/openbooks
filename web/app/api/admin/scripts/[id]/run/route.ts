@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server'
 import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/db.ts'
 import { runScheduledScript, runBulkScript, computeNextRunAt } from '@openbooks/engine/src/scripting.ts'
-import { guardPermission } from '../../../../../../lib/authz'
+import { guardFeaturePermission } from '../../../../../../lib/feature-gates'
 
 export const runtime = 'nodejs'
 
@@ -13,7 +13,7 @@ export const runtime = 'nodejs'
  *              when Redis is down the run happens inline as a fallback.
  */
 export async function POST(_req: Request, { params }: { params: Promise<{ id: string }> }) {
-  const gate = await guardPermission('scripts.manage')
+  const gate = await guardFeaturePermission('scripts.manage', 'scripts')
   if (gate instanceof NextResponse) return gate
   const user = gate.user
   const { id } = await params

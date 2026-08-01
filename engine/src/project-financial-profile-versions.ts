@@ -95,7 +95,7 @@ export function assertValidProjectFinancialProfile(
   const overhead = object(profile.overhead, "overhead");
   oneOf(
     overhead.method,
-    ["none", "percent_of_labor", "per_labor_hour", "rate_engine", "account_group_actual"],
+    ["none", "percent_of_labor", "per_labor_hour", "rate_engine", "posted_gl_account_group"],
     "overhead.method",
   );
   optionalNonnegativeNumber(overhead.ratePercent, "overhead.ratePercent");
@@ -119,7 +119,7 @@ export function assertValidProjectFinancialProfile(
       throw new Error("overhead.rateEngine.dimension is required");
     }
   }
-  if (overhead.method === "account_group_actual") {
+  if (overhead.method === "posted_gl_account_group") {
     const accountGroup = object(overhead.accountGroup, "overhead.accountGroup");
     if (typeof accountGroup.dimension !== "string" || !accountGroup.dimension) {
       throw new Error("overhead.accountGroup.dimension is required");

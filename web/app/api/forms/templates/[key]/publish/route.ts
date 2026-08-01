@@ -2,8 +2,8 @@ import { NextResponse } from 'next/server'
 import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/db.ts'
 import { parseFormSchema } from '@openbooks/forms-core'
-import { currentUser } from '../../../../../../lib/auth'
-import { canAuthor, getLatestVersion, getTemplateByKey } from '../../../_lib'
+import { guardPermission } from '../../../../../../lib/authz'
+import { getLatestVersion, getTemplateByKey } from '../../../_lib'
 
 export const runtime = 'nodejs'
 
@@ -14,9 +14,9 @@ export const runtime = 'nodejs'
  * keep their responses readable forever.
  */
 export async function POST(req: Request, { params }: { params: Promise<{ key: string }> }) {
-  const user = await currentUser()
-  if (!user) return NextResponse.json({ error: 'unauthorized' }, { status: 401 })
-  if (!canAuthor(user.role)) return NextResponse.json({ error: 'forbidden' }, { status: 403 })
+  const gate = await guardPermission('admin.customization.manage')
+  if (gate instanceof NextResponse) return gate
+  const { user } = gate
   const { key } = await params
 
   const template = await getTemplateByKey(user.orgId, key)

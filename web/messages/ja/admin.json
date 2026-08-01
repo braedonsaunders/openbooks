@@ -699,7 +699,6 @@
       "lastSignIn": "最終サインイン"
     },
     "you": "あなた",
-    "legacyRole": "レガシー: {role}",
     "statusActive": "有効",
     "statusInactive": "無効",
     "requestFailed": "リクエストに失敗しました",

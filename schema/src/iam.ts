@@ -15,10 +15,8 @@ export type PermissionKey = string;
 /**
  * Org-scoped roles: named bundles of permission keys. Built-in roles
  * (admin/controller/accountant/approver/viewer) are seeded per org by
- * engine/src/seed-roles.ts and mirror the legacy users.role enum; custom
- * roles are created in the admin UI. `key` is a stable slug — built-in keys
- * intentionally equal the legacy users.role values so the seed script can
- * map existing users onto assignments.
+ * engine/src/seed-roles.ts; custom roles are created in the admin UI. `key` is
+ * the stable identifier used by workflow targets and policy evaluation.
  *
  * Named app_roles (not roles) to stay clear of Postgres's pg_roles and any
  * future DB-level role work.
@@ -53,10 +51,8 @@ export const appRoles = pgTable(
 
 /**
  * User ↔ role links. A user may hold any number of roles; their effective
- * permissions are the union of every assigned role's keys. When a user has
- * NO assignments, authorization falls back to mapping the legacy users.role
- * column through the built-in role definitions — so the app keeps working
- * before the seed script has run.
+ * permissions are the union of every assigned role's keys. Active users must
+ * receive at least one explicit assignment before they can access the product.
  */
 export const roleAssignments = pgTable(
   "role_assignments",
@@ -79,7 +75,8 @@ export const roleAssignments = pgTable(
 /**
  * Cross-tenant access grants — the "one login, many tenants" model. A member
  * (identified by their home `users` row = the login identity) is granted access
- * to another production org, acting there as a specific `users` row in that org.
+ * to another production or isolated preview org, acting there as a specific
+ * `users` row in that org.
  *
  * A user always has implicit access to their own home org (no row needed), and
  * to any sandbox of an org they can reach (the acting user is the deterministic
@@ -96,7 +93,7 @@ export const userOrgAccess = pgTable(
     id: id(),
     /** The login identity being granted access (home users row). */
     memberUserId: uuid("member_user_id").notNull(),
-    /** The production org granted. */
+    /** The production or preview org granted. Sandboxes derive access from their parent. */
     orgId: orgRef(),
     /** The users row in `orgId` this member acts as when switched in. */
     actingUserId: uuid("acting_user_id").notNull(),

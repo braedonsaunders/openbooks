@@ -127,8 +127,8 @@ export interface SourceLedgerVerification {
 
 export interface SyncOptions {
   kind?: "incremental" | "full_migration" | "targeted_repair";
-  orgId?: string;
-  connectionId?: string;
+  orgId: string;
+  connectionId: string;
   /** "auto" resumes from the watermark; null = all history; Date = explicit. */
   since?: Date | null | "auto";
   loadEntitiesFirst?: boolean;
@@ -450,7 +450,7 @@ class SyncVerificationError extends Error {
 export function runFullMigration(
   source: MigrationSource,
   triggeredBy: string,
-  ctxOpts: { orgId?: string; connectionId?: string } = {},
+  ctxOpts: { orgId: string; connectionId: string },
 ): Promise<SyncResult> {
   return runSync(source, triggeredBy, {
     kind: "full_migration",
@@ -465,7 +465,7 @@ export function runTargetedRepair(
   source: MigrationSource,
   sourceRefs: string[],
   triggeredBy: string,
-  ctxOpts: { orgId?: string; connectionId?: string } = {},
+  ctxOpts: { orgId: string; connectionId: string },
 ): Promise<SyncResult> {
   const refs = [...new Set(sourceRefs.map(String))];
   if (refs.length === 0) {
@@ -1083,7 +1083,7 @@ async function insertImportedLines(
 export async function runSync(
   source: MigrationSource,
   triggeredBy: string,
-  opts: SyncOptions = {},
+  opts: SyncOptions,
 ): Promise<SyncResult> {
   const started = Date.now();
   const kind = opts.kind ?? "incremental";
@@ -1112,10 +1112,8 @@ export async function runSync(
     );
   }
   const refKey = source.refKey;
-  const connectionId = opts.connectionId ?? null;
-  const org = opts.orgId
-    ? { id: opts.orgId }
-    : (await db.select().from(schema.orgs))[0]!;
+  const connectionId = opts.connectionId;
+  const org = { id: opts.orgId };
 
   const [run] = await db
     .insert(schema.syncRuns)
@@ -1136,9 +1134,7 @@ export async function runSync(
       .from(schema.syncRuns)
       .where(
         sql`${schema.syncRuns.status} = 'ok' and ${schema.syncRuns.syncedThrough} is not null and ${
-          connectionId
-            ? sql`${schema.syncRuns.connectionId} = ${connectionId}`
-            : sql`${schema.syncRuns.source} = ${source.name}`
+          sql`${schema.syncRuns.connectionId} = ${connectionId}`
         }`,
       )
       .orderBy(desc(schema.syncRuns.syncedThrough))
@@ -1454,13 +1450,9 @@ export async function runSync(
         );
         if (!have) {
           // ---- NEW: insert + post through the kernel -------------------------
-          if (
-            doc.posting &&
-            !doc.postingPeriodId &&
-            !ctx.periodFor(doc.postingDate ?? doc.documentDate)
-          ) {
+          if (doc.posting && !doc.postingPeriodId) {
             docsFailed++;
-            skipped.push(`${doc.sourceRef}: no period for ${doc.documentDate}`);
+            skipped.push(`${doc.sourceRef}: posting transaction has no exact source period reference`);
             continue;
           }
           // The source document, lines, tax evidence, journal, and posted flip

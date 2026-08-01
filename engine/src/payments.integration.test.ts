@@ -10,17 +10,14 @@ import {
   updateDraftPayment,
 } from "./payments.ts";
 import { postDocument } from "./posting.ts";
-import { createScratchOrg, dropScratchOrg } from "./test-fixtures.ts";
+import { createScratchOrg, createScratchUser, dropScratchOrg } from "./test-fixtures.ts";
 
 const DB = !!process.env.OPENBOOKS_DB_URL;
 
 test("cross-currency payment, dual-amount application, realized FX, evidence, and reversal are atomic", { skip: !DB }, async () => {
   const org = await createScratchOrg();
   try {
-    const userId = randomUUID();
-    await db.execute(sql`
-      insert into users (id, org_id, email, name, password_hash, role, is_active)
-      values (${userId}, ${org.orgId}, ${`fx-${userId}@scratch.test`}, 'FX Tester', 'x', 'admin', true)`);
+    const userId = await createScratchUser(org.orgId, "FX Tester", "admin");
 
     const invoiceId = randomUUID();
     await db.execute(sql`

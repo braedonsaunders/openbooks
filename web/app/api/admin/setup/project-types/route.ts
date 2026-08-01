@@ -11,7 +11,7 @@ export const runtime = 'nodejs'
 
 function validateInvoicingProfile(profile: any, billingMethod: unknown): string | null {
   const validBases = new Set(['date_range', 'draw_amount', 'time_selection', 'milestone', 'field_ticket'])
-  const procedure = profile?.billingProcedure ?? 'standard'
+  const procedure = profile?.billingProcedure
   if (!['standard', 'application_for_payment'].includes(procedure)) return 'Invalid billing procedure'
   if (!Array.isArray(profile?.allowedBases) || profile.allowedBases.length === 0) return 'At least one billing basis is required'
   if (profile.allowedBases.some((basis: unknown) => typeof basis !== 'string' || !validBases.has(basis))) {
@@ -20,7 +20,7 @@ function validateInvoicingProfile(profile: any, billingMethod: unknown): string 
   if (new Set(profile.allowedBases).size !== profile.allowedBases.length) return 'Billing bases must be unique'
   if (!profile.allowedBases.includes(profile.defaultBasis)) return 'Default billing basis must be allowed'
   if (procedure === 'application_for_payment') {
-    if (billingMethod !== 'fixed_price') return 'Applications for payment require the fixed-price compatibility classifier'
+    if (billingMethod !== 'fixed_price') return 'Applications for payment require the fixed-price billing classification'
     if (profile.allowedBases.length !== 1 || profile.allowedBases[0] !== 'draw_amount') {
       return 'Applications for payment require draw-amount billing'
     }
@@ -44,6 +44,8 @@ export async function POST(req: Request) {
   const key = String(b.key ?? '').trim()
   const name = String(b.name ?? '').trim()
   if (!key || !name) return NextResponse.json({ error: 'Key and name are required' }, { status: 422 })
+  if (!['time_and_materials', 'fixed_price', 'cost_plus'].includes(b.billingMethod))
+    return NextResponse.json({ error: 'Billing classification is required' }, { status: 422 })
   if (!b.financialProfile || !b.invoicingProfile || !b.backupProfile)
     return NextResponse.json({ error: 'Missing profile' }, { status: 422 })
   const profileError = validateInvoicingProfile(b.invoicingProfile, b.billingMethod)
@@ -61,10 +63,10 @@ export async function POST(req: Request) {
     const id = await db.transaction(async (tx) => {
       const r = (await tx.execute(sql`
         insert into project_types (org_id, key, name, description, is_built_in, is_active, sort_order,
-          billing_method, financial_profile, invoicing_profile, backup_profile, created_by, updated_by)
+          billing_method, invoicing_profile, backup_profile, created_by, updated_by)
         values (${orgId}, ${key}, ${name}, ${b.description ?? null}, false, true, ${Number(b.sortOrder ?? 50)},
-          ${b.billingMethod ?? null}, ${JSON.stringify(b.financialProfile)}::jsonb,
-          ${JSON.stringify(b.invoicingProfile)}::jsonb, ${JSON.stringify(b.backupProfile)}::jsonb,
+          ${b.billingMethod}, ${JSON.stringify(b.invoicingProfile)}::jsonb,
+          ${JSON.stringify(b.backupProfile)}::jsonb,
           ${gate.user.id}, ${gate.user.id})
         returning id`)) as unknown as { rows: { id: string }[] }
       const createdId = r.rows[0].id
@@ -79,7 +81,7 @@ export async function POST(req: Request) {
       await tx.execute(sql`
         insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
         values (${orgId}, 'project_types', ${createdId}, 'insert',
-                ${JSON.stringify({ after: { key, name, billingMethod: b.billingMethod ?? null, financialProfile: b.financialProfile, invoicingProfile: b.invoicingProfile, backupProfile: b.backupProfile } })},
+                ${JSON.stringify({ after: { key, name, billingMethod: b.billingMethod, financialProfile: b.financialProfile, invoicingProfile: b.invoicingProfile, backupProfile: b.backupProfile } })},
                 ${gate.user.id})`)
       return createdId
     })
@@ -99,6 +101,8 @@ export async function PATCH(req: Request) {
   if (feature) return feature
   const b = (await req.json().catch(() => ({}))) as any
   if (!isUuid(b.id)) return NextResponse.json({ error: 'not found' }, { status: 404 })
+  if (!['time_and_materials', 'fixed_price', 'cost_plus'].includes(b.billingMethod))
+    return NextResponse.json({ error: 'Billing classification is required' }, { status: 422 })
   if (b.invoicingProfile) {
     const profileError = validateInvoicingProfile(b.invoicingProfile, b.billingMethod)
     if (profileError) return NextResponse.json({ error: profileError }, { status: 422 })
@@ -111,7 +115,7 @@ export async function PATCH(req: Request) {
     sql`description = ${b.description ?? null}`,
     sql`is_active = ${b.isActive !== false}`,
     sql`sort_order = ${Number(b.sortOrder ?? 50)}`,
-    sql`billing_method = ${b.billingMethod ?? null}`,
+    sql`billing_method = ${b.billingMethod}`,
     sql`updated_at = now()`,
     sql`updated_by = ${gate.user.id}`,
   ]
@@ -123,7 +127,7 @@ export async function PATCH(req: Request) {
       const before = (await tx.execute(sql`
         select pt.key, pt.name, pt.description, pt.is_active, pt.sort_order,
                pt.billing_method, pt.invoicing_profile, pt.backup_profile,
-               coalesce(version.financial_profile, pt.financial_profile) as financial_profile
+               version.financial_profile as financial_profile
           from project_types pt
           left join lateral (
             select v.financial_profile

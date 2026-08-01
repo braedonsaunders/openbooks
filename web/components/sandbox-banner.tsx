@@ -5,11 +5,18 @@ import { exitSandbox } from "../lib/sandbox-session";
  * inside a sandbox, so a user can never mistake a sandbox for production. The
  * exit button clears the env cookie via a server action.
  */
-export function SandboxBanner({ name }: { name?: string }) {
+export function SandboxBanner({
+  name,
+  kind = "sandbox",
+}: {
+  name?: string;
+  kind?: "sandbox" | "preview";
+}) {
+  const isPreview = kind === "preview";
   return (
     <div className="flex items-center justify-center gap-3 bg-amber-500 px-4 py-1.5 text-center text-sm font-medium text-amber-950">
       <span>
-        Sandbox environment{name ? ` · ${name}` : ""} — emails, payments, and integrations are disabled.
+        {isPreview ? "Sample company" : "Sandbox environment"}{name ? ` · ${name}` : ""} — emails, payments, and integrations are disabled.
       </span>
       <form action={exitSandbox}>
         <button

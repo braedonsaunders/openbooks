@@ -7,8 +7,8 @@ export const runtime = 'nodejs'
 
 /**
  * Rich read-only detail for one journal entry, used by the reports EntryFlyout
- * so drilling from a statement opens the transaction as a flyout (not the bare
- * legacy full-page journal table). Returns the entry header, its source document (so the
+ * so drilling from a statement opens the transaction as a flyout. Returns the
+ * entry header, its source document (so the
  * flyout can escalate to the full editable transaction drawer), and every line
  * enriched with account/party/dimension names.
  */

@@ -35,6 +35,8 @@ const CONTROL_ACCOUNT_KEYS = [
   "employeePayable",
   "fxUnrealizedGainLoss",
   "fxRealizedGainLoss",
+  // Vendor progress-billing retainage is credited here until released.
+  "retainagePayable",
   // Project GL recognition (inert until mapped). Labor→WIP posts DR laborWip /
   // CR laborClearing at time approval; fixed-price recognition posts DR
   // unbilledReceivable / CR projectRevenue and the invoice relieves unbilledReceivable.

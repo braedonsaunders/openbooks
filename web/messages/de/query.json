@@ -23,7 +23,6 @@
   "runHint": "Schreiben Sie oben SQL und drücken Sie dann Ausführen oder ⌘⏎. Markieren Sie Text, um nur diesen auszuführen.",
   "emptyResultSet": "Die Abfrage lieferte keine Spalten",
   "noFilterMatch": "Keine Zeilen entsprechen Ihrem Filter",
-  "run_legacy": "Abfrage ausführen",
   "rail": {
     "schema": "Schema",
     "snippets": "Snippets",
@@ -33,7 +32,11 @@
     "searchPlaceholder": "Tabellen und Spalten durchsuchen…",
     "noMatch": "Keine passenden Tabellen",
     "insertTable": "Klicken, um Tabellennamen einzufügen",
-    "insertColumn": "Klicken, um Spaltennamen einzufügen"
+    "insertColumn": "Klicken, um Spaltennamen einzufügen",
+    "showSchema": "Schema anzeigen",
+    "browseRows": "Zeilen durchsuchen",
+    "insertTableName": "Tabellennamen einfügen",
+    "insertSelectTemplate": "SELECT-Vorlage einfügen"
   },
   "history": {
     "count": "{count, plural, one {# Abfrage} other {# Abfragen}}",
@@ -74,12 +77,12 @@
       "description": "Anzahl der Buchungen gruppiert nach ihrer Herkunft."
     },
     "tableSizes": {
-      "label": "Tabellenzeilenzahlen",
-      "description": "Geschätzte aktive Zeilen pro Tabelle, größte zuerst."
+      "label": "Übersicht des Abfragekatalogs",
+      "description": "Kontrollierte Berichtsansichten mit der Anzahl verfügbarer Spalten."
     },
     "listColumns": {
       "label": "Alle Spalten auflisten",
-      "description": "Jede Spalte im public-Schema mit ihrem Typ."
+      "description": "Jede verfügbare Spalte im kontrollierten Abfragekatalog mit ihrem Typ."
     }
   }
 }

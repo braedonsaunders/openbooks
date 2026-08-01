@@ -123,7 +123,7 @@ export async function loadFieldTicketDrawerData({
         orgId,
         userId: authz.user.id,
         recordType: 'field_ticket',
-        userRoles: [authz.user.role],
+        userRoles: authz.user.roles.map(({ key }) => key),
         headerDefs: [],
         lineDefs: [],
         explicitLayoutId: formLayoutId,

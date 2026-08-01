@@ -51,15 +51,15 @@ approvals, and audit history operate as one connected business system.
 ## See OpenBooks in action
 
 <p align="center">
-  <img src=".github/assets/screenshots/executive-dashboard.jpg" alt="OpenBooks executive dashboard showing cash, receivables, payables, approvals, quick actions, and recent journal activity" width="100%" />
+  <img src=".github/assets/screenshots/financial-health.jpg" alt="OpenBooks financial health dashboard showing score, KPIs, trends, issues, recommendations, and a profit and loss summary" width="100%" />
 </p>
-<p align="center"><sub>See cash, receivables, payables, approvals, and recent accounting activity at a glance.</sub></p>
+<p align="center"><sub>Move from headline performance to trends, exceptions, recommendations, and the underlying financial statements in one workspace.</sub></p>
 
 <table>
   <tr>
     <td width="50%">
-      <img src=".github/assets/screenshots/financial-health.jpg" alt="OpenBooks financial health dashboard with score, KPIs, trends, issues, and recommendations" width="100%" /><br />
-      <sub><strong>Financial health:</strong> KPIs, trends, issues, and practical recommendations in one view.</sub>
+      <img src=".github/assets/screenshots/executive-dashboard.jpg" alt="OpenBooks personalized dashboard showing cash, receivables, payables, quick actions, approvals, and recent journal activity" width="100%" /><br />
+      <sub><strong>Personalized workspace:</strong> Cash, receivables, payables, quick actions, approvals, and recent accounting activity.</sub>
     </td>
     <td width="50%">
       <img src=".github/assets/screenshots/profit-and-loss.jpg" alt="OpenBooks profit and loss statement for Summit Ridge Construction" width="100%" /><br />
@@ -94,11 +94,11 @@ approvals, and audit history operate as one connected business system.
 <summary><strong>Prefer dark mode?</strong> View the same workflows in OpenBooks dark mode.</summary>
 <br />
 <p align="center">
-  <img src=".github/assets/screenshots/executive-dashboard-dark.jpg" alt="OpenBooks executive dashboard in dark mode" width="100%" />
+  <img src=".github/assets/screenshots/financial-health-dark.jpg" alt="OpenBooks financial health dashboard in dark mode" width="100%" />
 </p>
 <table>
   <tr>
-    <td width="50%"><img src=".github/assets/screenshots/financial-health-dark.jpg" alt="OpenBooks financial health dashboard in dark mode" width="100%" /></td>
+    <td width="50%"><img src=".github/assets/screenshots/executive-dashboard-dark.jpg" alt="OpenBooks personalized dashboard in dark mode" width="100%" /></td>
     <td width="50%"><img src=".github/assets/screenshots/profit-and-loss-dark.jpg" alt="OpenBooks profit and loss statement in dark mode" width="100%" /></td>
   </tr>
   <tr>
@@ -151,17 +151,26 @@ cd openbooks &&
 ./scripts/compose-up.sh
 ```
 
-The installer:
+The installer asks for the organization's ISO country and base-currency codes,
+then:
 
-1. creates `.env.compose` with random database, Redis, object-storage, session,
-   encryption, internal-service, and administrator credentials;
+1. creates `.env.compose` with separate random database-owner and constrained
+   application-role passwords, plus Redis, object-storage, session, encryption,
+   internal-service, and administrator credentials;
 2. pulls the public `ghcr.io/braedonsaunders/openbooks:latest` image;
 3. starts PostgreSQL 16, Redis 7, MinIO, the OpenBooks web application, and its
    background worker;
-4. applies every migration and database control through the idempotent
-   deployment bootstrap; and
+4. runs migrations and grants in a one-shot privileged bootstrap container,
+   then starts web and worker containers that receive only a non-superuser,
+   non-`BYPASSRLS` database login; and
 5. waits for the application to become healthy before printing the URL and
    first administrator login.
+
+For an unattended first install, provide the choices explicitly:
+
+```bash
+ORG_COUNTRY=US ORG_CURRENCY=USD ./scripts/compose-up.sh
+```
 
 Open <http://localhost:4780>. Credentials remain in `.env.compose`, which is
 created with mode `600` and ignored by Git.
@@ -412,6 +421,9 @@ OpenBooks combines:
 - RBAC roles, wildcard permissions, explicit user overrides, and subsidiary
   restrictions;
 - PostgreSQL row-level security on organization-owned tables;
+- separate migration-owner and application database roles: the privileged
+  credential exists only in the one-shot bootstrap container, while both web
+  and worker fail startup if their login can bypass RLS or escalate roles;
 - scoped and hashed API keys;
 - AES-256-GCM protection for stored connection/provider secrets;
 - sandbox and app content-security policies;
@@ -459,18 +471,23 @@ packages/
 | Authentication | scrypt passwords, signed cookies, RBAC |
 | Packaging | Multi-stage Docker image with web, bootstrap, and worker |
 
-The production image starts by taking a database advisory lock and running the
-idempotent bootstrap. The bootstrap applies tracked migrations and constraints,
-refreshes row-level security, verifies the catalog, ensures base roles and
-periods, and creates the first administrator only when none exists.
+The Compose stack runs the production image first as a one-shot bootstrap
+service. It takes a database advisory lock, applies tracked migrations and
+constraints, refreshes row-level security, verifies the catalog and constrained
+runtime role, ensures base roles and periods, and creates the first
+administrator only when none exists. The image then runs separately as web and
+worker processes with only the constrained application credential; the
+database-owner credential is not present in either runtime container.
 
 ## Development
 
 ```bash
 npm ci
 cp .env.example .env
-# Replace the examples and point OPENBOOKS_DB_URL at a disposable database.
-npx tsx scripts/bootstrap.ts
+# Replace the examples. Bootstrap with a disposable database-owner connection,
+# provision a constrained runtime role, then leave OPENBOOKS_DB_URL pointed at
+# that runtime role for the development server.
+OPENBOOKS_BOOTSTRAP=1 npx tsx scripts/bootstrap.ts
 npm run dev -w web
 ```
 
@@ -487,13 +504,17 @@ when a database is configured, and creates a production build. GitHub Actions
 also runs a PostgreSQL-backed integration canary, full integration suite,
 coverage, and Playwright browser smoke tests.
 
-At the first alpha release, the full release suite contains **826 tests**
-covering ledger, posting, payment, banking, close, tax, fixed-asset, inventory,
-project, workflow, reporting, security-boundary, and customization behavior.
+The release suite covers ledger, posting, payment, banking, close, tax,
+fixed-asset, inventory, project, workflow, reporting, security boundaries, and
+customization behavior. The test count is intentionally not frozen here; the
+checked-in suite and release workflow are authoritative.
 
 ## Project status
 
-`v0.1.0-alpha.1` is the first packaged community release.
+`v0.1.0-alpha.2` is the current community preview. It adds the guided company
+setup and go-live experience, industry sample companies, governed query tools,
+expanded country tax packs, canonical pre-launch data models, and a hardened
+one-command container installation.
 
 Good uses today:
 

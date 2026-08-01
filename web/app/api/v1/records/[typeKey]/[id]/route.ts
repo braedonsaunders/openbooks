@@ -1,134 +1,132 @@
+import { randomUUID } from "node:crypto";
 import { NextResponse } from "next/server";
-import { sql } from "drizzle-orm";
-import { db } from "@openbooks/engine/src/db.ts";
-import { canApi, enforceRateLimit, logKeyEvent, resolveApiKeyAuth, type ApiKeyAuth } from "../../../../../../lib/api-auth";
-import { loadApiSchema, resolveApiType } from "../../../../../../lib/api/schema-registry";
-import { deleteRecord, updateRecord } from "../../../../../../lib/api/writers";
-import { isUuid } from "../../../../../../lib/list-params";
+import {
+  enforceRateLimit,
+  guardApiKeyFeature,
+  logKeyEvent,
+  resolveApiKeyAuth,
+  type ApiKeyAuth,
+} from "../../../../../../lib/api-auth";
+import { applicationContextFromApiKey } from "../../../../../../lib/application/context";
+import { ApplicationError } from "../../../../../../lib/application/errors";
+import {
+  deleteApplicationRecord,
+  getRecord,
+  updateApplicationRecord,
+} from "../../../../../../lib/application/records";
 
 export const runtime = "nodejs";
 
-/** GET /api/v1/records/[typeKey]/[id] — get one record by id. */
-export async function GET(
-  req: Request,
-  { params }: { params: Promise<{ typeKey: string; id: string }> },
-) {
-  const start = Date.now();
-  const { typeKey, id } = await params;
-
-  const auth = await resolveApiKeyAuth(req);
-  if (!auth) return NextResponse.json({ error: "invalid or missing API key" }, { status: 401 });
-  const limited = await enforceRateLimit(auth, req, start);
-  if (limited) return limited;
-  if (!isUuid(id)) return NextResponse.json({ error: "invalid id" }, { status: 400 });
-
-  const resolved = await resolveApiType(auth.user.orgId, typeKey);
-  if (!resolved) return NextResponse.json({ error: "unknown record type" }, { status: 404 });
-  if (!canApi(auth, resolved.readPermission)) {
-    return NextResponse.json({ error: `missing permission: ${resolved.readPermission}` }, { status: 403 });
-  }
-
-  const tableName = sql.raw(resolved.table);
-  const docKind = resolved.writer.kind === "document" ? resolved.writer.docKind : null;
-  const row = (await db.execute(sql`
-    select * from ${tableName}
-     where id = ${id} and org_id = ${auth.user.orgId}
-     ${docKind ? sql`and kind = ${docKind}` : sql``}
-     ${resolved.dynamic ? sql`and type_key = ${resolved.key}` : sql``}
-     limit 1`)) as any;
-
-  if (!row.rows[0]) {
-    done(req, start, 404, auth);
-    return NextResponse.json({ error: "not found" }, { status: 404 });
-  }
-  done(req, start, 200, auth);
-  return NextResponse.json(row.rows[0]);
+export async function GET(request: Request, route: RouteContext): Promise<NextResponse> {
+  return withAuth(request, route, async (auth, typeKey, id) => {
+    const record = await getRecord(context(auth, request), { typeKey, id });
+    return { status: 200, body: record };
+  });
 }
 
-/** PATCH /api/v1/records/[typeKey]/[id] — update a record. */
-export async function PATCH(
-  req: Request,
-  { params }: { params: Promise<{ typeKey: string; id: string }> },
-) {
+export async function PATCH(request: Request, route: RouteContext): Promise<NextResponse> {
+  return mutate(request, route, async (auth, typeKey, id, body, idempotencyKey) => {
+    const result = await updateApplicationRecord(context(auth, request), {
+      typeKey, id, body, idempotencyKey,
+    });
+    return { status: result.status, body: result.result, replayed: result.replayed };
+  });
+}
+
+export async function DELETE(request: Request, route: RouteContext): Promise<NextResponse> {
+  return withAuth(request, route, async (auth, typeKey, id) => {
+    const idempotencyKey = request.headers.get("idempotency-key")?.trim();
+    if (!idempotencyKey) throw new ApplicationError("invalid_input", "Idempotency-Key header is required", 400);
+    const result = await deleteApplicationRecord(context(auth, request), {
+      typeKey, id, idempotencyKey,
+    });
+    return { status: result.status, body: result.result, replayed: result.replayed };
+  });
+}
+
+type RouteContext = { params: Promise<{ typeKey: string; id: string }> };
+type AdapterResult = { status: number; body: unknown; replayed?: boolean };
+
+async function mutate(
+  request: Request,
+  route: RouteContext,
+  operation: (
+    auth: ApiKeyAuth,
+    typeKey: string,
+    id: string,
+    body: Record<string, unknown>,
+    idempotencyKey: string,
+  ) => Promise<AdapterResult>,
+): Promise<NextResponse> {
+  return withAuth(request, route, async (auth, typeKey, id) => {
+    const idempotencyKey = request.headers.get("idempotency-key")?.trim();
+    if (!idempotencyKey) throw new ApplicationError("invalid_input", "Idempotency-Key header is required", 400);
+    let body: Record<string, unknown>;
+    try {
+      const parsed = await request.json();
+      if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) throw new Error();
+      body = parsed as Record<string, unknown>;
+    } catch {
+      throw new ApplicationError("invalid_input", "invalid JSON body", 400);
+    }
+    return operation(auth, typeKey, id, body, idempotencyKey);
+  });
+}
+
+async function withAuth(
+  request: Request,
+  route: RouteContext,
+  operation: (auth: ApiKeyAuth, typeKey: string, id: string) => Promise<AdapterResult>,
+): Promise<NextResponse> {
   const start = Date.now();
-  const { typeKey, id } = await params;
-
-  const auth = await resolveApiKeyAuth(req);
+  const auth = await resolveApiKeyAuth(request);
   if (!auth) return NextResponse.json({ error: "invalid or missing API key" }, { status: 401 });
-  const limited = await enforceRateLimit(auth, req, start);
+  const featureGate = await guardApiKeyFeature(auth, "apiAccess");
+  if (featureGate) return featureGate;
+  const limited = await enforceRateLimit(auth, request, start);
   if (limited) return limited;
-  if (!isUuid(id)) return NextResponse.json({ error: "invalid id" }, { status: 400 });
-
-  const gate = await guardWrite(auth, typeKey, "update", req, start);
-  if (gate instanceof NextResponse) return gate;
-  const { resolved } = gate;
-
-  let body: Record<string, unknown>;
+  const { typeKey, id } = await route.params;
   try {
-    body = (await req.json()) as Record<string, unknown>;
-  } catch {
-    done(req, start, 400, auth);
-    return NextResponse.json({ error: "invalid JSON body" }, { status: 400 });
+    const result = await operation(auth, typeKey, id);
+    done(request, start, result.status, auth);
+    return NextResponse.json(result.body, {
+      status: result.status,
+      headers: {
+        "cache-control": "no-store",
+        ...(result.replayed === undefined ? {} : { "idempotency-replayed": String(result.replayed) }),
+      },
+    });
+  } catch (error) {
+    if (error instanceof ApplicationError) {
+      done(request, start, error.status, auth, error.code);
+      return NextResponse.json(
+        { error: error.code, message: error.message, details: error.details },
+        { status: error.status },
+      );
+    }
+    console.error("[api/v1/records/:id] application operation failed", error);
+    done(request, start, 500, auth, "internal_error");
+    return NextResponse.json({ error: "internal_error" }, { status: 500 });
   }
-
-  const fields = resolved.writer.kind === "entity"
-    ? (await loadApiSchema(auth.user.orgId)).find((s) => s.key === resolved.key)?.fields ?? []
-    : [];
-
-  const result = await updateRecord(auth.user, resolved, fields, id, body);
-  done(req, start, result.status, auth);
-  return NextResponse.json(result.body, { status: result.status });
 }
 
-/** DELETE /api/v1/records/[typeKey]/[id] — delete a record. */
-export async function DELETE(
-  req: Request,
-  { params }: { params: Promise<{ typeKey: string; id: string }> },
-) {
-  const start = Date.now();
-  const { typeKey, id } = await params;
-
-  const auth = await resolveApiKeyAuth(req);
-  if (!auth) return NextResponse.json({ error: "invalid or missing API key" }, { status: 401 });
-  const limited = await enforceRateLimit(auth, req, start);
-  if (limited) return limited;
-  if (!isUuid(id)) return NextResponse.json({ error: "invalid id" }, { status: 400 });
-
-  const gate = await guardWrite(auth, typeKey, "delete", req, start);
-  if (gate instanceof NextResponse) return gate;
-
-  const result = await deleteRecord(auth.user, gate.resolved, id);
-  done(req, start, result.status, auth);
-  return NextResponse.json(result.body, { status: result.status });
+function context(auth: ApiKeyAuth, request: Request) {
+  return applicationContextFromApiKey(
+    auth,
+    "api",
+    request.headers.get("x-request-id") || randomUUID(),
+  );
 }
 
-/** Resolve + authorize a write; returns the resolved type or a ready response. */
-async function guardWrite(
-  auth: ApiKeyAuth,
-  typeKey: string,
-  op: "update" | "delete",
-  req: Request,
-  start: number,
-) {
-  const resolved = await resolveApiType(auth.user.orgId, typeKey);
-  if (!resolved) {
-    done(req, start, 404, auth);
-    return NextResponse.json({ error: "unknown record type" }, { status: 404 });
-  }
-  if (!resolved.operations.includes(op) || !resolved.writePermission) {
-    done(req, start, 405, auth);
-    return NextResponse.json({ error: `${typeKey} does not support ${op}` }, { status: 405 });
-  }
-  if (!canApi(auth, resolved.writePermission)) {
-    done(req, start, 403, auth);
-    return NextResponse.json({ error: `missing permission: ${resolved.writePermission}` }, { status: 403 });
-  }
-  return { resolved };
-}
-
-function done(req: Request, start: number, status: number, auth: ApiKeyAuth) {
+function done(request: Request, start: number, status: number, auth: ApiKeyAuth, error?: string): void {
   logKeyEvent({
-    orgId: auth.user.orgId, keyId: auth.keyId, method: req.method,
-    path: new URL(req.url).pathname, statusCode: status, durationMs: Date.now() - start, req,
+    orgId: auth.user.orgId,
+    keyId: auth.keyId,
+    method: request.method,
+    path: new URL(request.url).pathname,
+    statusCode: status,
+    durationMs: Date.now() - start,
+    req: request,
+    error,
   });
 }

@@ -74,7 +74,10 @@ export async function runDunning(asOf?: string): Promise<DunningRunResult> {
 
   const orgs = await withBypass(async () => {
     return (await db.execute(sql`
-      select distinct org_id as "orgId" from dunning_policies where is_active
+      select distinct policy.org_id as "orgId"
+        from dunning_policies policy
+        join orgs organization on organization.id = policy.org_id
+       where policy.is_active and organization.env_kind = 'production'
     `)) as unknown as { rows: { orgId: string }[] };
   });
 

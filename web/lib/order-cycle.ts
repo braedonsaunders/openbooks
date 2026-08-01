@@ -6,6 +6,7 @@ import { ORDER_KINDS, type OrderKind, CONVERSION_TARGETS } from './order-kinds'
 import { promoteCrmAccount } from '@openbooks/engine/src/crm.ts'
 import { add, sum } from '@openbooks/engine/src/money.ts'
 import { remainingOrderLine } from './order-cycle-math'
+import { isFeatureEnabled } from './features'
 
 export { ORDER_KINDS, CONVERSION_TARGETS }
 export type { OrderKind }
@@ -35,6 +36,7 @@ const NUMBER_PREFIX: Record<OrderKind, { kind: OrderKind; prefix: string }> = {
 
 /** Create an empty draft order document and return its id + number. */
 export async function createOrderDraft(orgId: string, userId: string, kind: OrderKind) {
+  if (!(await isFeatureEnabled(orgId, 'orders'))) throw new Error('Orders feature is disabled')
   const cfg = NUMBER_PREFIX[kind]
   const org = (await db.execute(
     sql`select base_currency from orgs where id = ${orgId}`,
@@ -68,6 +70,7 @@ export async function convertOrder(
   sourceId: string,
   targetKind: string,
 ): Promise<ConvertResult> {
+  if (!(await isFeatureEnabled(orgId, 'orders'))) throw new ConversionError('Orders feature is disabled')
   return db.transaction(async (tx) => {
     const src = (await tx.execute(sql`
       select id, kind, status, party_id, currency, fx_rate, document_date, due_date,

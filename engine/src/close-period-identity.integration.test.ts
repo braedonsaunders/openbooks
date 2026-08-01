@@ -14,7 +14,7 @@ import {
 const DB = !!process.env.OPENBOOKS_DB_URL;
 
 test(
-  "close controls scope documents by exact period with a legacy date fallback",
+  "close controls require an exact document period and never infer one from a date",
   { skip: !DB },
   async () => {
     const org = await createScratchOrg();
@@ -120,39 +120,47 @@ test(
       );
       assert.equal(afterAdjustmentChange.fingerprint, initial.fingerprint);
 
-      const legacyDocumentId = await seedDraftDocument(org.orgId, {
+      const unassignedDocumentId = await seedDraftDocument(org.orgId, {
         kind: "vendor_bill",
         createdBy: actors.adminId,
-        number: "LEGACY-DATE-SCOPED-DRAFT",
+        number: "UNASSIGNED-PERIOD-DRAFT",
       });
       await db.execute(sql`
         update documents
            set posting_date = ${org.date},
                posting_period_id = null,
                updated_at = '2026-07-15 12:02:00+00'
-         where id = ${legacyDocumentId}
+         where id = ${unassignedDocumentId}
       `);
-      const afterLegacyDocument = await refreshCloseRun(
+      const afterUnassignedDocument = await refreshCloseRun(
         org.orgId,
         runId,
         actors.adminId,
       );
-      assert.notEqual(afterLegacyDocument.fingerprint, initial.fingerprint);
-      const legacyDrafts = (await db.execute(sql`
+      assert.notEqual(afterUnassignedDocument.fingerprint, initial.fingerprint);
+      const exactPeriodDrafts = (await db.execute(sql`
         select status, details
           from close_exceptions
          where run_id = ${runId} and code = 'drafts-open'
       `)) as unknown as {
         rows: { status: string; details: { count: number } }[];
       };
-      assert.equal(legacyDrafts.rows[0]!.status, "open");
-      assert.equal(Number(legacyDrafts.rows[0]!.details.count), 1);
+      assert.ok(exactPeriodDrafts.rows.length === 0 || exactPeriodDrafts.rows[0]!.status === "resolved");
+      const missingPeriod = (await db.execute(sql`
+        select status, details
+          from close_exceptions
+         where run_id = ${runId} and code = 'posting-period-missing'
+      `)) as unknown as {
+        rows: { status: string; details: { count: number } }[];
+      };
+      assert.equal(missingPeriod.rows[0]!.status, "open");
+      assert.equal(Number(missingPeriod.rows[0]!.details.count), 1);
 
       await db.execute(sql`
         update documents
            set posting_period_id = ${adjustmentPeriodId},
                updated_at = '2026-07-15 12:03:00+00'
-         where id = ${legacyDocumentId}
+         where id = ${unassignedDocumentId}
       `);
       const afterExactAdjustmentScope = await refreshCloseRun(
         org.orgId,
@@ -160,14 +168,14 @@ test(
         actors.adminId,
       );
       assert.equal(afterExactAdjustmentScope.fingerprint, initial.fingerprint);
-      const resolvedDrafts = (await db.execute(sql`
+      const resolvedPeriodIdentity = (await db.execute(sql`
         select status, details
           from close_exceptions
-         where run_id = ${runId} and code = 'drafts-open'
+         where run_id = ${runId} and code = 'posting-period-missing'
       `)) as unknown as {
         rows: { status: string; details: { count: number } }[];
       };
-      assert.equal(resolvedDrafts.rows[0]!.status, "resolved");
+      assert.equal(resolvedPeriodIdentity.rows[0]!.status, "resolved");
     } finally {
       await dropScratchOrg(org.orgId);
     }

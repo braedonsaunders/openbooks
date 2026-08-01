@@ -10,7 +10,7 @@ import {
   postProvisionRun,
 } from "./income-tax-provision.ts";
 import { postDocument } from "./posting.ts";
-import { createScratchOrg, dropScratchOrg } from "./test-fixtures.ts";
+import { createScratchOrg, createScratchUser, dropScratchOrg } from "./test-fixtures.ts";
 
 const DB = !!process.env.OPENBOOKS_DB_URL;
 
@@ -25,10 +25,7 @@ test(
   async () => {
     const org = await createScratchOrg();
     try {
-      const userId = randomUUID();
-      await db.execute(sql`
-      insert into users (id, org_id, email, name, password_hash, role, is_active)
-      values (${userId}, ${org.orgId}, ${`tax-${userId}@scratch.test`}, 'Tax Tester', 'x', 'admin', true)`);
+      const userId = await createScratchUser(org.orgId, "Tax Tester", "admin");
 
       // Income-tax accounts + control mapping.
       const mk = async (number: string, name: string, type: string) => {

@@ -14,7 +14,7 @@
   "financialChangeReasonPlaceholder": "Änderung der Bilanzierungsrichtlinie beschreiben",
   "financialChangeReasonRequired": "Geben Sie einen aussagekräftigen Grund für die Änderung der Finanzrichtlinie ein",
   "financialVersionNotice": "Beim Speichern wird eine neue zeitlich gültige Richtlinie veröffentlicht. Frühere Perioden behalten ihre ursprüngliche Richtlinie.",
-  "legacySeed": "übernommener Ausgangswert",
+  "initialPolicy": "Ausgangsrichtlinie",
   "deleteConfirm": "„{name}“ löschen oder archivieren?",
   "tabs": {
     "general": "Allgemein",

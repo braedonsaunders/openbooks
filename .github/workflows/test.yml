@@ -69,6 +69,8 @@ jobs:
           --health-interval 5s --health-timeout 5s --health-retries 12
     env:
       OPENBOOKS_DB_URL: postgres://openbooks:openbooks@localhost:5433/openbooks_test
+      OPENBOOKS_RUNTIME_DB_URL: postgres://openbooks_app:openbooks-runtime-ci-password@localhost:5433/openbooks_test
+      OPENBOOKS_DB_PASSWORD: openbooks-runtime-ci-password
       PGPASSWORD: openbooks
     steps:
       - uses: actions/checkout@v4
@@ -119,6 +121,8 @@ jobs:
           --health-interval 5s --health-timeout 5s --health-retries 12
     env:
       OPENBOOKS_DB_URL: postgres://openbooks:openbooks@localhost:5433/openbooks_coverage
+      OPENBOOKS_RUNTIME_DB_URL: postgres://openbooks_app:openbooks-runtime-ci-password@localhost:5433/openbooks_coverage
+      OPENBOOKS_DB_PASSWORD: openbooks-runtime-ci-password
       PGPASSWORD: openbooks
     steps:
       - uses: actions/checkout@v4
@@ -177,6 +181,8 @@ jobs:
           --health-interval 5s --health-timeout 5s --health-retries 12
     env:
       OPENBOOKS_DB_URL: postgres://openbooks:openbooks@localhost:5433/openbooks_e2e
+      OPENBOOKS_RUNTIME_DB_URL: postgres://openbooks_app:openbooks-runtime-ci-password@localhost:5433/openbooks_e2e
+      OPENBOOKS_DB_PASSWORD: openbooks-runtime-ci-password
       PGPASSWORD: openbooks
       SESSION_SECRET: e2e-ci-secret-not-production
       ADMIN_EMAIL: e2e@openbooks.test

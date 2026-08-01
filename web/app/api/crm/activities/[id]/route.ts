@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server'
 import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/db.ts'
-import { guardPermission } from '../../../../../lib/authz'
+import { guardFeaturePermission } from '../../../../../lib/feature-gates'
 import { isUuid } from '../../../../../lib/list-params'
 import { loadActivity } from '../../../../../lib/crm'
 
@@ -32,7 +32,7 @@ async function subjectExists(orgId: string, kind: string, id: string): Promise<b
 }
 
 export async function GET(_req: Request, { params }: { params: Promise<{ id: string }> }) {
-  const gate = await guardPermission('crm.activities.read')
+  const gate = await guardFeaturePermission('crm.activities.read', 'crm')
   if (gate instanceof NextResponse) return gate
   const { id } = await params
   const activity = isUuid(id) ? await loadActivity(id, gate.user.orgId) : null
@@ -40,7 +40,7 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
 }
 
 export async function PATCH(req: Request, { params }: { params: Promise<{ id: string }> }) {
-  const gate = await guardPermission('crm.activities.manage')
+  const gate = await guardFeaturePermission('crm.activities.manage', 'crm')
   if (gate instanceof NextResponse) return gate
   const { user } = gate
   const { id } = await params
@@ -122,7 +122,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
 }
 
 export async function DELETE(_req: Request, { params }: { params: Promise<{ id: string }> }) {
-  const gate = await guardPermission('crm.activities.manage')
+  const gate = await guardFeaturePermission('crm.activities.manage', 'crm')
   if (gate instanceof NextResponse) return gate
   const { id } = await params
   if (!isUuid(id)) return NextResponse.json({ error: 'not found' }, { status: 404 })

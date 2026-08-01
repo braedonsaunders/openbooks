@@ -34,7 +34,7 @@ export default async function AppRuntimePage({ params }: { params: Promise<{ key
 
   const context = {
     app: { id: app.id, key: app.key, name: app.name },
-    user: { id: authz.user.id, name: authz.user.name, role: authz.user.role },
+    user: { id: authz.user.id, name: authz.user.name, roles: authz.user.roles.map(({ key }) => key) },
   }
 
   return (

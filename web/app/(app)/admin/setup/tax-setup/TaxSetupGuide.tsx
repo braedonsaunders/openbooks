@@ -22,11 +22,13 @@ export interface SupportedSubJurisdiction {
   packCode: string
   region: string
   name: string
+  coverage: 'detailed_pack' | 'country_tax_setup' | 'jurisdiction_setup'
 }
 export interface SupportedCountry {
   country: string
   name: string
   countryPack: string | null
+  countryStatus: 'ready' | 'subdivisions' | 'in_development'
   subs: SupportedSubJurisdiction[]
 }
 
@@ -66,29 +68,41 @@ export function TaxSetupGuide({
   const filtered = useMemo(() => {
     const needle = query.trim().toLocaleLowerCase(locale)
     if (!needle) return countries
-    return countries.filter((c) =>
-      [label(c), c.country, ...c.subs.map((s) => s.name)].some((v) =>
+    return countries.flatMap((c) => {
+      const countryMatches = [label(c), c.country].some((v) =>
         String(v ?? '').toLocaleLowerCase(locale).includes(needle),
-      ),
-    )
+      )
+      if (countryMatches) return [c]
+      const matchingSubs = c.subs.filter((s) =>
+        [s.name, s.region].some((v) => String(v).toLocaleLowerCase(locale).includes(needle)),
+      )
+      return matchingSubs.length ? [{ ...c, subs: matchingSubs }] : []
+    })
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [countries, countryNames, locale, query])
 
   // Selecting a country selects its country pack; expand to add state packs.
   function toggleCountry(c: SupportedCountry) {
-    const key = c.countryPack ?? c.subs[0]?.packCode
-    if (!key) return
+    if (!c.countryPack) {
+      if (c.subs.length) {
+        setExpanded((cur) => {
+          const next = new Set(cur)
+          next.has(c.country) ? next.delete(c.country) : next.add(c.country)
+          return next
+        })
+      }
+      return
+    }
+    const countryPack = c.countryPack
     setSelected((cur) => {
       const next = new Set(cur)
-      const anySelected = c.countryPack ? next.has(c.countryPack) : c.subs.some((s) => next.has(s.packCode))
+      const anySelected = next.has(countryPack)
       if (anySelected) {
         // Deselect the country and all its subs.
-        if (c.countryPack) next.delete(c.countryPack)
+        next.delete(countryPack)
         c.subs.forEach((s) => next.delete(s.packCode))
-      } else if (c.countryPack) {
-        next.add(c.countryPack)
-      } else if (c.subs[0]) {
-        next.add(c.subs[0].packCode)
+      } else {
+        next.add(countryPack)
       }
       return next
     })
@@ -168,7 +182,7 @@ export function TaxSetupGuide({
               const countryInstalled = c.countryPack
                 ? installed.has(c.countryPack)
                 : c.subs.length > 0 && c.subs.every((s) => installed.has(s.packCode))
-              const isOpen = expanded.has(c.country)
+              const isOpen = expanded.has(c.country) || (query.trim().length > 0 && c.subs.length > 0)
               const selectedSubs = c.subs.filter((s) => selected.has(s.packCode)).length
               return (
                 <li key={c.country} className={`rounded-xl border ${countrySelected ? 'border-teal-500' : 'border-slate-200 dark:border-slate-800'}`}>
@@ -176,7 +190,8 @@ export function TaxSetupGuide({
                     <button
                       type="button"
                       onClick={() => toggleCountry(c)}
-                      className="flex min-w-0 flex-1 items-center gap-2 text-left"
+                      disabled={c.countryStatus === 'in_development'}
+                      className="flex min-w-0 flex-1 items-center gap-2 text-left disabled:cursor-not-allowed disabled:opacity-60"
                     >
                       <span className={`flex h-5 w-5 shrink-0 items-center justify-center rounded border ${countrySelected ? 'border-teal-500 bg-teal-500 text-white' : 'border-slate-300 dark:border-slate-600'}`}>
                         {countrySelected ? <Check size={13} /> : null}
@@ -186,7 +201,9 @@ export function TaxSetupGuide({
                         <span className="block truncate text-xs text-slate-500 dark:text-slate-400">
                           {c.subs.length
                             ? t('statesAvailable', { count: c.subs.length })
-                            : (c.countryPack ?? '').replace(/_/g, ' ')}
+                            : c.countryStatus === 'in_development'
+                              ? t('packInDevelopment')
+                              : t('countryPackReady')}
                         </span>
                       </span>
                     </button>
@@ -203,7 +220,7 @@ export function TaxSetupGuide({
                     ) : null}
                   </div>
                   {c.subs.length && isOpen ? (
-                    <ul className="border-t border-slate-100 px-3 py-2 dark:border-slate-800">
+                    <ul className="max-h-80 overflow-y-auto border-t border-slate-100 px-3 py-2 dark:border-slate-800">
                       {c.subs.map((s) => {
                         const on = selected.has(s.packCode)
                         const sInstalled = installed.has(s.packCode)
@@ -219,6 +236,15 @@ export function TaxSetupGuide({
                                 {on || sInstalled ? <Check size={11} /> : null}
                               </span>
                               <span className="text-slate-700 dark:text-slate-200">{s.name}</span>
+                              {!sInstalled ? (
+                                <span className="ml-auto text-[11px] text-slate-500 dark:text-slate-400">
+                                  {t(s.coverage === 'detailed_pack'
+                                    ? 'detailedPack'
+                                    : s.coverage === 'country_tax_setup'
+                                      ? 'countryTaxSetup'
+                                      : 'jurisdictionSetup')}
+                                </span>
+                              ) : null}
                               {sInstalled ? <span className="ml-auto text-xs text-teal-600">{t('installed')}</span> : null}
                             </button>
                           </li>

@@ -1,6 +1,6 @@
 // Run with:  node --import tsx --test web/lib/record-schema.test.ts   (from repo root)
 //
-// Unit tests for the section-aware record-type helpers: legacy normalization,
+// Unit tests for the section-aware record-type helpers: canonical validation,
 // linting header + repeating (line-list) sections with rollup formulas, the
 // merged-data ⇄ (values, rows) split, unknown-key stripping, value validation
 // (incl. repeating minRows), and live formula/rollup computation.
@@ -61,16 +61,12 @@ const SECTIONS: FormSection[] = [
   },
 ]
 
-test('normalizeSectionsInput wraps a legacy flat field list into one header section', () => {
+test('flat custom-record field definitions are rejected by the canonical section model', () => {
   const flat = [
     { id: 'a', type: 'text', label: 'A' },
     { id: 'b', type: 'number', label: 'B' },
   ]
-  const out = normalizeSectionsInput(flat) as FormSection[]
-  assert.equal(out.length, 1)
-  assert.equal(out[0]!.id, 'main')
-  assert.equal(out[0]!.repeating, undefined)
-  assert.equal(out[0]!.fields.length, 2)
+  assert.equal(lintRecordFields(flat, 'Asset').success, false)
 })
 
 test('normalizeSectionsInput passes a section array through and returns [] for empty', () => {

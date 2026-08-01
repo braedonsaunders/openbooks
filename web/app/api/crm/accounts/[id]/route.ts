@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server'
 import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/db.ts'
 import { promoteCrmAccount, routeCrmAccount } from '@openbooks/engine/src/crm.ts'
-import { guardPermission } from '../../../../../lib/authz'
+import { guardFeaturePermission } from '../../../../../lib/feature-gates'
 import { isUuid } from '../../../../../lib/list-params'
 import { loadCrmAccount } from '../../../../../lib/crm'
 
@@ -21,7 +21,7 @@ function uuidOrNull(value: unknown): string | null | 'invalid' {
 }
 
 export async function GET(_req: Request, { params }: { params: Promise<{ id: string }> }) {
-  const gate = await guardPermission('crm.accounts.read')
+  const gate = await guardFeaturePermission('crm.accounts.read', 'crm')
   if (gate instanceof NextResponse) return gate
   const { id } = await params
   if (!isUuid(id)) return NextResponse.json({ error: 'not found' }, { status: 404 })
@@ -30,7 +30,7 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
 }
 
 export async function PATCH(req: Request, { params }: { params: Promise<{ id: string }> }) {
-  const gate = await guardPermission('crm.accounts.manage')
+  const gate = await guardFeaturePermission('crm.accounts.manage', 'crm')
   if (gate instanceof NextResponse) return gate
   const { user } = gate
   const { id } = await params

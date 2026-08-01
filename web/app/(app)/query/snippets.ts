@@ -67,16 +67,18 @@ having abs(sum(l.amount)) > 0.005
   },
   {
     key: 'tableSizes',
-    sql: `select relname as table, n_live_tup as est_rows
-  from pg_stat_user_tables
- order by n_live_tup desc
- limit 30`,
+    sql: `select table_name, count(*)::int as columns
+  from information_schema.columns
+ where table_schema = 'openbooks_query'
+ group by table_name
+ order by columns desc, table_name
+ limit 100`,
   },
   {
     key: 'listColumns',
     sql: `select table_name, column_name, data_type
   from information_schema.columns
- where table_schema = 'public'
+ where table_schema = 'openbooks_query'
  order by table_name, ordinal_position
  limit 200`,
   },

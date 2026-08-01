@@ -3,6 +3,7 @@
     "title": "Plano de Contas",
     "description": "Saldos atuais em sinal natural (balanço patrimonial acumulado, DRE no ano fiscal corrente), consolidados através das contas de resumo.",
     "searchPlaceholder": "Buscar número ou nome…",
+    "views": { "list": "Lista", "hierarchy": "Hierarquia" },
     "badges": {
       "inactive": "inativa",
       "summary": "resumo"

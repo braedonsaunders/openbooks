@@ -2,11 +2,12 @@ import { NextResponse } from 'next/server'
 import { sql, type SQL } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/db.ts'
 import { guardPermission } from '../../../../../lib/authz'
-import { FEATURE_BY_KEY } from '../../../../../lib/features'
+import { FEATURE_BY_KEY, featureRequirements } from '../../../../../lib/features'
 import { INDUSTRY_BY_KEY, canSwitchIndustry } from '../../../../../lib/industries'
 import { normalizeCountryCode } from '../../../../../lib/countries'
 import { periodDerivationSql } from '../../../../../lib/fiscal-periods'
 import { ONBOARDING_SCHEMA_VERSION, onboardingRecord } from '../../../../../lib/onboarding'
+import { isBookStart, isCloseCadence, isComplexityLevel, isMonthlyActivityLevel, isTaxPosition, isTeamSize } from '../../../../../lib/workspace-profile'
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
@@ -41,7 +42,7 @@ export async function PUT(req: Request) {
     fiscalYearStartMonth: inputFiscalMonth,
     industry: inputIndustry,
     features: inputFeatureOverrides,
-    skipCoa,
+    workspaceProfile: inputWorkspaceProfile,
   } = body as {
     name?: string
     legalName?: string
@@ -50,7 +51,7 @@ export async function PUT(req: Request) {
     fiscalYearStartMonth?: number
     industry?: string
     features?: Record<string, boolean>
-    skipCoa?: boolean
+    workspaceProfile?: { teamSize?: unknown; complexity?: unknown; bookStart?: unknown; taxPosition?: unknown; monthlyActivity?: unknown; closeCadence?: unknown }
   }
 
   if (typeof inputName !== 'string' || !inputName.trim()) {
@@ -65,6 +66,18 @@ export async function PUT(req: Request) {
   if (typeof inputCurrency !== 'string' || !/^[A-Z]{3}$/.test(inputCurrency)) {
     return NextResponse.json({ error: 'invalid-base-currency' }, { status: 422 })
   }
+  const knownCurrency = (await db.execute(
+    sql`select 1 from currencies where code = ${inputCurrency} limit 1`,
+  )) as unknown as { rows: unknown[] }
+  if (!knownCurrency.rows[0]) {
+    return NextResponse.json(
+      {
+        error: 'unsupported-base-currency',
+        message: `${inputCurrency} is not available in this installation. Run deployment bootstrap or choose a supported currency.`,
+      },
+      { status: 422 },
+    )
+  }
   if (
     typeof inputFiscalMonth !== 'number'
     || !Number.isInteger(inputFiscalMonth)
@@ -72,6 +85,17 @@ export async function PUT(req: Request) {
     || inputFiscalMonth > 12
   ) {
     return NextResponse.json({ error: 'invalid-fiscal-year-start-month' }, { status: 422 })
+  }
+  if (
+    !inputWorkspaceProfile
+    || !isTeamSize(inputWorkspaceProfile.teamSize)
+    || !isComplexityLevel(inputWorkspaceProfile.complexity)
+    || !isBookStart(inputWorkspaceProfile.bookStart)
+    || !isTaxPosition(inputWorkspaceProfile.taxPosition)
+    || !isMonthlyActivityLevel(inputWorkspaceProfile.monthlyActivity)
+    || !isCloseCadence(inputWorkspaceProfile.closeCadence)
+  ) {
+    return NextResponse.json({ error: 'invalid-workspace-profile' }, { status: 422 })
   }
   if (
     inputFeatureOverrides === null
@@ -85,10 +109,6 @@ export async function PUT(req: Request) {
       return NextResponse.json({ error: 'invalid-feature-override', key }, { status: 422 })
     }
   }
-  if (skipCoa !== undefined && typeof skipCoa !== 'boolean') {
-    return NextResponse.json({ error: 'invalid-skip-coa' }, { status: 422 })
-  }
-
   const industry = typeof inputIndustry === 'string' ? INDUSTRY_BY_KEY.get(inputIndustry) : undefined
   if (!industry) {
     return NextResponse.json({ error: 'unknown-industry', key: inputIndustry }, { status: 422 })
@@ -114,7 +134,7 @@ export async function PUT(req: Request) {
     if (!current) {
       return NextResponse.json({ error: 'org-not-found' }, { status: 404 })
     }
-    if (industry && current.industry !== industry.key) {
+    if (industry && current.industry !== null && current.industry !== industry.key) {
       return NextResponse.json(
         { error: 'industry-locked', message: 'Cannot change industry after postings exist.' },
         { status: 409 },
@@ -192,10 +212,6 @@ export async function PUT(req: Request) {
       }
     }
     if (inputCurrency !== undefined && typeof inputCurrency === 'string' && /^[A-Z]{3}$/.test(inputCurrency) && inputCurrency !== cur.base_currency) {
-      const known = (await tx.execute(sql`select 1 from currencies where code = ${inputCurrency} limit 1`)) as unknown as { rows: unknown[] }
-      if (!known.rows[0]) {
-        throw new Error(`unknown currency "${inputCurrency}"`)
-      }
       orgSets.push(sql`base_currency = ${inputCurrency}`)
       changes.baseCurrency = [cur.base_currency, inputCurrency]
       effectiveBaseCurrency = inputCurrency
@@ -210,7 +226,10 @@ export async function PUT(req: Request) {
     }
 
     // 2. Insert COA template (idempotent) ---------------------------------
-    if (industry && industryChanged && !skipCoa) {
+    // Never accept a client-controlled escape hatch for chart provisioning.
+    // Existing posted books may be classified for the first time, but their
+    // established chart and control-account mapping remain untouched.
+    if (industry && industryChanged && accountingFoundationMutable) {
       const inserted = (await tx.execute(sql`
         with ins as (
           insert into accounts (id, org_id, number, name, type, is_summary, is_active, currency_restriction, reconcilable, required_dimensions, created_at, created_by, updated_at, updated_by)
@@ -257,6 +276,15 @@ export async function PUT(req: Request) {
       }
     }
 
+    // A usable fresh company needs at least one ordinary due-date policy.
+    // Seed a conservative Net 30 option only when the tenant has no terms at
+    // all; never overwrite or compete with a company's own term library.
+    await tx.execute(sql`
+      insert into payment_terms (org_id, name, net_days, is_active)
+      select ${orgId}, 'Net 30', 30, true
+       where not exists (select 1 from payment_terms where org_id = ${orgId})
+    `)
+
     // 4. Feature presets (merged through the authoritative feature model) --
     if (industryChanged || inputFeatureOverrides) {
       const curFeatures = (nextSettings!.features ?? {}) as Record<string, boolean>
@@ -273,25 +301,21 @@ export async function PUT(req: Request) {
         const overrides = Object.entries(inputFeatureOverrides).filter(
           (entry): entry is [string, boolean] => FEATURE_BY_KEY.has(entry[0]) && typeof entry[1] === 'boolean',
         )
-        // Apply parent gates first so child validation uses the final requested
-        // parent state rather than object-property order from the client.
-        for (const [key, val] of overrides) {
-          if (!FEATURE_BY_KEY.get(key)?.parentKey) nextFeatures[key] = val
-        }
-        for (const [key, val] of overrides) {
-          const def = FEATURE_BY_KEY.get(key)!
-          if (!def.parentKey) continue
-          const parentEnabled = nextFeatures[def.parentKey]
-            ?? FEATURE_BY_KEY.get(def.parentKey)?.defaultEnabled
-            ?? false
-          nextFeatures[key] = parentEnabled ? val : false
-        }
+        for (const [key, val] of overrides) nextFeatures[key] = val
       }
-      // Industry presets can also include children. Normalize the complete
-      // result so no stored child gate remains on beneath a disabled parent.
-      for (const def of FEATURE_BY_KEY.values()) {
-        if (def.parentKey && nextFeatures[def.parentKey] === false) {
-          nextFeatures[def.key] = false
+      // Normalize the complete dependency graph. Repeat to a fixed point so a
+      // disabled root also suppresses grandchildren regardless of registry order.
+      let dependencyChanged = true
+      while (dependencyChanged) {
+        dependencyChanged = false
+        for (const def of FEATURE_BY_KEY.values()) {
+          const missing = featureRequirements(def).some((requiredKey) =>
+            !(nextFeatures[requiredKey] ?? FEATURE_BY_KEY.get(requiredKey)?.defaultEnabled ?? false),
+          )
+          if (missing && nextFeatures[def.key] !== false) {
+            nextFeatures[def.key] = false
+            dependencyChanged = true
+          }
         }
       }
 
@@ -308,6 +332,23 @@ export async function PUT(req: Request) {
         nextSettings!.industry = industry.key
         settingsChanges.industry = [curIndustry, industry.key]
       }
+    }
+
+    const currentWorkspaceProfile = (nextSettings!.workspaceProfile ?? null) as Record<string, unknown> | null
+    const nextWorkspaceProfile = {
+      teamSize: inputWorkspaceProfile.teamSize,
+      complexity: inputWorkspaceProfile.complexity,
+      bookStart: inputWorkspaceProfile.bookStart,
+      taxPosition: inputWorkspaceProfile.taxPosition,
+      monthlyActivity: inputWorkspaceProfile.monthlyActivity,
+      closeCadence: inputWorkspaceProfile.closeCadence,
+      assessedAt: new Date().toISOString(),
+      assessedBy: actorId,
+    }
+    nextSettings!.workspaceProfile = nextWorkspaceProfile
+    settingsChanges.workspaceProfile = {
+      before: currentWorkspaceProfile,
+      after: nextWorkspaceProfile,
     }
 
     // Onboarding mark
@@ -339,6 +380,55 @@ export async function PUT(req: Request) {
     }
     if (orgSets.length > 0) {
       await tx.execute(sql`update orgs set ${sql.join(orgSets, sql`, `)} where id = ${orgId}`)
+    }
+
+    // A single-entity company should never have two competing identities.
+    // Keep its sole root subsidiary aligned with Company until the tenant
+    // explicitly enables and creates a multi-entity structure. Multi-entity
+    // roots are intentionally left alone because the group name and parent
+    // legal entity can legitimately differ.
+    const singleRoot = (await tx.execute(sql`
+      select s.id, s.name, s.legal_name, s.base_currency, s.country,
+             (select count(*)::int from subsidiaries x
+               where x.org_id = ${orgId} and x.is_active and not x.is_elimination) as entity_count
+        from subsidiaries s
+       where s.org_id = ${orgId} and s.parent_id is null
+       for update
+    `)) as unknown as {
+      rows: {
+        id: string
+        name: string
+        legal_name: string | null
+        base_currency: string
+        country: string
+        entity_count: number
+      }[]
+    }
+    const root = singleRoot.rows[0]
+    if (root && root.entity_count === 1) {
+      const nextName = inputName.trim()
+      const nextLegalName = inputLegalName?.trim() || null
+      const nextCountry = normalizeCountryCode(inputCountry)!
+      const rootChanges: Record<string, unknown> = {}
+      if (root.name !== nextName) rootChanges.name = [root.name, nextName]
+      if (root.legal_name !== nextLegalName) rootChanges.legalName = [root.legal_name, nextLegalName]
+      if (root.base_currency !== inputCurrency) rootChanges.baseCurrency = [root.base_currency, inputCurrency]
+      if (root.country !== nextCountry) rootChanges.country = [root.country, nextCountry]
+      if (Object.keys(rootChanges).length > 0) {
+        await tx.execute(sql`
+          update subsidiaries
+             set name = ${nextName}, legal_name = ${nextLegalName},
+                 base_currency = ${inputCurrency}, country = ${nextCountry},
+                 updated_at = now(), updated_by = ${actorId}
+           where id = ${root.id} and org_id = ${orgId}
+        `)
+        await tx.execute(sql`
+          insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
+          values (${orgId}, 'subsidiaries', ${root.id}, 'update',
+                  ${JSON.stringify({ ...rootChanges, reason: 'single-entity company identity synchronized by setup' })},
+                  ${actorId})
+        `)
+      }
     }
     if (fiscalStartChanged) {
       await tx.execute(sql`drop index if exists periods_org_year_num`)

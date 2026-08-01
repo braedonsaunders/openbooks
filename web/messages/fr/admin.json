@@ -722,7 +722,6 @@
       "lastSignIn": "Dernière connexion"
     },
     "you": "vous",
-    "legacyRole": "ancien : {role}",
     "statusActive": "actif",
     "statusInactive": "inactif",
     "requestFailed": "La requête a échoué",

@@ -10,8 +10,7 @@ import { db } from "../db.ts";
 import { ensureReportDefinitions } from "../ensure-report-definitions.ts";
 import { renderReportPdf } from "./render-client.ts";
 
-/** Per-report override captured on the package (mirrors the UI's
- * ReportAttachment). Legacy packages stored bare slug strings. */
+/** Per-report override captured on the package (mirrors the UI attachment). */
 type Attachment = {
   slug: string;
   period?: string;
@@ -31,7 +30,6 @@ const MAX_REPORTS = 10;
 function normalizeAttachments(raw: unknown): Attachment[] {
   if (!Array.isArray(raw)) return [];
   return raw
-    .map((item) => (typeof item === "string" ? { slug: item } : item))
     .filter((item): item is Attachment => Boolean(item && typeof item === "object" && (item as Attachment).slug));
 }
 

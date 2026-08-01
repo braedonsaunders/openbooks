@@ -1,8 +1,8 @@
 import { NextResponse } from 'next/server'
-import { and, eq } from 'drizzle-orm'
-import { db, schema } from '@openbooks/engine/src/db.ts'
+import { and, eq, sql } from 'drizzle-orm'
+import { db, schema, withOrgTransaction } from '@openbooks/engine/src/db.ts'
 import { submitAndReleaseIfUngated } from '@openbooks/engine/src/flows/index.ts'
-import { postDocument, PostingError } from '@openbooks/engine/src/posting.ts'
+import { postDocument, PostingError, runPostDocumentEffects } from '@openbooks/engine/src/posting.ts'
 import { getAuthz, can } from '../../../../lib/authz'
 import { controlDeps, DOC_KINDS, createPermission, postPermission } from '../../../../lib/documents'
 
@@ -61,32 +61,57 @@ export async function POST(req: Request) {
       }
       return NextResponse.json({ ok: true, requestId: null, autoApproved })
     }
-    // post
-    if (doc.status === 'draft') {
-      const submission = await submitAndReleaseIfUngated(doc.kind, doc.id, user.id)
-      if (submission.flowError) {
-        return NextResponse.json(
-          { error: `approval could not be routed: ${submission.flowError}` },
-          { status: 422 },
-        )
+    // Submit/release/post is one financial command. A posting rejection must
+    // not strand a draft in approved status or persist partial financial work.
+    const outcome = await withOrgTransaction(user.orgId, async () => {
+      const locked = (await db.execute(sql`
+        select kind, status from documents
+         where id = ${doc.id} and org_id = ${user.orgId}
+         for update
+      `)) as unknown as { rows: Array<{ kind: string; status: string }> }
+      const current = locked.rows[0]
+      if (!current) return { kind: 'not_found' as const }
+      const previousStatus = current.status
+      if (previousStatus === 'draft') {
+        const submission = await submitAndReleaseIfUngated(current.kind, doc.id, user.id)
+        if (submission.flowError) {
+          return { kind: 'flow_error' as const, error: submission.flowError }
+        }
+        if (submission.gated) {
+          return { kind: 'pending' as const, requestId: submission.runId }
+        }
+      } else if (previousStatus !== 'approved') {
+        return { kind: 'invalid_status' as const, status: previousStatus }
       }
-      if (submission.gated) {
-        return NextResponse.json(
-          { ok: true, pendingApproval: true, requestId: submission.runId },
-          { status: 202 },
-        )
-      }
-    } else if (doc.status !== 'approved') {
+      const entryId = await postDocument(doc.id, await controlDeps(user.orgId), {
+        deferEffects: true,
+        audit: { actorId: user.id, source: 'ui' },
+      })
+      return { kind: 'posted' as const, entryId, previousStatus }
+    })
+    if (outcome.kind === 'not_found') {
+      return NextResponse.json({ error: 'not found' }, { status: 404 })
+    }
+    if (outcome.kind === 'flow_error') {
       return NextResponse.json(
-        { error: `document is ${doc.status}; only an approved document can be posted` },
+        { error: `approval could not be routed: ${outcome.error}` },
         { status: 422 },
       )
     }
-    const deps = await controlDeps(user.orgId)
-    const entryId = await postDocument(doc.id, deps, {
-      audit: { actorId: user.id, source: 'ui' },
-    })
-    return NextResponse.json({ ok: true, entryId })
+    if (outcome.kind === 'pending') {
+      return NextResponse.json(
+        { ok: true, pendingApproval: true, requestId: outcome.requestId },
+        { status: 202 },
+      )
+    }
+    if (outcome.kind === 'invalid_status') {
+      return NextResponse.json(
+        { error: `document is ${outcome.status}; only an approved document can be posted` },
+        { status: 422 },
+      )
+    }
+    await runPostDocumentEffects(doc.id, outcome.previousStatus)
+    return NextResponse.json({ ok: true, entryId: outcome.entryId })
   } catch (e) {
     const status = e instanceof PostingError ? 422 : 500
     return NextResponse.json({ error: (e as Error).message }, { status })

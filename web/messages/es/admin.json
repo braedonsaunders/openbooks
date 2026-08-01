@@ -678,7 +678,6 @@
       "lastSignIn": "Último inicio de sesión"
     },
     "you": "usted",
-    "legacyRole": "heredado: {role}",
     "statusActive": "activo",
     "statusInactive": "inactivo",
     "requestFailed": "La solicitud falló",

@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/db.ts'
-import { guardPermission } from '../../../../lib/authz'
+import { guardFeaturePermission } from '../../../../lib/feature-gates'
 import { ensureDefaultCategory } from '../categories/_ensure'
 
 export const runtime = 'nodejs'
@@ -12,7 +12,7 @@ export const runtime = 'nodejs'
  * required by the schema, so a default one is ensured up front.
  */
 export async function POST(_req: NextRequest) {
-  const gate = await guardPermission('assets.manage')
+  const gate = await guardFeaturePermission('assets.manage', 'fixedAssets')
   if (gate instanceof NextResponse) return gate
   const user = gate.user
 

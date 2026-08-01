@@ -194,6 +194,12 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
   if (!existing.rows[0]) return NextResponse.json({ error: 'not found' }, { status: 404 })
 
   const body = (await req.json()) as PatchBody
+  const displayName = body.displayName !== undefined ? body.displayName.trim() : undefined
+  const completesPlaceholder =
+    body.isActive === undefined
+    && existing.rows[0].is_active === false
+    && existing.rows[0].display_name === 'New party'
+    && Boolean(displayName && displayName !== 'New party')
   if (
     !body.expectedUpdatedAt ||
     new Date(body.expectedUpdatedAt).getTime() !== new Date(existing.rows[0].updated_at).getTime()
@@ -251,9 +257,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
   if (body.kind !== undefined && !PARTY_KINDS.includes(body.kind as (typeof PARTY_KINDS)[number])) {
     return bad('kind must be company or person')
   }
-  const displayName = body.displayName !== undefined ? body.displayName.trim() : undefined
-
-  const willBeActive = body.isActive ?? existing.rows[0].is_active
+  const willBeActive = body.isActive ?? (completesPlaceholder ? true : existing.rows[0].is_active)
   const effectiveName = displayName ?? existing.rows[0].display_name.trim()
   if (willBeActive && (!effectiveName || effectiveName === 'New party')) {
     return bad(
@@ -319,7 +323,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
         website = ${website !== undefined ? website : sql`website`},
         custom = coalesce(${cleanedCustom ? JSON.stringify(cleanedCustom) : null}::jsonb, custom),
         subsidiary_id = ${subsidiaryId !== undefined ? subsidiaryId : sql`subsidiary_id`},
-        is_active = ${body.isActive !== undefined ? body.isActive : sql`is_active`},
+        is_active = ${body.isActive !== undefined ? body.isActive : completesPlaceholder ? true : sql`is_active`},
         updated_at = now(), updated_by = ${user.id}
       where id = ${id} and org_id = ${user.orgId}
         and updated_at = ${existing.rows[0].updated_at}
@@ -622,7 +626,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
       ${user.orgId}, 'parties', ${id}, 'update',
       ${JSON.stringify({
         mode: 'party_update',
-        reason: changeReason || null,
+        reason: changeReason || (completesPlaceholder ? 'initial party setup completed' : null),
         before: existing.rows[0].before,
         materialControlChange,
       })}::jsonb ||

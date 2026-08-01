@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server'
 import { runEndpointScript } from '@openbooks/engine/src/scripting.ts'
-import { guardPermission } from '@/lib/authz'
+import { guardFeaturePermission } from '@/lib/feature-gates'
 
 export const runtime = 'nodejs'
 
@@ -12,7 +12,7 @@ export const runtime = 'nodejs'
  * script sees the calling user in ctx.user.
  */
 async function handle(req: Request, slug: string) {
-  const gate = await guardPermission('scripts.execute')
+  const gate = await guardFeaturePermission('scripts.execute', 'scripts')
   if (gate instanceof NextResponse) return gate
   const user = gate.user
 
@@ -24,7 +24,7 @@ async function handle(req: Request, slug: string) {
   const outcome = await runEndpointScript(
     slug,
     user.orgId,
-    { id: user.id, name: user.name, role: user.role },
+    { id: user.id, name: user.name, roles: user.roles.map(({ key }) => key) },
     { method: req.method, query, body },
   )
   if (!outcome) return NextResponse.json({ error: 'no such endpoint script' }, { status: 404 })

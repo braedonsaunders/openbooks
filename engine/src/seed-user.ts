@@ -26,10 +26,23 @@ const org = (await db.execute(sql`
 if (!org.rows[0]) {
   throw new Error("no production organization exists; create one before seeding a login user");
 }
-await db.execute(sql`
-  insert into users (org_id, email, name, password_hash, role)
-  values (${org.rows[0].id}, ${email.toLowerCase()}, ${name}, ${hash}, ${role})
-  on conflict (org_id, email) do update set password_hash = ${hash}, role = ${role}, is_active = true
-`);
+await db.transaction(async (tx) => {
+  const roleRow = (await tx.execute(sql`
+    select id from app_roles where org_id = ${org.rows[0].id} and key = ${role} limit 1
+  `)) as unknown as { rows: { id: string }[] };
+  if (!roleRow.rows[0]) throw new Error(`role ${role} does not exist in the production organization`);
+  const user = (await tx.execute(sql`
+    insert into users (org_id, email, name, password_hash)
+    values (${org.rows[0].id}, ${email.toLowerCase()}, ${name}, ${hash})
+    on conflict (org_id, email) do update
+      set password_hash = ${hash}, is_active = true, updated_at = now()
+    returning id
+  `)) as unknown as { rows: { id: string }[] };
+  await tx.execute(sql`
+    insert into role_assignments (org_id, user_id, role_id)
+    values (${org.rows[0].id}, ${user.rows[0]!.id}, ${roleRow.rows[0].id})
+    on conflict (org_id, user_id, role_id) do nothing
+  `);
+});
 console.log(`user ${email} (${role}) ready${supplied ? "" : ` — password: ${password}`}`);
 process.exit(0);
