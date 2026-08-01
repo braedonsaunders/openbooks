@@ -27,7 +27,7 @@ export async function PaymentsSection({
   orgId,
   userId,
   canManage,
-  userRole,
+  userRoles,
 }: {
   sp: Record<string, string | string[] | undefined>
   basePath: string
@@ -35,7 +35,7 @@ export async function PaymentsSection({
   orgId: string
   userId: string
   canManage: boolean
-  userRole: string
+  userRoles: readonly string[]
 }) {
   const t = await getTranslations('payments')
   const side = PAYMENT_KIND_SIDE[kind]
@@ -49,8 +49,8 @@ export async function PaymentsSection({
   if (openPayment) {
     const partyFilter =
       side === 'ap'
-        ? sql`(exists (select 1 from vendor_roles vr where vr.party_id = p.id) or p.custom->>'nsKind' = 'vendor')`
-        : sql`(exists (select 1 from customer_roles cr where cr.party_id = p.id) or p.custom->>'nsKind' = 'customer')`
+        ? sql`exists (select 1 from vendor_roles vr where vr.party_id = p.id and vr.is_active)`
+        : sql`exists (select 1 from customer_roles cr where cr.party_id = p.id and cr.is_active)`
     const [parties, banks] = await Promise.all([
       db.execute(sql`
         select id, display_name from parties p
@@ -69,7 +69,7 @@ export async function PaymentsSection({
       orgId,
       userId,
       recordType: kind,
-      userRoles: [userRole],
+      userRoles: [...userRoles],
       headerDefs: [],
       lineDefs: [],
       explicitLayoutId: pickString(sp.form),

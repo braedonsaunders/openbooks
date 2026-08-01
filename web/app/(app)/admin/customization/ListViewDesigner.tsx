@@ -60,15 +60,18 @@ export function ListViewDesigner({
   canManageOrg,
   userId,
   showInListDefs,
+  filterOptions,
 }: {
   recordType: string
   def: ViewDef | null
   canManageOrg: boolean
   userId: string
   showInListDefs: CustomFieldDefClient[]
+  filterOptions: Record<string, { value: string; label: string }[]>
 }) {
   const t = useTranslations('customization')
   const tCommon = useTranslations('common')
+  const tRoot = useTranslations()
   const router = useRouter()
   const creating = !def?.id
   const meta = getRecordType(recordType)
@@ -89,6 +92,8 @@ export function ListViewDesigner({
 
   const colLabel = (key: string): string => {
     if (isCustomFieldKey(key)) return showInListByDefKey.get(customFieldDefKey(key))?.label ?? key
+    const column = meta?.listColumns.find((candidate) => candidate.key === key)
+    if (column && tRoot.has(column.labelKey as never)) return tRoot(column.labelKey as never)
     switch (key) {
       case 'document_number': return tCommon('labels.number')
       case 'party_name': return recordType.startsWith('customer') ? tCommon('labels.customer') : tCommon('labels.vendor')
@@ -128,10 +133,10 @@ export function ListViewDesigner({
   async function save() {
     setBusy(true)
     const body = { recordType, name, scope, config: view, isDefault, isActive }
-    const res = await fetch('/api/customization/list-views', {
+    const res = await fetch(creating ? '/api/customization/list-views' : `/api/customization/list-views/${def!.id}`, {
       method: creating ? 'POST' : 'PATCH',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(creating ? body : { id: def!.id, ...body }),
+      body: JSON.stringify(body),
     })
     const data = await res.json()
     if (!res.ok) { toast.error(data.error ?? t('designer.list.saveFailed')); setBusy(false); return }
@@ -187,7 +192,7 @@ export function ListViewDesigner({
             <Select
               value={scope}
               onChange={(e) => setScope(e.target.value as 'org' | 'user')}
-              disabled={!canManageOrg}
+              disabled={!canManageOrg || !creating}
             >
               <option value="user">{t('designer.list.scopeUser')}</option>
               <option value="org" disabled={!canManageOrg}>{t('designer.list.scopeOrg')}</option>
@@ -233,7 +238,7 @@ export function ListViewDesigner({
               return (
                 <div key={fi} className="flex flex-wrap items-center gap-2 rounded-md border border-slate-100 px-2.5 py-1.5 dark:border-slate-800">
                   <Select value={f.key} onChange={(e) => { const nm = filterMeta(e.target.value); updateFilter(fi, { key: e.target.value, operator: nm?.operators[0] ?? 'eq', value: '', to: null }) }} className="h-7 w-40">
-                    {meta?.listFilters.map((lf) => <option key={lf.key} value={lf.key}>{lf.labelKey.includes('.') ? lf.key : lf.key}</option>)}
+                    {meta?.listFilters.map((lf) => <option key={lf.key} value={lf.key}>{tRoot.has(lf.labelKey as never) ? tRoot(lf.labelKey as never) : lf.key}</option>)}
                   </Select>
                   <Select value={f.operator} onChange={(e) => updateFilter(fi, { operator: e.target.value as FilterOperator })} className="h-7 w-32">
                     {ops.map((o) => <option key={o} value={o}>{o}</option>)}
@@ -247,7 +252,12 @@ export function ListViewDesigner({
                     ) : valueKind === 'select' && fm?.options ? (
                       <Select value={Array.isArray(f.value) ? f.value[0] : (f.value as string) ?? ''} onChange={(e) => updateFilter(fi, { value: e.target.value })} className="h-7 w-40">
                         <option value="">—</option>
-                        {fm.options.map((o) => <option key={o.value} value={o.value}>{o.value}</option>)}
+                        {fm.options.map((o) => <option key={o.value} value={o.value}>{o.labelKey && tRoot.has(o.labelKey as never) ? tRoot(o.labelKey as never) : o.value}</option>)}
+                      </Select>
+                    ) : valueKind === 'entity_ref' && filterOptions[f.key]?.length ? (
+                      <Select value={Array.isArray(f.value) ? f.value[0] : (f.value as string) ?? ''} onChange={(e) => updateFilter(fi, { value: e.target.value })} className="h-7 w-52">
+                        <option value="">—</option>
+                        {filterOptions[f.key].map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
                       </Select>
                     ) : (
                       <Input value={Array.isArray(f.value) ? f.value.join(',') : (f.value as string) ?? ''} onChange={(e) => updateFilter(fi, { value: e.target.value })} className="h-7 w-40" />

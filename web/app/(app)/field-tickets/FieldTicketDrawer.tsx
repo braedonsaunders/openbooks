@@ -181,8 +181,8 @@ function buildGrid(entries: EntryRow[]): GridRow[] {
 }
 
 function relatedDocumentHref(kind: string, id: string, projectId: string | null): string | null {
-  if (kind === 'customer_invoice') return `/ar?invoice=${id}`
-  if (kind === 'vendor_bill') return `/ap?bill=${id}`
+  if (kind === 'customer_invoice') return `/ar/invoices?doc=${id}`
+  if (kind === 'vendor_bill') return `/ap/bills?doc=${id}`
   if (kind === 'sales_order') return `/sales-orders?order=${id}`
   if (kind === 'purchase_order') return `/purchase-orders?order=${id}`
   if (kind === 'quote') return `/estimates?estimate=${id}`
@@ -1180,7 +1180,7 @@ export function FieldTicketDrawer(props: FieldTicketDrawerProps) {
                       <span className="flex-1" />
                       {request.invoiceDocumentId && request.invoiceNumber ? (
                         <Link
-                          href={`/ar?invoice=${request.invoiceDocumentId}`}
+                          href={`/ar/invoices?doc=${request.invoiceDocumentId}`}
                           className="font-mono text-teal-700 hover:underline dark:text-teal-300"
                         >
                           {request.invoiceNumber}

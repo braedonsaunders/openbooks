@@ -21,7 +21,7 @@ const STATUS_VARIANT: Record<string, 'success' | 'secondary' | 'warning' | 'outl
  * with the posted period entries). Recognition is driven by invoices + the Run
  * action, so this surface reads rather than edits.
  */
-export function ContractDrawer({ payload, canRun }: { payload: ContractPayload; canRun: boolean }) {
+export function ContractDrawer({ payload, canRun, closeHref = '/revenue' }: { payload: ContractPayload; canRun: boolean; closeHref?: string }) {
   const { money } = useMoney()
   const t = useTranslations('revenue')
   const tCommon = useTranslations('common')
@@ -30,7 +30,7 @@ export function ContractDrawer({ payload, canRun }: { payload: ContractPayload; 
   return (
     <UrlDrawer
       open
-      closeHref="/revenue"
+      closeHref={closeHref}
       size="2xl"
       title={
         <span className="flex items-center gap-2.5">

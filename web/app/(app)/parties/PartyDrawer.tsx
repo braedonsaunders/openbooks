@@ -521,14 +521,16 @@ export function PartyDrawer({
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ ...savePayload, changeReason }),
     })
+    const data = await res.json().catch(() => ({}))
     if (res.ok) {
+      setIsActive(data.party?.is_active === true)
       setSaveState('saved')
       setDirty(false)
       setMode('view')
       router.refresh()
     } else {
       setSaveState('error')
-      toast.error((await res.json()).error ?? t('autosaveFailed'))
+      toast.error(data.error ?? t('autosaveFailed'))
     }
     setBusy(false)
   }
