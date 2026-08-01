@@ -4,6 +4,7 @@ import { db } from '@openbooks/engine/src/db.ts'
 import type { FinancialProfile, CostSource, OverheadSource } from '@openbooks/schema'
 import { resolveAccountGroups } from './account-groups'
 import { add, cmp, fromUnits, mul, mulPercent, neg, normalizeMoney, roundDiv, sum, toUnits } from '@openbooks/engine/src/money.ts'
+import { directSubcontractOpenCommitment } from './subcontract-commitments'
 
 /**
  * Profile-driven project financials — the configurable successor to the hardcoded
@@ -162,6 +163,10 @@ export async function resolveProjectFinancials(
     groupAccountIds(orgId, overheadCostSource),
   ])
   const financialAdjustmentsPromise = projectFinancialAdjustments(
+    orgId,
+    projectId,
+  )
+  const directSubcontractCommitmentPromise = directSubcontractOpenCommitment(
     orgId,
     projectId,
   )
@@ -339,7 +344,10 @@ export async function resolveProjectFinancials(
        group by d.id, pt.display_name order by d.document_date desc, d.document_number desc`),
   ]) as unknown as { rows: any[] }[]
 
-  const adjustments = await financialAdjustmentsPromise
+  const [adjustments, directSubcontractCommitment] = await Promise.all([
+    financialAdjustmentsPromise,
+    directSubcontractCommitmentPromise,
+  ])
   const invoicedToDate = add(
     amount(invRes.rows[0]?.invoiced),
     adjustments.invoiced_to_date,
@@ -349,7 +357,10 @@ export async function resolveProjectFinancials(
     adjustments.actual_cost,
   )
   const revenuePosted = amount(costRes.rows[0]?.revenue)
-  const committedCost = amount(committedRes.rows[0]?.committed)
+  const committedCost = add(
+    amount(committedRes.rows[0]?.committed),
+    directSubcontractCommitment,
+  )
   const laborCost = amount(laborRes.rows[0]?.labor)
   const totalHours = amount(hoursRes.rows[0]?.total)
   // Overhead is a STATISTICAL allocation (never a GL posting by default). Each

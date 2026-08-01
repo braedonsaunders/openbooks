@@ -2,6 +2,7 @@ import 'server-only'
 import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/db.ts'
 import { add, fromUnits, neg, normalizeMoney, toUnits } from '@openbooks/engine/src/money.ts'
+import { directSubcontractOpenCommitment } from './subcontract-commitments'
 
 /**
  * Job-costing rollup for a single project — the heart of project accounting.
@@ -53,7 +54,7 @@ const m = (v: unknown) => normalizeMoney(v == null ? '0' : String(v))
 const n = (v: unknown) => (v == null ? 0 : Number(v))
 
 export async function projectCostSummary(orgId: string, projectId: string): Promise<ProjectCostSummary> {
-  const [proj, actualRows, committedRows, byAccountRows, docRows] = await Promise.all([
+  const [proj, actualRows, committedRows, directSubcontractCommitment, byAccountRows, docRows] = await Promise.all([
     // project custom (contract value) + task cost budget
     db.execute(sql`
       select coalesce(p.contract_value, 0) as contract_value,
@@ -82,6 +83,7 @@ export async function projectCostSummary(orgId: string, projectId: string): Prom
         and d.status = 'approved' and d.kind in ('purchase_order', 'sales_order')
         and dl.quantity > dl.quantity_billed
     `) as any,
+    directSubcontractOpenCommitment(orgId, projectId),
     // actual cost broken down by account
     db.execute(sql`
       select a.id as account_id, a.number, a.name, a.type, sum(l.amount) as amount
@@ -111,16 +113,16 @@ export async function projectCostSummary(orgId: string, projectId: string): Prom
     `) as any,
   ])
 
-  return assembleSummary(proj, actualRows, committedRows, byAccountRows, docRows)
+  return assembleSummary(proj, actualRows, committedRows, directSubcontractCommitment, byAccountRows, docRows)
 }
 
-function assembleSummary(proj: any, actualRows: any, committedRows: any, byAccountRows: any, docRows: any): ProjectCostSummary {
+function assembleSummary(proj: any, actualRows: any, committedRows: any, directSubcontractCommitment: string, byAccountRows: any, docRows: any): ProjectCostSummary {
   const p = proj.rows[0] ?? { contract_value: 0, cost_budget: 0 }
   const contractValue = m(p.contract_value)
   const costBudget = m(p.cost_budget)
   const cost = m(actualRows.rows[0]?.cost)
   const revenue = m(actualRows.rows[0]?.revenue)
-  const committedCost = m(committedRows.rows[0]?.committed_cost)
+  const committedCost = add(m(committedRows.rows[0]?.committed_cost), directSubcontractCommitment)
   const committedRevenue = m(committedRows.rows[0]?.committed_revenue)
 
   const costByAccount = (byAccountRows.rows as any[]).map((r) => ({

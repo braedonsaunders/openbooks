@@ -3,6 +3,7 @@
 import { useMoney } from '@/components/money-provider'
 import { useEffect, useState } from "react";
 import { Badge, Button, Card, Input, Label, Select } from "@openbooks/ui";
+import { AdvancedSubscriptionsPanel } from "./AdvancedSubscriptionsPanel";
 
 interface Schedule {
   id: string;
@@ -51,18 +52,21 @@ interface Subscription {
   id: string; customerId: string; customerName: string | null; planId: string; planName: string;
   quantity: string; priceOverride: string | null; status: string; startOn: string; nextBillOn: string;
   autoPost: boolean; runCount: number; lastError: string | null; mrr: string; planCurrency: string | null;
+  advancedLifecycle?: boolean;
 }
 
 export function CollectionsClient({
   subscriptionsEnabled = false,
+  advancedSubscriptionsEnabled = false,
   customers = [],
   incomeAccounts = [],
 }: {
   subscriptionsEnabled?: boolean;
+  advancedSubscriptionsEnabled?: boolean;
   customers?: Opt[];
   incomeAccounts?: Opt[];
 }) {
-  const [tab, setTab] = useState<"recurring" | "subscriptions" | "dunning">("recurring");
+  const [tab, setTab] = useState<"recurring" | "subscriptions" | "advanced" | "dunning">("recurring");
   return (
     <div className="mt-6">
       <div className="mb-4 flex flex-wrap gap-2">
@@ -74,12 +78,16 @@ export function CollectionsClient({
             Subscriptions
           </Button>
         )}
+        {advancedSubscriptionsEnabled && (
+          <Button variant={tab === "advanced" ? "default" : "ghost"} onClick={() => setTab("advanced")}>Advanced lifecycle</Button>
+        )}
         <Button variant={tab === "dunning" ? "default" : "ghost"} onClick={() => setTab("dunning")}>
           Dunning ladders
         </Button>
       </div>
       {tab === "recurring" && <RecurringPanel />}
       {tab === "subscriptions" && subscriptionsEnabled && <SubscriptionsPanel customers={customers} incomeAccounts={incomeAccounts} />}
+      {tab === "advanced" && advancedSubscriptionsEnabled && <AdvancedSubscriptionsPanel />}
       {tab === "dunning" && <DunningPanel />}
     </div>
   );
@@ -183,7 +191,7 @@ function SubscriptionsPanel({ customers, incomeAccounts }: { customers: Opt[]; i
                     ) : (
                       <>
                         <Button size="sm" variant="ghost" onClick={async () => { const r = await post({ action: "billNow", id: s.id }); if (r?.invoiceId) setMsg(`Billed ${r.documentNumber}`); }}>Bill now</Button>
-                        {s.status === "active" && <Button size="sm" variant="ghost" onClick={() => { setChanging(s.id); setChangeQty(s.quantity); }}>Change qty</Button>}
+                        {s.status === "active" && !s.advancedLifecycle && <Button size="sm" variant="ghost" onClick={() => { setChanging(s.id); setChangeQty(s.quantity); }}>Change qty</Button>}
                         {s.status === "active"
                           ? <Button size="sm" variant="ghost" onClick={() => post({ action: "updateSubscription", id: s.id, status: "paused" })}>Pause</Button>
                           : s.status === "paused"
