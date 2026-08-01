@@ -33,6 +33,8 @@ jobs:
     env:
       OPENBOOKS_SIM: "1"
       OPENBOOKS_DB_URL: postgres://openbooks:openbooks@localhost:5433/openbooks_sim
+      ORG_COUNTRY: US
+      ORG_CURRENCY: USD
       PGPASSWORD: openbooks
     steps:
       - uses: actions/checkout@v4
