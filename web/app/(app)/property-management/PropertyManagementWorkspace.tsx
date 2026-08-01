@@ -11,9 +11,7 @@ import {
 } from "react";
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
-import {
-  ChevronDown,
-} from "lucide-react";
+import { ChevronDown, Search } from "lucide-react";
 import { toast } from "sonner";
 import {
   Badge,
@@ -67,10 +65,16 @@ type Workspace = {
   camPools: any[];
   camAllocations: any[];
 };
-type Tab = "properties" | "cam";
+type Tab = "properties" | "rentRoll" | "cam";
 type LeaseTab = "overview" | "charges" | "escalations" | "deposits";
 type LeaseCreateContext = { propertyId: string; unitId?: string | null };
+type CamCreateContext = { propertyId?: string };
 type ActionPayload = Record<string, unknown>;
+const mainTabs: Array<{ key: Tab; label: string }> = [
+  { key: "properties", label: "Properties" },
+  { key: "rentRoll", label: "Rent Roll" },
+  { key: "cam", label: "CAM" },
+];
 const empty: Workspace = {
   properties: [],
   units: [],
@@ -140,7 +144,7 @@ export function PropertyManagementWorkspace({
     null,
   );
   const [selectedLeaseId, setSelectedLeaseId] = useState<string | null>(null);
-  const [createCam, setCreateCam] = useState(false);
+  const [createCam, setCreateCam] = useState<CamCreateContext | null>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -276,21 +280,21 @@ export function PropertyManagementWorkspace({
               role="tablist"
               aria-label="Property management sections"
             >
-              {(["properties", "cam"] as Tab[]).map((key) => (
+              {mainTabs.map((item) => (
                 <button
                   type="button"
-                  key={key}
+                  key={item.key}
                   role="tab"
-                  aria-selected={tab === key}
-                  onClick={() => setTab(key)}
+                  aria-selected={tab === item.key}
+                  onClick={() => setTab(item.key)}
                   className={cn(
-                    "border-b-2 px-3 py-3 text-sm font-medium capitalize transition-colors",
-                    tab === key
+                    "border-b-2 px-3 py-3 text-sm font-medium transition-colors",
+                    tab === item.key
                       ? "border-teal-600 text-teal-700 dark:border-teal-400 dark:text-teal-300"
                       : "border-transparent text-slate-500 hover:border-slate-300 hover:text-slate-800 dark:text-slate-400 dark:hover:border-slate-700 dark:hover:text-slate-200",
                   )}
                 >
-                  {key}
+                  {item.label}
                 </button>
               ))}
             </nav>
@@ -301,7 +305,31 @@ export function PropertyManagementWorkspace({
                 </Button>
               ) : null}
               {tab === "cam" && permissions.manage ? (
-                <Button onClick={() => setCreateCam(true)}>New CAM pool</Button>
+                <Button onClick={() => setCreateCam({})}>New CAM pool</Button>
+              ) : null}
+              {tab === "rentRoll" && permissions.bill && permissions.bulk ? (
+                <>
+                  <Button
+                    variant="outline"
+                    disabled={busy}
+                    onClick={() =>
+                      act(
+                        { action: "assessLateFees" },
+                        "Portfolio late fees assessed",
+                      )
+                    }
+                  >
+                    Assess late fees
+                  </Button>
+                  <Button
+                    disabled={busy}
+                    onClick={() =>
+                      act({ action: "billRent" }, "Portfolio rent billed")
+                    }
+                  >
+                    Bill due rent
+                  </Button>
+                </>
               ) : null}
             </div>
           </div>
@@ -315,6 +343,23 @@ export function PropertyManagementWorkspace({
               view={customization.listView}
               fieldDefs={customization.fieldDefs}
               onOpen={setSelectedPropertyId}
+            />
+          ) : tab === "rentRoll" ? (
+            <RentRollTable
+              data={data}
+              money={money}
+              onOpenUnit={(unitId: string) => {
+                const unit = data.units.find((row) => row.id === unitId);
+                if (!unit) return;
+                setSelectedPropertyId(unit.propertyId);
+                setSelectedUnitId(unit.id);
+              }}
+              onOpenLease={(leaseId: string) => {
+                const lease = data.leases.find((row) => row.id === leaseId);
+                if (!lease) return;
+                setSelectedPropertyId(lease.propertyId);
+                setSelectedLeaseId(lease.id);
+              }}
             />
           ) : (
             <CamTable
@@ -369,6 +414,10 @@ export function PropertyManagementWorkspace({
         onAddLease={(unitId?: string | null) =>
           selectedProperty &&
           setCreateLease({ propertyId: selectedProperty.id, unitId })
+        }
+        onAddCam={() =>
+          selectedProperty &&
+          setCreateCam({ propertyId: selectedProperty.id })
         }
         onOpenLease={(leaseId: string) => {
           setSelectedLeaseId(leaseId);
@@ -448,8 +497,10 @@ export function PropertyManagementWorkspace({
         }}
       />
       <CamDrawer
-        open={createCam}
-        onClose={() => setCreateCam(false)}
+        open={!!createCam}
+        stacked={!!selectedProperty}
+        initialPropertyId={createCam?.propertyId}
+        onClose={() => setCreateCam(null)}
         data={data}
         expenseAccounts={options.expenseAccounts}
         busy={busy}
@@ -458,7 +509,7 @@ export function PropertyManagementWorkspace({
             { action: "createCamPool", ...payload },
             "CAM pool created",
           );
-          if (result) setCreateCam(false);
+          if (result) setCreateCam(null);
         }}
       />
       <LeaseRecordDrawer
@@ -578,6 +629,7 @@ function PropertyDetailDrawer({
   onAddUnit,
   onOpenUnit,
   onAddLease,
+  onAddCam,
   onOpenLease,
   onSave,
   onDelete,
@@ -923,6 +975,7 @@ function PropertyDetailDrawer({
       leases: "Leases",
       rent: "Rent",
       deposits: "Deposits",
+      cam: "CAM",
     }[item.key] ??
       item.key.replace(/^tab_/, "").replaceAll("_", " "));
   const propertyPayload = (status = form.status) => ({
@@ -1308,6 +1361,34 @@ function PropertyDetailDrawer({
           />
         </div>
       ) : null}
+      {tab === "cam" ? (
+        <div className="space-y-3 p-1">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div>
+              <h3 className="text-sm font-semibold">CAM reconciliations</h3>
+              <p className="text-xs text-slate-500">
+                Operating-expense pools, allocations, and tenant true-ups for
+                this property.
+              </p>
+            </div>
+            {permissions.manage && property.status === "active" ? (
+              <Button size="sm" onClick={onAddCam}>
+                New CAM pool
+              </Button>
+            ) : null}
+          </div>
+          <div className="overflow-hidden rounded-md border border-slate-200 dark:border-slate-800">
+            <CamTable
+              data={data}
+              propertyId={property.id}
+              money={money}
+              busy={busy}
+              permissions={permissions}
+              act={act}
+            />
+          </div>
+        </div>
+      ) : null}
       {tabs.some((item) => item.key === tab && isCustomTabKey(item.key)) ? (
         <div className="p-1">
           <HeaderFields
@@ -1468,6 +1549,188 @@ function PropertiesTable({ data, view, fieldDefs, onOpen }: any) {
         ))}
       </TableBody>
     </Table>
+  );
+}
+function RentRollTable({ data, money, onOpenUnit, onOpenLease }: any) {
+  const [query, setQuery] = useState("");
+  const [propertyId, setPropertyId] = useState("all");
+  const [status, setStatus] = useState("all");
+  const today = new Date().toISOString().slice(0, 10);
+  const operatingLeases = data.leases.filter((lease: any) =>
+    ["active", "notice"].includes(lease.status),
+  );
+  const occupiedUnitIds = new Set(
+    operatingLeases
+      .map((lease: any) => lease.unitId)
+      .filter((id: unknown): id is string => typeof id === "string"),
+  );
+  const draftByUnit = new Map<string, any>();
+  for (const lease of data.leases) {
+    if (lease.status === "draft" && lease.unitId && !draftByUnit.has(lease.unitId))
+      draftByUnit.set(lease.unitId, lease);
+  }
+  const rows = [
+    ...operatingLeases.filter((lease: any) => lease.unitId).map((lease: any) => ({
+      key: `lease:${lease.id}`,
+      property: data.properties.find((item: any) => item.id === lease.propertyId),
+      unit: data.units.find((item: any) => item.id === lease.unitId) ?? null,
+      lease,
+    })),
+    ...data.units
+      .filter((unit: any) => !occupiedUnitIds.has(unit.id))
+      .map((unit: any) => ({
+        key: `unit:${unit.id}`,
+        property: data.properties.find((item: any) => item.id === unit.propertyId),
+        unit,
+        lease: draftByUnit.get(unit.id) ?? null,
+      })),
+    ...data.leases
+      .filter((lease: any) =>
+        !lease.unitId && ["active", "notice", "draft"].includes(lease.status),
+      )
+      .map((lease: any) => ({
+        key: `lease:${lease.id}`,
+        property: data.properties.find((item: any) => item.id === lease.propertyId),
+        unit: null,
+        lease,
+      })),
+  ].sort((a, b) =>
+    `${a.property?.name ?? ""}:${a.unit?.code ?? ""}:${a.lease?.leaseNumber ?? ""}`.localeCompare(
+      `${b.property?.name ?? ""}:${b.unit?.code ?? ""}:${b.lease?.leaseNumber ?? ""}`,
+    ),
+  );
+  const monthlyCharges = (lease: any) => {
+    if (!lease) return 0;
+    const current = data.charges.filter((charge: any) =>
+      charge.leaseId === lease.id && charge.frequency === "monthly" &&
+      charge.effectiveFrom <= today && (!charge.effectiveTo || charge.effectiveTo >= today),
+    );
+    if (current.length)
+      return current.reduce((total: number, charge: any) => total + Number(charge.amount), 0);
+    return lease.status === "draft" ? Number(lease.baseRent ?? 0) : 0;
+  };
+  const pastDue = (lease: any) => {
+    if (!lease) return 0;
+    const invoices = new Map<string, number>();
+    for (const line of data.schedules) {
+      if (line.leaseId === lease.id && line.invoiceDocumentId &&
+          line.invoiceStatus === "posted" && line.invoiceDueOn && line.invoiceDueOn < today) {
+        invoices.set(line.invoiceDocumentId, Number(line.invoiceOpenBalance ?? 0));
+      }
+    }
+    return [...invoices.values()].reduce((total, amount) => total + amount, 0);
+  };
+  const rowStatus = (row: any) => row.lease?.status ?? row.unit?.status ?? "vacant";
+  const normalizedQuery = query.trim().toLowerCase();
+  const filtered = rows.filter((row) => {
+    if (propertyId !== "all" && row.property?.id !== propertyId) return false;
+    if (status !== "all" && rowStatus(row) !== status) return false;
+    if (!normalizedQuery) return true;
+    return [row.property?.name, row.property?.code, row.unit?.code, row.unit?.name,
+      row.lease?.leaseNumber, row.lease?.tenantName]
+      .some((value) => String(value ?? "").toLowerCase().includes(normalizedQuery));
+  });
+  return (
+    <div className="min-w-0">
+      <div className="flex flex-col gap-3 border-b border-slate-200 p-3 sm:flex-row sm:items-end dark:border-slate-800">
+        <Field label="Search rent roll">
+          <div className="relative sm:w-72">
+            <Search className="pointer-events-none absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+            <Input className="pl-8" value={query} onChange={(event) => setQuery(event.target.value)}
+              placeholder="Property, unit, tenant, or lease" />
+          </div>
+        </Field>
+        <Field label="Property">
+          <Select className="sm:w-56" value={propertyId} onChange={(event) => setPropertyId(event.target.value)}>
+            <option value="all">All properties</option>
+            {data.properties.map((property: any) => (
+              <option key={property.id} value={property.id}>{property.name}</option>
+            ))}
+          </Select>
+        </Field>
+        <Field label="Status">
+          <Select className="sm:w-44" value={status} onChange={(event) => setStatus(event.target.value)}>
+            <option value="all">All statuses</option>
+            <option value="active">Active</option>
+            <option value="notice">Notice</option>
+            <option value="draft">Upcoming / draft</option>
+            <option value="vacant">Vacant</option>
+            <option value="offline">Offline</option>
+          </Select>
+        </Field>
+        <p className="pb-2 text-xs text-slate-500 sm:ml-auto">
+          {filtered.length} of {rows.length} rows · historical leases stay on each property
+        </p>
+      </div>
+      {filtered.length ? (
+        <div className="overflow-x-auto">
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Property / unit</TableHead>
+                <TableHead>Tenant / lease</TableHead>
+                <TableHead>Term</TableHead>
+                <TableHead>Status</TableHead>
+                <TableHead className="text-right">Monthly charges</TableHead>
+                <TableHead className="text-right">Deposit held</TableHead>
+                <TableHead className="text-right">Past due</TableHead>
+                <TableHead>Billing</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {filtered.map((row) => {
+                const overdueAmount = pastDue(row.lease);
+                const open = () => row.lease ? onOpenLease(row.lease.id) :
+                  row.unit ? onOpenUnit(row.unit.id) : undefined;
+                return (
+                  <TableRow key={row.key} role="button" tabIndex={0}
+                    className="cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-teal-600"
+                    onClick={open}
+                    onKeyDown={(event) => {
+                      if (event.key === "Enter" || event.key === " ") {
+                        event.preventDefault(); open();
+                      }
+                    }}>
+                    <TableCell>
+                      <div className="font-medium">{row.property?.name ?? "—"}</div>
+                      <div className="text-xs text-slate-500">
+                        {row.unit?.code ?? "Whole property"}{row.unit?.name ? ` · ${row.unit.name}` : ""}
+                      </div>
+                    </TableCell>
+                    <TableCell>
+                      <div>{row.lease?.tenantName ?? "No tenant"}</div>
+                      <div className="font-mono text-xs text-slate-500">{row.lease?.leaseNumber ?? "Available"}</div>
+                    </TableCell>
+                    <TableCell className="whitespace-nowrap text-xs">
+                      {row.lease ? `${row.lease.startsOn} – ${row.lease.endsOn || "Open"}` : "—"}
+                    </TableCell>
+                    <TableCell><Status value={rowStatus(row)} /></TableCell>
+                    <TableCell className="text-right tabular-nums">
+                      {row.lease ? money(monthlyCharges(row.lease), { currency: row.lease.currency }) : "—"}
+                    </TableCell>
+                    <TableCell className="text-right tabular-nums">
+                      {row.lease ? money(row.lease.depositBalance ?? 0, { currency: row.lease.currency }) : "—"}
+                    </TableCell>
+                    <TableCell className={cn("text-right tabular-nums", overdueAmount > 0 && "font-medium text-red-600")}>
+                      {row.lease ? money(overdueAmount, { currency: row.lease.currency }) : "—"}
+                    </TableCell>
+                    <TableCell>
+                      {row.lease ? (
+                        <Badge variant={row.lease.autoInvoice ? "success" : "secondary"}>
+                          {row.lease.autoInvoice ? "Automatic" : "Manual"}
+                        </Badge>
+                      ) : "—"}
+                    </TableCell>
+                  </TableRow>
+                );
+              })}
+            </TableBody>
+          </Table>
+        </div>
+      ) : (
+        <Empty title="No rent-roll rows match" detail="Adjust the search, property, or status filters." />
+      )}
+    </div>
   );
 }
 function LeasesTable({ leases, money, onOpen }: any) {
@@ -1638,17 +1901,22 @@ function DepositTable({ deposits, leases, money, onReverse }: any) {
     </Table>
   );
 }
-function CamTable({ data, money, busy, permissions, act }: any) {
-  if (!data.camPools.length)
+function CamTable({ data, propertyId, money, busy, permissions, act }: any) {
+  const pools = propertyId
+    ? data.camPools.filter((pool: any) => pool.propertyId === propertyId)
+    : data.camPools;
+  if (!pools.length)
     return (
       <Empty
         title="No CAM pools yet"
-        detail="Create an annual operating-expense pool, allocate actual GL costs, and invoice tenant true-ups."
+        detail={propertyId
+          ? "Create this property's first operating-expense pool and tenant reconciliation."
+          : "Create an annual operating-expense pool, allocate actual GL costs, and invoice tenant true-ups."}
       />
     );
   return (
     <div className="divide-y divide-slate-200 dark:divide-slate-800">
-      {data.camPools.map((pool: any) => {
+      {pools.map((pool: any) => {
         const property = data.properties.find(
           (item: any) => item.id === pool.propertyId,
         );
@@ -3588,6 +3856,8 @@ function DepositSection({
 
 function CamDrawer({
   open,
+  stacked,
+  initialPropertyId,
   onClose,
   data,
   expenseAccounts,
@@ -3596,7 +3866,7 @@ function CamDrawer({
 }: any) {
   const year = new Date().getUTCFullYear();
   const initial = {
-    propertyId: data.properties[0]?.id ?? "",
+    propertyId: initialPropertyId ?? data.properties[0]?.id ?? "",
     name: "Operating expenses",
     fiscalYear: String(year),
     periodStartsOn: `${year}-01-01`,
@@ -3607,12 +3877,13 @@ function CamDrawer({
   };
   const [form, setForm] = useState(initial);
   useEffect(() => {
-    if (open) setForm({ ...initial, propertyId: data.properties[0]?.id ?? "" });
-  }, [open, data.properties.length]);
+    if (open) setForm({ ...initial, propertyId: initialPropertyId ?? data.properties[0]?.id ?? "" });
+  }, [open, initialPropertyId, data.properties.length]);
   const submit = () => onSave({ ...form, fiscalYear: Number(form.fiscalYear) });
   return (
     <Drawer
       open={open}
+      stacked={stacked}
       onClose={onClose}
       title="New CAM pool"
       description="CAM actuals are read from posted GL lines on the property's location and selected expense accounts."
@@ -3641,6 +3912,7 @@ function CamDrawer({
           <Field label="Property">
             <Select
               value={form.propertyId}
+              disabled={!!initialPropertyId}
               onChange={(e) => setForm({ ...form, propertyId: e.target.value })}
             >
               <option value="">Select property</option>

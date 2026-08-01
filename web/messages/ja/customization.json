@@ -22,7 +22,14 @@
     "property": "物件"
   },
   "property": {
-    "tabs": { "overview": "概要", "units": "ユニット", "leases": "賃貸契約", "rent": "賃料", "deposits": "保証金" },
+    "tabs": {
+      "overview": "概要",
+      "units": "ユニット",
+      "leases": "賃貸契約",
+      "rent": "賃料",
+      "deposits": "保証金",
+      "cam": "CAM"
+    },
     "fields": {
       "code": "物件コード",
       "propertyType": "物件タイプ",

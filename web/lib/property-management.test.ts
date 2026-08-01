@@ -62,7 +62,7 @@ test("property-management workspace keeps exactly four KPIs in one desktop row",
   );
   assert.match(
     workspace,
-    /"border-b-2 px-3 py-3 text-sm font-medium capitalize transition-colors"/,
+    /"border-b-2 px-3 py-3 text-sm font-medium transition-colors"/,
   );
   assert.match(workspace, /charge\.effectiveFrom <= today/);
   assert.match(workspace, /overdueInvoices = new Map/);
@@ -89,7 +89,12 @@ test("property-management UI exposes the complete operator entry points", () => 
   }
   assert.match(workspace, /aria-label="Property management sections"/);
   assert.match(workspace, /label="Lease details"/);
-  assert.match(workspace, /\["properties", "cam"\] as Tab\[\]/);
+  assert.match(workspace, /key: "rentRoll", label: "Rent Roll"/);
+  assert.match(workspace, /function RentRollTable/);
+  assert.match(workspace, /Search rent roll/);
+  assert.match(workspace, /Monthly charges/);
+  assert.match(workspace, /Past due/);
+  assert.match(workspace, /historical leases stay on/);
   assert.doesNotMatch(
     workspace,
     /\["properties", "leases", "rent", "deposits", "cam"\]/,
@@ -111,6 +116,9 @@ test("property-management UI exposes the complete operator entry points", () => 
   assert.match(workspace, /stacked=\{!!selectedProperty \|\| !!selectedUnit\}/);
   assert.match(workspace, /onClick=\{\(\) => onOpenUnit\(unit\.id\)\}/);
   assert.match(workspace, /propertyId: property\.id/);
+  assert.match(workspace, /CAM reconciliations/);
+  assert.match(workspace, /propertyId=\{property\.id\}/);
+  assert.match(workspace, /initialPropertyId=\{createCam\?\.propertyId\}/);
   assert.match(workspace, /Deactivate property/);
   assert.match(workspace, /Reactivate property/);
   assert.match(workspace, /Delete property/);

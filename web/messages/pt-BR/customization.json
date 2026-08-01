@@ -27,7 +27,8 @@
       "units": "Unidades",
       "leases": "Contratos",
       "rent": "Aluguel",
-      "deposits": "Depósitos"
+      "deposits": "Depósitos",
+      "cam": "CAM"
     },
     "fields": {
       "code": "Código do imóvel",

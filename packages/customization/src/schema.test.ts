@@ -77,6 +77,7 @@ test('properties expose system form, operational tabs, and default list view', (
     'leases',
     'rent',
     'deposits',
+    'cam',
   ])
   assert.deepEqual(lintFormLayout(layout), [])
   assert.equal(

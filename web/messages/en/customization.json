@@ -26,7 +26,14 @@
     "property": "Property"
   },
   "property": {
-    "tabs": { "overview": "Overview", "units": "Units", "leases": "Leases", "rent": "Rent", "deposits": "Deposits" },
+    "tabs": {
+      "overview": "Overview",
+      "units": "Units",
+      "leases": "Leases",
+      "rent": "Rent",
+      "deposits": "Deposits",
+      "cam": "CAM"
+    },
     "fields": {
       "code": "Property code",
       "propertyType": "Property type",
