@@ -167,6 +167,10 @@
         "label": "プロジェクト",
         "description": "ジョブ／プロジェクト。"
       },
+      "managedProperties": {
+        "label": "物件",
+        "description": "管理対象の不動産物件。"
+      },
       "accounts": {
         "label": "勘定",
         "description": "会計科目表。"

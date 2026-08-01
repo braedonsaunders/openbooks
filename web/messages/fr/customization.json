@@ -22,7 +22,33 @@
     "project": "Projet",
     "project_charge": "Charge de projet",
     "field_ticket": "Bon de régie",
-    "fixed_asset": "Immobilisation"
+    "fixed_asset": "Immobilisation",
+    "property": "Propriété"
+  },
+  "property": {
+    "tabs": { "overview": "Aperçu", "units": "Unités", "leases": "Baux" },
+    "fields": {
+      "code": "Code de propriété",
+      "propertyType": "Type de propriété",
+      "fixedAsset": "Immobilisation",
+      "street": "Rue",
+      "city": "Ville",
+      "region": "Province / région",
+      "postalCode": "Code postal",
+      "rentIncomeAccount": "Compte de revenus locatifs",
+      "camIncomeAccount": "Compte de revenus CAM",
+      "depositLiabilityAccount": "Compte de passif des dépôts",
+      "defaultBankAccount": "Compte bancaire par défaut",
+      "occupancy": "Occupation"
+    },
+    "status": { "sold": "Vendue" },
+    "types": {
+      "residential": "Résidentielle",
+      "commercial": "Commerciale",
+      "mixed_use": "Usage mixte",
+      "industrial": "Industrielle",
+      "other": "Autre"
+    }
   },
   "views": {
     "defaultName": "Vue par défaut",

@@ -718,6 +718,207 @@ const FIXED_ASSET: RecordTypeMeta = {
   listFilters: [],
 };
 
+/** Managed properties are operating assets, not parties. Their owners,
+ * tenants, managers, and vendors remain party records; this form governs the
+ * property master and its accounting controls. Units and leases are built-in
+ * record tabs while organization-specific fields use managed_properties.custom. */
+const PROPERTY: RecordTypeMeta = {
+  key: "property",
+  labelKey: "customization.recordTypes.property",
+  category: "entity",
+  supportsForms: true,
+  customFieldTable: "managed_properties",
+  customFieldLineTable: null,
+  tabs: [
+    {
+      key: "overview",
+      labelKey: "customization.property.tabs.overview",
+      locked: true,
+    },
+    { key: "units", labelKey: "customization.property.tabs.units" },
+    { key: "leases", labelKey: "customization.property.tabs.leases" },
+  ],
+  headerFields: [
+    {
+      key: "name",
+      labelKey: "common.labels.name",
+      level: "header",
+      kind: "text",
+      required: true,
+      locked: true,
+    },
+    {
+      key: "code",
+      labelKey: "customization.property.fields.code",
+      level: "header",
+      kind: "text",
+      required: true,
+    },
+    {
+      key: "property_type",
+      labelKey: "customization.property.fields.propertyType",
+      level: "header",
+      kind: "select",
+      required: true,
+    },
+    {
+      key: "status",
+      labelKey: "common.labels.status",
+      level: "header",
+      kind: "status",
+    },
+    {
+      key: "subsidiary_id",
+      labelKey: "common.labels.subsidiary",
+      level: "header",
+      kind: "entity_ref",
+      required: true,
+    },
+    {
+      key: "location_id",
+      labelKey: "common.labels.location",
+      level: "header",
+      kind: "entity_ref",
+    },
+    {
+      key: "fixed_asset_id",
+      labelKey: "customization.property.fields.fixedAsset",
+      level: "header",
+      kind: "entity_ref",
+    },
+    {
+      key: "currency",
+      labelKey: "common.labels.currency",
+      level: "header",
+      kind: "select",
+      required: true,
+    },
+    {
+      key: "street",
+      labelKey: "customization.property.fields.street",
+      level: "header",
+      kind: "text",
+    },
+    {
+      key: "city",
+      labelKey: "customization.property.fields.city",
+      level: "header",
+      kind: "text",
+    },
+    {
+      key: "region",
+      labelKey: "customization.property.fields.region",
+      level: "header",
+      kind: "text",
+    },
+    {
+      key: "postal_code",
+      labelKey: "customization.property.fields.postalCode",
+      level: "header",
+      kind: "text",
+    },
+    {
+      key: "rent_income_account_id",
+      labelKey: "customization.property.fields.rentIncomeAccount",
+      level: "header",
+      kind: "entity_ref",
+    },
+    {
+      key: "cam_income_account_id",
+      labelKey: "customization.property.fields.camIncomeAccount",
+      level: "header",
+      kind: "entity_ref",
+    },
+    {
+      key: "deposit_liability_account_id",
+      labelKey: "customization.property.fields.depositLiabilityAccount",
+      level: "header",
+      kind: "entity_ref",
+    },
+    {
+      key: "default_bank_account_id",
+      labelKey: "customization.property.fields.defaultBankAccount",
+      level: "header",
+      kind: "entity_ref",
+    },
+  ],
+  lineFields: [],
+  listColumns: [
+    {
+      key: "name",
+      labelKey: "common.labels.name",
+      kind: "reference",
+      sortable: true,
+      sortKey: "name",
+      locked: true,
+    },
+    {
+      key: "code",
+      labelKey: "customization.property.fields.code",
+      kind: "text",
+      sortable: true,
+      sortKey: "code",
+    },
+    { key: "subsidiary", labelKey: "common.labels.subsidiary", kind: "text" },
+    { key: "location", labelKey: "common.labels.location", kind: "text" },
+    {
+      key: "property_type",
+      labelKey: "customization.property.fields.propertyType",
+      kind: "text",
+    },
+    {
+      key: "occupancy",
+      labelKey: "customization.property.fields.occupancy",
+      kind: "text",
+      defaultWidth: 110,
+    },
+    {
+      key: "currency",
+      labelKey: "common.labels.currency",
+      kind: "text",
+      defaultHidden: true,
+      defaultWidth: 90,
+    },
+    {
+      key: "status",
+      labelKey: "common.labels.status",
+      kind: "status",
+      sortable: true,
+      sortKey: "status",
+      defaultWidth: 110,
+    },
+  ],
+  listFilters: [
+    {
+      key: "status",
+      labelKey: "common.labels.status",
+      kind: "select",
+      operators: OPERATORS_BY_KIND.select,
+      options: [
+        { value: "active", labelKey: "common.status.active" },
+        { value: "inactive", labelKey: "common.status.inactive" },
+        { value: "sold", labelKey: "customization.property.status.sold" },
+      ],
+    },
+    {
+      key: "property_type",
+      labelKey: "customization.property.fields.propertyType",
+      kind: "select",
+      operators: OPERATORS_BY_KIND.select,
+      options: [
+        "residential",
+        "commercial",
+        "mixed_use",
+        "industrial",
+        "other",
+      ].map((value) => ({
+        value,
+        labelKey: `customization.property.types.${value}`,
+      })),
+    },
+  ],
+};
+
 /** Labor Pricing rate cards use the same configurable form-layout system as
  * transaction drawers. Custom header fields persist on the effective-dated
  * version; the native item-rate table remains the editable line surface. */
@@ -821,6 +1022,7 @@ export const RECORD_TYPES: RecordTypeMeta[] = [
   FIELD_TICKET,
   PROJECT,
   FIXED_ASSET,
+  PROPERTY,
   LABOR_RATE_CARD,
 ];
 

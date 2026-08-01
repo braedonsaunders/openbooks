@@ -160,6 +160,129 @@ export async function createManagedProperty(input: {
   });
 }
 
+export async function updateManagedProperty(input: {
+  orgId: string;
+  actorId: string;
+  propertyId: string;
+  subsidiaryId: string;
+  locationId?: string | null;
+  fixedAssetId?: string | null;
+  code: string;
+  name: string;
+  propertyType: string;
+  status: string;
+  currency: string;
+  address?: Record<string, string>;
+  rentIncomeAccountId?: string | null;
+  camIncomeAccountId?: string | null;
+  depositLiabilityAccountId?: string | null;
+  defaultBankAccountId?: string | null;
+  custom?: Record<string, unknown>;
+}): Promise<{ id: string }> {
+  const code = input.code.trim();
+  const name = input.name.trim();
+  const currency = input.currency.trim().toUpperCase();
+  if (!code || !name)
+    throw new PropertyManagementError("Property code and name are required");
+  if (!/^[A-Z]{3}$/.test(currency))
+    throw new PropertyManagementError(
+      "Property currency must be a three-letter ISO code",
+    );
+  if (
+    !["residential", "commercial", "mixed_use", "industrial", "other"].includes(
+      input.propertyType,
+    )
+  ) {
+    throw new PropertyManagementError("Invalid property type");
+  }
+  if (!["active", "inactive", "sold"].includes(input.status))
+    throw new PropertyManagementError("Invalid property status");
+  return db.transaction(async (tx) => {
+    await assertEnabled(tx, input.orgId);
+    const scope = (await tx.execute(sql`
+      select p.subsidiary_id as "currentSubsidiaryId",p.currency as "currentCurrency",
+        exists(select 1 from property_leases where org_id=p.org_id and property_id=p.id) as has_leases,
+        exists(select 1 from property_leases where org_id=p.org_id and property_id=p.id and status in ('active','notice')) as has_active_leases,
+        exists(select 1 from subsidiaries where org_id=${input.orgId} and id=${input.subsidiaryId}) as subsidiary_ok,
+        (${input.locationId ?? null}::uuid is null or exists(select 1 from locations where org_id=${input.orgId} and id=${input.locationId ?? null})) as location_ok,
+        (${input.fixedAssetId ?? null}::uuid is null or exists(select 1 from fixed_assets where org_id=${input.orgId} and id=${input.fixedAssetId ?? null} and subsidiary_id=${input.subsidiaryId})) as asset_ok,
+        (${input.rentIncomeAccountId ?? null}::uuid is null or exists(select 1 from accounts where org_id=${input.orgId} and id=${input.rentIncomeAccountId ?? null} and type in ('income','income_other') and is_active and not is_summary)) as rent_account_ok,
+        (${input.camIncomeAccountId ?? null}::uuid is null or exists(select 1 from accounts where org_id=${input.orgId} and id=${input.camIncomeAccountId ?? null} and type in ('income','income_other') and is_active and not is_summary)) as cam_account_ok,
+        (${input.depositLiabilityAccountId ?? null}::uuid is null or exists(select 1 from accounts where org_id=${input.orgId} and id=${input.depositLiabilityAccountId ?? null} and type in ('liability_current_other','liability_long_term') and is_active and not is_summary)) as deposit_account_ok,
+        (${input.defaultBankAccountId ?? null}::uuid is null or exists(select 1 from accounts where org_id=${input.orgId} and id=${input.defaultBankAccountId ?? null} and type='asset_bank' and is_active and not is_summary)) as bank_account_ok
+      from managed_properties p where p.org_id=${input.orgId} and p.id=${input.propertyId} for update
+    `)) as unknown as {
+      rows: Array<{
+        currentSubsidiaryId: string;
+        currentCurrency: string;
+        has_leases: boolean;
+        has_active_leases: boolean;
+        subsidiary_ok: boolean;
+        location_ok: boolean;
+        asset_ok: boolean;
+        rent_account_ok: boolean;
+        cam_account_ok: boolean;
+        deposit_account_ok: boolean;
+        bank_account_ok: boolean;
+      }>;
+    };
+    const row = scope.rows[0];
+    if (!row) throw new PropertyManagementError("Property not found");
+    if (!row.subsidiary_ok || !row.location_ok || !row.asset_ok)
+      throw new PropertyManagementError(
+        "Property dimensions do not belong to this organization",
+      );
+    if (
+      !row.rent_account_ok ||
+      !row.cam_account_ok ||
+      !row.deposit_account_ok ||
+      !row.bank_account_ok
+    ) {
+      throw new PropertyManagementError(
+        "Property control accounts have incompatible account types",
+      );
+    }
+    if (
+      row.has_leases &&
+      (row.currentSubsidiaryId !== input.subsidiaryId ||
+        row.currentCurrency !== currency)
+    ) {
+      throw new PropertyManagementError(
+        "Subsidiary and currency cannot change after a lease exists",
+      );
+    }
+    if (row.has_active_leases && input.status !== "active") {
+      throw new PropertyManagementError(
+        "End active or notice leases before deactivating this property",
+      );
+    }
+    await tx.execute(sql`
+      update managed_properties set subsidiary_id=${input.subsidiaryId},location_id=${input.locationId ?? null},
+        fixed_asset_id=${input.fixedAssetId ?? null},code=${code},name=${name},property_type=${input.propertyType},
+        status=${input.status},currency=${currency},address=${JSON.stringify(input.address ?? {})}::jsonb,
+        rent_income_account_id=${input.rentIncomeAccountId ?? null},cam_income_account_id=${input.camIncomeAccountId ?? null},
+        deposit_liability_account_id=${input.depositLiabilityAccountId ?? null},default_bank_account_id=${input.defaultBankAccountId ?? null},
+        custom=${JSON.stringify(input.custom ?? {})}::jsonb,updated_at=now(),updated_by=${input.actorId}
+      where org_id=${input.orgId} and id=${input.propertyId}
+    `);
+    await audit(
+      tx,
+      input.orgId,
+      "managed_properties",
+      input.propertyId,
+      "update",
+      input.actorId,
+      {
+        code,
+        name,
+        propertyType: input.propertyType,
+        status: input.status,
+      },
+    );
+    return { id: input.propertyId };
+  });
+}
+
 export async function createPropertyUnit(input: { orgId: string; actorId: string; propertyId: string; code: string; name?: string | null; unitType?: string | null; rentableArea?: string | null; bedrooms?: number | null }): Promise<{ id: string }> {
   if (!input.code.trim()) throw new PropertyManagementError("Unit code is required");
   return db.transaction(async (tx) => {
@@ -636,7 +759,7 @@ export async function billCamReconciliation(orgId: string, actorId: string, pool
 
 export async function propertyManagementWorkspace(orgId: string) {
   const [properties, units, leases, charges, escalations, schedules, deposits, pools, allocations] = await Promise.all([
-    db.execute(sql`select p.id,p.code,p.name,p.property_type as "propertyType",p.status,p.currency,p.subsidiary_id as "subsidiaryId",s.name as "subsidiaryName",p.location_id as "locationId",l.name as "locationName",
+    db.execute(sql`select p.id,p.code,p.name,p.property_type as "propertyType",p.status,p.currency,p.address,p.custom,p.subsidiary_id as "subsidiaryId",s.name as "subsidiaryName",p.location_id as "locationId",l.name as "locationName",p.fixed_asset_id as "fixedAssetId",
       p.rent_income_account_id as "rentIncomeAccountId",p.cam_income_account_id as "camIncomeAccountId",p.deposit_liability_account_id as "depositLiabilityAccountId",p.default_bank_account_id as "defaultBankAccountId",
       count(u.id)::int as "unitCount",count(u.id) filter(where u.status='occupied')::int as "occupiedUnits" from managed_properties p join subsidiaries s on s.id=p.subsidiary_id and s.org_id=p.org_id
       left join locations l on l.id=p.location_id and l.org_id=p.org_id left join property_units u on u.property_id=p.id and u.org_id=p.org_id where p.org_id=${orgId} group by p.id,s.name,l.name order by p.name`),

@@ -64,6 +64,7 @@ const TARGETS: {
   },
   { table: 'parties', labelKey: 'targets.parties.label', descriptionKey: 'targets.parties.description', kinds: [] },
   { table: 'projects', labelKey: 'targets.projects.label', descriptionKey: 'targets.projects.description', kinds: [] },
+  { table: 'managed_properties', labelKey: 'targets.managedProperties.label', descriptionKey: 'targets.managedProperties.description', kinds: [] },
   { table: 'accounts', labelKey: 'targets.accounts.label', descriptionKey: 'targets.accounts.description', kinds: [] },
   { table: 'items', labelKey: 'targets.items.label', descriptionKey: 'targets.items.description', kinds: [] },
   { table: 'crm_account_profiles', labelKey: 'targets.crmAccounts.label', descriptionKey: 'targets.crmAccounts.description', kinds: [] },

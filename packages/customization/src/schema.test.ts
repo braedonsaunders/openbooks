@@ -64,6 +64,27 @@ test('fixed assets expose the universal record form contract', () => {
   assert.deepEqual(lintFormLayout(layout), [])
 })
 
+test('properties expose system form, operational tabs, and default list view', () => {
+  const meta = getRecordType('property')
+  assert.ok(meta)
+  assert.equal(meta.supportsForms, true)
+  assert.equal(meta.customFieldTable, 'managed_properties')
+
+  const layout = defaultFormLayout('property')
+  assert.deepEqual(resolveFormTabs(layout).map((tab) => tab.key), ['overview', 'units', 'leases'])
+  assert.deepEqual(lintFormLayout(layout), [])
+  assert.equal(
+    layout.header.groups[0]!.fields.some((field) => field.key === 'deposit_liability_account_id'),
+    true,
+  )
+
+  const view = defaultListView('property')
+  assert.deepEqual(
+    view.columns.filter((column) => column.visible).map((column) => column.key),
+    ['name', 'code', 'subsidiary', 'location', 'property_type', 'occupancy', 'status'],
+  )
+})
+
 test('party role forms expose the complete native record without leaking related-list governance', () => {
   const customer = defaultFormLayout('customer')
   const vendor = defaultFormLayout('vendor')

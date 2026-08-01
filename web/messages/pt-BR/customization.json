@@ -18,7 +18,37 @@
     "purchase_order": "Pedido de compra",
     "project": "Projeto",
     "project_charge": "Apropriação de projeto",
-    "fixed_asset": "Ativo imobilizado"
+    "fixed_asset": "Ativo imobilizado",
+    "property": "Imóvel"
+  },
+  "property": {
+    "tabs": {
+      "overview": "Visão geral",
+      "units": "Unidades",
+      "leases": "Contratos"
+    },
+    "fields": {
+      "code": "Código do imóvel",
+      "propertyType": "Tipo de imóvel",
+      "fixedAsset": "Ativo imobilizado",
+      "street": "Rua",
+      "city": "Cidade",
+      "region": "Estado / província",
+      "postalCode": "CEP",
+      "rentIncomeAccount": "Conta de receita de aluguel",
+      "camIncomeAccount": "Conta de receita CAM",
+      "depositLiabilityAccount": "Conta de passivo de depósitos",
+      "defaultBankAccount": "Conta bancária padrão",
+      "occupancy": "Ocupação"
+    },
+    "status": { "sold": "Vendido" },
+    "types": {
+      "residential": "Residencial",
+      "commercial": "Comercial",
+      "mixed_use": "Uso misto",
+      "industrial": "Industrial",
+      "other": "Outro"
+    }
   },
   "views": {
     "defaultName": "Visualização padrão",

@@ -26,6 +26,7 @@ export const GL_MUTATION_SOURCE_FILES = [
   "payments.ts",
   "posting.ts",
   "project-recognition.ts",
+  "property-management.ts",
   "psp-settlement.ts",
   "revenue-recognition.ts",
   "sync/source-deletions.ts",
@@ -39,6 +40,13 @@ export const GL_MUTATION_SOURCE_FILES = [
  * than the economic-event matrix.
  */
 export const GL_OPERATION_REGISTRY: readonly GlOperation[] = [
+  {
+    openbooksOperation: "property-management.recordSecurityDeposit",
+    erpnextEquivalent: "Journal Entry / Payment Entry (semantic)",
+    status: "partial",
+    evidencePrefixes: ["property-deposit-"],
+    remaining: "Dedicated property-deposit subledger parity fixture",
+  },
   {
     openbooksOperation: "posting.RULES.journal",
     erpnextEquivalent: "Journal Entry",

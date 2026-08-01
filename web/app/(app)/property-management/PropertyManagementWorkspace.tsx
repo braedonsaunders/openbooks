@@ -6,8 +6,12 @@ import {
   useCallback,
   useEffect,
   useId,
+  useMemo,
   useState,
 } from "react";
+import Link from "next/link";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
+import { ChevronDown } from "lucide-react";
 import { toast } from "sonner";
 import {
   Badge,
@@ -17,6 +21,7 @@ import {
   Drawer,
   Input,
   Label,
+  Popover,
   Select,
   Table,
   TableBody,
@@ -27,7 +32,18 @@ import {
   Textarea,
   cn,
 } from "@openbooks/ui";
+import {
+  defaultFormLayout,
+  isCustomTabKey,
+  resolveFormTabs,
+  type FormLayoutConfig,
+  type HeaderFieldPlacement,
+  type ListViewConfig,
+} from "@openbooks/customization";
 import { useMoney } from "@/components/money-provider";
+import { CustomFieldInput } from "../../../components/custom-field-input";
+import type { CustomFieldDefClient } from "../../../components/custom-field-inputs";
+import { HeaderFields } from "../../../components/transaction-form/header-fields";
 
 type Option = {
   id: string;
@@ -76,6 +92,7 @@ async function api(payload: Record<string, unknown>) {
 export function PropertyManagementWorkspace({
   options,
   permissions,
+  customization,
 }: {
   options: {
     subsidiaries: Option[];
@@ -93,6 +110,14 @@ export function PropertyManagementWorkspace({
     bill: boolean;
     account: boolean;
     bulk: boolean;
+    customize: boolean;
+  };
+  customization: {
+    layout: FormLayoutConfig;
+    forms: Array<{ id: string; name: string }>;
+    currentFormId: string | null;
+    fieldDefs: CustomFieldDefClient[];
+    listView: ListViewConfig;
   };
 }) {
   const { money } = useMoney();
@@ -101,6 +126,9 @@ export function PropertyManagementWorkspace({
   const [busy, setBusy] = useState(false);
   const [tab, setTab] = useState<Tab>("properties");
   const [createProperty, setCreateProperty] = useState(false);
+  const [selectedPropertyId, setSelectedPropertyId] = useState<string | null>(
+    null,
+  );
   const [unitPropertyId, setUnitPropertyId] = useState<string | null>(null);
   const [createLease, setCreateLease] = useState(false);
   const [selectedLeaseId, setSelectedLeaseId] = useState<string | null>(null);
@@ -190,6 +218,9 @@ export function PropertyManagementWorkspace({
   );
   const selectedLease =
     data.leases.find((lease) => lease.id === selectedLeaseId) ?? null;
+  const selectedProperty =
+    data.properties.find((property) => property.id === selectedPropertyId) ??
+    null;
 
   return (
     <div className="space-y-4">
@@ -222,9 +253,9 @@ export function PropertyManagementWorkspace({
 
       <Card className="min-w-0 overflow-hidden">
         <CardContent className="p-0">
-          <div className="flex flex-col items-stretch justify-between gap-3 border-b border-slate-200 p-4 sm:flex-row sm:items-center dark:border-slate-800">
+          <div className="flex flex-col items-stretch justify-between gap-3 border-b border-slate-200 px-4 sm:flex-row sm:items-center dark:border-slate-800">
             <nav
-              className="flex min-w-0 overflow-x-auto"
+              className="-mb-px flex min-w-0 gap-1 overflow-x-auto"
               role="tablist"
               aria-label="Property management sections"
             >
@@ -238,17 +269,17 @@ export function PropertyManagementWorkspace({
                   aria-selected={tab === key}
                   onClick={() => setTab(key)}
                   className={cn(
-                    "rounded-md px-3 py-2 text-sm font-medium capitalize",
+                    "border-b-2 px-3 py-3 text-sm font-medium capitalize transition-colors",
                     tab === key
-                      ? "bg-teal-50 text-teal-800 dark:bg-teal-950/40 dark:text-teal-200"
-                      : "text-slate-500 hover:bg-slate-50 dark:hover:bg-slate-900",
+                      ? "border-teal-600 text-teal-700 dark:border-teal-400 dark:text-teal-300"
+                      : "border-transparent text-slate-500 hover:border-slate-300 hover:text-slate-800 dark:text-slate-400 dark:hover:border-slate-700 dark:hover:text-slate-200",
                   )}
                 >
                   {key}
                 </button>
               ))}
             </nav>
-            <div className="flex flex-wrap gap-2 sm:justify-end">
+            <div className="flex flex-wrap gap-2 py-3 sm:justify-end">
               {tab === "properties" && permissions.manage ? (
                 <Button onClick={() => setCreateProperty(true)}>
                   New property
@@ -290,9 +321,9 @@ export function PropertyManagementWorkspace({
           ) : tab === "properties" ? (
             <PropertiesTable
               data={data}
-              money={money}
-              canManage={permissions.manage}
-              onAddUnit={setUnitPropertyId}
+              view={customization.listView}
+              fieldDefs={customization.fieldDefs}
+              onOpen={setSelectedPropertyId}
             />
           ) : tab === "leases" ? (
             <LeasesTable
@@ -339,6 +370,32 @@ export function PropertyManagementWorkspace({
           );
           if (result) setCreateProperty(false);
         }}
+      />
+      <PropertyDetailDrawer
+        key={selectedProperty?.id ?? "property-detail"}
+        property={selectedProperty}
+        units={data.units.filter(
+          (unit) => unit.propertyId === selectedProperty?.id,
+        )}
+        leases={data.leases.filter(
+          (lease) => lease.propertyId === selectedProperty?.id,
+        )}
+        options={options}
+        permissions={permissions}
+        customization={customization}
+        busy={busy}
+        onClose={() => setSelectedPropertyId(null)}
+        onAddUnit={() =>
+          selectedProperty && setUnitPropertyId(selectedProperty.id)
+        }
+        onOpenLease={(leaseId: string) => {
+          setSelectedPropertyId(null);
+          setSelectedLeaseId(leaseId);
+          setLeaseTab("overview");
+        }}
+        onSave={(payload: ActionPayload) =>
+          act({ action: "updateProperty", ...payload }, "Property updated")
+        }
       />
       <UnitDrawer
         propertyId={unitPropertyId}
@@ -393,6 +450,21 @@ export function PropertyManagementWorkspace({
             ? `${selectedLease.propertyName}${selectedLease.unitCode ? ` · ${selectedLease.unitCode}` : ""} · ${selectedLease.tenantName}`
             : ""
         }
+        subtabs={
+          selectedLease ? (
+            <RecordTabs
+              label="Lease details"
+              active={leaseTab}
+              tabs={[
+                { key: "overview", label: "Overview" },
+                { key: "charges", label: "Charges" },
+                { key: "escalations", label: "Escalations" },
+                { key: "deposits", label: "Deposits" },
+              ]}
+              onChange={(key) => setLeaseTab(key as LeaseTab)}
+            />
+          ) : undefined
+        }
       >
         {selectedLease ? (
           <LeaseDetail
@@ -402,7 +474,6 @@ export function PropertyManagementWorkspace({
             permissions={permissions}
             busy={busy}
             tab={leaseTab}
-            setTab={setLeaseTab}
             act={act}
             money={money}
           />
@@ -467,7 +538,695 @@ function Empty({ title, detail }: { title: string; detail: string }) {
   );
 }
 
-function PropertiesTable({ data, money, canManage, onAddUnit }: any) {
+function RecordTabs({
+  label,
+  active,
+  tabs,
+  onChange,
+}: {
+  label: string;
+  active: string;
+  tabs: Array<{ key: string; label: string }>;
+  onChange: (key: string) => void;
+}) {
+  return (
+    <nav
+      className="-mb-px flex gap-1 overflow-x-auto"
+      role="tablist"
+      aria-label={label}
+    >
+      {tabs.map((item) => (
+        <button
+          key={item.key}
+          type="button"
+          role="tab"
+          aria-selected={active === item.key}
+          onClick={() => onChange(item.key)}
+          className={cn(
+            "border-b-2 px-3 py-3 text-sm font-medium transition-colors",
+            active === item.key
+              ? "border-teal-600 text-teal-700 dark:border-teal-400 dark:text-teal-300"
+              : "border-transparent text-slate-500 hover:border-slate-300 hover:text-slate-800 dark:text-slate-400 dark:hover:border-slate-700 dark:hover:text-slate-200",
+          )}
+        >
+          {item.label}
+        </button>
+      ))}
+    </nav>
+  );
+}
+
+function PropertyDetailDrawer({
+  property,
+  units,
+  leases,
+  options,
+  permissions,
+  customization,
+  busy,
+  onClose,
+  onAddUnit,
+  onOpenLease,
+  onSave,
+}: any) {
+  const pathname = usePathname();
+  const router = useRouter();
+  const searchParams = useSearchParams();
+  const [mode, setMode] = useState<"view" | "edit">("view");
+  const [tab, setTab] = useState("overview");
+  const [actionsOpen, setActionsOpen] = useState(false);
+  const [form, setForm] = useState(() =>
+    propertyForm(property ?? {}, customization.fieldDefs),
+  );
+  const effectiveLayout: FormLayoutConfig =
+    customization.layout ?? defaultFormLayout("property");
+  const customByKey = useMemo(
+    () =>
+      new Map<string, CustomFieldDefClient>(
+        customization.fieldDefs.map((def: CustomFieldDefClient) => [
+          def.key,
+          def,
+        ]),
+      ),
+    [customization.fieldDefs],
+  );
+  const tabs = resolveFormTabs(effectiveLayout).filter((item) => item.visible);
+  const customGroupIds = new Set(
+    tabs
+      .filter((item) => isCustomTabKey(item.key))
+      .flatMap((item) => item.groupIds ?? []),
+  );
+  const overviewLayout: FormLayoutConfig = {
+    ...effectiveLayout,
+    header: {
+      groups: effectiveLayout.header.groups.filter(
+        (group: FormLayoutConfig["header"]["groups"][number]) =>
+          !customGroupIds.has(group.id),
+      ),
+    },
+  };
+  if (!property) return null;
+
+  const editable = mode === "edit" && permissions.manage;
+  const reset = () => {
+    setForm(propertyForm(property, customization.fieldDefs));
+    setMode("view");
+  };
+  const optionName = (items: Option[], value: string) =>
+    items.find((item) => item.id === value)?.name ?? "—";
+  const labelFor = (placement: HeaderFieldPlacement, fallback: string) =>
+    placement.labelOverride?.trim() || fallback;
+  const requiredFor = (placement: HeaderFieldPlacement, required = false) =>
+    required || placement.required === true;
+  const field = (
+    placement: HeaderFieldPlacement,
+    label: string,
+    content: React.ReactNode,
+    required = false,
+  ) => (
+    <>
+      <Label>
+        {labelFor(placement, label)}
+        {editable && requiredFor(placement, required) ? (
+          <span className="text-red-500"> *</span>
+        ) : null}
+      </Label>
+      {content}
+    </>
+  );
+  const read = (value: unknown, className = "") => (
+    <p className={cn("text-sm", className)}>
+      {value == null || value === "" ? "—" : String(value)}
+    </p>
+  );
+  const select = (
+    value: string,
+    onChange: (value: string) => void,
+    items: Option[],
+    empty = "Not mapped",
+  ) =>
+    editable ? (
+      <Select value={value} onChange={(event) => onChange(event.target.value)}>
+        <option value="">{empty}</option>
+        {items.map((item) => (
+          <option key={item.id} value={item.id}>
+            {item.name}
+          </option>
+        ))}
+      </Select>
+    ) : (
+      read(optionName(items, value))
+    );
+
+  function renderPropertyField(placement: HeaderFieldPlacement) {
+    const key = placement.key;
+    if (key.startsWith("cf_")) {
+      const def = customByKey.get(key.slice(3));
+      if (!def) return null;
+      return (
+        <CustomFieldInput
+          def={{
+            ...def,
+            label: labelFor(placement, def.label),
+            isRequired: requiredFor(placement, def.isRequired),
+          }}
+          value={form.custom[def.key]}
+          onChange={(value) =>
+            setForm({ ...form, custom: { ...form.custom, [def.key]: value } })
+          }
+          readOnly={!editable}
+        />
+      );
+    }
+    switch (key) {
+      case "name":
+        return field(
+          placement,
+          "Name",
+          editable ? (
+            <Input
+              value={form.name}
+              onChange={(e) => setForm({ ...form, name: e.target.value })}
+            />
+          ) : (
+            read(form.name)
+          ),
+          true,
+        );
+      case "code":
+        return field(
+          placement,
+          "Property code",
+          editable ? (
+            <Input
+              className="font-mono"
+              value={form.code}
+              onChange={(e) => setForm({ ...form, code: e.target.value })}
+            />
+          ) : (
+            read(form.code, "font-mono")
+          ),
+          true,
+        );
+      case "property_type":
+        return field(
+          placement,
+          "Property type",
+          editable ? (
+            <Select
+              value={form.propertyType}
+              onChange={(e) =>
+                setForm({ ...form, propertyType: e.target.value })
+              }
+            >
+              {[
+                "residential",
+                "commercial",
+                "mixed_use",
+                "industrial",
+                "other",
+              ].map((value) => (
+                <option key={value} value={value}>
+                  {value.replaceAll("_", " ")}
+                </option>
+              ))}
+            </Select>
+          ) : (
+            read(form.propertyType.replaceAll("_", " "), "capitalize")
+          ),
+          true,
+        );
+      case "status":
+        return field(
+          placement,
+          "Status",
+          editable ? (
+            <Select
+              value={form.status}
+              onChange={(e) => setForm({ ...form, status: e.target.value })}
+            >
+              {["active", "inactive", "sold"].map((value) => (
+                <option key={value} value={value}>
+                  {value}
+                </option>
+              ))}
+            </Select>
+          ) : (
+            <Status value={form.status} />
+          ),
+        );
+      case "subsidiary_id":
+        return field(
+          placement,
+          "Subsidiary",
+          select(
+            form.subsidiaryId,
+            (value) => setForm({ ...form, subsidiaryId: value }),
+            options.subsidiaries,
+            "Select subsidiary",
+          ),
+          true,
+        );
+      case "location_id":
+        return field(
+          placement,
+          "Location",
+          select(
+            form.locationId,
+            (value) => setForm({ ...form, locationId: value }),
+            options.locations,
+          ),
+        );
+      case "fixed_asset_id":
+        return field(
+          placement,
+          "Fixed asset",
+          select(
+            form.fixedAssetId,
+            (value) => setForm({ ...form, fixedAssetId: value }),
+            options.assets,
+          ),
+        );
+      case "currency":
+        return field(
+          placement,
+          "Currency",
+          editable ? (
+            <Input
+              className="font-mono uppercase"
+              maxLength={3}
+              value={form.currency}
+              onChange={(e) =>
+                setForm({ ...form, currency: e.target.value.toUpperCase() })
+              }
+            />
+          ) : (
+            read(form.currency, "font-mono")
+          ),
+          true,
+        );
+      case "street":
+        return field(
+          placement,
+          "Street",
+          editable ? (
+            <Input
+              value={form.street}
+              onChange={(e) => setForm({ ...form, street: e.target.value })}
+            />
+          ) : (
+            read(form.street)
+          ),
+        );
+      case "city":
+        return field(
+          placement,
+          "City",
+          editable ? (
+            <Input
+              value={form.city}
+              onChange={(e) => setForm({ ...form, city: e.target.value })}
+            />
+          ) : (
+            read(form.city)
+          ),
+        );
+      case "region":
+        return field(
+          placement,
+          "State / province",
+          editable ? (
+            <Input
+              value={form.region}
+              onChange={(e) => setForm({ ...form, region: e.target.value })}
+            />
+          ) : (
+            read(form.region)
+          ),
+        );
+      case "postal_code":
+        return field(
+          placement,
+          "Postal code",
+          editable ? (
+            <Input
+              value={form.postalCode}
+              onChange={(e) => setForm({ ...form, postalCode: e.target.value })}
+            />
+          ) : (
+            read(form.postalCode)
+          ),
+        );
+      case "rent_income_account_id":
+        return field(
+          placement,
+          "Rent income account",
+          select(
+            form.rentIncomeAccountId,
+            (value) => setForm({ ...form, rentIncomeAccountId: value }),
+            options.incomeAccounts,
+          ),
+        );
+      case "cam_income_account_id":
+        return field(
+          placement,
+          "CAM income account",
+          select(
+            form.camIncomeAccountId,
+            (value) => setForm({ ...form, camIncomeAccountId: value }),
+            options.incomeAccounts,
+          ),
+        );
+      case "deposit_liability_account_id":
+        return field(
+          placement,
+          "Deposit liability account",
+          select(
+            form.depositLiabilityAccountId,
+            (value) => setForm({ ...form, depositLiabilityAccountId: value }),
+            options.liabilityAccounts,
+          ),
+        );
+      case "default_bank_account_id":
+        return field(
+          placement,
+          "Default bank account",
+          select(
+            form.defaultBankAccountId,
+            (value) => setForm({ ...form, defaultBankAccountId: value }),
+            options.bankAccounts,
+          ),
+        );
+      default:
+        return null;
+    }
+  }
+
+  const tabLabel = (item: { key: string; labelOverride?: string | null }) =>
+    item.labelOverride?.trim() ||
+    ({ overview: "Overview", units: "Units", leases: "Leases" }[item.key] ??
+      item.key.replace(/^tab_/, "").replaceAll("_", " "));
+  const save = async () => {
+    const result = await onSave({
+      propertyId: property.id,
+      name: form.name,
+      code: form.code,
+      propertyType: form.propertyType,
+      status: form.status,
+      subsidiaryId: form.subsidiaryId,
+      locationId: form.locationId || null,
+      fixedAssetId: form.fixedAssetId || null,
+      currency: form.currency,
+      address: {
+        street: form.street,
+        city: form.city,
+        region: form.region,
+        postalCode: form.postalCode,
+      },
+      rentIncomeAccountId: form.rentIncomeAccountId || null,
+      camIncomeAccountId: form.camIncomeAccountId || null,
+      depositLiabilityAccountId: form.depositLiabilityAccountId || null,
+      defaultBankAccountId: form.defaultBankAccountId || null,
+      custom: form.custom,
+    });
+    if (result) setMode("view");
+  };
+  const selectForm = (formId: string) => {
+    const next = new URLSearchParams(searchParams.toString());
+    if (formId) next.set("form", formId);
+    else next.delete("form");
+    router.replace(`${pathname}?${next.toString()}`, { scroll: false });
+    setActionsOpen(false);
+  };
+
+  return (
+    <Drawer
+      open
+      onClose={onClose}
+      size="2xl"
+      title={
+        <span className="flex items-center gap-2.5">
+          <span className="font-mono text-sm text-slate-500">{form.code}</span>
+          <span>{form.name}</span>
+          <Status value={form.status} />
+        </span>
+      }
+      description={`${property.subsidiaryName} · ${property.locationName || "No location"}`}
+      subtabs={
+        <RecordTabs
+          label="Property details"
+          active={tab}
+          tabs={tabs.map((item) => ({ key: item.key, label: tabLabel(item) }))}
+          onChange={setTab}
+        />
+      }
+      headerActions={
+        mode === "edit" ? (
+          <div className="flex items-center gap-1.5">
+            <Button size="sm" variant="outline" disabled={busy} onClick={reset}>
+              Cancel
+            </Button>
+            <Button
+              size="sm"
+              disabled={busy || !form.name.trim() || !form.code.trim()}
+              onClick={save}
+            >
+              {busy ? "Saving…" : "Save"}
+            </Button>
+          </div>
+        ) : permissions.manage || permissions.customize ? (
+          <div className="flex items-center gap-1.5">
+            {permissions.manage ? (
+              <Button
+                size="sm"
+                variant="outline"
+                className="h-8 px-2.5 text-xs"
+                onClick={() => setMode("edit")}
+              >
+                Edit
+              </Button>
+            ) : null}
+            <Popover
+              open={actionsOpen}
+              onOpenChange={setActionsOpen}
+              align="end"
+              className="w-64 p-1.5"
+              trigger={
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="h-8 gap-1.5 px-2.5 text-xs"
+                  onClick={() => setActionsOpen((open) => !open)}
+                >
+                  Actions{" "}
+                  <ChevronDown
+                    className={cn("h-3.5 w-3.5", actionsOpen && "rotate-180")}
+                  />
+                </Button>
+              }
+            >
+              {customization.forms.length ? (
+                <div className="mb-1 border-b border-slate-200 p-2 dark:border-slate-800">
+                  <Label className="mb-1 block text-xs">Custom form</Label>
+                  <Select
+                    value={customization.currentFormId ?? ""}
+                    onChange={(e) => selectForm(e.target.value)}
+                  >
+                    {customization.forms.map((item: any) => (
+                      <option key={item.id} value={item.id}>
+                        {item.name}
+                      </option>
+                    ))}
+                  </Select>
+                </div>
+              ) : null}
+              {permissions.customize ? (
+                <Button
+                  asChild
+                  variant="ghost"
+                  className="h-8 w-full justify-start rounded px-2 text-xs"
+                >
+                  <Link href="/admin/customization?recordType=property&tab=forms">
+                    Customize form
+                  </Link>
+                </Button>
+              ) : null}
+            </Popover>
+          </div>
+        ) : undefined
+      }
+    >
+      {tab === "overview" ? (
+        <div className="p-1">
+          <HeaderFields
+            layout={overviewLayout}
+            editable={editable}
+            renderField={renderPropertyField}
+          />
+        </div>
+      ) : null}
+      {tab === "units" ? (
+        <div className="space-y-3 p-1">
+          <div className="flex items-center justify-between gap-3">
+            <div>
+              <h3 className="text-sm font-semibold">Rentable units</h3>
+              <p className="text-xs text-slate-500">
+                Occupancy, rentable area, and unit-level lease capacity.
+              </p>
+            </div>
+            {permissions.manage && property.status === "active" ? (
+              <Button size="sm" onClick={onAddUnit}>
+                Add unit
+              </Button>
+            ) : null}
+          </div>
+          {units.length ? (
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Unit</TableHead>
+                  <TableHead>Type</TableHead>
+                  <TableHead className="text-right">Rentable area</TableHead>
+                  <TableHead className="text-right">Bedrooms</TableHead>
+                  <TableHead>Status</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {units.map((unit: any) => (
+                  <TableRow key={unit.id}>
+                    <TableCell>
+                      <div className="font-medium">{unit.code}</div>
+                      <div className="text-xs text-slate-500">
+                        {unit.name || "—"}
+                      </div>
+                    </TableCell>
+                    <TableCell>{unit.unitType || "—"}</TableCell>
+                    <TableCell className="text-right tabular-nums">
+                      {unit.rentableArea || "—"}
+                    </TableCell>
+                    <TableCell className="text-right tabular-nums">
+                      {unit.bedrooms ?? "—"}
+                    </TableCell>
+                    <TableCell>
+                      <Status value={unit.status} />
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          ) : (
+            <Empty
+              title="No units yet"
+              detail="Add the first rentable unit from this property record."
+            />
+          )}
+        </div>
+      ) : null}
+      {tab === "leases" ? (
+        <div className="space-y-3 p-1">
+          <div>
+            <h3 className="text-sm font-semibold">Property leases</h3>
+            <p className="text-xs text-slate-500">
+              Current and historical tenant agreements for this property.
+            </p>
+          </div>
+          {leases.length ? (
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Lease</TableHead>
+                  <TableHead>Unit</TableHead>
+                  <TableHead>Tenant</TableHead>
+                  <TableHead>Term</TableHead>
+                  <TableHead>Status</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {leases.map((lease: any) => (
+                  <TableRow
+                    key={lease.id}
+                    tabIndex={0}
+                    role="button"
+                    className="cursor-pointer"
+                    onClick={() => onOpenLease(lease.id)}
+                    onKeyDown={(event) => {
+                      if (event.key === "Enter" || event.key === " ") {
+                        event.preventDefault();
+                        onOpenLease(lease.id);
+                      }
+                    }}
+                  >
+                    <TableCell className="font-medium text-teal-700">
+                      {lease.leaseNumber}
+                    </TableCell>
+                    <TableCell>{lease.unitCode || "Whole property"}</TableCell>
+                    <TableCell>{lease.tenantName}</TableCell>
+                    <TableCell>
+                      {lease.startsOn} – {lease.endsOn || "Open"}
+                    </TableCell>
+                    <TableCell>
+                      <Status value={lease.status} />
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          ) : (
+            <Empty
+              title="No leases yet"
+              detail="Create a lease from the Leases workspace tab."
+            />
+          )}
+        </div>
+      ) : null}
+      {tabs.some((item) => item.key === tab && isCustomTabKey(item.key)) ? (
+        <div className="p-1">
+          <HeaderFields
+            layout={{
+              ...effectiveLayout,
+              header: {
+                groups: effectiveLayout.header.groups.filter(
+                  (group: FormLayoutConfig["header"]["groups"][number]) =>
+                    (
+                      tabs.find((item) => item.key === tab)?.groupIds ?? []
+                    ).includes(group.id),
+                ),
+              },
+            }}
+            editable={editable}
+            renderField={renderPropertyField}
+          />
+        </div>
+      ) : null}
+    </Drawer>
+  );
+}
+
+function propertyForm(property: any, defs: CustomFieldDefClient[]) {
+  return {
+    name: property.name ?? "",
+    code: property.code ?? "",
+    propertyType: property.propertyType ?? "other",
+    status: property.status ?? "active",
+    subsidiaryId: property.subsidiaryId ?? "",
+    locationId: property.locationId ?? "",
+    fixedAssetId: property.fixedAssetId ?? "",
+    currency: property.currency ?? "",
+    street: property.address?.street ?? "",
+    city: property.address?.city ?? "",
+    region: property.address?.region ?? "",
+    postalCode: property.address?.postalCode ?? "",
+    rentIncomeAccountId: property.rentIncomeAccountId ?? "",
+    camIncomeAccountId: property.camIncomeAccountId ?? "",
+    depositLiabilityAccountId: property.depositLiabilityAccountId ?? "",
+    defaultBankAccountId: property.defaultBankAccountId ?? "",
+    custom: Object.fromEntries(
+      defs.map((def) => [def.key, property.custom?.[def.key]]),
+    ) as Record<string, unknown>,
+  };
+}
+
+function PropertiesTable({ data, view, fieldDefs, onOpen }: any) {
   if (!data.properties.length)
     return (
       <Empty
@@ -475,50 +1234,107 @@ function PropertiesTable({ data, money, canManage, onAddUnit }: any) {
         detail="Create the first property, connect its accounting dimensions, then add rentable units."
       />
     );
+  const defs = new Map<string, CustomFieldDefClient>(
+    fieldDefs.map((def: CustomFieldDefClient) => [def.key, def]),
+  );
+  const columns = view.columns.filter((column: any) => column.visible);
+  const showsCodeColumn = columns.some((column: any) => column.key === "code");
+  const labels: Record<string, string> = {
+    name: "Property",
+    code: "Code",
+    subsidiary: "Entity",
+    location: "Location",
+    property_type: "Type",
+    occupancy: "Occupancy",
+    currency: "Currency",
+    status: "Status",
+  };
+  const label = (column: any) =>
+    column.labelOverride?.trim() ||
+    (column.key.startsWith("cf_")
+      ? defs.get(column.key.slice(3))?.label
+      : labels[column.key]) ||
+    column.key;
+  const cell = (property: any, key: string) => {
+    if (key.startsWith("cf_")) {
+      const value = property.custom?.[key.slice(3)];
+      return Array.isArray(value)
+        ? value.join(", ")
+        : value == null || value === ""
+          ? "—"
+          : String(value);
+    }
+    if (key === "name")
+      return (
+        <>
+          <div className="font-medium text-teal-700">{property.name}</div>
+          {showsCodeColumn ? null : (
+            <div className="font-mono text-xs text-slate-500">
+              {property.code}
+            </div>
+          )}
+        </>
+      );
+    if (key === "code")
+      return <span className="font-mono text-sm">{property.code}</span>;
+    if (key === "subsidiary") return property.subsidiaryName;
+    if (key === "location") return property.locationName || "Not mapped";
+    if (key === "property_type")
+      return (
+        <span className="capitalize">
+          {property.propertyType.replaceAll("_", " ")}
+        </span>
+      );
+    if (key === "occupancy")
+      return (
+        <span className="tabular-nums">
+          {property.occupiedUnits} / {property.unitCount}
+        </span>
+      );
+    if (key === "currency")
+      return <span className="font-mono text-xs">{property.currency}</span>;
+    if (key === "status") return <Status value={property.status} />;
+    return "—";
+  };
   return (
     <Table>
       <TableHeader>
         <TableRow>
-          <TableHead>Property</TableHead>
-          <TableHead>Entity</TableHead>
-          <TableHead>Location</TableHead>
-          <TableHead>Type</TableHead>
-          <TableHead className="text-right">Occupancy</TableHead>
-          <TableHead>Status</TableHead>
-          {canManage ? <TableHead /> : null}
+          {columns.map((column: any) => (
+            <TableHead
+              key={column.key}
+              className={column.key === "occupancy" ? "text-right" : undefined}
+            >
+              {label(column)}
+            </TableHead>
+          ))}
         </TableRow>
       </TableHeader>
       <TableBody>
         {data.properties.map((property: any) => (
-          <TableRow key={property.id}>
-            <TableCell>
-              <div className="font-medium">
-                {property.code} · {property.name}
-              </div>
-              <div className="text-xs text-slate-500">{property.currency}</div>
-            </TableCell>
-            <TableCell>{property.subsidiaryName}</TableCell>
-            <TableCell>{property.locationName || "Not mapped"}</TableCell>
-            <TableCell className="capitalize">
-              {property.propertyType.replaceAll("_", " ")}
-            </TableCell>
-            <TableCell className="text-right tabular-nums">
-              {property.occupiedUnits} / {property.unitCount}
-            </TableCell>
-            <TableCell>
-              <Status value={property.status} />
-            </TableCell>
-            {canManage ? (
-              <TableCell className="text-right">
-                <Button
-                  size="sm"
-                  variant="outline"
-                  onClick={() => onAddUnit(property.id)}
-                >
-                  Add unit
-                </Button>
+          <TableRow
+            key={property.id}
+            tabIndex={0}
+            role="button"
+            className="cursor-pointer"
+            onClick={() => onOpen(property.id)}
+            onKeyDown={(event) => {
+              if (event.key === "Enter" || event.key === " ") {
+                event.preventDefault();
+                onOpen(property.id);
+              }
+            }}
+          >
+            {columns.map((column: any) => (
+              <TableCell
+                key={column.key}
+                className={
+                  column.key === "occupancy" ? "text-right" : undefined
+                }
+              >
+                {cell(property, column.key)}
               </TableCell>
-            ) : null}
+            ))}
           </TableRow>
         ))}
       </TableBody>
@@ -1114,6 +1930,7 @@ function UnitDrawer({ propertyId, onClose, busy, onSave }: any) {
     <Drawer
       open={!!propertyId}
       onClose={onClose}
+      stacked
       title="Add rentable unit"
       description="Units carry occupancy and rentable-area evidence for CAM allocation."
       footer={
@@ -1424,7 +2241,6 @@ function LeaseDetail({
   permissions,
   busy,
   tab,
-  setTab,
   act,
   money,
 }: any) {
@@ -1486,31 +2302,6 @@ function LeaseDetail({
           ) : null}
         </div>
       </div>
-      <nav
-        className="flex gap-1 overflow-x-auto border-b border-slate-200 dark:border-slate-800"
-        role="tablist"
-        aria-label="Lease details"
-      >
-        {(["overview", "charges", "escalations", "deposits"] as LeaseTab[]).map(
-          (key) => (
-            <button
-              type="button"
-              key={key}
-              role="tab"
-              aria-selected={tab === key}
-              onClick={() => setTab(key)}
-              className={cn(
-                "-mb-px border-b-2 px-3 py-2 text-sm font-medium capitalize",
-                tab === key
-                  ? "border-teal-600 text-teal-700"
-                  : "border-transparent text-slate-500",
-              )}
-            >
-              {key}
-            </button>
-          ),
-        )}
-      </nav>
       {tab === "overview" ? (
         <div className="space-y-4">
           <div className="grid gap-3 sm:grid-cols-3">

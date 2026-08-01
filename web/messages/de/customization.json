@@ -18,7 +18,37 @@
     "purchase_order": "Bestellung",
     "project": "Projekt",
     "project_charge": "Projektbelastung",
-    "fixed_asset": "Anlagevermögen"
+    "fixed_asset": "Anlagevermögen",
+    "property": "Immobilie"
+  },
+  "property": {
+    "tabs": {
+      "overview": "Übersicht",
+      "units": "Einheiten",
+      "leases": "Mietverträge"
+    },
+    "fields": {
+      "code": "Immobiliencode",
+      "propertyType": "Immobilientyp",
+      "fixedAsset": "Anlagevermögen",
+      "street": "Straße",
+      "city": "Stadt",
+      "region": "Bundesland / Region",
+      "postalCode": "Postleitzahl",
+      "rentIncomeAccount": "Mietertragskonto",
+      "camIncomeAccount": "CAM-Ertragskonto",
+      "depositLiabilityAccount": "Kautionsverbindlichkeitskonto",
+      "defaultBankAccount": "Standardbankkonto",
+      "occupancy": "Belegung"
+    },
+    "status": { "sold": "Verkauft" },
+    "types": {
+      "residential": "Wohnen",
+      "commercial": "Gewerbe",
+      "mixed_use": "Mischnutzung",
+      "industrial": "Industrie",
+      "other": "Sonstige"
+    }
   },
   "views": {
     "defaultName": "Standardansicht",

@@ -12,6 +12,7 @@ import {
   billDueLeaseCharges,
   createCamPool,
   createManagedProperty,
+  updateManagedProperty,
   createPropertyLease,
   createPropertyUnit,
   finalizeCamPool,
@@ -22,6 +23,10 @@ import {
 } from "@openbooks/engine/src/property-management.ts";
 import { guardPermission } from "../../../lib/authz";
 import type { Authz } from "../../../lib/authz";
+import {
+  loadFieldDefs,
+  validateCustomValues,
+} from "../../../lib/custom-fields";
 import { guardPropertyManagementFeature } from "../../../lib/property-management-gate";
 
 export const runtime = "nodejs";
@@ -77,6 +82,7 @@ const glActions = new Set(["recordDeposit", "finalizeCam"]);
 const billingActions = new Set(["billRent", "billCam", "assessLateFees"]);
 const knownActions = new Set([
   "createProperty",
+  "updateProperty",
   "createUnit",
   "createLease",
   "activateLease",
@@ -124,11 +130,25 @@ async function guardSubsidiaryAccess(
   if (action === "createProperty") {
     subsidiaryId =
       typeof body.subsidiaryId === "string" ? body.subsidiaryId : null;
-  } else if (["createUnit", "createLease", "createCamPool"].includes(action)) {
+  } else if (
+    ["updateProperty", "createUnit", "createLease", "createCamPool"].includes(
+      action,
+    )
+  ) {
     const result = (await db.execute(
       sql`select subsidiary_id as "subsidiaryId" from managed_properties where org_id=${authz.user.orgId} and id=${String(body.propertyId ?? "")}`,
     )) as any;
     subsidiaryId = result.rows[0]?.subsidiaryId ?? null;
+    if (
+      action === "updateProperty" &&
+      typeof body.subsidiaryId === "string" &&
+      !allowed.has(body.subsidiaryId)
+    ) {
+      return NextResponse.json(
+        { error: "Target subsidiary is outside your access" },
+        { status: 403 },
+      );
+    }
   } else if (
     [
       "activateLease",
@@ -191,6 +211,28 @@ export async function POST(request: Request) {
       case "createProperty":
         result = await createManagedProperty({ ...body, ...common } as any);
         break;
+      case "updateProperty": {
+        const validation = validateCustomValues(
+          await loadFieldDefs("managed_properties"),
+          body.custom,
+        );
+        if (!validation.ok) {
+          return NextResponse.json(
+            {
+              error:
+                Object.values(validation.errors)[0] ?? "Invalid custom fields",
+              errors: validation.errors,
+            },
+            { status: 400 },
+          );
+        }
+        result = await updateManagedProperty({
+          ...body,
+          custom: validation.cleaned,
+          ...common,
+        } as any);
+        break;
+      }
       case "createUnit":
         result = await createPropertyUnit({ ...body, ...common } as any);
         break;
