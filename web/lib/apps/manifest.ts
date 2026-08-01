@@ -1,4 +1,5 @@
 import { z } from 'zod'
+import { API_RECORD_TYPES } from '../api/registry-data'
 
 /**
  * App manifest — the contract that describes an uploaded App bundle. Shared by
@@ -27,9 +28,23 @@ const BUNDLE_PATH = /^(?!\/)(?!.*\.\.)[a-z0-9._\-/]+$/i
 export const APP_CAPABILITIES = {
   /** Read custom records via ob.records / bridge records.* (org-scoped). */
   RECORDS_READ: 'records.read',
+  /** Create, update, and delete published custom records via platform CRUD. */
+  RECORDS_CREATE: 'records.create',
   /** Governed ledger writes via ob.journal (draft + post through the posting engine). */
   GL_POST: 'gl.post',
 } as const
+
+/** Every permission currently consumed by the governed App host API. */
+export const APP_PLATFORM_PERMISSIONS = [
+  ...new Set([
+    APP_CAPABILITIES.RECORDS_READ,
+    APP_CAPABILITIES.RECORDS_CREATE,
+    APP_CAPABILITIES.GL_POST,
+    'ap.post',
+    'ar.post',
+    ...API_RECORD_TYPES.flatMap((type) => [type.readPermission, type.writePermission].filter((p): p is string => !!p)),
+  ]),
+].sort()
 
 export const HTTP_METHODS = ['GET', 'POST', 'ANY'] as const
 export type AppHttpMethod = (typeof HTTP_METHODS)[number]

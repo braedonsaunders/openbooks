@@ -41,6 +41,8 @@ test('makeBridgeResult builds ok and error envelopes', () => {
 test('isBridgeMethod allowlists only known methods', () => {
   assert.equal(isBridgeMethod('callBackend'), true)
   assert.equal(isBridgeMethod('records.list'), true)
+  assert.equal(isBridgeMethod('platform.schema'), true)
+  assert.equal(isBridgeMethod('platform.create'), true)
   assert.equal(isBridgeMethod('storage.set'), false)
   assert.equal(isBridgeMethod('__proto__'), false)
 })
@@ -72,6 +74,8 @@ test('bridgeClientSource embeds context and defines the SDK surface', () => {
   assert.match(src, /window\.openbooks/)
   assert.match(src, /callBackend/)
   assert.match(src, /records/)
+  assert.match(src, /platform/)
+  assert.match(src, /delete: function/)
   assert.match(src, /"key":"demo"/)
   assert.match(src, /type: 'ready'/)
 })

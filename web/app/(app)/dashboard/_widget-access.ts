@@ -2,6 +2,7 @@ import type { Authz } from '@/lib/authz'
 import { isUuid } from '@/lib/list-params'
 import { permissionSetCovers } from '@/lib/permissions'
 import { WIDGETS } from './_widget-registry'
+import { isAppWidgetId } from '@/lib/apps/surfaces'
 
 const GL = ['gl.read']
 const AP = ['ap.read', 'ap.approve']
@@ -32,6 +33,7 @@ export function canSeeWidget(authz: Authz, id: string): boolean {
   const required = WIDGET_PERMISSIONS[id]
   if (required) return hasAnyPermission(authz.permissions, required)
   if (id in WIDGETS) return true
+  if (isAppWidgetId(id)) return hasAnyPermission(authz.permissions, ['apps.use'])
   return isUuid(id) && canSeeInsightCards(authz)
 }
 

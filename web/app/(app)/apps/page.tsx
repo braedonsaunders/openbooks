@@ -8,6 +8,7 @@ import { SearchInput } from '@/components/search-input'
 import { can, requirePermission } from '@/lib/authz'
 import { listApps } from '@/lib/apps/store'
 import { parseListParams } from '@/lib/list-params'
+import { NavIcon } from '@/components/sidebar-nav'
 
 export const runtime = 'nodejs'
 
@@ -76,7 +77,7 @@ export default async function AppsLauncherPage({
               <Card interactive className="h-full">
                 <CardHeader className="flex-row items-start gap-3 p-4 pb-3">
                   <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-teal-50 text-teal-700 dark:bg-teal-950/50 dark:text-teal-300">
-                    <Boxes size={20} aria-hidden />
+                    <NavIcon iconKey={app.iconKey} size={20} />
                   </span>
                   <div className="min-w-0 flex-1">
                     <CardTitle className="truncate text-base">{app.name}</CardTitle>

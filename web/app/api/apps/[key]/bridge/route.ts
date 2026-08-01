@@ -22,11 +22,12 @@ export async function POST(req: Request, { params }: { params: Promise<{ key: st
 
   const res = await runBridgeMethod({
     orgId: gate.user.orgId,
-    user: { id: gate.user.id, name: gate.user.name, role: gate.user.role },
+    user: gate.user,
     key,
     method: body.method,
     payload: body.payload ?? {},
     userCan: (perm) => can(gate, perm),
+    allowedSubsidiaryIds: gate.allowedSubsidiaryIds,
   })
 
   if (!res.ok) return NextResponse.json({ ok: false, error: res.error }, { status: res.status })

@@ -12,7 +12,9 @@ import {
   NAV_MODULES,
   NAV_SUBGROUPS,
   defaultNavConfig,
+  layerInNavApps,
   type NavGroupKey,
+  type NavAppOption,
   type OrgNavConfig,
 } from './registry'
 
@@ -38,11 +40,25 @@ export async function resolveNav(
   role: string | null | undefined,
   t: (key: string) => string,
 ): Promise<SidebarNavGroup[]> {
-  const r = (await db.execute(sql`select config from org_nav_configs where org_id = ${orgId} limit 1`)) as unknown as {
-    rows: { config: OrgNavConfig }[]
-  }
+  const [r, appResult] = await Promise.all([
+    db.execute(sql`select config from org_nav_configs where org_id = ${orgId} limit 1`) as unknown as Promise<{
+      rows: { config: OrgNavConfig }[]
+    }>,
+    db.execute(sql`
+      select a.key,
+             coalesce(nullif(v.manifest #>> '{nav,label}', ''), a.name) as name,
+             coalesce(nullif(v.manifest #>> '{nav,icon}', ''), a.icon_key) as "iconKey",
+             a.show_in_nav as "showInNav"
+        from apps a
+        join app_versions v on v.id = a.active_version_id
+       where a.org_id = ${orgId} and a.status = 'installed'
+       order by a.sort_order, a.name
+    `) as unknown as Promise<{ rows: NavAppOption[] }>,
+  ])
   const saved = r.rows[0]?.config
-  const config = saved?.version === 2 ? layerInNewModules(saved) : defaultNavConfig()
+  const baseConfig = saved?.version === 2 ? layerInNewModules(saved) : defaultNavConfig()
+  const config = layerInNavApps(baseConfig, appResult.rows)
+  const appByKey = new Map(appResult.rows.map((app) => [app.key, app]))
   const featureState = (
     (await db.execute(sql`select settings->'features' as f from orgs where id = ${orgId}`)) as unknown as {
       rows: { f: FeatureState | null }[]
@@ -88,6 +104,16 @@ export async function resolveNav(
                   : {}),
               }
             : {}),
+        })
+      } else if (item.kind === 'app') {
+        if (!can('apps.use')) continue
+        const app = appByKey.get(item.appKey)
+        if (!app) continue
+        items.push({
+          href: `/apps/${encodeURIComponent(app.key)}`,
+          label: item.label?.trim() || app.name,
+          iconKey: item.iconKey ?? app.iconKey,
+          mobile: item.mobile,
         })
       } else {
         items.push({

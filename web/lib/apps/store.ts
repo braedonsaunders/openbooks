@@ -12,6 +12,9 @@ import { createScriptJournal, type ScriptJournalInput } from '@openbooks/engine/
 import { parseManifest, validateBundle, contentTypeFor, type AppManifest } from './manifest'
 import { APP_CAPABILITIES } from './manifest'
 import { parseObjectSpecs, type ParsedObjects } from './objects'
+import { createAppPlatformAdapter, AppPlatformError } from './platform'
+import type { SessionUser } from '@/lib/auth'
+import { permissionSetCovers } from '@/lib/permissions'
 
 /**
  * Apps server store — every function is org-scoped: the caller passes the
@@ -312,20 +315,73 @@ function recordsAdapter(orgId: string): AppRecordsAdapter {
  */
 export async function runBridgeMethod(opts: {
   orgId: string
-  user: { id: string; name: string; role: string }
+  user: SessionUser
   key: string
   method: string
   payload: any
   userCan: (perm: string) => boolean
+  allowedSubsidiaryIds: ReadonlySet<string> | null
 }): Promise<{ ok: true; result: unknown } | { ok: false; error: string; status: number }> {
   const app = await getAppByKey(opts.orgId, opts.key)
   if (!app || !app.manifest) return { ok: false, error: 'app not found', status: 404 }
   if (app.status !== 'installed') return { ok: false, error: 'app is disabled', status: 403 }
 
   const recordsGranted =
-    app.grantedPermissions.includes(APP_CAPABILITIES.RECORDS_READ) && opts.userCan(APP_CAPABILITIES.RECORDS_READ)
+    permissionSetCovers(new Set(app.grantedPermissions), APP_CAPABILITIES.RECORDS_READ) &&
+    opts.userCan(APP_CAPABILITIES.RECORDS_READ)
   const glGranted =
-    app.grantedPermissions.includes(APP_CAPABILITIES.GL_POST) && opts.userCan(APP_CAPABILITIES.GL_POST)
+    permissionSetCovers(new Set(app.grantedPermissions), APP_CAPABILITIES.GL_POST) && opts.userCan(APP_CAPABILITIES.GL_POST)
+
+  const platform = createAppPlatformAdapter({
+    orgId: opts.orgId,
+    user: opts.user,
+    grantedPermissions: app.grantedPermissions,
+    userCan: opts.userCan,
+    allowedSubsidiaryIds: opts.allowedSubsidiaryIds,
+  })
+
+  if (opts.method.startsWith('platform.')) {
+    const typeKey = String(opts.payload?.typeKey ?? '')
+    const id = String(opts.payload?.id ?? '')
+    try {
+      let result: unknown
+      switch (opts.method) {
+        case 'platform.schema':
+          result = await platform.schema()
+          break
+        case 'platform.list':
+          result = await platform.list(typeKey, opts.payload?.options ?? {})
+          break
+        case 'platform.get':
+          result = await platform.get(typeKey, id)
+          break
+        case 'platform.create':
+          result = await platform.create(typeKey, opts.payload?.body ?? {})
+          break
+        case 'platform.update':
+          result = await platform.update(typeKey, id, opts.payload?.body ?? {})
+          break
+        case 'platform.delete':
+          result = await platform.delete(typeKey, id)
+          break
+        default:
+          return { ok: false, error: `unknown method: ${opts.method}`, status: 400 }
+      }
+      await logAppRun(app, opts, opts.method, 'ok', null, platformBridgeUnits(opts.method))
+      return { ok: true, result }
+    } catch (error) {
+      const status = error instanceof AppPlatformError ? error.status : 400
+      await logAppRun(
+        app,
+        opts,
+        opts.method,
+        status === 403 ? 'forbidden' : 'error',
+        (error as Error).message,
+        platformBridgeUnits(opts.method),
+      )
+      return { ok: false, error: (error as Error).message, status }
+    }
+  }
 
   if (opts.method === 'records.list' || opts.method === 'records.get') {
     if (!recordsGranted) return { ok: false, error: 'records.read not granted', status: 403 }
@@ -355,6 +411,7 @@ export async function runBridgeMethod(opts: {
           createScriptJournal(opts.orgId, opts.user.id, input as ScriptJournalInput, { post }),
       }
     }
+    adapters.platform = platform
 
     const request: AppRequest = {
       method: endpoint.method === 'ANY' ? 'POST' : endpoint.method,
@@ -383,6 +440,31 @@ export async function runBridgeMethod(opts: {
   }
 
   return { ok: false, error: `unknown method: ${opts.method}`, status: 400 }
+}
+
+function platformBridgeUnits(method: string): number {
+  if (method === 'platform.schema' || method === 'platform.list') return 20
+  if (method === 'platform.get') return 10
+  if (method === 'platform.create' || method === 'platform.update' || method === 'platform.delete') return 50
+  return 0
+}
+
+async function logAppRun(
+  app: AppRow,
+  opts: { orgId: string; user: SessionUser },
+  endpoint: string,
+  status: 'ok' | 'error' | 'timeout' | 'forbidden',
+  error: string | null,
+  units: number,
+): Promise<void> {
+  try {
+    await db.execute(sql`
+      insert into app_runs (org_id, app_id, version_id, endpoint, status, units, logs, error_message, duration_ms, actor_id)
+      values (${opts.orgId}, ${app.id}, ${app.activeVersionId}, ${endpoint}, ${status}, ${units}, '[]'::jsonb,
+              ${error}, 0, ${opts.user.id})`)
+  } catch {
+    // Run logging is best-effort and must never change the API result.
+  }
 }
 
 // ---------------------------------------------------------------------------

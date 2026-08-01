@@ -12,8 +12,33 @@ import { WidgetCard } from './_widget-views'
 import { loadDashboardMetrics, pruneDashboardMetrics } from './_metrics'
 import type { DashboardMetrics } from './_metrics'
 import { CardTile, type CardTileData } from '../insights/CardTile'
+import { listApps } from '@/lib/apps/store'
+import { appKeyFromWidgetId, appWidgetId } from '@/lib/apps/surfaces'
+import { AppWidgetCard, type DashboardApp } from './_app-widget'
 
 export type LibraryCard = { id: string; name: string; description: string }
+
+export async function loadDashboardApps(authz: Authz): Promise<DashboardApp[]> {
+  if (!can(authz, 'apps.use')) return []
+  const apps = await listApps(authz.user.orgId)
+  return apps
+    .filter((app) => app.status === 'installed' && app.activeVersionId)
+    .map((app) => ({
+      key: app.key,
+      name: app.name,
+      description: app.description ?? '',
+      iconKey: app.iconKey,
+    }))
+}
+
+function appWidgetNodes(apps: DashboardApp[], widgetIds?: readonly string[]): Record<string, React.ReactNode> {
+  const requested = widgetIds ? new Set(widgetIds.map(appKeyFromWidgetId).filter((key): key is string => !!key)) : null
+  return Object.fromEntries(
+    apps
+      .filter((app) => !requested || requested.has(app.key))
+      .map((app) => [appWidgetId(app.key), <AppWidgetCard key={app.key} app={app} />]),
+  )
+}
 
 export async function loadPublishedInsightCards(orgId: string): Promise<LibraryCard[]> {
   const res = (await db.execute(sql`
@@ -56,9 +81,10 @@ export async function loadDashboardView(
   authz: Authz,
   layout: DashboardLayoutData,
 ): Promise<{ nodes: Record<string, React.ReactNode> }> {
-  const [metrics, cardNodes] = await Promise.all([
+  const [metrics, cardNodes, apps] = await Promise.all([
     loadDashboardMetrics(authz),
     loadInsightCardNodes(authz.user.orgId, layout.widgets.map((w) => w.id)),
+    loadDashboardApps(authz),
   ])
 
   const nodes: Record<string, React.ReactNode> = {}
@@ -76,6 +102,7 @@ export async function loadDashboardView(
     }
   }
   Object.assign(nodes, cardNodes)
+  Object.assign(nodes, appWidgetNodes(apps, layout.widgets.map((widget) => widget.id)))
   return { nodes }
 }
 
@@ -88,17 +115,19 @@ export async function loadDashboardEditCanvas(
 ): Promise<{
   nodes: Record<string, React.ReactNode>
   libraryCards: LibraryCard[]
+  apps: DashboardApp[]
 }> {
   const widgetAllowed = (id: string) => !opts.allowedWidgetIds || opts.allowedWidgetIds.has(id)
   const canUseInsights = can(authz, 'insights.read')
 
-  const [data, libraryCards, placedCardNodes] = await Promise.all([
+  const [data, libraryCards, placedCardNodes, apps] = await Promise.all([
     loadDashboardMetrics(authz),
     canUseInsights ? loadPublishedInsightCards(authz.user.orgId) : Promise.resolve([] as LibraryCard[]),
     loadInsightCardNodes(
       authz.user.orgId,
       layout.widgets.filter((w) => isUuid(w.id)).map((w) => w.id),
     ),
+    loadDashboardApps(authz),
   ])
 
   const nodes: Record<string, React.ReactNode> = {}
@@ -113,8 +142,9 @@ export async function loadDashboardEditCanvas(
     )
   }
   Object.assign(nodes, placedCardNodes)
+  Object.assign(nodes, appWidgetNodes(apps))
 
-  return { nodes, libraryCards }
+  return { nodes, libraryCards, apps }
 }
 
 export type { DashboardMetrics }

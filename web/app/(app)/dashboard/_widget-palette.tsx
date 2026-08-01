@@ -11,6 +11,9 @@ import {
 } from './_widget-registry'
 import type { RoleTier } from './_role-tier'
 import { widgetsForRole } from './_widget-registry'
+import type { DashboardApp } from './_app-widget'
+import { NavIcon } from '@/components/sidebar-nav'
+import { appWidgetId } from '@/lib/apps/surfaces'
 
 type LibraryCard = { id: string; name: string; description: string }
 
@@ -20,6 +23,8 @@ interface WidgetPaletteProps {
   onAdd: (widget: WidgetMeta) => void
   libraryCards: LibraryCard[]
   onAddCard: (card: { id: string }) => void
+  apps: DashboardApp[]
+  onAddApp: (app: DashboardApp) => void
   allowedWidgetIds: readonly string[] | Set<string> | undefined
   onClose: () => void
 }
@@ -30,16 +35,20 @@ export function WidgetPalette({
   onAdd,
   libraryCards,
   onAddCard,
+  apps,
+  onAddApp,
   allowedWidgetIds,
   onClose,
 }: WidgetPaletteProps) {
   const t = useTranslations('dashboard')
+  const tApps = useTranslations('apps')
   const present = presentIds instanceof Set ? presentIds : new Set(presentIds)
   const allowed = allowedWidgetIds instanceof Set ? allowedWidgetIds : new Set(allowedWidgetIds ?? [])
 
   const available = widgetsForRole(role).filter(
     (w) => !present.has(w.id) && allowed.has(w.id),
   )
+  const availableApps = apps.filter((app) => !present.has(appWidgetId(app.key)))
 
   const byCategory = new Map<WidgetCategory, WidgetMeta[]>()
   for (const w of available) {
@@ -57,7 +66,7 @@ export function WidgetPalette({
       description={t('palette.subtitle')}
       bodyClassName="overflow-y-auto p-3"
     >
-          {byCategory.size === 0 && libraryCards.length === 0 ? (
+          {byCategory.size === 0 && libraryCards.length === 0 && availableApps.length === 0 ? (
             <p className="px-2 py-4 text-sm text-slate-400">
               {t('palette.empty')}
             </p>
@@ -113,6 +122,34 @@ export function WidgetPalette({
                         </p>
                       ) : null}
                     </div>
+                  </button>
+                ))}
+              </div>
+            </div>
+          ) : null}
+
+          {availableApps.length > 0 ? (
+            <div className="mb-4">
+              <h3 className="mb-2 px-1 text-xs font-semibold tracking-wider text-slate-400 uppercase dark:text-slate-500">
+                {tApps('title')}
+              </h3>
+              <div className="space-y-1">
+                {availableApps.map((app) => (
+                  <button
+                    key={app.key}
+                    onClick={() => onAddApp(app)}
+                    className="flex w-full items-start gap-2.5 rounded-lg border border-slate-200 px-3 py-2 text-left transition-colors hover:border-teal-300 hover:bg-teal-50/50 dark:border-slate-800 dark:hover:border-teal-700 dark:hover:bg-teal-950/30"
+                  >
+                    <span className="mt-0.5 shrink-0 text-teal-600 dark:text-teal-400">
+                      <NavIcon iconKey={app.iconKey} size={15} />
+                    </span>
+                    <div className="min-w-0">
+                      <p className="text-sm font-medium text-slate-900 dark:text-slate-100">{app.name}</p>
+                      <p className="text-xs text-slate-500 dark:text-slate-400">
+                        {app.description || tApps('noDescription')}
+                      </p>
+                    </div>
+                    <Plus size={15} className="ml-auto mt-0.5 shrink-0 text-teal-600 dark:text-teal-400" />
                   </button>
                 ))}
               </div>

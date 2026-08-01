@@ -28,6 +28,9 @@ import { newAsyncContext } from "./quickjs.ts";
  *   ob.storage.delete(key[, ns])           delete a KV entry         (governed)
  *   ob.records.list(typeKey[, filters])    read custom records (needs records.read)
  *   ob.records.get(typeKey, id)            read one custom record   (needs records.read)
+ *   ob.platform.schema()                   discover permitted record types + fields
+ *   ob.platform.list/get(...)              search and read registered records
+ *   ob.platform.create/update/delete(...)  governed domain writes with per-type permissions
  *   ob.journal.create(input[, {post}])     create a balanced draft journal, optionally
  *                                          post it through the posting engine (needs gl.post)
  */
@@ -61,12 +64,24 @@ export interface AppJournalAdapter {
   create(input: unknown, post: boolean): Promise<unknown>;
 }
 
+/** Permission-scoped access to the platform's self-describing record API. */
+export interface AppPlatformAdapter {
+  schema(): Promise<unknown>;
+  list(typeKey: string, options: Record<string, unknown>): Promise<unknown>;
+  get(typeKey: string, id: string): Promise<unknown>;
+  create(typeKey: string, body: Record<string, unknown>): Promise<unknown>;
+  update(typeKey: string, id: string, body: Record<string, unknown>): Promise<unknown>;
+  delete(typeKey: string, id: string): Promise<unknown>;
+}
+
 export interface AppHostAdapters {
   storage: AppStorageAdapter;
   /** Present only when the App was granted records.read. */
   records?: AppRecordsAdapter;
   /** Present only when the App was granted gl.post (∩ the calling user). */
   journal?: AppJournalAdapter;
+  /** Self-describing core/custom record CRUD, with per-type permission gates. */
+  platform?: AppPlatformAdapter;
 }
 
 export interface AppEndpointResult {
@@ -90,6 +105,12 @@ const COST = {
   recordsGet: 5,
   journalDraft: 100,
   journalPost: 200,
+  platformSchema: 20,
+  platformList: 20,
+  platformGet: 10,
+  platformCreate: 50,
+  platformUpdate: 50,
+  platformDelete: 50,
 };
 const DEFAULT_BUDGET = 1000;
 const DEFAULT_TIMEOUT_MS = 3000;
@@ -255,6 +276,47 @@ export async function runAppEndpoint(opts: {
       },
     );
 
+    const platformCall = (
+      name: string,
+      cost: number,
+      call: (...args: any[]) => Promise<unknown>,
+    ) =>
+      vm.newAsyncifiedFunction(name, async (...handles) => {
+        if (!adapters.platform) {
+          return { error: vm.newError(`${FORBIDDEN}platform API unavailable`) };
+        }
+        const over = charge(cost);
+        if (over) return over;
+        try {
+          const result = await call(...handles.map((handle) => vm.dump(handle)));
+          return vm.newString(JSON.stringify(result ?? null));
+        } catch (e) {
+          const message = (e as Error).message;
+          return {
+            error: vm.newError(
+              message.startsWith("missing permission:") ? `${FORBIDDEN}${message}` : message,
+            ),
+          };
+        }
+      });
+
+    const platformSchema = platformCall("__platform_schema", COST.platformSchema, () => adapters.platform!.schema());
+    const platformList = platformCall("__platform_list", COST.platformList, (typeH, optionsH) =>
+      adapters.platform!.list(String(typeH), optionsH ? JSON.parse(String(optionsH)) : {}),
+    );
+    const platformGet = platformCall("__platform_get", COST.platformGet, (typeH, idH) =>
+      adapters.platform!.get(String(typeH), String(idH)),
+    );
+    const platformCreate = platformCall("__platform_create", COST.platformCreate, (typeH, bodyH) =>
+      adapters.platform!.create(String(typeH), bodyH ? JSON.parse(String(bodyH)) : {}),
+    );
+    const platformUpdate = platformCall("__platform_update", COST.platformUpdate, (typeH, idH, bodyH) =>
+      adapters.platform!.update(String(typeH), String(idH), bodyH ? JSON.parse(String(bodyH)) : {}),
+    );
+    const platformDelete = platformCall("__platform_delete", COST.platformDelete, (typeH, idH) =>
+      adapters.platform!.delete(String(typeH), String(idH)),
+    );
+
     vm.setProp(obHandle, "log", logFn);
     vm.setProp(obHandle, "__storage_get", storageGet);
     vm.setProp(obHandle, "__storage_set", storageSet);
@@ -263,6 +325,12 @@ export async function runAppEndpoint(opts: {
     vm.setProp(obHandle, "__records_list", recordsList);
     vm.setProp(obHandle, "__records_get", recordsGet);
     vm.setProp(obHandle, "__journal_create", journalCreate);
+    vm.setProp(obHandle, "__platform_schema", platformSchema);
+    vm.setProp(obHandle, "__platform_list", platformList);
+    vm.setProp(obHandle, "__platform_get", platformGet);
+    vm.setProp(obHandle, "__platform_create", platformCreate);
+    vm.setProp(obHandle, "__platform_update", platformUpdate);
+    vm.setProp(obHandle, "__platform_delete", platformDelete);
     vm.setProp(vm.global, "ob", obHandle);
     for (const h of [
       logFn,
@@ -273,6 +341,12 @@ export async function runAppEndpoint(opts: {
       recordsList,
       recordsGet,
       journalCreate,
+      platformSchema,
+      platformList,
+      platformGet,
+      platformCreate,
+      platformUpdate,
+      platformDelete,
       obHandle,
     ])
       h.dispose();
@@ -299,6 +373,15 @@ export async function runAppEndpoint(opts: {
 
         ob.journal = {
           create: function(input, opts) { return JSON.parse(ob.__journal_create(JSON.stringify(input || {}), !!(opts && opts.post))); }
+        };
+
+        ob.platform = {
+          schema: function() { return JSON.parse(ob.__platform_schema()); },
+          list: function(typeKey, options) { return JSON.parse(ob.__platform_list(String(typeKey), JSON.stringify(options || {}))); },
+          get: function(typeKey, id) { return JSON.parse(ob.__platform_get(String(typeKey), String(id))); },
+          create: function(typeKey, body) { return JSON.parse(ob.__platform_create(String(typeKey), JSON.stringify(body || {}))); },
+          update: function(typeKey, id, body) { return JSON.parse(ob.__platform_update(String(typeKey), String(id), JSON.stringify(body || {}))); },
+          delete: function(typeKey, id) { return JSON.parse(ob.__platform_delete(String(typeKey), String(id))); }
         };
 
         if (typeof handler !== "function") throw new Error("endpoint must define function handler(request)");

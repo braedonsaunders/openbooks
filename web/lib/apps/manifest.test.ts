@@ -4,7 +4,7 @@
 
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { parseManifest, validateBundle, contentTypeFor, type AppManifest } from './manifest.ts'
+import { APP_PLATFORM_PERMISSIONS, parseManifest, validateBundle, contentTypeFor, type AppManifest } from './manifest.ts'
 
 const good = {
   key: 'expense-helper',
@@ -94,4 +94,10 @@ test('contentTypeFor maps extensions and binary flag', () => {
   assert.equal(contentTypeFor('logo.png').binary, true)
   assert.equal(contentTypeFor('font.woff2').binary, true)
   assert.equal(contentTypeFor('weird.xyz').contentType, 'text/plain; charset=utf-8')
+})
+
+test('platform permission catalogue covers every record API read and write surface', () => {
+  for (const permission of ['gl.read', 'ap.read', 'ap.create', 'ar.read', 'ar.create', 'parties.manage', 'records.create']) {
+    assert.equal(APP_PLATFORM_PERMISSIONS.includes(permission), true, permission)
+  }
 })

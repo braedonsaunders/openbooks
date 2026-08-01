@@ -16,6 +16,8 @@ import {
 import { QuickActionsSchema } from './_quick-actions-input'
 import { DashboardLayoutInputSchema, filterPersistableDashboardWidgets } from './_layout-input'
 import type { DashboardLayoutData } from '@openbooks/schema'
+import { listApps } from '@/lib/apps/store'
+import { appWidgetId } from '@/lib/apps/surfaces'
 
 export async function saveDashboardLayout(input: unknown) {
   const authz = await getAuthz()
@@ -27,8 +29,16 @@ export async function saveDashboardLayout(input: unknown) {
   const allowedWidgetIds = new Set(
     Object.keys(WIDGETS).filter((id) => canSeeWidget(authz, id)),
   )
+  const allowedAppWidgetIds = can(authz, 'apps.use')
+    ? new Set(
+        (await listApps(authz.user.orgId))
+          .filter((app) => app.status === 'installed' && app.activeVersionId)
+          .map((app) => appWidgetId(app.key)),
+      )
+    : new Set<string>()
   const widgets = filterPersistableDashboardWidgets(parsed.data.widgets, {
     allowedWidgetIds,
+    allowedAppWidgetIds,
     // Must match canSeeWidget's insight-card visibility (insights.read OR
     // reports.read), or saving would silently drop cards the user can see.
     allowAnyInsightCardUuid: canSeeInsightCards(authz),
@@ -160,6 +170,20 @@ export async function listQuickActionOptions(): Promise<{
       tone: 'slate',
       hint: 'Navigate',
     })
+  }
+
+  if (can(authz, 'apps.use')) {
+    const apps = await listApps(authz.user.orgId)
+    for (const app of apps) {
+      if (app.status !== 'installed' || !app.activeVersionId) continue
+      common.push({
+        label: app.name,
+        href: `/apps/${encodeURIComponent(app.key)}`,
+        iconKey: app.iconKey,
+        tone: 'teal',
+        hint: 'App',
+      })
+    }
   }
 
   return { common }
