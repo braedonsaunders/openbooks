@@ -59,6 +59,10 @@
   "help": "Dokumentation",
   "costSourceKinds": "Abrechenbare Kostenquellen",
   "costSourceStatuses": "Status abrechenbarer Kosten",
+  "includeUnbilledTime": "Nicht abgerechnete Zeit in WIP einbeziehen",
+  "includeUnbilledCostLines": "Nicht abgerechnete Kostenzeilen in WIP einbeziehen",
+  "timeRateMethod": "WIP-Preisgrundlage",
+  "defaultMarkupPercent": "Standardaufschlag %",
   "markupPresentation": "Aufschlagsdarstellung",
   "notToExceed": "Nicht überschreiten"
 }
