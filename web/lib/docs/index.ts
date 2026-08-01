@@ -17,6 +17,7 @@ import { fixedAssetsDepreciation } from './articles/fixed-assets-depreciation'
 import { revenueRecognition } from './articles/revenue-recognition'
 import { apps } from './articles/apps'
 import { appBuilder } from './articles/app-builder'
+import { appApiReference } from './articles/app-api-reference'
 import { scriptingEngine, scriptingApiReference } from './articles/scripting'
 import { quickBooksDesktopConnector } from './articles/quickbooks-desktop-connector'
 import { netSuiteBridge } from './articles/netsuite-bridge'
@@ -194,6 +195,7 @@ const ARTICLE_SECTION_BY_SLUG: Record<string, string> = {
   'navigation-customization': 'administration-customize',
   apps: 'apps-build',
   'app-builder': 'apps-build',
+  'app-api-reference': 'apps-build',
   'scripting-engine': 'apps-build',
   'scripting-api-reference': 'apps-build',
   flows: 'apps-automation',
@@ -230,6 +232,7 @@ const RAW_DOC_ARTICLES: DocArticle[] = [
   netSuiteBridge,
   apps,
   appBuilder,
+  appApiReference,
   scriptingEngine,
   scriptingApiReference,
   ...platformArticles,

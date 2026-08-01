@@ -11,6 +11,7 @@ function validate(config: unknown): config is OrgNavConfig {
   if (!c || c.version !== 2 || !Array.isArray(c.groups) || c.groups.length === 0 || c.groups.length > 32) return false
   const groupIds = new Set<string>()
   const moduleKeys = new Set<string>()
+  const appKeys = new Set<string>()
   let itemCount = 0
   for (const g of c.groups) {
     if (
@@ -31,6 +32,15 @@ function validate(config: unknown): config is OrgNavConfig {
       if (i.kind === 'module') {
         if (!MODULE_BY_KEY.has(i.moduleKey) || moduleKeys.has(i.moduleKey)) return false
         moduleKeys.add(i.moduleKey)
+      } else if (i.kind === 'app') {
+        if (
+          typeof i.appKey !== 'string' ||
+          !/^[a-z][a-z0-9-]*$/.test(i.appKey) ||
+          appKeys.has(i.appKey) ||
+          (i.label !== undefined && (typeof i.label !== 'string' || i.label.length > 100))
+        )
+          return false
+        appKeys.add(i.appKey)
       } else if (i.kind === 'link') {
         if (
           typeof i.href !== 'string' ||
@@ -58,6 +68,18 @@ export async function PUT(req: Request) {
 
   const { config } = (await req.json()) as { config?: unknown }
   if (!validate(config)) return NextResponse.json({ error: 'invalid nav config' }, { status: 400 })
+
+  const configuredAppKeys = config.groups.flatMap((group) =>
+    group.items.flatMap((item) => (item.kind === 'app' ? [item.appKey] : [])),
+  )
+  if (configuredAppKeys.length > 0) {
+    const installed = (await db.execute(sql`
+      select key from apps where org_id = ${user.orgId} and key = any(${configuredAppKeys}::text[])
+    `)) as unknown as { rows: { key: string }[] }
+    if (installed.rows.length !== configuredAppKeys.length) {
+      return NextResponse.json({ error: 'navigation references an unknown app' }, { status: 400 })
+    }
+  }
 
   await db.execute(sql`
     insert into org_nav_configs (org_id, config)

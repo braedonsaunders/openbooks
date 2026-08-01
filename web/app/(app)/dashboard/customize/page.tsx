@@ -31,7 +31,7 @@ export default async function CustomiseDashboardPage() {
   const allowedWidgetIds = new Set(
     Object.keys(WIDGETS).filter((id) => canSeeWidget(authz, id)),
   )
-  const { nodes, libraryCards } = await loadDashboardEditCanvas(authz, visibleLayout, {
+  const { nodes, libraryCards, apps } = await loadDashboardEditCanvas(authz, visibleLayout, {
     allowedWidgetIds,
   })
 
@@ -63,6 +63,7 @@ export default async function CustomiseDashboardPage() {
           role={role}
           mode="edit"
           libraryCards={libraryCards}
+          apps={apps}
           allowedWidgetIds={allowedWidgetIds}
           quickActionsSaveAction={saveQuickActions}
         />

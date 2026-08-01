@@ -7,7 +7,7 @@ export const appBuilder: DocArticle = {
   order: 2,
   summary:
     'Create, edit, provision, secure, run, and publish organization apps — a sandboxed frontend plus a governed backend.',
-  updated: '2026-07-21',
+  updated: '2026-07-31',
   keywords: [
     'app builder',
     'app package',
@@ -21,7 +21,7 @@ export const appBuilder: DocArticle = {
     'App Library',
     'sandbox',
   ],
-  related: ['apps', 'scripting-engine', 'scripting-api-reference', 'record-customization'],
+  related: ['apps', 'app-api-reference', 'scripting-engine', 'scripting-api-reference', 'record-customization'],
   body: `# App Builder
 
 **Settings → Extend → App Builder** (route **/admin/apps**) is where an
@@ -45,6 +45,12 @@ An app is a package of a **manifest** plus its **files**. The manifest declares:
 - **endpoints** — named backend handlers, each pointing at a file and an HTTP
   method (**GET**, **POST**, or **ANY**). Endpoint names must be unique.
 - **nav** — whether the app shows in navigation, and its label and icon.
+
+When **nav.show** is enabled, the host initially places the app in **My Work**.
+An administrator can later move that first-class shortcut to any navigation
+workspace without changing the package. Every active app is also available as
+a dashboard launcher card and as a Quick action; these host surfaces keep the
+app's sandbox and permission boundary intact.
 
 A typical bundle looks like:
 
@@ -82,16 +88,17 @@ cannot be deleted out from under the manifest.
 
 The **Overview** tab is a form — you never edit JSON by hand. It sets the name,
 description, navigation visibility, the **Backend endpoints** list, and the
-app's **Capabilities**. Two capabilities are grantable:
-
-- **Read custom records** (**records.read**) — read custom-record data.
-- **Create & post journals** (**gl.post**) — write governed ledger entries.
+app's **Capabilities**. Capabilities cover the self-describing platform record
+API: ledger, payables, receivables, parties, items, projects, assets, and custom
+records each expose their relevant read and write permission. **Create & post
+journals** adds the dedicated balanced-journal writer.
 
 Everything else is denied by default. Grant only what the app needs. Every
 backend and bridge call is checked against these grants **intersected with the
 calling user's own permissions**, so an app can never exceed the authority of
-the person using it. The app's private key-value store is always available and
-needs no capability.
+the person using it. The App API filters its live schema and operations to that
+intersection. The app's private key-value store is always available and needs
+no capability.
 
 ## Provision records and fields
 
@@ -122,14 +129,17 @@ lines it emitted. Use it to investigate a failing action.
   access to the parent page, and a content-security policy that blocks it from
   making its own network calls. Its only channel to the platform is a validated
   message bridge exposing **openbooks.getContext()**, **openbooks.callBackend()**,
-  and read-only **records** helpers.
+  custom-record helpers, and self-describing governed platform record CRUD.
 - The **backend** runs in a WebAssembly JavaScript sandbox with no filesystem,
   no network, and no database connection. It reaches data only through the
   permission-scoped adapters the platform injects, under a memory limit, a time
   limit, and a per-run unit budget.
 
-See **Scripting Engine** and **Scripting API Reference** for the backend
-runtime, the entry-point contract, and the full host API.
+See **App API Reference** for the exact frontend and backend function contract,
+including parameters, return values, permissions, errors, governance costs,
+and limits. The **Scripting Engine** and **Scripting API Reference** describe
+the related trigger-script surface, which is not interchangeable with the App
+API.
 
 ## Publish to the App Library
 

@@ -4,7 +4,8 @@ import { db } from '@openbooks/engine/src/db.ts'
 import { PageHeader } from '@openbooks/ui'
 import { PageContainer } from '../../../../components/page-layout'
 import { currentUser } from '../../../../lib/auth'
-import { defaultNavConfig, type OrgNavConfig } from '../../../../lib/nav/registry'
+import { listApps } from '../../../../lib/apps/store'
+import { defaultNavConfig, layerInNavApps, type OrgNavConfig } from '../../../../lib/nav/registry'
 import { NavEditor } from './NavEditor'
 
 export const dynamic = 'force-dynamic'
@@ -15,17 +16,28 @@ export default async function NavigationAdmin() {
   const t = await getTranslations('admin.navigation')
   const tHub = await getTranslations('admin.hub')
 
-  const r = (await db.execute(
-    sql`select config from org_nav_configs where org_id = ${user.orgId} limit 1`,
-  )) as unknown as { rows: { config: OrgNavConfig }[] }
+  const [r, apps] = await Promise.all([
+    db.execute(sql`select config from org_nav_configs where org_id = ${user.orgId} limit 1`) as unknown as Promise<{
+      rows: { config: OrgNavConfig }[]
+    }>,
+    listApps(user.orgId),
+  ])
   const saved = r.rows[0]?.config
-  const config = saved?.version === 2 ? saved : defaultNavConfig()
+  const navApps = apps
+    .filter((app) => app.status === 'installed' && app.activeVersionId)
+    .map((app) => ({
+      key: app.key,
+      name: app.manifest?.nav?.label?.trim() || app.name,
+      iconKey: app.manifest?.nav?.icon?.trim() || app.iconKey,
+      showInNav: app.showInNav,
+    }))
+  const config = layerInNavApps(saved?.version === 2 ? saved : defaultNavConfig(), navApps)
 
   return (
     <PageContainer className="max-w-3xl">
       <PageHeader back={{ href: '/admin', label: tHub('title') }} title={t('title')} description={t('description')} />
       <div className="mt-6">
-        <NavEditor initial={config} />
+        <NavEditor initial={config} apps={navApps} />
       </div>
     </PageContainer>
   )

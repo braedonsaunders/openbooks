@@ -27,6 +27,13 @@ export default async function DashboardPage() {
   const visibleLayout = { ...layout, widgets }
 
   const { nodes } = await loadDashboardView(authz, visibleLayout)
+  const renderedLayout = {
+    ...visibleLayout,
+    // Removed/disabled apps and unpublished insight cards leave no live node.
+    // Keep stale references out of the everyday dashboard; customization can
+    // still surface and remove them on the next save.
+    widgets: visibleLayout.widgets.filter((widget) => nodes[widget.id] !== undefined),
+  }
 
   const greeting = buildGreeting(today, authz.user.name, {
     morning: t('greeting.morning'),
@@ -39,7 +46,7 @@ export default async function DashboardPage() {
       <div className="space-y-5">
         <DashboardHeader greeting={greeting} />
         <DashboardGrid
-          initialLayout={visibleLayout}
+          initialLayout={renderedLayout}
           nodes={nodes}
           role={role}
           mode="view"

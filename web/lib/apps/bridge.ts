@@ -15,7 +15,17 @@
 export const BRIDGE_MARKER = '__ob' as const
 
 /** Methods the host relays to the server (getContext is answered locally). */
-export const BRIDGE_METHODS = ['callBackend', 'records.list', 'records.get'] as const
+export const BRIDGE_METHODS = [
+  'callBackend',
+  'records.list',
+  'records.get',
+  'platform.schema',
+  'platform.list',
+  'platform.get',
+  'platform.create',
+  'platform.update',
+  'platform.delete',
+] as const
 export type BridgeMethod = (typeof BRIDGE_METHODS)[number]
 
 export interface BridgeContext {
@@ -109,6 +119,14 @@ export function bridgeClientSource(context: BridgeContext): string {
     records: {
       list: function(typeKey, filters){ return call('records.list', { typeKey: typeKey, filters: filters || {} }); },
       get: function(typeKey, id){ return call('records.get', { typeKey: typeKey, id: id }); }
+    },
+    platform: {
+      schema: function(){ return call('platform.schema', {}); },
+      list: function(typeKey, options){ return call('platform.list', { typeKey: typeKey, options: options || {} }); },
+      get: function(typeKey, id){ return call('platform.get', { typeKey: typeKey, id: id }); },
+      create: function(typeKey, body){ return call('platform.create', { typeKey: typeKey, body: body || {} }); },
+      update: function(typeKey, id, body){ return call('platform.update', { typeKey: typeKey, id: id, body: body || {} }); },
+      delete: function(typeKey, id){ return call('platform.delete', { typeKey: typeKey, id: id }); }
     }
   };
   window.parent.postMessage({ '${BRIDGE_MARKER}': true, type: 'ready' }, '*');

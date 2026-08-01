@@ -29,6 +29,8 @@ import type { SaveQuickActionsAction } from './_quick-actions-shared'
 import { WidgetPalette } from './_widget-palette'
 import { resetDashboardLayout, saveDashboardLayout } from './actions'
 import { isUuid } from '@/lib/list-params'
+import { appWidgetId, isAppWidgetId } from '@/lib/apps/surfaces'
+import type { DashboardApp } from './_app-widget'
 
 const Responsive = dynamic(() => import('react-grid-layout').then((m) => m.Responsive), {
   ssr: false,
@@ -60,6 +62,7 @@ export function DashboardGrid({
   role,
   mode,
   libraryCards = [],
+  apps = [],
   allowedWidgetIds,
   saveLayoutAction = saveDashboardLayout as SaveDashboardGridAction,
   resetLayoutAction = resetDashboardLayout as ResetDashboardGridAction,
@@ -71,6 +74,7 @@ export function DashboardGrid({
   role: RoleTier
   mode: 'view' | 'edit'
   libraryCards?: LibraryCard[]
+  apps?: DashboardApp[]
   allowedWidgetIds?: readonly string[] | Set<string>
   saveLayoutAction?: SaveDashboardGridAction
   resetLayoutAction?: ResetDashboardGridAction
@@ -135,13 +139,14 @@ export function DashboardGrid({
     () =>
       layout.map((w) => {
         const meta = WIDGETS[w.id]
+        const appWidget = isAppWidgetId(w.id)
         return {
           i: w.id,
           x: w.x,
           y: w.y,
           w: w.w,
           h: w.h,
-          minW: meta?.minSize.w ?? 2,
+          minW: meta?.minSize.w ?? (appWidget ? 3 : 2),
           minH: meta?.minSize.h ?? 2,
           maxW: meta?.maxSize?.w,
           maxH: meta?.maxSize?.h,
@@ -171,6 +176,16 @@ export function DashboardGrid({
       if (presentIds.has(card.id)) return
       const maxY = layout.reduce((m, w) => Math.max(m, w.y + w.h), 0)
       setLayout((prev) => [...prev, { id: card.id, x: 0, y: maxY, w: 4, h: 4 }])
+    },
+    [layout, presentIds],
+  )
+
+  const handleAddApp = useCallback(
+    (app: DashboardApp) => {
+      const id = appWidgetId(app.key)
+      if (presentIds.has(id)) return
+      const maxY = layout.reduce((m, w) => Math.max(m, w.y + w.h), 0)
+      setLayout((prev) => [...prev, { id, x: 0, y: maxY, w: 4, h: 3 }])
     },
     [layout, presentIds],
   )
@@ -353,6 +368,8 @@ export function DashboardGrid({
             onAdd={handleAdd}
             libraryCards={libraryCards}
             onAddCard={handleAddCard}
+            apps={apps}
+            onAddApp={handleAddApp}
             allowedWidgetIds={allowedWidgetIds}
             onClose={() => setPaletteOpen(false)}
           />

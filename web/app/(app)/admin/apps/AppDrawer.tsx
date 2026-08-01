@@ -30,6 +30,7 @@ import { Badge, Button, Input, Label, Select, Textarea, UrlDrawer, cn } from '@o
 import { promptDialog } from '@/lib/prompt'
 import { confirmDialog } from '@/lib/confirm'
 import { dateTime } from '@/lib/format'
+import { APP_PLATFORM_PERMISSIONS } from '@/lib/apps/manifest'
 
 /**
  * The Apps admin surface: toolbar (New app / Import .zip), the marketplace
@@ -186,10 +187,33 @@ const TABS = ['overview', 'files', 'runs'] as const
 type Tab = (typeof TABS)[number]
 const TAB_LABELS: Record<Tab, string> = { overview: 'Overview', files: 'Files', runs: 'Runs' }
 
-const CAPABILITIES: { key: string; label: string; help: string }[] = [
-  { key: 'records.read', label: 'Read custom records', help: 'Let this app read your custom records' },
-  { key: 'gl.post', label: 'Create & post journals', help: 'Let this app create and post journal entries' },
-]
+const CAPABILITY_COPY: Record<string, { label: string; help: string }> = {
+  'records.read': { label: 'Read custom records', help: 'Read published custom record types' },
+  'records.create': { label: 'Manage custom records', help: 'Create, update, and delete custom records' },
+  'gl.read': { label: 'Read the general ledger', help: 'Read accounts and posted journal entries' },
+  'gl.post': { label: 'Create and post journals', help: 'Create governed balanced journals' },
+  'ap.read': { label: 'Read payables', help: 'Read vendor bills' },
+  'ap.create': { label: 'Manage vendor bills', help: 'Create, update, submit, and delete bills' },
+  'ap.post': { label: 'Post vendor bills', help: 'Post governed vendor bills to the ledger' },
+  'ap.pay': { label: 'Read payments', help: 'Read payment documents' },
+  'ar.read': { label: 'Read receivables', help: 'Read customer invoices' },
+  'ar.create': { label: 'Manage customer invoices', help: 'Create, update, submit, and delete invoices' },
+  'ar.post': { label: 'Post customer invoices', help: 'Post governed customer invoices to the ledger' },
+  'parties.read': { label: 'Read parties', help: 'Read customers, vendors, and employees' },
+  'parties.manage': { label: 'Manage parties', help: 'Create, update, and delete parties' },
+  'items.read': { label: 'Read items and services', help: 'Read the item catalog' },
+  'items.manage': { label: 'Manage items and services', help: 'Create, update, and delete catalog items' },
+  'projects.read': { label: 'Read projects', help: 'Read projects and jobs' },
+  'projects.manage': { label: 'Manage projects', help: 'Create, update, and delete projects' },
+  'assets.read': { label: 'Read fixed assets', help: 'Read fixed assets' },
+  'assets.manage': { label: 'Manage fixed assets', help: 'Create, update, and delete fixed assets' },
+}
+
+const CAPABILITIES = APP_PLATFORM_PERMISSIONS.map((key) => ({
+  key,
+  label: CAPABILITY_COPY[key]?.label ?? key,
+  help: CAPABILITY_COPY[key]?.help ?? `Allow ${key}`,
+}))
 
 interface AppDetail {
   key: string

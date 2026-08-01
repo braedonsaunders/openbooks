@@ -1,6 +1,13 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
-import { DEFAULT_NAV_ORDER, NAV_GROUPS, NAV_MODULES, defaultNavConfig } from './registry'
+import {
+  DEFAULT_NAV_ORDER,
+  NAV_GROUPS,
+  NAV_MODULES,
+  defaultNavConfig,
+  layerInNavApps,
+  type OrgNavConfig,
+} from './registry'
 
 test('default navigation is a complete version-two workspace configuration', () => {
   const config = defaultNavConfig()
@@ -80,6 +87,23 @@ test('default mobile navigation pins exactly four high-frequency destinations', 
 
 test('applications for payment is not exposed as a top-level navigation module', () => {
   assert.equal(NAV_MODULES.some((candidate) => candidate.key === 'construction-billing'), false)
+})
+
+test('nav-enabled apps layer into My Work once and preserve explicit placement', () => {
+  const apps = [{ key: 'expense-insights', name: 'Expense Insights', iconKey: 'activity', showInNav: true }]
+  const layered = layerInNavApps(defaultNavConfig(), apps)
+  const appItems = layered.groups.flatMap((group) => group.items).filter((item) => item.kind === 'app')
+  assert.deepEqual(appItems, [{ kind: 'app', appKey: 'expense-insights' }])
+
+  const moved: OrgNavConfig = {
+    ...layered,
+    groups: layered.groups.map((group) => ({
+      ...group,
+      items: group.items.filter((item) => item.kind !== 'app') as typeof group.items,
+    })),
+  }
+  moved.groups.find((group) => group.id === 'insights')!.items.push(appItems[0]!)
+  assert.equal(layerInNavApps(moved, apps), moved)
 })
 
 test('every module belongs to a declared workspace and has a unique stable key', () => {

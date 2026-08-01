@@ -6,8 +6,9 @@ export const apps: DocArticle = {
   category: 'apps',
   order: 1,
   summary: 'Find, install, update, open, and administer extensions for your organization.',
-  updated: '2026-07-19',
-  keywords: ['apps', 'extensions', 'library', 'install', 'update', 'app builder', 'marketplace'],
+  updated: '2026-07-31',
+  related: ['app-builder', 'app-api-reference'],
+  keywords: ['apps', 'extensions', 'library', 'install', 'update', 'app builder', 'marketplace', 'dashboard', 'navigation'],
   body: `# Apps and the App Library
 
 Apps extend the platform with organization-specific workflows, screens, records,
@@ -21,6 +22,24 @@ then select a card to open it. Only active, fully installed apps appear here.
 
 If an app you expect is missing, ask an administrator to confirm that it is
 installed and enabled for your organization.
+
+## Put apps where work happens
+
+Installed apps participate in the same customizable surfaces as built-in
+destinations:
+
+- In **Settings → Navigation**, add an app shortcut to any workspace, move or
+  rename it, hide it, or make it one of the four mobile shortcuts. Apps whose
+  package enables navigation are added to **My Work** automatically the first
+  time they appear.
+- On **Dashboard → Customize**, choose an installed app from the widget drawer
+  to add a resizable launcher card.
+- In the dashboard's **Quick actions** editor, choose an installed app just as
+  you would choose a built-in destination.
+
+These are host-rendered shortcuts. Opening one still runs the app on its
+isolated screen, and placing it on a menu or dashboard grants no additional app
+permissions. Disabled or uninstalled apps disappear from these surfaces.
 
 ## Browse the App Library
 

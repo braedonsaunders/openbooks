@@ -1,7 +1,8 @@
 import { z } from 'zod'
 import type { DashboardLayoutData } from '@openbooks/schema'
-import { isUuid } from '@/lib/list-params'
+import { isUuid } from '../../../lib/list-params'
 import { WIDGETS } from './_widget-registry'
+import { isAppWidgetId } from '../../../lib/apps/surfaces'
 
 const WidgetSchema = z.object({
   id: z.string().min(1),
@@ -21,11 +22,13 @@ export function filterPersistableDashboardWidgets(
   widgets: DashboardLayoutWidgetInput[],
   opts: {
     allowedWidgetIds?: ReadonlySet<string>
+    allowedAppWidgetIds?: ReadonlySet<string>
     allowAnyInsightCardUuid?: boolean
   } = {},
 ): DashboardLayoutData['widgets'] {
   return widgets.filter((w) => {
     if (w.id in WIDGETS) return !opts.allowedWidgetIds || opts.allowedWidgetIds.has(w.id)
+    if (isAppWidgetId(w.id)) return opts.allowedAppWidgetIds?.has(w.id) === true
     if (!isUuid(w.id)) return false
     return opts.allowAnyInsightCardUuid === true
   })

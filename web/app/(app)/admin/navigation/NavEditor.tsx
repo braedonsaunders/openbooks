@@ -11,6 +11,7 @@ import {
   NAV_GROUP_BY_KEY,
   defaultNavConfig,
   type NavGroupConfig,
+  type NavAppOption,
   type NavGroupKey,
   type NavItemConfig,
   type OrgNavConfig,
@@ -27,15 +28,21 @@ function move<T>(arr: T[], i: number, delta: number): T[] {
 
 function itemLabel(item: NavItemConfig): string {
   if (item.kind === 'link') return item.label
+  if (item.kind === 'app') return item.label ?? item.appKey
   return item.label ?? MODULE_BY_KEY.get(item.moduleKey)?.label ?? item.moduleKey
 }
 
-export function NavEditor({ initial }: { initial: OrgNavConfig }) {
+export function NavEditor({ initial, apps }: { initial: OrgNavConfig; apps: NavAppOption[] }) {
   const t = useTranslations('admin.navigation')
   const tCommon = useTranslations('common')
   const [config, setConfig] = useState<OrgNavConfig>(initial)
   const [busy, setBusy] = useState(false)
   const router = useRouter()
+  const appByKey = new Map(apps.map((app) => [app.key, app]))
+  const placedApps = new Set(
+    config.groups.flatMap((group) => group.items.flatMap((item) => (item.kind === 'app' ? [item.appKey] : []))),
+  )
+  const availableApps = apps.filter((app) => !placedApps.has(app.key))
 
   const setGroup = (gi: number, patch: Partial<NavGroupConfig>) =>
     setConfig((c) => ({
@@ -147,11 +154,15 @@ export function NavEditor({ initial }: { initial: OrgNavConfig }) {
             <ul className="divide-y divide-slate-100 dark:divide-slate-800">
               {g.items.map((item, ii) => (
                 <li
-                  key={`${item.kind === 'module' ? item.moduleKey : item.href}-${ii}`}
+                  key={`${item.kind === 'module' ? item.moduleKey : item.kind === 'app' ? `app:${item.appKey}` : item.href}-${ii}`}
                   className={cn('flex flex-wrap items-center gap-2 py-1.5', item.hidden && 'opacity-45')}
                 >
                   <Input
-                    value={itemLabel(item)}
+                    value={
+                      item.kind === 'app'
+                        ? item.label ?? appByKey.get(item.appKey)?.name ?? item.appKey
+                        : itemLabel(item)
+                    }
                     onChange={(e) =>
                       setGroup(gi, {
                         items: g.items.map((x, k) => (k === ii ? { ...x, label: e.target.value } : x)),
@@ -162,6 +173,10 @@ export function NavEditor({ initial }: { initial: OrgNavConfig }) {
                   />
                   {item.kind === 'module' ? (
                     <span className="font-mono text-xs text-slate-400">{item.moduleKey}</span>
+                  ) : item.kind === 'app' ? (
+                    <span className="font-mono text-xs text-slate-400">
+                      app:{appByKey.get(item.appKey)?.name ?? item.appKey}
+                    </span>
                   ) : (
                     <span className="truncate font-mono text-xs text-slate-400">{item.href}</span>
                   )}
@@ -247,6 +262,26 @@ export function NavEditor({ initial }: { initial: OrgNavConfig }) {
             >
               <Plus size={13} /> {t('addLink')}
             </Button>
+            {availableApps.length > 0 ? (
+              <Select
+                value=""
+                onChange={(event) => {
+                  const appKey = event.currentTarget.value
+                  if (!appKey) return
+                  setGroup(gi, { items: [...g.items, { kind: 'app', appKey }] })
+                }}
+                aria-label={t.has('addApp') ? t('addApp') : 'Add app shortcut'}
+                className="w-52"
+                triggerClassName="h-9 text-xs"
+              >
+                <option value="">{t.has('addApp') ? t('addApp') : 'Add app shortcut…'}</option>
+                {availableApps.map((app) => (
+                  <option key={app.key} value={app.key}>
+                    {app.name}
+                  </option>
+                ))}
+              </Select>
+            ) : null}
           </CardContent>
         </Card>
       ))}
