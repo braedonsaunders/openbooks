@@ -71,7 +71,13 @@ test('properties expose system form, operational tabs, and default list view', (
   assert.equal(meta.customFieldTable, 'managed_properties')
 
   const layout = defaultFormLayout('property')
-  assert.deepEqual(resolveFormTabs(layout).map((tab) => tab.key), ['overview', 'units', 'leases'])
+  assert.deepEqual(resolveFormTabs(layout).map((tab) => tab.key), [
+    'overview',
+    'units',
+    'leases',
+    'rent',
+    'deposits',
+  ])
   assert.deepEqual(lintFormLayout(layout), [])
   assert.equal(
     layout.header.groups[0]!.fields.some((field) => field.key === 'deposit_liability_account_id'),

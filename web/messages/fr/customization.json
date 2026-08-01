@@ -26,7 +26,7 @@
     "property": "Propriété"
   },
   "property": {
-    "tabs": { "overview": "Aperçu", "units": "Unités", "leases": "Baux" },
+    "tabs": { "overview": "Aperçu", "units": "Unités", "leases": "Baux", "rent": "Loyer", "deposits": "Dépôts" },
     "fields": {
       "code": "Code de propriété",
       "propertyType": "Type de propriété",

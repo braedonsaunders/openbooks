@@ -10,14 +10,20 @@ import {
   assessLeaseLateFees,
   billCamReconciliation,
   billDueLeaseCharges,
+  cancelPropertyLease,
   createCamPool,
   createManagedProperty,
+  deleteManagedProperty,
+  deletePropertyUnit,
   updateManagedProperty,
   createPropertyLease,
   createPropertyUnit,
+  updatePropertyLease,
+  updatePropertyUnit,
   finalizeCamPool,
   propertyManagementWorkspace,
   recordSecurityDeposit,
+  reverseSecurityDepositTransaction,
   scheduleLeaseCharges,
   terminatePropertyLease,
 } from "@openbooks/engine/src/property-management.ts";
@@ -78,13 +84,18 @@ export async function GET() {
   });
 }
 
-const glActions = new Set(["recordDeposit", "finalizeCam"]);
+const glActions = new Set(["recordDeposit", "reverseDeposit", "finalizeCam"]);
 const billingActions = new Set(["billRent", "billCam", "assessLateFees"]);
 const knownActions = new Set([
   "createProperty",
   "updateProperty",
+  "deleteProperty",
   "createUnit",
+  "updateUnit",
+  "deleteUnit",
   "createLease",
+  "updateLease",
+  "cancelLease",
   "activateLease",
   "terminateLease",
   "addCharge",
@@ -94,6 +105,7 @@ const knownActions = new Set([
   "billRent",
   "assessLateFees",
   "recordDeposit",
+  "reverseDeposit",
   "createCamPool",
   "finalizeCam",
   "billCam",
@@ -108,7 +120,11 @@ async function guardSubsidiaryAccess(
 ): Promise<NextResponse | null> {
   const allowed = authz.allowedSubsidiaryIds;
   if (!allowed) return null;
-  if ((action === "billRent" && !body.leaseId) || action === "assessLateFees") {
+  if (
+    ((action === "billRent" || action === "assessLateFees") &&
+      !body.leaseId &&
+      !body.propertyId)
+  ) {
     return NextResponse.json(
       {
         error: "Bulk portfolio billing requires unrestricted subsidiary access",
@@ -117,7 +133,13 @@ async function guardSubsidiaryAccess(
     );
   }
   const recordId = String(
-    body.propertyId ?? body.leaseId ?? body.escalationId ?? body.poolId ?? "",
+    body.propertyId ??
+      body.leaseId ??
+      body.unitId ??
+      body.transactionId ??
+      body.escalationId ??
+      body.poolId ??
+      "",
   );
   if (action !== "createProperty" && !UUID.test(recordId)) {
     return NextResponse.json(
@@ -130,10 +152,26 @@ async function guardSubsidiaryAccess(
   if (action === "createProperty") {
     subsidiaryId =
       typeof body.subsidiaryId === "string" ? body.subsidiaryId : null;
+  } else if (["updateUnit", "deleteUnit"].includes(action)) {
+    const result = (await db.execute(
+      sql`select p.subsidiary_id as "subsidiaryId" from property_units u join managed_properties p on p.id=u.property_id and p.org_id=u.org_id where u.org_id=${authz.user.orgId} and u.id=${String(body.unitId ?? "")}`,
+    )) as any;
+    subsidiaryId = result.rows[0]?.subsidiaryId ?? null;
+  } else if (action === "reverseDeposit") {
+    const result = (await db.execute(
+      sql`select p.subsidiary_id as "subsidiaryId" from security_deposit_transactions d join property_leases l on l.id=d.lease_id and l.org_id=d.org_id join managed_properties p on p.id=l.property_id and p.org_id=l.org_id where d.org_id=${authz.user.orgId} and d.id=${String(body.transactionId ?? "")}`,
+    )) as any;
+    subsidiaryId = result.rows[0]?.subsidiaryId ?? null;
   } else if (
-    ["updateProperty", "createUnit", "createLease", "createCamPool"].includes(
-      action,
-    )
+    [
+      "updateProperty",
+      "deleteProperty",
+      "createUnit",
+      "createLease",
+      "createCamPool",
+      "billRent",
+      "assessLateFees",
+    ].includes(action) && body.propertyId
   ) {
     const result = (await db.execute(
       sql`select subsidiary_id as "subsidiaryId" from managed_properties where org_id=${authz.user.orgId} and id=${String(body.propertyId ?? "")}`,
@@ -151,6 +189,8 @@ async function guardSubsidiaryAccess(
     }
   } else if (
     [
+      "updateLease",
+      "cancelLease",
       "activateLease",
       "terminateLease",
       "addCharge",
@@ -233,11 +273,38 @@ export async function POST(request: Request) {
         } as any);
         break;
       }
+      case "deleteProperty":
+        result = await deleteManagedProperty(
+          common.orgId,
+          common.actorId,
+          String(body.propertyId),
+        );
+        break;
       case "createUnit":
         result = await createPropertyUnit({ ...body, ...common } as any);
         break;
+      case "updateUnit":
+        result = await updatePropertyUnit({ ...body, ...common } as any);
+        break;
+      case "deleteUnit":
+        result = await deletePropertyUnit(
+          common.orgId,
+          common.actorId,
+          String(body.unitId),
+        );
+        break;
       case "createLease":
         result = await createPropertyLease({ ...body, ...common } as any);
+        break;
+      case "updateLease":
+        result = await updatePropertyLease({ ...body, ...common } as any);
+        break;
+      case "cancelLease":
+        result = await cancelPropertyLease(
+          common.orgId,
+          common.actorId,
+          String(body.leaseId),
+        );
         break;
       case "activateLease":
         result = await activatePropertyLease(
@@ -282,6 +349,7 @@ export async function POST(request: Request) {
           common.actorId,
           body.asOf,
           body.leaseId,
+          body.propertyId,
         );
         break;
       case "assessLateFees":
@@ -289,10 +357,18 @@ export async function POST(request: Request) {
           common.orgId,
           common.actorId,
           body.asOf,
+          body.leaseId,
+          body.propertyId,
         );
         break;
       case "recordDeposit":
         result = await recordSecurityDeposit({ ...body, ...common } as any);
+        break;
+      case "reverseDeposit":
+        result = await reverseSecurityDepositTransaction({
+          ...body,
+          ...common,
+        } as any);
         break;
       case "createCamPool":
         result = await createCamPool({ ...body, ...common } as any);

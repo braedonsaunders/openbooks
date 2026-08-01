@@ -25,7 +25,9 @@
     "tabs": {
       "overview": "Übersicht",
       "units": "Einheiten",
-      "leases": "Mietverträge"
+      "leases": "Mietverträge",
+      "rent": "Miete",
+      "deposits": "Kautionen"
     },
     "fields": {
       "code": "Immobiliencode",

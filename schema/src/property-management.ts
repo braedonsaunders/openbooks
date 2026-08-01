@@ -202,12 +202,16 @@ export const securityDepositTransactions = pgTable(
     offsetAccountId: uuid("offset_account_id"),
     appliedDocumentId: uuid("applied_document_id"),
     journalEntryId: uuid("journal_entry_id").notNull(),
+    reversalOfId: uuid("reversal_of_id"),
     memo: text("memo"),
     ...auditColumns,
   },
   (t) => [
     index("security_deposits_lease_date").on(t.orgId, t.leaseId, t.occurredOn),
     uniqueIndex("security_deposits_entry").on(t.orgId, t.journalEntryId),
+    uniqueIndex("security_deposits_reversal_once")
+      .on(t.orgId, t.reversalOfId)
+      .where(sql`${t.reversalOfId} is not null`),
     check("security_deposits_amount_positive", sql`${t.amount} > 0`),
     check(
       "security_deposits_application_shape",
