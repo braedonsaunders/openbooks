@@ -44,7 +44,7 @@ export default async function Receipts({
         orgId={authz.user.orgId}
         userId={authz.user.id}
         canManage={can(authz, 'admin.customization.manage')}
-        userRoles={authz.user.roles.map(({ key }) => key)}
+        userRoles={(authz.user as any).roles?.map(({ key }: { key: string }) => key) ?? [authz.user.role]}
       /> : <RunsSection sp={sp} orgId={authz.user.orgId} canApprove={can(authz, 'ar.approve')} direction="inbound" basePath="/receipts" />}
     </ListPageLayout>
   )

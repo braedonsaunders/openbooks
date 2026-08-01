@@ -75,7 +75,7 @@ export default async function EntityRole({
         orgId,
         userId: authz.user.id,
         recordType: role,
-        userRoles: authz.user.roles.map(({ key }) => key),
+        userRoles: (authz.user as any).roles?.map(({ key }: { key: string }) => key) ?? [authz.user.role],
         headerDefs: pickers[3] as any,
         lineDefs: [],
         explicitLayoutId: pickString(sp.partyForm),

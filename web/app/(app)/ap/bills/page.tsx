@@ -108,7 +108,7 @@ export default async function ApBills({
           orgId: authz.user.orgId,
           userId: authz.user.id,
           recordType: openKind!,
-          userRoles: authz.user.roles.map(({ key }) => key),
+          userRoles: (authz.user as any).roles?.map(({ key }: { key: string }) => key) ?? [authz.user.role],
           headerDefs,
           lineDefs,
           explicitLayoutId: pickString(sp.form),
