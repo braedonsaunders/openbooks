@@ -27,7 +27,8 @@
       "units": "Einheiten",
       "leases": "Mietverträge",
       "rent": "Miete",
-      "deposits": "Kautionen"
+      "deposits": "Kautionen",
+      "cam": "CAM"
     },
     "fields": {
       "code": "Immobiliencode",

@@ -22,7 +22,14 @@
     "property": "物业"
   },
   "property": {
-    "tabs": { "overview": "概览", "units": "单元", "leases": "租约", "rent": "租金", "deposits": "押金" },
+    "tabs": {
+      "overview": "概览",
+      "units": "单元",
+      "leases": "租约",
+      "rent": "租金",
+      "deposits": "押金",
+      "cam": "CAM"
+    },
     "fields": {
       "code": "物业代码",
       "propertyType": "物业类型",

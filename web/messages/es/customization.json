@@ -31,7 +31,8 @@
       "units": "Unidades",
       "leases": "Arrendamientos",
       "rent": "Alquiler",
-      "deposits": "Depósitos"
+      "deposits": "Depósitos",
+      "cam": "CAM"
     },
     "fields": {
       "code": "Código de propiedad",

@@ -15,6 +15,7 @@ export const propertyManagement: DocArticle = {
     'lease',
     'tenant',
     'rent',
+    'rent roll',
     'escalation',
     'late fee',
     'security deposit',
@@ -56,8 +57,8 @@ allocation. A vacant unit can be prepared before a tenant or lease is known.
 
 ## Creating and activating a lease
 
-Create the lease from the **Leases** tab, select its property, unit, tenant,
-term, billing day, currency, and default accounts, then add its charges. A
+Open a property and create the lease from its **Leases** tab. Select the unit,
+tenant, term, billing day, currency, and default accounts, then add its charges. A
 charge can recur monthly or quarterly, or occur once. Base rent, estimated CAM,
 parking, storage, and other tenant charges can use separate income accounts.
 
@@ -72,9 +73,17 @@ set a new amount, increase the current amount by a percentage, or apply a fixed
 increase. Applying it updates future billing while preserving the prior terms
 and the audit history.
 
-## Billing rent and fees
+## Rent roll, billing, and fees
 
-The **Rent** tab shows scheduled charges that are ready to bill. **Bill rent**
+The portfolio **Rent Roll** shows current and upcoming tenant agreements beside
+vacant and offline units. Search or filter it by property and status, then open
+a row to review the underlying property, unit, and lease without leaving the
+portfolio. Monthly recurring charges, deposits held, past-due balances, and
+automatic-billing status are shown together for operating review.
+
+Use the Rent Roll's portfolio actions to assess late fees or bill every due
+lease when your role has unrestricted subsidiary access. For a narrower run,
+open a property and use its **Rent** tab. **Bill due rent**
 groups eligible lines into native customer invoices with the tenant, property
 location, due date, accounts, and source details attached. The resulting
 invoice follows the normal receivables lifecycle and appears in Accounts
@@ -92,9 +101,10 @@ history.
 
 ## Security deposits
 
-Use the **Deposits** tab to receive, refund, adjust, or accrue interest on a
-deposit. Every transaction creates a balanced journal entry. Receipts debit the
-selected bank account and credit the deposit liability; refunds reverse that
+Open a lease and use its **Deposits** tab to receive, refund, adjust, or accrue
+interest on a deposit. The property's **Deposits** tab provides a read-only
+rollup across its leases. Every transaction creates a balanced journal entry.
+Receipts debit the selected bank account and credit the deposit liability; refunds reverse that
 movement. The deposit balance is calculated from its transaction history rather
 than stored as an editable total.
 
@@ -107,7 +117,8 @@ advice.
 
 ## CAM reconciliation
 
-Create a CAM pool for the property and reconciliation period. Select the posted
+Create a CAM pool from the portfolio **CAM** workspace or from the property's
+**CAM** tab. Select the property and reconciliation period, then the posted
 expense accounts that belong in the pool, then choose the allocation method:
 equal shares, rentable area, or custom percentages. Estimated CAM already
 billed through lease charges is compared with the tenant's share of actual
