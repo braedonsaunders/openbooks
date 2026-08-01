@@ -29,6 +29,7 @@ export * from "./subscriptions";
 export * from "./advanced-subscriptions";
 export * from "./subcontracts";
 export * from "./wip-billing";
+export * from "./property-management";
 export * from "./iam";
 export * from "./api";
 export * from "./application-operations";

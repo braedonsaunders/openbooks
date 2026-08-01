@@ -51,6 +51,7 @@ test('default workspaces follow the approved journey-oriented information archit
     'receipts',
   ])
   assert.deepEqual(DEFAULT_NAV_ORDER.operations, [
+    'property-management',
     'projects',
     'wip-billing',
     'timesheets',

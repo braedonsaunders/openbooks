@@ -146,7 +146,7 @@ async function resolveIncomeAccount(orgId: string, incomeAccountId: string | nul
   return id;
 }
 
-interface InvoiceSpec {
+export interface InvoiceSpec {
   orgId: string;
   actorId: string;
   customerId: string;
@@ -160,11 +160,17 @@ interface InvoiceSpec {
   unitPrice: string;
   memo: string;
   invoiceDate: string;
+  dueDate?: string | null;
+  locationId?: string | null;
   autoPost: boolean;
   /** When false, tax is skipped even if a tax code is present (proration credits). */
   applyTax?: boolean;
   /** Advanced lifecycle supplies an immutable component snapshot. */
   lines?: AdvancedBillingLine[];
+  /** Source-owned provenance retained on the native invoice header. */
+  custom?: Record<string, unknown>;
+  /** Property CAM true-ups may issue a native customer credit. */
+  documentKind?: "customer_invoice" | "customer_credit";
 }
 
 /**
@@ -172,7 +178,7 @@ interface InvoiceSpec {
  * supply the scalar fields and remain one line; advanced subscriptions supply
  * the effective-dated component snapshot and receive an itemized invoice.
  */
-async function createSubscriptionInvoice(
+export async function createSubscriptionInvoice(
   spec: InvoiceSpec,
 ): Promise<{ invoiceId: string; documentNumber: string; posted: boolean; total: string }> {
   const invoiceLines: AdvancedBillingLine[] = spec.lines?.length ? spec.lines : [{
@@ -211,12 +217,14 @@ async function createSubscriptionInvoice(
   }
   const total = add(netAmount, taxTotal);
 
-  const documentNumber = await nextNumber(spec.orgId, "customer_invoice", spec.subsidiaryId, "INV-");
+  const kind = spec.documentKind ?? "customer_invoice";
+  const documentNumber = await nextNumber(spec.orgId, kind, spec.subsidiaryId, kind === "customer_credit" ? "CM-" : "INV-");
   const created = (await db.execute(sql`
-    insert into documents (org_id, kind, document_number, party_id, document_date, currency, status,
-                           subsidiary_id, memo, subtotal, tax_total, total, created_by)
-    values (${spec.orgId}, 'customer_invoice', ${documentNumber}, ${spec.customerId}, ${spec.invoiceDate},
-            ${spec.currency}, 'draft', ${spec.subsidiaryId}, ${spec.memo}, ${netAmount}, ${taxTotal}, ${total}, ${spec.actorId})
+    insert into documents (org_id, kind, document_number, party_id, document_date, due_date, currency, status,
+                           subsidiary_id, location_id, memo, subtotal, tax_total, total, custom, created_by)
+    values (${spec.orgId}, ${kind}, ${documentNumber}, ${spec.customerId}, ${spec.invoiceDate}, ${spec.dueDate ?? null},
+            ${spec.currency}, 'draft', ${spec.subsidiaryId}, ${spec.locationId ?? null}, ${spec.memo}, ${netAmount}, ${taxTotal}, ${total},
+            ${JSON.stringify(spec.custom ?? {})}::jsonb, ${spec.actorId})
     returning id
   `)) as unknown as { rows: { id: string }[] };
   const invoiceId = created.rows[0]!.id;
@@ -238,7 +246,7 @@ async function createSubscriptionInvoice(
   let posted = false;
   if (spec.autoPost) {
     const submission = await submitAndReleaseIfUngated(
-      "customer_invoice",
+      kind,
       invoiceId,
       spec.actorId,
     );

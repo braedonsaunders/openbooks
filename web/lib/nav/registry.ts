@@ -250,6 +250,16 @@ export const NAV_MODULES: NavModule[] = [
     requiredPermission: 'items.read',
   },
   {
+    key: 'property-management',
+    href: '/property-management',
+    label: 'Property Management',
+    iconKey: 'building',
+    group: 'operations',
+    subgroup: 'delivery',
+    requiredPermission: 'ar.read',
+    featureKey: 'propertyManagement',
+  },
+  {
     key: 'purchase-orders',
     href: '/purchase-orders',
     label: 'Purchase Orders',
@@ -785,6 +795,7 @@ export const DEFAULT_NAV_ORDER: Record<NavGroupKey, readonly string[]> = {
   ],
   purchasing: ['purchase-orders', 'subcontracts', 'ap', 'ap-bills', 'payments', 'expenses', 'vendors', 'compliance', 'compliance-vendors', 'lien-waivers', 'information-returns'],
   operations: [
+    'property-management',
     'projects',
     'wip-billing',
     'timesheets',
