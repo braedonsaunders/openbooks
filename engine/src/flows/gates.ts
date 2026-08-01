@@ -485,6 +485,7 @@ export interface WorklistGate {
   href: string | null;
   /** Joined document header (null for future non-document subjects). */
   document: {
+    subsidiaryId: string | null;
     documentNumber: string;
     kind: string;
     status: string;
@@ -521,6 +522,7 @@ function mapWorklistRow(
     href: row.closePeriodName ? `/close?run=${String(row.subjectId)}&stage=lock` : null,
     document: row.documentNumber
       ? {
+          subsidiaryId: (row.subsidiaryId as string | null) ?? null,
           documentNumber: String(row.documentNumber),
           kind: String(row.docKind),
           status: String(row.docStatus),
@@ -542,6 +544,7 @@ const WORKLIST_SELECT = sql`
            g.assignee_user_id as "assigneeUserId", g.assignee_role as "assigneeRole",
            g.created_at as "createdAt", g.remind_at as "remindAt", g.escalate_at as "escalateAt",
            d.document_number as "documentNumber", d.kind as "docKind", d.status as "docStatus",
+           d.subsidiary_id as "subsidiaryId",
            d.total, d.currency, d.document_date as "documentDate", d.memo,
            p.display_name as "partyName", cp.name as "closePeriodName",
            case when cp.name is not null then cp.name || ' close' else null end as "subjectLabel"

@@ -333,6 +333,10 @@ async function deleteEntity(user: SessionUser, table: string, id: string): Promi
  *  action (draft is the default; submit routes for approval; post writes GL). */
 type DocApiBody = DocumentEditInput & { action?: "draft" | "submit" | "post" };
 
+export interface RecordWriteOptions {
+  source?: "api" | "mcp" | "assistant";
+}
+
 /** Run the submit/post lifecycle after an edit. Only for not-yet-posted docs
  *  (a posted doc already carries GL). Returns an error result or null on ok. */
 async function runDocumentLifecycle(
@@ -340,6 +344,7 @@ async function runDocumentLifecycle(
   id: string,
   kind: string,
   action: DocApiBody["action"],
+  source: "api" | "mcp" | "assistant",
 ): Promise<WriteResult | null> {
   if (action !== "submit" && action !== "post") return null;
   try {
@@ -367,7 +372,7 @@ async function runDocumentLifecycle(
     if (action === "post") {
       const deps = await controlDeps(user.orgId);
       await postDocument(id, deps, {
-        audit: { actorId: user.id, source: "api" },
+        audit: { actorId: user.id, source },
       });
     }
     return null;
@@ -384,8 +389,13 @@ function docEditError(e: unknown): WriteResult | null {
   return null;
 }
 
-async function createDocument(user: SessionUser, docKind: string, body: DocApiBody): Promise<WriteResult> {
-  const draft = await createDocumentDraft(user.orgId, user.id, docKind);
+async function createDocument(
+  user: SessionUser,
+  docKind: string,
+  body: DocApiBody,
+  source: "api" | "mcp" | "assistant",
+): Promise<WriteResult> {
+  const draft = await createDocumentDraft(user.orgId, user.id, docKind, { source });
   const current: DocumentEditCurrent = {
     kind: docKind,
     status: "draft",
@@ -396,18 +406,24 @@ async function createDocument(user: SessionUser, docKind: string, body: DocApiBo
     updatedAt: undefined,
   };
   try {
-    await applyDocumentEdit(draft.id, current, body, { orgId: user.orgId, userId: user.id, source: "api" });
+    await applyDocumentEdit(draft.id, current, body, { orgId: user.orgId, userId: user.id, source });
   } catch (e) {
     const mapped = docEditError(e);
     if (mapped) return mapped;
     throw e;
   }
-  const life = await runDocumentLifecycle(user, draft.id, docKind, body.action);
+  const life = await runDocumentLifecycle(user, draft.id, docKind, body.action, source);
   if (life) return life;
   return { status: 201, body: await loadDocument(draft.id, user.orgId) };
 }
 
-async function updateDocument(user: SessionUser, docKind: string, id: string, body: DocApiBody): Promise<WriteResult> {
+async function updateDocument(
+  user: SessionUser,
+  docKind: string,
+  id: string,
+  body: DocApiBody,
+  source: "api" | "mcp" | "assistant",
+): Promise<WriteResult> {
   const owned = (await db.execute(sql`
     select kind, status, total, tax_total as "taxTotal", party_id as "partyId",
            document_date as "documentDate", updated_at as "updatedAt"
@@ -416,14 +432,14 @@ async function updateDocument(user: SessionUser, docKind: string, id: string, bo
   if (!row) return err(404, "not found");
   if (row.status === "voided") return err(422, "a voided document cannot be edited");
   try {
-    await applyDocumentEdit(id, row, body, { orgId: user.orgId, userId: user.id, source: "api" });
+    await applyDocumentEdit(id, row, body, { orgId: user.orgId, userId: user.id, source });
   } catch (e) {
     const mapped = docEditError(e);
     if (mapped) return mapped;
     throw e;
   }
   // Posted docs already have GL; only advance the lifecycle for pre-post edits.
-  const life = row.status === "posted" ? null : await runDocumentLifecycle(user, id, docKind, body.action);
+  const life = row.status === "posted" ? null : await runDocumentLifecycle(user, id, docKind, body.action, source);
   if (life) return life;
   return { status: 200, body: await loadDocument(id, user.orgId) };
 }
@@ -450,6 +466,7 @@ export async function createRecord(
   resolved: ResolvedApiType,
   fields: ApiField[],
   body: Record<string, unknown>,
+  options: RecordWriteOptions = {},
 ): Promise<WriteResult> {
   switch (resolved.writer.kind) {
     case "custom_record":
@@ -457,7 +474,7 @@ export async function createRecord(
     case "entity":
       return createEntity(user, resolved.writer.table, fields, body);
     case "document":
-      return createDocument(user, resolved.writer.docKind, body as DocApiBody);
+      return createDocument(user, resolved.writer.docKind, body as DocApiBody, options.source ?? "api");
     case "readonly":
       return err(405, `${resolved.key} is read-only through the API`);
   }
@@ -469,6 +486,7 @@ export async function updateRecord(
   fields: ApiField[],
   id: string,
   body: Record<string, unknown>,
+  options: RecordWriteOptions = {},
 ): Promise<WriteResult> {
   switch (resolved.writer.kind) {
     case "custom_record":
@@ -476,7 +494,7 @@ export async function updateRecord(
     case "entity":
       return updateEntity(user, resolved.writer.table, fields, id, body);
     case "document":
-      return updateDocument(user, resolved.writer.docKind, id, body as DocApiBody);
+      return updateDocument(user, resolved.writer.docKind, id, body as DocApiBody, options.source ?? "api");
     case "readonly":
       return err(405, `${resolved.key} is read-only through the API`);
   }

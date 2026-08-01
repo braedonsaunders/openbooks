@@ -23,6 +23,7 @@
     "@codemirror/lang-javascript": "^6.2.5",
     "@codemirror/lang-json": "^6.0.2",
     "@grapesjs/react": "^2.0.0",
+    "@modelcontextprotocol/sdk": "^1.30.0",
     "@openbooks/emails": "*",
     "@openbooks/engine": "*",
     "@openbooks/jobs": "*",

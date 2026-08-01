@@ -81,6 +81,12 @@ test("OpenAPI documents exactly the operations each type advertises", () => {
   const item = spec.paths["/api/v1/records/widgets/{id}"];
   assert.ok(coll.get && coll.post, "widgets collection should document GET + POST");
   assert.ok(item.get && item.patch && item.delete, "widgets item should document GET + PATCH + DELETE");
+  for (const operation of [coll.post, item.patch, item.delete]) {
+    assert.ok(
+      operation.parameters.some((parameter: { name?: string }) => parameter.name === "Idempotency-Key"),
+      "every REST mutation must document Idempotency-Key",
+    );
+  }
 
   // Write bodies reference the *Write model (writable fields only).
   const writeRef = coll.post.requestBody.content["application/json"].schema.$ref;
