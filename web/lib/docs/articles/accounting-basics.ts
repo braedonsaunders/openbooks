@@ -282,7 +282,7 @@ Before importing transactions:
 4. validate default currencies, terms, taxes, and accounts; and
 5. archive records that should not be selected for new work.
 
-Good master data prevents duplicate parties, unmapped items, inconsistent aging,
+Controlled master data prevents duplicate parties, unmapped items, inconsistent aging,
 and misleading project reports later.
 `,
 }

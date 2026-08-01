@@ -6,7 +6,7 @@ export const projectTypes: DocArticle = {
   category: 'projects',
   order: 1,
   summary:
-    'Configure how each class of project is costed, priced, invoiced, and backed up — the profitability, invoicing, and backup profiles behind every project.',
+    'Configure profitability, invoicing, costing, pricing, and supporting-document requirements by project class.',
   updated: '2026-07-23',
   keywords: [
     'project type',
@@ -26,9 +26,8 @@ export const projectTypes: DocArticle = {
   body: `# Project Types
 
 A **project type** is the configurable classification that drives a project's
-profitability, invoicing, and backup behaviour. Instead of hardcoding "fixed
-price vs. time & materials" everywhere, each project points at a project type,
-and that type carries three profiles:
+profitability, invoicing, and backup behaviour. Each project references a
+project type containing three profiles:
 
 - **Profitability** — how each P&L measure is sourced or derived, plus the order
   of the P&L statement shown on a project's Financials tab.
@@ -37,8 +36,8 @@ and that type carries three profiles:
 - **Backup** — whether an invoice needs a backup package and what it contains.
 
 You manage project types under **Settings → Company Setup → Project
-Types**. Five built-in types ship with controlled defaults you can use as-is or
-duplicate and tune: **Time & Materials**, **Fixed Price**, **Cost-Plus**,
+Types**. Five built-in types are provided with controlled defaults and may be
+used directly or duplicated and modified: **Time & Materials**, **Fixed Price**, **Cost-Plus**,
 **Not-to-Exceed**, and **Schedule of Values**.
 
 ---
@@ -52,7 +51,7 @@ The **General** tab holds the type's identity and defaults:
 - **Description** — shown to users when they pick a type on a project.
 - **Billing method** — the legacy method (**time_and_materials**, **fixed_price**,
   **cost_plus**) this type maps to. It is kept for backwards compatibility; the
-  profiles below are what actually drive behaviour.
+  profiles below determine current behavior.
 - **Sort order** and **Status** — ordering in pickers and whether the type is
   selectable.
 
@@ -60,8 +59,8 @@ The **General** tab holds the type's identity and defaults:
 
 ## Profitability profile
 
-The Profitability tab defines how every number on a project's mini P&L is
-computed. Each measure has a configurable **source**.
+The Profitability tab defines how each measure on a project's profitability
+statement is computed. Each measure has a configurable **source**.
 
 The **Billing procedure** on the Invoicing tab chooses the operational workflow:
 
@@ -116,8 +115,8 @@ so concurrent draft releases cannot exceed funds held.
 - **Labor cost source** — how labor cost is measured: **In Actual Cost** (already
   included in actual cost), **Time Rate** (hours times cost rate), **Payroll JE**
   (from posted payroll journals), or **Account Group**.
-- **Overhead method** — each job's share of the cost of running the company. This
-  is a STATISTICAL, managerial number on the project P&L — never a ledger posting
+- **Overhead method** — each job's allocated share of indirect company costs. This
+  is a statistical managerial value on the project P&L, not a ledger posting
   (the real indirect costs are already expensed in the GL; posting overhead onto
   jobs too would double-count). Methods:
   - **None** — no overhead on this type.
@@ -130,8 +129,8 @@ so concurrent draft releases cannot exceed funds held.
     never change. The **Overhead Model** workspace (Company Settings →
     Projects) computes each department's rate from actuals — overhead pool
     divided by labor hours — as an analytical preview; **Publish rates**
-    locks those into the rate card, and the **Setup wizard** walks through
-    method, rates, and which project types to apply in one pass.
+    publishes those values to the rate card. The **Setup wizard** configures the
+    method, rates, and applicable project types.
   - **Account Group Actual** — legacy: sum project-tagged GL posted to an
     overhead account group.
 - **Cost budget source** — **Wbs Estimates** (roll up the project's work-breakdown
@@ -210,8 +209,8 @@ formats further.
 
 ## Reproducing a legacy costing model
 
-Because every measure source is configurable, a project type can be tuned to
-match an external system to the penny. The general approach:
+Configurable measure sources allow a project type to align with an external
+costing model. Use the following procedure:
 
 1. Set **Invoiced to date** to count the same customer documents the legacy
    system counts.
@@ -224,6 +223,6 @@ match an external system to the penny. The general approach:
 If you are migrating from a system that applies overhead as a per-labor-hour rate
 by department, use the **Rate Engine** method with the **standard** rate source and
 import (or enter) your historical rates on the Overhead Rates card — effective
-dating means past periods keep their original rates to the penny.
+dating preserves the original rates for prior periods.
 `,
 }

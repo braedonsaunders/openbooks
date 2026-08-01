@@ -162,7 +162,7 @@ charge, and which government return the ledger settles to. It starts with a
   consumption). Jurisdictions can nest.
 - **Tax Nexus** — your registrations in each jurisdiction, including
   registration number, filing frequency, return form, and effective dates.
-- **Tax Codes** — what actually applies to a line: which side it applies to,
+- **Tax Codes** — the tax treatment applied to a line: which side it applies to,
   standard/withholding/reverse-charge calculation, the collected, paid, and
   withholding accounts, recoverable percent, and price-inclusive behavior.
   Effective-dated **Tax Rates** live inside each code's flyout.

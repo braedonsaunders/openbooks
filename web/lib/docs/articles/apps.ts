@@ -23,7 +23,7 @@ then select a card to open it. Only active, fully installed apps appear here.
 If an app you expect is missing, ask an administrator to confirm that it is
 installed and enabled for your organization.
 
-## Put apps where work happens
+## Add apps to navigation and dashboards
 
 Installed apps participate in the same customizable surfaces as built-in
 destinations:
@@ -34,11 +34,11 @@ destinations:
   time they appear.
 - On **Dashboard → Customize**, choose an installed app from the widget drawer
   to add a resizable launcher card.
-- In the dashboard's **Quick actions** editor, choose an installed app just as
-  you would choose a built-in destination.
+- The dashboard **Quick actions** editor includes installed apps in the same
+  destination selector as built-in pages.
 
-These are host-rendered shortcuts. Opening one still runs the app on its
-isolated screen, and placing it on a menu or dashboard grants no additional app
+These are host-rendered shortcuts. Each shortcut opens the app on its isolated
+screen, and placement on a menu or dashboard grants no additional app
 permissions. Disabled or uninstalled apps disappear from these surfaces.
 
 ## Browse the App Library

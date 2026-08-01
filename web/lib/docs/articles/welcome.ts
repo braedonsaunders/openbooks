@@ -10,11 +10,10 @@ export const welcome: DocArticle = {
   keywords: ['intro', 'overview', 'help', 'start'],
   body: `# Welcome to OpenBooks
 
-OpenBooks is a configurable accounting and operations platform. Almost every
-accounting behaviour — how projects are costed, how invoices are built, how
-revenue is recognized, what a document PDF looks like — is driven by settings
-you control, not hardcoded. This documentation explains how those settings work
-so you can configure the system to match your business exactly.
+OpenBooks is a configurable accounting and operations platform. Core accounting
+behavior, including project costing, invoice construction, revenue recognition,
+and document presentation, is controlled through organization settings. This
+documentation describes those settings and their operational effects.
 
 ## How the docs are organized
 
@@ -34,19 +33,18 @@ Documentation is grouped into categories you can browse from the sidebar:
 - **Apps & Extensions** — finding, installing, updating, and administering apps.
 - **Settings** — company setup, administration, customization, automation, and extensions.
 
-Use the search box at the top of the sidebar to jump straight to a topic.
+Use the search box at the top of the sidebar to locate an article by topic.
 
-## A note on configurability
+## Configuration references
 
-Wherever you see a setting in the app, there is usually a matching article here
-explaining what each option does and how the choices interact. If you are trying
-to reproduce a specific behaviour (for example, matching a legacy system to the
-penny), the relevant article will call out which options to combine.
+Configuration articles explain available options and their interactions. Where
+applicable, they also document the settings required to align behavior with an
+existing accounting policy or source system.
 
 ## Getting help
 
 Every configuration workspace links to its documentation with a **Documentation**
-or **Learn more** link near the top of the page. Following that link brings you
-straight to the article for what you are configuring.
+or **Learn more** link near the top of the page. The link opens the article for
+the applicable configuration area.
 `,
 }

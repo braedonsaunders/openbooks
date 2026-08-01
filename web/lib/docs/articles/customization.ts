@@ -10,7 +10,7 @@ export const customRecords: DocArticle = {
   category: 'administration',
   order: 2,
   summary:
-    'Define your own master-data record types — fields, sublists, formulas, and navigation — without a schema change.',
+    'Define organization-specific master-data record types, including fields, sublists, formulas, and navigation, without a schema change.',
   updated: '2026-07-21',
   keywords: [
     'custom records',
@@ -26,14 +26,14 @@ export const customRecords: DocArticle = {
   body: `# Custom Records
 
 **Settings → Custom Records** (route **/records/types**, permission **Manage
-record types**) lets you define your own kinds of master data — equipment
-registers, certifications, inspections, anything your business tracks that is not
-a built-in record. A custom record type needs no schema change and no code.
+record types**) supports organization-defined master data such as equipment
+registers, certifications, and inspections. A custom record type requires no
+schema change or application code.
 
 ## Types versus records
 
 A **record type** is the definition; a **record** is one instance of it. Records
-are living master data, not point-in-time submissions — editing a published type
+are operational master data, not point-in-time submissions. Editing a published type
 takes effect immediately for existing records.
 
 ## Build a type
@@ -69,7 +69,7 @@ published type set to **Show in navigation** gets its own sidebar entry under a
 **Records** group, visible to users who hold record read access and any role you
 listed in the audience.
 
-## How records appear
+## Record presentation
 
 A published type automatically gets a full list view — search, per-choice filter
 chips, sortable columns, and a status filter (**draft → active → inactive**) —
@@ -77,8 +77,8 @@ and a record drawer. Records are numbered from a sequence keyed to the type (for
 example **EQU-00001**). Creating records requires the create permission;
 managing the type definitions requires **Manage record types**.
 
-For adding a few fields to an existing built-in record instead of a whole new
-type, use **Custom Fields**. For a custom screen with its own logic, use the
+To add fields to an existing built-in record without defining a separate record
+type, use **Custom Fields**. For a custom screen with application logic, use the
 **App Builder**.
 `,
 }
@@ -89,7 +89,7 @@ export const customFields: DocArticle = {
   category: 'administration',
   order: 3,
   summary:
-    'Add your own fields to built-in records and transactions — rendered inline with native fields, not bolted on.',
+    'Add organization-specific fields to built-in records and transactions, rendered inline with native fields.',
   updated: '2026-07-21',
   keywords: [
     'custom fields',
@@ -128,21 +128,19 @@ Choose from **text**, **long text**, **number**, **currency**, **date**,
 placeholder, a default, numeric bounds, whether it shows as a list column, its
 display mode (editable, read-only, or hidden), and which roles may see it.
 
-## They feel native
+## Native form integration
 
-A custom field is not a bolted-on afterthought. It is surfaced to the form layout
-as **cf_<key>** and rendered **inline in the normal field grid**, exactly like a
-built-in field — you place it, move it, resize its column span, and rename it in
-**Forms & Views** wherever it makes sense on the form. Only fields you have not
-explicitly placed fall into a trailing group; anything you position stays where
-you put it. On transaction lines, custom columns insert ahead of the amount so
-the line reads naturally.
+A custom field is exposed to the form layout as **cf_<key>** and rendered inline
+in the standard field grid. **Forms & Views** controls its position, column span,
+and display label. Fields without an explicit position appear in a trailing
+group; positioned fields retain their configured placement. On transaction
+lines, custom columns appear before the amount column.
 
 Custom fields also flow through to list columns, the API schema, and validation,
 so an unknown or malformed value is rejected rather than silently stored.
 
-Use **Custom Fields** to extend a record you already have; use **Custom Records**
-when you need a whole new kind of record.
+Use **Custom Fields** to extend an existing record type. Use **Custom Records**
+to define a separate record type.
 `,
 }
 
@@ -182,8 +180,8 @@ report**, **check**, **journal**, and **field ticket**. Each type has one org
 
 ## Design in the visual editor
 
-The editor is a drag-and-drop visual builder. The canvas is a real paper sheet
-sized to your chosen **paper size** (Letter, A4, or Legal), **orientation**, and
+The editor is a drag-and-drop visual builder. The canvas represents a page
+using the selected **paper size** (Letter, A4, or Legal), **orientation**, and
 **margins**, with a running **header** and **footer** that can show page numbers.
 Drop in headings, text, images, dividers, spacers, page breaks, and columns, plus
 two data-aware blocks:
@@ -191,7 +189,7 @@ two data-aware blocks:
 - **Merge fields** — single values such as **document number**, **date**,
   **total**, party name, and your organization name and logo.
 - **Collection tables** — repeating rows bound to the record's **lines** (item,
-  quantity, unit price, amount, and so on).
+  quantity, unit price, amount, and related fields).
 
 Your organization's **custom fields** appear in the merge-field palette
 automatically, so a field you added to invoices can be printed on the invoice.
@@ -225,7 +223,7 @@ export const navigationCustomization: DocArticle = {
   body: `# Navigation
 
 **Settings → Navigation** (route **/admin/navigation**, permission **Manage
-navigation**) tailors the menu for your whole organization. Without any changes,
+navigation**) defines the menu for the organization. Without any changes,
 the menu is the platform default; your saved layout overrides it.
 
 ## What you can change
@@ -241,19 +239,19 @@ the menu is the platform default; your saved layout overrides it.
 - **Add custom groups and links** — group headings you name, and links to any URL.
 - **Reset to defaults** at any time.
 
-## How it resolves for each user
+## Per-user resolution
 
 Your layout is the starting point, then each user sees a filtered view:
 
-- modules the user lacks permission for are dropped;
-- modules for features your organization has turned off are dropped;
+- modules the user lacks permission for are omitted;
+- modules for disabled organization features are omitted;
 - hidden items and any group left empty are removed; and
 - published custom record types set to show in navigation are appended under a
   **Records** group.
 
 Modules shipped after you saved your layout are added automatically into their
 default group, so customizing the menu never hides new features. Module
-identifiers are stable, so your layout keeps working across upgrades.
+identifiers are stable, so saved layouts remain valid across upgrades.
 `,
 }
 

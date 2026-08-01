@@ -12,9 +12,9 @@ export const overheadCosting: DocArticle = {
   related: ['project-types'],
   body: `# Setting Up Overhead Costing
 
-Overhead costing gives every project its share of the cost of running the
-company — rent, insurance, admin salaries, IT — so a project's margin reflects
-the **fully-burdened** cost of the work, not just its direct costs.
+Overhead costing allocates indirect company costs to projects, including rent,
+insurance, administrative salaries, and IT, so a project's margin reflects
+the **fully-burdened** cost of the work rather than only its direct costs.
 
 Two principles the system enforces:
 
@@ -28,28 +28,27 @@ Two principles the system enforces:
   effective-dated rates**. Each hour of labor uses the rate that was in effect
   on the day it was worked, so closed periods never change.
 
-## The three pieces
+## Configuration components
 
 | Piece | Where | Role |
 |---|---|---|
-| **Overhead Model** | Company Settings → Projects → Overhead Model | The *calculator*. Groups your overhead accounts into categories and computes each department's rate from actuals: overhead ÷ labor hours. |
-| **Overhead Rates** | Company Settings → Projects → Overhead Rates | The *rate card*. The published, effective-dated $/hour (or % of labor) rates that projects are actually costed from. |
-| **Project Types** | Company Settings → Projects → Project Types | The *policy*. Each type chooses an overhead method — rate card, flat $/hour, % of labor, or none. |
+| **Overhead Model** | Company Settings → Projects → Overhead Model | Groups overhead accounts into categories and calculates each department's rate from actual overhead and labor hours. |
+| **Overhead Rates** | Company Settings → Projects → Overhead Rates | Stores the published, effective-dated hourly or labor-percentage rates used for project costing. |
+| **Project Types** | Company Settings → Projects → Project Types | Selects the overhead method for each project type: rate card, flat hourly amount, percentage of labor, or none. |
 
 ## Setup, step by step
 
 1. **Classify your overhead costs.** On the Overhead Model's **Categories**
    tab, group your indirect expense accounts into categories (Facilities,
-   Insurance, Admin…). Accounts you haven't classified appear under
-   **Unassigned** — assign them so nothing is missed.
+   Insurance, Administration). Accounts that have not been classified appear
+   under **Unassigned** and should be reviewed before rates are published.
 2. **Review the computed rates.** The **Matrix** tab shows each department's
-   rate: its share of overhead divided by its labor hours. This is an
-   analytical preview — it moves with your actuals and is never used to cost
-   jobs directly.
-3. **Run the Setup wizard.** It walks through the whole configuration in one
-   pass: pick an approach (the **department rate card** is recommended),
-   confirm the rates to publish (pre-filled from the computed values — adjust
-   if you prefer round numbers), and choose which project types it applies to.
+   rate: its share of overhead divided by its labor hours. This analytical
+   preview recalculates from actuals and is not used directly for project costing.
+3. **Run the Setup wizard.** Select the method, confirm the rates to publish,
+   and choose the applicable project types. The **department rate card** is the
+   recommended default. Rate values are prefilled from the computed amounts and
+   can be adjusted according to policy.
    Finishing publishes the rate card and updates the selected types, including
    their P&L layout.
 4. **Check a project.** Open any project's **Financials** tab — an **Overhead**
@@ -57,8 +56,8 @@ Two principles the system enforces:
 
 ## Keeping rates current
 
-Costs drift, so revisit periodically (quarterly is typical): compare the
-computed rates against the published card, then use **Publish rates** to lock
+Review rates periodically according to the organization's accounting policy.
+Compare the computed rates against the published card, then use **Publish rates** to publish
 in new values from a chosen effective date. Prior periods keep their original
 rates; only work from the effective date forward uses the new ones.
 
@@ -68,13 +67,13 @@ effective date range.
 
 ## Choosing a method
 
-- **Department rate card** — per-department $/hour, effective-dated. The most
-  accurate and auditable; recommended for field/shop businesses.
-- **Flat $ per labor hour** — one company-wide hourly rate. Simple.
-- **% of labor cost** — overhead as a markup on labor dollars. Common in
-  professional services.
-- **None** — for project types that shouldn't carry overhead (e.g. internal or
-  warranty work).
+- **Department rate card** — effective-dated hourly rates by department. This
+  method preserves department-level costing detail and rate history.
+- **Flat $ per labor hour** — one company-wide hourly rate, suitable when
+  department-specific rates are not required.
+- **% of labor cost** — overhead calculated as a percentage of labor cost.
+- **None** — for project types that should not carry overhead, such as internal
+  or warranty work.
 
 The method is set per **project type**, so different classes of work can carry
 overhead differently.

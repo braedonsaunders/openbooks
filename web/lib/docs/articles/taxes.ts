@@ -22,9 +22,9 @@ export const taxJurisdictionsAndNexus: DocArticle = {
   related: ['tax-configuration', 'tax-returns-and-boxes', 'setup-taxes-group'],
   body: `# Tax Jurisdictions and Nexus
 
-Before you configure codes and returns, model *where* tax applies and *where you
-are registered*. These are two different things, and OpenBooks keeps them
-separate on purpose.
+Before configuring codes and returns, distinguish jurisdictions where tax
+applies from jurisdictions where the organization is registered. OpenBooks
+models these concepts separately.
 
 ## Tax Jurisdictions
 
@@ -37,15 +37,16 @@ levy indirect tax. Each jurisdiction has:
 Jurisdictions **nest**, so a US city rolls up to its state and its country, and a
 report can aggregate at any level. Choose **Country** from the searchable ISO
 country list; arbitrary country codes are rejected. Installing a maintained
-return pack creates its jurisdiction automatically, so you rarely build these by
-hand for a supported filing.
+return pack creates its jurisdiction automatically, so manual creation is
+typically unnecessary for a supported filing.
 
-Tax codes and returns both point at a structured jurisdiction rather than a free
--text label, which is what lets the same code drive both posting and filing.
+Tax codes and returns both point at a structured jurisdiction rather than a
+free-text label. This structure allows the same code to support posting and
+filing.
 
 ## Tax Nexus
 
-**Taxes → Tax Nexus** records where the business is actually **registered** to
+**Taxes → Tax Nexus** records where the business is **registered** to
 collect and remit tax:
 
 - the **jurisdiction** you are registered in;
@@ -54,18 +55,18 @@ collect and remit tax:
   annual); and
 - the **return** you file there, with its effective dates.
 
-Nexus is the source of truth for your **filing calendar** — the concrete return
+Nexus is the authoritative configuration for the **filing calendar** — the return
 periods that come due — rather than inferring obligations from whichever tax
-codes happen to exist. A code can exist without an obligation to file; nexus is
-what says you must.
+codes happen to exist. A code can exist without an obligation to file; nexus
+determines the filing obligation.
 
-## Keep the two in step
+## Maintain jurisdiction and nexus alignment
 
 Register nexus for every jurisdiction where you have an obligation, and retire a
 registration (with its effective-to date) when it ends rather than deleting it,
 so historical periods still reflect what was true at the time. From here, move on
 to **Tax Codes, Rates, and Groups** to define what you charge, and **Tax Returns
-and Boxes** to shape the filing itself.
+and Boxes** to configure the filing structure.
 `,
 }
 
@@ -93,14 +94,14 @@ export const taxReturnsAndBoxes: DocArticle = {
   body: `# Tax Returns and Boxes
 
 A **return** turns ledger activity into a government filing. OpenBooks computes
-each box from your posted tax, renders a form-faithful copy, and routes filing to
-the jurisdiction's real channel. A new jurisdiction is data — a form and its
-boxes — not new code.
+each box from posted tax, renders a form-faithful copy, and routes filing to the
+jurisdiction's designated channel. Jurisdiction-specific forms and boxes are
+configured as data without application code changes.
 
 ## Install a maintained return
 
 Open **Taxes → Tax Returns** and choose **Library**. Search the maintained list,
-select every pack you want, and choose **Install selected** to import them
+select the required packs, and choose **Install selected** to import them
 together. Installed packs remain visible with an explicit **Reset** action;
 resetting replaces that return's configured structure, so review local
 customizations before confirming.
@@ -144,11 +145,10 @@ only for a manual box whose value must be entered at filing time.
 ## Form PDF and the official form
 
 Prepare a return, then **Form PDF** downloads a **form-faithful facsimile** — a
-working copy laid out like the real government return (agency masthead, numbered
+working copy laid out like the applicable government return (agency masthead, numbered
 line grid, section headings), populated from your ledger and watermarked
-not-for-filing. Because it is generated from your own template, it works for every
-jurisdiction, including the API- and portal-only returns that have no fillable
-government PDF.
+not-for-filing. Organization templates support jurisdictions that use API or
+portal filing and do not publish a fillable government PDF.
 
 If a jurisdiction publishes a fillable official PDF, upload it on the return and
 map each box to its AcroForm field; **Filled official form** then fills and
@@ -160,7 +160,7 @@ you are entitled to.
 Prepare the return for a representative open period and reconcile every box to the
 tax accounts and transaction detail. Confirm formula signs, recoverability,
 rounding, and the filing period before you submit. Nexus (see **Tax Jurisdictions
-and Nexus**) tells you which periods are due; this reconciliation proves the
-numbers inside them.
+and Nexus**) determines which periods are due; reconciliation validates the
+amounts reported for those periods.
 `,
 }

@@ -26,59 +26,56 @@ export const subcontractorCompliance: DocArticle = {
   related: ['project-types', 'field-tickets', 'purchasing-workflow'],
   body: `# Subcontractor Compliance
 
-Paying a subcontractor whose insurance lapsed a month ago is how a general
-contractor inherits somebody else's claim. Paying one without a signed lien
-waiver is how a paid-for job ends up with a lien on it anyway. This module makes
-both impossible by putting the control where the money moves: **a bill for a
-non-compliant subcontractor cannot enter a pay run, and cannot be released.**
+The Subcontractor Compliance module applies insurance and lien-waiver controls
+to vendor payments. When policy requires a blocking response, a bill for a
+noncompliant subcontractor cannot enter or be released from a pay run.
 
 Switch it on in **Company Settings → Features → Subcontractor compliance**. It
-is off by default and turns itself on for the Construction and
+is off by default and is enabled automatically for the Construction and
 Engineering/Architecture industry presets in the setup wizard. Turning it back
-off preserves every certificate, waiver and filing — the only thing it refuses
-is going dark while a finalized information return has not been filed yet.
+off preserves every certificate, waiver, and filing. The feature cannot be
+disabled while a finalized information return remains unfiled.
 
-## The three things it does
+## Functional areas
 
-**Certificates of insurance and other evidence.** What each kind of counterparty
-must carry, the limits and endorsements it must show, and what happens when it
-lapses.
+**Certificates of insurance and other evidence.** Defines required evidence by
+counterparty class, including coverage limits, endorsements, and lapse behavior.
 
-**Lien waivers.** Conditional and unconditional, progress and final, received
-from subcontractors and issued to owners — with the through-date and amount the
-payment control actually reads.
+**Lien waivers.** Tracks conditional, unconditional, progress, and final waivers
+received from subcontractors or issued to owners, including the through-date and
+amount used by payment controls.
 
-**Information returns.** 1099-NEC, 1099-MISC and T4A, computed from the cash you
-actually paid in the calendar year rather than from what you were billed.
+**Information returns.** Calculates 1099-NEC, 1099-MISC, and T4A amounts from
+cash payments made during the calendar year rather than billed amounts.
 
 The lien-waiver surface additionally requires the **Projects** feature: a lien is
-a claim against improved real property, and there is nothing to waive without a
-project. Insurance tracking and 1099 filing stand on their own.
+a claim against improved real property and therefore requires a project.
+Insurance tracking and information-return filing operate independently.
 
 ## Setting up the policy
 
-Everything the module enforces is a row you author, not a hardcoded rule.
+Module controls are configuration-driven rather than hard-coded.
 
 ### Counterparty classes
 
-**Setup → Compliance → Counterparty classes.** A class is what kind of
-counterparty a vendor is — Trade Subcontractor, Material Supplier, Professional
-Consultant, Equipment Rental. It carries two decisions:
+**Setup → Compliance → Counterparty classes.** A class categorizes a vendor,
+such as Trade Subcontractor, Material Supplier, Professional Consultant, or
+Equipment Rental. It defines the following controls:
 
-| Setting | What it decides |
+| Setting | Control |
 |---|---|
 | Lien waiver control | None, warn, or block payment until a signed waiver covers the bill |
 | Default waiver form | Which of the four statutory forms to request by default |
-| Default information return | Which form vendors of this class file on, unless they say otherwise |
+| Default information return | Form assigned to vendors in the class unless a vendor-specific override exists |
 
-A vendor with **no class is not tracked** and never blocks a payment. There is no
-separate "tracked" flag to fall out of sync — the class is the switch.
+A vendor with **no class is not tracked** and does not block payment. Assigning a
+class enables compliance tracking for the vendor.
 
 ### Requirements
 
 **Setup → Compliance → Compliance requirements.** One row per policy: General
 Liability at two million naming us as additional insured, Workers' Compensation,
-a current trade licence, a W-9. Each row says:
+a current trade licence, or a W-9. Each row defines:
 
 - **Applies to class** — leave empty and it applies to every tracked counterparty.
 - **Limits** — a minimum per-occurrence and aggregate limit, plus the currency
@@ -90,47 +87,46 @@ a current trade licence, a W-9. Each row says:
 - **On failure** — report only, warn on payment, block payment, or block the
   bill from being recorded at all. Blocking the bill is strictly stronger than
   blocking payment.
-- **Grace days** and **warn before expiry** — the courtesy window after a lapse,
-  and how far ahead a coming expiry starts surfacing.
+- **Grace days** and **warn before expiry** — the permitted grace period after a
+  lapse and the advance-warning interval before expiry.
 
-Want the same certificate demanded of two classes with different limits? That is
-two rows. This is deliberate: every enforced number has exactly one home.
+Create separate requirement rows when counterparty classes use different limits.
+Each enforced limit is stored in one requirement row.
 
-## Day to day
+## Daily operations
 
 ### Recording a certificate
 
 Open a subcontractor from **Compliance → Subcontractors**, or from the vendor
 record, and record the certificate on the Compliance tab: insurer, policy
-number, effective and expiry dates, limits, endorsements. Attach the PDF — it
-lands in the File Cabinet and stays linked to the record.
+number, effective and expiry dates, limits, and endorsements. The attached PDF
+is stored in the File Cabinet and remains linked to the record.
 
-A certificate is recorded as **pending review**. It does not count until someone
-**else** verifies it. The person who recorded it can never be the person who
-verifies it, and that is enforced at the API, not just hidden in the interface.
+A certificate is recorded as **pending review** and does not satisfy a
+requirement until a different authorized user verifies it. The API enforces this
+separation of duties.
 
 Renewals are new records, not edits. Point the new certificate at the one it
 renews and the old row is marked superseded, keeping its dates and its
-verification trail intact. The resolver always evaluates whichever record covers
-furthest.
+verification trail intact. Evaluation uses the applicable verified record with
+the latest coverage date.
 
 ### The matrix
 
-**Compliance → Subcontractors** is a grid: one row per tracked subcontractor,
-one column per policy. A per-vendor list makes it impossible to notice that nine
-subs all let the same certificate lapse in the same week; the grid makes it
-obvious. Every cell is the same evaluation the pay run performs, so a green row
-is a promise the pay run will keep.
+**Compliance → Subcontractors** presents one row per tracked subcontractor and
+one column per policy. This matrix identifies common or simultaneous coverage
+gaps across vendors. Each cell uses the same evaluation as pay-run processing,
+so displayed status corresponds to the current payment-control result.
 
 ### Exceptions
 
-Sometimes you have to pay anyway. An **exception** is the only legitimate way
-past a blocking requirement, and it is deliberately expensive to use: its own
-permission, a mandatory reason, a mandatory end date capped at 120 days, and a
-permanent audit entry. Revoking one is recorded rather than deleted — the window
-during which a control was suspended is exactly what a reviewer needs to see.
+An authorized **exception** can temporarily override a blocking requirement. It
+requires a dedicated permission, a reason, an end date no more than 120 days in
+the future, and a permanent audit entry. Revocation is recorded rather than
+deleted so the period of suspended enforcement remains auditable.
 
-A longer suspension is a policy change. Change the policy.
+A suspension longer than 120 days requires a policy change rather than an
+exception.
 
 ## Lien waivers
 
@@ -145,46 +141,44 @@ is not cosmetic:
 | Unconditional final | The whole contract, retention included | Immediately, cleared or not |
 
 Create a waiver from **Compliance → Lien waivers**, print the form, and record
-it as signed once the executed document is in hand. Marking a waiver signed is
-what releases a blocked payment, so it is the one action in the module treated
-as consequential: it demands the signatory's name and the date, records who in
-your organisation attested to receiving it, and freezes the amount and
-through-date afterwards.
+it as signed after receiving the executed document. Because a signed waiver can
+release a blocked payment, the action requires the signatory name and date,
+records the user who attested to receipt, and makes the amount and through-date
+immutable.
 
-The printed form is our own document reproducing the operative language of the
-type you chose, with the jurisdiction you name printed on it. It is not a
-government-issued form — have counsel confirm the wording your jurisdiction
-requires.
+The printed waiver is a system-generated document containing the configured
+operative language and jurisdiction. It is not a government-issued form.
+Organizations should obtain legal review of jurisdiction-specific language.
 
 ### How coverage is judged
 
 A waiver releases a bill when it is **signed**, for the **same project**, its
 through-date **reaches the bill's date**, and its amount **at least matches** the
 bill, in the same currency. A waiver explicitly linked to a bill governs that
-bill even when a larger unlinked one exists — that is the pairing the signatory
-intended.
+bill even when a larger unlinked waiver exists. The explicit link takes
+precedence over inferred coverage.
 
 ## What the control does to payments
 
 When compliance is on, three points evaluate every subcontractor bill:
 
 1. **Pay-run creation** refuses a selection containing a blocked bill. It refuses
-   the whole selection rather than silently dropping bills, because a quietly
-   shortened run leaves an operator believing a subcontractor was paid.
+   the complete selection rather than omitting blocked bills, so the operator
+   receives an explicit failure.
 2. **Run readiness** re-evaluates before the file is generated — a run created on
    Monday can be released on Friday, by which time a certificate may have
    lapsed.
 3. **Posting the run** evaluates once more and blocks the individual instruction,
-   so one lapsed certificate never strands everyone else's money.
+   so one blocked instruction does not prevent unrelated payments.
 
-A **block the bill** requirement goes further and refuses the posting itself, in
-the kernel, so no import, script, or API route can route around it. Historical
+A **block the bill** requirement rejects posting in the transaction kernel, so
+imports, scripts, and API routes cannot bypass it. Historical
 migration posts are exempt — old books are reproduced as they were, not
 re-adjudicated.
 
-Every one of those evaluations is written out in full: what the policy was, what
-was on file, and what was decided. That frozen snapshot is why tightening a
-policy tomorrow never reinterprets a release granted today.
+Each evaluation records the applicable policy, evidence, and decision. The
+resulting snapshot prevents later policy changes from altering an earlier
+release decision.
 
 ## Information returns
 
@@ -193,31 +187,31 @@ policy tomorrow never reinterprets a release granted today.
 Open a filing for a completed calendar year and compute it. The figure is
 **cash paid**, not billed: every posted vendor payment in the year is traced
 through its applications to the bills it settled, through those bills to their
-expense lines, and through each line's account to a box. A payment that settled
-nothing — a retainer or an advance — lands in the recipient's default box,
-because the money did leave.
+expense lines, and through each line's account to a box. A payment without an
+application, such as a retainer or advance, is assigned to the recipient's
+default box because it remains a reportable cash payment.
 
-The allocation is exact: a recipient's boxes always re-add to the cash that left
-the bank, to the penny, with no rounding residue.
+For each recipient, allocated box amounts reconcile to the corresponding cash
+payments without a rounding residual.
 
 ### Mapping accounts to boxes
 
-Boxes are law; which of **your** accounts feeds which box is your configuration,
-in **Setup → Compliance → Information return boxes**. Anything unmapped falls to
+Statutory box definitions are fixed; account-to-box mappings are configured in
+**Setup → Compliance → Information return boxes**. Unmapped activity falls to
 the vendor's default box, so an organisation that reports all subcontract cost as
 nonemployee compensation configures nothing at all. Unmapped spend is reported as
 an exception rather than absorbed silently.
 
-### The readiness queue
+### Readiness queue
 
-Below the filings list is the queue that has to be empty before January:
+Resolve the following readiness items before filing preparation:
 
 - reportable vendors with **no taxpayer identification number** on file;
 - reportable vendors with **no form assigned**;
-- vendors **paid over the threshold that nobody flagged** as reportable;
+- vendors **paid over the threshold but not flagged** as reportable;
 - **corporations flagged as reportable**, which are generally outside 1099
   reporting except for attorney gross proceeds and medical payments;
-- vendors flagged for **backup withholding** where nothing was withheld.
+- vendors flagged for **backup withholding** with no withholding amount.
 
 Taxpayer identification numbers are sealed at rest. Only the last four digits are
 ever displayed, and the full number never appears in the audit trail or in the
@@ -228,7 +222,7 @@ transmittal export.
 The worksheet shows the computed figure and any deliberate adjustment side by
 side. Adjustments are stored as **signed deltas** against the ledger figure and
 require a reason, so the trace back to the books is never overwritten;
-recomputing preserves them, along with any recipient a person chose to exclude.
+recomputing preserves them, along with any excluded recipient.
 
 **Finalize** freezes the filing and snapshots the payer identification that will
 be transmitted. It refuses to freeze a filing that still has a recipient with no
@@ -240,7 +234,7 @@ The transmittal export is the file your filing channel or agent consumes.
 
 ## Permissions
 
-Five keys, because these are five different duties:
+Five permissions separate the relevant duties:
 
 | Permission | Allows |
 |---|---|
