@@ -30,6 +30,7 @@
       "result": "Result"
     },
     "resource": "Import into",
+    "resourcePlaceholder": "Choose an import target…",
     "format": "File format",
     "file": "File",
     "chooseFile": "Choose a file",

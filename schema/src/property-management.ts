@@ -203,6 +203,7 @@ export const securityDepositTransactions = pgTable(
     appliedDocumentId: uuid("applied_document_id"),
     journalEntryId: uuid("journal_entry_id").notNull(),
     reversalOfId: uuid("reversal_of_id"),
+    importKey: text("import_key"),
     memo: text("memo"),
     ...auditColumns,
   },
@@ -212,6 +213,9 @@ export const securityDepositTransactions = pgTable(
     uniqueIndex("security_deposits_reversal_once")
       .on(t.orgId, t.reversalOfId)
       .where(sql`${t.reversalOfId} is not null`),
+    uniqueIndex("security_deposits_import_key_once")
+      .on(t.orgId, t.importKey)
+      .where(sql`${t.importKey} is not null`),
     check("security_deposits_amount_positive", sql`${t.amount} > 0`),
     check(
       "security_deposits_application_shape",
@@ -239,7 +243,7 @@ export const camPools = pgTable(
     budgetAmount: money("budget_amount").notNull().default("0"),
     actualAmount: money("actual_amount"),
     expenseAccountIds: jsonb("expense_account_ids").$type<string[]>().notNull().default([]),
-    status: text("status", { enum: ["draft", "open", "finalized", "invoiced"] }).notNull().default("draft"),
+    status: text("status", { enum: ["draft", "open", "finalized", "invoiced", "cancelled"] }).notNull().default("draft"),
     finalizedAt: timestamp("finalized_at", { withTimezone: true }),
     finalizedBy: uuid("finalized_by"),
     ...auditColumns,
