@@ -51,9 +51,6 @@ export const DOCUMENT_SORTS: Record<string, SQL> = {
   status: sql`d.status`,
 }
 
-/** @deprecated use DOCUMENT_SORTS — kept for the AP page's existing import. */
-export const VENDOR_BILL_SORTS = DOCUMENT_SORTS
-
 /** Built-in column key → select expression, shared by documents-backed lists. */
 export const DOCUMENT_BUILT_IN_EXPR: Record<string, SQL> = {
   document_number: sql`d.document_number`,
@@ -210,6 +207,8 @@ export interface AdhocFilters {
   to?: string
   /** Narrow to a single document kind within the view's kind set. */
   kind?: string
+  /** Extra reusable quick-filter values keyed by registry filter key. */
+  filters?: Record<string, string | undefined>
 }
 
 function filterPredicate(clause: FilterClause): SQL | null {
@@ -226,6 +225,16 @@ function filterPredicate(clause: FilterClause): SQL | null {
         if (values.length === 0) return operator === "in" ? sql`false` : sql`true`
         const list = sql.join(values.map((item) => sql`${item}`), sql`, `)
         return operator === "in" ? sql`d.status in (${list})` : sql`d.status not in (${list})`
+      }
+      return null
+    case "transaction_kind":
+      if (operator === "eq") return sql`d.kind = ${single(value)}`
+      if (operator === "ne") return sql`d.kind <> ${single(value)}`
+      if (operator === "in" || operator === "not_in") {
+        const values = (Array.isArray(value) ? value : [String(value ?? "")]).map(String)
+        if (values.length === 0) return operator === "in" ? sql`false` : sql`true`
+        const list = sql.join(values.map((item) => sql`${item}`), sql`, `)
+        return operator === "in" ? sql`d.kind in (${list})` : sql`d.kind not in (${list})`
       }
       return null
     case "party_id":
@@ -279,6 +288,7 @@ export function documentWhere(
   }
   if (adhoc.status) parts.push(sql`and d.status = ${adhoc.status}`)
   if (adhoc.kind) parts.push(sql`and d.kind = ${adhoc.kind}`)
+  if (adhoc.filters?.party_id) parts.push(sql`and d.party_id = ${adhoc.filters.party_id}`)
   if (adhoc.vendor) parts.push(sql`and d.party_id = ${adhoc.vendor}`)
   if (adhoc.from) parts.push(sql`and d.document_date >= ${adhoc.from}`)
   if (adhoc.to) parts.push(sql`and d.document_date <= ${adhoc.to}`)
@@ -286,6 +296,38 @@ export function documentWhere(
     parts.push(
       sql`and (d.document_number ilike ${"%" + adhoc.q + "%"} or p.display_name ilike ${"%" + adhoc.q + "%"} or d.reference_number ilike ${"%" + adhoc.q + "%"})`,
     )
+  return sql.join(parts, sql` `)
+}
+
+/** A reconcilable account touched by a banking document. Posted documents use
+ * journal legs; drafts also inspect document lines and header/card overrides. */
+export const BANK_TRANSACTION_ACCOUNT_MATCH = sql`a.org_id = d.org_id and a.reconcilable and (
+  exists (select 1 from journal_lines jl where jl.org_id = d.org_id and jl.entry_id = d.posted_entry_id and jl.account_id = a.id)
+  or exists (select 1 from document_lines dl where dl.org_id = d.org_id and dl.document_id = d.id and dl.account_id = a.id)
+  or a.id = nullif(d.custom->>'controlAccountId', '')::uuid
+  or a.id = (select pc.liability_account_id from payment_cards pc where pc.id = d.payment_card_id and pc.org_id = d.org_id)
+)`
+
+export function bankTransactionWhere(
+  kinds: readonly string[],
+  view: ListViewConfig,
+  adhoc: AdhocFilters,
+  orgId: string,
+  allowedSubsidiaryIds?: Set<string> | null,
+): SQL {
+  const parts: SQL[] = [documentWhere(kinds, view, adhoc, orgId, allowedSubsidiaryIds)]
+  const accountClauses = view.filters.filter((filter) => filter.key === 'bank_account_id')
+  for (const clause of accountClauses) {
+    const value = Array.isArray(clause.value) ? String(clause.value[0] ?? '') : String(clause.value ?? '')
+    if (clause.operator === 'eq') {
+      parts.push(sql`and exists (select 1 from accounts a where a.id = ${value} and ${BANK_TRANSACTION_ACCOUNT_MATCH})`)
+    } else if (clause.operator === 'ne') {
+      parts.push(sql`and not exists (select 1 from accounts a where a.id = ${value} and ${BANK_TRANSACTION_ACCOUNT_MATCH})`)
+    }
+  }
+  if (adhoc.filters?.bank_account_id) {
+    parts.push(sql`and exists (select 1 from accounts a where a.id = ${adhoc.filters.bank_account_id} and ${BANK_TRANSACTION_ACCOUNT_MATCH})`)
+  }
   return sql.join(parts, sql` `)
 }
 

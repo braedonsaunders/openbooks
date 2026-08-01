@@ -1,16 +1,11 @@
-import Link from 'next/link'
 import { notFound } from 'next/navigation'
 import { getTranslations } from 'next-intl/server'
 import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/db.ts'
-import { Badge, EmptyState, PageHeader, Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@openbooks/ui'
+import { PageHeader } from '@openbooks/ui'
 import { ListPageLayout } from '../../../../components/page-layout'
-import { SearchInput } from '../../../../components/search-input'
-import { ShowInactivesToggle } from '../../../../components/show-inactives-toggle'
-import { Pagination } from '../../../../components/pagination'
-import { SortTh } from '../../../../components/sortable-th'
 import { can, requirePermission } from '../../../../lib/authz'
-import { buildListDrawerHref, isUuid, parseListParams, pickString } from '../../../../lib/list-params'
+import { isUuid, pickString } from '../../../../lib/list-params'
 import { loadFieldDefs } from '../../../../lib/custom-fields'
 import { loadParty } from '../../../api/parties/_lib'
 import { subsidiaryUiOptions } from '../../../../lib/subsidiaries'
@@ -31,11 +26,6 @@ const ROLES = {
   employees: { role: 'employee', badge: 'outline' as const },
 } as const
 
-const ROLE_CONDITION = (role: string) =>
-  sql`(exists (select 1 from ${sql.raw(role + '_roles')} r where r.party_id = p.id and r.is_active) or p.custom->>'nsKind' = ${role})`
-
-const SORT_COLUMNS = { name: sql`p.display_name`, code: sql`p.short_code` } as const
-
 export default async function EntityRole({
   params,
   searchParams,
@@ -49,7 +39,6 @@ export default async function EntityRole({
   const role = meta.role
   const basePath = `/entities/${slug}`
   const t = await getTranslations('entities')
-  const tc = await getTranslations('common')
   const newLabel = t(`roles.${slug}.newLabel`)
 
   const authz = await requirePermission('parties.read')
@@ -86,7 +75,7 @@ export default async function EntityRole({
         orgId,
         userId: authz.user.id,
         recordType: role,
-        userRoles: [authz.user.role],
+        userRoles: authz.user.roles.map(({ key }) => key),
         headerDefs: pickers[3] as any,
         lineDefs: [],
         explicitLayoutId: pickString(sp.partyForm),
@@ -135,113 +124,25 @@ export default async function EntityRole({
     </>
   )
 
-  if (role === 'customer') {
-    return (
-      <ListPageLayout
-        header={
-          <PageHeader
-            title={t(`roles.${slug}.title`)}
-            description={t(`roles.${slug}.description`)}
-            actions={canManage ? <NewPartyButton basePath={basePath} role={role} label={newLabel} /> : undefined}
-          />
-        }
-      >
-        <EntityListView
-          recordType="customer"
-          orgId={orgId}
-          userId={authz.user.id}
-          canManage={canManage}
-          sp={sp}
-          emptyAction={canManage ? <NewPartyButton basePath={basePath} role={role} label={newLabel} /> : undefined}
-          drawer={partyDrawers}
-        />
-      </ListPageLayout>
-    )
-  }
-
-  const listParams = parseListParams(sp, { sort: 'name', dir: 'asc', perPage: 25, allowedSorts: ['name', 'code'] as const })
-  const showInactive = pickString(sp.showInactive) === 'true'
-  const where = sql`p.org_id = ${orgId} and ${ROLE_CONDITION(role)}
-    ${listParams.q ? sql` and (p.display_name ilike ${'%' + listParams.q + '%'} or p.short_code ilike ${'%' + listParams.q + '%'} or p.email ilike ${'%' + listParams.q + '%'})` : sql``}
-    ${showInactive ? sql`` : sql` and p.is_active`}`
-  const [parties, counts] = await Promise.all([
-    db.execute(sql`
-      select p.id, p.display_name, p.short_code, p.email, p.phone, p.is_active
-        from parties p where ${where}
-       order by ${SORT_COLUMNS[listParams.sort]} ${listParams.dir === 'asc' ? sql`asc` : sql`desc`} nulls last
-       limit ${listParams.perPage} offset ${(listParams.page - 1) * listParams.perPage}
-    `) as any,
-    db.execute(sql`
-      select count(*) as total,
-             count(*) filter (where p.is_active) as active,
-             count(*) filter (where not p.is_active) as inactive
-        from parties p where p.org_id = ${orgId} and ${ROLE_CONDITION(role)} ${showInactive ? sql`` : sql`and p.is_active`}
-    `) as any,
-  ])
-  const total = Number(counts.rows[0].total)
-  const filteredTotal = listParams.q
-    ? Number(((await db.execute(sql`select count(*) as n from parties p where ${where}`)) as any).rows[0].n)
-    : total
-
   return (
     <ListPageLayout
       header={
-        <>
-          <PageHeader
-            title={t(`roles.${slug}.title`)}
-            description={t(`roles.${slug}.description`)}
-            actions={canManage ? <NewPartyButton basePath={basePath} role={role} label={newLabel} /> : undefined}
-          />
-          <div className="flex flex-wrap items-center gap-2">
-            <SearchInput placeholder={t('list.searchPlaceholder')} />
-            <ShowInactivesToggle basePath={basePath} currentParams={sp} />
-          </div>
-        </>
+        <PageHeader
+          title={t(`roles.${slug}.title`)}
+          description={t(`roles.${slug}.description`)}
+          actions={canManage ? <NewPartyButton basePath={basePath} role={role} label={newLabel} /> : undefined}
+        />
       }
     >
-      {total === 0 ? (
-        <EmptyState
-          title={t(`roles.${slug}.emptyTitle`)}
-          description={t(`roles.${slug}.emptyDescription`)}
-          action={canManage ? <NewPartyButton basePath={basePath} role={role} label={newLabel} /> : undefined}
-        />
-      ) : (
-        <>
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <SortTh basePath={basePath} currentParams={sp} column="name" sort={listParams.sort} dir={listParams.dir}>{tc('labels.name')}</SortTh>
-                <SortTh basePath={basePath} currentParams={sp} column="code" sort={listParams.sort} dir={listParams.dir}>{t('list.shortCode')}</SortTh>
-                <TableHead>{tc('labels.email')}</TableHead>
-                <TableHead>{t('list.phone')}</TableHead>
-                <TableHead>{tc('labels.status')}</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {parties.rows.map((p: any) => (
-                <TableRow key={p.id}>
-                  <TableCell className="font-semibold">
-                    <Link href={buildListDrawerHref(basePath, sp, 'party', String(p.id)) as any} className="text-teal-700 hover:underline dark:text-teal-300">
-                      {p.display_name}
-                    </Link>
-                  </TableCell>
-                  <TableCell className="font-mono text-[13px]">{p.short_code}</TableCell>
-                  <TableCell className="text-slate-500 dark:text-slate-400">{p.email}</TableCell>
-                  <TableCell className="text-slate-500 dark:text-slate-400">{p.phone}</TableCell>
-                  <TableCell>
-                    <Badge variant={p.is_active ? 'success' : 'outline'}>{p.is_active ? tc('status.active') : tc('status.inactive')}</Badge>
-                  </TableCell>
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
-          <div className="mt-3">
-            <Pagination basePath={basePath} currentParams={sp} total={filteredTotal} page={listParams.page} perPage={listParams.perPage} />
-          </div>
-        </>
-      )}
-
-      {partyDrawers}
+      <EntityListView
+        recordType={role}
+        orgId={orgId}
+        userId={authz.user.id}
+        canManage={can(authz, 'admin.customization.manage')}
+        sp={sp}
+        emptyAction={canManage ? <NewPartyButton basePath={basePath} role={role} label={newLabel} /> : undefined}
+        drawer={partyDrawers}
+      />
     </ListPageLayout>
   )
 }

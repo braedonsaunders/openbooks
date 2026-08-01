@@ -11,8 +11,8 @@ import { KpiStrip } from '../../../../components/kpi-strip'
 import { confirmDialog } from '../../../../lib/confirm'
 
 interface Opt { id: string; name: string; code?: string | null; number?: string | null }
-export function EquipmentDrawer({ payload, items, assets, books, subsidiaries, canManage }: {
-  payload: any; items: Opt[]; assets: Opt[]; books: Opt[]; subsidiaries: Opt[]; canManage: boolean
+export function EquipmentDrawer({ payload, items, assets, books, subsidiaries, canManage, closeHref = '/assets/equipment' }: {
+  payload: any; items: Opt[]; assets: Opt[]; books: Opt[]; subsidiaries: Opt[]; canManage: boolean; closeHref?: string
 }) {
   const { money } = useMoney()
   const t = useTranslations('assets.equipment'); const common = useTranslations('common'); const router = useRouter()
@@ -60,7 +60,7 @@ export function EquipmentDrawer({ payload, items, assets, books, subsidiaries, c
     ? ((Number(m.billed_revenue) - Number(m.recovery) - Number(m.direct_costs) - Number(m.depreciation)) / Number(e.purchase_price)) * 100
     : 0
   const utilization = Number(e.capacity_quantity) > 0 ? Math.min(100, Number(m.usage) / Number(e.capacity_quantity) * 100) : 0
-  return <UrlDrawer open closeHref="/assets/equipment" size="2xl" title={<span className="flex items-center gap-2">{name || t('new')}<Badge variant={status === 'active' ? 'success' : 'secondary'}>{t(`statuses.${status}`)}</Badge></span>}
+  return <UrlDrawer open closeHref={closeHref} size="2xl" title={<span className="flex items-center gap-2">{name || t('new')}<Badge variant={status === 'active' ? 'success' : 'secondary'}>{t(`statuses.${status}`)}</Badge></span>}
     headerActions={mode === 'edit' ? <><Button size="sm" variant="outline" disabled={busy} onClick={() => setMode('view')}>{common('actions.cancel')}</Button><Button size="sm" disabled={busy} onClick={() => save()}>{common('actions.save')}</Button></> : canManage ? <><Button size="sm" variant="outline" onClick={() => setMode('edit')}>{common('actions.edit')}</Button><Popover open={actionsOpen} onOpenChange={setActionsOpen} align="end" className="w-52 p-1" trigger={<Button size="sm" variant="outline" onClick={() => setActionsOpen(!actionsOpen)}>{common('labels.actions')}<ChevronDown size={14}/></Button>}><div className="grid gap-1">{status !== 'active' ? <Button variant="ghost" className="justify-start" onClick={() => save({status:'active'})}>{t('activate')}</Button> : <Button variant="ghost" className="justify-start" onClick={() => save({status:'inactive'})}>{t('deactivate')}</Button>} {!e.fixed_asset_id ? <Button variant="ghost" className="justify-start" disabled={busy} onClick={capitalize}>{t('capitalize')}</Button> : null} {status === 'draft' ? <Button variant="ghost" className="justify-start text-red-600" onClick={remove}>{common('actions.delete')}</Button> : null}</div></Popover></> : undefined}>
     <div className="space-y-6">
       <KpiStrip items={[{label:t('metrics.purchasePrice'),value:money(e.purchase_price)},{label:t('metrics.recovery'),value:money(m.recovery)},{label:t('metrics.billedRevenue'),value:money(m.billed_revenue)},{label:t('metrics.roi'),value:`${roi.toFixed(1)}%`},{label:t('metrics.utilization'),value:`${utilization.toFixed(1)}%`}]} />

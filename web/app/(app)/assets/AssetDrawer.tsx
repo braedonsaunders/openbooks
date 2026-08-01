@@ -72,6 +72,7 @@ export function AssetDrawer({
   currentFormId,
   fieldDefs,
   depreciationMethods,
+  closeHref = '/assets',
 }: {
   payload: AssetPayload
   categories: CategoryOpt[]
@@ -85,6 +86,7 @@ export function AssetDrawer({
   currentFormId: string | null
   fieldDefs: CustomFieldDefClient[]
   depreciationMethods: DepreciationMethodOpt[]
+  closeHref?: string
 }) {
   const { money } = useMoney()
   const t = useTranslations('assets')
@@ -347,7 +349,7 @@ export function AssetDrawer({
 
   return <UrlDrawer
     open
-    closeHref="/assets"
+    closeHref={closeHref}
     size="2xl"
     title={<span className="flex items-center gap-2.5"><span className="font-mono text-sm text-slate-500 dark:text-slate-400">{assetNumber || a.asset_number}</span><span>{displayName}</span><Badge variant={STATUS_VARIANT[status] ?? 'secondary'}>{t(`status.${status}`)}</Badge></span>}
     description={mode === 'edit' ? t('drawer.editing') : (payload.category?.name ?? undefined)}
