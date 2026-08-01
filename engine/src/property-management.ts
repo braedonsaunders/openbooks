@@ -717,7 +717,7 @@ export async function assessLeaseLateFees(orgId: string, actorId: string, asOf?:
   return { created };
 }
 
-export async function recordSecurityDeposit(input: { orgId: string; actorId: string; leaseId: string; kind: string; occurredOn: string; amount: string; bankAccountId?: string | null; offsetAccountId?: string | null; appliedDocumentId?: string | null; memo?: string | null }): Promise<{ id: string; entryId: string; balance: string }> {
+export async function recordSecurityDeposit(input: { orgId: string; actorId: string; leaseId: string; kind: string; occurredOn: string; amount: string; bankAccountId?: string | null; offsetAccountId?: string | null; appliedDocumentId?: string | null; memo?: string | null; importKey?: string | null }): Promise<{ id: string; entryId: string; balance: string }> {
   const shape = depositPostingShape(input.kind);
   const occurredOn = validDate(input.occurredOn, "Deposit date")!;
   const amount = normalizeMoney(input.amount);
@@ -809,8 +809,8 @@ export async function recordSecurityDeposit(input: { orgId: string; actorId: str
         target_transaction_amount,target_transaction_currency,settlement_rate,settlement_rate_source,settlement_rate_reference,applied_on,created_by,updated_by)
         values(${input.orgId},${credit.rows[0]!.id},${targetLineId},${amount},${amount},${amount},${row.currency},${amount},${row.currency},1,'same_currency','Security deposit application',${occurredOn},${input.actorId},${input.actorId})`);
     }
-    const inserted = (await tx.execute(sql`insert into security_deposit_transactions(org_id,lease_id,kind,occurred_on,amount,bank_account_id,offset_account_id,applied_document_id,journal_entry_id,memo,created_by,updated_by)
-      values(${input.orgId},${input.leaseId},${input.kind},${occurredOn},${amount},${bankId},${offsetId},${input.appliedDocumentId ?? null},${entryId},${input.memo ?? null},${input.actorId},${input.actorId}) returning id`)) as unknown as { rows: { id: string }[] };
+    const inserted = (await tx.execute(sql`insert into security_deposit_transactions(org_id,lease_id,kind,occurred_on,amount,bank_account_id,offset_account_id,applied_document_id,journal_entry_id,import_key,memo,created_by,updated_by)
+      values(${input.orgId},${input.leaseId},${input.kind},${occurredOn},${amount},${bankId},${offsetId},${input.appliedDocumentId ?? null},${entryId},${input.importKey?.trim() || null},${input.memo ?? null},${input.actorId},${input.actorId}) returning id`)) as unknown as { rows: { id: string }[] };
     return { id: inserted.rows[0]!.id, entryId, balance: nextBalance };
   });
 }
@@ -915,6 +915,61 @@ export async function createCamPool(input: { orgId: string; actorId: string; pro
   });
 }
 
+export async function updateCamPool(input: { orgId: string; actorId: string; poolId: string; name: string; fiscalYear: number; periodStartsOn: string; periodEndsOn: string; allocationBasis: "rentable_area" | "equal" | "custom"; budgetAmount: string; expenseAccountIds: string[] }): Promise<{ id: string }> {
+  const name = input.name.trim();
+  const startsOn = validDate(input.periodStartsOn, "CAM period start")!;
+  const endsOn = validDate(input.periodEndsOn, "CAM period end")!;
+  const expenseAccountIds = [...new Set(input.expenseAccountIds)];
+  if (!name || !Number.isInteger(input.fiscalYear) || endsOn < startsOn) throw new PropertyManagementError("CAM name, fiscal year, and a valid period are required");
+  if (!expenseAccountIds.length) throw new PropertyManagementError("Select at least one CAM expense account");
+  return db.transaction(async (tx) => {
+    await assertEnabled(tx, input.orgId);
+    const accounts = (await tx.execute(sql`select count(*)::int as n from accounts where org_id=${input.orgId} and id::text in
+      (select jsonb_array_elements_text(${JSON.stringify(expenseAccountIds)}::jsonb)) and type in ('expense','expense_other') and is_active and not is_summary`)) as unknown as { rows: { n: number }[] };
+    if (accounts.rows[0]?.n !== expenseAccountIds.length) throw new PropertyManagementError("CAM accounts must be active posting expense accounts");
+    const result = (await tx.execute(sql`
+      update cam_pools set name=${name},fiscal_year=${input.fiscalYear},period_starts_on=${startsOn},period_ends_on=${endsOn},
+        allocation_basis=${input.allocationBasis},budget_amount=${normalizeMoney(input.budgetAmount)},expense_account_ids=${JSON.stringify(expenseAccountIds)}::jsonb,
+        updated_at=now(),updated_by=${input.actorId}
+      where org_id=${input.orgId} and id=${input.poolId} and status in ('draft','open') returning id,property_id as "propertyId"
+    `)) as unknown as { rows: { id: string; propertyId: string }[] };
+    const row = result.rows[0];
+    if (!row) throw new PropertyManagementError("Editable CAM pool not found");
+    await audit(tx, input.orgId, "cam_pools", input.poolId, "update", input.actorId, { name, fiscalYear: input.fiscalYear, periodStartsOn: startsOn, periodEndsOn: endsOn, allocationBasis: input.allocationBasis, budgetAmount: normalizeMoney(input.budgetAmount), expenseAccountIds });
+    return { id: row.id };
+  });
+}
+
+export async function cancelCamPool(orgId: string, actorId: string, poolId: string): Promise<void> {
+  await db.transaction(async (tx) => {
+    await assertEnabled(tx, orgId);
+    const result = (await tx.execute(sql`
+      update cam_pools set status='cancelled',updated_at=now(),updated_by=${actorId}
+      where org_id=${orgId} and id=${poolId} and status in ('draft','open') returning name
+    `)) as unknown as { rows: { name: string }[] };
+    if (!result.rows[0]) throw new PropertyManagementError("Open CAM pool not found");
+    await audit(tx, orgId, "cam_pools", poolId, "cancel", actorId, { after: { status: "cancelled" }, name: result.rows[0].name });
+  });
+}
+
+export async function reopenFinalizedCamPool(orgId: string, actorId: string, poolId: string, reason: string): Promise<void> {
+  const correctionReason = reason.trim();
+  if (!correctionReason) throw new PropertyManagementError("CAM correction reason is required");
+  await db.transaction(async (tx) => {
+    await assertEnabled(tx, orgId);
+    const result = (await tx.execute(sql`
+      select cp.name,cp.status,exists(select 1 from cam_allocations a where a.org_id=cp.org_id and a.pool_id=cp.id and a.invoice_document_id is not null) as billed
+      from cam_pools cp where cp.org_id=${orgId} and cp.id=${poolId} for update
+    `)) as unknown as { rows: { name: string; status: string; billed: boolean }[] };
+    const pool = result.rows[0];
+    if (!pool || pool.status !== "finalized") throw new PropertyManagementError("Finalized CAM pool not found");
+    if (pool.billed) throw new PropertyManagementError("An invoiced CAM pool is immutable; correct the tenant documents and create a supplemental pool");
+    await tx.execute(sql`delete from cam_allocations where org_id=${orgId} and pool_id=${poolId}`);
+    await tx.execute(sql`update cam_pools set status='open',actual_amount=null,finalized_at=null,finalized_by=null,updated_at=now(),updated_by=${actorId} where org_id=${orgId} and id=${poolId}`);
+    await audit(tx, orgId, "cam_pools", poolId, "reopen", actorId, { reason: correctionReason, before: { status: "finalized" }, after: { status: "open" }, name: pool.name });
+  });
+}
+
 export async function finalizeCamPool(orgId: string, actorId: string, poolId: string): Promise<{ actualAmount: string; allocations: number }> {
   return db.transaction(async (tx) => {
     const poolResult = (await tx.execute(sql`select cp.*,p.location_id from cam_pools cp join managed_properties p on p.id=cp.property_id and p.org_id=cp.org_id where cp.org_id=${orgId} and cp.id=${poolId} for update`)) as unknown as { rows: any[] };
@@ -1011,6 +1066,91 @@ export async function billCamReconciliation(orgId: string, actorId: string, pool
     where cp.org_id=${orgId} and cp.id=${poolId} and cp.status='finalized'
       and not exists(select 1 from cam_allocations a where a.org_id=cp.org_id and a.pool_id=cp.id and a.reconciliation_amount<>0 and a.invoice_document_id is null)`);
   return { documents };
+}
+
+export async function securityDepositReconciliation(orgId: string, asOf?: string) {
+  const throughOn = validDate(asOf ?? new Date().toISOString().slice(0, 10), "Reconciliation date")!;
+  await assertEnabled(db, orgId);
+  const properties = (await db.execute(sql`
+    select p.id as "propertyId",p.code as "propertyCode",p.name as "propertyName",p.subsidiary_id as "subsidiaryId",p.location_id as "locationId",p.currency,
+      p.deposit_liability_account_id as "liabilityAccountId",concat_ws(' · ',la.number,la.name) as "liabilityAccountName",
+      p.default_bank_account_id as "defaultBankAccountId",concat_ws(' · ',ba.number,ba.name) as "defaultBankAccountName",
+      coalesce((select sum(case when d.kind in ('received','interest','adjustment_increase') then d.amount else -d.amount end)
+        from security_deposit_transactions d join property_leases l on l.id=d.lease_id and l.org_id=d.org_id
+        where d.org_id=p.org_id and l.property_id=p.id and d.occurred_on<=${throughOn}),0)::text as "subledgerBalance",
+      coalesce((select -sum(jl.amount) from security_deposit_transactions d
+        join property_leases l on l.id=d.lease_id and l.org_id=d.org_id
+        join journal_entries je on je.id=d.journal_entry_id and je.org_id=d.org_id and je.status='posted'
+        join journal_lines jl on jl.entry_id=je.id and jl.org_id=je.org_id and jl.account_id=p.deposit_liability_account_id
+        where d.org_id=p.org_id and l.property_id=p.id and d.occurred_on<=${throughOn}),0)::text as "linkedGlBalance",
+      case when p.location_id is null or p.deposit_liability_account_id is null then null else
+        coalesce((select -sum(jl.amount) from journal_lines jl join journal_entries je on je.id=jl.entry_id and je.org_id=jl.org_id
+          where jl.org_id=p.org_id and je.status='posted' and je.posting_date<=${throughOn}
+            and jl.account_id=p.deposit_liability_account_id and jl.location_id=p.location_id),0)::text end as "locationControlBalance",
+      coalesce((select sum(case when d.kind='received' then d.amount when d.kind='refunded' then -d.amount else 0 end)
+        from security_deposit_transactions d join property_leases l on l.id=d.lease_id and l.org_id=d.org_id
+        where d.org_id=p.org_id and l.property_id=p.id and d.occurred_on<=${throughOn}),0)::text as "cashActivity",
+      (select max(d.occurred_on)::text from security_deposit_transactions d join property_leases l on l.id=d.lease_id and l.org_id=d.org_id
+        where d.org_id=p.org_id and l.property_id=p.id and d.occurred_on<=${throughOn}) as "lastActivityOn"
+    from managed_properties p
+    left join accounts la on la.id=p.deposit_liability_account_id and la.org_id=p.org_id
+    left join accounts ba on ba.id=p.default_bank_account_id and ba.org_id=p.org_id
+    where p.org_id=${orgId} order by p.name
+  `)) as unknown as { rows: any[] };
+  const banks = (await db.execute(sql`
+    select l.property_id as "propertyId",d.bank_account_id as "bankAccountId",concat_ws(' · ',a.number,a.name) as "bankAccountName",
+      sum(case when d.kind='received' then d.amount when d.kind='refunded' then -d.amount else 0 end)::text as "cashActivity"
+    from security_deposit_transactions d join property_leases l on l.id=d.lease_id and l.org_id=d.org_id
+    join accounts a on a.id=d.bank_account_id and a.org_id=d.org_id
+    where d.org_id=${orgId} and d.occurred_on<=${throughOn} and d.bank_account_id is not null
+    group by l.property_id,d.bank_account_id,a.number,a.name order by a.number,a.name
+  `)) as unknown as { rows: any[] };
+  const leases = (await db.execute(sql`
+    select l.id as "leaseId",l.property_id as "propertyId",l.lease_number as "leaseNumber",l.status,t.display_name as "tenantName",u.code as "unitCode",
+      coalesce(sum(case when d.kind in ('received','interest','adjustment_increase') then d.amount else -d.amount end),0)::text as balance,
+      max(d.occurred_on)::text as "lastActivityOn"
+    from property_leases l join parties t on t.id=l.tenant_id and t.org_id=l.org_id
+    left join property_units u on u.id=l.unit_id and u.org_id=l.org_id
+    left join security_deposit_transactions d on d.lease_id=l.id and d.org_id=l.org_id and d.occurred_on<=${throughOn}
+    where l.org_id=${orgId} group by l.id,t.display_name,u.code order by l.lease_number
+  `)) as unknown as { rows: any[] };
+  const rows = properties.rows.map((row) => {
+    const subledgerBalance = normalizeMoney(row.subledgerBalance ?? "0");
+    const linkedGlBalance = normalizeMoney(row.linkedGlBalance ?? "0");
+    const locationControlBalance = row.locationControlBalance == null ? null : normalizeMoney(row.locationControlBalance);
+    const linkedVariance = add(linkedGlBalance, neg(subledgerBalance));
+    const controlVariance = locationControlBalance == null ? null : add(locationControlBalance, neg(subledgerBalance));
+    const status = !row.liabilityAccountId
+      ? "configuration_required"
+      : cmp(linkedVariance, "0") !== 0 || (controlVariance != null && cmp(controlVariance, "0") !== 0)
+        ? "discrepancy"
+        : !row.locationId
+          ? "limited"
+          : "reconciled";
+    return {
+      ...row,
+      subledgerBalance,
+      linkedGlBalance,
+      locationControlBalance,
+      linkedVariance,
+      controlVariance,
+      cashActivity: normalizeMoney(row.cashActivity ?? "0"),
+      status,
+      bankAccounts: banks.rows.filter((bank) => bank.propertyId === row.propertyId).map((bank) => ({ ...bank, cashActivity: normalizeMoney(bank.cashActivity ?? "0") })),
+      leases: leases.rows.filter((lease) => lease.propertyId === row.propertyId).map((lease) => ({ ...lease, balance: normalizeMoney(lease.balance ?? "0") })),
+    };
+  });
+  return {
+    asOf: throughOn,
+    rows,
+    totals: {
+      subledgerBalance: sum(rows.map((row) => row.subledgerBalance)),
+      linkedGlBalance: sum(rows.map((row) => row.linkedGlBalance)),
+      cashActivity: sum(rows.map((row) => row.cashActivity)),
+      discrepancies: rows.filter((row) => row.status === "discrepancy").length,
+      configurationRequired: rows.filter((row) => row.status === "configuration_required").length,
+    },
+  };
 }
 
 export async function propertyManagementWorkspace(orgId: string) {

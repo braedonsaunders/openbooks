@@ -65,15 +65,16 @@ type Workspace = {
   camPools: any[];
   camAllocations: any[];
 };
-type Tab = "properties" | "rentRoll" | "cam";
+type Tab = "properties" | "rentRoll" | "cam" | "depositReconciliation";
 type LeaseTab = "overview" | "charges" | "escalations" | "deposits";
 type LeaseCreateContext = { propertyId: string; unitId?: string | null };
-type CamCreateContext = { propertyId?: string };
+type CamCreateContext = { propertyId?: string; poolId?: string };
 type ActionPayload = Record<string, unknown>;
 const mainTabs: Array<{ key: Tab; label: string }> = [
   { key: "properties", label: "Properties" },
   { key: "rentRoll", label: "Rent Roll" },
   { key: "cam", label: "CAM" },
+  { key: "depositReconciliation", label: "Deposit Reconciliation" },
 ];
 const empty: Workspace = {
   properties: [],
@@ -145,6 +146,8 @@ export function PropertyManagementWorkspace({
   );
   const [selectedLeaseId, setSelectedLeaseId] = useState<string | null>(null);
   const [createCam, setCreateCam] = useState<CamCreateContext | null>(null);
+  const [reopenCamPoolId, setReopenCamPoolId] = useState<string | null>(null);
+  const [propertyInitialTab, setPropertyInitialTab] = useState("overview");
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -361,13 +364,25 @@ export function PropertyManagementWorkspace({
                 setSelectedLeaseId(lease.id);
               }}
             />
-          ) : (
+          ) : tab === "cam" ? (
             <CamTable
               data={data}
               money={money}
               busy={busy}
               permissions={permissions}
               act={act}
+              onEdit={(pool: any) =>
+                setCreateCam({ propertyId: pool.propertyId, poolId: pool.id })
+              }
+              onReopen={(pool: any) => setReopenCamPoolId(pool.id)}
+            />
+          ) : (
+            <DepositReconciliationWorkspace
+              money={money}
+              onOpenProperty={(propertyId: string) => {
+                setPropertyInitialTab("deposits");
+                setSelectedPropertyId(propertyId);
+              }}
             />
           )}
         </CardContent>
@@ -387,7 +402,7 @@ export function PropertyManagementWorkspace({
         }}
       />
       <PropertyDetailDrawer
-        key={selectedProperty?.id ?? "property-detail"}
+        key={`${selectedProperty?.id ?? "property-detail"}:${propertyInitialTab}`}
         property={selectedProperty}
         units={data.units.filter(
           (unit) => unit.propertyId === selectedProperty?.id,
@@ -402,10 +417,12 @@ export function PropertyManagementWorkspace({
         money={money}
         act={act}
         busy={busy}
+        initialTab={propertyInitialTab}
         onClose={() => {
           setSelectedLeaseId(null);
           setSelectedUnitId(null);
           setSelectedPropertyId(null);
+          setPropertyInitialTab("overview");
         }}
         onAddUnit={() =>
           selectedProperty && setUnitPropertyId(selectedProperty.id)
@@ -422,6 +439,10 @@ export function PropertyManagementWorkspace({
         onOpenLease={(leaseId: string) => {
           setSelectedLeaseId(leaseId);
         }}
+        onEditCam={(pool: any) =>
+          setCreateCam({ propertyId: pool.propertyId, poolId: pool.id })
+        }
+        onReopenCam={(pool: any) => setReopenCamPoolId(pool.id)}
         onSave={(payload: ActionPayload) =>
           act({ action: "updateProperty", ...payload }, "Property updated")
         }
@@ -500,16 +521,33 @@ export function PropertyManagementWorkspace({
         open={!!createCam}
         stacked={!!selectedProperty}
         initialPropertyId={createCam?.propertyId}
+        pool={data.camPools.find((pool) => pool.id === createCam?.poolId)}
         onClose={() => setCreateCam(null)}
         data={data}
         expenseAccounts={options.expenseAccounts}
         busy={busy}
         onSave={async (payload: ActionPayload) => {
           const result = await act(
-            { action: "createCamPool", ...payload },
-            "CAM pool created",
+            createCam?.poolId
+              ? { action: "updateCamPool", poolId: createCam.poolId, ...payload }
+              : { action: "createCamPool", ...payload },
+            createCam?.poolId ? "CAM pool updated" : "CAM pool created",
           );
           if (result) setCreateCam(null);
+        }}
+      />
+      <CamCorrectionDrawer
+        open={!!reopenCamPoolId}
+        stacked={!!selectedProperty}
+        pool={data.camPools.find((pool) => pool.id === reopenCamPoolId)}
+        busy={busy}
+        onClose={() => setReopenCamPoolId(null)}
+        onSave={async (reason: string) => {
+          const result = await act(
+            { action: "reopenCamPool", poolId: reopenCamPoolId, reason },
+            "CAM pool reopened for correction",
+          );
+          if (result) setReopenCamPoolId(null);
         }}
       />
       <LeaseRecordDrawer
@@ -630,15 +668,18 @@ function PropertyDetailDrawer({
   onOpenUnit,
   onAddLease,
   onAddCam,
+  onEditCam,
+  onReopenCam,
   onOpenLease,
   onSave,
   onDelete,
+  initialTab,
 }: any) {
   const pathname = usePathname();
   const router = useRouter();
   const searchParams = useSearchParams();
   const [mode, setMode] = useState<"view" | "edit">("view");
-  const [tab, setTab] = useState("overview");
+  const [tab, setTab] = useState(initialTab ?? "overview");
   const [actionsOpen, setActionsOpen] = useState(false);
   const [form, setForm] = useState(() =>
     propertyForm(property ?? {}, customization.fieldDefs),
@@ -1385,6 +1426,8 @@ function PropertyDetailDrawer({
               busy={busy}
               permissions={permissions}
               act={act}
+              onEdit={onEditCam}
+              onReopen={onReopenCam}
             />
           </div>
         </div>
@@ -1901,7 +1944,151 @@ function DepositTable({ deposits, leases, money, onReverse }: any) {
     </Table>
   );
 }
-function CamTable({ data, propertyId, money, busy, permissions, act }: any) {
+
+function DepositReconciliationWorkspace({ money, onOpenProperty }: any) {
+  const [asOf, setAsOf] = useState(new Date().toISOString().slice(0, 10));
+  const [result, setResult] = useState<any>(null);
+  const [loading, setLoading] = useState(true);
+  useEffect(() => {
+    let cancelled = false;
+    setLoading(true);
+    fetch(`/api/property-management/deposit-reconciliation?asOf=${asOf}`, {
+      cache: "no-store",
+    })
+      .then(async (response) => {
+        const body = await response.json();
+        if (!response.ok) throw new Error(body.error ?? "Reconciliation failed");
+        if (!cancelled) setResult(body);
+      })
+      .catch((error) => {
+        if (!cancelled)
+          toast.error(
+            error instanceof Error ? error.message : "Reconciliation failed",
+          );
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [asOf]);
+  if (loading && !result)
+    return (
+      <div className="p-12 text-center text-sm text-slate-500">
+        Reconciling deposit subledger to the general ledger…
+      </div>
+    );
+  const rows = result?.rows ?? [];
+  const totals = result?.totals ?? {};
+  return (
+    <div className="space-y-4 p-4">
+      <div className="flex flex-wrap items-end justify-between gap-3">
+        <div>
+          <h2 className="text-sm font-semibold">Security deposit reconciliation</h2>
+          <p className="mt-1 max-w-3xl text-xs text-slate-500">
+            Compare tenant deposit activity with posted deposit-liability entries
+            and the property location control balance. Bank activity is supporting
+            evidence and can differ after applications, interest, or adjustments.
+          </p>
+        </div>
+        <div className="w-44">
+          <Field label="As of">
+            <Input
+              type="date"
+              value={asOf}
+              onChange={(event) => setAsOf(event.target.value)}
+            />
+          </Field>
+        </div>
+      </div>
+      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+        <Small label="Deposit subledger" value={money(totals.subledgerBalance ?? 0)} />
+        <Small label="Linked posted GL" value={money(totals.linkedGlBalance ?? 0)} />
+        <Small label="Deposit cash activity" value={money(totals.cashActivity ?? 0)} />
+        <Small
+          label="Exceptions"
+          value={String(
+            Number(totals.discrepancies ?? 0) +
+              Number(totals.configurationRequired ?? 0),
+          )}
+        />
+      </div>
+      <div className="overflow-x-auto rounded-md border border-slate-200 dark:border-slate-800">
+        <Table>
+          <TableHeader>
+            <TableRow>
+              <TableHead>Property</TableHead>
+              <TableHead>Deposit bank</TableHead>
+              <TableHead className="text-right">Subledger</TableHead>
+              <TableHead className="text-right">Linked GL</TableHead>
+              <TableHead className="text-right">Location control</TableHead>
+              <TableHead className="text-right">Difference</TableHead>
+              <TableHead>Last activity</TableHead>
+              <TableHead>Status</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {rows.map((row: any) => {
+              const difference = row.controlVariance ?? row.linkedVariance;
+              return (
+                <TableRow
+                  key={row.propertyId}
+                  role="button"
+                  tabIndex={0}
+                  className="cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-teal-600"
+                  onClick={() => onOpenProperty(row.propertyId)}
+                  onKeyDown={(event) => {
+                    if (event.key === "Enter" || event.key === " ") {
+                      event.preventDefault();
+                      onOpenProperty(row.propertyId);
+                    }
+                  }}
+                >
+                  <TableCell>
+                    <div className="font-medium">{row.propertyName}</div>
+                    <div className="font-mono text-xs text-slate-500">{row.propertyCode}</div>
+                  </TableCell>
+                  <TableCell>
+                    {row.bankAccounts?.length
+                      ? row.bankAccounts
+                          .map((bank: any) => bank.bankAccountName)
+                          .join(", ")
+                      : row.defaultBankAccountName ?? "Not configured"}
+                  </TableCell>
+                  <TableCell className="text-right tabular-nums">{money(row.subledgerBalance)}</TableCell>
+                  <TableCell className="text-right tabular-nums">{money(row.linkedGlBalance)}</TableCell>
+                  <TableCell className="text-right tabular-nums">
+                    {row.locationControlBalance == null ? "—" : money(row.locationControlBalance)}
+                  </TableCell>
+                  <TableCell className={cn("text-right tabular-nums", Number(difference) !== 0 && "font-medium text-red-600")}>
+                    {money(difference ?? 0)}
+                  </TableCell>
+                  <TableCell>{row.lastActivityOn ?? "—"}</TableCell>
+                  <TableCell><Status value={row.status} /></TableCell>
+                </TableRow>
+              );
+            })}
+          </TableBody>
+        </Table>
+        {!rows.length ? (
+          <Empty title="No properties to reconcile" detail="Create a property and lease before running deposit reconciliation." />
+        ) : null}
+      </div>
+    </div>
+  );
+}
+
+function CamTable({
+  data,
+  propertyId,
+  money,
+  busy,
+  permissions,
+  act,
+  onEdit,
+  onReopen,
+}: any) {
   const pools = propertyId
     ? data.camPools.filter((pool: any) => pool.propertyId === propertyId)
     : data.camPools;
@@ -1937,6 +2124,37 @@ function CamTable({ data, propertyId, money, busy, permissions, act }: any) {
               </div>
               <div className="flex gap-2">
                 <Status value={pool.status} />
+                {permissions.manage &&
+                ["draft", "open"].includes(pool.status) ? (
+                  <>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      disabled={busy}
+                      onClick={() => onEdit?.(pool)}
+                    >
+                      Edit
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      disabled={busy}
+                      onClick={() => {
+                        if (
+                          window.confirm(
+                            `Cancel ${pool.name}? The pool will remain in CAM history.`,
+                          )
+                        )
+                          void act(
+                            { action: "cancelCamPool", poolId: pool.id },
+                            "CAM pool cancelled",
+                          );
+                      }}
+                    >
+                      Cancel
+                    </Button>
+                  </>
+                ) : null}
                 {permissions.account &&
                 ["draft", "open"].includes(pool.status) ? (
                   <Button
@@ -1951,6 +2169,16 @@ function CamTable({ data, propertyId, money, busy, permissions, act }: any) {
                     }
                   >
                     Finalize
+                  </Button>
+                ) : null}
+                {permissions.account && pool.status === "finalized" ? (
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    disabled={busy}
+                    onClick={() => onReopen?.(pool)}
+                  >
+                    Reopen for correction
                   </Button>
                 ) : null}
                 {permissions.bill && pool.status === "finalized" ? (
@@ -3858,6 +4086,7 @@ function CamDrawer({
   open,
   stacked,
   initialPropertyId,
+  pool,
   onClose,
   data,
   expenseAccounts,
@@ -3866,26 +4095,27 @@ function CamDrawer({
 }: any) {
   const year = new Date().getUTCFullYear();
   const initial = {
-    propertyId: initialPropertyId ?? data.properties[0]?.id ?? "",
-    name: "Operating expenses",
-    fiscalYear: String(year),
-    periodStartsOn: `${year}-01-01`,
-    periodEndsOn: `${year}-12-31`,
-    allocationBasis: "rentable_area",
-    budgetAmount: "",
-    expenseAccountIds: [] as string[],
+    propertyId:
+      pool?.propertyId ?? initialPropertyId ?? data.properties[0]?.id ?? "",
+    name: pool?.name ?? "Operating expenses",
+    fiscalYear: String(pool?.fiscalYear ?? year),
+    periodStartsOn: pool?.periodStartsOn ?? `${year}-01-01`,
+    periodEndsOn: pool?.periodEndsOn ?? `${year}-12-31`,
+    allocationBasis: pool?.allocationBasis ?? "rentable_area",
+    budgetAmount: pool?.budgetAmount ?? "",
+    expenseAccountIds: (pool?.expenseAccountIds ?? []) as string[],
   };
   const [form, setForm] = useState(initial);
   useEffect(() => {
-    if (open) setForm({ ...initial, propertyId: initialPropertyId ?? data.properties[0]?.id ?? "" });
-  }, [open, initialPropertyId, data.properties.length]);
+    if (open) setForm(initial);
+  }, [open, pool?.id, initialPropertyId, data.properties.length]);
   const submit = () => onSave({ ...form, fiscalYear: Number(form.fiscalYear) });
   return (
     <Drawer
       open={open}
       stacked={stacked}
       onClose={onClose}
-      title="New CAM pool"
+      title={pool ? "Edit CAM pool" : "New CAM pool"}
       description="CAM actuals are read from posted GL lines on the property's location and selected expense accounts."
       footer={
         <>
@@ -3902,7 +4132,7 @@ function CamDrawer({
             }
             onClick={submit}
           >
-            {busy ? "Creating…" : "Create CAM pool"}
+            {busy ? "Saving…" : pool ? "Save CAM pool" : "Create CAM pool"}
           </Button>
         </>
       }
@@ -3912,7 +4142,7 @@ function CamDrawer({
           <Field label="Property">
             <Select
               value={form.propertyId}
-              disabled={!!initialPropertyId}
+              disabled={!!initialPropertyId || !!pool}
               onChange={(e) => setForm({ ...form, propertyId: e.target.value })}
             >
               <option value="">Select property</option>
@@ -4003,6 +4233,55 @@ function CamDrawer({
               </label>
             ))}
           </div>
+        </Field>
+      </div>
+    </Drawer>
+  );
+}
+
+function CamCorrectionDrawer({
+  open,
+  stacked,
+  pool,
+  busy,
+  onClose,
+  onSave,
+}: any) {
+  const [reason, setReason] = useState("");
+  useEffect(() => {
+    if (open) setReason("");
+  }, [open, pool?.id]);
+  return (
+    <Drawer
+      open={open}
+      stacked={stacked}
+      onClose={onClose}
+      title="Reopen CAM for correction"
+      description={`${pool?.name ?? "CAM pool"} will return to open status and its calculated allocations will be removed.`}
+      footer={
+        <>
+          <Button variant="outline" disabled={busy} onClick={onClose}>
+            Cancel
+          </Button>
+          <Button
+            disabled={busy || !reason.trim()}
+            onClick={() => onSave(reason)}
+          >
+            {busy ? "Reopening…" : "Reopen pool"}
+          </Button>
+        </>
+      }
+    >
+      <div className="p-1">
+        <Field
+          label="Correction reason"
+          hint="This explanation is written to the audit trail. Invoiced CAM pools cannot be reopened."
+        >
+          <Textarea
+            value={reason}
+            onChange={(event) => setReason(event.target.value)}
+            placeholder="Explain why the finalized allocation needs to be recalculated"
+          />
         </Field>
       </div>
     </Drawer>

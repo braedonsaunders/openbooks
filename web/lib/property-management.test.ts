@@ -84,6 +84,8 @@ test("property-management UI exposes the complete operator entry points", () => 
     "Record deposit transaction",
     "New CAM pool",
     "Create true-ups",
+    "Reopen for correction",
+    "Deposit Reconciliation",
   ]) {
     assert.match(workspace, new RegExp(label));
   }
@@ -128,6 +130,11 @@ test("property-management UI exposes the complete operator entry points", () => 
   assert.match(workspace, /Terminate lease/);
   assert.match(workspace, /Post reversal/);
   assert.match(workspace, /action: "reverseDeposit"/);
+  assert.match(workspace, /action: "updateCamPool"/);
+  assert.match(workspace, /action: "cancelCamPool"/);
+  assert.match(workspace, /action: "reopenCamPool"/);
+  assert.match(workspace, /function DepositReconciliationWorkspace/);
+  assert.match(workspace, /deposit-reconciliation\?asOf=/);
   assert.doesNotMatch(workspace, /window\.prompt/);
 });
 
@@ -150,4 +157,24 @@ test("property customization provisions form, view, and custom-field persistence
   assert.match(route, /validateCustomValues/);
   assert.match(schema, /custom: jsonb\("custom"\)/);
   assert.match(schema, /reversalOfId: uuid\("reversal_of_id"\)/);
+  assert.match(schema, /importKey: text\("import_key"\)/);
+});
+
+test("property migration uses the universal company import and export registry", () => {
+  const resources = source("lib/data-io/resources.ts");
+  const types = source("lib/data-io/types.ts");
+
+  for (const key of [
+    "properties",
+    "property-units",
+    "property-leases",
+    "lease-charges",
+    "security-deposit-opening-balances",
+  ]) {
+    assert.match(resources, new RegExp(`key: '${key}'`));
+  }
+  assert.match(resources, /propertyManagementEnabled/);
+  assert.match(resources, /recordSecurityDeposit/);
+  assert.match(resources, /importKey: externalKey/);
+  assert.match(types, /'Property management'/);
 });

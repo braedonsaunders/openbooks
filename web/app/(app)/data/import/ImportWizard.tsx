@@ -251,7 +251,7 @@ export function ImportWizard() {
           <div className="space-y-2">
             <label className="text-sm font-medium text-muted-foreground">{t('import.resource')}</label>
             <Select value={resource} onChange={(e) => setResource(e.target.value)}>
-              <option value="">{t('export.resourcePlaceholder')}</option>
+              <option value="">{t('import.resourcePlaceholder')}</option>
               {grouped.map(([group, list]) => (
                 <optgroup key={group} label={group}>
                   {list.map((r) => (

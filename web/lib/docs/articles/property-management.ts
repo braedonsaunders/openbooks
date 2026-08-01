@@ -115,6 +115,15 @@ when local rules require a notice or itemized deduction. Deposit law varies by
 jurisdiction, so configure accounts and operating procedures with professional
 advice.
 
+Use the portfolio **Deposit Reconciliation** tab at period end. It compares the
+tenant deposit subledger with the journal entries created by deposit activity
+and, when the property has a location, the full deposit-liability control
+balance for that location. Open an exception row to inspect the property's
+deposit history. A missing liability account is shown as a configuration issue;
+a difference is shown as a reconciliation exception. Bank-account activity is
+supporting evidence and is not expected to equal the ending liability after
+applications, interest, or non-cash adjustments.
+
 ## CAM reconciliation
 
 Create a CAM pool from the portfolio **CAM** workspace or from the property's
@@ -129,6 +138,28 @@ location and freezes the allocation result. Review every tenant allocation
 before billing. A positive true-up becomes a customer invoice; a negative
 true-up becomes a customer credit. Both use the native posting path, so the CAM
 result is visible in receivables and the ledger without a parallel balance.
+An open pool can be edited or cancelled. A finalized, unbilled pool can be
+reopened with a required correction reason; its calculated allocations are
+removed and rebuilt on the next finalization. Once a pool has produced tenant
+documents, correct those documents and use a supplemental pool rather than
+rewriting the billed history.
+
+## Migrating an existing portfolio
+
+Use **Company Settings → Import Data** and **Company Settings → Export Data**;
+Property Management does not have a separate uploader. Import in dependency
+order: **Properties**, **Property units**, **Property leases**, **Lease charges**,
+then **Security deposit opening balances**. Lease charges carry CAM estimates,
+parking, storage, utilities, and other non-base recurring charges. Tenants,
+accounts, subsidiaries, locations, and
+fixed assets must already exist and are referenced by their normal human keys.
+Lease rows include base rent and can be imported as draft or active.
+
+Deposit opening balances post a real balanced journal. Give every row a stable
+external key so rerunning an upsert cannot duplicate it, and select the migration
+clearing account that offsets the deposit liability. Choose an opening date in
+an open accounting period and reconcile the imported total before beginning
+live deposit activity.
 
 ## Period-end review
 

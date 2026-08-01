@@ -65,11 +65,12 @@ export interface ResourceDescriptor {
   postPermission?: string
 }
 
-export type ResourceGroup = 'Setup' | 'Master data' | 'Records' | 'Transactions'
+export type ResourceGroup = 'Setup' | 'Master data' | 'Property management' | 'Records' | 'Transactions'
 
 export const RESOURCE_GROUP_ORDER: ResourceGroup[] = [
   'Setup',
   'Master data',
+  'Property management',
   'Records',
   'Transactions',
 ]

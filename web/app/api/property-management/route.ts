@@ -10,6 +10,7 @@ import {
   assessLeaseLateFees,
   billCamReconciliation,
   billDueLeaseCharges,
+  cancelCamPool,
   cancelPropertyLease,
   createCamPool,
   createManagedProperty,
@@ -24,8 +25,10 @@ import {
   propertyManagementWorkspace,
   recordSecurityDeposit,
   reverseSecurityDepositTransaction,
+  reopenFinalizedCamPool,
   scheduleLeaseCharges,
   terminatePropertyLease,
+  updateCamPool,
 } from "@openbooks/engine/src/property-management.ts";
 import { guardPermission } from "../../../lib/authz";
 import type { Authz } from "../../../lib/authz";
@@ -107,6 +110,9 @@ const knownActions = new Set([
   "recordDeposit",
   "reverseDeposit",
   "createCamPool",
+  "updateCamPool",
+  "cancelCamPool",
+  "reopenCamPool",
   "finalizeCam",
   "billCam",
 ]);
@@ -209,7 +215,9 @@ async function guardSubsidiaryAccess(
       sql`select p.subsidiary_id as "subsidiaryId" from lease_escalations e join property_leases l on l.id=e.lease_id and l.org_id=e.org_id join managed_properties p on p.id=l.property_id and p.org_id=l.org_id where e.org_id=${authz.user.orgId} and e.id=${String(body.escalationId ?? "")}`,
     )) as any;
     subsidiaryId = result.rows[0]?.subsidiaryId ?? null;
-  } else if (["finalizeCam", "billCam"].includes(action)) {
+  } else if (
+    ["updateCamPool", "cancelCamPool", "reopenCamPool", "finalizeCam", "billCam"].includes(action)
+  ) {
     const result = (await db.execute(
       sql`select p.subsidiary_id as "subsidiaryId" from cam_pools cp join managed_properties p on p.id=cp.property_id and p.org_id=cp.org_id where cp.org_id=${authz.user.orgId} and cp.id=${String(body.poolId ?? "")}`,
     )) as any;
@@ -372,6 +380,20 @@ export async function POST(request: Request) {
         break;
       case "createCamPool":
         result = await createCamPool({ ...body, ...common } as any);
+        break;
+      case "updateCamPool":
+        result = await updateCamPool({ ...body, ...common } as any);
+        break;
+      case "cancelCamPool":
+        await cancelCamPool(common.orgId, common.actorId, String(body.poolId));
+        break;
+      case "reopenCamPool":
+        await reopenFinalizedCamPool(
+          common.orgId,
+          common.actorId,
+          String(body.poolId),
+          String(body.reason ?? ""),
+        );
         break;
       case "finalizeCam":
         result = await finalizeCamPool(
