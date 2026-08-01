@@ -61,7 +61,7 @@ export default async function Projects({
         }),
         db.execute(sql`
           select id, name, billing_method as "billingMethod",
-                 coalesce(invoicing_profile->>'billingProcedure', 'standard') as "billingProcedure"
+                 invoicing_profile->>'billingProcedure' as "billingProcedure"
             from project_types where org_id = ${orgId} and is_active order by sort_order, name`) as any,
       ])
     : [null, [], null, null]
@@ -79,7 +79,7 @@ export default async function Projects({
         orgId,
         userId: authz.user.id,
         recordType: 'project',
-        userRoles: [authz.user.role],
+        userRoles: authz.user.roles.map(({ key }) => key),
         headerDefs: await loadFieldDefs('projects'),
         lineDefs: [],
         explicitLayoutId: pickString(sp.form),

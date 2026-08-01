@@ -4,6 +4,7 @@ import { getTranslations } from 'next-intl/server'
 import { BookOpenText } from 'lucide-react'
 import { Badge, PageHeader, Table, TableBody, TableCell, TableHead, TableHeader, TableRow, cn } from '@openbooks/ui'
 import { ListPageLayout } from '../../../components/page-layout'
+import { EntityListView } from '../../../components/entity-list-view'
 import { SearchInput } from '../../../components/search-input'
 import { FilterChips } from '../../../components/filter-bar'
 import { ShowInactivesToggle } from '../../../components/show-inactives-toggle'
@@ -22,6 +23,7 @@ import { AccountRegisterLink } from '../../../components/account-register-link'
 import { NewAccountButton } from './NewAccountButton'
 import { AccountsHierarchyTable, type HierarchyAccountGroup } from './AccountsHierarchyTable'
 import { accountParentPath, orderAccountHierarchy } from '../../../lib/account-hierarchy'
+import { ModuleHomeTabs } from '../../../components/module-home/ui'
 
 export const dynamic = 'force-dynamic'
 
@@ -68,6 +70,7 @@ export default async function Accounts({
   const tc = await getTranslations('common')
   const typeLabel = (type: string) => (TYPE_KEYS[type] ? t(`types.${TYPE_KEYS[type]}`) : type)
   const sp = await searchParams
+  const layout = pickString(sp.layout) === 'hierarchy' ? 'hierarchy' : 'list'
   const params = parseListParams(sp, { sort: 'number', allowedSorts: ['number'] as const, perPage: FLAT_PER_PAGE })
   const q = params.q?.toLowerCase()
   const cls = pickString(sp.class)
@@ -121,7 +124,10 @@ export default async function Accounts({
       : null,
     subsidiaryFeatureEnabled(authz.user.orgId),
   ])
-  const closeHref = mergeHref('/accounts', sp, { account: undefined, accountNew: undefined })
+  const requestedReturn = pickString(sp.drawerReturn)
+  const closeHref = requestedReturn?.startsWith('/accounts')
+    ? requestedReturn
+    : mergeHref('/accounts', sp, { account: undefined, accountNew: undefined, drawerReturn: undefined })
   const drawerPayload = creating ? {
     account: {
       id: '',
@@ -165,20 +171,52 @@ export default async function Accounts({
     />
   ) : null
 
+  const viewTabs = (
+    <ModuleHomeTabs
+      tabs={[
+        { href: '/accounts', label: t('list.views.list'), active: layout === 'list' },
+        { href: '/accounts?layout=hierarchy', label: t('list.views.hierarchy'), active: layout === 'hierarchy' },
+      ]}
+    />
+  )
+  const headerActions = (
+    <div className="flex items-center gap-3">
+      {viewTabs}
+      {canManageAccounts ? <NewAccountButton currentParams={sp} label={t('list.newAccount')} /> : null}
+    </div>
+  )
   const header = (
     <>
       <PageHeader
         title={t('list.title')}
         description={t('list.description')}
-        actions={canManageAccounts ? <NewAccountButton currentParams={sp} label={t('list.newAccount')} /> : undefined}
+        actions={headerActions}
       />
-      <div className="flex flex-wrap items-center gap-2">
-        <SearchInput placeholder={t('list.searchPlaceholder')} />
-        <FilterChips basePath="/accounts" currentParams={sp} paramKey="class" label={tc('labels.class')} options={classCounts} />
-        <ShowInactivesToggle basePath="/accounts" currentParams={sp} />
-      </div>
+      {layout === 'hierarchy' ? (
+        <div className="flex flex-wrap items-center gap-2">
+          <SearchInput placeholder={t('list.searchPlaceholder')} />
+          <FilterChips basePath="/accounts" currentParams={sp} paramKey="class" label={tc('labels.class')} options={classCounts} />
+          <ShowInactivesToggle basePath="/accounts" currentParams={sp} />
+        </div>
+      ) : null}
     </>
   )
+
+  if (layout === 'list') {
+    return (
+      <ListPageLayout header={header}>
+        <EntityListView
+          recordType="account"
+          orgId={authz.user.orgId}
+          userId={authz.user.id}
+          canManage={can(authz, 'admin.customization.manage')}
+          sp={sp}
+          drawer={drawer}
+          emptyAction={canManageAccounts ? <NewAccountButton currentParams={sp} label={t('list.newAccount')} /> : undefined}
+        />
+      </ListPageLayout>
+    )
+  }
 
   // ---- searched → flat, paginated results with hierarchy context ----------
   if (q) {

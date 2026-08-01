@@ -50,6 +50,7 @@ export async function EntityListView({
   sp,
   drawer,
   emptyAction,
+  formatValue,
 }: {
   recordType: string
   orgId: string
@@ -58,6 +59,7 @@ export async function EntityListView({
   sp: Record<string, string | string[] | undefined>
   drawer?: ReactNode
   emptyAction?: ReactNode
+  formatValue?: (row: any, columnKey: string, value: unknown) => ReactNode
 }) {
   const { money } = await getMoneyFormatter()
   const source = entityListSource(recordType)
@@ -77,7 +79,9 @@ export async function EntityListView({
   }
 
   // Custom (cf_*) list columns come from the field defs with showInList set.
-  const headerDefs = await loadFieldDefs(source.customFieldTable)
+  const headerDefs = source.customFieldTable
+    ? await loadFieldDefs(source.customFieldTable, source.customFieldKind)
+    : []
   const showInListDefs = headerDefs.filter((d) => d.config.showInList)
 
   const resolvedView = await resolveListView({
@@ -101,55 +105,74 @@ export async function EntityListView({
     allowedSorts,
   })
 
-  const requestedStatus = pickString(sp.status)
-  const viewOwnsStatus = view.filters.some((filter) => filter.key === 'status')
-  const defaultStatus = viewOwnsStatus ? undefined : source.defaultStatus
-  const status = requestedStatus === 'all' ? undefined : (requestedStatus ?? defaultStatus)
-  const billing = pickString(sp.billing)
   const showInactive = pickString(sp.showInactive) === 'true'
+
+  const quickValues: Record<string, string | undefined> = {}
+  const quickDefaults: Record<string, string | undefined> = {}
+  for (const quick of source.quickFilters) {
+    const requested = pickString(sp[quick.paramKey])
+    const defaultValue = view.filters.some((filter) => filter.key === quick.filterKey)
+      ? undefined
+      : quick.defaultValue
+    quickDefaults[quick.filterKey] = defaultValue
+    quickValues[quick.filterKey] = requested === 'all' ? undefined : (requested ?? defaultValue)
+  }
 
   const labels: Record<string, string> = { actions: tCommon('labels.actions') }
   for (const c of meta.listColumns) labels[c.key] = label(c.labelKey)
 
-  const cols = columnDescriptors(recordType, view, showInListDefs, source.builtInExpr, labels, source.alias)
+  const cols = columnDescriptors(recordType, view, showInListDefs, source.builtInExpr, labels, source.customFieldAlias ?? source.alias)
   const selectCols = sql.join(
     cols.filter((c) => c.expr).map((c) => sql`${c.expr} as ${sql.raw(`"${c.key}"`)}`),
     sql`, `,
   )
   const allowedSubs = await allowedSubsidiaryIds(userId)
-  const adhoc = { q: params.q, status, billing, showInactive }
+  const adhoc = { q: params.q, filters: quickValues, showInactive }
   const where = source.where(view, adhoc, orgId, allowedSubs)
   // Counts ignore the ad-hoc status selection so every status remains visible
   // in the picker, while retaining saved-view scope and entity de-duplication.
-  const countView = { ...view, filters: view.filters.filter((filter) => filter.key !== 'status') }
-  const countWhere = source.where(countView, { showInactive }, orgId, allowedSubs)
+  const countFilterKey = source.countFilterKey ?? 'status'
+  const countView = { ...view, filters: view.filters.filter((filter) => filter.key !== countFilterKey) }
+  const countWhere = source.where(countView, { showInactive, filters: {} }, orgId, allowedSubs)
   const orderExpr = source.sorts[params.sort] ?? source.defaultSort
   const aliasSql = sql.raw(source.alias)
+  const idExpr = source.idExpr ?? sql`${aliasSql}.id`
   const tableSql = sql.raw(`${source.table} ${source.alias}`)
   const statusExpr = source.statusExpr ?? sql`${aliasSql}.status`
+  const baseJoins = typeof source.baseJoins === 'function' ? source.baseJoins(allowedSubs) : source.baseJoins
 
-  const [rowsRes, statusCounts, totalRow] = await Promise.all([
+  const [rowsRes, statusCounts, totalRow, loadedQuickOptions] = await Promise.all([
     db.execute(sql`
-      select ${aliasSql}.id${source.extraSelect ? sql`, ${source.extraSelect}` : sql``}, ${selectCols}
+      select ${idExpr} as id${source.extraSelect ? sql`, ${source.extraSelect}` : sql``}, ${selectCols}
         from ${tableSql}
-        ${source.baseJoins}
+        ${baseJoins}
        where ${where}
        order by ${orderExpr} ${params.dir === 'asc' ? sql`asc` : sql`desc`} nulls last
        limit ${params.perPage} offset ${(params.page - 1) * params.perPage}
     `) as any,
-    db.execute(sql`
-      select ${statusExpr} as status, count(*) as n from ${tableSql}
-        ${source.baseJoins}
-       where ${countWhere}
-       group by ${statusExpr}`) as any,
+    source.statusCounts === false
+      ? Promise.resolve({ rows: [] })
+      : db.execute(sql`
+          select ${statusExpr} as status, count(*) as n from ${tableSql}
+            ${baseJoins}
+           where ${countWhere}
+           group by ${statusExpr}`) as any,
     db.execute(sql`
       select count(*) as n from ${tableSql}
-        ${source.baseJoins}
+        ${baseJoins}
        where ${where}`) as any,
+    Promise.all(source.quickFilters.map(async (quick) => {
+      if (quick.loadOptions) return quick.loadOptions(orgId)
+      const filterMeta = meta.listFilters.find((filter) => filter.key === quick.filterKey)
+      return (filterMeta?.options ?? []).map((option) => ({
+        value: option.value,
+        label: option.labelKey ? label(option.labelKey) : option.value.replace(/_/g, ' '),
+      }))
+    })),
   ])
   const rows = rowsRes.rows as any[]
-  const total = statusCounts.rows.reduce((a: number, r: any) => a + Number(r.n), 0)
   const filteredTotal = Number(totalRow.rows[0].n)
+  const total = filteredTotal
 
   // Enum value → display label, resolved from any list filter that carries an
   // option set (status, project_type…). Lets both the chips and the table
@@ -160,28 +183,30 @@ export async function EntityListView({
     return opt ? (opt.labelKey ? label(opt.labelKey) : opt.value) : value.replace(/_/g, ' ')
   }
 
-  // Status chips: registry option set (value + labelKey) with data counts.
-  const statusFilterMeta = meta.listFilters.find((f) => f.key === 'status')
   const statusCountByValue = new Map(statusCounts.rows.map((r: any) => [String(r.status), Number(r.n)]))
-  const statusOptions = (statusFilterMeta?.options ?? []).map((o) => ({
-    value: o.value,
-    label: o.labelKey ? label(o.labelKey) : o.value,
-    count: Number(statusCountByValue.get(o.value) ?? 0),
-  }))
-  const billingFilterMeta = meta.listFilters.find((f) => f.key === 'project_type')
-  const billingOptions = (billingFilterMeta?.options ?? []).map((o) => ({
-    value: o.value,
-    label: o.labelKey ? label(o.labelKey) : o.value,
-  }))
+  const quickFilters = source.quickFilters.map((quick, index) => {
+    const filterMeta = meta.listFilters.find((filter) => filter.key === quick.filterKey)
+    const options = loadedQuickOptions[index] ?? []
+    return {
+      ...quick,
+      label: filterMeta ? label(filterMeta.labelKey) : quick.filterKey.replace(/_/g, ' '),
+      options: quick.filterKey === countFilterKey
+        ? options.map((option) => ({ ...option, count: Number(statusCountByValue.get(option.value) ?? 0) }))
+        : options,
+    }
+  })
 
-  const openHref = (id: string) =>
-    buildListDrawerHref(basePath, sp, source.drawerParam, id)
+  const openHref = (id: string, row?: any) => {
+    if (row && source.rowHref) return source.rowHref(row)
+    const target = row && source.drawerTarget ? source.drawerTarget(row) : { param: source.drawerParam, id }
+    return buildListDrawerHref(basePath, sp, target.param, target.id)
+  }
 
   const cell = (row: any, c: ListColDesc) => {
     const v = row[c.key]
     switch (c.kind) {
       case 'reference': {
-        const href = openHref(String(row.id))
+        const href = openHref(String(row.id), row)
         return (
           <TableCell key={c.key} className="font-medium">
             <Link
@@ -197,13 +222,13 @@ export async function EntityListView({
       case 'amount':
         return (
           <TableCell key={c.key} className="text-right tabular-nums">
-            {v == null || v === '' ? <span className="text-slate-400">—</span> : money(v)}
+            {v == null || v === '' ? <span className="text-slate-400">—</span> : money(v, source.currencyField ? { currency: row[source.currencyField] } : undefined)}
           </TableCell>
         )
       case 'status':
         return (
           <TableCell key={c.key}>
-            <Badge variant={STATUS_VARIANT[String(v)] ?? 'secondary'}>{optionLabel(c.key, String(v))}</Badge>
+            <Badge variant={source.statusVariant?.(row, v, c.key) ?? STATUS_VARIANT[String(v)] ?? 'secondary'}>{optionLabel(c.key, String(v))}</Badge>
           </TableCell>
         )
       case 'date':
@@ -224,7 +249,7 @@ export async function EntityListView({
         return (
           <TableCell key={c.key} className="w-px whitespace-nowrap px-2 text-center" style={{ width: 44 }}>
             <Link
-              href={openHref(String(row.id)) as any}
+              href={openHref(String(row.id), row) as any}
               className="inline-flex h-7 w-7 items-center justify-center rounded-md text-slate-500 transition-colors hover:bg-slate-100 hover:text-teal-700 dark:text-slate-400 dark:hover:bg-slate-800 dark:hover:text-teal-300"
               aria-label={tCommon('actions.open')}
               title={tCommon('actions.open')}
@@ -235,10 +260,11 @@ export async function EntityListView({
         )
       default: {
         const hasOptions = meta.listFilters.some((f) => f.key === c.key && f.options?.length)
-        const display = v == null || v === '' ? '—' : hasOptions ? optionLabel(c.key, String(v)) : String(v)
+        const display = formatValue?.(row, c.key, v)
+          ?? (v == null || v === '' ? '—' : hasOptions ? optionLabel(c.key, String(v)) : String(v))
         return (
           <TableCell key={c.key} className={v == null || v === '' ? 'text-slate-400' : 'text-slate-600 dark:text-slate-400'}>
-            <span className="block max-w-[16rem] truncate" title={display}>{display}</span>
+            <span className="block max-w-[16rem] truncate" title={typeof display === 'string' ? display : undefined}>{display}</span>
           </TableCell>
         )
       }
@@ -249,19 +275,17 @@ export async function EntityListView({
     <>
       <div className="flex flex-wrap items-center gap-2">
         <SearchInput placeholder={tCommon('actions.search')} />
-        {statusOptions.length ? (
+        {quickFilters.map((filter) => filter.options.length ? (
           <FilterChips
+            key={filter.paramKey}
             basePath={basePath}
             currentParams={sp}
-            paramKey="status"
-            label={tCommon('labels.status')}
-            options={statusOptions}
-            defaultValue={defaultStatus}
+            paramKey={filter.paramKey}
+            label={filter.label}
+            options={filter.options}
+            defaultValue={quickDefaults[filter.filterKey]}
           />
-        ) : null}
-        {billingOptions.length ? (
-          <FilterChips basePath={basePath} currentParams={sp} paramKey="billing" label={billingFilterMeta ? label(billingFilterMeta.labelKey) : ''} options={billingOptions} />
-        ) : null}
+        ) : null)}
         {source.hasInactive ? <ShowInactivesToggle basePath={basePath} currentParams={sp} /> : null}
         <ViewsMenu
           available={resolvedView.available}

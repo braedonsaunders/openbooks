@@ -124,6 +124,7 @@ export function ExpenseDrawer({
   canSubmit,
   canPost,
   layout,
+  closeHref = '/expenses/reports',
 }: {
   report: ExpensePayload
   initialMode?: DrawerMode
@@ -139,6 +140,7 @@ export function ExpenseDrawer({
   canSubmit: boolean
   canPost: boolean
   layout?: FormLayoutConfig
+  closeHref?: string
 }) {
   const { money } = useMoney()
   const t = useTranslations('expenses')
@@ -426,7 +428,7 @@ export function ExpenseDrawer({
 
   return (
     <TransactionDrawer
-      closeHref="/expenses"
+      closeHref={closeHref}
       recordId={String(doc.id)}
       canEditAttachments={canSubmit}
       panelClassName={docTypeMeta('expense_report').surfaceCls}

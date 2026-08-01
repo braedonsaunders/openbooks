@@ -8,7 +8,8 @@ import { db } from '@openbooks/engine/src/db.ts'
 import { Badge, EmptyState, Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@openbooks/ui'
 import { getRecordType, listColumnMeta } from '@openbooks/customization'
 import { SearchInput } from './search-input'
-import { FilterChips } from './filter-bar'
+import { FilterChips, SearchSelectFilter } from './filter-bar'
+import { DateRangeFilter } from './date-range-filter'
 import { Pagination } from './pagination'
 import { SortTh } from './sortable-th'
 import { ViewsMenu } from './views-menu'
@@ -134,7 +135,12 @@ export async function RecordListView({
   })
 
   const status = pickString(sp.status)
-  const kind = source.multiKind ? pickString(sp.kind) : undefined
+  const kindParamKey = source.kindParamKey ?? 'kind'
+  const kind = source.multiKind ? pickString(sp[kindParamKey]) : undefined
+  const from = source.dateRange ? pickString(sp.from) : undefined
+  const to = source.dateRange ? pickString(sp.to) : undefined
+  const extraQuickValues: Record<string, string | undefined> = {}
+  for (const quick of source.quickFilters ?? []) extraQuickValues[quick.filterKey] = pickString(sp[quick.paramKey])
 
   const labels: Record<string, string> = { actions: tCommon('labels.actions') }
   for (const c of meta.listColumns) labels[c.key] = label(c.labelKey)
@@ -147,7 +153,12 @@ export async function RecordListView({
   const joins = source.joins ?? sql``
   // Role-based subsidiary visibility (null = unrestricted).
   const allowedSubs = await allowedSubsidiaryIds(userId)
-  const where = documentWhere(source.kinds, view, { q: params.q, status, kind }, orgId, allowedSubs)
+  const whereBuilder = source.where ?? documentWhere
+  const where = whereBuilder(source.kinds, view, { q: params.q, status, kind, from, to, filters: extraQuickValues }, orgId, allowedSubs)
+  const statusCountView = { ...view, filters: view.filters.filter((filter) => filter.key !== 'status') }
+  const statusCountWhere = whereBuilder(source.kinds, statusCountView, { kind, from, to, filters: extraQuickValues }, orgId, allowedSubs)
+  const kindCountView = { ...view, filters: view.filters.filter((filter) => filter.key !== 'transaction_kind') }
+  const kindCountWhere = whereBuilder(source.kinds, kindCountView, { status, from, to, filters: extraQuickValues }, orgId, allowedSubs)
   const orderExpr = source.sorts[params.sort] ?? sql`d.document_date`
 
   const [rowsRes, statusCounts, totalRow] = await Promise.all([
@@ -162,7 +173,7 @@ export async function RecordListView({
     `) as any,
     db.execute(sql`
       select d.status, count(*) as n from documents d
-       where d.org_id = ${orgId} and d.kind in (${sql.join(source.kinds.map((k) => sql`${k}`), sql`, `)})
+       where ${statusCountWhere}
        group by d.status`) as any,
     db.execute(sql`
       select count(*) as n from documents d
@@ -180,13 +191,26 @@ export async function RecordListView({
     count: Number(r.n),
   }))
 
+  const extraQuickFilters = await Promise.all((source.quickFilters ?? []).map(async (quick) => {
+    const filterMeta = meta.listFilters.find((filter) => filter.key === quick.filterKey)
+    const options = quick.loadOptions ? await quick.loadOptions(orgId) : (filterMeta?.options ?? []).map((option) => ({
+      value: option.value,
+      label: option.labelKey ? label(option.labelKey) : option.value.replace(/_/g, ' '),
+    }))
+    return {
+      ...quick,
+      label: filterMeta ? label(filterMeta.labelKey) : quick.filterKey.replace(/_/g, ' '),
+      options,
+    }
+  }))
+
   // Optional kind chips for mixed-kind lists (e.g. bills + credits).
   let kindOptions: { value: string; label: string; count: number }[] = []
   if (source.multiKind) {
     const kindCounts = (await db.execute(sql`
-      select kind, count(*) as n from documents
-       where org_id = ${orgId} and kind in (${sql.join(source.kinds.map((k) => sql`${k}`), sql`, `)})
-       group by kind`)) as any
+      select d.kind, count(*) as n from documents d
+       where ${kindCountWhere}
+       group by d.kind`)) as any
     const countByKind = new Map(kindCounts.rows.map((r: any) => [r.kind, Number(r.n)]))
     kindOptions = source.kinds.map((k) => ({
       value: k,
@@ -197,6 +221,11 @@ export async function RecordListView({
 
   const openHref = (id: string) =>
     buildListDrawerHref(basePath, sp, source.drawerParam, id)
+
+  const optionLabel = (columnKey: string, value: string) => {
+    const option = meta.listFilters.find((filter) => filter.key === columnKey)?.options?.find((item) => item.value === value)
+    return option ? (option.labelKey ? label(option.labelKey) : option.value) : value.replace(/_/g, ' ')
+  }
 
   const cell = (row: any, c: ListColDesc) => {
     const v = row[c.key]
@@ -278,7 +307,7 @@ export async function RecordListView({
       default:
         return (
           <TableCell key={c.key} className={v == null || v === '' ? 'text-slate-400' : ''}>
-            {v != null && v !== '' ? String(v) : '—'}
+            {v != null && v !== '' ? optionLabel(c.key, String(v)) : '—'}
           </TableCell>
         )
     }
@@ -289,9 +318,30 @@ export async function RecordListView({
       <div className="flex flex-wrap items-center gap-2">
         <SearchInput placeholder={tCommon('actions.search')} />
         {source.multiKind ? (
-          <FilterChips basePath={basePath} currentParams={sp} paramKey="kind" label={tCommon('labels.type')} options={kindOptions} />
+          <FilterChips basePath={basePath} currentParams={sp} paramKey={kindParamKey} label={tCommon('labels.type')} options={kindOptions} />
         ) : null}
         <FilterChips basePath={basePath} currentParams={sp} paramKey="status" label={tCommon('labels.status')} options={statusOptions} />
+        {extraQuickFilters.map((filter) => filter.options.length ? (
+          filter.searchSelect ? (
+            <SearchSelectFilter key={filter.paramKey} paramKey={filter.paramKey} label={filter.label} options={filter.options} />
+          ) : (
+            <FilterChips
+              key={filter.paramKey}
+              basePath={basePath}
+              currentParams={sp}
+              paramKey={filter.paramKey}
+              label={filter.label}
+              options={filter.options}
+            />
+          )
+        ) : null)}
+        {source.dateRange ? (
+          <DateRangeFilter
+            fromLabel={tCommon('labels.from')}
+            toLabel={tCommon('labels.to')}
+            clearLabel={tCommon('actions.clear')}
+          />
+        ) : null}
         <ViewsMenu
           available={resolvedView.available}
           currentId={resolvedView.row?.id ?? null}
