@@ -25,7 +25,9 @@
     "tabs": {
       "overview": "Visão geral",
       "units": "Unidades",
-      "leases": "Contratos"
+      "leases": "Contratos",
+      "rent": "Aluguel",
+      "deposits": "Depósitos"
     },
     "fields": {
       "code": "Código do imóvel",

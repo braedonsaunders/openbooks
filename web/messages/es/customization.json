@@ -29,7 +29,9 @@
     "tabs": {
       "overview": "Resumen",
       "units": "Unidades",
-      "leases": "Arrendamientos"
+      "leases": "Arrendamientos",
+      "rent": "Alquiler",
+      "deposits": "Depósitos"
     },
     "fields": {
       "code": "Código de propiedad",

@@ -26,7 +26,7 @@ test("property-management API gates reads, accounting effects, and subsidiary re
   assert.match(route, /guardPropertyManagementFeature/);
   assert.match(
     route,
-    /const glActions = new Set\(\["recordDeposit", "finalizeCam"\]\)/,
+    /const glActions = new Set\(\["recordDeposit", "reverseDeposit", "finalizeCam"\]\)/,
   );
   assert.match(route, /guardSubsidiaryAccess/);
   assert.match(
@@ -50,6 +50,11 @@ test("property-management workspace keeps exactly four KPIs in one desktop row",
   assert.notEqual(healthStart, -1);
   assert.match(health, /lg:grid-cols-4/);
   assert.equal((health.match(/<Metric\b/g) ?? []).length, 4);
+  assert.equal((workspace.match(/<HomeStatTile\b/g) ?? []).length, 1);
+  assert.match(workspace, /icon="building"/);
+  assert.match(workspace, /icon="badge-dollar"/);
+  assert.match(workspace, /icon="circle-alert"/);
+  assert.match(workspace, /icon="shield-check"/);
   assert.match(workspace, /min-w-0 overflow-hidden/);
   assert.match(
     workspace,
@@ -84,6 +89,11 @@ test("property-management UI exposes the complete operator entry points", () => 
   }
   assert.match(workspace, /aria-label="Property management sections"/);
   assert.match(workspace, /label="Lease details"/);
+  assert.match(workspace, /\["properties", "cam"\] as Tab\[\]/);
+  assert.doesNotMatch(
+    workspace,
+    /\["properties", "leases", "rent", "deposits", "cam"\]/,
+  );
   assert.match(workspace, /onKeyDown=\{\(event\)/);
   const propertiesTable = workspace.slice(
     workspace.indexOf("function PropertiesTable"),
@@ -94,6 +104,22 @@ test("property-management UI exposes the complete operator entry points", () => 
   assert.match(workspace, /defaultFormLayout\("property"\)/);
   assert.match(workspace, /recordType=property&tab=forms/);
   assert.match(workspace, /<HeaderFields\s+layout=\{overviewLayout\}/);
+  assert.match(workspace, /function UnitRecordDrawer/);
+  assert.match(workspace, /action: "updateUnit"/);
+  assert.match(workspace, /function LeaseRecordDrawer/);
+  assert.match(workspace, /action: "updateLease"/);
+  assert.match(workspace, /stacked=\{!!selectedProperty \|\| !!selectedUnit\}/);
+  assert.match(workspace, /onClick=\{\(\) => onOpenUnit\(unit\.id\)\}/);
+  assert.match(workspace, /propertyId: property\.id/);
+  assert.match(workspace, /Deactivate property/);
+  assert.match(workspace, /Reactivate property/);
+  assert.match(workspace, /Delete property/);
+  assert.match(workspace, /Take unit offline/);
+  assert.match(workspace, /Delete unit/);
+  assert.match(workspace, /Cancel lease/);
+  assert.match(workspace, /Terminate lease/);
+  assert.match(workspace, /Post reversal/);
+  assert.match(workspace, /action: "reverseDeposit"/);
   assert.doesNotMatch(workspace, /window\.prompt/);
 });
 
@@ -107,6 +133,13 @@ test("property customization provisions form, view, and custom-field persistence
   assert.match(page, /resolveListView/);
   assert.match(page, /loadFieldDefs\("managed_properties"\)/);
   assert.match(route, /case "updateProperty"/);
+  assert.match(route, /case "updateUnit"/);
+  assert.match(route, /case "updateLease"/);
+  assert.match(route, /case "deleteProperty"/);
+  assert.match(route, /case "deleteUnit"/);
+  assert.match(route, /case "cancelLease"/);
+  assert.match(route, /case "reverseDeposit"/);
   assert.match(route, /validateCustomValues/);
   assert.match(schema, /custom: jsonb\("custom"\)/);
+  assert.match(schema, /reversalOfId: uuid\("reversal_of_id"\)/);
 });

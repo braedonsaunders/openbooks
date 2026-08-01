@@ -737,6 +737,8 @@ const PROPERTY: RecordTypeMeta = {
     },
     { key: "units", labelKey: "customization.property.tabs.units" },
     { key: "leases", labelKey: "customization.property.tabs.leases" },
+    { key: "rent", labelKey: "customization.property.tabs.rent" },
+    { key: "deposits", labelKey: "customization.property.tabs.deposits" },
   ],
   headerFields: [
     {

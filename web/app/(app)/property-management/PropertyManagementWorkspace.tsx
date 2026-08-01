@@ -11,7 +11,9 @@ import {
 } from "react";
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
-import { ChevronDown } from "lucide-react";
+import {
+  ChevronDown,
+} from "lucide-react";
 import { toast } from "sonner";
 import {
   Badge,
@@ -44,6 +46,8 @@ import { useMoney } from "@/components/money-provider";
 import { CustomFieldInput } from "../../../components/custom-field-input";
 import type { CustomFieldDefClient } from "../../../components/custom-field-inputs";
 import { HeaderFields } from "../../../components/transaction-form/header-fields";
+import { HomeStatTile } from "../../../components/module-home/client";
+import type { Accent } from "../../../components/cockpit/ui";
 
 type Option = {
   id: string;
@@ -63,8 +67,9 @@ type Workspace = {
   camPools: any[];
   camAllocations: any[];
 };
-type Tab = "properties" | "leases" | "rent" | "deposits" | "cam";
+type Tab = "properties" | "cam";
 type LeaseTab = "overview" | "charges" | "escalations" | "deposits";
+type LeaseCreateContext = { propertyId: string; unitId?: string | null };
 type ActionPayload = Record<string, unknown>;
 const empty: Workspace = {
   properties: [],
@@ -130,9 +135,11 @@ export function PropertyManagementWorkspace({
     null,
   );
   const [unitPropertyId, setUnitPropertyId] = useState<string | null>(null);
-  const [createLease, setCreateLease] = useState(false);
+  const [selectedUnitId, setSelectedUnitId] = useState<string | null>(null);
+  const [createLease, setCreateLease] = useState<LeaseCreateContext | null>(
+    null,
+  );
   const [selectedLeaseId, setSelectedLeaseId] = useState<string | null>(null);
-  const [leaseTab, setLeaseTab] = useState<LeaseTab>("overview");
   const [createCam, setCreateCam] = useState(false);
 
   const load = useCallback(async () => {
@@ -221,6 +228,8 @@ export function PropertyManagementWorkspace({
   const selectedProperty =
     data.properties.find((property) => property.id === selectedPropertyId) ??
     null;
+  const selectedUnit =
+    data.units.find((unit) => unit.id === selectedUnitId) ?? null;
 
   return (
     <div className="space-y-4">
@@ -232,22 +241,30 @@ export function PropertyManagementWorkspace({
           label="Occupied units"
           value={`${occupied} / ${data.units.length}`}
           hint={`${activeLeases.length} active leases`}
+          icon="building"
+          accent="teal"
         />
         <Metric
           label="Monthly base rent"
           value={money(monthlyRent)}
           hint="Current active charges"
+          icon="badge-dollar"
+          accent="emerald"
         />
         <Metric
           label="Rent billed past due"
           value={money(overdue)}
           hint="Invoice schedule aging"
           tone={overdue > 0 ? "danger" : undefined}
+          icon="circle-alert"
+          accent="red"
         />
         <Metric
           label="Security deposits held"
           value={money(depositsHeld)}
           hint="Tenant deposit liability"
+          icon="shield-check"
+          accent="violet"
         />
       </section>
 
@@ -259,9 +276,7 @@ export function PropertyManagementWorkspace({
               role="tablist"
               aria-label="Property management sections"
             >
-              {(
-                ["properties", "leases", "rent", "deposits", "cam"] as Tab[]
-              ).map((key) => (
+              {(["properties", "cam"] as Tab[]).map((key) => (
                 <button
                   type="button"
                   key={key}
@@ -285,30 +300,6 @@ export function PropertyManagementWorkspace({
                   New property
                 </Button>
               ) : null}
-              {tab === "leases" && permissions.manage ? (
-                <Button onClick={() => setCreateLease(true)}>New lease</Button>
-              ) : null}
-              {tab === "rent" && permissions.bill && permissions.bulk ? (
-                <>
-                  <Button
-                    variant="outline"
-                    disabled={busy}
-                    onClick={() =>
-                      act({ action: "assessLateFees" }, "Late fees assessed")
-                    }
-                  >
-                    Assess late fees
-                  </Button>
-                  <Button
-                    disabled={busy}
-                    onClick={() =>
-                      act({ action: "billRent" }, "Due rent billed")
-                    }
-                  >
-                    Bill due rent
-                  </Button>
-                </>
-              ) : null}
               {tab === "cam" && permissions.manage ? (
                 <Button onClick={() => setCreateCam(true)}>New CAM pool</Button>
               ) : null}
@@ -324,27 +315,6 @@ export function PropertyManagementWorkspace({
               view={customization.listView}
               fieldDefs={customization.fieldDefs}
               onOpen={setSelectedPropertyId}
-            />
-          ) : tab === "leases" ? (
-            <LeasesTable
-              leases={data.leases}
-              money={money}
-              onOpen={(id: string) => {
-                setSelectedLeaseId(id);
-                setLeaseTab("overview");
-              }}
-            />
-          ) : tab === "rent" ? (
-            <RentTable
-              schedules={data.schedules}
-              leases={data.leases}
-              money={money}
-            />
-          ) : tab === "deposits" ? (
-            <DepositTable
-              deposits={data.deposits}
-              leases={data.leases}
-              money={money}
             />
           ) : (
             <CamTable
@@ -383,19 +353,38 @@ export function PropertyManagementWorkspace({
         options={options}
         permissions={permissions}
         customization={customization}
+        data={data}
+        money={money}
+        act={act}
         busy={busy}
-        onClose={() => setSelectedPropertyId(null)}
+        onClose={() => {
+          setSelectedLeaseId(null);
+          setSelectedUnitId(null);
+          setSelectedPropertyId(null);
+        }}
         onAddUnit={() =>
           selectedProperty && setUnitPropertyId(selectedProperty.id)
         }
+        onOpenUnit={(unitId: string) => setSelectedUnitId(unitId)}
+        onAddLease={(unitId?: string | null) =>
+          selectedProperty &&
+          setCreateLease({ propertyId: selectedProperty.id, unitId })
+        }
         onOpenLease={(leaseId: string) => {
-          setSelectedPropertyId(null);
           setSelectedLeaseId(leaseId);
-          setLeaseTab("overview");
         }}
         onSave={(payload: ActionPayload) =>
           act({ action: "updateProperty", ...payload }, "Property updated")
         }
+        onDelete={async () => {
+          if (!selectedProperty) return null;
+          const result = await act(
+            { action: "deleteProperty", propertyId: selectedProperty.id },
+            "Property deleted",
+          );
+          if (result) setSelectedPropertyId(null);
+          return result;
+        }}
       />
       <UnitDrawer
         propertyId={unitPropertyId}
@@ -409,9 +398,41 @@ export function PropertyManagementWorkspace({
           if (result) setUnitPropertyId(null);
         }}
       />
+      <UnitRecordDrawer
+        key={selectedUnit?.id ?? "unit-detail"}
+        unit={selectedUnit}
+        property={selectedProperty}
+        leases={data.leases.filter((lease) => lease.unitId === selectedUnit?.id)}
+        permissions={permissions}
+        busy={busy}
+        onClose={() => setSelectedUnitId(null)}
+        onOpenLease={setSelectedLeaseId}
+        onAddLease={() =>
+          selectedUnit &&
+          setCreateLease({
+            propertyId: selectedUnit.propertyId,
+            unitId: selectedUnit.id,
+          })
+        }
+        onSave={(payload: ActionPayload) =>
+          act({ action: "updateUnit", ...payload }, "Unit updated")
+        }
+        onDelete={async () => {
+          if (!selectedUnit) return null;
+          const result = await act(
+            { action: "deleteUnit", unitId: selectedUnit.id },
+            "Unit deleted",
+          );
+          if (result) setSelectedUnitId(null);
+          return result;
+        }}
+      />
       <LeaseDrawer
-        open={createLease}
-        onClose={() => setCreateLease(false)}
+        open={!!createLease}
+        stacked={!!selectedProperty || !!selectedUnit}
+        initialPropertyId={createLease?.propertyId}
+        initialUnitId={createLease?.unitId}
+        onClose={() => setCreateLease(null)}
         data={data}
         tenants={options.tenants}
         busy={busy}
@@ -421,7 +442,7 @@ export function PropertyManagementWorkspace({
             "Lease created",
           );
           if (result?.id) {
-            setCreateLease(false);
+            setCreateLease(null);
             setSelectedLeaseId(result.id);
           }
         }}
@@ -440,45 +461,21 @@ export function PropertyManagementWorkspace({
           if (result) setCreateCam(false);
         }}
       />
-      <Drawer
-        open={!!selectedLease}
+      <LeaseRecordDrawer
+        key={selectedLease?.id ?? "lease-detail"}
+        lease={selectedLease}
+        data={data}
+        options={options}
+        permissions={permissions}
+        busy={busy}
+        stacked={!!selectedProperty || !!selectedUnit}
         onClose={() => setSelectedLeaseId(null)}
-        size="2xl"
-        title={selectedLease ? `Lease ${selectedLease.leaseNumber}` : "Lease"}
-        description={
-          selectedLease
-            ? `${selectedLease.propertyName}${selectedLease.unitCode ? ` · ${selectedLease.unitCode}` : ""} · ${selectedLease.tenantName}`
-            : ""
+        act={act}
+        money={money}
+        onSave={(payload: ActionPayload) =>
+          act({ action: "updateLease", ...payload }, "Lease updated")
         }
-        subtabs={
-          selectedLease ? (
-            <RecordTabs
-              label="Lease details"
-              active={leaseTab}
-              tabs={[
-                { key: "overview", label: "Overview" },
-                { key: "charges", label: "Charges" },
-                { key: "escalations", label: "Escalations" },
-                { key: "deposits", label: "Deposits" },
-              ]}
-              onChange={(key) => setLeaseTab(key as LeaseTab)}
-            />
-          ) : undefined
-        }
-      >
-        {selectedLease ? (
-          <LeaseDetail
-            lease={selectedLease}
-            data={data}
-            options={options}
-            permissions={permissions}
-            busy={busy}
-            tab={leaseTab}
-            act={act}
-            money={money}
-          />
-        ) : null}
-      </Drawer>
+      />
     </div>
   );
 }
@@ -488,35 +485,25 @@ function Metric({
   value,
   hint,
   tone,
+  icon,
+  accent,
 }: {
   label: string;
   value: string;
   hint: string;
   tone?: "danger";
+  icon: string;
+  accent: Accent;
 }) {
   return (
-    <Card
-      className={cn(
-        "min-w-0 overflow-hidden",
-        tone === "danger" && "border-red-200 dark:border-red-900",
-      )}
-    >
-      <CardContent className="min-w-0 p-4">
-        <div className="truncate text-xs font-medium uppercase tracking-wide text-slate-500">
-          {label}
-        </div>
-        <div
-          title={value}
-          className={cn(
-            "mt-1 truncate text-xl font-semibold tabular-nums",
-            tone === "danger" && "text-red-600 dark:text-red-400",
-          )}
-        >
-          {value}
-        </div>
-        <div className="mt-1 truncate text-xs text-slate-500">{hint}</div>
-      </CardContent>
-    </Card>
+    <HomeStatTile
+      label={label}
+      value={value}
+      sub={hint}
+      icon={icon}
+      accent={accent}
+      tone={tone === "danger" ? "negative" : "neutral"}
+    />
   );
 }
 function Status({ value }: { value: string }) {
@@ -583,11 +570,17 @@ function PropertyDetailDrawer({
   options,
   permissions,
   customization,
+  data,
+  money,
+  act,
   busy,
   onClose,
   onAddUnit,
+  onOpenUnit,
+  onAddLease,
   onOpenLease,
   onSave,
+  onDelete,
 }: any) {
   const pathname = usePathname();
   const router = useRouter();
@@ -924,15 +917,20 @@ function PropertyDetailDrawer({
 
   const tabLabel = (item: { key: string; labelOverride?: string | null }) =>
     item.labelOverride?.trim() ||
-    ({ overview: "Overview", units: "Units", leases: "Leases" }[item.key] ??
+    ({
+      overview: "Overview",
+      units: "Units",
+      leases: "Leases",
+      rent: "Rent",
+      deposits: "Deposits",
+    }[item.key] ??
       item.key.replace(/^tab_/, "").replaceAll("_", " "));
-  const save = async () => {
-    const result = await onSave({
+  const propertyPayload = (status = form.status) => ({
       propertyId: property.id,
       name: form.name,
       code: form.code,
       propertyType: form.propertyType,
-      status: form.status,
+      status,
       subsidiaryId: form.subsidiaryId,
       locationId: form.locationId || null,
       fixedAssetId: form.fixedAssetId || null,
@@ -948,8 +946,17 @@ function PropertyDetailDrawer({
       depositLiabilityAccountId: form.depositLiabilityAccountId || null,
       defaultBankAccountId: form.defaultBankAccountId || null,
       custom: form.custom,
-    });
+  });
+  const save = async () => {
+    const result = await onSave(propertyPayload());
     if (result) setMode("view");
+  };
+  const changeStatus = async (status: string) => {
+    const result = await onSave(propertyPayload(status));
+    if (result) {
+      setForm({ ...form, status });
+      setActionsOpen(false);
+    }
   };
   const selectForm = (formId: string) => {
     const next = new URLSearchParams(searchParams.toString());
@@ -1051,6 +1058,44 @@ function PropertyDetailDrawer({
                   </Link>
                 </Button>
               ) : null}
+              {permissions.manage ? (
+                <div className="mt-1 border-t border-slate-200 pt-1 dark:border-slate-800">
+                  {form.status === "active" ? (
+                    <Button
+                      variant="ghost"
+                      className="h-8 w-full justify-start rounded px-2 text-xs"
+                      disabled={busy}
+                      onClick={() => changeStatus("inactive")}
+                    >
+                      Deactivate property
+                    </Button>
+                  ) : form.status === "inactive" ? (
+                    <Button
+                      variant="ghost"
+                      className="h-8 w-full justify-start rounded px-2 text-xs"
+                      disabled={busy}
+                      onClick={() => changeStatus("active")}
+                    >
+                      Reactivate property
+                    </Button>
+                  ) : null}
+                  <Button
+                    variant="ghost"
+                    className="h-8 w-full justify-start rounded px-2 text-xs text-red-600 hover:text-red-700"
+                    disabled={busy}
+                    onClick={() => {
+                      if (
+                        window.confirm(
+                          `Delete ${property.name}? Only unused properties can be permanently deleted.`,
+                        )
+                      )
+                        void onDelete();
+                    }}
+                  >
+                    Delete property
+                  </Button>
+                </div>
+              ) : null}
             </Popover>
           </div>
         ) : undefined
@@ -1093,7 +1138,19 @@ function PropertyDetailDrawer({
               </TableHeader>
               <TableBody>
                 {units.map((unit: any) => (
-                  <TableRow key={unit.id}>
+                  <TableRow
+                    key={unit.id}
+                    tabIndex={0}
+                    role="button"
+                    className="cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-teal-600"
+                    onClick={() => onOpenUnit(unit.id)}
+                    onKeyDown={(event) => {
+                      if (event.key === "Enter" || event.key === " ") {
+                        event.preventDefault();
+                        onOpenUnit(unit.id);
+                      }
+                    }}
+                  >
                     <TableCell>
                       <div className="font-medium">{unit.code}</div>
                       <div className="text-xs text-slate-500">
@@ -1124,11 +1181,18 @@ function PropertyDetailDrawer({
       ) : null}
       {tab === "leases" ? (
         <div className="space-y-3 p-1">
-          <div>
-            <h3 className="text-sm font-semibold">Property leases</h3>
-            <p className="text-xs text-slate-500">
-              Current and historical tenant agreements for this property.
-            </p>
+          <div className="flex items-center justify-between gap-3">
+            <div>
+              <h3 className="text-sm font-semibold">Property leases</h3>
+              <p className="text-xs text-slate-500">
+                Current and historical tenant agreements for this property.
+              </p>
+            </div>
+            {permissions.manage && property.status === "active" ? (
+              <Button size="sm" onClick={() => onAddLease(null)}>
+                New lease
+              </Button>
+            ) : null}
           </div>
           {leases.length ? (
             <Table>
@@ -1177,6 +1241,71 @@ function PropertyDetailDrawer({
               detail="Create a lease from the Leases workspace tab."
             />
           )}
+        </div>
+      ) : null}
+      {tab === "rent" ? (
+        <div className="space-y-3 p-1">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div>
+              <h3 className="text-sm font-semibold">Rent schedule</h3>
+              <p className="text-xs text-slate-500">
+                Scheduled and invoiced rent for this property’s leases.
+              </p>
+            </div>
+            {permissions.bill ? (
+              <div className="flex gap-2">
+                <Button
+                  size="sm"
+                  variant="outline"
+                  disabled={busy}
+                  onClick={() =>
+                    act(
+                      { action: "assessLateFees", propertyId: property.id },
+                      "Property late fees assessed",
+                    )
+                  }
+                >
+                  Assess late fees
+                </Button>
+                <Button
+                  size="sm"
+                  disabled={busy}
+                  onClick={() =>
+                    act(
+                      { action: "billRent", propertyId: property.id },
+                      "Property rent billed",
+                    )
+                  }
+                >
+                  Bill due rent
+                </Button>
+              </div>
+            ) : null}
+          </div>
+          <RentTable
+            schedules={data.schedules.filter((row: any) =>
+              leases.some((lease: any) => lease.id === row.leaseId),
+            )}
+            leases={leases}
+            money={money}
+          />
+        </div>
+      ) : null}
+      {tab === "deposits" ? (
+        <div className="space-y-3 p-1">
+          <div>
+            <h3 className="text-sm font-semibold">Security deposits</h3>
+            <p className="text-xs text-slate-500">
+              Append-only tenant deposit activity across this property.
+            </p>
+          </div>
+          <DepositTable
+            deposits={data.deposits.filter((row: any) =>
+              leases.some((lease: any) => lease.id === row.leaseId),
+            )}
+            leases={leases}
+            money={money}
+          />
         </div>
       ) : null}
       {tabs.some((item) => item.key === tab && isCustomTabKey(item.key)) ? (
@@ -1446,7 +1575,7 @@ function RentTable({ schedules, leases, money }: any) {
     </Table>
   );
 }
-function DepositTable({ deposits, leases, money }: any) {
+function DepositTable({ deposits, leases, money, onReverse }: any) {
   if (!deposits.length)
     return (
       <Empty
@@ -1464,6 +1593,7 @@ function DepositTable({ deposits, leases, money }: any) {
           <TableHead>Memo</TableHead>
           <TableHead>Journal</TableHead>
           <TableHead className="text-right">Amount</TableHead>
+          {onReverse ? <TableHead className="text-right">Actions</TableHead> : null}
         </TableRow>
       </TableHeader>
       <TableBody>
@@ -1474,7 +1604,11 @@ function DepositTable({ deposits, leases, money }: any) {
               <TableCell>{row.occurredOn}</TableCell>
               <TableCell>{lease?.leaseNumber ?? "—"}</TableCell>
               <TableCell>
-                <Status value={row.kind} />
+                <div className="flex flex-wrap items-center gap-2">
+                  <Status value={row.kind} />
+                  {row.reversalOfId ? <Badge variant="secondary">Reversal</Badge> : null}
+                  {row.reversed ? <Badge variant="secondary">Reversed</Badge> : null}
+                </div>
               </TableCell>
               <TableCell>{row.memo || "—"}</TableCell>
               <TableCell className="font-mono text-xs">
@@ -1486,6 +1620,17 @@ function DepositTable({ deposits, leases, money }: any) {
                   lease?.currency ? { currency: lease.currency } : undefined,
                 )}
               </TableCell>
+              {onReverse ? (
+                <TableCell className="text-right">
+                  {!row.reversalOfId && !row.reversed ? (
+                    <Button size="sm" variant="outline" onClick={() => onReverse(row)}>
+                      Reverse
+                    </Button>
+                  ) : (
+                    <span className="text-xs text-slate-400">Locked</span>
+                  )}
+                </TableCell>
+              ) : null}
             </TableRow>
           );
         })}
@@ -1988,11 +2133,235 @@ function UnitDrawer({ propertyId, onClose, busy, onSave }: any) {
   );
 }
 
-function LeaseDrawer({ open, onClose, data, tenants, busy, onSave }: any) {
+function UnitRecordDrawer({
+  unit,
+  property,
+  leases,
+  permissions,
+  busy,
+  onClose,
+  onOpenLease,
+  onAddLease,
+  onSave,
+  onDelete,
+}: any) {
+  const [tab, setTab] = useState("overview");
+  const [mode, setMode] = useState<"view" | "edit">("view");
+  const [actionsOpen, setActionsOpen] = useState(false);
+  const [form, setForm] = useState(() => unitForm(unit ?? {}));
+  if (!unit) return null;
+  const reset = () => {
+    setForm(unitForm(unit));
+    setMode("view");
+  };
+  const save = async () => {
+    const result = await onSave({
+      unitId: unit.id,
+      code: form.code,
+      name: form.name || null,
+      unitType: form.unitType || null,
+      rentableArea: form.rentableArea || null,
+      bedrooms: form.bedrooms === "" ? null : Number(form.bedrooms),
+      status: form.status,
+    });
+    if (result) setMode("view");
+  };
+  const activeLease = leases.some((lease: any) =>
+    ["active", "notice"].includes(lease.status),
+  );
+  const setAvailability = async (status: "vacant" | "offline") => {
+    const result = await onSave({
+      unitId: unit.id,
+      ...form,
+      name: form.name || null,
+      unitType: form.unitType || null,
+      rentableArea: form.rentableArea || null,
+      bedrooms: form.bedrooms === "" ? null : Number(form.bedrooms),
+      status,
+    });
+    if (result) {
+      setForm({ ...form, status });
+      setActionsOpen(false);
+    }
+  };
+  return (
+    <Drawer
+      open
+      stacked
+      size="xl"
+      onClose={onClose}
+      title={
+        <span className="flex items-center gap-2.5">
+          <span className="font-mono text-sm text-slate-500">{unit.code}</span>
+          <span>{unit.name || "Rentable unit"}</span>
+          <Status value={form.status} />
+        </span>
+      }
+      description={`${property?.name ?? "Property"} · Occupancy is controlled by lease activation`}
+      subtabs={
+        <RecordTabs
+          label="Unit details"
+          active={tab}
+          tabs={[
+            { key: "overview", label: "Overview" },
+            { key: "leases", label: "Leases" },
+          ]}
+          onChange={setTab}
+        />
+      }
+      headerActions={
+        mode === "edit" ? (
+          <div className="flex gap-1.5">
+            <Button size="sm" variant="outline" disabled={busy} onClick={reset}>
+              Cancel
+            </Button>
+            <Button size="sm" disabled={busy || !form.code.trim()} onClick={save}>
+              {busy ? "Saving…" : "Save"}
+            </Button>
+          </div>
+        ) : permissions.manage ? (
+          <div className="flex gap-1.5">
+            <Button size="sm" variant="outline" onClick={() => setMode("edit")}>
+              Edit
+            </Button>
+            <Popover
+              open={actionsOpen}
+              onOpenChange={setActionsOpen}
+              align="end"
+              className="w-56 p-1.5"
+              trigger={
+                <Button size="sm" variant="outline" onClick={() => setActionsOpen((open) => !open)}>
+                  Actions <ChevronDown className={cn("h-3.5 w-3.5", actionsOpen && "rotate-180")} />
+                </Button>
+              }
+            >
+              {form.status === "offline" ? (
+                <Button variant="ghost" className="h-8 w-full justify-start rounded px-2 text-xs" disabled={busy} onClick={() => setAvailability("vacant")}>
+                  Return to service
+                </Button>
+              ) : (
+                <Button variant="ghost" className="h-8 w-full justify-start rounded px-2 text-xs" disabled={busy || activeLease} onClick={() => setAvailability("offline")}>
+                  {activeLease ? "End lease before taking offline" : "Take unit offline"}
+                </Button>
+              )}
+              <Button
+                variant="ghost"
+                className="h-8 w-full justify-start rounded px-2 text-xs text-red-600 hover:text-red-700"
+                disabled={busy}
+                onClick={() => {
+                  if (window.confirm(`Delete unit ${unit.code}? Only units without lease history can be deleted.`)) void onDelete();
+                }}
+              >
+                Delete unit
+              </Button>
+            </Popover>
+          </div>
+        ) : undefined
+      }
+    >
+      {tab === "overview" ? (
+        mode === "edit" ? (
+          <div className="grid gap-4 p-1 sm:grid-cols-2">
+            <Field label="Unit code">
+              <Input className="font-mono" value={form.code} onChange={(e) => setForm({ ...form, code: e.target.value })} />
+            </Field>
+            <Field label="Display name">
+              <Input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} />
+            </Field>
+            <Field label="Unit type">
+              <Input value={form.unitType} onChange={(e) => setForm({ ...form, unitType: e.target.value })} />
+            </Field>
+            <Field label="Rentable area">
+              <Input type="number" min="0" value={form.rentableArea} onChange={(e) => setForm({ ...form, rentableArea: e.target.value })} />
+            </Field>
+            <Field label="Bedrooms">
+              <Input type="number" min="0" step="1" value={form.bedrooms} onChange={(e) => setForm({ ...form, bedrooms: e.target.value })} />
+            </Field>
+            <Field label="Occupancy status" hint="Status changes when a lease is activated or terminated.">
+              <div className="pt-2"><Status value={form.status} /></div>
+            </Field>
+          </div>
+        ) : (
+          <Card>
+            <CardContent className="grid gap-4 p-4 sm:grid-cols-2">
+              <Read label="Property" value={property?.name ?? "—"} />
+              <Read label="Unit type" value={unit.unitType || "—"} />
+              <Read label="Rentable area" value={unit.rentableArea || "—"} />
+              <Read label="Bedrooms" value={unit.bedrooms == null ? "—" : String(unit.bedrooms)} />
+              <Read label="Status" value={form.status} />
+            </CardContent>
+          </Card>
+        )
+      ) : null}
+      {tab === "leases" ? (
+        <div className="space-y-3 p-1">
+          <div className="flex items-center justify-between gap-3">
+            <div>
+              <h3 className="text-sm font-semibold">Unit leases</h3>
+              <p className="text-xs text-slate-500">Lease history and current occupancy for this unit.</p>
+            </div>
+            {permissions.manage && !activeLease && property?.status === "active" ? (
+              <Button size="sm" onClick={onAddLease}>New lease</Button>
+            ) : null}
+          </div>
+          {leases.length ? (
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Lease</TableHead>
+                  <TableHead>Tenant</TableHead>
+                  <TableHead>Term</TableHead>
+                  <TableHead>Status</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {leases.map((lease: any) => (
+                  <TableRow
+                    key={lease.id}
+                    tabIndex={0}
+                    role="button"
+                    className="cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-teal-600"
+                    onClick={() => onOpenLease(lease.id)}
+                    onKeyDown={(event) => {
+                      if (event.key === "Enter" || event.key === " ") {
+                        event.preventDefault();
+                        onOpenLease(lease.id);
+                      }
+                    }}
+                  >
+                    <TableCell className="font-medium text-teal-700">{lease.leaseNumber}</TableCell>
+                    <TableCell>{lease.tenantName}</TableCell>
+                    <TableCell>{lease.startsOn} – {lease.endsOn || "Open"}</TableCell>
+                    <TableCell><Status value={lease.status} /></TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          ) : (
+            <Empty title="No unit leases" detail="Create a lease to assign this unit to a tenant." />
+          )}
+        </div>
+      ) : null}
+    </Drawer>
+  );
+}
+
+function unitForm(unit: any) {
+  return {
+    code: unit.code ?? "",
+    name: unit.name ?? "",
+    unitType: unit.unitType ?? "",
+    rentableArea: unit.rentableArea ?? "",
+    bedrooms: unit.bedrooms == null ? "" : String(unit.bedrooms),
+    status: unit.status ?? "vacant",
+  };
+}
+
+function LeaseDrawer({ open, stacked, initialPropertyId, initialUnitId, onClose, data, tenants, busy, onSave }: any) {
   const today = new Date().toISOString().slice(0, 10);
   const initial = {
-    propertyId: data.properties[0]?.id ?? "",
-    unitId: "",
+    propertyId: initialPropertyId ?? data.properties[0]?.id ?? "",
+    unitId: initialUnitId ?? "",
     tenantId: "",
     leaseNumber: "",
     startsOn: today,
@@ -2011,8 +2380,13 @@ function LeaseDrawer({ open, onClose, data, tenants, busy, onSave }: any) {
   };
   const [form, setForm] = useState(initial);
   useEffect(() => {
-    if (open) setForm({ ...initial, propertyId: data.properties[0]?.id ?? "" });
-  }, [open, data.properties.length]);
+    if (open)
+      setForm({
+        ...initial,
+        propertyId: initialPropertyId ?? data.properties[0]?.id ?? "",
+        unitId: initialUnitId ?? "",
+      });
+  }, [open, initialPropertyId, initialUnitId, data.properties.length]);
   const units = data.units.filter(
     (u: any) => u.propertyId === form.propertyId && u.status === "vacant",
   );
@@ -2030,6 +2404,7 @@ function LeaseDrawer({ open, onClose, data, tenants, busy, onSave }: any) {
     <Drawer
       open={open}
       onClose={onClose}
+      stacked={stacked}
       title="New tenant lease"
       description="The draft freezes commercial policy before activation creates the rent schedule."
       footer={
@@ -2234,6 +2609,310 @@ function LeaseDrawer({ open, onClose, data, tenants, busy, onSave }: any) {
   );
 }
 
+function LeaseRecordDrawer({
+  lease,
+  data,
+  options,
+  permissions,
+  busy,
+  stacked,
+  onClose,
+  act,
+  money,
+  onSave,
+}: any) {
+  const [tab, setTab] = useState<LeaseTab>("overview");
+  const [mode, setMode] = useState<"view" | "edit">("view");
+  const [actionsOpen, setActionsOpen] = useState(false);
+  const [terminationOpen, setTerminationOpen] = useState(false);
+  const [termination, setTermination] = useState({
+    terminatedOn: new Date().toISOString().slice(0, 10),
+    reason: "",
+  });
+  const [form, setForm] = useState(() => leaseForm(lease ?? {}));
+  if (!lease) return null;
+  const canEdit =
+    permissions.manage && ["draft", "active", "notice"].includes(lease.status);
+  const reset = () => {
+    setForm(leaseForm(lease));
+    setMode("view");
+  };
+  const save = async () => {
+    const result = await onSave({
+      leaseId: lease.id,
+      ...form,
+      unitId: form.unitId || null,
+      endsOn: form.endsOn || null,
+      billingDay: Number(form.billingDay),
+      paymentTermsDays: Number(form.paymentTermsDays),
+      graceDays: Number(form.graceDays),
+      camSharePercent: form.camSharePercent || null,
+    });
+    if (result) setMode("view");
+  };
+  return (
+    <Drawer
+      open
+      stacked={stacked}
+      onClose={onClose}
+      size="2xl"
+      title={
+        <span className="flex items-center gap-2.5">
+          <span>{`Lease ${lease.leaseNumber}`}</span>
+          <Status value={lease.status} />
+        </span>
+      }
+      description={`${lease.propertyName}${lease.unitCode ? ` · ${lease.unitCode}` : ""} · ${lease.tenantName}`}
+      subtabs={
+        <RecordTabs
+          label="Lease details"
+          active={tab}
+          tabs={[
+            { key: "overview", label: "Overview" },
+            { key: "charges", label: "Charges" },
+            { key: "escalations", label: "Escalations" },
+            { key: "deposits", label: "Deposits" },
+          ]}
+          onChange={(key) => {
+            setTab(key as LeaseTab);
+            if (key !== "overview" && mode === "edit") reset();
+          }}
+        />
+      }
+      headerActions={
+        mode === "edit" ? (
+          <div className="flex gap-1.5">
+            <Button size="sm" variant="outline" disabled={busy} onClick={reset}>
+              Cancel
+            </Button>
+            <Button
+              size="sm"
+              disabled={
+                busy ||
+                !form.leaseNumber.trim() ||
+                !form.propertyId ||
+                !form.tenantId ||
+                !form.startsOn ||
+                !form.baseRent
+              }
+              onClick={save}
+            >
+              {busy ? "Saving…" : "Save"}
+            </Button>
+          </div>
+        ) : (
+          <div className="flex gap-1.5">
+            {canEdit && tab === "overview" ? (
+              <Button size="sm" variant="outline" onClick={() => setMode("edit")}>
+                Edit
+              </Button>
+            ) : null}
+            {permissions.manage ? (
+              <Popover
+                open={actionsOpen}
+                onOpenChange={setActionsOpen}
+                align="end"
+                className="w-56 p-1.5"
+                trigger={
+                  <Button size="sm" variant="outline" onClick={() => setActionsOpen((open) => !open)}>
+                    Actions <ChevronDown className={cn("h-3.5 w-3.5", actionsOpen && "rotate-180")} />
+                  </Button>
+                }
+              >
+                {lease.status === "draft" ? (
+                  <Button
+                    variant="ghost"
+                    className="h-8 w-full justify-start rounded px-2 text-xs text-red-600 hover:text-red-700"
+                    disabled={busy}
+                    onClick={() => {
+                      if (window.confirm(`Cancel lease ${lease.leaseNumber}? The record will remain in history.`)) {
+                        void act({ action: "cancelLease", leaseId: lease.id }, "Lease cancelled");
+                        setActionsOpen(false);
+                      }
+                    }}
+                  >
+                    Cancel lease
+                  </Button>
+                ) : ["active", "notice"].includes(lease.status) ? (
+                  <Button
+                    variant="ghost"
+                    className="h-8 w-full justify-start rounded px-2 text-xs text-red-600 hover:text-red-700"
+                    disabled={busy}
+                    onClick={() => {
+                      setTerminationOpen(true);
+                      setActionsOpen(false);
+                      setTab("overview");
+                    }}
+                  >
+                    Terminate lease
+                  </Button>
+                ) : (
+                  <div className="px-2 py-1.5 text-xs text-slate-500">This lease is read-only.</div>
+                )}
+              </Popover>
+            ) : null}
+          </div>
+        )
+      }
+    >
+      {terminationOpen ? (
+        <Card className="border-red-200 dark:border-red-900">
+          <CardContent className="space-y-4 p-4">
+            <div>
+              <h3 className="font-medium text-red-700 dark:text-red-300">Terminate lease</h3>
+              <p className="mt-1 text-xs text-slate-500">Future scheduled rent will be cancelled and the unit returned to vacant.</p>
+            </div>
+            <div className="grid gap-3 sm:grid-cols-2">
+              <Field label="Termination date">
+                <Input type="date" value={termination.terminatedOn} onChange={(e) => setTermination({ ...termination, terminatedOn: e.target.value })} />
+              </Field>
+              <Field label="Reason">
+                <Input value={termination.reason} onChange={(e) => setTermination({ ...termination, reason: e.target.value })} />
+              </Field>
+            </div>
+            <div className="flex justify-end gap-2">
+              <Button variant="outline" disabled={busy} onClick={() => setTerminationOpen(false)}>Cancel</Button>
+              <Button
+                disabled={busy || !termination.terminatedOn || !termination.reason.trim()}
+                onClick={async () => {
+                  const result = await act(
+                    { action: "terminateLease", leaseId: lease.id, ...termination },
+                    "Lease terminated",
+                  );
+                  if (result) setTerminationOpen(false);
+                }}
+              >
+                Terminate lease
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
+      ) : (
+        <LeaseDetail
+          lease={lease}
+          data={data}
+          options={options}
+          permissions={permissions}
+          busy={busy}
+          tab={tab}
+          act={act}
+          money={money}
+          editing={mode === "edit"}
+          form={form}
+          setForm={setForm}
+        />
+      )}
+    </Drawer>
+  );
+}
+
+function leaseForm(lease: any) {
+  return {
+    propertyId: lease.propertyId ?? "",
+    unitId: lease.unitId ?? "",
+    tenantId: lease.tenantId ?? "",
+    leaseNumber: lease.leaseNumber ?? "",
+    startsOn: lease.startsOn ?? "",
+    endsOn: lease.endsOn ?? "",
+    baseRent: lease.baseRent ?? "",
+    billingDay: String(lease.billingDay ?? 1),
+    paymentTermsDays: String(lease.paymentTermsDays ?? 0),
+    securityDepositRequired: lease.securityDepositRequired ?? "0",
+    camMethod: lease.camMethod ?? "none",
+    camSharePercent: lease.camSharePercent ?? "",
+    lateFeeType: lease.lateFeeType ?? "none",
+    lateFeeValue: lease.lateFeeValue ?? "0",
+    graceDays: String(lease.graceDays ?? 0),
+    autoInvoice: lease.autoInvoice ?? true,
+    autoPost: lease.autoPost ?? false,
+  };
+}
+
+function LeaseEditFields({ lease, data, options, form, setForm }: any) {
+  const draft = lease.status === "draft";
+  const units = data.units.filter(
+    (unit: any) =>
+      unit.propertyId === form.propertyId &&
+      (unit.status === "vacant" || unit.id === form.unitId),
+  );
+  return (
+    <div className="space-y-4">
+      {!draft ? (
+        <div className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800 dark:border-amber-900 dark:bg-amber-950/40 dark:text-amber-200">
+          Activated leases keep their property, unit, tenant, start date, billing day, and rent evidence. Use an escalation for a rent change.
+        </div>
+      ) : null}
+      <div className="grid gap-4 sm:grid-cols-2">
+        <Field label="Lease number">
+          <Input value={form.leaseNumber} onChange={(e) => setForm({ ...form, leaseNumber: e.target.value })} />
+        </Field>
+        <Field label="Tenant">
+          <Select disabled={!draft} value={form.tenantId} onChange={(e) => setForm({ ...form, tenantId: e.target.value })}>
+            <option value="">Select tenant</option>
+            {options.tenants.map((option: Option) => <option key={option.id} value={option.id}>{option.name}</option>)}
+          </Select>
+        </Field>
+        <Field label="Property">
+          <Select disabled={!draft} value={form.propertyId} onChange={(e) => setForm({ ...form, propertyId: e.target.value, unitId: "" })}>
+            {data.properties.map((property: any) => <option key={property.id} value={property.id}>{property.name}</option>)}
+          </Select>
+        </Field>
+        <Field label="Unit">
+          <Select disabled={!draft} value={form.unitId} onChange={(e) => setForm({ ...form, unitId: e.target.value })}>
+            <option value="">Whole property / no unit</option>
+            {units.map((unit: any) => <option key={unit.id} value={unit.id}>{unit.code}{unit.name ? ` · ${unit.name}` : ""}</option>)}
+          </Select>
+        </Field>
+        <Field label="Starts">
+          <Input disabled={!draft} type="date" value={form.startsOn} onChange={(e) => setForm({ ...form, startsOn: e.target.value })} />
+        </Field>
+        <Field label="Ends">
+          <Input disabled={!draft && !lease.endsOn} type="date" value={form.endsOn} onChange={(e) => setForm({ ...form, endsOn: e.target.value })} />
+        </Field>
+        <Field label="Monthly base rent" hint={draft ? undefined : "Use an escalation to change active rent."}>
+          <Input disabled={!draft} type="number" min="0" step="0.01" value={form.baseRent} onChange={(e) => setForm({ ...form, baseRent: e.target.value })} />
+        </Field>
+        <Field label="Billing day">
+          <Input disabled={!draft} type="number" min="1" max="31" value={form.billingDay} onChange={(e) => setForm({ ...form, billingDay: e.target.value })} />
+        </Field>
+        <Field label="Security deposit required">
+          <Input type="number" min="0" step="0.01" value={form.securityDepositRequired} onChange={(e) => setForm({ ...form, securityDepositRequired: e.target.value })} />
+        </Field>
+        <Field label="Payment terms days">
+          <Input type="number" min="0" step="1" value={form.paymentTermsDays} onChange={(e) => setForm({ ...form, paymentTermsDays: e.target.value })} />
+        </Field>
+        <Field label="CAM method">
+          <Select value={form.camMethod} onChange={(e) => setForm({ ...form, camMethod: e.target.value })}>
+            <option value="none">None</option>
+            <option value="fixed">Fixed estimate</option>
+            <option value="pro_rata">Pro rata reconciliation</option>
+          </Select>
+        </Field>
+        <Field label="CAM share %">
+          <Input disabled={form.camMethod === "none"} type="number" min="0" max="100" value={form.camSharePercent} onChange={(e) => setForm({ ...form, camSharePercent: e.target.value })} />
+        </Field>
+        <Field label="Late fee">
+          <Select value={form.lateFeeType} onChange={(e) => setForm({ ...form, lateFeeType: e.target.value, lateFeeValue: e.target.value === "none" ? "0" : form.lateFeeValue })}>
+            <option value="none">None</option>
+            <option value="fixed">Fixed amount</option>
+            <option value="percent">Percent of open charge</option>
+          </Select>
+        </Field>
+        <Field label="Late fee value">
+          <Input disabled={form.lateFeeType === "none"} type="number" min="0" value={form.lateFeeValue} onChange={(e) => setForm({ ...form, lateFeeValue: e.target.value })} />
+        </Field>
+        <Field label="Grace days">
+          <Input type="number" min="0" step="1" value={form.graceDays} onChange={(e) => setForm({ ...form, graceDays: e.target.value })} />
+        </Field>
+      </div>
+      <div className="flex flex-wrap gap-5 rounded-md border border-slate-200 p-3 text-sm dark:border-slate-800">
+        <label className="flex items-center gap-2"><input type="checkbox" checked={form.autoInvoice} onChange={(e) => setForm({ ...form, autoInvoice: e.target.checked })} /> Auto-create invoices</label>
+        <label className="flex items-center gap-2"><input type="checkbox" checked={form.autoPost} onChange={(e) => setForm({ ...form, autoPost: e.target.checked })} /> Auto-post invoices</label>
+      </div>
+    </div>
+  );
+}
+
 function LeaseDetail({
   lease,
   data,
@@ -2243,6 +2922,9 @@ function LeaseDetail({
   tab,
   act,
   money,
+  editing,
+  form,
+  setForm,
 }: any) {
   const charges = data.charges.filter((row: any) => row.leaseId === lease.id);
   const escalations = data.escalations.filter(
@@ -2254,9 +2936,9 @@ function LeaseDetail({
   );
   return (
     <div className="space-y-5 p-1">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <Status value={lease.status} />
-        <div className="flex flex-wrap gap-2">
+      {!editing ? (
+        <div className="flex flex-wrap items-center justify-end gap-3">
+          <div className="flex flex-wrap gap-2">
           {lease.status === "draft" && permissions.manage ? (
             <Button
               size="sm"
@@ -2300,10 +2982,20 @@ function LeaseDetail({
               </Button>
             </>
           ) : null}
+          </div>
         </div>
-      </div>
+      ) : null}
       {tab === "overview" ? (
-        <div className="space-y-4">
+        editing ? (
+          <LeaseEditFields
+            lease={lease}
+            data={data}
+            options={options}
+            form={form}
+            setForm={setForm}
+          />
+        ) : (
+          <div className="space-y-4">
           <div className="grid gap-3 sm:grid-cols-3">
             <Small
               label="Term"
@@ -2343,7 +3035,8 @@ function LeaseDetail({
               />
             </CardContent>
           </Card>
-        </div>
+          </div>
+        )
       ) : null}
       {tab === "charges" ? (
         <ChargesSection
@@ -2674,6 +3367,11 @@ function DepositSection({
     appliedDocumentId: "",
     memo: "",
   });
+  const [reverseRow, setReverseRow] = useState<any>(null);
+  const [reversal, setReversal] = useState({
+    occurredOn: today,
+    reason: "",
+  });
   const invoices = options.openInvoices.filter(
     (o: Option) => o.partyId === lease.tenantId,
   );
@@ -2691,14 +3389,69 @@ function DepositSection({
           value={money(lease.depositBalance, { currency: lease.currency })}
         />
       </div>
+      <div className="rounded-md border border-sky-200 bg-sky-50 px-3 py-2 text-xs text-sky-800 dark:border-sky-900 dark:bg-sky-950/40 dark:text-sky-200">
+        Deposit entries post immediately and cannot be edited or deleted. Reverse an incorrect entry, then post its corrected replacement below.
+      </div>
       {rows.length ? (
-        <DepositTable deposits={rows} leases={[lease]} money={money} />
+        <DepositTable
+          deposits={rows}
+          leases={[lease]}
+          money={money}
+          onReverse={permissions.account ? setReverseRow : undefined}
+        />
       ) : (
         <Empty
           title="No deposit activity"
           detail="Record the receipt to establish the tenant deposit liability."
         />
       )}
+      {reverseRow ? (
+        <Card className="border-red-200 dark:border-red-900">
+          <CardContent className="space-y-3 p-4">
+            <div>
+              <div className="font-medium text-red-700 dark:text-red-300">Reverse deposit transaction</div>
+              <p className="mt-1 text-xs text-slate-500">
+                {reverseRow.occurredOn} · {reverseRow.kind.replaceAll("_", " ")} · {money(reverseRow.amount, { currency: lease.currency })}
+              </p>
+            </div>
+            <div className="grid gap-3 sm:grid-cols-2">
+              <Field label="Reversal date">
+                <Input type="date" value={reversal.occurredOn} onChange={(e) => setReversal({ ...reversal, occurredOn: e.target.value })} />
+              </Field>
+              <Field label="Reason">
+                <Input value={reversal.reason} onChange={(e) => setReversal({ ...reversal, reason: e.target.value })} />
+              </Field>
+            </div>
+            <div className="flex justify-end gap-2">
+              <Button variant="outline" disabled={busy} onClick={() => setReverseRow(null)}>Cancel</Button>
+              <Button
+                disabled={busy || !reversal.occurredOn || !reversal.reason.trim()}
+                onClick={async () => {
+                  const result = await act(
+                    { action: "reverseDeposit", transactionId: reverseRow.id, ...reversal },
+                    "Deposit transaction reversed",
+                  );
+                  if (result) {
+                    setForm({
+                      kind: reverseRow.kind,
+                      occurredOn: reversal.occurredOn,
+                      amount: reverseRow.amount,
+                      bankAccountId: reverseRow.bankAccountId ?? "",
+                      offsetAccountId: reverseRow.offsetAccountId ?? "",
+                      appliedDocumentId: "",
+                      memo: `Correction for ${reverseRow.occurredOn}`,
+                    });
+                    setReverseRow(null);
+                    setReversal({ occurredOn: today, reason: "" });
+                  }
+                }}
+              >
+                Post reversal
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
+      ) : null}
       {permissions.account ? (
         <Card>
           <CardContent className="space-y-3 p-4">

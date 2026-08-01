@@ -6,6 +6,7 @@ import { fileURLToPath } from "node:url";
 import {
   PropertyManagementError,
   depositBalance,
+  depositReversalKind,
   depositPostingShape,
   escalatedRent,
   leaseChargeSchedule,
@@ -62,6 +63,16 @@ test("deposit posting shapes put party-bearing liability and AR on the correct s
   }
   assert.deepEqual(depositPostingShape("applied"), { kind: "applied", liabilitySide: "debit", offsetSide: "credit", offsetIsArOpenItem: true });
   assert.throws(() => depositPostingShape("chargeback"), /Unsupported deposit transaction type/);
+});
+
+test("deposit corrections reverse the subledger sign without deleting evidence", () => {
+  assert.equal(depositReversalKind("received"), "refunded");
+  assert.equal(depositReversalKind("refunded"), "received");
+  assert.equal(depositReversalKind("interest"), "adjustment_decrease");
+  assert.equal(depositReversalKind("adjustment_increase"), "adjustment_decrease");
+  assert.equal(depositReversalKind("adjustment_decrease"), "adjustment_increase");
+  assert.equal(depositReversalKind("applied"), "adjustment_increase");
+  assert.throws(() => depositReversalKind("delete"), /Unsupported deposit transaction type/);
 });
 
 test("deposit period-close lookup follows the property's subsidiary", () => {

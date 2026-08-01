@@ -89,6 +89,20 @@ function asDepositKind(value: string): DepositKind {
   return value as DepositKind;
 }
 
+export function depositReversalKind(value: string): DepositKind {
+  const reverse: Partial<Record<DepositKind, DepositKind>> = {
+    received: "refunded",
+    refunded: "received",
+    interest: "adjustment_decrease",
+    adjustment_increase: "adjustment_decrease",
+    adjustment_decrease: "adjustment_increase",
+    applied: "adjustment_increase",
+  };
+  const kind = reverse[asDepositKind(value)];
+  if (!kind) throw new PropertyManagementError("Unsupported deposit reversal");
+  return kind;
+}
+
 /** Accounting-side contract for the security-deposit subledger. */
 export function depositPostingShape(kindValue: string): {
   kind: DepositKind;
@@ -283,6 +297,26 @@ export async function updateManagedProperty(input: {
   });
 }
 
+export async function deleteManagedProperty(orgId: string, actorId: string, propertyId: string): Promise<void> {
+  await db.transaction(async (tx) => {
+    await assertEnabled(tx, orgId);
+    const record = (await tx.execute(sql`
+      select p.code,p.name,
+        exists(select 1 from property_units where org_id=p.org_id and property_id=p.id) as has_units,
+        exists(select 1 from property_leases where org_id=p.org_id and property_id=p.id) as has_leases,
+        exists(select 1 from cam_pools where org_id=p.org_id and property_id=p.id) as has_cam
+      from managed_properties p where p.org_id=${orgId} and p.id=${propertyId} for update
+    `)) as unknown as { rows: Array<{ code: string; name: string; has_units: boolean; has_leases: boolean; has_cam: boolean }> };
+    const row = record.rows[0];
+    if (!row) throw new PropertyManagementError("Property not found");
+    if (row.has_units || row.has_leases || row.has_cam) {
+      throw new PropertyManagementError("A property with units, leases, or CAM history cannot be deleted; deactivate it instead");
+    }
+    await tx.execute(sql`delete from managed_properties where org_id=${orgId} and id=${propertyId}`);
+    await audit(tx, orgId, "managed_properties", propertyId, "delete", actorId, { before: { code: row.code, name: row.name } });
+  });
+}
+
 export async function createPropertyUnit(input: { orgId: string; actorId: string; propertyId: string; code: string; name?: string | null; unitType?: string | null; rentableArea?: string | null; bedrooms?: number | null }): Promise<{ id: string }> {
   if (!input.code.trim()) throw new PropertyManagementError("Unit code is required");
   return db.transaction(async (tx) => {
@@ -295,6 +329,58 @@ export async function createPropertyUnit(input: { orgId: string; actorId: string
     if (!result.rows[0]) throw new PropertyManagementError("Active property not found");
     await audit(tx, input.orgId, "property_units", result.rows[0].id, "insert", input.actorId, { propertyId: input.propertyId, code: input.code.trim() });
     return { id: result.rows[0].id };
+  });
+}
+
+export async function updatePropertyUnit(input: {
+  orgId: string; actorId: string; unitId: string; code: string; name?: string | null;
+  unitType?: string | null; rentableArea?: string | null; bedrooms?: number | null; status?: string;
+}): Promise<{ id: string }> {
+  const code = input.code.trim();
+  const rentableArea = input.rentableArea == null || input.rentableArea === "" ? null : normalizeMoney(input.rentableArea);
+  if (!code) throw new PropertyManagementError("Unit code is required");
+  if (rentableArea != null && cmp(rentableArea, "0") <= 0) throw new PropertyManagementError("Rentable area must be positive");
+  if (input.bedrooms != null && (!Number.isInteger(input.bedrooms) || input.bedrooms < 0)) {
+    throw new PropertyManagementError("Bedrooms must be a non-negative whole number");
+  }
+  return db.transaction(async (tx) => {
+    await assertEnabled(tx, input.orgId);
+    const currentResult = (await tx.execute(sql`
+      select u.status,
+        exists(select 1 from property_leases l where l.org_id=u.org_id and l.unit_id=u.id and l.status in ('active','notice')) as has_active_lease
+      from property_units u where u.org_id=${input.orgId} and u.id=${input.unitId} for update
+    `)) as unknown as { rows: Array<{ status: string; has_active_lease: boolean }> };
+    const current = currentResult.rows[0];
+    if (!current) throw new PropertyManagementError("Unit not found");
+    const status = input.status ?? current.status;
+    if (!["vacant", "occupied", "notice", "offline"].includes(status)) throw new PropertyManagementError("Invalid unit status");
+    if (current.has_active_lease && status !== current.status) throw new PropertyManagementError("End the active lease before changing unit availability");
+    if (!current.has_active_lease && ["occupied", "notice"].includes(status)) throw new PropertyManagementError("Unit occupancy is controlled by lease activation");
+    const result = (await tx.execute(sql`
+      update property_units set code=${code},name=${input.name?.trim() || null},unit_type=${input.unitType?.trim() || null},
+        rentable_area=${rentableArea},bedrooms=${input.bedrooms ?? null},status=${status},updated_at=now(),updated_by=${input.actorId}
+      where org_id=${input.orgId} and id=${input.unitId} returning id,property_id as "propertyId"
+    `)) as unknown as { rows: { id: string; propertyId: string }[] };
+    const unit = result.rows[0];
+    if (!unit) throw new PropertyManagementError("Unit not found");
+    await audit(tx, input.orgId, "property_units", unit.id, "update", input.actorId, { propertyId: unit.propertyId, code });
+    return { id: unit.id };
+  });
+}
+
+export async function deletePropertyUnit(orgId: string, actorId: string, unitId: string): Promise<void> {
+  await db.transaction(async (tx) => {
+    await assertEnabled(tx, orgId);
+    const record = (await tx.execute(sql`
+      select u.code,u.property_id as "propertyId",
+        exists(select 1 from property_leases where org_id=u.org_id and unit_id=u.id) as has_leases
+      from property_units u where u.org_id=${orgId} and u.id=${unitId} for update
+    `)) as unknown as { rows: Array<{ code: string; propertyId: string; has_leases: boolean }> };
+    const row = record.rows[0];
+    if (!row) throw new PropertyManagementError("Unit not found");
+    if (row.has_leases) throw new PropertyManagementError("A unit with lease history cannot be deleted; take it offline instead");
+    await tx.execute(sql`delete from property_units where org_id=${orgId} and id=${unitId}`);
+    await audit(tx, orgId, "property_units", unitId, "delete", actorId, { before: { code: row.code, propertyId: row.propertyId } });
   });
 }
 
@@ -333,6 +419,93 @@ export async function createPropertyLease(input: {
       values(${input.orgId},${id},'base_rent','Base rent',${baseRent},'monthly',${startsOn},${endsOn},${property.rent_income_account_id},${input.actorId},${input.actorId})`);
     await audit(tx, input.orgId, "property_leases", id, "insert", input.actorId, { leaseNumber, propertyId: input.propertyId, tenantId: input.tenantId, baseRent });
     return { id };
+  });
+}
+
+export async function updatePropertyLease(input: {
+  orgId: string; actorId: string; leaseId: string; propertyId: string; unitId?: string | null; tenantId: string; leaseNumber: string;
+  startsOn: string; endsOn?: string | null; baseRent: string; billingDay: number; paymentTermsDays: number;
+  securityDepositRequired: string; camMethod: "none" | "fixed" | "pro_rata"; camSharePercent?: string | null;
+  lateFeeType: "none" | "fixed" | "percent"; lateFeeValue: string; graceDays: number; autoInvoice: boolean; autoPost: boolean;
+}): Promise<{ id: string }> {
+  const leaseNumber = input.leaseNumber.trim();
+  const startsOn = validDate(input.startsOn, "Lease start")!;
+  const endsOn = validDate(input.endsOn, "Lease end");
+  const baseRent = normalizeMoney(input.baseRent);
+  const deposit = normalizeMoney(input.securityDepositRequired);
+  const camShare = input.camSharePercent == null || input.camSharePercent === "" ? null : normalizeMoney(input.camSharePercent);
+  const lateFeeValue = input.lateFeeType === "none" ? "0.0000" : normalizeMoney(input.lateFeeValue);
+  if (!leaseNumber || cmp(baseRent, "0") <= 0) throw new PropertyManagementError("Lease number and positive base rent are required");
+  if (endsOn && endsOn < startsOn) throw new PropertyManagementError("Lease end cannot precede start");
+  if (!Number.isInteger(input.billingDay) || input.billingDay < 1 || input.billingDay > 31) throw new PropertyManagementError("Billing day must be between 1 and 31");
+  if (!Number.isInteger(input.paymentTermsDays) || input.paymentTermsDays < 0 || !Number.isInteger(input.graceDays) || input.graceDays < 0) {
+    throw new PropertyManagementError("Payment terms and grace days must be non-negative whole numbers");
+  }
+  if (cmp(deposit, "0") < 0) throw new PropertyManagementError("Security deposit cannot be negative");
+  if (!(["none", "fixed", "pro_rata"] as string[]).includes(input.camMethod)) throw new PropertyManagementError("Invalid CAM method");
+  if (camShare != null && (cmp(camShare, "0") < 0 || cmp(camShare, "100") > 0)) throw new PropertyManagementError("CAM share must be between 0 and 100");
+  if (!(["none", "fixed", "percent"] as string[]).includes(input.lateFeeType)) throw new PropertyManagementError("Invalid late-fee type");
+  if (input.lateFeeType !== "none" && cmp(lateFeeValue, "0") <= 0) throw new PropertyManagementError("Late-fee value must be positive");
+  if (input.lateFeeType === "percent" && cmp(lateFeeValue, "100") > 0) throw new PropertyManagementError("Late-fee percent cannot exceed 100");
+  return db.transaction(async (tx) => {
+    await assertEnabled(tx, input.orgId);
+    const currentResult = (await tx.execute(sql`
+      select l.id,l.status,l.property_id as "propertyId",l.unit_id as "unitId",l.tenant_id as "tenantId",l.starts_on as "startsOn",
+        l.ends_on as "endsOn",l.billing_day as "billingDay",
+        (select amount from lease_charges where org_id=l.org_id and lease_id=l.id and charge_type='base_rent' order by effective_from desc limit 1) as "baseRent"
+      from property_leases l where l.org_id=${input.orgId} and l.id=${input.leaseId} for update
+    `)) as unknown as { rows: Array<{ id: string; status: string; propertyId: string; unitId: string | null; tenantId: string; startsOn: string; endsOn: string | null; billingDay: number; baseRent: string }> };
+    const current = currentResult.rows[0];
+    if (!current || !["draft", "active", "notice"].includes(current.status)) throw new PropertyManagementError("Editable lease not found");
+    const draft = current.status === "draft";
+    if (!draft && (current.propertyId !== input.propertyId || current.unitId !== (input.unitId ?? null) || current.tenantId !== input.tenantId || current.startsOn !== startsOn)) {
+      throw new PropertyManagementError("Property, unit, tenant, and start date cannot change after activation");
+    }
+    if (!draft && (current.billingDay !== input.billingDay || cmp(current.baseRent, baseRent) !== 0)) {
+      throw new PropertyManagementError("Use rent escalation to change active rent; billing day is fixed after activation");
+    }
+    if (!draft && ((current.endsOn == null && endsOn != null) || (current.endsOn != null && endsOn != null && endsOn < current.endsOn))) {
+      throw new PropertyManagementError("An active lease term may only be extended");
+    }
+    const scope = (await tx.execute(sql`
+      select p.id,p.rent_income_account_id,
+        exists(select 1 from customer_roles cr where cr.org_id=p.org_id and cr.party_id=${input.tenantId} and cr.is_active) as tenant_ok,
+        (${input.unitId ?? null}::uuid is null or exists(select 1 from property_units u where u.org_id=p.org_id and u.id=${input.unitId ?? null} and u.property_id=p.id and u.status<>'offline')) as unit_ok,
+        (${input.unitId ?? null}::uuid is null or not exists(select 1 from property_leases x where x.org_id=p.org_id and x.unit_id=${input.unitId ?? null} and x.id<>${input.leaseId} and x.status in ('active','notice'))) as unit_available
+      from managed_properties p where p.org_id=${input.orgId} and p.id=${input.propertyId} and p.status='active'
+    `)) as unknown as { rows: Array<{ id: string; rent_income_account_id: string | null; tenant_ok: boolean; unit_ok: boolean; unit_available: boolean }> };
+    const property = scope.rows[0];
+    if (!property) throw new PropertyManagementError("Active property not found");
+    if (!property.tenant_ok) throw new PropertyManagementError("Tenant must be an active customer");
+    if (!property.unit_ok || !property.unit_available) throw new PropertyManagementError("Unit is unavailable for this lease");
+    if (!property.rent_income_account_id) throw new PropertyManagementError("Configure the property rent income account first");
+    await tx.execute(sql`
+      update property_leases set property_id=${input.propertyId},unit_id=${input.unitId ?? null},tenant_id=${input.tenantId},lease_number=${leaseNumber},
+        starts_on=${startsOn},ends_on=${endsOn},billing_day=${input.billingDay},payment_terms_days=${input.paymentTermsDays},
+        security_deposit_required=${deposit},cam_method=${input.camMethod},cam_share_percent=${input.camMethod === "none" ? null : camShare},
+        late_fee_type=${input.lateFeeType},late_fee_value=${lateFeeValue},grace_days=${input.graceDays},auto_invoice=${input.autoInvoice},auto_post=${input.autoPost},
+        updated_at=now(),updated_by=${input.actorId} where org_id=${input.orgId} and id=${input.leaseId}
+    `);
+    if (draft) {
+      await tx.execute(sql`
+        update lease_charges set amount=${baseRent},effective_from=${startsOn},effective_to=${endsOn},income_account_id=${property.rent_income_account_id},
+          updated_at=now(),updated_by=${input.actorId} where org_id=${input.orgId} and lease_id=${input.leaseId} and charge_type='base_rent'
+      `);
+    }
+    await audit(tx, input.orgId, "property_leases", input.leaseId, "update", input.actorId, { leaseNumber, propertyId: input.propertyId, unitId: input.unitId ?? null, status: current.status });
+    return { id: input.leaseId };
+  });
+}
+
+export async function cancelPropertyLease(orgId: string, actorId: string, leaseId: string): Promise<void> {
+  await db.transaction(async (tx) => {
+    await assertEnabled(tx, orgId);
+    const result = (await tx.execute(sql`
+      update property_leases set status='cancelled',updated_at=now(),updated_by=${actorId}
+      where org_id=${orgId} and id=${leaseId} and status='draft' returning lease_number as "leaseNumber"
+    `)) as unknown as { rows: { leaseNumber: string }[] };
+    if (!result.rows[0]) throw new PropertyManagementError("Draft lease not found");
+    await audit(tx, orgId, "property_leases", leaseId, "cancel", actorId, { after: { status: "cancelled" }, leaseNumber: result.rows[0].leaseNumber });
   });
 }
 
@@ -453,7 +626,7 @@ export async function applyLeaseEscalation(orgId: string, actorId: string, escal
 }
 
 function billingKey(leaseId: string, scheduleIds: string[]): string { return `rent:${leaseId}:${[...scheduleIds].sort().join(",")}`; }
-export async function billDueLeaseCharges(orgId: string, actorId: string | null, asOf?: string, onlyLeaseId?: string): Promise<{ billed: number; invoices: string[] }> {
+export async function billDueLeaseCharges(orgId: string, actorId: string | null, asOf?: string, onlyLeaseId?: string, onlyPropertyId?: string): Promise<{ billed: number; invoices: string[] }> {
   const through = asOf ?? new Date().toISOString().slice(0, 10);
   await assertEnabled(db, orgId);
   const due = (await db.execute(sql`
@@ -464,7 +637,8 @@ export async function billDueLeaseCharges(orgId: string, actorId: string | null,
     from lease_schedule_lines s join lease_charges c on c.id=s.charge_id and c.org_id=s.org_id
     join property_leases l on l.id=s.lease_id and l.org_id=s.org_id join managed_properties p on p.id=l.property_id and p.org_id=l.org_id
     where s.org_id=${orgId} and s.status='scheduled' and s.due_on<=${through} and l.status in ('active','notice')
-      and l.auto_invoice and (${onlyLeaseId ?? null}::uuid is null or l.id=${onlyLeaseId ?? null}) order by l.id,s.due_on,s.id
+      and l.auto_invoice and (${onlyLeaseId ?? null}::uuid is null or l.id=${onlyLeaseId ?? null})
+      and (${onlyPropertyId ?? null}::uuid is null or l.property_id=${onlyPropertyId ?? null}) order by l.id,s.due_on,s.id
   `)) as unknown as { rows: any[] };
   const groups = new Map<string, any[]>(); for (const row of due.rows) groups.set(row.leaseId, [...(groups.get(row.leaseId) ?? []), row]);
   const invoices: string[] = [];
@@ -506,7 +680,7 @@ export async function billDueLeaseCharges(orgId: string, actorId: string | null,
   return { billed: billed.rows[0]?.n ?? 0, invoices };
 }
 
-export async function assessLeaseLateFees(orgId: string, actorId: string, asOf?: string): Promise<{ created: number }> {
+export async function assessLeaseLateFees(orgId: string, actorId: string, asOf?: string, onlyLeaseId?: string, onlyPropertyId?: string): Promise<{ created: number }> {
   const date = validDate(asOf ?? new Date().toISOString().slice(0, 10), "Late-fee date")!;
   await assertEnabled(db, orgId);
   const overdue = (await db.execute(sql`
@@ -521,6 +695,8 @@ export async function assessLeaseLateFees(orgId: string, actorId: string, asOf?:
       group by jl.id
     ) oi on true
     where s.org_id=${orgId} and s.status='invoiced' and l.status in ('active','notice') and l.late_fee_type<>'none'
+      and (${onlyLeaseId ?? null}::uuid is null or l.id=${onlyLeaseId ?? null})
+      and (${onlyPropertyId ?? null}::uuid is null or l.property_id=${onlyPropertyId ?? null})
       and d.kind='customer_invoice' and d.status='posted' and d.due_date is not null and d.due_date + l.grace_days < ${date}
       and oi.transaction_open::numeric>0
     group by d.id,s.lease_id,l.late_fee_type,l.late_fee_value,p.rent_income_account_id,oi.transaction_open
@@ -636,6 +812,86 @@ export async function recordSecurityDeposit(input: { orgId: string; actorId: str
     const inserted = (await tx.execute(sql`insert into security_deposit_transactions(org_id,lease_id,kind,occurred_on,amount,bank_account_id,offset_account_id,applied_document_id,journal_entry_id,memo,created_by,updated_by)
       values(${input.orgId},${input.leaseId},${input.kind},${occurredOn},${amount},${bankId},${offsetId},${input.appliedDocumentId ?? null},${entryId},${input.memo ?? null},${input.actorId},${input.actorId}) returning id`)) as unknown as { rows: { id: string }[] };
     return { id: inserted.rows[0]!.id, entryId, balance: nextBalance };
+  });
+}
+
+export async function reverseSecurityDepositTransaction(input: {
+  orgId: string; actorId: string; transactionId: string; occurredOn: string; reason: string;
+}): Promise<{ id: string; entryId: string; balance: string }> {
+  const occurredOn = validDate(input.occurredOn, "Reversal date")!;
+  const reason = input.reason.trim();
+  if (!reason) throw new PropertyManagementError("Reversal reason is required");
+  return db.transaction(async (tx) => {
+    await assertEnabled(tx, input.orgId);
+    const context = (await tx.execute(sql`
+      select t.*,p.subsidiary_id,p.currency,s.base_currency,je.book_id,
+        exists(select 1 from security_deposit_transactions r where r.org_id=t.org_id and r.reversal_of_id=t.id) as already_reversed,
+        (select id from accounting_periods where org_id=t.org_id and not is_adjustment and starts_on<=${occurredOn} and ends_on>=${occurredOn}
+          and not period_module_is_closed(t.org_id,id,je.book_id,p.subsidiary_id,'gl') order by starts_on desc limit 1) as period_id
+      from security_deposit_transactions t
+      join property_leases l on l.id=t.lease_id and l.org_id=t.org_id
+      join managed_properties p on p.id=l.property_id and p.org_id=l.org_id
+      join subsidiaries s on s.id=p.subsidiary_id and s.org_id=p.org_id
+      join journal_entries je on je.id=t.journal_entry_id and je.org_id=t.org_id
+      where t.org_id=${input.orgId} and t.id=${input.transactionId} for update of t
+    `)) as unknown as { rows: any[] };
+    const row = context.rows[0];
+    if (!row) throw new PropertyManagementError("Deposit transaction not found");
+    if (row.reversal_of_id || row.already_reversed) throw new PropertyManagementError("Deposit transaction is already a reversal or has already been reversed");
+    if (!row.period_id) throw new PropertyManagementError("An open GL period is required for the reversal date");
+    if (row.currency !== row.base_currency) throw new PropertyManagementError("Security-deposit reversals require functional-currency deposits");
+
+    const kind = depositReversalKind(row.kind);
+    const prior = (await tx.execute(sql`select kind,amount from security_deposit_transactions where org_id=${input.orgId} and lease_id=${row.lease_id}`)) as unknown as { rows: { kind: string; amount: string }[] };
+    const balance = depositBalance([...prior.rows, { kind, amount: row.amount }]);
+    if (cmp(balance, "0") < 0) throw new PropertyManagementError("Later deposit activity must be corrected before this transaction can be reversed");
+
+    const entryNumber = `DEP-REV-${occurredOn}-${input.transactionId.slice(0, 8)}-${crypto.randomUUID().slice(0, 8)}`;
+    const entry = (await tx.execute(sql`
+      insert into journal_entries(org_id,book_id,subsidiary_id,entry_number,posting_date,period_id,memo,status,origin,reverses_entry_id,custom,created_by,updated_by)
+      values(${input.orgId},${row.book_id},${row.subsidiary_id},${entryNumber},${occurredOn},${row.period_id},${`Deposit reversal: ${reason}`},'draft','manual',${row.journal_entry_id},
+        ${JSON.stringify({ propertyManagement: { leaseId: row.lease_id, reversalOfId: input.transactionId, kind } })}::jsonb,${input.actorId},${input.actorId}) returning id
+    `)) as unknown as { rows: { id: string }[] };
+    const entryId = entry.rows[0]!.id;
+    await tx.execute(sql`
+      insert into journal_lines(org_id,entry_id,line_number,account_id,subsidiary_id,amount,currency,txn_amount,fx_rate,memo,party_id,department_id,project_id,location_id,class_id,equipment_unit_id,payment_card_id,extra_dims,quantity,unit,due_date,is_open_item,tax_code_id,custom)
+      select org_id,${entryId},line_number,account_id,subsidiary_id,-amount,currency,-txn_amount,fx_rate,${`Deposit reversal: ${reason}`},party_id,department_id,project_id,location_id,class_id,equipment_unit_id,payment_card_id,extra_dims,
+        case when quantity is null then null else -quantity end,unit,due_date,is_open_item,tax_code_id,custom
+      from journal_lines where org_id=${input.orgId} and entry_id=${row.journal_entry_id} order by line_number
+    `);
+
+    const applications = (await tx.execute(sql`
+      select a.*,source.line_number
+      from applications a join journal_lines source on source.id=a.from_line_id and source.org_id=a.org_id
+      where a.org_id=${input.orgId} and source.entry_id=${row.journal_entry_id} and a.unapplied_at is null for update of a
+    `)) as unknown as { rows: any[] };
+    if (applications.rows.length) {
+      await tx.execute(sql`
+        update applications set unapplied_at=now(),updated_at=now(),updated_by=${input.actorId}
+        where org_id=${input.orgId} and unapplied_at is null and from_line_id in
+          (select id from journal_lines where org_id=${input.orgId} and entry_id=${row.journal_entry_id})
+      `);
+      for (const application of applications.rows) {
+        const reversalLine = (await tx.execute(sql`
+          select id from journal_lines where org_id=${input.orgId} and entry_id=${entryId} and line_number=${application.line_number}
+        `)) as unknown as { rows: { id: string }[] };
+        await tx.execute(sql`
+          insert into applications(org_id,from_line_id,to_line_id,amount,source_amount,source_transaction_amount,source_transaction_currency,
+            target_transaction_amount,target_transaction_currency,settlement_rate,settlement_rate_source,settlement_rate_reference,applied_on,created_by,updated_by)
+          values(${input.orgId},${application.from_line_id},${reversalLine.rows[0]!.id},${application.amount},${application.source_amount},
+            ${application.source_transaction_amount},${application.source_transaction_currency},${application.target_transaction_amount},${application.target_transaction_currency},
+            ${application.settlement_rate},${application.settlement_rate_source},'Security deposit reversal',${occurredOn},${input.actorId},${input.actorId})
+        `);
+      }
+    }
+    await tx.execute(sql`update journal_entries set status='posted',posted_at=now(),posted_by=${input.actorId},updated_at=now(),updated_by=${input.actorId} where org_id=${input.orgId} and id=${entryId}`);
+    const inserted = (await tx.execute(sql`
+      insert into security_deposit_transactions(org_id,lease_id,kind,occurred_on,amount,bank_account_id,offset_account_id,journal_entry_id,reversal_of_id,memo,created_by,updated_by)
+      values(${input.orgId},${row.lease_id},${kind},${occurredOn},${row.amount},${["received", "refunded"].includes(kind) ? row.bank_account_id : null},
+        ${["received", "refunded"].includes(kind) ? row.bank_account_id : row.offset_account_id},${entryId},${input.transactionId},${`Reversal: ${reason}`},${input.actorId},${input.actorId}) returning id
+    `)) as unknown as { rows: { id: string }[] };
+    await audit(tx, input.orgId, "security_deposit_transactions", inserted.rows[0]!.id, "reverse", input.actorId, { reversalOfId: input.transactionId, reason, occurredOn });
+    return { id: inserted.rows[0]!.id, entryId, balance };
   });
 }
 
@@ -765,7 +1021,9 @@ export async function propertyManagementWorkspace(orgId: string) {
       left join locations l on l.id=p.location_id and l.org_id=p.org_id left join property_units u on u.property_id=p.id and u.org_id=p.org_id where p.org_id=${orgId} group by p.id,s.name,l.name order by p.name`),
     db.execute(sql`select id,property_id as "propertyId",code,name,unit_type as "unitType",rentable_area as "rentableArea",bedrooms,status from property_units where org_id=${orgId} order by property_id,code`),
     db.execute(sql`select l.id,l.property_id as "propertyId",l.unit_id as "unitId",l.tenant_id as "tenantId",l.lease_number as "leaseNumber",l.status,l.starts_on as "startsOn",l.ends_on as "endsOn",
-      l.security_deposit_required as "securityDepositRequired",l.cam_method as "camMethod",l.cam_share_percent as "camSharePercent",l.late_fee_type as "lateFeeType",l.late_fee_value as "lateFeeValue",l.grace_days as "graceDays",
+      l.billing_day as "billingDay",l.payment_terms_days as "paymentTermsDays",l.security_deposit_required as "securityDepositRequired",l.cam_method as "camMethod",l.cam_share_percent as "camSharePercent",
+      l.late_fee_type as "lateFeeType",l.late_fee_value as "lateFeeValue",l.grace_days as "graceDays",l.auto_invoice as "autoInvoice",l.auto_post as "autoPost",l.notes,
+      (select c.amount from lease_charges c where c.org_id=l.org_id and c.lease_id=l.id and c.charge_type='base_rent' order by c.effective_from desc limit 1) as "baseRent",
       p.name as "propertyName",u.code as "unitCode",t.display_name as "tenantName",p.currency,
       coalesce((select sum(case when d.kind in ('received','interest','adjustment_increase') then d.amount else -d.amount end) from security_deposit_transactions d where d.org_id=l.org_id and d.lease_id=l.id),0)::text as "depositBalance"
       from property_leases l join managed_properties p on p.id=l.property_id and p.org_id=l.org_id left join property_units u on u.id=l.unit_id and u.org_id=l.org_id
@@ -776,7 +1034,9 @@ export async function propertyManagementWorkspace(orgId: string) {
       d.status as "invoiceStatus",d.due_date as "invoiceDueOn",d.open_balance as "invoiceOpenBalance",c.charge_type as "chargeType",c.description
       from lease_schedule_lines s join lease_charges c on c.id=s.charge_id and c.org_id=s.org_id
       left join documents d on d.id=s.invoice_document_id and d.org_id=s.org_id where s.org_id=${orgId} order by s.due_on desc limit 2000`),
-    db.execute(sql`select d.id,d.lease_id as "leaseId",d.kind,d.occurred_on as "occurredOn",d.amount,d.applied_document_id as "appliedDocumentId",d.journal_entry_id as "journalEntryId",d.memo from security_deposit_transactions d where d.org_id=${orgId} order by d.occurred_on desc,d.created_at desc`),
+    db.execute(sql`select d.id,d.lease_id as "leaseId",d.kind,d.occurred_on as "occurredOn",d.amount,d.bank_account_id as "bankAccountId",d.offset_account_id as "offsetAccountId",d.applied_document_id as "appliedDocumentId",d.journal_entry_id as "journalEntryId",d.reversal_of_id as "reversalOfId",d.memo,
+      exists(select 1 from security_deposit_transactions r where r.org_id=d.org_id and r.reversal_of_id=d.id) as reversed
+      from security_deposit_transactions d where d.org_id=${orgId} order by d.occurred_on desc,d.created_at desc`),
     db.execute(sql`select id,property_id as "propertyId",name,fiscal_year as "fiscalYear",period_starts_on as "periodStartsOn",period_ends_on as "periodEndsOn",allocation_basis as "allocationBasis",budget_amount as "budgetAmount",actual_amount as "actualAmount",expense_account_ids as "expenseAccountIds",status from cam_pools where org_id=${orgId} order by fiscal_year desc,name`),
     db.execute(sql`select id,pool_id as "poolId",lease_id as "leaseId",share_percent as "sharePercent",budget_allocation as "budgetAllocation",actual_allocation as "actualAllocation",billed_estimate as "billedEstimate",reconciliation_amount as "reconciliationAmount",invoice_document_id as "invoiceDocumentId" from cam_allocations where org_id=${orgId} order by created_at`),
   ]) as unknown as Array<{ rows: any[] }>;
