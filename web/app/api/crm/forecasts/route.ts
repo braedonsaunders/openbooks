@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/db.ts'
 import { guardPermission } from '../../../../lib/authz'
+import { guardFeaturePermission } from '../../../../lib/feature-gates'
 import { isUuid } from '../../../../lib/list-params'
 import { calculateForecast } from '../../../../lib/crm'
 
@@ -10,7 +11,7 @@ export const runtime = 'nodejs'
 const DATE = /^\d{4}-\d{2}-\d{2}$/
 
 export async function GET(req: NextRequest) {
-  const gate = await guardPermission('crm.forecasts.read')
+  const gate = await guardFeaturePermission('crm.forecasts.read', 'crm')
   if (gate instanceof NextResponse) return gate
   const params = req.nextUrl.searchParams
   const periodStart = params.get('periodStart') ?? new Date().toISOString().slice(0, 8) + '01'
@@ -41,14 +42,16 @@ export async function GET(req: NextRequest) {
 }
 
 export async function POST(req: NextRequest) {
-  const gate = await guardPermission('crm.forecasts.manage')
+  const gate = await guardFeaturePermission('crm.forecasts.manage', 'crm')
   if (gate instanceof NextResponse) return gate
   const { user } = gate
   const body = await req.json() as Record<string, any>
   const periodStart = String(body.periodStart ?? '')
   const periodEnd = String(body.periodEnd ?? '')
   if (!DATE.test(periodStart) || !DATE.test(periodEnd) || periodEnd < periodStart) return NextResponse.json({ error: 'invalid forecast period' }, { status: 422 })
-  const ownerUserId = body.ownerUserId ?? user.id
+  // An explicit null means the caller is targeting a team. When the key is
+  // absent we retain the convenient personal-snapshot default.
+  const ownerUserId = Object.prototype.hasOwnProperty.call(body, 'ownerUserId') ? body.ownerUserId : user.id
   const salesTeamId = body.salesTeamId ?? null
   if ((ownerUserId ? 1 : 0) + (salesTeamId ? 1 : 0) !== 1 || (ownerUserId && !isUuid(ownerUserId)) || (salesTeamId && !isUuid(salesTeamId))) return NextResponse.json({ error: 'choose exactly one owner or team' }, { status: 422 })
   const overrideAmount = body.overrideAmount == null || body.overrideAmount === '' ? null : String(body.overrideAmount)

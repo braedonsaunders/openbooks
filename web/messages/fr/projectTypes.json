@@ -14,7 +14,7 @@
   "financialChangeReasonPlaceholder": "Décrivez le changement de politique comptable",
   "financialChangeReasonRequired": "Saisissez un motif pertinent pour le changement de politique financière",
   "financialVersionNotice": "L’enregistrement publie une nouvelle politique datée. Les périodes antérieures conservent leur politique d’origine.",
-  "legacySeed": "valeur initiale héritée",
+  "initialPolicy": "politique initiale",
   "deleteConfirm": "Supprimer ou archiver « {name} » ?",
   "tabs": {
     "general": "Général",

@@ -2,8 +2,7 @@ import { NextResponse } from 'next/server'
 import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/db.ts'
 import { emptyFormSchema } from '@openbooks/forms-core'
-import { currentUser } from '../../../../lib/auth'
-import { canAuthor } from '../_lib'
+import { guardPermission } from '../../../../lib/authz'
 
 export const runtime = 'nodejs'
 
@@ -12,8 +11,9 @@ const KINDS = new Set(['form', 'wizard', 'checklist', 'register'])
 
 /** List templates with latest-version + response rollups. */
 export async function GET() {
-  const user = await currentUser()
-  if (!user) return NextResponse.json({ error: 'unauthorized' }, { status: 401 })
+  const gate = await guardPermission('admin.customization.manage')
+  if (gate instanceof NextResponse) return gate
+  const { user } = gate
 
   const r = (await db.execute(sql`
     select t.id, t.key, t.name, t.category, t.description, t.status, t.kind,
@@ -40,9 +40,9 @@ export async function GET() {
 
 /** Create a template + its version-1 draft schema. */
 export async function POST(req: Request) {
-  const user = await currentUser()
-  if (!user) return NextResponse.json({ error: 'unauthorized' }, { status: 401 })
-  if (!canAuthor(user.role)) return NextResponse.json({ error: 'forbidden' }, { status: 403 })
+  const gate = await guardPermission('admin.customization.manage')
+  if (gate instanceof NextResponse) return gate
+  const { user } = gate
 
   const body = (await req.json()) as {
     key?: string

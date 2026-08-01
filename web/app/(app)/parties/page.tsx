@@ -27,12 +27,11 @@ const SORT_COLUMNS = {
   code: sql`p.short_code`,
 } as const
 
-// A party "is" a customer/vendor/employee when a live role row exists. The
-// legacy sync tag (custom->>'nsKind') also counts until roles are backfilled.
+// A party is classified only by its active canonical role row.
 const ROLE_CONDITIONS = {
-  customer: sql`(exists (select 1 from customer_roles r where r.party_id = p.id and r.is_active) or p.custom->>'nsKind' = 'customer')`,
-  vendor: sql`(exists (select 1 from vendor_roles r where r.party_id = p.id and r.is_active) or p.custom->>'nsKind' = 'vendor')`,
-  employee: sql`(exists (select 1 from employee_roles r where r.party_id = p.id and r.is_active) or p.custom->>'nsKind' = 'employee')`,
+  customer: sql`exists (select 1 from customer_roles r where r.party_id = p.id and r.is_active)`,
+  vendor: sql`exists (select 1 from vendor_roles r where r.party_id = p.id and r.is_active)`,
+  employee: sql`exists (select 1 from employee_roles r where r.party_id = p.id and r.is_active)`,
 } as const
 
 export default async function Parties({
@@ -124,7 +123,7 @@ export default async function Parties({
         orgId,
         userId: authz.user.id,
         recordType: role,
-        userRoles: [authz.user.role],
+        userRoles: authz.user.roles.map(({ key }) => key),
         headerDefs: pickers[3] as any,
         lineDefs: [],
         explicitLayoutId: pickString(sp.partyForm),

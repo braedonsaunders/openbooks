@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server'
 import { runDepreciation } from '@openbooks/engine/src/depreciation.ts'
-import { guardPermission } from '../../../../lib/authz'
+import { guardFeaturePermission } from '../../../../lib/feature-gates'
 import { isUuid } from '../../../../lib/list-params'
 
 export const runtime = 'nodejs'
@@ -19,7 +19,7 @@ interface Body {
  * `assetId` scopes the run to one asset; `asOfDate` defaults to today.
  */
 export async function POST(req: Request) {
-  const gate = await guardPermission('assets.manage')
+  const gate = await guardFeaturePermission('assets.manage', 'fixedAssets')
   if (gate instanceof NextResponse) return gate
   const user = gate.user
 

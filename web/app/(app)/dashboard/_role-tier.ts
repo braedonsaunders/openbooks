@@ -18,12 +18,14 @@ export const ROLE_TIER_LABELS: Record<RoleTier, string> = {
   viewer: 'Viewer',
 }
 
-export function inferRoleTier(roleKey: string): RoleTier {
-  return roleKey in TIER_RANK ? (roleKey as RoleTier) : 'viewer'
+export function inferRoleTier(roleKeys: readonly string[]): RoleTier {
+  return (Object.keys(TIER_RANK) as RoleTier[])
+    .filter((tier) => roleKeys.includes(tier))
+    .sort((a, b) => TIER_RANK[a] - TIER_RANK[b])[0] ?? 'viewer'
 }
 
 export function getUserRoleTier(authz: Authz): RoleTier {
-  return inferRoleTier(authz.user.role)
+  return inferRoleTier(authz.user.roles.map(({ key }) => key))
 }
 
 export function dashboardSourceKeyForTier(tier: RoleTier): string {

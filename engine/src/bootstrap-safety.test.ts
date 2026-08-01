@@ -26,6 +26,11 @@ test("deployment bootstrap serializes migrate and seed work", () => {
     bootstrap.indexOf("await seedProjectTypes") <
       bootstrap.indexOf("pg_advisory_unlock"),
   );
+  assert.match(bootstrap, /await withBypassContext\(async \(\) =>/);
+  assert.ok(
+    bootstrap.indexOf("await withBypassContext") <
+      bootstrap.indexOf("await migrate()"),
+  );
 });
 
 test("row-level security refresh is versioned and drift-driven", () => {

@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server'
-import { guardPermission } from '../../../../lib/authz'
+import { guardFeaturePermission } from '../../../../lib/feature-gates'
 import { isUuid } from '../../../../lib/list-params'
 import { approveSubmittedTimeEntries } from '../../../../lib/time-approval'
 import { isIsoDate, loadWeek, weekStart, weekWindow } from '../_lib'
@@ -21,7 +21,7 @@ interface Body {
  * alone (submit them first) so approval is an explicit two-step gate.
  */
 export async function POST(req: Request) {
-  const gate = await guardPermission('time.approve')
+  const gate = await guardFeaturePermission('time.approve', 'timeTracking')
   if (gate instanceof NextResponse) return gate
   const { user } = gate
   const orgId = user.orgId

@@ -4,6 +4,14 @@ import { matchesTerritory, shouldPromoteLifecycle, type CrmLifecycleStage, type 
 
 type SqlExecutor = Pick<typeof db, "execute">;
 
+async function crmFeatureEnabled(executor: SqlExecutor, orgId: string): Promise<boolean> {
+  const result = (await executor.execute(sql`
+    select coalesce((settings->'features'->>'crm')::boolean, true) as enabled
+      from orgs where id = ${orgId}
+  `)) as unknown as { rows: { enabled: boolean }[] };
+  return result.rows[0]?.enabled === true;
+}
+
 const DEFAULT_ACCOUNT_STATUSES = [
   ["lead", "new", "New", false, false, true],
   ["lead", "working", "Working", false, false, false],
@@ -27,6 +35,7 @@ const DEFAULT_OPPORTUNITY_STATUSES = [
 
 /** Idempotent tenant bootstrap; safe to call before every CRM draft. */
 export async function ensureCrmDefaults(orgId: string, actorId: string, executor: SqlExecutor = db): Promise<void> {
+  if (!(await crmFeatureEnabled(executor, orgId))) return;
   for (let sequence = 0; sequence < DEFAULT_ACCOUNT_STATUSES.length; sequence++) {
     const [stage, key, name, qualified, closed, isDefault] = DEFAULT_ACCOUNT_STATUSES[sequence]!;
     await executor.execute(sql`
@@ -58,6 +67,7 @@ export async function promoteCrmAccount(
     reason?: string | null;
   },
 ): Promise<boolean> {
+  if (!(await crmFeatureEnabled(executor, input.orgId))) return false;
   const existing = (await executor.execute(sql`
     select id, lifecycle_stage from crm_account_profiles
      where org_id = ${input.orgId} and party_id = ${input.partyId} for update
@@ -107,6 +117,7 @@ export async function promoteCrmAccount(
 
 /** Route one account using the first matching active territory by priority. */
 export async function routeCrmAccount(orgId: string, profileId: string, actorId: string): Promise<string | null> {
+  if (!(await crmFeatureEnabled(db, orgId))) return null;
   return db.transaction(async (tx) => {
     const account = (await tx.execute(sql`
       select cp.id, cp.lifecycle_stage, cp.lead_source_id, cp.industry, cp.annual_revenue, cp.employee_count,
@@ -152,6 +163,7 @@ export async function routeCrmAccount(orgId: string, profileId: string, actorId:
 }
 
 export async function nextOpportunityNumber(orgId: string): Promise<string> {
+  if (!(await crmFeatureEnabled(db, orgId))) throw new Error("CRM feature is disabled");
   const seq = (await db.execute(sql`
     insert into number_sequences (org_id, document_kind, subsidiary_id, prefix)
     values (${orgId}, 'crm_opportunity', null, 'OPP-')

@@ -1,7 +1,7 @@
 -- Overhead becomes a rich statistical allocation config (OverheadSource) instead
 -- of a thin CostSource. Backfill existing project_types.financial_profile.overhead:
 --   {source:'none'}                        → {method:'none'}
---   {source:'account_group', dimension:X}  → {method:'account_group_actual', accountGroup:{dimension:X}}
+--   {source:'account_group', dimension:X}  → {method:'posted_gl_account_group', accountGroup:{dimension:X}}
 -- Idempotent: only rewrites rows still on the old {source:...} shape.
 
 UPDATE project_types
@@ -11,7 +11,7 @@ UPDATE project_types
          CASE
            WHEN financial_profile -> 'overhead' ->> 'source' = 'account_group'
              THEN jsonb_build_object(
-                    'method', 'account_group_actual',
+                    'method', 'posted_gl_account_group',
                     'accountGroup', jsonb_build_object('dimension', financial_profile -> 'overhead' ->> 'dimension')
                   )
            ELSE jsonb_build_object('method', 'none')

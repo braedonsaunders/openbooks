@@ -28,13 +28,13 @@ jobs:
       postgres:
         image: postgres:16
         env:
-          POSTGRES_USER: openbooks
-          POSTGRES_PASSWORD: openbooks
+          POSTGRES_USER: openbooks_owner
+          POSTGRES_PASSWORD: openbooks-owner-release-test-password
           POSTGRES_DB: openbooks_release
         ports:
           - 5433:5432
         options: >-
-          --health-cmd "pg_isready -U openbooks -d openbooks_release"
+          --health-cmd "pg_isready -U openbooks_owner -d openbooks_release"
           --health-interval 5s
           --health-timeout 5s
           --health-retries 20
@@ -48,11 +48,12 @@ jobs:
           --health-timeout 5s
           --health-retries 20
     env:
-      OPENBOOKS_DB_URL: postgres://openbooks:openbooks@localhost:5433/openbooks_release
+      OPENBOOKS_DB_URL: postgres://openbooks_owner:openbooks-owner-release-test-password@localhost:5433/openbooks_release
+      OPENBOOKS_RUNTIME_DB_URL: postgres://openbooks_app:openbooks-runtime-release-test-password@localhost:5433/openbooks_release
       OPENBOOKS_REDIS_URL: redis://localhost:6379
       SESSION_SECRET: openbooks-release-test-secret-not-production
       OPENBOOKS_DATA_KEY: 000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f
-      PGPASSWORD: openbooks
+      PGPASSWORD: openbooks-owner-release-test-password
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -61,7 +62,17 @@ jobs:
           cache: npm
       - run: npm ci
       - name: Bootstrap a clean release database
+        env:
+          NODE_ENV: production
         run: npx tsx scripts/bootstrap.ts
+      - name: Prove production runtime role cannot bypass tenant RLS
+        env:
+          NODE_ENV: production
+          OPENBOOKS_DB_URL: postgres://openbooks_app:openbooks-runtime-release-test-password@localhost:5433/openbooks_release
+        run: >-
+          npx tsx -e "import { assertSafeRuntimeDatabaseRole, pool } from './engine/src/db.ts';
+          void (async () => { try { await assertSafeRuntimeDatabaseRole(); }
+          finally { await pool.end(); } })();"
       - name: Verify types, accounting tests, and production build
         run: npm run verify:release
 

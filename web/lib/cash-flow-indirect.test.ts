@@ -28,17 +28,18 @@ test("indirect cash flow ties to bank balances and net income", { skip: !env.OPE
 
           // The statement reconciles to the proven bank-balance movement.
           assert.ok(
-            Math.abs(cf.reconciliationGap) < 0.005,
+            (toUnits(cf.reconciliationGap) < 0n ? -toUnits(cf.reconciliationGap) : toUnits(cf.reconciliationGap)) < 50n,
             org.id + " " + period.name + " reconciliation gap " + cf.reconciliationGap,
           );
 
           // Sections assemble to the net change.
-          const assembled = cf.operating + cf.investingTotal + cf.financingTotal + cf.fxEffectOnCash;
-          assert.ok(Math.abs(assembled - cf.netChange) < 0.005, org.id + " " + period.name + " section assembly");
+          const assembled = [cf.operating, cf.investingTotal, cf.financingTotal, cf.fxEffectOnCash]
+            .reduce((sum, value) => sum + toUnits(value), 0n);
+          assert.equal(assembled, toUnits(cf.netChange), org.id + " " + period.name + " section assembly");
 
           // Opening + change = closing.
           assert.ok(
-            Math.abs(cf.openingCash + cf.netChange - cf.closingCash) < 0.01,
+            toUnits(cf.openingCash) + toUnits(cf.netChange) === toUnits(cf.closingCash),
             org.id + " " + period.name + " opening/closing tie",
           );
 
@@ -53,17 +54,15 @@ test("indirect cash flow ties to bank balances and net income", { skip: !env.OPE
                and e.posting_date >= \${period.starts_on} and e.posting_date <= \${period.ends_on}
           \`);
           assert.equal(
-            toUnits(cf.netIncome.toFixed(4)),
+            toUnits(cf.netIncome),
             toUnits(expected.rows[0].ni),
             org.id + " " + period.name + " net income",
           );
 
           // Operating = NI + adjustments + working capital (line arithmetic).
-          const op =
-            cf.netIncome +
-            cf.adjustments.reduce((a, l) => a + l.amount, 0) +
-            cf.workingCapital.reduce((a, l) => a + l.amount, 0);
-          assert.ok(Math.abs(op - cf.operating) < 0.005, org.id + " " + period.name + " operating arithmetic");
+          const op = [cf.netIncome, ...cf.adjustments.map((line) => line.amount), ...cf.workingCapital.map((line) => line.amount)]
+            .reduce((sum, value) => sum + toUnits(value), 0n);
+          assert.equal(op, toUnits(cf.operating), org.id + " " + period.name + " operating arithmetic");
         }
       });
     }

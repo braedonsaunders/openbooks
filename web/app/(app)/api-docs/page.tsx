@@ -1,5 +1,6 @@
 import { getTranslations } from 'next-intl/server'
 import { requirePermission } from '../../../lib/authz'
+import { requireFeatureEnabled } from '../../../lib/feature-gates'
 import { loadApiSchema } from '../../../lib/api/schema-registry'
 import { ApiConsole } from './ApiConsole'
 
@@ -12,6 +13,7 @@ export async function generateMetadata() {
 
 export default async function ApiDocsPage() {
   const authz = await requirePermission('api.keys.manage')
+  await requireFeatureEnabled(authz.user.orgId, 'apiAccess')
   const schema = await loadApiSchema(authz.user.orgId)
 
   // The console owns the full-height workbench (record-type rail + reference +

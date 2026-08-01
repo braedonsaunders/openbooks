@@ -65,6 +65,46 @@ export const taxJurisdictions = pgTable(
   ],
 );
 
+/** Immutable tenant evidence of the exact localization content installed. */
+export const taxCountryPackInstallations = pgTable(
+  "tax_country_pack_installations",
+  {
+    id: id(),
+    orgId: orgRef(),
+    packCode: text("pack_code").notNull(),
+    country: text("country").notNull(),
+    version: text("version").notNull(),
+    contentHash: text("content_hash").notNull(),
+    manifest: jsonb("manifest").notNull(),
+    status: text("status", { enum: ["active", "superseded"] }).notNull().default("active"),
+    installedAt: timestamp("installed_at", { withTimezone: true }).notNull().defaultNow(),
+    installedBy: uuid("installed_by"),
+    supersededAt: timestamp("superseded_at", { withTimezone: true }),
+    supersededBy: uuid("superseded_by"),
+  },
+  (t) => [
+    uniqueIndex("tax_country_pack_installations_org_pack_version").on(t.orgId, t.packCode, t.version),
+    uniqueIndex("tax_country_pack_installations_one_active").on(t.orgId, t.packCode).where(sql`${t.status} = 'active'`),
+    index("tax_country_pack_installations_org_country").on(t.orgId, t.country),
+    check("tax_country_pack_installations_identity", sql`
+      ${t.packCode} <> ''
+      and ${t.country} ~ '^[A-Z]{2}$'
+      and ${t.version} ~ '^[0-9]{4}\.[0-9]{2}\.[0-9]{2}$'
+      and ${t.contentHash} ~ '^[0-9a-f]{64}$'
+    `),
+    check("tax_country_pack_installations_manifest", sql`
+      jsonb_typeof(${t.manifest}) = 'object'
+      and ${t.manifest}->>'code' = ${t.packCode}
+      and ${t.manifest}->>'country' = ${t.country}
+      and ${t.manifest}->>'version' = ${t.version}
+    `),
+    check("tax_country_pack_installations_lifecycle", sql`
+      (${t.status} = 'active' and ${t.supersededAt} is null and ${t.supersededBy} is null)
+      or (${t.status} = 'superseded' and ${t.supersededAt} is not null)
+    `),
+  ],
+);
+
 /**
  * The org's nexus footprint: one row per jurisdiction the business is
  * registered to collect and remit in. This is what makes tax obligations
@@ -101,16 +141,15 @@ export const taxRegistrations = pgTable(
 );
 
 /**
- * Tax codes with dated rates. Canada-first (GST/HST/PST, ITC recoverability)
- * but jurisdiction-generic. Compound provincial cases (QST-on-GST legacy)
- * handled via tax groups summing component codes.
+ * Tax codes with dated rates for jurisdiction-specific indirect-tax regimes.
+ * Compound taxes are represented by tax groups that sum component codes.
  */
 export const taxCodes = pgTable("tax_codes", {
   id: id(),
   orgId: orgRef(),
   code: text("code").notNull(), // "HST-ON", "GST", "EXEMPT"
   name: text("name").notNull(),
-  /** Structured jurisdiction (preferred). country/region kept for back-compat. */
+  /** Structured jurisdiction ownership. Country and region are denormalized for indexed filtering. */
   jurisdictionId: uuid("jurisdiction_id"),
   country: text("country"),
   region: text("region"),
@@ -233,17 +272,17 @@ export const documentLineTaxComponents = pgTable(
 /**
  * A configurable government tax return, tenant-owned and UI-editable via the
  * Setup registry. openbooks computes the box values from the ledger, renders a
- * faithful facsimile (works for every jurisdiction), and routes filing through
- * the channel the jurisdiction actually mandates — matching how source platform's Tax
- * Reporting Framework works. New jurisdictions are DATA (a form + its boxes),
- * not code. `code` matches tax_report_lines.report_code (e.g. "CA_GST34").
+ * working copy, and routes filing through the channel the jurisdiction
+ * mandates. New jurisdictions are versioned country-pack data (a form and its
+ * boxes), not conditional application code. `code` matches
+ * tax_report_lines.report_code (for example, "CA_GST34").
  */
 export const taxReturnForms = pgTable("tax_return_forms", {
   id: id(),
   orgId: orgRef(),
   code: text("code").notNull(), // "CA_GST34" — joins tax_report_lines.report_code
   name: text("name").notNull(), // "GST/HST Return (GST34)"
-  /** Structured jurisdiction (preferred). country/region kept for back-compat. */
+  /** Structured jurisdiction ownership; country and region support indexed filtering. */
   jurisdictionId: uuid("jurisdiction_id"),
   country: text("country"), // "CA"
   region: text("region"),

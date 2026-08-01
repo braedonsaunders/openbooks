@@ -7,13 +7,13 @@ import { startReconciliation, createMatch, excludeStatementLine } from '@openboo
 import { controlDeps } from './documents'
 import { nextDocumentNumber } from './bills'
 import {
-  type AnyCriteria,
-  type AnyOutcome,
+  type RuleCriteria,
+  type RuleOutcome,
   type BankLine,
   type RuleRow,
   type RuleSplitLine,
   firstMatchingRule,
-  isV2Outcome,
+  isCategorizeOutcome,
   lineMatchesRule,
   resolveSplitAmounts,
   ruleAppliesToAccount,
@@ -27,12 +27,8 @@ import {
  * which is then matched into the account's open reconciliation. This is the open
  * equivalent of source platform's "Reconciliation Rules" / source platform + source platform "Bank Rules",
  * extended with split lines, boolean grouping, a suggest-vs-auto posture, and a
- * dry-run preview that never touches the ledger.
- *
- * Orchestration lives here; the pure condition + split logic lives in
- * banking-rules-core.ts (no db, unit-tested). The `criteria` / `outcome` JSONB
- * is versioned — legacy rows (no `version`) keep their v1 flat shape and are
- * evaluated by the legacy path. No migration is required.
+ * dry-run preview that never touches the ledger. Orchestration lives here;
+ * the pure condition + split logic lives in banking-rules-core.ts.
  */
 
 // Re-export the pure model + logic so existing importers keep one entry point.
@@ -141,7 +137,7 @@ export async function applyRulesToAccount(orgId: string, userId: string, account
       continue
     }
     // categorize
-    if (isV2Outcome(outcome) && outcome.mode === 'suggest') {
+    if (isCategorizeOutcome(outcome) && outcome.mode === 'suggest') {
       // Left for the user to confirm in Match Bank Data.
       result.suggested++
       continue
@@ -203,11 +199,9 @@ async function postCategorizeForLine(
 ): Promise<void> {
   const outcome = rule.outcome
   if (outcome.action !== 'categorize') return
-  const splits: RuleSplitLine[] = isV2Outcome(outcome)
-    ? outcome.lines
-    : [{ accountId: outcome.accountId, portion: { kind: 'remainder' }, partyId: outcome.partyId ?? null }]
-  const headerParty = isV2Outcome(outcome) ? outcome.partyId ?? null : null
-  const memo = (isV2Outcome(outcome) ? outcome.memo : null) ?? line.description ?? rule.name
+  const splits: RuleSplitLine[] = outcome.lines
+  const headerParty = outcome.partyId ?? null
+  const memo = outcome.memo ?? line.description ?? rule.name
 
   const bankJournalLineId = await createCategorizingJournal(orgId, userId, {
     bankAccountId,
@@ -265,7 +259,7 @@ export async function previewRules(
   accountId: string,
   opts: {
     /** A single unsaved rule to test; when omitted, previews all active rules. */
-    draftRule?: { criteria: AnyCriteria; outcome: AnyOutcome; priority?: number; id?: string }
+    draftRule?: { criteria: RuleCriteria; outcome: RuleOutcome; priority?: number; id?: string }
     /** Look back this many days (default 90); use 'unmatched' status when false. */
     windowDays?: number
     onlyUnmatched?: boolean
@@ -308,7 +302,7 @@ export async function previewRules(
         ruleId: rule.id,
         ruleName: rule.name,
         action: rule.outcome.action,
-        ruleMode: isV2Outcome(rule.outcome) ? rule.outcome.mode : rule.outcome.action === 'categorize' ? 'auto' : null,
+        ruleMode: isCategorizeOutcome(rule.outcome) ? rule.outcome.mode : null,
         splitPreview: previewSplit(line, rule.outcome),
       })
     }
@@ -329,12 +323,9 @@ function toPreviewLine(line: BankLine): Omit<PreviewMatch, 'ruleId' | 'ruleName'
   }
 }
 
-function previewSplit(line: BankLine, outcome: AnyOutcome): { accountId: string; amount: string }[] | undefined {
+function previewSplit(line: BankLine, outcome: RuleOutcome): { accountId: string; amount: string }[] | undefined {
   if (outcome.action !== 'categorize') return undefined
-  const splits: RuleSplitLine[] = isV2Outcome(outcome)
-    ? outcome.lines
-    : [{ accountId: outcome.accountId, portion: { kind: 'remainder' } }]
-  return resolveSplitAmounts(line.amount, splits).map((r) => ({ accountId: r.line.accountId, amount: r.amount }))
+  return resolveSplitAmounts(line.amount, outcome.lines).map((r) => ({ accountId: r.line.accountId, amount: r.amount }))
 }
 
 // ---------------------------------------------------------------------------

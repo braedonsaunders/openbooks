@@ -58,7 +58,7 @@ export function computeOrderTotals(lines: OrderLineInput[], profiles: TaxProfile
   }
 }
 
-export { taxProfileMap as orderTaxRateMap }
+export { taxProfileMap as orderTaxProfileMap }
 
 /**
  * Full order payload for the drawer: header (with party name resolved), lines

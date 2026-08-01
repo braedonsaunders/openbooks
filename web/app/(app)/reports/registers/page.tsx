@@ -15,6 +15,7 @@ import { SaveViewButton } from '../SaveViewButton'
 import { ReportPaper } from '../ReportPaper'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '../ReportTable'
 import { ReportDrillLink } from '../ReportDrillLink'
+import { decimalCmp, decimalIsZero } from '../../../../lib/statement-format'
 
 export const dynamic = 'force-dynamic'
 
@@ -36,7 +37,7 @@ export default async function RegistersPage({
     dimensionOptions(),
     orgInfo(),
   ])
-  const m = (v: number) => money(v, { currency: org?.base_currency })
+  const m = (v: string) => money(Number(v), { currency: org?.base_currency })
   const keep = toSearchParams(q).toString()
   const accountTypes = [side === 'ap' ? 'liability_payable' : 'asset_receivable']
   const openingTo = new Date(`${period.from}T00:00:00Z`)
@@ -125,9 +126,9 @@ export default async function RegistersPage({
                         </span>
                       </TableCell>
                       <TableCell className="text-slate-600 dark:text-slate-300">{l.memo}</TableCell>
-                      <TableCell className="text-right tabular-nums"><TxnLink entryId={l.entryId} docKind={l.docKind} docId={l.docId} className="hover:text-teal-700 hover:underline dark:hover:text-teal-300">{l.debit ? m(l.debit) : ''}</TxnLink></TableCell>
-                      <TableCell className="text-right tabular-nums"><TxnLink entryId={l.entryId} docKind={l.docKind} docId={l.docId} className="hover:text-teal-700 hover:underline dark:hover:text-teal-300">{l.credit ? m(l.credit) : ''}</TxnLink></TableCell>
-                      <TableCell className={cn('text-right tabular-nums', l.balance < 0 && 'text-red-600 dark:text-red-400')}>
+                      <TableCell className="text-right tabular-nums"><TxnLink entryId={l.entryId} docKind={l.docKind} docId={l.docId} className="hover:text-teal-700 hover:underline dark:hover:text-teal-300">{!decimalIsZero(l.debit) ? m(l.debit) : ''}</TxnLink></TableCell>
+                      <TableCell className="text-right tabular-nums"><TxnLink entryId={l.entryId} docKind={l.docKind} docId={l.docId} className="hover:text-teal-700 hover:underline dark:hover:text-teal-300">{!decimalIsZero(l.credit) ? m(l.credit) : ''}</TxnLink></TableCell>
+                      <TableCell className={cn('text-right tabular-nums', decimalCmp(l.balance, '0') < 0 && 'text-red-600 dark:text-red-400')}>
                         <TxnLink entryId={l.entryId} docKind={l.docKind} docId={l.docId} className="hover:text-teal-700 hover:underline dark:hover:text-teal-300">{m(l.balance)}</TxnLink>
                       </TableCell>
                     </TableRow>

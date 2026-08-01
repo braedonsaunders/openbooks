@@ -19,9 +19,8 @@ export type RecordTypeRow = {
   icon_key: string
   description: string | null
   /**
-   * The raw stored definition jsonb — either a FormSection[] (current shape)
-   * or a legacy flat FormField[]. Always run it through `lintRecordFields`
-   * (which normalizes both) rather than reading it directly.
+   * The stored section-aware form definition. Always validate it through
+   * `lintRecordFields` before reading fields.
    */
   fields: unknown
   status: RecordTypeStatus
@@ -85,9 +84,12 @@ export async function loadRecord(
  * non-empty ⇒ listed role keys plus admins (same contract as form
  * templates). Type authoring is records.manage_types regardless.
  */
-export function inTypeAudience(role: string, allowedRoles: string[] | null | undefined): boolean {
+export function inTypeAudience(
+  roleKeys: readonly string[],
+  allowedRoles: string[] | null | undefined,
+): boolean {
   if (!allowedRoles || allowedRoles.length === 0) return true
-  return role === 'admin' || allowedRoles.includes(role)
+  return roleKeys.includes('admin') || roleKeys.some((key) => allowedRoles.includes(key))
 }
 
 /**

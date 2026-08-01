@@ -147,18 +147,31 @@ export const reconciliationMatches = pgTable(
 );
 
 /** Rules that auto-categorize unmatched bank lines (create + match a doc). */
-export const bankMatchRules = pgTable("bank_match_rules", {
-  id: id(),
-  orgId: orgRef(),
-  name: text("name").notNull(),
-  /** e.g. { descriptionContains: "STRIPE", amountSign: "+" } */
-  criteria: jsonb("criteria").notNull().default({}),
-  /** e.g. { action: "create_document", kind: "customer_payment", partyId: … } */
-  outcome: jsonb("outcome").notNull().default({}),
-  priority: integer("priority").notNull().default(100),
-  isActive: boolean("is_active").notNull().default(true),
-  ...auditColumns,
-});
+export const bankMatchRules = pgTable(
+  "bank_match_rules",
+  {
+    id: id(),
+    orgId: orgRef(),
+    name: text("name").notNull(),
+    /** Versioned nested condition tree plus optional account scope. */
+    criteria: jsonb("criteria").notNull(),
+    /** Exclude, or categorized split lines with an explicit execution mode. */
+    outcome: jsonb("outcome").notNull(),
+    priority: integer("priority").notNull().default(100),
+    isActive: boolean("is_active").notNull().default(true),
+    ...auditColumns,
+  },
+  (t) => [
+    check(
+      "bank_match_rules_criteria_shape",
+      sql`openbooks_bank_rule_criteria_is_valid(${t.criteria})`,
+    ),
+    check(
+      "bank_match_rules_outcome_shape",
+      sql`openbooks_bank_rule_outcome_is_valid(${t.outcome})`,
+    ),
+  ],
+);
 
 /**
  * Payment runs: select approved payables → generate instructions → export
@@ -208,7 +221,7 @@ export const paymentRuns = pgTable("payment_runs", {
  */
 export const sftpDaemon = pgTable("sftp_daemon", {
   id: text("id").primaryKey().default("default"),
-  enabled: boolean("enabled").notNull().default(true),
+  enabled: boolean("enabled").notNull().default(false),
   port: integer("port").notNull().default(2222),
   /** Auto-generated ed25519 host key PEM (stable fingerprint across restarts). */
   hostKey: text("host_key").notNull(),

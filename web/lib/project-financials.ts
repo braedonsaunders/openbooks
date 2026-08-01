@@ -4,14 +4,14 @@ import { db } from '@openbooks/engine/src/db.ts'
 import type { FinancialProfile, CostSource, OverheadSource } from '@openbooks/schema'
 import { resolveAccountGroups } from './account-groups'
 import { add, cmp, fromUnits, mul, mulPercent, neg, normalizeMoney, roundDiv, sum, toUnits } from '@openbooks/engine/src/money.ts'
+import { directSubcontractOpenCommitment } from './subcontract-commitments'
 
 /**
  * Profile-driven project financials — the configurable successor to the hardcoded
  * measures in `project-costing.ts`. Given a project type's `FinancialProfile`, it
  * resolves the full measure catalog (base aggregations + derived formulas) so the
- * Financials P&L renders per-type. Monetary measures stay exact decimal strings
- * through the calculation. Definitions validated to the penny against the
- * source platform RESTlet for job 6089 (invoiced $6,206,001.04, cost $6,320,076.85).
+ * Financials P&L renders per type. Monetary measures stay exact decimal strings
+ * through the entire calculation and are covered by deterministic parity tests.
  */
 
 const amount = (v: unknown): string => normalizeMoney(v == null ? '0' : String(v))
@@ -53,7 +53,7 @@ function costPredicate(src: CostSource, accountIds: string[]): SQL {
  *
  * Rates come ONLY from the published, effective-dated rate card
  * (overhead_rates). The Overhead Model's live composite is an analytical
- * preview that seeds publishing — it is never a costing basis, so job costs
+ * preview that seeds publishing — it is never a costing basis, so project costs
  * and closed-period margins can never restate retroactively. A department's
  * rate is the SUM of its effective rows (a card may stack category rows);
  * per_hour rows cost hours × $rate, percent rows cost labor cost × rate%.
@@ -151,10 +151,10 @@ export async function resolveProjectFinancials(
   const costBudget = profile.costBudget.source === 'wbs_estimates' ? amount(proj.cost_budget) : '0.0000'
 
   // Account-id sets for account-group cost sources. Overhead only reads GL when
-  // its method is the legacy account_group_actual; every other method is a
+  // its method is posted_gl_account_group; every other method is a
   // statistical rate applied below (never a GL sum).
   const overheadCostSource: CostSource =
-    profile.overhead.method === 'account_group_actual' && profile.overhead.accountGroup
+    profile.overhead.method === 'posted_gl_account_group' && profile.overhead.accountGroup
       ? { source: 'account_group', dimension: profile.overhead.accountGroup.dimension, groupKeys: profile.overhead.accountGroup.groupKeys }
       : { source: 'none' }
   const [costIds, overheadIds] = await Promise.all([
@@ -162,6 +162,10 @@ export async function resolveProjectFinancials(
     groupAccountIds(orgId, overheadCostSource),
   ])
   const financialAdjustmentsPromise = projectFinancialAdjustments(
+    orgId,
+    projectId,
+  )
+  const directSubcontractCommitmentPromise = directSubcontractOpenCommitment(
     orgId,
     projectId,
   )
@@ -305,8 +309,8 @@ export async function resolveProjectFinancials(
                where te.org_id = ${orgId} and te.project_id = ${projectId}
                  and te.status = 'approved' and te.costing_basis = 'estimated'`)
         : db.execute(sql`select 0 as labor`),
-    // overhead (account_group_actual only) — posted GL to overhead accounts.
-    profile.overhead.method !== 'account_group_actual'
+    // overhead (posted_gl_account_group only) — posted GL to overhead accounts.
+    profile.overhead.method !== 'posted_gl_account_group'
       ? db.execute(sql`select 0 as overhead`)
       : db.execute(sql`select coalesce(sum(l.amount) filter (where ${costPredicate(overheadCostSource, overheadIds)}), 0) as overhead
            from journal_lines l join journal_entries e on e.id = l.entry_id join accounts a on a.id = l.account_id
@@ -339,7 +343,10 @@ export async function resolveProjectFinancials(
        group by d.id, pt.display_name order by d.document_date desc, d.document_number desc`),
   ]) as unknown as { rows: any[] }[]
 
-  const adjustments = await financialAdjustmentsPromise
+  const [adjustments, directSubcontractCommitment] = await Promise.all([
+    financialAdjustmentsPromise,
+    directSubcontractCommitmentPromise,
+  ])
   const invoicedToDate = add(
     amount(invRes.rows[0]?.invoiced),
     adjustments.invoiced_to_date,
@@ -349,14 +356,17 @@ export async function resolveProjectFinancials(
     adjustments.actual_cost,
   )
   const revenuePosted = amount(costRes.rows[0]?.revenue)
-  const committedCost = amount(committedRes.rows[0]?.committed)
+  const committedCost = add(
+    amount(committedRes.rows[0]?.committed),
+    directSubcontractCommitment,
+  )
   const laborCost = amount(laborRes.rows[0]?.labor)
   const totalHours = amount(hoursRes.rows[0]?.total)
   // Overhead is a STATISTICAL allocation (never a GL posting by default). Each
   // method turns a rate into the job's share of company overhead.
   const oh = profile.overhead
   const calculatedOverhead =
-    oh.method === 'account_group_actual' ? amount(overheadRes.rows[0]?.overhead)
+    oh.method === 'posted_gl_account_group' ? amount(overheadRes.rows[0]?.overhead)
     : oh.method === 'percent_of_labor' ? mulPercent(laborCost, String(oh.ratePercent ?? 0))
     : oh.method === 'per_labor_hour' ? mul(totalHours, String(oh.ratePerHour ?? 0))
     : oh.method === 'rate_engine' ? await rateEngineOverhead(orgId, projectId, oh.rateEngine)

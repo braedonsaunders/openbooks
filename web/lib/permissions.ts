@@ -385,10 +385,8 @@ export const PERMISSION_GROUPS: {
 ];
 
 /**
- * Built-in role definitions, seeded per org by engine/src/seed-roles.ts.
- * Keys intentionally equal the legacy users.role enum values so existing
- * users map 1:1 onto assignments — and so authz can fall back to users.role
- * through this table when a user has no assignments yet.
+ * Built-in role definitions, seeded per organization. Authorization is based
+ * exclusively on explicit role_assignments rows.
  */
 export const BUILT_IN_ROLES: Record<
   string,
@@ -632,22 +630,15 @@ export function applyPermissionDenies(permissions: Set<string>, denies: string[]
 }
 
 /**
- * Union assigned roles' permissions (falling back to the legacy users.role
- * mapped through BUILT_IN_ROLES when no assignments exist), add grant
- * overrides, then apply deny overrides — denies win.
+ * Union assigned roles' permissions, add grant overrides, then apply deny
+ * overrides. A user without an assigned role has no permissions.
  */
 export function resolveEffectivePermissions(args: {
   rolePermissionSets: readonly (readonly string[])[];
-  legacyRole: string | null;
   overrides: readonly { permission: string; effect: "grant" | "deny" }[];
 }): Set<string> {
   const permissions = new Set<string>();
-  if (args.rolePermissionSets.length > 0) {
-    for (const set of args.rolePermissionSets) for (const p of set) permissions.add(p);
-  } else if (args.legacyRole) {
-    const builtIn = BUILT_IN_ROLES[args.legacyRole];
-    if (builtIn) for (const p of builtIn.permissions) permissions.add(p);
-  }
+  for (const set of args.rolePermissionSets) for (const p of set) permissions.add(p);
   for (const o of args.overrides) if (o.effect === "grant") permissions.add(o.permission);
   applyPermissionDenies(
     permissions,

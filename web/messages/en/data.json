@@ -64,7 +64,21 @@
     "importAnother": "Import another file",
     "postMode": "How to import",
     "postDraft": "Create drafts (review & post later)",
-    "postPost": "Create and post to the ledger"
+    "postPost": "Create and post to the ledger",
+    "sample": {
+      "title": "Explore a complete sample company",
+      "description": "Open a realistic, industry-specific company with customers, vendors, transactions, reports, projects, and closed periods already in place.",
+      "industry": "Sample company",
+      "create": "Create sample company",
+      "open": "Open sample company",
+      "preparing": "Preparing company…",
+      "created": "Sample company is ready",
+      "ready": "Opening your sample company",
+      "error": "The sample company could not be prepared",
+      "firstGeneration": "The first copy may take a few minutes while its verified template is generated",
+      "safety": "Sample data is copied into a separate, clearly marked workspace. It never enters your live books, and email, payment, API, and integration side effects remain disabled.",
+      "orFile": "or import your own file"
+    }
   },
   "history": {
     "title": "Import history",

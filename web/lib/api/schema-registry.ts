@@ -121,8 +121,7 @@ export async function loadApiSchema(orgId: string): Promise<ApiRecordTypeSchema[
      order by sort_order, name`)) as any;
 
   for (const row of custom.rows) {
-    // The stored definition is a FormSection[] (or a legacy flat FormField[]);
-    // flatten every section's fields into the API's flat field list.
+    // Flatten the canonical FormSection[] definition into the API field list.
     const sections = normalizeSectionsInput(row.fields) as Array<{ fields?: any[] }>;
     const flat = sections.flatMap((s) => (Array.isArray(s.fields) ? s.fields : []));
     const fields: ApiField[] = flat.map((f: any): ApiField => ({

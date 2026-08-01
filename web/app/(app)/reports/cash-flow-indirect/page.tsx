@@ -14,6 +14,7 @@ import { ReportPaper } from '../ReportPaper'
 import { Table, TableBody, TableCell, TableRow, reportSubtotalRowClass, reportTotalRowClass } from '../ReportTable'
 import { ReportDrillLink } from '../ReportDrillLink'
 import type { StatementDimFilter } from '../../../../lib/statement-matrix'
+import { decimalCmp, decimalIsMaterial, type ExactDecimal } from '../../../../lib/statement-format'
 
 export const dynamic = 'force-dynamic'
 
@@ -34,14 +35,14 @@ export default async function CashFlowIndirect({
   const to = period.to
   const dims = q.dims
   const [cf, opts, org] = await Promise.all([cashFlowIndirect(from, to, dims), dimensionOptions(), orgInfo()])
-  const m = (v: number) => money(v, { currency: org?.base_currency })
+  const m = (v: ExactDecimal) => money(Number(v), { currency: org?.base_currency })
   const openingTo = new Date(`${from}T00:00:00Z`)
   openingTo.setUTCDate(openingTo.getUTCDate() - 1)
   const openingDate = openingTo.toISOString().slice(0, 10)
 
-  const reconciled = Math.abs(cf.reconciliationGap) < 0.01
+  const reconciled = !decimalIsMaterial(cf.reconciliationGap, '0.0100')
   const hasMovements =
-    Math.abs(cf.netIncome) >= 0.005 ||
+    decimalIsMaterial(cf.netIncome) ||
     cf.adjustments.length > 0 ||
     cf.workingCapital.length > 0 ||
     cf.investing.length > 0 ||
@@ -167,13 +168,13 @@ export default async function CashFlowIndirect({
                 drill={{ kind: 'ledger', label: t('subtotals.financing'), accountTypes: cf.financing.map((l) => l.type), from, to, mode: 'flow', dims, cashOnly: true }}
               />
 
-              {Math.abs(cf.fxEffectOnCash) >= 0.005 ? (
+              {decimalIsMaterial(cf.fxEffectOnCash) ? (
                 <AmountRow label={t('fxEffect')} amount={cf.fxEffectOnCash} m={m} />
               ) : null}
 
               <TableRow className={reportSubtotalRowClass}>
                 <TableCell className="font-bold">{t('netChange')}</TableCell>
-                <TableCell className={cn('text-right font-bold tabular-nums', cf.netChange < 0 && 'text-red-600 dark:text-red-400')}>
+                <TableCell className={cn('text-right font-bold tabular-nums', decimalCmp(cf.netChange, '0') < 0 && 'text-red-600 dark:text-red-400')}>
                   <ReportDrillLink target={{ kind: 'ledger', label: t('netChange'), accountTypes: ['asset_bank'], from, to, mode: 'flow', dims }} className="hover:text-teal-700 hover:underline dark:hover:text-teal-300">{m(cf.netChange)}</ReportDrillLink>
                 </TableCell>
               </TableRow>
@@ -183,7 +184,7 @@ export default async function CashFlowIndirect({
               </TableRow>
               <TableRow className={reportTotalRowClass}>
                 <TableCell className="font-semibold">{t('closingCash')}</TableCell>
-                <TableCell className={cn('text-right font-semibold tabular-nums', cf.closingCash < 0 && 'text-red-600 dark:text-red-400')}>
+                <TableCell className={cn('text-right font-semibold tabular-nums', decimalCmp(cf.closingCash, '0') < 0 && 'text-red-600 dark:text-red-400')}>
                   <ReportDrillLink target={{ kind: 'ledger', label: t('closingCash'), accountTypes: ['asset_bank'], to, mode: 'balance', dims }} className="hover:text-teal-700 hover:underline dark:hover:text-teal-300">{m(cf.closingCash)}</ReportDrillLink>
                 </TableCell>
               </TableRow>
@@ -196,7 +197,7 @@ export default async function CashFlowIndirect({
   )
 }
 
-type Money = (v: number) => string
+type Money = (v: ExactDecimal) => string
 
 function SectionHeader({ title }: { title: string }) {
   return (
@@ -235,14 +236,14 @@ function AmountRow({
   drill,
 }: {
   label: string
-  amount: number
+  amount: ExactDecimal
   m: Money
   drill?: ReportDrillTarget
 }) {
   return (
     <TableRow>
       <TableCell className="pl-8">{label}</TableCell>
-      <TableCell className={cn('text-right tabular-nums', amount < 0 && 'text-red-600 dark:text-red-400')}>
+      <TableCell className={cn('text-right tabular-nums', decimalCmp(amount, '0') < 0 && 'text-red-600 dark:text-red-400')}>
         {drill ? (
           <ReportDrillLink target={drill} className="hover:text-teal-700 hover:underline dark:hover:text-teal-300">{m(amount)}</ReportDrillLink>
         ) : (
@@ -260,14 +261,14 @@ function SubtotalRow({
   drill,
 }: {
   label: string
-  amount: number
+  amount: ExactDecimal
   m: Money
   drill?: ReportDrillTarget
 }) {
   return (
     <TableRow className={reportSubtotalRowClass}>
       <TableCell className="font-semibold">{label}</TableCell>
-      <TableCell className={cn('text-right font-semibold tabular-nums', amount < 0 && 'text-red-600 dark:text-red-400')}>
+      <TableCell className={cn('text-right font-semibold tabular-nums', decimalCmp(amount, '0') < 0 && 'text-red-600 dark:text-red-400')}>
         {drill ? (
           <ReportDrillLink target={drill} className="hover:text-teal-700 hover:underline dark:hover:text-teal-300">{m(amount)}</ReportDrillLink>
         ) : (

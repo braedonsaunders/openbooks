@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { sql } from "drizzle-orm";
 import { db } from "@openbooks/engine/src/db.ts";
 import { ensureCrmDefaults } from "@openbooks/engine/src/crm.ts";
-import { guardPermission } from "../../../../lib/authz";
+import { guardFeaturePermission } from "../../../../lib/feature-gates";
 import { isUuid } from "../../../../lib/list-params";
 
 export const runtime = "nodejs";
@@ -16,7 +16,7 @@ function slug(value: string): string {
 }
 
 export async function GET() {
-  const gate = await guardPermission("crm.setup.manage");
+  const gate = await guardFeaturePermission("crm.setup.manage", "crm");
   if (gate instanceof NextResponse) return gate;
   await ensureCrmDefaults(gate.user.orgId, gate.user.id);
   const [
@@ -67,7 +67,7 @@ export async function GET() {
 }
 
 export async function POST(req: NextRequest) {
-  const gate = await guardPermission("crm.setup.manage");
+  const gate = await guardFeaturePermission("crm.setup.manage", "crm");
   if (gate instanceof NextResponse) return gate;
   const { user } = gate;
   await ensureCrmDefaults(user.orgId, user.id);

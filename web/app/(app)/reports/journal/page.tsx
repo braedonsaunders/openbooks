@@ -13,6 +13,7 @@ import { ExportMenu } from '../ExportMenu'
 import { SaveViewButton } from '../SaveViewButton'
 import { ReportPaper } from '../ReportPaper'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '../ReportTable'
+import { decimalIsZero } from '../../../../lib/statement-format'
 
 export const dynamic = 'force-dynamic'
 
@@ -33,7 +34,7 @@ export default async function JournalPage({
     dimensionOptions(),
     orgInfo(),
   ])
-  const m = (v: number) => money(v, { currency: org?.base_currency })
+  const m = (v: string) => money(Number(v), { currency: org?.base_currency })
 
   return (
     <ListPageLayout
@@ -91,8 +92,8 @@ export default async function JournalPage({
                       <TableCell className="text-slate-600 dark:text-slate-300">
                         {[l.party, l.memo].filter(Boolean).join(' · ')}
                       </TableCell>
-                      <TableCell className="text-right tabular-nums"><TxnLink entryId={e.id} docKind={e.docKind} docId={e.docId} className="hover:text-teal-700 hover:underline dark:hover:text-teal-300">{l.debit ? m(l.debit) : ''}</TxnLink></TableCell>
-                      <TableCell className="text-right tabular-nums"><TxnLink entryId={e.id} docKind={e.docKind} docId={e.docId} className="hover:text-teal-700 hover:underline dark:hover:text-teal-300">{l.credit ? m(l.credit) : ''}</TxnLink></TableCell>
+                      <TableCell className="text-right tabular-nums"><TxnLink entryId={e.id} docKind={e.docKind} docId={e.docId} className="hover:text-teal-700 hover:underline dark:hover:text-teal-300">{!decimalIsZero(l.debit) ? m(l.debit) : ''}</TxnLink></TableCell>
+                      <TableCell className="text-right tabular-nums"><TxnLink entryId={e.id} docKind={e.docKind} docId={e.docId} className="hover:text-teal-700 hover:underline dark:hover:text-teal-300">{!decimalIsZero(l.credit) ? m(l.credit) : ''}</TxnLink></TableCell>
                     </TableRow>
                   ))}
                 </TableBody>

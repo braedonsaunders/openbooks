@@ -26,7 +26,7 @@ export async function POST(_req: Request, { params }: { params: Promise<{ typeKe
   const { typeKey } = await params
 
   const type = await loadRecordTypeByKey(user.orgId, typeKey)
-  if (!type || type.status !== 'published' || !inTypeAudience(user.role, type.allowed_roles)) {
+  if (!type || type.status !== 'published' || !inTypeAudience(user.roles.map(({ key }) => key), type.allowed_roles)) {
     return NextResponse.json({ error: 'not found' }, { status: 404 })
   }
   const lint = lintRecordFields(type.fields, type.name)

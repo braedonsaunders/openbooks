@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server'
 import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/db.ts'
-import { guardPermission } from '../../../lib/authz'
+import { guardFeaturePermission } from '../../../lib/feature-gates'
 import { isUuid } from '../../../lib/list-params'
 import { isIsoDate, loadWeek, weekStart, weekWindow } from './_lib'
 
@@ -43,7 +43,7 @@ function hoursOrNull(v: unknown): string | null | 'invalid' {
 
 /** GET ?employee=&week= → the week's grid rows + status. */
 export async function GET(req: Request) {
-  const gate = await guardPermission('time.read')
+  const gate = await guardFeaturePermission('time.read', 'timeTracking')
   if (gate instanceof NextResponse) return gate
   const orgId = gate.user.orgId
 
@@ -65,7 +65,7 @@ export async function GET(req: Request) {
  * a save never silently overwrites an approval (or an in-flight submission).
  */
 async function save(req: Request) {
-  const gate = await guardPermission('time.manage')
+  const gate = await guardFeaturePermission('time.manage', 'timeTracking')
   if (gate instanceof NextResponse) return gate
   const { user } = gate
   const orgId = user.orgId

@@ -52,6 +52,7 @@ test('default workspaces follow the approved journey-oriented information archit
   ])
   assert.deepEqual(DEFAULT_NAV_ORDER.operations, [
     'projects',
+    'wip-billing',
     'timesheets',
     'field-tickets',
     'items',

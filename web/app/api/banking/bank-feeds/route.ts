@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { sql } from "drizzle-orm";
 import { db } from "@openbooks/engine/src/db.ts";
 import { sealCredentials } from "@openbooks/engine/src/bank-feed-providers.ts";
-import { requirePermission } from "../../../../lib/authz";
+import { guardFeaturePermission } from "../../../../lib/feature-gates";
 
 export const runtime = "nodejs";
 
@@ -15,7 +15,8 @@ const API_PROVIDERS = new Set(["plaid", "gocardless", "truelayer"]);
  * list only ever exposes whether a connection has credentials configured.
  */
 export async function GET() {
-  const authz = await requirePermission("admin.setup.manage");
+  const authz = await guardFeaturePermission("admin.setup.manage", "bankFeeds");
+  if (authz instanceof NextResponse) return authz;
   const rows = (await db.execute(sql`
     select c.id, c.name, c.provider, c.account_id as "accountId", c.status,
            c.external_account_id as "externalAccountId", c.sync_cadence as "syncCadence",
@@ -32,7 +33,8 @@ export async function GET() {
 }
 
 export async function POST(req: Request) {
-  const authz = await requirePermission("admin.setup.manage");
+  const authz = await guardFeaturePermission("admin.setup.manage", "bankFeeds");
+  if (authz instanceof NextResponse) return authz;
   const body = (await req.json().catch(() => ({}))) as {
     name?: string;
     provider?: string;

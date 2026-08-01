@@ -12,12 +12,16 @@ import {
   CalendarCheck,
   CircleDollarSign,
   ClipboardList,
+  Code2,
   Clock,
+  Database,
   LayoutGrid,
   Landmark,
+  KeyRound,
   Lock,
   Package,
   Puzzle,
+  PlugZap,
   Radio,
   Receipt,
   Repeat2,
@@ -32,7 +36,14 @@ import {
 } from 'lucide-react'
 import { cn } from '@openbooks/ui'
 
-type Feature = { key: string; category: string; enabled: boolean; parentKey?: string }
+type Feature = {
+  key: string
+  category: string
+  enabled: boolean
+  parentKey?: string
+  requiresAll?: string[]
+  recommends?: string[]
+}
 type Impact = { labelKey: string; count: number }
 type DisableStatus = { blocked: boolean; impacts: Impact[] }
 
@@ -42,9 +53,12 @@ const ICONS: Record<string, LucideIcon> = {
   orders: ShoppingCart,
   revenueRecognition: TrendingUp,
   subscriptionBilling: Repeat2,
+  advancedSubscriptions: Repeat2,
   projects: Briefcase,
   timeTracking: Clock,
   fieldTickets: ClipboardList,
+  subcontracts: ClipboardList,
+  wipBilling: CircleDollarSign,
   inventory: Package,
   equipment: Wrench,
   expenses: Receipt,
@@ -57,6 +71,10 @@ const ICONS: Record<string, LucideIcon> = {
   continuousClose: CalendarCheck,
   flows: Workflow,
   apps: LayoutGrid,
+  scripts: Code2,
+  apiAccess: KeyRound,
+  mcpAccess: PlugZap,
+  queryConsole: Database,
 }
 
 const CATEGORY_ORDER = ['sales', 'operations', 'accounting', 'platform'] as const
@@ -116,7 +134,16 @@ export function FeaturesWorkspace({
         body: JSON.stringify({ features: { [key]: next } }),
       })
       if (!res.ok) {
-        const code = (await res.json().catch(() => ({})))?.error
+        const payload = await res.json().catch(() => ({}))
+        const code = payload?.error
+        if (code === 'feature-dependency') {
+          const names = (payload.requiredKeys ?? []).map((required: string) => t(`features.${required}.title`)).join(', ')
+          throw new Error(t('setup.features.errors.dependency', { features: names }))
+        }
+        if (code === 'feature-dependents-enabled') {
+          const names = (payload.dependentKeys ?? []).map((dependent: string) => t(`features.${dependent}.title`)).join(', ')
+          throw new Error(t('setup.features.errors.dependents', { features: names }))
+        }
         throw new Error(
           code === 'feature-blocked' ? t('setup.features.errors.blocked') : (code ?? t('setup.features.errors.blocked')),
         )
@@ -156,7 +183,10 @@ export function FeaturesWorkspace({
 
       {categories.map((cat) => {
         const rows = features.filter((f) => f.category === cat)
-        const on = rows.filter((f) => state[f.key] && (!f.parentKey || state[f.parentKey])).length
+        const requirementsFor = (feature: Feature) => [
+          ...new Set([...(feature.parentKey ? [feature.parentKey] : []), ...(feature.requiresAll ?? [])]),
+        ]
+        const on = rows.filter((f) => state[f.key] && requirementsFor(f).every((key) => state[key])).length
         return (
           <section key={cat} className="space-y-2.5">
             <div className="flex items-baseline justify-between px-1">
@@ -170,9 +200,10 @@ export function FeaturesWorkspace({
             <div className="divide-y divide-slate-100 overflow-hidden rounded-xl border border-slate-200 bg-white dark:divide-slate-800 dark:border-slate-800 dark:bg-slate-900">
               {rows.map((f) => {
                 const status = disableStatus[f.key]
-                const parentEnabled = !f.parentKey || Boolean(state[f.parentKey])
-                const dependencyLocked = Boolean(f.parentKey && !parentEnabled)
-                const isOn = Boolean(state[f.key]) && parentEnabled
+                const missingRequirements = requirementsFor(f).filter((key) => !state[key])
+                const dependencyLocked = missingRequirements.length > 0
+                const isOn = Boolean(state[f.key]) && !dependencyLocked
+                const missingRecommendations = (f.recommends ?? []).filter((key) => !state[key])
                 const blocked = isOn && Boolean(status?.blocked)
                 const impacts = status?.impacts ?? []
                 return (
@@ -185,12 +216,14 @@ export function FeaturesWorkspace({
                     blocked={blocked}
                     reason={
                       dependencyLocked
-                        ? `Requires ${t(`features.${f.parentKey}.title`)}.`
+                        ? `Requires ${missingRequirements.map((key) => t(`features.${key}.title`)).join(', ')}.`
                         : blocked
                         ? t('setup.features.blockedReason', { items: impactText(impacts) })
                         : isOn && impacts.length > 0
                           ? t('setup.features.affectsNote', { items: impactText(impacts) })
-                          : undefined
+                          : isOn && missingRecommendations.length > 0
+                            ? `Works best with ${missingRecommendations.map((key) => t(`features.${key}.title`)).join(', ')}.`
+                            : undefined
                     }
                     reasonTone={blocked || dependencyLocked ? 'block' : 'info'}
                     busy={pending === f.key}

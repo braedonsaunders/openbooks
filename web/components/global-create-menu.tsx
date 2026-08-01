@@ -73,13 +73,13 @@ interface CreateAction {
 }
 
 const ACTIONS: CreateAction[] = [
-  { key: 'invoice', group: 'sales', enabled: (p) => p.accountsReceivable, icon: FilePlus2, endpoint: '/api/documents/draft', body: { kind: 'customer_invoice' }, destination: (id) => `/ar?doc=${id}&mode=edit` },
-  { key: 'creditMemo', group: 'sales', enabled: (p) => p.accountsReceivable, icon: FileMinus2, endpoint: '/api/documents/draft', body: { kind: 'customer_credit' }, destination: (id) => `/ar?doc=${id}&mode=edit` },
+  { key: 'invoice', group: 'sales', enabled: (p) => p.accountsReceivable, icon: FilePlus2, endpoint: '/api/documents/draft', body: { kind: 'customer_invoice' }, destination: (id) => `/ar/invoices?doc=${id}&mode=edit` },
+  { key: 'creditMemo', group: 'sales', enabled: (p) => p.accountsReceivable, icon: FileMinus2, endpoint: '/api/documents/draft', body: { kind: 'customer_credit' }, destination: (id) => `/ar/invoices?doc=${id}&mode=edit` },
   { key: 'estimate', group: 'sales', enabled: (p) => p.accountsReceivable, icon: ClipboardList, endpoint: '/api/estimates/draft', destination: (id) => `/estimates?estimate=${id}&mode=edit` },
   { key: 'salesOrder', group: 'sales', enabled: (p) => p.accountsReceivable, icon: Send, endpoint: '/api/sales-orders/draft', destination: (id) => `/sales-orders?order=${id}&mode=edit` },
   { key: 'customerPayment', group: 'sales', enabled: (p) => p.customerPayments, icon: WalletCards, endpoint: '/api/payments/draft', body: { kind: 'customer_payment' }, destination: (id) => `/receipts?payment=${id}&mode=edit` },
-  { key: 'bill', group: 'purchases', enabled: (p) => p.accountsPayable, icon: Receipt, endpoint: '/api/documents/draft', body: { kind: 'vendor_bill' }, destination: (id) => `/ap?doc=${id}&mode=edit` },
-  { key: 'vendorCredit', group: 'purchases', enabled: (p) => p.accountsPayable, icon: FileMinus2, endpoint: '/api/documents/draft', body: { kind: 'vendor_credit' }, destination: (id) => `/ap?doc=${id}&mode=edit` },
+  { key: 'bill', group: 'purchases', enabled: (p) => p.accountsPayable, icon: Receipt, endpoint: '/api/documents/draft', body: { kind: 'vendor_bill' }, destination: (id) => `/ap/bills?doc=${id}&mode=edit` },
+  { key: 'vendorCredit', group: 'purchases', enabled: (p) => p.accountsPayable, icon: FileMinus2, endpoint: '/api/documents/draft', body: { kind: 'vendor_credit' }, destination: (id) => `/ap/bills?doc=${id}&mode=edit` },
   { key: 'purchaseOrder', group: 'purchases', enabled: (p) => p.accountsPayable, icon: ShoppingCart, endpoint: '/api/purchase-orders/draft', destination: (id) => `/purchase-orders?order=${id}&mode=edit` },
   { key: 'vendorPayment', group: 'purchases', enabled: (p) => p.vendorPayments, icon: WalletCards, endpoint: '/api/payments/draft', body: { kind: 'vendor_payment' }, destination: (id) => `/payments?payment=${id}&mode=edit` },
   { key: 'journal', group: 'accounting', enabled: (p) => p.journal, icon: ScrollText, endpoint: '/api/journals/draft', destination: (id) => `/journal?entry=${id}&mode=edit` },

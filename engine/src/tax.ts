@@ -376,7 +376,7 @@ export function computeLineTaxes(
   };
 }
 
-/** Compatibility-shaped exact single-code resolver used by simple callers. */
+/** Exact single-code resolver for callers that require one jurisdiction code. */
 export interface TaxResolution {
   taxAmount: string;
   computed: string;

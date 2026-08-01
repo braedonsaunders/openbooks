@@ -7,7 +7,7 @@
  * reports what is left over on each side, which is where the defects actually
  * are.
  *
- * Usage: npx tsx --conditions=react-server src/validation/line-diff.ts INV0437 [INV0170 ...]
+ * Usage: npx tsx --conditions=react-server src/validation/line-diff.ts DOC-0001 [DOC-0002 ...]
  *        npx tsx --conditions=react-server src/validation/line-diff.ts --worst=10
  */
 import { readFileSync } from "node:fs";

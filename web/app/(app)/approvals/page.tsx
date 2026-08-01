@@ -81,8 +81,8 @@ export default async function Approvals({
   if (!authz) return null
   const user = authz.user
   const orgId = user.orgId
-  const isAdmin = user.role === 'admin'
-  const canSeeAll = isAdmin || can(authz, 'flows.manage')
+  const canManageFlows = can(authz, 'flows.manage')
+  const canSeeAll = canManageFlows
 
   const sp = await searchParams
   const rawTab = pickString(sp.tab)
@@ -124,7 +124,7 @@ export default async function Approvals({
       engineName: flowNames.get(g.flowId) ?? '',
       requestedAt: iso(g.createdAt),
       assignee,
-      canDelegate: isAdmin || g.assigneeUserId === user.id,
+      canDelegate: canManageFlows || g.assigneeUserId === user.id,
       quorumAll: g.quorum === 'all',
       signatureRequired: g.signatureRequired,
     }
@@ -177,7 +177,7 @@ export default async function Approvals({
           engineName: String(g.flowName),
           requestedAt: iso(g.createdAt),
           assignee: g.assigneeName ?? g.assigneeRole ?? null,
-          canDelegate: isAdmin,
+          canDelegate: canManageFlows,
           quorumAll: g.quorum === 'all',
           signatureRequired: !!g.signatureRequired,
         }
@@ -402,7 +402,7 @@ export default async function Approvals({
               users={delegateUsers}
               bulk={tab === 'mine'}
               showAssignee={tab === 'all'}
-              actionsEnabled={tab === 'mine' || isAdmin}
+              actionsEnabled={tab === 'mine' || canManageFlows}
             />
           </div>
         )}

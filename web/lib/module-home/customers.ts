@@ -152,8 +152,7 @@ export async function customersHome(orgId: string, subIds?: string[]): Promise<C
           and d.status = 'posted' and d.voided_at is null${docScope}
           and coalesce(d.document_date, d.posting_date) >= current_date - 7) as collected_7d,
         (select count(*) from parties p where p.org_id = ${orgId} and p.is_active
-          and (p.custom->>'nsKind' = 'customer'
-               or exists (select 1 from customer_roles cr where cr.org_id = ${orgId} and cr.party_id = p.id))
+          and exists (select 1 from customer_roles cr where cr.org_id = ${orgId} and cr.party_id = p.id and cr.is_active)
           ${subArr ? sql`and (p.subsidiary_id is null or p.subsidiary_id = any(${subArr}))` : sql``}) as customers
     `),
     calculateForecast({ orgId, periodStart: q.start, periodEnd: q.end }),

@@ -156,11 +156,6 @@ export const users = pgTable(
     email: text("email").notNull(),
     name: text("name").notNull(),
     passwordHash: text("password_hash").notNull(),
-    role: text("role", {
-      enum: ["admin", "controller", "accountant", "approver", "viewer"],
-    })
-      .notNull()
-      .default("viewer"),
     partyId: uuid("party_id"),
     /** UI language (BCP 47, e.g. "en", "fr"). Null = inherit the org default
      *  (orgs.settings.defaultLocale). Shipped locales: web/i18n/config.ts. */
@@ -286,8 +281,8 @@ export const syncRuns = pgTable(
   {
     id: id(),
     orgId: orgRef(),
-    /** The connection this run belongs to (nullable: pre-connections legacy runs). */
-    connectionId: uuid("connection_id"),
+    /** The authoritative connection that produced this run. */
+    connectionId: uuid("connection_id").notNull(),
     source: text("source").notNull(), // "netsuite"
     kind: text("kind", {
       enum: [

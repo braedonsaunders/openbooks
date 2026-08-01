@@ -1,11 +1,10 @@
 import { randomUUID } from "node:crypto";
 import { sql } from "drizzle-orm";
 import { db } from "../db.ts";
-import { postDocument } from "../posting.ts";
 import { postProjectLaborCost } from "../project-recognition.ts";
 import { mul, sum as sumMoney } from "../money.ts";
 import { addDays } from "./manifest.ts";
-import { postingDeps } from "./activities/documents.ts";
+import { postDraftDocument } from "./activities/documents.ts";
 import type { SimOrg } from "./world.ts";
 
 /**
@@ -179,7 +178,10 @@ export async function billTimeAndMaterials(
               ${ex.quantity ?? "1"}, ${ex.unitPrice ?? ex.amount}, ${ex.amount}, '0.00', ${projectId}, true)`);
   }
 
-  await postDocument(docId, postingDeps(world));
+  // T&M invoices obey the same draft → submit → approved → posted lifecycle
+  // as every other posting document. The simulator may auto-release only when
+  // the tenant has no approval gate; it never writes an approved status.
+  await postDraftDocument(world, docId);
 
   // Mark each time entry billed (idempotency for the next billing run).
   for (const { lineId, timeEntryId } of lineIds) {

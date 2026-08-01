@@ -401,7 +401,7 @@ export function BillingSection({
             {
               key: 'invoice', header: t('invoice'),
               cell: (r) => r.invoiceDocumentId ? (
-                <Link href={`/ar?invoice=${r.invoiceDocumentId}`} className="font-mono text-[13px] text-teal-700 hover:underline dark:text-teal-300">{r.invoiceNumber}</Link>
+                <Link href={`/ar/invoices?doc=${r.invoiceDocumentId}`} className="font-mono text-[13px] text-teal-700 hover:underline dark:text-teal-300">{r.invoiceNumber}</Link>
               ) : '—',
             },
             {

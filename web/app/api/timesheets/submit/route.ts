@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server'
 import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/db.ts'
-import { guardPermission } from '../../../../lib/authz'
+import { guardFeaturePermission } from '../../../../lib/feature-gates'
 import { isUuid } from '../../../../lib/list-params'
 import { isIsoDate, loadWeek, weekStart, weekWindow } from '../_lib'
 
@@ -18,7 +18,7 @@ interface Body {
 
 /** POST { employee, week } → move the week's draft entries to submitted. */
 export async function POST(req: Request) {
-  const gate = await guardPermission('time.manage')
+  const gate = await guardFeaturePermission('time.manage', 'timeTracking')
   if (gate instanceof NextResponse) return gate
   const { user } = gate
   const orgId = user.orgId

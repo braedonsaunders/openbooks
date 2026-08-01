@@ -699,7 +699,6 @@
       "lastSignIn": "Letzte Anmeldung"
     },
     "you": "Sie",
-    "legacyRole": "Alt: {role}",
     "statusActive": "aktiv",
     "statusInactive": "inaktiv",
     "requestFailed": "Anfrage fehlgeschlagen",

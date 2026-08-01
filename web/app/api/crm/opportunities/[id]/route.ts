@@ -4,6 +4,7 @@ import { db } from '@openbooks/engine/src/db.ts'
 import { promoteCrmAccount } from '@openbooks/engine/src/crm.ts'
 import { computeOpportunityTotals, validateContributionTotal } from '@openbooks/engine/src/crm-math.ts'
 import { guardPermission } from '../../../../../lib/authz'
+import { guardFeaturePermission } from '../../../../../lib/feature-gates'
 import { isUuid } from '../../../../../lib/list-params'
 import { loadOpportunity } from '../../../../../lib/crm'
 
@@ -31,7 +32,7 @@ async function orgUuidExists(table: 'parties' | 'contacts' | 'users' | 'crm_sale
 }
 
 export async function GET(_req: Request, { params }: { params: Promise<{ id: string }> }) {
-  const gate = await guardPermission('crm.opportunities.read')
+  const gate = await guardFeaturePermission('crm.opportunities.read', 'crm')
   if (gate instanceof NextResponse) return gate
   const { id } = await params
   const opportunity = isUuid(id) ? await loadOpportunity(id, gate.user.orgId) : null
@@ -39,7 +40,7 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
 }
 
 export async function PATCH(req: Request, { params }: { params: Promise<{ id: string }> }) {
-  const gate = await guardPermission('crm.opportunities.manage')
+  const gate = await guardFeaturePermission('crm.opportunities.manage', 'crm')
   if (gate instanceof NextResponse) return gate
   const { user } = gate
   const { id } = await params
@@ -167,7 +168,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
 }
 
 export async function DELETE(_req: Request, { params }: { params: Promise<{ id: string }> }) {
-  const gate = await guardPermission('crm.opportunities.manage')
+  const gate = await guardFeaturePermission('crm.opportunities.manage', 'crm')
   if (gate instanceof NextResponse) return gate
   const { id } = await params
   if (!isUuid(id)) return NextResponse.json({ error: 'not found' }, { status: 404 })

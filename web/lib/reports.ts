@@ -4,6 +4,36 @@ import { db } from "@openbooks/engine/src/db.ts";
 import { currentFiscalYear, fiscalStartMonth, fiscalYearRangeFor } from "./fiscal";
 import { segmentRegistry } from "./segments";
 import { resolveOrgId } from "./org-scope";
+import {
+  decimalAbs,
+  decimalAdd,
+  decimalCmp,
+  decimalIsMaterial,
+  decimalNeg,
+  decimalSum,
+  fromDecimalUnits,
+  roundDiv,
+  toDecimalUnits,
+  type ExactDecimal,
+} from "./statement-format";
+
+const ZERO: ExactDecimal = "0.0000";
+
+function decimalSubtract(a: ExactDecimal, b: ExactDecimal): ExactDecimal {
+  return decimalAdd(a, decimalNeg(b));
+}
+
+function compareAbsoluteDescending(a: ExactDecimal, b: ExactDecimal): number {
+  return decimalCmp(decimalAbs(b), decimalAbs(a));
+}
+
+function decimalRatio(numerator: ExactDecimal, denominator: ExactDecimal): ExactDecimal | null {
+  const denominatorUnits = toDecimalUnits(denominator);
+  if (denominatorUnits === 0n) return null;
+  const negative = denominatorUnits < 0n;
+  const ratioUnits = roundDiv(toDecimalUnits(numerator) * 10_000n, negative ? -denominatorUnits : denominatorUnits);
+  return fromDecimalUnits(negative ? -ratioUnits : ratioUnits);
+}
 
 /**
  * Financial statement queries. Sign convention: journal amounts are
@@ -16,7 +46,7 @@ export interface StatementRow {
   number: string | null;
   name: string;
   type: string;
-  balance: number; // reader-signed (revenue positive, expense positive)
+  balance: ExactDecimal; // reader-signed (revenue positive, expense positive)
   depth: number;
   isSummary: boolean;
 }
@@ -35,7 +65,7 @@ export interface DimFilter {
   classId?: string;
   /**
    * Subsidiary line filter (resolved ids: one leaf, or a consolidated subtree
-   * plus its elimination subsidiaries). These legacy single-currency queries
+   * plus its elimination subsidiaries). These single-currency queries
    * filter without FX translation — amounts stay in functional currency.
    */
   subsidiaryIds?: string[];
@@ -77,11 +107,11 @@ async function accountBalances(where: ReturnType<typeof sql>, dims?: DimFilter, 
 /** Roll child balances into parents, return tree-ordered rows with depth. */
 function treeify(rows: Awaited<ReturnType<typeof accountBalances>>, types: string[]): StatementRow[] {
   const byId = new Map(rows.map((r) => [r.id, r]));
-  const rolled = new Map<string, number>(rows.map((r) => [r.id, Number(r.raw)]));
+  const rolled = new Map<string, ExactDecimal>(rows.map((r) => [r.id, r.raw]));
   for (const r of rows) {
     let p = r.parent_id;
     while (p) {
-      rolled.set(p, (rolled.get(p) ?? 0) + Number(r.raw));
+      rolled.set(p, decimalAdd(rolled.get(p) ?? ZERO, r.raw));
       p = byId.get(p)?.parent_id ?? null;
     }
   }
@@ -94,9 +124,9 @@ function treeify(rows: Awaited<ReturnType<typeof accountBalances>>, types: strin
   const walk = (parent: string | null, depth: number) => {
     for (const r of children.get(parent) ?? []) {
       if (!types.includes(r.type)) continue;
-      const bal = rolled.get(r.id) ?? 0;
-      const signed = CREDIT_NORMAL.has(r.type) ? -bal : bal;
-      if (Math.abs(signed) >= 0.005 || r.is_summary) {
+      const bal = rolled.get(r.id) ?? ZERO;
+      const signed = CREDIT_NORMAL.has(r.type) ? decimalNeg(bal) : bal;
+      if (decimalIsMaterial(signed) || r.is_summary) {
         out.push({
           id: r.id, number: r.number, name: r.name, type: r.type,
           balance: signed, depth, isSummary: r.is_summary,
@@ -108,7 +138,7 @@ function treeify(rows: Awaited<ReturnType<typeof accountBalances>>, types: strin
   walk(null, 0);
   // prune empty summary rows (no visible descendants, zero balance)
   return out.filter((r, i) => {
-    if (!r.isSummary || Math.abs(r.balance) >= 0.005) return true;
+    if (!r.isSummary || decimalIsMaterial(r.balance)) return true;
     const next = out[i + 1];
     return next !== undefined && next.depth > r.depth;
   });
@@ -123,11 +153,12 @@ export async function profitAndLoss(from: string, to: string, dims?: DimFilter, 
   );
   const items = treeify(rows, PNL_TYPES);
   const total = (types: string[]) =>
-    items.filter((r) => types.includes(r.type) && r.depth === 0).reduce((a, r) => a + r.balance, 0);
+    decimalSum(items.filter((r) => types.includes(r.type) && r.depth === 0).map((r) => r.balance));
   const revenue = total(["income", "income_other"]);
   const cogs = total(["cogs"]);
   const expenses = total(["expense", "expense_other", "expense_deferred"]);
-  return { items, revenue, cogs, grossProfit: revenue - cogs, expenses, netIncome: revenue - cogs - expenses };
+  const grossProfit = decimalSubtract(revenue, cogs);
+  return { items, revenue, cogs, grossProfit, expenses, netIncome: decimalSubtract(grossProfit, expenses) };
 }
 
 export async function balanceSheet(asOf: string, orgId?: string) {
@@ -137,10 +168,10 @@ export async function balanceSheet(asOf: string, orgId?: string) {
   const liabilities = treeify(rows, ["liability_payable", "liability_card", "liability_current_other", "liability_long_term"]);
   const equity = treeify(rows, ["equity"]);
 
-  const sum = (xs: StatementRow[]) => xs.filter((r) => r.depth === 0).reduce((a, r) => a + r.balance, 0);
+  const sum = (xs: StatementRow[]) => decimalSum(xs.filter((r) => r.depth === 0).map((r) => r.balance));
   const totalAssets = sum(assets);
   const totalLiabilities = sum(liabilities);
-  let totalEquity = sum(equity);
+  const statedEquity = sum(equity);
 
   // No closing entries exist (by design): accumulated earnings = lifetime P&L.
   const pl = (await db.execute(sql`
@@ -151,12 +182,12 @@ export async function balanceSheet(asOf: string, orgId?: string) {
      where a.org_id = ${resolvedOrgId} and l.org_id = ${resolvedOrgId} and e.org_id = ${resolvedOrgId}
        and a.type in ${PNL_TYPES} and e.posting_date <= ${asOf}
   `)) as any;
-  const accumulatedEarnings = -Number(pl.rows[0].s);
+  const accumulatedEarnings = decimalNeg(String(pl.rows[0].s));
   equity.push({
     id: "computed-earnings", number: null, name: "Accumulated earnings (computed)",
     type: "equity", balance: accumulatedEarnings, depth: 0, isSummary: false,
   });
-  totalEquity += accumulatedEarnings;
+  const totalEquity = decimalAdd(statedEquity, accumulatedEarnings);
 
   return { assets, liabilities, equity, totalAssets, totalLiabilities, totalEquity };
 }
@@ -207,12 +238,12 @@ export type AgingSide = "ar" | "ap";
 export interface AgingRow {
   partyId: string | null;
   partyName: string | null;
-  current: number; // not yet due (age <= 0)
-  b1: number; // 1–30
-  b2: number; // 31–60
-  b3: number; // 61–90
-  b4: number; // 90+
-  total: number;
+  current: ExactDecimal; // not yet due (age <= 0)
+  b1: ExactDecimal; // 1–30
+  b2: ExactDecimal; // 31–60
+  b3: ExactDecimal; // 61–90
+  b4: ExactDecimal; // 90+
+  total: ExactDecimal;
 }
 
 export interface AgingResult {
@@ -323,23 +354,23 @@ export async function agingByParty(side: AgingSide, asOf: string, dims?: DimFilt
   const rows: AgingRow[] = r.rows.map((x) => ({
     partyId: x.party_id,
     partyName: x.party_name,
-    current: Number(x.current),
-    b1: Number(x.b1),
-    b2: Number(x.b2),
-    b3: Number(x.b3),
-    b4: Number(x.b4),
-    total: Number(x.total),
+    current: x.current,
+    b1: x.b1,
+    b2: x.b2,
+    b3: x.b3,
+    b4: x.b4,
+    total: x.total,
   }));
   const totals = rows.reduce(
     (a, r) => ({
-      current: a.current + r.current,
-      b1: a.b1 + r.b1,
-      b2: a.b2 + r.b2,
-      b3: a.b3 + r.b3,
-      b4: a.b4 + r.b4,
-      total: a.total + r.total,
+      current: decimalAdd(a.current, r.current),
+      b1: decimalAdd(a.b1, r.b1),
+      b2: decimalAdd(a.b2, r.b2),
+      b3: decimalAdd(a.b3, r.b3),
+      b4: decimalAdd(a.b4, r.b4),
+      total: decimalAdd(a.total, r.total),
     }),
-    { current: 0, b1: 0, b2: 0, b3: 0, b4: 0, total: 0 },
+    { current: ZERO, b1: ZERO, b2: ZERO, b3: ZERO, b4: ZERO, total: ZERO },
   );
   return { rows, totals, asOf };
 }
@@ -382,16 +413,16 @@ export const CASH_FLOW_SECTION: Record<string, CashFlowSection> = {
 export interface CashFlowLine {
   type: string;
   label: string;
-  amount: number; // effect on cash (debit-to-bank positive = cash in)
+  amount: ExactDecimal; // effect on cash (debit-to-bank positive = cash in)
 }
 
 export interface CashFlowResult {
-  sections: { section: CashFlowSection; lines: CashFlowLine[]; subtotal: number }[];
-  netChange: number;
-  openingCash: number;
-  closingCash: number;
+  sections: { section: CashFlowSection; lines: CashFlowLine[]; subtotal: ExactDecimal }[];
+  netChange: ExactDecimal;
+  openingCash: ExactDecimal;
+  closingCash: ExactDecimal;
   /** closingCash − openingCash − netChange; should be ~0 when the statement ties. */
-  reconciliationGap: number;
+  reconciliationGap: ExactDecimal;
 }
 
 const CASH_FLOW_TYPE_LABEL: Record<string, string> = {
@@ -448,8 +479,8 @@ export async function cashFlow(from: string, to: string, dims?: DimFilter, orgId
 
   const bySection: Record<CashFlowSection, CashFlowLine[]> = { operating: [], investing: [], financing: [] };
   for (const row of contra.rows) {
-    const amount = Number(row.cash_effect);
-    if (Math.abs(amount) < 0.005) continue;
+    const amount = row.cash_effect;
+    if (!decimalIsMaterial(amount)) continue;
     const section = CASH_FLOW_SECTION[row.type] ?? "operating";
     bySection[section].push({
       type: row.type,
@@ -460,10 +491,10 @@ export async function cashFlow(from: string, to: string, dims?: DimFilter, orgId
 
   const order: CashFlowSection[] = ["operating", "investing", "financing"];
   const sections = order.map((section) => {
-    const lines = bySection[section].sort((a, b) => Math.abs(b.amount) - Math.abs(a.amount));
-    return { section, lines, subtotal: lines.reduce((a, l) => a + l.amount, 0) };
+    const lines = bySection[section].sort((a, b) => compareAbsoluteDescending(a.amount, b.amount));
+    return { section, lines, subtotal: decimalSum(lines.map((line) => line.amount)) };
   });
-  const netChange = sections.reduce((a, s) => a + s.subtotal, 0);
+  const netChange = decimalSum(sections.map((section) => section.subtotal));
 
   // Opening/closing cash straight from the bank accounts, proving the tie-out.
   const cash = (await db.execute(sql`
@@ -474,15 +505,15 @@ export async function cashFlow(from: string, to: string, dims?: DimFilter, orgId
       join accounts a on a.id = l.account_id and a.org_id = l.org_id
      where l.org_id = ${resolvedOrgId} and a.type = 'asset_bank' and ${dimWhere(dims)}
   `)) as unknown as { rows: { opening: string; closing: string }[] };
-  const openingCash = Number(cash.rows[0]?.opening ?? 0);
-  const closingCash = Number(cash.rows[0]?.closing ?? 0);
+  const openingCash = cash.rows[0]?.opening ?? ZERO;
+  const closingCash = cash.rows[0]?.closing ?? ZERO;
 
   return {
     sections,
     netChange,
     openingCash,
     closingCash,
-    reconciliationGap: closingCash - openingCash - netChange,
+    reconciliationGap: decimalSubtract(decimalSubtract(closingCash, openingCash), netChange),
   };
 }
 
@@ -497,7 +528,7 @@ export interface CfAdjustmentLine {
   /** Present when key === 'account': the P&L account's own name. */
   label?: string;
   accountId?: string;
-  amount: number;
+  amount: ExactDecimal;
 }
 
 /** A per-account working-capital movement line. */
@@ -507,7 +538,7 @@ export interface CfWorkingCapitalLine {
   name: string;
   type: string;
   /** Cash effect: asset decreases / liability increases read positive. */
-  amount: number;
+  amount: ExactDecimal;
 }
 
 /** A per-account investing/financing movement line (from cash-contra analysis). */
@@ -516,25 +547,25 @@ export interface CfAccountLine {
   number: string | null;
   name: string;
   type: string;
-  amount: number;
+  amount: ExactDecimal;
 }
 
 export interface CashFlowIndirectResult {
-  netIncome: number;
+  netIncome: ExactDecimal;
   adjustments: CfAdjustmentLine[];
   workingCapital: CfWorkingCapitalLine[];
   /** NI + adjustments + working capital. */
-  operating: number;
+  operating: ExactDecimal;
   investing: CfAccountLine[];
-  investingTotal: number;
+  investingTotal: ExactDecimal;
   financing: CfAccountLine[];
-  financingTotal: number;
+  financingTotal: ExactDecimal;
   /** Translation effect on foreign-currency cash (usually zero). */
-  fxEffectOnCash: number;
-  netChange: number;
-  openingCash: number;
-  closingCash: number;
-  reconciliationGap: number;
+  fxEffectOnCash: ExactDecimal;
+  netChange: ExactDecimal;
+  openingCash: ExactDecimal;
+  closingCash: ExactDecimal;
+  reconciliationGap: ExactDecimal;
 }
 
 /**
@@ -613,7 +644,7 @@ export async function cashFlowIndirect(
        and e.posting_date >= ${from} and e.posting_date <= ${to}
        and a.type in ${PNL_TYPES} and ${dim}
   `)) as unknown as { rows: { ni: string }[] };
-  const netIncome = Number(ni.rows[0]?.ni ?? 0);
+  const netIncome = ni.rows[0]?.ni ?? ZERO;
 
   // Add-backs. Sign convention throughout: the sum of the entry's debit-signed
   // P&L lines — expenses add back positive, gains add back negative.
@@ -629,8 +660,8 @@ export async function cashFlowIndirect(
          and e.posting_date >= ${from} and e.posting_date <= ${to}
          and e.origin = 'revaluation' and a.type in ${PNL_TYPES} and ${dim}
     `)) as unknown as { rows: { impact: string }[] };
-    const impact = Number(a.rows[0]?.impact ?? 0);
-    if (Math.abs(impact) >= 0.005) adjustments.push({ key: "unrealizedFx", amount: impact });
+    const impact = a.rows[0]?.impact ?? ZERO;
+    if (decimalIsMaterial(impact)) adjustments.push({ key: "unrealizedFx", amount: impact });
 
     // (b) P&L legs of no-bank entries that touch I/F accounts: depreciation
     // and amortization, impairment, non-cash disposal gains/losses. Per
@@ -648,8 +679,8 @@ export async function cashFlowIndirect(
        group by l.account_id, a.number, a.name
     `)) as unknown as { rows: { account_id: string; number: string | null; name: string; impact: string }[] };
     for (const r of b.rows) {
-      const amount = Number(r.impact);
-      if (Math.abs(amount) < 0.005) continue;
+      const amount = r.impact;
+      if (!decimalIsMaterial(amount)) continue;
       adjustments.push({
         key: "account",
         accountId: r.account_id,
@@ -685,17 +716,17 @@ export async function cashFlowIndirect(
       // Debit-signed balances: an increase reads positive on assets (cash
       // use) and negative on liabilities (cash source) — so the cash impact
       // is uniformly −delta for every working-capital account.
-      const delta = Number(r.bal_to) - Number(r.bal_from) - Number(r.stripped);
+      const delta = decimalSubtract(decimalSubtract(r.bal_to, r.bal_from), r.stripped);
       return {
         accountId: r.account_id,
         number: r.number,
         name: r.name,
         type: r.type,
-        amount: -delta,
+        amount: decimalNeg(delta),
       };
     })
-    .filter((l) => Math.abs(l.amount) >= 0.005)
-    .sort((a, b) => Math.abs(b.amount) - Math.abs(a.amount));
+    .filter((line) => decimalIsMaterial(line.amount))
+    .sort((a, b) => compareAbsoluteDescending(a.amount, b.amount));
 
   // Investing + financing: exact cash-contra population, per account. Cash-
   // touched disposal entries also contribute their P&L gain/loss legs so the
@@ -728,22 +759,22 @@ export async function cashFlowIndirect(
   };
   const investing: CfAccountLine[] = [];
   const financing: CfAccountLine[] = [];
-  let disposalGainOnCash = 0;
+  let disposalGainOnCash = ZERO;
   for (const r of contra.rows) {
-    const amount = Number(r.cash_effect);
-    if (Math.abs(amount) < 0.005) continue;
+    const amount = r.cash_effect;
+    if (!decimalIsMaterial(amount)) continue;
     const line: CfAccountLine = { accountId: r.account_id, number: r.number, name: r.name, type: r.type, amount };
     if (CF_FINANCING_TYPES.includes(r.type)) financing.push(line);
     else investing.push(line);
     // The P&L leg of a cash disposal is reclassified from operating (it is in
     // net income) into investing proceeds — the operating add-back is below.
-    if (!IF_TYPES.includes(r.type)) disposalGainOnCash += amount;
+    if (!IF_TYPES.includes(r.type)) disposalGainOnCash = decimalAdd(disposalGainOnCash, amount);
   }
-  if (Math.abs(disposalGainOnCash) >= 0.005) {
-    adjustments.push({ key: "disposal", amount: -disposalGainOnCash });
+  if (decimalIsMaterial(disposalGainOnCash)) {
+    adjustments.push({ key: "disposal", amount: decimalNeg(disposalGainOnCash) });
   }
-  investing.sort((a, b) => Math.abs(b.amount) - Math.abs(a.amount));
-  financing.sort((a, b) => Math.abs(b.amount) - Math.abs(a.amount));
+  investing.sort((a, b) => compareAbsoluteDescending(a.amount, b.amount));
+  financing.sort((a, b) => compareAbsoluteDescending(a.amount, b.amount));
 
   // FX translation effect on foreign-currency cash balances.
   const fx = (await db.execute(sql`
@@ -755,15 +786,16 @@ export async function cashFlowIndirect(
        and e.posting_date >= ${from} and e.posting_date <= ${to}
        and e.origin = 'translation' and a.type = 'asset_bank' and ${dim}
   `)) as unknown as { rows: { effect: string }[] };
-  const fxEffectOnCash = Number(fx.rows[0]?.effect ?? 0);
+  const fxEffectOnCash = fx.rows[0]?.effect ?? ZERO;
 
-  const operating =
-    netIncome +
-    adjustments.reduce((a, l) => a + l.amount, 0) +
-    workingCapital.reduce((a, l) => a + l.amount, 0);
-  const investingTotal = investing.reduce((a, l) => a + l.amount, 0);
-  const financingTotal = financing.reduce((a, l) => a + l.amount, 0);
-  const netChange = operating + investingTotal + financingTotal + fxEffectOnCash;
+  const operating = decimalSum([
+    netIncome,
+    ...adjustments.map((line) => line.amount),
+    ...workingCapital.map((line) => line.amount),
+  ]);
+  const investingTotal = decimalSum(investing.map((line) => line.amount));
+  const financingTotal = decimalSum(financing.map((line) => line.amount));
+  const netChange = decimalSum([operating, investingTotal, financingTotal, fxEffectOnCash]);
 
   const cash = (await db.execute(sql`
     select coalesce(sum(l.amount) filter (where e.posting_date < ${from}), 0) as opening,
@@ -773,8 +805,8 @@ export async function cashFlowIndirect(
       join accounts a on a.id = l.account_id and a.org_id = l.org_id
      where l.org_id = ${resolvedOrgId} and a.type = 'asset_bank' and ${dimWhere(dims)}
   `)) as unknown as { rows: { opening: string; closing: string }[] };
-  const openingCash = Number(cash.rows[0]?.opening ?? 0);
-  const closingCash = Number(cash.rows[0]?.closing ?? 0);
+  const openingCash = cash.rows[0]?.opening ?? ZERO;
+  const closingCash = cash.rows[0]?.closing ?? ZERO;
 
   return {
     netIncome,
@@ -789,7 +821,7 @@ export async function cashFlowIndirect(
     netChange,
     openingCash,
     closingCash,
-    reconciliationGap: closingCash - openingCash - netChange,
+    reconciliationGap: decimalSubtract(decimalSubtract(closingCash, openingCash), netChange),
   };
 }
 
@@ -878,9 +910,9 @@ export interface GeneralLedgerLine {
   date: string
   memo: string | null
   party: string | null
-  debit: number
-  credit: number
-  balance: number // running (debit-signed) within the account
+  debit: ExactDecimal
+  credit: ExactDecimal
+  balance: ExactDecimal // running (debit-signed) within the account
   docKind: string | null
   docId: string | null
 }
@@ -890,8 +922,8 @@ export interface GeneralLedgerAccount {
   number: string | null
   name: string
   type: string
-  opening: number
-  closing: number
+  opening: ExactDecimal
+  closing: ExactDecimal
   lines: GeneralLedgerLine[]
 }
 
@@ -927,7 +959,7 @@ export async function generalLedger(
      where l.org_id = ${orgId} and e.posting_date < ${from} and ${dimWhere(opts.dims)}${acctFilter}
      group by l.account_id
   `)) as unknown as { rows: { account_id: string; bal: string }[] }
-  const openingByAcct = new Map(opening.rows.map((r) => [r.account_id, Number(r.bal)]))
+  const openingByAcct = new Map(opening.rows.map((r) => [r.account_id, r.bal]))
 
   const lines = (await db.execute(sql`
     select l.account_id, a.number, a.name, a.type,
@@ -957,20 +989,20 @@ export async function generalLedger(
   let current: GeneralLedgerAccount | null = null
   for (const r of rows) {
     if (!current || current.id !== r.account_id) {
-      const open = openingByAcct.get(r.account_id) ?? 0
+      const open = openingByAcct.get(r.account_id) ?? ZERO
       current = { id: r.account_id, number: r.number, name: r.name, type: r.type, opening: open, closing: open, lines: [] }
       accounts.push(current)
     }
-    const amt = Number(r.amount)
-    current.closing += amt
+    const amt = r.amount
+    current.closing = decimalAdd(current.closing, amt)
     current.lines.push({
       entryId: r.entry_id,
       entryNumber: r.entry_number,
       date: r.date,
       memo: r.memo,
       party: r.party,
-      debit: amt > 0 ? amt : 0,
-      credit: amt < 0 ? -amt : 0,
+      debit: decimalCmp(amt, ZERO) > 0 ? amt : ZERO,
+      credit: decimalCmp(amt, ZERO) < 0 ? decimalNeg(amt) : ZERO,
       balance: current.closing,
       docKind: r.doc_kind,
       docId: r.doc_id,
@@ -988,8 +1020,8 @@ export interface JournalReportLine {
   accountName: string
   party: string | null
   memo: string | null
-  debit: number
-  credit: number
+  debit: ExactDecimal
+  credit: ExactDecimal
 }
 export interface JournalReportEntry {
   id: string
@@ -998,7 +1030,7 @@ export interface JournalReportEntry {
   memo: string | null
   origin: string
   lines: JournalReportLine[]
-  totalDebit: number
+  totalDebit: ExactDecimal
   docKind: string | null
   docId: string | null
 }
@@ -1050,20 +1082,20 @@ export async function journalReport(
   for (const x of rows) {
     let entry = entriesById.get(x.id)
     if (!entry) {
-      entry = { id: x.id, entryNumber: x.entry_number, date: x.date, memo: x.entry_memo, origin: x.origin, lines: [], totalDebit: 0, docKind: x.doc_kind, docId: x.doc_id }
+      entry = { id: x.id, entryNumber: x.entry_number, date: x.date, memo: x.entry_memo, origin: x.origin, lines: [], totalDebit: ZERO, docKind: x.doc_kind, docId: x.doc_id }
       entriesById.set(x.id, entry)
       entries.push(entry)
     }
-    const amt = Number(x.amount)
+    const amt = x.amount
     entry.lines.push({
       accountNumber: x.acct_number,
       accountName: x.acct_name,
       party: x.party,
       memo: x.line_memo,
-      debit: amt > 0 ? amt : 0,
-      credit: amt < 0 ? -amt : 0,
+      debit: decimalCmp(amt, ZERO) > 0 ? amt : ZERO,
+      credit: decimalCmp(amt, ZERO) < 0 ? decimalNeg(amt) : ZERO,
     })
-    if (amt > 0) entry.totalDebit += amt
+    if (decimalCmp(amt, ZERO) > 0) entry.totalDebit = decimalAdd(entry.totalDebit, amt)
   }
   return { entries, from, to, truncated }
 }
@@ -1083,11 +1115,11 @@ export interface AgingDetailRow {
   dueDate: string | null
   ageDays: number
   bucket: AgingBucket
-  open: number
+  open: ExactDecimal
 }
 export interface AgingDetailResult {
   rows: AgingDetailRow[]
-  totals: Record<AgingBucket, number> & { total: number }
+  totals: Record<AgingBucket, ExactDecimal> & { total: ExactDecimal }
   asOf: string
 }
 
@@ -1135,12 +1167,12 @@ export async function agingDetail(side: AgingSide, asOf: string, dims?: DimFilte
       due_date: string | null; age_days: number; open: string
     }[]
   }
-  const totals: Record<AgingBucket, number> & { total: number } = { current: 0, b1: 0, b2: 0, b3: 0, b4: 0, total: 0 }
+  const totals: Record<AgingBucket, ExactDecimal> & { total: ExactDecimal } = { current: ZERO, b1: ZERO, b2: ZERO, b3: ZERO, b4: ZERO, total: ZERO }
   const rows: AgingDetailRow[] = r.rows.map((x) => {
-    const open = Number(x.open)
+    const open = x.open
     const bucket = bucketOf(x.age_days)
-    totals[bucket] += open
-    totals.total += open
+    totals[bucket] = decimalAdd(totals[bucket], open)
+    totals.total = decimalAdd(totals.total, open)
     return { docId: x.id, docKind: x.kind, partyId: x.party_id, partyName: x.party_name, reference: x.reference, dueDate: x.due_date, ageDays: x.age_days, bucket, open }
   })
   return { rows, totals, asOf }
@@ -1155,17 +1187,17 @@ export interface RegisterLine {
   entryNumber: string | null
   date: string
   memo: string | null
-  debit: number
-  credit: number
-  balance: number
+  debit: ExactDecimal
+  credit: ExactDecimal
+  balance: ExactDecimal
   docKind: string | null
   docId: string | null
 }
 export interface RegisterParty {
   partyId: string | null
   partyName: string | null
-  opening: number
-  closing: number
+  opening: ExactDecimal
+  closing: ExactDecimal
   lines: RegisterLine[]
 }
 export interface RegisterResult {
@@ -1200,7 +1232,7 @@ export async function partyRegister(
        and l.org_id = ${resolvedOrgId} and ${dimWhere(opts.dims)}${partyFilter}
      group by l.party_id
   `)) as unknown as { rows: { party_id: string | null; bal: string }[] }
-  const openingByParty = new Map(opening.rows.map((r) => [r.party_id, Number(r.bal)]))
+  const openingByParty = new Map(opening.rows.map((r) => [r.party_id, r.bal]))
 
   const lines = (await db.execute(sql`
     select l.party_id, pt.display_name as party_name,
@@ -1229,19 +1261,19 @@ export async function partyRegister(
   let current: RegisterParty | null = null
   for (const x of rows) {
     if (!current || current.partyId !== x.party_id) {
-      const open = openingByParty.get(x.party_id) ?? 0
+      const open = openingByParty.get(x.party_id) ?? ZERO
       current = { partyId: x.party_id, partyName: x.party_name, opening: open, closing: open, lines: [] }
       parties.push(current)
     }
-    const amt = Number(x.amount)
-    current.closing += amt
+    const amt = x.amount
+    current.closing = decimalAdd(current.closing, amt)
     current.lines.push({
       entryId: x.entry_id,
       entryNumber: x.entry_number,
       date: x.date,
       memo: x.memo,
-      debit: amt > 0 ? amt : 0,
-      credit: amt < 0 ? -amt : 0,
+      debit: decimalCmp(amt, ZERO) > 0 ? amt : ZERO,
+      credit: decimalCmp(amt, ZERO) < 0 ? decimalNeg(amt) : ZERO,
       balance: current.closing,
       docKind: x.doc_kind,
       docId: x.doc_id,
@@ -1259,10 +1291,10 @@ export interface PartnerStatementResult {
   side: AgingSide
   from: string
   to: string
-  opening: number
-  closing: number
+  opening: ExactDecimal
+  closing: ExactDecimal
   lines: RegisterLine[]
-  aging: Record<AgingBucket, number> & { total: number }
+  aging: Record<AgingBucket, ExactDecimal> & { total: ExactDecimal }
 }
 
 /** Account statement for a single party: opening balance on the control
@@ -1279,19 +1311,19 @@ export async function partnerStatement(
     rows: { display_name: string | null }[]
   }
   const aging = await agingDetail(opts.side, opts.to, undefined, orgId)
-  const agingTotals: Record<AgingBucket, number> & { total: number } = { current: 0, b1: 0, b2: 0, b3: 0, b4: 0, total: 0 }
+  const agingTotals: Record<AgingBucket, ExactDecimal> & { total: ExactDecimal } = { current: ZERO, b1: ZERO, b2: ZERO, b3: ZERO, b4: ZERO, total: ZERO }
   for (const row of aging.rows) {
     if (row.partyId !== partyId) continue
-    agingTotals[row.bucket] += row.open
-    agingTotals.total += row.open
+    agingTotals[row.bucket] = decimalAdd(agingTotals[row.bucket], row.open)
+    agingTotals.total = decimalAdd(agingTotals.total, row.open)
   }
   return {
     party: { id: partyId, name: nameRow.rows[0]?.display_name ?? p?.partyName ?? null },
     side: opts.side,
     from: opts.from,
     to: opts.to,
-    opening: p?.opening ?? 0,
-    closing: p?.closing ?? 0,
+    opening: p?.opening ?? ZERO,
+    closing: p?.closing ?? ZERO,
     lines: p?.lines ?? [],
     aging: agingTotals,
   }
@@ -1311,7 +1343,7 @@ export interface TxnDetailLine {
   accountType: string
   party: string | null
   memo: string | null
-  amount: number // debit-signed
+  amount: ExactDecimal // debit-signed
   /** Source-document kind (vendor_bill, customer_invoice, journal, …) for the
    *  transaction-type pill; null for system-generated GL entries. */
   docKind: string | null
@@ -1321,10 +1353,10 @@ export interface TxnDetailLine {
 
 export interface TxnDetailResult {
   lines: TxnDetailLine[]
-  totalDebit: number
-  totalCredit: number
+  totalDebit: ExactDecimal
+  totalCredit: ExactDecimal
   /** Reader-signed net (credit-normal types flipped) — ties to the clicked cell. */
-  net: number
+  net: ExactDecimal
   count: number
   truncated: boolean
 }
@@ -1462,15 +1494,15 @@ export async function transactionDetail(opts: {
     accountType: x.acct_type,
     party: x.party,
     memo: x.memo,
-    amount: Number(x.amount),
+    amount: x.amount,
     docKind: x.doc_kind,
     docId: x.doc_id,
   }))
   return {
     lines,
-    totalDebit: Number(totals.debit),
-    totalCredit: Number(totals.credit),
-    net: Number(totals.net),
+    totalDebit: totals.debit,
+    totalCredit: totals.credit,
+    net: totals.net,
     count: totals.n,
     truncated: totals.n > lines.length,
   }
@@ -1487,21 +1519,21 @@ export interface ProjectProfitRow {
   customerName: string | null
   status: string | null
   projectType: string | null
-  revenue: number
-  cogs: number
-  grossProfit: number
-  expenses: number
-  net: number
-  margin: number | null // net ÷ revenue; null when there's no revenue
+  revenue: ExactDecimal
+  cogs: ExactDecimal
+  grossProfit: ExactDecimal
+  expenses: ExactDecimal
+  net: ExactDecimal
+  margin: ExactDecimal | null // exact net ÷ revenue ratio; null when there's no revenue
   hours: number
 }
 export type ProjectProfitTotals = {
-  revenue: number
-  cogs: number
-  grossProfit: number
-  expenses: number
-  net: number
-  margin: number | null
+  revenue: ExactDecimal
+  cogs: ExactDecimal
+  grossProfit: ExactDecimal
+  expenses: ExactDecimal
+  net: ExactDecimal
+  margin: ExactDecimal | null
   hours: number
 }
 export interface ProjectProfitCustomerGroup {
@@ -1519,18 +1551,15 @@ export interface ProjectProfitResult {
 }
 
 function projectProfitTotals(rows: ProjectProfitRow[]): ProjectProfitTotals {
-  const t = rows.reduce(
-    (a, row) => ({
-      revenue: a.revenue + row.revenue,
-      cogs: a.cogs + row.cogs,
-      grossProfit: a.grossProfit + row.grossProfit,
-      expenses: a.expenses + row.expenses,
-      net: a.net + row.net,
-      hours: a.hours + row.hours,
-    }),
-    { revenue: 0, cogs: 0, grossProfit: 0, expenses: 0, net: 0, hours: 0 },
-  )
-  return { ...t, margin: Math.abs(t.revenue) >= 0.005 ? t.net / t.revenue : null }
+  const t = {
+    revenue: decimalSum(rows.map((row) => row.revenue)),
+    cogs: decimalSum(rows.map((row) => row.cogs)),
+    grossProfit: decimalSum(rows.map((row) => row.grossProfit)),
+    expenses: decimalSum(rows.map((row) => row.expenses)),
+    net: decimalSum(rows.map((row) => row.net)),
+    hours: rows.reduce((sum, row) => sum + row.hours, 0),
+  }
+  return { ...t, margin: decimalRatio(t.net, t.revenue) }
 }
 
 /** Customer subtotal hierarchy shared by the in-app report and every export. */
@@ -1549,7 +1578,7 @@ export function groupProjectProfitabilityRows(rows: ProjectProfitRow[]): Project
       rows: customerRows,
       totals: projectProfitTotals(customerRows),
     }))
-    .sort((a, b) => b.totals.net - a.totals.net || (a.customerName ?? '').localeCompare(b.customerName ?? ''))
+    .sort((a, b) => decimalCmp(b.totals.net, a.totals.net) || (a.customerName ?? '').localeCompare(b.customerName ?? ''))
 }
 
 /**
@@ -1611,11 +1640,11 @@ export async function projectProfitability(
     }[]
   }
   const rows: ProjectProfitRow[] = r.rows.map((x) => {
-    const revenue = Number(x.revenue)
-    const cogs = Number(x.cogs)
-    const expenses = Number(x.expenses)
-    const grossProfit = revenue - cogs
-    const net = grossProfit - expenses
+    const revenue = x.revenue
+    const cogs = x.cogs
+    const expenses = x.expenses
+    const grossProfit = decimalSubtract(revenue, cogs)
+    const net = decimalSubtract(grossProfit, expenses)
     return {
       projectId: x.id,
       projectName: x.name,
@@ -1624,7 +1653,7 @@ export async function projectProfitability(
       status: x.status,
       projectType: x.project_type,
       revenue, cogs, grossProfit, expenses, net,
-      margin: Math.abs(revenue) >= 0.005 ? net / revenue : null,
+      margin: decimalRatio(net, revenue),
       hours: Number(x.hours),
     }
   })

@@ -1,6 +1,6 @@
 import 'server-only'
 import { sql } from 'drizzle-orm'
-import { featureEnabled, type FeatureState } from '../features'
+import { hiddenNavModules, resolvedFeatureState } from '../features'
 import { db } from '@openbooks/engine/src/db.ts'
 import type { SidebarNavGroup } from '../../components/sidebar-nav'
 import {
@@ -26,8 +26,8 @@ import {
  * show_in_nav). (beaconhs nav/resolve.ts, org-scoped, minus form pinning for
  * now.)
  *
- * `role` (the user's role key, e.g. authz.user.role) scopes role-gated record
- * types; when omitted, only types without an allowed_roles restriction appear.
+ * `roleKeys` scopes role-gated record types; an unrestricted record type is
+ * visible to every user who holds its required permission.
  *
  * `t` translates registry-default labels (nav.* messages). Labels an org
  * customized in /admin/navigation are user content and render verbatim; a
@@ -37,10 +37,10 @@ import {
 export async function resolveNav(
   orgId: string,
   can: (permission: string | undefined) => boolean,
-  role: string | null | undefined,
+  roleKeys: readonly string[],
   t: (key: string) => string,
 ): Promise<SidebarNavGroup[]> {
-  const [r, appResult] = await Promise.all([
+  const [r, appResult, featureState] = await Promise.all([
     db.execute(sql`select config from org_nav_configs where org_id = ${orgId} limit 1`) as unknown as Promise<{
       rows: { config: OrgNavConfig }[]
     }>,
@@ -54,16 +54,13 @@ export async function resolveNav(
        where a.org_id = ${orgId} and a.status = 'installed'
        order by a.sort_order, a.name
     `) as unknown as Promise<{ rows: NavAppOption[] }>,
+    resolvedFeatureState(orgId),
   ])
   const saved = r.rows[0]?.config
   const baseConfig = saved?.version === 2 ? layerInNewModules(saved) : defaultNavConfig()
   const config = layerInNavApps(baseConfig, appResult.rows)
   const appByKey = new Map(appResult.rows.map((app) => [app.key, app]))
-  const featureState = (
-    (await db.execute(sql`select settings->'features' as f from orgs where id = ${orgId}`)) as unknown as {
-      rows: { f: FeatureState | null }[]
-    }
-  ).rows[0]?.f ?? {}
+  const featureHiddenModules = hiddenNavModules(featureState)
 
   const groups: SidebarNavGroup[] = []
   for (const g of config.groups) {
@@ -73,13 +70,13 @@ export async function resolveNav(
       if (item.kind === 'module') {
         const mod = MODULE_BY_KEY.get(item.moduleKey)
         if (!mod) continue
+        if (featureHiddenModules.has(mod.key)) continue
         // The collapsed Administration entry has no single permission — it
         // opens the /admin hub, which is reachable by anyone holding any
         // admin-ish permission (each card there is re-gated individually).
         if (mod.key === ADMIN_MODULE_KEY) {
           if (!ADMIN_HUB_PERMISSIONS.some((p) => can(p))) continue
         } else if (!can(mod.requiredPermission)) continue
-        if (mod.featureKey && !featureEnabled(featureState, mod.featureKey)) continue
         items.push({
           href: mod.href,
           label: item.label && item.label !== mod.label ? item.label : t(`modules.${mod.key}`) || mod.label,
@@ -139,7 +136,7 @@ export async function resolveNav(
     }
   }
 
-  const recordItems = await recordTypeNavItems(orgId, can, role ?? null)
+  const recordItems = await recordTypeNavItems(orgId, can, roleKeys)
   if (recordItems.length > 0) {
     groups.push({
       id: 'records',
@@ -163,7 +160,7 @@ export async function resolveNav(
 async function recordTypeNavItems(
   orgId: string,
   can: (permission: string | undefined) => boolean,
-  role: string | null,
+  roleKeys: readonly string[],
 ): Promise<SidebarNavGroup['items']> {
   if (!can('records.read')) return []
   try {
@@ -185,8 +182,8 @@ async function recordTypeNavItems(
         (t) =>
           !t.allowed_roles ||
           t.allowed_roles.length === 0 ||
-          role === 'admin' ||
-          (role !== null && t.allowed_roles.includes(role)),
+          roleKeys.includes('admin') ||
+          roleKeys.some((key) => t.allowed_roles!.includes(key)),
       )
       .map((t) => ({
         href: `/records/${t.key}`,

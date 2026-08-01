@@ -44,9 +44,6 @@ function initialsFrom(name: string, email: string): string {
   return (parts[0]![0]! + parts[parts.length - 1]![0]!).toUpperCase()
 }
 
-// The built-in users.role enum — custom role slugs render verbatim.
-const ROLE_KEYS = ['admin', 'controller', 'accountant', 'approver', 'viewer']
-
 type View = 'home' | 'tenants' | 'language' | 'theme' | 'layout'
 
 async function signOut() {
@@ -56,14 +53,14 @@ async function signOut() {
 export function AccountMenu({
   name,
   email,
-  role,
+  roles,
   localePreference,
   navModePreference,
   environments,
 }: {
   name: string
   email: string
-  role: string
+  roles: ReadonlyArray<{ key: string; name: string }>
   localePreference: Locale | null
   navModePreference: NavMode | null
   environments: WorkspaceEnvironments
@@ -83,6 +80,15 @@ export function AccountMenu({
   const label = name || email || t('account')
   const initials = initialsFrom(name, email)
   const inSandbox = environments.envKind !== 'production'
+  const isPreview = environments.envKind === 'preview'
+  const environmentLabel = inSandbox
+    ? `${environments.currentName} · ${isPreview ? t('sampleCompany') : t('sandbox')}`
+    : environments.currentName
+  const environmentTone = isPreview
+    ? 'text-teal-600 dark:text-teal-400'
+    : inSandbox
+      ? 'text-amber-600 dark:text-amber-400'
+      : 'text-slate-400 dark:text-slate-500'
   const showTenants =
     environments.tenants.length > 1 ||
     environments.tenants.some((tn) => tn.sandboxes.length > 0) ||
@@ -156,10 +162,10 @@ export function AccountMenu({
             <span
               className={cn(
                 'truncate text-[11px] leading-tight',
-                inSandbox ? 'text-amber-600 dark:text-amber-400' : 'text-slate-400 dark:text-slate-500',
+                environmentTone,
               )}
             >
-              {inSandbox ? `${environments.currentName} · sandbox` : environments.currentName}
+              {environmentLabel}
             </span>
           </span>
           <ChevronDown size={14} className="hidden shrink-0 text-slate-400 sm:inline dark:text-slate-500" />
@@ -178,8 +184,8 @@ export function AccountMenu({
               {email ? (
                 <span className="truncate text-xs text-slate-500 dark:text-slate-400">{email}</span>
               ) : null}
-              <span className="mt-0.5 w-fit rounded-full bg-slate-100 px-1.5 py-px text-[10px] font-medium text-slate-500 dark:bg-slate-800 dark:text-slate-400">
-                {ROLE_KEYS.includes(role) ? t(`roles.${role}`) : role}
+              <span className="mt-0.5 line-clamp-2 w-fit rounded-full bg-slate-100 px-1.5 py-px text-[10px] font-medium text-slate-500 dark:bg-slate-800 dark:text-slate-400">
+                {roles.length > 0 ? roles.map(({ name }) => name).join(' · ') : t('superAdmin')}
               </span>
             </span>
           </div>
@@ -191,8 +197,8 @@ export function AccountMenu({
                 icon={Building2}
                 tint="bg-teal-50 text-teal-600 dark:bg-teal-950/40 dark:text-teal-400"
                 label={t('organizations')}
-                sub={inSandbox ? `${environments.currentName} · sandbox` : environments.currentName}
-                subTone={inSandbox ? 'text-amber-600 dark:text-amber-400' : undefined}
+                sub={environmentLabel}
+                subTone={inSandbox ? environmentTone : undefined}
                 onClick={() => setView('tenants')}
               />
             )}

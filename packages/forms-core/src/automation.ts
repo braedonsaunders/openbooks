@@ -264,7 +264,16 @@ export function interpolateTemplate(template: string, ctx: EvalContext): string 
  * (status transition endpoints, which manual button was clicked, which
  * scheduled nodes are due via `opts.triggerNodeIds`).
  */
-export type FlowEventSource = 'ui' | 'api' | 'sync' | 'script' | 'schedule' | 'close_automation'
+export type FlowEventSource =
+  | 'ui'
+  | 'api'
+  | 'mcp'
+  | 'assistant'
+  | 'sync'
+  | 'script'
+  | 'schedule'
+  | 'close_automation'
+  | 'posted_correction'
 
 export type TriggerEvent = (
   | { kind: 'on_create' }

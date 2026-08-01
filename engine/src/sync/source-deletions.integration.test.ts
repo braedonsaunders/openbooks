@@ -6,6 +6,7 @@ import { db } from "../db.ts";
 import { postDocument } from "../posting.ts";
 import {
   createScratchOrg,
+  createScratchUser,
   dropScratchOrg,
 } from "../test-fixtures.ts";
 import {
@@ -130,15 +131,8 @@ test(
   async () => {
     const org = await createScratchOrg();
     try {
-      const actorId = randomUUID();
+      const actorId = await createScratchUser(org.orgId, "Source Deletion Controller", "admin");
       const connectionId = randomUUID();
-      await db.execute(sql`
-        insert into users
-          (id, org_id, email, name, password_hash, role, is_active)
-        values (
-          ${actorId}, ${org.orgId}, ${`source-delete-${actorId}@scratch.test`},
-          'Source Deletion Controller', 'x', 'admin', true
-        )`);
       await db.execute(sql`
         insert into connections
           (id, org_id, source, display_name, status)

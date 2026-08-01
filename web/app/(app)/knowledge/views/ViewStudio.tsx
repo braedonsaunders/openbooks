@@ -71,7 +71,7 @@ export function ViewStudio({
       measures: [{ fn: 'count' }],
       filters: null,
       groupBy: null,
-      sort: e.defaultSort ?? null,
+      sorts: e.defaultSort ? [e.defaultSort] : null,
       limit: query.limit ?? 1000,
     })
   }

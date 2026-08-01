@@ -23,7 +23,6 @@
   "runHint": "Écrivez du SQL ci-dessus, puis Exécuter ou ⌘⏎. Sélectionnez du texte pour n’exécuter que cela.",
   "emptyResultSet": "La requête n’a renvoyé aucune colonne",
   "noFilterMatch": "Aucune ligne ne correspond au filtre",
-  "run_legacy": "Exécuter la requête",
   "rail": {
     "schema": "Schéma",
     "snippets": "Extraits",
@@ -33,7 +32,11 @@
     "searchPlaceholder": "Rechercher tables et colonnes…",
     "noMatch": "Aucune table correspondante",
     "insertTable": "Cliquer pour insérer le nom de la table",
-    "insertColumn": "Cliquer pour insérer le nom de la colonne"
+    "insertColumn": "Cliquer pour insérer le nom de la colonne",
+    "showSchema": "Afficher le schéma",
+    "browseRows": "Parcourir les lignes",
+    "insertTableName": "Insérer le nom de la table",
+    "insertSelectTemplate": "Insérer un modèle SELECT"
   },
   "history": {
     "count": "{count, plural, one {# requête} other {# requêtes}}",
@@ -74,12 +77,12 @@
       "description": "Nombre d’écritures regroupées par origine."
     },
     "tableSizes": {
-      "label": "Lignes par table",
-      "description": "Lignes actives estimées par table, décroissant."
+      "label": "Aperçu du catalogue de requêtes",
+      "description": "Vues de rapports gouvernées et nombre de colonnes disponibles."
     },
     "listColumns": {
       "label": "Lister toutes les colonnes",
-      "description": "Chaque colonne du schéma public avec son type."
+      "description": "Chaque colonne disponible du catalogue de requêtes gouverné avec son type."
     }
   }
 }

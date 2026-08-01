@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server'
 import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/db.ts'
-import { currentUser } from '../../../../lib/auth'
+import { guardPermission } from '../../../../lib/authz'
 import { MODULE_BY_KEY, type OrgNavConfig } from '../../../../lib/nav/registry'
 
 export const runtime = 'nodejs'
@@ -62,9 +62,9 @@ function validate(config: unknown): config is OrgNavConfig {
 }
 
 export async function PUT(req: Request) {
-  const user = await currentUser()
-  if (!user) return NextResponse.json({ error: 'unauthorized' }, { status: 401 })
-  if (user.role !== 'admin') return NextResponse.json({ error: 'admin only' }, { status: 403 })
+  const gate = await guardPermission('admin.customization.manage')
+  if (gate instanceof NextResponse) return gate
+  const { user } = gate
 
   const { config } = (await req.json()) as { config?: unknown }
   if (!validate(config)) return NextResponse.json({ error: 'invalid nav config' }, { status: 400 })

@@ -15,6 +15,9 @@ export function DateRangeFilter({
   toLabel,
   clearLabel = 'Clear dates',
   pageParamKey = 'page',
+  defaultFrom,
+  defaultTo,
+  clearable = true,
 }: {
   fromKey?: string
   toKey?: string
@@ -22,12 +25,19 @@ export function DateRangeFilter({
   toLabel: string
   clearLabel?: string
   pageParamKey?: string
+  /** Values displayed when the corresponding URL key is absent. */
+  defaultFrom?: string
+  defaultTo?: string
+  /** Required-period controls can suppress the clear affordance. */
+  clearable?: boolean
 }) {
   const router = useRouter()
   const pathname = usePathname()
   const sp = useSearchParams()
-  const from = sp.get(fromKey) ?? ''
-  const to = sp.get(toKey) ?? ''
+  const rawFrom = sp.get(fromKey)
+  const rawTo = sp.get(toKey)
+  const from = rawFrom ?? defaultFrom ?? ''
+  const to = rawTo ?? defaultTo ?? ''
 
   function apply(next: URLSearchParams) {
     next.delete(pageParamKey)
@@ -69,7 +79,7 @@ export function DateRangeFilter({
         onChange={(e) => set(toKey, e.target.value)}
         className={inputCls}
       />
-      {(from || to) && (
+      {clearable && (rawFrom || rawTo) && (
         <button
           type="button"
           onClick={clear}

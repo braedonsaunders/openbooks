@@ -3,6 +3,7 @@
     "title": "Chart of Accounts",
     "description": "Natural-sign current balances (balance-sheet cumulative, P&L this fiscal year), rolled up through summary accounts.",
     "searchPlaceholder": "Search number or name…",
+    "views": { "list": "List", "hierarchy": "Hierarchy" },
     "newAccount": "New account",
     "viewRegister": "View register",
     "expand": "Expand account",

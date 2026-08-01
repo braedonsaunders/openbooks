@@ -299,9 +299,8 @@ export const landedCostAllocations = pgTable(
     /** The cost source: a bill line for freight/duty/etc. Null for a manual
      *  landed-cost entry not tied to a document line. */
     sourceDocumentLineId: uuid("source_document_line_id"),
-    /** Present for multi-target voucher allocations; null for the legacy
-     * single-target allocation service. */
-    voucherId: uuid("voucher_id"),
+    /** Every landed-cost allocation belongs to the authoritative voucher. */
+    voucherId: uuid("voucher_id").notNull(),
     targetCostLayerId: uuid("target_cost_layer_id").notNull(),
     basis: text("basis", { enum: ["value", "quantity", "weight", "manual"] }).notNull(),
     amount: money("amount").notNull(),

@@ -18,6 +18,7 @@ import { revenueRecognition } from './articles/revenue-recognition'
 import { apps } from './articles/apps'
 import { appBuilder } from './articles/app-builder'
 import { appApiReference } from './articles/app-api-reference'
+import { mcpControl } from './articles/mcp-control'
 import { scriptingEngine, scriptingApiReference } from './articles/scripting'
 import { quickBooksDesktopConnector } from './articles/quickbooks-desktop-connector'
 import { netSuiteBridge } from './articles/netsuite-bridge'
@@ -201,6 +202,7 @@ const ARTICLE_SECTION_BY_SLUG: Record<string, string> = {
   flows: 'apps-automation',
   'query-console': 'apps-automation',
   'rest-api': 'apps-automation',
+  'mcp-control': 'apps-automation',
   sandboxes: 'apps-automation',
 }
 
@@ -233,6 +235,7 @@ const RAW_DOC_ARTICLES: DocArticle[] = [
   apps,
   appBuilder,
   appApiReference,
+  mcpControl,
   scriptingEngine,
   scriptingApiReference,
   ...platformArticles,

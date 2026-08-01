@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server'
 import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/db.ts'
-import { guardPermission } from '../../../../../lib/authz'
+import { guardFeaturePermission } from '../../../../../lib/feature-gates'
 import { isUuid } from '../../../../../lib/list-params'
 
 export const runtime = 'nodejs'
@@ -9,7 +9,7 @@ const FORMATS = new Set(['auto', 'ofx', 'csv', 'camt053', 'bai2', 'mt940'])
 
 /** List import schedules (with server + account names) for the org. */
 export async function GET() {
-  const gate = await guardPermission('admin.setup.manage')
+  const gate = await guardFeaturePermission('admin.setup.manage', 'bankFeeds')
   if (gate instanceof NextResponse) return gate
   const r = (await db.execute(sql`
     select sc.id, sc.sftp_server_id, sc.account_id, sc.format, sc.folder, sc.is_active, sc.last_run_at, sc.last_result,
@@ -24,7 +24,7 @@ export async function GET() {
 
 /** Create an import schedule. */
 export async function POST(req: Request) {
-  const gate = await guardPermission('admin.setup.manage')
+  const gate = await guardFeaturePermission('admin.setup.manage', 'bankFeeds')
   if (gate instanceof NextResponse) return gate
   const { user } = gate
   const body = (await req.json().catch(() => ({}))) as { sftpServerId?: string; accountId?: string; format?: string; folder?: string; csvMapping?: unknown }

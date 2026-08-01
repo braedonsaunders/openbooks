@@ -5,7 +5,7 @@ import { cmp } from '@openbooks/engine/src/money.ts'
 import { runRecordFlows } from '@openbooks/engine/src/flows/index.ts'
 import { captureTransactionAuditSnapshot, recordTransactionAudit } from '@openbooks/engine/src/transaction-audit.ts'
 import { promoteCrmAccount } from '@openbooks/engine/src/crm.ts'
-import { computeBillTotals, nextDocumentNumber, persistLineTaxComponents, taxProfileMap, taxRateMap, type BillLineInput } from './bills'
+import { computeBillTotals, nextDocumentNumber, persistLineTaxComponents, taxProfileMap, type BillLineInput } from './bills'
 import { DOC_KINDS, docKindConfig, type DocKindConfig } from './document-kinds'
 import { loadFieldDefs, validateCustomValues } from './custom-fields'
 import { segmentRegistry, validateExtraDims } from './segments'
@@ -28,7 +28,7 @@ import { resolveOrgId } from './org-scope'
  * kind-agnostic.
  */
 
-export { computeBillTotals, taxRateMap, nextDocumentNumber, type BillLineInput } from './bills'
+export { computeBillTotals, taxProfileMap, nextDocumentNumber, type BillLineInput } from './bills'
 export {
   DOC_KINDS,
   AP_KINDS,
@@ -76,7 +76,7 @@ export async function createDocumentDraft(
   orgId: string,
   userId: string,
   kind: string,
-  options: { runFlows?: boolean } = {},
+  options: { runFlows?: boolean; source?: 'ui' | 'api' | 'mcp' | 'assistant' | 'posted_correction' } = {},
 ) {
   const cfg = docKindConfig(kind)
   if (!cfg) throw new Error(`unknown document kind "${kind}"`)
@@ -106,7 +106,7 @@ export async function createDocumentDraft(
   // throws into the caller (failures land on the flow_runs row), and it is
   // awaited — not detached — so it runs inside this request's RLS org scope.
   if (options.runFlows !== false) {
-    await runRecordFlows({ kind: 'on_create', source: 'ui' }, kind, doc.id, { orgId, userId })
+    await runRecordFlows({ kind: 'on_create', source: options.source ?? 'ui' }, kind, doc.id, { orgId, userId })
   }
   return doc
 }
@@ -135,6 +135,7 @@ export async function createPostedCorrectionDraft(
 
   const replacement = await createDocumentDraft(ctx.orgId, ctx.userId, source.kind, {
     runFlows: false,
+    source: ctx.source,
   })
   try {
     const [current] = await db
@@ -191,7 +192,7 @@ export async function createPostedCorrectionDraft(
       `)
     })
     await runRecordFlows(
-      { kind: 'on_create', source: 'ui' },
+      { kind: 'on_create', source: ctx.source },
       source.kind,
       replacement.id,
       { orgId: ctx.orgId, userId: ctx.userId },
@@ -323,7 +324,7 @@ export interface DocumentEditContext {
   orgId: string
   userId: string
   /** Provenance recorded on the transaction audit + flow events. */
-  source: 'ui' | 'api' | 'posted_correction'
+  source: 'ui' | 'api' | 'mcp' | 'assistant' | 'posted_correction'
   /** Fire on_update record flows after the edit commits (default true). */
   runFlows?: boolean
 }
@@ -576,7 +577,7 @@ export async function applyDocumentEdit(
   await runRecordFlows(
     {
       kind: 'on_update',
-      source: ctx.source === 'posted_correction' ? 'ui' : ctx.source,
+      source: ctx.source,
       previousTotal: current.total,
       totalChanged: cmp(newTotal, current.total) !== 0,
       changedFields,
@@ -613,9 +614,14 @@ export async function partyOptions(role: 'vendor' | 'customer', orgId?: string):
   const resolvedOrgId = await resolveOrgId(orgId)
   const filter =
     role === 'vendor'
-      ? sql`custom->>'nsKind' = 'vendor'`
-      : sql`(custom->>'nsKind' = 'customer'
-             or exists (select 1 from customer_roles cr where cr.org_id = ${resolvedOrgId} and cr.party_id = parties.id))`
+      ? sql`exists (select 1 from vendor_roles vr
+                     where vr.org_id = ${resolvedOrgId}
+                       and vr.party_id = parties.id
+                       and vr.is_active)`
+      : sql`exists (select 1 from customer_roles cr
+                     where cr.org_id = ${resolvedOrgId}
+                       and cr.party_id = parties.id
+                       and cr.is_active)`
   const r = (await db.execute(sql`
     select id, display_name, subsidiary_id from parties
      where org_id = ${resolvedOrgId} and ${filter} and is_active

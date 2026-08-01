@@ -175,8 +175,7 @@ export function RuleDrawer({
     [t],
   )
 
-  // ---- initial state (v2, or migrated from a v1 rule) -----------------------
-  const initial = useMemo(() => migrateRule(rule, seedFromLine), [rule, seedFromLine])
+  const initial = useMemo(() => initialRuleState(rule, seedFromLine), [rule, seedFromLine])
 
   const [name, setName] = useState(initial.name)
   const [priority, setPriority] = useState(String(initial.priority))
@@ -549,36 +548,33 @@ function serializeLines(lines: AllocationLine[]) {
     }))
 }
 
-/** Read a saved rule (v1 or v2) into the studio's editable state. */
-function migrateRule(rule: Record<string, any> | null, seed?: { description?: string | null; amount?: string | null } | null) {
-  const c = rule?.criteria ?? {}
-  const o = rule?.outcome ?? {}
-  const v2 = c?.version === 2 && c.match
-
-  let match: ConditionGroup
-  if (v2) {
-    match = c.match
-  } else {
-    // Migrate a v1 flat rule into an equivalent and-group.
-    const rules: ConditionGroup['rules'] = []
-    if (c.descriptionContains) rules.push({ field: 'anyText', op: 'contains', value: c.descriptionContains })
-    if (c.amountSign === 'in' || c.amountSign === 'out') rules.push({ field: 'flow', op: 'is', value: c.amountSign })
-    if (typeof c.minAmount === 'number' && typeof c.maxAmount === 'number') rules.push({ field: 'amount', op: 'between', value: [c.minAmount, c.maxAmount] })
-    else if (typeof c.minAmount === 'number') rules.push({ field: 'amount', op: 'gte', value: c.minAmount })
-    else if (typeof c.maxAmount === 'number') rules.push({ field: 'amount', op: 'lte', value: c.maxAmount })
-    match = { combinator: 'and', rules }
-  }
-  // Seed a brand-new rule from a bank line the user clicked "create rule from".
-  if (!rule && seed?.description) {
-    match = { combinator: 'and', rules: [{ field: 'anyText', op: 'contains', value: seed.description.slice(0, 60) }] }
+/** Read the canonical stored model, or create a blank unsaved rule. */
+function initialRuleState(rule: Record<string, any> | null, seed?: { description?: string | null; amount?: string | null } | null) {
+  if (!rule) {
+    const match: ConditionGroup = seed?.description
+      ? { combinator: 'and', rules: [{ field: 'anyText', op: 'contains', value: seed.description.slice(0, 60) }] }
+      : { combinator: 'and', rules: [] }
+    return {
+      name: '',
+      priority: 100,
+      isActive: true,
+      accountScope: [] as string[],
+      match,
+      action: 'categorize' as const,
+      mode: 'suggest' as const,
+      lines: [{ accountId: '', portion: { kind: 'remainder' as const } }],
+      partyId: '',
+      memo: '',
+    }
   }
 
-  const action: 'categorize' | 'exclude' = o.action === 'exclude' ? 'exclude' : 'categorize'
-  const v2o = o?.action === 'categorize' && o?.version === 2
-  const lines: AllocationLine[] = v2o && Array.isArray(o.lines)
+  const c = rule.criteria
+  const o = rule.outcome
+  const action: 'categorize' | 'exclude' = o.action
+  const lines: AllocationLine[] = o.action === 'categorize'
     ? o.lines.map((l: any) => ({
         accountId: l.accountId ?? '',
-        portion: l.portion ?? { kind: 'remainder' },
+        portion: l.portion,
         departmentId: l.departmentId ?? null,
         locationId: l.locationId ?? null,
         classId: l.classId ?? null,
@@ -586,20 +582,18 @@ function migrateRule(rule: Record<string, any> | null, seed?: { description?: st
         partyId: l.partyId ?? null,
         description: l.description ?? null,
       }))
-    : o.action === 'categorize' && o.accountId
-      ? [{ accountId: o.accountId, portion: { kind: 'remainder' }, partyId: o.partyId ?? null }]
-      : [{ accountId: '', portion: { kind: 'remainder' } }]
+    : [{ accountId: '', portion: { kind: 'remainder' } }]
 
   return {
     name: rule?.name ?? '',
     priority: rule?.priority ?? 100,
     isActive: rule?.is_active ?? true,
-    accountScope: v2 && Array.isArray(c.accountScope) ? (c.accountScope as string[]) : [],
-    match,
+    accountScope: c.accountScope ?? [],
+    match: c.match,
     action,
-    mode: (v2o ? o.mode : 'suggest') as 'auto' | 'suggest',
+    mode: (o.action === 'categorize' ? o.mode : 'suggest') as 'auto' | 'suggest',
     lines,
-    partyId: (v2o ? o.partyId : o.partyId) ?? '',
-    memo: (v2o ? o.memo : '') ?? '',
+    partyId: o.action === 'categorize' ? (o.partyId ?? '') : '',
+    memo: o.action === 'categorize' ? (o.memo ?? '') : '',
   }
 }

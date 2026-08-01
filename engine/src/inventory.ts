@@ -2264,21 +2264,6 @@ export async function reverseAssemblyBuild(
 // Landed cost (allocate freight/duty onto receipt layers)
 // ---------------------------------------------------------------------------
 
-export interface LandedCostInput {
-  itemId: string;
-  stockLocationId: string;
-  /** total landed cost to capitalize into inventory (> 0). */
-  amount: string;
-  basis: "value" | "quantity";
-  /** the account the freight/duty currently sits in (credited as it moves to stock). */
-  freightAccountId: string;
-  subsidiaryId: string;
-  date: string;
-  /** provenance: the freight/duty bill line. */
-  sourceDocumentLineId?: string | null;
-  memo?: string | null;
-}
-
 interface RevaluableLayer {
   id: string;
   source_movement_id: string;
@@ -2451,112 +2436,6 @@ async function devalueLayerExactly(
        set unit_cost = ${fromUnits(low)}, updated_at = now(), updated_by = ${actorId}
      where id = ${layer.id} and org_id = ${orgId}
   `);
-}
-
-/**
- * Capitalize a landed cost (freight, duty) onto an item's current cost layers at
- * a location, spread by value or quantity. Each layer's unit cost is bumped so
- * future issues carry the true landed cost, and DR inventory / CR the freight
- * account posts the capitalization. Value and quantity of stock are unchanged.
- */
-export async function allocateLandedCost(
-  orgId: string,
-  actorId: string | null,
-  input: LandedCostInput,
-): Promise<{ entryId: string; layersAffected: number }> {
-  if (cmp(input.amount, "0") <= 0)
-    throw new InventoryError("landed cost amount must be positive");
-  return await db.transaction(async (tx) => {
-    await lockInventoryPosition(tx, input.itemId, input.stockLocationId);
-    const profile = await resolveProfile(orgId, input.itemId, tx);
-    const period = await periodForDate(orgId, input.date, tx);
-    if (!period)
-      throw new InventoryError(`no accounting period for ${input.date}`);
-    const bookId = await primaryBookId(orgId, tx);
-    const currency = await subsidiaryCurrency(
-      orgId,
-      input.subsidiaryId,
-      tx,
-    );
-    const layersRes = (await tx.execute(sql`
-      select id, source_movement_id, received_at::text, original_quantity,
-             remaining_quantity, unit_cost
-        from cost_layers
-       where org_id = ${orgId} and item_id = ${input.itemId}
-         and stock_location_id = ${input.stockLocationId}
-         and remaining_quantity > 0
-       order by received_at, id
-       for update`)) as unknown as { rows: RevaluableLayer[] };
-    const layers = layersRes.rows;
-    if (layers.length === 0)
-      throw new InventoryError("no on-hand layers to capitalize onto");
-
-    const weights = layers.map((layer) =>
-      input.basis === "quantity"
-        ? layer.remaining_quantity
-        : extendCost(layer.remaining_quantity, layer.unit_cost),
-    );
-    const shares = apportionUnits(toUnits(input.amount), weights);
-    const allocationIds: string[] = [];
-    let affected = 0;
-    for (let i = 0; i < layers.length; i++) {
-      const shareUnits = shares[i];
-      if (shareUnits === 0n) continue;
-      const fragments = await revalueLayerExactly(
-        tx,
-        orgId,
-        layers[i]!,
-        shareUnits,
-        actorId,
-        profile.costingMethod !== "moving_average",
-      );
-      for (const fragment of fragments) {
-        const allocationId = randomUUID();
-        allocationIds.push(allocationId);
-        await tx.execute(sql`
-          insert into landed_cost_allocations
-            (id, org_id, source_document_line_id, target_cost_layer_id, basis,
-             amount, journal_entry_id, created_by, updated_by)
-          values
-            (${allocationId}, ${orgId}, ${input.sourceDocumentLineId ?? null},
-             ${fragment.layerId}, ${input.basis}, ${fragment.amount}, null,
-             ${actorId}, ${actorId})`);
-        affected++;
-      }
-    }
-
-    const lines: JournalLineInput[] = [
-      {
-        accountId: profile.assetAccountId,
-        amount: input.amount,
-        locationId: null,
-        memo: input.memo ?? "Landed cost",
-      },
-      {
-        accountId: input.freightAccountId,
-        amount: neg(input.amount),
-        memo: input.memo ?? "Landed cost",
-      },
-    ];
-    const entryId = await postInventoryEntry(tx, {
-      orgId,
-      bookId,
-      subsidiaryId: input.subsidiaryId,
-      currency,
-      periodId: period,
-      date: input.date,
-      entryNumber: `INV-LAND-${input.date}-${input.itemId.slice(0, 8)}`,
-      memo: input.memo ?? "Landed cost",
-      lines,
-    });
-    await tx.execute(sql`
-      update landed_cost_allocations
-         set journal_entry_id = ${entryId}
-       where org_id = ${orgId}
-         and id in (${joinIds(allocationIds)})
-    `);
-    return { entryId, layersAffected: affected };
-  });
 }
 
 /** Largest-remainder apportionment of money units across numeric weights. */

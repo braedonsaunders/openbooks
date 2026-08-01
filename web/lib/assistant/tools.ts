@@ -62,7 +62,7 @@ const whoami: AssistantToolDef = {
       data: {
         name: authz.user.name,
         email: authz.user.email,
-        role: authz.user.role,
+        roles: authz.user.roles.map(({ key }) => key),
         org: org.rows[0]?.name ?? null,
         baseCurrency: org.rows[0]?.base_currency ?? null,
         permissions: [...authz.permissions].sort(),

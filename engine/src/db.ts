@@ -35,12 +35,17 @@ function loadEnv(): Record<string, string> {
 
 export const env = loadEnv();
 
+const databaseUrl =
+  env.OPENBOOKS_BOOTSTRAP === "1"
+    ? env.OPENBOOKS_MIGRATION_DB_URL || env.OPENBOOKS_DB_URL
+    : env.OPENBOOKS_DB_URL;
+
 const basePool = new pg.Pool({
-  connectionString: env.OPENBOOKS_DB_URL,
+  connectionString: databaseUrl,
   max: 10,
   keepAlive: true,
-  // The WG path to the DB VIP flaps; without a client-side read timeout a query
-  // in flight when the tunnel drops hangs on a half-open socket for the OS TCP
+  // Without a client-side read timeout, a query in flight during an intermittent
+  // network interruption can hang on a half-open socket for the OS TCP
   // timeout (many minutes), wedging long-running jobs. query_timeout aborts the
   // query client-side and destroys the poisoned connection; the pool reconnects
   // on the next query and callers' try/catch see a normal rejection (safe to
@@ -49,7 +54,7 @@ const basePool = new pg.Pool({
   query_timeout: 120_000,
   statement_timeout: 120_000,
 });
-// A transient network blackout (e.g. the WG path to the DB VIP dropping) makes
+// A transient network interruption can make
 // an idle pool client emit 'error'; with no listener, Node crashes the whole
 // process — fatal for long-running jobs. Swallow it: the pool reconnects on the
 // next query, and per-query failures still reject normally (callers catch them).
@@ -64,7 +69,7 @@ basePool.on("error", (err) => {
 // disables the client- and server-side statement timeouts. Small, since only a
 // couple of clone/wipe jobs run at once (the worker serializes them).
 const longPool = new pg.Pool({
-  connectionString: env.OPENBOOKS_DB_URL,
+  connectionString: databaseUrl,
   max: 4,
   keepAlive: true,
   connectionTimeoutMillis: 30_000,
@@ -74,6 +79,34 @@ const longPool = new pg.Pool({
 longPool.on("error", (err) => {
   console.error("[pg longPool] transient client error (ignored, will reconnect):", (err as Error).message);
 });
+
+/**
+ * `pg.Pool` handles errors emitted by idle clients, but a checked-out client is
+ * the caller's responsibility. A tunnel or database failover can therefore
+ * emit an `error` between awaited queries and terminate Node even though the
+ * surrounding operation is prepared to retry. Keep one listener for the whole
+ * checkout, remember that the session is poisoned, and make release discard it.
+ */
+function protectCheckedOutClient(client: pg.PoolClient, label: string): pg.PoolClient {
+  let connectionError: Error | undefined;
+  let released = false;
+  const originalRelease = client.release.bind(client);
+  const handleError = (error: Error) => {
+    connectionError = error;
+    console.error(`[${label}] checked-out client error; discarding connection:`, error.message);
+  };
+  client.on("error", handleError);
+  client.release = ((error?: Error | boolean) => {
+    if (released) return;
+    released = true;
+    client.off("error", handleError);
+    originalRelease(error || connectionError);
+  }) as pg.PoolClient["release"];
+  return client;
+}
+
+const rawLongConnect = async (): Promise<pg.PoolClient> =>
+  protectCheckedOutClient(await longPool.connect(), "pg longPool");
 
 /** Timeout-free pool for long org-scoped units of work (backups, clones). */
 export { longPool };
@@ -89,9 +122,10 @@ export { longPool };
 // The GUCs are applied per checked-out connection from an AsyncLocalStorage
 // context (withOrg/withBypass) or, when none is active, from a host-registered
 // per-request resolver (see registerRequestOrgResolver). Code that runs with
-// NEITHER (CLIs, workers, the identity bootstrap before a user is known) is
-// treated as trusted and runs with bypass on — so it keeps working while every
-// authenticated request path is DB-enforced to its tenant.
+// NEITHER is denied by default: it receives an empty organization and bypass
+// remains off. Org-spanning work must therefore cross an explicit withBypass or
+// withBypassContext boundary; absence of application context is never treated
+// as authority.
 // ---------------------------------------------------------------------------
 type OrgCtx = {
   orgId: string | null;
@@ -126,13 +160,16 @@ function activeOrgCtx(): OrgCtx | undefined {
   return orgContext.getStore() ?? dbRuntime.__openbooksRequestOrgResolver?.();
 }
 
-const rawConnect = (): Promise<pg.PoolClient> =>
-  (pg.Pool.prototype.connect as (...a: unknown[]) => Promise<pg.PoolClient>).call(basePool);
+const rawConnect = async (): Promise<pg.PoolClient> =>
+  protectCheckedOutClient(
+    await (pg.Pool.prototype.connect as (...a: unknown[]) => Promise<pg.PoolClient>).call(basePool),
+    "pg pool",
+  );
 
-/** Set the RLS GUCs on a client from the active context (or bypass if none). */
+/** Set the RLS GUCs on a client from the active context (deny if none). */
 async function applyGuc(client: pg.PoolClient, ctx: OrgCtx | undefined): Promise<void> {
-  const bypass = !ctx || ctx.bypass;
-  const org = bypass ? "" : ctx!.orgId ?? "";
+  const bypass = ctx?.bypass === true;
+  const org = bypass ? "" : ctx?.orgId ?? "";
   await client.query(
     "select set_config('app.current_org', $1, false), set_config('app.bypass_rls', $2, false)",
     [org, bypass ? "on" : "off"],
@@ -169,6 +206,54 @@ export const pool = basePool;
 const poolDb = drizzle({ client: basePool });
 
 /**
+ * Fail closed when a production process is connected with a role capable of
+ * bypassing tenant RLS or escalating itself. FORCE ROW LEVEL SECURITY cannot
+ * protect a session whose login is SUPERUSER or BYPASSRLS.
+ */
+export async function assertSafeRuntimeDatabaseRole(): Promise<void> {
+  if (env.NODE_ENV !== "production") return;
+  const result = await pool.query<{
+    current_user: string;
+    unsafe_roles: string[];
+  }>(`
+    select current_user,
+           array(
+             select role_row.rolname
+               from pg_roles role_row
+              where pg_has_role(current_user, role_row.oid, 'MEMBER')
+                and (
+                  role_row.rolsuper
+                  or role_row.rolbypassrls
+                  or role_row.rolcreatedb
+                  or role_row.rolcreaterole
+                  or role_row.rolreplication
+                  or role_row.rolname in (
+                    'pg_read_server_files',
+                    'pg_write_server_files',
+                    'pg_execute_server_program'
+                  )
+                )
+              order by role_row.rolname
+           )::text[] as unsafe_roles
+  `);
+  const row = result.rows[0];
+  const unsafeRoles = Array.isArray(row?.unsafe_roles)
+    ? row.unsafe_roles
+    : String(row?.unsafe_roles ?? "")
+        .replace(/^\{|\}$/g, "")
+        .split(",")
+        .filter(Boolean);
+  if (!row || unsafeRoles.length > 0) {
+    throw new Error(
+      `[database-security] refusing production startup: role ${row?.current_user ?? "unknown"} can assume unsafe database privileges (${unsafeRoles.join(", ") || "posture unavailable"})`,
+    );
+  }
+  console.log(
+    `[database-security] runtime role ${row.current_user} verified: tenant RLS cannot be bypassed by role privilege`,
+  );
+}
+
+/**
  * Run `fn` with every `db` query scoped to `orgId` at the database (RLS). Used
  * for multi-statement atomic units (the clone engine, refresh, change-set
  * apply): pins ONE connection and one transaction with the GUCs set LOCAL, so
@@ -187,7 +272,7 @@ export async function withOrg<T>(orgId: string | null, fn: () => Promise<T>): Pr
     return fn();
   }
   // Long-running, timeout-free pool — a clone/wipe is one big transaction.
-  const client = await longPool.connect();
+  const client = await rawLongConnect();
   const bypass = orgId === null;
   try {
     await client.query("begin");
@@ -206,6 +291,54 @@ export async function withOrg<T>(orgId: string | null, fn: () => Promise<T>): Pr
       // connection already broken; release will discard it
     }
     throw err;
+  } finally {
+    client.release();
+  }
+}
+
+/**
+ * Run a normal request-sized unit of work in one tenant-scoped transaction.
+ *
+ * `withOrg` intentionally uses the timeout-free long-running pool for backups,
+ * clones, and destructive maintenance. Interactive application commands need
+ * the opposite contract: the regular pool's connection/query/statement
+ * timeouts, one pinned connection, and transaction-local RLS settings. This
+ * helper is the authoritative boundary for API/MCP idempotency and other
+ * multi-step financial commands.
+ */
+export async function withOrgTransaction<T>(
+  orgId: string,
+  fn: () => Promise<T>,
+): Promise<T> {
+  const active = orgContext.getStore();
+  if (active?.txDb && !active.bypass) {
+    if (orgId !== active.orgId) {
+      throw new Error("cannot change organization inside an active tenant transaction");
+    }
+    return fn();
+  }
+
+  const client = await rawConnect();
+  try {
+    await client.query("begin");
+    await client.query(
+      "select set_config('app.current_org', $1, true), set_config('app.bypass_rls', 'off', true)",
+      [orgId],
+    );
+    const txDb = drizzle({ client });
+    const result = await orgContext.run(
+      { orgId, bypass: false, txDb },
+      fn,
+    );
+    await client.query("commit");
+    return result;
+  } catch (error) {
+    try {
+      await client.query("rollback");
+    } catch {
+      // A broken connection is discarded by pg when released.
+    }
+    throw error;
   } finally {
     client.release();
   }

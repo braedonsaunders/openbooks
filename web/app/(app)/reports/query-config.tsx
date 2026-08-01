@@ -160,11 +160,7 @@ export function RowsConfig({
   )
 }
 
-/**
- * Multi-level sort editor (source platform "Sort by / then by"). Writes both `sorts`
- * (the engine's multi-level list, max 3) and the legacy single `sort` (kept in
- * sync with level 1) so older consumers of the plan keep working.
- */
+/** Multi-level sort editor (maximum three levels). */
 export function SortConfig({
   entity,
   query,
@@ -178,11 +174,11 @@ export function SortConfig({
 }) {
   const t = useTranslations('reports.custom.builder')
   const tReports = useTranslations('reports')
-  const sorts = query.sorts?.length ? query.sorts : query.sort ? [query.sort] : []
+  const sorts = query.sorts ?? []
 
   const commit = (next: { column: string; direction: 'asc' | 'desc' }[]) => {
     const cleaned = next.filter((s) => s.column)
-    patch({ sorts: cleaned.length ? cleaned : null, sort: cleaned[0] ?? null })
+    patch({ sorts: cleaned.length ? cleaned : null })
   }
   const setLevel = (i: number, s: { column: string; direction: 'asc' | 'desc' }) => {
     const next = [...sorts]

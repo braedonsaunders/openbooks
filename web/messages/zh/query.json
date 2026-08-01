@@ -23,7 +23,6 @@
   "runHint": "在上方编写 SQL，然后按运行或 ⌘⏎。选中文本可仅运行该部分。",
   "emptyResultSet": "查询未返回任何列",
   "noFilterMatch": "没有行匹配您的筛选条件",
-  "run_legacy": "运行查询",
   "rail": {
     "schema": "Schema",
     "snippets": "代码片段",
@@ -33,7 +32,11 @@
     "searchPlaceholder": "搜索表和列…",
     "noMatch": "没有匹配的表",
     "insertTable": "点击插入表名",
-    "insertColumn": "点击插入列名"
+    "insertColumn": "点击插入列名",
+    "showSchema": "显示架构",
+    "browseRows": "浏览行",
+    "insertTableName": "插入表名",
+    "insertSelectTemplate": "插入 SELECT 模板"
   },
   "history": {
     "count": "{count, plural, one {# 个查询} other {# 个查询}}",
@@ -74,12 +77,12 @@
       "description": "按来源分组统计的分录数量。"
     },
     "tableSizes": {
-      "label": "表行数统计",
-      "description": "每个表的估计活动行数，最大者优先。"
+      "label": "查询目录概览",
+      "description": "受管控的报表视图及其可用列数。"
     },
     "listColumns": {
       "label": "列出所有列",
-      "description": "public schema 中的每一列及其类型。"
+      "description": "受管控查询目录中每个可用列及其类型。"
     }
   }
 }

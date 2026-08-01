@@ -21,7 +21,7 @@ import { DetailPageLayout } from '../../../../../../components/page-layout'
 import { confirmDialog } from '../../../../../../lib/confirm'
 import { FilterTree } from '../../FilterTree'
 import { PaperView, type PaperData } from '../../../PaperView'
-import { RowsConfig, SummarizeConfig } from '../../../query-config'
+import { RowsConfig, SortConfig, SummarizeConfig } from '../../../query-config'
 
 type Tab = 'data' | 'filter' | 'format'
 
@@ -77,7 +77,7 @@ export function ReportBuilder({
       measures: [{ fn: 'count' }],
       filters: null,
       groupBy: null,
-      sort: e.defaultSort ?? null,
+      sorts: e.defaultSort ? [e.defaultSort] : null,
       limit: query.limit ?? 1000,
     })
   }
@@ -304,35 +304,7 @@ export function ReportBuilder({
                 <SummarizeConfig entity={entity} query={query} patch={patch} />
               )}
 
-              <div className="grid grid-cols-2 gap-3">
-                <div className={field}>
-                  <Label>{t('sortBy')}</Label>
-                  <Select
-                    value={query.sort?.column ?? ''}
-                    onChange={(e) =>
-                      patch({ sort: e.target.value ? { column: e.target.value, direction: query.sort?.direction ?? 'desc' } : null })
-                    }
-                  >
-                    <option value="">{t('sortDefault')}</option>
-                    {entity.columns.map((c) => (
-                      <option key={c.key} value={c.key}>
-                        {tReports(`catalog.columns.${entity.key}.${c.key}`)}
-                      </option>
-                    ))}
-                  </Select>
-                </div>
-                <div className={field}>
-                  <Label>{t('direction')}</Label>
-                  <Select
-                    value={query.sort?.direction ?? 'desc'}
-                    disabled={!query.sort?.column}
-                    onChange={(e) => query.sort?.column && patch({ sort: { column: query.sort.column, direction: e.target.value as 'asc' | 'desc' } })}
-                  >
-                    <option value="desc">{t('descending')}</option>
-                    <option value="asc">{t('ascending')}</option>
-                  </Select>
-                </div>
-              </div>
+              <SortConfig entity={entity} query={query} patch={patch} />
 
               <div className={field}>
                 <Label>{t('rowLimit')}</Label>

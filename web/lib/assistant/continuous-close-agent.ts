@@ -48,7 +48,7 @@ function systemAuthz(orgId: string, agentKey: "accounting" | "finance"): Authz {
       id: SYSTEM_USER_ID,
       email: "continuous-close@system.invalid",
       name: agentKey === "accounting" ? "Accounting agent" : "Finance agent",
-      role: "system_agent",
+      roles: [{ key: "system_agent", name: "System agent" }],
       orgId,
       envKind: "production",
       productionOrgId: orgId,

@@ -1,5 +1,6 @@
 import { redirect } from 'next/navigation'
 import { can, requirePermission } from '../../../../lib/authz'
+import { requireFeatureEnabled } from '../../../../lib/feature-gates'
 import { isUuid, pickString } from '../../../../lib/list-params'
 import {
   currentWeekStart,
@@ -25,6 +26,7 @@ export default async function TimesheetEntry({
   searchParams: Promise<Record<string, string | string[] | undefined>>
 }) {
   const authz = await requirePermission('time.read')
+  await requireFeatureEnabled(authz.user.orgId, 'timeTracking')
   const orgId = authz.user.orgId
   const canManage = can(authz, 'time.manage')
   const canApprove = can(authz, 'time.approve')

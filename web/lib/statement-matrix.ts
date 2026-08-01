@@ -13,7 +13,7 @@ import {
 } from './statement-format'
 
 /**
- * Multi-column statement engine. Where the legacy `accountBalances` returned a
+ * Multi-column statement engine. Where the scalar report surface returns a
  * single balance per account, this computes a VECTOR of values per account —
  * one per output column — in a single query using Postgres `sum() FILTER
  * (WHERE …)`. Columns come from the report's breakout (a column per
@@ -369,7 +369,7 @@ function comparePeriods(
 }
 
 /** Roll each column vector up the account tree; sign-flip and prune like the
- *  legacy `treeify`, but over a value vector. */
+ * scalar statement tree, but over a value vector. */
 function treeifyMatrix(
   rows: {
     id: string

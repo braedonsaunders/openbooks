@@ -29,7 +29,7 @@ export default async function AssistantPage({
       conversations={conversations}
       activeId={null}
       initialMessages={[]}
-      canWrite={can(authz, 'assistant.write') && can(authz, 'gl.post')}
+      canWrite={can(authz, 'assistant.write')}
       aiEnabled={getModel(aiConfig, 'smart') !== null}
       initialPrompt={typeof q === 'string' ? q : undefined}
     />

@@ -450,6 +450,11 @@ export async function runDueFxProviders(now = new Date()): Promise<number> {
   const due = (await db.execute(sql`
     select ${CONFIG_COLS} from fx_provider_configs
      where is_enabled and schedule <> 'manual' and next_sync_at <= ${now}
+       and exists (
+         select 1 from orgs organization
+          where organization.id = fx_provider_configs.org_id
+            and organization.env_kind = 'production'
+       )
      order by next_sync_at limit 20
   `)) as unknown as { rows: FxProviderConfigRow[] };
   let claimedCount = 0;

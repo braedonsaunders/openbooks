@@ -24,7 +24,7 @@ import { id, orgRef, auditColumns } from "./helpers";
  *
  * Built-in types (Fixed Price, Time & Materials, Cost-Plus, Not-to-Exceed) ship
  * world-class defaults that fit any project business; a tenant can add types and
- * tune every profile (e.g. to reproduce a legacy source platform RESTlet to the penny).
+ * tune every profile to match the organization's governed accounting policy.
  */
 
 /* ------------------------------------------------------------------ */
@@ -83,7 +83,7 @@ export interface OverheadSource {
     | "percent_of_labor" //    laborCost × ratePercent
     | "per_labor_hour" //      project hours × ratePerHour (flat)
     | "rate_engine" //         per-department composite burden rate × project hours-by-dept (the reference organization/Gantry model)
-    | "account_group_actual"; // legacy: sum posted GL to an overhead pool tagged to the project
+    | "posted_gl_account_group"; // sum posted GL in an overhead account group tagged to the project
   /** For percent_of_labor — the percentage (25 = 25%). */
   ratePercent?: number;
   /** For per_labor_hour — the flat dollars per labor hour. */
@@ -99,7 +99,7 @@ export interface OverheadSource {
     /** How the rate is scoped. */
     scope: "flat" | "department" | "class";
   };
-  /** For account_group_actual — the pool selection. */
+  /** For posted_gl_account_group — the pool selection. */
   accountGroup?: { dimension: string; groupKeys?: string[] };
 }
 
@@ -167,9 +167,8 @@ export interface PnlLine {
 export interface InvoicingProfile {
   /** Operational procedure used to prepare project invoices. Standard billing
    *  uses billing requests; application_for_payment uses an SOV, cumulative
-   *  applications, change orders, and retainage. Missing on legacy profiles
-   *  means standard. */
-  billingProcedure?: "standard" | "application_for_payment";
+   *  applications, change orders, and retainage. */
+  billingProcedure: "standard" | "application_for_payment";
   /** Billing bases the request form offers for this type. */
   /**
    * Billing bases this type offers. `field_ticket` bills a SELECTION OF SIGNED
@@ -325,11 +324,10 @@ export const projectTypes = pgTable(
     isBuiltIn: boolean("is_built_in").notNull().default(false),
     isActive: boolean("is_active").notNull().default(true),
     sortOrder: integer("sort_order").notNull().default(0),
-    /** Coarse back-compat classifier mirroring projects.billing_method. */
+    /** Coarse project classification used by controlled billing constraints. */
     billingMethod: text("billing_method", {
       enum: ["time_and_materials", "fixed_price", "cost_plus"],
-    }),
-    financialProfile: jsonb("financial_profile").$type<FinancialProfile>().notNull(),
+    }).notNull(),
     invoicingProfile: jsonb("invoicing_profile").$type<InvoicingProfile>().notNull(),
     backupProfile: jsonb("backup_profile").$type<BackupProfile>().notNull(),
     custom: jsonb("custom").notNull().default({}),
@@ -340,9 +338,8 @@ export const projectTypes = pgTable(
 
 /**
  * Effective-dated financial-policy history. This table is authoritative for
- * project profitability calculations; `project_types.financial_profile`
- * remains only as a backward-compatible seed value for pre-version tenants.
- * Published profiles are append-only. A new version closes the prior range.
+ * project profitability calculations. Published profiles are append-only; a
+ * new version closes the prior range.
  */
 export const projectFinancialProfileVersions = pgTable(
   "project_financial_profile_versions",
@@ -415,7 +412,7 @@ export interface BuiltInProjectType {
   key: string;
   name: string;
   description: string;
-  billingMethod: "time_and_materials" | "fixed_price" | "cost_plus" | null;
+  billingMethod: "time_and_materials" | "fixed_price" | "cost_plus";
   sortOrder: number;
   financialProfile: FinancialProfile;
   invoicingProfile: InvoicingProfile;

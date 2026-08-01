@@ -23,7 +23,6 @@
   "runHint": "上に SQL を書き、実行を押すか ⌘⏎ を押します。テキストを選択すると、その部分だけを実行します。",
   "emptyResultSet": "クエリは列を返しませんでした",
   "noFilterMatch": "フィルターに一致する行はありません",
-  "run_legacy": "クエリを実行",
   "rail": {
     "schema": "スキーマ",
     "snippets": "スニペット",
@@ -33,7 +32,11 @@
     "searchPlaceholder": "テーブルと列を検索…",
     "noMatch": "一致するテーブルがありません",
     "insertTable": "クリックしてテーブル名を挿入",
-    "insertColumn": "クリックして列名を挿入"
+    "insertColumn": "クリックして列名を挿入",
+    "showSchema": "スキーマを表示",
+    "browseRows": "行を参照",
+    "insertTableName": "テーブル名を挿入",
+    "insertSelectTemplate": "SELECTテンプレートを挿入"
   },
   "history": {
     "count": "{count, plural, one {# 件のクエリ} other {# 件のクエリ}}",
@@ -74,12 +77,12 @@
       "description": "ソースのオリジンごとにグループ化した仕訳件数。"
     },
     "tableSizes": {
-      "label": "テーブル行数",
-      "description": "テーブルごとの推定ライブ行数、大きい順。"
+      "label": "クエリカタログ概要",
+      "description": "管理されたレポートビューと利用可能な列数。"
     },
     "listColumns": {
       "label": "すべての列を一覧",
-      "description": "public スキーマ内のすべての列とその型。"
+      "description": "管理されたクエリカタログで利用可能なすべての列と型。"
     }
   }
 }

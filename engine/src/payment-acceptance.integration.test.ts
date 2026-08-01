@@ -10,7 +10,7 @@ import {
   handleProviderWebhook,
 } from "./payment-acceptance.ts";
 import { postDocument } from "./posting.ts";
-import { createScratchOrg, dropScratchOrg } from "./test-fixtures.ts";
+import { createScratchOrg, createScratchUser, dropScratchOrg } from "./test-fixtures.ts";
 
 const DB = !!process.env.OPENBOOKS_DB_URL;
 
@@ -22,10 +22,25 @@ const DB = !!process.env.OPENBOOKS_DB_URL;
 test("payment link settles a signed webhook into an applied receipt with a surcharge leg", { skip: !DB }, async () => {
   const org = await createScratchOrg();
   try {
-    const userId = randomUUID();
-    await db.execute(sql`
-      insert into users (id, org_id, email, name, password_hash, role, is_active)
-      values (${userId}, ${org.orgId}, ${`pay-${userId}@scratch.test`}, 'Pay Tester', 'x', 'admin', true)`);
+    const userId = await createScratchUser(org.orgId, "Pay Tester", "admin");
+    // Online receipts post on the provider event date. Keep the fixed invoice
+    // fixture date while ensuring the scratch calendar also covers today so
+    // this boundary test remains valid when the suite runs after July 2026.
+    const today = new Date().toISOString().slice(0, 10);
+    if (today < "2026-07-01" || today > "2026-07-31") {
+      const [year, month] = today.split("-").map(Number) as [number, number, number];
+      const startsOn = `${year}-${String(month).padStart(2, "0")}-01`;
+      const endsOn = new Date(Date.UTC(year, month, 0)).toISOString().slice(0, 10);
+      await db.execute(sql`
+        insert into accounting_periods
+          (org_id, fiscal_calendar_id, fiscal_year, period_number, name,
+           starts_on, ends_on, is_adjustment)
+        select ${org.orgId}, fiscal_calendar_id, ${year}, ${month}, ${today.slice(0, 7)},
+               ${startsOn}, ${endsOn}, false
+          from accounting_periods
+         where id = ${org.periodId}
+      `);
+    }
 
     // Posted $100 invoice.
     const invoiceId = randomUUID();

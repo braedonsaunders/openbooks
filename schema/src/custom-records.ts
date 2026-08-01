@@ -24,9 +24,7 @@ import { auditColumns, id, orgRef } from "./helpers";
  * (@openbooks/forms-core: zod validators, conditional-visibility rules, typed
  * formula trees incl. line-item rollups, gl_account/party entity pickers).
  * Record types deliberately reuse it rather than inventing a second field
- * language; the column keeps its historical `fields` name and still accepts a
- * legacy flat FormField[] (normalized into one header section on read — see
- * web/lib/record-schema.ts). A record's `data` jsonb is one merged map: header
+ * language. A record's `data` jsonb is one merged map: header
  * values keyed by field id, plus each repeating section's rows keyed by section
  * id (data[sectionId] = [{ rowFieldId: value }, …]).
  *

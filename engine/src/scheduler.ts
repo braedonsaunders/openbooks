@@ -40,9 +40,14 @@ export async function tick(): Promise<void> {
     // NOTE: this org-less scan needs a supporting index on user_scripts with
     // column order (trigger_point, is_active, next_run_at).
     const due = (await db.execute(sql`
-      select id, org_id as "orgId", cron, next_run_at as "nextRunAt"
-        from user_scripts
-       where trigger_point = 'scheduled' and is_active and next_run_at <= now()
+      select script.id, script.org_id as "orgId", script.cron, script.next_run_at as "nextRunAt"
+        from user_scripts script
+        join orgs organization on organization.id = script.org_id
+       where script.trigger_point = 'scheduled'
+         and script.is_active
+         and script.next_run_at <= now()
+         and organization.env_kind = 'production'
+         and organization.settings #>> '{features,scripts}' = 'true'
        order by next_run_at
     `)) as unknown as { rows: { id: string; orgId: string; cron: string | null; nextRunAt: Date }[] };
 

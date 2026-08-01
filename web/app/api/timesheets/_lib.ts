@@ -204,12 +204,9 @@ export async function loadPickers(orgId: string): Promise<TimesheetPickers> {
         from parties p
        where p.org_id = ${orgId}
          and p.is_active
-         and (
-           p.custom->>'nsKind' = 'employee'
-           or exists (
-             select 1 from employee_roles r
-              where r.party_id = p.id and r.org_id = ${orgId} and r.is_active
-           )
+         and exists (
+           select 1 from employee_roles r
+            where r.party_id = p.id and r.org_id = ${orgId} and r.is_active
          )
        order by p.display_name`),
     db.execute(sql`

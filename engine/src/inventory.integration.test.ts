@@ -6,7 +6,6 @@ import { db } from "./db.ts";
 import { fromUnits, toUnits } from "./money.ts";
 import {
   adjustInventory,
-  allocateLandedCost,
   buildAssembly,
   createTransferOrder,
   ensureLot,
@@ -149,9 +148,10 @@ test("inventory subledger posts, costs, and keeps GL = Σ layer value", { skip: 
 
     // -- Landed cost: capitalize freight onto FIFO layers --------------------
     const glBefore = await glBalance(org.orgId, org.accounts.invAsset);
-    await allocateLandedCost(org.orgId, null, {
-      itemId: org.items.fifo, stockLocationId: loc, amount: "30", basis: "value",
-      freightAccountId: org.accounts.freight, subsidiaryId: sub, date: org.date,
+    await postLandedCostVoucher(org.orgId, null, {
+      amount: "30", basis: "value", freightAccountId: org.accounts.freight,
+      subsidiaryId: sub, voucherDate: org.date,
+      targets: [{ itemId: org.items.fifo, stockLocationId: loc }],
     });
     const glAfter = await glBalance(org.orgId, org.accounts.invAsset);
     assert.equal(toUnits(glAfter) - toUnits(glBefore), toUnits("30")); // +30 capitalized
@@ -374,15 +374,14 @@ test("landed costs preserve the GL-to-layer invariant to the smallest ledger uni
       date: org.date,
     });
 
-    await allocateLandedCost(org.orgId, actor, {
-      itemId: org.items.fifo,
-      stockLocationId: org.stockLocationId,
+    await postLandedCostVoucher(org.orgId, actor, {
       amount: "0.0001",
       basis: "quantity",
       freightAccountId: org.accounts.freight,
       subsidiaryId: org.subsidiaryId,
-      date: org.date,
+      voucherDate: org.date,
       memo: "Minimum-unit landed cost",
+      targets: [{ itemId: org.items.fifo, stockLocationId: org.stockLocationId }],
     });
     await assertInvariant(org);
 
@@ -488,7 +487,9 @@ test("landed costs preserve the GL-to-layer invariant to the smallest ledger uni
     assert.equal(toUnits(evidence.rows[0]!.allocated), toUnits("0.0006"));
     assert.ok(evidence.rows[0]!.allocation_rows >= 6);
     assert.equal(evidence.rows[0]!.unlinked, 0);
-    assert.equal(evidence.rows[0]!.vouchers, 3);
+    // quantity + manual + value + quantity remain posted; the weight voucher
+    // is the independently preserved void below.
+    assert.equal(evidence.rows[0]!.vouchers, 4);
     assert.equal(evidence.rows[0]!.void_vouchers, 1);
   } finally {
     await dropScratchOrg(org.orgId);

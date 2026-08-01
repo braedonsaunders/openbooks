@@ -1,6 +1,6 @@
 import type {
-  AnyCriteria,
-  AnyOutcome,
+  RuleCriteria,
+  RuleOutcome,
   RuleCondition,
   RuleConditionGroup,
   RuleSplitLine,
@@ -28,6 +28,10 @@ function isUuidLike(v: unknown): v is string {
   return typeof v === 'string' && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(v)
 }
 
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value)
+}
+
 function validateCondition(raw: Record<string, unknown>): ValidationResult<RuleCondition> {
   const field = String(raw.field ?? '')
   const op = String(raw.op ?? '')
@@ -39,7 +43,10 @@ function validateCondition(raw: Record<string, unknown>): ValidationResult<RuleC
     return { ok: true, value: { field: 'flow', op: 'is', value: v as 'in' | 'out' } }
   }
   if (field === 'source') {
-    return { ok: true, value: { field: 'source', op: 'equals', value: String(raw.value ?? '').slice(0, 40) } }
+    if (op !== 'equals') return { ok: false, error: 'source requires the "equals" operator' }
+    const value = typeof raw.value === 'string' ? raw.value.trim() : ''
+    if (!value) return { ok: false, error: 'source requires a value' }
+    return { ok: true, value: { field: 'source', op: 'equals', value: value.slice(0, 40) } }
   }
   if (field === 'amount') {
     if (!NUMBER_OPS.has(op)) return { ok: false, error: `invalid amount operator "${op}"` }
@@ -66,7 +73,10 @@ function validateCondition(raw: Record<string, unknown>): ValidationResult<RuleC
       return { ok: true, value: { field: 'date', op: 'withinDays', value: n } }
     }
     const v = String(raw.value ?? '')
-    if (!/^\d{4}-\d{2}-\d{2}$/.test(v)) return { ok: false, error: 'date must be YYYY-MM-DD' }
+    const timestamp = Date.parse(`${v}T00:00:00Z`)
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(v) || !Number.isFinite(timestamp) || new Date(timestamp).toISOString().slice(0, 10) !== v) {
+      return { ok: false, error: 'date must be a valid YYYY-MM-DD date' }
+    }
     return { ok: true, value: { field: 'date', op: op as RuleCondition['op'], value: v } }
   }
   if (TEXT_FIELDS.has(field)) {
@@ -81,12 +91,20 @@ function validateCondition(raw: Record<string, unknown>): ValidationResult<RuleC
 
 function validateGroup(raw: unknown, depth: number, count: { n: number }): ValidationResult<RuleConditionGroup> {
   if (depth > MAX_DEPTH) return { ok: false, error: 'condition nesting is too deep' }
-  const g = (raw ?? {}) as Record<string, unknown>
-  const combinator = g.combinator === 'or' ? 'or' : 'and'
-  const rawRules = Array.isArray(g.rules) ? g.rules : []
+  if (!isRecord(raw)) return { ok: false, error: 'each condition group must be an object' }
+  const g = raw
+  if (g.combinator !== 'and' && g.combinator !== 'or') {
+    return { ok: false, error: 'condition group combinator must be "and" or "or"' }
+  }
+  const combinator = g.combinator
+  if (!Array.isArray(g.rules) || g.rules.length === 0) {
+    return { ok: false, error: 'each condition group needs at least one condition' }
+  }
+  const rawRules = g.rules
   const rules: (RuleCondition | RuleConditionGroup)[] = []
   for (const r of rawRules) {
-    const rec = (r ?? {}) as Record<string, unknown>
+    if (!isRecord(r)) return { ok: false, error: 'each condition must be an object' }
+    const rec = r
     if (Array.isArray(rec.rules)) {
       const sub = validateGroup(rec, depth + 1, count)
       if (!sub.ok) return sub
@@ -102,13 +120,19 @@ function validateGroup(raw: unknown, depth: number, count: { n: number }): Valid
   return { ok: true, value: { combinator, rules } }
 }
 
-export function validateCriteria(raw: unknown): ValidationResult<AnyCriteria> {
-  const c = (raw ?? {}) as Record<string, unknown>
+export function validateCriteria(raw: unknown): ValidationResult<RuleCriteria> {
+  if (!isRecord(raw)) return { ok: false, error: 'criteria must be an object' }
+  const c = raw
+  if (c.version !== 2) return { ok: false, error: 'criteria version must be 2' }
   const group = validateGroup(c.match, 0, { n: 0 })
   if (!group.ok) return group
-  const value: AnyCriteria = { version: 2, match: group.value }
-  if (Array.isArray(c.accountScope)) {
-    const scope = c.accountScope.filter(isUuidLike)
+  const value: RuleCriteria = { version: 2, match: group.value }
+  if (c.accountScope !== undefined) {
+    if (!Array.isArray(c.accountScope) || !c.accountScope.every(isUuidLike)) {
+      return { ok: false, error: 'account scope must contain only account IDs' }
+    }
+    const scope = [...new Set(c.accountScope)]
+    if (scope.length !== c.accountScope.length) return { ok: false, error: 'account scope contains duplicate accounts' }
     if (scope.length > 0) value.accountScope = scope
   }
   return { ok: true, value }
@@ -126,21 +150,30 @@ function validateSplitLine(raw: Record<string, unknown>): ValidationResult<RuleS
     const v = Number(p.value)
     if (!Number.isFinite(v) || v <= 0) return { ok: false, error: 'fixed amount must be positive' }
     portion = { kind: 'fixed', value: v }
-  } else {
+  } else if (p.kind === 'remainder') {
     portion = { kind: 'remainder' }
+  } else {
+    return { ok: false, error: 'portion kind must be remainder, percent, or fixed' }
   }
   const line: RuleSplitLine = { accountId: raw.accountId, portion }
   for (const k of ['partyId', 'departmentId', 'projectId', 'locationId', 'classId', 'taxCodeId'] as const) {
+    if (raw[k] !== undefined && raw[k] !== null && !isUuidLike(raw[k])) {
+      return { ok: false, error: `${k} must be a valid ID` }
+    }
     if (isUuidLike(raw[k])) line[k] = raw[k] as string
   }
   if (typeof raw.description === 'string' && raw.description.trim()) line.description = raw.description.slice(0, 200)
   return { ok: true, value: line }
 }
 
-export function validateOutcome(raw: unknown): ValidationResult<AnyOutcome> {
-  const o = (raw ?? {}) as Record<string, unknown>
+export function validateOutcome(raw: unknown): ValidationResult<RuleOutcome> {
+  if (!isRecord(raw)) return { ok: false, error: 'outcome must be an object' }
+  const o = raw
   if (o.action === 'exclude') return { ok: true, value: { action: 'exclude' } }
   if (o.action !== 'categorize') return { ok: false, error: 'outcome action must be "exclude" or "categorize"' }
+
+  if (o.version !== 2) return { ok: false, error: 'categorize outcome version must be 2' }
+  if (o.mode !== 'auto' && o.mode !== 'suggest') return { ok: false, error: 'mode must be "auto" or "suggest"' }
 
   const rawLines = Array.isArray(o.lines) ? o.lines : []
   if (rawLines.length === 0) return { ok: false, error: 'a categorize rule needs at least one line' }
@@ -148,15 +181,18 @@ export function validateOutcome(raw: unknown): ValidationResult<AnyOutcome> {
   const lines: RuleSplitLine[] = []
   let remainderCount = 0
   for (const rl of rawLines) {
-    const res = validateSplitLine((rl ?? {}) as Record<string, unknown>)
+    if (!isRecord(rl)) return { ok: false, error: 'each split line must be an object' }
+    const res = validateSplitLine(rl)
     if (!res.ok) return res
     if (res.value.portion.kind === 'remainder') remainderCount++
     lines.push(res.value)
   }
   if (remainderCount > 1) return { ok: false, error: 'only one line can be the remainder' }
 
-  const mode = o.mode === 'auto' ? 'auto' : 'suggest'
-  const outcome: Extract<AnyOutcome, { version: 2 }> = { action: 'categorize', version: 2, mode, lines }
+  const outcome: Extract<RuleOutcome, { action: 'categorize' }> = { action: 'categorize', version: 2, mode: o.mode, lines }
+  if (o.partyId !== undefined && o.partyId !== null && !isUuidLike(o.partyId)) {
+    return { ok: false, error: 'partyId must be a valid ID' }
+  }
   if (isUuidLike(o.partyId)) outcome.partyId = o.partyId
   if (typeof o.memo === 'string' && o.memo.trim()) outcome.memo = o.memo.slice(0, 300)
   return { ok: true, value: outcome }

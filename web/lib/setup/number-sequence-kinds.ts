@@ -42,7 +42,7 @@ function friendlyUnknownKind(kind: string): string {
     .join(' ')
 }
 
-/** Built-in kinds plus this organization's custom-record types and legacy rows. */
+/** Built-in kinds plus this organization's custom-record and extension kinds. */
 export async function loadNumberSequenceKindOptions(orgId: string): Promise<NumberSequenceKindOption[]> {
   const [customTypes, configured] = await Promise.all([
     db.execute(sql`

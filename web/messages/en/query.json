@@ -23,7 +23,6 @@
   "runHint": "Write SQL above, then press Run or ⌘⏎. Select text to run just that.",
   "emptyResultSet": "Query returned no columns",
   "noFilterMatch": "No rows match your filter",
-  "run_legacy": "Run query",
   "rail": {
     "schema": "Schema",
     "snippets": "Snippets",
@@ -33,7 +32,11 @@
     "searchPlaceholder": "Search tables & columns…",
     "noMatch": "No matching tables",
     "insertTable": "Click to insert table name",
-    "insertColumn": "Click to insert column name"
+    "insertColumn": "Click to insert column name",
+    "showSchema": "Show schema",
+    "browseRows": "Browse rows",
+    "insertTableName": "Insert table name",
+    "insertSelectTemplate": "Insert SELECT template"
   },
   "history": {
     "count": "{count, plural, one {# query} other {# queries}}",
@@ -74,12 +77,12 @@
       "description": "Count of entries grouped by their source origin."
     },
     "tableSizes": {
-      "label": "Table row counts",
-      "description": "Estimated live rows per table, largest first."
+      "label": "Query catalog overview",
+      "description": "Governed reporting views with their available column counts."
     },
     "listColumns": {
       "label": "List all columns",
-      "description": "Every column in the public schema with its type."
+      "description": "Every available column in the governed query catalog with its type."
     }
   }
 }

@@ -14,7 +14,7 @@
   "financialChangeReasonPlaceholder": "说明会计政策变更",
   "financialChangeReasonRequired": "请输入有意义的财务政策变更原因",
   "financialVersionNotice": "保存后将发布新的按生效日期管理的政策。以前期间保留原政策。",
-  "legacySeed": "旧版初始值",
+  "initialPolicy": "初始政策",
   "deleteConfirm": "删除或归档“{name}”？",
   "tabs": {
     "general": "常规",

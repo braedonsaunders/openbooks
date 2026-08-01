@@ -13,6 +13,7 @@ import {
 } from "@openbooks/engine/src/close.ts";
 import { guardPermission } from "../../../../lib/authz";
 import { isUuid } from "../../../../lib/list-params";
+import { isFeatureEnabled } from "../../../../lib/features";
 
 export const runtime = "nodejs";
 
@@ -349,6 +350,19 @@ async function saveAutomation(orgId: string, actorId: string, body: Body) {
 }
 
 async function savePackage(orgId: string, actorId: string, body: Body) {
+  if (!Array.isArray(body.reports)) throw new CloseError("reports must be an array");
+  const reports = body.reports.map((report) => {
+    if (
+      !report
+      || typeof report !== "object"
+      || Array.isArray(report)
+      || typeof (report as Record<string, unknown>).slug !== "string"
+      || !(report as Record<string, unknown>).slug
+    ) {
+      throw new CloseError("each report attachment requires a slug");
+    }
+    return report as Record<string, unknown>;
+  });
   const id =
     typeof body.id === "string" && isUuid(body.id) ? body.id : undefined;
   const isDefault = body.isDefault === true;
@@ -359,7 +373,7 @@ async function savePackage(orgId: string, actorId: string, body: Body) {
       );
     if (id) {
       await tx.execute(sql`update close_reporting_packages set name = ${text(body, "name", true)!}, description = ${text(body, "description")},
-        reports = ${JSON.stringify(Array.isArray(body.reports) ? body.reports : [])}::jsonb,
+        reports = ${JSON.stringify(reports)}::jsonb,
         recipients = ${JSON.stringify(Array.isArray(body.recipients) ? body.recipients : [])}::jsonb,
         delivery = ${JSON.stringify(object(body, "delivery"))}::jsonb, is_default = ${isDefault},
         is_active = ${body.isActive !== false}, updated_at = now(), updated_by = ${actorId}
@@ -369,7 +383,7 @@ async function savePackage(orgId: string, actorId: string, body: Body) {
     const result = (await tx.execute(sql`insert into close_reporting_packages
       (org_id, name, description, reports, recipients, delivery, is_default, is_active, created_by, updated_by)
       values (${orgId}, ${text(body, "name", true)!}, ${text(body, "description")},
-              ${JSON.stringify(Array.isArray(body.reports) ? body.reports : [])}::jsonb,
+              ${JSON.stringify(reports)}::jsonb,
               ${JSON.stringify(Array.isArray(body.recipients) ? body.recipients : [])}::jsonb,
               ${JSON.stringify(object(body, "delivery"))}::jsonb, ${isDefault}, ${body.isActive !== false}, ${actorId}, ${actorId}) returning id`)) as any;
     return result.rows[0].id as string;
@@ -390,6 +404,10 @@ export async function POST(req: Request) {
   if (gate instanceof NextResponse) return gate;
   const { orgId, id: actorId } = gate.user;
   try {
+    const advancedActions = new Set(["save-blueprint", "save-policy", "save-automation", "save-package", "send-package"]);
+    if (advancedActions.has(action) && !(await isFeatureEnabled(orgId, "advancedClose"))) {
+      throw new CloseError("enable Advanced close controls to manage blueprints, policies, automation, or reporting packages");
+    }
     if (action === "save-calendar")
       return NextResponse.json({
         ok: true,

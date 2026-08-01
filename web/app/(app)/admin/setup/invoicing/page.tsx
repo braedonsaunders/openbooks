@@ -21,11 +21,11 @@ export default async function InvoicingSettingsPage() {
       select count(*) filter (where is_active)::int as active,
              count(*) filter (
                where is_active
-                 and coalesce(invoicing_profile->>'billingProcedure', 'standard') = 'standard'
+                 and invoicing_profile->>'billingProcedure' = 'standard'
              )::int as standard,
              count(*) filter (
                where is_active
-                 and coalesce(invoicing_profile->>'billingProcedure', 'standard') = 'application_for_payment'
+                 and invoicing_profile->>'billingProcedure' = 'application_for_payment'
              )::int as applications
         from project_types
        where org_id = ${orgId}`) as unknown as Promise<{

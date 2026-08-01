@@ -11,6 +11,7 @@ import { agingDetail, transactionDetail } from './reports'
 import { getMoneyFormatter } from './money-server'
 import type { ReportDrillResponse, ReportDrillTarget } from './report-drill'
 import type { StatementDimFilter } from './statement-matrix'
+import { decimalCmp, decimalNeg, decimalSum } from './statement-format'
 
 export const REPORT_DRILL_PAGE_SIZE = 50
 
@@ -56,9 +57,9 @@ async function ledgerData(target: Extract<ReportDrillTarget, { kind: 'ledger' }>
     title: target.label,
     description: tr('drillDrawer.supporting'),
     summary: [
-      { label: tr('detail.netTotal'), value: money(result.net) },
-      { label: tr('trialBalance.columns.debits'), value: money(result.totalDebit) },
-      { label: tr('trialBalance.columns.credits'), value: money(result.totalCredit) },
+      { label: tr('detail.netTotal'), value: money(Number(result.net)) },
+      { label: tr('trialBalance.columns.debits'), value: money(Number(result.totalDebit)) },
+      { label: tr('trialBalance.columns.credits'), value: money(Number(result.totalCredit)) },
     ],
     columns: [
       { label: tc('labels.date') },
@@ -75,8 +76,8 @@ async function ledgerData(target: Extract<ReportDrillTarget, { kind: 'ledger' }>
         line.entryNumber,
         [line.accountNumber, line.accountName].filter(Boolean).join(' · '),
         [line.party, line.memo].filter(Boolean).join(' · '),
-        line.amount > 0 ? money(line.amount) : '',
-        line.amount < 0 ? money(-line.amount) : '',
+        decimalCmp(line.amount, '0') > 0 ? money(Number(line.amount)) : '',
+        decimalCmp(line.amount, '0') < 0 ? money(Number(decimalNeg(line.amount))) : '',
       ],
       transaction: { entryId: line.entryId, docKind: line.docKind, docId: line.docId },
     })),
@@ -98,7 +99,7 @@ async function agingData(target: Extract<ReportDrillTarget, { kind: 'aging' }>, 
   return {
     title: target.label,
     description: tr('drillDrawer.supporting'),
-    summary: [{ label: tc('labels.total'), value: money(rows.reduce((sum, row) => sum + row.open, 0)) }],
+    summary: [{ label: tc('labels.total'), value: money(Number(decimalSum(rows.map((row) => row.open)))) }],
     columns: [
       { label: tc('labels.party') },
       { label: tc('labels.reference') },
@@ -109,7 +110,7 @@ async function agingData(target: Extract<ReportDrillTarget, { kind: 'aging' }>, 
     ],
     rows: paginate(rows, page).map((row) => ({
       key: row.docId,
-      cells: [row.partyName, row.reference, row.dueDate, row.ageDays, tr(`aging.buckets.${row.bucket}`), money(row.open)],
+      cells: [row.partyName, row.reference, row.dueDate, row.ageDays, tr(`aging.buckets.${row.bucket}`), money(Number(row.open))],
       transaction: { entryId: row.docId, docKind: row.docKind, docId: row.docId },
     })),
     linkColumn: 1,

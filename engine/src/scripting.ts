@@ -53,7 +53,7 @@ export interface ScriptContext {
   /** endpoint scripts: the inbound HTTP request { method, query, body }. */
   request?: Record<string, unknown>;
   org: { id: string; name: string; baseCurrency: string };
-  user?: { id: string; name: string; role: string };
+  user?: { id: string; name: string; roles: string[] };
 }
 
 export interface ScriptOutcome {
@@ -80,6 +80,16 @@ const MUTABLE_FIELDS = new Set([
   "classId",
   "custom",
 ]);
+
+/** Domain-boundary gate for every script execution path. */
+export async function scriptingFeatureEnabled(orgId: string): Promise<boolean> {
+  const result = (await db.execute(sql`
+    select settings #>> '{features,scripts}' as enabled
+      from orgs
+     where id = ${orgId}
+  `)) as unknown as { rows: { enabled: string | null }[] };
+  return result.rows[0]?.enabled === "true";
+}
 
 export async function runScript(
   source: string,
@@ -111,6 +121,7 @@ export async function runScript(
       const sqlText = String(vm.dump(sqlH));
       try {
         const result = await runUserSql(sqlText, {
+          orgId: ctx.org.id,
           maxRows: 5_000,
           timeoutMs: 5_000,
         });
@@ -290,6 +301,7 @@ export async function runTriggerScripts(
   ctx: ScriptContext,
   targetId: string,
 ): Promise<ScriptOutcome[]> {
+  if (!(await scriptingFeatureEnabled(ctx.org.id))) return [];
   const docKind = ctx.document?.kind ?? "";
   const scripts = await db
     .select()
@@ -339,6 +351,7 @@ export async function runScheduledScript(
   scriptId: string,
   orgId: string,
 ): Promise<ScriptOutcome> {
+  if (!(await scriptingFeatureEnabled(orgId))) throw new Error("scripts feature is disabled");
   const [s] = await db
     .select()
     .from(schema.userScripts)
@@ -388,9 +401,10 @@ export async function runScheduledScript(
 export async function runEndpointScript(
   slug: string,
   orgId: string,
-  user: { id: string; name: string; role: string },
+  user: { id: string; name: string; roles: string[] },
   request: { method: string; query: Record<string, string>; body: unknown },
 ): Promise<ScriptOutcome | null> {
+  if (!(await scriptingFeatureEnabled(orgId))) return null;
   const [s] = await db
     .select()
     .from(schema.userScripts)
@@ -447,6 +461,7 @@ export async function runBulkScript(
   scriptId: string,
   orgId: string,
 ): Promise<ScriptOutcome> {
+  if (!(await scriptingFeatureEnabled(orgId))) throw new Error("scripts feature is disabled");
   const [s] = await db
     .select()
     .from(schema.userScripts)
@@ -504,6 +519,14 @@ export function computeNextRunAt(
 }
 
 export async function refreshScheduledNextRuns(orgId: string): Promise<void> {
+  if (!(await scriptingFeatureEnabled(orgId))) {
+    await db.execute(sql`
+      update user_scripts
+         set next_run_at = null
+       where org_id = ${orgId} and trigger_point = 'scheduled'
+    `);
+    return;
+  }
   const scripts = await db
     .select()
     .from(schema.userScripts)
