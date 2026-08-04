@@ -67,6 +67,55 @@ jobs:
     timeout-minutes: 20
     environment: dev
     steps:
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Run deployment bootstrap
+        env:
+          DOKPLOY_URL: ${{ secrets.DOKPLOY_URL }}
+          DOKPLOY_TOKEN: ${{ secrets.DOKPLOY_TOKEN }}
+          COMPOSE_ID: ${{ secrets.DOKPLOY_COMPOSE_ID }}
+          NEW_TAG: ${{ needs.build.outputs.tag }}
+        run: |
+          set -euo pipefail
+          base="${DOKPLOY_URL%/}"
+          current="$(curl -sS --fail -H "x-api-key: $DOKPLOY_TOKEN" \
+            -G "$base/api/compose.one" --data-urlencode "composeId=$COMPOSE_ID")"
+          env_text="$(jq -r '.env // ""' <<<"$current")"
+          env_value() {
+            local key="$1"
+            sed -n "s/^${key}=//p" <<<"$env_text" | head -n 1
+          }
+          migration_url="$(env_value OPENBOOKS_MIGRATION_DB_URL)"
+          runtime_url="$(env_value OPENBOOKS_RUNTIME_DB_URL)"
+          if [ -z "$runtime_url" ]; then runtime_url="$(env_value OPENBOOKS_DB_URL)"; fi
+          if [ -z "$migration_url" ] || [ -z "$runtime_url" ]; then
+            echo "::error::Dev deployment requires separate OPENBOOKS_MIGRATION_DB_URL and runtime database URLs"
+            exit 1
+          fi
+          echo "::add-mask::$migration_url"
+          echo "::add-mask::$runtime_url"
+          bootstrap_env="$(mktemp)"
+          cleanup() { rm -f "$bootstrap_env"; }
+          trap cleanup EXIT
+          chmod 600 "$bootstrap_env"
+          {
+            printf 'NODE_ENV=production\n'
+            printf 'OPENBOOKS_BOOTSTRAP=1\n'
+            printf 'OPENBOOKS_MIGRATION_DB_URL=%s\n' "$migration_url"
+            printf 'OPENBOOKS_RUNTIME_DB_URL=%s\n' "$runtime_url"
+            for key in ORG_NAME ORG_CURRENCY ORG_COUNTRY ADMIN_EMAIL ADMIN_NAME ADMIN_PASSWORD; do
+              value="$(env_value "$key")"
+              if [ -n "$value" ]; then printf '%s=%s\n' "$key" "$value"; fi
+            done
+          } > "$bootstrap_env"
+          docker pull "$IMAGE_NAME:$NEW_TAG"
+          docker run --rm --env-file "$bootstrap_env" \
+            "$IMAGE_NAME:$NEW_TAG" node scripts/bootstrap.mjs
+
       - name: Select image and deploy
         env:
           DOKPLOY_URL: ${{ secrets.DOKPLOY_URL }}
@@ -88,38 +137,6 @@ jobs:
           if [ -z "$compose_file" ]; then
             echo "::error::The configured deployment has no compose source"
             exit 1
-          fi
-          # A completed one-shot Compose service is otherwise eligible for
-          # reuse across image rollouts. Stamp the bootstrap service itself so
-          # every immutable revision reruns migrations before web can start.
-          if grep -Eq '^[[:space:]]*OPENBOOKS_BOOTSTRAP_REV:' <<<"$compose_file"; then
-            compose_file="$(sed -E "s|^([[:space:]]*OPENBOOKS_BOOTSTRAP_REV:).*|\\1 \"${NEW_TAG}\"|" <<<"$compose_file")"
-          elif grep -Eq '^[[:space:]]*-[[:space:]]*OPENBOOKS_BOOTSTRAP_REV=' <<<"$compose_file"; then
-            compose_file="$(sed -E "s|^([[:space:]]*-[[:space:]]*OPENBOOKS_BOOTSTRAP_REV=).*|\\1${NEW_TAG}|" <<<"$compose_file")"
-          else
-            compose_file="$(awk -v rev="$NEW_TAG" '
-              /^[[:space:]]*OPENBOOKS_BOOTSTRAP:[[:space:]]*["'\''"]?1["'\''"]?[[:space:]]*$/ {
-                print
-                match($0, /^[[:space:]]*/)
-                print substr($0, 1, RLENGTH) "OPENBOOKS_BOOTSTRAP_REV: \"" rev "\""
-                inserted=1
-                next
-              }
-              /^[[:space:]]*-[[:space:]]*OPENBOOKS_BOOTSTRAP=1[[:space:]]*$/ {
-                print
-                match($0, /^[[:space:]]*/)
-                print substr($0, 1, RLENGTH) "- OPENBOOKS_BOOTSTRAP_REV=" rev
-                inserted=1
-                next
-              }
-              { print }
-              END { if (!inserted) exit 42 }
-            ' <<<"$compose_file")" || {
-              echo "::error::Could not stamp the bootstrap service in the configured Compose source"
-              echo "Configured Compose service headers and migration markers:"
-              grep -nE '^[[:space:]]{0,8}[[:alnum:]_-]+:[[:space:]]*$|OPENBOOKS_BOOTSTRAP|bootstrap|migrat' <<<"$compose_file" || true
-              exit 1
-            }
           fi
           jq -n --arg id "$COMPOSE_ID" --arg env "$new_env" --arg composeFile "$compose_file" \
             '{composeId:$id, env:$env, composeFile:$composeFile}' \
