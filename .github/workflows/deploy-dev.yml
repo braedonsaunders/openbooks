@@ -245,24 +245,29 @@ jobs:
             mkdir -p "$backup_dir"
             chmod 700 "$backup_dir"
             backup_path="$backup_dir/pre-alpha3-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}.dump"
-            docker run --rm \
-              -e PGOPTIONS='-c app.bypass_rls=on' \
-              -v "$backup_dir:/backup" postgres:16 sh -ec \
-              'pg_dump "$1" --enable-row-security --format=custom --file=/backup/"$2"' \
-              sh "$migration_url" "$(basename "$backup_path")"
+            docker run --rm -e PGOPTIONS='-c app.bypass_rls=on' postgres:16 \
+              pg_dump "$migration_url" --enable-row-security --format=custom > "$backup_path"
             chmod 600 "$backup_path"
             test -s "$backup_path"
 
             reference_name="openbooks-baseline-reference-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
-            docker run --name "$reference_name" \
-              -e POSTGRES_PASSWORD='openbooks-reference-only' \
-              -e POSTGRES_DB=openbooks -p 127.0.0.1::5432 -d postgres:16 >/dev/null
+            runner_network="$(docker inspect "$HOSTNAME" --format '{{range $name, $_ := .NetworkSettings.Networks}}{{$name}}{{"\n"}}{{end}}' 2>/dev/null | head -n 1 || true)"
+            if [ -n "$runner_network" ]; then
+              docker run --name "$reference_name" --network "$runner_network" \
+                -e POSTGRES_PASSWORD='openbooks-reference-only' \
+                -e POSTGRES_DB=openbooks -d postgres:16 >/dev/null
+              reference_url="postgresql://postgres:openbooks-reference-only@${reference_name}:5432/openbooks"
+            else
+              docker run --name "$reference_name" \
+                -e POSTGRES_PASSWORD='openbooks-reference-only' \
+                -e POSTGRES_DB=openbooks -p 127.0.0.1::5432 -d postgres:16 >/dev/null
+              reference_port="$(docker port "$reference_name" 5432/tcp | sed -n 's/.*://p' | head -n 1)"
+              reference_url="postgresql://postgres:openbooks-reference-only@127.0.0.1:${reference_port}/openbooks"
+            fi
             for attempt in $(seq 1 30); do
               docker exec "$reference_name" pg_isready -U postgres -d openbooks >/dev/null 2>&1 && break
               sleep 1
             done
-            reference_port="$(docker port "$reference_name" 5432/tcp | sed -n 's/.*://p' | head -n 1)"
-            reference_url="postgresql://postgres:openbooks-reference-only@127.0.0.1:${reference_port}/openbooks"
             OPENBOOKS_DB_URL="$reference_url" NODE_ENV=test \
               ORG_NAME='Canonical Reference' ORG_CURRENCY=CAD ORG_COUNTRY=CA \
               ADMIN_EMAIL='reference@example.test' ADMIN_PASSWORD='Reference-only-2026!' \
