@@ -12,7 +12,6 @@ import {
   NAV_MODULES,
   NAV_SUBGROUPS,
   defaultNavConfig,
-  layerInNavApps,
   type NavGroupKey,
   type NavAppOption,
   type OrgNavConfig,
@@ -47,8 +46,7 @@ export async function resolveNav(
     db.execute(sql`
       select a.key,
              coalesce(nullif(v.manifest #>> '{nav,label}', ''), a.name) as name,
-             coalesce(nullif(v.manifest #>> '{nav,icon}', ''), a.icon_key) as "iconKey",
-             a.show_in_nav as "showInNav"
+             coalesce(nullif(v.manifest #>> '{nav,icon}', ''), a.icon_key) as "iconKey"
         from apps a
         join app_versions v on v.id = a.active_version_id
        where a.org_id = ${orgId} and a.status = 'installed'
@@ -58,7 +56,7 @@ export async function resolveNav(
   ])
   const saved = r.rows[0]?.config
   const baseConfig = saved?.version === 2 ? layerInNewModules(saved) : defaultNavConfig()
-  const config = layerInNavApps(baseConfig, appResult.rows)
+  const config = baseConfig
   const appByKey = new Map(appResult.rows.map((app) => [app.key, app]))
   const featureHiddenModules = hiddenNavModules(featureState)
 

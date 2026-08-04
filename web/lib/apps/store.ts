@@ -32,7 +32,6 @@ export interface AppRow {
   status: 'installed' | 'disabled'
   activeVersionId: string | null
   grantedPermissions: string[]
-  showInNav: boolean
   version: string | null
   manifest: AppManifest | null
 }
@@ -54,7 +53,7 @@ export async function listApps(orgId: string): Promise<AppRow[]> {
   return rows<AppRow>(sql`
     select a.id, a.key, a.name, a.description, a.icon_key as "iconKey", a.status,
            a.active_version_id as "activeVersionId", a.granted_permissions as "grantedPermissions",
-           a.show_in_nav as "showInNav", v.version, v.manifest
+           v.version, v.manifest
       from apps a
       left join app_versions v on v.id = a.active_version_id
      where a.org_id = ${orgId}
@@ -66,7 +65,7 @@ export async function getAppByKey(orgId: string, key: string): Promise<AppRow | 
   const r = await rows<AppRow>(sql`
     select a.id, a.key, a.name, a.description, a.icon_key as "iconKey", a.status,
            a.active_version_id as "activeVersionId", a.granted_permissions as "grantedPermissions",
-           a.show_in_nav as "showInNav", v.version, v.manifest
+           v.version, v.manifest
       from apps a
       left join app_versions v on v.id = a.active_version_id
      where a.org_id = ${orgId} and a.key = ${key}
@@ -103,13 +102,13 @@ export async function installApp(orgId: string, userId: string, bundle: UploadBu
   await db.transaction(async (tx) => {
     // Upsert the app row (create, or update presentation on reinstall/upgrade).
     const appRes = (await tx.execute(sql`
-      insert into apps (org_id, key, name, description, icon_key, status, granted_permissions, show_in_nav, created_by, updated_by)
+      insert into apps (org_id, key, name, description, icon_key, status, granted_permissions, created_by, updated_by)
       values (${orgId}, ${manifest.key}, ${manifest.name}, ${manifest.description ?? null},
               ${manifest.icon ?? 'box'}, 'installed', ${JSON.stringify(granted)}::jsonb,
-              ${manifest.nav?.show ?? true}, ${userId}, ${userId})
+              ${userId}, ${userId})
       on conflict (org_id, key) do update set
         name = excluded.name, description = excluded.description, icon_key = excluded.icon_key,
-        granted_permissions = excluded.granted_permissions, show_in_nav = excluded.show_in_nav,
+        granted_permissions = excluded.granted_permissions,
         status = 'installed', updated_at = now(), updated_by = ${userId}
       returning id`)) as unknown as { rows: { id: string }[] }
     const appId = appRes.rows[0]!.id
@@ -556,7 +555,6 @@ export async function createAppScaffold(orgId: string, userId: string, name: str
       permissions: [],
       frontend: { entry: 'frontend/index.html' },
       endpoints: [{ name: 'hello', file: 'backend/hello.js', method: 'ANY' }],
-      nav: { show: true },
     },
     files: [
       { path: 'frontend/index.html', content: SCAFFOLD_HTML },
@@ -570,7 +568,6 @@ export interface AppMetaUpdate {
   name?: string
   description?: string | null
   iconKey?: string
-  showInNav?: boolean
   grantedPermissions?: string[]
   endpoints?: { name: string; file: string; method?: 'GET' | 'POST' | 'ANY' }[]
 }
@@ -591,7 +588,6 @@ export async function updateAppMeta(orgId: string, userId: string, key: string, 
   }
   if (meta.description !== undefined) manifest.description = meta.description?.slice(0, 2000) || undefined
   if (meta.iconKey !== undefined) manifest.icon = meta.iconKey
-  if (meta.showInNav !== undefined) manifest.nav = { ...(manifest.nav ?? { show: true }), show: meta.showInNav }
   if (meta.grantedPermissions !== undefined) {
     // Authoring flow: what you grant is what the manifest requests.
     manifest.permissions = [...new Set(meta.grantedPermissions.filter((p) => typeof p === 'string' && p.length <= 80))]
@@ -619,7 +615,7 @@ export async function updateAppMeta(orgId: string, userId: string, key: string, 
     await tx.execute(sql`
       update apps set
         name = ${manifest.name}, description = ${manifest.description ?? null},
-        icon_key = ${manifest.icon ?? app.iconKey}, show_in_nav = ${manifest.nav?.show ?? app.showInNav},
+        icon_key = ${manifest.icon ?? app.iconKey},
         granted_permissions = ${JSON.stringify(granted)}::jsonb,
         updated_at = now(), updated_by = ${userId}
       where org_id = ${orgId} and key = ${key}`)

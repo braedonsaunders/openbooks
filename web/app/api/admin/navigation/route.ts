@@ -81,10 +81,30 @@ export async function PUT(req: Request) {
     }
   }
 
-  await db.execute(sql`
-    insert into org_nav_configs (org_id, config)
-    values (${user.orgId}, ${JSON.stringify(config)})
-    on conflict (org_id) do update set config = excluded.config, updated_at = now()
-  `)
+  await db.transaction(async (tx) => {
+    const before = (await tx.execute(sql`
+      select id, config from org_nav_configs where org_id = ${user.orgId} limit 1
+    `)) as unknown as { rows: { id: string; config: OrgNavConfig }[] }
+    const saved = (await tx.execute(sql`
+      insert into org_nav_configs (org_id, config, created_by, updated_by)
+      values (${user.orgId}, ${JSON.stringify(config)}, ${user.id}, ${user.id})
+      on conflict (org_id) do update set
+        config = excluded.config,
+        updated_at = now(),
+        updated_by = ${user.id}
+      returning id
+    `)) as unknown as { rows: { id: string }[] }
+    await tx.execute(sql`
+      insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
+      values (
+        ${user.orgId},
+        'org_nav_configs',
+        ${saved.rows[0]!.id},
+        ${before.rows[0] ? 'update' : 'insert'},
+        ${JSON.stringify({ before: before.rows[0]?.config ?? null, after: config })}::jsonb,
+        ${user.id}
+      )
+    `)
+  })
   return NextResponse.json({ ok: true })
 }

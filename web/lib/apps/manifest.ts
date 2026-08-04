@@ -73,7 +73,6 @@ export const manifestSchema = z.object({
   endpoints: z.array(endpointSchema).max(50).default([]),
   nav: z
     .object({
-      show: z.boolean().default(true),
       label: z.string().max(120).optional(),
       icon: z.string().max(40).optional(),
     })

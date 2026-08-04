@@ -230,11 +230,12 @@ export function NavEditor({ initial, apps }: { initial: OrgNavConfig; apps: NavA
                   >
                     <ArrowDown size={14} />
                   </Button>
-                  {item.kind === 'link' ? (
+                  {item.kind === 'link' || item.kind === 'app' ? (
                     <Button
                       variant="ghost"
                       size="icon"
-                      aria-label={t('deleteLink')}
+                      aria-label={item.kind === 'app' ? t('removeApp') : t('deleteLink')}
+                      title={item.kind === 'app' ? t('removeApp') : t('deleteLink')}
                       onClick={() =>
                         setGroup(gi, {
                           items: g.items.filter((_, index) => index !== ii),

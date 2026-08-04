@@ -321,6 +321,8 @@
     "linkLabelPrompt": "Rótulo:",
     "addLink": "Adicionar link",
     "deleteLink": "Excluir link",
+    "addApp": "Adicionar atalho do aplicativo…",
+    "removeApp": "Remover atalho do aplicativo",
     "newGroupPrompt": "Nome do espaço de trabalho:",
     "addGroup": "Adicionar espaço de trabalho",
     "deleteGroup": "Excluir espaço de trabalho",

@@ -60,8 +60,6 @@ export const apps = pgTable(
      * requested permissions — an admin may grant fewer.
      */
     grantedPermissions: jsonb("granted_permissions").$type<string[]>().notNull().default([]),
-    /** Published Apps with this flag get a dynamic sidebar entry ("Apps" group). */
-    showInNav: boolean("show_in_nav").notNull().default(true),
     sortOrder: integer("sort_order").notNull().default(0),
     /**
      * Provenance of objects this App provisioned from its bundle's objects/

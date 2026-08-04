@@ -321,6 +321,8 @@
     "linkLabelPrompt": "ラベル:",
     "addLink": "リンクを追加",
     "deleteLink": "リンクを削除",
+    "addApp": "アプリのショートカットを追加…",
+    "removeApp": "アプリのショートカットを削除",
     "newGroupPrompt": "ワークスペース名:",
     "addGroup": "ワークスペースを追加",
     "deleteGroup": "ワークスペースを削除",
