@@ -33,8 +33,11 @@ test("deployment bootstrap serializes migrate and seed work", () => {
   );
 });
 
-test("legacy owned-schema mode is migration-only and fail-closed", () => {
-  assert.match(bootstrap, /OPENBOOKS_LEGACY_OWNED_SCHEMA === "1"/);
+test("constrained schema-owner mode is migration-only and fail-closed", () => {
+  assert.match(
+    bootstrap,
+    /OPENBOOKS_CONSTRAINED_SCHEMA_OWNER_MIGRATION === "1"/,
+  );
   assert.match(bootstrap, /role\.rolsuper or role\.rolbypassrls/);
   assert.match(bootstrap, /role\.rolcreatedb/);
   assert.match(bootstrap, /role\.rolcreaterole/);
@@ -43,16 +46,19 @@ test("legacy owned-schema mode is migration-only and fail-closed", () => {
   assert.match(bootstrap, /posture\.current_database !== runtimeDatabase/);
   assert.match(bootstrap, /posture\.unowned_tables !== 0/);
 
-  const legacyBranch = bootstrap.slice(
-    bootstrap.indexOf("if (legacyOwnedSchema)"),
+  const constrainedOwnerBranch = bootstrap.slice(
+    bootstrap.indexOf("if (constrainedSchemaOwnerMigration)"),
     bootstrap.indexOf("// Some migrations grant privileges"),
   );
-  assert.match(legacyBranch, /await assertLegacyOwnedSchemaMigrationRole/);
-  assert.match(legacyBranch, /await migrate\(\)/);
-  assert.match(legacyBranch, /return;/);
-  assert.doesNotMatch(legacyBranch, /ensureReadRole/);
-  assert.doesNotMatch(legacyBranch, /ensureRuntimeDatabaseRole/);
-  assert.doesNotMatch(legacyBranch, /seed[A-Z]/);
+  assert.match(
+    constrainedOwnerBranch,
+    /await assertConstrainedSchemaOwnerMigrationRole/,
+  );
+  assert.match(constrainedOwnerBranch, /await migrate\(\)/);
+  assert.match(constrainedOwnerBranch, /return;/);
+  assert.doesNotMatch(constrainedOwnerBranch, /ensureReadRole/);
+  assert.doesNotMatch(constrainedOwnerBranch, /ensureRuntimeDatabaseRole/);
+  assert.doesNotMatch(constrainedOwnerBranch, /seed[A-Z]/);
 });
 
 test("row-level security refresh is versioned and drift-driven", () => {
