@@ -92,15 +92,23 @@ jobs:
           # A completed one-shot Compose service is otherwise eligible for
           # reuse across image rollouts. Stamp the bootstrap service itself so
           # every immutable revision reruns migrations before web can start.
-          if grep -q '^      OPENBOOKS_BOOTSTRAP_REV:' <<<"$compose_file"; then
-            compose_file="$(sed "s|^      OPENBOOKS_BOOTSTRAP_REV:.*|      OPENBOOKS_BOOTSTRAP_REV: \"${NEW_TAG}\"|" <<<"$compose_file")"
+          if grep -Eq '^[[:space:]]*OPENBOOKS_BOOTSTRAP_REV:' <<<"$compose_file"; then
+            compose_file="$(sed -E "s|^([[:space:]]*OPENBOOKS_BOOTSTRAP_REV:).*|\\1 \"${NEW_TAG}\"|" <<<"$compose_file")"
+          elif grep -Eq '^[[:space:]]*-[[:space:]]*OPENBOOKS_BOOTSTRAP_REV=' <<<"$compose_file"; then
+            compose_file="$(sed -E "s|^([[:space:]]*-[[:space:]]*OPENBOOKS_BOOTSTRAP_REV=).*|\\1${NEW_TAG}|" <<<"$compose_file")"
           else
             compose_file="$(awk -v rev="$NEW_TAG" '
-              /^  bootstrap:[[:space:]]*$/ { in_bootstrap=1 }
-              in_bootstrap && /^  [[:alnum:]_-]+:[[:space:]]*$/ && $0 !~ /^  bootstrap:/ { in_bootstrap=0 }
-              in_bootstrap && /^    environment:[[:space:]]*$/ {
+              /^[[:space:]]*OPENBOOKS_BOOTSTRAP:[[:space:]]*["'\''"]?1["'\''"]?[[:space:]]*$/ {
                 print
-                print "      OPENBOOKS_BOOTSTRAP_REV: \"" rev "\""
+                match($0, /^[[:space:]]*/)
+                print substr($0, 1, RLENGTH) "OPENBOOKS_BOOTSTRAP_REV: \"" rev "\""
+                inserted=1
+                next
+              }
+              /^[[:space:]]*-[[:space:]]*OPENBOOKS_BOOTSTRAP=1[[:space:]]*$/ {
+                print
+                match($0, /^[[:space:]]*/)
+                print substr($0, 1, RLENGTH) "- OPENBOOKS_BOOTSTRAP_REV=" rev
                 inserted=1
                 next
               }
@@ -108,6 +116,8 @@ jobs:
               END { if (!inserted) exit 42 }
             ' <<<"$compose_file")" || {
               echo "::error::Could not stamp the bootstrap service in the configured Compose source"
+              echo "Configured Compose service headers and migration markers:"
+              grep -nE '^[[:space:]]{0,8}[[:alnum:]_-]+:[[:space:]]*$|OPENBOOKS_BOOTSTRAP|bootstrap|migrat' <<<"$compose_file" || true
               exit 1
             }
           fi
