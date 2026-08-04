@@ -173,6 +173,23 @@ jobs:
           fi
           if [ -z "$migration_url" ] || [ -z "$runtime_url" ]; then
             echo "::error::Dev deployment requires separate OPENBOOKS_MIGRATION_DB_URL and runtime database URLs"
+            echo "Available Dokploy environment keys:"
+            sed -n 's/^\([A-Z0-9_]*\)=.*/\1/p' <<<"$env_text" | sort -u
+            echo "Configured web environment keys:"
+            awk '
+              /^  web:[[:space:]]*$/ { in_web=1; next }
+              in_web && /^  [[:alnum:]_-]+:[[:space:]]*$/ { exit }
+              in_web && /^[[:space:]]+[A-Z0-9_]+:/ {
+                line=$0; sub(/^[[:space:]]+/, "", line); sub(/:.*/, "", line); print line
+              }
+              in_web && /^[[:space:]]*-[[:space:]]*[A-Z0-9_]+=/ {
+                line=$0; sub(/^[[:space:]]*-[[:space:]]*/, "", line); sub(/=.*/, "", line); print line
+              }
+            ' <<<"$(jq -r '.composeFile // ""' <<<"$current")" | sort -u
+            echo "Managed PostgreSQL metadata (credentials omitted):"
+            jq -c '[.. | objects | select(.postgresId? != null) |
+              {postgresId,name,appName,databaseName,databaseUser,externalPort}]' \
+              <<<"${project_catalog:-[]}" || true
             exit 1
           fi
           echo "::add-mask::$migration_url"
