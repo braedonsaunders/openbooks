@@ -89,9 +89,62 @@ jobs:
             local key="$1"
             sed -n "s/^${key}=//p" <<<"$env_text" | head -n 1
           }
+          compose_web_value() {
+            local key="$1"
+            awk -v key="$key" '
+              /^  web:[[:space:]]*$/ { in_web=1; next }
+              in_web && /^  [[:alnum:]_-]+:[[:space:]]*$/ { exit }
+              in_web && $0 ~ "^[[:space:]]+" key ":[[:space:]]*" {
+                sub("^[[:space:]]+" key ":[[:space:]]*", "")
+                gsub(/^["'\''"]|["'\''"]$/, "")
+                print
+                exit
+              }
+              in_web && $0 ~ "^[[:space:]]*-[[:space:]]*" key "=" {
+                sub("^[[:space:]]*-[[:space:]]*" key "=", "")
+                print
+                exit
+              }
+            ' <<<"$(jq -r '.composeFile // ""' <<<"$current")"
+          }
+          resolve_placeholders() {
+            local value="$1" token key replacement
+            while [[ "$value" =~ (\$\{([A-Z0-9_]+)\}) ]]; do
+              token="${BASH_REMATCH[1]}"
+              key="${BASH_REMATCH[2]}"
+              replacement="$(env_value "$key")"
+              if [ -z "$replacement" ]; then return 1; fi
+              value="${value//$token/$replacement}"
+            done
+            printf '%s' "$value"
+          }
           migration_url="$(env_value OPENBOOKS_MIGRATION_DB_URL)"
           runtime_url="$(env_value OPENBOOKS_RUNTIME_DB_URL)"
           if [ -z "$runtime_url" ]; then runtime_url="$(env_value OPENBOOKS_DB_URL)"; fi
+          if [ -z "$migration_url" ]; then
+            migration_url="$(resolve_placeholders "$(compose_web_value OPENBOOKS_MIGRATION_DB_URL)" || true)"
+          fi
+          if [ -z "$runtime_url" ]; then
+            runtime_url="$(resolve_placeholders "$(compose_web_value OPENBOOKS_RUNTIME_DB_URL)" || true)"
+          fi
+          if [ -z "$runtime_url" ]; then
+            runtime_url="$(resolve_placeholders "$(compose_web_value OPENBOOKS_DB_URL)" || true)"
+          fi
+          # Pre-role-split dev deployments used PostgreSQL's explicit postgres
+          # owner plus POSTGRES_PASSWORD. Convert that declared configuration
+          # deterministically; the bootstrap connection still verifies it.
+          if [ -z "$migration_url" ] && [ -n "$runtime_url" ]; then
+            owner_password="$(env_value POSTGRES_PASSWORD)"
+            if [ -n "$owner_password" ]; then
+              echo "::add-mask::$owner_password"
+              migration_url="$(RUNTIME_URL="$runtime_url" OWNER_PASSWORD="$owner_password" node -e '
+                const url = new URL(process.env.RUNTIME_URL);
+                url.username = "postgres";
+                url.password = process.env.OWNER_PASSWORD;
+                process.stdout.write(url.toString());
+              ')"
+            fi
+          fi
           if [ -z "$migration_url" ] || [ -z "$runtime_url" ]; then
             echo "::error::Dev deployment requires separate OPENBOOKS_MIGRATION_DB_URL and runtime database URLs"
             exit 1
