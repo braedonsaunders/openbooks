@@ -64,7 +64,7 @@ async function quoted(value: string, kind: "identifier" | "literal"): Promise<st
   return result.rows[0]!.value;
 }
 
-async function assertLegacyOwnedSchemaMigrationRole(
+async function assertConstrainedSchemaOwnerMigrationRole(
   runtimeConfig: RuntimeDatabaseConfig,
 ): Promise<void> {
   const result = await pool.query<{
@@ -97,11 +97,11 @@ async function assertLegacyOwnedSchemaMigrationRole(
     posture.unowned_tables !== 0
   ) {
     throw new Error(
-      "legacy owned-schema migration requires a constrained role that owns every public table",
+      "constrained schema-owner migration requires a restricted role that owns every public table",
     );
   }
   console.log(
-    `[bootstrap] constrained legacy schema owner ${posture.current_user} verified for migration-only mode`,
+    `[bootstrap] constrained schema owner ${posture.current_user} verified for migration-only mode`,
   );
 }
 
@@ -665,7 +665,8 @@ async function seedAdmin(orgId: string): Promise<void> {
 
 async function main(): Promise<void> {
   const runtimeConfig = runtimeDatabaseConfig();
-  const legacyOwnedSchema = env.OPENBOOKS_LEGACY_OWNED_SCHEMA === "1";
+  const constrainedSchemaOwnerMigration =
+    env.OPENBOOKS_CONSTRAINED_SCHEMA_OWNER_MIGRATION === "1";
   if (env.NODE_ENV === "production" && !runtimeConfig) {
     throw new Error(
       "OPENBOOKS_RUNTIME_DB_URL is required for production bootstrap; migrations and application traffic must use separate database roles",
@@ -690,13 +691,13 @@ async function main(): Promise<void> {
     // constraint. Context-only scope keeps each tracked migration's own
     // transaction authoritative instead of pinning an outer transaction.
     await withBypassContext(async () => {
-      if (legacyOwnedSchema) {
+      if (constrainedSchemaOwnerMigration) {
         if (!runtimeConfig) {
           throw new Error(
-            "legacy owned-schema migration requires OPENBOOKS_RUNTIME_DB_URL",
+            "constrained schema-owner migration requires OPENBOOKS_RUNTIME_DB_URL",
           );
         }
-        await assertLegacyOwnedSchemaMigrationRole(runtimeConfig);
+        await assertConstrainedSchemaOwnerMigrationRole(runtimeConfig);
         await migrate();
         return;
       }
