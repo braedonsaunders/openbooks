@@ -2,14 +2,14 @@ import { NextResponse } from 'next/server'
 import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/db.ts'
 import { runDueSftpImports } from '@openbooks/engine/src/sftp/import-job.ts'
-import { guardPermission } from '../../../../../../lib/authz'
+import { guardFeaturePermission } from '../../../../../../lib/feature-gates'
 import { isUuid } from '../../../../../../lib/list-params'
 
 export const runtime = 'nodejs'
 
 /** Toggle active, or run the schedule now: { action: 'run' } / { isActive }. */
 export async function PATCH(req: Request, { params }: { params: Promise<{ id: string }> }) {
-  const gate = await guardPermission('admin.setup.manage')
+  const gate = await guardFeaturePermission('admin.setup.manage', 'bankFeeds')
   if (gate instanceof NextResponse) return gate
   const { user } = gate
   const { id } = await params
@@ -19,7 +19,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     // Scoped run: activate-scan just this org's schedules and report this one.
     const owned = (await db.execute(sql`select id from sftp_import_schedules where id = ${id} and org_id = ${user.orgId}`)) as unknown as { rows: unknown[] }
     if (!owned.rows[0]) return NextResponse.json({ error: 'not found' }, { status: 404 })
-    const runs = await runDueSftpImports()
+    const runs = await runDueSftpImports(user.orgId, id)
     const mine = runs.find((r) => r.scheduleId === id)
     return NextResponse.json({ ok: true, result: mine ?? { scheduleId: id, filesSeen: 0, imported: 0, duplicates: 0, errors: [] } })
   }
@@ -31,7 +31,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
 }
 
 export async function DELETE(_req: Request, { params }: { params: Promise<{ id: string }> }) {
-  const gate = await guardPermission('admin.setup.manage')
+  const gate = await guardFeaturePermission('admin.setup.manage', 'bankFeeds')
   if (gate instanceof NextResponse) return gate
   const { user } = gate
   const { id } = await params

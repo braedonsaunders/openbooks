@@ -1,13 +1,13 @@
 import { NextResponse } from 'next/server'
 import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/db.ts'
-import { guardPermission } from '../../../../lib/authz'
+import { guardFeaturePermission } from '../../../../lib/feature-gates'
 import { isUuid } from '../../../../lib/list-params'
 
 export const runtime = 'nodejs'
 
 export async function PATCH(req: Request) {
-  const gate = await guardPermission('admin.setup.manage')
+  const gate = await guardFeaturePermission('admin.setup.manage', 'fixedAssets')
   if (gate instanceof NextResponse) return gate
   const body = (await req.json().catch(() => ({}))) as { categoryId?: string; regime?: string; classCode?: string | null }
   if (!body.categoryId || !isUuid(body.categoryId) || !body.regime) return NextResponse.json({ error: 'invalid assignment' }, { status: 422 })

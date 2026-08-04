@@ -3,7 +3,7 @@ import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/db.ts'
 import { buildAllSchedulesWithRunner } from '@openbooks/engine/src/depreciation.ts'
 import { cmp, normalizeMoney, toUnits } from '@openbooks/engine/src/money.ts'
-import { guardPermission } from '../../../../lib/authz'
+import { guardFeaturePermission } from '../../../../lib/feature-gates'
 import { isUuid } from '../../../../lib/list-params'
 import { loadFieldDefs, validateCustomValues } from '../../../../lib/custom-fields'
 import { loadAsset } from '../_lib'
@@ -68,7 +68,7 @@ interface PatchBody {
 }
 
 export async function GET(req: Request, { params }: { params: Promise<{ id: string }> }) {
-  const gate = await guardPermission('assets.read')
+  const gate = await guardFeaturePermission('assets.read', 'fixedAssets')
   if (gate instanceof NextResponse) return gate
   const { id } = await params
   if (!isUuid(id)) return NextResponse.json({ error: 'not found' }, { status: 404 })
@@ -94,7 +94,7 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
  * view + a subsequent run reflect the new plan.
  */
 export async function PATCH(req: Request, { params }: { params: Promise<{ id: string }> }) {
-  const gate = await guardPermission('assets.manage')
+  const gate = await guardFeaturePermission('assets.manage', 'fixedAssets')
   if (gate instanceof NextResponse) return gate
   const user = gate.user
   const { id } = await params
@@ -370,7 +370,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
  * for a draft that has never posted any depreciation (guarded).
  */
 export async function DELETE(_req: Request, { params }: { params: Promise<{ id: string }> }) {
-  const gate = await guardPermission('assets.manage')
+  const gate = await guardFeaturePermission('assets.manage', 'fixedAssets')
   if (gate instanceof NextResponse) return gate
   const user = gate.user
   const { id } = await params

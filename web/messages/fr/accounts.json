@@ -3,6 +3,7 @@
     "title": "Plan comptable",
     "description": "Soldes courants en signe naturel (bilan en cumulatif, résultats de l’exercice en cours), consolidés dans les comptes sommaires.",
     "searchPlaceholder": "Rechercher un numéro ou un nom…",
+    "views": { "list": "Liste", "hierarchy": "Hiérarchie" },
     "newAccount": "Nouveau compte",
     "viewRegister": "Voir le registre",
     "expand": "Développer le compte",

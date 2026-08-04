@@ -110,7 +110,7 @@ export default async function Assets({
         orgId,
         userId: authz.user.id,
         recordType: 'fixed_asset',
-        userRoles: (authz.user as any).roles?.map(({ key }: { key: string }) => key) ?? [authz.user.role],
+        userRoles: authz.user.roles.map(({ key }) => key),
         headerDefs: fieldDefs,
         lineDefs: [],
         explicitLayoutId: pickString(sp.form),

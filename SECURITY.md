@@ -47,7 +47,11 @@ OpenBooks does not currently operate a paid bug-bounty program.
 
 The repository implements defense-in-depth controls including:
 
-- PostgreSQL row-level security for organization-owned tables;
+- forced PostgreSQL row-level security for organization-owned tables;
+- an isolated migration owner used only by the one-shot bootstrap, with web
+  and worker processes restricted to a `NOSUPERUSER NOBYPASSRLS` runtime role;
+- fail-closed runtime role checks that refuse production startup when the
+  login, or a role it can assume, can defeat tenant isolation;
 - server-side RBAC and permission checks;
 - scoped, hashed API keys;
 - scrypt password hashing and signed session cookies;

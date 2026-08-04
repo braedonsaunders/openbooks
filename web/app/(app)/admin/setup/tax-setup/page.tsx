@@ -19,8 +19,12 @@ export default async function TaxSetupPage() {
   const t = await getTranslations('admin.setup.taxSetup')
   const orgId = authz.user.orgId
 
-  const [installed, jurisdictions, registrations] = await Promise.all([
+  const [installed, installedJurisdictions, jurisdictions, registrations] = await Promise.all([
     db.execute(sql`select distinct code from tax_return_forms where org_id = ${orgId} and is_active`) as unknown as Promise<{ rows: { code: string }[] }>,
+    db.execute(sql`
+      select code from tax_jurisdictions
+       where org_id = ${orgId} and is_active and level = 'state'
+    `) as unknown as Promise<{ rows: { code: string }[] }>,
     db.execute(sql`select count(*)::int as n from tax_jurisdictions where org_id = ${orgId} and is_active`) as unknown as Promise<{ rows: { n: number }[] }>,
     db.execute(sql`select count(*)::int as n from tax_registrations where org_id = ${orgId} and is_active`) as unknown as Promise<{ rows: { n: number }[] }>,
   ])
@@ -33,7 +37,10 @@ export default async function TaxSetupPage() {
       </header>
       <TaxSetupGuide
         countries={supportedTaxCountries()}
-        installedCodes={installed.rows.map((r) => r.code)}
+        installedCodes={[
+          ...installed.rows.map((r) => r.code),
+          ...installedJurisdictions.rows.map((r) => `JURISDICTION:${r.code}`),
+        ]}
         jurisdictionCount={jurisdictions.rows[0]?.n ?? 0}
         registrationCount={registrations.rows[0]?.n ?? 0}
       />

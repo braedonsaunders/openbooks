@@ -11,6 +11,7 @@ import {
   ApplicationCommandCard,
   applicationCommandFromOutput,
 } from './application-command-card'
+import { AssistantEntityCards } from './entity-cards'
 
 type AnyPart = { type: string; [k: string]: unknown }
 
@@ -45,6 +46,7 @@ function PartView({ part }: { part: AnyPart }) {
     return (
       <div className="space-y-2">
         <ToolUseCard name={name} state={state} input={part.input} output={part.output} />
+        <AssistantEntityCards name={name} output={part.output} />
         {proposal ? <ProposalCard proposal={proposal} /> : null}
         {applicationCommand ? <ApplicationCommandCard proposal={applicationCommand} /> : null}
       </div>

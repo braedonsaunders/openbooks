@@ -56,6 +56,8 @@ jobs:
           tags: |
             ${{ env.IMAGE_NAME }}:${{ github.sha }}
             ${{ env.IMAGE_NAME }}:dev
+          build-args: |
+            OPENBOOKS_VERSION=${{ github.sha }}
           cache-from: type=gha
           cache-to: type=gha,mode=max,ignore-error=true
 
@@ -65,6 +67,159 @@ jobs:
     timeout-minutes: 20
     environment: dev
     steps:
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Run deployment bootstrap
+        env:
+          DOKPLOY_URL: ${{ secrets.DOKPLOY_URL }}
+          DOKPLOY_TOKEN: ${{ secrets.DOKPLOY_TOKEN }}
+          COMPOSE_ID: ${{ secrets.DOKPLOY_COMPOSE_ID }}
+          NEW_TAG: ${{ needs.build.outputs.tag }}
+        run: |
+          set -euo pipefail
+          base="${DOKPLOY_URL%/}"
+          current="$(curl -sS --fail -H "x-api-key: $DOKPLOY_TOKEN" \
+            -G "$base/api/compose.one" --data-urlencode "composeId=$COMPOSE_ID")"
+          env_text="$(jq -r '.env // ""' <<<"$current")"
+          env_value() {
+            local key="$1"
+            sed -n "s/^${key}=//p" <<<"$env_text" | head -n 1
+          }
+          compose_web_value() {
+            local key="$1"
+            awk -v key="$key" '
+              /^  web:[[:space:]]*$/ { in_web=1; next }
+              in_web && /^  [[:alnum:]_-]+:[[:space:]]*$/ { exit }
+              in_web && $0 ~ "^[[:space:]]+" key ":[[:space:]]*" {
+                sub("^[[:space:]]+" key ":[[:space:]]*", "")
+                gsub(/^["'\''"]|["'\''"]$/, "")
+                print
+                exit
+              }
+              in_web && $0 ~ "^[[:space:]]*-[[:space:]]*" key "=" {
+                sub("^[[:space:]]*-[[:space:]]*" key "=", "")
+                print
+                exit
+              }
+            ' <<<"$(jq -r '.composeFile // ""' <<<"$current")"
+          }
+          resolve_placeholders() {
+            local value="$1" token key replacement
+            while [[ "$value" =~ (\$\{([A-Z0-9_]+)\}) ]]; do
+              token="${BASH_REMATCH[1]}"
+              key="${BASH_REMATCH[2]}"
+              replacement="$(env_value "$key")"
+              if [ -z "$replacement" ]; then return 1; fi
+              value="${value//$token/$replacement}"
+            done
+            printf '%s' "$value"
+          }
+          migration_url="$(env_value OPENBOOKS_MIGRATION_DB_URL)"
+          runtime_url="$(env_value OPENBOOKS_RUNTIME_DB_URL)"
+          if [ -z "$runtime_url" ]; then runtime_url="$(env_value OPENBOOKS_DB_URL)"; fi
+          if [ -z "$migration_url" ]; then
+            migration_url="$(resolve_placeholders "$(compose_web_value OPENBOOKS_MIGRATION_DB_URL)" || true)"
+          fi
+          if [ -z "$runtime_url" ]; then
+            runtime_url="$(resolve_placeholders "$(compose_web_value OPENBOOKS_RUNTIME_DB_URL)" || true)"
+          fi
+          if [ -z "$runtime_url" ]; then
+            runtime_url="$(resolve_placeholders "$(compose_web_value OPENBOOKS_DB_URL)" || true)"
+          fi
+          # Pre-role-split dev deployments used PostgreSQL's explicit postgres
+          # owner plus POSTGRES_PASSWORD. Convert that declared configuration
+          # deterministically; the bootstrap connection still verifies it.
+          if [ -z "$migration_url" ] && [ -n "$runtime_url" ]; then
+            owner_password="$(env_value POSTGRES_PASSWORD)"
+            if [ -n "$owner_password" ]; then
+              echo "::add-mask::$owner_password"
+              migration_url="$(RUNTIME_URL="$runtime_url" OWNER_PASSWORD="$owner_password" node -e '
+                const url = new URL(process.env.RUNTIME_URL);
+                url.username = "postgres";
+                url.password = process.env.OWNER_PASSWORD;
+                process.stdout.write(url.toString());
+              ')"
+            fi
+          fi
+          # Managed Dokploy databases keep their owner credential in the
+          # database resource, not the application environment. Resolve one
+          # exact database/owner match through the authenticated catalog.
+          if [ -z "$migration_url" ] && [ -n "$runtime_url" ]; then
+            runtime_database="$(RUNTIME_URL="$runtime_url" node -e '
+              process.stdout.write(new URL(process.env.RUNTIME_URL).pathname.replace(/^\//, ""));
+            ')"
+            project_catalog="$(curl -sS --fail -H "x-api-key: $DOKPLOY_TOKEN" "$base/api/project.all")"
+            candidates="$(jq -c --arg database "$runtime_database" '
+              [.. | objects
+                | select(.postgresId? != null)
+                | select(.databaseName == $database and .databaseUser == "postgres")]
+              | unique_by(.postgresId)
+            ' <<<"$project_catalog")"
+            if [ "$(jq 'length' <<<"$candidates")" = "1" ]; then
+              owner_user="$(jq -r '.[0].databaseUser' <<<"$candidates")"
+              owner_password="$(jq -r '.[0].databasePassword' <<<"$candidates")"
+              echo "::add-mask::$owner_password"
+              migration_url="$(RUNTIME_URL="$runtime_url" OWNER_USER="$owner_user" OWNER_PASSWORD="$owner_password" node -e '
+                const url = new URL(process.env.RUNTIME_URL);
+                url.username = process.env.OWNER_USER;
+                url.password = process.env.OWNER_PASSWORD;
+                process.stdout.write(url.toString());
+              ')"
+            fi
+          fi
+          constrained_schema_owner_migration=0
+          if [ -z "$migration_url" ] && [ -n "$runtime_url" ]; then
+            migration_url="$runtime_url"
+            constrained_schema_owner_migration=1
+          fi
+          if [ -z "$runtime_url" ]; then
+            echo "::error::Dev deployment has no resolvable runtime database URL"
+            echo "Available Dokploy environment keys:"
+            sed -n 's/^\([A-Z0-9_]*\)=.*/\1/p' <<<"$env_text" | sort -u
+            echo "Configured web environment keys:"
+            awk '
+              /^  web:[[:space:]]*$/ { in_web=1; next }
+              in_web && /^  [[:alnum:]_-]+:[[:space:]]*$/ { exit }
+              in_web && /^[[:space:]]+[A-Z0-9_]+:/ {
+                line=$0; sub(/^[[:space:]]+/, "", line); sub(/:.*/, "", line); print line
+              }
+              in_web && /^[[:space:]]*-[[:space:]]*[A-Z0-9_]+=/ {
+                line=$0; sub(/^[[:space:]]*-[[:space:]]*/, "", line); sub(/=.*/, "", line); print line
+              }
+            ' <<<"$(jq -r '.composeFile // ""' <<<"$current")" | sort -u
+            echo "Managed PostgreSQL metadata (credentials omitted):"
+            jq -c '[.. | objects | select(.postgresId? != null) |
+              {postgresId,name,appName,databaseName,databaseUser,externalPort}]' \
+              <<<"${project_catalog:-[]}" || true
+            exit 1
+          fi
+          echo "::add-mask::$migration_url"
+          echo "::add-mask::$runtime_url"
+          bootstrap_env="$(mktemp)"
+          cleanup() { rm -f "$bootstrap_env"; }
+          trap cleanup EXIT
+          chmod 600 "$bootstrap_env"
+          {
+            printf 'NODE_ENV=production\n'
+            printf 'OPENBOOKS_BOOTSTRAP=1\n'
+            printf 'OPENBOOKS_MIGRATION_DB_URL=%s\n' "$migration_url"
+            printf 'OPENBOOKS_RUNTIME_DB_URL=%s\n' "$runtime_url"
+            if [ "$constrained_schema_owner_migration" = "1" ]; then
+              printf 'OPENBOOKS_CONSTRAINED_SCHEMA_OWNER_MIGRATION=1\n'
+            fi
+            for key in ORG_NAME ORG_CURRENCY ORG_COUNTRY ADMIN_EMAIL ADMIN_NAME ADMIN_PASSWORD; do
+              value="$(env_value "$key")"
+              if [ -n "$value" ]; then printf '%s=%s\n' "$key" "$value"; fi
+            done
+          } > "$bootstrap_env"
+          docker pull "$IMAGE_NAME:$NEW_TAG"
+          docker run --rm --env-file "$bootstrap_env" \
+            "$IMAGE_NAME:$NEW_TAG" node scripts/bootstrap.mjs
+
       - name: Select image and deploy
         env:
           DOKPLOY_URL: ${{ secrets.DOKPLOY_URL }}

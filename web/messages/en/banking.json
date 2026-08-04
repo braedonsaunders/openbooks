@@ -140,7 +140,8 @@
     "description": "Open and signed-off reconciliations across all accounts.",
     "search": "Search by date or account…",
     "emptyTitle": "No reconciliations yet",
-    "emptyDescription": "Start a reconciliation from a bank or card account to see it here."
+    "emptyDescription": "Start a reconciliation from a bank or card account to see it here.",
+    "chooseAccount": "Choose an account"
   },
   "rules": {
     "title": "Reconciliation rules",

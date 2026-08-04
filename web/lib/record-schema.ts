@@ -8,10 +8,8 @@
 // those sections in a FormSchemaV1, so record types and app-builder forms can
 // never disagree about what a valid field definition or value is.
 //
-// The stored `custom_record_types.fields` jsonb still carries the definition;
-// `normalizeSections` accepts either the new FormSection[] shape or a legacy
-// flat FormField[] (wrapped into a single "Details" header section on read),
-// so no data migration is required.
+// The stored `custom_record_types.fields` jsonb carries the canonical
+// FormSection[] definition. The database cutover rejects flat field lists.
 //
 // A record's `data` jsonb is one merged map: header field values keyed by
 // field id, plus each repeating section's rows keyed by SECTION id
@@ -123,22 +121,13 @@ export type RecordSection = FormSection
 export const MAX_RECORD_SECTIONS = 50
 export const MAX_RECORD_FIELDS = 200
 
-function looksLikeSection(el: unknown): boolean {
-  return Boolean(el) && typeof el === 'object' && Array.isArray((el as { fields?: unknown }).fields)
-}
-
 /**
- * Coerce the stored `fields` jsonb into a raw sections array (still
- * unvalidated — `lintRecordFields` runs the forms-core zod + invariants).
- *
- *   []                     → [] (an empty draft has no sections yet)
- *   FormSection[]          → as-is (the current shape)
- *   legacy flat FormField[] → wrapped in one non-repeating "Details" section
+ * Return the stored section array without changing its model. Structural
+ * validation remains the responsibility of `lintRecordFields`.
  */
 export function normalizeSectionsInput(input: unknown): unknown[] {
-  if (!Array.isArray(input) || input.length === 0) return []
-  if (input.every(looksLikeSection)) return input
-  return [{ id: 'main', title: 'Details', fields: input }]
+  if (input == null) return []
+  return Array.isArray(input) ? input : [input]
 }
 
 /** Every field across all sections (header + repeating), definition order. */

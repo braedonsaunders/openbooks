@@ -4,6 +4,7 @@ import { sql } from "drizzle-orm";
 import { db } from "@openbooks/engine/src/db.ts";
 import { profitAndLoss, balanceSheet, type StatementRow } from "../reports";
 import { resolveOrgId } from "../org-scope";
+import { decimalSum, type ExactDecimal } from '../statement-format'
 
 /**
  * Financial Health — the ratio + scorecard engine behind
@@ -226,10 +227,10 @@ function scoreOf(value: number | null, benchmark: number, inverse?: boolean): nu
 }
 
 /** Sum reader-signed statement rows of the given types at the top level. */
-function totalOf(items: StatementRow[], types: string[]): number {
-  return items
+function totalOf(items: StatementRow[], types: string[]): ExactDecimal {
+  return decimalSum(items
     .filter((r) => types.includes(r.type) && r.depth === 0)
-    .reduce((a, r) => a + r.balance, 0);
+    .map((row) => row.balance));
 }
 
 /** Shift an ISO date back one year (prior-year comparison period). */
@@ -292,26 +293,28 @@ export async function financialHealth(
   ]);
 
   // Operating vs non-operating split, straight off account types.
-  const operatingRevenue = totalOf(pl.items, ["income"]);
-  const otherIncome = totalOf(pl.items, ["income_other"]);
-  const revenue = pl.revenue; // = operatingRevenue + otherIncome (ties to P&L report)
-  const cogs = pl.cogs;
-  const grossProfit = pl.grossProfit;
-  const opex = totalOf(pl.items, ["expense", "expense_deferred"]);
-  const otherExpense = totalOf(pl.items, ["expense_other"]);
+  // Ratios are presentation analytics. All source rollups above remain exact;
+  // convert each final monetary input once before ratio math.
+  const operatingRevenue = Number(totalOf(pl.items, ["income"]));
+  const otherIncome = Number(totalOf(pl.items, ["income_other"]));
+  const revenue = Number(pl.revenue); // = operatingRevenue + otherIncome (ties to P&L report)
+  const cogs = Number(pl.cogs);
+  const grossProfit = Number(pl.grossProfit);
+  const opex = Number(totalOf(pl.items, ["expense", "expense_deferred"]));
+  const otherExpense = Number(totalOf(pl.items, ["expense_other"]));
   const operatingIncome = revenue - cogs - opex;
-  const netIncome = pl.netIncome; // = revenue - cogs - opex - otherExpense
+  const netIncome = Number(pl.netIncome); // = revenue - cogs - opex - otherExpense
 
-  const priorRevenue = priorPl.revenue;
-  const priorOpInc = priorPl.revenue - priorPl.cogs - totalOf(priorPl.items, ["expense", "expense_deferred"]);
+  const priorRevenue = Number(priorPl.revenue);
+  const priorOpInc = Number(priorPl.revenue) - Number(priorPl.cogs) - Number(totalOf(priorPl.items, ["expense", "expense_deferred"]));
   const revenueGrowth = priorRevenue > 0 ? (revenue - priorRevenue) / priorRevenue : 0;
   const opIncGrowth = priorOpInc !== 0 ? (operatingIncome - priorOpInc) / Math.abs(priorOpInc) : 0;
   const operatingLeverage = revenueGrowth !== 0 ? opIncGrowth / revenueGrowth : 1;
 
   // Balance sheet
-  const totalAssets = bs.totalAssets;
-  const totalEquity = bs.totalEquity;
-  const totalDebt = totalOf(bs.liabilities, ["liability_long_term"]);
+  const totalAssets = Number(bs.totalAssets);
+  const totalEquity = Number(bs.totalEquity);
+  const totalDebt = Number(totalOf(bs.liabilities, ["liability_long_term"]));
   const investedCapital = totalEquity + totalDebt;
   const hasBalanceSheet = Math.abs(totalAssets) > 0.005;
 

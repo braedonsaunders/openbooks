@@ -758,6 +758,11 @@ export const ADMIN_HUB_PERMISSIONS = [
   'admin.sandboxes.manage',
   'admin.backups.manage',
   'admin.customization.manage',
+  'scripts.manage',
+  'flows.manage',
+  'apps.manage',
+  'api.keys.manage',
+  'sql.execute',
   'sync.run',
 ] as const
 
@@ -889,7 +894,6 @@ export interface NavAppOption {
   key: string
   name: string
   iconKey: string
-  showInNav: boolean
 }
 
 /** Default layout computed from the registry (used when no org config). */
@@ -904,30 +908,5 @@ export function defaultNavConfig(): OrgNavConfig {
       ...(mobileModules.has(moduleKey) ? { mobile: true } : {}),
     })),
   }))
-  return { version: 2, groups }
-}
-
-/**
- * Add newly installed, nav-enabled apps to My Work without disturbing a
- * tenant's saved ordering. Once present, the navigation editor can move the
- * app to any workspace, rename it, hide it, or pin it for mobile.
- */
-export function layerInNavApps(config: OrgNavConfig, apps: readonly NavAppOption[]): OrgNavConfig {
-  const present = new Set(
-    config.groups.flatMap((group) =>
-      group.items.flatMap((item) => (item.kind === 'app' ? [item.appKey] : [])),
-    ),
-  )
-  const missing = apps.filter((app) => app.showInNav && !present.has(app.key))
-  if (missing.length === 0) return config
-
-  const groups = config.groups.map((group) => ({ ...group, items: [...group.items] }))
-  let target = groups.find((group) => group.id === 'my-work')
-  if (!target) {
-    const defaults = NAV_GROUP_BY_KEY.get('my-work')!
-    target = { id: defaults.key, label: defaults.label, items: [] }
-    groups.unshift(target)
-  }
-  for (const app of missing) target.items.push({ kind: 'app', appKey: app.key })
   return { version: 2, groups }
 }

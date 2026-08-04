@@ -3,21 +3,9 @@ import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/db.ts'
 
 /**
- * Shared helpers for the forms API. Authoring (create/edit/publish templates)
- * is gated to finance-admin roles; filling respects each template's
- * `allowed_roles` audience (empty/null ⇒ everyone; admins always pass).
+ * Shared data helpers for the forms API. Route handlers enforce the
+ * `admin.customization.manage` permission before loading or changing designs.
  */
-
-const AUTHOR_ROLES = new Set(['admin', 'controller'])
-
-export function canAuthor(role: string): boolean {
-  return AUTHOR_ROLES.has(role)
-}
-
-export function canFill(role: string, allowedRoles: string[] | null | undefined): boolean {
-  if (!allowedRoles || allowedRoles.length === 0) return true
-  return role === 'admin' || allowedRoles.includes(role)
-}
 
 export type TemplateRow = {
   id: string

@@ -6,8 +6,6 @@ import {
   RECORD_TYPES,
   defaultFormLayout,
   defaultListView,
-  refreshDefaultFormLayout,
-  type FormLayoutConfig,
 } from '@openbooks/customization'
 
 const DEFAULT_FORM_NAME = 'Default form'
@@ -56,50 +54,6 @@ export async function ensureCustomizationDefaults(args: {
              )
         `)
 
-        // Bring pre-action-layout rows onto the current clean-cutover schema.
-        // Existing baseline forms also receive the all-visible defaults once;
-        // the marker keeps subsequent user visibility choices intact.
-        const forms = (await tx.execute(sql`
-          select id, name, layout from form_layouts
-           where org_id = ${args.orgId} and record_type = ${meta.key}
-        `)) as unknown as { rows: { id: string; name: string; layout: FormLayoutConfig & { actions?: unknown } }[] }
-        for (const form of forms.rows) {
-          const revealBaseline =
-            form.name === DEFAULT_FORM_NAME && form.layout?.defaultVisibilityVersion !== 1
-          const addActions = !Array.isArray(form.layout?.actions)
-          const refreshBaseline =
-            meta.key === 'project' &&
-            form.name === DEFAULT_FORM_NAME &&
-            form.layout?.defaultLayoutVersion !== layout.defaultLayoutVersion
-          if (revealBaseline || addActions || refreshBaseline) {
-            let nextLayout = {
-              ...form.layout,
-              actions: addActions ? layout.actions : form.layout.actions,
-            } as FormLayoutConfig
-            if (refreshBaseline) nextLayout = refreshDefaultFormLayout(nextLayout)
-            if (revealBaseline) {
-              nextLayout = {
-                ...nextLayout,
-                defaultVisibilityVersion: 1,
-                header: {
-                  groups: nextLayout.header.groups.map((group) => ({
-                    ...group,
-                    fields: group.fields.map((field) => ({ ...field, visible: true })),
-                  })),
-                },
-                lines: {
-                  columns: nextLayout.lines.columns.map((column) => ({ ...column, visible: true })),
-                },
-              }
-            }
-            await tx.execute(sql`
-              update form_layouts
-                 set layout = ${JSON.stringify(nextLayout)}::jsonb,
-                     updated_at = now(), updated_by = ${args.actorId}
-               where id = ${form.id} and org_id = ${args.orgId}
-            `)
-          }
-        }
       }
 
       const config = defaultListView(meta.key)

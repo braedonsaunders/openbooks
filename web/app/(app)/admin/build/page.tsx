@@ -15,6 +15,7 @@ import {
 } from 'lucide-react'
 import { PageHeader, cn } from '@openbooks/ui'
 import { getAuthz, can } from '../../../../lib/authz'
+import { featureEnabled, resolvedFeatureState } from '../../../../lib/features'
 
 export const dynamic = 'force-dynamic'
 
@@ -54,6 +55,7 @@ type Card = {
   cardKey: string
   icon: ReactNode
   permission: string
+  featureKey?: string
 }
 type Group = { key: string; labelKey: string; accent: Accent; cards: Card[] }
 
@@ -110,12 +112,14 @@ const GROUPS: Group[] = [
         icon: <Workflow size={18} />,
         cardKey: 'scripts',
         permission: 'scripts.manage',
+        featureKey: 'scripts',
       },
       {
         href: '/admin/apps',
         icon: <Blocks size={18} />,
         cardKey: 'apps',
         permission: 'apps.manage',
+        featureKey: 'apps',
       },
     ],
   },
@@ -129,12 +133,14 @@ const GROUPS: Group[] = [
         icon: <KeyRound size={18} />,
         cardKey: 'apiKeys',
         permission: 'api.keys.manage',
+        featureKey: 'apiAccess',
       },
       {
         href: '/api-docs',
         icon: <Code size={18} />,
         cardKey: 'apiDocs',
         permission: 'api.keys.manage',
+        featureKey: 'apiAccess',
       },
     ],
   },
@@ -144,10 +150,11 @@ export default async function BuildPage() {
   const authz = await getAuthz()
   if (!authz) redirect('/login')
   const t = await getTranslations('admin')
+  const featureState = await resolvedFeatureState(authz.user.orgId)
 
   const groups = GROUPS.map((g) => ({
     ...g,
-    cards: g.cards.filter((c) => can(authz, c.permission)),
+    cards: g.cards.filter((c) => can(authz, c.permission) && (!c.featureKey || featureEnabled(featureState, c.featureKey))),
   })).filter((g) => g.cards.length > 0)
 
   // No build-ish permission at all → this landing has nothing to show.

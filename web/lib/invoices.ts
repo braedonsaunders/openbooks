@@ -5,7 +5,7 @@ import { resolveOrgId } from './org-scope'
 
 /**
  * AR (customer invoice) helpers. Shared math lives in lib/bills.ts —
- * nextDocumentNumber / computeBillTotals / taxRateMap are document-kind
+ * nextDocumentNumber / computeBillTotals / taxProfileMap are document-kind
  * agnostic and are imported from there by the invoice API routes. Only the
  * AR-specific loader lives here.
  */

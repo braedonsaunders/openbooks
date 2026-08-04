@@ -21,10 +21,10 @@ import {
 
 export const runtime = 'nodejs'
 
-async function loadScope(orgId: string, role: string, typeKey: string, id: string) {
+async function loadScope(orgId: string, roleKeys: readonly string[], typeKey: string, id: string) {
   if (!isUuid(id)) return null
   const type = await loadRecordTypeByKey(orgId, typeKey)
-  if (!type || type.status !== 'published' || !inTypeAudience(role, type.allowed_roles)) return null
+  if (!type || type.status !== 'published' || !inTypeAudience(roleKeys, type.allowed_roles)) return null
   const record = await loadRecord(orgId, typeKey, id)
   if (!record) return null
   const lint = lintRecordFields(type.fields, type.name)
@@ -39,7 +39,7 @@ export async function GET(
   const gate = await guardPermission('records.read')
   if (gate instanceof NextResponse) return gate
   const { typeKey, id } = await params
-  const scope = await loadScope(gate.user.orgId, gate.user.role, typeKey, id)
+  const scope = await loadScope(gate.user.orgId, gate.user.roles.map(({ key }) => key), typeKey, id)
   if (!scope) return NextResponse.json({ error: 'not found' }, { status: 404 })
   return NextResponse.json({ record: scope.record })
 }
@@ -67,7 +67,7 @@ export async function PATCH(
   if (gate instanceof NextResponse) return gate
   const { user } = gate
   const { typeKey, id } = await params
-  const scope = await loadScope(user.orgId, user.role, typeKey, id)
+  const scope = await loadScope(user.orgId, user.roles.map(({ key }) => key), typeKey, id)
   if (!scope) return NextResponse.json({ error: 'not found' }, { status: 404 })
   const { record, sections } = scope
 
@@ -145,7 +145,7 @@ export async function PATCH(
         data: effectiveData,
       },
       org: { id: org.id, name: org.name, baseCurrency: org.base_currency },
-      user: { id: user.id, name: user.name, role: user.role },
+      user: { id: user.id, name: user.name, roles: user.roles.map(({ key }) => key) },
     },
     record.id,
   )
@@ -182,7 +182,7 @@ export async function DELETE(
   if (gate instanceof NextResponse) return gate
   const { user } = gate
   const { typeKey, id } = await params
-  const scope = await loadScope(user.orgId, user.role, typeKey, id)
+  const scope = await loadScope(user.orgId, user.roles.map(({ key }) => key), typeKey, id)
   if (!scope) return NextResponse.json({ error: 'not found' }, { status: 404 })
   if (scope.record.status !== 'draft') {
     return NextResponse.json({ error: 'Only draft records can be deleted — deactivate instead' }, { status: 422 })

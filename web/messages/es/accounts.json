@@ -3,6 +3,7 @@
     "title": "Plan de cuentas",
     "description": "Saldos actuales con signo natural (acumulado para el balance general, del ejercicio fiscal en curso para resultados), consolidados a través de cuentas de resumen.",
     "searchPlaceholder": "Buscar por número o nombre…",
+    "views": { "list": "Lista", "hierarchy": "Jerarquía" },
     "newAccount": "Nueva cuenta",
     "viewRegister": "Ver registro",
     "expand": "Expandir cuenta",

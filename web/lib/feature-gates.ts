@@ -10,7 +10,10 @@ export async function requireFeatureEnabled(orgId: string, featureKey: string): 
   if (!(await isFeatureEnabled(orgId, featureKey))) notFound()
 }
 
-/** Permission and feature enforcement for optional-capability APIs. */
+/**
+ * API boundary that combines permission and feature enforcement. Disabled
+ * features return 404 so hidden modules do not expose an alternate API surface.
+ */
 export async function guardFeaturePermission(
   permission: string,
   featureKey: string,

@@ -51,10 +51,7 @@ export const DOCUMENT_STATUSES = [
 ] as const;
 
 /**
- * Built-in role names for the assignee/recipient `role` target picker. These
- * are the users.role enum values AND the seeded app_roles keys — the two role
- * models intentionally share keys (see engine/src/seed-roles.ts +
- * web/lib/permissions.ts BUILT_IN_ROLES); the runtime resolver matches both.
+ * Built-in app-role keys for the assignee/recipient `role` target picker.
  * Custom app_roles keys also resolve at runtime; this list is only the picker
  * default.
  */
@@ -70,10 +67,13 @@ export const BUILT_IN_ROLE_NAMES = [
 export const EVENT_SOURCE_OPTIONS = [
   { value: "ui", label: "User interface" },
   { value: "api", label: "API" },
+  { value: "mcp", label: "MCP" },
+  { value: "assistant", label: "Assistant" },
   { value: "sync", label: "Data synchronization" },
   { value: "script", label: "Script" },
   { value: "schedule", label: "Scheduled process" },
   { value: "close_automation", label: "Close automation" },
+  { value: "posted_correction", label: "Posted-transaction correction" },
 ] as const;
 
 /**
@@ -139,7 +139,7 @@ export const DOCUMENT_FIELDS: FlowFieldDef[] = [
   { key: "old_total", label: "Old total (on update)", type: "number" },
   { key: "old_taxTotal", label: "Old tax total (on update)", type: "number" },
   // Injected on every dispatch: where the mutation came from
-  // ('ui'|'api'|'sync'|'script'|'schedule'|'close_automation') — execution-context
+  // Closed FlowEventSource vocabulary — execution-context
   // filters (auto-approve system-generated records).
   {
     key: "event_source",

@@ -51,7 +51,7 @@ export default async function OverheadModelSetup({
   const data = await trueCostData(authz.user.orgId, { from: iso(from), to: iso(to), label: 'TTM' })
   const typesRes = (await db.execute(sql`
     select pt.id, pt.name,
-           coalesce(version.financial_profile, pt.financial_profile)->'overhead' as overhead
+           version.financial_profile->'overhead' as overhead
       from project_types pt
       left join lateral (
         select v.financial_profile
@@ -99,7 +99,7 @@ export default async function OverheadModelSetup({
       case 'rate_engine': return t('setup.entities.overhead-model.methodCard')
       case 'percent_of_labor': return t('setup.entities.overhead-model.methodPct', { rate: oh.ratePercent ?? 0 })
       case 'per_labor_hour': return t('setup.entities.overhead-model.methodHr', { rate: (oh.ratePerHour ?? 0).toFixed(2) })
-      case 'account_group_actual': return t('setup.entities.overhead-model.methodGl')
+      case 'posted_gl_account_group': return t('setup.entities.overhead-model.methodGl')
       default: return t('setup.entities.overhead-model.methodNone')
     }
   }

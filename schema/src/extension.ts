@@ -156,11 +156,6 @@ export const users = pgTable(
     email: text("email").notNull(),
     name: text("name").notNull(),
     passwordHash: text("password_hash").notNull(),
-    role: text("role", {
-      enum: ["admin", "controller", "accountant", "approver", "viewer"],
-    })
-      .notNull()
-      .default("viewer"),
     partyId: uuid("party_id"),
     /** UI language (BCP 47, e.g. "en", "fr"). Null = inherit the org default
      *  (orgs.settings.defaultLocale). Shipped locales: web/i18n/config.ts. */
@@ -265,6 +260,20 @@ export const connections = pgTable(
     mirrorEnabled: boolean("mirror_enabled").notNull().default(false),
     /** Cron-ish cadence label, e.g. "daily" (resolved by the scheduler). */
     mirrorSchedule: text("mirror_schedule").notNull().default("daily"),
+    /**
+     * Controller disposition for source changes that alter an already-posted
+     * projection. Automatic mode never rewrites history: it authorizes the
+     * posting engine's guarded append-only reversal/replacement workflow.
+     */
+    postedChangePolicy: text("posted_change_policy", {
+      enum: ["review_required", "append_only_automatic"],
+    })
+      .notNull()
+      .default("review_required"),
+    postedChangeAuthorizedBy: uuid("posted_change_authorized_by"),
+    postedChangeAuthorizedAt: timestamp("posted_change_authorized_at", {
+      withTimezone: true,
+    }),
     /** Source-clock high-water mark of the last successful sync. */
     cursor: timestamp("cursor", { withTimezone: true }),
     lastRunAt: timestamp("last_run_at", { withTimezone: true }),
@@ -286,8 +295,8 @@ export const syncRuns = pgTable(
   {
     id: id(),
     orgId: orgRef(),
-    /** The connection this run belongs to (nullable: pre-connections legacy runs). */
-    connectionId: uuid("connection_id"),
+    /** The authoritative connection that produced this run. */
+    connectionId: uuid("connection_id").notNull(),
     source: text("source").notNull(), // "netsuite"
     kind: text("kind", {
       enum: [

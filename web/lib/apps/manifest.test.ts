@@ -17,7 +17,7 @@ const good = {
     { name: 'total', file: 'backend/total.js' },
     { name: 'save', file: 'backend/save.js', method: 'POST' },
   ],
-  nav: { show: true, label: 'Expense Helper' },
+  nav: { label: 'Expense Helper' },
 }
 
 test('parseManifest accepts a valid manifest and applies defaults', () => {

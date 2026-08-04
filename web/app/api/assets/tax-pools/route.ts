@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server'
 import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/db.ts'
 import { listTaxRegimes, runTaxPool } from '@openbooks/engine/src/tax-pool-run.ts'
-import { guardPermission } from '../../../../lib/authz'
+import { guardFeaturePermission } from '../../../../lib/feature-gates'
 
 export const runtime = 'nodejs'
 
@@ -19,7 +19,7 @@ async function rootSubsidiary(orgId: string): Promise<string | null> {
 
 /** Read a tax year's computed pool results (Schedule 8-style). */
 export async function GET(req: Request) {
-  const gate = await guardPermission('assets.read')
+  const gate = await guardFeaturePermission('assets.read', 'fixedAssets')
   if (gate instanceof NextResponse) return gate
   const p = new URL(req.url).searchParams
   const taxYear = Number(p.get('taxYear'))
@@ -37,7 +37,7 @@ export async function GET(req: Request) {
 
 /** Run the tax pools for a year (defaults: primary book, root subsidiary, calendar year). */
 export async function POST(req: Request) {
-  const gate = await guardPermission('assets.manage')
+  const gate = await guardFeaturePermission('assets.manage', 'fixedAssets')
   if (gate instanceof NextResponse) return gate
   const body = (await req.json().catch(() => ({}))) as {
     regime?: string; taxYear?: number; yearStart?: string; yearEnd?: string; bookId?: string; subsidiaryId?: string

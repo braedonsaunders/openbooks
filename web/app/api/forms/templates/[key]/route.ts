@@ -2,8 +2,8 @@ import { NextResponse } from 'next/server'
 import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/db.ts'
 import { parseFormSchema } from '@openbooks/forms-core'
-import { currentUser } from '../../../../../lib/auth'
-import { canAuthor, getLatestVersion, getTemplateByKey } from '../../_lib'
+import { guardPermission } from '../../../../../lib/authz'
+import { getLatestVersion, getTemplateByKey } from '../../_lib'
 
 export const runtime = 'nodejs'
 
@@ -11,8 +11,9 @@ type Params = { params: Promise<{ key: string }> }
 
 /** Template meta + all versions + the editable draft schema. */
 export async function GET(_req: Request, { params }: Params) {
-  const user = await currentUser()
-  if (!user) return NextResponse.json({ error: 'unauthorized' }, { status: 401 })
+  const gate = await guardPermission('admin.customization.manage')
+  if (gate instanceof NextResponse) return gate
+  const { user } = gate
   const { key } = await params
 
   const template = await getTemplateByKey(user.orgId, key)
@@ -39,9 +40,9 @@ export async function GET(_req: Request, { params }: Params) {
 
 /** Update template meta and/or save the draft schema. */
 export async function PUT(req: Request, { params }: Params) {
-  const user = await currentUser()
-  if (!user) return NextResponse.json({ error: 'unauthorized' }, { status: 401 })
-  if (!canAuthor(user.role)) return NextResponse.json({ error: 'forbidden' }, { status: 403 })
+  const gate = await guardPermission('admin.customization.manage')
+  if (gate instanceof NextResponse) return gate
+  const { user } = gate
   const { key } = await params
 
   const template = await getTemplateByKey(user.orgId, key)
@@ -118,9 +119,9 @@ export async function PUT(req: Request, { params }: Params) {
 
 /** Archive (soft-retire) a template. Responses and versions are kept. */
 export async function DELETE(_req: Request, { params }: Params) {
-  const user = await currentUser()
-  if (!user) return NextResponse.json({ error: 'unauthorized' }, { status: 401 })
-  if (!canAuthor(user.role)) return NextResponse.json({ error: 'forbidden' }, { status: 403 })
+  const gate = await guardPermission('admin.customization.manage')
+  if (gate instanceof NextResponse) return gate
+  const { user } = gate
   const { key } = await params
 
   const template = await getTemplateByKey(user.orgId, key)

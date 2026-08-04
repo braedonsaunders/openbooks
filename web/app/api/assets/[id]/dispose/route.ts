@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server'
 import { disposeAsset } from '@openbooks/engine/src/asset-lifecycle.ts'
-import { guardPermission } from '../../../../../lib/authz'
+import { guardFeaturePermission } from '../../../../../lib/feature-gates'
 import { isUuid } from '../../../../../lib/list-params'
 
 export const runtime = 'nodejs'
@@ -22,7 +22,7 @@ interface Body {
  * asset is rejected).
  */
 export async function POST(req: Request, { params }: { params: Promise<{ id: string }> }) {
-  const gate = await guardPermission('assets.manage')
+  const gate = await guardFeaturePermission('assets.manage', 'fixedAssets')
   if (gate instanceof NextResponse) return gate
   const { id } = await params
   if (!isUuid(id)) return NextResponse.json({ error: 'invalid asset' }, { status: 422 })

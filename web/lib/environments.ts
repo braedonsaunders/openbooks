@@ -20,6 +20,7 @@ export interface EnvOption {
 export interface TenantGroup {
   productionOrgId: string;
   productionOrgName: string;
+  envKind: "production" | "preview";
   sandboxes: EnvOption[];
 }
 
@@ -48,17 +49,22 @@ export async function shellEnvironments(authz: Authz): Promise<WorkspaceEnvironm
     const tenants: TenantGroup[] = [];
     for (const o of accessible) {
       let sandboxes: EnvOption[] = [];
-      if (canManage) {
+      if (canManage && o.envKind === "production") {
         const rows = (await db.execute(sql`
           select org_id as "orgId", name, status, tier
             from sandboxes where production_org_id = ${o.orgId}
            order by created_at`)) as any;
         sandboxes = rows.rows as EnvOption[];
       }
-      tenants.push({ productionOrgId: o.orgId, productionOrgName: o.name, sandboxes });
+      tenants.push({
+        productionOrgId: o.orgId,
+        productionOrgName: o.name,
+        envKind: o.envKind,
+        sandboxes,
+      });
     }
     const currentName =
-      authz.user.envKind === "production"
+      authz.user.envKind === "production" || authz.user.envKind === "preview"
         ? tenants.find((t) => t.productionOrgId === authz.user.productionOrgId)?.productionOrgName ??
           "Production"
         : authz.user.sandboxName ?? "Sandbox";

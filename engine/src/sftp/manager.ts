@@ -40,10 +40,10 @@ export async function loadDaemonConfig(): Promise<DaemonConfig> {
   }
   const hostKey = generateHostKey();
   await db.execute(sql`
-    insert into sftp_daemon (id, enabled, port, host_key) values ('default', true, 2222, ${hostKey})
+    insert into sftp_daemon (id, enabled, port, host_key) values ('default', false, 2222, ${hostKey})
     on conflict (id) do nothing
   `);
-  return { enabled: true, port: 2222, hostKey, advertisedHost: null };
+  return { enabled: false, port: 2222, hostKey, advertisedHost: null };
 }
 
 /** SHA-256 fingerprint of the host public key (shown in the UI, like ssh-keygen -l). */
@@ -103,7 +103,8 @@ let currentPort: number | null = null;
 /**
  * Start (or reconcile) the SFTP daemon from the DB config. Idempotent and safe
  * to call after a settings change: it restarts only when enabled/port changed.
- * No env gate — a tenant enabling SFTP in the UI is all it takes.
+ * No env gate — a platform administrator explicitly enabling SFTP in the UI
+ * is all it takes. Fresh installations stay closed by default.
  */
 export async function ensureSftpServer(): Promise<void> {
   let cfg: DaemonConfig;

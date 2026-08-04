@@ -4,9 +4,10 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { useTranslations } from 'next-intl'
 import { toast } from 'sonner'
-import { ArrowLeft, ArrowRight, CheckCircle2, Upload } from 'lucide-react'
+import { ArrowLeft, ArrowRight, CheckCircle2, Database, Sparkles, Upload } from 'lucide-react'
 import { Badge, Button, PageHeader, Select, cn } from '@openbooks/ui'
 import { WizardLayout } from '../../../../components/page-layout'
+import { enterOrg } from '../../../../lib/sandbox-session'
 
 interface ResourceDescriptor {
   key: string
@@ -26,6 +27,14 @@ interface Outcome {
   updated: number
   failed: number
   errors: { row: number; message: string; field?: string }[]
+}
+interface SampleCompanyProfile {
+  industryKey: string
+  profileId: string
+  companyName: string
+  focus: string[]
+  templateReady: boolean
+  existingOrgId: string | null
 }
 
 type Step = 'source' | 'mapping' | 'preview' | 'result'
@@ -54,13 +63,60 @@ export function ImportWizard() {
   const [preview, setPreview] = useState<Outcome | null>(null)
   const [result, setResult] = useState<Outcome | null>(null)
   const [busy, setBusy] = useState(false)
+  const [sampleProfiles, setSampleProfiles] = useState<SampleCompanyProfile[]>([])
+  const [sampleIndustry, setSampleIndustry] = useState('')
+  const [sampleBusy, setSampleBusy] = useState(false)
 
   useEffect(() => {
     fetch('/api/data/resources')
       .then((r) => r.json())
       .then((d) => setResources((d.resources ?? []).filter((x: ResourceDescriptor & { supportsImport?: boolean }) => x)))
       .catch(() => setResources([]))
+    fetch('/api/data/sample-companies')
+      .then((r) => r.json())
+      .then((d) => {
+        const profiles = (d.profiles ?? []) as SampleCompanyProfile[]
+        setSampleProfiles(profiles)
+        setSampleIndustry((current) => current || profiles[0]?.industryKey || '')
+      })
+      .catch(() => setSampleProfiles([]))
   }, [])
+
+  const selectedSample = useMemo(
+    () => sampleProfiles.find((profile) => profile.industryKey === sampleIndustry) ?? null,
+    [sampleIndustry, sampleProfiles],
+  )
+
+  const createOrOpenSample = async () => {
+    if (!selectedSample) return
+    setSampleBusy(true)
+    let orgId = selectedSample.existingOrgId
+    try {
+      if (!orgId) {
+        const response = await fetch('/api/data/sample-companies', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ industry: selectedSample.industryKey }),
+        })
+        const data = await response.json().catch(() => ({}))
+        if (!response.ok || typeof data.orgId !== 'string') {
+          throw new Error(data.error ?? t('import.sample.error'))
+        }
+        orgId = data.orgId
+        toast.success(data.created ? t('import.sample.created') : t('import.sample.ready'))
+      }
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : t('import.sample.error'))
+      setSampleBusy(false)
+      return
+    }
+    if (!orgId) {
+      toast.error(t('import.sample.error'))
+      setSampleBusy(false)
+      return
+    }
+    await enterOrg(orgId)
+  }
 
   const grouped = useMemo(() => {
     const map = new Map<string, ResourceDescriptor[]>()
@@ -248,6 +304,52 @@ export function ImportWizard() {
     <WizardLayout header={header} footer={footer}>
       {step === 'source' && (
         <div className="space-y-5">
+          <section className="overflow-hidden rounded-xl border border-teal-200 bg-gradient-to-br from-teal-50 via-white to-cyan-50 dark:border-teal-900 dark:from-teal-950/40 dark:via-slate-950 dark:to-cyan-950/30">
+            <div className="flex items-start gap-3 border-b border-teal-100 p-4 dark:border-teal-900/70">
+              <span className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-teal-600 text-white shadow-sm">
+                <Sparkles className="h-5 w-5" />
+              </span>
+              <div>
+                <h2 className="font-semibold text-foreground">{t('import.sample.title')}</h2>
+                <p className="mt-0.5 text-sm leading-relaxed text-muted-foreground">{t('import.sample.description')}</p>
+              </div>
+            </div>
+            <div className="grid gap-4 p-4 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-end">
+              <div className="space-y-2">
+                <label className="text-sm font-medium text-foreground">{t('import.sample.industry')}</label>
+                <Select value={sampleIndustry} onChange={(event) => setSampleIndustry(event.target.value)}>
+                  {sampleProfiles.map((profile) => (
+                    <option key={profile.industryKey} value={profile.industryKey}>{profile.companyName}</option>
+                  ))}
+                </Select>
+                {selectedSample && (
+                  <p className="text-xs text-muted-foreground">
+                    {selectedSample.focus.join(' · ')}
+                    {!selectedSample.templateReady && !selectedSample.existingOrgId ? ` · ${t('import.sample.firstGeneration')}` : ''}
+                  </p>
+                )}
+              </div>
+              <Button
+                type="button"
+                onClick={createOrOpenSample}
+                disabled={!selectedSample || sampleBusy}
+                className="sm:min-w-44"
+              >
+                <Database className="mr-2 h-4 w-4" />
+                {sampleBusy
+                  ? t('import.sample.preparing')
+                  : selectedSample?.existingOrgId
+                    ? t('import.sample.open')
+                    : t('import.sample.create')}
+              </Button>
+            </div>
+            <p className="px-4 pb-4 text-xs leading-relaxed text-muted-foreground">{t('import.sample.safety')}</p>
+          </section>
+          <div className="flex items-center gap-3 text-xs font-medium uppercase tracking-wide text-muted-foreground">
+            <span className="h-px flex-1 bg-border" />
+            {t('import.sample.orFile')}
+            <span className="h-px flex-1 bg-border" />
+          </div>
           <div className="space-y-2">
             <label className="text-sm font-medium text-muted-foreground">{t('import.resource')}</label>
             <Select value={resource} onChange={(e) => setResource(e.target.value)}>

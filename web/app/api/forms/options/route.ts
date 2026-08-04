@@ -47,16 +47,14 @@ export async function GET(req: Request) {
     const kind = (PARTY_PICKER_KINDS as readonly string[]).includes(rawKind)
       ? (rawKind as PartyPickerKind)
       : 'any'
-    // Role membership comes from the role tables; parties imported by the
-    // sync bridge carry their source role in custom->>'nsKind' until role
-    // rows exist, so accept either signal.
+    // Role membership comes exclusively from the canonical role tables.
     const roleFilter =
       kind === 'vendor'
-        ? sql` and (exists (select 1 from vendor_roles vr where vr.party_id = p.id) or p.custom->>'nsKind' = 'vendor')`
+        ? sql` and exists (select 1 from vendor_roles vr where vr.party_id = p.id and vr.is_active)`
         : kind === 'customer'
-          ? sql` and (exists (select 1 from customer_roles cr where cr.party_id = p.id) or p.custom->>'nsKind' = 'customer')`
+          ? sql` and exists (select 1 from customer_roles cr where cr.party_id = p.id and cr.is_active)`
           : kind === 'employee'
-            ? sql` and (exists (select 1 from employee_roles er where er.party_id = p.id) or p.custom->>'nsKind' = 'employee')`
+            ? sql` and exists (select 1 from employee_roles er where er.party_id = p.id and er.is_active)`
             : sql``
     const r = (await db.execute(sql`
       select p.id, p.display_name, p.short_code from parties p

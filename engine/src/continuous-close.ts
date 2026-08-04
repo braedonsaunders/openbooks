@@ -956,6 +956,7 @@ export async function runDueContinuousCloseAgents(now = new Date()): Promise<voi
       from ai_agent_policies p
       join orgs o on o.id = p.org_id
      where p.enabled and p.automatic_runs and p.next_run_at <= ${now}
+       and o.env_kind = 'production'
        and coalesce((o.settings->'ai'->>'enabled')::boolean, true)
      order by p.next_run_at
   `)) as unknown as {

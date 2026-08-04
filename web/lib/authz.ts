@@ -12,10 +12,9 @@ import { allowedSubsidiaryIds } from "./subsidiaries";
  * currentUser() stays the identity source; this layer resolves the user's
  * EFFECTIVE permissions:
  *
- *   1. union of every assigned app_role's permission keys;
- *   2. when the user has no assignments, fall back to their legacy
- *      users.role mapped through BUILT_IN_ROLES;
- *   3. apply user_permission_overrides — grants add, denies win.
+ *   1. union of every explicitly assigned app_role's permission keys;
+ *   2. apply user_permission_overrides — grants add, denies win.
+ * A user without an assigned role has no role-granted permissions.
  */
 
 export interface Authz {
@@ -48,7 +47,6 @@ export async function getAuthz(): Promise<Authz | null> {
     rolePermissionSets: assignments.rows.map((r: any) =>
       Array.isArray(r.permissions) ? r.permissions : [],
     ),
-    legacyRole: user.role,
     overrides: overrides.rows,
   });
   return { user, permissions, allowedSubsidiaryIds: allowedSubs };

@@ -66,7 +66,7 @@ export default async function Estimates({
   ])
   const resolvedForm = openOrder && pickers ? await resolveFormLayout({
     orgId: authz.user.orgId, userId: authz.user.id, recordType: KIND,
-    userRoles: (authz.user as any).roles?.map(({ key }: { key: string }) => key) ?? [authz.user.role], headerDefs: [], lineDefs: [], explicitLayoutId: pickString(sp.form),
+    userRoles: authz.user.roles.map(({ key }) => key), headerDefs: [], lineDefs: [], explicitLayoutId: pickString(sp.form),
   }) : null
 
   const newBtn = canManage ? (

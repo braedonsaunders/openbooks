@@ -60,7 +60,7 @@ const err = (status: number, error: string, extra?: Record<string, unknown>): Wr
 
 async function loadCustomScope(user: SessionUser, typeKey: string) {
   const type = await loadRecordTypeByKey(user.orgId, typeKey);
-  if (!type || type.status !== "published" || !inTypeAudience(user.role, type.allowed_roles)) return null;
+  if (!type || type.status !== "published" || !inTypeAudience(user.roles.map(({ key }) => key), type.allowed_roles)) return null;
   const lint = lintRecordFields(type.fields, type.name);
   if (!lint.success) return null;
   return { type, sections: lint.sections };
@@ -133,7 +133,7 @@ async function applyCustomRecord(
         data: effectiveData,
       },
       org: { id: org.id, name: org.name, baseCurrency: org.base_currency },
-      user: { id: user.id, name: user.name, role: user.role },
+      user: { id: user.id, name: user.name, roles: user.roles.map(({ key }) => key) },
     },
     record.id,
   );

@@ -4,8 +4,12 @@ import { redirect } from 'next/navigation'
 import { getTranslations } from 'next-intl/server'
 import {
   ArrowUpRight,
+  Blocks,
   Boxes,
+  Code2,
+  Database,
   DatabaseBackup,
+  KeyRound,
   Link as LinkIcon,
   Mail,
   PanelLeft,
@@ -13,9 +17,11 @@ import {
   ShieldCheck,
   Sparkles,
   Users,
+  Workflow,
 } from 'lucide-react'
 import { PageHeader, cn } from '@openbooks/ui'
 import { getAuthz, can } from '../../../lib/authz'
+import { featureEnabled, resolvedFeatureState } from '../../../lib/features'
 
 export const dynamic = 'force-dynamic'
 
@@ -55,6 +61,7 @@ type Card = {
   cardKey: string
   icon: ReactNode
   permission: string
+  featureKey?: string
 }
 type Group = { key: string; labelKey: string; accent: Accent; cards: Card[] }
 
@@ -118,6 +125,55 @@ const GROUPS: Group[] = [
     ],
   },
   {
+    key: 'platform',
+    labelKey: 'hub.groups.platform',
+    accent: 'teal',
+    cards: [
+      {
+        href: '/admin/scripts',
+        icon: <Code2 size={18} />,
+        cardKey: 'scripts',
+        permission: 'scripts.manage',
+        featureKey: 'scripts',
+      },
+      {
+        href: '/admin/flows',
+        icon: <Workflow size={18} />,
+        cardKey: 'flows',
+        permission: 'flows.manage',
+        featureKey: 'flows',
+      },
+      {
+        href: '/admin/apps',
+        icon: <Blocks size={18} />,
+        cardKey: 'apps',
+        permission: 'apps.manage',
+        featureKey: 'apps',
+      },
+      {
+        href: '/admin/api-keys',
+        icon: <KeyRound size={18} />,
+        cardKey: 'apiKeys',
+        permission: 'api.keys.manage',
+        featureKey: 'apiAccess',
+      },
+      {
+        href: '/api-docs',
+        icon: <Code2 size={18} />,
+        cardKey: 'apiDocs',
+        permission: 'api.keys.manage',
+        featureKey: 'apiAccess',
+      },
+      {
+        href: '/query',
+        icon: <Database size={18} />,
+        cardKey: 'queryConsole',
+        permission: 'sql.execute',
+        featureKey: 'queryConsole',
+      },
+    ],
+  },
+  {
     key: 'data',
     labelKey: 'hub.groups.data',
     accent: 'sky',
@@ -154,10 +210,11 @@ export default async function AdminPage() {
   const authz = await getAuthz()
   if (!authz) redirect('/login')
   const t = await getTranslations('admin')
+  const featureState = await resolvedFeatureState(authz.user.orgId)
 
   const groups = GROUPS.map((g) => ({
     ...g,
-    cards: g.cards.filter((c) => can(authz, c.permission)),
+    cards: g.cards.filter((c) => can(authz, c.permission) && (!c.featureKey || featureEnabled(featureState, c.featureKey))),
   })).filter((g) => g.cards.length > 0)
 
   // No admin-ish permission at all → this landing has nothing to show.

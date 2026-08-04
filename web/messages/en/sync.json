@@ -139,7 +139,13 @@
     "name": "Connection name",
     "select": "Select…",
     "credentials": "Credentials (encrypted at rest, never displayed again)",
-    "keepCurrent": "Leave blank to keep current"
+    "keepCurrent": "Leave blank to keep current",
+    "postedChanges": {
+      "label": "Changes to posted source transactions",
+      "review": "Stop and require review",
+      "automatic": "Append reversal and replacement automatically",
+      "help": "Automatic corrections never rewrite posted history. OpenBooks retains the original, posts a linked reversal and replacement, transfers eligible applications, and still stops for reconciliations, closed periods, inventory, revenue recognition, or downstream documents."
+    }
   },
   "oauth": {
     "title": "One-time app setup in the <link>{portal}</link>",

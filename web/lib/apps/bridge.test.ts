@@ -70,7 +70,7 @@ test('inlineDocument handles documents without a <head>', () => {
 })
 
 test('bridgeClientSource embeds context and defines the SDK surface', () => {
-  const src = bridgeClientSource({ app: { id: 'a1', key: 'demo', name: 'Demo' }, user: { id: 'u1', name: 'Ada', role: 'admin' } })
+  const src = bridgeClientSource({ app: { id: 'a1', key: 'demo', name: 'Demo' }, user: { id: 'u1', name: 'Ada', roles: ['admin'] } })
   assert.match(src, /window\.openbooks/)
   assert.match(src, /callBackend/)
   assert.match(src, /records/)

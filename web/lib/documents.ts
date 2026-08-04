@@ -5,7 +5,7 @@ import { cmp } from '@openbooks/engine/src/money.ts'
 import { runRecordFlows } from '@openbooks/engine/src/flows/index.ts'
 import { captureTransactionAuditSnapshot, recordTransactionAudit } from '@openbooks/engine/src/transaction-audit.ts'
 import { promoteCrmAccount } from '@openbooks/engine/src/crm.ts'
-import { computeBillTotals, nextDocumentNumber, persistLineTaxComponents, taxProfileMap, taxRateMap, type BillLineInput } from './bills'
+import { computeBillTotals, nextDocumentNumber, persistLineTaxComponents, taxProfileMap, type BillLineInput } from './bills'
 import { DOC_KINDS, docKindConfig, type DocKindConfig } from './document-kinds'
 import { loadFieldDefs, validateCustomValues } from './custom-fields'
 import { segmentRegistry, validateExtraDims } from './segments'
@@ -28,7 +28,7 @@ import { resolveOrgId } from './org-scope'
  * kind-agnostic.
  */
 
-export { computeBillTotals, taxRateMap, nextDocumentNumber, type BillLineInput } from './bills'
+export { computeBillTotals, taxProfileMap, nextDocumentNumber, type BillLineInput } from './bills'
 export {
   DOC_KINDS,
   AP_KINDS,
@@ -614,9 +614,14 @@ export async function partyOptions(role: 'vendor' | 'customer', orgId?: string):
   const resolvedOrgId = await resolveOrgId(orgId)
   const filter =
     role === 'vendor'
-      ? sql`custom->>'nsKind' = 'vendor'`
-      : sql`(custom->>'nsKind' = 'customer'
-             or exists (select 1 from customer_roles cr where cr.org_id = ${resolvedOrgId} and cr.party_id = parties.id))`
+      ? sql`exists (select 1 from vendor_roles vr
+                     where vr.org_id = ${resolvedOrgId}
+                       and vr.party_id = parties.id
+                       and vr.is_active)`
+      : sql`exists (select 1 from customer_roles cr
+                     where cr.org_id = ${resolvedOrgId}
+                       and cr.party_id = parties.id
+                       and cr.is_active)`
   const r = (await db.execute(sql`
     select id, display_name, subsidiary_id from parties
      where org_id = ${resolvedOrgId} and ${filter} and is_active

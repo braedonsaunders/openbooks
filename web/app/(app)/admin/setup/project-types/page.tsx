@@ -18,7 +18,7 @@ export default async function ProjectTypesSetup() {
     db.execute(sql`
       select id, key, name, description, is_built_in as "isBuiltIn", is_active as "isActive",
              sort_order as "sortOrder", billing_method as "billingMethod",
-             coalesce(version.financial_profile, project_types.financial_profile) as "financialProfile",
+             version.financial_profile as "financialProfile",
              version.effective_from::text as "financialProfileEffectiveFrom",
              invoicing_profile as "invoicingProfile", backup_profile as "backupProfile"
         from project_types

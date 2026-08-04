@@ -40,7 +40,7 @@ export default async function PropertyManagementPage({
       orgId,
       userId: authz.user.id,
       recordType: "property",
-      userRoles: [authz.user.role],
+      userRoles: authz.user.roles.map(({ key }) => key),
       headerDefs: fieldDefs,
       lineDefs: [],
       explicitLayoutId: pickString(sp.form),

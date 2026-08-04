@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server'
 import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/db.ts'
 import { computeNextRunAt } from '@openbooks/engine/src/scripting.ts'
-import { guardPermission } from '../../../../lib/authz'
+import { guardFeaturePermission } from '../../../../lib/feature-gates'
 
 export const runtime = 'nodejs'
 
@@ -30,7 +30,7 @@ function validate(body: Record<string, unknown>): string | null {
 }
 
 export async function POST(req: Request) {
-  const gate = await guardPermission('scripts.manage')
+  const gate = await guardFeaturePermission('scripts.manage', 'scripts')
   if (gate instanceof NextResponse) return gate
   const user = gate.user
   const body = (await req.json()) as Record<string, unknown>
@@ -50,7 +50,7 @@ export async function POST(req: Request) {
 }
 
 export async function PATCH(req: Request) {
-  const gate = await guardPermission('scripts.manage')
+  const gate = await guardFeaturePermission('scripts.manage', 'scripts')
   if (gate instanceof NextResponse) return gate
   const user = gate.user
   const body = (await req.json()) as Record<string, unknown>

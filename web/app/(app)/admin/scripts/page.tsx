@@ -9,6 +9,7 @@ import { FilterChips } from '../../../../components/filter-bar'
 import { Pagination } from '../../../../components/pagination'
 import { buildListDrawerHref, parseListParams, pickString } from '../../../../lib/list-params'
 import { requirePermission } from '../../../../lib/authz'
+import { requireFeatureEnabled } from '../../../../lib/feature-gates'
 import { dateTime } from '../../../../lib/format'
 import { BUILT_IN_SCRIPT_KINDS, customRecordTypeKey, isCustomRecordKind } from '../../../../lib/script-kinds'
 import { NewScriptButton, ScriptDrawer } from './ScriptDrawer'
@@ -32,6 +33,7 @@ export default async function Scripts({
   searchParams: Promise<Record<string, string | string[] | undefined>>
 }) {
   const authz = await requirePermission('scripts.manage')
+  await requireFeatureEnabled(authz.user.orgId, 'scripts')
   const orgId = authz.user.orgId
   const t = await getTranslations('admin.scripts')
   const tHub = await getTranslations('admin.hub')

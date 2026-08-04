@@ -29,10 +29,10 @@ export function StartCloseButton({
         body: JSON.stringify({ periodId, bookId }),
       });
       const data = await response.json();
-      if (!response.ok) throw new Error();
+      if (!response.ok) throw new Error(data.error ?? t("errors.actionFailed"));
       router.push(`/close?run=${data.runId}`);
-    } catch {
-      toast.error(t("errors.actionFailed"));
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : t("errors.actionFailed"));
       setBusy(false);
     }
   }

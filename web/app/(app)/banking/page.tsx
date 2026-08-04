@@ -57,7 +57,7 @@ export default async function BankingHomePage({
     resolveNav(
       authz.user.orgId,
       (permission) => permission === undefined || can(authz, permission),
-      authz.user.role,
+      authz.user.roles.map(({ key }) => key),
       (key) => {
         try {
           return tNav(key)

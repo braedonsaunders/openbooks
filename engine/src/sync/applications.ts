@@ -48,18 +48,22 @@ export async function reconcileApplications(
   }
 
   // -- open AR/AP lines per source ref ----------------------------------------
-  // Posted entries only: a reversed entry (voided / source-deleted document)
-  // no longer carries a settleable open item.
+  // Current posted entries only: a reversed entry (voided / source-deleted
+  // document) no longer carries a settleable open item. Do not filter on
+  // journal origin here. A controller-authorized source correction replaces
+  // the document's original `document` entry with an append-only `migration`
+  // or `intercompany` entry; that replacement is the only legal settlement
+  // endpoint and must remain visible to a later source application.
   const lineRows = (await db.execute(sql`
     select d.custom->>${refKey} as ref, l.id as line_id, e.posting_date::text as pdate,
            l.line_number as line_no, abs(l.amount) as amt,
            l.account_id as account_id, l.party_id as party_id,
            l.subsidiary_id, l.currency, l.fx_rate, sign(l.amount) as amount_sign
       from journal_entries e
-      join documents d on d.id = e.source_document_id
+      join documents d on d.id = e.source_document_id and d.posted_entry_id = e.id
       join journal_lines l on l.entry_id = e.id and l.is_open_item
       join accounts a on a.id = l.account_id
-     where e.origin = 'document' and e.status = 'posted' and d.org_id = ${orgId}
+     where e.status = 'posted' and d.org_id = ${orgId}
        and a.type in ('liability_payable', 'asset_receivable')
        and d.custom->>${refKey} is not null`)) as unknown as {
     rows: { ref: string; line_id: string; pdate: string; line_no: number; amt: string; account_id: string; party_id: string | null; subsidiary_id: string; currency: string; fx_rate: string; amount_sign: string }[];

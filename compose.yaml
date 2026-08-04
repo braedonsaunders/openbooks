@@ -1,10 +1,10 @@
 name: openbooks
 
-x-openbooks-environment: &openbooks-environment
+x-openbooks-runtime-environment: &openbooks-runtime-environment
   NODE_ENV: production
   HOSTNAME: 0.0.0.0
   PORT: "3000"
-  OPENBOOKS_DB_URL: postgres://openbooks:${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}@postgres:5432/openbooks
+  OPENBOOKS_DB_URL: postgres://openbooks_app:${OPENBOOKS_DB_PASSWORD:?OPENBOOKS_DB_PASSWORD is required}@postgres:5432/openbooks
   OPENBOOKS_REDIS_URL: redis://:${REDIS_PASSWORD:?REDIS_PASSWORD is required}@redis:6379
   SESSION_SECRET: ${SESSION_SECRET:?SESSION_SECRET is required}
   OPENBOOKS_DATA_KEY: ${OPENBOOKS_DATA_KEY:?OPENBOOKS_DATA_KEY is required}
@@ -16,24 +16,18 @@ x-openbooks-environment: &openbooks-environment
   S3_ACCESS_KEY_ID: ${MINIO_ROOT_USER:?MINIO_ROOT_USER is required}
   S3_SECRET_ACCESS_KEY: ${MINIO_ROOT_PASSWORD:?MINIO_ROOT_PASSWORD is required}
   S3_BUCKET: openbooks
-  ORG_NAME: ${ORG_NAME:-OpenBooks}
-  ORG_CURRENCY: ${ORG_CURRENCY:-CAD}
-  ORG_COUNTRY: ${ORG_COUNTRY:-CA}
-  ADMIN_EMAIL: ${ADMIN_EMAIL:-admin@openbooks.local}
-  ADMIN_NAME: ${ADMIN_NAME:-Administrator}
-  ADMIN_PASSWORD: ${ADMIN_PASSWORD:?ADMIN_PASSWORD is required}
 
 services:
   postgres:
     image: postgres:16-alpine
     environment:
       POSTGRES_DB: openbooks
-      POSTGRES_USER: openbooks
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_USER: openbooks_owner
+      POSTGRES_PASSWORD: ${POSTGRES_OWNER_PASSWORD:?POSTGRES_OWNER_PASSWORD is required}
     volumes:
       - postgres-data:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U openbooks -d openbooks"]
+      test: ["CMD-SHELL", "pg_isready -U openbooks_owner -d openbooks"]
       interval: 5s
       timeout: 5s
       retries: 20
@@ -89,14 +83,38 @@ services:
         mc mb --ignore-existing local/openbooks
     restart: "no"
 
-  web:
+  bootstrap:
     image: ghcr.io/braedonsaunders/openbooks:${OPENBOOKS_IMAGE_TAG:-latest}
     pull_policy: missing
+    command: ["node", "scripts/bootstrap.mjs"]
     environment:
-      <<: *openbooks-environment
+      <<: *openbooks-runtime-environment
+      OPENBOOKS_BOOTSTRAP: "1"
+      # Changes with every immutable deployment so Compose recreates this
+      # completed one-shot container and applies newly published migrations.
+      OPENBOOKS_BOOTSTRAP_REV: ${OPENBOOKS_BOOTSTRAP_REV:-local}
+      OPENBOOKS_MIGRATION_DB_URL: postgres://openbooks_owner:${POSTGRES_OWNER_PASSWORD:?POSTGRES_OWNER_PASSWORD is required}@postgres:5432/openbooks
+      OPENBOOKS_RUNTIME_DB_URL: postgres://openbooks_app:${OPENBOOKS_DB_PASSWORD:?OPENBOOKS_DB_PASSWORD is required}@postgres:5432/openbooks
+      ORG_NAME: ${ORG_NAME:-OpenBooks}
+      ORG_CURRENCY: ${ORG_CURRENCY:?ORG_CURRENCY is required}
+      ORG_COUNTRY: ${ORG_COUNTRY:?ORG_COUNTRY is required}
+      ADMIN_EMAIL: ${ADMIN_EMAIL:-admin@openbooks.local}
+      ADMIN_NAME: ${ADMIN_NAME:-Administrator}
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD:?ADMIN_PASSWORD is required}
     depends_on:
       postgres:
         condition: service_healthy
+    restart: "no"
+
+  web:
+    image: ghcr.io/braedonsaunders/openbooks:${OPENBOOKS_IMAGE_TAG:-latest}
+    pull_policy: missing
+    command: ["node", "web/server.js"]
+    environment:
+      <<: *openbooks-runtime-environment
+    depends_on:
+      bootstrap:
+        condition: service_completed_successfully
       redis:
         condition: service_healthy
       minio-init:
@@ -120,7 +138,7 @@ services:
     pull_policy: missing
     command: ["node", "scripts/worker.mjs"]
     environment:
-      <<: *openbooks-environment
+      <<: *openbooks-runtime-environment
       OPENBOOKS_INTERNAL_URL: http://web:3000
     depends_on:
       web:

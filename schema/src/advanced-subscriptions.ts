@@ -26,7 +26,7 @@ export const SUBSCRIPTION_AMENDMENT_TYPES = [
 
 /**
  * Effective-dated, publish-once commercial catalog. The base plan remains the
- * stable product identity used by legacy subscriptions; versions freeze the
+ * stable product identity; versions freeze the
  * commercial terms that were actually offered and accepted.
  */
 export const subscriptionPlanVersions = pgTable(
@@ -80,7 +80,7 @@ export const subscriptionPlanVersionComponents = pgTable(
   ],
 );
 
-/** One-to-one commercial lifecycle extension for a legacy subscription. */
+/** One-to-one commercial lifecycle extension for a subscription. */
 export const subscriptionLifecycles = pgTable(
   "subscription_lifecycles",
   {

@@ -34,7 +34,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   const groups = await resolveNav(
     authz.user.orgId,
     (permission) => permission === undefined || can(authz, permission),
-    authz.user.role,
+    authz.user.roles.map(({ key }) => key),
     // Fall back to the registry label when a module has no translation yet, so
     // a newly-added nav module can never crash the whole app (MISSING_MESSAGE).
     (key) => {
@@ -54,7 +54,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
           account={{
             name: authz.user.name,
             email: authz.user.email,
-            role: authz.user.role,
+            roles: authz.user.roles,
             localePreference,
             navModePreference,
           }}
@@ -80,7 +80,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
           canManageWages={can(authz, 'admin.setup.manage')}
           >
             {authz.user.envKind !== 'production' && (
-              <SandboxBanner name={authz.user.sandboxName} />
+              <SandboxBanner name={authz.user.sandboxName} kind={authz.user.envKind} />
             )}
             {children}
           </AppShell>

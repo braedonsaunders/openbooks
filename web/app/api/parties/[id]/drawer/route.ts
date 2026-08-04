@@ -41,7 +41,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
     orgId: gate.user.orgId,
     userId: gate.user.id,
     recordType: role,
-    userRoles: [gate.user.role],
+    userRoles: gate.user.roles.map(({ key }) => key),
     headerDefs: fieldDefs as any,
     lineDefs: [],
     explicitLayoutId: formId,

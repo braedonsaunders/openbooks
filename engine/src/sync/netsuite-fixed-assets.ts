@@ -514,13 +514,8 @@ export async function syncNetSuiteFixedAssets(
         subsidiaryId: sourceDoc.subsidiaryId ?? nativePreparation.nativeContext.rootSubsidiaryId,
       };
       if (!document.posting) throw new Error(`NetSuite FAM transaction ${document.sourceRef} is non-posting`);
-      if (
-        !document.postingPeriodId &&
-        !nativePreparation.nativeContext.periodFor(
-          document.postingDate ?? document.documentDate,
-        )
-      ) {
-        throw new Error(`NetSuite FAM transaction ${document.sourceRef} has no period for ${document.documentDate}`);
+      if (!document.postingPeriodId) {
+        throw new Error(`NetSuite FAM transaction ${document.sourceRef} has no exact source period reference`);
       }
       const existing = (await db.execute(sql`
         select id from documents

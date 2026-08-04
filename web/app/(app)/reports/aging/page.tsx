@@ -14,6 +14,7 @@ import { ReportPaper } from '../ReportPaper'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow, reportTotalRowClass } from '../ReportTable'
 import { ReportDrillLink } from '../ReportDrillLink'
 import { TxnLink } from '../TxnLink'
+import { decimalCmp, decimalIsZero } from '../../../../lib/statement-format'
 
 export const dynamic = 'force-dynamic'
 
@@ -42,7 +43,7 @@ export default async function Aging({
     dimensionOptions(),
     orgInfo(),
   ])
-  const m = (v: number) => money(v, { currency: org?.base_currency })
+  const m = (v: string | number) => money(Number(v), { currency: org?.base_currency })
 
   const title = `${side === 'ap' ? t('payablesTitle') : t('receivablesTitle')} · ${detail ? t('detail') : t('summary')}`
 
@@ -137,9 +138,9 @@ export default async function Aging({
                     )}
                   </TableCell>
                   {BUCKETS.map((b) => (
-                    <TableCell key={b} className={cn('text-right tabular-nums', r[b] < 0 && 'text-red-600 dark:text-red-400')}>
+                    <TableCell key={b} className={cn('text-right tabular-nums', decimalCmp(r[b], '0') < 0 && 'text-red-600 dark:text-red-400')}>
                       <ReportDrillLink target={{ kind: 'aging', label: `${r.partyName ?? t('noParty')} · ${bucketLabels[b]}`, side, asOf, dims, partyId: r.partyId ?? undefined, bucket: b }} className="hover:text-teal-700 hover:underline dark:hover:text-teal-300">
-                        {r[b] !== 0 ? m(r[b]) : <span className="text-slate-300 dark:text-slate-600">—</span>}
+                        {!decimalIsZero(r[b]) ? m(r[b]) : <span className="text-slate-300 dark:text-slate-600">—</span>}
                       </ReportDrillLink>
                     </TableCell>
                   ))}

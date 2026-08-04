@@ -14,7 +14,7 @@ import {
 } from "../../../../../lib/close/report-descriptor";
 import { clamp, isUuid, pickString } from "../../../../../lib/list-params";
 import { CloseSetupWorkspace } from "./CloseSetupWorkspace";
-import { subsidiaryFeatureEnabled } from "../../../../../lib/features";
+import { isFeatureEnabled, subsidiaryFeatureEnabled } from "../../../../../lib/features";
 
 const PER_PAGE = 20;
 const CONFIG_PER_PAGE = 12;
@@ -44,6 +44,7 @@ export async function CloseSetupPage({
   canReopen: boolean;
 }) {
   await ensureCloseDefaults(orgId, actorId);
+  const advancedClose = await isFeatureEnabled(orgId, "advancedClose");
   const q = pickString(searchParams.periodQ)?.trim();
   const fiscalYear = Number(
     pickString(searchParams.fy) ?? new Date().getFullYear(),
@@ -361,6 +362,7 @@ export async function CloseSetupPage({
       reopenPage={reopenList.page}
       reopenTotal={Number(reopenCount.rows[0]?.count ?? 0)}
       reopenPerPage={CONFIG_PER_PAGE}
+      advancedClose={advancedClose}
     />
   );
 }

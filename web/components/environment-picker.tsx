@@ -7,7 +7,7 @@
 
 import { useTransition } from "react";
 import Link from "next/link";
-import { Check, FlaskConical, Layers, Settings2 } from "lucide-react";
+import { Check, FlaskConical, Layers, Settings2, Sparkles } from "lucide-react";
 import { Badge, cn } from "@openbooks/ui";
 import { enterOrg } from "../lib/sandbox-session";
 import type { WorkspaceEnvironments } from "../lib/environments";
@@ -43,8 +43,8 @@ export function EnvironmentPicker({
       )}
       <div className="max-h-72 overflow-y-auto px-1 pb-1">
         {env.tenants.map((t) => {
-          const prodActive =
-            env.envKind === "production" && env.currentOrgId === t.productionOrgId;
+          const topLevelActive = env.currentOrgId === t.productionOrgId;
+          const isPreview = t.envKind === "preview";
           return (
             <div key={t.productionOrgId} className="mb-0.5">
               {multi && (
@@ -53,10 +53,10 @@ export function EnvironmentPicker({
                 </div>
               )}
               <Row
-                icon={<Layers size={15} />}
-                label={multi ? "Production" : t.productionOrgName}
-                hint={multi ? undefined : "Production"}
-                active={prodActive}
+                icon={isPreview ? <Sparkles size={15} className="text-teal-500" /> : <Layers size={15} />}
+                label={multi && !isPreview ? "Production" : t.productionOrgName}
+                hint={isPreview ? "Sample company" : multi ? undefined : "Production"}
+                active={topLevelActive}
                 disabled={pending}
                 onClick={() => go(t.productionOrgId)}
               />

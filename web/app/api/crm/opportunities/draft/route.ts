@@ -2,13 +2,13 @@ import { NextRequest, NextResponse } from 'next/server'
 import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/db.ts'
 import { ensureCrmDefaults, nextOpportunityNumber, promoteCrmAccount } from '@openbooks/engine/src/crm.ts'
-import { guardPermission } from '../../../../../lib/authz'
+import { guardFeaturePermission } from '../../../../../lib/feature-gates'
 import { isUuid } from '../../../../../lib/list-params'
 
 export const runtime = 'nodejs'
 
 export async function POST(req: NextRequest) {
-  const gate = await guardPermission('crm.opportunities.manage')
+  const gate = await guardFeaturePermission('crm.opportunities.manage', 'crm')
   if (gate instanceof NextResponse) return gate
   const { user } = gate
   const body = await req.json().catch(() => ({})) as { partyId?: string }

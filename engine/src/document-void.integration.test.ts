@@ -6,21 +6,14 @@ import { db } from "./db.ts";
 import { deleteDocument } from "./document-delete.ts";
 import { requestDocumentVoid } from "./document-void.ts";
 import { postDocument } from "./posting.ts";
-import { createScratchOrg, dropScratchOrg } from "./test-fixtures.ts";
+import { createScratchOrg, createScratchUser, dropScratchOrg } from "./test-fixtures.ts";
 
 const DB = !!process.env.OPENBOOKS_DB_URL;
 
 test("controlled void preserves the source and posts an exact open-period reversal", { skip: !DB }, async () => {
   const org = await createScratchOrg();
   try {
-    const actorId = randomUUID();
-    await db.execute(sql`
-      insert into users (id, org_id, email, name, password_hash, role, is_active)
-      values (
-        ${actorId}, ${org.orgId}, ${`void-${actorId}@scratch.test`},
-        'Void Controller', 'x', 'admin', true
-      )
-    `);
+    const actorId = await createScratchUser(org.orgId, "Void Controller", "admin");
     const documentId = randomUUID();
     await db.execute(sql`
       insert into documents

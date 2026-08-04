@@ -301,6 +301,9 @@ export interface ConnectionRow {
   secrets: string | null;
   mirrorEnabled: boolean;
   mirrorSchedule: string;
+  postedChangePolicy: "review_required" | "append_only_automatic";
+  postedChangeAuthorizedBy: string | null;
+  postedChangeAuthorizedAt: Date | null;
   cursor: Date | null;
   lastRunAt: Date | null;
   lastError: string | null;
@@ -308,7 +311,10 @@ export interface ConnectionRow {
 
 const SELECT_COLS = sql`id, org_id as "orgId", source, display_name as "displayName",
   auth_kind as "authKind", status, config, secrets, mirror_enabled as "mirrorEnabled",
-  mirror_schedule as "mirrorSchedule", cursor, last_run_at as "lastRunAt", last_error as "lastError"`;
+  mirror_schedule as "mirrorSchedule", posted_change_policy as "postedChangePolicy",
+  posted_change_authorized_by as "postedChangeAuthorizedBy",
+  posted_change_authorized_at as "postedChangeAuthorizedAt",
+  cursor, last_run_at as "lastRunAt", last_error as "lastError"`;
 
 export async function listConnections(orgId: string): Promise<ConnectionRow[]> {
   const r = (await db.execute(sql`

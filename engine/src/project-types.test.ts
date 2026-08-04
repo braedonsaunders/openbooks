@@ -7,7 +7,7 @@ import { assertValidProjectFinancialProfile } from './project-financial-profile-
 test('every built-in project type declares an explicit billing procedure', () => {
   assert.ok(BUILTIN_PROJECT_TYPES.length >= 5)
   for (const type of BUILTIN_PROJECT_TYPES) {
-    assert.ok(['standard', 'application_for_payment'].includes(type.invoicingProfile.billingProcedure ?? ''))
+    assert.ok(['standard', 'application_for_payment'].includes(type.invoicingProfile.billingProcedure))
   }
 })
 
@@ -44,9 +44,18 @@ test('project financial policy is effective-dated, immutable, and tenant isolate
   )
   assert.match(migration, /project financial profile effective ranges cannot overlap/)
   assert.match(migration, /published project financial profile versions are immutable/)
-  assert.match(migration, /project_types\.financial_profile is a seed value/)
   assert.match(migration, /FORCE ROW LEVEL SECURITY/)
   assert.match(migration, /CREATE POLICY org_isolation ON project_financial_profile_versions/)
+
+  const cutover = readFileSync(
+    'schema/migrations/generated/0123_prelaunch_canonical_models.sql',
+    'utf8',
+  )
+  assert.match(cutover, /DROP COLUMN financial_profile/)
+  assert.match(cutover, /every project type requires an effective-dated financial profile/)
+  assert.match(cutover, /Normalize the custom record definition to the canonical form-section model/)
+  assert.match(cutover, /jsonb_build_object\(\s*'id', 'main',\s*'title', 'Details',\s*'fields'/)
+  assert.match(cutover, /INSERT INTO audit_log/)
 
   const correction = readFileSync(
     'schema/migrations/generated/0085_project_financial_profile_corrections.sql',

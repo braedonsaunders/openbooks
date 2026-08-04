@@ -25,9 +25,7 @@ async function assertProjectsEnabled(tx: any, orgId: string): Promise<void> {
 
 async function assertApplicationProcedure(tx: any, orgId: string, projectId: string): Promise<void> {
   const result = (await tx.execute(sql`
-    select coalesce(pt.invoicing_profile->>'billingProcedure', 'standard') = 'application_for_payment'
-        or exists(select 1 from sov_lines where org_id = p.org_id and project_id = p.id)
-        or exists(select 1 from pay_applications where org_id = p.org_id and project_id = p.id) as supported
+    select pt.invoicing_profile->>'billingProcedure' = 'application_for_payment' as supported
       from projects p
       left join project_types pt on pt.id = p.project_type_id and pt.org_id = p.org_id
      where p.org_id = ${orgId} and p.id = ${projectId}

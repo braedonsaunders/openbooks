@@ -105,7 +105,7 @@ export async function resolveApiKeyAuth(req: Request): Promise<ApiKeyAuth | null
         (await db.execute(sql`
       select k.id, k.org_id, k.user_id, k.scopes, k.is_active, k.expires_at,
              k.rate_limit_per_min,
-             u.email, u.name, u.role, u.is_active as user_active
+             u.email, u.name, u.is_active as user_active
         from api_keys k
         join users u on u.id = k.user_id
        where k.key_hash = ${keyHash}
@@ -122,7 +122,7 @@ export async function resolveApiKeyAuth(req: Request): Promise<ApiKeyAuth | null
   // Resolve the owner's effective permissions (same logic as authz.getAuthz).
   const [assignments, overrides, allowedSubs] = (await Promise.all([
     db.execute(sql`
-      select r.permissions
+      select r.key, r.name, r.permissions
         from role_assignments a
         join app_roles r on r.id = a.role_id
        where a.user_id = ${keyRow.user_id} and a.org_id = ${keyRow.org_id}`),
@@ -137,7 +137,6 @@ export async function resolveApiKeyAuth(req: Request): Promise<ApiKeyAuth | null
     rolePermissionSets: assignments.rows.map((r: any) =>
       Array.isArray(r.permissions) ? r.permissions : [],
     ),
-    legacyRole: keyRow.role,
     overrides: overrides.rows,
   });
 
@@ -159,7 +158,7 @@ export async function resolveApiKeyAuth(req: Request): Promise<ApiKeyAuth | null
     id: keyRow.user_id,
     email: keyRow.email,
     name: keyRow.name,
-    role: keyRow.role,
+    roles: assignments.rows.map((row: any) => ({ key: row.key, name: row.name })),
     orgId: keyRow.org_id,
     // API keys are always bound to their production org — no sandbox entry.
     envKind: "production",

@@ -352,6 +352,8 @@
     "linkLabelPrompt": "Libellé :",
     "addLink": "Ajouter un lien",
     "deleteLink": "Supprimer le lien",
+    "addApp": "Ajouter un raccourci d’application…",
+    "removeApp": "Supprimer le raccourci d’application",
     "newGroupPrompt": "Nom de l’espace de travail :",
     "addGroup": "Ajouter un espace de travail",
     "deleteGroup": "Supprimer l’espace de travail",
@@ -726,7 +728,6 @@
       "lastSignIn": "Dernière connexion"
     },
     "you": "vous",
-    "legacyRole": "ancien : {role}",
     "statusActive": "actif",
     "statusInactive": "inactif",
     "requestFailed": "La requête a échoué",

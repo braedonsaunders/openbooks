@@ -102,9 +102,8 @@ function compileRows(
   if (groupBy && !selectKeys.includes(groupBy)) selectKeys.push(groupBy)
 
   const selectList = selectKeys.map((c) => `${columnRef(entity, c)} AS "${c}"`).join(', ')
-  // Multi-level sort (`sorts`) wins over the single legacy `sort`. Every
-  // column resolves through the catalog; unknowns are dropped.
-  const sortSpecs = (q.sorts?.length ? q.sorts : q.sort ? [q.sort] : [])
+  // Every sort column resolves through the catalog; unknowns are dropped.
+  const sortSpecs = (q.sorts ?? [])
     .map((s) => {
       const ref = s.column ? columnRef(entity, s.column) : null
       return ref ? `${ref} ${s.direction === 'asc' ? 'ASC' : 'DESC'} NULLS LAST` : null
@@ -289,7 +288,7 @@ export function defaultRowsQuery(entity: ReportEntity): ReportCustomQuery {
     measures: [],
     filters: null,
     groupBy: null,
-    sort: entity.defaultSort ?? null,
+    ...(entity.defaultSort ? { sorts: [entity.defaultSort] } : {}),
     limit: DEFAULT_REPORT_LIMIT,
   }
 }

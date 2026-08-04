@@ -12,12 +12,16 @@ import {
   CalendarCheck,
   CircleDollarSign,
   ClipboardList,
+  Code2,
   Clock,
+  Database,
   LayoutGrid,
   Landmark,
+  KeyRound,
   Lock,
   Package,
   Puzzle,
+  PlugZap,
   Radio,
   Receipt,
   Repeat2,
@@ -68,6 +72,10 @@ const ICONS: Record<string, LucideIcon> = {
   continuousClose: CalendarCheck,
   flows: Workflow,
   apps: LayoutGrid,
+  scripts: Code2,
+  apiAccess: KeyRound,
+  mcpAccess: PlugZap,
+  queryConsole: Database,
 }
 
 const CATEGORY_ORDER = ['sales', 'operations', 'accounting', 'platform'] as const

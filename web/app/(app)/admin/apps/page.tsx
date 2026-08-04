@@ -43,7 +43,7 @@ export default async function AppsAdminPage({
 
   const [apps, statuses, totalRow] = await Promise.all([
     db.execute(sql`
-      select a.key, a.name, a.description, a.status, a.show_in_nav as "showInNav",
+      select a.key, a.name, a.description, a.status,
              a.granted_permissions as "grantedPermissions", a.updated_at as "updatedAt",
              v.version, v.manifest,
              (select count(*) from app_runs r where r.app_id = a.id) as run_count
@@ -66,7 +66,7 @@ export default async function AppsAdminPage({
   if (appKey) {
     const detail = (await db.execute(sql`
       select a.id, a.key, a.name, a.description, a.icon_key as "iconKey", a.status,
-             a.show_in_nav as "showInNav", a.granted_permissions as "grantedPermissions",
+             a.granted_permissions as "grantedPermissions",
              v.version, v.manifest
         from apps a left join app_versions v on v.id = a.active_version_id
        where a.org_id = ${orgId} and a.key = ${appKey} limit 1

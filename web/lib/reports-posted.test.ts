@@ -11,7 +11,7 @@ test("financial statements exclude draft and other unposted journals", { skip: !
     import assert from "node:assert/strict";
     import { randomUUID } from "node:crypto";
     import { sql } from "drizzle-orm";
-    import { db, withOrg } from "./engine/src/db.ts";
+    import { db, withBypass, withOrg } from "./engine/src/db.ts";
     import { toUnits } from "./engine/src/money.ts";
     import { createScratchOrg, dropScratchOrg } from "./engine/src/test-fixtures.ts";
     import { agingByParty, agingDetail, cashFlow, financialTrends, journalReport, profitAndLoss, projectProfitability, transactionDetail } from "./web/lib/reports.ts";
@@ -38,11 +38,11 @@ test("financial statements exclude draft and other unposted journals", { skip: !
            where l.org_id = \${org.id}
         \`);
         const row = expected.rows[0];
-        assert.equal(toUnits(report.revenue.toFixed(4)), toUnits(row.revenue), org.id + " revenue");
-        assert.equal(toUnits(report.cogs.toFixed(4)), toUnits(row.cogs), org.id + " COGS");
-        assert.equal(toUnits(report.expenses.toFixed(4)), toUnits(row.expenses), org.id + " expenses");
+        assert.equal(toUnits(report.revenue), toUnits(row.revenue), org.id + " revenue");
+        assert.equal(toUnits(report.cogs), toUnits(row.cogs), org.id + " COGS");
+        assert.equal(toUnits(report.expenses), toUnits(row.expenses), org.id + " expenses");
         assert.equal(
-          toUnits(report.netIncome.toFixed(4)),
+          toUnits(report.netIncome),
           toUnits(row.revenue) - toUnits(row.cogs) - toUnits(row.expenses),
           org.id + " net income",
         );
@@ -59,15 +59,15 @@ test("financial statements exclude draft and other unposted journals", { skip: !
           org.id + " every project appears in exactly one customer group",
         );
         for (const customer of projectReport.customers) {
-          const sum = (key) => customer.rows.reduce((total, row) => total + row[key], 0);
+          const moneySum = (key) => customer.rows.reduce((total, row) => total + toUnits(row[key]), 0n);
           for (const key of ["revenue", "cogs", "grossProfit", "expenses", "net"]) {
             assert.equal(
-              toUnits(customer.totals[key].toFixed(4)),
-              toUnits(sum(key).toFixed(4)),
+              toUnits(customer.totals[key]),
+              moneySum(key),
               org.id + " " + (customer.customerName ?? "unassigned") + " " + key + " subtotal",
             );
           }
-          assert.equal(customer.totals.hours, sum("hours"), org.id + " customer hours subtotal");
+          assert.equal(customer.totals.hours, customer.rows.reduce((total, row) => total + row.hours, 0), org.id + " customer hours subtotal");
           if (customer.customerId) {
             const filtered = await projectProfitability("0001-01-01", "9999-12-31", { customerId: customer.customerId });
             assert.ok(filtered.rows.every((row) => row.customerId === customer.customerId), org.id + " customer filter scope");
@@ -91,14 +91,16 @@ test("financial statements exclude draft and other unposted journals", { skip: !
             from: "0001-01-01", to: "9999-12-31", mode: "flow",
             dims: { projectId: sampleProject.projectId }, profitSigned: true,
           });
-          assert.equal(toUnits(grossDetail.net.toFixed(4)), toUnits(sampleProject.grossProfit.toFixed(4)), org.id + " project gross-profit drill tie-out");
-          assert.equal(toUnits(netDetail.net.toFixed(4)), toUnits(sampleProject.net.toFixed(4)), org.id + " project net-profit drill tie-out");
+          assert.equal(toUnits(grossDetail.net), toUnits(sampleProject.grossProfit), org.id + " project gross-profit drill tie-out");
+          assert.equal(toUnits(netDetail.net), toUnits(sampleProject.net), org.id + " project net-profit drill tie-out");
         }
+        const databaseToday = await db.execute(sql\`select current_date::text as today\`);
+        const asOf = databaseToday.rows[0].today;
         for (const side of ["ar", "ap"]) {
           const positiveKind = side === "ar" ? "customer_invoice" : "vendor_bill";
           const creditKind = side === "ar" ? "customer_credit" : "vendor_credit";
-          const aging = await agingByParty(side, new Date().toISOString().slice(0, 10));
-          const detail = await agingDetail(side, new Date().toISOString().slice(0, 10));
+          const aging = await agingByParty(side, asOf);
+          const detail = await agingDetail(side, asOf);
           const open = await db.execute(sql\`
             select round(coalesce(sum(
                      (case when kind = \${creditKind} then -1 else 1 end)
@@ -110,18 +112,19 @@ test("financial statements exclude draft and other unposted journals", { skip: !
                and coalesce(posting_date, document_date) <= current_date
           \`);
           assert.equal(
-            toUnits(aging.totals.total.toFixed(4)),
+            toUnits(aging.totals.total),
             toUnits(open.rows[0].total),
             org.id + " " + side.toUpperCase() + " aging",
           );
           assert.equal(
-            toUnits(detail.totals.total.toFixed(4)),
-            toUnits(aging.totals.total.toFixed(4)),
+            toUnits(detail.totals.total),
+            toUnits(aging.totals.total),
             org.id + " " + side.toUpperCase() + " detail tie-out",
           );
           assert.equal(
-            toUnits((aging.totals.current + aging.totals.b1 + aging.totals.b2 + aging.totals.b3 + aging.totals.b4).toFixed(4)),
-            toUnits(aging.totals.total.toFixed(4)),
+            [aging.totals.current, aging.totals.b1, aging.totals.b2, aging.totals.b3, aging.totals.b4]
+              .reduce((sum, value) => sum + toUnits(value), 0n),
+            toUnits(aging.totals.total),
             org.id + " " + side.toUpperCase() + " bucket tie-out",
           );
         }
@@ -131,7 +134,7 @@ test("financial statements exclude draft and other unposted journals", { skip: !
           const statement = await cashFlow(period.starts_on, period.ends_on);
           assert.equal(
             toUnits(Number(period.closing_cash).toFixed(4)),
-            toUnits(statement.closingCash.toFixed(4)),
+            toUnits(statement.closingCash),
             org.id + " " + period.name + " trend cash sign",
           );
         }
@@ -141,8 +144,9 @@ test("financial statements exclude draft and other unposted journals", { skip: !
     // Adjustment periods can overlap a regular period's calendar dates.
     // Period analytics must use the ledger's exact period identity, not infer
     // it from posting_date.
-    const scratch = await createScratchOrg();
+    const scratch = await withBypass(() => createScratchOrg());
     try {
+      await withBypass(async () => {
       const calendar = await db.execute(sql\`
         select fiscal_calendar_id
           from accounting_periods
@@ -199,6 +203,7 @@ test("financial statements exclude draft and other unposted journals", { skip: !
            set status = 'posted', posted_at = now()
          where id in (\${regularEntryId}, \${adjustmentEntryId})
       \`);
+      });
 
       await withOrg(scratch.orgId, async () => {
         const trends = await financialTrends(scratch.orgId, 15);
@@ -208,7 +213,7 @@ test("financial statements exclude draft and other unposted journals", { skip: !
         assert.equal(regularPeriod.net_income, "100.0000");
       });
     } finally {
-      await dropScratchOrg(scratch.orgId);
+      await withBypass(() => dropScratchOrg(scratch.orgId));
     }
   `;
   const result = spawnSync(

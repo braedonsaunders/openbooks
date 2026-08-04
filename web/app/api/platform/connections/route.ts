@@ -24,6 +24,8 @@ function toClient(c: Awaited<ReturnType<typeof listConnections>>[number]) {
     config: c.config,
     mirrorEnabled: c.mirrorEnabled,
     mirrorSchedule: c.mirrorSchedule,
+    postedChangePolicy: c.postedChangePolicy,
+    postedChangeAuthorizedAt: c.postedChangeAuthorizedAt,
     cursor: c.cursor,
     lastRunAt: c.lastRunAt,
     lastError: c.lastError,

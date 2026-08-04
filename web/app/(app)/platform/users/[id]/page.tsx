@@ -178,7 +178,7 @@ export default async function PlatformUserPage({
           <CardContent className="space-y-4 text-sm">
             <Fact label="User ID" value={user.id} mono />
             <Fact label="Home organization" value={user.orgName} />
-            <Fact label="Organization role" value={user.role} />
+            <Fact label="Organization roles" value={user.roles.join(', ')} />
             <Fact label="Last login" value={formatDate(user.lastLoginAt)} />
             <Fact label="Created" value={formatDate(user.createdAt)} />
           </CardContent>

@@ -80,7 +80,6 @@ granted.
 | **permissions** | string[] | no | Requested capabilities. The administrator may grant a subset. |
 | **frontend.entry** | string | yes | Bundle-relative HTML entry path. Traversal and absolute paths are rejected. |
 | **endpoints** | object[] | no | Named backend endpoint declarations; maximum 50. |
-| **nav.show** | boolean | no | Whether a new install is automatically placed in navigation. |
 | **nav.label** | string | no | Navigation label override. |
 | **nav.icon** | string | no | Navigation icon override. |
 
@@ -104,7 +103,7 @@ Example:
   "endpoints": [
     { "name": "summary", "file": "backend/summary.js", "method": "POST" }
   ],
-  "nav": { "show": true, "label": "Expense Helper", "icon": "receipt" }
+  "nav": { "label": "Expense Helper", "icon": "receipt" }
 }
 ~~~
 

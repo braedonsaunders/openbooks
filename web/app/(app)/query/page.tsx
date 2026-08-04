@@ -21,6 +21,7 @@ import {
 import { Badge, Button, Input, Select, cn } from '@openbooks/ui'
 import { ResultsGrid, resultToCsv, type QueryResult } from './ResultsGrid'
 import { SchemaBrowser, type SchemaTable } from './SchemaBrowser'
+import { queryResponseError, readQueryResponse } from './query-response'
 import { SNIPPETS } from './snippets'
 
 const STARTER = `select a.number, a.name, sum(l.amount) as balance
@@ -92,11 +93,18 @@ export default function QueryConsole() {
   useEffect(() => {
     let alive = true
     fetch('/api/query/schema')
-      .then((r) => r.json().then((d) => ({ ok: r.ok, d })))
-      .then(({ ok, d }) => {
+      .then(async (response) => ({ response, data: await readQueryResponse<{ tables?: unknown; error?: unknown }>(response) }))
+      .then(({ response, data }) => {
         if (!alive) return
-        if (ok) setSchema(d.tables ?? [])
-        else setSchemaError(d.error ?? 'error')
+        if (!response.ok) {
+          setSchemaError(queryResponseError(data, response.status))
+          return
+        }
+        if (!Array.isArray(data.tables)) {
+          setSchemaError('Query service returned an invalid schema response')
+          return
+        }
+        setSchema(data.tables as SchemaTable[])
       })
       .catch((e) => alive && setSchemaError((e as Error).message))
       .finally(() => alive && setSchemaLoading(false))
@@ -126,14 +134,7 @@ export default function QueryConsole() {
     })
   }, [])
 
-  const run = useCallback(async () => {
-    const el = editorRef.current
-    let sql = sqlText
-    let selection = false
-    if (el && el.selectionStart !== el.selectionEnd) {
-      sql = sqlText.slice(el.selectionStart, el.selectionEnd)
-      selection = true
-    }
+  const executeSql = useCallback(async (sql: string, selection = false) => {
     if (!sql.trim()) return
     setBusy(true)
     setRanSelection(selection)
@@ -145,8 +146,11 @@ export default function QueryConsole() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ sql, maxRows }),
       })
-      const data = await res.json()
-      if (!res.ok) throw new Error(data.error ?? `HTTP ${res.status}`)
+      const data = await readQueryResponse<QueryResult & { error?: unknown }>(res)
+      if (!res.ok) throw new Error(queryResponseError(data, res.status))
+      if (!Array.isArray(data.columns) || !Array.isArray(data.rows) || typeof data.rowCount !== 'number') {
+        throw new Error('Query service returned an invalid result')
+      }
       setResult(data)
       pushHistory({ sql: sql.trim(), at: Date.now(), ms: data.durationMs, rows: data.rowCount, ok: true })
     } catch (e) {
@@ -156,7 +160,26 @@ export default function QueryConsole() {
     } finally {
       setBusy(false)
     }
-  }, [sqlText, maxRows, pushHistory])
+  }, [maxRows, pushHistory])
+
+  const run = useCallback(async () => {
+    const el = editorRef.current
+    let sql = sqlText
+    let selection = false
+    if (el && el.selectionStart !== el.selectionEnd) {
+      sql = sqlText.slice(el.selectionStart, el.selectionEnd)
+      selection = true
+    }
+    await executeSql(sql, selection)
+  }, [executeSql, sqlText])
+
+  // Replace the editor with a schema-browser query and run that exact text.
+  // Passing the statement directly avoids executing a stale React state value.
+  const browseRows = useCallback((sql: string) => {
+    setSqlText(sql)
+    requestAnimationFrame(() => editorRef.current?.focus())
+    void executeSql(sql)
+  }, [executeSql])
 
   // Insert text (table/column name) at the caret from the schema browser.
   const insertAtCaret = useCallback(
@@ -321,7 +344,13 @@ export default function QueryConsole() {
 
           <div className="min-h-0 flex-1 overflow-hidden">
             {tab === 'schema' ? (
-              <SchemaBrowser tables={schema} loading={schemaLoading} error={schemaError} onInsert={insertAtCaret} />
+              <SchemaBrowser
+                tables={schema}
+                loading={schemaLoading}
+                error={schemaError}
+                onInsert={insertAtCaret}
+                onBrowse={browseRows}
+              />
             ) : tab === 'snippets' ? (
               <div className="flex h-full flex-col">
                 {/* Save the current query */}

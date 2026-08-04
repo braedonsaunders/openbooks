@@ -76,5 +76,9 @@ export async function PUT(req: Request) {
     return null
   })
   if (dependencyError) return NextResponse.json(dependencyError, { status: dependencyError.error === 'not-found' ? 404 : 409 })
+  if (clean.scripts !== undefined) {
+    const { refreshScheduledNextRuns } = await import('@openbooks/engine/src/scripting.ts')
+    await refreshScheduledNextRuns(orgId)
+  }
   return NextResponse.json({ ok: true })
 }

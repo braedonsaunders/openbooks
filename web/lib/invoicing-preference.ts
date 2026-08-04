@@ -53,7 +53,7 @@ export async function resolveInvoicingPreference(orgId: string, projectId: strin
   const [invoiceTemplateId, tmplSrc] = pick<string | null>(null, 'invoiceTemplateId', 'invoiceTemplateId')
 
   return {
-    billingProcedure: type.invoicingProfile.billingProcedure ?? 'standard',
+    billingProcedure: type.invoicingProfile.billingProcedure,
     allowedBases: type.invoicingProfile.allowedBases,
     defaultBasis,
     lineBuilder: type.invoicingProfile.lineBuilder,

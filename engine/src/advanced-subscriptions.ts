@@ -475,8 +475,9 @@ export async function advancedSubscriptionWorkspace(orgId: string) {
 }
 
 /**
- * Called by the recurring runner before it claims a due row. Legacy
- * subscriptions return true. Manual/no-renew contracts stop at the boundary;
+ * Called by the recurring runner before it claims a due row. Subscriptions
+ * without contract lifecycle configuration return true. Manual/no-renew
+ * contracts stop at the boundary;
  * auto-renew contracts append the same immutable amendment as an interactive
  * renewal, using a deterministic idempotency key.
  */
@@ -516,7 +517,7 @@ export interface AdvancedBillingLine {
   taxCodeId: string | null;
 }
 
-/** Snapshot used by the invoice engine; null means legacy single-plan billing. */
+/** Snapshot used by the invoice engine; null means single-plan billing. */
 export async function advancedBillingSnapshot(subscriptionId: string, billOn: string, periodStartOverride?: string | null): Promise<{
   contractRevision: number;
   billingTiming: BillingTiming;

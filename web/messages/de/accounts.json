@@ -3,6 +3,7 @@
     "title": "Kontenplan",
     "description": "Aktuelle Salden mit natürlichem Vorzeichen (Bilanz kumulativ, GuV im laufenden Geschäftsjahr), aggregiert über Sammelkonten.",
     "searchPlaceholder": "Nummer oder Name durchsuchen…",
+    "views": { "list": "Liste", "hierarchy": "Hierarchie" },
     "badges": {
       "inactive": "inaktiv",
       "summary": "Sammelkonto"

@@ -193,7 +193,7 @@ export interface DocumentDrawerProps {
   initialMode?: DrawerMode
   /** Resolved transaction form layout; when present the header + line columns
    *  render from it (move/hide/rename/custom fields). Omitted only for the
-   *  defensive legacy-free fallback used while a page is loading. */
+   *  defensive loading fallback used while a page is resolving. */
   layout?: FormLayoutConfig
   /** Available org form layouts (for the per-record "Custom Form" picker). */
   availableLayouts?: { id: string; name: string }[]
@@ -1374,8 +1374,8 @@ export function DocumentDrawer({
         ) : null}
 
         {mode === 'view' ? (
-          // source platform "Workflow History" parity: the record's approval timeline
-          // (flows + legacy policy engine). Renders nothing when empty.
+          // The record's tenant-authored Flow approval timeline. Renders
+          // nothing when no approval flow applies.
           <ApprovalHistory subjectKind={String(doc.kind)} subjectId={String(doc.id)} />
         ) : null}
 

@@ -5,6 +5,7 @@ import { db } from '@openbooks/engine/src/db.ts'
 import { cn } from '@openbooks/ui'
 import { taxDepreciationPacks } from '@openbooks/engine/src/tax-depreciation-packs.ts'
 import { requirePermission } from '../../../../../lib/authz'
+import { requireFeatureEnabled } from '../../../../../lib/feature-gates'
 import { pickString } from '../../../../../lib/list-params'
 import { SETUP_ENTITY_BY_KEY } from '../../../../../lib/setup/registry'
 import { SetupEntitySection } from '../[entity]/SetupEntitySection'
@@ -26,6 +27,7 @@ export default async function TaxDepreciationSetupPage({
 }) {
   const authz = await requirePermission('admin.setup.manage')
   const orgId = authz.user.orgId
+  await requireFeatureEnabled(orgId, 'fixedAssets')
   const sp = await searchParams
   const requested = pickString(sp.tab)
   const tab: Tab = requested && (requested === 'overview' || requested in ENTITY_BY_TAB) ? requested as Tab : 'overview'

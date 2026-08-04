@@ -2,6 +2,7 @@ import { sql } from "drizzle-orm";
 import { db } from "@openbooks/engine/src/db.ts";
 import { ensureCrmDefaults } from "@openbooks/engine/src/crm.ts";
 import { requirePermission } from "../../../../../lib/authz";
+import { requireFeatureEnabled } from "../../../../../lib/feature-gates";
 import {
   isUuid,
   parseListParams,
@@ -27,6 +28,7 @@ export default async function CrmSetup({
 }) {
   const authz = await requirePermission("crm.setup.manage");
   const orgId = authz.user.orgId;
+  await requireFeatureEnabled(orgId, "crm");
   const sp = await searchParams;
   const requestedTab = pickString(sp.tab) as CrmSetupTab | undefined;
   const tab =

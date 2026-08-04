@@ -1,6 +1,5 @@
 import { NextResponse } from 'next/server'
-import { provisionTaxPacks } from '@openbooks/engine/src/tax-pack-provisioning.ts'
-import { taxReturnPack } from '@openbooks/engine/src/seed-tax-forms.ts'
+import { isTaxProvisionSelection, provisionTaxPacks } from '@openbooks/engine/src/tax-pack-provisioning.ts'
 import { guardPermission } from '../../../../lib/authz'
 
 export const runtime = 'nodejs'
@@ -15,8 +14,8 @@ export async function POST(req: Request) {
   if (!body || !Array.isArray(body.packs) || body.packs.length === 0 || body.packs.length > 60) {
     return NextResponse.json({ error: 'packs must be a non-empty array' }, { status: 400 })
   }
-  if (body.packs.some((c) => typeof c !== 'string' || !taxReturnPack(c))) {
-    return NextResponse.json({ error: 'unknown pack in selection' }, { status: 422 })
+  if (body.packs.some((c) => typeof c !== 'string' || !isTaxProvisionSelection(c))) {
+    return NextResponse.json({ error: 'unknown tax setup selection' }, { status: 422 })
   }
 
   try {

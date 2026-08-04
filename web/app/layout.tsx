@@ -1,5 +1,6 @@
 import './globals.css'
 import type { Metadata, Viewport } from 'next'
+import Script from 'next/script'
 import { NextIntlClientProvider } from 'next-intl'
 import { getLocale, getMessages, getTranslations } from 'next-intl/server'
 import { Toaster } from 'sonner'
@@ -44,7 +45,11 @@ export default async function RootLayout({ children }: { children: React.ReactNo
   return (
     <html lang={locale} className="h-full" data-application-name="openbooks" suppressHydrationWarning>
       <head>
-        <script suppressHydrationWarning dangerouslySetInnerHTML={{ __html: HEAD_INIT }} />
+        <Script
+          id="openbooks-head-init"
+          strategy="beforeInteractive"
+          dangerouslySetInnerHTML={{ __html: HEAD_INIT }}
+        />
       </head>
       <body className="h-full overflow-hidden bg-slate-50 text-slate-900 antialiased dark:bg-slate-950 dark:text-slate-100">
         <NextIntlClientProvider locale={locale} messages={messages}>

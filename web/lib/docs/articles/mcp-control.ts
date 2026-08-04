@@ -99,7 +99,7 @@ The core MCP surface includes:
 - **create_payment**, **update_payment**, and **post_payment** — governed vendor
   payment and customer receipt workflows with exact open-item allocations;
 - **list_close_runs**, **get_close_run**, **start_close_run**, and the explicit
-  refresh, approval, lock, publish, and controlled-reopen commands
+  refresh, approval, attestation, lock, publish, and controlled-reopen commands
   for the period-close lifecycle;
 - financial searches and reports made available by the OpenBooks assistant
   registry, such as accounts, journals, documents, statements, aging, budgets,

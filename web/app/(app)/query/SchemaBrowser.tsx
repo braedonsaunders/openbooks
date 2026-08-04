@@ -2,8 +2,8 @@
 
 import { useMemo, useState } from 'react'
 import { useTranslations } from 'next-intl'
-import { ChevronRight, Columns3, Database, Eye, KeyRound, Search, Table2 } from 'lucide-react'
-import { Input, cn } from '@openbooks/ui'
+import { ChevronRight, Columns3, Database, Eye, KeyRound, Play, Search, Table2, TextCursorInput } from 'lucide-react'
+import { ContextMenu, Input, cn, useContextMenu, type ContextMenuEntry } from '@openbooks/ui'
 
 export interface SchemaColumn {
   name: string
@@ -14,6 +14,15 @@ export interface SchemaTable {
   name: string
   kind: 'table' | 'view'
   columns: SchemaColumn[]
+}
+
+/** Quote a PostgreSQL identifier without treating any part of it as SQL. */
+function quoteIdentifier(identifier: string): string {
+  return `"${identifier.replace(/"/g, '""')}"`
+}
+
+function selectTemplate(tableName: string): string {
+  return `select *\n  from ${quoteIdentifier(tableName)}\n limit 100`
 }
 
 /**
@@ -28,15 +37,19 @@ export function SchemaBrowser({
   loading,
   error,
   onInsert,
+  onBrowse,
 }: {
   tables: SchemaTable[]
   loading: boolean
   error: string | null
   onInsert: (text: string) => void
+  onBrowse: (sql: string) => void
 }) {
   const t = useTranslations('query')
   const [q, setQ] = useState('')
   const [open, setOpen] = useState<Record<string, boolean>>({})
+  const [menuTable, setMenuTable] = useState<SchemaTable | null>(null)
+  const menu = useContextMenu()
 
   const query = q.trim().toLowerCase()
   const filtered = useMemo(() => {
@@ -51,6 +64,47 @@ export function SchemaBrowser({
   }, [tables, query])
 
   const isOpen = (name: string) => open[name] ?? Boolean(query)
+
+  function showSchema(table: SchemaTable) {
+    setQ(table.name)
+    setOpen((current) => ({ ...current, [table.name]: true }))
+  }
+
+  function openTableMenu(event: React.MouseEvent<HTMLButtonElement>, table: SchemaTable) {
+    setMenuTable(table)
+    event.currentTarget.focus()
+    menu.onContextMenu(event)
+  }
+
+  const menuItems: ContextMenuEntry[] = menuTable
+    ? [
+        {
+          key: 'show-schema',
+          label: t('schema.showSchema'),
+          icon: Columns3,
+          onSelect: () => showSchema(menuTable),
+        },
+        {
+          key: 'browse-rows',
+          label: t('schema.browseRows'),
+          icon: Play,
+          onSelect: () => onBrowse(selectTemplate(menuTable.name)),
+        },
+        { key: 'insert-separator', separator: true },
+        {
+          key: 'insert-table',
+          label: t('schema.insertTableName'),
+          icon: TextCursorInput,
+          onSelect: () => onInsert(quoteIdentifier(menuTable.name)),
+        },
+        {
+          key: 'insert-select',
+          label: t('schema.insertSelectTemplate'),
+          icon: Table2,
+          onSelect: () => onInsert(selectTemplate(menuTable.name)),
+        },
+      ]
+    : []
 
   return (
     <div className="flex h-full flex-col">
@@ -88,6 +142,7 @@ export function SchemaBrowser({
                 <button
                   type="button"
                   onClick={() => setOpen((o) => ({ ...o, [tbl.name]: !isOpen(tbl.name) }))}
+                  onContextMenu={(event) => openTableMenu(event, tbl)}
                   className="group flex w-full items-center gap-1.5 rounded-md px-1.5 py-1.5 text-left text-[13px] hover:bg-slate-100 dark:hover:bg-slate-800/70"
                 >
                   <ChevronRight
@@ -103,7 +158,7 @@ export function SchemaBrowser({
                     className="min-w-0 flex-1 truncate font-mono text-slate-700 dark:text-slate-200"
                     onClick={(e) => {
                       e.stopPropagation()
-                      onInsert(tbl.name)
+                      onInsert(quoteIdentifier(tbl.name))
                     }}
                     title={t('schema.insertTable')}
                   >
@@ -119,7 +174,7 @@ export function SchemaBrowser({
                       <li key={col.name}>
                         <button
                           type="button"
-                          onClick={() => onInsert(col.name)}
+                          onClick={() => onInsert(quoteIdentifier(col.name))}
                           title={t('schema.insertColumn')}
                           className="group flex w-full items-center gap-1.5 rounded px-1.5 py-1 text-left text-xs hover:bg-slate-100 dark:hover:bg-slate-800/70"
                         >
@@ -141,6 +196,7 @@ export function SchemaBrowser({
           </ul>
         )}
       </div>
+      <ContextMenu open={menu.open} position={menu.position} items={menuItems} onClose={menu.close} />
     </div>
   )
 }

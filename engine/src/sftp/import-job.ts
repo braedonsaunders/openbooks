@@ -93,13 +93,18 @@ async function runSchedule(s: ScheduleRow): Promise<ScheduleRun> {
 }
 
 /** Run every active import schedule due for a scan (called from the scheduler tick). */
-export async function runDueSftpImports(): Promise<ScheduleRun[]> {
+export async function runDueSftpImports(orgId?: string, scheduleId?: string): Promise<ScheduleRun[]> {
   const rows = (await db.execute(sql`
     select sc.id, sc.org_id, sc.account_id, sc.format, sc.folder, sc.csv_mapping, sc.created_by,
            sv.backend, sv.bucket, sv.root_prefix
       from sftp_import_schedules sc
       join sftp_servers sv on sv.id = sc.sftp_server_id and sv.is_active
+      join orgs o on o.id = sc.org_id
      where sc.is_active
+       and o.env_kind = 'production'
+       and coalesce((o.settings->'features'->>'bankFeeds')::boolean, false)
+       ${orgId ? sql`and sc.org_id = ${orgId}` : sql``}
+       ${scheduleId ? sql`and sc.id = ${scheduleId}` : sql``}
   `)) as unknown as { rows: ScheduleRow[] };
   const runs: ScheduleRun[] = [];
   for (const s of rows.rows) {

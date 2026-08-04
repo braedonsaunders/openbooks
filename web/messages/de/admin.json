@@ -325,6 +325,8 @@
     "linkLabelPrompt": "Beschriftung:",
     "addLink": "Link hinzufügen",
     "deleteLink": "Link löschen",
+    "addApp": "App-Verknüpfung hinzufügen…",
+    "removeApp": "App-Verknüpfung entfernen",
     "newGroupPrompt": "Arbeitsbereichsname:",
     "addGroup": "Arbeitsbereich hinzufügen",
     "deleteGroup": "Arbeitsbereich löschen",
@@ -703,7 +705,6 @@
       "lastSignIn": "Letzte Anmeldung"
     },
     "you": "Sie",
-    "legacyRole": "Alt: {role}",
     "statusActive": "aktiv",
     "statusInactive": "inaktiv",
     "requestFailed": "Anfrage fehlgeschlagen",

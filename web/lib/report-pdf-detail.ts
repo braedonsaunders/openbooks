@@ -1,6 +1,7 @@
 import type { PdfColumnAlign, PdfTableGroup } from '@openbooks/pdf'
 import type { GeneralLedgerResult } from './reports'
 import type { ExportData, Translator } from './report-pdf'
+import { decimalIsZero } from './statement-format'
 
 const LEDGER_ALIGN: PdfColumnAlign[] = ['left', 'left', 'left', 'right', 'right', 'right']
 
@@ -28,16 +29,16 @@ export function generalLedgerExportData(
     title: `${account.number ?? ''} ${account.name}`.trim(),
     columns,
     rows: [
-      ['', '', t('generalLedger.opening'), null, null, account.opening],
+      ['', '', t('generalLedger.opening'), null, null, Number(account.opening)],
       ...account.lines.map((line) => [
         line.date,
         line.entryNumber ?? '',
         [line.party, line.memo].filter(Boolean).join(' · '),
-        line.debit || null,
-        line.credit || null,
-        line.balance,
+        decimalIsZero(line.debit) ? null : Number(line.debit),
+        decimalIsZero(line.credit) ? null : Number(line.credit),
+        Number(line.balance),
       ]),
-      ['', '', t('generalLedger.closing'), null, null, account.closing],
+      ['', '', t('generalLedger.closing'), null, null, Number(account.closing)],
     ],
     align: LEDGER_ALIGN,
   }))

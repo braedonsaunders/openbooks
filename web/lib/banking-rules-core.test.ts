@@ -3,7 +3,6 @@ import test from 'node:test'
 import {
   evaluateGroup,
   lineMatchesRule,
-  matchesLegacyCriteria,
   resolveSplitAmounts,
   ruleAppliesToAccount,
   type BankLine,
@@ -86,22 +85,14 @@ test('date withinDays honours the injected clock', () => {
   assert.equal(evaluateGroup(line({ posted_on: '2026-06-01' }), g, FIXED_NOW), false) // 49 days ago
 })
 
-test('legacy v1 criteria still evaluate', () => {
-  assert.equal(matchesLegacyCriteria(line(), { descriptionContains: 'stripe', amountSign: 'in' }), true)
-  assert.equal(matchesLegacyCriteria(line({ amount: '-5' }), { amountSign: 'in' }), false)
-  assert.equal(matchesLegacyCriteria(line({ amount: '50' }), { minAmount: 100 }), false)
-})
-
-test('lineMatchesRule dispatches on version', () => {
+test('lineMatchesRule evaluates the condition tree', () => {
   assert.equal(lineMatchesRule(line(), { version: 2, match: { combinator: 'and', rules: [{ field: 'flow', op: 'is', value: 'in' }] } }, FIXED_NOW), true)
-  assert.equal(lineMatchesRule(line(), { descriptionContains: 'stripe' }), true)
 })
 
-test('accountScope gates v2 rules', () => {
+test('accountScope gates rules', () => {
   assert.equal(ruleAppliesToAccount({ version: 2, match: { combinator: 'and', rules: [] }, accountScope: ['acc-1'] }, 'acc-1'), true)
   assert.equal(ruleAppliesToAccount({ version: 2, match: { combinator: 'and', rules: [] }, accountScope: ['acc-1'] }, 'acc-2'), false)
   assert.equal(ruleAppliesToAccount({ version: 2, match: { combinator: 'and', rules: [] } }, 'acc-2'), true) // no scope = all
-  assert.equal(ruleAppliesToAccount({ descriptionContains: 'x' }, 'acc-2'), true) // v1 = all
 })
 
 test('split: single remainder line equals the negated bank amount', () => {

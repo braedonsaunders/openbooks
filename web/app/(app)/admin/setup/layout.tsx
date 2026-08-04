@@ -48,6 +48,8 @@ export default async function SetupLayout({ children }: { children: ReactNode })
             hiddenEntityKeys={hiddenEntityKeys}
             projectsEnabled={featureEnabled(features, 'projects')}
             currencyEnabled={featureEnabled(features, 'multiCurrency')}
+            fixedAssetsEnabled={featureEnabled(features, 'fixedAssets')}
+            crmEnabled={featureEnabled(features, 'crm')}
             bankFeedsEnabled={featureEnabled(features, 'bankFeeds')}
             onlinePaymentsEnabled={featureEnabled(features, 'onlinePayments')}
           />

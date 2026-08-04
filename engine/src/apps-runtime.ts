@@ -41,7 +41,7 @@ export interface AppRequest {
   path?: string;
   query: Record<string, string>;
   body: unknown;
-  user: { id: string; name: string; role: string } | null;
+  user: { id: string; name: string; roles: string[] } | null;
 }
 
 export interface AppStorageAdapter {

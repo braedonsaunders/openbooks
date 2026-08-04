@@ -2,6 +2,7 @@ import Link from 'next/link'
 import { getTranslations } from 'next-intl/server'
 import { cn } from '@openbooks/ui'
 import { requirePermission } from '../../../../../lib/authz'
+import { requireFeatureEnabled } from '../../../../../lib/feature-gates'
 import { pickString } from '../../../../../lib/list-params'
 import { SETUP_ENTITY_BY_KEY } from '../../../../../lib/setup/registry'
 import { SetupEntitySection } from '../[entity]/SetupEntitySection'
@@ -20,6 +21,7 @@ export default async function DepreciationSetupPage({
   searchParams: Promise<Record<string, string | string[] | undefined>>
 }) {
   const authz = await requirePermission('admin.setup.manage')
+  await requireFeatureEnabled(authz.user.orgId, 'fixedAssets')
   const sp = await searchParams
   const requested = pickString(sp.tab)
   const tab: Tab = requested && requested in ENTITY_BY_TAB ? requested as Tab : 'methods'

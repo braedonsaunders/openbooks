@@ -1,11 +1,9 @@
 import { getTranslations } from 'next-intl/server'
-import { redirect } from 'next/navigation'
 import { PageHeader } from '@openbooks/ui'
 import { ListPageLayout } from '../../../components/page-layout'
 import { ModuleHomeTabs } from '../../../components/module-home/ui'
 import { groupTabs } from '../../../components/module-home/group-tabs'
 import { NewDocumentButton } from '../../../components/new-document-button'
-import { pickString } from '../../../lib/list-params'
 import { requirePermission, can } from '../../../lib/authz'
 import { analyticsConfig } from '../../../lib/analytics/config'
 import { arPosition } from '../../../lib/cash/ar-position'
@@ -21,26 +19,9 @@ export async function generateMetadata() {
 /**
  * Accounts Receivable — the receivables control center (vitals + collections
  * worklist + aging), the AP page's mirror. The invoice list is its own
- * first-class route at /ar/invoices; legacy ?view=invoices / ?doc= links
- * redirect there so old drill-throughs keep working.
+ * first-class route at /ar/invoices.
  */
-export default async function AR({
-  searchParams,
-}: {
-  searchParams: Promise<Record<string, string | string[] | undefined>>
-}) {
-  const sp = await searchParams
-  // Legacy tab/flyout URLs → the dedicated invoices route, params preserved.
-  if (typeof sp.doc === 'string' || pickString(sp.view) === 'invoices') {
-    const qs = new URLSearchParams()
-    for (const [k, v] of Object.entries(sp)) {
-      if (k === 'view' || v === undefined) continue
-      for (const val of Array.isArray(v) ? v : [v]) qs.append(k, val)
-    }
-    const suffix = qs.toString()
-    redirect(`/ar/invoices${suffix ? `?${suffix}` : ''}`)
-  }
-
+export default async function AR() {
   const authz = await requirePermission('ar.read')
   const canCreate = can(authz, 'ar.create')
   const t = await getTranslations('ar')

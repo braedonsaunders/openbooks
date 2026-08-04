@@ -184,7 +184,9 @@ export default async function PlatformUsersPage({
                   </TableCell>
                   <TableCell>{user.orgName}</TableCell>
                   <TableCell>
-                    <Badge variant="outline">{user.role}</Badge>
+                    <div className="flex flex-wrap gap-1">
+                      {user.roles.map((role) => <Badge key={role} variant="outline">{role}</Badge>)}
+                    </div>
                   </TableCell>
                   <TableCell>
                     {user.grantCount > 0 ? (
