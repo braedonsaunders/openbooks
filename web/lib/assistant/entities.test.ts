@@ -102,7 +102,7 @@ test("malformed tool records cannot create arbitrary drawer targets", () => {
 
 test("assistant prompt relies on native record cards instead of generic module links", () => {
   const prompt = assistantSystemPrompt({
-    orgName: "Rassaun",
+    orgName: "Example Organization",
     baseCurrency: "CAD",
     userName: "Braedon",
     today: "2026-08-04",
