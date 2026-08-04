@@ -245,9 +245,13 @@ jobs:
             mkdir -p "$backup_dir"
             chmod 700 "$backup_dir"
             backup_path="$backup_dir/pre-alpha3-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}.dump"
-            docker run --rm -v "$backup_dir:/backup" postgres:16 sh -ec \
-              'pg_dump "$1" --format=custom --file=/backup/"$2"' sh "$migration_url" "$(basename "$backup_path")"
+            docker run --rm \
+              -e PGOPTIONS='-c app.bypass_rls=on' \
+              -v "$backup_dir:/backup" postgres:16 sh -ec \
+              'pg_dump "$1" --enable-row-security --format=custom --file=/backup/"$2"' \
+              sh "$migration_url" "$(basename "$backup_path")"
             chmod 600 "$backup_path"
+            test -s "$backup_path"
 
             reference_name="openbooks-baseline-reference-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
             docker run --name "$reference_name" \
