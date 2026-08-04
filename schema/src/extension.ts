@@ -260,6 +260,20 @@ export const connections = pgTable(
     mirrorEnabled: boolean("mirror_enabled").notNull().default(false),
     /** Cron-ish cadence label, e.g. "daily" (resolved by the scheduler). */
     mirrorSchedule: text("mirror_schedule").notNull().default("daily"),
+    /**
+     * Controller disposition for source changes that alter an already-posted
+     * projection. Automatic mode never rewrites history: it authorizes the
+     * posting engine's guarded append-only reversal/replacement workflow.
+     */
+    postedChangePolicy: text("posted_change_policy", {
+      enum: ["review_required", "append_only_automatic"],
+    })
+      .notNull()
+      .default("review_required"),
+    postedChangeAuthorizedBy: uuid("posted_change_authorized_by"),
+    postedChangeAuthorizedAt: timestamp("posted_change_authorized_at", {
+      withTimezone: true,
+    }),
     /** Source-clock high-water mark of the last successful sync. */
     cursor: timestamp("cursor", { withTimezone: true }),
     lastRunAt: timestamp("last_run_at", { withTimezone: true }),

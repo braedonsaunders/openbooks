@@ -69,6 +69,8 @@ interface Connection {
   config: Record<string, unknown>;
   mirrorEnabled: boolean;
   mirrorSchedule: string;
+  postedChangePolicy: "review_required" | "append_only_automatic";
+  postedChangeAuthorizedAt: string | null;
   cursor: string | null;
   lastRunAt: string | null;
   lastError: string | null;
@@ -1063,6 +1065,9 @@ function ConnectionDrawer({
   const [displayName, setDisplayName] = useState("");
   const [config, setConfig] = useState<Record<string, string>>({});
   const [secrets, setSecrets] = useState<Record<string, string>>({});
+  const [postedChangePolicy, setPostedChangePolicy] = useState<
+    "review_required" | "append_only_automatic"
+  >("review_required");
   const [saving, setSaving] = useState(false);
 
   // Prefill from the edited connection (or clear for a fresh add) on open.
@@ -1080,11 +1085,13 @@ function ConnectionDrawer({
         ),
       );
       setSecrets({});
+      setPostedChangePolicy(editing.postedChangePolicy);
     } else {
       setSource("");
       setDisplayName("");
       setConfig({});
       setSecrets({});
+      setPostedChangePolicy("review_required");
     }
   }, [open, editing]);
 
@@ -1113,7 +1120,12 @@ function ConnectionDrawer({
         ? await fetch(`/api/platform/connections/${editing.id}`, {
             method: "PATCH",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ displayName, config, secrets: provided }),
+            body: JSON.stringify({
+              displayName,
+              config,
+              secrets: provided,
+              postedChangePolicy,
+            }),
           })
         : await fetch("/api/platform/connections", {
             method: "POST",
@@ -1221,6 +1233,32 @@ function ConnectionDrawer({
                 onChange={(e) => setDisplayName(e.target.value)}
               />
             </div>
+
+            {editing ? (
+              <div className="rounded-md border border-slate-200 bg-slate-50/70 p-3 dark:border-slate-700 dark:bg-slate-900/40">
+                <Label>{t("drawer.postedChanges.label")}</Label>
+                <Select
+                  value={postedChangePolicy}
+                  onChange={(event) =>
+                    setPostedChangePolicy(
+                      event.target.value as
+                        | "review_required"
+                        | "append_only_automatic",
+                    )
+                  }
+                >
+                  <option value="review_required">
+                    {t("drawer.postedChanges.review")}
+                  </option>
+                  <option value="append_only_automatic">
+                    {t("drawer.postedChanges.automatic")}
+                  </option>
+                </Select>
+                <p className="mt-2 text-xs text-slate-500 dark:text-slate-400">
+                  {t("drawer.postedChanges.help")}
+                </p>
+              </div>
+            ) : null}
 
             {def.configFields.map((f) => (
               <div key={f.key}>

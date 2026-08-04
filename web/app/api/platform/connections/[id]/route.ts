@@ -38,6 +38,7 @@ export async function PATCH(
     secrets?: Record<string, string>;
     mirrorEnabled?: boolean;
     mirrorSchedule?: string;
+    postedChangePolicy?: "review_required" | "append_only_automatic";
     status?: "active" | "paused";
   };
 
@@ -86,14 +87,59 @@ export async function PATCH(
     }
     sets.push(sql`mirror_schedule = ${body.mirrorSchedule}`);
   }
+  const postedChangePolicyChanged =
+    body.postedChangePolicy !== undefined &&
+    body.postedChangePolicy !== existing.postedChangePolicy;
+  if (postedChangePolicyChanged) {
+    if (
+      body.postedChangePolicy !== "review_required" &&
+      body.postedChangePolicy !== "append_only_automatic"
+    ) {
+      return NextResponse.json(
+        { error: "invalid posted-change policy" },
+        { status: 400 },
+      );
+    }
+    if (body.postedChangePolicy === "append_only_automatic") {
+      sets.push(
+        sql`posted_change_policy = 'append_only_automatic'`,
+        sql`posted_change_authorized_by = ${gate.user.id}`,
+        sql`posted_change_authorized_at = now()`,
+      );
+    } else {
+      sets.push(
+        sql`posted_change_policy = 'review_required'`,
+        sql`posted_change_authorized_by = null`,
+        sql`posted_change_authorized_at = null`,
+      );
+    }
+  }
   if (body.status === "active" || body.status === "paused")
     sets.push(sql`status = ${body.status}`);
 
   if (sets.length === 0) return NextResponse.json({ ok: true });
   sets.push(sql`updated_at = now()`, sql`updated_by = ${gate.user.id}`);
-  await db.execute(
-    sql`update connections set ${sql.join(sets, sql`, `)} where org_id = ${orgId} and id = ${id}`,
-  );
+  await db.transaction(async (tx) => {
+    await tx.execute(
+      sql`update connections set ${sql.join(sets, sql`, `)} where org_id = ${orgId} and id = ${id}`,
+    );
+    if (postedChangePolicyChanged) {
+      await tx.execute(sql`
+        insert into audit_log
+          (org_id, table_name, row_id, action, changes, actor_id)
+        values (
+          ${orgId}, 'connections', ${id}, 'update',
+          ${JSON.stringify({
+            field: "postedChangePolicy",
+            before: existing.postedChangePolicy,
+            after: body.postedChangePolicy,
+            control: "append_only_source_correction",
+          })}::jsonb,
+          ${gate.user.id}
+        )
+      `);
+    }
+  });
   return NextResponse.json({ ok: true });
 }
 
