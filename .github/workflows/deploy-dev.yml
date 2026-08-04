@@ -89,6 +89,28 @@ jobs:
             echo "::error::The configured deployment has no compose source"
             exit 1
           fi
+          # A completed one-shot Compose service is otherwise eligible for
+          # reuse across image rollouts. Stamp the bootstrap service itself so
+          # every immutable revision reruns migrations before web can start.
+          if grep -q '^      OPENBOOKS_BOOTSTRAP_REV:' <<<"$compose_file"; then
+            compose_file="$(sed "s|^      OPENBOOKS_BOOTSTRAP_REV:.*|      OPENBOOKS_BOOTSTRAP_REV: \"${NEW_TAG}\"|" <<<"$compose_file")"
+          else
+            compose_file="$(awk -v rev="$NEW_TAG" '
+              /^  bootstrap:[[:space:]]*$/ { in_bootstrap=1 }
+              in_bootstrap && /^  [[:alnum:]_-]+:[[:space:]]*$/ && $0 !~ /^  bootstrap:/ { in_bootstrap=0 }
+              in_bootstrap && /^    environment:[[:space:]]*$/ {
+                print
+                print "      OPENBOOKS_BOOTSTRAP_REV: \"" rev "\""
+                inserted=1
+                next
+              }
+              { print }
+              END { if (!inserted) exit 42 }
+            ' <<<"$compose_file")" || {
+              echo "::error::Could not stamp the bootstrap service in the configured Compose source"
+              exit 1
+            }
+          fi
           jq -n --arg id "$COMPOSE_ID" --arg env "$new_env" --arg composeFile "$compose_file" \
             '{composeId:$id, env:$env, composeFile:$composeFile}' \
             | curl -sS --fail -H "x-api-key: $DOKPLOY_TOKEN" \
