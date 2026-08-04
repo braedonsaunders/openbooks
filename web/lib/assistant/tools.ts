@@ -351,7 +351,8 @@ const findDocuments: AssistantToolDef = {
     if (a.toDate) where = sql`${where} and d.document_date <= ${a.toDate}`;
     const rows = (await db.execute(sql`
       select d.id, d.kind, d.document_number, d.reference_number, d.document_date,
-             d.due_date, d.status, d.currency, d.total, d.memo, p.display_name as party
+             d.due_date, d.status, d.currency, d.total, d.memo, d.posted_entry_id,
+             p.id as party_id, p.display_name as party
         from documents d
         left join parties p on p.id = d.party_id
        where ${where}
@@ -382,6 +383,8 @@ const findDocuments: AssistantToolDef = {
           currency: r.currency,
           total: num(r.total),
           party: r.party,
+          partyId: r.party_id,
+          postedEntryId: r.posted_entry_id,
           memo: truncateText(r.memo, 160),
         })),
       },
@@ -429,6 +432,7 @@ const getDocument: AssistantToolDef = {
         documentNumber: d.document_number,
         referenceNumber: d.reference_number,
         party: d.party,
+        partyId: d.party_id,
         documentDate: d.document_date,
         postingDate: d.posting_date,
         dueDate: d.due_date,
