@@ -69,7 +69,7 @@ export default async function RecordModule({
   const sp = await searchParams
 
   const type = await loadRecordTypeByKey(authz.user.orgId, typeKey)
-  if (!type || type.status !== 'published' || !inTypeAudience(authz.user.role, type.allowed_roles)) {
+  if (!type || type.status !== 'published' || !inTypeAudience(authz.user.roles.map(({ key }) => key), type.allowed_roles)) {
     notFound()
   }
   const lint = lintRecordFields(type.fields, type.name)

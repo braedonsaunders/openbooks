@@ -652,6 +652,7 @@ export async function postPaymentWithApplications(
   allocations?: AllocationInput[],
   userId?: string,
   auditSource: "ui" | "api" | "mcp" | "assistant" = "ui",
+  options: { deferEffects?: boolean } = {},
 ): Promise<{ entryId: string }> {
   const [preflight] = await db.select().from(schema.documents).where(eq(schema.documents.id, paymentDocId));
   if (!preflight || !isPaymentKind(preflight.kind)) throw new PaymentError("payment document not found");
@@ -936,7 +937,9 @@ export async function postPaymentWithApplications(
     return { entryId };
   });
 
-  await runPostDocumentEffects(paymentDocId, preflight.status);
+  if (!options.deferEffects) {
+    await runPostDocumentEffects(paymentDocId, preflight.status);
+  }
   return result;
 }
 

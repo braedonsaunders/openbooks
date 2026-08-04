@@ -79,7 +79,8 @@ export interface SessionUser {
   id: string;
   email: string;
   name: string;
-  role: string;
+  /** Explicit organization-scoped assignments; the only role source of truth. */
+  roles: ReadonlyArray<{ key: string; name: string }>;
   /** Effective org — the sandbox org when one is entered, else the home org. */
   orgId: string;
   /** Environment the request is operating in. */
@@ -105,7 +106,7 @@ export async function currentUser(): Promise<SessionUser | null> {
   // once per request — layout and page each resolve it).
   const home = await withBypassContext(async () => {
     const r = (await db.execute(sql`
-      select id, email, name, role, org_id as "orgId", is_super_admin as "isSuperAdmin"
+      select id, email, name, org_id as "orgId", is_super_admin as "isSuperAdmin"
         from users where id = ${uid} and is_active`)) as any;
     return r.rows[0];
   });
@@ -121,11 +122,25 @@ export async function currentUser(): Promise<SessionUser | null> {
 
   // Scope the rest of this request to the effective org (RLS enforced).
   setRequestOrg(env.orgId);
+  const roles = await withBypassContext(async () => {
+    const result = (await db.execute(sql`
+      select r.key, r.name
+        from role_assignments assignment
+        join app_roles r
+          on r.id = assignment.role_id
+         and r.org_id = assignment.org_id
+       where assignment.org_id = ${env.orgId}
+         and assignment.user_id = ${env.actingUserId}
+       order by r.is_built_in desc, r.name, r.key
+    `)) as unknown as { rows: { key: string; name: string }[] };
+    return result.rows;
+  });
+  if (!homeUser.isSuperAdmin && roles.length === 0) return null;
   return {
     id: env.actingUserId,
     email: home.email,
     name: home.name,
-    role: home.role,
+    roles,
     orgId: env.orgId,
     envKind: env.envKind,
     productionOrgId: env.productionOrgId,

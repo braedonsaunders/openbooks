@@ -441,7 +441,7 @@ export function AssistantApp({
                 {t('errors.notConfigured')}
               </p>
             ) : (
-              <div className="flex items-end gap-2 rounded-2xl border border-slate-300 bg-white p-2 shadow-sm focus-within:border-teal-500 focus-within:ring-2 focus-within:ring-teal-500/20 dark:border-slate-700 dark:bg-slate-950">
+              <div className="flex items-center gap-1.5 rounded-2xl border border-slate-300 bg-white p-1.5 shadow-sm focus-within:border-teal-500 focus-within:ring-2 focus-within:ring-teal-500/20 dark:border-slate-700 dark:bg-slate-950">
                 <textarea
                   value={input}
                   onChange={(e) => setInput(e.target.value)}
@@ -449,13 +449,14 @@ export function AssistantApp({
                   maxLength={MAX_PROMPT_CHARS}
                   rows={1}
                   placeholder={t('placeholder')}
-                  className="max-h-40 flex-1 resize-none appearance-none overflow-y-auto border-0 bg-transparent px-2 py-1.5 text-base text-slate-900 shadow-none outline-none placeholder:text-slate-400 focus:border-0 focus:ring-0 focus:outline-none sm:text-sm dark:text-slate-100"
+                  className="min-h-8 max-h-40 flex-1 resize-none appearance-none overflow-y-auto border-0 bg-transparent px-2 py-1.5 text-base leading-5 text-slate-900 shadow-none outline-none [field-sizing:content] placeholder:text-slate-400 focus:border-0 focus:ring-0 focus:outline-none sm:text-sm dark:text-slate-100"
                 />
                 {streaming ? (
                   <Button
                     type="button"
                     variant="outline"
                     size="icon"
+                    className="h-8 w-8 shrink-0 rounded-xl"
                     onClick={stop}
                     aria-label={t('stop')}
                   >
@@ -465,6 +466,7 @@ export function AssistantApp({
                   <Button
                     type="button"
                     size="icon"
+                    className="h-8 w-8 shrink-0 rounded-xl"
                     onClick={() => void send(input)}
                     disabled={!input.trim()}
                     aria-label={t('send')}

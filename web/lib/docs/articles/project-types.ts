@@ -49,9 +49,10 @@ The **General** tab holds the type's identity and defaults:
 - **Name** and **Key** — the display name and a stable key. The key is generated
   from the name if you leave it blank; keep it stable once projects use the type.
 - **Description** — shown to users when they pick a type on a project.
-- **Billing method** — the legacy method (**time_and_materials**, **fixed_price**,
-  **cost_plus**) this type maps to. It is kept for backwards compatibility; the
-  profiles below determine current behavior.
+- **Billing classification** — the governed commercial model
+  (**time_and_materials**, **fixed_price**, or **cost_plus**) used by controlled
+  billing constraints and transaction snapshots. The profiles below define the
+  detailed workflow and accounting policy.
 - **Sort order** and **Status** — ordering in pickers and whether the type is
   selectable.
 
@@ -131,8 +132,8 @@ so concurrent draft releases cannot exceed funds held.
     divided by labor hours — as an analytical preview; **Publish rates**
     publishes those values to the rate card. The **Setup wizard** configures the
     method, rates, and applicable project types.
-  - **Account Group Actual** — legacy: sum project-tagged GL posted to an
-    overhead account group.
+  - **Posted GL Account Group** — sum project-tagged GL posted to an overhead
+    account group.
 - **Cost budget source** — **Wbs Estimates** (roll up the project's work-breakdown
   estimates) or **None**.
 - **Committed cost from** — which open documents count as committed: **Purchase
@@ -207,17 +208,17 @@ formats further.
 
 ---
 
-## Reproducing a legacy costing model
+## Aligning an external costing model
 
 Configurable measure sources allow a project type to align with an external
 costing model. Use the following procedure:
 
-1. Set **Invoiced to date** to count the same customer documents the legacy
+1. Set **Invoiced to date** to count the same customer documents the source
    system counts.
 2. Point **Actual cost** (and **Overhead**) at the account groups that mirror the
-   legacy cost pools.
+   source cost pools.
 3. Choose the **Total price method** and **Could-be-invoiced formula** that match
-   the legacy definitions.
+   the source definitions.
 4. Confirm the numbers against a sample of known projects before relying on them.
 
 If you are migrating from a system that applies overhead as a per-labor-hour rate

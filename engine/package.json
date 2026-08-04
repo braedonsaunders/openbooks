@@ -29,6 +29,7 @@
     "harness": "tsx src/harness/cli.ts",
     "harness:ledger-parity": "tsx src/harness/ledger-parity/cli.ts",
     "sim": "tsx src/sim/cli.ts",
+    "samples": "tsx src/sample-companies/cli.ts",
     "typecheck": "tsc --noEmit"
   }
 }

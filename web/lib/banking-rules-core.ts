@@ -8,7 +8,7 @@
 import { abs as moneyAbs, add, cmp, formatMoney, mulPercent, neg, normalizeMoney, roundMoney, sum } from '@openbooks/engine/src/money.ts'
 
 // ---------------------------------------------------------------------------
-// Condition model (v2)
+// Condition model
 // ---------------------------------------------------------------------------
 
 export type RuleField = 'description' | 'payee' | 'anyText' | 'reference' | 'amount' | 'flow' | 'date' | 'source'
@@ -30,26 +30,10 @@ export interface RuleConditionGroup {
   rules: (RuleCondition | RuleConditionGroup)[]
 }
 
-/** v1 flat criteria — retained for backward compatibility. */
 export interface RuleCriteria {
-  descriptionContains?: string
-  amountSign?: 'in' | 'out' | 'any'
-  minAmount?: number
-  maxAmount?: number
-  source?: string
-}
-
-/** v2 criteria — a nested condition tree plus rule-level scope. */
-export interface RuleCriteriaV2 {
   version: 2
   match: RuleConditionGroup
   accountScope?: string[]
-}
-
-export type AnyCriteria = RuleCriteria | RuleCriteriaV2
-
-export function isV2Criteria(c: AnyCriteria): c is RuleCriteriaV2 {
-  return (c as RuleCriteriaV2)?.version === 2 && !!(c as RuleCriteriaV2).match
 }
 
 // ---------------------------------------------------------------------------
@@ -68,11 +52,7 @@ export interface RuleSplitLine {
   description?: string | null
 }
 
-export type RuleOutcomeV1 =
-  | { action: 'exclude' }
-  | { action: 'categorize'; accountId: string; partyId?: string | null }
-
-export type RuleOutcomeV2 =
+export type RuleOutcome =
   | { action: 'exclude' }
   | {
       action: 'categorize'
@@ -83,17 +63,15 @@ export type RuleOutcomeV2 =
       memo?: string | null
     }
 
-export type AnyOutcome = RuleOutcomeV1 | RuleOutcomeV2
-
-export function isV2Outcome(o: AnyOutcome): o is Extract<RuleOutcomeV2, { action: 'categorize' }> {
-  return o?.action === 'categorize' && (o as RuleOutcomeV2 & { version?: number }).version === 2
+export function isCategorizeOutcome(o: RuleOutcome): o is Extract<RuleOutcome, { action: 'categorize' }> {
+  return o.action === 'categorize'
 }
 
 export interface RuleRow {
   id: string
   name: string
-  criteria: AnyCriteria
-  outcome: AnyOutcome
+  criteria: RuleCriteria
+  outcome: RuleOutcome
   priority: number
   is_active: boolean
 }
@@ -129,7 +107,7 @@ export function evaluateCondition(line: BankLine, cond: RuleCondition, now: numb
         return cmp(absolute, String(min)) >= 0 && cmp(absolute, String(max)) <= 0
       }
       let value: string
-      try { value = normalizeMoney(String(cond.value)) } catch { return true }
+      try { value = normalizeMoney(String(cond.value)) } catch { return false }
       switch (cond.op) {
         case 'eq': return cmp(absolute, value) === 0
         case 'ne': return cmp(absolute, value) !== 0
@@ -137,7 +115,7 @@ export function evaluateCondition(line: BankLine, cond: RuleCondition, now: numb
         case 'gte': return cmp(absolute, value) >= 0
         case 'lt': return cmp(absolute, value) < 0
         case 'lte': return cmp(absolute, value) <= 0
-        default: return true
+        default: return false
       }
     }
     case 'date': {
@@ -149,12 +127,12 @@ export function evaluateCondition(line: BankLine, cond: RuleCondition, now: numb
         case 'after': return !!v && on > v
         case 'withinDays': {
           const days = Number(cond.value)
-          if (!Number.isFinite(days)) return true
+          if (!Number.isFinite(days)) return false
           const ageMs = Date.parse(`${on}T00:00:00Z`)
           const cutoff = now - days * 86400000
           return Number.isFinite(ageMs) && ageMs >= cutoff
         }
-        default: return true
+        default: return false
       }
     }
     case 'source':
@@ -171,12 +149,12 @@ export function evaluateCondition(line: BankLine, cond: RuleCondition, now: numb
       const needle = norm(typeof cond.value === 'string' ? cond.value : String(cond.value ?? ''))
       switch (cond.op) {
         case 'isBlank': return hay === ''
-        case 'contains': return !needle || hay.includes(needle)
-        case 'notContains': return !needle || !hay.includes(needle)
+        case 'contains': return needle !== '' && hay.includes(needle)
+        case 'notContains': return needle !== '' && !hay.includes(needle)
         case 'equals': return hay === needle
-        case 'startsWith': return !needle || hay.startsWith(needle)
-        case 'endsWith': return !needle || hay.endsWith(needle)
-        default: return true
+        case 'startsWith': return needle !== '' && hay.startsWith(needle)
+        case 'endsWith': return needle !== '' && hay.endsWith(needle)
+        default: return false
       }
     }
   }
@@ -195,31 +173,13 @@ export function evaluateGroup(line: BankLine, group: RuleConditionGroup, now: nu
   return group.combinator === 'or' ? rules.some(test) : rules.every(test)
 }
 
-/** Legacy v1 matcher — every populated criterion must pass (implicit AND). */
-export function matchesLegacyCriteria(line: BankLine, c: RuleCriteria): boolean {
-  if (c.descriptionContains) {
-    const hay = `${line.description ?? ''} ${line.counterparty_ref ?? ''}`.toLowerCase()
-    if (!hay.includes(c.descriptionContains.toLowerCase())) return false
-  }
-  const amount = normalizeMoney(line.amount)
-  if (c.amountSign === 'in' && cmp(amount, '0') < 0) return false
-  if (c.amountSign === 'out' && cmp(amount, '0') >= 0) return false
-  const absolute = moneyAbs(amount)
-  if (typeof c.minAmount === 'number' && cmp(absolute, String(c.minAmount)) < 0) return false
-  if (typeof c.maxAmount === 'number' && cmp(absolute, String(c.maxAmount)) > 0) return false
-  if (c.source && line.source !== c.source) return false
-  return true
+export function lineMatchesRule(line: BankLine, criteria: RuleCriteria, now: number = Date.now()): boolean {
+  return evaluateGroup(line, criteria.match, now)
 }
 
-/** Unified matcher: v2 condition tree, else legacy flat criteria. */
-export function lineMatchesRule(line: BankLine, criteria: AnyCriteria, now: number = Date.now()): boolean {
-  if (isV2Criteria(criteria)) return evaluateGroup(line, criteria.match, now)
-  return matchesLegacyCriteria(line, criteria)
-}
-
-/** Does this rule apply to the given account? (v2 accountScope; v1 = all). */
-export function ruleAppliesToAccount(criteria: AnyCriteria, accountId: string): boolean {
-  if (isV2Criteria(criteria) && criteria.accountScope && criteria.accountScope.length > 0) {
+/** Does this rule apply to the given account? */
+export function ruleAppliesToAccount(criteria: RuleCriteria, accountId: string): boolean {
+  if (criteria.accountScope && criteria.accountScope.length > 0) {
     return criteria.accountScope.includes(accountId)
   }
   return true

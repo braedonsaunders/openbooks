@@ -8,7 +8,7 @@ import {
   regenerateGlImpactTx,
   type PostingDeps,
 } from "./posting.ts";
-import { createScratchOrg, dropScratchOrg } from "./test-fixtures.ts";
+import { createScratchOrg, createScratchUser, dropScratchOrg } from "./test-fixtures.ts";
 
 const DB = !!process.env.OPENBOOKS_DB_URL;
 
@@ -17,7 +17,7 @@ test(
   { skip: !DB },
   async () => {
     const org = await createScratchOrg();
-    const actorId = randomUUID();
+    const actorId = await createScratchUser(org.orgId, "Source Correction Controller", "admin");
     const documentId = randomUUID();
     const replacementPeriodId = randomUUID();
     const requestId = randomUUID();
@@ -33,14 +33,6 @@ test(
       },
     };
     try {
-      await db.execute(sql`
-        insert into users
-          (id, org_id, email, name, password_hash, role, is_active)
-        values (
-          ${actorId}, ${org.orgId}, ${`correction-${actorId}@scratch.test`},
-          'Source Correction Controller', 'x', 'admin', true
-        )
-      `);
       await db.execute(sql`
         insert into accounting_periods
           (id, org_id, fiscal_calendar_id, fiscal_year, period_number, name,

@@ -31,7 +31,6 @@ test("vendor application treats stored materials as a cumulative balance", () =>
     netDue: "90.0000",
   });
 });
-
 test("vendor application prevents stored-material double pay and overbilling", () => {
   assert.throws(() => computeVendorApplication([{
     sovLineId: "line-1",
@@ -60,4 +59,3 @@ test("deductive change cannot erase earned work", () => {
     SubcontractError,
   );
 });
-

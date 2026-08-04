@@ -1,9 +1,9 @@
 # openbooks — production image (Next.js standalone + bundled bootstrap).
 #
 # Build:  docker build -t openbooks .
-# Run:    needs OPENBOOKS_DB_URL, SESSION_SECRET (+ optional S3_*, ADMIN_*).
-#         Entrypoint applies migrations/seeds (scripts/bootstrap.ts) and then
-#         starts the web server on $PORT (default 3000).
+# Run:    use compose.yaml, which executes the privileged bootstrap as a
+#         one-shot service before starting web/worker with an RLS-constrained
+#         database role.
 
 # --- deps: workspace-aware install ------------------------------------------
 FROM node:24-bookworm-slim AS deps
@@ -67,13 +67,15 @@ ENV NODE_ENV=production \
 
 # Standalone output is rooted at the monorepo (outputFileTracingRoot):
 # node_modules + web/server.js + web/.next live inside it.
-COPY --from=build /app/web/.next/standalone ./
-COPY --from=build /app/web/.next/static ./web/.next/static
-COPY --from=build /out/bootstrap.mjs ./scripts/bootstrap.mjs
-COPY --from=build /out/worker.mjs ./scripts/worker.mjs
+COPY --chown=node:node --from=build /app/web/.next/standalone ./
+COPY --chown=node:node --from=build /app/web/.next/static ./web/.next/static
+COPY --chown=node:node --from=build /out/bootstrap.mjs ./scripts/bootstrap.mjs
+COPY --chown=node:node --from=build /out/worker.mjs ./scripts/worker.mjs
 # The bootstrap reads migration SQL relative to its own location (/app/scripts → /app).
-COPY schema/migrations ./schema/migrations
+COPY --chown=node:node schema/migrations ./schema/migrations
 
 EXPOSE 3000
-# Bootstrap (migrate + seed) must succeed before the server takes traffic.
-CMD ["sh", "-c", "node scripts/bootstrap.mjs && exec node web/server.js"]
+# Database bootstrap is intentionally not part of this process: the web server
+# must never receive migration-owner credentials.
+USER node
+CMD ["node", "web/server.js"]

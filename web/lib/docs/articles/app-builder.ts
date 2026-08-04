@@ -44,13 +44,14 @@ An app is a package of a **manifest** plus its **files**. The manifest declares:
 - **frontend.entry** — the HTML file that renders when the app opens.
 - **endpoints** — named backend handlers, each pointing at a file and an HTTP
   method (**GET**, **POST**, or **ANY**). Endpoint names must be unique.
-- **nav** — whether the app shows in navigation, and its label and icon.
+- **nav** — optional label and icon suggestions for an administrator-created
+  navigation shortcut.
 
-When **nav.show** is enabled, the host initially places the app in **My Work**.
-An administrator can later move that app shortcut to any navigation
-workspace without changing the package. Every active app is also available as
-a dashboard launcher card and as a Quick action. Placement on these host
-surfaces does not alter the app's sandbox or permission boundary.
+Installing an app never places it in a workspace automatically. An
+administrator can add, move, rename, or remove an app shortcut in Navigation
+settings without installing, disabling, or uninstalling the app. Every active
+app remains available from the Apps library. Placement on host surfaces does
+not alter the app's sandbox or permission boundary.
 
 A typical bundle looks like:
 

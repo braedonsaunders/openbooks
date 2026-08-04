@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server'
 import { eq, sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/db.ts'
-import { guardPermission } from '../../../../../lib/authz'
+import { guardFeaturePermission } from '../../../../../lib/feature-gates'
 
 export const runtime = 'nodejs'
 
@@ -9,7 +9,7 @@ export const runtime = 'nodejs'
  *  deleted freely; an active script is deactivated first (its script_runs
  *  rows are kept for audit). */
 export async function DELETE(_req: Request, { params }: { params: Promise<{ id: string }> }) {
-  const gate = await guardPermission('scripts.manage')
+  const gate = await guardFeaturePermission('scripts.manage', 'scripts')
   if (gate instanceof NextResponse) return gate
   const user = gate.user
   const { id } = await params

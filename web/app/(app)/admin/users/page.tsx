@@ -63,7 +63,7 @@ export default async function AdminUsersPage({
 
   const [rowsR, countR, statusCountsR, rolesR] = (await Promise.all([
     db.execute(sql`
-      select u.id, u.name, u.email, u.role, u.is_active, u.last_login_at
+      select u.id, u.name, u.email, u.is_active, u.last_login_at
         from users u
        where ${where}
        order by ${orderBy}
@@ -82,7 +82,6 @@ export default async function AdminUsersPage({
     id: string
     name: string
     email: string
-    role: string
     is_active: boolean
     last_login_at: string | null
   }[]
@@ -187,7 +186,7 @@ export default async function AdminUsersPage({
                       <div className="flex flex-wrap items-center gap-1">
                         {assigned.length === 0 ? (
                           <Badge variant="warning" className="text-[10px]">
-                            {t('legacyRole', { role: u.role })}
+                            {t('unassignedRole')}
                           </Badge>
                         ) : (
                           assigned.map((r) => (

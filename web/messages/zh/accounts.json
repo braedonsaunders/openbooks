@@ -3,6 +3,7 @@
     "title": "会计科目表",
     "description": "本位符号的当前余额（资产负债表为累计，损益表为本财年），通过汇总科目向上汇总。",
     "searchPlaceholder": "搜索编号或名称…",
+    "views": { "list": "列表", "hierarchy": "层级" },
     "newAccount": "新建科目",
     "viewRegister": "查看明细账",
     "expand": "展开科目",

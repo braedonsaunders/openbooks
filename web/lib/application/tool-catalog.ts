@@ -234,10 +234,11 @@ export const APPLICATION_TOOLS: readonly ApplicationToolDefinition[] = [
     readOnly: false, destructive: false, openWorld: false, assistantConfirmation: "always", visibleTo: hasPermission("close.run"),
     execute: async (context, input) => ({ ok: true, ...await startApplicationCloseRun(context, input) }),
   }),
-  ...(["refresh", "request_approval", "close", "publish"] as const).map((action) => {
+  ...(["refresh", "request_approval", "attest", "close", "publish"] as const).map((action) => {
     const names = {
       refresh: ["refresh_close_run", "Refresh Close Run"],
       request_approval: ["request_close_approval", "Request Close Approval"],
+      attest: ["attest_close_run", "Attest Close Run"],
       close: ["close_period", "Close Period"],
       publish: ["publish_close_package", "Publish Close Package"],
     } as const;
@@ -251,7 +252,7 @@ export const APPLICATION_TOOLS: readonly ApplicationToolDefinition[] = [
       destructive: action === "close",
       openWorld: action === "publish",
       assistantConfirmation: "always",
-      visibleTo: hasPermission(action === "close" ? "close.approve" : "close.run"),
+      visibleTo: hasPermission(action === "attest" || action === "close" ? "close.approve" : "close.run"),
       execute: async (context, input) => ({ ok: true, ...await advanceCloseRun(context, { ...input, action }) }),
     });
   }),

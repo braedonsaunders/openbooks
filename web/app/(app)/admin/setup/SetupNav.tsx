@@ -78,6 +78,8 @@ export function SetupNav({
   hiddenEntityKeys = [],
   projectsEnabled = true,
   currencyEnabled = true,
+  fixedAssetsEnabled = true,
+  crmEnabled = true,
   bankFeedsEnabled = false,
   onlinePaymentsEnabled = false,
 }: {
@@ -87,6 +89,8 @@ export function SetupNav({
   hiddenEntityKeys?: string[]
   projectsEnabled?: boolean
   currencyEnabled?: boolean
+  fixedAssetsEnabled?: boolean
+  crmEnabled?: boolean
   bankFeedsEnabled?: boolean
   onlinePaymentsEnabled?: boolean
 }) {
@@ -129,6 +133,7 @@ export function SetupNav({
                 ]
               : group.key === 'company'
               ? [
+                  { href: '/admin/setup/readiness', label: t('readiness.navTitle'), iconKey: 'gauge' },
                   { href: '/admin/setup/wizard', label: t('features.runWizard'), iconKey: 'sparkles' },
                   { href: '/admin/setup/company', label: t('entities.company.title'), iconKey: 'building' },
                   { href: '/admin/setup/features', label: t('features.navTitle'), iconKey: 'layers' },
@@ -144,7 +149,9 @@ export function SetupNav({
                     ? [{ href: '/admin/setup/payment-providers', label: t('paymentProviders.navTitle'), iconKey: 'payments' }]
                     : []),
                   { href: '/admin/setup/payment-operations', label: t('entities.payment-operations.title'), iconKey: 'payments' },
-                  { href: '/admin/setup/crm', label: tCrm('setup.title'), iconKey: 'users' },
+                  ...(crmEnabled
+                    ? [{ href: '/admin/setup/crm', label: tCrm('setup.title'), iconKey: 'users' }]
+                    : []),
                 ]
               : group.key === 'currency'
               ? [
@@ -196,15 +203,17 @@ export function SetupNav({
                   })),
                 ]
               : group.key === 'assets'
-              ? [
-                  ...(byGroup.get(group.key) ?? []).map((e) => ({
-                    href: `/admin/setup/${e.key}`,
-                    label: t(`entities.${e.key}.title`),
-                    iconKey: e.iconKey,
-                  })),
-                  { href: '/admin/setup/depreciation', label: t('assetDepreciationSetup.navTitle'), iconKey: 'percent' },
-                  { href: '/admin/setup/tax-depreciation', label: t('taxDepreciationSetup.navTitle'), iconKey: 'landmark' },
-                ]
+              ? fixedAssetsEnabled
+                ? [
+                    ...(byGroup.get(group.key) ?? []).map((e) => ({
+                      href: `/admin/setup/${e.key}`,
+                      label: t(`entities.${e.key}.title`),
+                      iconKey: e.iconKey,
+                    })),
+                    { href: '/admin/setup/depreciation', label: t('assetDepreciationSetup.navTitle'), iconKey: 'percent' },
+                    { href: '/admin/setup/tax-depreciation', label: t('taxDepreciationSetup.navTitle'), iconKey: 'landmark' },
+                  ]
+                : []
               : (byGroup.get(group.key) ?? []).map((e) => ({
                   href: `/admin/setup/${e.key}`,
                   label: t(`entities.${e.key}.title`),

@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/db.ts'
 import { getAuthz } from '@/lib/authz'
+import { isFeatureEnabled } from '@/lib/features'
 
 export const runtime = 'nodejs'
 
@@ -14,6 +15,9 @@ export const runtime = 'nodejs'
 export async function GET(req: Request) {
   const authz = await getAuthz()
   if (!authz) return NextResponse.json({ error: 'unauthorized' }, { status: 401 })
+  if (!(await isFeatureEnabled(authz.user.orgId, 'scripts'))) {
+    return NextResponse.json({ error: 'not found' }, { status: 404 })
+  }
 
   const url = new URL(req.url)
   const kind = url.searchParams.get('documentKind') ?? ''

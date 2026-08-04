@@ -2,12 +2,12 @@ import { NextResponse } from 'next/server'
 import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/db.ts'
 import { ensureCrmDefaults } from '@openbooks/engine/src/crm.ts'
-import { guardPermission } from '../../../../../lib/authz'
+import { guardFeaturePermission } from '../../../../../lib/feature-gates'
 
 export const runtime = 'nodejs'
 
 export async function POST() {
-  const gate = await guardPermission('crm.accounts.create')
+  const gate = await guardFeaturePermission('crm.accounts.create', 'crm')
   if (gate instanceof NextResponse) return gate
   const { user } = gate
   await ensureCrmDefaults(user.orgId, user.id)

@@ -26,6 +26,16 @@ async function withCloseRun(
   const fixture = await createScratchOrg();
   try {
     const actors = await seedFlowActors(fixture.orgId);
+    await db.execute(sql`
+      update orgs
+         set settings = jsonb_set(
+           settings,
+           '{features}',
+           coalesce(settings->'features', '{}'::jsonb) || '{"advancedClose":true}'::jsonb,
+           true
+         )
+       where id = ${fixture.orgId}
+    `);
     const defaults = await ensureCloseDefaults(fixture.orgId, actors.submitterId);
     await db.execute(sql`delete from flows where org_id = ${fixture.orgId} and subject_kind = 'close_run'`);
     const inserted = (await db.execute(sql`

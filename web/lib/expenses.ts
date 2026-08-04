@@ -4,7 +4,7 @@ import { db } from '@openbooks/engine/src/db.ts'
 
 /**
  * Expense-report loaders. Tax/totals math and document numbering are shared
- * with AP (see ./bills.ts — taxRateMap, computeBillTotals, nextDocumentNumber);
+ * with AP (see ./bills.ts — taxProfileMap, computeBillTotals, nextDocumentNumber);
  * only the kind-scoped payload query lives here.
  */
 

@@ -7,9 +7,7 @@ import { seedDashboardDefaultsForOrg } from "./dashboard-defaults.ts";
  * Seed the RBAC foundation:
  *   npx tsx engine/src/seed-roles.ts
  *
- * For every org: upsert the built-in roles into app_roles, then create a
- * role_assignments row for each existing user pointing at the built-in role
- * whose key equals their legacy users.role value.
+ * For every org: upsert the built-in roles into app_roles.
  *
  * Idempotent — built-in role definitions are refreshed on re-run (name,
  * description, permissions), existing assignments are left untouched, and
@@ -37,15 +35,6 @@ for (const org of orgs.rows) {
     `);
   }
 
-  const assigned = (await db.execute(sql`
-    insert into role_assignments (org_id, user_id, role_id)
-    select u.org_id, u.id, r.id
-      from users u
-      join app_roles r on r.org_id = u.org_id and r.key = u.role
-     where u.org_id = ${org.id}
-    on conflict (org_id, user_id, role_id) do nothing
-  `)) as any;
-
   const dashboardCount = await seedDashboardDefaultsForOrg(
     org.id,
     Object.keys(BUILT_IN_ROLES),
@@ -53,7 +42,6 @@ for (const org of orgs.rows) {
 
   console.log(
     `org "${org.name}": ${Object.keys(BUILT_IN_ROLES).length} built-in roles upserted, ` +
-      `${assigned.rowCount ?? 0} role assignment(s) created from users.role, ` +
       `${dashboardCount} dashboard default(s) upserted`,
   );
 }

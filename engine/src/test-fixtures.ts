@@ -7,10 +7,11 @@ import { db } from "./db.ts";
  * subledger integration test needs (book, subsidiary, open period, accounts,
  * inventory items + profiles, a BOM, and a revenue-recognition item/rule).
  *
- * Tests run with no request context, so engine/src/db.ts falls back to trusted
- * bypass-RLS mode; these helpers therefore write across the scratch org freely.
- * dropScratchOrg tears everything down under `openbooks.amend = on` so it can
- * remove the posted journal entries the kernel otherwise pins as immutable.
+ * Callers must create and remove fixtures inside an explicit `withBypass`
+ * boundary, then exercise product behavior in `withOrg`/`withOrgContext`.
+ * Unscoped database access is deliberately denied even in tests. dropScratchOrg
+ * tears everything down under `openbooks.amend = on` so it can remove the
+ * posted journal entries the kernel otherwise pins as immutable.
  */
 
 export interface ScratchOrg {
@@ -187,14 +188,36 @@ export interface FlowActors {
   outsiderId: string;
 }
 
+/** Create an active scratch user and its explicit role assignment atomically. */
+export async function createScratchUser(
+  orgId: string,
+  name: string,
+  roleKey: string,
+  userId = randomUUID(),
+): Promise<string> {
+  await db.transaction(async (tx) => {
+    const role = (await tx.execute(sql`
+      insert into app_roles (org_id, key, name, is_built_in, permissions)
+      values (${orgId}, ${roleKey}, ${roleKey.replaceAll('_', ' ')}, false, '[]'::jsonb)
+      on conflict (org_id, key) do update set updated_at = now()
+      returning id
+    `)) as unknown as { rows: { id: string }[] };
+    await tx.execute(sql`
+      insert into users (id, org_id, email, name, password_hash, is_active)
+      values (${userId}, ${orgId}, ${`u-${userId.slice(0, 8)}@scratch.test`}, ${name}, 'x', true)
+    `);
+    await tx.execute(sql`
+      insert into role_assignments (org_id, user_id, role_id)
+      values (${orgId}, ${userId}, ${role.rows[0]!.id})
+    `);
+  });
+  return userId;
+}
+
 /** Seed the users an approval-flow test needs. Passwords are placeholders. */
 export async function seedFlowActors(orgId: string): Promise<FlowActors> {
   const mk = async (name: string, role: string): Promise<string> => {
-    const id = randomUUID();
-    await db.execute(sql`
-      insert into users (id, org_id, email, name, password_hash, role, is_active)
-      values (${id}, ${orgId}, ${`u-${id.slice(0, 8)}@scratch.test`}, ${name}, 'x', ${role}, true)`);
-    return id;
+    return createScratchUser(orgId, name, role);
   };
   return {
     submitterId: await mk("Submitter", "accountant"),
@@ -286,8 +309,12 @@ export async function dropScratchOrg(orgId: string): Promise<void> {
     // demote them first so the delete can proceed.
     await tx.execute(sql`update inventory_movements set status = 'pending' where org_id = ${orgId}`);
     // documents.posted_entry_id ↔ journal_entries.source_document_id is a
-    // genuine cycle of NOT DEFERRABLE FKs; null one side before deleting.
-    await tx.execute(sql`update documents set posted_entry_id = null where org_id = ${orgId}`);
+    // genuine cycle of NOT DEFERRABLE FKs. The exact-period invariant forbids
+    // a posted row with either identity missing, so the sandbox-only teardown
+    // demotes status and clears both identities in the same guarded update.
+    await tx.execute(sql`update documents
+      set status = 'draft', posted_entry_id = null, posting_period_id = null
+      where org_id = ${orgId}`);
     await tx.execute(sql`delete from tax_group_members where tax_group_id in (select id from tax_groups where org_id = ${orgId})`);
     await tx.execute(sql`delete from file_blobs where version_id in (select v.id from file_versions v join files f on f.id=v.file_id where f.org_id=${orgId})`);
     await tx.execute(sql`delete from file_versions where file_id in (select id from files where org_id=${orgId})`);
@@ -386,9 +413,16 @@ export async function dropScratchOrg(orgId: string): Promise<void> {
       "ownership_consolidation_runs",
       "subsidiary_ownership_interests",
       "documents",
+      "tax_report_lines",
+      "tax_registrations",
+      "tax_return_forms",
+      // Versioned country-pack manifests are immutable except during the
+      // explicit sandbox wipe authorized at the start of this transaction.
+      "tax_country_pack_installations",
       "tax_rates",
       "tax_groups",
       "tax_codes",
+      "tax_jurisdictions",
       "equipment_units",
       "labor_rate_adjustment_targets",
       "labor_rate_adjustments",

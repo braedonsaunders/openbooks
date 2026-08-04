@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server'
 import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/db.ts'
-import { currentUser } from '../../../../lib/auth'
+import { guardPermission } from '../../../../lib/authz'
 import { MODULE_BY_KEY, type OrgNavConfig } from '../../../../lib/nav/registry'
 
 export const runtime = 'nodejs'
@@ -62,9 +62,9 @@ function validate(config: unknown): config is OrgNavConfig {
 }
 
 export async function PUT(req: Request) {
-  const user = await currentUser()
-  if (!user) return NextResponse.json({ error: 'unauthorized' }, { status: 401 })
-  if (user.role !== 'admin') return NextResponse.json({ error: 'admin only' }, { status: 403 })
+  const gate = await guardPermission('admin.customization.manage')
+  if (gate instanceof NextResponse) return gate
+  const { user } = gate
 
   const { config } = (await req.json()) as { config?: unknown }
   if (!validate(config)) return NextResponse.json({ error: 'invalid nav config' }, { status: 400 })
@@ -81,10 +81,30 @@ export async function PUT(req: Request) {
     }
   }
 
-  await db.execute(sql`
-    insert into org_nav_configs (org_id, config)
-    values (${user.orgId}, ${JSON.stringify(config)})
-    on conflict (org_id) do update set config = excluded.config, updated_at = now()
-  `)
+  await db.transaction(async (tx) => {
+    const before = (await tx.execute(sql`
+      select id, config from org_nav_configs where org_id = ${user.orgId} limit 1
+    `)) as unknown as { rows: { id: string; config: OrgNavConfig }[] }
+    const saved = (await tx.execute(sql`
+      insert into org_nav_configs (org_id, config, created_by, updated_by)
+      values (${user.orgId}, ${JSON.stringify(config)}, ${user.id}, ${user.id})
+      on conflict (org_id) do update set
+        config = excluded.config,
+        updated_at = now(),
+        updated_by = ${user.id}
+      returning id
+    `)) as unknown as { rows: { id: string }[] }
+    await tx.execute(sql`
+      insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
+      values (
+        ${user.orgId},
+        'org_nav_configs',
+        ${saved.rows[0]!.id},
+        ${before.rows[0] ? 'update' : 'insert'},
+        ${JSON.stringify({ before: before.rows[0]?.config ?? null, after: config })}::jsonb,
+        ${user.id}
+      )
+    `)
+  })
   return NextResponse.json({ ok: true })
 }

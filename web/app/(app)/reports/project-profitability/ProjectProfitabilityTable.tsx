@@ -7,6 +7,7 @@ import Link from 'next/link'
 import { ChevronDown, ChevronRight } from 'lucide-react'
 import { cn } from '@openbooks/ui'
 import { isNegative } from '../../../../lib/statement-format'
+import type { ExactDecimal } from '../../../../lib/statement-format'
 import type { ReportDrillTarget } from '../../../../lib/report-drill'
 import { ReportDrillLink } from '../ReportDrillLink'
 import { ReportPaper } from '../ReportPaper'
@@ -23,12 +24,12 @@ import {
 } from '../ReportTable'
 
 type Values = {
-  revenue: number
-  cogs: number
-  grossProfit: number
-  expenses: number
-  net: number
-  margin: number | null
+  revenue: ExactDecimal
+  cogs: ExactDecimal
+  grossProfit: ExactDecimal
+  expenses: ExactDecimal
+  net: ExactDecimal
+  margin: ExactDecimal | null
   hours: number
 }
 
@@ -60,7 +61,7 @@ function ValueCells({ values, drills, currency, weight }: { values: Values; dril
     const target = drills[key]
     const negative = value !== null && isNegative(value, key === 'margin' ? 'variance_pct' : 'amount')
     const text = key === 'margin'
-      ? value === null ? '—' : format.number(value, { style: 'percent', minimumFractionDigits: 1, maximumFractionDigits: 1 })
+      ? value === null ? '—' : format.number(Number(value), { style: 'percent', minimumFractionDigits: 1, maximumFractionDigits: 1 })
       : key === 'hours'
         ? format.number(Number(value ?? 0), { maximumFractionDigits: 2 })
         : money(Number(value ?? 0), { currency: currency || undefined, accounting: true })

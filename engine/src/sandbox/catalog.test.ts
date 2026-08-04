@@ -3,6 +3,7 @@ import test from "node:test";
 import {
   deferredDeletionTables,
   deletionOrder,
+  insertionOrder,
   selfRefColumns,
   type TableInfo,
 } from "./catalog.ts";
@@ -56,4 +57,40 @@ test("sandbox wipe breaks document-ledger cycles without deferring the graph", (
     rebaseSet: new Set(),
   });
   assert.deepEqual([...deferred], []);
+});
+
+test("sandbox insertion orders inferred trigger-owned parents before children", () => {
+  const projectTypes = table("NO ACTION");
+  projectTypes.name = "project_types";
+  projectTypes.fks = {};
+  projectTypes.hardFks = {};
+  const versions = table("NO ACTION");
+  versions.name = "project_financial_profile_versions";
+  versions.fks = { project_type_id: "project_types" };
+  versions.hardFks = {};
+
+  const order = insertionOrder({
+    tables: [versions, projectTypes],
+    tenantTables: [versions, projectTypes],
+    rebaseSet: new Set(),
+  });
+  assert.ok(order.indexOf("project_types") < order.indexOf("project_financial_profile_versions"));
+});
+
+test("sandbox insertion opens the deferred document-ledger cycle at the declared breaker", () => {
+  const documents = table("NO ACTION");
+  documents.name = "documents";
+  documents.fks = { posted_entry_id: "journal_entries" };
+  documents.hardFks = {};
+  const entries = table("NO ACTION");
+  entries.name = "journal_entries";
+  entries.fks = { source_document_id: "documents" };
+  entries.hardFks = {};
+
+  const order = insertionOrder({
+    tables: [entries, documents],
+    tenantTables: [entries, documents],
+    rebaseSet: new Set(),
+  });
+  assert.ok(order.indexOf("documents") < order.indexOf("journal_entries"));
 });

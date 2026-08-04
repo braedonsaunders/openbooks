@@ -62,7 +62,7 @@ export const reportDefinitions = pgTable(
     description: text("description"),
     /**
      * The ReportCustomQuery plan (@openbooks/reports types.ts): entity, mode,
-     * columns, breakouts, measures, filters (nested and/or tree), sort, limit.
+     * columns, breakouts, measures, filters (nested and/or tree), sorts, limit.
      * Validated by validateCustomQuery on every write. NULL for `statement`
      * definitions, which carry their spec in `statement` instead.
      */

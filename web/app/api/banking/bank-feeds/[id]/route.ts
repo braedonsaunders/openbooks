@@ -6,7 +6,7 @@ import {
   syncBankFeedNow,
   testBankFeedConnection,
 } from "@openbooks/engine/src/bank-feed-providers.ts";
-import { requirePermission } from "../../../../../lib/authz";
+import { guardFeaturePermission } from "../../../../../lib/feature-gates";
 
 export const runtime = "nodejs";
 
@@ -18,7 +18,8 @@ async function owned(orgId: string, id: string): Promise<boolean> {
 }
 
 export async function PATCH(req: Request, { params }: { params: Promise<{ id: string }> }) {
-  const authz = await requirePermission("admin.setup.manage");
+  const authz = await guardFeaturePermission("admin.setup.manage", "bankFeeds");
+  if (authz instanceof NextResponse) return authz;
   const { id } = await params;
   if (!(await owned(authz.user.orgId, id))) {
     return NextResponse.json({ error: "not found" }, { status: 404 });
@@ -43,7 +44,8 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
 }
 
 export async function DELETE(_req: Request, { params }: { params: Promise<{ id: string }> }) {
-  const authz = await requirePermission("admin.setup.manage");
+  const authz = await guardFeaturePermission("admin.setup.manage", "bankFeeds");
+  if (authz instanceof NextResponse) return authz;
   const { id } = await params;
   await db.execute(sql`delete from bank_feed_connections where id = ${id} and org_id = ${authz.user.orgId}`);
   return NextResponse.json({ ok: true });
@@ -51,7 +53,8 @@ export async function DELETE(_req: Request, { params }: { params: Promise<{ id: 
 
 /** Actions: { action: "test" | "sync" }. */
 export async function POST(req: Request, { params }: { params: Promise<{ id: string }> }) {
-  const authz = await requirePermission("admin.setup.manage");
+  const authz = await guardFeaturePermission("admin.setup.manage", "bankFeeds");
+  if (authz instanceof NextResponse) return authz;
   const { id } = await params;
   if (!(await owned(authz.user.orgId, id))) {
     return NextResponse.json({ error: "not found" }, { status: 404 });

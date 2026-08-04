@@ -7,11 +7,7 @@ import { db } from "../db.ts";
  * Ported from the resolver block of beaconhs-platform's execute-flow-plan.ts,
  * adapted to openbooks' identity model:
  *
- *   role       — resolved against BOTH role models: the legacy users.role enum
- *                AND app_roles/role_assignments membership by role key (the
- *                seeded built-in keys equal the legacy enum values, see
- *                engine/src/seed-roles.ts), matching how web/lib/authz.ts
- *                falls back to users.role when a user has no assignments.
+ *   role       — resolved from explicit app_roles/role_assignments membership.
  *   submitter  — the run's submitter (documents.created_by).
  *   supervisor — submitter's users.partyId → employee_roles.supervisorId
  *                (a party) → the user linked to that party.
@@ -34,16 +30,16 @@ export interface TargetResolutionCtx {
 
 type Rows<T> = { rows: T[] };
 
-/** Active users holding `role` under either role model. */
+/** Active users explicitly assigned to `role`. */
 export async function roleUsers(orgId: string, role: string): Promise<ResolvedUser[]> {
   if (!role) return [];
   const r = (await db.execute(sql`
     select distinct u.id, u.name, u.email
       from users u
-      left join role_assignments ra on ra.user_id = u.id and ra.org_id = u.org_id
-      left join app_roles ar on ar.id = ra.role_id
+      join role_assignments ra on ra.user_id = u.id and ra.org_id = u.org_id
+      join app_roles ar on ar.id = ra.role_id and ar.org_id = u.org_id
      where u.org_id = ${orgId} and u.is_active
-       and (u.role = ${role} or ar.key = ${role})
+       and ar.key = ${role}
   `)) as unknown as Rows<ResolvedUser>;
   return r.rows;
 }
@@ -72,11 +68,9 @@ export async function supervisorOf(orgId: string, userId: string | null | undefi
   return r.rows[0] ?? null;
 }
 
-/** Role keys the user holds (legacy users.role + app_roles assignments). */
+/** Explicit role keys assigned to the user. */
 export async function userRoleKeys(orgId: string, userId: string): Promise<Set<string>> {
   const r = (await db.execute(sql`
-    select u.role as key from users u where u.id = ${userId} and u.org_id = ${orgId}
-    union
     select ar.key from role_assignments ra
       join app_roles ar on ar.id = ra.role_id
      where ra.user_id = ${userId} and ra.org_id = ${orgId}

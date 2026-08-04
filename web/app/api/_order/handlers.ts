@@ -2,9 +2,9 @@ import { NextResponse } from 'next/server'
 import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/db.ts'
 import { deleteDocument, DeleteError } from '@openbooks/engine/src/document-delete.ts'
-import { guardPermission } from '../../../lib/authz'
+import { guardFeaturePermission } from '../../../lib/feature-gates'
 import { convertOrder, ConversionError, type OrderKind } from '../../../lib/order-cycle'
-import { computeOrderTotals, loadOrder, orderTaxRateMap, type OrderLineInput } from './lib'
+import { computeOrderTotals, loadOrder, orderTaxProfileMap, type OrderLineInput } from './lib'
 import { cmp } from '@openbooks/engine/src/money.ts'
 import { persistLineTaxComponents } from '../../../lib/bills'
 import { segmentRegistry, validateExtraDims } from '../../../lib/segments'
@@ -33,7 +33,7 @@ export interface OrderHandlerConfig {
 /** GET: full order payload (header + lines + links) scoped to the org. */
 export function makeGET(cfg: OrderHandlerConfig) {
   return async function GET(_req: Request, { params }: { params: Promise<{ id: string }> }) {
-    const gate = await guardPermission(cfg.readPerm)
+    const gate = await guardFeaturePermission(cfg.readPerm, 'orders')
     if (gate instanceof NextResponse) return gate
     const { id } = await params
     const order = await loadOrder(id, gate.user.orgId, cfg.kind)
@@ -64,7 +64,7 @@ interface OrderPatchBody {
  */
 export function makePATCH(cfg: OrderHandlerConfig) {
   return async function PATCH(req: Request, { params }: { params: Promise<{ id: string }> }) {
-    const gate = await guardPermission(cfg.createPerm)
+    const gate = await guardFeaturePermission(cfg.createPerm, 'orders')
     if (gate instanceof NextResponse) return gate
     const { user } = gate
     const { id } = await params
@@ -197,7 +197,7 @@ export function makePATCH(cfg: OrderHandlerConfig) {
       )
       const computed = computeOrderTotals(
         valid,
-        await orderTaxRateMap(user.orgId, body.documentDate ?? existing.rows[0].document_date),
+        await orderTaxProfileMap(user.orgId, body.documentDate ?? existing.rows[0].document_date),
       )
       totals = { subtotal: computed.subtotal, taxTotal: computed.taxTotal, total: computed.total }
       preparedLines = []
@@ -277,7 +277,7 @@ export function makePATCH(cfg: OrderHandlerConfig) {
  */
 export function makeDELETE(cfg: OrderHandlerConfig) {
   return async function DELETE(_req: Request, { params }: { params: Promise<{ id: string }> }) {
-    const gate = await guardPermission(cfg.createPerm)
+    const gate = await guardFeaturePermission(cfg.createPerm, 'orders')
     if (gate instanceof NextResponse) return gate
     const { user } = gate
     const { id } = await params
@@ -298,7 +298,7 @@ export function makeDELETE(cfg: OrderHandlerConfig) {
 /** POST convert: pull the order forward into `targetKind` via convertOrder(). */
 export function makeConvertPOST(cfg: OrderHandlerConfig) {
   return async function POST(req: Request, { params }: { params: Promise<{ id: string }> }) {
-    const gate = await guardPermission(cfg.createPerm)
+    const gate = await guardFeaturePermission(cfg.createPerm, 'orders')
     if (gate instanceof NextResponse) return gate
     const { user } = gate
     const { id } = await params

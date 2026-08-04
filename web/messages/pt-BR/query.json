@@ -23,7 +23,6 @@
   "runHint": "Escreva SQL acima e pressione Executar ou ⌘⏎. Selecione um trecho para executar apenas ele.",
   "emptyResultSet": "A consulta não retornou colunas",
   "noFilterMatch": "Nenhuma linha corresponde ao seu filtro",
-  "run_legacy": "Executar consulta",
   "rail": {
     "schema": "Schema",
     "snippets": "Trechos",
@@ -33,7 +32,11 @@
     "searchPlaceholder": "Buscar tabelas e colunas…",
     "noMatch": "Nenhuma tabela correspondente",
     "insertTable": "Clique para inserir o nome da tabela",
-    "insertColumn": "Clique para inserir o nome da coluna"
+    "insertColumn": "Clique para inserir o nome da coluna",
+    "showSchema": "Mostrar schema",
+    "browseRows": "Explorar linhas",
+    "insertTableName": "Inserir nome da tabela",
+    "insertSelectTemplate": "Inserir modelo SELECT"
   },
   "history": {
     "count": "{count, plural, one {# consulta} other {# consultas}}",
@@ -74,12 +77,12 @@
       "description": "Contagem de lançamentos agrupados por sua origem."
     },
     "tableSizes": {
-      "label": "Contagem de linhas por tabela",
-      "description": "Linhas vivas estimadas por tabela, das maiores primeiro."
+      "label": "Visão geral do catálogo de consultas",
+      "description": "Visões de relatório governadas e suas contagens de colunas disponíveis."
     },
     "listColumns": {
       "label": "Listar todas as colunas",
-      "description": "Cada coluna do schema public com seu tipo."
+      "description": "Cada coluna disponível no catálogo de consultas governado com seu tipo."
     }
   }
 }

@@ -127,8 +127,8 @@ export interface SourceLedgerVerification {
 
 export interface SyncOptions {
   kind?: "incremental" | "full_migration" | "targeted_repair";
-  orgId?: string;
-  connectionId?: string;
+  orgId: string;
+  connectionId: string;
   /** "auto" resumes from the watermark; null = all history; Date = explicit. */
   since?: Date | null | "auto";
   loadEntitiesFirst?: boolean;
@@ -137,6 +137,11 @@ export interface SyncOptions {
    * nativeChangesByRefs capability and never advances the mirror cursor.
    */
   sourceRefs?: string[];
+  /** Controller authorization for guarded append-only posted-source corrections. */
+  postedChangeAuthorization?: {
+    actorId: string;
+    authorizedAt: Date;
+  };
 }
 
 export function syncErrorMessage(error: unknown, limit = 300): string {
@@ -450,7 +455,7 @@ class SyncVerificationError extends Error {
 export function runFullMigration(
   source: MigrationSource,
   triggeredBy: string,
-  ctxOpts: { orgId?: string; connectionId?: string } = {},
+  ctxOpts: Pick<SyncOptions, "orgId" | "connectionId" | "postedChangeAuthorization">,
 ): Promise<SyncResult> {
   return runSync(source, triggeredBy, {
     kind: "full_migration",
@@ -465,7 +470,7 @@ export function runTargetedRepair(
   source: MigrationSource,
   sourceRefs: string[],
   triggeredBy: string,
-  ctxOpts: { orgId?: string; connectionId?: string } = {},
+  ctxOpts: { orgId: string; connectionId: string },
 ): Promise<SyncResult> {
   const refs = [...new Set(sourceRefs.map(String))];
   if (refs.length === 0) {
@@ -1083,7 +1088,7 @@ async function insertImportedLines(
 export async function runSync(
   source: MigrationSource,
   triggeredBy: string,
-  opts: SyncOptions = {},
+  opts: SyncOptions,
 ): Promise<SyncResult> {
   const started = Date.now();
   const kind = opts.kind ?? "incremental";
@@ -1112,10 +1117,16 @@ export async function runSync(
     );
   }
   const refKey = source.refKey;
-  const connectionId = opts.connectionId ?? null;
-  const org = opts.orgId
-    ? { id: opts.orgId }
-    : (await db.select().from(schema.orgs))[0]!;
+  const connectionId = opts.connectionId;
+  const org = { id: opts.orgId };
+  const postedChangeAuthorization = opts.postedChangeAuthorization;
+  if (
+    postedChangeAuthorization &&
+    (!/^[0-9a-f-]{36}$/i.test(postedChangeAuthorization.actorId) ||
+      Number.isNaN(postedChangeAuthorization.authorizedAt.getTime()))
+  ) {
+    throw new Error("posted-change authorization is invalid");
+  }
 
   const [run] = await db
     .insert(schema.syncRuns)
@@ -1136,9 +1147,7 @@ export async function runSync(
       .from(schema.syncRuns)
       .where(
         sql`${schema.syncRuns.status} = 'ok' and ${schema.syncRuns.syncedThrough} is not null and ${
-          connectionId
-            ? sql`${schema.syncRuns.connectionId} = ${connectionId}`
-            : sql`${schema.syncRuns.source} = ${source.name}`
+          sql`${schema.syncRuns.connectionId} = ${connectionId}`
         }`,
       )
       .orderBy(desc(schema.syncRuns.syncedThrough))
@@ -1454,13 +1463,9 @@ export async function runSync(
         );
         if (!have) {
           // ---- NEW: insert + post through the kernel -------------------------
-          if (
-            doc.posting &&
-            !doc.postingPeriodId &&
-            !ctx.periodFor(doc.postingDate ?? doc.documentDate)
-          ) {
+          if (doc.posting && !doc.postingPeriodId) {
             docsFailed++;
-            skipped.push(`${doc.sourceRef}: no period for ${doc.documentDate}`);
+            skipped.push(`${doc.sourceRef}: posting transaction has no exact source period reference`);
             continue;
           }
           // The source document, lines, tax evidence, journal, and posted flip
@@ -1759,6 +1764,13 @@ export async function runSync(
             taxEvidence,
           );
           if (have.posted) {
+            const automaticCorrection = postedChangeAuthorization
+              ? {
+                  actorId: postedChangeAuthorization.actorId,
+                  requestId: run!.id,
+                  reason: `Controller-authorized ${source.name} append-only source correction for transaction ${doc.sourceRef}; policy authorized ${postedChangeAuthorization.authorizedAt.toISOString()}`,
+                }
+              : undefined;
             await regenerateGlImpactTx(
               tx,
               have.id,
@@ -1770,7 +1782,7 @@ export async function runSync(
                     requestId: run!.id,
                     reason: `Authorized ${source.name} source-exact correction for transaction ${doc.sourceRef}`,
                   }
-                : undefined,
+                : automaticCorrection,
             );
           }
           // The open-balance trigger fires only on posted_entry_id/status
@@ -1793,7 +1805,7 @@ export async function runSync(
               orgId: org.id,
               documentId: have.id,
               action: "update",
-              actorId: null,
+              actorId: postedChangeAuthorization?.actorId ?? null,
               source: "mirror",
               reason: "source_transaction_changed",
               before: auditBefore,

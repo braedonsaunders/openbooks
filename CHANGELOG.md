@@ -4,6 +4,52 @@ OpenBooks follows [Semantic Versioning](https://semver.org/) while the public AP
 and deployment format stabilize. Alpha releases may contain breaking changes;
 each release will document required operator action.
 
+## [0.1.0-alpha.2] - 2026-08-01
+
+### Added
+
+- Adaptive first-run company setup and go-live readiness guidance, with a
+  multi-question operating profile and authoritative Company Settings feature
+  gates
+- Audited, RLS-isolated industry sample-company templates and one-click preview
+  imports
+- Maintained country tax packs for Canada, the United States, Australia, New
+  Zealand, the United Kingdom, Germany, France, Spain, Italy, the Netherlands,
+  Ireland, Singapore, India, South Africa, the UAE, and Japan
+- Governed tenant-scoped query console with schema browsing and table context
+  actions
+- Platform settings for apps, scripts, API keys, API documentation, MCP, query
+  tools, workflows, sandboxes, and optional AI assistance
+
+### Changed
+
+- Replaced pre-launch compatibility fields and fallback models with canonical
+  project, close, reporting, bank-rule, custom-record, and period identities
+- Moved construction payment applications into normal project billing workflows
+- Made journal approvals use the same configurable Flow lifecycle as other
+  transactions
+- Upgraded to Next.js 16.2.12 and Drizzle 1.0.0-rc.4
+- Hardened the Docker Compose installer with separate database-owner and runtime
+  roles, explicit country/currency selection, health checks, and migration-first
+  startup
+
+### Security and integrity
+
+- Added production startup checks that reject database roles capable of
+  bypassing tenant RLS
+- Enforced tenant context across sample data, query tooling, application APIs,
+  scripting, integrations, and background workers
+- Added atomic/idempotent posting and payment operations, effective-dated tax
+  provisioning, and exact period identity controls
+
+### Operator action
+
+- Back up the database before upgrading. The container bootstrap applies all
+  tracked migrations before web and worker services start.
+- Deploy the web and worker processes from the same `v0.1.0-alpha.2` image. This
+  release removes pre-launch compatibility columns and requires schema and code
+  to move together.
+
 ## [0.1.0-alpha.1] - 2026-07-30
 
 First packaged community release.
@@ -39,7 +85,7 @@ First packaged community release.
 
 ### Verification
 
-- 826 release-suite tests passing with no failures or skips at release
+- Release-suite unit and database integration tests passing at release
   preparation
 - PostgreSQL-backed integration canary and full integration suite in CI
 - Playwright browser smoke suite
@@ -56,3 +102,4 @@ First packaged community release.
 - First-party MFA and SAML/OIDC SSO are not yet included
 
 [0.1.0-alpha.1]: https://github.com/braedonsaunders/openbooks/releases/tag/v0.1.0-alpha.1
+[0.1.0-alpha.2]: https://github.com/braedonsaunders/openbooks/releases/tag/v0.1.0-alpha.2

@@ -26,6 +26,39 @@ test("deployment bootstrap serializes migrate and seed work", () => {
     bootstrap.indexOf("await seedProjectTypes") <
       bootstrap.indexOf("pg_advisory_unlock"),
   );
+  assert.match(bootstrap, /await withBypassContext\(async \(\) =>/);
+  assert.ok(
+    bootstrap.indexOf("await withBypassContext") <
+      bootstrap.indexOf("await migrate()"),
+  );
+});
+
+test("constrained schema-owner mode is migration-only and fail-closed", () => {
+  assert.match(
+    bootstrap,
+    /OPENBOOKS_CONSTRAINED_SCHEMA_OWNER_MIGRATION === "1"/,
+  );
+  assert.match(bootstrap, /role\.rolsuper or role\.rolbypassrls/);
+  assert.match(bootstrap, /role\.rolcreatedb/);
+  assert.match(bootstrap, /role\.rolcreaterole/);
+  assert.match(bootstrap, /role\.rolreplication/);
+  assert.match(bootstrap, /posture\.current_user !== runtimeConfig\.roleName/);
+  assert.match(bootstrap, /posture\.current_database !== runtimeDatabase/);
+  assert.match(bootstrap, /posture\.unowned_tables !== 0/);
+
+  const constrainedOwnerBranch = bootstrap.slice(
+    bootstrap.indexOf("if (constrainedSchemaOwnerMigration)"),
+    bootstrap.indexOf("// Some migrations grant privileges"),
+  );
+  assert.match(
+    constrainedOwnerBranch,
+    /await assertConstrainedSchemaOwnerMigrationRole/,
+  );
+  assert.match(constrainedOwnerBranch, /await migrate\(\)/);
+  assert.match(constrainedOwnerBranch, /return;/);
+  assert.doesNotMatch(constrainedOwnerBranch, /ensureReadRole/);
+  assert.doesNotMatch(constrainedOwnerBranch, /ensureRuntimeDatabaseRole/);
+  assert.doesNotMatch(constrainedOwnerBranch, /seed[A-Z]/);
 });
 
 test("row-level security refresh is versioned and drift-driven", () => {

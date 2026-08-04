@@ -33,6 +33,9 @@ export function validateCustomQuery(
     throw new Error('Custom query is required')
   }
   const q = raw as Record<string, unknown>
+  if (Object.prototype.hasOwnProperty.call(q, 'sort')) {
+    throw new Error('Report queries use the ordered "sorts" array')
+  }
   const entity = String(q.entity ?? '')
   const entityMeta = entityMap[entity] ?? null
   if (!entityMeta) {
@@ -133,7 +136,6 @@ export function validateCustomQuery(
       direction: s.direction === 'asc' ? ('asc' as const) : ('desc' as const),
     }
   }
-  const sort = sanitizeSort(q.sort)
   // Multi-level sort: valid columns only, deduped, capped.
   const seenSortCols = new Set<string>()
   const sorts = Array.isArray(q.sorts)
@@ -164,7 +166,6 @@ export function validateCustomQuery(
     measures,
     filters: filtersFinal,
     groupBy,
-    sort,
     ...(sorts.length ? { sorts } : {}),
     ...(Object.keys(columnLabels).length ? { columnLabels } : {}),
     limit,

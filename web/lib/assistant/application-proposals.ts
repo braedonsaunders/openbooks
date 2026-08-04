@@ -4,13 +4,21 @@ import { env } from "@openbooks/engine/src/db.ts";
 import type { Authz } from "../authz";
 import { canonicalJson } from "../application/idempotency-core";
 
-const KEY = Buffer.from(hkdfSync(
-  "sha256",
-  Buffer.from(env.SESSION_SECRET),
-  Buffer.alloc(0),
-  Buffer.from("openbooks.assistant-application-command.v1"),
-  32,
-));
+let cachedKey: Buffer | undefined;
+function commandKey(): Buffer {
+  if (cachedKey) return cachedKey;
+  if (!env.SESSION_SECRET) {
+    throw new Error("SESSION_SECRET is required to sign assistant application commands");
+  }
+  cachedKey = Buffer.from(hkdfSync(
+    "sha256",
+    Buffer.from(env.SESSION_SECRET),
+    Buffer.alloc(0),
+    Buffer.from("openbooks.assistant-application-command.v1"),
+    32,
+  ));
+  return cachedKey;
+}
 const TTL_MS = 10 * 60 * 1000;
 
 interface TokenBody {
@@ -25,7 +33,7 @@ function signature(args: {
   orgId: string;
   exp: number;
 }): string {
-  return createHmac("sha256", KEY).update(canonicalJson(args)).digest("hex");
+  return createHmac("sha256", commandKey()).update(canonicalJson(args)).digest("hex");
 }
 
 /** Bind a proposed command to the exact actor, tenant, input, and expiry. */

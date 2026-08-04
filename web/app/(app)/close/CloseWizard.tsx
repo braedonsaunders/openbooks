@@ -56,6 +56,7 @@ type Props = {
   canReopen: boolean;
   canManageFlows: boolean;
   subsidiaryEnabled: boolean;
+  advancedClose: boolean;
 };
 
 const STAGES = [
@@ -106,8 +107,8 @@ export function CloseWizard(props: Props) {
       await call(`/api/close/runs/${props.run.id}`, { action, comment });
       toast.success(t(`messages.${action}`));
       router.refresh();
-    } catch {
-      toast.error(t("errors.actionFailed"));
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : t("errors.actionFailed"));
     } finally {
       setBusy(false);
     }
@@ -212,7 +213,7 @@ export function CloseWizard(props: Props) {
           <Sparkles size={14} className="text-teal-500" />
           <span>
             {t("continuousValidation", {
-              at: new Date(props.run.last_validated_at).toLocaleString(),
+              at: formatCloseTimestamp(props.run.last_validated_at),
             })}
           </span>
           <code className="ml-auto hidden max-w-44 truncate rounded bg-slate-100 px-1.5 py-0.5 dark:bg-slate-800 sm:block">
@@ -425,6 +426,7 @@ function ReadinessStage(
 function ExceptionRow({ item }: { item: Row }) {
   const t = useTranslations("close");
   const critical = ["critical", "error"].includes(item.severity);
+  const actionHref = closeExceptionActionHref(item.code);
   const values = { count: Number(item.details?.count ?? 0) };
   const title = item.title?.startsWith("close.")
     ? t(item.title.slice(6) as any, values)
@@ -457,9 +459,31 @@ function ExceptionRow({ item }: { item: Row }) {
         <p className="mt-0.5 text-sm text-slate-600 dark:text-slate-300">
           {message}
         </p>
+        {actionHref ? (
+          <Link href={actionHref as any} className="mt-3 inline-flex">
+            <Button size="sm" variant="outline">
+              {t("actions.resolveException")}
+              <ExternalLink size={13} />
+            </Button>
+          </Link>
+        ) : null}
       </div>
     </div>
   );
+}
+
+function closeExceptionActionHref(code: string): string | null {
+  const actions: Record<string, string> = {
+    "drafts-open": "/journal",
+    "posting-period-missing": "/journal",
+    "bank-unreconciled": "/banking",
+    "depreciation-unposted": "/assets",
+    "fx-missing": "/admin/setup/fx-rates",
+    "fx-unrevalued": "/admin/setup/fx-rates",
+    "intercompany-residual": "/reports/trial-balance",
+    "material-variances": "/reports/pnl",
+  };
+  return actions[code] ?? null;
 }
 
 function TaskStage(props: Props & { tasks: Row[] }) {
@@ -513,8 +537,8 @@ function TaskCard(props: Props & { task: Row }) {
       toast.success(t("messages.taskUpdated"));
       setNote("");
       router.refresh();
-    } catch {
-      toast.error(t("errors.actionFailed"));
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : t("errors.actionFailed"));
     } finally {
       setBusy(false);
     }
@@ -532,8 +556,8 @@ function TaskCard(props: Props & { task: Row }) {
       toast.success(t("messages.evidenceAdded"));
       setNote("");
       router.refresh();
-    } catch {
-      toast.error(t("errors.actionFailed"));
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : t("errors.actionFailed"));
     } finally {
       setBusy(false);
     }
@@ -546,8 +570,8 @@ function TaskCard(props: Props & { task: Row }) {
       });
       toast.success(t("messages.revaluationPosted"));
       router.refresh();
-    } catch {
-      toast.error(t("errors.actionFailed"));
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : t("errors.actionFailed"));
     } finally {
       setBusy(false);
     }
@@ -561,8 +585,8 @@ function TaskCard(props: Props & { task: Row }) {
       });
       toast.success(t("messages.consolidationPosted"));
       router.refresh();
-    } catch {
-      toast.error(t("errors.actionFailed"));
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : t("errors.actionFailed"));
     } finally {
       setBusy(false);
     }
@@ -747,7 +771,8 @@ function closeTaskActionHref(task: Row, run: Row): string | null {
     "fx-ready": "/admin/setup/fx-rates",
     "intercompany-balanced": "/reports/trial-balance",
     consolidation: "/reports/trial-balance",
-    "variance-review": "/reports/pnl",
+    "variance-review": `/reports/pnl?period=custom&from=${run.starts_on}&to=${run.ends_on}`,
+    "financial-review": `/reports/trial-balance?period=custom&from=${run.starts_on}&to=${run.ends_on}`,
     "controller-approval": "/approvals",
     "publish-package": `/close?run=${run.id}&stage=publish`,
   };
@@ -802,6 +827,7 @@ function LockStage(
 ) {
   const t = useTranslations("close");
   const rootLocks = props.locks.filter((lock) => !lock.subsidiary_id);
+  const [attestation, setAttestation] = useState("");
   const blockers = props.tasks.filter(
     (task) =>
       task.gate_type === "hard" &&
@@ -857,11 +883,23 @@ function LockStage(
       ) : null}
       <Card>
         <CardHeader>
-          <CardTitle>{t("lock.approvalTitle")}</CardTitle>
-          <CardDescription>{t("lock.approvalDescription")}</CardDescription>
+          <CardTitle>{t(props.advancedClose ? "lock.approvalTitle" : "lock.ownerTitle")}</CardTitle>
+          <CardDescription>{t(props.advancedClose ? "lock.approvalDescription" : "lock.ownerDescription")}</CardDescription>
         </CardHeader>
-        <CardContent className="flex flex-wrap gap-2">
-          {props.run.status === "in_progress" ? (
+        <CardContent className="space-y-3">
+          {!props.advancedClose && props.run.status === "in_progress" ? (
+            <div className="space-y-2">
+              <label htmlFor="close-owner-attestation" className="text-sm font-medium text-slate-800 dark:text-slate-100">{t("lock.attestationLabel")}</label>
+              <Textarea id="close-owner-attestation" value={attestation} onChange={(event) => setAttestation(event.target.value)}
+                placeholder={t("lock.attestationPlaceholder")} maxLength={1000} />
+              <Button disabled={props.busy || blockers.length > 0 || !props.canApprove || attestation.trim().length < 10}
+                onClick={() => props.onAction("attest", attestation.trim())}>
+                <ShieldCheck size={15} />{t("actions.attest")}
+              </Button>
+            </div>
+          ) : null}
+          <div className="flex flex-wrap gap-2">
+          {props.advancedClose && props.run.status === "in_progress" ? (
             <Button
               disabled={props.busy || blockers.length > 0 || !props.canRun}
               onClick={() => props.onAction("request_approval")}
@@ -881,7 +919,7 @@ function LockStage(
           {props.run.status === "approved" ? (
             <Button
               disabled={props.busy || !props.canApprove}
-              onClick={() => props.onAction("close")}
+              onClick={() => window.confirm(t("lock.confirmLock")) && props.onAction("close")}
             >
               <LockKeyhole size={15} />
               {t("actions.lockPeriod")}
@@ -893,7 +931,7 @@ function LockStage(
               {t("lock.complete", { name: props.run.closer_name ?? "" })}
             </div>
           ) : null}
-          {props.canManageFlows ? (
+          {props.advancedClose && props.canManageFlows ? (
             <Button variant="ghost" asChild>
               <Link href="/admin/flows?subject=close_run">
                 <GitBranch size={15} />
@@ -907,6 +945,7 @@ function LockStage(
               {t("actions.documentation")}
             </Link>
           </Button>
+          </div>
         </CardContent>
       </Card>
     </div>
@@ -957,7 +996,7 @@ function PublishStage(
           <div className="space-y-2">
             <Button
               disabled={props.busy || !props.canRun || props.run.status !== "closed"}
-              onClick={() => props.onAction("publish")}
+              onClick={() => window.confirm(t("publish.confirm")) && props.onAction("publish")}
             >
               <Send size={15} />
               {t("actions.publish")}
@@ -1015,7 +1054,7 @@ function PublishStage(
                 </p>
                 <p className="text-xs text-slate-500">
                   {event.actor_name ?? t("timeline.system")} ·{" "}
-                  {new Date(event.at).toLocaleString()}
+                  {formatCloseTimestamp(event.at)}
                 </p>
               </div>
             ))}
@@ -1024,4 +1063,9 @@ function PublishStage(
       </Card>
     </div>
   );
+}
+
+function formatCloseTimestamp(value: string): string {
+  const iso = new Date(value).toISOString();
+  return `${iso.slice(0, 10)} ${iso.slice(11, 16)} UTC`;
 }

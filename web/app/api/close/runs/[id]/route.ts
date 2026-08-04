@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import {
+  attestOwnerManagedClose,
   closeApprovedRun,
   CloseError,
   publishCloseRun,
@@ -23,7 +24,7 @@ export async function POST(
     comment?: string;
   };
   const permission =
-    body.action === "close"
+    body.action === "close" || body.action === "attest"
       ? "close.approve"
       : "close.run";
   const gate = await guardPermission(permission);
@@ -37,13 +38,15 @@ export async function POST(
     }
     if (body.action === "request_approval")
       await requestCloseApproval(gate.user.orgId, id, gate.user.id);
+    else if (body.action === "attest")
+      await attestOwnerManagedClose(gate.user.orgId, id, gate.user.id, body.comment ?? "");
     else if (body.action === "close")
       await closeApprovedRun(gate.user.orgId, id, gate.user.id);
     else if (body.action === "publish")
       await publishCloseRun(gate.user.orgId, id, gate.user.id, body.comment);
     else
       return NextResponse.json(
-        { error: "action must be refresh, request_approval, close, or publish" },
+        { error: "action must be refresh, request_approval, attest, close, or publish" },
         { status: 400 },
       );
     return NextResponse.json({ ok: true });

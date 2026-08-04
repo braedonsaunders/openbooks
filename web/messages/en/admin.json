@@ -7,6 +7,7 @@
       "company": "Company",
       "people": "People & access",
       "workspace": "Workspace",
+      "platform": "Platform & development",
       "activity": "Activity & data",
       "data": "Integrations & data"
     },
@@ -66,6 +67,14 @@
       "apiDocs": {
         "title": "API Docs",
         "description": "Browse the REST API reference for every record and transaction type"
+      },
+      "flows": {
+        "title": "Flows",
+        "description": "Build governed automations, approval gates, conditions, and actions"
+      },
+      "queryConsole": {
+        "title": "Query Console",
+        "description": "Run permission-controlled queries for analysis and integration work"
       },
       "audit": {
         "title": "Audit Log",
@@ -366,6 +375,8 @@
     "linkLabelPrompt": "Label:",
     "addLink": "Add link",
     "deleteLink": "Delete link",
+    "addApp": "Add app shortcut…",
+    "removeApp": "Remove app shortcut",
     "newGroupPrompt": "Workspace name:",
     "addGroup": "Add workspace",
     "deleteGroup": "Delete workspace",
@@ -742,7 +753,7 @@
   "users": {
     "metaTitle": "Users",
     "title": "Users",
-    "description": "Who can sign in, and which roles they hold. A user’s access is the union of their assigned roles; users with no assignment fall back to their legacy role.",
+    "description": "Who can sign in, and which roles they hold. Access is the union of explicitly assigned roles; users without a role have no role-granted access.",
     "manageRoles": "Manage roles",
     "searchPlaceholder": "Search name or email…",
     "statusFilter": "Status",
@@ -754,7 +765,7 @@
       "lastSignIn": "Last sign-in"
     },
     "you": "you",
-    "legacyRole": "legacy: {role}",
+    "unassignedRole": "no role assigned",
     "statusActive": "active",
     "statusInactive": "inactive",
     "requestFailed": "Request failed",
@@ -1108,19 +1119,24 @@
     "taxSetup": {
       "navTitle": "Tax Setup",
       "title": "Tax Setup",
-      "subtitle": "Pick the countries you do business in — and, where supported, their states and provinces. We create every jurisdiction, tax code, return form and nexus registration automatically.",
-      "searchPlaceholder": "Search countries…",
+      "subtitle": "Choose every country, province, territory, state, or district where tax obligations may arise. Canada and the United States include complete first-level jurisdiction coverage.",
+      "searchPlaceholder": "Search countries or jurisdictions…",
       "provisioning": "Setting up…",
       "provisionSelected": "{count, plural, =0 {Set up} one {Set up # jurisdiction} other {Set up # jurisdictions}}",
-      "provisionSuccess": "Created {jurisdictions} jurisdictions, {codes} tax codes, {groups} tax groups and {nexus} nexus registrations",
-      "provisionHint": "Selecting a country provisions its jurisdiction, standard tax code and rate, return form, and nexus registration. Expand a country to choose states or provinces.",
+      "provisionSuccess": "Created {jurisdictions} jurisdictions, {codes} tax codes and {groups} tax groups; prepared {nexus} nexus registrations",
+      "provisionHint": "Detailed packs create maintained jurisdiction, tax-code, rate, return, and nexus content. Country tax setup installs the parent return and effective-dated rates defined by that versioned country pack. Jurisdiction setup creates controlled reference data and an inactive nexus draft without inventing missing statutory content. Review every registration before going live.",
       "installed": "Set up",
-      "statesAvailable": "{count, plural, one {# state/province available} other {# states/provinces available}}",
-      "statesSelected": "{count, plural, one {# state selected} other {# states selected}}",
-      "toggleStates": "Show states for {country}",
+      "detailedPack": "Detailed pack",
+      "countryTaxSetup": "Country tax setup",
+      "jurisdictionSetup": "Jurisdiction setup",
+      "countryPackReady": "Source-backed country pack",
+      "packInDevelopment": "Country pack in development",
+      "statesAvailable": "{count, plural, one {# jurisdiction available} other {# jurisdictions available}}",
+      "statesSelected": "{count, plural, one {# jurisdiction selected} other {# jurisdictions selected}}",
+      "toggleStates": "Show jurisdictions for {country}",
       "step1": {
         "title": "Choose where you do business",
-        "description": "Pick countries (and states/provinces). Each selection creates its jurisdiction, tax code, return form and nexus."
+        "description": "Pick countries and expand them for complete province, territory, state, and district coverage. Each option shows whether a maintained detailed return pack is available."
       },
       "step2": {
         "title": "Review jurisdictions",
@@ -2605,6 +2621,12 @@
         "inventoryMovements": "{count, plural, one {# inventory movement} other {# inventory movements}}",
         "activeSubscriptions": "{count, plural, one {# active subscription} other {# active subscriptions}}",
         "advancedSubscriptionContracts": "{count, plural, one {# active versioned subscription contract} other {# active versioned subscription contracts}}",
+        "openOrders": "{count, plural, one {# issued order with an unconverted balance} other {# issued orders with unconverted balances}}",
+        "submittedTimeEntries": "{count, plural, one {# submitted time entry awaiting review} other {# submitted time entries awaiting review}}",
+        "activeBankFeeds": "{count, plural, one {# active bank-feed connection} other {# active bank-feed connections}}",
+        "activeBankImportSchedules": "{count, plural, one {# active SFTP bank-import schedule} other {# active SFTP bank-import schedules}}",
+        "activeScripts": "{count, plural, one {# active script} other {# active scripts}}",
+        "activeApiKeys": "{count, plural, one {# active API key} other {# active API keys}}",
         "projects": "{count, plural, one {# project} other {# projects}}",
         "activeProjects": "{count, plural, one {# active project} other {# active projects}}",
         "openProjectBillingRequests": "{count, plural, one {# open project billing request} other {# open project billing requests}}",
@@ -2642,6 +2664,9 @@
         "accounting": "Accounting",
         "platform": "Platform"
       }
+    },
+    "readiness": {
+      "navTitle": "Go-live guide"
     },
     "invoicing": {
       "navTitle": "Invoicing"
@@ -2700,14 +2725,14 @@
       "error": "Something went wrong. Please try again.",
       "welcome": {
         "title": "Let's set up your books",
-        "description": "Answer a few quick questions and we'll configure your chart of accounts, features, and tax — everything you need to start posting. You can change anything later.",
+        "description": "Tell us how your company works and OpenBooks will shape a focused starting workspace around it. You'll review every choice before anything changes.",
         "f1": "Chart of accounts",
-        "f2": "Industry presets",
-        "f3": "Feature switches"
+        "f2": "A workspace that fits",
+        "f3": "A guided go-live"
       },
       "company": {
         "title": "Tell us about your business",
-        "description": "The basics. You can edit these anytime in Company Settings.",
+        "description": "These details establish your accounting foundation. Name and legal details remain editable; base currency, industry, and fiscal calendar lock after your first posting.",
         "name": "Business name",
         "namePlaceholder": "e.g. Saunders Construction Ltd.",
         "legalName": "Legal name (optional)",
@@ -2718,14 +2743,36 @@
       },
       "industry": {
         "title": "What's your industry?",
-        "description": "We'll set up a chart of accounts and feature defaults tailored to your line of work. You can customize everything after.",
+        "description": "We'll recommend a chart of accounts and relevant capabilities for the way your industry works. You review the recommendation before it is applied.",
         "search": "Search industries…",
-        "locked": "Your industry can't be changed after transactions have been posted, but you can still customize your chart of accounts and features individually."
+        "locked": "Your industry can't be changed after transactions have been posted, but you can still customize your chart of accounts and features individually.",
+        "classificationOnly": "Your existing chart and posted history will be preserved. This first-time classification only tunes workspace and feature recommendations."
+      },
+      "profile": {
+        "title": "Meet your company where it is",
+        "description": "OpenBooks can stay beautifully simple today and reveal deeper controls as your team and accounting needs grow.",
+        "teamQuestion": "How many people will work in OpenBooks?",
+        "complexityQuestion": "How is financial work reviewed?",
+        "adapting": "OpenBooks uses these concrete working habits—not a vague company-size label—to recommend controls. You will review every enabled capability before anything is applied.",
+        "team": {
+          "solo": { "title": "Just me", "description": "Owner, bookkeeper, or founder" },
+          "small": { "title": "2–10 people", "description": "A small team with shared work" },
+          "medium": { "title": "11–50 people", "description": "Defined responsibilities and reviewers" },
+          "large": { "title": "51+ people", "description": "Specialized teams and stronger controls" }
+        },
+        "complexity": {
+          "essentials": { "title": "Owner-managed", "description": "The same trusted person can prepare, review, post, and close the books." },
+          "growing": { "title": "Team review", "description": "People share the work and important transactions should have a clear reviewer." },
+          "advanced": { "title": "Formal controls", "description": "Duties are separated and approvals, evidence, and close sign-off must be governed." }
+        }
       },
       "operations": {
         "title": "How do you operate?",
-        "description": "Turn on the modules you need. Each can be toggled individually later on the Features page.",
-        "note": "These are starting points — every feature has its own safety check. You can turn any feature on or off later, even ones from other industries.",
+        "description": "Confirm the work you actually do and the financial structure you operate. Your industry answers are already reflected below.",
+        "workTitle": "Work your company does",
+        "structureTitle": "Financial structure",
+        "structureDescription": "Answer these directly. OpenBooks never assumes extra legal entities or foreign-currency accounting from headcount or industry.",
+        "note": "This is a reviewable starting point. Every switch remains authoritative and adjustable under Company Settings → Features, with data-preserving safety checks.",
         "projects": {
           "title": "Projects & job costing",
           "description": "Track jobs with budgets, costing, billing, and profitability."
@@ -2742,6 +2789,14 @@
           "title": "Subscription billing",
           "description": "Plans and subscriptions that auto-generate recurring invoices."
         },
+        "orders": {
+          "title": "Estimates & orders",
+          "description": "Use estimates, sales orders, and purchase orders before invoices or bills."
+        },
+        "crm": {
+          "title": "Sales pipeline",
+          "description": "Track leads, opportunities, activities, and forecasts before a sale."
+        },
         "multiSubsidiary": {
           "title": "Multiple entities",
           "description": "Run more than one legal entity with consolidation and intercompany."
@@ -2751,25 +2806,85 @@
           "description": "Transact in foreign currencies with exchange rates and revaluation."
         }
       },
+      "rhythm": {
+        "title": "Set your accounting rhythm",
+        "description": "Volume changes how much automation helps. Close cadence changes which routines OpenBooks should put in front of you.",
+        "activityQuestion": "Roughly how much activity do you handle each month?",
+        "activityHint": "Count customer and vendor documents, expenses, payments, and bank or card transactions—not journal lines.",
+        "activity": {
+          "light": { "title": "Under 100", "description": "A focused workflow with little automation overhead." },
+          "steady": { "title": "100–1,000", "description": "Enough activity for imports, rules, and ongoing review to save time." },
+          "high": { "title": "More than 1,000", "description": "Automation and continuous monitoring should be ready from the start." }
+        },
+        "closeQuestion": "How often do you intend to formally close and report the books?",
+        "close": {
+          "monthly": { "title": "Every month", "description": "Recommended for timely management reporting and early error detection." },
+          "quarterly": { "title": "Every quarter", "description": "A lighter formal cycle, with banking still reconciled throughout the quarter." },
+          "annual": { "title": "At year-end", "description": "Minimal formal close cadence; routine reconciliation remains important." }
+        },
+        "note": "These are starting preferences, not limits. OpenBooks will never weaken posting integrity or close controls because activity is low."
+      },
+      "launch": {
+        "title": "Shape your go-live",
+        "description": "A few final answers let the readiness guide focus on the work between setup and your first live posting.",
+        "booksQuestion": "Where are the books starting?",
+        "books": {
+          "fresh": { "title": "Starting fresh", "description": "There are no prior balances to bring over; the ledger starts from zero." },
+          "migrate": { "title": "Moving existing books", "description": "Opening balances, open invoices and bills, and a cutover date need verification." }
+        },
+        "taxQuestion": "Does this company collect sales tax, GST/HST, or VAT?",
+        "tax": {
+          "registered": "Yes, registered",
+          "not_registered": "No, not required",
+          "unsure": "Not sure yet"
+        },
+        "toolsQuestion": "Which of these should be ready from day one?",
+        "features": {
+          "bankFeeds": { "title": "Connected banking", "description": "Automatically bring in bank activity." },
+          "onlinePayments": { "title": "Online payments", "description": "Let customers pay from invoices." },
+          "fixedAssets": { "title": "Asset depreciation", "description": "Track assets and depreciation schedules." }
+        },
+        "sample": {
+          "question": "Would you like a company you can explore immediately?",
+          "title": "Create an industry sample company",
+          "description": "A realistic company with transactions, projects, reports, and closed periods—matched to the industry you chose.",
+          "safety": "It is a separate, clearly marked workspace. Sample entries never enter these books, and outbound email, payments, APIs, and integrations are disabled.",
+          "error": "Your live company was configured, but the optional sample company could not be prepared. You can retry under Import & Export."
+        }
+      },
       "review": {
         "title": "Review your setup",
         "description": "Here's what we'll configure. Click 'Set up my books' to apply everything.",
         "companyName": "Business name",
+        "legalName": "Legal name",
+        "notProvided": "Not provided",
         "country": "Country",
         "currency": "Currency",
+        "fiscalYear": "Fiscal year starts",
+        "teamSize": "OpenBooks team",
+        "complexity": "Starting workspace",
+        "bookStart": "Ledger starting point",
+        "taxPosition": "Tax position",
+        "monthlyActivity": "Monthly activity",
+        "closeCadence": "Formal close",
+        "sampleCompany": "Exploration workspace",
+        "sampleCompanyYes": "Create a separate industry sample company",
+        "sampleCompanyNo": "Not now",
         "industry": "Industry",
         "chartOfAccounts": "Chart of accounts",
+        "chartPreserved": "Existing chart preserved",
         "accounts": "accounts",
         "features": "Features enabled",
-        "note": "After setup, you can fine-tune every account, feature, and tax setting from Company Settings."
+        "note": "This creates your accounting foundation and starting workspace. The readiness guide will show anything still needed before your first live posting. Every optional capability remains adjustable from Company Settings → Features.",
+        "notePreserved": "This updates company classification and workspace recommendations without changing the existing chart or posted history. Every optional capability remains adjustable from Company Settings → Features."
       },
       "applying": {
         "title": "Setting up your books…",
         "description": "Creating your chart of accounts, configuring features, and mapping control accounts."
       },
       "done": {
-        "title": "You're all set!",
-        "description": "Your books are configured and ready. Head to the dashboard to get started."
+        "title": "Your starting workspace is ready",
+        "description": "Next, the go-live guide will verify the remaining company, tax, numbering, banking, and opening-balance decisions before you post live activity."
       },
       "industries": {
         "general_business": {
@@ -3136,6 +3251,10 @@
       "title": "Continuous close",
       "description": "Always-on close checks in addition to the period close."
     },
+    "advancedClose": {
+      "title": "Advanced close governance",
+      "description": "Evidence-heavy close blueprints, independent approval routing, controlled locks, and governed close-package publication. Core month-end close remains available when this is off."
+    },
     "flows": {
       "title": "Flows & approvals",
       "description": "Workflow automation: triggers, conditions, approval gates."
@@ -3143,6 +3262,22 @@
     "apps": {
       "title": "Apps",
       "description": "Installable extensions and the app marketplace."
+    },
+    "scripts": {
+      "title": "Scripts",
+      "description": "Run sandboxed JavaScript at controlled transaction, schedule, bulk, client, and endpoint trigger points."
+    },
+    "apiAccess": {
+      "title": "REST API",
+      "description": "Create scoped API keys and expose the versioned, tenant-aware REST API and its live reference."
+    },
+    "mcpAccess": {
+      "title": "MCP access",
+      "description": "Expose governed OpenBooks tools to MCP clients through scoped API-key authentication."
+    },
+    "queryConsole": {
+      "title": "Query console",
+      "description": "Allow authorized users to run read-only, tenant-scoped SQL against the live reporting schema."
     },
     "bankFeeds": {
       "title": "Bank Feeds",

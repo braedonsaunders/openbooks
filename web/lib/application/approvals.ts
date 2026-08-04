@@ -15,7 +15,7 @@ export async function listApprovalWorklist(context: ApplicationContext) {
   const gates = await worklistGates(
     context.authz.user.orgId,
     context.authz.user.id,
-    [context.authz.user.role],
+    context.authz.user.roles.map((role) => role.key),
   );
   const allowed = context.authz.allowedSubsidiaryIds;
   return allowed === null

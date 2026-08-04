@@ -20,9 +20,8 @@ export type StatementPdfRow = {
   indent?: number
   /** Column-aligned values; null/undefined renders blank. Percentages are raw
    *  (e.g. -83.4 → "(83.4%)"); amounts should already be scaled by the caller.
-   *  Exact decimal STRINGS preserve financial precision end-to-end; numbers are
-   *  still accepted for legacy callers. */
-  values?: (number | string | null | undefined)[]
+   *  Exact decimal strings preserve financial precision end-to-end. */
+  values?: (string | null | undefined)[]
 }
 
 export type StatementPdfStyle = 'formal' | 'modern'

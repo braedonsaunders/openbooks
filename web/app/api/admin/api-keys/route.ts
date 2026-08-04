@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { sql, type SQL } from "drizzle-orm";
 import { db } from "@openbooks/engine/src/db.ts";
-import { guardPermission } from "../../../../lib/authz";
+import { guardFeaturePermission } from "../../../../lib/feature-gates";
 import { generateApiKey } from "../../../../lib/api-auth";
 import {
   isCataloguePermission,
@@ -57,7 +57,7 @@ async function audit(args: {
 
 /** List all keys in the org (without secrets). */
 export async function GET() {
-  const gate = await guardPermission("api.keys.manage");
+  const gate = await guardFeaturePermission("api.keys.manage", "apiAccess");
   if (gate instanceof NextResponse) return gate;
 
   const r = (await db.execute(sql`
@@ -74,7 +74,7 @@ export async function GET() {
 
 /** Create a new key — returns the plaintext ONCE. */
 export async function POST(req: Request) {
-  const gate = await guardPermission("api.keys.manage");
+  const gate = await guardFeaturePermission("api.keys.manage", "apiAccess");
   if (gate instanceof NextResponse) return gate;
   const actor = gate.user;
 
@@ -129,7 +129,7 @@ export async function POST(req: Request) {
 
 /** Update a key — name, description, scopes, or revoke (is_active = false). */
 export async function PATCH(req: Request) {
-  const gate = await guardPermission("api.keys.manage");
+  const gate = await guardFeaturePermission("api.keys.manage", "apiAccess");
   if (gate instanceof NextResponse) return gate;
   const actor = gate.user;
 
@@ -200,7 +200,7 @@ export async function PATCH(req: Request) {
 
 /** Revoke a key (soft-delete: is_active = false, preserves audit trail). */
 export async function DELETE(req: Request) {
-  const gate = await guardPermission("api.keys.manage");
+  const gate = await guardFeaturePermission("api.keys.manage", "apiAccess");
   if (gate instanceof NextResponse) return gate;
   const actor = gate.user;
 

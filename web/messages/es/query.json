@@ -23,7 +23,6 @@
   "runHint": "Escribe SQL arriba y pulsa Ejecutar o ⌘⏎. Selecciona texto para ejecutar solo eso.",
   "emptyResultSet": "La consulta no devolvió columnas",
   "noFilterMatch": "Ninguna fila coincide con el filtro",
-  "run_legacy": "Ejecutar consulta",
   "rail": {
     "schema": "Esquema",
     "snippets": "Fragmentos",
@@ -33,7 +32,11 @@
     "searchPlaceholder": "Buscar tablas y columnas…",
     "noMatch": "No hay tablas coincidentes",
     "insertTable": "Clic para insertar el nombre de la tabla",
-    "insertColumn": "Clic para insertar el nombre de la columna"
+    "insertColumn": "Clic para insertar el nombre de la columna",
+    "showSchema": "Mostrar esquema",
+    "browseRows": "Explorar filas",
+    "insertTableName": "Insertar nombre de tabla",
+    "insertSelectTemplate": "Insertar plantilla SELECT"
   },
   "history": {
     "count": "{count, plural, one {# consulta} other {# consultas}}",
@@ -74,12 +77,12 @@
       "description": "Recuento de asientos agrupados por su origen."
     },
     "tableSizes": {
-      "label": "Filas por tabla",
-      "description": "Filas activas estimadas por tabla, de mayor a menor."
+      "label": "Resumen del catálogo de consultas",
+      "description": "Vistas de informes gobernadas y su número de columnas disponibles."
     },
     "listColumns": {
       "label": "Listar todas las columnas",
-      "description": "Cada columna del esquema público con su tipo."
+      "description": "Cada columna disponible del catálogo de consultas gobernado con su tipo."
     }
   }
 }

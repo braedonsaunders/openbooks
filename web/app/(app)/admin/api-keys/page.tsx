@@ -8,6 +8,7 @@ import { SearchInput } from '../../../../components/search-input'
 import { Pagination } from '../../../../components/pagination'
 import { buildListDrawerHref, isUuid, parseListParams } from '../../../../lib/list-params'
 import { requirePermission } from '../../../../lib/authz'
+import { requireFeatureEnabled } from '../../../../lib/feature-gates'
 import { dateTime } from '../../../../lib/format'
 import { NewKeyButton, KeyDrawer } from './KeyDrawer'
 
@@ -19,6 +20,7 @@ export default async function ApiKeysPage({
   searchParams: Promise<Record<string, string | string[] | undefined>>
 }) {
   const authz = await requirePermission('api.keys.manage')
+  await requireFeatureEnabled(authz.user.orgId, 'apiAccess')
   const t = await getTranslations('admin.apiKeys')
   const tHub = await getTranslations('admin.hub')
   const sp = await searchParams

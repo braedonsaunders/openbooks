@@ -2,6 +2,7 @@ import "server-only";
 import { sql } from "drizzle-orm";
 import { db } from "@openbooks/engine/src/db.ts";
 import {
+  attestOwnerManagedClose,
   closeApprovedRun,
   CloseError,
   decidePeriodReopen,
@@ -135,13 +136,13 @@ export async function startApplicationCloseRun(context: ApplicationContext, inpu
 
 export async function advanceCloseRun(context: ApplicationContext, input: {
   runId: string;
-  action: "refresh" | "request_approval" | "close" | "publish";
+  action: "refresh" | "request_approval" | "attest" | "close" | "publish";
   comment?: string;
   idempotencyKey: string;
 }): Promise<{ replayed: boolean; result: Record<string, unknown> }> {
   assertApplicationPermission(
     context,
-    input.action === "close" ? "close.approve" : "close.run",
+    input.action === "attest" || input.action === "close" ? "close.approve" : "close.run",
   );
   await closeRun(context, input.runId);
   const outcome = await executeIdempotent({
@@ -156,6 +157,8 @@ export async function advanceCloseRun(context: ApplicationContext, input: {
         }
         if (input.action === "request_approval") {
           await requestCloseApproval(context.authz.user.orgId, input.runId, context.authz.user.id);
+        } else if (input.action === "attest") {
+          await attestOwnerManagedClose(context.authz.user.orgId, input.runId, context.authz.user.id, input.comment ?? "");
         } else if (input.action === "close") {
           await closeApprovedRun(context.authz.user.orgId, input.runId, context.authz.user.id);
         } else {

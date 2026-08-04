@@ -3,6 +3,7 @@
     "title": "勘定科目表",
     "description": "自然符号の現在残高(貸借対照表は累計、損益は当会計年度)を集計勘定を通じてロールアップします。",
     "searchPlaceholder": "番号または名称を検索…",
+    "views": { "list": "リスト", "hierarchy": "階層" },
     "newAccount": "新規勘定",
     "viewRegister": "元帳を表示",
     "expand": "勘定を展開",

@@ -12,6 +12,8 @@ import { pool } from "./db.ts";
  */
 
 export interface UserSqlOptions {
+  /** Organization whose forced-RLS policies must govern this query. */
+  orgId: string;
   maxRows?: number;
   timeoutMs?: number;
 }
@@ -47,7 +49,45 @@ export function validateUserSql(sqlText: string): string {
   return sqlText.trim().replace(/;\s*$/, "");
 }
 
-export async function runUserSql(sqlText: string, opts: UserSqlOptions = {}): Promise<UserSqlResult> {
+async function prepareQueryContext(client: import('pg').PoolClient, orgId: string): Promise<void> {
+  // The tenant identity is connection-local and owned by the application role.
+  // openbooks_read runs inside READ ONLY and has no privilege on this temp table;
+  // governed views can read it only through openbooks_query_org_id().
+  await client.query(`
+    create temporary table if not exists openbooks_query_context (
+      org_id uuid not null
+    ) on commit preserve rows
+  `);
+  await client.query("truncate table pg_temp.openbooks_query_context");
+  await client.query("insert into pg_temp.openbooks_query_context (org_id) values ($1)", [orgId]);
+}
+
+async function clearQueryContext(client: import('pg').PoolClient): Promise<void> {
+  await client.query("truncate table pg_temp.openbooks_query_context");
+}
+
+async function beginGovernedReadTransaction(
+  client: import('pg').PoolClient,
+  orgId: string,
+  timeoutMs: number,
+): Promise<void> {
+  await client.query("begin transaction read only");
+  // The governed views deliberately narrow the reporting surface, but tenant
+  // isolation still belongs to PostgreSQL RLS. Establish the same tenant GUCs
+  // used by normal application requests before assuming the SELECT-only role;
+  // this makes every underlying base-table policy independently enforce the
+  // organization boundary. The temp-table context remains a second, immutable
+  // predicate owned by the application connection.
+  await client.query(
+    "select set_config('app.current_org', $1, true), set_config('app.bypass_rls', 'off', true)",
+    [orgId],
+  );
+  await client.query("set local role openbooks_read");
+  await client.query("set local search_path = openbooks_query, pg_catalog");
+  await client.query(`set local statement_timeout = ${timeoutMs}`);
+}
+
+export async function runUserSql(sqlText: string, opts: UserSqlOptions): Promise<UserSqlResult> {
   const maxRows = Math.min(opts.maxRows ?? 1_000, 50_000);
   const timeoutMs = Math.min(opts.timeoutMs ?? 5_000, 60_000);
 
@@ -57,9 +97,8 @@ export async function runUserSql(sqlText: string, opts: UserSqlOptions = {}): Pr
   const client = await pool.connect();
   const started = Date.now();
   try {
-    await client.query("begin transaction read only");
-    await client.query("set local role openbooks_read");
-    await client.query(`set local statement_timeout = ${timeoutMs}`);
+    await prepareQueryContext(client, opts.orgId);
+    await beginGovernedReadTransaction(client, opts.orgId, timeoutMs);
     const res = await client.query(wrapped);
     await client.query("rollback");
     const truncated = res.rows.length > maxRows;
@@ -75,7 +114,13 @@ export async function runUserSql(sqlText: string, opts: UserSqlOptions = {}): Pr
     await client.query("rollback").catch(() => {});
     throw e;
   } finally {
-    client.release();
+    try {
+      await clearQueryContext(client);
+      client.release();
+    } catch (error) {
+      client.release(error as Error);
+      throw error;
+    }
   }
 }
 
@@ -97,12 +142,11 @@ export interface SchemaTable {
  * inside a READ ONLY transaction, so it lists exactly what a user could
  * actually query — nothing they lack privileges on leaks through.
  */
-export async function listSchema(): Promise<SchemaTable[]> {
+export async function listSchema(orgId: string): Promise<SchemaTable[]> {
   const client = await pool.connect();
   try {
-    await client.query("begin transaction read only");
-    await client.query("set local role openbooks_read");
-    await client.query("set local statement_timeout = 10000");
+    await prepareQueryContext(client, orgId);
+    await beginGovernedReadTransaction(client, orgId, 10_000);
     const res = await client.query<{
       table_name: string;
       table_type: string;
@@ -121,8 +165,8 @@ export async function listSchema(): Promise<SchemaTable[]> {
          join information_schema.tables t
            on t.table_schema = c.table_schema
           and t.table_name = c.table_name
-        where c.table_schema = 'public'
-          and t.table_type in ('BASE TABLE', 'VIEW')
+        where c.table_schema = 'openbooks_query'
+          and t.table_type = 'VIEW'
         order by c.table_name, c.ordinal_position`,
     );
     await client.query("rollback");
@@ -149,14 +193,20 @@ export async function listSchema(): Promise<SchemaTable[]> {
     await client.query("rollback").catch(() => {});
     throw e;
   } finally {
-    client.release();
+    try {
+      await clearQueryContext(client);
+      client.release();
+    } catch (error) {
+      client.release(error as Error);
+      throw error;
+    }
   }
 }
 
 /**
- * Verify the SELECT-only role exists and is granted to us. Role creation is
- * a superuser bootstrap step (see schema/migrations/README): create role
- * openbooks_read nologin + grant select on all tables + grant to app user.
+ * Verify the NOLOGIN query role exists and is granted to the application
+ * role. Bootstrap creates/grants the role; the governed catalog migration is
+ * the only place that grants it SELECT privileges.
  */
 export async function ensureReadRole(): Promise<void> {
   const client = await pool.connect();

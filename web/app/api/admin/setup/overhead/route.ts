@@ -60,7 +60,7 @@ export async function POST(req: Request) {
       await db.transaction(async (tx) => {
         for (const id of typeIds) {
           const current = (await tx.execute(sql`
-            select coalesce(version.financial_profile, pt.financial_profile) as financial_profile
+            select version.financial_profile as financial_profile
               from project_types pt
               left join lateral (
                 select v.financial_profile

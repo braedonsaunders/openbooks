@@ -20,18 +20,25 @@ type DashboardDefault = {
 
 async function loadAssignedRoleDefault(
   authz: Authz,
-  role: RoleTier,
 ): Promise<DashboardDefault | null> {
+  const roleKeys = authz.user.roles.map(({ key }) => key)
+  if (roleKeys.length === 0) return null
+  const roleMembership = sql.join(roleKeys.map((key) => sql`${key}`), sql`, `)
+  const rolePriority = sql.join(
+    roleKeys.map((key, index) => sql`when role_key = ${key} then ${index}`),
+    sql` `,
+  )
   const res = (await db.execute(sql`
-    select layout
+    select role_key, layout
       from role_dashboard_layouts
-     where org_id = ${authz.user.orgId} and role_key = ${authz.user.role}
+     where org_id = ${authz.user.orgId} and role_key in (${roleMembership})
+     order by case ${rolePriority} else ${roleKeys.length} end
      limit 1
   `)) as any
   if (!res.rows[0]) return null
   return {
     layout: res.rows[0].layout as DashboardLayoutData,
-    sourceKey: dashboardSourceKeyForRole(authz.user.role),
+    sourceKey: dashboardSourceKeyForRole(res.rows[0].role_key),
   }
 }
 
@@ -39,7 +46,7 @@ export async function resolveDashboardDefault(
   authz: Authz,
   role: RoleTier,
 ): Promise<DashboardDefault> {
-  const roleDefault = await loadAssignedRoleDefault(authz, role)
+  const roleDefault = await loadAssignedRoleDefault(authz)
   if (roleDefault) return roleDefault
   return {
     layout: DEFAULT_DASHBOARD_LAYOUTS[role] ?? DEFAULT_DASHBOARD_LAYOUTS.viewer,

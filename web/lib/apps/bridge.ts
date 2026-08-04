@@ -30,7 +30,7 @@ export type BridgeMethod = (typeof BRIDGE_METHODS)[number]
 
 export interface BridgeContext {
   app: { id: string; key: string; name: string }
-  user: { id: string; name: string; role: string } | null
+  user: { id: string; name: string; roles: string[] } | null
 }
 
 export interface BridgeRequest {

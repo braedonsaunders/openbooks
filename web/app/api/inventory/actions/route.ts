@@ -4,9 +4,9 @@ import { db } from '@openbooks/engine/src/db.ts'
 import { fromUnits, toUnits } from '@openbooks/engine/src/money.ts'
 import {
   adjustInventory,
-  allocateLandedCost,
   buildAssembly,
   issueInventory,
+  postLandedCostVoucher,
   receiveInventory,
   reverseInventoryMovement,
   transferInventory,
@@ -144,17 +144,16 @@ export async function POST(req: Request) {
       if (!body.offsetAccountId || !isUuid(body.offsetAccountId)) {
         return NextResponse.json({ error: 'freight account required' }, { status: 422 })
       }
-      const res = await allocateLandedCost(user.orgId, user.id, {
-        itemId: body.itemId,
-        stockLocationId: body.stockLocationId,
+      const res = await postLandedCostVoucher(user.orgId, user.id, {
         amount: quantity,
         basis: body.basis === 'quantity' ? 'quantity' : 'value',
         freightAccountId: body.offsetAccountId,
         subsidiaryId,
-        date,
+        voucherDate: date,
         memo: body.memo ?? null,
+        targets: [{ itemId: body.itemId, stockLocationId: body.stockLocationId }],
       })
-      return NextResponse.json({ ok: true, entryId: res.entryId, value: quantity })
+      return NextResponse.json({ ok: true, id: res.id, documentNumber: res.documentNumber, entryId: res.entryId, value: quantity })
     }
     if (body.action === 'transfer') {
       if (!body.toStockLocationId || !isUuid(body.toStockLocationId)) {

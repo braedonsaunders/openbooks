@@ -1,4 +1,3 @@
-import { redirect } from 'next/navigation'
 import { getTranslations } from 'next-intl/server'
 import { PageHeader } from '@openbooks/ui'
 import { ListPageLayout } from '../../../components/page-layout'
@@ -18,18 +17,10 @@ export async function generateMetadata() {
 
 /**
  * Expense-reports dashboard — the purchasing group's expenses cockpit (a
- * strip tab beside Purchasing and Accounts Payable). The report LIST lives at
- * /expenses/reports and is reached from the menu; legacy ?expense= flyout
- * links redirect there so old drill-throughs keep working.
+ * strip tab beside Purchasing and Accounts Payable). The report list lives at
+ * /expenses/reports and is reached from the menu.
  */
-export default async function ExpensesHome({
-  searchParams,
-}: {
-  searchParams: Promise<Record<string, string | string[] | undefined>>
-}) {
-  const sp = await searchParams
-  if (typeof sp.expense === 'string') redirect(`/expenses/reports?expense=${sp.expense}`)
-
+export default async function ExpensesHome() {
   const authz = await requirePermission('expenses.read')
   const t = await getTranslations('expenses')
   const data = await expensesDashboard(authz.user.orgId)

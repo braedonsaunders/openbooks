@@ -23,6 +23,7 @@ import {
 } from "./manifest.ts";
 import type { SimContext } from "./context.ts";
 import type { SimOrg } from "./world.ts";
+import { autopilotDay } from "./autopilot.ts";
 
 /**
  * Day-loop primitives. The operator (Claude Code) drives the loop: `dayStart`
@@ -117,6 +118,40 @@ export interface LoadedRun {
 
 export function loadRun(runDir: string): LoadedRun {
   return { manifest: readManifest(runDir), world: readWorld(runDir) };
+}
+
+/**
+ * Drive a deterministic run to its configured end without the CLI or an LLM
+ * persona. Product sample-company provisioning uses this only when a prepared,
+ * verified template is not already installed. The same day-start, canonical
+ * operations, close controls, and invariant oracle used by the simulator CLI
+ * remain in force.
+ */
+export async function autopilotRunToEnd(runDir: string): Promise<RunManifest> {
+  for (;;) {
+    const start = await dayStart(runDir);
+    if (start.halted) {
+      throw new Error(
+        `sample simulation halted on ${start.simDate}: ${start.halted.failures.map((failure) => failure.invariant).join(", ")}`,
+      );
+    }
+    if (start.done) return loadRun(runDir).manifest;
+
+    const { manifest, world } = loadRun(runDir);
+    await withSimClock(manifest.simDate, () =>
+      withOrgContext(manifest.orgId, async () => {
+        await autopilotDay(getProfile(manifest.profileId), world, manifest);
+      }),
+    );
+    writeManifest(runDir, manifest);
+
+    const end = await dayEnd(runDir);
+    if (end.halted) {
+      throw new Error(
+        `sample simulation halted on ${end.simDate}: ${end.halted.failures.map((failure) => failure.invariant).join(", ")}`,
+      );
+    }
+  }
 }
 
 /** Halt helper: record the defect, flag the manifest, persist. */

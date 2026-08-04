@@ -192,7 +192,7 @@ export default async function LaborPricingPage({
         orgId,
         userId: authz.user.id,
         recordType: "labor_rate_card",
-        userRoles: [authz.user.role],
+        userRoles: authz.user.roles.map(({ key }) => key),
         headerDefs,
         lineDefs: [],
         explicitLayoutId: pickString(sp.form),

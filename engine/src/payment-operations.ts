@@ -789,6 +789,7 @@ export async function runDuePaymentSchedules(now = new Date()): Promise<Array<{ 
            s.action, s.created_by, p.currency, p.subsidiary_id
       from payment_schedules s
       join payment_bank_profiles p on p.id = s.payment_bank_profile_id and p.is_active
+      join orgs o on o.id = s.org_id and o.env_kind = 'production'
      where s.is_active and s.next_run_at <= ${now}
      order by s.next_run_at
   `)) as unknown as { rows: Array<{

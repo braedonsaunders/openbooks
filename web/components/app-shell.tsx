@@ -40,7 +40,7 @@ export function AppShell({
   account: {
     name: string
     email: string
-    role: string
+    roles: ReadonlyArray<{ key: string; name: string }>
     localePreference: Locale | null
     navModePreference: NavMode | null
   }
@@ -94,7 +94,7 @@ export function AppShell({
               <AccountMenu
                 name={account.name}
                 email={account.email}
-                role={account.role}
+                roles={account.roles}
                 localePreference={account.localePreference}
                 navModePreference={account.navModePreference}
                 environments={environments}

@@ -41,7 +41,7 @@ export async function POST(req: Request) {
   }
 
   const target = (await db.execute(sql`
-    select id, role from users where id = ${body.userId} and org_id = ${actor.orgId}`)) as any;
+    select id from users where id = ${body.userId} and org_id = ${actor.orgId}`)) as any;
   if (!target.rows[0]) return NextResponse.json({ error: "user not found" }, { status: 404 });
 
   switch (body.action) {
@@ -73,21 +73,39 @@ export async function POST(req: Request) {
       if (!body.roleId || !isUuid(body.roleId)) {
         return NextResponse.json({ error: "roleId required" }, { status: 400 });
       }
-      const deleted = (await db.execute(sql`
-        delete from role_assignments
-         where org_id = ${actor.orgId} and user_id = ${body.userId} and role_id = ${body.roleId}
-        returning id`)) as any;
-      if (deleted.rows[0]) {
-        await audit({
-          orgId: actor.orgId,
-          tableName: "role_assignments",
-          rowId: deleted.rows[0].id,
-          action: "delete",
-          changes: { userId: [body.userId, null], roleId: [body.roleId, null] },
-          actorId: actor.id,
-        });
-      }
-      return NextResponse.json({ ok: true });
+      return db.transaction(async (tx) => {
+        await tx.execute(sql`
+          select pg_advisory_xact_lock(hashtextextended(${`openbooks:user-roles:${actor.orgId}:${body.userId}`}, 0))
+        `);
+        const assignments = (await tx.execute(sql`
+          select id, role_id from role_assignments
+           where org_id = ${actor.orgId} and user_id = ${body.userId}
+           order by id
+        `)) as unknown as { rows: { id: string; role_id: string }[] };
+        if (!assignments.rows.some((row) => row.role_id === body.roleId)) {
+          return NextResponse.json({ ok: true });
+        }
+        if (assignments.rows.length === 1) {
+          return NextResponse.json(
+            { error: "an active user must retain at least one role" },
+            { status: 409 },
+          );
+        }
+        const deleted = (await tx.execute(sql`
+          delete from role_assignments
+           where org_id = ${actor.orgId} and user_id = ${body.userId} and role_id = ${body.roleId}
+          returning id
+        `)) as unknown as { rows: { id: string }[] };
+        if (deleted.rows[0]) {
+          await tx.execute(sql`
+            insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
+            values (${actor.orgId}, 'role_assignments', ${deleted.rows[0].id}, 'delete',
+                    ${JSON.stringify({ userId: [body.userId, null], roleId: [body.roleId, null] })}::jsonb,
+                    ${actor.id})
+          `);
+        }
+        return NextResponse.json({ ok: true });
+      });
     }
     case "set-active": {
       if (typeof body.isActive !== "boolean") {
@@ -98,6 +116,20 @@ export async function POST(req: Request) {
           { error: "you cannot deactivate your own account" },
           { status: 400 },
         );
+      }
+      if (body.isActive) {
+        const assignment = (await db.execute(sql`
+          select 1
+            from role_assignments
+           where org_id = ${actor.orgId} and user_id = ${body.userId}
+           limit 1
+        `)) as unknown as { rows: { "?column?": number }[] };
+        if (!assignment.rows[0]) {
+          return NextResponse.json(
+            { error: "assign at least one role before activating this user" },
+            { status: 409 },
+          );
+        }
       }
       const updated = (await db.execute(sql`
         update users set is_active = ${body.isActive}, updated_at = now(), updated_by = ${actor.id}

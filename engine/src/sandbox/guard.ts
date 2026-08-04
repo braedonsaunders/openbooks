@@ -55,7 +55,46 @@ export async function neuterSandbox(sandboxOrgId: string): Promise<void> {
     update api_keys set is_active = false where org_id = ${sandboxOrgId}`);
   // Wipe SFTP credentials if the table/column exists (best-effort).
   await db
-    .execute(sql`update sftp_servers set password_encrypted = null where org_id = ${sandboxOrgId}`)
+    .execute(sql`
+      update sftp_servers
+         set password_encrypted = null, authorized_keys = null, is_active = false
+       where org_id = ${sandboxOrgId}`)
+    .catch(() => {});
+  await db
+    .execute(sql`update sftp_import_schedules set is_active = false where org_id = ${sandboxOrgId}`)
+    .catch(() => {});
+  await db
+    .execute(sql`
+      update connections
+         set status = 'paused', secrets = null, mirror_enabled = false, last_error = null
+       where org_id = ${sandboxOrgId}`)
+    .catch(() => {});
+  await db
+    .execute(sql`
+      update bank_feed_connections
+         set status = 'disconnected', credentials = null, is_active = false,
+             next_sync_at = null, last_error = null
+       where org_id = ${sandboxOrgId}`)
+    .catch(() => {});
+  await db
+    .execute(sql`
+      update tax_rate_provider_configs
+         set is_enabled = false, secrets = null, last_error = null
+       where org_id = ${sandboxOrgId}`)
+    .catch(() => {});
+  await db
+    .execute(sql`
+      update psp_provider_configs
+         set is_enabled = false, acceptance_enabled = false, secrets = null,
+             publishable_key = null, last_error = null
+       where org_id = ${sandboxOrgId}`)
+    .catch(() => {});
+  await db
+    .execute(sql`
+      update payment_bank_profiles
+         set originator_secrets_encrypted = null, is_active = false,
+             auto_remittance = false
+       where org_id = ${sandboxOrgId}`)
     .catch(() => {});
   // Provider credentials are tenant secrets and scheduled synchronization is
   // real network egress. Preserve the non-secret configuration for testing,

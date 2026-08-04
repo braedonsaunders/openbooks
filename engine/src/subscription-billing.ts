@@ -174,8 +174,9 @@ export interface InvoiceSpec {
 }
 
 /**
- * Create a customer invoice for a subscription charge. Legacy subscriptions
- * supply the scalar fields and remain one line; advanced subscriptions supply
+ * Create a customer invoice or credit for a subscription charge. Subscriptions
+ * without lifecycle configuration supply scalar fields and remain one line;
+ * lifecycle-managed subscriptions supply
  * the effective-dated component snapshot and receive an itemized invoice.
  */
 export async function createSubscriptionInvoice(
@@ -353,6 +354,7 @@ export async function runDueSubscriptions(asOf?: string): Promise<SubscriptionRu
         left join subscription_plan_versions v on v.id = l.plan_version_id and v.org_id = s.org_id
         join orgs o on o.id = s.org_id
        where s.status = 'active' and s.next_bill_on <= ${today}
+         and o.env_kind = 'production'
          and coalesce((o.settings->'features'->>'subscriptionBilling')::boolean, false)
          and (l.id is null or coalesce((o.settings->'features'->>'advancedSubscriptions')::boolean, false))
     `)) as unknown as {

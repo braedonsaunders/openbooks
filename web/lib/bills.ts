@@ -75,9 +75,6 @@ export async function taxProfileMap(orgId?: string, asOfDate?: string): Promise<
   return { codes, groups }
 }
 
-/** Backwards-compatible name for server callers; value is now exact profiles, not floats. */
-export const taxRateMap = taxProfileMap
-
 export interface BillLineInput {
   accountId: string
   description?: string | null

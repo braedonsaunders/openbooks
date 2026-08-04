@@ -1,13 +1,11 @@
 import { getTranslations } from 'next-intl/server'
 import Link from 'next/link'
-import { redirect } from 'next/navigation'
 import { ScanLine } from 'lucide-react'
 import { Button, PageHeader } from '@openbooks/ui'
 import { ListPageLayout } from '../../../components/page-layout'
 import { ModuleHomeTabs } from '../../../components/module-home/ui'
 import { groupTabs } from '../../../components/module-home/group-tabs'
 import { NewDocumentButton } from '../../../components/new-document-button'
-import { pickString } from '../../../lib/list-params'
 import { requirePermission, can } from '../../../lib/authz'
 import { analyticsConfig } from '../../../lib/analytics/config'
 import { apPosition } from '../../../lib/cash/ap-position'
@@ -22,26 +20,9 @@ export async function generateMetadata() {
 
 /**
  * Accounts Payable — the payables control center (vitals + pay-run planner +
- * aging). The bills list is its own first-class route at /ap/bills; legacy
- * ?view=bills / ?doc= links redirect there so old drill-throughs keep working.
+ * aging). The bills list is its own first-class route at /ap/bills.
  */
-export default async function AP({
-  searchParams,
-}: {
-  searchParams: Promise<Record<string, string | string[] | undefined>>
-}) {
-  const sp = await searchParams
-  // Legacy tab/flyout URLs → the dedicated bills route, params preserved.
-  if (typeof sp.doc === 'string' || pickString(sp.view) === 'bills') {
-    const qs = new URLSearchParams()
-    for (const [k, v] of Object.entries(sp)) {
-      if (k === 'view' || v === undefined) continue
-      for (const val of Array.isArray(v) ? v : [v]) qs.append(k, val)
-    }
-    const suffix = qs.toString()
-    redirect(`/ap/bills${suffix ? `?${suffix}` : ''}`)
-  }
-
+export default async function AP() {
   const authz = await requirePermission('ap.read')
   const canCreate = can(authz, 'ap.create')
   const t = await getTranslations('ap')

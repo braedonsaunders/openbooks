@@ -15,17 +15,11 @@ export interface ResolvedProjectType {
   key: string
   name: string
   /** Coarse classifier carried by the type (for snapshots/labels), derived here. */
-  billingMethod: 'time_and_materials' | 'fixed_price' | 'cost_plus' | null
+  billingMethod: 'time_and_materials' | 'fixed_price' | 'cost_plus'
   financialProfile: FinancialProfile
   financialProfileEffectiveFrom: string | null
   invoicingProfile: InvoicingProfile
   backupProfile: BackupProfile
-}
-
-/** Legacy JSON profiles predate the explicit procedure discriminator. Treat
- * absence as standard without rewriting historical configuration in place. */
-function normalizedInvoicingProfile(profile: InvoicingProfile): InvoicingProfile {
-  return { ...profile, billingProcedure: profile.billingProcedure ?? 'standard' }
 }
 
 const byKey = new Map(BUILTIN_PROJECT_TYPES.map((t) => [t.key, t]))
@@ -37,7 +31,7 @@ export function coarseBillingMethod(key: string | null | undefined): ResolvedPro
 
 function timeAndMaterials(): ResolvedProjectType {
   const t = byKey.get('time_and_materials')!
-  return { id: null, key: t.key, name: t.name, billingMethod: t.billingMethod, financialProfile: t.financialProfile, financialProfileEffectiveFrom: null, invoicingProfile: normalizedInvoicingProfile(t.invoicingProfile), backupProfile: t.backupProfile }
+  return { id: null, key: t.key, name: t.name, billingMethod: t.billingMethod, financialProfile: t.financialProfile, financialProfileEffectiveFrom: null, invoicingProfile: t.invoicingProfile, backupProfile: t.backupProfile }
 }
 
 export async function loadProjectType(
@@ -50,7 +44,7 @@ export async function loadProjectType(
   }
   const r = (await db.execute(sql`
     select pt.id, pt.key, pt.name, pt.billing_method as bm,
-           coalesce(version.financial_profile, pt.financial_profile) as fp,
+           version.financial_profile as fp,
            version.effective_from::text as fp_effective_from,
            pt.invoicing_profile as ip, pt.backup_profile as bp
       from projects p
@@ -69,7 +63,8 @@ export async function loadProjectType(
   `)) as unknown as { rows: { id: string | null; key: string | null; name: string | null; bm: ResolvedProjectType['billingMethod'] | null; fp: FinancialProfile | null; fp_effective_from: string | null; ip: InvoicingProfile | null; bp: BackupProfile | null }[] }
   const row = r.rows[0]
   if (row?.id && row.fp && row.ip && row.bp) {
-    return { id: row.id, key: row.key!, name: row.name!, billingMethod: row.bm ?? coarseBillingMethod(row.key), financialProfile: row.fp, financialProfileEffectiveFrom: row.fp_effective_from, invoicingProfile: normalizedInvoicingProfile(row.ip), backupProfile: row.bp }
+    if (!row.bm) throw new Error(`project type ${row.id} is missing its billing classification`)
+    return { id: row.id, key: row.key!, name: row.name!, billingMethod: row.bm, financialProfile: row.fp, financialProfileEffectiveFrom: row.fp_effective_from, invoicingProfile: row.ip, backupProfile: row.bp }
   }
   return timeAndMaterials()
 }

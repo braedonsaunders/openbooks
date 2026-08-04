@@ -352,6 +352,8 @@
     "linkLabelPrompt": "Etiqueta:",
     "addLink": "Agregar enlace",
     "deleteLink": "Eliminar enlace",
+    "addApp": "Agregar acceso directo a la aplicación…",
+    "removeApp": "Eliminar acceso directo a la aplicación",
     "newGroupPrompt": "Nombre del espacio de trabajo:",
     "addGroup": "Agregar espacio de trabajo",
     "deleteGroup": "Eliminar espacio de trabajo",
@@ -682,7 +684,6 @@
       "lastSignIn": "Último inicio de sesión"
     },
     "you": "usted",
-    "legacyRole": "heredado: {role}",
     "statusActive": "activo",
     "statusInactive": "inactivo",
     "requestFailed": "La solicitud falló",

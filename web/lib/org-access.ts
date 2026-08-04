@@ -7,7 +7,7 @@ import { db, withBypassContext } from "@openbooks/engine/src/db.ts";
  * The "one login across tenants" resolution layer. A person logs in as their
  * single home `users` row (the login identity). From there they can act in:
  *   - their home production org (implicit),
- *   - any production org granted via `user_org_access` (acting as a mapped row),
+ *   - any production or preview org granted via `user_org_access` (acting as a mapped row),
  *   - any org at all if they are a super admin,
  *   - and any sandbox of an org they can reach (acting as the deterministic
  *     rebase of their production users row — sandboxes are separate tenants).
@@ -39,6 +39,7 @@ export interface AccessibleOrg {
   orgId: string;
   name: string;
   actingUserId: string;
+  envKind: "production" | "preview";
 }
 
 /** Mirrors the SQL ob_rebase(old, seed) = md5(seed || ':' || old)::uuid so we
@@ -48,34 +49,73 @@ export function rebaseUuid(oldId: string, seed: string): string {
   return `${h.slice(0, 8)}-${h.slice(8, 12)}-${h.slice(12, 16)}-${h.slice(16, 20)}-${h.slice(20, 32)}`;
 }
 
-/** The users row this member acts as in a production org, or null if no access. */
-async function actingUserIn(home: HomeUser, prodOrgId: string): Promise<string | null> {
-  if (prodOrgId === home.orgId) return home.id;
-  if (home.isSuperAdmin) return home.id; // super admin acts as their home identity
+/** The users row this member acts as in a directly reachable org, or null. */
+async function actingUserIn(
+  home: HomeUser,
+  targetOrgId: string,
+  envKind: "production" | "preview" = "production",
+): Promise<string | null> {
+  if (targetOrgId === home.orgId) return home.id;
   const r = (await db.execute(sql`
     select acting_user_id from user_org_access
-     where member_user_id = ${home.id} and org_id = ${prodOrgId} and is_active`)) as any;
-  return r.rows[0]?.acting_user_id ?? null;
+     where member_user_id = ${home.id} and org_id = ${targetOrgId} and is_active`)) as any;
+  if (r.rows[0]?.acting_user_id) return r.rows[0].acting_user_id;
+  // A super administrator may inspect any production tenant using the platform
+  // identity. Preview/sample companies still require an explicit mapped user:
+  // their copied tenant data must never inherit a cross-tenant user identity.
+  return home.isSuperAdmin && envKind === "production" ? home.id : null;
 }
 
-/** Every PRODUCTION org the member can reach, with the acting row per org. */
+/** Every top-level production or explicitly granted preview org the member can reach. */
 export async function accessibleProductionOrgs(home: HomeUser): Promise<AccessibleOrg[]> {
   return withBypassContext(async () => {
     if (home.isSuperAdmin) {
       const rows = (await db.execute(sql`
-        select id, name from orgs where env_kind = 'production' order by name`)) as any;
-      return rows.rows.map((o: any) => ({ orgId: o.id, name: o.name, actingUserId: home.id }));
+        select id, name from orgs
+         where env_kind = 'production'
+           and not coalesce((settings->'sampleTemplate'->>'enabled')::boolean, false)
+         order by name`)) as any;
+      const out: AccessibleOrg[] = rows.rows.map((o: any) => ({
+        orgId: o.id,
+        name: o.name,
+        actingUserId: home.id,
+        envKind: "production" as const,
+      }));
+      const previews = (await db.execute(sql`
+        select a.org_id as "orgId", a.acting_user_id as "actingUserId", o.name
+          from user_org_access a join orgs o on o.id = a.org_id
+         where a.member_user_id = ${home.id} and a.is_active and o.env_kind = 'preview'
+         order by o.name`)) as any;
+      for (const preview of previews.rows) {
+        out.push({ ...preview, envKind: "preview" });
+      }
+      return out;
     }
     const homeRow = (await db.execute(sql`select name from orgs where id = ${home.orgId}`)) as any;
     const out: AccessibleOrg[] = [
-      { orgId: home.orgId, name: homeRow.rows[0]?.name ?? "openbooks", actingUserId: home.id },
+      {
+        orgId: home.orgId,
+        name: homeRow.rows[0]?.name ?? "openbooks",
+        actingUserId: home.id,
+        envKind: "production",
+      },
     ];
     const grants = (await db.execute(sql`
-      select a.org_id as "orgId", a.acting_user_id as "actingUserId", o.name
+      select a.org_id as "orgId", a.acting_user_id as "actingUserId", o.name,
+             o.env_kind as "envKind"
         from user_org_access a join orgs o on o.id = a.org_id
-       where a.member_user_id = ${home.id} and a.is_active and o.env_kind = 'production'
+       where a.member_user_id = ${home.id} and a.is_active
+         and o.env_kind in ('production', 'preview')
        order by o.name`)) as any;
-    for (const g of grants.rows) out.push({ orgId: g.orgId, name: g.name, actingUserId: g.actingUserId });
+    for (const g of grants.rows) {
+      if (g.orgId === home.orgId) continue;
+      out.push({
+        orgId: g.orgId,
+        name: g.name,
+        actingUserId: g.actingUserId,
+        envKind: g.envKind,
+      });
+    }
     return out;
   });
 }
@@ -104,7 +144,7 @@ export async function resolveActiveEnv(
 
     if (org.envKind === "sandbox") {
       const prodId = org.sandboxOf as string;
-      const acting = await actingUserIn(home, prodId);
+      const acting = await actingUserIn(home, prodId, "production");
       if (!acting) return null;
       const sb = (await db.execute(sql`
         select name, status from sandboxes where org_id = ${activeOrgId}`)) as any;
@@ -119,15 +159,16 @@ export async function resolveActiveEnv(
       };
     }
 
-    // production org (not home)
-    const acting = await actingUserIn(home, activeOrgId);
+    if (org.envKind !== "production" && org.envKind !== "preview") return null;
+    const acting = await actingUserIn(home, activeOrgId, org.envKind);
     if (!acting) return null;
     return {
       orgId: activeOrgId,
       actingUserId: acting,
-      envKind: "production",
+      envKind: org.envKind,
       productionOrgId: activeOrgId,
       name: org.name,
+      sandboxName: org.envKind === "preview" ? org.name : undefined,
     };
   });
 }

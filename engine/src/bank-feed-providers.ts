@@ -213,7 +213,11 @@ export async function testBankFeedConnection(
 ): Promise<{ ok: boolean; detail?: string }> {
   const row = await withBypass(async () =>
     (await db.execute(sql`
-      select provider, credentials from bank_feed_connections where id = ${connectionId}
+      select c.provider, c.credentials
+        from bank_feed_connections c
+        join orgs o on o.id = c.org_id
+       where c.id = ${connectionId}
+         and coalesce((o.settings->'features'->>'bankFeeds')::boolean, false)
     `)) as unknown as { rows: { provider: string; credentials: string | null }[] },
   );
   const conn = row.rows[0];
@@ -287,13 +291,16 @@ export async function runDueBankFeeds(): Promise<FeedSyncOutcome[]> {
   const now = Date.now();
   const due = await withBypass(async () =>
     (await db.execute(sql`
-      select id, org_id as "orgId", provider, account_id as "accountId", credentials,
-             external_account_id as "externalAccountId", sync_cadence as "syncCadence",
-             next_sync_at as "nextSyncAt", last_sync_at as "lastSyncAt"
-        from bank_feed_connections
-       where is_active and provider in ('plaid', 'gocardless', 'truelayer')
-         and sync_cadence <> 'manual'
-         and (next_sync_at is null or next_sync_at <= now())
+      select c.id, c.org_id as "orgId", c.provider, c.account_id as "accountId", c.credentials,
+             c.external_account_id as "externalAccountId", c.sync_cadence as "syncCadence",
+             c.next_sync_at as "nextSyncAt", c.last_sync_at as "lastSyncAt"
+        from bank_feed_connections c
+        join orgs o on o.id = c.org_id
+       where c.is_active and c.provider in ('plaid', 'gocardless', 'truelayer')
+         and o.env_kind = 'production'
+         and coalesce((o.settings->'features'->>'bankFeeds')::boolean, false)
+         and c.sync_cadence <> 'manual'
+         and (c.next_sync_at is null or c.next_sync_at <= now())
     `)) as unknown as {
       rows: {
         id: string;
@@ -348,9 +355,12 @@ export async function runDueBankFeeds(): Promise<FeedSyncOutcome[]> {
 export async function syncBankFeedNow(connectionId: string): Promise<FeedSyncOutcome> {
   const row = await withBypass(async () =>
     (await db.execute(sql`
-      select id, org_id as "orgId", provider, account_id as "accountId", credentials,
-             external_account_id as "externalAccountId", last_sync_at as "lastSyncAt"
-        from bank_feed_connections where id = ${connectionId}
+      select c.id, c.org_id as "orgId", c.provider, c.account_id as "accountId", c.credentials,
+             c.external_account_id as "externalAccountId", c.last_sync_at as "lastSyncAt"
+        from bank_feed_connections c
+        join orgs o on o.id = c.org_id
+       where c.id = ${connectionId}
+         and coalesce((o.settings->'features'->>'bankFeeds')::boolean, false)
     `)) as unknown as {
       rows: {
         id: string;

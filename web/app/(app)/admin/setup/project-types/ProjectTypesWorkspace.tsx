@@ -41,7 +41,7 @@ const LABELS: Record<string, string> = {
   cost_times_markup: 'Cost plus project markup',
   percent_of_labor: '% of labor cost',
   per_labor_hour: '$ per labor hour',
-  account_group_actual: 'Posted GL (account group)',
+  posted_gl_account_group: 'Posted GL (account group)',
   billed_hours: 'Billable hours only',
   total_hours: 'All hours',
   could_be_invoiced: 'Could be invoiced',
@@ -55,7 +55,7 @@ const BILLING_METHODS = ['', 'time_and_materials', 'fixed_price', 'cost_plus']
 const BILLING_PROCEDURES = ['standard', 'application_for_payment']
 const COST_SOURCES = ['account_types', 'account_group']
 const LABOR_SOURCES = ['in_actual_cost', 'time_rate', 'estimated_time_rate', 'payroll_je', 'account_group']
-const OVERHEAD_METHODS = ['none', 'percent_of_labor', 'per_labor_hour', 'rate_engine', 'account_group_actual']
+const OVERHEAD_METHODS = ['none', 'percent_of_labor', 'per_labor_hour', 'rate_engine', 'posted_gl_account_group']
 const ENGINE_DEFAULT = { rateSource: 'standard', hoursBasis: 'total_hours', dimension: 'overhead', scope: 'department' } as const
 const PRICE_METHODS = ['contract_field', 'billable_value', 'not_to_exceed', 'cost_plus']
 const CBI_FORMULAS = ['price_minus_invoiced', 'unbilled_billable']
@@ -108,7 +108,7 @@ function Chips({ label, all, selected, onToggle }: { label: string; all: string[
 }
 
 const BLANK = (t: string, name: string): ProjectTypeRow => ({
-  id: 'new', key: '', name, description: '', isBuiltIn: false, isActive: true, sortOrder: 50, billingMethod: null,
+  id: 'new', key: '', name, description: '', isBuiltIn: false, isActive: true, sortOrder: 50, billingMethod: 'time_and_materials',
   financialProfileEffectiveFrom: null,
   financialProfile: {
     invoicedToDate: { docKinds: ['customer_invoice'], creditKinds: ['customer_credit'] },
@@ -304,7 +304,7 @@ export function ProjectTypesWorkspace({
                 <div className="sm:col-span-2 rounded-lg border border-slate-200 bg-slate-50 p-3 dark:border-slate-800 dark:bg-slate-900/40">
                   <p className="text-xs leading-5 text-slate-600 dark:text-slate-300">
                     {t('financialPolicyEffective', {
-                      date: draft.financialProfileEffectiveFrom ?? t('legacySeed'),
+                      date: draft.financialProfileEffectiveFrom ?? t('initialPolicy'),
                     })}
                   </p>
                   {financialChanged ? (
@@ -358,7 +358,7 @@ export function ProjectTypesWorkspace({
                 <div className="space-y-1.5"><Label>{t('overheadRatePercent')}</Label><Input type="number" step="0.01" value={fp.overhead.ratePercent ?? ''} onChange={(e) => setFp({ overhead: { ...fp.overhead, ratePercent: e.target.value === '' ? undefined : Number(e.target.value) } })} /></div>
               ) : fp.overhead.method === 'per_labor_hour' ? (
                 <div className="space-y-1.5"><Label>{t('overheadRatePerHour')}</Label><Input type="number" step="0.01" value={fp.overhead.ratePerHour ?? ''} onChange={(e) => setFp({ overhead: { ...fp.overhead, ratePerHour: e.target.value === '' ? undefined : Number(e.target.value) } })} /></div>
-              ) : fp.overhead.method === 'account_group_actual' ? (
+              ) : fp.overhead.method === 'posted_gl_account_group' ? (
                 <EnumField label={t('overheadDimension')} value={fp.overhead.accountGroup?.dimension ?? ''} options={['', ...dimensions]} onChange={(v) => setFp({ overhead: { ...fp.overhead, accountGroup: { dimension: v } } })} />
               ) : <div />}
               {fp.overhead.method === 'rate_engine' ? (
@@ -406,7 +406,7 @@ export function ProjectTypesWorkspace({
 
           {sub === 'invoicing' ? (
             <div className="grid gap-4 sm:grid-cols-2">
-              <EnumField label={t('billingProcedure')} value={ip.billingProcedure ?? 'standard'} options={BILLING_PROCEDURES} onChange={(v) => {
+              <EnumField label={t('billingProcedure')} value={ip.billingProcedure} options={BILLING_PROCEDURES} onChange={(v) => {
                 if (v === 'application_for_payment') {
                   setDraft({
                     ...draft,

@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { sql } from 'drizzle-orm'
 import { db, schema } from '@openbooks/engine/src/db.ts'
 import { guardPermission } from '../../../../lib/authz'
 
@@ -43,7 +44,21 @@ export async function POST(req: NextRequest) {
       })
       .returning({ id: schema.parties.id })
 
-    if (roleTable) {
+    if (role === 'customer') {
+      const terms = (await tx.execute(sql`
+        select id from payment_terms
+         where org_id = ${user.orgId} and is_active
+         order by net_days, name limit 1
+      `)) as unknown as { rows: { id: string }[] }
+      await tx.insert(schema.customerRoles).values({
+        orgId: user.orgId,
+        partyId: p.id,
+        paymentTermsId: terms.rows[0]?.id ?? null,
+        isActive: true,
+        createdBy: user.id,
+        updatedBy: user.id,
+      })
+    } else if (roleTable) {
       await tx.insert(roleTable).values({
         orgId: user.orgId,
         partyId: p.id,
