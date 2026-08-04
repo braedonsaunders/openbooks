@@ -8,9 +8,34 @@
 import Markdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import Link from 'next/link'
+import type { ReactNode } from 'react'
 import { cn } from '@openbooks/ui'
+import { TxnLink } from '@/app/(app)/reports/TxnLink'
+import { RelatedPartyLink } from '@/components/related-party-link'
+import {
+  assistantDocumentByLabel,
+  assistantPartyByLabel,
+  type AssistantEntityIndex,
+} from '@/lib/assistant/entities'
 
-export function ChatMarkdown({ children, className }: { children: string; className?: string }) {
+function plainText(node: ReactNode): string {
+  if (typeof node === 'string' || typeof node === 'number') return String(node)
+  if (Array.isArray(node)) return node.map(plainText).join('')
+  if (node && typeof node === 'object' && 'props' in node) {
+    return plainText((node as { props?: { children?: ReactNode } }).props?.children)
+  }
+  return ''
+}
+
+export function ChatMarkdown({
+  children,
+  className,
+  entities,
+}: {
+  children: string
+  className?: string
+  entities?: AssistantEntityIndex
+}) {
   return (
     <div
       className={cn(
@@ -30,14 +55,32 @@ export function ChatMarkdown({ children, className }: { children: string; classN
       <Markdown
         remarkPlugins={[remarkGfm]}
         components={{
-          a: ({ href, children: linkChildren }) =>
-            href?.startsWith('/') ? (
+          a: ({ href, children: linkChildren }) => {
+            const label = plainText(linkChildren).trim()
+            const document = assistantDocumentByLabel(entities, label)
+            if (document) {
+              return (
+                <TxnLink
+                  entryId={document.postedEntryId ?? ''}
+                  docKind={document.kind}
+                  docId={document.id}
+                >
+                  {linkChildren}
+                </TxnLink>
+              )
+            }
+            const party = assistantPartyByLabel(entities, label)
+            if (party) {
+              return <RelatedPartyLink partyId={party.id}>{linkChildren}</RelatedPartyLink>
+            }
+            return href?.startsWith('/') ? (
               <Link href={href}>{linkChildren}</Link>
             ) : (
               <a href={href} target="_blank" rel="noreferrer">
                 {linkChildren}
               </a>
-            ),
+            )
+          },
         }}
       >
         {children}
