@@ -90,6 +90,9 @@ services:
     environment:
       <<: *openbooks-runtime-environment
       OPENBOOKS_BOOTSTRAP: "1"
+      # Changes with every immutable deployment so Compose recreates this
+      # completed one-shot container and applies newly published migrations.
+      OPENBOOKS_BOOTSTRAP_REV: ${OPENBOOKS_BOOTSTRAP_REV:-local}
       OPENBOOKS_MIGRATION_DB_URL: postgres://openbooks_owner:${POSTGRES_OWNER_PASSWORD:?POSTGRES_OWNER_PASSWORD is required}@postgres:5432/openbooks
       OPENBOOKS_RUNTIME_DB_URL: postgres://openbooks_app:${OPENBOOKS_DB_PASSWORD:?OPENBOOKS_DB_PASSWORD is required}@postgres:5432/openbooks
       ORG_NAME: ${ORG_NAME:-OpenBooks}
