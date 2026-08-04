@@ -25,6 +25,7 @@
   <a href="#run-it">Run it</a> ·
   <a href="#what-is-implemented">Features</a> ·
   <a href="#accounting-kernel">Accounting kernel</a> ·
+  <a href="TRUST.md">Trust</a> ·
   <a href="#architecture">Architecture</a> ·
   <a href="#project-status">Status</a> ·
   <a href="CONTRIBUTING.md">Contribute</a>
@@ -138,6 +139,29 @@ entry-level bookkeeping and want lasting control of their software and data.
 > placing production financial records on it. It has extensive automated tests,
 > but it has not yet completed an independent accounting audit, security audit,
 > or broad production validation.
+
+### Verify the accounting, don't take our word for it
+
+Three things are published, refreshed from CI on every commit to `main`, and
+reproducible from a clean checkout:
+
+- **[TRUST.md](TRUST.md)** — every ledger invariant that is checked
+  continuously: global balance, per-entry balance, document total against the
+  control account, subledger-to-general-ledger tie-out, closed-period
+  immutability, and audit-trail immutability. With current results and history.
+- **[Standards conformance matrix](docs/trust/conformance-matrix.md)** —
+  requirements of ASC 606/IFRS 15, IAS 2/ASC 330, IAS 21, ASC 360/IAS 16, and
+  ASC 740/IAS 12 encoded as executable fixtures with exact expected journal
+  entries, compared to the hundredth of a cent. Requirements the product does
+  **not** implement are published as gaps, never omitted.
+- **[AUDIT-CONTROLS.md](AUDIT-CONTROLS.md)** — the control matrix mapped to
+  financial-statement assertions (existence, completeness, accuracy, cutoff,
+  classification, presentation, rights and obligations) and IT general
+  controls, for handing to an audit partner during planning.
+
+```bash
+npm -w engine run conformance -- report
+```
 
 ## Run it
 
@@ -540,6 +564,10 @@ professionals.
 - [CONTRIBUTING.md](CONTRIBUTING.md) for setup, tests, financial integrity
   requirements, and pull-request expectations
 - [SECURITY.md](SECURITY.md) for private vulnerability reporting
+- [TRUST.md](TRUST.md) for the invariants, the conformance corpus, and how to
+  reproduce every published result yourself
+- [AUDIT-CONTROLS.md](AUDIT-CONTROLS.md) for the control matrix mapped to audit
+  assertions and IT general controls
 - [CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md) for community standards
 
 The most valuable contributions are accounting edge cases, anonymized workflow

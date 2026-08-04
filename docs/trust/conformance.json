@@ -1,0 +1,1284 @@
+{
+  "at": "2026-08-04T23:45:56.249Z",
+  "gitSha": null,
+  "totals": {
+    "pass": 28,
+    "fail": 0,
+    "gap": 11,
+    "skipped": 0
+  },
+  "pass": true,
+  "cases": [
+    {
+      "id": "rev-allocate-relative-ssp",
+      "title": "Transaction price allocates in proportion to standalone selling prices",
+      "standards": [
+        "ASC 606",
+        "IFRS 15"
+      ],
+      "citations": [
+        {
+          "standard": "ASC 606",
+          "reference": "606-10-32-31",
+          "kind": "requirement",
+          "requirement": "An entity allocates the transaction price to each performance obligation in proportion to its standalone selling price."
+        },
+        {
+          "standard": "IFRS 15",
+          "reference": "IFRS 15.76",
+          "kind": "requirement",
+          "requirement": "The transaction price is allocated to each performance obligation on a relative standalone-selling-price basis."
+        }
+      ],
+      "support": "supported",
+      "tier": "computation",
+      "status": "pass",
+      "assertion": "A bundled contract splits across its performance obligations strictly in SSP proportion, and the split sums to the contract price with no residual cent.",
+      "facts": [
+        "One contract with three performance obligations.",
+        "Transaction price 100.00.",
+        "Standalone selling prices 50.00, 25.00 and 75.00 (total 150.00).",
+        "Proportions are 1/3, 1/6 and 1/2 of the transaction price."
+      ],
+      "ms": 20
+    },
+    {
+      "id": "rev-allocate-no-lost-cent",
+      "title": "Allocation of an indivisible price loses no consideration",
+      "standards": [
+        "ASC 606",
+        "IFRS 15"
+      ],
+      "citations": [
+        {
+          "standard": "ASC 606",
+          "reference": "606-10-32-28",
+          "kind": "requirement",
+          "requirement": "The objective of allocation is to assign the amount of consideration the entity expects to be entitled to for each performance obligation."
+        },
+        {
+          "standard": "IFRS 15",
+          "reference": "IFRS 15.73",
+          "kind": "requirement",
+          "requirement": "The transaction price is allocated to performance obligations to depict the consideration the entity expects for transferring each."
+        }
+      ],
+      "support": "supported",
+      "tier": "computation",
+      "status": "pass",
+      "assertion": "Allocating a price that does not divide evenly still assigns the entire transaction price — the residual is placed deterministically, never dropped or invented.",
+      "facts": [
+        "Transaction price 1,000.00 across three performance obligations with equal standalone selling prices.",
+        "One third of 1,000.00 is not representable at four decimal places.",
+        "The residual unit is assigned to the first obligation by the largest-remainder rule."
+      ],
+      "ms": 0
+    },
+    {
+      "id": "rev-over-time-ratable",
+      "title": "An obligation satisfied evenly over time recognises revenue ratably",
+      "standards": [
+        "ASC 606",
+        "IFRS 15"
+      ],
+      "citations": [
+        {
+          "standard": "ASC 606",
+          "reference": "606-10-25-27",
+          "kind": "requirement",
+          "requirement": "An entity recognises revenue over time when the customer simultaneously receives and consumes the benefits as the entity performs."
+        },
+        {
+          "standard": "IFRS 15",
+          "reference": "IFRS 15.35",
+          "kind": "requirement",
+          "requirement": "Revenue is recognised over time where the customer simultaneously receives and consumes the benefits of the entity's performance."
+        }
+      ],
+      "support": "supported",
+      "tier": "computation",
+      "status": "pass",
+      "assertion": "A twelve-month service obligation recognises an equal amount each month and exactly the contract amount in total — the schedule never over- or under-recognises.",
+      "facts": [
+        "Obligation amount 1,200.00.",
+        "Service term of twelve months beginning 2026-01-01.",
+        "Benefits are consumed evenly, so progress is measured by elapsed time."
+      ],
+      "ms": 0
+    },
+    {
+      "id": "rev-uneven-term-sums-exactly",
+      "title": "A term that does not divide evenly still recognises the full amount",
+      "standards": [
+        "ASC 606",
+        "IFRS 15"
+      ],
+      "citations": [
+        {
+          "standard": "ASC 606",
+          "reference": "606-10-25-31",
+          "kind": "requirement",
+          "requirement": "Revenue recognised over time must depict the entity's performance in transferring control, measured by a single method applied consistently."
+        },
+        {
+          "standard": "IFRS 15",
+          "reference": "IFRS 15.39",
+          "kind": "requirement",
+          "requirement": "A single method of measuring progress is applied to each performance obligation satisfied over time."
+        }
+      ],
+      "support": "supported",
+      "tier": "computation",
+      "status": "pass",
+      "assertion": "Cumulative revenue over an indivisible term equals the contract amount exactly; rounding is absorbed within the schedule rather than left as a residual.",
+      "facts": [
+        "Obligation amount 1,000.00 recognised over seven months from 2026-01-01.",
+        "One seventh of 1,000.00 is not representable at four decimal places."
+      ],
+      "ms": 0
+    },
+    {
+      "id": "rev-contract-liability-then-recognition",
+      "title": "Billing ahead of performance creates a contract liability that unwinds as performance occurs",
+      "standards": [
+        "ASC 606",
+        "IFRS 15"
+      ],
+      "citations": [
+        {
+          "standard": "ASC 606",
+          "reference": "606-10-45-2",
+          "kind": "requirement",
+          "requirement": "When a customer is billed before the entity performs, the entity presents a contract liability rather than revenue."
+        },
+        {
+          "standard": "IFRS 15",
+          "reference": "IFRS 15.106",
+          "kind": "requirement",
+          "requirement": "Consideration billed before performance is presented as a contract liability until the entity performs."
+        },
+        {
+          "standard": "ASC 606",
+          "reference": "606-10-25-27",
+          "kind": "requirement",
+          "requirement": "Revenue is recognised as the performance obligation is satisfied over time."
+        }
+      ],
+      "support": "supported",
+      "tier": "ledger",
+      "status": "pass",
+      "assertion": "Invoicing a twelve-month service up front posts nothing to revenue — it raises a receivable and a contract liability — and the first month's performance moves exactly one twelfth out of that liability into revenue.",
+      "facts": [
+        "A twelve-month service obligation is invoiced in full for 1,200.00 on 2026-07-15.",
+        "The item carries a straight-line twelve-period recognition rule.",
+        "Recognition is run as at 2026-07-31, the end of the first service month."
+      ],
+      "ms": 106
+    },
+    {
+      "id": "rev-recognition-is-idempotent",
+      "title": "Re-running recognition for a period recognises nothing further",
+      "standards": [
+        "ASC 606"
+      ],
+      "citations": [
+        {
+          "standard": "ASC 606",
+          "reference": "606-10-25-27",
+          "kind": "requirement",
+          "requirement": "Revenue for a period is recognised once, as the obligation is satisfied in that period."
+        }
+      ],
+      "support": "supported",
+      "tier": "ledger",
+      "status": "pass",
+      "assertion": "Running the recognition process twice for the same period does not double-recognise revenue — a control an auditor tests directly when the process is automated or re-run after a correction.",
+      "facts": [
+        "A twelve-month service obligation of 1,200.00 invoiced on 2026-07-15.",
+        "Recognition is run for 2026-07-31, then run again for the same date."
+      ],
+      "ms": 77
+    },
+    {
+      "id": "rev-obligation-created-per-line",
+      "title": "Each revenue line becomes a tracked performance obligation",
+      "standards": [
+        "ASC 606",
+        "IFRS 15"
+      ],
+      "citations": [
+        {
+          "standard": "ASC 606",
+          "reference": "606-10-25-14",
+          "kind": "requirement",
+          "requirement": "At contract inception an entity identifies each promised good or service that is distinct as a separate performance obligation."
+        },
+        {
+          "standard": "IFRS 15",
+          "reference": "IFRS 15.22",
+          "kind": "requirement",
+          "requirement": "Each distinct promised good or service in a contract is identified as a separate performance obligation."
+        }
+      ],
+      "support": "supported",
+      "tier": "ledger",
+      "status": "pass",
+      "assertion": "The system creates and retains an identified performance obligation for each distinct promise, which is the record an auditor inspects when testing the completeness of the revenue schedule.",
+      "facts": [
+        "One invoice with a single distinct twelve-month service promise."
+      ],
+      "ms": 27
+    },
+    {
+      "id": "rev-variable-consideration-constraint",
+      "title": "Variable consideration is constrained to the amount not subject to significant reversal",
+      "standards": [
+        "ASC 606",
+        "IFRS 15"
+      ],
+      "citations": [
+        {
+          "standard": "ASC 606",
+          "reference": "606-10-32-11",
+          "kind": "requirement",
+          "requirement": "An entity includes variable consideration in the transaction price only to the extent it is probable that a significant revenue reversal will not occur."
+        },
+        {
+          "standard": "IFRS 15",
+          "reference": "IFRS 15.56",
+          "kind": "requirement",
+          "requirement": "Variable consideration is included in the transaction price only to the extent that it is highly probable no significant reversal will occur."
+        }
+      ],
+      "support": "not-implemented",
+      "tier": "computation",
+      "status": "gap",
+      "assertion": "A contract with a performance bonus recognises only the constrained amount, and the estimate is revisited each reporting period.",
+      "facts": [
+        "Fixed consideration 100,000 plus a 20,000 bonus contingent on early completion.",
+        "Management concludes only 12,000 of the bonus meets the constraint.",
+        "Transaction price is therefore 112,000, not 120,000."
+      ],
+      "gap": "There is no model for estimating variable consideration (expected value or most-likely-amount), no constraint assessment, and no re-estimation at each reporting date. Contracts with rebates, refunds, penalties, price concessions or performance bonuses must be constrained manually outside the system.",
+      "ms": 0
+    },
+    {
+      "id": "rev-significant-financing-component",
+      "title": "A significant financing component is separated from revenue",
+      "standards": [
+        "ASC 606",
+        "IFRS 15"
+      ],
+      "citations": [
+        {
+          "standard": "ASC 606",
+          "reference": "606-10-32-15",
+          "kind": "requirement",
+          "requirement": "The promised consideration is adjusted for the time value of money when the contract contains a significant financing component."
+        },
+        {
+          "standard": "IFRS 15",
+          "reference": "IFRS 15.60",
+          "kind": "requirement",
+          "requirement": "The transaction price is adjusted for the effects of the time value of money where the contract contains a significant financing component."
+        }
+      ],
+      "support": "not-implemented",
+      "tier": "computation",
+      "status": "gap",
+      "assertion": "Revenue on a contract paid materially in advance or arrears is recognised at the cash selling price, with the difference presented as interest.",
+      "facts": [
+        "Consideration of 121,000 receivable two years after control transfers.",
+        "A discount rate of 10% gives a cash selling price of 100,000.",
+        "Revenue is 100,000; the remaining 21,000 accretes as interest income over two years."
+      ],
+      "gap": "Long-dated contracts are recognised at their undiscounted invoice amount. There is no discount-rate configuration, no present-value adjustment at inception, and no interest accretion between recognition and payment.",
+      "ms": 0
+    },
+    {
+      "id": "lease-lessee-initial-recognition",
+      "title": "A lessee recognises a right-of-use asset and a lease liability at commencement",
+      "standards": [
+        "ASC 842",
+        "IFRS 16"
+      ],
+      "citations": [
+        {
+          "standard": "ASC 842",
+          "reference": "842-20-30-1",
+          "kind": "requirement",
+          "requirement": "At the commencement date a lessee measures the lease liability at the present value of the lease payments not yet paid and measures the right-of-use asset accordingly."
+        },
+        {
+          "standard": "IFRS 16",
+          "reference": "IFRS 16.26",
+          "kind": "requirement",
+          "requirement": "At the commencement date a lessee measures the lease liability at the present value of the lease payments not yet paid, discounted using the rate implicit in the lease or, if not readily determinable, the incremental borrowing rate."
+        },
+        {
+          "standard": "IFRS 16",
+          "reference": "IFRS 16.23",
+          "kind": "requirement",
+          "requirement": "At the commencement date a lessee measures the right-of-use asset at cost."
+        }
+      ],
+      "support": "not-implemented",
+      "tier": "computation",
+      "status": "gap",
+      "assertion": "Entering into a lease puts both an asset and a liability on the balance sheet at commencement, so leased capacity and the obligation to pay for it are visible rather than off balance sheet.",
+      "facts": [
+        "A five-year lease commencing 2026-01-01.",
+        "Annual payments of 20,000.00 in arrears; 100,000.00 undiscounted in total.",
+        "The incremental borrowing rate is 5%.",
+        "The present value of the payments is 86,589.5334."
+      ],
+      "gap": "There is no lessee lease accounting. No schema exists for lease contracts, discount rates, lease terms, renewal or termination options, or payment schedules; nothing computes a present value; and no right-of-use asset or lease liability is ever recognised. Leases entered into as lessee are accounted for only as the cash payments are made, which is the pre-ASC 842 and pre-IFRS 16 treatment. Any entity with material leases must maintain the lease schedule and the balance-sheet amounts outside the system and post them by manual journal.",
+      "ms": 0
+    },
+    {
+      "id": "lease-finance-interest-and-amortization",
+      "title": "A finance lease reports interest and amortisation separately",
+      "standards": [
+        "ASC 842",
+        "IFRS 16"
+      ],
+      "citations": [
+        {
+          "standard": "ASC 842",
+          "reference": "842-20-25-5",
+          "kind": "requirement",
+          "requirement": "For a finance lease, a lessee recognises interest on the lease liability separately from amortisation of the right-of-use asset."
+        },
+        {
+          "standard": "IFRS 16",
+          "reference": "IFRS 16.49",
+          "kind": "requirement",
+          "requirement": "A lessee presents interest expense on the lease liability separately from the depreciation charge on the right-of-use asset."
+        }
+      ],
+      "support": "not-implemented",
+      "tier": "computation",
+      "status": "gap",
+      "assertion": "A finance lease produces a front-loaded total charge and puts the interest element into finance costs rather than operating expenses, which changes reported operating profit and every leverage and coverage ratio computed from it.",
+      "facts": [
+        "Opening liability 86,589.5334 at 5%.",
+        "Year one interest is 4,329.4767.",
+        "The right-of-use asset amortises straight-line over five years at 17,317.9067 a year.",
+        "The 20,000.00 payment reduces the liability by 15,670.5233 after interest.",
+        "Total year-one charge is 21,647.3834, more than the 20,000.00 cash paid."
+      ],
+      "gap": "There is no lessee lease accounting. No schema exists for lease contracts, discount rates, lease terms, renewal or termination options, or payment schedules; nothing computes a present value; and no right-of-use asset or lease liability is ever recognised. Leases entered into as lessee are accounted for only as the cash payments are made, which is the pre-ASC 842 and pre-IFRS 16 treatment. Any entity with material leases must maintain the lease schedule and the balance-sheet amounts outside the system and post them by manual journal.",
+      "ms": 0
+    },
+    {
+      "id": "lease-operating-single-cost",
+      "title": "A US GAAP operating lease reports a single straight-line lease cost",
+      "standards": [
+        "ASC 842"
+      ],
+      "citations": [
+        {
+          "standard": "ASC 842",
+          "reference": "842-20-25-6",
+          "kind": "requirement",
+          "requirement": "For an operating lease, a lessee recognises a single lease cost allocated over the lease term on a generally straight-line basis."
+        },
+        {
+          "standard": "ASC 842",
+          "reference": "842-10-25-2",
+          "kind": "requirement",
+          "requirement": "A lessee classifies a lease as a finance lease when it meets any of the specified criteria, and as an operating lease otherwise."
+        }
+      ],
+      "support": "not-implemented",
+      "tier": "computation",
+      "status": "gap",
+      "assertion": "Under US GAAP an operating lease charges one flat amount to operating expenses each year, while still carrying the asset and liability on the balance sheet — a presentation that differs from IFRS for identical economics.",
+      "facts": [
+        "The same five-year, 20,000.00-a-year lease at 5%.",
+        "Total lease cost is 100,000.00 over five years, or 20,000.00 a year straight-line.",
+        "Year one: the liability unwinds by 15,670.5233 after 4,329.4767 of imputed interest, and the right-of-use asset reduces by the same amount so the two stay aligned.",
+        "No interest is presented separately; the whole 20,000.00 is one operating lease cost."
+      ],
+      "gap": "There is no lessee lease accounting. No schema exists for lease contracts, discount rates, lease terms, renewal or termination options, or payment schedules; nothing computes a present value; and no right-of-use asset or lease liability is ever recognised. Leases entered into as lessee are accounted for only as the cash payments are made, which is the pre-ASC 842 and pre-IFRS 16 treatment. Any entity with material leases must maintain the lease schedule and the balance-sheet amounts outside the system and post them by manual journal. There is additionally no lease classification test, so the finance/operating distinction that drives the entire US GAAP presentation difference cannot be made.",
+      "ms": 0
+    },
+    {
+      "id": "lease-ifrs-single-lessee-model",
+      "title": "IFRS applies one lessee model to every lease",
+      "standards": [
+        "IFRS 16"
+      ],
+      "citations": [
+        {
+          "standard": "IFRS 16",
+          "reference": "IFRS 16.22",
+          "kind": "requirement",
+          "requirement": "At the commencement date a lessee recognises a right-of-use asset and a lease liability for every lease within scope, without classifying leases as operating or finance."
+        },
+        {
+          "standard": "IFRS 16",
+          "reference": "IFRS 16.31",
+          "kind": "requirement",
+          "requirement": "A lessee depreciates the right-of-use asset applying the depreciation requirements for property, plant and equipment."
+        }
+      ],
+      "support": "not-implemented",
+      "tier": "computation",
+      "status": "gap",
+      "assertion": "The identical lease produces a different expense profile under IFRS than under US GAAP — front-loaded rather than flat — which is why a dual-reporting entity cannot use one set of numbers for both.",
+      "facts": [
+        "The same five-year, 20,000.00-a-year lease at 5%.",
+        "IFRS reports 4,329.4767 of interest plus 17,317.9067 of depreciation in year one, totalling 21,647.3834.",
+        "US GAAP reports a flat 20,000.00 operating lease cost in the same year.",
+        "The year-one difference between the two frameworks is 1,647.3834."
+      ],
+      "gap": "There is no lessee lease accounting. No schema exists for lease contracts, discount rates, lease terms, renewal or termination options, or payment schedules; nothing computes a present value; and no right-of-use asset or lease liability is ever recognised. Leases entered into as lessee are accounted for only as the cash payments are made, which is the pre-ASC 842 and pre-IFRS 16 treatment. Any entity with material leases must maintain the lease schedule and the balance-sheet amounts outside the system and post them by manual journal. A dual-reporting entity additionally needs the same lease to produce the IFRS single-model result and the US GAAP operating-lease result from one set of source data.",
+      "ms": 0
+    },
+    {
+      "id": "lease-short-term-and-low-value-exemption",
+      "title": "Short-term and low-value leases may be kept off balance sheet",
+      "standards": [
+        "IFRS 16",
+        "ASC 842"
+      ],
+      "citations": [
+        {
+          "standard": "IFRS 16",
+          "reference": "IFRS 16.5",
+          "kind": "requirement",
+          "requirement": "A lessee may elect not to recognise a right-of-use asset and lease liability for short-term leases and for leases of low-value assets."
+        },
+        {
+          "standard": "ASC 842",
+          "reference": "842-20-25-2",
+          "kind": "requirement",
+          "requirement": "A lessee may elect, by class of underlying asset, not to recognise a right-of-use asset and lease liability for short-term leases."
+        }
+      ],
+      "support": "not-implemented",
+      "tier": "computation",
+      "status": "gap",
+      "assertion": "An elected short-term lease charges rent straight-line to expense and recognises no asset or liability, and the election is recorded so it can be applied consistently and disclosed.",
+      "facts": [
+        "A nine-month lease with no purchase option, at 1,000.00 a month.",
+        "The short-term exemption is elected for this class of asset.",
+        "Expense is 1,000.00 a month with no right-of-use asset and no lease liability."
+      ],
+      "gap": "Without lessee lease accounting there is nothing to exempt from. When the module is built, the election must be recorded per class of underlying asset, applied consistently, and disclosed — an election taken silently is itself an audit finding.",
+      "ms": 0
+    },
+    {
+      "id": "lease-lessor-classification",
+      "title": "A lessor classifies each lease and accounts for it accordingly",
+      "standards": [
+        "IFRS 16",
+        "ASC 842"
+      ],
+      "citations": [
+        {
+          "standard": "IFRS 16",
+          "reference": "IFRS 16.61",
+          "kind": "requirement",
+          "requirement": "A lessor classifies each of its leases as either an operating lease or a finance lease."
+        },
+        {
+          "standard": "IFRS 16",
+          "reference": "IFRS 16.81",
+          "kind": "requirement",
+          "requirement": "A lessor recognises lease payments from operating leases as income on a straight-line basis or another systematic basis."
+        },
+        {
+          "standard": "ASC 842",
+          "reference": "842-30-25-1",
+          "kind": "requirement",
+          "requirement": "A lessor classifies a lease as a sales-type, direct financing, or operating lease and applies the corresponding recognition model."
+        }
+      ],
+      "support": "not-implemented",
+      "tier": "ledger",
+      "status": "gap",
+      "assertion": "A lessor tests each lease against the classification criteria, recognises operating-lease rent evenly over the term regardless of the billing pattern, and derecognises the underlying asset for a sales-type lease.",
+      "facts": [
+        "A five-year operating lease with rent rising from 10,000.00 to 14,000.00 a year, totalling 60,000.00.",
+        "Straight-line income is 12,000.00 a year regardless of the amount billed.",
+        "In year one the 2,000.00 billed short of the straight-line amount is accrued as a receivable."
+      ],
+      "gap": "The property-management module bills tenant rent and recognises it as revenue when charged, which resembles operating-lease lessor accounting but is not derived from a classification test. There is no assessment of whether a lease transfers substantially all the risks and rewards of ownership, no sales-type or direct-financing treatment, no net investment in the lease, and no straight-line levelling of escalating rents — an escalating lease is recognised as billed rather than levelled over the term.",
+      "ms": 0
+    },
+    {
+      "id": "fx-initial-recognition-at-spot",
+      "title": "A foreign-currency transaction is recorded at the spot rate on the transaction date",
+      "standards": [
+        "IAS 21"
+      ],
+      "citations": [
+        {
+          "standard": "IAS 21",
+          "reference": "IAS 21.21",
+          "kind": "requirement",
+          "requirement": "A foreign currency transaction is recorded on initial recognition by applying the spot exchange rate at the date of the transaction to the foreign currency amount."
+        }
+      ],
+      "support": "supported",
+      "tier": "ledger",
+      "status": "pass",
+      "assertion": "A sale invoiced in a foreign currency enters the books translated at that day's spot rate, and both the receivable and the revenue carry the same translated amount — no rate is applied to one leg and not the other.",
+      "facts": [
+        "The reporting currency is CAD.",
+        "A sale of USD 1,000.00 is invoiced on 2026-07-15.",
+        "The spot rate on 2026-07-15 is 1.3500 CAD per USD.",
+        "The translated amount is CAD 1,350.00."
+      ],
+      "ms": 23
+    },
+    {
+      "id": "fx-monetary-item-retranslated-at-closing-rate",
+      "title": "Monetary items are retranslated at the closing rate and the difference goes to profit or loss",
+      "standards": [
+        "IAS 21"
+      ],
+      "citations": [
+        {
+          "standard": "IAS 21",
+          "reference": "IAS 21.23(a)",
+          "kind": "requirement",
+          "requirement": "At the end of each reporting period foreign currency monetary items are translated using the closing rate."
+        },
+        {
+          "standard": "IAS 21",
+          "reference": "IAS 21.28",
+          "kind": "requirement",
+          "requirement": "Exchange differences arising on settling or retranslating monetary items are recognised in profit or loss in the period in which they arise."
+        },
+        {
+          "standard": "IAS 21",
+          "reference": "IAS 21.23(b)",
+          "kind": "requirement",
+          "requirement": "Non-monetary items measured at historical cost are translated using the exchange rate at the date of the transaction and are not retranslated."
+        }
+      ],
+      "support": "partial",
+      "tier": "ledger",
+      "status": "pass",
+      "assertion": "A foreign-currency receivable is restated to the closing rate at the reporting date, the movement is recognised immediately in profit or loss, and the revenue already recognised at the transaction-date rate is left untouched.",
+      "facts": [
+        "A receivable of USD 1,000.00 was recognised on 2026-07-15 at 1.3500, carried at CAD 1,350.00.",
+        "The closing rate on 2026-07-31 is 1.4000 CAD per USD.",
+        "The receivable is restated to CAD 1,400.00, an increase of CAD 50.00.",
+        "The exchange gain of CAD 50.00 is recognised in profit or loss.",
+        "Revenue stays at CAD 1,350.00 — it is not a monetary item and is not retranslated."
+      ],
+      "limitation": "The monetary-item population is narrower than IAS 21.16 requires. Period-end retranslation covers accounts typed as bank, receivable and payable only. Foreign-currency loans and other long-term debt, accrued liabilities, and other monetary balances carried outside those three account types are NOT retranslated and must be adjusted by manual journal.",
+      "ms": 43
+    },
+    {
+      "id": "fx-retranslation-arithmetic",
+      "title": "Retranslation restates the foreign balance and offsets the whole movement to profit or loss",
+      "standards": [
+        "IAS 21"
+      ],
+      "citations": [
+        {
+          "standard": "IAS 21",
+          "reference": "IAS 21.23(a)",
+          "kind": "requirement",
+          "requirement": "Foreign currency monetary items are translated at the closing rate at the end of the reporting period."
+        },
+        {
+          "standard": "IAS 21",
+          "reference": "IAS 21.28",
+          "kind": "requirement",
+          "requirement": "Exchange differences on monetary items are recognised in profit or loss in the period in which they arise."
+        }
+      ],
+      "support": "supported",
+      "tier": "computation",
+      "status": "pass",
+      "assertion": "Across several currencies and both directions of movement, each monetary balance is restated to foreign balance times closing rate and the net of every restatement lands in a single profit-or-loss account — the entry cannot leave a residual.",
+      "facts": [
+        "A USD receivable of 1,000.00 carried at CAD 1,350.00 with a closing rate of 1.4000 restates to 1,400.00, a gain of 50.00.",
+        "A EUR payable of −2,000.00 carried at CAD −2,900.00 with a closing rate of 1.5000 restates to −3,000.00, a loss of 100.00.",
+        "The net movement of −50.00 is offset to unrealised exchange gain or loss."
+      ],
+      "ms": 0
+    },
+    {
+      "id": "fx-unchanged-rate-posts-nothing",
+      "title": "An unchanged closing rate produces no entry",
+      "standards": [
+        "IAS 21"
+      ],
+      "citations": [
+        {
+          "standard": "IAS 21",
+          "reference": "IAS 21.28",
+          "kind": "requirement",
+          "requirement": "Exchange differences are recognised only when they arise; where no difference arises, none is recognised."
+        }
+      ],
+      "support": "supported",
+      "tier": "computation",
+      "status": "pass",
+      "assertion": "A period in which rates did not move generates no journal entry at all, so period-end processing cannot manufacture immaterial noise in the ledger or in the exchange gain and loss account.",
+      "facts": [
+        "A USD receivable of 1,000.00 carried at CAD 1,350.00.",
+        "The closing rate is unchanged at 1.3500."
+      ],
+      "ms": 0
+    },
+    {
+      "id": "inv-fifo-cost-formula",
+      "title": "First-in, first-out assigns the earliest costs to the earliest sales",
+      "standards": [
+        "IAS 2",
+        "ASC 330"
+      ],
+      "citations": [
+        {
+          "standard": "IAS 2",
+          "reference": "IAS 2.25",
+          "kind": "requirement",
+          "requirement": "The cost of inventories that are ordinarily interchangeable is assigned using the first-in first-out or weighted average cost formula."
+        },
+        {
+          "standard": "IAS 2",
+          "reference": "IAS 2.34",
+          "kind": "requirement",
+          "requirement": "When inventories are sold, their carrying amount is recognised as an expense in the period in which the related revenue is recognised."
+        },
+        {
+          "standard": "ASC 330",
+          "reference": "330-10-30-9",
+          "kind": "requirement",
+          "requirement": "Cost of inventory may be determined under a first-in first-out assumption about the flow of cost factors."
+        }
+      ],
+      "support": "supported",
+      "tier": "ledger",
+      "status": "pass",
+      "assertion": "Cost of sales is charged with the oldest layer first at its actual cost, and the remaining inventory carries the newest costs — the property an auditor recomputes when testing inventory valuation under FIFO.",
+      "facts": [
+        "Purchase one: 100 units at 2.00 each (200.00).",
+        "Purchase two: 100 units at 3.00 each (300.00).",
+        "Sale: 150 units at 10.00 each (1,500.00).",
+        "Under FIFO the sale consumes 100 units at 2.00 and 50 units at 3.00, so cost of sales is 350.00.",
+        "Fifty units remain, all from the second purchase, carried at 150.00."
+      ],
+      "ms": 89
+    },
+    {
+      "id": "inv-weighted-average-cost-formula",
+      "title": "Weighted average assigns a blended cost to each unit sold",
+      "standards": [
+        "IAS 2"
+      ],
+      "citations": [
+        {
+          "standard": "IAS 2",
+          "reference": "IAS 2.25",
+          "kind": "requirement",
+          "requirement": "The cost of inventories that are ordinarily interchangeable is assigned using the first-in first-out or weighted average cost formula."
+        },
+        {
+          "standard": "IAS 2",
+          "reference": "IAS 2.27",
+          "kind": "requirement",
+          "requirement": "Under the weighted average formula the cost of each item is the weighted average of the cost of similar items at the beginning of a period and those purchased during it."
+        }
+      ],
+      "support": "supported",
+      "tier": "ledger",
+      "status": "pass",
+      "assertion": "Cost of sales uses the blended average of all units held rather than any particular purchase, and the remaining inventory is carried at that same average.",
+      "facts": [
+        "Purchase one: 100 units at 2.00 each (200.00).",
+        "Purchase two: 100 units at 3.00 each (300.00).",
+        "The weighted average cost is 500.00 over 200 units, or 2.50 per unit.",
+        "Sale: 150 units at 10.00 each, so cost of sales is 150 at 2.50 = 375.00.",
+        "Fifty units remain at 2.50, carried at 125.00."
+      ],
+      "ms": 163
+    },
+    {
+      "id": "inv-cost-expensed-against-revenue",
+      "title": "Inventory cost becomes an expense in the period its revenue is recognised",
+      "standards": [
+        "IAS 2",
+        "ASC 330"
+      ],
+      "citations": [
+        {
+          "standard": "IAS 2",
+          "reference": "IAS 2.34",
+          "kind": "requirement",
+          "requirement": "The carrying amount of inventories sold is recognised as an expense in the period in which the related revenue is recognised."
+        },
+        {
+          "standard": "ASC 330",
+          "reference": "330-10-35-1B",
+          "kind": "requirement",
+          "requirement": "Inventory cost is charged against revenue in the period in which the inventory is sold."
+        }
+      ],
+      "support": "supported",
+      "tier": "ledger",
+      "status": "pass",
+      "assertion": "Revenue and its matching cost of sales are recognised in the same accounting period and neither can occur without the other — the matching property behind gross margin.",
+      "facts": [
+        "100 units purchased at 2.00 (200.00), then 40 units sold at 9.00 (360.00).",
+        "Cost of sales is 40 at 2.00 = 80.00, recognised with the sale."
+      ],
+      "ms": 52
+    },
+    {
+      "id": "inv-purchase-does-not-touch-profit",
+      "title": "Buying inventory is not an expense",
+      "standards": [
+        "IAS 2"
+      ],
+      "citations": [
+        {
+          "standard": "IAS 2",
+          "reference": "IAS 2.9",
+          "kind": "requirement",
+          "requirement": "Inventories are measured at the lower of cost and net realisable value and are carried as an asset until sold."
+        }
+      ],
+      "support": "supported",
+      "tier": "ledger",
+      "status": "pass",
+      "assertion": "A purchase of stock capitalises into inventory and never touches profit or loss, so gross margin cannot be distorted by purchasing activity in the period.",
+      "facts": [
+        "A vendor bill for 250 units at 4.00 each (1,000.00)."
+      ],
+      "ms": 27
+    },
+    {
+      "id": "inv-lower-of-cost-and-nrv",
+      "title": "Inventory is written down to net realisable value when NRV falls below cost",
+      "standards": [
+        "IAS 2",
+        "ASC 330"
+      ],
+      "citations": [
+        {
+          "standard": "IAS 2",
+          "reference": "IAS 2.9",
+          "kind": "requirement",
+          "requirement": "Inventories are measured at the lower of cost and net realisable value."
+        },
+        {
+          "standard": "IAS 2",
+          "reference": "IAS 2.28",
+          "kind": "requirement",
+          "requirement": "Inventories are written down to net realisable value item by item when cost may not be recoverable."
+        },
+        {
+          "standard": "ASC 330",
+          "reference": "330-10-35-1C",
+          "kind": "requirement",
+          "requirement": "Inventory measured using first-in first-out or average cost is measured at the lower of cost and net realisable value."
+        }
+      ],
+      "support": "not-implemented",
+      "tier": "ledger",
+      "status": "gap",
+      "assertion": "When net realisable value falls below cost, the carrying amount of inventory is reduced to NRV, the loss is recognised immediately, and the on-hand QUANTITY is unchanged.",
+      "facts": [
+        "100 units on hand at a cost of 3.00 each, carried at 300.00.",
+        "Net realisable value falls to 2.00 per unit, or 200.00 in total.",
+        "A write-down of 100.00 is recognised as an expense; 100 units remain on hand."
+      ],
+      "gap": "There is no value-only inventory remeasurement. `adjustInventory` changes QUANTITY — writing inventory down through it would remove units that physically exist and misstate the count. The only cost-layer revaluation path in the engine is landed-cost allocation, which increases carrying value. A period-end lower-of-cost-and-NRV write-down must therefore be booked as a manual journal, leaving the inventory subledger and the general ledger disagreeing by the amount of the write-down.",
+      "ms": 0
+    },
+    {
+      "id": "inv-writedown-reversal-policy-divergence",
+      "title": "Reversal of a write-down is required under IFRS and prohibited under US GAAP",
+      "standards": [
+        "IAS 2",
+        "ASC 330"
+      ],
+      "citations": [
+        {
+          "standard": "IAS 2",
+          "reference": "IAS 2.33",
+          "kind": "requirement",
+          "requirement": "When the circumstances that caused a write-down no longer exist, the write-down is reversed so the new carrying amount is the lower of cost and revised net realisable value."
+        },
+        {
+          "standard": "ASC 330",
+          "reference": "330-10-35-14",
+          "kind": "requirement",
+          "requirement": "A write-down of inventory to the lower of cost and net realisable value creates a new cost basis that is not subsequently written back up."
+        }
+      ],
+      "support": "not-implemented",
+      "tier": "ledger",
+      "status": "gap",
+      "assertion": "Under IFRS a recovered net realisable value reverses the earlier write-down up to original cost; under US GAAP the written-down amount is the new cost basis and no reversal is recognised.",
+      "facts": [
+        "100 units at cost 3.00 written down to NRV 2.00, a write-down of 100.00.",
+        "Net realisable value later recovers to 2.80 per unit.",
+        "Under IFRS the carrying amount returns to 280.00, reversing 80.00 of the write-down.",
+        "Under US GAAP the carrying amount stays at 200.00 and nothing is reversed."
+      ],
+      "gap": "This requirement cannot be implemented until lower-of-cost-and-NRV measurement exists (see inv-lower-of-cost-and-NRV). It additionally needs a reporting-framework policy switch: the same fact pattern must reverse under IFRS and must NOT reverse under US GAAP. The organisation already carries an `asc740`/`ias12` framework flag for income tax; inventory has no equivalent.",
+      "ms": 0
+    },
+    {
+      "id": "ppe-impairment-to-fair-value",
+      "title": "An impaired asset is written down to fair value and the loss is recognised immediately",
+      "standards": [
+        "ASC 360",
+        "IAS 16"
+      ],
+      "citations": [
+        {
+          "standard": "ASC 360",
+          "reference": "360-10-35-17",
+          "kind": "requirement",
+          "requirement": "When a long-lived asset's carrying amount is not recoverable, an impairment loss is measured as the excess of carrying amount over fair value."
+        },
+        {
+          "standard": "IAS 16",
+          "reference": "IAS 16.63",
+          "kind": "requirement",
+          "requirement": "The carrying amount of an item of property, plant and equipment is reduced when it is impaired, and the loss is recognised."
+        }
+      ],
+      "support": "semantic",
+      "tier": "computation",
+      "status": "pass",
+      "assertion": "The carrying amount falls to fair value by exactly the shortfall, and the whole shortfall is charged to profit or loss in the period — no part of it is deferred or spread.",
+      "facts": [
+        "An asset with a cost of 100,000.00 and accumulated depreciation of 40,000.00.",
+        "Carrying amount is therefore 60,000.00.",
+        "Fair value is 45,000.00 and the carrying amount is not recoverable.",
+        "The impairment loss is 15,000.00.",
+        "The product records the reduction against accumulated depreciation, leaving gross cost intact. This is a presentation choice: carrying amount, the loss, and subsequent depreciation are all identical to reducing the asset account directly."
+      ],
+      "ms": 0
+    },
+    {
+      "id": "ppe-impairment-establishes-new-basis",
+      "title": "The written-down amount becomes the new cost basis for future depreciation",
+      "standards": [
+        "ASC 360",
+        "IAS 36"
+      ],
+      "citations": [
+        {
+          "standard": "ASC 360",
+          "reference": "360-10-35-20",
+          "kind": "requirement",
+          "requirement": "After an impairment loss is recognised, the adjusted carrying amount is the asset's new cost basis and is depreciated over its remaining useful life."
+        },
+        {
+          "standard": "IAS 36",
+          "reference": "IAS 36.63",
+          "kind": "requirement",
+          "requirement": "After recognising an impairment loss, depreciation is adjusted to allocate the revised carrying amount over the remaining useful life."
+        }
+      ],
+      "support": "supported",
+      "tier": "computation",
+      "status": "pass",
+      "assertion": "Future depreciation runs off the impaired carrying amount, so the asset is never depreciated back through an amount that has already been written off.",
+      "facts": [
+        "Carrying amount of 60,000.00 impaired to 45,000.00.",
+        "The new basis is 45,000.00, which is what remaining depreciation must consume.",
+        "`remeasureAsset` rebuilds the remaining unposted depreciation schedule from the new basis rather than leaving the original schedule in place."
+      ],
+      "ms": 0
+    },
+    {
+      "id": "ppe-disposal-gain-loss",
+      "title": "Derecognition removes cost and accumulated depreciation and recognises the gain or loss",
+      "standards": [
+        "ASC 360",
+        "IAS 16"
+      ],
+      "citations": [
+        {
+          "standard": "ASC 360",
+          "reference": "360-10-40-5",
+          "kind": "requirement",
+          "requirement": "A gain or loss on the sale of a long-lived asset is the difference between the proceeds and the asset's carrying amount."
+        },
+        {
+          "standard": "IAS 16",
+          "reference": "IAS 16.71",
+          "kind": "requirement",
+          "requirement": "The gain or loss on derecognition is the difference between net disposal proceeds and the carrying amount of the item."
+        },
+        {
+          "standard": "IAS 16",
+          "reference": "IAS 16.68",
+          "kind": "requirement",
+          "requirement": "The carrying amount of an item of property, plant and equipment is derecognised on disposal."
+        }
+      ],
+      "support": "supported",
+      "tier": "computation",
+      "status": "pass",
+      "assertion": "On sale, the asset's cost and its accumulated depreciation both leave the balance sheet entirely and the profit or loss recognised is exactly proceeds less carrying amount — a disposal cannot leave a stub balance behind.",
+      "facts": [
+        "An asset with a cost of 100,000.00 and accumulated depreciation of 70,000.00.",
+        "Carrying amount is 30,000.00.",
+        "It is sold for cash proceeds of 35,000.00.",
+        "The gain is 5,000.00."
+      ],
+      "ms": 0
+    },
+    {
+      "id": "ppe-writeoff-recognises-full-carrying-amount",
+      "title": "Scrapping an asset with no proceeds recognises the whole carrying amount as a loss",
+      "standards": [
+        "IAS 16",
+        "ASC 360"
+      ],
+      "citations": [
+        {
+          "standard": "IAS 16",
+          "reference": "IAS 16.67",
+          "kind": "requirement",
+          "requirement": "The carrying amount of an item of property, plant and equipment is derecognised on disposal or when no future economic benefits are expected from its use or disposal."
+        },
+        {
+          "standard": "ASC 360",
+          "reference": "360-10-40-5",
+          "kind": "requirement",
+          "requirement": "The gain or loss on derecognition is the difference between the proceeds, if any, and the carrying amount."
+        }
+      ],
+      "support": "supported",
+      "tier": "computation",
+      "status": "pass",
+      "assertion": "A write-off with no proceeds charges the full remaining carrying amount to profit or loss and produces a balanced entry with no proceeds line at all.",
+      "facts": [
+        "An asset with a cost of 20,000.00 and accumulated depreciation of 12,000.00.",
+        "Carrying amount is 8,000.00 and it is scrapped for nothing.",
+        "The loss is 8,000.00."
+      ],
+      "ms": 0
+    },
+    {
+      "id": "ppe-us-gaap-prohibits-restoration",
+      "title": "US GAAP prohibits reversing an impairment of a held-and-used asset",
+      "standards": [
+        "ASC 360",
+        "IAS 36"
+      ],
+      "citations": [
+        {
+          "standard": "ASC 360",
+          "reference": "360-10-35-20",
+          "kind": "requirement",
+          "requirement": "Restoration of a previously recognised impairment loss is prohibited for a long-lived asset that is held and used."
+        },
+        {
+          "standard": "IAS 36",
+          "reference": "IAS 36.114",
+          "kind": "requirement",
+          "requirement": "An impairment loss recognised in prior periods is reversed if, and only if, the estimates used to determine recoverable amount have changed."
+        }
+      ],
+      "support": "not-implemented",
+      "tier": "computation",
+      "status": "gap",
+      "assertion": "Under US GAAP a recovery in fair value after impairment produces no entry; under IFRS a reversal is recognised but is capped at the carrying amount that would have existed had no impairment been recognised.",
+      "facts": [
+        "An asset impaired from a carrying amount of 60,000.00 down to 45,000.00.",
+        "Fair value later recovers to 58,000.00.",
+        "Under US GAAP the carrying amount stays at 45,000.00 less subsequent depreciation.",
+        "Under IFRS a reversal is recognised, limited to depreciated historical cost."
+      ],
+      "gap": "`remeasureAsset` accepts any new carrying value in either direction. Writing an impaired asset back up is permitted, which IFRS requires but US GAAP forbids, and nothing records whether a given write-up is a permitted IAS 16 revaluation, a permitted IAS 36 reversal, or a prohibited ASC 360 restoration. The organisation already carries an `asc740`/`ias12` reporting-framework flag for income tax; long-lived assets need the same flag to gate this, plus retention of the historical impairment so an IAS 36 reversal can be capped at what depreciated cost would have been.",
+      "ms": 0
+    },
+    {
+      "id": "tax-total-expense-is-current-plus-deferred",
+      "title": "Total income tax expense is current tax plus deferred tax",
+      "standards": [
+        "ASC 740",
+        "IAS 12"
+      ],
+      "citations": [
+        {
+          "standard": "ASC 740",
+          "reference": "740-10-10-1",
+          "kind": "requirement",
+          "requirement": "The objectives of accounting for income taxes are to recognise the tax payable or refundable for the current year and the deferred tax consequences of events already recognised."
+        },
+        {
+          "standard": "IAS 12",
+          "reference": "IAS 12.58",
+          "kind": "requirement",
+          "requirement": "Current and deferred tax are recognised as income or expense and included in profit or loss for the period."
+        }
+      ],
+      "support": "supported",
+      "tier": "computation",
+      "status": "pass",
+      "assertion": "The tax charge in profit or loss is the sum of the current-year liability and the movement in deferred taxes — the two components are computed separately and neither is dropped.",
+      "facts": [
+        "Pretax book income of 1,000,000.00.",
+        "A non-deductible permanent difference of 50,000.00.",
+        "A taxable temporary difference of 200,000.00 arising on fixed assets, giving a deferred tax liability.",
+        "The enacted rate is 25%.",
+        "Current tax is 25% of (1,000,000 + 50,000) = 262,500.00.",
+        "The deferred tax liability of 200,000 at 25% is 50,000.00, all of it arising this year.",
+        "Total tax expense is 312,500.00."
+      ],
+      "ms": 0
+    },
+    {
+      "id": "tax-deferred-measured-at-enacted-rate",
+      "title": "Deferred tax is measured at the enacted rate expected to apply on reversal",
+      "standards": [
+        "ASC 740",
+        "IAS 12"
+      ],
+      "citations": [
+        {
+          "standard": "ASC 740",
+          "reference": "740-10-30-5",
+          "kind": "requirement",
+          "requirement": "Deferred tax is measured using enacted tax rates expected to apply to taxable income in the years the temporary difference is expected to reverse."
+        },
+        {
+          "standard": "IAS 12",
+          "reference": "IAS 12.47",
+          "kind": "requirement",
+          "requirement": "Deferred tax is measured at the tax rates expected to apply when the asset is realised or the liability settled, based on rates enacted or substantively enacted by the end of the reporting period."
+        }
+      ],
+      "support": "supported",
+      "tier": "computation",
+      "status": "pass",
+      "assertion": "Deferred balances move with the enacted rate: the same temporary difference measured at a different enacted rate produces a proportionally different deferred balance, so a rate change is reflected rather than ignored.",
+      "facts": [
+        "A taxable temporary difference of 400,000.00.",
+        "At an enacted rate of 25% the deferred tax liability is 100,000.00.",
+        "At an enacted rate of 21% the same difference gives 84,000.00."
+      ],
+      "ms": 0
+    },
+    {
+      "id": "tax-deductible-difference-creates-deferred-asset",
+      "title": "A deductible temporary difference creates a deferred tax asset",
+      "standards": [
+        "ASC 740",
+        "IAS 12"
+      ],
+      "citations": [
+        {
+          "standard": "ASC 740",
+          "reference": "740-10-25-2",
+          "kind": "requirement",
+          "requirement": "A deferred tax asset is recognised for deductible temporary differences and carryforwards."
+        },
+        {
+          "standard": "IAS 12",
+          "reference": "IAS 12.24",
+          "kind": "requirement",
+          "requirement": "A deferred tax asset is recognised for all deductible temporary differences to the extent that taxable profit will be available against which they can be utilised."
+        }
+      ],
+      "support": "supported",
+      "tier": "computation",
+      "status": "pass",
+      "assertion": "Deductible and taxable differences are separated rather than netted into one figure, so the gross deferred tax asset and gross deferred tax liability are both visible — the presentation an auditor tests against the tax footnote.",
+      "facts": [
+        "A deductible temporary difference of 120,000.00 on provisions.",
+        "A taxable temporary difference of 300,000.00 on fixed assets.",
+        "At 25%, the gross deferred tax asset is 30,000.00 and the gross deferred tax liability is 75,000.00."
+      ],
+      "ms": 0
+    },
+    {
+      "id": "tax-valuation-allowance-reduces-deferred-asset",
+      "title": "A deferred tax asset is reduced when realisation is not expected",
+      "standards": [
+        "ASC 740",
+        "IAS 12"
+      ],
+      "citations": [
+        {
+          "standard": "ASC 740",
+          "reference": "740-10-30-5(e)",
+          "kind": "requirement",
+          "requirement": "A valuation allowance reduces deferred tax assets to the amount that is more likely than not to be realised."
+        },
+        {
+          "standard": "IAS 12",
+          "reference": "IAS 12.56",
+          "kind": "requirement",
+          "requirement": "The carrying amount of a deferred tax asset is reduced to the extent it is no longer probable that sufficient taxable profit will be available."
+        }
+      ],
+      "support": "supported",
+      "tier": "computation",
+      "status": "pass",
+      "assertion": "Unrealisable deferred tax assets raise the tax charge in the period the judgement is made, and the allowance can never exceed the gross asset it reduces.",
+      "facts": [
+        "A deductible temporary difference of 400,000.00 at 25% gives a gross deferred tax asset of 100,000.00.",
+        "Only 60,000.00 is expected to be realised, so an allowance of 40,000.00 is recognised.",
+        "The allowance increases deferred tax expense by 40,000.00."
+      ],
+      "ms": 0
+    },
+    {
+      "id": "tax-allowance-cannot-exceed-gross-asset",
+      "title": "A valuation allowance greater than the deferred tax asset is rejected",
+      "standards": [
+        "ASC 740"
+      ],
+      "citations": [
+        {
+          "standard": "ASC 740",
+          "reference": "740-10-30-5(e)",
+          "kind": "requirement",
+          "requirement": "A valuation allowance reduces deferred tax assets to the amount more likely than not to be realised; it cannot reduce them below zero."
+        }
+      ],
+      "support": "supported",
+      "tier": "computation",
+      "status": "pass",
+      "assertion": "The provision refuses to produce a negative deferred tax asset, so a mis-keyed allowance is rejected at entry rather than becoming a nonsensical balance in the tax footnote.",
+      "facts": [
+        "A gross deferred tax asset of 25,000.00.",
+        "An allowance of 40,000.00 is entered against it.",
+        "The computation must be rejected."
+      ],
+      "ms": 0
+    },
+    {
+      "id": "tax-permanent-difference-changes-effective-rate",
+      "title": "Permanent differences move the effective rate away from the statutory rate",
+      "standards": [
+        "ASC 740",
+        "IAS 12"
+      ],
+      "citations": [
+        {
+          "standard": "ASC 740",
+          "reference": "740-10-50-12",
+          "kind": "requirement",
+          "requirement": "A public entity reconciles the reported income tax expense to the amount produced by applying the statutory rate to pretax income."
+        },
+        {
+          "standard": "IAS 12",
+          "reference": "IAS 12.81(c)",
+          "kind": "requirement",
+          "requirement": "An entity discloses a reconciliation between tax expense and the product of accounting profit multiplied by the applicable tax rate."
+        }
+      ],
+      "support": "supported",
+      "tier": "computation",
+      "status": "pass",
+      "assertion": "The rate reconciliation begins at the statutory charge, shows each reconciling item separately, and ends at the reported total — the schedule that supports the effective tax rate disclosure.",
+      "facts": [
+        "Pretax book income of 500,000.00 at a statutory rate of 25% gives an expected charge of 125,000.00.",
+        "Non-deductible entertaining of 20,000.00 adds 5,000.00.",
+        "Reported tax expense is 130,000.00 and the effective rate is 26%."
+      ],
+      "ms": 0
+    },
+    {
+      "id": "tax-framework-terminology",
+      "title": "The reduction in a deferred tax asset is labelled per the reporting framework",
+      "standards": [
+        "ASC 740",
+        "IAS 12"
+      ],
+      "citations": [
+        {
+          "standard": "ASC 740",
+          "reference": "740-10-30-5(e)",
+          "kind": "requirement",
+          "requirement": "US GAAP reduces deferred tax assets through a separately identified valuation allowance."
+        },
+        {
+          "standard": "IAS 12",
+          "reference": "IAS 12.24",
+          "kind": "requirement",
+          "requirement": "IFRS recognises a deferred tax asset only to the extent of probable future taxable profit, rather than recognising it gross and then allowing against it."
+        }
+      ],
+      "support": "supported",
+      "tier": "computation",
+      "status": "pass",
+      "assertion": "The same arithmetic is presented in the vocabulary of whichever framework the entity reports under, so an IFRS filer never sees a US GAAP-only term in its tax note.",
+      "facts": [
+        "A US GAAP reporter calls the reduction a valuation allowance.",
+        "An IFRS reporter describes it as a deferred tax asset recognition adjustment."
+      ],
+      "ms": 0
+    },
+    {
+      "id": "tax-current-tax-omits-temporary-differences",
+      "title": "Current tax is measured on taxable profit for the period",
+      "standards": [
+        "ASC 740",
+        "IAS 12"
+      ],
+      "citations": [
+        {
+          "standard": "ASC 740",
+          "reference": "740-10-30-2",
+          "kind": "requirement",
+          "requirement": "Current tax expense or benefit is measured as the amount of taxes payable or refundable for the year, determined from taxable income for that year."
+        },
+        {
+          "standard": "IAS 12",
+          "reference": "IAS 12.12",
+          "kind": "requirement",
+          "requirement": "Current tax for the period is recognised as a liability to the extent unpaid, measured on taxable profit for that period."
+        }
+      ],
+      "support": "partial",
+      "tier": "computation",
+      "status": "pass",
+      "assertion": "Permanent differences and utilised loss carryforwards adjust taxable income and therefore current tax; this case asserts the part that is implemented.",
+      "facts": [
+        "Pretax book income of 800,000.00.",
+        "A non-deductible permanent difference of 30,000.00.",
+        "A loss carryforward of 100,000.00 is utilised.",
+        "Taxable income is 730,000.00 and current tax at 25% is 182,500.00.",
+        "No temporary differences are present, so this case is unaffected by the limitation above."
+      ],
+      "limitation": "Current tax is computed from book income adjusted for PERMANENT differences and loss carryforwards only. Originating and reversing TEMPORARY differences drive the deferred computation but do not adjust taxable income, so the current-tax figure is not taxable profit as ASC 740-10-30-2 and IAS 12.12 define it. Total tax expense (current plus deferred) is unaffected because the same differences flow through deferred tax, but the split between current and deferred — and therefore income tax payable — is misstated whenever temporary differences exist. Entities must reconcile the current-tax line to the filed return before publishing the tax note.",
+      "ms": 0
+    },
+    {
+      "id": "tax-loss-does-not-create-negative-current-tax",
+      "title": "A taxable loss does not produce a negative current tax charge",
+      "standards": [
+        "ASC 740"
+      ],
+      "citations": [
+        {
+          "standard": "ASC 740",
+          "reference": "740-10-25-2",
+          "kind": "requirement",
+          "requirement": "The benefit of a loss is recognised through a deferred tax asset for the carryforward, not as a negative current tax payable, unless it is refundable by carryback."
+        }
+      ],
+      "support": "supported",
+      "tier": "computation",
+      "status": "pass",
+      "assertion": "A loss-making year reports no current tax rather than a negative payable, and the reconciliation discloses the unrecognised current benefit explicitly instead of burying it.",
+      "facts": [
+        "A pretax book loss of 200,000.00 with no permanent differences.",
+        "Current tax is nil, not a 50,000.00 receivable.",
+        "The reconciliation shows the current-year loss carrying no current tax."
+      ],
+      "ms": 0
+    }
+  ]
+}
