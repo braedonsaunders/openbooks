@@ -145,6 +145,32 @@ jobs:
               ')"
             fi
           fi
+          # Managed Dokploy databases keep their owner credential in the
+          # database resource, not the application environment. Resolve one
+          # exact database/owner match through the authenticated catalog.
+          if [ -z "$migration_url" ] && [ -n "$runtime_url" ]; then
+            runtime_database="$(RUNTIME_URL="$runtime_url" node -e '
+              process.stdout.write(new URL(process.env.RUNTIME_URL).pathname.replace(/^\//, ""));
+            ')"
+            project_catalog="$(curl -sS --fail -H "x-api-key: $DOKPLOY_TOKEN" "$base/api/project.all")"
+            candidates="$(jq -c --arg database "$runtime_database" '
+              [.. | objects
+                | select(.postgresId? != null)
+                | select(.databaseName == $database and .databaseUser == "postgres")]
+              | unique_by(.postgresId)
+            ' <<<"$project_catalog")"
+            if [ "$(jq 'length' <<<"$candidates")" = "1" ]; then
+              owner_user="$(jq -r '.[0].databaseUser' <<<"$candidates")"
+              owner_password="$(jq -r '.[0].databasePassword' <<<"$candidates")"
+              echo "::add-mask::$owner_password"
+              migration_url="$(RUNTIME_URL="$runtime_url" OWNER_USER="$owner_user" OWNER_PASSWORD="$owner_password" node -e '
+                const url = new URL(process.env.RUNTIME_URL);
+                url.username = process.env.OWNER_USER;
+                url.password = process.env.OWNER_PASSWORD;
+                process.stdout.write(url.toString());
+              ')"
+            fi
+          fi
           if [ -z "$migration_url" ] || [ -z "$runtime_url" ]; then
             echo "::error::Dev deployment requires separate OPENBOOKS_MIGRATION_DB_URL and runtime database URLs"
             exit 1
