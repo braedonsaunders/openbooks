@@ -19,7 +19,7 @@ import {
   type WeekRow,
 } from "./core";
 
-/** AP capacity-scheduling knobs (Gantry's cashflow config). */
+/** AP capacity-scheduling knobs (the cashflow config). */
 export interface ApSettings {
   weeklyCap: number;
   restrictToSafe: boolean;
@@ -34,7 +34,7 @@ export interface TimelineResult {
 }
 
 /**
- * Roll the weekly cash timeline — Gantry buildFinalTimeline. Category flows
+ * Roll the weekly cash timeline — . Category flows
  * join AR/AP each week; when AP scheduling is on, payables are paid
  * oldest-due-first up to that week's capacity and the remainder defers forward.
  *
@@ -70,7 +70,7 @@ export function buildTimeline(args: {
     let deferredOut = 0;
     let apCapacity: number | null = null;
     if (schedulingOn) {
-      // Oldest due date first, then largest amount (Gantry's backlog order).
+      // Oldest due date first, then largest amount (the backlog order).
       backlog = [...backlog, ...dueThisWeek].sort((a, b) => {
         const ad = a.dueDate ?? a.predictedDate;
         const bd = b.dueDate ?? b.predictedDate;
@@ -145,7 +145,7 @@ export interface CashPosition {
   /** Global avg collect / pay days (forecast-model fallbacks). */
   dso: number;
   dpo: number;
-  /** Open AR / AP totals and the Gantry coverage ratio: (cash + AR) / AP. */
+  /** Open AR / AP totals and coverage ratio: (cash + AR) / AP. */
   arOutstanding: number;
   apOutstanding: number;
   arCoverage: number | null;
@@ -252,7 +252,7 @@ export async function cashPosition(
     dpo: apStats.globalAvg,
     arOutstanding,
     apOutstanding,
-    // Gantry formula: (starting cash + AR outstanding) / AP outstanding.
+    // Coverage formula: (starting cash + AR outstanding) / AP outstanding.
     arCoverage: apOutstanding > 0 ? (startingCash + arOutstanding) / apOutstanding : null,
     categories,
     apSettings,

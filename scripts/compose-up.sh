@@ -61,7 +61,7 @@ if [ ! -f "$env_file" ]; then
       "SESSION_SECRET=$session_secret" \
       "OPENBOOKS_DATA_KEY=$data_key" \
       "OPENBOOKS_INTERNAL_TOKEN=$internal_token" \
-      'ORG_NAME=OpenBooks' \
+      'ORG_NAME=the \
       "ORG_CURRENCY=$org_currency" \
       "ORG_COUNTRY=$org_country" \
       'ADMIN_EMAIL=admin@openbooks.local' \

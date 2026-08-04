@@ -16,7 +16,7 @@ import { auditColumns, currencyCode, fxRate, id, money, orgRef } from "./helpers
 /**
  * THE KERNEL. Controlled-mutation double-entry journal.
  *
- * Invariants enforced in Postgres (see migrations/kernel-constraints.sql):
+ * Invariants enforced in Postgres (see migrations/generated/0001_baseline.sql):
  *  - SUM(journal_lines.amount) = 0 per entry (deferred constraint trigger)
  *  - posted entries are locked by default; audited engine amendments are
  *    allowed only while both the old and new accounting scopes are open
@@ -50,7 +50,7 @@ export const journalEntries = pgTable(
     /**
      * Where this entry came from. Documents post through the kernel, so an
      * entry is traceable to its source; manual journals say so explicitly.
-     * `origin` supports the payroll/burden tagging that reference organization implemented
+     * `origin` supports payroll/burden tagging
      * as custbody checkboxes ("Payroll Journal", "Is Labor Burden JE").
      */
     sourceDocumentId: uuid("source_document_id"),
@@ -150,7 +150,7 @@ export const journalLines = pgTable(
 /**
  * Payment application — universal. Links a crediting line to a debiting
  * open item regardless of document type: payment→invoice, journal→invoice
- * (reference organization's actual AR pattern: 18.5k of these, zero payment records),
+ * while payment-only imports can be represented without synthetic applications,
  * credit-memo→invoice, vendor-credit→bill, prepayment→bill.
  */
 export const applications = pgTable(

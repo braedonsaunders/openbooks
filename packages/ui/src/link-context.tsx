@@ -1,6 +1,6 @@
 'use client'
 
-// @beaconhs/ui stays framework-agnostic: it can't import next/link directly
+// @openbooks/ui stays framework-agnostic: it cannot import next/link directly.
 // (a second module instance of next's router context in the transpiled
 // package falls back to full-page anchor navigation). Instead the app
 // provides its client-side <Link> once via UiLinkProvider, and ui components

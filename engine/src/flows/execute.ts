@@ -20,18 +20,17 @@ import { lockRecord, unlockRecord } from "./locks.ts";
 import { renderFlowPdf } from "./pdf-hook.ts";
 
 /**
- * The ONE flows executor — subject-agnostic, ported from beaconhs-platform's
- * lib/flows/execute-flow-plan.ts. Runs a planned graph (actions + gates)
+ * The subject-agnostic flows executor. Runs a planned graph (actions + gates)
  * against any FlowSubjectAdapter; everything record-specific is an adapter
- * call. Differences from beaconhs:
+ * call. Execution guarantees:
  *
  *   • Checkpoints live in flow_run_effects keyed `${flowId}:action:${nodeId}`
- *     (beaconhs reused its domain-event effects table) — re-executing a run
+ *     — re-executing a run
  *     (a resume after a gate, or a retry after a failure) skips completed
  *     effects instead of double-sending.
  *   • Gates fan out to MULTIPLE flow_gates rows (one per resolved assignee,
  *     shared groupKey, quorum any/all) with reminder/escalation timestamps —
- *     beaconhs gates were single-assignee.
+ *     and configurable quorum.
  *   • Per-action try/catch preserved: a failure records itself and BREAKS the
  *     chain (later actions in this plan do not run; effects let a future
  *     retry resume from the failed node).
@@ -93,7 +92,7 @@ export async function executeFlowPlan(
 ): Promise<ExecuteFlowPlanResult> {
   const { flow, runId, subjectId, plan } = params;
   // Strip inherited properties — special keys ("__proto__", …) become plain
-  // own data properties before any lookup (beaconhs hardening, preserved).
+  // own data properties before any lookup.
   const values = Object.fromEntries(Object.entries(params.evalCtx.values));
   const evalCtx: EvalContext = { values, rows: params.evalCtx.rows ?? {} };
   const targetCtx = { orgId: ctx.orgId, submitterUserId: params.submitterUserId, values };
@@ -296,7 +295,7 @@ export async function executeFlowPlan(
         await markEffectComplete(effectKey, { action: action.action, detail: desc });
       }
     } catch (e) {
-      // beaconhs semantics: record the failure and STOP the chain — later
+      // defined semantics: record the failure and STOP the chain — later
       // actions likely depend on this one; effects allow resuming here.
       const reason = e instanceof Error ? e.message : String(e);
       failed.push(`${action.action} (${reason})`);
@@ -305,7 +304,7 @@ export async function executeFlowPlan(
   }
 
   // --- Gates → pending approvals ---------------------------------------------
-  // Only reached when the action chain didn't break (parity with beaconhs,
+  // Only reached when the action chain didn't break,
   // where a failed chain returned to the outbox for retry before gates).
   if (failed.length === 0) {
     for (const { nodeId, gate } of plan.gates) {

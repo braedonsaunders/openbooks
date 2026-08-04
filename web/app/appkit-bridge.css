@@ -2,7 +2,7 @@
  *
  * The vendored `@appkit/*` packages (see vendor/appkit) style themselves with
  * AppKit's semantic token utilities — `bg-surface`, `text-fg-muted`,
- * `border-border`, `bg-primary-subtle`. OpenBooks' own components use raw
+ * `border-border`, `bg-primary-subtle`. the own components use raw
  * Tailwind palette classes, so those utilities do not otherwise exist in this
  * build. This file declares them.
  *

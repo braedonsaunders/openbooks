@@ -1,11 +1,11 @@
 /**
- * Import billable timesheets (field tickets) exactly, from a legacy export.
+ * Import billable timesheets (field tickets) exactly from a connector export.
  *
  * A field ticket is the crew's week on a job — approved, customer-signed, and in
  * many businesses the actual UNIT OF BILLING. Without them a migrated tenant can
  * neither reproduce how it bills nor produce the backup its customers expect.
  *
- * Reads two explicit tab-separated exports (no live connection to any legacy system):
+ * Reads two explicit tab-separated exports (no live source connection):
  *   --headers  id, TSNumber, JobID, EmpID, CustomerID, PPEBegin, PPEEnd,
  *                     Billed, FinalTimesheet, ApprovalStatus, ForemanID, PO, Description
  *   --rows     TimesheetID, EmpID, ItemId, Shortform, then 7 days x
@@ -18,6 +18,7 @@
  *
  * Usage: npx tsx src/validation/import-field-tickets.ts
  *   --org=<uuid> --headers=/path/headers.tsv --rows=/path/rows.tsv
+ *   --source-system=<stable connector id>
  *   [--out=/path/report.json] [--apply --production]
  */
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
@@ -38,11 +39,15 @@ const ORG =
   args.get("org") ??
   process.env.TARGET_ORG ??
   process.env.SANDBOX_ORG ??
-  (process.env.SANDBOX_ORG ?? (() => { throw new Error("SANDBOX_ORG is required"); })());
+  (() => { throw new Error("--org, TARGET_ORG, or SANDBOX_ORG is required"); })();
 const APPLY = args.get("apply") === "true";
 const HEADERS = args.get("headers") ?? "/tmp/ft-head.tsv";
 const ROWS = args.get("rows") ?? "/tmp/ft-rows.tsv";
 const OUT = args.get("out") ?? null;
+const SOURCE_SYSTEM = args.get("source-system")?.trim();
+if (!SOURCE_SYSTEM || !/^[a-z0-9][a-z0-9._-]{0,63}$/i.test(SOURCE_SYSTEM)) {
+  throw new Error("--source-system is required and must be a stable connector id");
+}
 if (!existsSync(HEADERS) || !existsSync(ROWS)) {
   throw new Error("--headers and --rows source artifacts are required");
 }
@@ -62,7 +67,7 @@ async function retry<T>(fn: () => Promise<T>, attempts = 8): Promise<T> {
 }
 
 interface Ticket {
-  legacyId: string; number: string; jobRef: string; empRef: string; customerRef: string;
+  sourceId: string; number: string; jobRef: string; empRef: string; customerRef: string;
   begin: string; end: string; billed: boolean; final: boolean; approval: string;
   foremanRef: string; po: string | null; description: string | null;
 }
@@ -71,7 +76,7 @@ interface Row { ticketId: string; empRef: string; itemRef: string; hours: { day:
 const parseTickets = (): Ticket[] =>
   readFileSync(HEADERS, "utf8").split("\n").map((l) => l.split("\t")).filter((c) => c.length >= 13 && /^\d+$/.test(c[0]))
     .map((c) => ({
-      legacyId: c[0], number: c[1], jobRef: c[2], empRef: c[3], customerRef: c[4],
+      sourceId: c[0], number: c[1], jobRef: c[2], empRef: c[3], customerRef: c[4],
       begin: c[5]!, end: c[6]!, billed: c[7] === "Yes", final: c[8] === "Yes", approval: c[9],
       foremanRef: c[10], po: c[11] === "NULL" ? null : c[11], description: (c[12] ?? "").trim() || null,
     }));
@@ -107,6 +112,11 @@ const parseRows = (): Row[] =>
   const projects = await map("projects");
   const parties = await map("parties");
   const actor = ((await retry(() => db.execute(sql`select id from users where org_id = ${ORG} order by created_at limit 1`))) as any).rows[0]?.id;
+  const org = ((await retry(() => db.execute(sql`
+    select base_currency from orgs where id = ${ORG}
+  `))) as any).rows[0] as { base_currency?: string } | undefined;
+  const baseCurrency = org?.base_currency?.trim();
+  if (!baseCurrency) throw new Error("target organization has no base currency");
 
   // Preload the tickets already landed so a resumed run costs one query, not one per ticket.
   const existingTickets = new Map<string, string>(
@@ -123,17 +133,29 @@ const parseRows = (): Row[] =>
     let ticketDocId: string | undefined = existingTickets.get(t.number);
     if (ticketDocId) existing++;
     else {
+      const sourceMetadata = {
+        source: {
+          system: SOURCE_SYSTEM,
+          externalId: t.sourceId,
+          number: t.number,
+          jobRef: t.jobRef,
+          empRef: t.empRef,
+          foremanRef: t.foremanRef,
+          periodBegin: t.begin,
+          periodEnd: t.end,
+          billed: t.billed,
+          finalTicket: t.final,
+          approval: t.approval,
+        },
+      };
       ticketDocId = await retry(() => withOrg(ORG, async () => {
         const ins = (await db.execute(sql`
           insert into documents (org_id, kind, document_number, party_id, project_id, document_date, currency,
                                  status, memo, subtotal, tax_total, total, reference_number, created_by, custom)
           values (${ORG}, 'field_ticket', ${t.number}, ${parties.get(t.customerRef) ?? null}, ${projectId},
-                  ${t.end}, 'CAD', ${t.approval === "Yes" ? "approved" : "draft"}, ${t.description},
+                  ${t.end}, ${baseCurrency}, ${t.approval === "Yes" ? "approved" : "draft"}, ${t.description},
                   '0', '0', '0', ${t.po}, ${actor},
-                  ${JSON.stringify({ legacy: { system: "adminapp2", id: t.legacyId, number: t.number,
-                    jobRef: t.jobRef, empRef: t.empRef, foremanRef: t.foremanRef,
-                    periodBegin: t.begin, periodEnd: t.end, billed: t.billed,
-                    finalTicket: t.final, approval: t.approval } })}::jsonb)
+                  ${JSON.stringify(sourceMetadata)}::jsonb)
           returning id`)) as any;
         await db.execute(sql`
           insert into field_tickets

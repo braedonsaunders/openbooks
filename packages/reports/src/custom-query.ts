@@ -1,5 +1,4 @@
-// Compiler for user-built custom reports (ported from beaconhs
-// packages/reports/src/custom-query.ts). SQL-injection-safe: every identifier
+// Compiler for user-built custom reports. SQL-injection-safe: every identifier
 // comes from the entity catalog (compile-time constants) and all values bind
 // as numbered parameters.
 //

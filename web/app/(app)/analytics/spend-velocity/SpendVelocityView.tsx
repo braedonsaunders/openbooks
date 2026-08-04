@@ -28,7 +28,7 @@ const TAB_LABEL: Record<Tab, string> = {
 }
 const pct1 = (v: number, d = 1) => `${v.toFixed(d)}%`
 
-/** Gantry velocity pill colouring: hot >15, warm >5, cold <−5, else cool. */
+/** Velocity pill colouring: hot >15, warm >5, cold <−5, else cool. */
 function velTone(v: number) {
   if (v > 15) return 'bg-rose-100 text-rose-700 dark:bg-rose-950/50 dark:text-rose-400'
   if (v > 5) return 'bg-amber-100 text-amber-700 dark:bg-amber-950/50 dark:text-amber-400'
@@ -45,7 +45,7 @@ function VelocityPill({ v }: { v: number }) {
   )
 }
 
-/** Gantry acceleration indicator (±1 / ±3 thresholds). */
+/** Acceleration indicator (±1 / ±3 thresholds). */
 function Accel({ a }: { a: number }) {
   const tone = a > 3 ? 'text-rose-600 dark:text-rose-400' : a > 1 ? 'text-amber-600 dark:text-amber-400'
     : a < -3 ? 'text-emerald-600 dark:text-emerald-400' : a < -1 ? 'text-sky-600 dark:text-sky-400' : 'text-slate-400 dark:text-slate-500'
@@ -61,7 +61,7 @@ const TREND_BADGE: Record<VelocityRow['trend'], { label: string; cls: string }> 
   new: { label: 'New', cls: 'bg-sky-100 text-sky-700 dark:bg-sky-950/50 dark:text-sky-400' },
 }
 
-/** Pure-SVG sparkline (60×20, Gantry table cell). */
+/** Pure-SVG sparkline for compact table cells (60×20). */
 function Spark({ values }: { values: number[] }) {
   if (values.length < 2) return <span className="text-xs text-slate-300">—</span>
   const min = Math.min(...values), max = Math.max(...values)
@@ -75,7 +75,7 @@ function Spark({ values }: { values: number[] }) {
   )
 }
 
-/** Health gauge (Gantry risk-meter): score 0-100 → colour + grade. */
+/** Health gauge (Risk-meter): score 0-100 → colour + grade. */
 function HealthGauge({ score, grade }: { score: number; grade: string }) {
   const color = score >= 80 ? '#10b981' : score >= 70 ? '#f59e0b' : score >= 60 ? '#f97316' : '#ef4444'
   const label = score >= 80 ? 'HEALTHY' : score >= 70 ? 'WATCH' : score >= 60 ? 'ELEVATED' : 'AT RISK'
@@ -160,7 +160,7 @@ function OverviewTab({ data, onDrill }: { data: SpendVelocityData; onDrill: (d: 
   const byVelocity = [...accounts].sort((a, b) => b.velocity - a.velocity).slice(0, 6)
   const top10 = accounts.slice(0, 10)
 
-  // IQR-based scatter bounds (verbatim Gantry).
+  // IQR-based scatter bounds (stable).
   const scatterOption = useMemo(() => {
     const vels = accounts.map((a) => a.velocity)
     const accels = accounts.map((a) => a.acceleration)

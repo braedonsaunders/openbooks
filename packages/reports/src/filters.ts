@@ -1,6 +1,5 @@
 // Filter → SQL compilation for custom reports. The report studio stores one
-// canonical nested and/or rule tree (ported from beaconhs
-// packages/reports/src/filters.ts, re-targeted at a plain pg client).
+// canonical nested and/or rule tree and compiles it for a plain pg client.
 //
 // Identifiers are never interpolated from user input: column keys must
 // resolve through the entity catalog, and values always bind as numbered

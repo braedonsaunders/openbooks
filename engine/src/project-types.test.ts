@@ -38,32 +38,21 @@ test('fixed-price time is cost evidence unless an explicit work basis bills it',
 })
 
 test('project financial policy is effective-dated, immutable, and tenant isolated', () => {
-  const migration = readFileSync(
-    'schema/migrations/generated/0079_project_financial_profile_versions.sql',
+  const baseline = readFileSync(
+    'schema/migrations/generated/0001_baseline.sql',
     'utf8',
   )
-  assert.match(migration, /project financial profile effective ranges cannot overlap/)
-  assert.match(migration, /published project financial profile versions are immutable/)
-  assert.match(migration, /FORCE ROW LEVEL SECURITY/)
-  assert.match(migration, /CREATE POLICY org_isolation ON project_financial_profile_versions/)
-
-  const cutover = readFileSync(
-    'schema/migrations/generated/0123_prelaunch_canonical_models.sql',
-    'utf8',
-  )
-  assert.match(cutover, /DROP COLUMN financial_profile/)
-  assert.match(cutover, /every project type requires an effective-dated financial profile/)
-  assert.match(cutover, /Normalize the custom record definition to the canonical form-section model/)
-  assert.match(cutover, /jsonb_build_object\(\s*'id', 'main',\s*'title', 'Details',\s*'fields'/)
-  assert.match(cutover, /INSERT INTO audit_log/)
-
-  const correction = readFileSync(
-    'schema/migrations/generated/0085_project_financial_profile_corrections.sql',
-    'utf8',
-  )
-  assert.match(correction, /openbooks\.correct_project_profile/)
-  assert.match(correction, /may change only policy JSON and requires a reason/)
-  assert.match(correction, /published project financial profile versions are immutable/)
+  assert.match(baseline, /project financial profile effective ranges cannot overlap/)
+  assert.match(baseline, /published project financial profile versions are immutable/)
+  assert.match(baseline, /ALTER TABLE ONLY public\.project_financial_profile_versions FORCE ROW LEVEL SECURITY/)
+  assert.match(baseline, /CREATE POLICY org_isolation ON public\.project_financial_profile_versions/)
+  assert.match(baseline, /openbooks\.correct_project_profile/)
+  assert.match(baseline, /may change only policy JSON and requires a reason/)
+  const projectTypesTable = baseline.match(
+    /CREATE TABLE public\.project_types \(([\s\S]*?)\n\);/,
+  )?.[1]
+  assert.ok(projectTypesTable)
+  assert.doesNotMatch(projectTypesTable, /financial_profile/)
 
   const service = readFileSync(
     'engine/src/project-financial-profile-versions.ts',

@@ -1,8 +1,7 @@
 /**
  * openbooks permission catalogue + built-in roles + wildcard matching.
  *
- * Ported from the beaconhs IAM foundation (packages/db/src/schema/iam.ts and
- * packages/tenant). Keys are hierarchical `module.action[.qualifier]` strings;
+ * Keys are hierarchical `module.action[.qualifier]` strings;
  * a stored grant of `ap.*` covers any `ap.x` at check time, and a stored `*`
  * covers everything.
  *
@@ -591,7 +590,7 @@ export const BUILT_IN_ROLES: Record<
 export const BUILT_IN_ROLE_KEYS = Object.keys(BUILT_IN_ROLES);
 
 /**
- * Wildcard-matching permission check, ported faithfully from beaconhs's
+ * Wildcard-matching permission check.
  * can() (packages/tenant): exact key, full wildcard `*`, or a `module.*`
  * grant whose prefix covers the requested key.
  */
@@ -606,8 +605,8 @@ export function permissionSetCovers(permissions: ReadonlySet<string>, perm: stri
 }
 
 /**
- * Apply deny overrides to a granted-permission set — deny wins. Ported from
- * beaconhs's applyPermissionDenies: a specific deny under a wildcard grant
+ * Apply deny overrides to a granted-permission set — deny wins. A specific
+ * deny under a wildcard grant
  * first expands that wildcard into its catalogue keys (so the sibling keys
  * survive), then every denied key — and everything under a wildcard deny —
  * is removed.

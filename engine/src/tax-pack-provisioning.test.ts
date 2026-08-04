@@ -245,11 +245,11 @@ test("the catalog contains no unsourced placeholder country packs", () => {
 });
 
 test("immutable pack evidence permits only an explicit sandbox teardown", () => {
-  const migration = readFileSync(
-    "schema/migrations/generated/0124_tax_pack_sandbox_wipe.sql",
+  const baseline = readFileSync(
+    "schema/migrations/generated/0001_baseline.sql",
     "utf8",
   );
-  assert.match(migration, /current_setting\('openbooks\.sandbox_wipe', true\) = 'on'/);
-  assert.match(migration, /env_kind = 'sandbox'/);
-  assert.match(migration, /country tax pack installation evidence is immutable/);
+  assert.match(baseline, /current_setting\('openbooks\.sandbox_wipe', true\) = 'on'/);
+  assert.match(baseline, /env_kind = 'sandbox'/);
+  assert.match(baseline, /country tax pack installation evidence is immutable/);
 });

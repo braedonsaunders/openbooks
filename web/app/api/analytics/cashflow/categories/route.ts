@@ -8,10 +8,10 @@ import type { ForecastCategory } from "../../../../../lib/analytics/cashflow-dat
 export const runtime = "nodejs";
 
 /**
- * Cash Flow forecast categories — the openbooks port of Gantry's category
- * config CRUD. Stored as an array at orgs.settings.analytics.cashflowCategories.
+ * Cash Flow forecast-category configuration. Stored as an array at
+ * orgs.settings.analytics.cashflowCategories.
  * PUT replaces the whole list (the editor sends the full state); each entry is
- * validated per method (ALL SEVEN Gantry strategies) and unknown fields are
+ * validated per method (all seven strategies) and unknown fields are
  * dropped.
  */
 const METHODS = new Set([

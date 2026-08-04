@@ -4,8 +4,7 @@ import { db } from "@openbooks/engine/src/db.ts";
 import type { Authz } from "./authz";
 
 /**
- * Assistant conversation persistence, ported from beaconhs's
- * ai-conversations.ts and simplified to openbooks' model: a conversation is
+ * Assistant conversation persistence: a conversation is
  * private to its owner (no sharing), org-scoped, namespaced by `scope`
  * ('assistant' for the overview chat). Every accessor takes the resolved
  * Authz and enforces ownership in SQL — no caller can read or append to

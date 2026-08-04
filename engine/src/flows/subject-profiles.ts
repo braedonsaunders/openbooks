@@ -8,8 +8,7 @@ import type { FlowFieldDef, FlowSubjectProfile } from "@openbooks/forms-core";
  * posting.ts before/after post, payments.ts void), so the profiles differ
  * only in label and, for non-posting kinds, the post_document action.
  *
- * Mirrors beaconhs-platform's lib/flows/module-profiles.ts, collapsed to the
- * one `documents` supertype openbooks has instead of beaconhs's 14 modules.
+ * The profile is collapsed onto the single `documents` supertype.
  */
 
 /**

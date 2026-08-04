@@ -1,5 +1,4 @@
-// Server-side sanitiser for untrusted customQuery payloads (ported from the
-// beaconhs studio validate.ts). Client JSON is untrusted: entity/columns/
+// Server-side sanitiser for untrusted customQuery payloads. Client JSON is untrusted: entity/columns/
 // operators must resolve through the catalog, the filter tree is depth/size-
 // capped, and aggregation specs are normalised. Shared by the definitions
 // CRUD routes and the run/preview route.

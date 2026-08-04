@@ -18,9 +18,8 @@ import { executeFlowPlan } from "./execute.ts";
 import { parseFlowGraph } from "./run.ts";
 
 /**
- * Scheduled flow triggers — ported from beaconhs-platform's
- * apps/worker/src/lib/scheduled-flow-runner.ts, adapted to the openbooks 60s
- * scheduler tick (engine/src/scheduler.ts).
+ * Scheduled flow triggers on the 60-second scheduler tick
+ * (engine/src/scheduler.ts).
  *
  * Anchoring: a flow fires when any of its `scheduled` trigger nodes has a
  * cron occurrence in (lastScheduledRunAt ?? createdAt, now] — a late tick or

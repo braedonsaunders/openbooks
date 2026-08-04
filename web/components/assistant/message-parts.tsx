@@ -1,7 +1,7 @@
 'use client'
 
 // Renders an assistant turn's ordered parts — markdown text + tool-use cards +
-// proposal cards. Ported from beaconhs; the SAME renderer serves live
+// proposal cards. The same renderer serves live
 // streaming and DB reload.
 
 import { ChatMarkdown } from './markdown'

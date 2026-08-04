@@ -6,7 +6,7 @@
 // boundary guide, and it floats on a dark "desk" surround. The styling
 // re-applies live when paper size / orientation / margin change in the top bar.
 // Multi-page pagination is the Preview tab (exact Chromium render); here it's
-// one tall sheet. Ported from beaconhs-platform's PdfBuilder.
+// one tall sheet.
 
 import { useEffect, useRef, useState, type CSSProperties } from 'react'
 import GjsEditor, { BlocksProvider, Canvas } from '@grapesjs/react'

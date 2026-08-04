@@ -8,7 +8,7 @@ import { GroupedBar } from './charts'
 import { useAnalyticsMoney } from './format'
 
 /**
- * Shared analytics drill-down drawer — the openbooks port of Gantry's
+ * Shared analytics drill-down drawer — the openbooks implementation of'
  * universal account/vendor flyout (3 KPI cards, monthly activity chart,
  * searchable + paginated transaction list with record deep-links, breakdown
  * view). Fetches per-entity on open via /api/analytics/drill — never a

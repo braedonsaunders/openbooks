@@ -1,4 +1,4 @@
-// openbooks app shell — the beaconhs shell minus tenancy: sidebar + header
+// OpenBooks app shell: sidebar, header, and main content surface.
 // (mobile toggle, org name, account menu) + scrolling main + mobile tab bar.
 //
 // Two desktop layouts, picked server-side by resolveNavMode: "sidebar" (the

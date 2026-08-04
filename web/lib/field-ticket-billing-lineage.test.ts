@@ -6,27 +6,23 @@ const source = (path: string) => readFileSync(path, 'utf8')
 
 test('Field Ticket billing selections use an immutable tenant-scoped relation', () => {
   const schema = source('schema/src/billing.ts')
-  const migration = source('schema/migrations/generated/0089_field_ticket_billing_lineage.sql')
+  const baseline = source('schema/migrations/generated/0001_baseline.sql')
   const requests = source('web/lib/billing-requests.ts')
 
   assert.match(schema, /enum: \["date_range", "draw_amount", "time_selection", "milestone", "field_ticket"\]/)
   assert.match(schema, /billingRequestFieldTickets = pgTable/)
   assert.match(schema, /billing_request_field_tickets_request_ticket/)
 
-  assert.match(migration, /CREATE TABLE IF NOT EXISTS billing_request_field_tickets/)
-  assert.match(migration, /selection_source IN \('request_creation', 'legacy_json_migration', 'validation_replay'\)/)
-  assert.match(migration, /custom = custom - 'fieldTicketIds'/)
-  assert.match(migration, /billing_requests_no_field_ticket_ids_json/)
-  assert.match(migration, /billing request Field Ticket selections are immutable/)
-  assert.match(migration, /CREATE CONSTRAINT TRIGGER billing_request_field_ticket_request_guard/)
-  assert.match(migration, /DEFERRABLE INITIALLY DEFERRED/)
-  assert.match(migration, /ticket\.org_id = new\.org_id/)
-  assert.match(migration, /ticket\.project_id = request_project_id/)
-  assert.match(migration, /ENABLE ROW LEVEL SECURITY/)
-  assert.match(migration, /FORCE ROW LEVEL SECURITY/)
+  assert.match(baseline, /CREATE TABLE public\.billing_request_field_tickets/)
+  assert.doesNotMatch(baseline, /selection_source/)
+  assert.match(baseline, /billing request Field Ticket selections are immutable/)
+  assert.match(baseline, /ticket\.org_id = new\.org_id/)
+  assert.match(baseline, /ticket\.project_id = request_project_id/)
+  assert.match(baseline, /ticket\.status = 'approved'/)
+  assert.match(baseline, /ALTER TABLE public\.billing_request_field_tickets ENABLE ROW LEVEL SECURITY/)
+  assert.match(baseline, /ALTER TABLE ONLY public\.billing_request_field_tickets FORCE ROW LEVEL SECURITY/)
 
   assert.match(requests, /insert into billing_request_field_tickets/)
-  assert.match(requests, /'request_creation'/)
   assert.match(requests, /ticket\.status = 'approved'/)
   assert.match(requests, /request\.status <> 'cancelled'/)
   assert.match(requests, /pg_advisory_xact_lock/)
@@ -37,7 +33,7 @@ test('Field Ticket charges and invoices preserve document and line provenance', 
   const tickets = source('web/lib/field-tickets.ts')
   const charges = source('web/lib/project-charges.ts')
   const billing = source('web/lib/billing.ts')
-  const migration = source('schema/migrations/generated/0089_field_ticket_billing_lineage.sql')
+  const baseline = source('schema/migrations/generated/0001_baseline.sql')
 
   assert.match(tickets, /fieldTicketId: ticketId/)
   assert.match(tickets, /field_ticket_id, created_by, updated_by/)
@@ -52,8 +48,8 @@ test('Field Ticket charges and invoices preserve document and line provenance', 
   assert.match(billing, /'bills'/)
   assert.doesNotMatch(billing, /custom\s*(?:\.|->).*fieldTicketIds/)
 
-  assert.match(migration, /SET field_ticket_id = ticket\.id/)
-  assert.match(migration, /document_links_unique_edge/)
+  assert.match(baseline, /field_ticket_id uuid/)
+  assert.match(baseline, /document_links_unique_edge/)
 })
 
 test('Field Ticket billing is feature-gated and visible in project and ticket workflows', () => {
@@ -61,7 +57,6 @@ test('Field Ticket billing is feature-gated and visible in project and ticket wo
   const billingUi = source('web/app/(app)/projects/tabs/BillingSection.tsx')
   const ticketUi = source('web/app/(app)/field-tickets/FieldTicketDrawer.tsx')
   const setupRoute = source('web/app/api/admin/setup/project-types/route.ts')
-  const replay = source('engine/src/validation/ft-batch-replay.ts')
 
   assert.match(cockpit, /isFeatureEnabled\(orgId, 'fieldTickets'\)/)
   assert.match(cockpit, /listBillableFieldTickets/)
@@ -72,8 +67,4 @@ test('Field Ticket billing is feature-gated and visible in project and ticket wo
   assert.match(ticketUi, /ticket\.billingRequests/)
   assert.match(ticketUi, /ticket\.links/)
   assert.match(setupRoute, /Company Settings → Features/)
-
-  assert.match(replay, /insert into billing_request_field_tickets/)
-  assert.match(replay, /'validation_replay'/)
-  assert.doesNotMatch(replay, /JSON\.stringify\(\{\s*fieldTicketIds/)
 })

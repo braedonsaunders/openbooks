@@ -11,10 +11,9 @@ import {
 import { auditColumns, id, money, orgRef } from "./helpers";
 
 /**
- * AI assistant conversation history. Ported from the beaconhs platform's
- * ai_conversations/ai_messages pair (packages/db/src/schema/ai.ts), minus the
- * cross-user sharing layer: an openbooks conversation is private to the user
- * who started it. `scope` namespaces threads per feature ('assistant' for the
+ * AI assistant conversation history. The ai_conversations/ai_messages pair
+ * stores private per-user conversations. `scope` namespaces threads per feature
+ * ('assistant' for the
  * overview chat) so future features (report explanations, drawer copilots)
  * can reuse the same tables.
  */

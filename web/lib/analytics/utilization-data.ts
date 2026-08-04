@@ -5,32 +5,31 @@ import { analyticsConfig } from "./config";
 import { getMoneyFormatter } from '../money-server'
 
 /**
- * Utilization (Billable IQ) — a faithful port of Gantry's Time dashboard
- * (Lib_Time_Data.js + Dashboard.Time.js).
+ * Utilization (Billable IQ) — data and metrics for the Time dashboard.
  *
  * Source data = `time_entries` (per-entry hours / is_billable / cost_rate),
- * grouped employee × department × item exactly like Gantry's fetchTimeStats.
- * Differences from source platform forced by the schema, stated plainly:
- *  - billable = the `is_billable` flag (Gantry: `customer IS NOT NULL`; here
- *    every billable entry carries a project → customer, so it's equivalent);
+ * grouped by employee × department × item.
+ * Schema behavior is stated plainly:
+ *  - billable = the `is_billable` flag; every billable entry carries a project
+ *    linked to a customer;
  *  - non-billable cost = Σ hours × per-entry `cost_rate` on non-billable rows
- *    (richer than Gantry's employee.laborcost single rate);
+ *    (richer than the employee.laborcost single rate);
  *  - job title: employees have no title field — an employee's `title` is their
  *    DOMINANT LABOUR CLASS (the item they logged the most hours to, e.g.
  *    "MECH:Foreman"), which is what timebill items encode in this dataset;
- *  - noBillable departments: Gantry has a config list; here a department is
- *    auto-flagged when it logged 0 billable hours in current AND prior range
+ *  - noBillable departments are auto-flagged when they logged 0 billable hours
+ *    in the current AND prior range
  *    (e.g. the "Overhead" department).
  *
  * The prior range is the same duration immediately preceding, and history is
- * 5 rolling prior periods of the same month-length — both verbatim Gantry.
+ * 5 rolling prior periods of the same month-length — both stable.
  */
 
 export interface UStat {
   hours: number;
   billableHours: number;
   nonBillableHours: number;
-  percentBilled: number; // 0-100 like Gantry
+  percentBilled: number; // 0-100
   nonBillableCost: number;
 }
 
@@ -78,8 +77,8 @@ export interface UtilizationData {
   history: { periodMonths: number; periods: UHistoryPeriod[] };
 }
 
-// Threshold defaults live in lib/analytics/config.ts (Gantry Lib_Config time
-// defaults); per-org overrides come from orgs.settings.analytics.utilization.
+// Threshold defaults live in lib/analytics/config.ts; per-org overrides come
+// from orgs.settings.analytics.utilization.
 
 interface StatRow {
   employee: string;
@@ -93,7 +92,7 @@ interface StatRow {
   non_billable_cost: number;
 }
 
-/** Gantry fetchTimeStats: one grouped scan per range.
+/** One grouped scan per range.
  *  org filter is EXPLICIT (defense in depth — do not rely on ambient RLS). */
 async function fetchTimeStats(orgId: string, from: string, to: string): Promise<StatRow[]> {
   const res: any = await db.execute(sql`
@@ -144,7 +143,7 @@ const ZERO: UStat = { hours: 0, billableHours: 0, nonBillableHours: 0, percentBi
 
 type Key = "department" | "item" | "employee";
 
-/** Gantry buildTimeGroup, verbatim semantics. */
+/** Build current/prior utilization groups for one reporting dimension. */
 function buildGroup(curr: StatRow[], prior: StatRow[], key: Key, titleByEmp: Map<string, string>, noBillDepts: Set<string>, minHours: number): UGroupRow[] {
   const deptName = new Map<string, string>();
   for (const r of curr) if (r.department && r.department_name) deptName.set(r.department, r.department_name);
@@ -167,7 +166,7 @@ function buildGroup(curr: StatRow[], prior: StatRow[], key: Key, titleByEmp: Map
       g.cost += r.non_billable_cost;
       if (key !== "department" && r.department) g.deptHours.set(r.department, (g.deptHours.get(r.department) ?? 0) + r.total_hours);
     }
-    // Primary department = most hours (Gantry's departmentHours logic).
+    // Primary department = most hours (the departmentHours logic).
     if (key !== "department") {
       for (const g of groups.values()) {
         let max = 0;
@@ -204,7 +203,7 @@ function buildGroup(curr: StatRow[], prior: StatRow[], key: Key, titleByEmp: Map
     if (key === "department") row.noBillable = noBillDepts.has(id);
     rows.push(row);
   }
-  // Gantry sorts groups by non-billable cost desc.
+  // Sort groups by non-billable cost descending.
   return rows.sort((a, b) => b.range.nonBillableCost - a.range.nonBillableCost);
 }
 
@@ -215,13 +214,13 @@ export async function utilizationData(orgId: string, period: { from: string; to:
   const rangeEnd = new Date(period.to + "T00:00:00Z");
   const days = Math.ceil((rangeEnd.getTime() - rangeStart.getTime()) / 86_400_000) + 1;
 
-  // Prior range: same duration immediately preceding (Gantry).
+  // Prior range: same duration immediately preceding.
   const priorEnd = new Date(rangeStart.getTime() - 86_400_000);
   const priorStart = new Date(priorEnd.getTime() - (days - 1) * 86_400_000);
   const priorFrom = ymd(priorStart);
   const priorTo = ymd(priorEnd);
 
-  // History period plan: same month-length, 5 prior periods, dedup labels (Gantry).
+  // History period plan: same month-length, 5 prior periods, deduplicated labels.
   const periodMonths =
     (rangeEnd.getUTCFullYear() - rangeStart.getUTCFullYear()) * 12 + (rangeEnd.getUTCMonth() - rangeStart.getUTCMonth()) + 1;
   const histPlans: { start: string; end: string; label: string }[] = [];
@@ -267,7 +266,7 @@ export async function utilizationData(orgId: string, period: { from: string; to:
     titleByEmp.set(emp, best);
   }
 
-  // Company rollup — billable-expected departments only (Gantry buildTimeCompany).
+  // Company rollup — billable-expected departments only ().
   const companySum = (rows: StatRow[]) => {
     let hours = 0, billable = 0, cost = 0;
     for (const r of rows) {

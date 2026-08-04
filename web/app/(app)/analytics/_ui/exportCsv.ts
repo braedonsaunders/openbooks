@@ -1,7 +1,7 @@
 'use client'
 
 /**
- * Client-side CSV download — Gantry's exportToCSV, shared by every analytics
+ * Client-side CSV download — the exportToCSV, shared by every analytics
  * table. Values are quoted-escaped; numbers pass through raw so spreadsheets
  * parse them.
  */

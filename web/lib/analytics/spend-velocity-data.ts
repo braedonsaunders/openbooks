@@ -5,10 +5,10 @@ import { analyticsConfig } from "./config";
 import { getMoneyFormatter } from '../money-server'
 
 /**
- * Spend Velocity — a faithful port of Gantry's SpendVelocity dashboard
+ * Spend Velocity — an implementation of the SpendVelocity dashboard
  * (Lib_SpendVelocity_Data.js, account-centric v3).
  *
- * Source data mirrors Gantry's four spend transaction types exactly:
+ * Source data mirrors the four spend transaction types exactly:
  * vendor_bill / expense_report / check (positive) net of vendor_credit —
  * as journal lines on expense/COGS accounts, grouped account × month
  * (primary) and vendor × month (drill-down). PO vs SO velocity feeds the
@@ -22,13 +22,13 @@ import { getMoneyFormatter } from '../money-server'
  * concentration risk (HHI), seasonal patterns, commitment cliff.
  * Comprehensive health score = 100 − severity-weighted deductions, verbatim.
  *
- * HONEST GAP: Gantry's Shadow IT detector needs a line-level VENDOR on
+ * HONEST GAP: the Shadow IT detector needs a line-level VENDOR on
  * expense-report lines (who the employee actually paid). openbooks expense
  * lines carry only the expense account + free-text description, so that
  * detector is reported as unavailable rather than faked.
  */
 
-// ---- Gantry default config -------------------------------------------------
+// ---- Default config -------------------------------------------------
 const CFG = {
   velocityHighThreshold: 15,
   velocityMediumThreshold: 5,
@@ -164,7 +164,7 @@ export interface SpendVelocityData {
   };
 }
 
-// ---- CAGR velocity engine (verbatim Gantry) ---------------------------------
+// ---- CAGR velocity engine (stable) ---------------------------------
 
 function calculateCAGR(startValue: number, endValue: number, periods: number): number {
   if (periods < 1 || startValue <= 0) return 0;
@@ -762,7 +762,7 @@ export async function spendVelocityData(orgId: string, period: { from: string; t
   deductions += Math.min(15, structural);
   // Financial impact (max −10).
   const savingsPotential = boilingFrog.summary.totalAnnualizedCreep + zombies.summary.totalAnnualCost;
-  const savingsWithFrag = savingsPotential + fragmentation.summary.totalFragmentedSpend * 0; // frag excluded per Gantry
+  const savingsWithFrag = savingsPotential + fragmentation.summary.totalFragmentedSpend * 0; // frag excluded as designed
   void savingsWithFrag;
   if (totalSpend > 0) {
     const ratio = (boilingFrog.summary.totalAnnualizedCreep + fragmentation.summary.totalFragmentedSpend * 0 + zombies.summary.totalAnnualCost) / totalSpend;

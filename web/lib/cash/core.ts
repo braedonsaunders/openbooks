@@ -7,8 +7,7 @@ import { getMoneyFormatter } from '../money-server'
 /**
  * Shared cash-engine core — the primitives behind BOTH the read-only analytics
  * cashflow forecast (analytics/cashflow) and the operational domain cockpits
- * (AP / AR / Banking-Cash). Everything here is a faithful port of Gantry's
- * Liquidity/Cashflow model; it was extracted verbatim from the original
+ * (AP / AR / Banking-Cash). It was extracted from the original
  * analytics `cashflow-data.ts` so the numbers stay byte-identical.
  *
  * Rule of the house: one source of truth. Analytics *explains* the forecast,
@@ -23,7 +22,7 @@ export const parseISO = (s: string) => new Date(s + "T00:00:00Z");
 export const toISO = (d: Date) => d.toISOString().slice(0, 10);
 export const addDays = (d: Date, n: number) => new Date(d.getTime() + n * MS_DAY);
 export const daysBetween = (a: Date, b: Date) => Math.round((b.getTime() - a.getTime()) / MS_DAY);
-/** Sunday of the week (Gantry getWeekStart: date − getDay()). */
+/** Sunday of the week (date − getDay()). */
 export const weekStart = (d: Date) => addDays(d, -d.getUTCDay());
 /** Weekend → next business day (Sat +2, Sun +1). */
 export const businessDay = (d: Date) => {
@@ -80,8 +79,7 @@ export interface WeekRow {
 }
 
 /**
- * Non-AR/AP forecast category — the openbooks port of Gantry's dynamic
- * category engine (Lib_Cashflow_Data processCategory). ALL SEVEN of Gantry's
+ * Non-AR/AP forecast category. All seven
  * calculation strategies are supported: GL History Average, Vendor Payment
  * History, Credit Card Cycle, Manual Recurring, Formula Expression, Vendor
  * Recurring (Auto) and Bank Register History — plus the expected-day /
@@ -148,7 +146,7 @@ export interface CategoryContext {
   subIds?: string[];
 }
 
-/** A source item behind a category estimate (Gantry's breakdown rows). */
+/** A source item behind a category estimate (the breakdown rows). */
 export interface CategoryBreakdownRow {
   name: string;
   date?: string;
@@ -165,11 +163,11 @@ export interface CategoryWeekly {
   method: ForecastCategory["method"];
   weekly: number[]; // aligned with weeks[]
   total: number;
-  /** Human explanation of the computation (Gantry's Forecast Logic card). */
+  /** Human explanation of the computation (the Forecast Logic card). */
   logic: string;
-  /** Gantry meta: display method label + the numbers behind the estimate. */
+  /** Display method label and the numbers behind the estimate. */
   meta: { method: string } & Record<string, string | number>;
-  /** The source items the estimate was derived from (Gantry breakdown). */
+  /** The source items the estimate was derived from. */
   breakdown: CategoryBreakdownRow[];
 }
 
@@ -205,7 +203,7 @@ export interface WeekGrid {
   weekStarts: string[];
 }
 
-/** Build the Sunday-aligned week grid for a horizon (Gantry buildFinalTimeline). */
+/** Build the Sunday-aligned week grid for a horizon (). */
 export function buildWeekGrid(asOfIso: string, horizonWeeks: number): WeekGrid {
   const asOf = parseISO(asOfIso);
   const start = weekStart(asOf);
@@ -281,7 +279,7 @@ export async function openItems(side: Side, asOf: string, subIds?: string[]): Pr
 
 /**
  * Per-party avg days (+ σ) from invoice/bill date to the applied payment.
- * Gantry parity: history restricted to the trailing 365 days (paymentHistoryDays),
+ * Forecast policy: history restricted to the trailing 365 days (paymentHistoryDays),
  * global average weighted by data point (globalSum/globalCount over all payments,
  * not an average of per-party averages), and 45-day default when no history exists.
  */
@@ -326,7 +324,7 @@ export async function loadCategories(orgId: string): Promise<ForecastCategory[]>
   return raw.filter((c: any) => c && typeof c === "object" && c.id && c.name && c.method);
 }
 
-/* ------------------- category engine helpers (Gantry ports) ------------- */
+/* ------------------- category engine helpers ------------------------------- */
 
 const addMonthsUTC = (d: Date, n: number): Date => {
   const r = new Date(d);
@@ -340,7 +338,7 @@ const round2 = (n: number): number => Math.round(n * 100) / 100;
 const isSet = (v: number | string | null | undefined): boolean => v !== null && v !== undefined && v !== "";
 
 /**
- * Gantry getProrationFactor — places a weekly amount on its expected day of
+ *  — places a weekly amount on its expected day of
  * week / week of month, zeroes weeks whose slot has already passed, and
  * prorates the current distributed week by business days remaining.
  */
@@ -387,7 +385,7 @@ export function getProrationFactor(
 
 /**
  * Compute one category's weekly amounts across the horizon — ALL SEVEN of
- * Gantry's strategies (Lib_Cashflow_Data processCategory), ported faithfully:
+ * the strategies (Lib_Cashflow_Data processCategory), ported faithfully:
  *
  *  - gl_history_average: weekly GL activity average over historyWeeks, actuals
  *    override forecast inside the horizon, optional net-amount mode.
@@ -453,7 +451,7 @@ export async function categoryWeekly(
     const ids = sql.join(cat.accountIds.map((a) => sql`${a}`), sql`, `);
     const historyStart = addDays(tStart, -historyWeeks * 7);
     // Grouped by Sunday-start week AND account: weeks before the horizon feed
-    // the average, weeks inside it act as actuals (Gantry weeklyHistory).
+    // the average, weeks inside it act as actuals ().
     const r = (await db.execute(sql`
       select (e.posting_date - extract(dow from e.posting_date)::int)::text as wk,
              a.number, a.name,
@@ -901,7 +899,7 @@ export function bucketOf(daysPastDue: number): string {
   return "90+";
 }
 
-/** Predict collection/payment date for one open item (Gantry logic). */
+/** Predict collection/payment date for one open item. */
 export function predict(
   item: OpenItem,
   asOf: Date,
@@ -954,7 +952,7 @@ export function summariseSide(items: OpenItem[], asOf: Date, scheduled: number, 
 }
 
 /**
- * Predict every open item into a week bucket (Gantry buildARForecast /
+ * Predict every open item into a week bucket ( /
  * buildAPForecast). Returns the by-week entry map and the total scheduled
  * inside the horizon — the shared step behind the analytics timeline and the
  * cockpit worklists.

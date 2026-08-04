@@ -15,7 +15,7 @@ test('orders accounts parent-first within one statement class', () => {
   assert.equal(result.parentIds.get('child'), 'parent')
 })
 
-test('keeps cross-class and cyclic legacy accounts visible as roots', () => {
+test('keeps cross-class and cyclic imported accounts visible as roots', () => {
   const rows = [
     { id: 'asset', parent_id: 'expense', name: 'Cash', type: 'asset_bank' },
     { id: 'expense', parent_id: null, name: 'Rent', type: 'expense' },

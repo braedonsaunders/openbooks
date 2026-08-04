@@ -3,9 +3,8 @@
 // renderer: callers (the web report adapters, the view export path)
 // shape their own result types into this generic input.
 //
-// The visual vocabulary is ported from the beaconhs report document renderer
-// (@beaconhs/reports/document.ts): a cover header with org branding, a key-
-// figures summary band, and one section per group of rows — re-implemented on
+// The visual vocabulary provides a cover header with organization branding, a
+// key-figures summary band, and one section per group of rows, implemented on
 // top of pdfkit (pure JS, no Chromium) instead of HTML + Puppeteer.
 
 /** Paper sizes a document can print on. */

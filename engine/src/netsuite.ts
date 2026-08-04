@@ -423,8 +423,8 @@ export async function netsuiteSoapTransactionIdsForFile(
  * This is the ONLY NetSuite read path without a ~10MB ceiling: the RESTlet
  * transport hits `File.getContents()`'s 10.0MB cap, the FileReader read
  * budget dies when load+reads cross 10MB, and getSegments' iterable cannot
- * be consumed in this runtime — all verified empirically against account
- * 8638714. SOAP file-get returned a 23.1MB file (30.8M base64 chars) whole.
+ * be consumed in this runtime. SuiteTalk SOAP returns the complete file as a
+ * base64 payload and is therefore used for large attachment reads.
  */
 export async function netsuiteSoapFileGet(
   fileId: string,

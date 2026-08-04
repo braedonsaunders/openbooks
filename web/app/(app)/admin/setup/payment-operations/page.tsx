@@ -1,6 +1,5 @@
 import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/db.ts'
-import { ensureBuiltInPaymentFormats } from '@openbooks/engine/src/payment-operations.ts'
 import { requirePermission } from '../../../../../lib/authz'
 import { isUuid, parseListParams, pickString } from '../../../../../lib/list-params'
 import { PaymentOperationsSetup, type PaymentSetupView } from './PaymentOperationsSetup'
@@ -23,8 +22,6 @@ export default async function PaymentOperationsSetupPage({
   const state = pickString(sp.state)
   const selectedId = isUuid(pickString(sp.row) ?? '') ? pickString(sp.row)! : null
   const orgId = authz.user.orgId
-  await ensureBuiltInPaymentFormats(orgId, authz.user.id)
-
   const q = `%${list.q ?? ''}%`
   const stateWhere = state
     ? view === 'mandates'

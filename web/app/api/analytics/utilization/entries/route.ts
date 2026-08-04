@@ -7,7 +7,7 @@ export const runtime = "nodejs";
 
 /**
  * Individual time entries behind a Utilization drill-down — the openbooks
- * equivalent of Gantry's `employee_entries` / `item_entries` sub-actions.
+ * equivalent of the `employee_entries` / `item_entries` sub-actions.
  * Feeds the native Drawer flyouts on the Employees / Items / Titles tabs.
  */
 export async function GET(req: Request) {

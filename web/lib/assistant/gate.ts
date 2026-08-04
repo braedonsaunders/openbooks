@@ -1,7 +1,7 @@
 import { can, type Authz } from "../authz";
 import type { AssistantToolDef, PermissionRule } from "./types";
 
-// Permission gating for assistant tools, ported from beaconhs. The model is
+// Permission gating for assistant tools. The model is
 // only ever handed tools the current user may run; execute() re-checks the
 // same gate defensively.
 

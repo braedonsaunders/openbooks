@@ -118,7 +118,6 @@ export interface TicketPayload {
     id: string
     requestNumber: string
     status: string
-    selectionSource: string
     selectedAt: string
     invoiceDocumentId: string | null
     invoiceNumber: string | null

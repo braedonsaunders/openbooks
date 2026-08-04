@@ -6,10 +6,11 @@ import { currentUser } from "../../../../../lib/auth";
 export const runtime = "nodejs";
 
 /**
- * Cash Flow entity drill — the openbooks port of Gantry's getEntityHistory.
+ * Cash Flow entity drill for customer and vendor history.
  * For a customer (AR) or vendor (AP): average days-to-pay, total paid over 12
  * months, open balance, a reliability score (0–100), open items and recent
- * payments. Reliability (Gantry): base 70, ±20/±10 by avg-days tiers 30/45/60,
+ * payments. Reliability starts at 70, with ±20/±10 adjustments by average-day
+ * tiers at 30/45/60,
  * +10 no overdue / −15 if >50% of open items overdue.
  */
 export async function GET(req: Request) {
@@ -88,7 +89,7 @@ export async function GET(req: Request) {
   const overdueCount = openItems.filter((i) => i.overdue).length;
   const overdueRatio = openItems.length ? overdueCount / openItems.length : 0;
 
-  // Gantry reliability score.
+  // Reliability score.
   let reliability = 70;
   if (avgDays !== null) {
     if (avgDays <= 30) reliability += 20;

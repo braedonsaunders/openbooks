@@ -17,7 +17,7 @@ export function MarginTab({ data }: { data: HealthData }) {
   const netPct = f.netIncome / rev
 
   const pnl = Object.fromEntries(data.pnlSummary.map((l) => [l.key, l]))
-  // Gantry's GM volume/rate bridge: volume effect = ΔRevenue × prior GM%,
+  // the GM volume/rate bridge: volume effect = ΔRevenue × prior GM%,
   // rate effect = current Revenue × ΔGM%. The two effects reconcile prior
   // gross margin to current exactly.
   const priorRev = pnl.revenue?.prior ?? 0

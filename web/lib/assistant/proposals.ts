@@ -4,7 +4,7 @@ import { env } from "@openbooks/engine/src/db.ts";
 import type { Authz } from "../authz";
 
 /**
- * HMAC-signed write proposals, ported from beaconhs. A draft tool builds a
+ * HMAC-signed write proposals. A draft tool builds a
  * `preview` and signs it; the commit route re-hashes the client-returned
  * preview and rejects any tampering or expiry. The signing key is derived from
  * SESSION_SECRET (the same secret the session cookie uses) — no new env var,

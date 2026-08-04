@@ -1,7 +1,5 @@
-// Email transport factory + provider implementations. Ported from
-// beaconhs-platform (@beaconhs/emails/transport), adapted: crypto + host
-// resolver come from ./crypto; no platform/tenant policy layer (OpenBooks
-// resolves a single per-org config).
+// Email transport factory + provider implementations. Secret handling and
+// host validation come from ./crypto; configuration is scoped per organization.
 //
 // `RawEmailConfig` is what we persist per org, with the single secret AES-sealed.
 // `resolveEmailTransport` unseals it into an `EmailTransport` (plaintext secret);

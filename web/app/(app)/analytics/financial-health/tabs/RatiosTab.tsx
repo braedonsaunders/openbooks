@@ -65,7 +65,7 @@ export function RatiosTab({ data, defs }: { data: HealthData; defs: Record<strin
   )
 }
 
-/** Gantry's DuPont decomposition: ROE = Net Margin × Asset Turnover × Equity Multiplier. */
+/** the DuPont decomposition: ROE = Net Margin × Asset Turnover × Equity Multiplier. */
 function DuPontPanel({ data }: { data: HealthData }) {
   const f = data.figures
   if (!data.hasBalanceSheet || Math.abs(f.totalEquity) < 0.005) {

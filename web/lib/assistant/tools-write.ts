@@ -7,8 +7,7 @@ import type { AssistantToolDef, ToolResult } from "./types";
 import { signProposal, type JournalLinePreview, type JournalPreview } from "./proposals";
 
 /**
- * Draft (write) tools — the propose→confirm→commit pattern ported from
- * beaconhs's draft_incident / draft_corrective_action. The tool NEVER writes:
+ * Draft (write) tools use the propose→confirm→commit pattern. The tool never writes:
  * it validates, resolves accounts, and returns an HMAC-signed proposal the UI
  * renders as a confirmation card. Only the user's Apply click (the
  * /api/assistant/commit route) creates anything — and even then it creates a

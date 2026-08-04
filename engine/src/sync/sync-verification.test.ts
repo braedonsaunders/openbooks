@@ -135,7 +135,7 @@ test("change detection treats an inherited line subsidiary as its header subsidi
 });
 
 test("zero tax ignores arbitrary rate-matched code identity during change detection", () => {
-  assert.equal(effectiveTaxCodeId("0", "legacy-zero-code"), null);
+  assert.equal(effectiveTaxCodeId("0", "zero-tax-code"), null);
   assert.equal(effectiveTaxCodeId("0.0000", null), null);
   assert.equal(effectiveTaxCodeId("13.00", "hst-code"), "hst-code");
 });

@@ -1,6 +1,6 @@
--- openbooks environments (sandboxes) — engine primitives + row-level security.
--- Applied after the generated DDL and referential-integrity.sql, alongside
--- kernel-constraints.sql.
+-- OpenBooks environments (sandboxes) — engine primitives + row-level security.
+-- Applied after the canonical baseline and rerun only when its digest or the
+-- live tenant-isolation catalog changes.
 
 -- ---------------------------------------------------------------------------
 -- ob_rebase(old, seed): the deterministic UUID-rebase function that powers the

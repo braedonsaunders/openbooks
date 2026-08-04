@@ -8,7 +8,7 @@ import { getMoneyFormatter } from '../money-server'
 /**
  * Full data payload for the Financial Health dashboard — everything the 10
  * tabs need, sourced natively from the openbooks GL (+ invoice doc lines for
- * item revenue). Ported from Gantry's Lib_Health_Data.js shapes.
+ * item revenue). built around the Lib_Health_Data.js shapes.
  *
  * Sign convention: journal amounts are debit-positive; income/credit-normal
  * types are flipped so revenue/margins read positive.
@@ -189,7 +189,7 @@ async function segmentsBy(
   const pTo = priorYear(to);
   const col = sql.raw(`l.${dimCol}`);
   const tbl = sql.raw(dimTable);
-  // LEFT JOIN so untagged GL activity lands in an "Unassigned" bucket (Gantry
+  // LEFT JOIN so untagged GL activity lands in an "Unassigned" bucket (the
   // parity) — segment totals then tie out to the P&L instead of silently
   // dropping lines with no dimension.
   const r = (await db.execute(sql`
@@ -495,7 +495,7 @@ export async function healthData(period: { from: string; to: string; label: stri
  * account × period). Scenario choice: the newest approved budget covering the
  * range. Drafts never masquerade as official targets; null renders a direct
  * link to the budget authoring workflow.
- * Statuses (Gantry ±10% variance rule): on-track when favorable or within
+ * Statuses use a ±10% variance rule: on-track when favorable or within
  * 10%, watch to 25%, over beyond; income favours actual ≥ budget, cost
  * accounts the reverse.
  */

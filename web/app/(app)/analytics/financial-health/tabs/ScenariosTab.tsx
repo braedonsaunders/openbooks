@@ -16,7 +16,7 @@ interface Inputs {
   opex: number
 }
 
-// Template values are Gantry's (rev growth / price / cogs / opex; its volume
+// Template values are the (rev growth / price / cogs / opex; its volume
 // input maps onto our growth-driven COGS scaling).
 const TEMPLATES: Record<string, { label: string; inputs: Inputs }> = {
   recession: { label: '📉 Recession', inputs: { growth: -15, price: -5, cogs: -5, opex: -10 } },
@@ -46,7 +46,7 @@ export function ScenariosTab({ data }: { data: HealthData }) {
     const gmPct = revenue > 0 ? grossProfit / revenue : 0
     const breakeven = gmPct > 0 ? opex / gmPct : null
     const safety = breakeven !== null && revenue > 0 ? (revenue - breakeven) / revenue : null
-    // Gantry risk tiers: low ≥ 0.30, moderate ≥ 0.10 safety margin.
+    // Risk tiers: low ≥ 0.30, moderate ≥ 0.10 safety margin.
     const risk = safety === null ? 'unknown' : safety >= 0.3 ? 'low' : safety >= 0.1 ? 'moderate' : safety >= 0 ? 'high' : 'critical'
     return { revenue, cogs, opex, grossProfit, operatingIncome, netIncome, gmPct, breakeven, safety, risk }
   }, [inp, f])

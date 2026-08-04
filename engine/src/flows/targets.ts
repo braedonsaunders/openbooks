@@ -3,9 +3,8 @@ import type { AssigneeTarget, RecipientTarget } from "@openbooks/forms-core";
 import { db } from "../db.ts";
 
 /**
- * AssigneeTarget / RecipientTarget → concrete users and email addresses.
- * Ported from the resolver block of beaconhs-platform's execute-flow-plan.ts,
- * adapted to openbooks' identity model:
+ * AssigneeTarget / RecipientTarget → concrete users and email addresses using
+ * OpenBooks' identity model:
  *
  *   role       — resolved from explicit app_roles/role_assignments membership.
  *   submitter  — the run's submitter (documents.created_by).

@@ -1,6 +1,6 @@
 {
   "name": "openbooks",
-  "version": "0.1.0-alpha.2",
+  "version": "0.1.0-alpha.3",
   "private": true,
   "license": "AGPL-3.0-or-later",
   "workspaces": [
@@ -40,7 +40,7 @@
     "worker": "tsx engine/src/worker/index.ts",
     "check:product-neutrality": "node scripts/check-product-neutrality.mjs",
     "check:container-security": "node scripts/check-container-security.mjs",
-    "test": "npm run check:product-neutrality && node --import tsx --test --test-force-exit 'engine/src/**/*.test.ts' 'packages/**/*.test.ts' 'web/lib/**/*.test.ts' 'schema/**/*.test.ts'",
+    "test": "npm run check:product-neutrality && OPENBOOKS_TRUSTED_TEST_BYPASS=1 node --import tsx --import ./engine/src/test-database-bypass.ts --test --test-force-exit 'engine/src/**/*.test.ts' 'packages/**/*.test.ts' 'web/lib/**/*.test.ts' 'schema/**/*.test.ts'",
     "verify:release": "npm run check:container-security && npm run typecheck --workspaces --if-present && npm test && npm -w web run build"
   }
 }

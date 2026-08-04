@@ -255,7 +255,7 @@ const HEADER_FIELDS: Record<
   memo: { names: ["Memo", "Notes", "Comments", "Description"], kind: "text" },
 };
 
-/** Translate the current Azure invoice model into OpenBooks' stable capture contract. */
+/** Translate the current Azure invoice model into the stable capture contract. */
 export function normalizeAzureInvoice(raw: AzureAnalyzeResponse): {
   normalized: NormalizedCapture;
   evidence: CaptureEvidence[];

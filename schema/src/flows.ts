@@ -77,7 +77,7 @@ export const flows = pgTable(
 );
 
 /**
- * One row per trigger firing — the run history beaconhs lacked. Gates flip
+ * One row per trigger firing. Gates flip
  * status to 'waiting'; a satisfied quorum resumes the approve/reject branch.
  */
 export const flowRuns = pgTable(

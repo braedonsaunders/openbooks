@@ -12,7 +12,7 @@ export interface ScoreBar {
 /**
  * The Financial Health Score panel: the big gauge plus a stacked set of
  * category progress bars (Profitability / Efficiency / Operations) and an
- * emphasised Overall bar — the composite scorecard from Gantry's Health tab.
+ * emphasised Overall bar — the composite scorecard from the Health tab.
  */
 export function HealthScore({
   score,

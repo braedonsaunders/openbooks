@@ -17,7 +17,6 @@ import {
   customFieldDefKey,
 } from "@openbooks/customization";
 import type { CustomFieldDef } from "../custom-fields";
-import { ensureCustomizationDefaults } from "./seed-defaults";
 
 /**
  * Effective-resolution layer for transaction form layouts + saved list views.
@@ -152,8 +151,6 @@ export const resolveFormLayout = cache(
   }): Promise<ResolvedFormLayout> => {
     const { orgId, userId, recordType, userRoles, headerDefs, lineDefs, explicitLayoutId } = args;
 
-    await ensureCustomizationDefaults({ orgId, actorId: userId, recordTypes: [recordType] });
-
     const rows = (await db.execute(sql`
       select id, name, record_type as "recordType", is_default as "isDefault",
              is_active as "isActive", allowed_roles as "allowedRoles", layout
@@ -264,8 +261,6 @@ export const resolveListView = cache(
     showInListDefs: CustomFieldDef[];
   }): Promise<ResolvedListView> => {
     const { orgId, userId, recordType, viewId, showInListDefs } = args;
-
-    await ensureCustomizationDefaults({ orgId, actorId: userId, recordTypes: [recordType] });
 
     const rows = (await db.execute(sql`
       select id, name, record_type as "recordType", scope, owner_id as "ownerId",

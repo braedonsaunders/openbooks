@@ -7,7 +7,7 @@ export interface AccountHierarchyNode {
 
 /**
  * Order one statement class as a parent-first tree. A parent outside the class
- * is deliberately treated as absent so cross-class legacy data cannot make an
+ * is deliberately treated as absent so cross-class imported data cannot make an
  * account disappear under the wrong financial-statement section.
  */
 export function orderAccountHierarchy<T extends AccountHierarchyNode>(

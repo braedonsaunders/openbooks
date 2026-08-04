@@ -1,6 +1,5 @@
 /**
- * System prompt for the agentic assistant, ported from beaconhs and re-aimed
- * at the accounting domain. Security-first: tool output is treated as
+ * System prompt for the accounting-focused agentic assistant. Tool output is treated as
  * untrusted DATA, never as instructions (prompt-injection defense), and the
  * model is told it cannot post anything without the user's explicit
  * confirmation.

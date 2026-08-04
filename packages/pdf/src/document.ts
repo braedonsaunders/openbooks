@@ -1,6 +1,6 @@
 // The report-document renderer: takes a PdfDocumentInput and produces a PDF
-// Buffer using pdfkit (pure JS, no Chromium). Visual vocabulary ported from
-// the beaconhs report document renderer — cover header with org branding,
+// Buffer using pdfkit (pure JS, no Chromium). The visual vocabulary includes a
+// cover header with organization branding,
 // key-figures summary band, one section per group of rows, repeating table
 // headers, zebra rows, and "Page X of Y" footers.
 //

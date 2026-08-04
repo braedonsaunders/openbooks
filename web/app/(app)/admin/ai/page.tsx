@@ -15,7 +15,7 @@ export async function generateMetadata() {
 }
 
 /**
- * Admin → AI settings, ported from beaconhs's admin/ai page. The provider,
+ * Admin → AI settings. The provider,
  * model choices, and encrypted API key live in orgs.settings.ai — never in the
  * environment. The client form only ever sees non-secret fields (hasKey, not
  * the key itself).

@@ -12,9 +12,8 @@ import { getFlowAdapter } from "./registry.ts";
 import { executeFlowPlan } from "./execute.ts";
 
 /**
- * Trigger dispatch — fire a subject's enabled flows at a lifecycle event.
- * Ported from beaconhs-platform's lib/flows/run-module-flows.ts, adapted to
- * openbooks' in-process hook sites (the same places runTriggerScripts runs:
+ * Trigger dispatch — fire a subject's enabled flows at a lifecycle event from
+ * OpenBooks' in-process hook sites (the same places runTriggerScripts runs:
  * flows/submit.ts submit, posting.ts before/after post, payments.ts void).
  *
  * Contract with the hook sites: runRecordFlows NEVER throws into the calling

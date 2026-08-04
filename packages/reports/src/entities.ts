@@ -1,8 +1,7 @@
 // THE single source of truth for what a custom report can query. Each entity
 // carries both the UI metadata (labels, kinds, descriptions — drives the
 // report studio) and the SQL metadata (a server-defined FROM clause and
-// column expressions — drives the executor). Ported from beaconhs
-// packages/reports/src/entities.ts, re-pointed at the openbooks ledger.
+// column expressions — drives the executor), mapped to the OpenBooks ledger.
 //
 // Injection safety: every identifier the executor interpolates (`from`,
 // `orgColumn`, column `expr`) is a compile-time constant in this file. User

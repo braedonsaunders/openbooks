@@ -10,7 +10,7 @@ import { Panel } from './Panel'
 export interface CatOption { id: string; name: string }
 export interface AccountOption { id: string; number: string | null; name: string; type?: string }
 
-/** Gantry's method labels + descriptions, verbatim. */
+/** Forecast method labels and descriptions. */
 const METHODS: { value: ForecastCategoryMethod; label: string; description: string }[] = [
   { value: 'gl_history_average', label: 'GL History Average', description: 'Analyzes GL account postings over a defined period to calculate weekly averages' },
   { value: 'vendor_payment_history', label: 'Vendor Payment History', description: 'Aggregates historical payments to vendors to project future spend' },
@@ -40,7 +40,7 @@ const numCls = `${inputCls} text-right tabular-nums`
 const labelCls = 'mb-1 block text-[11px] font-medium text-slate-600 dark:text-slate-300'
 const helpCls = 'mt-0.5 block text-[11px] leading-snug text-slate-400 dark:text-slate-500'
 
-/** Multi-select with a search box on top (the Gantry account/vendor picker). */
+/** Multi-select with a search box on top. */
 function MultiPick({
   options,
   selected,
@@ -54,7 +54,7 @@ function MultiPick({
 }) {
   const [q, setQ] = useState('')
   const visible = options.filter((o) => !q || o.label.toLowerCase().includes(q.toLowerCase()))
-  // Selected entries sort to the top (Gantry behavior).
+  // Selected entries sort to the top (stable behavior).
   const ordered = [...visible].sort((a, b) => Number(selected.includes(b.id)) - Number(selected.includes(a.id)))
   return (
     <div>
@@ -82,8 +82,7 @@ function MultiPick({
 }
 
 /**
- * Forecast-category manager — the FULL Gantry category config (Dashboard.
- * Cashflow.js renderCategoryFlyoutForm): all seven calculation methods with
+ * Forecast-category manager: all seven calculation methods with
  * their per-method settings, expected-day/week placement, and edit-in-place.
  * Edits the whole list and PUTs it to /api/analytics/cashflow/categories,
  * then refreshes so every forecast (analytics + cockpits) recomputes.
@@ -172,7 +171,7 @@ export function CategoryManager({
     <Panel
       title="Forecast Categories"
       icon={SlidersHorizontal}
-      hint="Non-AR/AP cash flows — the engine's seven Gantry calculation methods"
+      hint="Non-AR/AP cash flows — the engine's seven calculation methods"
       actions={editIdx === null ? (
         <Button variant="outline" size="sm" onClick={() => openEditor(-1)}>
           <Plus size={14} />

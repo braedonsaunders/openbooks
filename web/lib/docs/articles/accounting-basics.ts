@@ -153,7 +153,7 @@ the normal correction when the original must remain visible. Never use an
 unrelated manual journal to conceal the source error.
 
 Do not filter a financial report to the literal **posted** journal status.
-OpenBooks' ledger-history population is **posted** plus **reversed**; drafts remain
+the ledger-history population is **posted** plus **reversed**; drafts remain
 excluded.
 `,
 }

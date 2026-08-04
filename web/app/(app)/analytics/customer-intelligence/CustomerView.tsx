@@ -183,7 +183,7 @@ const REC_STYLE: Record<Recommendation, string> = {
   maintain: 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-300',
 }
 
-/** RFM 1–5 score chip (Gantry's score badges). */
+/** RFM 1–5 score chip (the score badges). */
 function ScoreChip({ v }: { v: number }) {
   const cls = v >= 5 ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-300' : v >= 3 ? 'bg-amber-100 text-amber-700 dark:bg-amber-950/60 dark:text-amber-300' : 'bg-red-100 text-red-700 dark:bg-red-950/60 dark:text-red-300'
   return <span className={cn('inline-block w-5 rounded py-0.5 text-center text-[10px] font-bold', cls)}>{v}</span>
@@ -278,7 +278,7 @@ function OverviewTab({ data }: { data: CustomerData }) {
 
   return (
     <div className="space-y-5">
-      {/* Key metrics — Gantry's 6-metric grid */}
+      {/* Key metrics — the 6-metric grid */}
       <Panel title="Key Metrics" icon={BarChart3}>
         <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
           {metric('Avg Value', money(k.avgCustomerValue), 'per customer')}
@@ -306,7 +306,7 @@ function OverviewTab({ data }: { data: CustomerData }) {
       </div>
 
       <div className="grid grid-cols-1 gap-5 lg:grid-cols-2">
-        {/* RFM Segments bars — Gantry cvSegmentBars */}
+        {/* RFM Segments bars —  */}
         <Panel title="RFM Segments" icon={Grid3x3} bodyClassName="p-0">
           <ul className="divide-y divide-slate-50 dark:divide-slate-800/60">
             {data.segments.map((s) => (
@@ -322,7 +322,7 @@ function OverviewTab({ data }: { data: CustomerData }) {
           </ul>
         </Panel>
 
-        {/* Intelligence Insights — Gantry cvInsightsPanel */}
+        {/* Intelligence Insights —  */}
         <Panel title="Intelligence Insights" icon={Lightbulb} bodyClassName="p-0">
           {data.insights.length === 0 ? (
             <p className="px-4 py-6 text-center text-xs text-slate-400">No notable signals for this period.</p>
@@ -521,7 +521,7 @@ function SegmentationTab({ data }: { data: CustomerData }) {
 
   return (
     <div className="space-y-5">
-      {/* RFM Matrix grid — Gantry's segment cards */}
+      {/* RFM Matrix grid — the segment cards */}
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-4 lg:grid-cols-8">
         {data.segments.map((s) => (
           <button
@@ -719,7 +719,7 @@ function ChurnTab({ data }: { data: CustomerData }) {
   const money = (n: number) => fmtMoney(n, { compact: true })
   const [page, setPage] = useState(1)
   const k = data.kpis
-  // Gantry lists critical + high + medium in the at-risk table.
+  // List critical, high, and medium risk customers in the at-risk table.
   const atRisk = data.rows.filter((r) => r.churnLevel !== 'low').sort((a, b) => b.churnScore - a.churnScore || b.revenue - a.revenue)
   const totalPages = Math.max(1, Math.ceil(atRisk.length / 25))
   const pageNo = Math.min(page, totalPages)

@@ -27,7 +27,7 @@ export interface RatioDef {
 /**
  * A single graded ratio tile. Colour-tinted by letter grade, shows the value
  * and its benchmark, and opens a detail popover (formula, interpretation,
- * the actual numerator/denominator) on click — mirroring Gantry's "click any
+ * the actual numerator/denominator) on click — mirroring the "click any
  * ratio for details" affordance.
  */
 export function RatioCard({ data, def }: { data: RatioCardData; def: RatioDef }) {

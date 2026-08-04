@@ -22,8 +22,7 @@ import {
  * layer in modules shipped after the config was saved → filter by permission
  * via the caller-supplied `can` predicate → drop hidden items/empty groups →
  * append the dynamic "Records" group (published custom record types flagged
- * show_in_nav). (beaconhs nav/resolve.ts, org-scoped, minus form pinning for
- * now.)
+ * show_in_nav).
  *
  * `roleKeys` scopes role-gated record types; an unrestricted record type is
  * visible to every user who holds its required permission.

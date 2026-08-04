@@ -1,7 +1,6 @@
 import type { FieldType } from './schema'
 
-// Field-type registry, ported from the beaconhs form builder and trimmed to
-// the openbooks v1 set, plus two openbooks-native data-bound pickers
+// Field-type registry for the OpenBooks field set, including data-bound pickers
 // (gl_account, party). The designer palette, config panels, filler renderer,
 // and response validator all key off this metadata.
 

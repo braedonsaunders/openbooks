@@ -3,8 +3,8 @@ import { createCipheriv, createDecipheriv, randomBytes } from "node:crypto";
 import { env } from "@openbooks/engine/src/db.ts";
 
 /**
- * Server-only secret sealing (AES-256-GCM) — the beaconhs @beaconhs/crypto
- * pattern, keyed on the SAME OPENBOOKS_DATA_KEY and `enc:v1:` wire format the
+ * Server-only secret sealing (AES-256-GCM), keyed on the same
+ * OPENBOOKS_DATA_KEY and `enc:v1:` wire format the
  * payments engine already uses for payee bank account numbers
  * (engine/src/payments.ts), so one data key protects everything at rest.
  * Nothing secret ever lives in the environment beyond that key itself.

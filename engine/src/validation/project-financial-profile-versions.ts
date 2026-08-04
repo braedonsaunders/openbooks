@@ -122,7 +122,7 @@ async function main(): Promise<void> {
     await db.transaction(async (tx) => {
       await expectDatabaseRejection(
         tx,
-        "legacy_profile_guard",
+        "direct_profile_guard",
         sql`
           update project_types
              set financial_profile =
@@ -208,7 +208,7 @@ async function main(): Promise<void> {
         status: "exact",
         ...counts,
         rollbackExercise: {
-          legacySeedMutationRejected: true,
+          directProfileMutationRejected: true,
           publishedVersionMutationRejected: true,
           publishedVersionDeleteRejected: true,
           controlledPublishAudited: true,

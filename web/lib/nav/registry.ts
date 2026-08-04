@@ -1,4 +1,4 @@
-// openbooks module registry — the beaconhs nav registry pattern. Module keys
+// OpenBooks module registry. Module keys
 // are STABLE ids (never change them once shipped); org nav configs reference
 // them. The resolver merges this with the org's saved layout and filters by
 // permission.

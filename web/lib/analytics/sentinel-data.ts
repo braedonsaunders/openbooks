@@ -4,32 +4,27 @@ import { db } from "@openbooks/engine/src/db.ts";
 import { analyticsConfig } from "./config";
 
 /**
- * Sentinel — transaction integrity forensics, a faithful port of Gantry's
- * Integrity dashboard (Lib_Integrity_Data.js) re-engineered for SCALE.
+ * Sentinel — transaction integrity forensics re-engineered for scale.
  *
- * Gantry's engine is artificially limited: a hard 30-day date-range cap,
- * per-vendor N+1 baseline queries, FETCH FIRST row caps, and client-side JS
- * analysis over the first few hundred rows. This port pushes every forensic
- * test into single-pass SQL over the FULL ledger — window functions for
+ * Every forensic test runs as set-based SQL over the full ledger — window functions for
  * per-vendor baselines (RSF, z-score), gaps-and-islands for sequential
  * invoice runs, set-based self-join for duplicates, GROUP BY digit for
  * Benford — so any period over any dataset size returns aggregates, with
  * only the top-N detail rows per detector shipped to the client.
  *
- * Tests (thresholds verbatim from Gantry):
+ * Tests and default thresholds:
  *  - Duplicates: same vendor + same doc kind + same amount within 14 days
  *    (≥$100, credits excluded); confidence by memo/date proximity.
  *  - Benford first-digit + first-two-digit distributions with Mean Absolute
  *    Deviation conformity bands (Nigrini), over EVERY spend document.
  *  - Threshold trap: amounts ending 99 / 999 / 9999 (approval-limit gaming).
- *  - Weekend documents: spend documents DATED Sat/Sun. (Gantry keys off the
- *    system created date; migrated openbooks data carries import timestamps,
- *    so the accounting date is the honest signal — stated in Configuration.)
+ *  - Weekend documents: spend documents dated Saturday or Sunday, using the
+ *    accounting date rather than an import timestamp.
  *  - RSF: amount ÷ vendor's historical 2nd-largest (36-month baseline) ≥ 10.
  *  - Z-score: |amount − vendor mean| / vendor σ ≥ 3 (baseline ≥ 5 txns, σ>10).
  *  - Sequential invoices: gap-free vendor reference-number runs spread over
  *    7+ days — the shell-company / sole-customer indicator.
- *  - Ghost vendors: Gantry's two-phase detector — employee names matched
+ *  - Ghost vendors: the two-phase detector — employee names matched
  *    against vendor names AND normalized street addresses (line1 + postal)
  *    shared between a paid vendor and an employee (name 75 / addr 90 / both 95).
  *  - Audit trail: native audit_log events on parties/documents (deletes,
@@ -38,7 +33,7 @@ import { analyticsConfig } from "./config";
 
 const SPEND_KINDS = ["vendor_bill", "vendor_credit", "vendor_payment", "check", "expense_report", "journal", "customer_credit"] as const;
 
-// Gantry constants, verbatim. Duplicate/sequential thresholds are per-org
+// Fixed detection constants. Duplicate/sequential thresholds are per-org
 // configurable (lib/analytics/config.ts) — these are the fixed ones.
 const HIGH_RISK_AMOUNT = 10_000;
 const CRITICAL_RISK_AMOUNT = 25_000;
@@ -151,7 +146,7 @@ export async function sentinelData(orgId: string, period: { from: string; to: st
   const SEQUENTIAL_MIN = cfg.sequentialMinCount!;
   const SEQUENTIAL_MIN_DAYS_FOR_FLAG = cfg.sequentialMinDays!;
 
-  // Baseline window for vendor statistics: 36 months before period end (Gantry).
+  // Baseline window for vendor statistics: 36 months before period end.
   const end = new Date(to + "T00:00:00Z");
   const baselineFrom = `${end.getUTCFullYear() - 3}${to.slice(4)}`;
 
@@ -177,7 +172,7 @@ export async function sentinelData(orgId: string, period: { from: string; to: st
       group by 1
     `) as Promise<any>,
 
-    // Benford first-two digits (scale <10 amounts ×10, Gantry rule).
+    // Benford first-two digits (scale amounts below 10 by 10).
     db.execute(sql`
       select case when abs(d.total) >= 10 then left(trunc(abs(d.total))::bigint::text, 2)
                   else left(trunc(abs(d.total) * 10)::bigint::text, 2) end as digits,
@@ -368,10 +363,10 @@ export async function sentinelData(orgId: string, period: { from: string; to: st
       limit 50
     `) as Promise<any>,
 
-    // Ghost vendors — Gantry's full two-phase detector, both phases in SQL.
+    // Ghost vendors — the full two-phase detector, both phases in SQL.
     // Phase 1: company-vendor names vs employee names. Phase 2: shared street
     // address — line1 normalized (punctuation stripped, directional/street-type
-    // words abbreviated) + postal code. Weights per Gantry: name 75 /
+    // words abbreviated) + postal code. Weights as designed: name 75 /
     // address 90 / name+address 95.
     db.execute(sql`
       with norm_addr as (
@@ -611,7 +606,7 @@ export async function sentinelData(orgId: string, period: { from: string; to: st
     };
   });
 
-  // ---- Ghost vendors (Gantry tiers: name 75 / address 90 / name+address 95) -----------------------
+  // ---- Ghost vendors (Score tiers: name 75 / address 90 / name+address 95) -----------------------
   const ghosts: GhostVendor[] = (ghostRows.rows as any[]).map((r) => {
     const name = Boolean(r.name_match);
     const addr = Boolean(r.address_match);
@@ -637,7 +632,7 @@ export async function sentinelData(orgId: string, period: { from: string; to: st
   const auditDeletes = Number(auditAgg.rows[0]?.deletes ?? 0);
   const auditSensitive = Number(auditAgg.rows[0]?.sensitive ?? 0);
 
-  // ---- Flagged aggregate (dedup by doc, Gantry order) -----------------------------------------------
+  // ---- Flagged aggregate (dedup by doc, stable order) -----------------------------------------------
   const flagged: FlaggedDoc[] = [];
   const seen = new Set<string>();
   const push = (f: FlaggedDoc) => { if (!seen.has(f.docId)) { seen.add(f.docId); flagged.push(f); } };
@@ -645,7 +640,7 @@ export async function sentinelData(orgId: string, period: { from: string; to: st
   for (const w of weekendItems) push(w);
   for (const r of rsfItems) push(r);
   for (const z of zItems) push(z);
-  // Gantry composition: duplicates + weekend + RSF + z-score + sequential-run
+  // Composite signal: duplicates + weekend + RSF + z-score + sequential-run
   // invoices (threshold-trap docs stay in their own tab, NOT in the aggregate).
   for (const s of sequential)
     for (const inv of s.invoices)
@@ -663,7 +658,7 @@ export async function sentinelData(orgId: string, period: { from: string; to: st
     v.maxRiskScore = Math.max(v.maxRiskScore, f.riskScore);
     if (!v.flagTypes.includes(f.flagType)) v.flagTypes.push(f.flagType);
   }
-  // Gantry composite vendor score: flag volume (cap 40) + amount tier + flag-type
+  // Composite vendor score: flag volume (cap 40) + amount tier + flag-type
   // diversity + 30% of the worst single flag, capped at 100. Sorted by it.
   for (const v of vendorMap.values()) {
     const amountTier = v.totalAmount >= 50_000 ? 25 : v.totalAmount >= 10_000 ? 15 : 5;
@@ -671,7 +666,7 @@ export async function sentinelData(orgId: string, period: { from: string; to: st
   }
   const vendorRisk = [...vendorMap.values()].sort((a, b) => b.compositeScore - a.compositeScore || b.totalAmount - a.totalAmount).slice(0, 50);
 
-  // ---- Summary (verbatim Gantry risk model) ------------------------------------------------------------
+  // ---- Summary (stable risk model) ------------------------------------------------------------
   let risk = 0;
   if (flagged.length > 50) risk += 15; else if (flagged.length > 20) risk += 10;
   if (dupAmount > 100_000) risk += 20; else if (dupAmount > 50_000) risk += 15;

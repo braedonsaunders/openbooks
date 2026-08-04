@@ -1,10 +1,10 @@
 'use client'
 
-// Reactive AI settings form, ported from beaconhs's ai-settings/settings-form:
-// the provider selector drives the base-URL field, the API-key hint and the
+// Reactive AI settings form: the provider selector drives the base-URL field,
+// the API-key hint and the
 // model dropdowns; model lists are fetched live from the provider's API via
-// the server (the key never reaches the browser). Adapted to openbooks' API-
-// route convention (no server actions) and single-org scope (no platform
+// the server (the key never reaches the browser). It uses OpenBooks' API-route
+// convention (no server actions) and single-org scope (no platform
 // policy selector, no journal-automation toggle).
 
 import { useCallback, useEffect, useRef, useState, useTransition } from 'react'

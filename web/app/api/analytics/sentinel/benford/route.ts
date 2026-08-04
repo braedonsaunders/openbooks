@@ -8,7 +8,7 @@ export const runtime = "nodejs";
 const SPEND_KINDS = ["vendor_bill", "vendor_credit", "vendor_payment", "check", "expense_report", "journal", "customer_credit"];
 
 /**
- * Benford digit drill — the openbooks port of Gantry's openBenford1DDigitFlyout.
+ * Benford digit drill for the transaction flyout.
  * Returns the spend documents whose leading digit (1D) or leading two digits
  * (2D) equal the clicked digit, so a deviating Benford bar drills straight into
  * the transactions behind it. Capped at 500 detail rows with the true count.

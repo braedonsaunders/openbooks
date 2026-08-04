@@ -73,7 +73,7 @@ export function isNetSuiteRecentActivityEmail(row: NetSuiteRecentActivityNoteRow
   return recentActivityKind(row) === 'email'
 }
 
-/** RecentActivity is the only analytics surface that exposes legacy note text and note type. */
+/** RecentActivity is the only analytics surface that exposes source note text and note type. */
 export function normalizeNetSuiteRecentActivityNote(row: NetSuiteRecentActivityNoteRow): NormalizedNetSuiteRecentActivityNote | null {
   const sourceId = sourceText(row.id)
   const body = sourceText(row.subdetails)

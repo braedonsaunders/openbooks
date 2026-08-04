@@ -18,9 +18,8 @@ import { activeDelegationPrincipal, activeDelegationPrincipals } from "./delegat
 import { emailActionUrls } from "./email-tokens.ts";
 
 /**
- * Gate lifecycle — decide / worklist / delegate / timers. Ports the semantics
- * of beaconhs-platform's gate-actions.ts + resume-flow-gate.ts, fused into
- * one module because openbooks resumes IN-PROCESS (no worker outbox): the
+ * Gate lifecycle — decide / worklist / delegate / timers. OpenBooks resumes
+ * in process (no worker outbox): the
  * decide is an atomic conditional UPDATE (pending → decided, so two
  * concurrent approvals can never both resume the branch), quorum evaluation
  * (quorum.ts) picks the branch, and planFromGate → executeFlowPlan re-runs on

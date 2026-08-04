@@ -6,9 +6,7 @@ import { currentUser } from "../../../../lib/auth";
 export const runtime = "nodejs";
 
 /**
- * Generic analytics drill-down — the openbooks equivalent of Gantry's
- * `account_transactions` / `vendor_transactions` / `account_by_vendor` /
- * `account_monthly_trend` sub-actions, one endpoint for every dashboard:
+ * Generic analytics drill-down, with one endpoint for every dashboard:
  *
  *   ?account=<id>&from&to  — GL activity on one account: transactions,
  *                            monthly trend, by-party breakdown.

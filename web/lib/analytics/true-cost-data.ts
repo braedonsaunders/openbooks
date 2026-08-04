@@ -20,22 +20,20 @@ import {
 } from "./true-cost-engine";
 
 /**
- * True Cost — a faithful port of Gantry's Burden (Rate Engine) dashboard
- * (Dashboard.Burden.js + Lib_Burden_Data.js).
+ * True Cost — data and calculations for the Burden (Rate Engine) dashboard.
  *
  * The engine is DEPARTMENT-BASED: burden categories (native account groups in
- * the `burden` dimension — Gantry's category manager maps onto the rule+pin
+ * the `burden` dimension — the category manager maps onto the rule+pin
  * primitive) × departments form a rate MATRIX of $/hr rates. The composite
  * burden rate = total burden expense ÷ billed labour hours; each department
  * gets its own composite from its department-tagged expense and its own billed
  * hours (untagged expense is allocated across departments by billed-hours
- * share, Gantry's allocation-base behaviour).
+ * share, the allocation-base behaviour).
  *
  * Burden scope: overhead-type expense accounts — expense/expense_other/
  * expense_deferred accounts EXCLUDING direct labour (per the `cost_pool`
  * dimension); COGS is direct cost, never burden. Accounts with spend that no
- * burden category matches surface as "Unassigned", exactly like Gantry's
- * classifier.
+ * burden category matches surface as "Unassigned".
  *
  * Absorption: this ledger HAS an "Overhead Burden" GL account (5200) + a
  * clearing account, but neither carries postings — the applied-burden
@@ -78,7 +76,7 @@ export interface BurdenCategory {
   rate: number; // the formatted rate value in the category's rate format
   /** Raw $/hr rate before formatting (totalAmount ÷ allocation base at Overall). */
   rawRate: number;
-  /** Allocation settings applied to this category (Gantry engine). */
+  /** Allocation settings applied to this category (rate engine). */
   allocationBase: AllocationBase;
   allocationMethod: AllocationMethod;
   rateFormat: RateFormat;
@@ -90,7 +88,7 @@ export interface BurdenCategory {
   byDept: Record<string, { amount: number; rate: number }>;
 }
 
-/** Additional non-expense category from config (Gantry manual/derived/formula). */
+/** Additional non-expense category from config (manual/derived/formula). */
 export interface CustomCategory {
   id: string;
   name: string;
@@ -114,7 +112,7 @@ export interface CategorySettings {
   allocationTiers?: { min?: number; max?: number; rate?: number }[];
 }
 
-/** A named engine profile (Gantry getActiveProfile) — all tunables in one bundle. */
+/** A named engine profile with all tunables in one bundle. */
 export interface TrueCostProfile {
   id: string;
   name: string;
@@ -176,7 +174,7 @@ export interface TrueCostData {
   monthly: MonthPoint[];
   forecast: { month: string; label: string; rate: number }[];
   hasBurdenGL: boolean; // the 5200 applied account carries postings
-  /** Allocation base values (Gantry fetchAllAllocationBases) for the engine + UI. */
+  /** Allocation base values () for the engine + UI. */
   bases: AllocationBaseBundle;
   /** Active engine config: composite method, per-category settings, custom categories, profiles. */
   config: {
@@ -219,7 +217,7 @@ export const DEFAULT_PROFILE: TrueCostProfile = {
   baseOverrides: {},
 };
 
-/** Load the True Cost engine config and resolve the active profile (Gantry getActiveProfile). */
+/** Load the True Cost engine config and resolve the active profile (). */
 export async function loadTrueCostConfig(orgId: string): Promise<{ activeProfileId: string; profiles: TrueCostProfile[]; profile: TrueCostProfile }> {
   const r = (await db.execute(sql`
     select settings -> 'analytics' -> 'trueCost' as cfg from orgs where id = ${orgId}
@@ -264,7 +262,7 @@ export async function trueCostData(orgId: string, period: { from: string; to: st
     // Labour hours per department × month (billed = is_billable). Non-billable
     // labour cost (Σ hours × cost rate on non-billable time) is a native burden
     // category — the cost of paying people for unbilled time must be recovered
-    // on billable hours (Gantry's unbilled-labour / time category).
+    // on billable hours (the unbilled-labour / time category).
     db.execute(sql`
       select t.department_id, to_char(t.worked_on, 'YYYY-MM') as month,
         sum(t.hours) as total_hours,
@@ -328,7 +326,7 @@ export async function trueCostData(orgId: string, period: { from: string; to: st
         and e.posting_date >= ${from} and e.posting_date <= ${to}
     `) as Promise<any>,
     db.execute(sql`select id, name from departments where org_id = ${orgId} order by name`) as Promise<any>,
-    // Allocation bases by department (Gantry fetchAllAllocationBases): labour $,
+    // Allocation bases by department (): labour $,
     // headcount, revenue, direct cost. Hours come from hoursRows above.
     db.execute(sql`
       select d.id as dept_id,
@@ -402,7 +400,7 @@ export async function trueCostData(orgId: string, period: { from: string; to: st
     .sort((a, b) => b.hours.billed - a.hours.billed);
   const billedShare = new Map(departmentsBase.map((d) => [d.id, billedHours > 0 ? d.hours.billed / billedHours : 0]));
 
-  // ---- allocation-base bundle (Gantry fetchAllAllocationBases) -----------------
+  // ---- allocation-base bundle () -----------------
   const deptIds = departmentsBase.map((d) => d.id);
   const baseMap = new Map((baseRows.rows as any[]).map((r) => [r.dept_id as string, r]));
   const sumBase = (field: string) => deptIds.reduce((s, id) => s + Number(baseMap.get(id)?.[field] ?? 0), 0);
@@ -531,7 +529,7 @@ export async function trueCostData(orgId: string, period: { from: string; to: st
   const totalOverhead = [...cats.values()].reduce((s, c) => s + c.total, 0) + nonbillCostTotal;
   const settingsOf = (id: string): CategorySettings => profile.categorySettings[id] ?? {};
 
-  // Apply the Gantry rate engine to one category's expense-by-dept: allocation
+  // Apply the rate engine to one category's expense-by-dept: allocation
   // base × method → raw rate, then formatted per the category's rate format.
   function buildCategory(
     id: string, key: string, name: string, color: string | null,
@@ -598,7 +596,7 @@ export async function trueCostData(orgId: string, period: { from: string; to: st
 
   const categories: BurdenCategory[] = [...expenseCategories, ...timeCategories, ...customCategories];
 
-  // ---- composite rate via the configured method (Gantry calculateCompositeRate) ---
+  // ---- composite rate via the configured method () ---
   const laborHoursSumForComposite = employeesWeightedRate(empRows.rows as any[]);
   const compositeCats: CompositeCategory[] = categories.map((c) => ({
     id: c.id, rateValue: c.rate, totalExpense: c.totalAmount, rateFormat: c.rateFormat, includeInComposite: c.includeInComposite,

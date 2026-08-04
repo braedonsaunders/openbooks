@@ -13,7 +13,7 @@ export const dynamic = 'force-dynamic'
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 
-/** One conversation, deep-linkable — ported from beaconhs's assistant/[id]. */
+/** One deep-linkable assistant conversation. */
 export default async function AssistantConversationPage({
   params,
 }: {

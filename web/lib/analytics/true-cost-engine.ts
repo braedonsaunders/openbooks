@@ -1,17 +1,16 @@
 /**
- * True Cost rate engine — an EXACT port of Gantry's Lib_Burden_Data.js
- * calculation primitives (ALLOCATION_BASES, calculateRate, formatRate,
+ * True Cost rate-engine calculation primitives (ALLOCATION_BASES,
+ * calculateRate, formatRate,
  * calculateCompositeRate, category calculators, calculateScenario). Pure
  * functions, no DB — the data layer fetches the base values and feeds them in.
  *
- * Everything here mirrors the Gantry algorithms line-for-line so a Gantry user
- * gets identical numbers: allocation base × method → raw rate, formatted per
+ * The implementation is deterministic: allocation base × method → raw rate, formatted per
  * the category's rate format, blended into a composite by the configured
  * method. Category types beyond expense (time / manual / derived / formula)
- * are computed exactly as Gantry does.
+ * use the same calculation pipeline.
  */
 
-/* ─────────────────────────────────────────────── constants (verbatim) ── */
+/* ─────────────────────────────────────────────── constants ── */
 
 export type AllocationBase =
   | "billed_hours"
@@ -69,7 +68,7 @@ export interface BaseValues {
   byDept: Record<string, number>;
 }
 
-/** Every allocation base's values (Gantry fetchAllAllocationBases shape). */
+/** Values for every supported allocation base. */
 export interface AllocationBaseBundle {
   hours: { total: number; totalBilled: number; byDept: Record<string, { total: number; billed: number }> };
   laborDollars: BaseValues;
@@ -82,7 +81,7 @@ export interface AllocationBaseBundle {
   monthCount: number;
 }
 
-/** Gantry getAllocationBaseValue — verbatim. */
+/** Resolve one allocation-base value for an organization or department. */
 export function getAllocationBaseValue(baseType: AllocationBase, bases: AllocationBaseBundle, deptId: string): number {
   const over = deptId === "Overall";
   switch (baseType) {
@@ -124,7 +123,7 @@ export interface CategoryRateConfig {
 }
 
 /**
- * Gantry calculateRate — verbatim. `expenses`/`baseValue` are either scalars
+ * Calculate a category rate. `expenses`/`baseValue` are either scalars
  * (Overall) or per-dept maps (for weighted).
  */
 export function calculateRate(
@@ -195,7 +194,7 @@ type RateMoneyOptions = {
   maximumFractionDigits?: number;
 };
 
-/** Gantry formatRate — verbatim, 5 output formats. */
+/** Format a raw rate using one of the five supported output formats. */
 export function formatRate(
   rawRate: number,
   format: RateFormat | undefined,
@@ -259,7 +258,7 @@ export interface CompositeConfig {
   baseLaborRate?: number;
 }
 
-/** Gantry calculateCompositeRate — verbatim (sum / weighted / cascading). */
+/** Calculate a composite rate using sum, weighted, or cascading behavior. */
 export function calculateCompositeRate(
   categories: CompositeCategory[],
   compositeConfig: CompositeConfig,
@@ -314,7 +313,7 @@ export function calculateCompositeRate(
 
 /* ─────────────────────────────────── manual / derived / formula ── */
 
-/** Gantry calculateManualCategoryData — verbatim (fixed_total / by_dept / per_unit). */
+/** Calculate manual category values in fixed-total, department, or per-unit mode. */
 export function calculateManualCategoryData(
   manualConfig: { entryMode?: "fixed_total" | "by_dept" | "per_unit"; fixedTotal?: number; byDeptAmounts?: Record<string, number>; unitType?: AllocationBase; perUnitRate?: number },
   allocationBase: AllocationBase,
@@ -357,7 +356,7 @@ export function calculateManualCategoryData(
   return { expense, totalExpense };
 }
 
-/** Gantry calculateDerivedCategoryData — verbatim (% of another category). */
+/** Calculate a category as a percentage of another category. */
 export function calculateDerivedCategoryData(
   derivedConfig: { sourceCategory?: string; percentage?: number; allocationBase?: AllocationBase | "same" },
   categoryTotals: Record<string, { expenseOverall: number }>,
@@ -386,7 +385,7 @@ export function calculateDerivedCategoryData(
 }
 
 /**
- * Gantry calculateFormulaCategoryData — verbatim. Evaluates a formula with
+ * Evaluate a formula with
  * cat.<id> / cat["id"] and base.<name> references against category totals and
  * base values, then allocates by base. Evaluation is a guarded arithmetic
  * parser (no `eval`) — see evaluateFormula.
@@ -435,7 +434,7 @@ export function calculateFormulaCategoryData(
 }
 
 /**
- * Safe arithmetic evaluator (Gantry Core.evaluateFormula analogue) — supports
+ * Safe arithmetic evaluator for formulas — supports
  * + − × ÷, parentheses, and decimal numbers only. No identifiers, no calls,
  * so a stored formula can't execute code. Returns null on parse failure.
  */
@@ -527,7 +526,7 @@ export interface ScenarioImpact {
 
 const round2 = (n: number) => Math.round(n * 100) / 100;
 
-/** Gantry calculateScenario — verbatim (6 scenario types, 2080 hrs/yr, fringe). */
+/** Calculate six scenario types, including annualized hours and fringe. */
 export function calculateScenario(
   input: ScenarioInput,
   cur: ScenarioCurrent,

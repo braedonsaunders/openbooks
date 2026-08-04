@@ -2,7 +2,7 @@ import { boolean, index, jsonb, pgTable, text, uniqueIndex, uuid } from "drizzle
 import { auditColumns, id, orgRef } from "./helpers";
 
 /**
- * IAM — role-based access control, ported from the beaconhs iam foundation.
+ * IAM — role-based access control.
  *
  * Permission keys are strings: `module.action[.qualifier]`, e.g. `gl.post`,
  * `ap.approve`, `admin.roles.manage`. Wildcards are supported at check time

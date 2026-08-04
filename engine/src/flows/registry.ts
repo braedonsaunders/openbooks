@@ -26,11 +26,10 @@ import { sql } from "drizzle-orm";
 import { db } from "../db.ts";
 
 /**
- * subjectKind → FlowSubjectAdapter. Ported from beaconhs-platform's
- * lib/flows/registry.ts: the gate-resume path and every dispatch site rebuild
+ * subjectKind → FlowSubjectAdapter. The gate-resume path and every dispatch site rebuild
  * the right adapter from a stored subjectKind string. The documents adapter
  * covers every document kind; party_bank_account is the first non-document
- * subject (the replicated source platform bank-details approval); future adapters
+ * subject; future adapters
  * (custom record types, …) register here.
  */
 

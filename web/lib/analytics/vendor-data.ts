@@ -3,14 +3,13 @@ import { sql } from "drizzle-orm";
 import { db } from "@openbooks/engine/src/db.ts";
 
 /**
- * Vendor Performance — data behind /analytics/vendor-performance, ported from
- * Gantry's Procurement (VendorPerformance) dashboard.
+ * Vendor Performance — data behind /analytics/vendor-performance.
  *
  * What openbooks' data supports (built): spend analysis, concentration (HHI),
  * spend tiers, PAYMENT BEHAVIOR (days-to-pay / on-time %, from the `applications`
  * ledger), a composite vendor SCORECARD, and a Kraljic-style LEVERAGE MATRIX.
  *
- * What Gantry has but this ledger CANNOT support (no PO↔bill line linkage,
+ * Unsupported metrics (because there is no PO↔bill line linkage and
  * `quantity_fulfilled`/`quantity_billed`/`billed_by_line_id` are all empty, and
  * bill lines carry no item_id): OTIF, Lead Time, Purchase Price Variance, and
  * Maverick spend. Those need receipt/fulfillment + PO-matching data that isn't
@@ -19,7 +18,7 @@ import { db } from "@openbooks/engine/src/db.ts";
 
 export type SpendTier = "strategic" | "core" | "tactical" | "tail";
 export type Grade = "A" | "B" | "C" | "D" | "F";
-// Gantry leverage matrix: spend (financial impact) × performance. We proxy
+// Leverage matrix: spend (financial impact) × performance. We proxy
 // "performance" with payment-relationship health (on-time %), the only vendor-
 // performance signal this ledger supports.
 export type Quadrant = "strategic" | "commodity" | "niche" | "transactional";
@@ -196,7 +195,7 @@ export async function vendorData(period: { from: string; to: string; label: stri
 
   const totalSpend = base.reduce((a, r) => a + r.spend, 0) || 1;
   const sortedSpends = base.map((r) => r.spend).sort((a, b) => a - b);
-  // High-spend threshold = 80th percentile (Gantry highSpendThreshold).
+  // High-spend threshold = 80th percentile ().
   const highSpendThreshold = sortedSpends.length ? sortedSpends[Math.floor(sortedSpends.length * 0.8)] : 0;
   const n = base.length;
   const TIER_SIGNIFICANCE: Record<SpendTier, number> = { strategic: 40, core: 30, tactical: 20, tail: 10 };
@@ -220,7 +219,7 @@ export async function vendorData(period: { from: string; to: string; label: stri
     // payment history → neutral 50.
     const performance = r.onTimePct === null ? 50 : r.onTimePct * 100;
     const highSpend = r.spend >= highSpendThreshold;
-    const highPerf = performance >= 75; // Gantry highPerformanceThreshold
+    const highPerf = performance >= 75;
     const quadrant: Quadrant = highSpend
       ? highPerf ? "strategic" : "commodity"
       : highPerf ? "niche" : "transactional";

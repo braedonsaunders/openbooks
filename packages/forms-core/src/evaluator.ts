@@ -1,7 +1,6 @@
 // Typed JSON-tree evaluators for form field logic and formulas.
 //
-// Ported from the beaconhs form builder. This module is the SINGLE
-// implementation of the form condition/formula language — the designer
+// This is the single implementation of the form condition/formula language — the designer
 // preview, the filler, and the server-side submit validation all evaluate
 // rules through it so visibility decisions never diverge.
 //

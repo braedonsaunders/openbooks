@@ -10,9 +10,7 @@ import {
 /**
  * The documents FlowSubjectAdapter — one adapter instance per document kind
  * (subjectKind = the kind string, 'vendor_bill' …), all sharing the documents
- * supertype. Ported from beaconhs-platform's lib/flows/adapters/journals.ts
- * (the cleanest module adapter there), collapsed onto openbooks' single
- * documents table.
+ * supertype, collapsed onto OpenBooks' single documents table.
  *
  * loadContext mirrors how engine/src/scripting.ts builds a ScriptContext:
  * header row + ordered lines. The header is flattened into `values` (the

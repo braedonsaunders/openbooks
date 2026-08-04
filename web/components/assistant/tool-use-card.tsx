@@ -1,7 +1,7 @@
 'use client'
 
-// A single tool call rendered as a tidy, expandable card, ported from
-// beaconhs. Driven by the SDK part `state`: input-streaming/input-available →
+// A single tool call rendered as a tidy, expandable card. Driven by the SDK
+// part `state`: input-streaming/input-available →
 // spinner; output-available → check; output-error → alert. The same card
 // renders live and on transcript reload.
 

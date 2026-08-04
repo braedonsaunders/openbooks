@@ -6,11 +6,10 @@ import { createOpenAICompatible } from "@ai-sdk/openai-compatible";
 import { generateText, type LanguageModel } from "ai";
 
 /**
- * Config-driven AI client, ported from beaconhs's packages/ai/src/client.ts.
+ * Config-driven AI client.
  * Provider + API key + models (+ base URL) are passed in per call — resolved
  * from the org's encrypted settings (see ./ai-config.ts), NOT read from the
- * environment. beaconhs's socket-pinned egress transport is simplified to a
- * bounded fetch here (openbooks is self-hosted; the base URL is set by an org
+ * environment. Requests use a bounded fetch (OpenBooks is self-hosted; the base URL is set by an org
  * admin, not an untrusted tenant) — the URL is still validated to be public
  * HTTPS with no obviously-private host.
  */

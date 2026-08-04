@@ -8,8 +8,8 @@
  *   all — one rejection rejects the gate (siblings cancel); the approve
  *         branch resumes only when EVERY sibling has approved.
  *
- * beaconhs gates were single-assignee (decision == branch); the quorum layer
- * is the openbooks extension described in the flow execution contract.
+ * Single-assignee gates resolve directly; multi-assignee gates use the quorum
+ * behavior described in the flow execution contract.
  */
 
 export type GateQuorum = "any" | "all";

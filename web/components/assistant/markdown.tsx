@@ -1,6 +1,6 @@
 'use client'
 
-// Markdown renderer for assistant messages, ported from beaconhs. Sanitized
+// Sanitized Markdown renderer for assistant messages.
 // (no raw HTML), GFM tables + lists + code, styled with the app's prose tokens
 // incl. dark mode. Relative links (the model deep-links records like
 // /journal?entry=<id>) open in the same tab; external links open in a new one.

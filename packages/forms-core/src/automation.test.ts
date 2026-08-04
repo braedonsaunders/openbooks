@@ -1,7 +1,6 @@
 // Run with:  node --import tsx --test packages/forms-core/src/automation.test.ts
 //
-// Planner + lint tests for the pure flow-graph core, ported from
-// beaconhs-platform's automation.test.ts and adapted to the openbooks
+// Planner + lint tests for the pure flow-graph core and OpenBooks
 // trigger/action vocabulary.
 
 import { test, describe } from 'node:test'

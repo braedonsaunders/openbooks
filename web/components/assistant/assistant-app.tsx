@@ -1,7 +1,6 @@
 'use client'
 
-// The assistant experience, ported from beaconhs's AssistantApp: a
-// multi-conversation sidebar + streaming thread with tool-use cards +
+// The assistant experience: a multi-conversation sidebar + streaming thread with tool-use cards +
 // composer. Streams via the UI-message protocol (readUIMessageStream) so the
 // SAME parts[] renderer serves live tokens and reloaded transcripts.
 

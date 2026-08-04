@@ -158,9 +158,9 @@ export async function createBillingRequest(orgId: string, userId: string, input:
     for (const fieldTicketId of fieldTicketIds) {
       await tx.execute(sql`
         insert into billing_request_field_tickets (
-          org_id, billing_request_id, field_ticket_id, selection_source, selected_by
+          org_id, billing_request_id, field_ticket_id, selected_by
         )
-        values (${orgId}, ${created.id}, ${fieldTicketId}, 'request_creation', ${userId})
+        values (${orgId}, ${created.id}, ${fieldTicketId}, ${userId})
       `)
     }
     await tx.execute(sql`

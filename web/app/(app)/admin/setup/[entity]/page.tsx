@@ -197,7 +197,7 @@ export default async function SetupEntityPage({
   if (entityKey === 'company') return <CompanyTab orgId={orgId} />
   if (entityKey === 'period-close') {
     await requirePermission('periods.manage')
-    return <CloseSetupPage orgId={orgId} actorId={authz.user.id} searchParams={sp} canReopen={can(authz, 'close.reopen')} />
+    return <CloseSetupPage orgId={orgId} searchParams={sp} canReopen={can(authz, 'close.reopen')} />
   }
   if (entityKey === 'fx-provider') return <FxProviderPage orgId={orgId} />
 

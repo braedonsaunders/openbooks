@@ -2,12 +2,8 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import test from "node:test";
 
-const migration = readFileSync(
-  "schema/migrations/generated/0082_project_financial_adjustments.sql",
-  "utf8",
-);
-const sourcePairMigration = readFileSync(
-  "schema/migrations/generated/0084_project_financial_adjustment_source_pair.sql",
+const baseline = readFileSync(
+  "schema/migrations/generated/0001_baseline.sql",
   "utf8",
 );
 const service = readFileSync(
@@ -17,15 +13,15 @@ const service = readFileSync(
 const resolver = readFileSync("web/lib/project-financials.ts", "utf8");
 
 test("project financial adjustments are immutable controlled evidence", () => {
-  assert.match(migration, /project_financial_adjustments/i);
-  assert.match(migration, /append-only/i);
-  assert.match(migration, /reversing project financial adjustment/i);
-  assert.match(migration, /project_id = new\.project_id/i);
-  assert.match(migration, /original\.measure = new\.measure/i);
-  assert.match(migration, /original\.amount = -new\.amount/i);
-  assert.match(migration, /force row level security/i);
+  assert.match(baseline, /project_financial_adjustments/i);
+  assert.match(baseline, /append-only/i);
+  assert.match(baseline, /reversing project financial adjustment/i);
+  assert.match(baseline, /project_id = new\.project_id/i);
+  assert.match(baseline, /original\.measure = new\.measure/i);
+  assert.match(baseline, /original\.amount = -new\.amount/i);
+  assert.match(baseline, /force row level security/i);
   assert.match(
-    sourcePairMigration,
+    baseline,
     /\(source_system is null\) = \(source_ref is null\)/i,
   );
   assert.match(service, /source identity/i);

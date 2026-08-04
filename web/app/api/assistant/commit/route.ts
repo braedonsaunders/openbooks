@@ -7,8 +7,8 @@ import { verifyProposal, type JournalPreview } from "../../../../lib/assistant/p
 import { createDraftJournal } from "../../../../lib/journals";
 
 /**
- * The third gate of the propose→confirm→commit pattern (ported from
- * beaconhs's _commit-actions.ts). The user clicked Apply on a proposal card;
+ * The third gate of the propose→confirm→commit pattern. The user clicked Apply
+ * on a proposal card;
  * we re-check the real module permission, verify the HMAC over the exact
  * preview the client returned, and only then write — a DRAFT journal document
  * the user reviews and posts from /journal. The assistant never posts to the

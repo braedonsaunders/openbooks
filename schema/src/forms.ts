@@ -11,7 +11,7 @@ import {
 import { auditColumns, id, orgRef } from "./helpers";
 
 /**
- * App/form builder — ported from the beaconhs form platform. Lifecycle:
+ * App/form builder lifecycle:
  *
  *   form_templates (stable identity, keyed by org+key slug)
  *     └─ form_template_versions (schema snapshots; immutable once published)

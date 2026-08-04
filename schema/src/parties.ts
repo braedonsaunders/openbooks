@@ -1,3 +1,4 @@
+import { sql } from "drizzle-orm";
 import {
   boolean,
   date,
@@ -27,7 +28,7 @@ export const parties = pgTable(
     kind: text("kind", { enum: ["company", "person"] }).notNull(),
     displayName: text("display_name").notNull(),
     legalName: text("legal_name"),
-    shortCode: text("short_code"), // reference organization's "Shortform" custentity, promoted
+    shortCode: text("short_code"), // concise organization-defined display code
     email: text("email"),
     phone: text("phone"),
     website: text("website"),
@@ -42,13 +43,23 @@ export const parties = pgTable(
     /** Customer-level invoicing/backup override (cascades over project type). */
     invoicingPreference: jsonb("invoicing_preference").$type<InvoicingPreference>(),
     /** Invoicing rules agreed with this customer, layered over the project type. */
-  invoicingProfile: jsonb("invoicing_profile"),
-  custom: jsonb("custom").notNull().default({}),
+    invoicingProfile: jsonb("invoicing_profile"),
+    custom: jsonb("custom").notNull().default({}),
     ...auditColumns,
   },
   (t) => [
     index("parties_org_name").on(t.orgId, t.displayName),
     uniqueIndex("parties_org_shortcode").on(t.orgId, t.shortCode),
+    uniqueIndex("parties_org_source_identity")
+      .on(
+        t.orgId,
+        sql`(${t.custom}->'source'->>'system')`,
+        sql`(${t.custom}->'source'->>'externalId')`,
+      )
+      .where(sql`
+        ${t.custom}->'source'->>'system' is not null
+        and ${t.custom}->'source'->>'externalId' is not null
+      `),
   ],
 );
 

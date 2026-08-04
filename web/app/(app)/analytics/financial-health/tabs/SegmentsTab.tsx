@@ -31,7 +31,7 @@ export function SegmentsTab({ data }: { data: HealthData }) {
   const totalRev = rows.reduce((a, r) => a + r.revenue, 0)
   const totalOp = rows.reduce((a, r) => a + r.operatingIncome, 0)
   const best = rows.slice().sort((a, b) => b.operatingMarginPct - a.operatingMarginPct)[0]
-  // Gantry's segment concentration: HHI = Σ(share×100)², classic 0–10,000
+  // the segment concentration: HHI = Σ(share×100)², classic 0–10,000
   // scale (Unconcentrated <1500 / Moderate <2500 / Concentrated).
   const hhi = Math.round(rows.reduce((a, r) => a + (totalRev > 0 ? (r.revenue / totalRev) * 100 : 0) ** 2, 0))
   const hhiLabel = hhi >= 2500 ? 'Concentrated' : hhi >= 1500 ? 'Moderate' : 'Unconcentrated'

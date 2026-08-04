@@ -27,7 +27,7 @@ const TAB_LABEL: Record<Tab, string> = {
 const pct1 = (v: number | null | undefined, d = 1) => (v == null || isNaN(v) ? '—' : `${Number(v).toFixed(d)}%`)
 const hrs0 = (n: number) => `${Math.round(n).toLocaleString('en-US')}`
 
-/** Gantry status colouring vs target: on / near (−10) / below. */
+/** Status colouring vs target: on / near (−10) / below. */
 function statusTone(pct: number, target: number) {
   if (pct >= target) return { text: 'text-emerald-600 dark:text-emerald-400', bar: 'bg-emerald-500', hex: '#10b981' }
   if (pct >= target - 10) return { text: 'text-amber-600 dark:text-amber-400', bar: 'bg-amber-500', hex: '#f59e0b' }
@@ -50,7 +50,7 @@ function TrendDelta({ delta, goodIfUp, unit = 'pp', digits = 1 }: { delta: numbe
   )
 }
 
-/** Gantry's risk-meter billable gauge (semicircle arc coloured vs target). */
+/** the risk-meter billable gauge (semicircle arc coloured vs target). */
 function BillableGauge({ pct, target }: { pct: number; target: number }) {
   const diff = pct - target
   const color = diff >= 0 ? '#10b981' : diff >= -10 ? '#f59e0b' : diff >= -20 ? '#f97316' : '#ef4444'
@@ -88,7 +88,7 @@ function Sparkline({ values }: { values: number[] }) {
   )
 }
 
-/** Gantry treemap pastel scale (soft red → orange → yellow → mint → green). */
+/** Treemap pastel scale (soft red → orange → yellow → mint → green). */
 function treemapColor(pct: number): string {
   const stops: [number, [number, number, number]][] = [
     [0, [254, 202, 202]], [25, [254, 215, 170]], [50, [254, 240, 138]], [75, [187, 247, 208]], [100, [134, 239, 172]],
@@ -134,7 +134,7 @@ function EntriesDrawer({ kind, id, name, sub, peer, from, to, onClose }: {
   const total = (entries ?? []).reduce((a, e) => a + e.hours, 0)
   const billable = (entries ?? []).reduce((a, e) => a + (e.billable ? e.hours : 0), 0)
 
-  // Group entries by a key → { hours, billable } (Gantry by-item / by-customer).
+  // Group entries by a key → { hours, billable }.
   const groupBy = (keyFn: (e: Entry) => string) => {
     const m = new Map<string, { hours: number; billable: number }>()
     for (const e of entries ?? []) {
@@ -249,7 +249,7 @@ export function UtilizationView({ data }: { data: UtilizationData }) {
 
   return (
     <div className="space-y-5">
-      {/* Hero row — Gantry topline: gauge + 4 KPIs */}
+      {/* Hero row: gauge + 4 KPIs */}
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
         <BillableGauge pct={c.percentBilled} target={target} />
         <KpiCard icon={DollarSign} accent="red" label="Non-Billable Cost" value={money(c.nonBillableCost)} sub="total for range" tone="negative" />
@@ -314,7 +314,7 @@ function OverviewTab({ data }: { data: UtilizationData }) {
     ['Cost Per Day', money0(c.nonBillableCostPerDay), money0(p.nonBillableCostPerDay), '—'],
   ]
 
-  // Cost hotspots (exclude no-billable departments, Gantry renderTopline).
+  // Cost hotspots (exclude no-billable departments, ).
   const billableDepts = data.departments.filter((x) => !x.noBillable)
   const topDept = billableDepts[0]
   const topItem = data.items[0]
@@ -466,7 +466,7 @@ function IntelligenceTab({ data }: { data: UtilizationData }) {
   )
 }
 
-/** Gantry calculateForecasts: linear regression on history + inverse cost. */
+/** : linear regression on history + inverse cost. */
 function useForecasts(data: UtilizationData) {
   return useMemo(() => {
     const range = data.company.range
@@ -487,7 +487,7 @@ function useForecasts(data: UtilizationData) {
     const f = forecast(series)
     const projectedBillable = Math.min(100, Math.max(0, f.projected))
 
-    // Cost projection — inverse to billable % (Gantry, incl. ~100% edge case).
+    // Cost projection — inverse to billable %, including the ~100% edge case.
     const currentCost = range.nonBillableCost
     const currentNonBillPct = 100 - range.percentBilled
     const projectedNonBillPct = 100 - projectedBillable
@@ -552,7 +552,7 @@ function ForecastingSub({ data }: { data: UtilizationData }) {
   )
 }
 
-/** Gantry detectEmployeeAnomalies, verbatim thresholds. */
+/** , verbatim thresholds. */
 function useAnomalies(data: UtilizationData) {
   return useMemo(() => {
     const { employees } = intelligenceScope(data)
@@ -653,7 +653,7 @@ function AnomaliesSub({ data }: { data: UtilizationData }) {
   )
 }
 
-/** Gantry calculatePeerComparison. */
+/** . */
 function usePeers(data: UtilizationData) {
   return useMemo(() => {
     const { employees } = intelligenceScope(data)
@@ -731,7 +731,7 @@ function PeersSub({ data }: { data: UtilizationData }) {
   )
 }
 
-/** Gantry calculateWhatIfScenarios, verbatim formulas. */
+/** , verbatim formulas. */
 function useWhatIf(data: UtilizationData) {
   return useMemo(() => {
     const { employees, depts } = intelligenceScope(data)
@@ -924,7 +924,7 @@ function WhatIfSub({ data }: { data: UtilizationData }) {
   )
 }
 
-/** Gantry buildTreemapData → ECharts treemap (size = hours, colour = billable %). */
+/**  → ECharts treemap (size = hours, colour = billable %). */
 function TreemapSub({ data }: { data: UtilizationData }) {
   const { depts, employees } = intelligenceScope(data)
 
@@ -1315,7 +1315,7 @@ function EmployeesTab({ data, onDrill }: { data: UtilizationData; onDrill: (f: F
   const qualified = filtered.filter((e) => e.range.hours >= minHours).sort((a, b) => a.range.percentBilled - b.range.percentBilled)
   const low = filtered.filter((e) => e.range.hours < minHours)
 
-  // KPI stats (weighted, Gantry renderEmployeeTab).
+  // KPI stats (weighted, ).
   const qHours = qualified.reduce((s, e) => s + e.range.hours, 0)
   const qBillable = qualified.reduce((s, e) => s + e.range.billableHours, 0)
   const avgBillable = qHours > 0 ? (qBillable / qHours) * 100 : 0

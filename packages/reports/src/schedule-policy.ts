@@ -1,5 +1,5 @@
 // Schedule policy for reports — next-run computation plus recipient/filter
-// validation limits. Merged port of beaconhs packages/reports/src/cadence.ts
+// validation limits. Merged implementation of packages/reports/src/cadence.ts
 // (the next-run math) and schedule-policy.ts (recipient/filter bounds).
 //
 // Next-run computation works in the schedule's local timezone (IANA, e.g.

@@ -5,12 +5,10 @@ import { db } from "@openbooks/engine/src/db.ts";
 import { analyticsConfig } from "./config";
 
 /**
- * Customer Intelligence — the data behind /analytics/customer-intelligence, a
- * faithful port of Gantry's Revenue Intelligence (Lib_CustomerValue_Data.js).
+ * Customer Intelligence — the data behind /analytics/customer-intelligence.
  * Every subsystem and its exact parameters:
  *  - Base metrics: per-customer invoice count / revenue / avg value / first-last
- *    dates / recency / tenure from customer_invoice documents (Gantry summed
- *    CustInvc+CashSale headers; this ledger has no cash-sale kind).
+ *    dates / recency / tenure from customer_invoice documents.
  *  - RFM: R from fixed day thresholds (≤30→5, ≤90→3, ≤180→2, else 1); F/M from
  *    33rd/66th percentile cuts ({1,3,5} scores); 8 behavioural segments
  *    (champions/loyal/new/potential/hibernating/lost/at-risk/regular).
@@ -26,7 +24,7 @@ import { analyticsConfig } from "./config";
  *  - Velocity: avg days between orders (tenure/(txns−1)); overdue vs cadence;
  *    urgency critical >1× / high >0.5× / medium >0 / due-soon ≤7d.
  *  - Payment: paid = fully-applied invoices; days-to-pay = final application
- *    date − invoice date (Gantry's closedate−trandate); score 100 −40/−20/−10
+ *    date − invoice date (the closedate−trandate); score 100 −40/−20/−10
  *    by DSO >60/>30/>15 − min(40, overdue×10); ratings 80/60/40.
  *  - Growth: monthly revenue/customers/new-customers with median-based mature
  *    months (10% floor), MoM capped +200/−80, YoY = last-3mo vs months −15..−12,
@@ -39,7 +37,7 @@ import { analyticsConfig } from "./config";
  */
 
 /* --------------------------------------------------------------- constants */
-// Gantry DEFAULTS (Lib_CustomerValue_Data.js).
+// Default values (Lib_CustomerValue_Data.js).
 const W_RECENCY = 0.25;
 const W_FREQUENCY = 0.25;
 const W_MONETARY = 0.3;
@@ -207,7 +205,7 @@ export interface CustomerData {
 
 /* ------------------------------------------------------------ Profitability */
 // Project-financials profitability (faithful; kept from the first port), plus
-// Gantry's fake-champion flag (revenue > $100k ∧ margin < 15%).
+// the fake-champion flag (revenue > $100k ∧ margin < 15%).
 
 export type ProfitTier = "high" | "medium" | "low" | "marginal" | "loss";
 
@@ -342,7 +340,7 @@ function daysBetween(a: string, b: string): number {
   return Math.round((new Date(b + "T00:00:00Z").getTime() - new Date(a + "T00:00:00Z").getTime()) / 86_400_000);
 }
 
-/** Gantry's percentile: value at fraction p of a pre-sorted ascending array. */
+/** the percentile: value at fraction p of a pre-sorted ascending array. */
 function percentile(sorted: number[], p: number): number {
   if (!sorted.length) return 0;
   return sorted[Math.min(sorted.length - 1, Math.floor(sorted.length * p))]!;
@@ -378,7 +376,7 @@ export async function customerData(period: { from: string; to: string; label: st
   const clvYears = cfg.clvYears;
 
   const [baseRows, frictionRows, paymentRows, growthRows, cohortRows, profitData] = await Promise.all([
-    // Base customer metrics — Gantry's header query over CustInvc(+CashSale):
+    // Base customer metrics — the header query over CustInvc(+CashSale):
     // per-customer count / revenue / avg / first / last / recency / tenure.
     // Prior-year revenue added for YoY context (openbooks extension).
     db.execute(sql`
@@ -397,7 +395,7 @@ export async function customerData(period: { from: string; to: string; label: st
       group by d.party_id, p.display_name
       having sum(abs(d.total)) filter (where d.posting_date >= ${from}) > 0
     `) as Promise<any>,
-    // Friction — credit memos per customer (Gantry: RtnAuth×3 + CustCred×2;
+    // Friction — credit memos per customer (returns×3 + credits×2;
     // this ledger has no return-auth kind, so returns are always 0).
     db.execute(sql`
       select d.party_id as id,
@@ -412,7 +410,7 @@ export async function customerData(period: { from: string; to: string; label: st
       having count(*) filter (where d.kind = 'customer_invoice') > 0
     `) as Promise<any>,
     // Payment behaviour — paid = fully-applied invoice; days-to-pay = final
-    // application date − invoice date (Gantry closedate − trandate); overdue =
+    // application date − invoice date; overdue =
     // past due and not fully paid, as of the reference date.
     db.execute(sql`
       with inv as (
@@ -440,7 +438,7 @@ export async function customerData(period: { from: string; to: string; label: st
       group by party_id
     `) as Promise<any>,
     // Growth trends — monthly revenue / unique customers / txns / NEW customers
-    // (no earlier customer doc of any kind, lifetime — Gantry's NOT EXISTS).
+    // (no earlier customer doc of any kind, lifetime — the NOT EXISTS).
     db.execute(sql`
       select to_char(d.posting_date, 'YYYY-MM') as month,
         count(distinct d.party_id) as unique_customers,
@@ -494,7 +492,7 @@ export async function customerData(period: { from: string; to: string; label: st
     };
   });
 
-  /* ---- RFM (Gantry analyzeRFMSegmentation) ---- */
+  /* ---- RFM () ---- */
   const freqSorted = base.map((c) => c.txns).sort((a, b) => a - b);
   const monSorted = base.map((c) => c.revenue).sort((a, b) => a - b);
   const freqP33 = percentile(freqSorted, 0.33);
@@ -525,7 +523,7 @@ export async function customerData(period: { from: string; to: string; label: st
     return { r, f, m, score: Math.round(((r + f + m) / 3) * 10) / 10, code: `${r}${f}${m}`, segment };
   };
 
-  /* ---- CLV (Gantry calculateLifetimeValue) ---- */
+  /* ---- CLV () ---- */
   const clvOf = (c: Base) => {
     const yearsActive = Math.max(0.25, c.tenure / 365);
     const freqPerYear = c.txns / yearsActive;
@@ -534,7 +532,7 @@ export async function customerData(period: { from: string; to: string; label: st
     return { annualValue: Math.round(annualValue), clv: Math.round(annualValue * clvYears * retention), retentionFactor: Math.round(retention * 100) };
   };
 
-  /* ---- churn (Gantry analyzeChurnRisk) ---- */
+  /* ---- churn () ---- */
   const churnOf = (c: Base) => {
     let score = 0;
     const factors: string[] = [];
@@ -551,7 +549,7 @@ export async function customerData(period: { from: string; to: string; label: st
     return { score, level, factors, retentionProbability: Math.max(0, 100 - score), avgDaysBetween: Math.round(avgDaysBetween) };
   };
 
-  /* ---- velocity (Gantry analyzePurchaseVelocity) ---- */
+  /* ---- velocity () ---- */
   const velocityOf = (c: Base) => {
     const cycle = c.tenure > 0 && c.txns > 1 ? c.tenure / (c.txns - 1) : 30;
     const nextIn = Math.max(0, cycle - c.recency);
@@ -610,7 +608,7 @@ export async function customerData(period: { from: string; to: string; label: st
     const vel = velocityOf(c);
     return { c, rfm, clv, churn, vel };
   });
-  // Tier assignment ranks by projected CLV (Gantry sorts clvData by projectedCLV).
+  // Tier assignment ranks by projected CLV.
   const byClv = [...enriched].sort((a, b) => b.clv.clv - a.clv.clv);
   const nAll = byClv.length;
   const platinumCutoff = Math.ceil(nAll * 0.1);
@@ -628,7 +626,7 @@ export async function customerData(period: { from: string; to: string; label: st
     bronze: 0,
   };
 
-  /* ---- concentration (Gantry analyzeConcentrationRisk) ---- */
+  /* ---- concentration () ---- */
   const totalRevenue = base.reduce((a, c) => a + c.revenue, 0);
   const byRevenue = [...enriched].sort((a, b) => b.c.revenue - a.c.revenue);
   const shareMap = new Map<string, { sharePct: number; risk: RiskLevel }>();
@@ -646,7 +644,7 @@ export async function customerData(period: { from: string; to: string; label: st
   const top10PctCount = Math.ceil(nAll * 0.1);
   const top10Share = totalRevenue > 0 ? (byRevenue.slice(0, top10PctCount).reduce((a, e) => a + e.c.revenue, 0) / totalRevenue) * 100 : 0;
 
-  /* ---- health scores + recommendations (Gantry buildCustomerHealthScores) ---- */
+  /* ---- health scores + recommendations () ---- */
   const rows: CustomerRow[] = enriched.map(({ c, rfm, clv, churn, vel }) => {
     const friction = frictionMap.get(c.id);
     const payment = paymentMap.get(c.id);
@@ -657,7 +655,7 @@ export async function customerData(period: { from: string; to: string; label: st
     const recencyScore = rfm.r * 20;
     const frequencyScore = rfm.f * 20;
     const monetaryScore = rfm.m * 20;
-    const paymentScore = payment ? payment.score : 75; // Gantry default when unknown
+    const paymentScore = payment ? payment.score : 75; // Default when unknown
     const frictionPenalty = friction?.level === "critical" ? 25 : friction?.level === "high" ? 15 : friction?.level === "medium" ? 8 : 0;
 
     let healthScore = Math.round(recencyScore * W_RECENCY + frequencyScore * W_FREQUENCY + monetaryScore * W_MONETARY + paymentScore * W_PAYMENT);
@@ -758,7 +756,7 @@ export async function customerData(period: { from: string; to: string; label: st
     };
   });
 
-  /* ---- growth (Gantry analyzeGrowthTrends) ---- */
+  /* ---- growth () ---- */
   const gRows = growthRows.rows as any[];
   const revenues = gRows.map((r) => Number(r.revenue ?? 0)).sort((a, b) => a - b);
   const medianRevenue = revenues.length ? revenues[Math.floor(revenues.length / 2)]! : 0;
@@ -807,7 +805,7 @@ export async function customerData(period: { from: string; to: string; label: st
   }
   const totalNewCustomers = monthly.reduce((a, m) => a + m.newCustomers, 0);
 
-  /* ---- cohorts (Gantry analyzeCohorts) ---- */
+  /* ---- cohorts () ---- */
   const sixMonthsAgo = new Date(ref + "T00:00:00Z");
   sixMonthsAgo.setUTCMonth(sixMonthsAgo.getUTCMonth() - 6);
   const activeCut = sixMonthsAgo.toISOString().slice(0, 10);
@@ -834,7 +832,7 @@ export async function customerData(period: { from: string; to: string; label: st
     .sort((a, b) => a.year.localeCompare(b.year));
   const overallRetention = lifetimeCustomers ? Math.round((lifetimeActive / lifetimeCustomers) * 100) : 0;
 
-  /* ---- intelligence score (Gantry generateSummary) ---- */
+  /* ---- intelligence score () ---- */
   const championsStat = segments.find((s) => s.segment === "champions")!;
   const championsScore = Math.min(100, championsStat.percentage * 5);
   const avgRetentionProbability = rows.length ? Math.round(rows.reduce((a, r) => a + r.retentionProbability, 0) / rows.length) : 50;

@@ -3,8 +3,8 @@ import { sql } from "drizzle-orm";
 import { db } from "@openbooks/engine/src/db.ts";
 
 /**
- * Per-org analytics dashboard settings — the openbooks equivalent of Gantry's
- * editable Configuration tabs. Stored in `orgs.settings.analytics.<dashboard>`
+ * Per-organization analytics dashboard settings for the editable Configuration
+ * tabs. Stored in `orgs.settings.analytics.<dashboard>`
  * (no new table); unknown keys are ignored and every value is clamped to its
  * field's range, so a hand-edited settings blob can't break a dashboard.
  */

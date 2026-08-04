@@ -2,19 +2,19 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { priceCappedLadder, priceLowestCost, priceSelectedRateUnit, type RateTier } from "./item-rate-pricing.ts";
 
-const legacy: RateTier[] = [
+const threeTier: RateTier[] = [
   { id: "day", unitCode: "day", unitName: "Day", baseQuantity: "1", costRate: "0", billRate: "100" },
   { id: "week", unitCode: "week", unitName: "Week", baseQuantity: "4", costRate: "0", billRate: "250" },
   { id: "month", unitCode: "month", unitName: "Month", baseQuantity: "12", costRate: "0", billRate: "800" },
 ];
 
 test("capped ladder reproduces the 1/4/12 roll-up", () => {
-  const result = priceCappedLadder("15", legacy, "bill");
+  const result = priceCappedLadder("15", threeTier, "bill");
   assert.equal(result.amount, "1050.0000");
   assert.deepEqual(result.components.map((c) => [c.unitCode, c.quantity]), [["month", "1.0000"], ["week", "1.0000"]]);
 });
 
-test("capped ladder matches the legacy three-day and eleven-day boundary cases", () => {
+test("capped ladder promotes the three-day and eleven-day boundary cases", () => {
   const sourceRates: RateTier[] = [
     { unitCode: "day", unitName: "Day", baseQuantity: "1", costRate: "0", billRate: "10" },
     { unitCode: "week", unitName: "Week", baseQuantity: "4", costRate: "0", billRate: "25" },
@@ -25,7 +25,7 @@ test("capped ladder matches the legacy three-day and eleven-day boundary cases",
 });
 
 test("capped ladder preserves strict greater-than promotion", () => {
-  const tiers = legacy.map((t) => t.unitCode === "week" ? { ...t, billRate: "300" } : t);
+  const tiers = threeTier.map((t) => t.unitCode === "week" ? { ...t, billRate: "300" } : t);
   const result = priceCappedLadder("3", tiers, "bill");
   assert.equal(result.amount, "300.0000");
   assert.equal(result.components[0]!.unitCode, "day");
@@ -33,8 +33,8 @@ test("capped ladder preserves strict greater-than promotion", () => {
 });
 
 test("zero cost and positive billing price are independent", () => {
-  assert.equal(priceCappedLadder("7", legacy, "cost").amount, "0.0000");
-  assert.equal(priceCappedLadder("7", legacy, "bill").amount, "500.0000");
+  assert.equal(priceCappedLadder("7", threeTier, "cost").amount, "0.0000");
+  assert.equal(priceCappedLadder("7", threeTier, "bill").amount, "500.0000");
 });
 
 test("lowest-cost pricing supports arbitrary N package units", () => {
@@ -49,7 +49,7 @@ test("lowest-cost pricing supports arbitrary N package units", () => {
 });
 
 test("an explicitly selected package is not promoted or decomposed", () => {
-  const result = priceSelectedRateUnit("2", legacy[1]!, "bill");
+  const result = priceSelectedRateUnit("2", threeTier[1]!, "bill");
   assert.equal(result.amount, "500.0000");
   assert.deepEqual(result.components.map((c) => [c.unitCode, c.quantity, c.rate]), [["week", "2.0000", "250"]]);
 });

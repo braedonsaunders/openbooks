@@ -20,8 +20,7 @@ import { projectCostSummary } from "../project-costing";
 import { isFeatureEnabled } from "../features";
 
 /**
- * Read/search tools for the agentic assistant — the openbooks replacement for
- * beaconhs's incident/document/training tools. Every tool is permission-gated
+ * Read/search tools for the agentic assistant. Every tool is permission-gated
  * (same keys the pages use), returns capped result sets, and reuses the exact
  * query layer the UI renders from (web/lib/data.ts, web/lib/reports.ts) so the
  * assistant can never disagree with the screens.

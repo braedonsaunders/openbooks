@@ -1,7 +1,7 @@
 // Run with:  node --import tsx --test engine/src/flows/quorum.test.ts
 //
-// Pure quorum-resolution tests for flow gates (multi-assignee any/all), the
-// openbooks extension over beaconhs's single-assignee gates. Conventions
+// Pure quorum-resolution tests for single- and multi-assignee flow gates.
+// Conventions
 // follow packages/forms-core/src/automation.test.ts.
 
 import { test, describe } from "node:test";
@@ -27,7 +27,7 @@ describe("quorum 'any'", () => {
     assert.deepEqual(out.cancelIds, ["b"]);
   });
 
-  test("single-assignee gate (beaconhs semantics): decision == branch", () => {
+  test("single-assignee gate: decision equals branch", () => {
     assert.equal(resolveQuorumOutcome("any", "approved", [g("a", "approved")]).resume, "approve");
     assert.equal(resolveQuorumOutcome("any", "rejected", [g("a", "rejected")]).resume, "reject");
   });

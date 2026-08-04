@@ -38,7 +38,7 @@ function RiskPill({ score }: { score: number }) {
   return <span className={cn('rounded-full px-2 py-0.5 text-xs font-bold tabular-nums', score >= 80 ? 'bg-rose-100 text-rose-700 dark:bg-rose-950/50 dark:text-rose-400' : score >= 60 ? 'bg-amber-100 text-amber-700 dark:bg-amber-950/50 dark:text-amber-400' : 'bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300')}>{score}</span>
 }
 
-/** Overall-risk gauge (Gantry risk-meter, inverted: high = red). */
+/** Overall-risk gauge (Risk-meter, inverted: high = red). */
 function RiskGauge({ score }: { score: number }) {
   const color = score >= 60 ? '#ef4444' : score >= 40 ? '#f97316' : score >= 20 ? '#f59e0b' : '#10b981'
   const label = score >= 60 ? 'HIGH RISK' : score >= 40 ? 'ELEVATED' : score >= 20 ? 'MODERATE' : 'LOW RISK'
@@ -402,7 +402,7 @@ function BenfordTab({ data }: { data: SentinelData }) {
   )
 }
 
-/** Benford digit → transactions drill (Gantry openBenford1DDigitFlyout). */
+/** Benford digit → transactions drill (). */
 function BenfordDrill({ digit, dim, from, to, onClose }: { digit: number; dim: '1d' | '2d'; from: string; to: string; onClose: () => void }) {
   const fmtMoney = useAnalyticsMoney()
   const money = (n: number) => fmtMoney(n, { compact: true })

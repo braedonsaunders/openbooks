@@ -82,7 +82,7 @@ export interface OverheadSource {
     | "none" //                no overhead
     | "percent_of_labor" //    laborCost × ratePercent
     | "per_labor_hour" //      project hours × ratePerHour (flat)
-    | "rate_engine" //         per-department composite burden rate × project hours-by-dept (the reference organization/Gantry model)
+    | "rate_engine" //         per-department composite burden rate × project hours-by-dept
     | "posted_gl_account_group"; // sum posted GL in an overhead account group tagged to the project
   /** For percent_of_labor — the percentage (25 = 25%). */
   ratePercent?: number;

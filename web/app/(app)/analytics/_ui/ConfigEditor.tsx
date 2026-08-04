@@ -6,7 +6,7 @@ import { Settings2 } from 'lucide-react'
 import { Panel } from './Panel'
 
 /**
- * Editable analytics thresholds — Gantry's Configuration-tab save flow.
+ * Editable analytics thresholds — the Configuration-tab save flow.
  * Renders the field spec from lib/analytics/config.ts, PUTs overrides to
  * /api/analytics/config/<dashboard>, then refreshes the server-rendered
  * dashboard so every tab recomputes with the new values.

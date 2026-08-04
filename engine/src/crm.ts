@@ -34,7 +34,11 @@ const DEFAULT_OPPORTUNITY_STATUSES = [
 ] as const;
 
 /** Idempotent tenant bootstrap; safe to call before every CRM draft. */
-export async function ensureCrmDefaults(orgId: string, actorId: string, executor: SqlExecutor = db): Promise<void> {
+export async function ensureCrmDefaults(
+  orgId: string,
+  actorId: string | null = null,
+  executor: SqlExecutor = db,
+): Promise<void> {
   if (!(await crmFeatureEnabled(executor, orgId))) return;
   for (let sequence = 0; sequence < DEFAULT_ACCOUNT_STATUSES.length; sequence++) {
     const [stage, key, name, qualified, closed, isDefault] = DEFAULT_ACCOUNT_STATUSES[sequence]!;

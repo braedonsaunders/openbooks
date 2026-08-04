@@ -1,7 +1,7 @@
 // Email provider catalogue — the single source of truth for the settings UI and
 // the transport factory. Add a provider here (+ a `sendVia` branch) and it lights
 // up in the admin form. This module is pure data (no SDK / Node imports) so it is
-// safe to map into the client bundle. Ported from beaconhs-platform.
+// safe to map into the client bundle.
 
 export type EmailProvider = 'resend' | 'sendgrid' | 'mailgun' | 'postmark' | 'smtp'
 

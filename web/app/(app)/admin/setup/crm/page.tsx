@@ -1,6 +1,5 @@
 import { sql } from "drizzle-orm";
 import { db } from "@openbooks/engine/src/db.ts";
-import { ensureCrmDefaults } from "@openbooks/engine/src/crm.ts";
 import { requirePermission } from "../../../../../lib/authz";
 import { requireFeatureEnabled } from "../../../../../lib/feature-gates";
 import {
@@ -42,8 +41,6 @@ export default async function CrmSetup({
   });
   const offset = (list.page - 1) * list.perPage;
   const term = `%${list.q ?? ""}%`;
-
-  await ensureCrmDefaults(orgId, authz.user.id);
 
   let rowsResult: any;
   let countResult: any;

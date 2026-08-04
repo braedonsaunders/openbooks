@@ -1,8 +1,7 @@
 import { z } from 'zod'
 import { isResponseValueField } from './field-types'
 
-// Runtime-validated form schema, ported from the beaconhs form builder and
-// trimmed to the openbooks v1 field set. These zod validators are the source
+// Runtime-validated form schema for the OpenBooks field set. These zod validators are the source
 // of truth at runtime — keep them in lockstep with `schema/src/forms.ts`
 // (which stores this shape as `form_template_versions.schema` jsonb).
 

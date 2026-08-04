@@ -16,7 +16,7 @@ import {
 } from "../../../../lib/ai-conversations";
 
 /**
- * The agentic turn endpoint, ported from beaconhs's assistant/chat/route.ts.
+ * The agentic turn endpoint.
  * Streams a multi-step tool-using assistant turn over the UI-message protocol
  * (decoded client-side by readUIMessageStream) and persists the assembled
  * transcript into ai_messages on finish.

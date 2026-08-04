@@ -10,9 +10,8 @@ import { decimalSum, type ExactDecimal } from '../statement-format'
  * Financial Health — the ratio + scorecard engine behind
  * /analytics/financial-health.
  *
- * Ported from the Gantry package's "P&L / Financial Health" dashboard
- * (Dashboard.Health.js), but sourced natively from openbooks' own GL: every
- * figure derives from profitAndLoss()/balanceSheet(), so the numbers tie out
+ * Every figure is sourced natively from OpenBooks' own GL and derives from
+ * profitAndLoss()/balanceSheet(), so the numbers tie out
  * to the P&L and Balance Sheet reports exactly. No source platform, no Plotly.
  *
  * Sign convention follows web/lib/reports.ts — statement values are already
@@ -336,7 +335,7 @@ export async function financialHealth(
   const months = monthsBetween(from, to);
   const grossMarginPct = revenue > 0 ? grossProfit / revenue : 0;
   // Monthly revenue needed to cover fixed costs (opex) at the target gross
-  // margin. Gantry's chooseTargetGMPct: use actual range GM when it's above 5%,
+  // margin. the chooseTargetGMPct: use actual range GM when it's above 5%,
   // else fall back to a 20% planning default; clamp to 5–60% so distressed or
   // windfall margins don't produce absurd breakevens.
   const targetGM = Math.min(0.6, Math.max(0.05, grossMarginPct > 0.05 ? grossMarginPct : 0.2));

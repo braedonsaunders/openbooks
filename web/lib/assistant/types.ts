@@ -2,8 +2,7 @@ import type { ZodTypeAny } from "zod";
 import type { Authz } from "../authz";
 
 /**
- * Tool framework for the agentic assistant, ported from beaconhs
- * (apps/web/src/lib/assistant/types.ts). A tool is a permission-gated
+ * Tool framework for the agentic assistant. A tool is a permission-gated
  * capability the model may call. Two independent gates protect every call:
  * (1) the registry only EXPOSES tools the user may run (buildToolRegistry),
  * and (2) each execute() re-checks the gate defensively. Write tools add a

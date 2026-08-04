@@ -16,11 +16,11 @@ const COST_POOLS = [
 ];
 
 /**
- * Burden categories for the True Cost rate engine (Gantry's category manager
+ * Burden categories for the True Cost rate engine (the category manager
  * maps onto account groups). Classifies OVERHEAD-type expense accounts into
  * rate-composition categories; deliberately NO catch-all — accounts with
  * spend that match no category surface as "Unassigned" on the dashboard,
- * exactly like Gantry's classifier.
+ * exactly like the classifier.
  */
 const BURDEN_CATEGORIES = [
   { key: "facilities", name: "Facilities", color: "#f59e0b", sort: 10, match: { namePattern: "rent|property tax|building|premises|heat|hydro|utilit|electric power|water|waste|janitor|snow" }, catchAll: false },

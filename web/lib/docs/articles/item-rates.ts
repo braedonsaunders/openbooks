@@ -137,8 +137,8 @@ unit and snapshotted cost and bill rates.
 
 When migrating equipment rates, import each shared charge definition as one
 equipment-charge item, create effective rate versions, and link all applicable
-units to that item. Map the legacy **Applies To** text to the item description
-and the legacy category to the item category. A daily, weekly, and monthly
+units to that item. Map the source **Applies To** text to the item description
+and the source category to the item category. A daily, weekly, and monthly
 schedule becomes rate units of **1**, **4**, and **12** base days under the
 **Capped ladder** policy; use a zero cost rate when the source only supplied bill
 rates. Each physical equipment record references the migrated charge item rather

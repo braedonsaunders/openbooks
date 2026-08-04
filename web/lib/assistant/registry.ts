@@ -15,7 +15,7 @@ import { WRITE_TOOLS } from "./tools-write";
 import type { AssistantToolDef, ToolResult } from "./types";
 
 /**
- * Builds the per-turn AI-SDK ToolSet, ported from beaconhs. The model only
+ * Builds the per-turn AI-SDK ToolSet. The model only
  * ever SEES tools the current user may run (first gate); every execute()
  * re-checks the gate (second gate); write tools add a third gate at commit
  * time in /api/assistant/commit.

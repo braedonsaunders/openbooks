@@ -84,7 +84,7 @@ jobs:
 
       - name: Load schema
         # The production bootstrap is the authoritative provisioner: tracked
-        # migrations, referential integrity, kernel constraints, base seeds.
+        # canonical baseline, row-level security, and base seeds.
         run: npx tsx scripts/bootstrap.ts
 
       - name: Integration canary

@@ -9,7 +9,7 @@ import {
 } from '../src/fiscal-calendar.ts'
 import { PERIOD_PRESETS, resolvePreset } from '../src/period-presets.ts'
 
-const APRIL = 4 // reference organization's fiscal start month
+const APRIL = 4 // example non-calendar fiscal start month
 const JAN = 1
 const TODAY = '2026-07-15'
 

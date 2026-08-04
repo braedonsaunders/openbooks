@@ -1,9 +1,9 @@
 /**
- * Safe Excel-style formula evaluator — a faithful port of Gantry's
+ * Safe Excel-style formula evaluator — a faithful implementation of'
  * Lib_Core.evaluateFormula/tokenizeFormula (recursive descent, no eval).
  * Supports ternary (? :), || &&, == !=, < <= > >=, + - * / %, unary ! + -,
  * parens, and the functions min/max/ceil/floor/round/sqrt/pow/abs/avg.
- * Division and modulo by zero return 0 (Gantry semantics).
+ * Division and modulo by zero return 0 (defined semantics).
  */
 
 type Token =

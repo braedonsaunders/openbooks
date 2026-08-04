@@ -2,8 +2,7 @@ import "server-only";
 import { providerSpec, validateAiBaseUrl, type AiConfig } from "./client";
 
 /**
- * Model discovery, ported from beaconhs's packages/ai/src/models.ts — queries
- * each provider's "list models" endpoint so the settings UI can offer dynamic
+ * Model discovery queries each provider's "list models" endpoint so the settings UI can offer dynamic
  * dropdowns instead of free-text model ids. Runs server-side only (the API key
  * never leaves the server).
  */

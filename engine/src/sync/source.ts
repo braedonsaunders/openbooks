@@ -18,6 +18,8 @@ import type { NativeContext, NativeDocument } from "./native.ts";
 
 /** One canonical master-data record (see migrate.ts for the loader). */
 export interface SourceEntity {
+  /** Immutable id in this adapter's source namespace. It is never compared to
+   * another adapter's id, even when both happen to use the same characters. */
   sourceRef: string;
   /** Natural key for the target resource (account number, party short code…). */
   naturalKey?: string | null;
@@ -154,8 +156,26 @@ export interface SourceProjectFinancialInputs {
 // --- The adapter -----------------------------------------------------------------
 
 export interface MigrationSource {
+  /** Stable machine identifier for the source namespace. Together with a
+   * record's sourceRef this establishes the canonical `custom.source` origin
+   * when the row is first landed. Explicitly mapped secondary adapter refs may
+   * accumulate without replacing that origin. */
   readonly name: string;
-  /** Key under which source ids live in each row's `custom` jsonb (e.g. "nsId"). */
+  /**
+   * Unique key under which this adapter's source ids live in each row's
+   * `custom` JSON. Party and project identity is resolved only through this
+   * key; loaders must never adopt those entities by matching another adapter's
+   * id, display name, or natural key. Some canonical setup resources (for
+   * example payment terms by name or tax codes by code) intentionally merge
+   * through their own organization-scoped unique business key.
+   *
+   * A tenant that knows two source records represent the same real-world
+   * entity may install an explicit, reviewed one-to-one mapping by placing this
+   * adapter's refKey/sourceRef on the selected target row before sync. That
+   * mapping is tenant configuration: validate both sides, reject ambiguity and
+   * collisions, retain evidence, and audit the write. It is not connector
+   * fallback behavior.
+   */
   readonly refKey: string;
   /** ISO 4217 base currency of the source book. */
   readonly baseCurrency: string;

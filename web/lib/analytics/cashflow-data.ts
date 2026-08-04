@@ -25,7 +25,7 @@ import { buildTimeline } from "../cash/cash-position";
  * Every primitive — open-item prediction, payment statistics, aging, the weekly
  * timeline roll — is shared from `lib/cash/core` and `lib/cash/cash-position`,
  * so this forecast and the cockpits never drift. The model is a faithful port
- * of Gantry's Liquidity/Cashflow dashboard.
+ * of the Liquidity/Cashflow dashboard.
  */
 
 // Re-export the shared types so existing analytics imports keep working.
@@ -96,7 +96,7 @@ export async function cashflowData(orgId: string, horizonWeeks: number, asOfDate
 
   const startingCash = banks.reduce((a, b) => a + b.balance, 0);
 
-  // Predict each open item into a week bucket (Gantry buildARForecast/buildAPForecast).
+  // Predict each open item into a week bucket ().
   const ar = scheduleForecast(arItems, arStats, grid.asOf, grid.start, grid.end);
   const ap = scheduleForecast(apItems, apStats, grid.asOf, grid.start, grid.end);
   const weekTotals = (byWeek: Map<string, { amount: number }[]>): Record<string, number> =>
@@ -154,7 +154,7 @@ export async function cashflowData(orgId: string, horizonWeeks: number, asOfDate
       burnRate,
       runwayWeeks,
       runwayStatus,
-      // Gantry formula: (starting cash + AR outstanding) / AP outstanding.
+      // Coverage formula: (starting cash + AR outstanding) / AP outstanding.
       arCoverage: apSummary.outstanding > 0 ? (startingCash + arSummary.outstanding) / apSummary.outstanding : null,
       dso: arStats.globalAvg,
       dpo: apStats.globalAvg,

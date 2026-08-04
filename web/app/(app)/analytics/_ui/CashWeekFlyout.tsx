@@ -33,7 +33,7 @@ const PAGE_SIZE = 25
 type SortCol = 'docNumber' | 'partyName' | 'predictedDate' | 'amount'
 type TabKey = 'ar' | 'ap' | `cat:${string}`
 
-/** Gantry's method → accent colors for the category method pill. */
+/** the method → accent colors for the category method pill. */
 const CAT_METHOD_TONE: Record<string, string> = {
   'GL Average': 'text-sky-600 dark:text-sky-400',
   'Vendor History (Median)': 'text-violet-600 dark:text-violet-400',
@@ -59,10 +59,10 @@ const META_LABELS: Record<string, string> = {
 const MONEYISH = new Set(['sourceTotal','rawAverage','finalAverage','monthlyMedian','finalWeekly','amount','medianPayment','avgPayment','currentBalance','dailyBurnRate','monthlySpendRate','projectedGrowth','avgAmount','currentWeekApplied'])
 
 /**
- * Per-week cash drill at the legacy Gantry dashboard's full fidelity: KPI
+ * Per-week cash drill with detailed KPI
  * cards (net change + coverage gauge), the week's complete flow breakdown,
  * then the primary tabs — AR Inflows and AP Outflows with counts AND totals,
- * plus one tab per forecast CATEGORY active that week (Gantry's Category
+ * plus one tab per forecast CATEGORY active that week (the Category
  * Analysis: method KPIs, source-item table with search / sort / pagination /
  * CSV export). Transaction tabs carry the search toolbar, sortable table with
  * document-ID drill, method + days pills, pagination, and the run-builder
@@ -106,7 +106,7 @@ export function CashWeekFlyout({
   const catOuts = weekCats.filter((c) => c.direction === 'outflow')
   const coverage = week.outflow > 0 ? week.inflow / week.outflow : 1
 
-  // Breakdown — the legacy summary rows, straight off the shared WeekRow.
+  // Breakdown — the summary rows, straight off the shared WeekRow.
   const breakdown: { label: string; value: number; icon: typeof Wallet; tone: string }[] = [
     { label: 'Starting Cash', value: week.startingCash, icon: Wallet, tone: 'neutral' },
     ...(week.apCapacity !== null ? [{ label: 'Safe AP Capacity', value: week.apCapacity, icon: ShieldCheck, tone: 'info' }] : []),
@@ -346,7 +346,7 @@ export function CashWeekFlyout({
 }
 
 /**
- * Gantry's Category Analysis pane, scoped to the week flyout: method KPI row
+ * the Category Analysis pane, scoped to the week flyout: method KPI row
  * (This Week / Total Forecast / Method / Source Items / Export CSV), the
  * forecast-logic line, and the source-item table with search, sortable
  * columns and pagination.
@@ -394,7 +394,7 @@ function CategoryPane({ cat, weekAmount }: { cat: CategoryWeekly; weekAmount: nu
     <ArrowUpDown size={10} className={cn('ml-1 inline', sortCol === col ? 'text-teal-500' : 'text-slate-300 dark:text-slate-600')} />
   )
 
-  // Gantry exportCategoryCSV, client-side.
+  // , client-side.
   const exportCsv = () => {
     let csv = `"Category","${cat.name.replace(/"/g, '""')}"\n"Total","${cat.total}"\n\n"Entity/Description","Date","Amount","Type"\n`
     for (const row of cat.breakdown) {
@@ -548,7 +548,7 @@ function ActionBar({
   )
 }
 
-/** Prediction-method pill (legacy classes: History / Terms / Average / Pushed). */
+/** Prediction-method pill (classes: History / Terms / Average / Pushed). */
 function MethodPill({ method }: { method: string }) {
   const base = method.replace(/\s*\(deferred.*$/, '')
   const map: Record<string, { label: string; cls: string }> = {

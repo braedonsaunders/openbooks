@@ -1,5 +1,5 @@
 /**
- * Time-series forecasting engine — a faithful TypeScript port of Gantry's
+ * Time-series forecasting engine — a faithful TypeScript implementation of'
  * Dashboard.Health.js forecast methods (ETS/Holt-Winters, linear regression,
  * seasonal decomposition, moving average, ARIMA-style) plus the trend/σ,
  * seasonality detection, and MAPE/RMSE/R² diagnostics. Pure and deterministic

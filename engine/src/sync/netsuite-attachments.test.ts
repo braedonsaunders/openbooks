@@ -25,7 +25,7 @@ test("detectContentType rejects unsupported content instead of mis-serving it", 
   assert.throws(() => detectContentType(Buffer.from("not an image"), "spoofed.pdf"), /unsupported attachment/);
 });
 
-test("normalizeAttachmentBytes removes the bounded CPOW envelope from legacy PDFs", () => {
+test("normalizeAttachmentBytes removes the bounded CPOW envelope from wrapped PDFs", () => {
   const wrapped = Buffer.from("%PDFfileName=R42565_IN.PDF\r\n%[EndCPOW]\r\n%PDF-1.3\nbody");
   const normalized = normalizeAttachmentBytes(wrapped);
   assert.equal(normalized.toString(), "%PDF-1.3\nbody");

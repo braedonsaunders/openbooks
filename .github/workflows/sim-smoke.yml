@@ -45,7 +45,7 @@ jobs:
 
       - name: Load schema
         # Use the production bootstrap so CI exercises the authoritative
-        # UUID prerequisite, tracked migrations, constraints, and base seeds.
+        # Canonical schema baseline, row-level security, and base seeds.
         run: npx tsx scripts/bootstrap.ts
 
       - name: Typecheck

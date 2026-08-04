@@ -3,7 +3,7 @@
  *
  * This is deliberately population-based, never sample-based. It inventories
  * every source project, customer invoice, project-tagged GL category, and
- * legacy field-ticket header, then compares them to one OpenBooks tenant using
+ * source field-ticket header, then compares them to one OpenBooks tenant using
  * exact numeric(19,4) arithmetic. Missing source layers are reported as
  * unproven gates; they are never silently omitted from the denominator.
  *
@@ -26,9 +26,12 @@
  *   --source-invoices=/path/invoices.json
  *   --source-invoice-lines=/path/invoice-lines.json
  *   --source-project-gl=/path/project-account-totals.json
- *   --legacy-tickets=/path/field-ticket-headers.tsv
- *   --legacy-crew=/path/field-ticket-crew.tsv
- *   --legacy-project-financials=/path/project-financials.json
+ *   --field-ticket-headers=/path/field-ticket-headers.tsv
+ *   --field-ticket-crew=/path/field-ticket-crew.tsv
+ *   --project-financials=/path/project-financials.json
+ *   --field-ticket-source-system=<stable connector id>
+ *   --source-metadata-key=source
+ *   --source-id-key=externalId
  *   --out=/path/certificate.json
  */
 import { execFileSync } from "node:child_process";
@@ -86,6 +89,22 @@ if (connectionId && !/^[0-9a-f-]{36}$/i.test(connectionId)) {
 }
 const requestedSourceAccountingBook =
   args.get("source-accounting-book")?.trim() || null;
+const fieldTicketSourceSystem =
+  args.get("field-ticket-source-system")?.trim() || null;
+if (
+  fieldTicketSourceSystem &&
+  !/^[a-z0-9][a-z0-9._-]{0,63}$/i.test(fieldTicketSourceSystem)
+) {
+  throw new Error("--field-ticket-source-system must be a stable connector id");
+}
+const sourceMetadataKey = args.get("source-metadata-key")?.trim() || "source";
+if (!/^[a-z][a-z0-9_-]{0,31}$/i.test(sourceMetadataKey)) {
+  throw new Error("--source-metadata-key must be a JSON object key");
+}
+const sourceIdKey = args.get("source-id-key")?.trim() || "externalId";
+if (!/^[a-z][a-z0-9_-]{0,31}$/i.test(sourceIdKey)) {
+  throw new Error("--source-id-key must be a JSON object key");
+}
 const financialAsOf = args.get("as-of")?.trim() || undefined;
 if (financialAsOf && !/^\d{4}-\d{2}-\d{2}$/.test(financialAsOf)) {
   throw new Error("--as-of must be YYYY-MM-DD");
@@ -126,10 +145,11 @@ const paths = {
   sourceProjectGl:
     args.get("source-project-gl") ??
     "/tmp/parity-ns-project-account-totals.json",
-  legacyTickets: args.get("legacy-tickets") ?? "/tmp/ft-head.tsv",
-  legacyCrew: args.get("legacy-crew") ?? "/tmp/ft-rows.tsv",
-  legacyProjectFinancials:
-    args.get("legacy-project-financials") ?? "/tmp/golden-cost.json",
+  fieldTicketHeaders:
+    args.get("field-ticket-headers") ?? "/tmp/ft-head.tsv",
+  fieldTicketCrew: args.get("field-ticket-crew") ?? "/tmp/ft-rows.tsv",
+  sourceProjectFinancials:
+    args.get("project-financials") ?? "/tmp/project-financials.json",
   sourceSnapshot:
     args.get("source-snapshot") ??
     `${args.get("source-projects") ?? "/tmp/parity-ns-projects.json"}.snapshot.json`,
@@ -401,7 +421,7 @@ async function refreshSource(): Promise<void> {
   writeFileSync(paths.sourceSnapshot, JSON.stringify(manifest, null, 2));
 }
 
-function parseLegacyTicketHeaders(path: string): JsonRow[] | null {
+function parseFieldTicketHeaders(path: string): JsonRow[] | null {
   if (!existsSync(path)) return null;
   const lines = readFileSync(path, "utf8").split(/\r?\n/);
   return lines
@@ -424,7 +444,7 @@ function addDays(iso: string, days: number): string {
   return date.toISOString().slice(0, 10);
 }
 
-function parseLegacyCrew(
+function parseFieldTicketCrew(
   path: string,
   tickets: JsonRow[] | null,
 ): Map<string, bigint> | null {
@@ -500,9 +520,14 @@ if (sourceAccountingBooks.length > 1) {
     )}; provide a single-book artifact`,
   );
 }
-const legacyTickets = parseLegacyTicketHeaders(paths.legacyTickets);
-const legacyCrew = parseLegacyCrew(paths.legacyCrew, legacyTickets);
-const legacyProjectFinancials = readJson(paths.legacyProjectFinancials);
+const fieldTicketHeaders = parseFieldTicketHeaders(paths.fieldTicketHeaders);
+const fieldTicketCrew = parseFieldTicketCrew(paths.fieldTicketCrew, fieldTicketHeaders);
+const sourceProjectFinancials = readJson(paths.sourceProjectFinancials);
+if ((fieldTicketHeaders || fieldTicketCrew) && !fieldTicketSourceSystem) {
+  throw new Error(
+    "--field-ticket-source-system is required when field-ticket source artifacts are present",
+  );
+}
 const sourceSnapshot = existsSync(paths.sourceSnapshot)
   ? (JSON.parse(
       readFileSync(paths.sourceSnapshot, "utf8"),
@@ -576,7 +601,7 @@ const target = await withOrgContext(orgId, async () => {
     retry(() =>
       db.execute(sql`
       select d.id, d.document_number,
-             d.custom->'legacy'->>'id' as legacy_id,
+             d.custom->${sourceMetadataKey}->>${sourceIdKey} as source_id,
              p.custom->>'nsId' as source_project_id
         from documents d
         left join projects p on p.id = d.project_id and p.org_id = d.org_id
@@ -598,13 +623,13 @@ const target = await withOrgContext(orgId, async () => {
     ),
     retry(() =>
       db.execute(sql`
-      select evidence.legacy_id, evidence.source_employee_id,
+      select evidence.source_id, evidence.source_employee_id,
              evidence.source_item_id, evidence.worked_on,
              evidence.time_kind, sum(evidence.hours)::text as hours
         from (
           -- Approved commercial labor is frozen in its current evidence
           -- revision; later operational time changes cannot reinterpret it.
-          select d.custom->'legacy'->>'id' as legacy_id,
+          select d.custom->${sourceMetadataKey}->>${sourceIdKey} as source_id,
                  employee.custom->>'nsId' as source_employee_id,
                  item.custom->>'nsId' as source_item_id,
                  line.worked_on::text as worked_on,
@@ -616,7 +641,7 @@ const target = await withOrgContext(orgId, async () => {
              and snapshot.org_id = d.org_id
              and snapshot.superseded_at is null
              and snapshot.evidence_basis = 'source_import'
-             and snapshot.source_system = 'adminapp2'
+             and snapshot.source_system = ${fieldTicketSourceSystem ?? ""}
             join field_ticket_labor_lines line
               on line.snapshot_id = snapshot.id
              and line.org_id = snapshot.org_id
@@ -630,13 +655,13 @@ const target = await withOrgContext(orgId, async () => {
            where d.org_id = ${orgId}
              and d.kind = 'field_ticket'
              and d.status = 'approved'
-             and d.custom->'legacy'->>'id' is not null
+             and d.custom->${sourceMetadataKey}->>${sourceIdKey} is not null
 
           union all
 
           -- A draft has no frozen customer-facing revision yet. Its editable
           -- labor source of truth is the atomic operational time ledger.
-          select d.custom->'legacy'->>'id' as legacy_id,
+          select d.custom->${sourceMetadataKey}->>${sourceIdKey} as source_id,
                  employee.custom->>'nsId' as source_employee_id,
                  item.custom->>'nsId' as source_item_id,
                  time.worked_on::text as worked_on,
@@ -658,9 +683,9 @@ const target = await withOrgContext(orgId, async () => {
            where d.org_id = ${orgId}
              and d.kind = 'field_ticket'
              and d.status = 'draft'
-             and d.custom->'legacy'->>'id' is not null
+             and d.custom->${sourceMetadataKey}->>${sourceIdKey} is not null
         ) evidence
-       group by evidence.legacy_id, evidence.source_employee_id,
+       group by evidence.source_id, evidence.source_employee_id,
                 evidence.source_item_id, evidence.worked_on,
                 evidence.time_kind
     `),
@@ -825,15 +850,15 @@ const gates: Record<string, GateResult> = {};
     sourceProjects?.map((row) => String(row.id)) ?? [],
   );
   const financialProjectIds = new Set(
-    legacyProjectFinancials?.map((row) => String(row.job ?? "")) ?? [],
+    sourceProjectFinancials?.map((row) => String(row.job ?? "")) ?? [],
   );
   const financialFetchedTimes =
-    legacyProjectFinancials?.map((row) =>
+    sourceProjectFinancials?.map((row) =>
       Date.parse(String(row.fetchedAt ?? "")),
     ) ?? [];
   if (
-    legacyProjectFinancials &&
-    financialProjectIds.size !== legacyProjectFinancials.length
+    sourceProjectFinancials &&
+    financialProjectIds.size !== sourceProjectFinancials.length
   ) {
     artifactProblems.push(
       "project-financial artifact contains duplicate identities",
@@ -841,7 +866,7 @@ const gates: Record<string, GateResult> = {};
   }
   if (
     sourceProjects &&
-    legacyProjectFinancials &&
+    sourceProjectFinancials &&
     (sourceProjectIds.size !== financialProjectIds.size ||
       [...sourceProjectIds].some((id) => !financialProjectIds.has(id)))
   ) {
@@ -850,7 +875,7 @@ const gates: Record<string, GateResult> = {};
     );
   }
   if (
-    legacyProjectFinancials &&
+    sourceProjectFinancials &&
     (financialFetchedTimes.length === 0 ||
       financialFetchedTimes.some((value) => !Number.isFinite(value)))
   ) {
@@ -874,13 +899,13 @@ const gates: Record<string, GateResult> = {};
     }
   }
   const boundArtifactCount =
-    requiredArtifactKeys.length + (legacyProjectFinancials ? 1 : 0);
+    requiredArtifactKeys.length + (sourceProjectFinancials ? 1 : 0);
   gates.sourceSnapshotCoherence = {
     status: artifactProblems.length === 0 ? "exact" : "unproven",
     sourceCount: boundArtifactCount,
     targetCount:
       requiredArtifactKeys.filter((key) => fileHash(paths[key]) !== null).length +
-      (legacyProjectFinancials ? 1 : 0),
+      (sourceProjectFinancials ? 1 : 0),
     exactCount: artifactProblems.length === 0 ? boundArtifactCount : null,
     mismatchCount: artifactProblems.length,
     detail:
@@ -1143,29 +1168,29 @@ if (!sourceProjectGl) {
   };
 }
 
-if (!legacyTickets) {
+if (!fieldTicketHeaders) {
   gates.fieldTicketHeaders = {
     status: "unproven",
     sourceCount: null,
     targetCount: target.tickets.length,
     exactCount: null,
     mismatchCount: null,
-    detail: `missing ${paths.legacyTickets}`,
+    detail: `missing ${paths.fieldTicketHeaders}`,
   };
 } else {
-  const byLegacyId = new Map(
+  const bySourceId = new Map(
     target.tickets
-      .filter((row) => row.legacy_id)
-      .map((row) => [String(row.legacy_id), row]),
+      .filter((row) => row.source_id)
+      .map((row) => [String(row.source_id), row]),
   );
   const byNumber = new Map(
     target.tickets.map((row) => [String(row.document_number), row]),
   );
   let exact = 0;
-  for (const ticket of legacyTickets) {
+  for (const ticket of fieldTicketHeaders) {
     const sourceRef = String(ticket.id);
     const targetTicket =
-      byLegacyId.get(sourceRef) ?? byNumber.get(String(ticket.number));
+      bySourceId.get(sourceRef) ?? byNumber.get(String(ticket.number));
     if (!targetTicket) {
       differences.push({
         layer: "field_ticket_header",
@@ -1192,26 +1217,26 @@ if (!legacyTickets) {
     exact++;
   }
   gates.fieldTicketHeaders = {
-    status: exact === legacyTickets.length ? "exact" : "different",
-    sourceCount: legacyTickets.length,
+    status: exact === fieldTicketHeaders.length ? "exact" : "different",
+    sourceCount: fieldTicketHeaders.length,
     targetCount: target.tickets.length,
     exactCount: exact,
-    mismatchCount: legacyTickets.length - exact,
+    mismatchCount: fieldTicketHeaders.length - exact,
     targetOnlyCount: Math.max(0, target.tickets.length - exact),
   };
 }
 
 const sourceProjectCount = sourceProjects?.length ?? null;
-const legacyFinancialCount = legacyProjectFinancials?.length ?? null;
-if (legacyProjectFinancials && sourceProjectCount !== null) {
-  const availableFinancialCount = legacyProjectFinancials.length;
+const sourceFinancialCount = sourceProjectFinancials?.length ?? null;
+if (sourceProjectFinancials && sourceProjectCount !== null) {
+  const availableFinancialCount = sourceProjectFinancials.length;
   const targetBySourceProject = new Map(
     target.projects
       .filter((row) => row.source_id)
       .map((row) => [String(row.source_id), row]),
   );
   const comparisonResults = await mapConcurrent(
-    legacyProjectFinancials,
+    sourceProjectFinancials,
     projectConcurrency,
     async (source) => {
       const projectDifferences: Difference[] = [];
@@ -1219,7 +1244,7 @@ if (legacyProjectFinancials && sourceProjectCount !== null) {
       const project = targetBySourceProject.get(sourceRef);
       if (!project) {
         projectDifferences.push({
-          layer: "legacy_project_financial",
+          layer: "source_project_financial",
           sourceRef,
           field: "project_presence",
           source: "present",
@@ -1300,7 +1325,7 @@ if (legacyProjectFinancials && sourceProjectCount !== null) {
         if (pennyEqual(sourceValue, targetValue)) continue;
         exact = false;
         projectDifferences.push({
-          layer: "legacy_project_financial",
+          layer: "source_project_financial",
           sourceRef,
           field,
           source: sourceValue,
@@ -1318,7 +1343,7 @@ if (legacyProjectFinancials && sourceProjectCount !== null) {
   }
   const availableMismatches = availableFinancialCount - exactProjects;
   const completePopulation = availableFinancialCount === sourceProjectCount;
-  gates.legacyProjectFinancialMeasures = {
+  gates.sourceProjectFinancialMeasures = {
     status:
       availableMismatches > 0
         ? "different"
@@ -1332,13 +1357,13 @@ if (legacyProjectFinancials && sourceProjectCount !== null) {
     detail: `Compared source TotalJobCost, TotalJobPrice, InvoicedToDate, gross margin, and any explicit invoiceable/overhead measures to the penny for every available row; source export covers ${availableFinancialCount}/${sourceProjectCount} projects`,
   };
 } else {
-  gates.legacyProjectFinancialMeasures = {
+  gates.sourceProjectFinancialMeasures = {
     status: "unproven",
-    sourceCount: legacyFinancialCount,
+    sourceCount: sourceFinancialCount,
     targetCount: target.projects.length,
     exactCount: null,
     mismatchCount: null,
-    detail: `missing complete legacy project financial export (${paths.legacyProjectFinancials})`,
+    detail: `missing complete source project financial export (${paths.sourceProjectFinancials})`,
   };
 }
 
@@ -1507,25 +1532,25 @@ if (!sourceInvoiceLines) {
     detail: `Every source customer-invoice detail line by stable identity, sequence, item, account, quantity, unit, rate, amount, and description; ${retainedTargetOnlyCount} target-only lines belong to controlled voided source-deletion tombstones`,
   };
 }
-if (!legacyCrew) {
+if (!fieldTicketCrew) {
   gates.fieldTicketCrewAndHours = {
     status: "unproven",
     sourceCount: null,
     targetCount: target.ticketCrew.length,
     exactCount: null,
     mismatchCount: null,
-    detail: `missing ${paths.legacyCrew} or ticket headers`,
+    detail: `missing ${paths.fieldTicketCrew} or ticket headers`,
   };
 } else {
   const currentSourceTicketIds = new Set(
-    legacyTickets!.map((ticket) => String(ticket.id)),
+    fieldTicketHeaders!.map((ticket) => String(ticket.id)),
   );
   const targetCrew = new Map<string, bigint>();
   for (const row of target.ticketCrew.filter((candidate) =>
-    currentSourceTicketIds.has(String(candidate.legacy_id)),
+    currentSourceTicketIds.has(String(candidate.source_id)),
   )) {
     const key = [
-      row.legacy_id,
+      row.source_id,
       row.source_employee_id,
       row.source_item_id,
       row.worked_on,
@@ -1535,10 +1560,10 @@ if (!legacyCrew) {
       .join("|");
     addAmount(targetCrew, key, row.hours);
   }
-  const keys = new Set([...legacyCrew.keys(), ...targetCrew.keys()]);
+  const keys = new Set([...fieldTicketCrew.keys(), ...targetCrew.keys()]);
   let exact = 0;
   for (const key of keys) {
-    const sourceHours = legacyCrew.get(key) ?? 0n;
+    const sourceHours = fieldTicketCrew.get(key) ?? 0n;
     const targetHours = targetCrew.get(key) ?? 0n;
     if (sourceHours === targetHours) {
       exact++;
@@ -1554,12 +1579,12 @@ if (!legacyCrew) {
   }
   gates.fieldTicketCrewAndHours = {
     status: exact === keys.size ? "exact" : "different",
-    sourceCount: legacyCrew.size,
+    sourceCount: fieldTicketCrew.size,
     targetCount: targetCrew.size,
     exactCount: exact,
     mismatchCount: keys.size - exact,
     detail:
-      "Aggregated by legacy ticket, employee, item, work date, and regular/overtime/double-time tier",
+      "Aggregated by source ticket, employee, item, work date, and regular/overtime/double-time tier",
   };
 }
 

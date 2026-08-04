@@ -45,7 +45,7 @@ const useRate = () => {
 const hrs0 = (n: number) => Math.round(n).toLocaleString('en-US')
 const FALLBACK = '#94a3b8'
 
-/** Pill wrapper for inline filter selects (Gantry's .srb-filter). */
+/** Pill wrapper for inline filter selects (the .srb-filter). */
 function FilterPill({ icon: Icon, children }: { icon: typeof Building2; children: React.ReactNode }) {
   return (
     <span className="inline-flex items-center gap-0.5 rounded-full border border-slate-200 bg-white py-0.5 pl-2 pr-0.5 dark:border-slate-700 dark:bg-slate-900">
@@ -129,7 +129,7 @@ export function TrueCostView({ data, mode = 'analytics' }: { data: TrueCostData;
   return (
     <div className="space-y-5">
       {mode === 'analytics' ? (
-        /* Hero — Gantry's 5 KPIs verbatim (dashboard surface only) */
+        /* Hero — the 5 KPIs verbatim (dashboard surface only) */
         <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
           <KpiCard
             icon={GaugeIcon} accent="sky" label="Composite Rate" value={rate(k.compositeRate)}
@@ -368,7 +368,7 @@ function CategoryFlyout({ catId, data, onClose, onDrillAccount }: { catId: strin
         </p>
       )}
 
-      {/* Allocation settings (Gantry rate engine) */}
+      {/* Allocation settings */}
       <div className="space-y-2.5 border-b border-slate-100 bg-slate-50/40 px-4 py-3 dark:border-slate-800 dark:bg-slate-800/20">
         <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">Allocation</p>
         <div className="grid grid-cols-2 gap-2">
@@ -1397,7 +1397,7 @@ function TrendsTab({ data }: { data: TrueCostData }) {
 
 /* ----------------------------------------------------------- Configuration */
 
-/** Composite method + active-profile switcher (Gantry calculateCompositeRate + getActiveProfile). */
+/** Composite method + active-profile switcher ( + getActiveProfile). */
 function CompositePanel({ data }: { data: TrueCostData }) {
   const rate = useRate()
   const router = useRouter()
@@ -1495,7 +1495,7 @@ function ConfigTab({ data }: { data: TrueCostData }) {
   )
 }
 
-/** Manage config-driven custom categories: manual / derived / formula (Gantry). */
+/** Manage config-driven custom categories: manual / derived / formula. */
 function CustomCategoryManager({ data }: { data: TrueCostData }) {
   const router = useRouter()
   const [busy, setBusy] = useState(false)

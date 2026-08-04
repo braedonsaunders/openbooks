@@ -17,9 +17,8 @@
 // and one LogicBuilder UI everywhere. `set_field` reuses
 // `DefaultValueExpression` (resolved by `resolveDefaultValue`).
 //
-// Ported from beaconhs-platform's forms-core automation module; the trigger /
-// action vocabulary is adapted to the openbooks ERP document lifecycle (see
-// the flow execution contract).
+// The trigger/action vocabulary follows the OpenBooks ERP document lifecycle
+// described in the flow execution contract.
 
 import { z } from 'zod'
 import {

@@ -1,7 +1,7 @@
 'use client'
 
 import { useMoney } from '@/components/money-provider'
-// Confirm card for a drafted (proposed) write, ported from beaconhs. The
+// Confirm card for a drafted (proposed) write. The
 // draft tool returns a signed proposal in its output; this renders the
 // journal preview + Apply/Discard. The real mutation happens only in
 // /api/assistant/commit after the user clicks Apply — and lands as a DRAFT

@@ -30,9 +30,7 @@ import {
 import { DEFAULT_INVOICE_MODEL, validateAzureDocumentEndpoint } from "@openbooks/engine/src/ap-capture.ts";
 
 /**
- * AI provider configuration, ported from beaconhs's lib/ai-config.ts and
- * collapsed to openbooks' single-org model: beaconhs resolved platform →
- * tenant policy across two scopes; here the org IS the tenant, so the config
+ * AI provider configuration for OpenBooks' organization-scoped tenancy model. The config
  * lives in `orgs.settings.ai` alone. The API key is encrypted at rest
  * (web/lib/secrets.ts, AES-256-GCM under OPENBOOKS_DATA_KEY). There is no
  * environment fallback — nothing AI-related lives in the environment.

@@ -1,6 +1,5 @@
 // The document template engine — merges org-authored HTML templates with
-// record values. Ported from beaconhs-platform's email-render keystone; the
-// grammar and safety model are identical:
+// record values using this grammar and safety model:
 //
 //   {{ path }}            escaped value (path = key, this, this.key, a.b.c, @index…)
 //   {{{ path }}}          raw (unescaped) value — for fields that hold trusted HTML

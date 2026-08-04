@@ -3,8 +3,7 @@ import { generateText, stepCountIs, streamText, type ModelMessage, type ToolSet,
 import { AIDisabledError, getModel, type AiConfig, type ModelTier } from "./client";
 
 /**
- * Agentic, multi-step tool-using turn. Ported from beaconhs's
- * packages/ai/src/agent.ts: the caller passes a permission-bound ToolSet plus
+ * Agentic, multi-step tool-using turn. The caller passes a permission-bound ToolSet plus
  * a system prompt; we run the Vercel AI SDK tool loop and stream the result to
  * the browser using the UI-message protocol — which `readUIMessageStream`
  * decodes on the client into the same `parts[]` shape we persist and

@@ -1,5 +1,4 @@
-// Response payload validation, ported from the beaconhs form builder and
-// trimmed to the openbooks v1 field set. Shared verbatim by the client filler
+// Response payload validation for the OpenBooks field set. Shared by the client filler
 // (pre-submit) and the server route (authoritative) so the two can never
 // disagree about what a valid response is.
 

@@ -1,4 +1,4 @@
-// Server-only secret sealing (AES-256-GCM). Ported from beaconhs-platform.
+// Server-only secret sealing (AES-256-GCM).
 // (No `server-only` import: this package is also consumed by the Node worker.)
 // The key is derived from the existing SESSION_SECRET via HKDF — no new env var,
 // no plaintext secrets in the DB. A secret sealed by a web admin action unseals
@@ -56,7 +56,7 @@ export function unsealSecret(sealed: SealedSecret): string | null {
 }
 
 /**
- * Simplified SMTP host resolver (beaconhs uses a full egress SSRF guard). We
+ * SMTP host resolver. We
  * reject IP literals so TLS identity can be verified against a DNS name;
  * nodemailer resolves DNS itself, and we keep `rejectUnauthorized` + servername.
  */

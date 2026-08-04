@@ -10,8 +10,8 @@
 // at author time. Server-side behaviour lives in the matching subject adapter
 // (engine/src/flows/registry.ts).
 //
-// Ported from beaconhs-platform's flow-subjects module, adapted to the
-// openbooks document vocabulary (see the flow execution contract).
+// Subject profiles use the OpenBooks document vocabulary described in the
+// flow execution contract.
 
 import type { TriggerKind, ActionKind } from './automation'
 

@@ -42,7 +42,7 @@ export function CashflowView({ data }: { data: CashflowData }) {
 
   return (
     <div className="space-y-5">
-      {/* KPI row — Gantry: Current Cash / Projected End / Lowest Point / Inflows / Outflows */}
+      {/* KPI row: Current Cash / Projected End / Lowest Point / Inflows / Outflows */}
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
         <Kpi icon={University} accent="slate" label="Current Cash" value={money(s.startingCash)} tone={s.startingCash < 0 ? 'neg' : undefined} />
         <Kpi icon={Wallet} accent="sky" label="Projected End" value={money(s.projectedEnd)} sub={`${s.netChange >= 0 ? '+' : ''}${money(s.netChange)} net`} tone={s.netChange >= 0 ? 'pos' : 'neg'} />

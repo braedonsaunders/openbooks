@@ -1,5 +1,4 @@
-// Canonical types for the custom-report engine (ported from beaconhs
-// packages/reports + packages/db/src/schema/reports.ts, vendor-neutral).
+// Canonical vendor-neutral types for the custom-report engine.
 //
 // The query-plan types here are THE source of truth. schema/src/reporting.ts
 // carries structurally-identical mirrors on its jsonb columns so the schema

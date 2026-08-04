@@ -14,7 +14,7 @@ import { auditColumns, id, orgRef } from "./helpers";
 /**
  * Custom-field registry: definitions here, values in each table's `custom`
  * JSONB, validated at the API layer against the definition (type, options,
- * applicability). Same philosophy as beaconhs' form/plugin framework —
+ * applicability). Same philosophy as the form/plugin framework —
  * extension without migration, but never schemaless chaos: a value without
  * a definition is rejected.
  */

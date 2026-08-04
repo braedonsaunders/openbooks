@@ -87,9 +87,10 @@ async function ensureProjectPocRule(orgId: string, actorId: string | null): Prom
 /**
  * Sync the revenue contract + obligation for every qualifying fixed-price
  * project (or one, when `projectId` is given): ensure the contract/obligation
- * exist, refresh the percent-complete target, backfill any pre-pipeline
- * recognition entries into the schedule (so history is never re-recognized),
- * and rebuild the schedule for the central run to post.
+ * exist, refresh the percent-complete target, and rebuild the schedule for the
+ * central run to post. Historical ledger adoption is deliberately not part of
+ * this runtime path: imported opening positions must enter through an explicit,
+ * reviewed migration before project contracts are activated.
  */
 export async function syncProjectRevenueContracts(
   orgId: string,
@@ -108,23 +109,25 @@ export async function syncProjectRevenueContracts(
   const projects = (await db.execute(sql`
     select p.id, p.code, p.name, p.customer_id, p.subsidiary_id, p.starts_on,
            coalesce(p.contract_value, 0)::numeric(19,4) as contract_value,
-           nullif(p.custom->>'percentCompleteOverride', '')::numeric as pct_override
+           nullif(p.custom->>'percentCompleteOverride', '')::numeric as pct_override,
+           coalesce(s.base_currency, root.base_currency) as functional_currency
       from projects p
       left join project_types pt on pt.id = p.project_type_id and pt.org_id = p.org_id
+      left join subsidiaries s on s.id = p.subsidiary_id and s.org_id = p.org_id
+      left join lateral (
+        select base_currency from subsidiaries
+         where org_id = p.org_id and parent_id is null and is_active and not is_elimination
+         limit 1
+      ) root on true
      where p.org_id = ${orgId} and p.is_active
        and pt.invoicing_profile->>'recognition' = 'percent_complete_cost'
        ${projectId ? sql`and p.id = ${projectId}` : sql``}
      order by p.code`)) as unknown as {
     rows: {
       id: string; code: string; name: string; customer_id: string | null; subsidiary_id: string | null;
-      starts_on: string | null; contract_value: string; pct_override: string | null;
+      starts_on: string | null; contract_value: string; pct_override: string | null; functional_currency: string | null;
     }[];
   };
-
-  const org = (await db.execute(sql`select base_currency from orgs where id = ${orgId}`)) as unknown as {
-    rows: { base_currency: string }[];
-  };
-  const currency = org.rows[0]?.base_currency ?? "CAD";
 
   let ruleId: string | null = null;
 
@@ -132,6 +135,10 @@ export async function syncProjectRevenueContracts(
     if (cmp(p.contract_value, "0") === 0) continue; // nothing to recognize (yet)
     if (!p.customer_id) {
       result.problems.push(`${p.code}: project has no customer — cannot carry a revenue contract`);
+      continue;
+    }
+    if (!p.functional_currency) {
+      result.problems.push(`${p.code}: project has no authoritative functional currency`);
       continue;
     }
     ruleId ??= await ensureProjectPocRule(orgId, actorId);
@@ -177,7 +184,7 @@ export async function syncProjectRevenueContracts(
       const ins = (await db.execute(sql`
         insert into revenue_contracts
           (org_id, customer_id, project_id, contract_number, status, starts_on, currency, total_transaction_price, created_by, updated_by)
-        values (${orgId}, ${p.customer_id}, ${p.id}, ${p.code}, 'active', ${startsOn}, ${currency}, ${p.contract_value}, ${actorId}, ${actorId})
+        values (${orgId}, ${p.customer_id}, ${p.id}, ${p.code}, 'active', ${startsOn}, ${p.functional_currency}, ${p.contract_value}, ${actorId}, ${actorId})
         returning id`)) as unknown as { rows: { id: string }[] };
       contractId = ins.rows[0].id;
       created = true;
@@ -209,11 +216,6 @@ export async function syncProjectRevenueContracts(
                 ${startsOn}, ${accts.unbilledReceivable}, ${accts.projectRevenue}, 'open', ${actorId}, ${actorId})
         returning id`)) as unknown as { rows: { id: string }[] };
       obligationId = ins.rows[0].id;
-
-      // Backfill pre-pipeline recognition (the retired per-project button) as
-      // POSTED schedule lines pointing at the real journal entries, so the
-      // percent-complete rebuild credits history instead of re-recognizing it.
-      await backfillHistoricalRecognition(orgId, actorId, p.id, obligationId, accts.projectRevenue);
     }
 
     await buildAllRecognitionSchedules(obligationId, orgId, actorId, asOfDate);
@@ -231,59 +233,4 @@ export async function syncProjectRevenueContracts(
   }
 
   return result;
-}
-
-/**
- * Record already-posted `revenue_recognition` entries for a project (credits to
- * the project revenue account, posted before the contract existed) as posted
- * schedule lines on the obligation's primary-book schedule. The lines point at
- * the real journal entries — the subledger ties to the GL, and rebuilds treat
- * the amounts as recognized-to-date.
- */
-async function backfillHistoricalRecognition(
-  orgId: string,
-  actorId: string | null,
-  projectId: string,
-  obligationId: string,
-  projectRevenueAccountId: string,
-): Promise<void> {
-  const hist = (await db.execute(sql`
-    select e.id, e.period_id, coalesce(-sum(l.amount), 0)::numeric(19,4) as recognized
-      from journal_entries e
-      join journal_lines l on l.entry_id = e.id
-     where e.org_id = ${orgId} and e.status in ('posted', 'reversed') and e.origin = 'revenue_recognition'
-       and l.project_id = ${projectId} and l.account_id = ${projectRevenueAccountId}
-       and not exists (select 1 from recognition_schedule_lines rl
-                        where rl.org_id = ${orgId} and rl.journal_entry_id = e.id)
-     group by e.id, e.period_id
-    having coalesce(-sum(l.amount), 0) <> 0
-     order by min(e.posting_date)`)) as unknown as {
-    rows: { id: string; period_id: string; recognized: string }[];
-  };
-  if (hist.rows.length === 0) return;
-
-  const book = (await db.execute(sql`
-    select id from accounting_books where org_id = ${orgId} and is_primary = true limit 1`)) as unknown as {
-    rows: { id: string }[];
-  };
-  const bookId = book.rows[0]?.id;
-  if (!bookId) return;
-
-  await db.transaction(async (tx) => {
-    const sched = (await tx.execute(sql`
-      insert into recognition_schedules (org_id, obligation_id, book_id, total_amount, created_by, updated_by)
-      select ${orgId}, ${obligationId}, ${bookId}, allocated_price, ${actorId}, ${actorId}
-        from performance_obligations where id = ${obligationId}
-      on conflict (obligation_id, book_id) do update set updated_at = now()
-      returning id`)) as unknown as { rows: { id: string }[] };
-    const scheduleId = sched.rows[0].id;
-    let seq = 0;
-    for (const h of hist.rows) {
-      await tx.execute(sql`
-        insert into recognition_schedule_lines
-          (org_id, schedule_id, period_id, sequence, planned_amount, recognized_amount, journal_entry_id, created_by, updated_by)
-        values (${orgId}, ${scheduleId}, ${h.period_id}, ${seq}, ${h.recognized}, ${h.recognized}, ${h.id}, ${actorId}, ${actorId})`);
-      seq++;
-    }
-  });
 }
