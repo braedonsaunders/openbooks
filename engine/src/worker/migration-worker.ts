@@ -6,7 +6,7 @@ import {
   getBlockingConnection,
   type MigrationJobData,
 } from "@openbooks/jobs";
-import { db } from "../db.ts";
+import { db, withBypassContext, withOrgContext } from "../db.ts";
 import { buildSource, getConnection } from "../sync/connection.ts";
 import {
   preflightFullSync,
@@ -32,7 +32,7 @@ import { mirrorIsDue } from "../sync/mirror-schedule.ts";
 export function createMigrationWorker(): Worker<MigrationJobData> {
   return new Worker<MigrationJobData>(
     MIGRATION_QUEUE,
-    async (job) => {
+    async (job) => withOrgContext(job.data.orgId, async () => {
       const {
         orgId,
         connectionId,
@@ -206,7 +206,16 @@ export function createMigrationWorker(): Worker<MigrationJobData> {
           await source.dispose?.();
         }
       }
-      const ctx = { orgId, connectionId };
+      const postedChangeAuthorization =
+        conn.postedChangePolicy === "append_only_automatic" &&
+        conn.postedChangeAuthorizedBy &&
+        conn.postedChangeAuthorizedAt
+          ? {
+              actorId: conn.postedChangeAuthorizedBy,
+              authorizedAt: new Date(conn.postedChangeAuthorizedAt),
+            }
+          : undefined;
+      const ctx = { orgId, connectionId, postedChangeAuthorization };
       const result =
         mode === "full_migration"
           ? await runFullMigration(source, triggeredBy ?? "worker", ctx)
@@ -249,7 +258,7 @@ export function createMigrationWorker(): Worker<MigrationJobData> {
             }
           : null,
       };
-    },
+    }),
     {
       connection: getBlockingConnection(),
       concurrency: 2,
@@ -277,7 +286,7 @@ const MIRROR_TICK_MS = 5 * 60_000;
  * when it finishes, overwriting the reaper's mark.
  */
 export async function reapStaleSyncRuns(): Promise<number> {
-  const res = (await db.execute(sql`
+  const res = (await withBypassContext(() => db.execute(sql`
     update sync_runs
        set status = 'failed', finished_at = now(),
            error_message = 'Run never finished: the worker was interrupted (deploy, crash, or restart). Marked failed by the stale-run reaper.'
@@ -285,7 +294,7 @@ export async function reapStaleSyncRuns(): Promise<number> {
        and started_at < now() - case
          when kind = 'full_migration' then interval '6 hours'
          else interval '30 minutes'
-       end`)) as unknown as { rowCount?: number };
+       end`))) as unknown as { rowCount?: number };
   return res.rowCount ?? 0;
 }
 
@@ -301,7 +310,7 @@ export function startMirrorScheduler(): void {
       if (reaped > 0)
         console.log(`[mirror-scheduler] reaped ${reaped} stale sync run(s)`);
       await purgeExpiredQbdBridgeData();
-      const candidates = (await db.execute(sql`
+      const candidates = (await withBypassContext(() => db.execute(sql`
         select c.id, c.org_id as "orgId", c.mirror_schedule as schedule,
                history.last_successful_at as "lastSuccessfulAt",
                history.last_scheduled_attempt_at as "lastScheduledAttemptAt",
@@ -329,7 +338,7 @@ export function startMirrorScheduler(): void {
            and not exists (
              select 1 from sync_runs running
               where running.connection_id = c.id and running.kind = 'incremental' and running.status = 'running'
-           )`)) as unknown as {
+           )`))) as unknown as {
         rows: {
           id: string;
           orgId: string;
