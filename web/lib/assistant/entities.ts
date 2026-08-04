@@ -24,11 +24,6 @@ export type AssistantPartyEntity = {
   isActive?: boolean;
 };
 
-export type AssistantEntityIndex = {
-  documentsByReference: ReadonlyMap<string, AssistantDocumentEntity>;
-  partiesByName: ReadonlyMap<string, AssistantPartyEntity>;
-};
-
 type AnyRecord = Record<string, unknown>;
 
 const UUID =
@@ -134,73 +129,4 @@ export function assistantEntitiesFromToolOutput(
     };
   }
   return { documents: [], parties: [] };
-}
-
-function normalizedReference(value: string): string {
-  return value.trim().toLowerCase();
-}
-
-function definedFields<T extends object>(value: T): Partial<T> {
-  return Object.fromEntries(
-    Object.entries(value).filter(([, field]) => field !== undefined),
-  ) as Partial<T>;
-}
-
-/**
- * Builds a record lookup from every completed tool part in one assistant turn.
- * The lookup lets historic markdown links inherit the IDs already saved in the
- * tool result, so old generic /ar and /ap links become native drawer links.
- */
-export function assistantEntityIndex(parts: unknown[]): AssistantEntityIndex {
-  const documents = new Map<string, AssistantDocumentEntity>();
-  const parties = new Map<string, AssistantPartyEntity>();
-
-  for (const rawPart of parts) {
-    const part = record(rawPart);
-    const type = text(part?.type);
-    if (
-      !part ||
-      !type ||
-      (type !== "dynamic-tool" && !type.startsWith("tool-"))
-    )
-      continue;
-    const toolName =
-      type === "dynamic-tool"
-        ? text(part.toolName)
-        : type.slice("tool-".length);
-    if (!toolName) continue;
-    const entities = assistantEntitiesFromToolOutput(toolName, part.output);
-    for (const document of entities.documents) {
-      const key = normalizedReference(document.documentNumber);
-      const previous = documents.get(key);
-      documents.set(key, {
-        ...previous,
-        ...definedFields(document),
-      } as AssistantDocumentEntity);
-    }
-    for (const party of entities.parties) {
-      const key = normalizedReference(party.displayName);
-      const previous = parties.get(key);
-      parties.set(key, {
-        ...previous,
-        ...definedFields(party),
-      } as AssistantPartyEntity);
-    }
-  }
-
-  return { documentsByReference: documents, partiesByName: parties };
-}
-
-export function assistantDocumentByLabel(
-  index: AssistantEntityIndex | undefined,
-  label: string,
-): AssistantDocumentEntity | undefined {
-  return index?.documentsByReference.get(normalizedReference(label));
-}
-
-export function assistantPartyByLabel(
-  index: AssistantEntityIndex | undefined,
-  label: string,
-): AssistantPartyEntity | undefined {
-  return index?.partiesByName.get(normalizedReference(label));
 }

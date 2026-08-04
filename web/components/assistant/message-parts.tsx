@@ -12,29 +12,27 @@ import {
   applicationCommandFromOutput,
 } from './application-command-card'
 import { AssistantEntityCards } from './entity-cards'
-import { assistantEntityIndex, type AssistantEntityIndex } from '@/lib/assistant/entities'
 
 type AnyPart = { type: string; [k: string]: unknown }
 
 export function MessageParts({ parts }: { parts: unknown[] }) {
   const list = Array.isArray(parts) ? (parts as AnyPart[]) : []
-  const entities = assistantEntityIndex(list)
   return (
     <div className="space-y-2.5">
       {list.map((part, i) => (
-        <PartView key={i} part={part} entities={entities} />
+        <PartView key={i} part={part} />
       ))}
     </div>
   )
 }
 
-function PartView({ part, entities }: { part: AnyPart; entities: AssistantEntityIndex }) {
+function PartView({ part }: { part: AnyPart }) {
   if (!part || typeof part !== 'object' || typeof part.type !== 'string') return null
   const { type } = part
 
   if (type === 'text') {
     const text = typeof part.text === 'string' ? part.text : ''
-    return text.trim() ? <ChatMarkdown entities={entities}>{text}</ChatMarkdown> : null
+    return text.trim() ? <ChatMarkdown>{text}</ChatMarkdown> : null
   }
   if (type === 'step-start' || type === 'reasoning') return null
 
