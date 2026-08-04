@@ -19,7 +19,7 @@ import { auditColumns, currencyCode, id, orgRef } from "./helpers";
  *
  * `documents` owns the common commercial header; this one-to-one table owns
  * the product's Field Ticket state. Tenant-defined extension fields may still
- * use documents.custom, but OpenBooks' own fields must never live there.
+ * use documents.custom, but the own fields must never live there.
  */
 export const fieldTickets = pgTable(
   "field_tickets",

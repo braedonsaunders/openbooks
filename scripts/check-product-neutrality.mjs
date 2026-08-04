@@ -24,7 +24,20 @@ const vendorPatterns = [
   new RegExp(joined("One", "World"), "i"),
 ];
 
-const organizationPatterns = [new RegExp(["Ac", "me"].join(""), "i")];
+// Known customer, tenant, predecessor-codebase, installed-SuiteApp, account,
+// and incident identifiers must never enter tracked product files. Split the
+// literals here so this audit does not whitelist itself by containing them.
+const privateProvenancePatterns = [
+  new RegExp(joined("Ac", "me"), "i"),
+  new RegExp(joined("Sum", "mit"), "i"),
+  new RegExp(joined("Legacy", "App"), "i"),
+  new RegExp(joined("Light", "house"), "i"),
+  new RegExp(joined("Har", "bor"), "i"),
+  new RegExp(joined("123", "4567")),
+  new RegExp(joined("100", "001")),
+  new RegExp(joined("100", "002")),
+  new RegExp(joined("100", "003")),
+];
 
 const connectorPaths = [
   /^\.gitignore$/,
@@ -63,21 +76,25 @@ function firstMatch(text, patterns) {
   return null;
 }
 
-const trackedFiles = execFileSync("git", ["ls-files", "-z"], {
-  encoding: "utf8",
-})
+const publicFiles = execFileSync(
+  "git",
+  ["ls-files", "--cached", "--others", "--exclude-standard", "-z"],
+  {
+    encoding: "utf8",
+  },
+)
   .split("\0")
   .filter(Boolean);
 
 const violations = [];
 
-for (const filePath of trackedFiles) {
+for (const filePath of publicFiles) {
   // TypeScript incremental state is a generated compiler cache, not product
   // copy or source. It embeds every imported filename and string literal.
   if (filePath.endsWith(".tsbuildinfo")) continue;
-  const organizationPathMatch = firstMatch(filePath, organizationPatterns);
-  if (organizationPathMatch) {
-    violations.push(`${filePath}: organization name in path`);
+  const provenancePathMatch = firstMatch(filePath, privateProvenancePatterns);
+  if (provenancePathMatch) {
+    violations.push(`${filePath}: private provenance identifier in path`);
   }
 
   const vendorPathMatch = firstMatch(filePath, vendorPatterns);
@@ -95,11 +112,11 @@ for (const filePath of trackedFiles) {
   }
   if (source.includes("\0")) continue;
 
-  const organizationMatch = firstMatch(source, organizationPatterns);
-  if (organizationMatch) {
-    const line = source.slice(0, organizationMatch.index).split("\n").length;
+  const provenanceMatch = firstMatch(source, privateProvenancePatterns);
+  if (provenanceMatch) {
+    const line = source.slice(0, provenanceMatch.index).split("\n").length;
     violations.push(
-      `${filePath}:${line}: organization name in tracked content`,
+      `${filePath}:${line}: private provenance identifier in public content`,
     );
   }
 

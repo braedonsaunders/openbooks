@@ -15,7 +15,6 @@ import { RECORD_TYPES, RECORD_TYPE_BY_KEY, customFieldTargetFor, defaultFormLayo
 import { loadFieldDefs } from '../../../../lib/custom-fields'
 import { FormDesigner, NewFormButton } from './FormDesigner'
 import { ListViewDesigner, NewViewButton } from './ListViewDesigner'
-import { ensureCustomizationDefaults } from '../../../../lib/customization/seed-defaults'
 import { subsidiaryFeatureEnabled } from '../../../../lib/features'
 
 export const dynamic = 'force-dynamic'
@@ -49,12 +48,6 @@ export default async function CustomizationPage({
   const formId = canManageOrg ? pickString(sp.form) : undefined
   const viewId = pickString(sp.view)
   const params = parseListParams(sp, { sort: 'name', allowedSorts: ['name'] as const, perPage: 100 })
-
-  // Provision every baseline in one pass so Forms & Views always exposes an
-  // editable default for the full catalog, not a virtual one-off fallback.
-  if (canManageOrg) {
-    await ensureCustomizationDefaults({ orgId: authz.user.orgId, actorId: authz.user.id })
-  }
 
   const typeFilter = recordType ? sql`record_type = ${recordType}` : sql`true`
   const searchFilter = params.q ? sql`name ilike ${`%${params.q}%`}` : sql`true`

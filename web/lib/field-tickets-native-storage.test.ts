@@ -21,7 +21,7 @@ test('native Field Ticket runtime never persists product state in custom JSON', 
   }
 })
 
-test('legacy importer cannot infer ticket lineage from matching time values', () => {
+test('source importer cannot infer ticket lineage from matching time values', () => {
   const source = readFileSync('engine/src/validation/import-field-tickets.ts', 'utf8')
   assert.doesNotMatch(source, /update\s+time_entries[\s\S]*field_ticket_id/i)
   assert.doesNotMatch(source, /abs\s*\(\s*te\.hours/i)

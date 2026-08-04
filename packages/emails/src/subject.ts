@@ -1,4 +1,4 @@
-// Ported from lighthouse-platform (@lighthouse/email-render/subject).
+// Transport-safe email subject normalization.
 export const EMAIL_SUBJECT_LIMITS = {
   subjectChars: 998,
   subjectBytes: 998,

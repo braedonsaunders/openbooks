@@ -1,12 +1,10 @@
 /**
  * Deployment bootstrap — idempotent, runs before the web server starts.
  *
- *   1. Applies schema/migrations/generated/*.sql in filename order, tracked in
- *      _applied_migrations (skip-once semantics; a changed already-applied file
- *      logs a loud warning instead of re-running).
- *   2. Applies referential-integrity.sql + kernel-constraints.sql the same way,
- *      then verifies environments.sql (row-level security), applying it only
- *      when its version or live catalog coverage has changed.
+ *   1. Applies the canonical baseline and any future forward migrations in
+ *      schema/migrations/generated/*.sql, tracked by immutable file digest.
+ *   2. Verifies environments.sql (row-level security), applying it only when
+ *      its version or live catalog coverage has changed.
  *   3. Ensures the SELECT-only `openbooks_read` role + grants (SQL workbench
  *      and user-script queries need it).
  *   4. Ensures an org, its primary accounting book, monthly accounting
@@ -24,8 +22,8 @@ import { sql } from "drizzle-orm";
 import pg from "pg";
 import { db, env, pool, withBypassContext } from "../engine/src/db.ts";
 import { ensureCloseDefaults } from "../engine/src/close.ts";
+import { provisionOrganizationDefaults } from "../engine/src/organization-provisioning.ts";
 import { SUPPORTED_CURRENCIES } from "../engine/src/currencies.ts";
-import { seedProjectTypes } from "../engine/src/seed-project-types.ts";
 import { BUILT_IN_ROLES } from "../web/lib/permissions.ts";
 
 const repoRoot = join(dirname(fileURLToPath(import.meta.url)), "..");
@@ -116,13 +114,12 @@ async function applyTracked(
 ): Promise<void> {
   const digest = sha256(content);
   const seen = (await db.execute(sql`
-    select sha256 from _applied_migrations where filename = ${filename}
+    select sha256 from public._applied_migrations where filename = ${filename}
   `)) as unknown as { rows: { sha256: string }[] };
   if (seen.rows.length > 0) {
     if (seen.rows[0].sha256 !== digest) {
-      console.warn(
-        `[bootstrap] WARNING: ${filename} changed after it was applied — new statements were NOT run. ` +
-          `Reconcile manually, then update _applied_migrations.sha256.`,
+      throw new Error(
+        `[bootstrap] ${filename} changed after it was applied; published migrations are immutable`,
       );
     }
     return;
@@ -132,8 +129,13 @@ async function applyTracked(
   try {
     await client.query("begin");
     await client.query(content);
+    // pg_dump-style baselines intentionally clear search_path while creating
+    // fully qualified objects. Restore the application default before this
+    // pooled session is returned to callers that execute reviewed SQL files.
+    await client.query("set search_path = public, pg_catalog");
+    await client.query("set row_security = on");
     await client.query(
-      "insert into _applied_migrations (filename, sha256) values ($1, $2)",
+      "insert into public._applied_migrations (filename, sha256) values ($1, $2)",
       [filename, digest],
     );
     await client.query("commit");
@@ -148,23 +150,8 @@ async function applyTracked(
 }
 
 async function migrate(): Promise<void> {
-  // The id() column default across the whole schema — a plain SQL v7-UUID
-  // generator (no extension). Must exist before the first CREATE TABLE.
-  await db.execute(
-    sql.raw(`
-    CREATE OR REPLACE FUNCTION public.uuid_generate_v7()
-     RETURNS uuid
-     LANGUAGE sql
-     PARALLEL SAFE
-    AS $fn$
-      select encode(set_bit(set_bit(overlay(uuid_send(gen_random_uuid())
-        placing substring(int8send((extract(epoch from clock_timestamp()) * 1000)::bigint) from 3)
-        from 1 for 6), 52, 1), 53, 1), 'hex')::uuid
-    $fn$;
-  `),
-  );
   await db.execute(sql`
-    create table if not exists _applied_migrations (
+    create table if not exists public._applied_migrations (
       filename text primary key,
       sha256 text not null,
       applied_at timestamptz not null default now()
@@ -179,27 +166,7 @@ async function migrate(): Promise<void> {
     const content = readFileSync(join(migrationsDir, "generated", f), "utf8");
     await applyTracked("migration", filename, content);
   }
-  for (const f of [
-    "referential-integrity.sql",
-    "referential-integrity-v2.sql",
-    "referential-integrity-v3.sql",
-    "kernel-constraints.sql",
-  ]) {
-    await applyTracked(
-      "constraints",
-      f,
-      readFileSync(join(migrationsDir, f), "utf8"),
-    );
-  }
   await applyRowLevelSecurity();
-  await applyTracked(
-    "constraints",
-    "referential-integrity-v4.sql",
-    readFileSync(
-      join(migrationsDir, "referential-integrity-v4.sql"),
-      "utf8",
-    ),
-  );
 }
 
 /**
@@ -219,7 +186,7 @@ async function applyRowLevelSecurity(): Promise<void> {
   const state = (await db.execute(sql`
     select
       (select sha256
-         from _applied_migrations
+         from public._applied_migrations
         where filename = 'environments.sql') as applied_digest,
       exists (
         select 1
@@ -287,7 +254,7 @@ async function applyRowLevelSecurity(): Promise<void> {
     console.log("[bootstrap] refreshing row-level security catalog");
     await pool.query(content);
     await db.execute(sql`
-      insert into _applied_migrations (filename, sha256)
+      insert into public._applied_migrations (filename, sha256)
       values ('environments.sql', ${digest})
       on conflict (filename) do update
         set sha256 = excluded.sha256,
@@ -579,7 +546,7 @@ async function seedCurrencies(): Promise<void> {
   const configured = env.ORG_CURRENCY?.trim().toUpperCase();
   if (configured && !SUPPORTED_CURRENCIES.some((currency) => currency.code === configured)) {
     throw new Error(
-      `ORG_CURRENCY ${configured} is not in OpenBooks' supported ISO 4217 registry`,
+      `ORG_CURRENCY ${configured} is not in the supported ISO 4217 registry`,
     );
   }
   console.log(`[bootstrap] ${SUPPORTED_CURRENCIES.length} currencies ensured`);
@@ -709,12 +676,18 @@ async function main(): Promise<void> {
       if (runtimeConfig) await ensureRuntimeDatabaseRole(runtimeConfig);
       await ensureReadRole(runtimeConfig?.roleName);
       await seedCurrencies();
-      const orgId = await ensureOrg();
-      await ensureRootSubsidiary(orgId);
-      await seedRoles(orgId);
-      await seedProjectTypes(orgId);
-      await seedAdmin(orgId);
-      if (runtimeConfig) await verifyRuntimeDatabaseRole(runtimeConfig, orgId);
+      const primaryOrgId = await ensureOrg();
+      const organizations = (await db.execute(
+        sql`select id from orgs order by created_at`,
+      )) as unknown as { rows: { id: string }[] };
+      for (const { id: orgId } of organizations.rows) {
+        await ensureRootSubsidiary(orgId);
+        await seedRoles(orgId);
+        await provisionOrganizationDefaults(orgId);
+      }
+      await seedAdmin(primaryOrgId);
+      if (runtimeConfig)
+        await verifyRuntimeDatabaseRole(runtimeConfig, primaryOrgId);
     });
     console.log("[bootstrap] done");
   } finally {

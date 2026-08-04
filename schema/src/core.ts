@@ -231,7 +231,19 @@ export const projects = pgTable(
     endsOn: date("ends_on"),
     notes: text("notes"),
   },
-  (t) => [index("projects_customer").on(t.customerId)],
+  (t) => [
+    index("projects_customer").on(t.customerId),
+    uniqueIndex("projects_org_source_identity")
+      .on(
+        t.orgId,
+        sql`(${t.custom}->'source'->>'system')`,
+        sql`(${t.custom}->'source'->>'externalId')`,
+      )
+      .where(sql`
+        ${t.custom}->'source'->>'system' is not null
+        and ${t.custom}->'source'->>'externalId' is not null
+      `),
+  ],
 );
 
 /**

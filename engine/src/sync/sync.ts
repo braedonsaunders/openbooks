@@ -1400,21 +1400,6 @@ export async function runSync(
         r.id,
       ]),
     );
-    // Older rate-keyed order imports retained a non-zero-rate code even when
-    // no source tax existed. Zero tax has no unambiguous tax identity in this
-    // adapter; remove that legacy promise before canonical change detection.
-    if (!targetedRefs) {
-      await db.execute(sql`
-        update document_lines dl set tax_code_id = null, updated_at = now()
-         where dl.tax_amount = 0 and dl.tax_code_id is not null
-           and not exists (
-             select 1 from document_line_tax_components c where c.document_line_id = dl.id
-           )
-           and exists (
-             select 1 from documents d where d.id = dl.document_id and d.org_id = ${org.id}
-               and d.custom->>${refKey} is not null
-           )`);
-    }
     const fullStoredKeys =
       since === null ? await loadStoredKeys(org.id, refKey) : null;
 

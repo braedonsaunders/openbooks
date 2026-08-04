@@ -27,7 +27,7 @@ test('journal line changes are expanded to the specific line and field', () => {
   ])
 })
 
-test('legacy field-pair events still produce before and after values', () => {
+test('field-pair events produce before and after values', () => {
   assert.deepEqual(auditEventDiffs({
     source: 'ui',
     status: ['draft', 'posted'],

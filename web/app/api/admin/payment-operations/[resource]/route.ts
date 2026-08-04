@@ -3,7 +3,6 @@ import { sql } from 'drizzle-orm'
 import { db, schema } from '@openbooks/engine/src/db.ts'
 import {
   createPaymentBankProfile,
-  ensureBuiltInPaymentFormats,
   type PaymentBankProfileInput,
 } from '@openbooks/engine/src/payment-operations.ts'
 import { computeNextRunAt } from '@openbooks/engine/src/scripting.ts'
@@ -20,7 +19,6 @@ export async function GET(_req: Request, { params }: { params: Promise<{ resourc
   if (gate instanceof NextResponse) return gate
   const { resource } = await params
   if (!RESOURCES.has(resource)) return NextResponse.json({ error: 'not found' }, { status: 404 })
-  await ensureBuiltInPaymentFormats(gate.user.orgId, gate.user.id)
   if (resource === 'formats') {
     const rows = await db.execute(sql`
       select id, code, name, rail, direction, country, currency, file_extension,

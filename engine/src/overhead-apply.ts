@@ -7,7 +7,7 @@ import {
 import { add, isZero, mulRate, neg } from "./money.ts";
 
 /**
- * Overhead application — the NET-ZERO PAIR (the reference organization/source platform mechanism),
+ * Overhead application — a net-zero journal pair,
  * applied WITH the hours: when approved time lands on a job, its overhead
  * share (hours × the effective-dated PUBLISHED per-department rate) posts as
  *   DR overhead account [project]   — project-scoped ledger views carry burden

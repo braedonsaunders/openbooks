@@ -1,7 +1,6 @@
 import { sql } from "drizzle-orm";
 import { getTranslations } from "next-intl/server";
 import { db } from "@openbooks/engine/src/db.ts";
-import { ensureCloseDefaults } from "@openbooks/engine/src/close.ts";
 import {
   BUILT_IN_REPORT_DEFINITIONS,
   STANDARD_STATEMENT_DEFINITIONS,
@@ -34,16 +33,13 @@ function configListParams(
 
 export async function CloseSetupPage({
   orgId,
-  actorId,
   searchParams,
   canReopen,
 }: {
   orgId: string;
-  actorId: string;
   searchParams: Record<string, string | string[] | undefined>;
   canReopen: boolean;
 }) {
-  await ensureCloseDefaults(orgId, actorId);
   const advancedClose = await isFeatureEnabled(orgId, "advancedClose");
   const q = pickString(searchParams.periodQ)?.trim();
   const fiscalYear = Number(

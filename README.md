@@ -375,7 +375,8 @@ OpenBooks does not currently include a complete:
 
 - payroll calculation and remittance engine;
 - human-capital-management suite;
-- manufacturing/MRP, bill-of-materials, or production-order module;
+- full manufacturing/MRP and production-order suite beyond the light
+  bill-of-materials assembly-build workflow;
 - point-of-sale or e-commerce storefront;
 - native iOS or Android application;
 - offline-first client; or
@@ -439,8 +440,8 @@ and deployment responsibilities.
 OpenBooks is an npm-workspaces monorepo:
 
 ```text
-schema/       Drizzle schema, generated migrations, referential integrity,
-              row-level security, and accounting-kernel SQL
+schema/       Drizzle schema, canonical SQL baseline, forward migrations,
+              row-level security, and accounting-kernel controls
 engine/       Posting, subledgers, money math, close, assets, inventory,
               workflow runtime, workers, migration adapters, and simulation
 web/          Next.js App Router application, REST routes, reports, admin,
@@ -460,7 +461,7 @@ packages/
 | Layer | Implementation |
 | --- | --- |
 | Web | Next.js 16, React 19, Tailwind CSS 4 |
-| Language | TypeScript 5.9 in application workspaces |
+| Language | TypeScript 5.9 and 7.0 workspace toolchains |
 | Database | PostgreSQL 16, Drizzle ORM, handwritten control SQL |
 | Queues | Redis 7 and BullMQ |
 | Object storage | S3-compatible storage; MinIO in the Compose stack |
@@ -473,10 +474,10 @@ packages/
 
 The Compose stack runs the production image first as a one-shot bootstrap
 service. It takes a database advisory lock, applies tracked migrations and
-constraints, refreshes row-level security, verifies the catalog and constrained
-runtime role, ensures base roles and periods, and creates the first
-administrator only when none exists. The image then runs separately as web and
-worker processes with only the constrained application credential; the
+verifies their immutable digests, refreshes row-level security, verifies the
+catalog and constrained runtime role, ensures base roles and periods, and
+creates the first administrator only when none exists. The image then runs
+separately as web and worker processes with only the constrained application credential; the
 database-owner credential is not present in either runtime container.
 
 ## Development
@@ -511,10 +512,10 @@ checked-in suite and release workflow are authoritative.
 
 ## Project status
 
-`v0.1.0-alpha.2` is the current community preview. It adds the guided company
+`v0.1.0-alpha.3` is the current community preview. It adds the guided company
 setup and go-live experience, industry sample companies, governed query tools,
-expanded country tax packs, canonical pre-launch data models, and a hardened
-one-command container installation.
+24 maintained country tax packs, canonical source identities, and a hardened
+one-command container installation backed by a clean PostgreSQL baseline.
 
 Good uses today:
 

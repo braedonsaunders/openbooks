@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/db.ts'
+import { provisionFeatureDefaults } from '@openbooks/engine/src/organization-provisioning.ts'
 import { guardPermission } from '../../../../../lib/authz'
 import {
   FEATURES,
@@ -14,7 +15,8 @@ export const dynamic = 'force-dynamic'
 
 /**
  * Toggle optional features on/off for the org. Only registry keys are
- * accepted; toggling never touches feature data — off just hides surfaces.
+ * accepted. Enabling a feature installs its editable baseline configuration;
+ * disabling it preserves all existing data and only hides its surfaces.
  */
 export async function PUT(req: Request) {
   const gate = await guardPermission('admin.setup.manage')
@@ -79,6 +81,9 @@ export async function PUT(req: Request) {
   if (clean.scripts !== undefined) {
     const { refreshScheduledNextRuns } = await import('@openbooks/engine/src/scripting.ts')
     await refreshScheduledNextRuns(orgId)
+  }
+  for (const [key, enabled] of Object.entries(clean)) {
+    if (enabled) await provisionFeatureDefaults(orgId, gate.user.id, key)
   }
   return NextResponse.json({ ok: true })
 }

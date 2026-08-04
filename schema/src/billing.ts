@@ -81,9 +81,6 @@ export const billingRequestFieldTickets = pgTable(
     orgId: orgRef(),
     billingRequestId: uuid("billing_request_id").notNull(),
     fieldTicketId: uuid("field_ticket_id").notNull(),
-    selectionSource: text("selection_source", {
-      enum: ["request_creation", "legacy_json_migration", "validation_replay"],
-    }).notNull().default("request_creation"),
     selectedAt: timestamp("selected_at", { withTimezone: true }).notNull().defaultNow(),
     selectedBy: uuid("selected_by"),
   },

@@ -12,7 +12,7 @@ export async function generateMetadata() {
   return { title: t('title') }
 }
 
-/** New-chat view of the assistant, ported from lighthouse's assistant page. */
+/** New-chat view of the assistant. */
 export default async function AssistantPage({
   searchParams,
 }: {

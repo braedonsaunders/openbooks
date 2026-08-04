@@ -4,6 +4,45 @@ OpenBooks follows [Semantic Versioning](https://semver.org/) while the public AP
 and deployment format stabilize. Alpha releases may contain breaking changes;
 each release will document required operator action.
 
+## [0.1.0-alpha.3] - 2026-08-04
+
+### Added
+
+- Explicit company provisioning for feature defaults, customization, project
+  types, payment operations, CRM, and close configuration
+- Adapter-scoped source identities for generic, collision-safe migration and
+  mirror connectors
+- Database-backed release tests for row-level security, canonical schema
+  controls, source identity, setup provisioning, and README claims
+
+### Changed
+
+- Replaced the prerelease generated migration chain with one audited canonical
+  PostgreSQL baseline for clean installations
+- Made setup pages and GET endpoints read-only; provisioning now happens only
+  through bootstrap or explicit setup commands
+- Removed tenant-specific migration and reconciliation operators from the
+  public product while preserving the generic connector framework
+- Removed accounting currency fallbacks and historical repair behavior from
+  ordinary runtime paths
+
+### Security and integrity
+
+- Test-only database bypass now requires an explicit trusted test flag and is
+  rejected in production
+- Generic source identity uniqueness is enforced independently for every
+  organization and connector system
+- Product-neutrality checks now reject private tenant identifiers, incident
+  references, and operator artifacts in tracked or publishable files
+
+### Operator action
+
+- Fresh installs bootstrap directly from the canonical baseline.
+- Back up any earlier alpha database before upgrading. Because this is a
+  prerelease baseline reset, existing alpha installations require an
+  operator-reviewed catalog adoption or a fresh database; startup refuses to
+  guess through a migration digest mismatch.
+
 ## [0.1.0-alpha.2] - 2026-08-01
 
 ### Added
@@ -103,3 +142,4 @@ First packaged community release.
 
 [0.1.0-alpha.1]: https://github.com/braedonsaunders/openbooks/releases/tag/v0.1.0-alpha.1
 [0.1.0-alpha.2]: https://github.com/braedonsaunders/openbooks/releases/tag/v0.1.0-alpha.2
+[0.1.0-alpha.3]: https://github.com/braedonsaunders/openbooks/releases/tag/v0.1.0-alpha.3

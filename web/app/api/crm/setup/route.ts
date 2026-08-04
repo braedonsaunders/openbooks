@@ -18,7 +18,6 @@ function slug(value: string): string {
 export async function GET() {
   const gate = await guardFeaturePermission("crm.setup.manage", "crm");
   if (gate instanceof NextResponse) return gate;
-  await ensureCrmDefaults(gate.user.orgId, gate.user.id);
   const [
     accountStatuses,
     opportunityStatuses,

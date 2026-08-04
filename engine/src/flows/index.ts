@@ -1,6 +1,6 @@
 /**
  * Flows engine — public surface for the web phase (APIs, builder, worklist).
- * See the flow execution contract; ported from lighthouse-platform's lib/flows.
+ * See the flow execution contract for lifecycle and idempotency guarantees.
  */
 
 export {

@@ -4,7 +4,7 @@ import { postDocument, PostingError, type PostingDeps } from "./posting.ts";
 import { ensureReadRole, runUserSql } from "./sqlapi.ts";
 
 /**
- * End-to-end demo on top of the replayed reference organization data:
+ * End-to-end demo using imported accounting data:
  *   1. install a user script (real JS) that vetoes big unexplained bills
  *      and auto-schedules payment 2 business days before due
  *   2. create a vendor bill → posting VETOED by the script

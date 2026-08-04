@@ -88,7 +88,7 @@ export const documents = pgTable(
     extraDims: jsonb("extra_dims").notNull().default({}),
     paymentCardId: uuid("payment_card_id"), // card_charge/refund docs
 
-    // Promoted from reference organization custbody fields:
+    // Operational document metadata promoted to typed columns:
     billingMethod: text("billing_method", { enum: ["time_and_materials", "fixed_price"] }),
     isFinalInvoice: boolean("is_final_invoice").notNull().default(false),
     referenceNumber: text("reference_number"), // vendor's invoice no., cheque no.
@@ -170,7 +170,7 @@ export const documentLines = pgTable(
     /** Line overrides for custom segment assignments. */
     extraDims: jsonb("extra_dims").notNull().default({}),
 
-    // Promoted from reference organization custcols — job-costing/billing chain:
+    // Job-costing and billing-lineage columns:
     employeeId: uuid("employee_id"), // labor line: who worked it
     timeEntryId: uuid("time_entry_id"), // provenance from timesheets
     timeTypeId: uuid("time_type_id"),
@@ -263,7 +263,7 @@ export const documentLinks = pgTable(
   ],
 );
 
-/** Item catalog — services business first (reference organization: zero inventory items). */
+/** Item catalog for services, non-inventory, and inventory businesses. */
 export const items = pgTable(
   "items",
   {

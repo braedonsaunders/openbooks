@@ -57,8 +57,8 @@ function component(tier: RateTier, role: RateRole, quantityUnits: bigint): RateC
 
 /**
  * Hierarchical capped ladder. It decomposes from the largest package down, then promotes a lower package only when its subtotal is
- * strictly greater than one next-tier price. The strict comparison preserves
- * legacy equality behavior; 1/4/12 tiers reproduce day/week/month exactly.
+ * strictly greater than one next-tier price. Equality remains on the lower
+ * package; 1/4/12 tiers reproduce day/week/month exactly.
  */
 export function priceCappedLadder(baseQuantity: string, tiers: RateTier[], role: RateRole): RatePrice {
   const target = toUnits(baseQuantity);
@@ -102,7 +102,7 @@ function gcd(a: bigint, b: bigint): bigint {
   return x;
 }
 
-/** True minimum-cost package cover. Intended for configurable non-legacy
+/** True minimum-cost package cover. Intended for configurable arbitrary
  * ladders; it may cover slightly more than the entered usage, like rental
  * package pricing. */
 export function priceLowestCost(baseQuantity: string, tiers: RateTier[], role: RateRole): RatePrice {

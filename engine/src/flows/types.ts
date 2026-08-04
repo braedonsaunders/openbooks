@@ -3,11 +3,9 @@ import type { EvalContext, FlowSubjectProfile } from "@openbooks/forms-core";
 /**
  * The FlowSubjectAdapter seam — everything record-specific the flows engine
  * needs, behind one interface, so the ONE executor (execute.ts) can drive any
- * automatable record kind. Ported from lighthouse-platform's
- * lib/flows/types.ts and adapted to the openbooks document vocabulary:
- * lighthouse's loadValues/resolveSubmitter collapse into loadContext, and the
- * openbooks actions add status transitions (changeStatus) and whitelisted
- * header writes (setField) that lighthouse handled via persistAfterRun.
+ * automatable record kind. The OpenBooks document vocabulary exposes a single
+ * loadContext operation, status transitions (changeStatus), and whitelisted
+ * header writes (setField).
  *
  * Adapters are pure server-side objects (no I/O at construction). They run in
  * whatever RLS scope the caller established (request org context at hook

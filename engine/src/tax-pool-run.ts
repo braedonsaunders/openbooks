@@ -59,7 +59,7 @@ async function firstYearRule(
 }
 
 /** The asset-category tax_attributes key that carries a class code for a regime.
- *  An org regime row can override it; Canada's legacy data uses "ca_cca_class". */
+ *  An org regime row can override it; Canadian configurations use "ca_cca_class". */
 async function regimeClassAttribute(orgId: string, regime: string): Promise<string> {
   const r = (await db.execute(sql`
     select class_attribute from tax_regimes where org_id = ${orgId} and code = ${regime} and is_active limit 1`)) as unknown as {

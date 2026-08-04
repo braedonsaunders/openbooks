@@ -8077,7 +8077,7 @@ async function runIncomeTaxProvisionParity(): Promise<void> {
 
   // The shared parity tenant already contains prior fixture activity. Measure
   // that pretax balance first, then offset it to an exact $1,000 taxable base
-  // so ERPNext's currency-scale journal and OpenBooks' 4dp ledger compare
+  // so ERPNext's currency-scale journal and the 4dp ledger compare
   // without hiding a sub-cent difference.
   const probe = await compute("200", "0");
   const permanentDifference = fromUnits(

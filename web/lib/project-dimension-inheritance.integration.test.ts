@@ -12,6 +12,7 @@ test(
       import { randomUUID } from "node:crypto";
       import { sql } from "drizzle-orm";
       import { db, withOrg } from "./engine/src/db.ts";
+      import { installTrustedTestDatabaseBypass } from "./engine/src/test-database-bypass.ts";
       import {
         createScratchOrg,
         dropScratchOrg,
@@ -23,6 +24,9 @@ test(
       import { projectUnbilled } from "./web/lib/project-costing.ts";
       import { loadProjectType } from "./web/lib/project-type.ts";
 
+      // Web modules install the normal request resolver during evaluation.
+      // Re-establish the explicit test-only trusted boundary afterwards.
+      installTrustedTestDatabaseBypass();
       const org = await createScratchOrg();
       try {
         const projectA = randomUUID();
@@ -157,6 +161,8 @@ test(
         "--conditions=react-server",
         "--import",
         "tsx",
+        "--import",
+        "./engine/src/test-database-bypass.ts",
         "--input-type=module",
         "-e",
         source,

@@ -991,7 +991,6 @@ export async function loadFieldTicket(
       select request.id,
              request.request_number as "requestNumber",
              request.status,
-             selected.selection_source as "selectionSource",
              selected.selected_at::text as "selectedAt",
              invoice.id as "invoiceDocumentId",
              invoice.document_number as "invoiceNumber",
@@ -1010,7 +1009,6 @@ export async function loadFieldTicket(
       id: string
       requestNumber: string
       status: string
-      selectionSource: string
       selectedAt: string
       invoiceDocumentId: string | null
       invoiceNumber: string | null

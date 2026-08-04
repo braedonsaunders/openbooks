@@ -3,10 +3,6 @@ import { sql } from "drizzle-orm";
 import { getTranslations } from "next-intl/server";
 import { db } from "@openbooks/engine/src/db.ts";
 import {
-  ensureCloseDefaults,
-  refreshCloseRun,
-} from "@openbooks/engine/src/close.ts";
-import {
   Badge,
   Button,
   PageHeader,
@@ -44,10 +40,7 @@ export default async function PeriodClose({
   const featureState = await resolvedFeatureState(orgId);
   const advancedClose = featureEnabled(featureState, "advancedClose");
   const runId = pickString(sp.run);
-  await ensureCloseDefaults(orgId, actorId);
-
   if (runId && isUuid(runId)) {
-    if (can(authz, "close.run")) await refreshCloseRun(orgId, runId, actorId);
     const [
       runRes,
       tasksRes,

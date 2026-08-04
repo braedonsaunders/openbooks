@@ -101,32 +101,26 @@ export async function postProjectGlEntryWithinTransaction(
      order by is_primary desc, code limit 1`)) as unknown as { rows: { id: string }[] };
   const bookId = book.rows[0]?.id;
   if (!bookId) throw new Error("no active GL book");
-  const org = (await tx.execute(sql`select base_currency from orgs where id = ${orgId}`)) as unknown as {
-    rows: { base_currency: string }[];
-  };
-  const orgCurrency = org.rows[0]?.base_currency ?? "CAD";
-  // journal_entries.subsidiary_id is NOT NULL — fall back to the org's default
-  // (first non-elimination) subsidiary when the project/time carries none.
+  // journal_entries.subsidiary_id is NOT NULL. When the source row carries no
+  // legal entity, the one authoritative org root is the default.
   let subId = subsidiaryId;
   if (!subId) {
     const s = (await tx.execute(sql`
       select id from subsidiaries where org_id = ${orgId} and is_active and not is_elimination
-       order by name limit 1`)) as unknown as { rows: { id: string }[] };
+       and parent_id is null limit 1`)) as unknown as { rows: { id: string }[] };
     subId = s.rows[0]?.id ?? null;
   }
-  let currency = orgCurrency;
-  if (subId) {
-    const subsidiary = (await tx.execute(sql`
-      select base_currency from subsidiaries where org_id = ${orgId} and id = ${subId}`)) as unknown as {
-      rows: { base_currency: string }[];
-    };
-    const functionalCurrency = subsidiary.rows[0]?.base_currency;
-    if (!functionalCurrency) throw new Error(`subsidiary ${subId} does not exist`);
-    if (opts.currency && opts.currency !== functionalCurrency) {
-      throw new Error(`project GL currency ${opts.currency} does not match subsidiary functional currency ${functionalCurrency}`);
-    }
-    currency = opts.currency ?? functionalCurrency;
+  if (!subId) throw new Error("project GL posting requires an active root subsidiary");
+  const subsidiary = (await tx.execute(sql`
+    select nullif(trim(base_currency), '') as base_currency
+      from subsidiaries where org_id = ${orgId} and id = ${subId} and is_active
+  `)) as unknown as { rows: { base_currency: string | null }[] };
+  const functionalCurrency = subsidiary.rows[0]?.base_currency;
+  if (!functionalCurrency) throw new Error(`subsidiary ${subId} has no configured functional currency`);
+  if (opts.currency && opts.currency !== functionalCurrency) {
+    throw new Error(`project GL currency ${opts.currency} does not match subsidiary functional currency ${functionalCurrency}`);
   }
+  const currency = opts.currency ?? functionalCurrency;
   const per = (await tx.execute(sql`
     select period.id,
            period_module_is_closed(

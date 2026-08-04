@@ -12,6 +12,7 @@ test(
       import { randomUUID } from "node:crypto";
       import { sql } from "drizzle-orm";
       import { db } from "./engine/src/db.ts";
+      import { installTrustedTestDatabaseBypass } from "./engine/src/test-database-bypass.ts";
       import {
         createScratchOrg,
         dropScratchOrg,
@@ -19,6 +20,7 @@ test(
       } from "./engine/src/test-fixtures.ts";
       import { approveSubmittedTimeEntries } from "./web/lib/time-approval.ts";
 
+      installTrustedTestDatabaseBypass();
       const org = await createScratchOrg();
       try {
         const actorId = (await seedFlowActors(org.orgId)).adminId;
@@ -113,6 +115,8 @@ test(
         "--conditions=react-server",
         "--import",
         "tsx",
+        "--import",
+        "./engine/src/test-database-bypass.ts",
         "--input-type=module",
         "-e",
         source,

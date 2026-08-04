@@ -456,19 +456,31 @@ export async function materializeCapture(input: {
       throw new CaptureMaterializationError("Resolve the capture math errors before creating a draft");
     }
     const org = (await tx.execute(sql`
-      select o.base_currency, s.id as subsidiary_id
+      select o.base_currency as org_currency, s.id as subsidiary_id,
+             s.base_currency as subsidiary_currency
         from orgs o left join lateral (
-          select id from subsidiaries where org_id = o.id and parent_id is null limit 1
+          select id, base_currency from subsidiaries
+           where org_id = o.id and parent_id is null and is_active
+           limit 1
         ) s on true where o.id = ${input.orgId}
-    `)) as unknown as { rows: { base_currency: string; subsidiary_id: string | null }[] };
-    const subsidiaryId = org.rows[0]?.subsidiary_id ?? null;
+    `)) as unknown as { rows: { org_currency: string | null; subsidiary_id: string | null; subsidiary_currency: string | null }[] };
+    const company = org.rows[0];
+    if (!company) throw new CaptureMaterializationError("The company no longer exists");
+    const subsidiaryId = company.subsidiary_id;
+    if (!subsidiaryId) {
+      throw new CaptureMaterializationError("The company has no active root subsidiary");
+    }
+    const currency = capture.currency ?? company.subsidiary_currency ?? company.org_currency;
+    if (!currency) {
+      throw new CaptureMaterializationError("The company has no configured base currency");
+    }
     const documentNumber = await nextDocumentNumber(tx, input.orgId, item.document_kind, subsidiaryId);
     const inserted = (await tx.execute(sql`
       insert into documents (org_id, kind, document_number, party_id, subsidiary_id, document_date,
                              due_date, currency, status, reference_number, memo,
                              subtotal, tax_total, total, created_by, updated_by)
       values (${input.orgId}, ${item.document_kind}, ${documentNumber}, ${vendorId}, ${subsidiaryId},
-              ${capture.invoiceDate}, ${capture.dueDate}, ${capture.currency ?? org.rows[0]?.base_currency ?? "CAD"},
+              ${capture.invoiceDate}, ${capture.dueDate}, ${currency},
               'draft', ${capture.invoiceNumber}, ${capture.memo},
               ${capture.subtotal ?? sum(capture.lines.map((line) => line.amount))},
               ${capture.taxTotal ?? sum(capture.lines.map((line) => line.taxAmount))},

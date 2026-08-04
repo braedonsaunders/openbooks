@@ -36,7 +36,7 @@ test("per_hour flat vs scaled", () => {
   assert.equal(computeCostRate("40", "1.5", cfg([scaled])), "64.5000");
 });
 
-test("reference organization-style stack: burden % + per diem", () => {
+test("stacked labor costing: burden percentage plus per diem", () => {
   const comps: LaborCostComponent[] = [
     { key: "burden", name: "Payroll burden (est.)", kind: "percent_of_wage", value: 14, scaleWithOvertime: true },
     { key: "perdiem", name: "Per diem", kind: "per_day", value: 60 },

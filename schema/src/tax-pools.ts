@@ -65,7 +65,7 @@ export const taxPoolPeriods = pgTable(
  * built-in engine regimes (ca_cca, uk_wda, au_pool, nz_pool). A tenant can add a
  * jurisdiction the engine doesn't ship, or shadow a built-in to override it. The
  * engine merges these over the built-ins. `classAttribute` is the asset-category
- * tax_attributes key that carries a class code for this regime (Canada legacy
+ * tax_attributes key that carries a class code for this regime (Canadian
  * data uses "ca_cca_class"; new regimes use "tax_pool_class").
  */
 export const taxRegimes = pgTable(

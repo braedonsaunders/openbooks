@@ -84,6 +84,10 @@ test("invoice parity covers business identity and settlement state, not only tot
 });
 
 test("Field Ticket parity follows the labor source of truth for each lifecycle", () => {
+  assert.match(source, /--field-ticket-source-system/);
+  assert.match(source, /--source-id-key/);
+  assert.match(source, /snapshot\.source_system = \$\{fieldTicketSourceSystem/);
+  assert.doesNotMatch(source, /snapshot\.source_system = '[^']+'/);
   assert.match(source, /join field_ticket_labor_snapshots snapshot/i);
   assert.match(source, /join field_ticket_labor_lines line/i);
   assert.match(source, /snapshot\.superseded_at is null/i);

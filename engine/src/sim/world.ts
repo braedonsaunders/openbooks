@@ -2,8 +2,7 @@ import { randomUUID } from "node:crypto";
 import { sql } from "drizzle-orm";
 import { db, withBypass, withOrgContext } from "../db.ts";
 import { dropScratchOrg } from "../test-fixtures.ts";
-import { ensureCloseDefaults } from "../close.ts";
-import { seedProjectTypes } from "../seed-project-types.ts";
+import { provisionOrganizationDefaults } from "../organization-provisioning.ts";
 import { ensureReportDefinitions } from "../ensure-report-definitions.ts";
 import { createScriptJournal } from "../journal-writes.ts";
 import { assertSimOrg, SIM_ORG_PREFIX } from "./db-guard.ts";
@@ -383,8 +382,7 @@ export async function provisionOrg(profile: Profile, window: { startDate: string
     }
 
     // Built-in configuration a fresh org needs.
-    await ensureCloseDefaults(orgId, actors.admin);
-    await seedProjectTypes(orgId, actors.admin);
+    await provisionOrganizationDefaults(orgId, actors.admin);
 
     // Client engagements for bottom-up billing (workers log billable time against
     // these). Governed T&M project type. Only for profiles that opt in via

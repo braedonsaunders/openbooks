@@ -155,8 +155,23 @@ export async function createScriptJournal(
     for (const id of ids) if (!found.has(id)) throw new JournalWriteError(`unknown, inactive, or summary accountId "${id}"`);
   }
 
-  const currency = ((await db.execute(sql`select base_currency from orgs where id = ${orgId}`)) as any)
-    .rows[0]?.base_currency ?? "CAD";
+  const company = ((await db.execute(sql`
+    select s.id as subsidiary_id, nullif(trim(s.base_currency), '') as base_currency
+      from orgs o
+      left join lateral (
+        select id, base_currency from subsidiaries
+         where org_id = o.id and parent_id is null and is_active and not is_elimination
+         limit 1
+      ) s on true
+     where o.id = ${orgId}
+  `)) as any).rows[0] as { subsidiary_id: string | null; base_currency: string | null } | undefined;
+  if (!company) throw new JournalWriteError("organization does not exist");
+  if (!company.subsidiary_id) {
+    throw new JournalWriteError("organization has no active root subsidiary");
+  }
+  if (!company.base_currency) {
+    throw new JournalWriteError("root subsidiary has no configured functional currency");
+  }
 
   const docId = await db.transaction(async (tx) => {
     // JE- sequence, same upsert the UI path uses (web/lib/bills.ts).
@@ -170,9 +185,9 @@ export async function createScriptJournal(
     const documentNumber = `${s.prefix}${String(s.next_number).padStart(s.padding, "0")}`;
 
     const ins = (await tx.execute(sql`
-      insert into documents (org_id, kind, document_number, document_date, currency,
+      insert into documents (org_id, kind, document_number, subsidiary_id, document_date, currency,
                              memo, reference_number, subtotal, tax_total, total, created_by)
-      values (${orgId}, 'journal', ${documentNumber}, ${v.documentDate}, ${currency},
+      values (${orgId}, 'journal', ${documentNumber}, ${company.subsidiary_id}, ${v.documentDate}, ${company.base_currency},
               ${v.memo}, ${v.referenceNumber}, ${v.totalDebits}, '0', ${v.totalDebits}, ${actorId})
       returning id`)) as any;
     const id = String(ins.rows[0].id);

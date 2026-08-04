@@ -2,16 +2,12 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import test from "node:test";
 
-const migration = readFileSync(
-  "schema/migrations/generated/0078_time_entry_billing_status.sql",
+const baseline = readFileSync(
+  "schema/migrations/generated/0001_baseline.sql",
   "utf8",
 );
 const financialSync = readFileSync(
   "engine/src/sync/project-financial-inputs.ts",
-  "utf8",
-);
-const costingMigration = readFileSync(
-  "schema/migrations/generated/0080_time_entry_costing_basis.sql",
   "utf8",
 );
 const projectFinancials = readFileSync(
@@ -20,10 +16,10 @@ const projectFinancials = readFileSync(
 );
 
 test("time billing is a native lifecycle independent of invoice-line linkage", () => {
-  assert.match(migration, /billing_status text not null default 'unbilled'/i);
+  assert.match(baseline, /billing_status text DEFAULT 'unbilled'::text NOT NULL/i);
   assert.match(
-    migration,
-    /invoiced_by_line_id is null or billing_status = 'billed'/i,
+    baseline,
+    /invoiced_by_line_id IS NULL\) OR \(billing_status = 'billed'::text\)/i,
   );
   assert.match(
     projectFinancials,
@@ -47,8 +43,8 @@ test("time billing is a native lifecycle independent of invoice-line linkage", (
 
 test("time costing distinguishes actualized labor from estimates", () => {
   assert.match(
-    costingMigration,
-    /costing_basis text not null default 'actual'/i,
+    baseline,
+    /costing_basis text DEFAULT 'actual'::text NOT NULL/i,
   );
   assert.match(financialSync, /costing_basis/i);
   assert.match(financialSync, /costingBasis/i);

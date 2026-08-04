@@ -19,7 +19,6 @@ const FINANCIAL_REPORT_MODULES = [
   "engine/src/construction-billing.ts",
   "engine/src/banking.ts",
   "engine/src/validation/project-parity-certificate.ts",
-  "engine/src/validation/legacy-cost-recon.ts",
   "web/lib/reports.ts",
   "web/lib/project-financials.ts",
   "web/lib/project-costing.ts",

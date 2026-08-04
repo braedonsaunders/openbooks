@@ -45,7 +45,10 @@ const BUILTIN_FORMATS: Array<{
 ];
 
 /** Idempotently installs the audited built-in format definitions for one tenant. */
-export async function ensureBuiltInPaymentFormats(orgId: string, userId: string): Promise<void> {
+export async function ensureBuiltInPaymentFormats(
+  orgId: string,
+  userId: string | null = null,
+): Promise<void> {
   for (const f of BUILTIN_FORMATS) {
     await db.execute(sql`
       insert into payment_formats

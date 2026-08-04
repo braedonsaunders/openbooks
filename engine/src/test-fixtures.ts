@@ -7,11 +7,12 @@ import { db } from "./db.ts";
  * subledger integration test needs (book, subsidiary, open period, accounts,
  * inventory items + profiles, a BOM, and a revenue-recognition item/rule).
  *
- * Callers must create and remove fixtures inside an explicit `withBypass`
- * boundary, then exercise product behavior in `withOrg`/`withOrgContext`.
- * Unscoped database access is deliberately denied even in tests. dropScratchOrg
- * tears everything down under `openbooks.amend = on` so it can remove the
- * posted journal entries the kernel otherwise pins as immutable.
+ * The repository test command preloads `test-database-bypass.ts`, an explicit
+ * test-process-only trusted boundary. Direct callers outside that runner must
+ * create/remove fixtures inside `withBypass`, then exercise product behavior
+ * in `withOrg`/`withOrgContext`. Unscoped application access remains denied.
+ * dropScratchOrg tears everything down under `openbooks.amend = on` so it can
+ * remove posted journal entries the kernel otherwise pins as immutable.
  */
 
 export interface ScratchOrg {
@@ -323,7 +324,6 @@ export async function dropScratchOrg(orgId: string): Promise<void> {
       "temporary_differences",
       "tax_provision_runs",
       "income_tax_rates",
-      "orphaned_tax_component_evidence",
       // Payment acceptance + PSP settlement (no FK enforcement, but keep
       // scratch tenants hermetic — leftover provider configs would let other
       // tests' webhook signatures resolve the wrong org).

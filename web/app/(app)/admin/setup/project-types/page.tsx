@@ -2,7 +2,6 @@ import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/db.ts'
 import { requirePermission } from '../../../../../lib/authz'
 import { requireProjectsFeature } from '../../../../../lib/projects-gate'
-import { seedProjectTypes } from '@openbooks/engine/src/seed-project-types.ts'
 import { isFeatureEnabled } from '../../../../../lib/features'
 import { ProjectTypesWorkspace, type ProjectTypeRow } from './ProjectTypesWorkspace'
 
@@ -12,8 +11,6 @@ export default async function ProjectTypesSetup() {
   const authz = await requirePermission('admin.setup.manage')
   const orgId = authz.user.orgId
   await requireProjectsFeature(orgId)
-  await seedProjectTypes(orgId, authz.user.id)
-
   const [typesRes, dimsRes, acctRes, fieldTicketsEnabled] = await Promise.all([
     db.execute(sql`
       select id, key, name, description, is_built_in as "isBuiltIn", is_active as "isActive",

@@ -1,4 +1,4 @@
-// Ported from lighthouse-platform (@lighthouse/email-render/delivery-input).
+// Provider-neutral email delivery input validation.
 import { normalizeEmailSubject } from './subject'
 
 export type EmailAttachmentPayload = {

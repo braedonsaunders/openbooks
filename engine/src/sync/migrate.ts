@@ -47,6 +47,7 @@ type RefMaps = {
 interface Ctx {
   orgId: string;
   refKey: string;
+  sourceName: string;
   currency: string;
   incremental: boolean;
   maps: RefMaps;
@@ -71,28 +72,15 @@ async function loadMap(table: string, orgId: string, refKey: string): Promise<Ma
   const rows = (await db.execute(sql`
     select id, custom->>${refKey} ns from ${sql.raw(table)}
      where org_id = ${orgId} and custom->>${refKey} is not null`)) as { rows: { id: string; ns: string }[] };
-  for (const r of rows.rows) m.set(r.ns, r.id);
+  for (const r of rows.rows) {
+    if (m.has(r.ns)) {
+      throw new Error(
+        `${table} contains multiple rows for connector identity ${refKey}:${r.ns}`,
+      );
+    }
+    m.set(r.ns, r.id);
+  }
   return m;
-}
-
-/** Self-heal schema drift the way the import scripts do (live DB predates cols). */
-async function ensureSchema(): Promise<void> {
-  await db.execute(sql`alter table addresses add column if not exists custom jsonb not null default '{}'::jsonb`);
-  await db.execute(sql`alter table payment_terms add column if not exists custom jsonb not null default '{}'::jsonb`);
-  await db.execute(sql`alter table time_types add column if not exists custom jsonb not null default '{}'::jsonb`);
-  await db.execute(sql`alter table time_entries add column if not exists custom jsonb not null default '{}'::jsonb`);
-  await db.execute(sql`alter table time_entries add column if not exists billing_status text not null default 'unbilled'`);
-  await db.execute(sql`
-    create table if not exists contacts (
-      id uuid primary key default uuid_generate_v7(),
-      org_id uuid not null, party_id uuid,
-      first_name text, last_name text, name text not null,
-      title text, role text, email text, phone text, mobile_phone text, fax text,
-      is_primary boolean not null default false, is_active boolean not null default true,
-      custom jsonb not null default '{}'::jsonb,
-      created_at timestamptz not null default now(), created_by uuid,
-      updated_at timestamptz not null default now(), updated_by uuid)`);
-  await db.execute(sql`create index if not exists contacts_party on contacts (party_id)`);
 }
 
 /**
@@ -110,9 +98,17 @@ async function ensureRootSubsidiary(orgId: string, fallbackCurrency: string): Pr
     rows: { name: string; legal_name: string | null; base_currency: string | null; country: string | null }[];
   };
   const o = org.rows[0];
-  const name = o?.legal_name || o?.name || "Head Office";
-  const currency = String(o?.base_currency || fallbackCurrency || "USD").toUpperCase();
-  const country = String(o?.country || "US").toUpperCase();
+  if (!o) throw new Error(`organization ${orgId} does not exist`);
+  const name = String(o.legal_name || o.name).trim();
+  if (!name) throw new Error(`organization ${orgId} has no configured name`);
+  const currency = String(o.base_currency || fallbackCurrency).trim().toUpperCase();
+  if (!/^[A-Z]{3}$/.test(currency)) {
+    throw new Error(`organization ${orgId} has no valid base currency`);
+  }
+  const country = String(o.country || "").trim().toUpperCase();
+  if (!/^[A-Z]{2}$/.test(country)) {
+    throw new Error(`organization ${orgId} has no valid country`);
+  }
   await db.execute(sql`
     insert into subsidiaries (org_id, parent_id, name, legal_name, base_currency, country)
     values (${orgId}, null, ${name}, ${o?.legal_name ?? null}, ${currency}, ${country})`);
@@ -127,10 +123,15 @@ export async function loadEntities(
   providedStreams?: EntityStream[],
 ): Promise<EntityLoadStats> {
   if (!source.entities && !providedStreams) return {};
-  await ensureSchema();
   const refKey = source.refKey;
+  if (!/^[a-z][a-z0-9_-]{0,63}$/i.test(refKey)) {
+    throw new Error("connector refKey must be a stable JSON object key");
+  }
+  if (!/^[a-z0-9][a-z0-9._-]{0,63}$/i.test(source.name)) {
+    throw new Error("connector name must be a stable source namespace");
+  }
   const ctx: Ctx = {
-    orgId, refKey, currency: source.baseCurrency, incremental: since != null,
+    orgId, refKey, sourceName: source.name, currency: source.baseCurrency, incremental: since != null,
     usedShortCodes: new Set(),
     audit,
     maps: {
@@ -175,6 +176,18 @@ export async function loadEntities(
     if (!KNOWN.has(stream.resource)) {
       stats[stream.resource] = { created: 0, updated: 0, skipped: stream.records.length };
       continue;
+    }
+    const sourceRefs = new Set<string>();
+    for (const record of stream.records) {
+      if (!record.sourceRef.trim()) {
+        throw new Error(`${stream.resource} contains an empty connector identity`);
+      }
+      if (sourceRefs.has(record.sourceRef)) {
+        throw new Error(
+          `${stream.resource} contains duplicate connector identity ${record.sourceRef}`,
+        );
+      }
+      sourceRefs.add(record.sourceRef);
     }
     const s: ResourceLoadStats = { created: 0, updated: 0, skipped: 0 };
 
@@ -363,41 +376,24 @@ export async function syncSourceAccountingPeriods(
 
 async function findByRef(table: string, orgId: string, refKey: string, sourceRef: string) {
   const existing = (await db.execute(sql`
-    select id from ${sql.raw(table)} where org_id = ${orgId} and custom->>${refKey} = ${sourceRef} limit 1`)) as {
+    select id from ${sql.raw(table)} where org_id = ${orgId} and custom->>${refKey} = ${sourceRef} limit 2`)) as {
     rows: { id: string }[];
   };
+  if (existing.rows.length > 1) {
+    throw new Error(
+      `${table} contains multiple rows for connector identity ${refKey}:${sourceRef}`,
+    );
+  }
   return existing.rows[0]?.id ?? null;
 }
 
 async function findPartyByRef(orgId: string, refKey: string, sourceRef: string) {
-  const direct = await findByRef("parties", orgId, refKey, sourceRef);
-  if (direct || refKey !== "nsId") return direct;
-  // Two connectors can key the same customer by the same upstream id. If the
-  // other import arrived first, adopt that party instead of creating a second one.
-  const existing = (await db.execute(sql`
-    select id from parties
-     where org_id = ${orgId}
-       and custom->'source'->>'externalId' = ${sourceRef}
-     limit 1`)) as { rows: { id: string }[] };
-  return existing.rows[0]?.id ?? null;
+  return findByRef("parties", orgId, refKey, sourceRef);
 }
 
-/**
- * Same cross-connector identity problem as findPartyByRef, for jobs/projects:
- * Two connectors can key the same job by the same upstream id, but each one
- * only looks up its OWN ref key, so whichever ran second created a second,
- * empty project for every job. Adopt the existing row instead — matching in
- * either direction, since either connector can arrive first.
- */
+/** Source identity is adapter-scoped; unrelated systems may reuse the same id. */
 async function findProjectByRef(orgId: string, refKey: string, sourceRef: string) {
-  const direct = await findByRef("projects", orgId, refKey, sourceRef);
-  if (direct) return direct;
-  const existing = (await db.execute(sql`
-    select id from projects
-     where org_id = ${orgId}
-       and (custom->'source'->>'externalId' = ${sourceRef} or custom->>'nsId' = ${sourceRef})
-     limit 1`)) as { rows: { id: string }[] };
-  return existing.rows[0]?.id ?? null;
+  return findByRef("projects", orgId, refKey, sourceRef);
 }
 
 async function loadSubsidiaries(records: SourceEntity[], ctx: Ctx, s: ResourceLoadStats): Promise<void> {
@@ -426,7 +422,10 @@ async function loadSubsidiaries(records: SourceEntity[], ctx: Ctx, s: ResourceLo
 async function upsert(resource: string, ctx: Ctx, rec: SourceEntity, s: ResourceLoadStats): Promise<string | null> {
   const f = rec.fields;
   const { orgId, refKey } = ctx;
-  const custom = JSON.stringify({ [refKey]: rec.sourceRef });
+  const custom = JSON.stringify({
+    [refKey]: rec.sourceRef,
+    source: { system: ctx.sourceName, externalId: rec.sourceRef },
+  });
 
   if (resource === "subsidiaries") {
     const name = String(f.name ?? `Subsidiary ${rec.sourceRef}`);
@@ -447,7 +446,9 @@ async function upsert(resource: string, ctx: Ctx, rec: SourceEntity, s: Resource
         update subsidiaries set name = ${name}, legal_name = ${legalName},
           base_currency = ${baseCurrency}, country = ${country},
           is_elimination = ${!!f.isElimination}, is_active = ${f.isActive !== false},
-          custom = custom || ${custom}::jsonb, updated_at = now()
+          custom = (${custom}::jsonb || subsidiaries.custom)
+            || jsonb_build_object(${refKey}, ${rec.sourceRef}),
+          updated_at = now()
          where id = ${id} and org_id = ${orgId}`);
       s.updated++;
       return id;
@@ -502,7 +503,10 @@ async function upsert(resource: string, ctx: Ctx, rec: SourceEntity, s: Resource
     const netDays = Number(f.netDays ?? 30);
     if (id) {
       await db.execute(sql`update payment_terms set name=${name}, net_days=${netDays}, discount_days=${(f.discountDays as number) ?? null},
-        discount_percent=${(f.discountPercent as string) ?? null}, custom=${custom}::jsonb where id=${id}`);
+        discount_percent=${(f.discountPercent as string) ?? null},
+        custom=(${custom}::jsonb || payment_terms.custom)
+          || jsonb_build_object(${refKey}, ${rec.sourceRef})
+        where id=${id}`);
       s.updated++; return id;
     }
     const ins = (await db.execute(sql`insert into payment_terms (org_id, name, net_days, discount_days, discount_percent, custom)
@@ -529,6 +533,7 @@ async function upsert(resource: string, ctx: Ctx, rec: SourceEntity, s: Resource
     const rate = String(f.ratePercent ?? "0");
     const taxCustom = JSON.stringify({
       [refKey]: rec.sourceRef,
+      source: { system: ctx.sourceName, externalId: rec.sourceRef },
       ...(typeof f.sourceRecordKind === "string"
         ? { sourceRecordKind: f.sourceRecordKind }
         : {}),
@@ -551,7 +556,9 @@ async function upsert(resource: string, ctx: Ctx, rec: SourceEntity, s: Resource
       await db.execute(sql`update tax_codes set name=${name}, applies_to=${appliesTo}::text,
         collected_account_id=coalesce(${collected}, collected_account_id),
         paid_account_id=coalesce(${paid}, paid_account_id),
-        custom=tax_codes.custom || ${taxCustom}::jsonb where id=${id}`);
+        custom=(${taxCustom}::jsonb || tax_codes.custom)
+          || jsonb_build_object(${refKey}, ${rec.sourceRef})
+        where id=${id}`);
       await db.execute(sql`update tax_rates set rate_percent=${rate} where tax_code_id=${id}`);
       s.updated++; return id;
     }
@@ -654,7 +661,10 @@ async function upsert(resource: string, ctx: Ctx, rec: SourceEntity, s: Resource
       subsidiary_id=coalesce(${subsidiaryId}, subsidiary_id),
       email=coalesce(${str(f.email)}, email), phone=coalesce(${str(f.phone)}, phone),
       website=coalesce(${str(f.website)}, website), legal_name=coalesce(${str(f.legalName)}, legal_name),
-      tax_ids=${taxIds}::jsonb, custom=parties.custom||${custom}::jsonb where id=${pid}`);
+      tax_ids=${taxIds}::jsonb,
+      custom=(${custom}::jsonb || parties.custom)
+        || jsonb_build_object(${refKey}, ${rec.sourceRef})
+      where id=${pid}`);
     s.updated++;
   } else {
     const ins = (await db.execute(sql`insert into parties (org_id, kind, display_name, is_active, subsidiary_id, email, phone, website, legal_name, tax_ids, custom)
