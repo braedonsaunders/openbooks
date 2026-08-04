@@ -171,8 +171,13 @@ jobs:
               ')"
             fi
           fi
-          if [ -z "$migration_url" ] || [ -z "$runtime_url" ]; then
-            echo "::error::Dev deployment requires separate OPENBOOKS_MIGRATION_DB_URL and runtime database URLs"
+          legacy_owned_schema=0
+          if [ -z "$migration_url" ] && [ -n "$runtime_url" ]; then
+            migration_url="$runtime_url"
+            legacy_owned_schema=1
+          fi
+          if [ -z "$runtime_url" ]; then
+            echo "::error::Dev deployment has no resolvable runtime database URL"
             echo "Available Dokploy environment keys:"
             sed -n 's/^\([A-Z0-9_]*\)=.*/\1/p' <<<"$env_text" | sort -u
             echo "Configured web environment keys:"
@@ -203,6 +208,9 @@ jobs:
             printf 'OPENBOOKS_BOOTSTRAP=1\n'
             printf 'OPENBOOKS_MIGRATION_DB_URL=%s\n' "$migration_url"
             printf 'OPENBOOKS_RUNTIME_DB_URL=%s\n' "$runtime_url"
+            if [ "$legacy_owned_schema" = "1" ]; then
+              printf 'OPENBOOKS_LEGACY_OWNED_SCHEMA=1\n'
+            fi
             for key in ORG_NAME ORG_CURRENCY ORG_COUNTRY ADMIN_EMAIL ADMIN_NAME ADMIN_PASSWORD; do
               value="$(env_value "$key")"
               if [ -n "$value" ]; then printf '%s=%s\n' "$key" "$value"; fi

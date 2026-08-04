@@ -33,6 +33,28 @@ test("deployment bootstrap serializes migrate and seed work", () => {
   );
 });
 
+test("legacy owned-schema mode is migration-only and fail-closed", () => {
+  assert.match(bootstrap, /OPENBOOKS_LEGACY_OWNED_SCHEMA === "1"/);
+  assert.match(bootstrap, /role\.rolsuper or role\.rolbypassrls/);
+  assert.match(bootstrap, /role\.rolcreatedb/);
+  assert.match(bootstrap, /role\.rolcreaterole/);
+  assert.match(bootstrap, /role\.rolreplication/);
+  assert.match(bootstrap, /posture\.current_user !== runtimeConfig\.roleName/);
+  assert.match(bootstrap, /posture\.current_database !== runtimeDatabase/);
+  assert.match(bootstrap, /posture\.unowned_tables !== 0/);
+
+  const legacyBranch = bootstrap.slice(
+    bootstrap.indexOf("if (legacyOwnedSchema)"),
+    bootstrap.indexOf("// Some migrations grant privileges"),
+  );
+  assert.match(legacyBranch, /await assertLegacyOwnedSchemaMigrationRole/);
+  assert.match(legacyBranch, /await migrate\(\)/);
+  assert.match(legacyBranch, /return;/);
+  assert.doesNotMatch(legacyBranch, /ensureReadRole/);
+  assert.doesNotMatch(legacyBranch, /ensureRuntimeDatabaseRole/);
+  assert.doesNotMatch(legacyBranch, /seed[A-Z]/);
+});
+
 test("row-level security refresh is versioned and drift-driven", () => {
   assert.match(bootstrap, /applied_digest !== digest/);
   assert.match(bootstrap, /catalog_drift/);

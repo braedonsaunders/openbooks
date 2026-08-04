@@ -64,6 +64,47 @@ async function quoted(value: string, kind: "identifier" | "literal"): Promise<st
   return result.rows[0]!.value;
 }
 
+async function assertLegacyOwnedSchemaMigrationRole(
+  runtimeConfig: RuntimeDatabaseConfig,
+): Promise<void> {
+  const result = await pool.query<{
+    current_user: string;
+    current_database: string;
+    unsafe: boolean;
+    unowned_tables: number;
+  }>(`
+    select current_user, current_database(),
+           role.rolsuper or role.rolbypassrls or role.rolcreatedb
+             or role.rolcreaterole or role.rolreplication as unsafe,
+           (select count(*)::int
+              from pg_class relation
+              join pg_namespace namespace on namespace.oid = relation.relnamespace
+             where namespace.nspname = 'public'
+               and relation.relkind in ('r', 'p')
+               and pg_get_userbyid(relation.relowner) <> current_user) as unowned_tables
+      from pg_roles role
+     where role.rolname = current_user
+  `);
+  const posture = result.rows[0];
+  const runtimeDatabase = decodeURIComponent(
+    new URL(runtimeConfig.connectionString).pathname.replace(/^\//, ""),
+  );
+  if (
+    !posture ||
+    posture.current_user !== runtimeConfig.roleName ||
+    posture.current_database !== runtimeDatabase ||
+    posture.unsafe ||
+    posture.unowned_tables !== 0
+  ) {
+    throw new Error(
+      "legacy owned-schema migration requires a constrained role that owns every public table",
+    );
+  }
+  console.log(
+    `[bootstrap] constrained legacy schema owner ${posture.current_user} verified for migration-only mode`,
+  );
+}
+
 function sha256(s: string): string {
   return createHash("sha256").update(s).digest("hex");
 }
@@ -624,6 +665,7 @@ async function seedAdmin(orgId: string): Promise<void> {
 
 async function main(): Promise<void> {
   const runtimeConfig = runtimeDatabaseConfig();
+  const legacyOwnedSchema = env.OPENBOOKS_LEGACY_OWNED_SCHEMA === "1";
   if (env.NODE_ENV === "production" && !runtimeConfig) {
     throw new Error(
       "OPENBOOKS_RUNTIME_DB_URL is required for production bootstrap; migrations and application traffic must use separate database roles",
@@ -648,6 +690,16 @@ async function main(): Promise<void> {
     // constraint. Context-only scope keeps each tracked migration's own
     // transaction authoritative instead of pinning an outer transaction.
     await withBypassContext(async () => {
+      if (legacyOwnedSchema) {
+        if (!runtimeConfig) {
+          throw new Error(
+            "legacy owned-schema migration requires OPENBOOKS_RUNTIME_DB_URL",
+          );
+        }
+        await assertLegacyOwnedSchemaMigrationRole(runtimeConfig);
+        await migrate();
+        return;
+      }
       // Some migrations grant privileges to openbooks_read, so a fresh database
       // must establish the role before applying them. Run the same idempotent
       // routine again afterward to grant access to the newly created tables.
