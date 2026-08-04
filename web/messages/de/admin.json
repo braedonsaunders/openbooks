@@ -321,6 +321,8 @@
     "linkLabelPrompt": "Beschriftung:",
     "addLink": "Link hinzufügen",
     "deleteLink": "Link löschen",
+    "addApp": "App-Verknüpfung hinzufügen…",
+    "removeApp": "App-Verknüpfung entfernen",
     "newGroupPrompt": "Arbeitsbereichsname:",
     "addGroup": "Arbeitsbereich hinzufügen",
     "deleteGroup": "Arbeitsbereich löschen",

@@ -221,7 +221,6 @@ interface AppDetail {
   description: string | null
   iconKey: string
   status: 'installed' | 'disabled'
-  showInNav: boolean
   grantedPermissions: string[]
   version: string | null
   manifest: {
@@ -258,7 +257,6 @@ export function AppDrawer({
   // -- Overview form state ---------------------------------------------------
   const [name, setName] = useState(app.name)
   const [description, setDescription] = useState(app.description ?? '')
-  const [showInNav, setShowInNav] = useState(app.showInNav)
   const [granted, setGranted] = useState<Set<string>>(new Set(app.grantedPermissions))
   const [endpoints, setEndpoints] = useState<{ name: string; file: string; method: 'GET' | 'POST' | 'ANY' }[]>(
     app.manifest?.endpoints ?? [],
@@ -266,7 +264,6 @@ export function AppDrawer({
   const dirtyMeta =
     name !== app.name ||
     description !== (app.description ?? '') ||
-    showInNav !== app.showInNav ||
     JSON.stringify([...granted].sort()) !== JSON.stringify([...app.grantedPermissions].sort()) ||
     JSON.stringify(endpoints) !== JSON.stringify(app.manifest?.endpoints ?? [])
 
@@ -278,7 +275,6 @@ export function AppDrawer({
       body: JSON.stringify({
         name,
         description: description || null,
-        showInNav,
         grantedPermissions: [...granted],
         endpoints,
       }),
@@ -587,18 +583,18 @@ export function AppDrawer({
                       </span>
                     </label>
                   ))}
-                  <label className="flex items-start gap-2 text-sm">
-                    <input
-                      type="checkbox"
-                      checked={showInNav}
-                      onChange={(e) => setShowInNav(e.target.checked)}
-                      className="mt-0.5 h-4 w-4 rounded border-slate-300 text-teal-600 focus:ring-teal-500"
-                    />
-                    <span>
-                      Show in navigation <span className="text-xs text-slate-400">— list this app on the Apps page</span>
-                    </span>
-                  </label>
                 </div>
+              </div>
+
+              <div className="space-y-2">
+                <Label>Navigation</Label>
+                <p className="text-xs text-slate-500">
+                  This app remains installed independently of its menu shortcuts. Add, remove, rename, or move a
+                  shortcut in Navigation settings.
+                </p>
+                <Button asChild variant="outline" size="sm">
+                  <Link href="/admin/navigation">Manage navigation shortcuts</Link>
+                </Button>
               </div>
 
               <div className="space-y-2">

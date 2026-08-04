@@ -5,7 +5,7 @@ import { PageHeader } from '@openbooks/ui'
 import { PageContainer } from '../../../../components/page-layout'
 import { currentUser } from '../../../../lib/auth'
 import { listApps } from '../../../../lib/apps/store'
-import { defaultNavConfig, layerInNavApps, type OrgNavConfig } from '../../../../lib/nav/registry'
+import { defaultNavConfig, type OrgNavConfig } from '../../../../lib/nav/registry'
 import { NavEditor } from './NavEditor'
 
 export const dynamic = 'force-dynamic'
@@ -29,9 +29,8 @@ export default async function NavigationAdmin() {
       key: app.key,
       name: app.manifest?.nav?.label?.trim() || app.name,
       iconKey: app.manifest?.nav?.icon?.trim() || app.iconKey,
-      showInNav: app.showInNav,
     }))
-  const config = layerInNavApps(saved?.version === 2 ? saved : defaultNavConfig(), navApps)
+  const config = saved?.version === 2 ? saved : defaultNavConfig()
 
   return (
     <PageContainer className="max-w-3xl">

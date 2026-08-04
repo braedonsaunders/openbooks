@@ -321,6 +321,8 @@
     "linkLabelPrompt": "标签：",
     "addLink": "添加链接",
     "deleteLink": "删除链接",
+    "addApp": "添加应用快捷方式…",
+    "removeApp": "移除应用快捷方式",
     "newGroupPrompt": "工作区名称：",
     "addGroup": "添加工作区",
     "deleteGroup": "删除工作区",
