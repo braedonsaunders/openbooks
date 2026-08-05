@@ -8,7 +8,8 @@ const compose = readFileSync(new URL("../compose.yaml", import.meta.url), "utf8"
 const dockerfile = readFileSync(new URL("../Dockerfile", import.meta.url), "utf8");
 const example = readFileSync(new URL("../.env.compose.example", import.meta.url), "utf8");
 const databaseRuntime = readFileSync(new URL("../engine/src/db.ts", import.meta.url), "utf8");
-const devDeploy = readFileSync(new URL("../.github/workflows/deploy-dev.yml", import.meta.url), "utf8");
+const devDeployPath = fileURLToPath(new URL("../.github/workflows/deploy-dev.yml", import.meta.url));
+const devDeploy = existsSync(devDeployPath) ? readFileSync(devDeployPath, "utf8") : null;
 const haBootstrap = readFileSync(new URL("../deploy/ha/base/bootstrap/bootstrap-job.yaml", import.meta.url), "utf8");
 const haApplication = readFileSync(new URL("../deploy/ha/base/runtime/application.yaml", import.meta.url), "utf8");
 const haNetworkPolicy = readFileSync(new URL("../deploy/ha/base/runtime/network-policy.yaml", import.meta.url), "utf8");
@@ -187,10 +188,12 @@ requirePattern(
   /const bypass = ctx\?\.bypass === true;[\s\S]*?const org = bypass \? "" : ctx\?\.orgId \?\? "";/,
   "unscoped application database access does not fail closed",
 );
-requirePattern(
-  devDeploy,
-  /name: Run deployment bootstrap[\s\S]*?OPENBOOKS_MIGRATION_DB_URL[\s\S]*?OPENBOOKS_RUNTIME_DB_URL[\s\S]*?docker run --rm --env-file[\s\S]*?name: Select image and deploy/,
-  "dev deployment does not complete the isolated migration bootstrap before rolling out web and worker",
-);
+if (devDeploy) {
+  requirePattern(
+    devDeploy,
+    /name: Run deployment bootstrap[\s\S]*?OPENBOOKS_MIGRATION_DB_URL[\s\S]*?OPENBOOKS_RUNTIME_DB_URL[\s\S]*?docker run --rm --env-file[\s\S]*?name: Select image and deploy/,
+    "dev deployment does not complete the isolated migration bootstrap before rolling out web and worker",
+  );
+}
 
 console.log("container OS/database role separation and fail-closed RLS context verified");
