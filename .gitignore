@@ -92,6 +92,7 @@ output/
 
 # scratch/test artifacts
 tmp/
+/tmp-*
 engine/harness-checkpoints/
 engine/sim-runs/
 .playwright-cli/
