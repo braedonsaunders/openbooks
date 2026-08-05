@@ -2535,7 +2535,8 @@ declare
     'vendor_pay_applications', 'vendor_retainage_releases', 'wip_holds',
     'wip_prebill_events', 'wip_prebill_lines', 'wip_prebills', 'worker_comp_groups',
     'employee_pay_components', 'employee_payroll_profiles',
-    'pay_components', 'pay_runs', 'pay_schedules', 'pay_stub_lines', 'pay_stubs',
+    'pay_components', 'pay_run_adjustments', 'pay_runs', 'pay_schedules',
+    'pay_stub_lines', 'pay_stubs',
     'payroll_opening_balances', 'union_agreements', 'union_classifications',
     'union_fringes'
   ];
@@ -10815,6 +10816,54 @@ CREATE VIEW openbooks_query.pay_components WITH (security_barrier='true') AS
     updated_by,
     country
    FROM public.pay_components;
+
+
+--
+-- Name: pay_run_adjustments; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.pay_run_adjustments (
+    id uuid DEFAULT public.uuid_generate_v7() NOT NULL,
+    org_id uuid NOT NULL,
+    pay_run_document_id uuid NOT NULL,
+    employee_party_id uuid NOT NULL,
+    adjustment_type text NOT NULL,
+    component_id uuid,
+    amount numeric(19,4),
+    hours numeric(12,2),
+    replace_component boolean DEFAULT false NOT NULL,
+    note text,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    created_by uuid,
+    updated_at timestamp with time zone DEFAULT now() NOT NULL,
+    updated_by uuid,
+    CONSTRAINT pay_run_adjustments_line_shape CHECK (((adjustment_type <> 'line'::text) OR ((component_id IS NOT NULL) AND (amount IS NOT NULL)))),
+    CONSTRAINT pay_run_adjustments_type CHECK ((adjustment_type = ANY (ARRAY['line'::text, 'exclude'::text])))
+);
+
+ALTER TABLE ONLY public.pay_run_adjustments FORCE ROW LEVEL SECURITY;
+
+
+--
+-- Name: pay_run_adjustments; Type: VIEW; Schema: openbooks_query; Owner: -
+--
+
+CREATE VIEW openbooks_query.pay_run_adjustments WITH (security_barrier='true') AS
+ SELECT id,
+    org_id,
+    pay_run_document_id,
+    employee_party_id,
+    adjustment_type,
+    component_id,
+    amount,
+    hours,
+    replace_component,
+    note,
+    created_at,
+    created_by,
+    updated_at,
+    updated_by
+   FROM public.pay_run_adjustments;
 
 
 --
@@ -20764,6 +20813,14 @@ ALTER TABLE ONLY public.pay_components
 
 
 --
+-- Name: pay_run_adjustments pay_run_adjustments_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.pay_run_adjustments
+    ADD CONSTRAINT pay_run_adjustments_pkey PRIMARY KEY (id);
+
+
+--
 -- Name: pay_runs pay_runs_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -25056,6 +25113,20 @@ CREATE INDEX pay_components_org_kind ON public.pay_components USING btree (org_i
 --
 
 CREATE UNIQUE INDEX pay_components_org_system ON public.pay_components USING btree (org_id, system_key, kind);
+
+
+--
+-- Name: pay_run_adjustments_exclude_once; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE UNIQUE INDEX pay_run_adjustments_exclude_once ON public.pay_run_adjustments USING btree (pay_run_document_id, employee_party_id) WHERE (adjustment_type = 'exclude'::text);
+
+
+--
+-- Name: pay_run_adjustments_run; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX pay_run_adjustments_run ON public.pay_run_adjustments USING btree (org_id, pay_run_document_id, employee_party_id);
 
 
 --
@@ -32856,6 +32927,54 @@ ALTER TABLE ONLY public.pay_components
 
 
 --
+-- Name: pay_run_adjustments pay_run_adjustments_component_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.pay_run_adjustments
+    ADD CONSTRAINT pay_run_adjustments_component_fkey FOREIGN KEY (component_id) REFERENCES public.pay_components(id) ON DELETE CASCADE DEFERRABLE;
+
+
+--
+-- Name: pay_run_adjustments pay_run_adjustments_created_by_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.pay_run_adjustments
+    ADD CONSTRAINT pay_run_adjustments_created_by_fkey FOREIGN KEY (created_by) REFERENCES public.users(id) ON DELETE SET NULL DEFERRABLE;
+
+
+--
+-- Name: pay_run_adjustments pay_run_adjustments_employee_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.pay_run_adjustments
+    ADD CONSTRAINT pay_run_adjustments_employee_fkey FOREIGN KEY (employee_party_id) REFERENCES public.parties(id) ON DELETE CASCADE DEFERRABLE;
+
+
+--
+-- Name: pay_run_adjustments pay_run_adjustments_org_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.pay_run_adjustments
+    ADD CONSTRAINT pay_run_adjustments_org_id_fkey FOREIGN KEY (org_id) REFERENCES public.orgs(id) ON DELETE CASCADE DEFERRABLE;
+
+
+--
+-- Name: pay_run_adjustments pay_run_adjustments_run_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.pay_run_adjustments
+    ADD CONSTRAINT pay_run_adjustments_run_fkey FOREIGN KEY (pay_run_document_id) REFERENCES public.pay_runs(document_id) ON DELETE CASCADE DEFERRABLE;
+
+
+--
+-- Name: pay_run_adjustments pay_run_adjustments_updated_by_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.pay_run_adjustments
+    ADD CONSTRAINT pay_run_adjustments_updated_by_fkey FOREIGN KEY (updated_by) REFERENCES public.users(id) ON DELETE SET NULL DEFERRABLE;
+
+
+--
 -- Name: pay_runs pay_runs_created_by_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -39588,6 +39707,20 @@ COMMENT ON POLICY org_isolation ON public.pay_components IS 'openbooks:org_isola
 
 
 --
+-- Name: pay_run_adjustments org_isolation; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY org_isolation ON public.pay_run_adjustments USING (((current_setting('app.bypass_rls'::text, true) = 'on'::text) OR ((org_id)::text = current_setting('app.current_org'::text, true)))) WITH CHECK (((current_setting('app.bypass_rls'::text, true) = 'on'::text) OR ((org_id)::text = current_setting('app.current_org'::text, true))));
+
+
+--
+-- Name: POLICY org_isolation ON pay_run_adjustments; Type: COMMENT; Schema: public; Owner: -
+--
+
+COMMENT ON POLICY org_isolation ON public.pay_run_adjustments IS 'openbooks:org_isolation:v1';
+
+
+--
 -- Name: pay_runs org_isolation; Type: POLICY; Schema: public; Owner: -
 --
 
@@ -41544,6 +41677,12 @@ ALTER TABLE public.pay_applications ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.pay_components ENABLE ROW LEVEL SECURITY;
 
 --
+-- Name: pay_run_adjustments; Type: ROW SECURITY; Schema: public; Owner: -
+--
+
+ALTER TABLE public.pay_run_adjustments ENABLE ROW LEVEL SECURITY;
+
+--
 -- Name: pay_runs; Type: ROW SECURITY; Schema: public; Owner: -
 --
 
@@ -43376,6 +43515,13 @@ GRANT SELECT ON TABLE openbooks_query.pay_applications TO openbooks_read;
 --
 
 GRANT SELECT ON TABLE openbooks_query.pay_components TO openbooks_read;
+
+
+--
+-- Name: TABLE pay_run_adjustments; Type: ACL; Schema: openbooks_query; Owner: -
+--
+
+GRANT SELECT ON TABLE openbooks_query.pay_run_adjustments TO openbooks_read;
 
 
 --
