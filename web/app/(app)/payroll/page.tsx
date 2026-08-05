@@ -70,6 +70,12 @@ export default async function PayrollHomePage({
               {t('home.actions.viewRuns')}
             </Link>
           </Button>
+          <Button variant="outline" asChild>
+            <Link href={'/payroll/remittances' as never}>{t('home.actions.remittances')}</Link>
+          </Button>
+          <Button variant="outline" asChild>
+            <Link href={'/payroll/year-end' as never}>{t('home.actions.yearEnd')}</Link>
+          </Button>
           <ModuleHomeTabs tabs={tabs} />
         </div>
       }

@@ -13,7 +13,9 @@
       "viewRuns": "Pay runs",
       "startRun": "Run payroll",
       "resume": "Resume run",
-      "reviewPost": "Review & post"
+      "reviewPost": "Review & post",
+      "remittances": "Remittances",
+      "yearEnd": "Year-end"
     },
     "vitals": {
       "employees": "On payroll",
@@ -140,7 +142,9 @@
       "replaceHelp": "Replace this component’s calculated lines instead of adding to them",
       "add": "Add adjustment",
       "remove": "Remove",
-      "replaces": "replaces calculated"
+      "replaces": "replaces calculated",
+      "earnings": "Earnings",
+      "deductions": "Deductions"
     }
   },
   "links": {
@@ -370,6 +374,75 @@
       "suiWageBase": "Wage base",
       "addState": "Add state",
       "removeState": "Remove"
+    }
+  },
+  "remittances": {
+    "title": "Payroll remittances",
+    "description": "Accrued withholdings and employer contributions by destination for a period. Creating a bill debits the liability accounts and hands payment to AP.",
+    "back": "Payroll",
+    "from": "From",
+    "to": "To",
+    "apply": "Apply",
+    "empty": "No committed pay runs with remittable amounts in this period.",
+    "unassigned": "No remittance vendor assigned",
+    "assignVendor": "Assign a vendor on the components",
+    "context": "Gross payroll {gross} · {employees, plural, one {# employee} other {# employees}} in the period",
+    "withheld": "Withheld",
+    "employer": "Employer",
+    "noAccount": "No liability account",
+    "total": "Total to remit",
+    "createBill": "Create remittance bill",
+    "createAnother": "Create another bill",
+    "billCreated": "Draft bill {number} created — review and post it in AP.",
+    "apNote": "Remittance bills are ordinary vendor bills:",
+    "apLink": "open AP bills"
+  },
+  "yearEnd": {
+    "title": "Year-end",
+    "description": "T4 slips and Summary (Canada) and 941/W-2 worksheets (US), built from committed pay stubs — every box reconciles to the stub traces.",
+    "back": "Payroll",
+    "yearLabel": "Tax year",
+    "print": "Print",
+    "t4": {
+      "title": "T4 slips (Canada)",
+      "description": "Per-employee statement of remuneration paid. CPP shown includes CPP2 (boxes 16 + 16A); Quebec employees report QPP/QPIP in the corresponding boxes.",
+      "empty": "No committed Canadian pay stubs for this year.",
+      "employee": "Employee",
+      "province": "Prov.",
+      "box14": "Box 14 income",
+      "box16": "Box 16/16A CPP",
+      "box18": "Box 18 EI",
+      "box22": "Box 22 tax",
+      "box24": "Box 24 EI insurable",
+      "box26": "Box 26 pensionable",
+      "box44": "Box 44 dues"
+    },
+    "summary": {
+      "slips": "Slips",
+      "income": "Employment income",
+      "cpp": "CPP (employee + employer)",
+      "ei": "EI (employee + employer)",
+      "tax": "Income tax",
+      "remitted": "Remitted (posted bills)"
+    },
+    "us": {
+      "title": "United States",
+      "description": "Form 941 quarterly worksheet and W-2 box data for US-pack employees.",
+      "empty": "No committed US pay stubs for this year.",
+      "quarter": "Quarter",
+      "wages": "Wages",
+      "fit": "Federal tax",
+      "ssWages": "SS wages",
+      "ssTax": "SS tax (both)",
+      "medicareTax": "Medicare tax (both)",
+      "employee": "Employee",
+      "state": "State",
+      "box1": "Box 1 wages",
+      "box2": "Box 2 FIT",
+      "box3": "Box 3 SS wages",
+      "box4": "Box 4 SS tax",
+      "box5": "Box 5 Medicare wages",
+      "box6": "Box 6 Medicare tax"
     }
   }
 }
