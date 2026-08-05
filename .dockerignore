@@ -18,6 +18,7 @@ Dockerfile
 playwright-report
 test-results
 tmp
+tmp-*
 output
 .backups
 .playwright-cli
