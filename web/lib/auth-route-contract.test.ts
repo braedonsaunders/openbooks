@@ -53,13 +53,14 @@ test("MFA enrollment requires primary reauthentication and is bound to the activ
   assert.match(auth, /if \(passwordVerification\.capacityLimited\)[\s\S]{0,120}kind: "invalid"/);
 });
 
-test("auth migration supports bounded setup and indexed login resolution", () => {
-  const migration = readFileSync("schema/migrations/generated/0129_auth_security.sql", "utf8");
-  assert.match(migration, /setup_session_id uuid references public\.auth_sessions\(id\) on delete cascade/i);
-  assert.match(migration, /setup_expires_at timestamptz/i);
+test("canonical baseline supports bounded setup and indexed login resolution", () => {
+  const migration = readFileSync("schema/migrations/generated/0001_baseline.sql", "utf8");
+  assert.match(migration, /setup_session_id uuid/i);
+  assert.match(migration, /setup_expires_at timestamp with time zone/i);
   assert.match(migration, /setup_attempt_count integer/i);
   assert.match(migration, /create table public\.auth_rate_limit_buckets/i);
-  assert.match(migration, /create index users_login_email_ci on public\.users\(lower\(email\)\) where is_active/i);
+  assert.match(migration, /auth_mfa_factors_setup_session_id_fkey foreign key \(setup_session_id\) references public\.auth_sessions\(id\) on delete cascade/i);
+  assert.match(migration, /create index users_login_email_ci on public\.users using btree \(lower\(email\)\) where is_active/i);
   assert.match(migration, /auth_login_events_email_failure_time/i);
 });
 

@@ -5,14 +5,11 @@ import test from "node:test";
 const baselinePath = "schema/migrations/generated/0001_baseline.sql";
 const baseline = readFileSync(baselinePath, "utf8");
 
-test("fresh installations have one canonical baseline followed by ordered forward migrations", () => {
+test("fresh installations have exactly one canonical prerelease baseline", () => {
   const generated = readdirSync("schema/migrations/generated")
     .filter((file) => file.endsWith(".sql"))
     .sort();
-  assert.equal(generated[0], "0001_baseline.sql");
-  assert.ok(generated.includes("0129_auth_security.sql"));
-  assert.ok(generated.includes("0130_backup_run_concurrency.sql"));
-  assert.ok(generated.every((file) => /^\d{4}_[a-z0-9_]+\.sql$/.test(file)));
+  assert.deepEqual(generated, ["0001_baseline.sql"]);
   assert.deepEqual(
     readdirSync("schema/migrations").filter((file) => file.endsWith(".sql")).sort(),
     ["environments.sql"],
@@ -23,16 +20,32 @@ test("fresh installations have one canonical baseline followed by ordered forwar
   assert.match(baseline, /SELECT public\.openbooks_refresh_query_catalog\(\)/);
 });
 
-test("authentication hardening is an additive migration", () => {
-  const authMigration = readFileSync(
-    "schema/migrations/generated/0129_auth_security.sql",
-    "utf8",
-  );
-  assert.match(authMigration, /create table public\.auth_sessions/i);
-  assert.match(authMigration, /create table public\.auth_login_events/i);
-  assert.match(authMigration, /create table public\.auth_mfa_factors/i);
-  assert.match(authMigration, /create table public\.auth_oidc_identities/i);
-  assert.match(authMigration, /references public\.users\(id\) on delete cascade/i);
+test("the baseline contains standards, payroll, authentication, and operational guards", () => {
+  for (const table of [
+    "lease_agreements",
+    "lease_agreement_schedule_lines",
+    "inventory_writedowns",
+    "pay_schedules",
+    "pay_components",
+    "employee_payroll_profiles",
+    "employee_pay_components",
+    "pay_runs",
+    "pay_stubs",
+    "pay_stub_lines",
+    "payroll_opening_balances",
+    "union_agreements",
+    "union_classifications",
+    "union_fringes",
+    "auth_sessions",
+    "auth_login_events",
+    "auth_mfa_factors",
+    "auth_oidc_identities",
+  ]) {
+    assert.match(baseline, new RegExp(`CREATE TABLE public\\.${table}`));
+  }
+  assert.match(baseline, /CREATE FUNCTION public\.posted_document_financial_guard\(\)/);
+  assert.match(baseline, /CREATE TRIGGER documents_posted_financial_guard/);
+  assert.match(baseline, /CREATE UNIQUE INDEX backup_runs_one_inflight_per_org/);
 });
 
 test("the canonical catalog contains no upgrade-only evidence model", () => {
@@ -60,10 +73,25 @@ test("external source identities are scoped by tenant and source system", () => 
 test("the governed query catalog exposes views, never access-control tables", () => {
   assert.match(baseline, /'managed_properties'/);
   assert.match(baseline, /'property_leases'/);
-  assert.doesNotMatch(
-    baseline.match(/safe_relations constant text\[\] := array\[([\s\S]*?)\n  \];/)?.[1] ?? "",
-    /user_org_access/,
-  );
+  const safeRelations = baseline.match(
+    /safe_relations constant text\[\] := array\[([\s\S]*?)\n  \];/,
+  )?.[1] ?? "";
+  for (const relation of [
+    "pay_schedules",
+    "pay_components",
+    "employee_payroll_profiles",
+    "employee_pay_components",
+    "pay_runs",
+    "pay_stubs",
+    "pay_stub_lines",
+    "payroll_opening_balances",
+    "union_agreements",
+    "union_classifications",
+    "union_fringes",
+  ]) {
+    assert.match(safeRelations, new RegExp(`'${relation}'`));
+  }
+  assert.doesNotMatch(safeRelations, /user_org_access|auth_[a-z0-9_]+/);
   assert.match(
     baseline,
     /revoke all privileges on all tables in schema public from openbooks_read/i,

@@ -94,4 +94,4 @@ months closed, leap days and year-ends crossed, per-probe counts, and the
 sweep result. The first endurance smoke run halted on simulated day 7: the
 posted-edit probe found that a posted document HEADER's financial identity
 was raw-SQL mutable (the journal side was always guarded) — closed by
-`schema/migrations/generated/0003_posted_document_financial_guard.sql`.
+the posted-document financial guard in `schema/migrations/generated/0001_baseline.sql`.
