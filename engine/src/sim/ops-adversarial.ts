@@ -2,7 +2,7 @@ import { randomUUID } from "node:crypto";
 import { sql } from "drizzle-orm";
 import { db } from "../db.ts";
 import { createScriptJournal } from "../journal-writes.ts";
-import { deleteDocument } from "../document-delete.ts";
+import { requestDocumentVoid } from "../document-void.ts";
 import { reverseProjectGlEntry } from "../project-recognition.ts";
 import {
   createPaymentDocument,
@@ -200,9 +200,10 @@ export async function reversalSymmetryProbe(world: SimOrg, simDate: string): Pro
 }
 
 /**
- * Void/recreate: post a bill, void it through the governed delete path, assert
- * its GL projection is gone, then repost an identical bill. The books must end
- * up exactly as if only the second bill ever existed.
+ * Void/recreate: post a bill, void it through the CONTROLLED void action
+ * (request → reversal entry), assert the original and its reversal net to
+ * exactly zero on every account, then repost an identical bill. The books
+ * must end up exactly as if only the second bill ever existed.
  */
 export async function voidRecreateProbe(world: SimOrg, simDate: string): Promise<InvariantResult> {
   const vendor = world.vendors[0];
@@ -220,18 +221,33 @@ export async function voidRecreateProbe(world: SimOrg, simDate: string): Promise
     custom: { sim: { adversarial: "void_recreate" } },
     lines: [{ accountId: world.accounts.office, description: "void probe", amount: "222.22" }],
   });
-  await deleteDocument(first.documentId, world.actors.controller, { source: "sim", reason: "void/recreate probe" });
+  const voided = await requestDocumentVoid({
+    documentId: first.documentId,
+    orgId: world.orgId,
+    actorId: world.actors.controller,
+    reason: "adversarial void/recreate probe",
+    reversalDate: simDate,
+  });
+  if (voided.status !== "voided" || !voided.reversalEntryId) {
+    return fail(
+      "adversarial-void",
+      `controlled void did not complete (status=${voided.status}, reversal=${voided.reversalEntryId ?? "none"})`,
+    );
+  }
 
   const residue = (await db.execute(sql`
     select
-      (select count(*) from journal_lines where org_id = ${world.orgId} and entry_id = ${first.entryId}) as lines,
-      (select count(*) from documents where org_id = ${world.orgId} and id = ${first.documentId}) as docs`)) as unknown as {
-    rows: { lines: string; docs: string }[];
+      (select count(*) from (
+        select account_id from journal_lines
+         where org_id = ${world.orgId} and entry_id in (${first.entryId}, ${voided.reversalEntryId})
+         group by account_id having abs(sum(amount)) >= 0.005) x) as unbalanced,
+      (select status from documents where org_id = ${world.orgId} and id = ${first.documentId}) as status`)) as unknown as {
+    rows: { unbalanced: string; status: string }[];
   };
-  if (Number(residue.rows[0]?.lines) !== 0 || Number(residue.rows[0]?.docs) !== 0) {
+  if (Number(residue.rows[0]?.unbalanced) !== 0 || residue.rows[0]?.status !== "voided") {
     return fail(
       "adversarial-void",
-      `voided bill ${first.documentId} left residue (lines=${residue.rows[0]?.lines}, docs=${residue.rows[0]?.docs})`,
+      `void of ${first.documentId} did not reverse cleanly (unbalanced accounts=${residue.rows[0]?.unbalanced}, status=${residue.rows[0]?.status})`,
     );
   }
 

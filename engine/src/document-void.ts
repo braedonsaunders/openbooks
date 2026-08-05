@@ -1,6 +1,7 @@
 import { eq, sql } from "drizzle-orm";
 import type { FlowEventSource } from "@openbooks/forms-core";
 import { db, schema, withOrg } from "./db.ts";
+import { now } from "./clock.ts";
 import { neg } from "./money.ts";
 import { emitStatusChange, runRecordFlows } from "./flows/run.ts";
 import { runTriggerScripts, type ScriptContext } from "./scripting.ts";
@@ -27,7 +28,8 @@ function validateReason(reason: string): string {
 }
 
 function validateDate(value?: string | null): string {
-  const date = value?.trim() || new Date().toISOString().slice(0, 10);
+  // Business-meaningful default date — honours a pinned simulation clock.
+  const date = value?.trim() || now().toISOString().slice(0, 10);
   if (!/^\d{4}-\d{2}-\d{2}$/.test(date) || Number.isNaN(Date.parse(`${date}T00:00:00Z`))) {
     throw new DocumentVoidError("reversalDate must be a valid YYYY-MM-DD date");
   }
