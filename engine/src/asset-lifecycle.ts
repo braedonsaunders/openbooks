@@ -2,6 +2,7 @@ import { sql } from "drizzle-orm";
 import { db } from "./db.ts";
 import { buildScheduleWithRunner } from "./depreciation.ts";
 import { add, cmp, fromUnits, isZero, neg, toUnits } from "./money.ts";
+import { orgReportingFramework } from "./reporting-framework.ts";
 
 /**
  * Fixed-asset lifecycle posting — disposal by sale and write-off.
@@ -119,6 +120,79 @@ async function primaryBookId(orgId: string): Promise<string> {
   return r.rows[0].id;
 }
 
+/**
+ * Net signed remeasurement delta carried on an asset: the sum of every
+ * un-reversed impairment (negative) and revaluation write-up (positive)
+ * event. Remeasurements post against ACCUMULATED DEPRECIATION but never into
+ * depreciation_schedule_lines, so any NBV derived from the schedule alone is
+ * wrong the moment an asset has been impaired — a later remeasure would
+ * measure off an overstated carrying amount, and a disposal would strand the
+ * impairment credit on the accumulated-depreciation account.
+ */
+async function netRemeasurementDelta(orgId: string, assetId: string): Promise<string> {
+  const r = (await db.execute(sql`
+    select coalesce(sum(event.amount), 0)::text as delta
+      from asset_events event
+     where event.org_id = ${orgId} and event.asset_id = ${assetId}
+       and event.kind in ('impaired', 'revalued')
+       and not exists (
+         select 1 from asset_events reversal
+          where reversal.org_id = event.org_id
+            and reversal.reverses_event_id = event.id)`)) as unknown as { rows: { delta: string }[] };
+  return r.rows[0]?.delta ?? "0";
+}
+
+export interface RemeasurementPolicyDecision {
+  allowed: boolean;
+  /** The part of an allowed write-up that releases prior impairment. */
+  reversalPortion: string;
+  reason?: string;
+}
+
+/**
+ * Framework gate on remeasurement direction — pure, so the rule itself is
+ * unit-testable and corpus-verifiable.
+ *
+ * Write-downs are always permitted. Write-ups on an asset carrying an
+ * unreversed impairment are RESTORATIONS:
+ *  - US GAAP (ASC 360-10-35-20): restoration of an impairment loss on a
+ *    held-and-used asset is prohibited outright.
+ *  - IFRS (IAS 36.114/117): a reversal is permitted but capped — the carrying
+ *    amount may not exceed what it would have been had no impairment been
+ *    recognised. The unreversed impairment balance IS that cap here, because
+ *    post-impairment schedules are rebuilt off the impaired basis; a write-up
+ *    beyond it is a revaluation-surplus event, which is a different model.
+ * A write-up with NO impairment history is an ordinary revaluation and passes
+ * through unchanged (both frameworks reach it via their revaluation models).
+ */
+export function remeasurementPolicy(args: {
+  framework: "us_gaap" | "ifrs";
+  delta: string;
+  unreversedImpairment: string;
+}): RemeasurementPolicyDecision {
+  const { framework, delta, unreversedImpairment } = args;
+  if (cmp(delta, "0") <= 0) return { allowed: true, reversalPortion: "0.0000" };
+  if (cmp(unreversedImpairment, "0") <= 0) return { allowed: true, reversalPortion: "0.0000" };
+
+  if (framework === "us_gaap") {
+    return {
+      allowed: false,
+      reversalPortion: "0.0000",
+      reason:
+        "US GAAP prohibits restoring a previously recognised impairment loss on a held-and-used asset (ASC 360-10-35-20) — the impaired amount is the asset's new cost basis",
+    };
+  }
+  if (cmp(delta, unreversedImpairment) > 0) {
+    return {
+      allowed: false,
+      reversalPortion: "0.0000",
+      reason:
+        `IAS 36 caps an impairment reversal at the carrying amount that would have existed had no impairment been recognised — the write-up of ${delta} exceeds the unreversed impairment of ${unreversedImpairment}; the excess is a revaluation-surplus event, which this remeasurement path does not model`,
+    };
+  }
+  return { allowed: true, reversalPortion: fromUnits(toUnits(delta)) };
+}
+
 export interface DisposeResult {
   assetId: string;
   entryId: string;
@@ -174,8 +248,13 @@ export async function disposeAsset(
     gainLossAccountId: custom.gainLoss || asset.gain_loss_account_id,
     proceedsAccountId: opts.proceedsAccountId,
   };
+  // Impairments and revaluations sit on the accumulated-depreciation account
+  // without schedule lines; fold them in so derecognition clears the account
+  // exactly (an impaired asset must not strand its impairment credit).
+  const remeasureDelta = await netRemeasurementDelta(orgId, assetId);
+  const effectiveAccumulated = sub(asset.accumulated, remeasureDelta);
   const { nbv, gainLoss, lines } = computeDisposal({
-    cost: asset.acquisition_cost, accumulated: asset.accumulated, proceeds, accounts,
+    cost: asset.acquisition_cost, accumulated: effectiveAccumulated, proceeds, accounts,
   });
 
   const status: "disposed" | "written_off" = opts.writeOff || isZero(proceeds) ? "written_off" : "disposed";
@@ -498,14 +577,27 @@ export async function remeasureAsset(
     throw new AssetLifecycleError("configure a gain/loss (adjustment) account on the asset category first");
   }
   const custom = (asset.custom?.accounts ?? {}) as Record<string, string | undefined>;
+  // Fold prior remeasurement events into the carrying amount: they credit
+  // accumulated depreciation without schedule lines, so the schedule sum alone
+  // overstates NBV the moment an asset has been impaired.
+  const remeasureDelta = await netRemeasurementDelta(orgId, assetId);
+  const effectiveAccumulated = sub(asset.accumulated, remeasureDelta);
   const { delta, lines } = computeRemeasurement({
     cost: asset.acquisition_cost,
-    accumulated: asset.accumulated,
+    accumulated: effectiveAccumulated,
     newCarryingValue: opts.newCarryingValue,
     accumulatedDepreciationAccountId: custom.accumulated || asset.accumulated_depreciation_account_id,
     adjustmentAccountId: custom.gainLoss || asset.gain_loss_account_id,
   });
   if (isZero(delta)) throw new AssetLifecycleError("new carrying value equals current net book value");
+
+  // Framework gate: restoration of an impairment is prohibited under US GAAP
+  // and capped under IAS 36. The rule reads the org's configured framework.
+  const unreversedImpairment = cmp(remeasureDelta, "0") < 0 ? neg(remeasureDelta) : "0";
+  const framework = await orgReportingFramework(orgId);
+  const policy = remeasurementPolicy({ framework, delta, unreversedImpairment });
+  if (!policy.allowed) throw new AssetLifecycleError(policy.reason!);
+
   const kind: "revalued" | "impaired" = cmp(delta, "0") < 0 ? "impaired" : "revalued";
 
   const entryId = await db.transaction(async (tx) => {

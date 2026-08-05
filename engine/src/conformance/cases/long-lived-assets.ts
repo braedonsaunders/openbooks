@@ -6,7 +6,7 @@
  * so what is asserted here is the arithmetic that reaches the ledger.
  */
 
-import { computeDisposal, computeRemeasurement } from "../../asset-lifecycle.ts";
+import { computeDisposal, computeRemeasurement, remeasurementPolicy } from "../../asset-lifecycle.ts";
 import { add } from "../../money.ts";
 import type { ConformanceCase } from "../types.ts";
 
@@ -234,9 +234,6 @@ export const LONG_LIVED_ASSET_CASES: readonly ConformanceCase[] = [
     },
   },
 
-  // -------------------------------------------------------------------------
-  // Declared gaps
-  // -------------------------------------------------------------------------
   {
     id: "ppe-us-gaap-prohibits-restoration",
     title: "US GAAP prohibits reversing an impairment of a held-and-used asset",
@@ -255,21 +252,60 @@ export const LONG_LIVED_ASSET_CASES: readonly ConformanceCase[] = [
         requirement:
           "An impairment loss recognised in prior periods is reversed if, and only if, the estimates used to determine recoverable amount have changed.",
       },
+      {
+        standard: "IAS 36",
+        reference: "IAS 36.117",
+        kind: "requirement",
+        requirement:
+          "A reversal must not increase the carrying amount above what it would have been, net of depreciation, had no impairment been recognised.",
+      },
     ],
-    support: "not-implemented",
+    support: "supported",
     tier: "computation",
-    gap:
-      "`remeasureAsset` accepts any new carrying value in either direction. Writing an impaired asset back up is permitted, which IFRS requires but US GAAP forbids, and nothing records whether a given write-up is a permitted IAS 16 revaluation, a permitted IAS 36 reversal, or a prohibited ASC 360 restoration. The organisation already carries an `asc740`/`ias12` reporting-framework flag for income tax; long-lived assets need the same flag to gate this, plus retention of the historical impairment so an IAS 36 reversal can be capped at what depreciated cost would have been.",
     assertion:
-      "Under US GAAP a recovery in fair value after impairment produces no entry; under IFRS a reversal is recognised but is capped at the carrying amount that would have existed had no impairment been recognised.",
+      "The same fair-value recovery after an impairment is refused outright under US GAAP — the impaired amount is the new cost basis — and recognised under IFRS only up to the unreversed impairment, so the carrying amount can never climb back above depreciated historical cost through the remeasurement path. The answer comes from the organisation's configured reporting framework.",
     facts: [
-      "An asset impaired from a carrying amount of 60,000.00 down to 45,000.00.",
-      "Fair value later recovers to 58,000.00.",
-      "Under US GAAP the carrying amount stays at 45,000.00 less subsequent depreciation.",
-      "Under IFRS a reversal is recognised, limited to depreciated historical cost.",
+      "An asset impaired from a carrying amount of 60,000.00 down to 45,000.00 — an unreversed impairment of 15,000.00.",
+      "Fair value later recovers, and a write-up to 58,000.00 (13,000.00) is requested.",
+      "Under US GAAP the write-up is refused; the carrying amount stays at 45,000.00.",
+      "Under IFRS the 13,000.00 reversal is recognised (within the 15,000.00 cap).",
+      "A write-up to 62,000.00 (17,000.00) is refused under IFRS: it exceeds the cap.",
     ],
     expected: {
-      values: { usGaapReversal: "0.0000", ifrsReversalIsCapped: "true" },
+      values: {
+        usGaapRestorationRefused: "true",
+        ifrsReversalAllowed: "true",
+        ifrsReversalPortion: "13000.0000",
+        ifrsBeyondCapRefused: "true",
+      },
+    },
+    run: () => {
+      const unreversedImpairment = "15000.00"; // 60,000 impaired to 45,000
+
+      const usGaap = remeasurementPolicy({
+        framework: "us_gaap",
+        delta: "13000.00",
+        unreversedImpairment,
+      });
+      const ifrsWithinCap = remeasurementPolicy({
+        framework: "ifrs",
+        delta: "13000.00",
+        unreversedImpairment,
+      });
+      const ifrsBeyondCap = remeasurementPolicy({
+        framework: "ifrs",
+        delta: "17000.00",
+        unreversedImpairment,
+      });
+
+      return {
+        values: {
+          usGaapRestorationRefused: String(!usGaap.allowed),
+          ifrsReversalAllowed: String(ifrsWithinCap.allowed),
+          ifrsReversalPortion: ifrsWithinCap.reversalPortion,
+          ifrsBeyondCapRefused: String(!ifrsBeyondCap.allowed),
+        },
+      };
     },
   },
 ];

@@ -194,22 +194,19 @@ or penetration test has been performed. There is no SOC 1, SOC 2, ISO 27001, or
 PCI DSS attestation, and no government filing certification.
 
 **Measurement gaps identified by our own conformance corpus.** The corpus's
-first publication identified five measurement gaps — no lessee lease
+first publication identified six measurement gaps — no lessee lease
 accounting, no lower-of-cost-and-NRV inventory measurement, current tax
 computed without temporary differences, narrow foreign-currency retranslation
-scope, and no ASC 606 variable-consideration constraint or financing-component
-split. Each has since been implemented as product capability with its own
-schema, engine code, and tests, and its conformance case now passes exactly.
-What remains published:
-
-- **Impairment restoration is not framework-gated.** A written-down
-  held-and-used asset can be written back up through remeasurement; US GAAP
-  prohibits that restoration (ASC 360-10-35-20) and IAS 36 caps a reversal at
-  depreciated historical cost. Neither rule is enforced yet.
-- **Lessor straight-line levelling is not wired into tenant billing.**
-  Classification, levelling, and sales-type commencement are engine
-  capabilities; property-management rent invoices still recognise as billed
-  unless the levelled schedule is applied through the lease module.
+scope, no ASC 606 variable-consideration constraint or financing-component
+split, and no framework gate on impairment restoration. Each has since been
+implemented as product capability with its own schema, engine code, and
+tests: impairment restoration is now refused under US GAAP and capped at the
+unreversed loss under IFRS (`remeasurementPolicy`), and escalating tenant
+rents are levelled to straight-line income against the property billing
+pipeline by `levelLeaseRentStraightLine`. **Every case in the conformance
+register currently passes with no gaps and no partials.** The register's
+scope is stated in `engine/src/conformance/README.md`; standards outside it
+are not claimed in either direction.
 
 **Coverage gaps.** Browser end-to-end coverage is a smoke tier only. There is
 no automated segregation-of-duties conflict report, no automated

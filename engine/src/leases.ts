@@ -207,19 +207,89 @@ export function measureLesseeLease(args: {
 // Lessor arithmetic (pure)
 // ---------------------------------------------------------------------------
 
-export type LessorClassification = "sales_type" | "operating";
+export type LessorClassification = "sales_type" | "direct_financing" | "operating";
 
-/** Lessor classification mirrors the lessee criteria (ASC 842-30-25-1 /
- *  IFRS 16.61-63): any transfer-of-risks-and-rewards criterion → sales-type
- *  (finance under IFRS); otherwise operating. */
+/**
+ * Lessor classification (ASC 842-30-25-1 / IFRS 16.61-63): any
+ * transfer-of-risks-and-rewards criterion met by the lease itself → sales-type
+ * (a finance lease under IFRS). Failing that, ASC 842 classifies as DIRECT
+ * FINANCING when the present value of the payments PLUS a third-party residual
+ * value guarantee amounts to substantially all of the fair value — control
+ * passes economically but not through the lease terms alone, so selling profit
+ * is deferred rather than taken at commencement. Otherwise operating.
+ */
 export function classifyLessorLease(
-  inputs: LeaseClassificationInputs,
+  inputs: LeaseClassificationInputs & { thirdPartyResidualGuaranteePv?: string },
 ): { classification: LessorClassification; criteria: string[] } {
   const asLessee = classifyLease(inputs, "us_gaap");
-  return {
-    classification: asLessee.model === "finance" ? "sales_type" : "operating",
-    criteria: asLessee.criteria,
+  if (asLessee.model === "finance") {
+    return { classification: "sales_type", criteria: asLessee.criteria };
+  }
+  if (
+    inputs.thirdPartyResidualGuaranteePv != null &&
+    inputs.pvOfPayments != null &&
+    inputs.fairValue != null &&
+    cmp(inputs.fairValue, "0") > 0
+  ) {
+    const threshold = inputs.pvThresholdPercent ?? "90";
+    const combined = add(inputs.pvOfPayments, inputs.thirdPartyResidualGuaranteePv);
+    const lhs = toUnits(combined) * 100n * 10_000n;
+    const rhs = toUnits(inputs.fairValue) * toUnits(threshold);
+    if (lhs >= rhs) {
+      return {
+        classification: "direct_financing",
+        criteria: ["pv-plus-third-party-guarantee-substantially-all"],
+      };
+    }
+  }
+  return { classification: "operating", criteria: asLessee.criteria };
+}
+
+/**
+ * Lessor commencement for the two financing classifications (ASC 842-30-25-1,
+ * 30-30-1/2):
+ *  - sales-type: derecognise the asset, recognise the net investment, and take
+ *    selling profit (or loss) immediately;
+ *  - direct financing: selling PROFIT is deferred — presented as a reduction
+ *    of the net investment and earned into income over the term through the
+ *    discount rate — while a selling LOSS is recognised immediately.
+ * Balanced by construction either way.
+ */
+export function lessorCommencement(args: {
+  classification: Exclude<LessorClassification, "operating">;
+  netInvestment: string;
+  carryingAmount: string;
+  accounts: {
+    netInvestmentAccountId: string;
+    assetAccountId: string;
+    sellingProfitAccountId: string;
+    /** Contra to net investment; required for direct financing with a profit. */
+    deferredProfitAccountId?: string;
   };
+}): { sellingProfit: string; deferredProfit: string; lines: { accountId: string; amount: string }[] } {
+  const profit = add(args.netInvestment, neg(args.carryingAmount));
+  const isProfit = cmp(profit, "0") > 0;
+
+  if (args.classification === "sales_type" || !isProfit) {
+    const { sellingProfit, lines } = salesTypeCommencement({
+      netInvestment: args.netInvestment,
+      carryingAmount: args.carryingAmount,
+      accounts: args.accounts,
+    });
+    return { sellingProfit, deferredProfit: "0.0000", lines };
+  }
+
+  if (!args.accounts.deferredProfitAccountId) {
+    throw new LeaseError("direct financing with a selling profit requires a deferred-profit account");
+  }
+  const lines = [
+    { accountId: args.accounts.netInvestmentAccountId, amount: args.netInvestment },
+    { accountId: args.accounts.assetAccountId, amount: neg(args.carryingAmount) },
+    { accountId: args.accounts.deferredProfitAccountId, amount: neg(profit) },
+  ];
+  const residual = lines.reduce((a, l) => add(a, l.amount), "0");
+  if (!isZero(residual)) throw new LeaseError(`direct-financing commencement does not balance (${residual})`);
+  return { sellingProfit: "0.0000", deferredProfit: fromUnits(toUnits(profit)), lines };
 }
 
 export interface LessorLevelledPeriod {

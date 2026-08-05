@@ -1,6 +1,7 @@
 import { sql } from "drizzle-orm";
 import { db, withBypass, withOrg, withOrgTransaction } from "./db.ts";
-import { add, cmp, mulPercent, mulRatio, neg, normalizeMoney, sum, toUnits } from "./money.ts";
+import { add, cmp, fromUnits, mulPercent, mulRatio, neg, normalizeMoney, sum, toUnits } from "./money.ts";
+import { apportion } from "./revenue-recognition.ts";
 import { createSubscriptionInvoice } from "./subscription-billing.ts";
 import type { AdvancedBillingLine } from "./advanced-subscriptions.ts";
 
@@ -626,6 +627,191 @@ export async function applyLeaseEscalation(orgId: string, actorId: string, escal
 }
 
 function billingKey(leaseId: string, scheduleIds: string[]): string { return `rent:${leaseId}:${[...scheduleIds].sort().join(",")}`; }
+export interface LeaseLevellingResult {
+  leaseId: string;
+  leaseNumber: string;
+  /** Straight-line income attributable to completed billing periods. */
+  straightLineToDate: string;
+  /** Contractual rent billed for those same periods. */
+  billedToDate: string;
+  /** SL − billed: the rent receivable (positive) or deferred rent (negative). */
+  targetAccrual: string;
+  postedAccrual: string;
+  delta: string;
+  entryId: string | null;
+}
+
+/**
+ * Straight-line an operating lease's escalating rent (IFRS 16.81 /
+ * ASC 842-30-25-11): income is level over the term regardless of the billing
+ * pattern, so a lease billed 10k→14k over five years recognises 12k a year,
+ * accruing a rent receivable while billing lags and releasing it as billing
+ * catches up — returning to exactly zero at the end of the term.
+ *
+ * The mechanism: rebuild the FULL contractual base-rent stream (all charge
+ * rows including applied escalations, over the whole lease term), apportion
+ * the total across the billing periods (day-weighted for partial first/last
+ * periods, equal otherwise), and true the cumulative accrual up for every
+ * COMPLETED period as of `asOf`. Idempotent: the posted accrual is measured
+ * from the ledger, so a rerun with no change posts nothing.
+ *
+ * Requires a determinable term (`ends_on`) — an open-ended lease has no total
+ * to level. Accounts: income from the property's rent income account; the
+ * accrual sits on `orgs.settings.controlAccounts.straightLineRent`.
+ */
+export async function levelLeaseRentStraightLine(
+  orgId: string,
+  actorId: string | null,
+  opts: { asOf: string; onlyLeaseId?: string },
+): Promise<LeaseLevellingResult[]> {
+  await assertEnabled(db, orgId);
+  const asOf = validDate(opts.asOf, "Levelling date")!;
+
+  const slAccount = (await db.execute(sql`
+    select settings->'controlAccounts'->>'straightLineRent' as acct from orgs where id = ${orgId}
+  `)) as unknown as { rows: { acct: string | null }[] };
+  const straightLineRentAccountId = slAccount.rows[0]?.acct ?? null;
+
+  const leases = (await db.execute(sql`
+    select l.id, l.lease_number as "leaseNumber", l.starts_on as "startsOn", l.ends_on as "endsOn",
+           l.billing_day as "billingDay", l.tenant_id as "tenantId",
+           p.subsidiary_id as "subsidiaryId", p.location_id as "locationId", p.currency,
+           p.rent_income_account_id as "rentIncomeAccountId"
+      from property_leases l
+      join managed_properties p on p.id = l.property_id and p.org_id = l.org_id
+     where l.org_id = ${orgId} and l.status in ('active','notice') and l.ends_on is not null
+       and (${opts.onlyLeaseId ?? null}::uuid is null or l.id = ${opts.onlyLeaseId ?? null})
+     order by l.lease_number`)) as unknown as {
+    rows: {
+      id: string; leaseNumber: string; startsOn: string; endsOn: string; billingDay: number;
+      tenantId: string; subsidiaryId: string; locationId: string | null; currency: string;
+      rentIncomeAccountId: string | null;
+    }[];
+  };
+
+  const results: LeaseLevellingResult[] = [];
+  for (const lease of leases.rows) {
+    const charges = (await db.execute(sql`
+      select amount, frequency, effective_from as "effectiveFrom", effective_to as "effectiveTo"
+        from lease_charges
+       where org_id = ${orgId} and lease_id = ${lease.id} and charge_type = 'base_rent'
+       order by effective_from`)) as unknown as {
+      rows: { amount: string; frequency: "monthly" | "quarterly" | "annually" | "one_time"; effectiveFrom: string; effectiveTo: string | null }[];
+    };
+    if (charges.rows.length === 0) continue;
+
+    // The full contractual stream over the term, with a day-count weight per
+    // billing period (1 for full periods, the active/nominal ratio otherwise).
+    const rows: { periodEndsOn: string; amount: string; weight: string }[] = [];
+    for (const charge of charges.rows) {
+      if (charge.frequency === "one_time") continue; // not periodic rent
+      const step = charge.frequency === "monthly" ? 1 : charge.frequency === "quarterly" ? 3 : 12;
+      for (const period of leaseChargeSchedule({
+        amount: charge.amount, frequency: charge.frequency,
+        effectiveFrom: charge.effectiveFrom, effectiveTo: charge.effectiveTo,
+        leaseStartsOn: lease.startsOn, leaseEndsOn: lease.endsOn,
+        throughOn: lease.endsOn, billingDay: lease.billingDay,
+      })) {
+        const nominalStart = startOfMonth(period.periodStartsOn);
+        const nominalEnd = addDays(addMonths(nominalStart, step), -1);
+        const active = dayCount(period.periodStartsOn, period.periodEndsOn);
+        const nominal = dayCount(nominalStart, nominalEnd);
+        rows.push({
+          periodEndsOn: period.periodEndsOn,
+          amount: period.amount,
+          weight: active >= nominal ? "1" : mulRatio("1", BigInt(active), BigInt(nominal)),
+        });
+      }
+    }
+    if (rows.length === 0) continue;
+    rows.sort((a, b) => (a.periodEndsOn < b.periodEndsOn ? -1 : a.periodEndsOn > b.periodEndsOn ? 1 : 0));
+
+    const totalUnits = rows.reduce((a, r) => a + toUnits(r.amount), 0n);
+    const level = apportion(totalUnits, rows.map((r) => r.weight));
+    let straightLine = 0n;
+    let billed = 0n;
+    for (let i = 0; i < rows.length; i++) {
+      if (rows[i]!.periodEndsOn > asOf) break;
+      straightLine += level[i]!;
+      billed += toUnits(rows[i]!.amount);
+    }
+    const target = straightLine - billed;
+
+    const posted = (await db.execute(sql`
+      select coalesce(sum(jl.amount), 0)::text as accrual
+        from journal_lines jl
+        join journal_entries je on je.id = jl.entry_id and je.status in ('posted','reversed')
+       where jl.org_id = ${orgId} and je.origin = 'lease'
+         and je.custom->'propertyManagement'->>'levellingLeaseId' = ${lease.id}
+         and (${straightLineRentAccountId}::uuid is null or jl.account_id = ${straightLineRentAccountId}::uuid)
+    `)) as unknown as { rows: { accrual: string }[] };
+    const postedUnits = toUnits(posted.rows[0]?.accrual ?? "0");
+    const deltaUnits = target - postedUnits;
+
+    const base: LeaseLevellingResult = {
+      leaseId: lease.id,
+      leaseNumber: lease.leaseNumber,
+      straightLineToDate: fromUnits(straightLine),
+      billedToDate: fromUnits(billed),
+      targetAccrual: fromUnits(target),
+      postedAccrual: posted.rows[0]?.accrual ?? "0",
+      delta: fromUnits(deltaUnits),
+      entryId: null,
+    };
+
+    if (deltaUnits === 0n) {
+      results.push(base);
+      continue;
+    }
+    if (!straightLineRentAccountId) {
+      throw new PropertyManagementError(
+        "Configure the straight-line rent account (Company Settings → controlAccounts.straightLineRent) before levelling lease income",
+      );
+    }
+    if (!lease.rentIncomeAccountId) {
+      throw new PropertyManagementError(`Property for lease ${lease.leaseNumber} has no rent income account`);
+    }
+
+    const entryId = await withOrgTransaction(orgId, async () => {
+      const ctx = (await db.execute(sql`
+        select (select id from accounting_books where org_id = ${orgId} and is_primary limit 1) as book_id,
+               (select id from accounting_periods where org_id = ${orgId} and not is_adjustment
+                  and starts_on <= ${asOf} and ends_on >= ${asOf} limit 1) as period_id
+      `)) as unknown as { rows: { book_id: string | null; period_id: string | null }[] };
+      if (!ctx.rows[0]?.book_id) throw new PropertyManagementError("No primary accounting book");
+      if (!ctx.rows[0]?.period_id) throw new PropertyManagementError(`No accounting period covers ${asOf}`);
+
+      const amount = fromUnits(deltaUnits < 0n ? -deltaUnits : deltaUnits);
+      const memo = `Straight-line rent levelling — ${lease.leaseNumber} (as of ${asOf})`;
+      const entry = (await db.execute(sql`
+        insert into journal_entries(org_id,book_id,subsidiary_id,entry_number,posting_date,period_id,memo,status,origin,custom,created_by,updated_by)
+        values(${orgId},${ctx.rows[0].book_id},${lease.subsidiaryId},
+               ${`SLR-${lease.leaseNumber}-${asOf}-${crypto.randomUUID().slice(0, 8)}`},${asOf},${ctx.rows[0].period_id},
+               ${memo},'draft','lease',
+               ${JSON.stringify({ propertyManagement: { levellingLeaseId: lease.id, asOf } })}::jsonb,
+               ${actorId},${actorId}) returning id`)) as unknown as { rows: { id: string }[] };
+      const eid = entry.rows[0]!.id;
+      // delta > 0: income levelled ABOVE billing → DR accrual / CR income.
+      // delta < 0: billing ran ahead (or the accrual releases) → reverse.
+      const accrualLeg = deltaUnits > 0n ? amount : neg(amount);
+      const incomeLeg = neg(accrualLeg);
+      await db.execute(sql`
+        insert into journal_lines(org_id,entry_id,line_number,account_id,subsidiary_id,amount,currency,txn_amount,fx_rate,location_id,party_id,is_open_item,memo)
+        values(${orgId},${eid},1,${straightLineRentAccountId},${lease.subsidiaryId},${accrualLeg},${lease.currency},${accrualLeg},1,${lease.locationId},${lease.tenantId},false,${memo})`);
+      await db.execute(sql`
+        insert into journal_lines(org_id,entry_id,line_number,account_id,subsidiary_id,amount,currency,txn_amount,fx_rate,location_id,party_id,is_open_item,memo)
+        values(${orgId},${eid},2,${lease.rentIncomeAccountId},${lease.subsidiaryId},${incomeLeg},${lease.currency},${incomeLeg},1,${lease.locationId},${lease.tenantId},false,${memo})`);
+      await db.execute(sql`
+        update journal_entries set status='posted',posted_at=now(),posted_by=${actorId},updated_at=now(),updated_by=${actorId}
+         where org_id=${orgId} and id=${eid}`);
+      return eid;
+    });
+
+    results.push({ ...base, entryId });
+  }
+  return results;
+}
+
 export async function billDueLeaseCharges(orgId: string, actorId: string | null, asOf?: string, onlyLeaseId?: string, onlyPropertyId?: string): Promise<{ billed: number; invoices: string[] }> {
   const through = asOf ?? new Date().toISOString().slice(0, 10);
   await assertEnabled(db, orgId);
