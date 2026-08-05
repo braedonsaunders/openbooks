@@ -10,7 +10,12 @@
     "builtIn": "Built-in",
     "starterHint": "Printed when no custom template exists — duplicate it to customize",
     "duplicate": "Duplicate",
-    "isDefault": "Default"
+    "isDefault": "Default",
+    "type": "Record type",
+    "allTypes": "All record types",
+    "previewNote": "Read-only preview of the built-in starter design, rendered with sample data. Duplicate it to make an editable template.",
+    "previewFailed": "Could not render the preview",
+    "empty": "No templates match."
   },
   "editor": {
     "back": "PDF Templates",
