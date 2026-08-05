@@ -95,6 +95,17 @@ export async function postedEditProbe(world: SimOrg): Promise<InvariantResult> {
     rows: { total: string }[];
   };
   const unchanged = after.rows[0]?.total === doc.total;
+  if (!unchanged) {
+    // The mutation landed — that is the defect being reported, but the probe
+    // must not leave the org poisoned, or every later oracle pass re-fails on
+    // probe residue instead of on the product. Restore under the governed
+    // amend flag (the engine's own correction path).
+    await db.transaction(async (tx) => {
+      await tx.execute(sql`set local openbooks.amend = on`);
+      await tx.execute(sql`
+        update documents set total = ${doc.total} where id = ${doc.id} and org_id = ${world.orgId}`);
+    });
+  }
   if (rejected && unchanged) return ok();
   return fail(
     "adversarial-posted-edit",

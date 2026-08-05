@@ -9,7 +9,7 @@
 -- statement. Close the gap the same way the journal guards do: refuse the
 -- write unless the engine's governed amend path ('openbooks.amend') is active.
 --
--- Additive and forward-only (0002_auth_security pattern); the immutable 0001
+-- Additive and forward-only (forward-migration pattern); the immutable 0001
 -- baseline is not rewritten.
 
 create function public.posted_document_financial_guard() returns trigger
