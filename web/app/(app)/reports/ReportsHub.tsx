@@ -127,7 +127,7 @@ export function ReportsHub({
           const accent = ACCENTS[group.accent] ?? ACCENTS.slate!
           return (
             <section key={group.key} className="space-y-2.5">
-              <h2 className="px-0.5 text-xs font-semibold tracking-wider text-slate-400 uppercase dark:text-slate-500">
+              <h2 className="px-0.5 text-xs font-semibold tracking-wider text-slate-600 uppercase dark:text-slate-400">
                 {group.label}
               </h2>
               <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-4">
