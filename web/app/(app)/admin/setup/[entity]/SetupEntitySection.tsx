@@ -12,6 +12,7 @@ import {
   TableRow,
 } from '@openbooks/ui'
 import { ShowInactivesToggle } from '../../../../../components/show-inactives-toggle'
+import { ListFilterSelect } from '../../../../../components/list-filter-select'
 import { SearchInput } from '../../../../../components/search-input'
 import { Pagination } from '../../../../../components/pagination'
 import { mergeHref, parseListParams, pickString } from '../../../../../lib/list-params'
@@ -101,9 +102,22 @@ export async function SetupEntitySection({
   const searchColumns = entity.columns.map(
     (column) => sql`cast(${sql.raw(toSnake(column.key))} as text) ilike ${`%${list.q ?? ''}%`}`,
   )
+  // Enum dropdown filters (`f_<key>` params). Only registry-declared option
+  // values are honoured, so the raw param never reaches SQL unchecked.
+  const activeFilters = (entity.filters ?? []).flatMap((filter) => {
+    const value = pickString(sp[`f_${filter.key}`])
+    if (!value || !filter.options.some((option) => option.value === value)) return []
+    return [{ filter, value }]
+  })
+  const filterClauses = activeFilters.map(({ filter, value }) =>
+    filter.nullMatchesAll
+      ? sql`and (${sql.raw(toSnake(filter.key))} = ${value} or ${sql.raw(toSnake(filter.key))} is null)`
+      : sql`and ${sql.raw(toSnake(filter.key))} = ${value}`,
+  )
   const rowFilter = sql`where 1 = 1
     ${entity.orgScoped ? sql`and org_id = ${orgId}` : sql``}
     ${entity.hasActive && !showInactive ? sql`and is_active` : sql``}
+    ${filterClauses.length ? sql.join(filterClauses, sql` `) : sql``}
     ${list.q && searchColumns.length ? sql`and (${sql.join(searchColumns, sql` or `)})` : sql``}`
 
   const [rowsRes, countRes, refOptions] = await Promise.all([
@@ -163,6 +177,17 @@ export async function SetupEntitySection({
 
       <div className="flex flex-wrap items-center gap-2">
         <SearchInput placeholder={t('searchPlaceholder')} />
+        {(entity.filters ?? []).map((filter) => (
+          <ListFilterSelect
+            key={filter.key}
+            basePath={basePath}
+            currentParams={sp}
+            paramKey={`f_${filter.key}`}
+            label={t(`fields.${filter.key}`)}
+            allLabel={t('filterAll')}
+            options={filter.options.map((option) => ({ value: option.value, label: t(option.labelKey) }))}
+          />
+        ))}
         {entity.hasActive ? <ShowInactivesToggle basePath={basePath} currentParams={sp} /> : null}
       </div>
 

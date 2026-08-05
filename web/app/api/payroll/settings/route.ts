@@ -2,7 +2,9 @@ import { NextResponse } from 'next/server'
 import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/db.ts'
 import { payrollSettings, seedPayrollComponents, usPayrollConfig } from '@openbooks/engine/src/payroll-run.ts'
-import { packSlotState, PAYROLL_COUNTRY_PACKS, setPackSlotAccount } from '@openbooks/engine/src/payroll/packs.ts'
+import {
+  packSlotState, PAYROLL_COUNTRY_PACKS, PayrollPackError, setPackSlotAccount, uninstallPayrollPack,
+} from '@openbooks/engine/src/payroll/packs.ts'
 import { US_STATES } from '@openbooks/engine/src/payroll/us/rates.ts'
 import { guardFeaturePermission } from '../../../../lib/feature-gates'
 import { canonicalDecimal, compareDecimal } from '../../../../lib/exact-decimal'
@@ -220,6 +222,21 @@ export async function POST(req: Request) {
     settings.countries = [...new Set([...countries, country])]
     await writePayrollBlob(gate.user.orgId, gate.user.id, settings)
     return NextResponse.json({ ok: true })
+  }
+  if (body.action === 'uninstall-pack') {
+    const country = String(body.country ?? '')
+    if (!(country in PAYROLL_COUNTRY_PACKS)) {
+      return NextResponse.json({ error: 'unknown country pack' }, { status: 422 })
+    }
+    try {
+      const result = await uninstallPayrollPack(gate.user.orgId, gate.user.id, country)
+      return NextResponse.json({ ok: true, ...result })
+    } catch (error) {
+      if (error instanceof PayrollPackError) {
+        return NextResponse.json({ error: error.message }, { status: 409 })
+      }
+      throw error
+    }
   }
   return NextResponse.json({ error: 'unknown action' }, { status: 400 })
 }

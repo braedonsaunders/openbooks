@@ -4,7 +4,8 @@ import { useMemo, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { useLocale, useTranslations } from 'next-intl'
 import { toast } from 'sonner'
-import { BadgeCheck, Check, Download, Globe2 } from 'lucide-react'
+import { BadgeCheck, Check, Download, Globe2, Trash2 } from 'lucide-react'
+import { confirmDialog } from '../../../../../lib/confirm'
 import {
   Badge,
   Button,
@@ -63,6 +64,37 @@ export function PayrollCountryPacks({
     }
   }
 
+  async function uninstall(country: 'CA' | 'US') {
+    const ok = await confirmDialog({
+      title: t('uninstallTitle'),
+      message: t('uninstallConfirm'),
+      confirmLabel: t('uninstall'),
+      tone: 'danger',
+    })
+    if (!ok) return
+    setBusy(country)
+    try {
+      const res = await fetch('/api/payroll/settings', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'uninstall-pack', country }),
+      })
+      const j = await res.json()
+      if (!res.ok) throw new Error(j.error ?? 'failed')
+      setInstalled((current) => {
+        const next = new Set(current)
+        next.delete(country)
+        return next
+      })
+      toast.success(t('uninstallSuccess'))
+      router.refresh()
+    } catch (e) {
+      toast.error((e as Error).message)
+    } finally {
+      setBusy(null)
+    }
+  }
+
   const packCard = (country: 'CA' | 'US', packKey: 'canada' | 'us', bullets: React.ReactNode[]) => {
     const isInstalled = installed.has(country)
     return (
@@ -101,13 +133,20 @@ export function PayrollCountryPacks({
             ) : (
               <span />
             )}
-            <Button
-              variant={isInstalled ? 'outline' : 'default'}
-              onClick={() => install(country)}
-              disabled={busy !== null}
-            >
-              <Download size={14} aria-hidden /> {isInstalled ? t('reinstall') : t('install')}
-            </Button>
+            <div className="flex items-center gap-2">
+              {isInstalled ? (
+                <Button variant="ghost" onClick={() => uninstall(country)} disabled={busy !== null}>
+                  <Trash2 size={14} aria-hidden /> {t('uninstall')}
+                </Button>
+              ) : null}
+              <Button
+                variant={isInstalled ? 'outline' : 'default'}
+                onClick={() => install(country)}
+                disabled={busy !== null}
+              >
+                <Download size={14} aria-hidden /> {isInstalled ? t('reinstall') : t('install')}
+              </Button>
+            </div>
           </div>
         </CardContent>
       </Card>

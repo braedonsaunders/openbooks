@@ -2336,6 +2336,10 @@
         "t4a020": "T4A 020 — Self-employed commissions",
         "t4a048": "T4A 048 — Fees for services",
         "t4a022": "T4A 022 — Income tax deducted"
+      },
+      "payComponentCountry": {
+        "CA": "Canada",
+        "US": "United States"
       }
     },
     "payroll": {
@@ -3075,7 +3079,8 @@
         },
         "installError": "Payroll was enabled, but the country pack could not be installed. You can install it from Payroll setup → Country packs."
       }
-    }
+    },
+    "filterAll": "All"
   },
   "flows": {
     "title": "Flows",
