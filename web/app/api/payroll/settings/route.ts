@@ -120,6 +120,20 @@ export async function PUT(req: Request) {
   if ('wagesTo' in body) {
     settings.wagesTo = body.wagesTo === 'labor_clearing' ? 'labor_clearing' : 'expense'
   }
+  if ('t4Transmitter' in body) {
+    const cfg = body.t4Transmitter
+    if (typeof cfg !== 'object' || cfg === null || Array.isArray(cfg)) {
+      return NextResponse.json({ error: 'invalid t4Transmitter' }, { status: 422 })
+    }
+    const keys = ['bn', 'transmitterNumber', 'name', 'contactName', 'contactEmail', 'contactPhone']
+    const clean: Record<string, string> = {}
+    for (const key of keys) {
+      const v = (cfg as Record<string, unknown>)[key]
+      if (v != null && typeof v !== 'string') return NextResponse.json({ error: `invalid ${key}` }, { status: 422 })
+      if (typeof v === 'string' && v.trim()) clean[key] = v.trim()
+    }
+    settings.t4Transmitter = clean
+  }
   if ('countries' in body) {
     const countries = body.countries
     if (

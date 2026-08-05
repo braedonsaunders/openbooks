@@ -163,6 +163,11 @@ export const employeePayrollProfiles = pgTable(
     authorizedProvincialCredits: money("authorized_provincial_credits"),
     cppExempt: boolean("cpp_exempt").notNull().default(false),
     eiExempt: boolean("ei_exempt").notNull().default(false),
+    /** Sealed SIN/SSN (envelope encryption, like vendor TINs) for T4/W-2
+     * filing; last 3 digits shown for identify-without-reveal. The workbench
+     * view excludes the ciphertext. */
+    sinEncrypted: text("sin_encrypted"),
+    sinLast3: text("sin_last3"),
     /** Claim code E / CRA letter / W-4 "Exempt": no income tax withholding
      * (statutory contributions still deducted). */
     taxExempt: boolean("tax_exempt").notNull().default(false),
