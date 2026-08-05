@@ -4,6 +4,8 @@ import { db } from "@openbooks/engine/src/db.ts";
 import { evaluateFormula } from "./formula";
 import { getMoneyFormatter } from '../money-server'
 
+export { openItems } from './open-items'
+
 /**
  * Shared cash-engine core — the primitives behind BOTH the read-only analytics
  * cashflow forecast (analytics/cashflow) and the operational domain cockpits
@@ -226,60 +228,6 @@ export function resolveAsOf(asOfDate?: string): string {
  */
 function subScope(col: ReturnType<typeof sql>, subIds?: string[]) {
   return subIds && subIds.length > 0 ? sql` and ${col} = any(${`{${subIds.join(",")}}`}::uuid[])` : sql``;
-}
-
-export async function openItems(orgId: string, side: Side, asOf: string, subIds?: string[]): Promise<OpenItem[]> {
-  const acctType = side === "ar" ? "asset_receivable" : "liability_payable";
-  const signFilter = side === "ap" ? sql`jl.amount < 0` : sql`jl.amount > 0`;
-  // The CASH cockpit deals in payable/receivable DOCUMENTS — the things a
-  // pay run pays and a collections run collects. Journal legs on the control
-  // accounts (month-end accruals, opening balances, reversals) are real GL and
-  // belong to aging/reconciliation surfaces, but they are NOT payables: an
-  // accrual journal must never appear in "Open payables" or the pay-run
-  // planner. Settlements drain from BOTH application roles (a journal-netted
-  // bill is just as paid as a payment-settled one). A corrected document may
-  // retain reversed historical entries forever; posted_entry_id identifies
-  // the one current projection that operational aging is allowed to count.
-  const kindFilter = side === "ap"
-    ? sql`d.kind in ('vendor_bill', 'expense_report')`
-    : sql`d.kind = 'customer_invoice'`;
-  const r = (await db.execute(sql`
-    with oi as (
-      select jl.id, jl.party_id, jl.entry_id, je.posting_date as tran_date, jl.due_date,
-             je.source_document_id as doc_id,
-             abs(jl.amount) - coalesce((
-               select sum(x.amount) from applications x
-                where x.org_id = ${orgId}
-                  and (x.to_line_id = jl.id or x.from_line_id = jl.id)
-                  and x.unapplied_at is null
-             ), 0) as remaining
-        from journal_lines jl
-        join journal_entries je on je.id = jl.entry_id and je.org_id = ${orgId} and je.status = 'posted'
-        join accounts a on a.id = jl.account_id and a.org_id = ${orgId}
-       where jl.is_open_item and a.type = ${acctType} and ${signFilter}
-         and je.posting_date <= ${asOf}${subScope(sql`jl.subsidiary_id`, subIds)}
-    )
-    select oi.id, oi.entry_id, oi.doc_id, d.kind as doc_kind, d.document_number as doc_number, oi.party_id,
-           coalesce(p.display_name, 'Unspecified') as party_name,
-           oi.tran_date, oi.due_date, oi.remaining
-      from oi
-      join documents d on d.id = oi.doc_id and d.org_id = ${orgId}
-       and d.posted_entry_id = oi.entry_id and d.status = 'posted' and ${kindFilter}
-      left join parties p on p.id = oi.party_id
-     where oi.remaining > 0.005
-  `)) as any;
-  return (r.rows as any[]).map((x) => ({
-    id: x.id,
-    entryId: x.entry_id,
-    docKind: x.doc_kind ?? null,
-    docNumber: x.doc_number ?? null,
-    docId: x.doc_id ?? null,
-    partyId: x.party_id,
-    partyName: x.party_name,
-    tranDate: parseISO(x.tran_date),
-    dueDate: x.due_date ? parseISO(x.due_date) : null,
-    remaining: Number(x.remaining),
-  }));
 }
 
 /**
