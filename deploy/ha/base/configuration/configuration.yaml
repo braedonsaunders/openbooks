@@ -4,6 +4,7 @@ metadata:
   name: openbooks
   labels:
     app.kubernetes.io/name: openbooks
+    app.kubernetes.io/component: configuration
 data:
   NODE_ENV: production
   HOSTNAME: "0.0.0.0"

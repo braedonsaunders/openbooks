@@ -10,7 +10,8 @@ test("fresh installations have one canonical baseline followed by ordered forwar
     .filter((file) => file.endsWith(".sql"))
     .sort();
   assert.equal(generated[0], "0001_baseline.sql");
-  assert.ok(generated.includes("0002_auth_security.sql"));
+  assert.ok(generated.includes("0129_auth_security.sql"));
+  assert.ok(generated.includes("0130_backup_run_concurrency.sql"));
   assert.ok(generated.every((file) => /^\d{4}_[a-z0-9_]+\.sql$/.test(file)));
   assert.deepEqual(
     readdirSync("schema/migrations").filter((file) => file.endsWith(".sql")).sort(),
@@ -24,7 +25,7 @@ test("fresh installations have one canonical baseline followed by ordered forwar
 
 test("authentication hardening is an additive migration", () => {
   const authMigration = readFileSync(
-    "schema/migrations/generated/0002_auth_security.sql",
+    "schema/migrations/generated/0129_auth_security.sql",
     "utf8",
   );
   assert.match(authMigration, /create table public\.auth_sessions/i);

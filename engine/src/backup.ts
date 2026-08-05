@@ -10,6 +10,7 @@ import { createGzip } from "node:zlib";
 import {
   DeleteObjectCommand,
   GetObjectCommand,
+  HeadObjectCommand,
   PutObjectCommand,
 } from "@aws-sdk/client-s3";
 import { sql } from "drizzle-orm";
@@ -19,12 +20,14 @@ import { assertUuid, loadCatalog, PARENT_FILTER } from "./sandbox/catalog.ts";
 import {
   BACKUP_FORMAT,
   BACKUP_FORMAT_VERSION,
+  BACKUP_DATA_KEY_CHECK_PLAINTEXT,
   DURABLE_USER_AUTH_BACKUP_TABLES,
   ORGLESS_CHILD_BACKUP_TABLES,
   ORG_SCOPED_BACKUP_EXCLUSIONS,
   backupSchemaFingerprint,
   type BackupQueryable,
 } from "./backup-format.ts";
+import { sealSecret } from "./secrets.ts";
 
 /**
  * Organization backups.
@@ -42,7 +45,7 @@ import {
  * exactly.
  *
  * Format (one JSON object per line):
- *   line 1:  {"format":"openbooks-backup","version":2,"orgId":...,"createdAt":...,"schemaSha256":...}
+ *   line 1:  {"format":"openbooks-backup","version":3,"orgId":...,"createdAt":...,"schemaSha256":...,"dataKeyCheck":...}
  *   rows:    {"t":"<table>","r":{...row...}}
  *   last:    {"meta":{"tables":[{name,rows}...],"totalRows":N,"completedAt":...}}
  *
@@ -140,8 +143,8 @@ async function assertForeignKeyClosure(
     `select constraint_row.conname as constraint_name,
             source.relname as source_table,
             target.relname as target_table,
-            array_agg(source_column.attname order by key_row.position) as source_columns,
-            array_agg(target_column.attname order by key_row.position) as target_columns
+            array_agg(source_column.attname::text order by key_row.position) as source_columns,
+            array_agg(target_column.attname::text order by key_row.position) as target_columns
        from pg_constraint constraint_row
        join pg_class source on source.oid = constraint_row.conrelid
        join pg_class target on target.oid = constraint_row.confrelid
@@ -273,7 +276,9 @@ export async function streamOrgBackup(orgId: string, sink: Writable): Promise<Ba
       ...childTables.map((name) => ({ name, where: PARENT_FILTER[name](orgId) })),
       ...presentAuthTables.rows.map(({ table_name: name }) => ({
         name,
-        where: `t.user_id in (select id from public.users where org_id = '${orgId}')`,
+        where:
+          `t.user_id in (select id from public.users where org_id = '${orgId}')` +
+          (name === "auth_mfa_factors" ? " and t.enabled_at is not null" : ""),
       })),
     ];
     for (const step of plan) {
@@ -293,6 +298,7 @@ export async function streamOrgBackup(orgId: string, sink: Writable): Promise<Ba
         orgId,
         createdAt: new Date().toISOString(),
         schemaSha256,
+        dataKeyCheck: sealSecret(BACKUP_DATA_KEY_CHECK_PLAINTEXT),
       }) + "\n",
     );
 
@@ -369,6 +375,10 @@ export async function getBackupObject(key: string) {
   return getS3Client().send(new GetObjectCommand({ Bucket: s3Bucket(), Key: key }));
 }
 
+export async function headBackupObject(key: string) {
+  return getS3Client().send(new HeadObjectCommand({ Bucket: s3Bucket(), Key: key }));
+}
+
 export async function deleteBackupObject(key: string): Promise<void> {
   await getS3Client().send(new DeleteObjectCommand({ Bucket: s3Bucket(), Key: key }));
 }
@@ -414,6 +424,32 @@ export async function executeBackupRun(runId: string): Promise<void> {
   const run = claimed.rows[0];
   if (!run) return; // already claimed/finished — redelivery
 
+  // A large organization can legitimately need longer than the scheduler's
+  // stale-run horizon. Keep the ledger lease fresh throughout export, hashing,
+  // upload, and finalization so reconciliation never races healthy work.
+  let heartbeatBusy = false;
+  const heartbeatTimer = setInterval(() => {
+    if (heartbeatBusy) return;
+    heartbeatBusy = true;
+    void db.execute(sql`
+      update backup_runs set updated_at = now()
+       where id = ${run.id} and status = 'running'
+    `).catch((error) => {
+      console.error(`[backup] run ${run.id}: heartbeat failed:`, (error as Error).message);
+    }).finally(() => {
+      heartbeatBusy = false;
+    });
+  }, 60_000);
+  heartbeatTimer.unref?.();
+
+  try {
+  let objectKey: string | null = null;
+  let fileName: string | null = null;
+  let stats: BackupExportStats | null = null;
+  let byteSize: number | null = null;
+  let sha256: string | null = null;
+  let uploadAttempted = false;
+  let completed = false;
   try {
     if (!s3Enabled) {
       throw new Error("S3 object storage is not configured (S3_ENDPOINT/S3_BUCKET/…)");
@@ -423,13 +459,10 @@ export async function executeBackupRun(runId: string): Promise<void> {
       rows: { name: string }[];
     };
     const orgName = orgRes.rows[0]?.name ?? "org";
-    const fileName = `${backupFileBaseName(orgName)}.json.gz`;
-    const objectKey = backupObjectKey(run.org_id, run.id);
+    fileName = `${backupFileBaseName(orgName)}.json.gz`;
+    objectKey = backupObjectKey(run.org_id, run.id);
 
     const tmp = await mkdtemp(join(tmpdir(), "ob-backup-"));
-    let stats: BackupExportStats;
-    let byteSize: number;
-    let sha256: string;
     try {
       const tmpFile = join(tmp, "backup.ndjson.gz");
       const hash = createHash("sha256");
@@ -446,6 +479,20 @@ export async function executeBackupRun(runId: string): Promise<void> {
       byteSize = (await stat(tmpFile)).size;
       sha256 = hash.digest("hex");
 
+      // Persist a deterministic upload intent before touching S3. A worker
+      // crash can then reconcile this exact key/hash instead of leaking an
+      // anonymous object or re-exporting a different snapshot.
+      const intended = (await db.execute(sql`
+        update backup_runs
+           set object_key = ${objectKey}, file_name = ${fileName},
+               byte_size = ${byteSize}, sha256 = ${sha256},
+               table_count = ${stats.tables.length}, row_count = ${stats.totalRows},
+               updated_at = now()
+         where id = ${run.id} and status = 'running'
+         returning id`)) as unknown as { rows: { id: string }[] };
+      if (!intended.rows[0]) throw new Error("backup run lost its running claim before upload");
+
+      uploadAttempted = true;
       await putBackupObject({
         key: objectKey,
         body: createReadStream(tmpFile),
@@ -457,49 +504,111 @@ export async function executeBackupRun(runId: string): Promise<void> {
       await rm(tmp, { recursive: true, force: true });
     }
 
-    await db.execute(sql`
+    const finalized = (await db.execute(sql`
       update backup_runs
          set status = 'completed', completed_at = now(), updated_at = now(),
-             object_key = ${objectKey}, file_name = ${fileName},
-             byte_size = ${byteSize!}, sha256 = ${sha256!},
-             table_count = ${stats!.tables.length}, row_count = ${stats!.totalRows},
              error = null
-       where id = ${run.id}`);
-    await db.execute(sql`
-      update backup_policies set last_run_at = now(), updated_at = now()
-       where org_id = ${run.org_id}`);
-
-    await auditBackupEvent({
-      orgId: run.org_id,
-      tableName: "backup_runs",
-      rowId: run.id,
-      actorId: run.actor_id,
-      changes: {
-        event: "backup_completed",
-        kind: run.kind,
-        fileName,
-        byteSize: byteSize!,
-        sha256: sha256!,
-        rowCount: stats!.totalRows,
-        tableCount: stats!.tables.length,
-      },
-    });
-
-    await rotateBackups(run.org_id);
+       where id = ${run.id} and status = 'running'
+       returning id`)) as unknown as { rows: { id: string }[] };
+    if (!finalized.rows[0]) throw new Error("backup run could not be finalized from running state");
+    completed = true;
   } catch (err) {
     const message = ((err as Error).message || String(err)).slice(0, 2000);
     console.error(`[backup] run ${runId} failed:`, message);
+    // A finalization response can be lost after PostgreSQL committed. Re-read
+    // state before deleting anything so an ambiguous network error cannot turn
+    // a completed ledger row into a missing object.
+    let state: { status: string } | undefined;
+    try {
+      const stateResult = (await db.execute(sql`
+        select status from backup_runs where id = ${runId}`)) as unknown as {
+        rows: { status: string }[];
+      };
+      state = stateResult.rows[0];
+    } catch (stateError) {
+      console.error(
+        `[backup] run ${runId}: database state unavailable; leaving upload intent for scheduler reconciliation:`,
+        (stateError as Error).message,
+      );
+      return;
+    }
+    if (state?.status === "completed") {
+      completed = true;
+    } else if (state?.status === "running") {
+      let cleaned = !uploadAttempted || !objectKey;
+      if (!cleaned && objectKey) {
+        try {
+          await deleteBackupObject(objectKey);
+          cleaned = true;
+        } catch (cleanupError) {
+          console.error(
+            `[backup] run ${runId}: upload cleanup failed; scheduler will reconcile ${objectKey}:`,
+            (cleanupError as Error).message,
+          );
+        }
+      }
+      if (cleaned) {
+        await db.execute(sql`
+          update backup_runs
+             set status = 'failed', object_key = null, error = ${message},
+                 completed_at = now(), updated_at = now()
+           where id = ${runId} and status = 'running'`);
+        await auditBackupEvent({
+          orgId: run.org_id,
+          tableName: "backup_runs",
+          rowId: run.id,
+          actorId: run.actor_id,
+          changes: { event: "backup_failed", kind: run.kind, error: message },
+        });
+      } else {
+        await db.execute(sql`
+          update backup_runs
+             set error = ${`upload/finalization uncertain; awaiting reconciliation: ${message}`}, updated_at = now()
+           where id = ${runId} and status = 'running'`);
+      }
+    }
+  }
+
+  if (!completed || !stats || !fileName || byteSize === null || !sha256) return;
+
+  await auditBackupEvent({
+    orgId: run.org_id,
+    tableName: "backup_runs",
+    rowId: run.id,
+    actorId: run.actor_id,
+    changes: {
+      event: "backup_completed",
+      kind: run.kind,
+      fileName,
+      byteSize,
+      sha256,
+      rowCount: stats.totalRows,
+      tableCount: stats.tables.length,
+    },
+  });
+  try {
     await db.execute(sql`
-      update backup_runs
-         set status = 'failed', error = ${message}, completed_at = now(), updated_at = now()
-       where id = ${runId}`);
+      update backup_policies set last_run_at = now(), updated_at = now()
+       where org_id = ${run.org_id}`);
+  } catch (error) {
+    console.error(`[backup] run ${runId}: policy timestamp update failed after completion:`, (error as Error).message);
+  }
+  try {
+    await rotateBackups(run.org_id);
+  } catch (error) {
+    // Retention is post-completion maintenance. It must never relabel or hide a
+    // verified backup; the next run (or an operator) can retry rotation.
+    console.error(`[backup] run ${runId}: retention failed after completion (will retry):`, (error as Error).message);
     await auditBackupEvent({
       orgId: run.org_id,
       tableName: "backup_runs",
       rowId: run.id,
       actorId: run.actor_id,
-      changes: { event: "backup_failed", kind: run.kind, error: message },
+      changes: { event: "backup_retention_failed", kind: run.kind, error: (error as Error).message.slice(0, 2000) },
     });
+  }
+  } finally {
+    clearInterval(heartbeatTimer);
   }
 }
 

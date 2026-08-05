@@ -54,13 +54,18 @@ The repository implements defense-in-depth controls including:
   login, or a role it can assume, can defeat tenant isolation;
 - server-side RBAC and permission checks;
 - scoped, hashed API keys;
-- scrypt password hashing and signed, server-side revocable session cookies;
+- asynchronous, versioned scrypt password hashing with legacy compatibility and
+  successful-login rehash, bounded to four active jobs and 32 queued jobs per
+  web process, plus signed, server-side revocable session cookies;
 - PostgreSQL-backed login throttling, temporary lockout, and authentication
   events that store keyed email/network hashes rather than raw identifiers;
-- TOTP MFA with encrypted secrets, anti-replay steps, and hashed one-time
-  recovery codes;
+- TOTP MFA with password-reauthenticated, session-bound, expiring enrollment,
+  anti-replay steps, encrypted secrets, and salted one-time recovery-code hashes;
 - OIDC authorization-code SSO with state, nonce, PKCE, discovery issuer checks,
   asymmetric JWKS verification, and verified-email existing-user linking;
+- request-scoped nonce Content Security Policy in production, clickjacking and
+  MIME-sniffing defenses, restrictive browser permissions, referrer controls,
+  cross-origin opener/resource controls, and HSTS for TLS deployments;
 - encryption of stored connection secrets with `OPENBOOKS_DATA_KEY`;
 - database constraints for balanced postings and closed periods;
 - a SELECT-only database role for the SQL workbench;
@@ -78,8 +83,12 @@ Production operators must:
 - replace every example credential and keep `.env` files out of version control;
 - terminate TLS at a trusted reverse proxy;
 - restrict database, Redis, and object-storage ports to private networks;
-- protect and rotate `SESSION_SECRET`, `OPENBOOKS_DATA_KEY`,
-  `OPENBOOKS_INTERNAL_TOKEN`, database credentials, and provider secrets;
+- generate `SESSION_SECRET` from at least 32 random bytes and rotate it as a
+  coordinated all-replica cutover;
+- protect `OPENBOOKS_DATA_KEY` and rotate it only with a decrypt-and-re-encrypt
+  migration for existing encrypted records;
+- protect and rotate `OPENBOOKS_INTERNAL_TOKEN`, database credentials, and
+  provider secrets;
 - back up PostgreSQL, object storage, and the deployment configuration;
 - test restoration and upgrades on isolated infrastructure;
 - restrict administrative access;
@@ -95,9 +104,18 @@ need an operator-designed production architecture.
 When enabling `OPENBOOKS_TRUST_PROXY`, the proxy must remove client-supplied
 `X-Forwarded-For`, `X-Real-IP`, and `CF-Connecting-IP` headers before setting
 trusted values. Otherwise leave it disabled; identity lockout remains active.
+An always-on, high deployment-wide password-attempt ceiling skips unknown-user
+KDF work after saturation while remaining fail-open for real accounts, so it
+cannot lock out the whole deployment. It is deliberately coarse and is not a
+replacement for an edge/WAF rate policy on internet-exposed deployments.
 OIDC deployments must use HTTPS, protect the optional client secret, register
 only the documented callback URI, and configure the provider to return a
 verified email claim. OIDC does not create or reactivate users.
+
+`SESSION_SECRET` rotation invalidates all browser sessions and in-progress OIDC
+flows and resets the privacy-hash namespace used by the short-lived login
+limiter; obsolete state is automatically pruned. Versioned salted MFA recovery
+hashes are independent of that key. Coordinate rotation across every replica.
 
 ## Disclosure
 

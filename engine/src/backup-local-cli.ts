@@ -16,6 +16,7 @@ import { Transform } from "node:stream";
 import { pipeline } from "node:stream/promises";
 import { createGzip } from "node:zlib";
 import { streamOrgBackup } from "./backup.ts";
+import { BACKUP_FORMAT_VERSION } from "./backup-format.ts";
 
 const args = new Map(
   process.argv
@@ -66,7 +67,7 @@ try {
   const manifest = {
     format: "openbooks-local-backup-manifest",
     version: 1,
-    backupFormatVersion: 2,
+    backupFormatVersion: BACKUP_FORMAT_VERSION,
     orgId,
     createdAt: new Date().toISOString(),
     file: out,

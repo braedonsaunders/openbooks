@@ -12,6 +12,10 @@ import { streamOrgBackup } from "./backup.ts";
 import { restoreOrgBackup } from "./backup-restore.ts";
 import { db } from "./db.ts";
 import { sealSecret, unsealSecret } from "./secrets.ts";
+import {
+  sealSecret as sealEmailSecret,
+  unsealSecret as unsealEmailSecret,
+} from "@openbooks/emails";
 import { createScratchOrg, createScratchUser, dropScratchOrg } from "./test-fixtures.ts";
 
 const ENABLED = !!process.env.OPENBOOKS_DB_URL && !!process.env.OPENBOOKS_DATA_KEY && process.env.OPENBOOKS_RESTORE_DRILL === "1";
@@ -20,6 +24,7 @@ test("offline drill exports, removes, restores, and revalidates an organization"
   const root = await mkdtemp(join(tmpdir(), "openbooks-restore-drill-"));
   const archive = join(root, "org.json.gz");
   const wrongSchemaArchive = join(root, "org-wrong-schema.json.gz");
+  const wrongDataKeyArchive = join(root, "org-wrong-data-key.json.gz");
   const source = await createScratchOrg();
   const external = await createScratchOrg();
   try {
@@ -30,11 +35,24 @@ test("offline drill exports, removes, restores, and revalidates an organization"
     const issuer = `https://restore-drill-${randomUUID()}.example.test`;
     const subject = `subject-${randomUUID()}`;
     const mfaSecret = "JBSWY3DPEHPK3PXP";
+    const emailCredential = `restore-email-${randomUUID()}`;
+    const sealedEmailCredential = sealEmailSecret(emailCredential);
+    await db.execute(sql`
+      update orgs
+         set settings = jsonb_set(coalesce(settings, '{}'::jsonb), '{email}', ${JSON.stringify({
+           enabled: true,
+           provider: "resend",
+           fromEmail: "restore@scratch.test",
+           keyCiphertext: sealedEmailCredential.ciphertext,
+           keyNonce: sealedEmailCredential.nonce,
+         })}::jsonb)
+       where id = ${source.orgId}`);
     await db.execute(sql`
       insert into auth_mfa_factors
         (id, user_id, secret_encrypted, recovery_code_hashes, enabled_at)
       values
-        (${factorId}, ${authUserId}, ${sealSecret(mfaSecret)}, ${JSON.stringify(["recovery-hash"])}::jsonb, now())`);
+        (${factorId}, ${authUserId}, ${sealSecret(mfaSecret)},
+         ${JSON.stringify([`s1:${"a".repeat(32)}:${"b".repeat(64)}`])}::jsonb, now())`);
     await db.execute(sql`
       insert into auth_oidc_identities
         (id, issuer, subject, user_id, email_at_link, last_login_at)
@@ -84,11 +102,32 @@ test("offline drill exports, removes, restores, and revalidates an organization"
     await writeFile(wrongSchemaArchive, wrongSchemaBytes, { mode: 0o600 });
     const wrongSchemaSha256 = createHash("sha256").update(wrongSchemaBytes).digest("hex");
 
+    const archiveLines = gunzipSync(await readFile(archive)).toString("utf8").split("\n");
+    const tamperedHeader = JSON.parse(archiveLines[0]!) as { dataKeyCheck: string };
+    tamperedHeader.dataKeyCheck = `${tamperedHeader.dataKeyCheck.slice(0, -1)}${
+      tamperedHeader.dataKeyCheck.endsWith("A") ? "B" : "A"
+    }`;
+    archiveLines[0] = JSON.stringify(tamperedHeader);
+    const wrongDataKeyBytes = gzipSync(archiveLines.join("\n"));
+    await writeFile(wrongDataKeyArchive, wrongDataKeyBytes, { mode: 0o600 });
+    const wrongDataKeySha256 = createHash("sha256").update(wrongDataKeyBytes).digest("hex");
+
     await dropScratchOrg(source.orgId);
     const absent = (await db.execute(sql`select count(*)::int as count from orgs where id = ${source.orgId}`)) as unknown as {
       rows: { count: number }[];
     };
     assert.equal(absent.rows[0]?.count, 0);
+
+    await assert.rejects(
+      restoreOrgBackup({
+        archivePath: wrongDataKeyArchive,
+        expectedSha256: wrongDataKeySha256,
+        expectedOrgId: source.orgId,
+        connectionString: process.env.OPENBOOKS_DB_URL!,
+        testOnlyAllowNonemptyTarget: true,
+      }),
+      /backup data-key verification failed/,
+    );
 
     await assert.rejects(
       restoreOrgBackup({
@@ -120,17 +159,33 @@ test("offline drill exports, removes, restores, and revalidates an organization"
     assert.equal(report.rowsRestored, exported.totalRows);
     assert.equal(report.validation.databaseConstraints, "passed");
     assert.equal(report.validation.mfaCiphertexts, "passed");
+    assert.equal(report.validation.mfaRecoveryHashes, "passed");
+    assert.equal(report.validation.sessionSecretEmailConfig, "passed");
     assert.equal(report.validation.postedLedgerBalance, "passed");
 
     const restored = (await db.execute(sql`
-      select o.name,
+      select o.name, o.settings -> 'email' as email,
              (select count(*)::int from accounts where org_id = ${source.orgId}) account_count,
              (select count(*)::int from parties where org_id = ${source.orgId}) party_count
         from orgs o where o.id = ${source.orgId}
-    `)) as unknown as { rows: { name: string; account_count: number; party_count: number }[] };
+    `)) as unknown as {
+      rows: {
+        name: string;
+        email: { keyCiphertext: string; keyNonce: string };
+        account_count: number;
+        party_count: number;
+      }[];
+    };
     assert.match(restored.rows[0]?.name ?? "", /^Scratch /);
     assert.ok(restored.rows[0]!.account_count >= 15);
     assert.equal(restored.rows[0]!.party_count, 2);
+    assert.equal(
+      unsealEmailSecret({
+        ciphertext: restored.rows[0]!.email.keyCiphertext,
+        nonce: restored.rows[0]!.email.keyNonce,
+      }),
+      emailCredential,
+    );
 
     const restoredAuth = (await db.execute(sql`
       select

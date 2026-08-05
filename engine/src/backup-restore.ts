@@ -10,13 +10,20 @@ import pg from "pg";
 import {
   BACKUP_FORMAT,
   BACKUP_FORMAT_VERSION,
+  BACKUP_DATA_KEY_CHECK_PLAINTEXT,
   DURABLE_USER_AUTH_BACKUP_TABLES,
   ORGLESS_BACKUP_TABLES,
   ORG_SCOPED_BACKUP_EXCLUSIONS,
   backupSchemaFingerprint,
   type BackupHeaderV2,
+  type BackupHeaderV3,
 } from "./backup-format.ts";
 import { unsealSecret } from "./secrets.ts";
+import {
+  unsealSecret as unsealEmailSecret,
+  validateStoredEmailConfig,
+  type RawEmailConfig,
+} from "@openbooks/emails";
 
 const TABLE_NAME_RE = /^[a-z0-9_]+$/;
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
@@ -33,7 +40,7 @@ type LegacyHeader = {
 export interface BackupArchiveInspection {
   archivePath: string;
   sha256: string;
-  header: BackupHeaderV2 | LegacyHeader;
+  header: BackupHeaderV3 | BackupHeaderV2 | LegacyHeader;
   tables: { name: string; rows: number }[];
   totalRows: number;
   spoolDir: string;
@@ -60,6 +67,8 @@ export interface RestoreReport {
     databaseConstraints: "passed";
     tenantReferences: "passed";
     mfaCiphertexts: "passed" | "reset";
+    mfaRecoveryHashes: "passed" | "reset";
+    sessionSecretEmailConfig: "passed" | "not-present";
     postedLedgerBalance: "passed";
   };
 }
@@ -91,6 +100,7 @@ export async function inspectBackupArchive(args: {
   expectedOrgId: string;
   spoolDir: string;
   allowLegacyV1?: boolean;
+  allowLegacyV2WithoutKeyCheck?: boolean;
 }): Promise<BackupArchiveInspection> {
   if (!args.archivePath.startsWith("/")) throw new Error("backup archive path must be absolute");
   if (!SHA256_RE.test(args.expectedSha256)) throw new Error("expected SHA-256 must be 64 lowercase hexadecimal characters");
@@ -106,7 +116,7 @@ export async function inspectBackupArchive(args: {
     input: createReadStream(args.archivePath).pipe(createGunzip()),
     crlfDelay: Infinity,
   });
-  let header: BackupHeaderV2 | LegacyHeader | null = null;
+  let header: BackupHeaderV3 | BackupHeaderV2 | LegacyHeader | null = null;
   let footer: { tables: { name: string; rows: number }[]; totalRows: number } | null = null;
   let lineNumber = 0;
   let currentTable: string | null = null;
@@ -124,11 +134,16 @@ export async function inspectBackupArchive(args: {
         if (!plainObject(candidate) || candidate.format !== BACKUP_FORMAT) {
           throw new Error("not an OpenBooks organization backup");
         }
-        if (candidate.version !== 1 && candidate.version !== BACKUP_FORMAT_VERSION) {
+        if (candidate.version !== 1 && candidate.version !== 2 && candidate.version !== BACKUP_FORMAT_VERSION) {
           throw new Error(`unsupported OpenBooks backup version ${String(candidate.version)}`);
         }
         if (candidate.version === 1 && !args.allowLegacyV1) {
           throw new Error("legacy format-v1 backup has no schema fingerprint; pass the explicit legacy override only after proving source/target schema parity");
+        }
+        if (candidate.version === 2 && !args.allowLegacyV2WithoutKeyCheck) {
+          throw new Error(
+            "legacy format-v2 backup has no data-key canary; pass --allow-legacy-v2-without-key-check only after independently proving the source OPENBOOKS_DATA_KEY",
+          );
         }
         if (typeof candidate.orgId !== "string" || candidate.orgId !== args.expectedOrgId) {
           throw new Error("backup organization does not match --org");
@@ -137,12 +152,18 @@ export async function inspectBackupArchive(args: {
           throw new Error("backup header has an invalid createdAt timestamp");
         }
         if (
-          candidate.version === BACKUP_FORMAT_VERSION &&
+          (candidate.version === 2 || candidate.version === BACKUP_FORMAT_VERSION) &&
           (typeof candidate.schemaSha256 !== "string" || !SHA256_RE.test(candidate.schemaSha256))
         ) {
-          throw new Error("format-v2 backup header has an invalid schema fingerprint");
+          throw new Error(`format-v${candidate.version} backup header has an invalid schema fingerprint`);
         }
-        header = candidate as unknown as BackupHeaderV2 | LegacyHeader;
+        if (
+          candidate.version === BACKUP_FORMAT_VERSION &&
+          (typeof candidate.dataKeyCheck !== "string" || !candidate.dataKeyCheck.startsWith("enc:v1:"))
+        ) {
+          throw new Error("format-v3 backup header has no valid data-key verification canary");
+        }
+        header = candidate as unknown as BackupHeaderV3 | BackupHeaderV2 | LegacyHeader;
         continue;
       }
       if (footer) throw new Error(`data found after backup footer at line ${lineNumber}`);
@@ -292,23 +313,76 @@ async function validateDurableAuthOwnership(
   }
 }
 
-async function validateMfaCiphertexts(client: pg.PoolClient, orgId: string): Promise<void> {
-  const factors = await client.query<{ secret_encrypted: string }>(
-    `select factor.secret_encrypted
+async function validateMfaMaterial(
+  client: pg.PoolClient,
+  orgId: string,
+  validateCiphertext: boolean,
+): Promise<void> {
+  const factors = await client.query<{ secret_encrypted: string; recovery_code_hashes: unknown }>(
+    `select factor.secret_encrypted, factor.recovery_code_hashes
        from auth_mfa_factors factor
        join users user_row on user_row.id = factor.user_id
       where user_row.org_id = $1`,
     [orgId],
   );
   for (const factor of factors.rows) {
+    if (
+      !Array.isArray(factor.recovery_code_hashes) ||
+      factor.recovery_code_hashes.some(
+        (hash) => typeof hash !== "string" || !/^s1:[0-9a-f]{32}:[0-9a-f]{64}$/i.test(hash),
+      )
+    ) {
+      throw new Error("restored MFA factor contains an unsupported recovery-code hash format");
+    }
     // Never return or log the plaintext. Successful authenticated decryption is
     // enough to prove the configured OPENBOOKS_DATA_KEY is the source key.
-    if (unsealSecret(factor.secret_encrypted) === null) {
+    if (validateCiphertext && unsealSecret(factor.secret_encrypted) === null) {
       throw new Error(
-        "restored MFA ciphertext cannot be decrypted with OPENBOOKS_DATA_KEY; supply the source data key or repeat the isolated restore with --reset-mfa",
+        "restored MFA ciphertext is corrupt despite a valid backup data-key canary",
       );
     }
   }
+}
+
+/**
+ * Email-provider credentials predate OPENBOOKS_DATA_KEY and are AES-GCM sealed
+ * with a key derived from SESSION_SECRET. Validate that separate recovery key
+ * while the restore is still transactional; a wrong key must not leave a
+ * seemingly successful organization whose outbound email is unusable.
+ */
+async function validateSessionSecretEmailConfig(
+  client: pg.PoolClient,
+  orgId: string,
+): Promise<"passed" | "not-present"> {
+  const result = await client.query<{ email: unknown }>(
+    "select settings -> 'email' as email from orgs where id = $1",
+    [orgId],
+  );
+  const email = result.rows[0]?.email;
+  if (email === null || email === undefined) return "not-present";
+  if (!plainObject(email)) {
+    throw new Error("restored organization email configuration is malformed");
+  }
+  try {
+    validateStoredEmailConfig(email as RawEmailConfig);
+  } catch {
+    throw new Error("restored organization email configuration is malformed");
+  }
+  const ciphertext = email.keyCiphertext;
+  const nonce = email.keyNonce;
+  const hasCiphertext = typeof ciphertext === "string" && ciphertext.trim().length > 0;
+  const hasNonce = typeof nonce === "string" && nonce.trim().length > 0;
+  if (!hasCiphertext && !hasNonce) return "not-present";
+  if (
+    !hasCiphertext ||
+    !hasNonce ||
+    unsealEmailSecret({ ciphertext: ciphertext as string, nonce: nonce as string }) === null
+  ) {
+    throw new Error(
+      "restored email-provider credential cannot be decrypted; SESSION_SECRET must match the source deployment",
+    );
+  }
+  return "passed";
 }
 
 async function insertionOrder(client: pg.PoolClient, tableNames: readonly string[]): Promise<string[]> {
@@ -447,7 +521,8 @@ export async function restoreOrgBackup(args: {
   expectedRowCount?: number;
   expectedTableCount?: number;
   allowLegacyV1?: boolean;
-  /** Explicit recovery path when the source OPENBOOKS_DATA_KEY is unavailable. */
+  allowLegacyV2WithoutKeyCheck?: boolean;
+  /** Explicit factor revocation; this never bypasses source-key verification. */
   resetMfaFactors?: boolean;
   /** Integration-drill escape hatch. Never exposed by the operator CLI. */
   testOnlyAllowNonemptyTarget?: boolean;
@@ -462,12 +537,21 @@ export async function restoreOrgBackup(args: {
       expectedOrgId: args.expectedOrgId,
       spoolDir,
       allowLegacyV1: args.allowLegacyV1,
+      allowLegacyV2WithoutKeyCheck: args.allowLegacyV2WithoutKeyCheck,
     });
     if (args.expectedRowCount !== undefined && args.expectedRowCount !== inspection.totalRows) {
       throw new Error(`manifest row count ${args.expectedRowCount} does not match archive ${inspection.totalRows}`);
     }
     if (args.expectedTableCount !== undefined && args.expectedTableCount !== inspection.tables.length) {
       throw new Error(`manifest table count ${args.expectedTableCount} does not match archive ${inspection.tables.length}`);
+    }
+    if (
+      inspection.header.version === BACKUP_FORMAT_VERSION &&
+      unsealSecret(inspection.header.dataKeyCheck) !== BACKUP_DATA_KEY_CHECK_PLAINTEXT
+    ) {
+      throw new Error(
+        "backup data-key verification failed; OPENBOOKS_DATA_KEY is missing, wrong, or the archive canary was tampered",
+      );
     }
     const client = await pool.connect();
     let deploymentLock = false;
@@ -501,13 +585,14 @@ export async function restoreOrgBackup(args: {
         throw new Error(`backup table catalog differs from target schema (missing: ${missing.join(", ") || "none"}; unknown: ${unknown.join(", ") || "none"})`);
       }
       const targetSchemaSha256 = await backupSchemaFingerprint(client, targetTables);
-      if (inspection.header.version === BACKUP_FORMAT_VERSION && inspection.header.schemaSha256 !== targetSchemaSha256) {
+      if (inspection.header.version !== 1 && inspection.header.schemaSha256 !== targetSchemaSha256) {
         throw new Error(`backup schema fingerprint ${inspection.header.schemaSha256} does not match target ${targetSchemaSha256}; restore the source version first, then upgrade`);
       }
       const order = await insertionOrder(client, targetTables);
       const rowCounts = new Map(inspection.tables.map((table) => [table.name, table.rows]));
       let interruptedBackupRunsClosed = 0;
       let mfaFactorsReset = 0;
+      let sessionSecretEmailConfig: "passed" | "not-present" = "not-present";
 
       await client.query("begin");
       try {
@@ -557,7 +642,9 @@ export async function restoreOrgBackup(args: {
         interruptedBackupRunsClosed = interrupted.rowCount ?? 0;
         await validateTenantReferences(client, args.expectedOrgId);
         await validateDurableAuthOwnership(client, inspection, args.expectedOrgId);
+        sessionSecretEmailConfig = await validateSessionSecretEmailConfig(client, args.expectedOrgId);
         if (sourceTables.includes("auth_mfa_factors")) {
+          await validateMfaMaterial(client, args.expectedOrgId, !args.resetMfaFactors);
           if (args.resetMfaFactors) {
             const reset = await client.query(
               `delete from auth_mfa_factors factor
@@ -566,8 +653,6 @@ export async function restoreOrgBackup(args: {
               [args.expectedOrgId],
             );
             mfaFactorsReset = reset.rowCount ?? 0;
-          } else {
-            await validateMfaCiphertexts(client, args.expectedOrgId);
           }
         }
         const invalidLedger = await client.query<{ count: string }>(`
@@ -611,7 +696,7 @@ export async function restoreOrgBackup(args: {
         sourceSha256: inspection.sha256,
         sourceCreatedAt: inspection.header.createdAt,
         sourceFormatVersion: inspection.header.version,
-        schemaSha256: inspection.header.version === BACKUP_FORMAT_VERSION ? inspection.header.schemaSha256 : null,
+        schemaSha256: inspection.header.version === 1 ? null : inspection.header.schemaSha256,
         tablesRestored: inspection.tables.length,
         rowsRestored: inspection.totalRows,
         interruptedBackupRunsClosed,
@@ -621,10 +706,12 @@ export async function restoreOrgBackup(args: {
         validation: {
           archiveCounts: "passed",
           targetEmpty: args.testOnlyAllowNonemptyTarget ? "test-override" : "passed",
-          schemaFingerprint: inspection.header.version === BACKUP_FORMAT_VERSION ? "passed" : "legacy-override",
+          schemaFingerprint: inspection.header.version === 1 ? "legacy-override" : "passed",
           databaseConstraints: "passed",
           tenantReferences: "passed",
           mfaCiphertexts: args.resetMfaFactors ? "reset" : "passed",
+          mfaRecoveryHashes: args.resetMfaFactors ? "reset" : "passed",
+          sessionSecretEmailConfig,
           postedLedgerBalance: "passed",
         },
       };

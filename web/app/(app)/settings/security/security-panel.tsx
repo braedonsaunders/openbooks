@@ -71,11 +71,27 @@ export function SecurityPanel() {
           </div>
 
           {!status?.enabled && !setup ? (
-            <Button disabled={busy || status === null} onClick={() => void act(async () => {
-              setSetup(await jsonRequest("/api/auth/mfa", { method: "POST" }));
-            })}>
-              Set up authenticator
-            </Button>
+            <div className="space-y-3">
+              <div className="space-y-1.5">
+                <Label htmlFor="setup-password">Confirm your current password</Label>
+                <Input
+                  id="setup-password"
+                  type="password"
+                  autoComplete="current-password"
+                  value={password}
+                  onChange={(event) => setPassword(event.target.value)}
+                />
+              </div>
+              <Button disabled={busy || status === null || !password} onClick={() => void act(async () => {
+                setSetup(await jsonRequest("/api/auth/mfa", {
+                  method: "POST",
+                  body: JSON.stringify({ password }),
+                }));
+                setPassword("");
+              })}>
+                Set up authenticator
+              </Button>
+            </div>
           ) : null}
 
           {setup && !status?.enabled ? (
@@ -84,6 +100,7 @@ export function SecurityPanel() {
                 <p className="text-sm font-medium text-slate-900 dark:text-white">Authenticator setup key</p>
                 <code className="mt-2 block break-all font-mono text-sm text-teal-700 dark:text-teal-300">{setup.secret}</code>
                 <p className="mt-2 text-xs text-slate-500">Add this key as a time-based (TOTP), six-digit account.</p>
+                <p className="mt-1 text-xs text-slate-500">This setup expires in 10 minutes and after five incorrect confirmations.</p>
               </div>
               <div className="space-y-1.5">
                 <Label htmlFor="confirm-mfa">Confirm the six-digit code</Label>

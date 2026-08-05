@@ -1,6 +1,11 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { isSessionRecordActive } from "./lib/auth-session-store";
+import { requireSessionSecret } from "./lib/auth-secret-policy";
 import { parseSessionTokenFormat, sessionSigningInput } from "./lib/auth-token-format";
+import {
+  buildContentSecurityPolicy,
+  createContentSecurityPolicyNonce,
+} from "./lib/content-security-policy";
 import { isPublicPath } from "./lib/proxy-policy";
 
 /**
@@ -31,22 +36,38 @@ async function validSignature(token: string, secret: string) {
 
 export async function proxy(req: NextRequest) {
   const { pathname } = req.nextUrl;
+  const nonce = createContentSecurityPolicyNonce();
+  const contentSecurityPolicy = buildContentSecurityPolicy(
+    nonce,
+    process.env.NODE_ENV === "development",
+  );
+  const requestHeaders = new Headers(req.headers);
+  requestHeaders.set("x-nonce", nonce);
+  // Next derives the nonce for its own framework/Flight scripts from the
+  // incoming CSP header. x-nonce is retained for our explicit <Script>.
+  requestHeaders.set("Content-Security-Policy", contentSecurityPolicy);
+  const next = () => NextResponse.next({ request: { headers: requestHeaders } });
+  const secured = <T,>(response: NextResponse<T>) => {
+    response.headers.set("Content-Security-Policy", contentSecurityPolicy);
+    return response;
+  };
+
   if (isPublicPath(pathname)) {
-    return NextResponse.next();
+    return secured(next());
   }
   const token = req.cookies.get("ob_session")?.value;
-  const secret = process.env.SESSION_SECRET ?? "";
-  if (token && secret) {
+  const secret = requireSessionSecret(process.env);
+  if (token) {
     const parsed = await validSignature(token, secret);
-    if (parsed && await isSessionRecordActive(token, parsed)) return NextResponse.next();
+    if (parsed && await isSessionRecordActive(token, parsed)) return secured(next());
   }
   if (pathname.startsWith("/api/")) {
-    return NextResponse.json({ error: "unauthorized" }, { status: 401 });
+    return secured(NextResponse.json({ error: "unauthorized" }, { status: 401 }));
   }
   const url = req.nextUrl.clone();
   url.pathname = "/login";
   url.searchParams.set("next", pathname);
-  return NextResponse.redirect(url);
+  return secured(NextResponse.redirect(url));
 }
 
 export const config = { matcher: ["/((?!_next/static|_next/image).*)"] };

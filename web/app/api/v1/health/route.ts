@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { getWorkerHeartbeat } from "@openbooks/jobs";
 import { assertS3Ready, s3Enabled } from "@openbooks/engine/src/file-storage.ts";
 import { pool } from "@openbooks/engine/src/db.ts";
+import { requireSessionSecret } from "../../../../lib/auth-secret-policy";
 
 export const runtime = "nodejs";
 
@@ -56,6 +57,14 @@ async function dependencyReadiness(): Promise<Record<"database" | "redis" | "obj
  * deployment-level worker telemetry for monitoring.
  */
 export async function GET(req: Request) {
+  try {
+    requireSessionSecret(process.env);
+  } catch {
+    return NextResponse.json(
+      { status: "error", service: "openbooks-api", version, error: "invalid authentication configuration" },
+      { status: 503 },
+    );
+  }
   const include = new URL(req.url).searchParams.get("include");
   if (!include) {
     return NextResponse.json({ status: "ok", service: "openbooks-api", version });

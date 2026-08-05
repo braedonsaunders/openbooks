@@ -1,6 +1,7 @@
 import './globals.css'
 import type { Metadata, Viewport } from 'next'
 import Script from 'next/script'
+import { headers } from 'next/headers'
 import { NextIntlClientProvider } from 'next-intl'
 import { getLocale, getMessages, getTranslations } from 'next-intl/server'
 import { Toaster } from 'sonner'
@@ -21,7 +22,6 @@ export async function generateMetadata(): Promise<Metadata> {
 export const viewport: Viewport = {
   width: 'device-width',
   initialScale: 1,
-  maximumScale: 1,
   viewportFit: 'cover',
   themeColor: '#0f766e',
 }
@@ -41,12 +41,14 @@ const HEAD_INIT = `(function(){try{var t=localStorage.getItem('theme')||'system'
 
 export default async function RootLayout({ children }: { children: React.ReactNode }) {
   // Locale: users.locale ?? orgs.settings.defaultLocale ?? 'en' (i18n/request.ts).
-  const [locale, messages] = await Promise.all([getLocale(), getMessages()])
+  const [locale, messages, requestHeaders] = await Promise.all([getLocale(), getMessages(), headers()])
+  const nonce = requestHeaders.get('x-nonce') ?? undefined
   return (
     <html lang={locale} className="h-full" data-application-name="openbooks" suppressHydrationWarning>
       <head>
         <Script
           id="openbooks-head-init"
+          nonce={nonce}
           strategy="beforeInteractive"
           dangerouslySetInnerHTML={{ __html: HEAD_INIT }}
         />

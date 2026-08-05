@@ -4,8 +4,10 @@ import {
   decodeBase32,
   encodeBase32,
   generateRecoveryCodes,
+  hashRecoveryCode,
   normalizeRecoveryCode,
   totpCode,
+  verifyRecoveryCodeHash,
   verifyTotpCode,
 } from "./auth-totp";
 
@@ -34,4 +36,16 @@ test("recovery codes are normalized without reducing entropy", () => {
   assert.equal(new Set(codes).size, 10);
   assert.match(codes[0], /^[A-Z2-7]{4}-[A-Z2-7]{4}-[A-Z2-7]{4}$/);
   assert.equal(normalizeRecoveryCode(codes[0].toLowerCase()), codes[0].replaceAll("-", ""));
+});
+
+test("recovery codes use salted hashes independent of the session signing key", () => {
+  const userId = "018f0000-0000-7000-8000-000000000001";
+  const code = "ABCDEFGH2345";
+  const first = hashRecoveryCode(userId, code);
+  const second = hashRecoveryCode(userId, code);
+  assert.notEqual(first, second);
+  assert.match(first, /^s1:[0-9a-f]{32}:[0-9a-f]{64}$/);
+  assert.equal(verifyRecoveryCodeHash(userId, code, first), true);
+  assert.equal(verifyRecoveryCodeHash(userId, "ABCDEFGH2346", first), false);
+  assert.equal(verifyRecoveryCodeHash("018f0000-0000-7000-8000-000000000002", code, first), false);
 });

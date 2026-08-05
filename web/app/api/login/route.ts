@@ -7,7 +7,11 @@ import {
   SESSION_COOKIE,
   SESSION_TTL_S,
 } from "../../../lib/auth";
-import { authRequestContext, useSecureCookies } from "../../../lib/auth-policy";
+import {
+  authRequestContext,
+  publicLoginFailure,
+  useSecureCookies,
+} from "../../../lib/auth-policy";
 
 export const runtime = "nodejs";
 
@@ -37,16 +41,17 @@ export async function POST(req: Request) {
   const wait = Math.max(0, 500 - (Date.now() - startedAt));
   if (wait) await new Promise((resolve) => setTimeout(resolve, wait));
 
-  if (result.kind === "rate_limited") {
+  if (result.kind === "rate_limited" || result.kind === "invalid") {
+    const failure = publicLoginFailure(result);
     return NextResponse.json(
-      { error: "invalid credentials", retryAfter: result.retryAfter },
-      { status: 429, headers: { "Retry-After": String(result.retryAfter), "Cache-Control": "no-store" } },
-    );
-  }
-  if (result.kind === "invalid") {
-    return NextResponse.json(
-      { error: "invalid credentials", retryAfter: result.retryAfter || undefined },
-      { status: 401, headers: { "Cache-Control": "no-store" } },
+      failure.body,
+      {
+        status: failure.status,
+        headers: {
+          ...(failure.retryAfterHeader ? { "Retry-After": failure.retryAfterHeader } : {}),
+          "Cache-Control": "no-store",
+        },
+      },
     );
   }
   if (result.kind === "mfa_required") {

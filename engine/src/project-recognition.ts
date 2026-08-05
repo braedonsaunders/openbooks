@@ -1,5 +1,6 @@
 import { sql } from "drizzle-orm";
 import { db, inDbTransaction } from "./db.ts";
+import { now } from "./clock.ts";
 import { add, mulRate, neg, sum, isZero } from "./money.ts";
 
 /**
@@ -199,8 +200,10 @@ export async function reverseProjectGlEntryWithinTransaction(
   if (reason.length < 5 || reason.length > 500) {
     throw new Error("a reversal reason between 5 and 500 characters is required");
   }
+  // Business-meaningful default date: honours a pinned simulation clock
+  // (clock.ts) so a reversal lands in the simulated period, not today's.
   const reversalDate =
-    reversalDateInput ?? new Date().toISOString().slice(0, 10);
+    reversalDateInput ?? now().toISOString().slice(0, 10);
   if (
     !/^\d{4}-\d{2}-\d{2}$/.test(reversalDate) ||
     Number.isNaN(Date.parse(`${reversalDate}T00:00:00Z`))
@@ -404,7 +407,7 @@ export async function postProjectLaborCost(orgId: string, actorId: string, timeE
         memo: "Labor cost",
       }));
       lines.push({ accountId: accts.laborClearing, amount: neg(group.total), memo: "Labor clearing" });
-      const postingDate = group.postingDate || new Date().toISOString().slice(0, 10);
+      const postingDate = group.postingDate || now().toISOString().slice(0, 10);
       const entryId = await postProjectGlEntryWithinTransaction(tx, {
         orgId,
         actorId,
