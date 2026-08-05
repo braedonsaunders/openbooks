@@ -933,9 +933,16 @@ function StubDrawer({
                     className="rounded-md border border-slate-300 bg-white px-2 py-1.5 text-sm dark:border-slate-700 dark:bg-slate-900"
                   >
                     <option value="">{t('wizard.adjust.component')}</option>
-                    {components.map((c) => (
-                      <option key={c.id} value={c.id}>{c.name}</option>
-                    ))}
+                    <optgroup label={t('wizard.adjust.earnings')}>
+                      {components.filter((c) => c.kind === 'earning').map((c) => (
+                        <option key={c.id} value={c.id}>{c.name}</option>
+                      ))}
+                    </optgroup>
+                    <optgroup label={t('wizard.adjust.deductions')}>
+                      {components.filter((c) => c.kind === 'deduction').map((c) => (
+                        <option key={c.id} value={c.id}>{c.name}</option>
+                      ))}
+                    </optgroup>
                   </select>
                   <input
                     aria-label={t('wizard.adjust.amount')}
