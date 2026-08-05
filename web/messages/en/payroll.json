@@ -124,8 +124,6 @@
       "postedTitle": "Pay run posted",
       "postedHint": "{number} is on the ledger.",
       "viewJournal": "View journal entry",
-      "bankFile": "Create bank file",
-      "bankFileDone": "Bank file downloaded.",
       "remittanceTitle": "Remittance summary",
       "remittanceHint": "Credits by account — what this run now owes.",
       "netPay": "Net pay to employees",

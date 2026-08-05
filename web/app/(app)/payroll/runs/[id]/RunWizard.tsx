@@ -14,7 +14,6 @@ import {
   CheckCircle2,
   ChevronRight,
   FileDown,
-  Landmark,
   Loader2,
   Send,
 } from 'lucide-react'
@@ -443,7 +442,7 @@ export function RunWizard(props: {
           stubs={props.stubs}
           adjustments={props.adjustments}
           components={props.adjustableComponents}
-          canAdjust={props.canRun && run.run_status !== 'committed'}
+          canAdjust={props.canRun && docDraft && run.run_status !== 'committed'}
           onAdjust={adjust}
           previousNet={props.previousNet}
           calcErrors={calcErrors}
@@ -1170,32 +1169,6 @@ function FinishStep({
   fmt: (v: string | number | null | undefined) => string
 }) {
   const t = useTranslations('payroll')
-  const [bankBusy, setBankBusy] = useState(false)
-
-  async function createBankFile() {
-    setBankBusy(true)
-    try {
-      const res = await fetch(`/api/payroll/runs/${run.document_id}/bank-file`, { method: 'POST' })
-      if (!res.ok) {
-        const j = await res.json().catch(() => ({}))
-        throw new Error(j.error ?? 'failed')
-      }
-      const blob = await res.blob()
-      const disposition = res.headers.get('Content-Disposition') ?? ''
-      const match = /filename="?([^";]+)"?/.exec(disposition)
-      const link = document.createElement('a')
-      link.href = URL.createObjectURL(blob)
-      link.download = match?.[1] ?? `${run.document_number}-bank-file.txt`
-      link.click()
-      URL.revokeObjectURL(link.href)
-      toast.success(t('wizard.finish.bankFileDone'))
-    } catch (e) {
-      toast.error((e as Error).message)
-    } finally {
-      setBankBusy(false)
-    }
-  }
-
   if (!committed && !posted) {
     return (
       <div className="rounded-xl border border-slate-200 bg-white px-4 py-10 text-center text-sm text-slate-500 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-400">
@@ -1232,10 +1205,6 @@ function FinishStep({
           </div>
         </div>
         <div className="flex items-center gap-2">
-          <Button size="sm" variant="outline" onClick={createBankFile} disabled={bankBusy}>
-            {bankBusy ? <Loader2 size={14} className="animate-spin" aria-hidden /> : <Landmark size={14} aria-hidden />}
-            {t('wizard.finish.bankFile')}
-          </Button>
           {posted && run.posted_entry_id && (
             <Button asChild size="sm" variant="outline">
               <Link href={`/journal?entry=${run.posted_entry_id}` as never}>
