@@ -4,9 +4,9 @@ Each row is one requirement of a published accounting standard, encoded as an ex
 
 The wording of each requirement is our own restatement. Verify a row by reading the cited paragraph in an authoritative copy of the standard.
 
-**39 passing · 0 failing · 1 gaps · 0 not run**
+**40 passing · 0 failing · 0 gaps · 0 not run**
 
-2026-08-05T00:24:42.826Z
+2026-08-05T00:41:14.533Z
 
 ## ASC 360
 
@@ -15,13 +15,7 @@ The wording of each requirement is our own restatement. Verify a row by reading 
 | **An impaired asset is written down to fair value and the loss is recognised immediately**<br><sub>The carrying amount falls to fair value by exactly the shortfall, and the whole shortfall is charged to profit or loss in the period — no part of it is deferred or spread.</sub> | ASC 360 360-10-35-17<br>IAS 16.63 | PASS | Implemented (different mechanism) |
 | **The written-down amount becomes the new cost basis for future depreciation**<br><sub>Future depreciation runs off the impaired carrying amount, so the asset is never depreciated back through an amount that has already been written off.</sub> | ASC 360 360-10-35-20<br>IAS 36.63 | PASS | Implemented |
 | **Derecognition removes cost and accumulated depreciation and recognises the gain or loss**<br><sub>On sale, the asset's cost and its accumulated depreciation both leave the balance sheet entirely and the profit or loss recognised is exactly proceeds less carrying amount — a disposal cannot leave a stub balance behind.</sub> | ASC 360 360-10-40-5<br>IAS 16.71<br>IAS 16.68 | PASS | Implemented |
-| **US GAAP prohibits reversing an impairment of a held-and-used asset**<br><sub>Under US GAAP a recovery in fair value after impairment produces no entry; under IFRS a reversal is recognised but is capped at the carrying amount that would have existed had no impairment been recognised.</sub> | ASC 360 360-10-35-20<br>IAS 36.114 | GAP | Not implemented |
-
-### ASC 360 — shortfalls
-
-**ppe-us-gaap-prohibits-restoration — US GAAP prohibits reversing an impairment of a held-and-used asset**
-
-> `remeasureAsset` accepts any new carrying value in either direction. Writing an impaired asset back up is permitted, which IFRS requires but US GAAP forbids, and nothing records whether a given write-up is a permitted IAS 16 revaluation, a permitted IAS 36 reversal, or a prohibited ASC 360 restoration. The organisation already carries an `asc740`/`ias12` reporting-framework flag for income tax; long-lived assets need the same flag to gate this, plus retention of the historical impairment so an IAS 36 reversal can be capped at what depreciated cost would have been.
+| **US GAAP prohibits reversing an impairment of a held-and-used asset**<br><sub>The same fair-value recovery after an impairment is refused outright under US GAAP — the impaired amount is the new cost basis — and recognised under IFRS only up to the unreversed impairment, so the carrying amount can never climb back above depreciated historical cost through the remeasurement path. The answer comes from the organisation's configured reporting framework.</sub> | ASC 360 360-10-35-20<br>IAS 36.114<br>IAS 36.117 | PASS | Implemented |
 
 ## ASC 606
 
@@ -92,13 +86,7 @@ The wording of each requirement is our own restatement. Verify a row by reading 
 | --- | --- | --- | --- |
 | **IFRS applies one lessee model to every lease**<br><sub>The identical lease produces a front-loaded charge under IFRS and a flat charge under US GAAP — the classification step is skipped entirely under IFRS, and a dual-reporting entity gets each framework's answer from the same source data by switching the configured framework.</sub> | IFRS 16.22<br>IFRS 16.31 | PASS | Implemented |
 | **Short-term and low-value leases may be kept off balance sheet**<br><sub>An elected short-term lease recognises no asset or liability at commencement and charges rent straight to expense as paid — and the election is validated against eligibility, so a thirteen-month lease cannot quietly take it.</sub> | IFRS 16.5<br>ASC 842 842-20-25-2 | PASS | Implemented |
-| **A lessor classifies each lease and accounts for it accordingly**<br><sub>A lessor tests each lease against the classification criteria; an operating lease's escalating rent levels to straight-line income with the accrual returning to exactly zero over the term; a sales-type lease derecognises the asset and takes selling profit at commencement.</sub> | IFRS 16.61<br>IFRS 16.81<br>ASC 842 842-30-25-1 | PASS | Partial |
-
-### IFRS 16 — shortfalls
-
-**lease-lessor-classification — A lessor classifies each lease and accounts for it accordingly**
-
-> Lessor classification, straight-line levelling of escalating rents, and sales-type commencement (derecognition plus selling profit) are engine capabilities. The property-management tenant-billing pipeline does not yet post the levelling accrual automatically — rent invoices recognise as billed unless the levelled schedule from the lease module is applied. Direct-financing deferral of selling profit is not modelled separately from sales-type.
+| **A lessor classifies each lease and accounts for it accordingly**<br><sub>A lessor tests each lease against the classification criteria — sales-type, direct financing (selling profit deferred into the net investment), or operating; an operating lease's escalating rent levels to straight-line income with the accrual returning to exactly zero over the term, and the levelling accrual is posted against the property billing pipeline by the levelling service, not left as a manual adjustment.</sub> | IFRS 16.61<br>IFRS 16.81<br>ASC 842 842-30-25-1 | PASS | Implemented |
 
 ## Reproducing this
 

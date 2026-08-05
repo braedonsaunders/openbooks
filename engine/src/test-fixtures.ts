@@ -372,6 +372,18 @@ export async function dropScratchOrg(orgId: string): Promise<void> {
       "notifications",
       "role_assignments",
       "app_roles",
+      // Lessee lease accounting + NRV evidence (standards capabilities).
+      "lease_agreement_schedule_lines",
+      "lease_agreements",
+      "inventory_writedowns",
+      // Property management (tenant leases); rows reference accounts/parties.
+      "lease_schedule_lines",
+      "lease_escalations",
+      "lease_charges",
+      "security_deposit_transactions",
+      "property_leases",
+      "property_units",
+      "managed_properties",
       "cost_layer_consumptions",
       "inventory_provisional_settlements",
       "inventory_provisional_costs",

@@ -237,16 +237,19 @@ omitted and never counted as passing. The test suite asserts that each gap is
 them to reclassify the case rather than letting this page quietly understate
 what the software does.
 
-The corpus has already done its job once: its first publication identified five
+The corpus has already done its job: its first publication identified six
 measurement gaps — no lessee lease accounting, no lower-of-cost-and-NRV
 inventory measurement, current tax computed without temporary differences,
-foreign-currency retranslation limited to three account types, and no variable
-consideration constraint — and each was then implemented as real product
-capability (schema, engine, and tests) and its case flipped from GAP to
-passing. The remaining published gap: restoration of an impaired held-and-used
-asset is not yet blocked under US GAAP (ASC 360-10-35-20) nor capped under
-IAS 36. One partial: lessor straight-line levelling is engine arithmetic that
-the property-management billing pipeline does not yet apply automatically.
+foreign-currency retranslation limited to three account types, no variable
+consideration constraint, and no framework gate on impairment restoration —
+and each was then implemented as real product capability (schema, engine, and
+tests) and its case flipped from GAP to passing. Along the way the corpus
+caught and forced fixes to three latent kernel defects: a zero-amount offset
+line on exactly-offsetting FX positions, net book value ignoring prior
+impairments on remeasure, and a stranded accumulated-depreciation credit on
+disposal after impairment. **Every case in the register currently passes with
+no gaps and no partials.** That statement holds only for what the register
+covers — see the scope note below.
 
 Full detail, including the shortfall text for every gap and partial:
 **[docs/trust/conformance-matrix.md](docs/trust/conformance-matrix.md)** and

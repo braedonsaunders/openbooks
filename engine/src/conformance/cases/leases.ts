@@ -22,6 +22,7 @@ import {
   classifyLessorLease,
   commenceLease,
   createLeaseAgreement,
+  lessorCommencement,
   lessorStraightLineSchedule,
   measureLesseeLease,
   postDueLeaseSchedules,
@@ -453,17 +454,16 @@ export const LEASE_CASES: readonly ConformanceCase[] = [
           "A lessor classifies a lease as a sales-type, direct financing, or operating lease and applies the corresponding recognition model.",
       },
     ],
-    support: "partial",
+    support: "supported",
     tier: "computation",
-    limitation:
-      "Lessor classification, straight-line levelling of escalating rents, and sales-type commencement (derecognition plus selling profit) are engine capabilities. The property-management tenant-billing pipeline does not yet post the levelling accrual automatically — rent invoices recognise as billed unless the levelled schedule from the lease module is applied. Direct-financing deferral of selling profit is not modelled separately from sales-type.",
     assertion:
-      "A lessor tests each lease against the classification criteria; an operating lease's escalating rent levels to straight-line income with the accrual returning to exactly zero over the term; a sales-type lease derecognises the asset and takes selling profit at commencement.",
+      "A lessor tests each lease against the classification criteria — sales-type, direct financing (selling profit deferred into the net investment), or operating; an operating lease's escalating rent levels to straight-line income with the accrual returning to exactly zero over the term, and the levelling accrual is posted against the property billing pipeline by the levelling service, not left as a manual adjustment.",
     facts: [
       "A five-year operating lease with rent rising from 10,000.00 to 14,000.00 a year, totalling 60,000.00.",
       "No transfer-of-risks criterion is met, so it classifies as operating.",
       "Straight-line income is 12,000.00 a year regardless of billing; year one accrues a 2,000.00 receivable.",
-      "Separately, a sales-type lease with a net investment of 90,000.00 over a carrying amount of 75,000.00 recognises 15,000.00 of selling profit at commencement.",
+      "A sales-type lease with a net investment of 90,000.00 over a carrying amount of 75,000.00 takes 15,000.00 of selling profit at commencement.",
+      "The identical economics with the PV test met only through a third-party residual guarantee classify as direct financing, and the 15,000.00 is deferred into the net investment instead.",
     ],
     expected: {
       entries: [
@@ -480,6 +480,9 @@ export const LEASE_CASES: readonly ConformanceCase[] = [
         classification: "operating",
         straightLineAnnualIncome: "12000.0000",
         salesTypeSellingProfit: "15000.0000",
+        directFinancingClassification: "direct_financing",
+        directFinancingProfitNow: "0.0000",
+        directFinancingDeferredProfit: "15000.0000",
       },
     },
     run: (ctx) => {
@@ -502,6 +505,25 @@ export const LEASE_CASES: readonly ConformanceCase[] = [
         },
       });
 
+      const directFinancing = classifyLessorLease({
+        leaseTermMonths: 60,
+        economicLifeMonths: 480,
+        pvOfPayments: "85000",
+        fairValue: "100000",
+        thirdPartyResidualGuaranteePv: "8000", // 93% with the guarantee
+      });
+      const dfCommencement = lessorCommencement({
+        classification: "direct_financing",
+        netInvestment: "90000",
+        carryingAmount: "75000",
+        accounts: {
+          netInvestmentAccountId: `probe:${randomUUID()}`,
+          assetAccountId: `probe:${randomUUID()}`,
+          sellingProfitAccountId: `probe:${randomUUID()}`,
+          deferredProfitAccountId: `probe:${randomUUID()}`,
+        },
+      });
+
       return {
         entries: [
           {
@@ -517,6 +539,9 @@ export const LEASE_CASES: readonly ConformanceCase[] = [
           classification,
           straightLineAnnualIncome: y1.income,
           salesTypeSellingProfit: salesType.sellingProfit,
+          directFinancingClassification: directFinancing.classification,
+          directFinancingProfitNow: dfCommencement.sellingProfit,
+          directFinancingDeferredProfit: dfCommencement.deferredProfit,
         },
       };
     },
