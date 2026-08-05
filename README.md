@@ -165,18 +165,16 @@ npm -w engine run conformance -- report
 
 ## Run it
 
-### Digest-pinned Docker Compose installation
+### One-command Docker Compose installation
 
-Requirements: Git, Docker with Docker Compose, and an explicitly approved
-OpenBooks image built from the remediated clean-history source and pinned to its
-multi-platform SHA-256 digest. Historical public OpenBooks packages must not be
-used.
+Requirements: Git and Docker with Docker Compose. The installer pulls the
+official alpha release, resolves the tag to its immutable multi-platform
+SHA-256 digest, and records that digest before starting any service.
 
 ```bash
 git clone https://github.com/braedonsaunders/openbooks.git &&
 cd openbooks &&
-OPENBOOKS_IMAGE='example.invalid/openbooks@sha256:<64-lowercase-hex>' \
-  ./scripts/compose-up.sh
+./scripts/compose-up.sh
 ```
 
 The installer asks for the organization's ISO country and base-currency codes,
@@ -185,8 +183,8 @@ then:
 1. creates `.env.compose` with separate random database-owner and constrained
    application-role passwords, plus Redis, object-storage, session, encryption,
    internal-service, and administrator credentials;
-2. pulls the explicitly supplied, post-clean OpenBooks image digest recorded in
-   `.env.compose`;
+2. resolves and records the official `0.1.0-alpha.3` image digest in
+   `.env.compose`, then pulls that exact image;
 3. starts PostgreSQL 16, Redis 7, MinIO, the OpenBooks web application, and its
    background worker;
 4. runs migrations and grants in a one-shot privileged bootstrap container,
@@ -198,8 +196,7 @@ then:
 For an unattended first install, provide the choices explicitly:
 
 ```bash
-OPENBOOKS_IMAGE='example.invalid/openbooks@sha256:<64-lowercase-hex>' \
-  ORG_COUNTRY=US ORG_CURRENCY=USD ./scripts/compose-up.sh
+ORG_COUNTRY=US ORG_CURRENCY=USD ./scripts/compose-up.sh
 ```
 
 Open <http://localhost:4780>. Credentials remain in `.env.compose`, which is
@@ -220,9 +217,9 @@ curl http://localhost:4780/api/v1/health?include=worker
 # Follow application logs
 docker compose --env-file .env.compose logs -f web worker
 
-# Pull a new published image and apply any future migrations
-# First set OPENBOOKS_IMAGE to a post-clean, scanned digest reference.
-./scripts/compose-up.sh
+# Pull a reviewed release digest and apply any future migrations
+OPENBOOKS_IMAGE='ghcr.io/braedonsaunders/openbooks@sha256:<64-lowercase-hex>' \
+  ./scripts/compose-up.sh
 
 # Stop without deleting data
 docker compose --env-file .env.compose down
@@ -636,7 +633,7 @@ checked-in suite and release workflow are authoritative.
 
 `v0.1.0-alpha.3` is the current community preview. It adds the guided company
 setup and go-live experience, industry sample companies, governed query tools,
-24 maintained country tax packs, canonical source identities, and a hardened
+16 maintained country tax packs, canonical source identities, and a hardened
 one-command container installation backed by a clean PostgreSQL baseline.
 
 Good uses today:
