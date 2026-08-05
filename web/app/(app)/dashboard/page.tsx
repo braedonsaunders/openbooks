@@ -7,6 +7,7 @@ import { canSeeWidget } from './_widget-access'
 import { DashboardHeader } from './_dashboard-header'
 import { saveQuickActions } from './actions'
 import { loadDashboardView } from './_edit-canvas'
+import { DashboardLiveRefresh } from './_live-refresh'
 
 export const dynamic = 'force-dynamic'
 
@@ -43,6 +44,7 @@ export default async function DashboardPage() {
 
   return (
     <PageContainer>
+      <DashboardLiveRefresh />
       <div className="space-y-5">
         <DashboardHeader greeting={greeting} />
         <DashboardGrid

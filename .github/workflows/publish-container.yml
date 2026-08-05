@@ -116,7 +116,10 @@ jobs:
             OPENBOOKS_VERSION=${{ startsWith(github.ref, 'refs/tags/v') && github.ref_name || inputs.version }}
           cache-from: type=gha
           cache-to: type=gha,mode=max,ignore-error=true
-      - name: Scan the exact amd64 manifest
+      # Debian may publish advisories before patched packages exist. Block the
+      # release on every fixable HIGH/CRITICAL finding; the scheduled security
+      # workflow continues reporting newly disclosed, not-yet-fixable issues.
+      - name: Scan the exact amd64 manifest for fixable vulnerabilities
         uses: aquasecurity/trivy-action@a9c7b0f06e461e9d4b4d1711f154ee024b8d7ab8 # v0.36.0
         env:
           TRIVY_PLATFORM: linux/amd64
@@ -126,9 +129,9 @@ jobs:
           vuln-type: os,library
           scanners: vuln,secret
           severity: HIGH,CRITICAL
-          ignore-unfixed: false
+          ignore-unfixed: true
           exit-code: "1"
-      - name: Scan the exact arm64 manifest
+      - name: Scan the exact arm64 manifest for fixable vulnerabilities
         uses: aquasecurity/trivy-action@a9c7b0f06e461e9d4b4d1711f154ee024b8d7ab8 # v0.36.0
         env:
           TRIVY_PLATFORM: linux/arm64
@@ -139,7 +142,7 @@ jobs:
           vuln-type: os,library
           scanners: vuln,secret
           severity: HIGH,CRITICAL
-          ignore-unfixed: false
+          ignore-unfixed: true
           exit-code: "1"
 
   publish:
