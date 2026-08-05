@@ -59,3 +59,39 @@ The invariant oracle checks accounting properties such as:
 Simulation coverage supplements unit, database-integration, and browser tests.
 It is not an independent audit or a substitute for review by qualified
 accounting and security professionals.
+
+## Endurance mode (decade runs)
+
+`endurance` drives the same day loop over an arbitrarily long window — the
+published target is ten fiscal years — and layers on what only a long horizon
+proves:
+
+```sh
+OPENBOOKS_SIM=1 npm run sim -- provision --profile general-business --seed decade-1 --start 2027-01-01 --end 2036-12-31
+OPENBOOKS_SIM=1 npm run sim -- endurance <runDir>
+OPENBOOKS_SIM=1 npm run sim -- endurance-report <runDir>   # re-run the finale alone
+```
+
+On top of the standard oracle (which already closes every month and probes
+closed-period immutability at each close), endurance adds:
+
+- **Continuous adversarial probes** (`ops-adversarial.ts`) on a seeded
+  cadence: backdating journals into periods closed YEARS earlier, raw SQL
+  edits of posted documents' financial identity, over-application beyond an
+  item's open balance, reversal-symmetry checks, and void/recreate cycles.
+  A probe the kernel fails to refuse halts the run exactly like a broken
+  balance.
+- **Boundary coverage by construction**: ten Dec-31 year-ends and every leap
+  day in the window are ordinary business days. (All simulated timestamps are
+  UTC dates; the kernel resolves periods from document dates, so civil-time
+  DST transitions have no ledger meaning and are deliberately not simulated.)
+- **A final GL-regeneration sweep**: every posted document in the decade is
+  regenerated through the kernel in mirror scope and must come back
+  `changed: false`, with the trial balance byte-identical before and after.
+
+The finale writes `<runDir>/endurance/endurance-report.json`: days simulated,
+months closed, leap days and year-ends crossed, per-probe counts, and the
+sweep result. The first endurance smoke run halted on simulated day 7: the
+posted-edit probe found that a posted document HEADER's financial identity
+was raw-SQL mutable (the journal side was always guarded) — closed by
+`schema/migrations/generated/0003_posted_document_financial_guard.sql`.
