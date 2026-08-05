@@ -58,7 +58,7 @@ test("permanent differences and loss carryforward shape the current tax", () => 
   assert.ok(keys.includes("lossCarryforward"));
 });
 
-test("temporary differences drive DTA/DTL and the deferred expense", () => {
+test("temporary differences shift tax between current and deferred, not the total", () => {
   const c = buildProvision({
     pretaxBookIncome: "1000000",
     enactedRatePercent: RATE,
@@ -70,13 +70,59 @@ test("temporary differences drive DTA/DTL and the deferred expense", () => {
       { category: "provisions", description: "Accrued warranty", difference: "-80000", source: "manual" },
     ],
   });
+  // Originating net taxable difference of 120,000 defers tax: taxable profit is
+  // 880,000 (ASC 740-10-30-2), current tax falls, deferred rises, and for pure
+  // timing the TOTAL equals the statutory charge on book income.
+  assert.equal(c.netTemporaryDifference, "120000.0000");
+  assert.equal(c.taxableIncome, "880000.0000");
+  assert.equal(c.currentTax, "233200.0000");
   assert.equal(c.balances.dtlGross, "53000.0000");
   assert.equal(c.balances.dtaGross, "21200.0000");
   assert.equal(c.deferredExpense, "31800.0000"); // 53,000 − 21,200
-  assert.equal(c.totalExpense, "296800.0000");
+  assert.equal(c.totalExpense, "265000.0000"); // = 26.5% × 1,000,000
+  assert.equal(c.effectiveRatePercent, "26.50");
   assert.equal(c.measured[0]!.ratePercent, RATE);
   assert.equal(c.measured[0]!.taxEffect, "53000.0000");
   assert.equal(c.measured[1]!.taxEffect, "-21200.0000");
+});
+
+test("a reversing temporary difference brings current tax back without touching the total", () => {
+  // Prior cumulative net taxable difference 120,000 fully reverses this year:
+  // book depreciation now exceeds tax depreciation, taxable profit exceeds
+  // book income, and the deferred balances drain back through current tax.
+  const c = buildProvision({
+    pretaxBookIncome: "1000000",
+    enactedRatePercent: RATE,
+    permanentDifferences: [],
+    lossCarryforwardUsed: "0",
+    valuationAllowance: "0",
+    differences: [],
+    prior: { dtaGross: "21200", dtlGross: "53000", valuationAllowance: "0" },
+    priorNetTemporaryDifference: "120000",
+  });
+  assert.equal(c.taxableIncome, "1120000.0000");
+  assert.equal(c.currentTax, "296800.0000");
+  assert.equal(c.deferredExpense, "-31800.0000"); // DTL and DTA both release
+  assert.equal(c.totalExpense, "265000.0000"); // still the statutory charge
+});
+
+test("loss carryforwards are attributes, not basis differences — they never adjust taxable profit", () => {
+  const c = buildProvision({
+    pretaxBookIncome: "1000000",
+    enactedRatePercent: RATE,
+    permanentDifferences: [],
+    lossCarryforwardUsed: "0",
+    valuationAllowance: "0",
+    differences: [
+      { category: "loss_carryforward", description: "Unused losses", difference: "-400000", source: "manual" },
+    ],
+  });
+  // The carryforward DTA is measured, but taxable profit is untouched: the
+  // loss was already a book loss in the year it arose, not a basis difference.
+  assert.equal(c.netTemporaryDifference, "0.0000");
+  assert.equal(c.taxableIncome, "1000000.0000");
+  assert.equal(c.currentTax, "265000.0000");
+  assert.equal(c.balances.dtaGross, "106000.0000");
 });
 
 test("valuation allowance reduces the DTA and cannot exceed it", () => {

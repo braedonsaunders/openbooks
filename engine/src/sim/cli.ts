@@ -131,6 +131,32 @@ async function main(): Promise<number> {
       return res.pass ? 0 : 2;
     }
 
+    case "endurance": {
+      // Decade-scale loop: day-start → autopilot → adversarial probes → day-end,
+      // then the GL regeneration sweep + endurance report. Provision the run
+      // first with a long window, e.g.:
+      //   npm run sim -- provision --profile general-business --seed decade-1 --start 2027-01-01 --end 2036-12-31
+      const { enduranceDay, enduranceFinale } = await import("./endurance.ts");
+      const runDir = argv[1]!;
+      for (;;) {
+        const res = await enduranceDay(runDir);
+        if (res.halted) { print({ simDate: res.simDate, halted: res.halted }); return 2; }
+        if (res.probesRun.length > 0) console.error(`[${res.simDate}] adversarial: ${res.probesRun.join(", ")} — all held`);
+        if (res.done) break;
+      }
+      const report = await enduranceFinale(runDir);
+      print(report);
+      return report.pass ? 0 : 2;
+    }
+
+    case "endurance-report": {
+      // Re-run the finale (regen sweep + report) without advancing the run.
+      const { enduranceFinale } = await import("./endurance.ts");
+      const report = await enduranceFinale(argv[1]!);
+      print(report);
+      return report.pass ? 0 : 2;
+    }
+
     case "status": {
       const { manifest } = loadRun(argv[1]!);
       print(manifest);
@@ -297,7 +323,7 @@ async function main(): Promise<number> {
     }
 
     default:
-      console.error("usage: provision | day-start | observe | act | day-end | verify | status | coverage | reset | list-profiles");
+      console.error("usage: provision | day-start | observe | act | day-end | verify | endurance | endurance-report | status | coverage | reset | list-profiles");
       return 1;
   }
 }

@@ -124,6 +124,14 @@ async function primaryBookId(orgId: string): Promise<string> {
  * Foreign-currency monetary positions for one subsidiary as of `asOfDate`,
  * measured from POSTED, non-revaluation lines only. Positions whose foreign
  * balance is exactly zero (fully settled) are dropped.
+ *
+ * The monetary-item population (IAS 21.8/16): bank, receivable, and payable
+ * account types by default, plus any balance-sheet account explicitly flagged
+ * `accounts.monetary = true` (foreign-currency loans, monetary accruals,
+ * long-term debt), minus any account flagged `monetary = false` (a
+ * default-typed account holding a non-monetary deferral). The true-override is
+ * ignored for income/expense/equity types — only balance-sheet items are
+ * monetary.
  */
 async function loadPositions(
   orgId: string,
@@ -147,7 +155,12 @@ async function loadPositions(
        and e.origin <> 'fx_revaluation'
        and e.posting_date <= ${asOfDate}
        and l.currency <> ${functionalCurrency}
-       and a.type in ('asset_bank', 'asset_receivable', 'liability_payable')
+       and case
+             when a.monetary is false then false
+             when a.monetary is true then a.type not in
+               ('income', 'income_other', 'cogs', 'expense', 'expense_other', 'expense_deferred', 'equity')
+             else a.type in ('asset_bank', 'asset_receivable', 'liability_payable')
+           end
      group by l.account_id, l.currency
      having sum(l.txn_amount) <> 0`)) as unknown as {
     rows: { account_id: string; currency: string; carrying_base: string; foreign_balance: string }[];

@@ -116,6 +116,7 @@ export type Role =
   // Foreign currency
   | "fxRealizedGainLoss"
   | "fxUnrealizedGainLoss"
+  | "loanPayable"
   // Income tax
   | "incomeTaxExpense"
   | "incomeTaxPayable"

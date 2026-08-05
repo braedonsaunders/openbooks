@@ -52,6 +52,7 @@ export default async function SetupLayout({ children }: { children: ReactNode })
             crmEnabled={featureEnabled(features, 'crm')}
             bankFeedsEnabled={featureEnabled(features, 'bankFeeds')}
             onlinePaymentsEnabled={featureEnabled(features, 'onlinePayments')}
+            payrollEnabled={featureEnabled(features, 'payroll')}
           />
         </aside>
         <div className="app-scroll min-h-0 flex-1 overflow-y-auto bg-slate-50 dark:bg-slate-950">

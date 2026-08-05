@@ -15,7 +15,8 @@
       "viewer": "Betrachter"
     },
     "organizations": "Organisationen",
-    "superAdmin": "Super-Admin"
+    "superAdmin": "Super-Admin",
+    "security": "Anmeldesicherheit"
   },
   "language": {
     "label": "Sprache",

@@ -307,7 +307,9 @@ interface JournalLineInput {
 
 type Runner = Pick<typeof db, "execute">;
 
-async function postInventoryEntry(
+/** Post one balanced inventory journal (draft→lines→posted, origin 'inventory').
+ *  Exported for the NRV remeasurement module, which shares this GL path. */
+export async function postInventoryEntry(
   tx: Runner,
   p: {
     orgId: string;

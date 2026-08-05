@@ -94,6 +94,18 @@ export interface ProvisionComputationInput {
     dtlGross: string;
     valuationAllowance: string;
   } | null;
+  /**
+   * Prior-year CUMULATIVE net basis difference (pre-tax, signed the same way as
+   * `DifferenceInput.difference`: positive = taxable/DTL-side), EXCLUDING
+   * loss-carryforward attributes. Current tax is measured on taxable profit
+   * (ASC 740-10-30-2 / IAS 12.12), so the year's ORIGINATING or REVERSING
+   * movement in basis differences — current cumulative minus this — adjusts
+   * taxable income. Loss carryforwards are excluded on both sides: a
+   * carryforward is a tax attribute (its DTA arises from the unused loss), not
+   * a book-versus-tax basis difference, so it never adjusts the current-year
+   * return.
+   */
+  priorNetTemporaryDifference?: string | null;
 }
 
 export interface RateReconStep {
@@ -117,6 +129,9 @@ export interface ProvisionComputation {
   totalExpense: string;
   balances: DeferredBalances;
   movement: { dtaGross: string; dtlGross: string; valuationAllowance: string };
+  /** Cumulative net basis difference (pre-tax, excl. loss carryforwards) —
+   *  persisted so the next year's run can measure its originating movement. */
+  netTemporaryDifference: string;
   effectiveRatePercent: string | null;
   rateReconciliation: RateReconStep[];
   measured: (DifferenceInput & { ratePercent: string; taxEffect: string })[];
@@ -142,9 +157,28 @@ export function buildProvision(
 ): ProvisionComputation {
   const rate = input.enactedRatePercent;
   const permanentTotal = sum(input.permanentDifferences.map((p) => p.amount));
+
+  // Current tax is measured on TAXABLE PROFIT (ASC 740-10-30-2 / IAS 12.12).
+  // Basis differences originating this year (tax deduction ahead of book, or
+  // book income ahead of tax) move taxable income away from book income by the
+  // year's MOVEMENT in the cumulative net difference; reversals move it back.
+  // Loss carryforwards are tax attributes, not basis differences, and never
+  // adjust the current-year return — they are excluded from the movement.
+  const netTemporaryDifference = sum(
+    input.differences
+      .filter((d) => d.category !== "loss_carryforward")
+      .map((d) => d.difference),
+  );
+  const temporaryMovement = add(
+    netTemporaryDifference,
+    neg(input.priorNetTemporaryDifference ?? "0"),
+  );
   const taxableIncome = add(
-    add(input.pretaxBookIncome, permanentTotal),
-    neg(input.lossCarryforwardUsed),
+    add(
+      add(input.pretaxBookIncome, permanentTotal),
+      neg(input.lossCarryforwardUsed),
+    ),
+    neg(temporaryMovement),
   );
   const currentTax = maxZero(mulPercent(maxZero(taxableIncome), rate, 4));
 
@@ -213,6 +247,18 @@ export function buildProvision(
       percent: percentOf(benefit, input.pretaxBookIncome),
     });
   }
+  if (!isZero(temporaryMovement)) {
+    // The current-tax leg of timing: deferred to (or recovered from) future
+    // periods. Its deferred-tax leg sits inside the deferredMovement step, so
+    // the two cancel for pure timing and the schedule stays additive to total.
+    const currentEffect = neg(mulPercent(temporaryMovement, rate, 4));
+    steps.push({
+      key: "temporaryDifferences",
+      label: "Temporary differences deferred to future periods (current tax)",
+      amount: currentEffect,
+      percent: percentOf(currentEffect, input.pretaxBookIncome),
+    });
+  }
   if (cmp(taxableIncome, "0") < 0) {
     // Current tax floored at zero: the not-recognized current benefit of the loss.
     const unrecognized = neg(mulPercent(taxableIncome, rate, 4));
@@ -246,6 +292,7 @@ export function buildProvision(
     totalExpense,
     balances: { dtaGross, dtlGross, valuationAllowance },
     movement,
+    netTemporaryDifference: fromUnits(toUnits(netTemporaryDifference)),
     effectiveRatePercent: percentOf(totalExpense, input.pretaxBookIncome),
     rateReconciliation: steps,
     measured,
@@ -454,15 +501,27 @@ async function latestPostedBalances(
   dtaGross: string;
   dtlGross: string;
   valuationAllowance: string;
+  netTemporaryDifference: string;
 }> {
   const r = (await db.execute(sql`
     select id, payload->'balances'->>'dtaGross' as dta, payload->'balances'->>'dtlGross' as dtl,
-           payload->'balances'->>'valuationAllowance' as va
+           payload->'balances'->>'valuationAllowance' as va,
+           coalesce(
+             payload->>'netTemporaryDifference',
+             -- Runs recorded before netTemporaryDifference was persisted:
+             -- recover the cumulative basis-difference total from the run's own
+             -- retained temporary_differences rows. Loss carryforwards are tax
+             -- attributes, not basis differences, and are excluded.
+             (select coalesce(sum(difference), 0)::text
+                from temporary_differences td
+               where td.org_id = ${orgId} and td.run_id = tax_provision_runs.id
+                 and td.category <> 'loss_carryforward')
+           ) as net_temp
       from tax_provision_runs
      where org_id = ${orgId} and status = 'posted' and fiscal_year < ${beforeFiscalYear}
      order by fiscal_year desc, version desc limit 1
   `)) as unknown as {
-    rows: { id: string; dta: string; dtl: string; va: string }[];
+    rows: { id: string; dta: string; dtl: string; va: string; net_temp: string | null }[];
   };
   const row = r.rows[0];
   return row
@@ -471,8 +530,9 @@ async function latestPostedBalances(
         dtaGross: row.dta,
         dtlGross: row.dtl,
         valuationAllowance: row.va,
+        netTemporaryDifference: row.net_temp ?? "0",
       }
-    : { runId: null, dtaGross: "0", dtlGross: "0", valuationAllowance: "0" };
+    : { runId: null, dtaGross: "0", dtlGross: "0", valuationAllowance: "0", netTemporaryDifference: "0" };
 }
 
 export interface ComputeProvisionOptions {
@@ -543,6 +603,7 @@ export async function computeProvisionRun(
         dtlGross: prior.dtlGross,
         valuationAllowance: prior.valuationAllowance,
       },
+      priorNetTemporaryDifference: prior.netTemporaryDifference,
     });
 
     const payload = {
@@ -558,6 +619,7 @@ export async function computeProvisionRun(
       totalExpense: computation.totalExpense,
       balances: computation.balances,
       movement: computation.movement,
+      netTemporaryDifference: computation.netTemporaryDifference,
       effectiveRatePercent: computation.effectiveRatePercent,
       rateReconciliation: computation.rateReconciliation,
       priorPostedRunId: prior.runId,

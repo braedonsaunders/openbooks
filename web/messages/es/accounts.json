@@ -3,7 +3,10 @@
     "title": "Plan de cuentas",
     "description": "Saldos actuales con signo natural (acumulado para el balance general, del ejercicio fiscal en curso para resultados), consolidados a través de cuentas de resumen.",
     "searchPlaceholder": "Buscar por número o nombre…",
-    "views": { "list": "Lista", "hierarchy": "Jerarquía" },
+    "views": {
+      "list": "Lista",
+      "hierarchy": "Jerarquía"
+    },
     "newAccount": "Nueva cuenta",
     "viewRegister": "Ver registro",
     "expand": "Expandir cuenta",
@@ -81,7 +84,11 @@
       "account_changed": "Esta cuenta cambió mientras la editaba. Vuelva a abrirla e inténtelo de nuevo.",
       "invalid_idempotency_key": "No se pudo reintentar la solicitud de cuenta de forma segura.",
       "save_failed": "No se pudo guardar la cuenta."
-    }
+    },
+    "monetary": "Reconversión cambiaria (partida monetaria)",
+    "monetaryDefault": "Según el tipo de cuenta",
+    "monetaryAlways": "Reconvertir siempre",
+    "monetaryNever": "No reconvertir nunca"
   },
   "register": {
     "notFound": "Cuenta no encontrada",

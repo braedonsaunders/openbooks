@@ -4,16 +4,10 @@ on:
   push:
     branches: [main]
   workflow_dispatch:
-    inputs:
-      adopt_prelaunch_baseline:
-        description: One-time, fail-closed adoption of the canonical prerelease baseline
-        required: false
-        type: boolean
-        default: false
 
 concurrency:
-  group: deploy-dev-prelaunch-adoption-final
-  cancel-in-progress: true
+  group: deploy-dev
+  cancel-in-progress: false
 
 permissions:
   contents: read
@@ -27,8 +21,8 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
           node-version: 24
           cache: npm
@@ -47,14 +41,14 @@ jobs:
     outputs:
       tag: ${{ github.sha }}
     steps:
-      - uses: actions/checkout@v4
-      - uses: docker/setup-buildx-action@v3
-      - uses: docker/login-action@v3
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3
+      - uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
-      - uses: docker/build-push-action@v6
+      - uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6
         with:
           context: .
           platforms: linux/amd64
@@ -73,19 +67,7 @@ jobs:
     timeout-minutes: 40
     environment: dev
     steps:
-      - uses: actions/checkout@v4
-        if: ${{ inputs.adopt_prelaunch_baseline == true }}
-        with:
-          fetch-depth: 0
-      - uses: actions/setup-node@v4
-        if: ${{ inputs.adopt_prelaunch_baseline == true }}
-        with:
-          node-version: 24
-          cache: npm
-      - name: Install adoption operator dependencies
-        if: ${{ inputs.adopt_prelaunch_baseline == true }}
-        run: npm ci
-      - uses: docker/login-action@v3
+      - uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
@@ -97,7 +79,6 @@ jobs:
           DOKPLOY_TOKEN: ${{ secrets.DOKPLOY_TOKEN }}
           COMPOSE_ID: ${{ secrets.DOKPLOY_COMPOSE_ID }}
           NEW_TAG: ${{ needs.build.outputs.tag }}
-          ADOPT_PRELAUNCH_BASELINE: ${{ inputs.adopt_prelaunch_baseline || false }}
         run: |
           set -euo pipefail
           base="${DOKPLOY_URL%/}"
@@ -240,119 +221,6 @@ jobs:
             done
           } > "$bootstrap_env"
 
-          if [ "$ADOPT_PRELAUNCH_BASELINE" = "true" ]; then
-            backup_dir="$HOME/.openbooks-backups"
-            mkdir -p "$backup_dir"
-            chmod 700 "$backup_dir"
-            backup_path="$backup_dir/pre-alpha3-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}.dump"
-            docker run --rm -e PGOPTIONS='-c app.bypass_rls=on' postgres:16 \
-              pg_dump "$migration_url" --enable-row-security --format=custom > "$backup_path"
-            chmod 600 "$backup_path"
-            test -s "$backup_path"
-
-            reference_name="openbooks-baseline-reference-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
-            runner_network="$(docker inspect "$HOSTNAME" --format '{{range $name, $_ := .NetworkSettings.Networks}}{{$name}}{{"\n"}}{{end}}' 2>/dev/null | head -n 1 || true)"
-            if [ -n "$runner_network" ]; then
-              docker run --name "$reference_name" --network "$runner_network" \
-                -e POSTGRES_PASSWORD='openbooks-reference-only' \
-                -e POSTGRES_DB=openbooks -d postgres:16 >/dev/null
-              reference_url="postgresql://postgres:openbooks-reference-only@${reference_name}:5432/openbooks"
-            else
-              docker run --name "$reference_name" \
-                -e POSTGRES_PASSWORD='openbooks-reference-only' \
-                -e POSTGRES_DB=openbooks -p 127.0.0.1::5432 -d postgres:16 >/dev/null
-              reference_port="$(docker port "$reference_name" 5432/tcp | sed -n 's/.*://p' | head -n 1)"
-              reference_url="postgresql://postgres:openbooks-reference-only@127.0.0.1:${reference_port}/openbooks"
-            fi
-            for attempt in $(seq 1 30); do
-              docker exec "$reference_name" pg_isready -U postgres -d openbooks >/dev/null 2>&1 && break
-              sleep 1
-            done
-            OPENBOOKS_DB_URL="$reference_url" NODE_ENV=test \
-              ORG_NAME='Canonical Reference' ORG_CURRENCY=CAD ORG_COUNTRY=CA \
-              ADMIN_EMAIL='reference@example.test' ADMIN_PASSWORD='Reference-only-2026!' \
-              npx tsx scripts/bootstrap.ts
-
-            PGOPTIONS='-c app.bypass_rls=on' OPENBOOKS_DB_URL="$migration_url" npx tsx -e '
-              import { execFileSync } from "node:child_process";
-              import pg from "pg";
-              void (async () => {
-              const client = new pg.Client({ connectionString: process.env.OPENBOOKS_DB_URL });
-              await client.connect();
-              try {
-                const names = ["managed_properties", "property_units", "property_leases", "lease_charges", "lease_escalations", "lease_schedule_lines", "security_deposit_transactions", "cam_pools", "cam_allocations"];
-                const present = await client.query("select count(*)::int as count from pg_class c join pg_namespace n on n.oid=c.relnamespace where n.nspname=\u0027public\u0027 and c.relname=any($1::text[]) and c.relkind=\u0027r\u0027", [names]);
-                const count = Number(present.rows[0]?.count ?? 0);
-                if (count !== 0 && count !== names.length) throw new Error(`partial property catalog (${count}/${names.length}); refusing adoption`);
-                if (count === 0) {
-                  const specs = [
-                    "a118c39d:schema/migrations/generated/0123_property_management.sql",
-                    "0d16adf7:schema/migrations/generated/0124_property_customization.sql",
-                    "102b8119:schema/migrations/generated/0125_security_deposit_reversals.sql",
-                    "4115c1b8:schema/migrations/generated/0126_property_management_imports.sql",
-                  ];
-                  await client.query("begin");
-                  try {
-                    for (const spec of specs) await client.query(execFileSync("git", ["show", spec], { encoding: "utf8" }));
-                    await client.query("commit");
-                  } catch (error) {
-                    await client.query("rollback");
-                    throw error;
-                  }
-                }
-              } finally { await client.end(); }
-              })().catch((error) => { console.error(error); process.exitCode = 1; });
-            '
-
-            gate_ids="$(PGOPTIONS='-c app.bypass_rls=on' OPENBOOKS_DB_URL="$migration_url" npx tsx -e '
-              import pg from "pg";
-              void (async () => {
-              const client = new pg.Client({ connectionString: process.env.OPENBOOKS_DB_URL });
-              await client.connect();
-              const result = await client.query(`
-                select organization.id::text as org_id, actor.id::text as actor_id
-                  from public.orgs organization
-                  join lateral (
-                    select id from public.users
-                     where org_id = organization.id and is_active
-                     order by created_at, id limit 1
-                  ) actor on true
-                 where organization.env_kind = \u0027production\u0027
-                   and organization.sandbox_of is null
-                 order by organization.created_at, organization.id limit 1
-              `);
-              await client.end();
-              if (result.rows.length !== 1) throw new Error("no production root organization with an active operator");
-              process.stdout.write(`${result.rows[0].org_id} ${result.rows[0].actor_id}`);
-              })().catch((error) => { console.error(error); process.exitCode = 1; });
-            ')"
-            read -r adoption_org adoption_actor <<<"$gate_ids"
-            evidence_stamp="${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
-            PGOPTIONS='-c app.bypass_rls=on' OPENBOOKS_DB_URL="$migration_url" OPENBOOKS_BASELINE_DB_URL="$reference_url" \
-              npx tsx .local/tenant-migrations/openbooks-rassaun/adopt-canonical-baseline.ts \
-              --org="$adoption_org"
-            PGOPTIONS='-c app.bypass_rls=on' OPENBOOKS_DB_URL="$migration_url" OPENBOOKS_BASELINE_DB_URL="$reference_url" \
-              npx tsx .local/tenant-migrations/openbooks-rassaun/adopt-canonical-baseline.ts \
-              --phase=canonicalize --apply --production \
-              --org="$adoption_org" --actor="$adoption_actor" \
-              --reason='Adopt the reviewed alpha 3 canonical prerelease catalog.' \
-              --confirm=CANONICALIZE_PRERELEASE_CATALOG \
-              --evidence=".local/tenant-migrations/openbooks-rassaun/evidence/${evidence_stamp}-canonicalize.json"
-            PGOPTIONS='-c app.bypass_rls=on' OPENBOOKS_DB_URL="$migration_url" OPENBOOKS_BASELINE_DB_URL="$reference_url" \
-              npx tsx .local/tenant-migrations/openbooks-rassaun/adopt-canonical-baseline.ts \
-              --phase=adopt --org="$adoption_org"
-            PGOPTIONS='-c app.bypass_rls=on' OPENBOOKS_DB_URL="$migration_url" OPENBOOKS_BASELINE_DB_URL="$reference_url" \
-              npx tsx .local/tenant-migrations/openbooks-rassaun/adopt-canonical-baseline.ts \
-              --phase=adopt --apply --production \
-              --org="$adoption_org" --actor="$adoption_actor" \
-              --reason='Stamp the exact reviewed alpha 3 canonical prerelease catalog.' \
-              --confirm=ADOPT_CANONICAL_BASELINE \
-              --evidence=".local/tenant-migrations/openbooks-rassaun/evidence/${evidence_stamp}-adopt.json"
-            cp .local/tenant-migrations/openbooks-rassaun/evidence/${evidence_stamp}-*.json "$backup_dir/"
-            chmod 600 "$backup_dir/${evidence_stamp}-canonicalize.json" "$backup_dir/${evidence_stamp}-adopt.json"
-            echo "Canonical adoption backup and evidence stored under $backup_dir"
-          fi
-
           docker pull "$IMAGE_NAME:$NEW_TAG"
           docker run --rm --env-file "$bootstrap_env" \
             "$IMAGE_NAME:$NEW_TAG" node scripts/bootstrap.mjs
@@ -442,3 +310,4 @@ jobs:
           done
           echo "::error::Application never became healthy"
           exit 1
+

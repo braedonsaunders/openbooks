@@ -24,6 +24,7 @@ interface CreateBody {
   subsidiaryId?: string | null
   subsidiaryIncludeChildren?: boolean
   reconcilable?: boolean
+  monetary?: boolean | null
   requiredDimensions?: string[]
   custom?: Record<string, unknown>
 }
@@ -134,6 +135,7 @@ export async function POST(request: Request) {
     subsidiary_id: subsidiaryId,
     subsidiary_include_children: body.subsidiaryIncludeChildren !== false,
     reconcilable,
+    monetary: typeof body.monetary === 'boolean' ? body.monetary : null,
     required_dimensions: requiredDimensions,
     custom,
   }
@@ -145,11 +147,12 @@ export async function POST(request: Request) {
         insert into accounts
           (id, org_id, number, name, type, description, parent_id, is_summary, is_active,
            currency_restriction, eliminate, subsidiary_id, subsidiary_include_children,
-           reconcilable, required_dimensions, custom, created_by, updated_by)
+           reconcilable, monetary, required_dimensions, custom, created_by, updated_by)
         values
           (${requestId}, ${gate.user.orgId}, ${number}, ${name}, ${body.type}, ${description},
            ${parentId}, ${isSummary}, ${isActive}, ${currencyRestriction}, ${body.eliminate === true},
            ${subsidiaryId}, ${body.subsidiaryIncludeChildren !== false}, ${reconcilable},
+           ${typeof body.monetary === 'boolean' ? body.monetary : null},
            ${JSON.stringify(requiredDimensions)}::jsonb, ${JSON.stringify(custom)}::jsonb,
            ${gate.user.id}, ${gate.user.id})
         on conflict (id) do nothing

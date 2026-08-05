@@ -165,14 +165,18 @@ npm -w engine run conformance -- report
 
 ## Run it
 
-### One-command Docker Compose installation
+### Digest-pinned Docker Compose installation
 
-Requirements: Git and Docker with Docker Compose.
+Requirements: Git, Docker with Docker Compose, and an explicitly approved
+OpenBooks image built from the remediated clean-history source and pinned to its
+multi-platform SHA-256 digest. Historical public OpenBooks packages must not be
+used.
 
 ```bash
 git clone https://github.com/braedonsaunders/openbooks.git &&
 cd openbooks &&
-./scripts/compose-up.sh
+OPENBOOKS_IMAGE='example.invalid/openbooks@sha256:<64-lowercase-hex>' \
+  ./scripts/compose-up.sh
 ```
 
 The installer asks for the organization's ISO country and base-currency codes,
@@ -181,7 +185,8 @@ then:
 1. creates `.env.compose` with separate random database-owner and constrained
    application-role passwords, plus Redis, object-storage, session, encryption,
    internal-service, and administrator credentials;
-2. pulls the public `ghcr.io/braedonsaunders/openbooks:latest` image;
+2. pulls the explicitly supplied, post-clean OpenBooks image digest recorded in
+   `.env.compose`;
 3. starts PostgreSQL 16, Redis 7, MinIO, the OpenBooks web application, and its
    background worker;
 4. runs migrations and grants in a one-shot privileged bootstrap container,
@@ -193,7 +198,8 @@ then:
 For an unattended first install, provide the choices explicitly:
 
 ```bash
-ORG_COUNTRY=US ORG_CURRENCY=USD ./scripts/compose-up.sh
+OPENBOOKS_IMAGE='example.invalid/openbooks@sha256:<64-lowercase-hex>' \
+  ORG_COUNTRY=US ORG_CURRENCY=USD ./scripts/compose-up.sh
 ```
 
 Open <http://localhost:4780>. Credentials remain in `.env.compose`, which is
@@ -215,6 +221,7 @@ curl http://localhost:4780/api/v1/health?include=worker
 docker compose --env-file .env.compose logs -f web worker
 
 # Pull a new published image and apply forward migrations
+# First set OPENBOOKS_IMAGE to a post-clean, scanned digest reference.
 ./scripts/compose-up.sh
 
 # Stop without deleting data
@@ -227,7 +234,11 @@ destruction is intended.
 
 For internet exposure, configure TLS, backups, monitoring, email, secret
 management, retention, and network policy appropriate to your environment. See
-[SECURITY.md](SECURITY.md).
+[SECURITY.md](SECURITY.md), the [backup and restore
+runbook](docs/operations/backup-restore.md), and the [upgrade
+runbook](docs/operations/upgrades.md). The included Compose deployment remains
+one host; the [`deploy/ha`](deploy/ha) reference shows a replicated application
+tier backed by separately operated HA PostgreSQL, Redis, and object storage.
 
 ## What is implemented
 
@@ -397,7 +408,10 @@ The interface includes locale catalogs for:
 
 OpenBooks does not currently include a complete:
 
-- payroll calculation and remittance engine;
+- US payroll withholding engine (Canadian payroll — CRA T4127 statutory
+  calculations, pay runs, union fringes, and remittance liabilities — ships
+  behind the optional payroll feature; US federal/state withholding does not
+  yet);
 - human-capital-management suite;
 - full manufacturing/MRP and production-order suite beyond the light
   bill-of-materials assembly-build workflow;
@@ -442,7 +456,13 @@ crossing the binary floating-point boundary.
 
 OpenBooks combines:
 
-- signed-cookie sessions with scrypt password hashes;
+- revocable server-side sessions with signed, production-secure cookies and
+  scrypt password hashes;
+- database-backed login throttling, privacy-preserving failure events, and
+  escalating temporary account lockout shared by every web replica;
+- first-party TOTP authenticator MFA with one-time recovery codes, plus generic
+  OpenID Connect authorization-code SSO with PKCE and asymmetric ID-token
+  verification;
 - RBAC roles, wildcard permissions, explicit user overrides, and subsidiary
   restrictions;
 - PostgreSQL row-level security on organization-owned tables;
@@ -455,9 +475,58 @@ OpenBooks combines:
 - audit logs and workflow evidence; and
 - server-side feature, permission, state-transition, and concurrency checks.
 
-OpenBooks does not currently ship first-party MFA or enterprise SAML/OIDC SSO.
-See [SECURITY.md](SECURITY.md) for the support policy, private reporting channel,
-and deployment responsibilities.
+OpenBooks does not currently implement SAML SSO. See [SECURITY.md](SECURITY.md)
+for the support policy, private reporting channel, authentication deployment
+details, and operator responsibilities.
+
+### Authentication deployment
+
+Every successful login creates a server-side session record. Users can inspect
+and selectively revoke active sessions from **Account → Sign-in security**;
+sign-out revokes the current record rather than only deleting its browser
+cookie. Session, login-limit, and MFA-challenge state is stored in PostgreSQL,
+so it remains effective when several web replicas are deployed.
+The stateful session format intentionally invalidates cookies issued by builds
+before migration `0002`; users sign in again once after this upgrade. Apply the
+migration before rolling out the web image. Mixed old/new web replicas are not
+supported during this authentication cutover.
+
+TOTP MFA is enabled by each user from **Account → Sign-in security**. Setup
+produces ten one-time recovery codes. Recovery codes are shown once and stored
+only as keyed hashes; the TOTP secret is encrypted with `OPENBOOKS_DATA_KEY`.
+Replacing recovery codes or disabling MFA requires both the current password
+and a current MFA/recovery credential, and failed reauthentication participates
+in the same distributed lockout policy as sign-in.
+
+Generic OIDC SSO is enabled when `OPENBOOKS_OIDC_ISSUER`,
+`OPENBOOKS_OIDC_CLIENT_ID`, and an HTTPS `OPENBOOKS_APP_URL` are configured.
+`OPENBOOKS_OIDC_CLIENT_SECRET` is optional for public PKCE clients, and
+`OPENBOOKS_OIDC_LABEL` customizes the login button. Register this redirect URI
+with the identity provider:
+
+```text
+${OPENBOOKS_APP_URL}/api/auth/oidc/callback
+```
+
+OIDC never provisions an OpenBooks user. On first use it links the provider's
+stable issuer/subject to exactly one existing, active production user only when
+the provider supplies a boolean `email_verified: true` claim. Ambiguous email
+matches fail closed. Subsequent sign-ins use the stable subject mapping. Local
+TOTP MFA, when enabled for that user, is still required after OIDC.
+
+Per-identity login limiting is always active. Set `OPENBOOKS_TRUST_PROXY=1` only
+when a trusted reverse proxy strips incoming forwarding headers and writes its
+own `X-Forwarded-For` or `X-Real-IP`; this additionally enables per-network
+limits without trusting attacker-supplied addresses. Production session and
+authentication cookies are always `Secure`; this cannot be disabled by an
+environment override.
+
+Migration `0002_auth_security.sql` is additive and forward-only. Before an
+upgrade, take and test a database backup. A deployment can disable OIDC by
+removing its optional environment variables, but it should not delete the new
+authentication tables as a rollback: doing so invalidates revocation, lockout,
+MFA, and session evidence. Restore the pre-upgrade database backup if a complete
+rollback is required.
 
 ## Architecture
 

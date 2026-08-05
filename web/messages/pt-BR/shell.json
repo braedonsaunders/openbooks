@@ -15,7 +15,8 @@
       "viewer": "Visualizador"
     },
     "organizations": "Organizações",
-    "superAdmin": "Superadministrador"
+    "superAdmin": "Superadministrador",
+    "security": "Segurança de login"
   },
   "language": {
     "label": "Idioma",

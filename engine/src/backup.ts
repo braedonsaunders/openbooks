@@ -16,14 +16,25 @@ import { sql } from "drizzle-orm";
 import { db, longPool } from "./db.ts";
 import { getS3Client, s3Bucket, s3Enabled } from "./file-storage.ts";
 import { assertUuid, loadCatalog, PARENT_FILTER } from "./sandbox/catalog.ts";
+import {
+  BACKUP_FORMAT,
+  BACKUP_FORMAT_VERSION,
+  DURABLE_USER_AUTH_BACKUP_TABLES,
+  ORGLESS_CHILD_BACKUP_TABLES,
+  ORG_SCOPED_BACKUP_EXCLUSIONS,
+  backupSchemaFingerprint,
+  type BackupQueryable,
+} from "./backup-format.ts";
 
 /**
  * Organization backups.
  *
  * A backup is a gzip-compressed NDJSON stream of every row the org owns: the
- * org row, every tenant table (any base table with an org_id column — the same
- * self-maintaining catalog the sandbox clone engine uses), and org-less child
- * tables filtered through their parent. The export runs inside one REPEATABLE
+ * org row, tenant tables (any base table with an org_id column, except the
+ * explicitly non-portable cross-tenant access-grant table), org-less children,
+ * and durable MFA/OIDC rows filtered through their home user. Live sessions,
+ * login challenges/state/events are intentionally excluded. The export runs
+ * inside one REPEATABLE
  * READ, READ ONLY transaction so the dump is a single consistent point-in-time
  * snapshot, with the session timezone pinned to UTC so timestamptz values
  * render deterministically. Rows are embedded as raw row_to_json text — never
@@ -31,7 +42,7 @@ import { assertUuid, loadCatalog, PARENT_FILTER } from "./sandbox/catalog.ts";
  * exactly.
  *
  * Format (one JSON object per line):
- *   line 1:  {"format":"openbooks-backup","version":1,"orgId":...,"createdAt":...}
+ *   line 1:  {"format":"openbooks-backup","version":2,"orgId":...,"createdAt":...,"schemaSha256":...}
  *   rows:    {"t":"<table>","r":{...row...}}
  *   last:    {"meta":{"tables":[{name,rows}...],"totalRows":N,"completedAt":...}}
  *
@@ -93,30 +104,124 @@ export function backupObjectKey(orgId: string, runId: string): string {
 
 const TABLE_NAME_RE = /^[a-z0-9_]+$/;
 
+interface BackupPlanStep {
+  name: string;
+  where: string;
+}
+
+function whereForAlias(where: string, alias: string): string {
+  return where.replace(/\bt\./g, `${alias}.`);
+}
+
+function sqlLiteral(value: string): string {
+  return `'${value.replaceAll("'", "''")}'`;
+}
+
+/**
+ * Prove that every FK from an included row to another archived table resolves
+ * to a row inside this same archive. This catches cross-organization links such
+ * as orgs.sandbox_of and change_sets.sandbox_org_id before any apparently valid
+ * backup is emitted. References to shared/bootstrap tables (for example the ISO
+ * currency registry) are outside the tenant archive and are instead protected
+ * by the exact migration/schema preflight during restore.
+ */
+async function assertForeignKeyClosure(
+  client: BackupQueryable,
+  plan: readonly BackupPlanStep[],
+): Promise<void> {
+  const byTable = new Map(plan.map((step) => [step.name, step]));
+  const constraints = await client.query<{
+    constraint_name: string;
+    source_table: string;
+    target_table: string;
+    source_columns: string[];
+    target_columns: string[];
+  }>(
+    `select constraint_row.conname as constraint_name,
+            source.relname as source_table,
+            target.relname as target_table,
+            array_agg(source_column.attname order by key_row.position) as source_columns,
+            array_agg(target_column.attname order by key_row.position) as target_columns
+       from pg_constraint constraint_row
+       join pg_class source on source.oid = constraint_row.conrelid
+       join pg_class target on target.oid = constraint_row.confrelid
+       join pg_namespace source_namespace on source_namespace.oid = source.relnamespace
+       join pg_namespace target_namespace on target_namespace.oid = target.relnamespace
+       cross join lateral unnest(constraint_row.conkey, constraint_row.confkey)
+         with ordinality as key_row(source_attnum, target_attnum, position)
+       join pg_attribute source_column
+         on source_column.attrelid = source.oid and source_column.attnum = key_row.source_attnum
+       join pg_attribute target_column
+         on target_column.attrelid = target.oid and target_column.attnum = key_row.target_attnum
+      where constraint_row.contype = 'f'
+        and source_namespace.nspname = 'public'
+        and target_namespace.nspname = 'public'
+        and source.relname = any($1::text[])
+        and target.relname = any($1::text[])
+      group by constraint_row.oid, constraint_row.conname, source.relname, target.relname
+      order by source.relname, constraint_row.conname`,
+    [plan.map((step) => step.name)],
+  );
+
+  const checks: string[] = [];
+  for (const constraint of constraints.rows) {
+    const source = byTable.get(constraint.source_table);
+    const target = byTable.get(constraint.target_table);
+    if (!source || !target || constraint.source_columns.length !== constraint.target_columns.length) {
+      throw new Error(`backup FK catalog is inconsistent at ${constraint.constraint_name}`);
+    }
+    for (const identifier of [
+      constraint.source_table,
+      constraint.target_table,
+      ...constraint.source_columns,
+      ...constraint.target_columns,
+    ]) {
+      if (!TABLE_NAME_RE.test(identifier)) throw new Error("unexpected identifier in backup FK catalog");
+    }
+    const populated = constraint.source_columns
+      .map((column) => `t."${column}" is not null`)
+      .join(" and ");
+    const reference = constraint.source_columns
+      .map((column, index) => `target_row."${constraint.target_columns[index]}" = t."${column}"`)
+      .join(" and ");
+    checks.push(
+      `select ${sqlLiteral(constraint.source_table)} as source_table,
+              ${sqlLiteral(constraint.constraint_name)} as constraint_name,
+              ${sqlLiteral(constraint.target_table)} as target_table
+         where exists (
+           select 1 from public."${constraint.source_table}" t
+            where (${source.where}) and (${populated})
+              and not exists (
+                select 1 from public."${constraint.target_table}" target_row
+                 where (${reference}) and (${whereForAlias(target.where, "target_row")})
+              )
+         )`,
+    );
+  }
+
+  // Bound individual statement size while avoiding hundreds of network round
+  // trips on schemas with a large FK graph.
+  for (let offset = 0; offset < checks.length; offset += 25) {
+    const violation = await client.query(checks.slice(offset, offset + 25).join("\nunion all\n") + "\nlimit 1");
+    const row = violation.rows[0] as
+      | { source_table: string; constraint_name: string; target_table: string }
+      | undefined;
+    if (row) {
+      throw new Error(
+        `organization backup is not self-contained: ${row.source_table}.${row.constraint_name} references ${row.target_table} outside the organization; use full-deployment recovery or remove/reconcile the external relationship first`,
+      );
+    }
+  }
+}
+
 /**
  * Stream the org's full dataset as NDJSON into `sink` (ending it). Bounded
  * memory: rows are pulled through a server-side cursor 2,000 at a time.
  */
 export async function streamOrgBackup(orgId: string, sink: Writable): Promise<BackupExportStats> {
   assertUuid(orgId);
-  const catalog = await loadCatalog();
-  const tenantTables = catalog.tenantTables
-    .filter((t) => t.hasOrgId)
-    .map((t) => t.name)
-    .sort();
-  const childTables = Object.keys(PARENT_FILTER)
-    .filter((n) => catalog.tenantTables.some((t) => t.name === n))
-    .sort();
-  const plan: { name: string; where: string }[] = [
-    { name: "orgs", where: `t.id = '${orgId}'` },
-    ...tenantTables.map((name) => ({ name, where: `t.org_id = '${orgId}'` })),
-    ...childTables.map((name) => ({ name, where: PARENT_FILTER[name](orgId) })),
-  ];
-  for (const step of plan) {
-    if (!TABLE_NAME_RE.test(step.name)) throw new Error(`unexpected table name: ${step.name}`);
-  }
-
   const client = await longPool.connect();
+  let deploymentLock = false;
   const stats: BackupExportStats = { tables: [], totalRows: 0 };
   const writeLine = async (line: string): Promise<void> => {
     if (sink.destroyed) throw new Error("backup output stream closed");
@@ -127,6 +232,12 @@ export async function streamOrgBackup(orgId: string, sink: Writable): Promise<Ba
   };
 
   try {
+    // Prevent a migration from changing the table catalog between the schema
+    // fingerprint and row export. Bootstrap takes the exclusive counterpart.
+    await client.query("select pg_advisory_lock_shared(hashtextextended($1, 0))", [
+      "openbooks:deployment-bootstrap",
+    ]);
+    deploymentLock = true;
     // One consistent snapshot for the whole dump. SET TRANSACTION must come
     // before any other statement in the transaction.
     await client.query("begin isolation level repeatable read read only");
@@ -136,12 +247,52 @@ export async function streamOrgBackup(orgId: string, sink: Writable): Promise<Ba
     );
     await client.query("set local timezone to 'UTC'");
 
+    const catalog = await loadCatalog();
+    const excludedOrgTables = new Set<string>(ORG_SCOPED_BACKUP_EXCLUSIONS);
+    const tenantTables = catalog.tenantTables
+      .filter((t) => t.hasOrgId)
+      .map((t) => t.name)
+      .filter((name) => !excludedOrgTables.has(name))
+      .sort();
+    const childTables = ORGLESS_CHILD_BACKUP_TABLES
+      .filter((name) => catalog.tenantTables.some((table) => table.name === name))
+      .sort();
+    for (const name of childTables) {
+      if (!PARENT_FILTER[name]) throw new Error(`backup child table ${name} has no ownership filter`);
+    }
+    const presentAuthTables = await client.query<{ table_name: string }>(
+      `select table_name from information_schema.tables
+        where table_schema = 'public' and table_type = 'BASE TABLE'
+          and table_name = any($1::text[])
+        order by table_name`,
+      [[...DURABLE_USER_AUTH_BACKUP_TABLES]],
+    );
+    const plan: BackupPlanStep[] = [
+      { name: "orgs", where: `t.id = '${orgId}'` },
+      ...tenantTables.map((name) => ({ name, where: `t.org_id = '${orgId}'` })),
+      ...childTables.map((name) => ({ name, where: PARENT_FILTER[name](orgId) })),
+      ...presentAuthTables.rows.map(({ table_name: name }) => ({
+        name,
+        where: `t.user_id in (select id from public.users where org_id = '${orgId}')`,
+      })),
+    ];
+    for (const step of plan) {
+      if (!TABLE_NAME_RE.test(step.name)) throw new Error(`unexpected table name: ${step.name}`);
+    }
+
+    await assertForeignKeyClosure(client, plan);
+    const schemaSha256 = await backupSchemaFingerprint(
+      client,
+      plan.map((step) => step.name),
+    );
+
     await writeLine(
       JSON.stringify({
-        format: "openbooks-backup",
-        version: 1,
+        format: BACKUP_FORMAT,
+        version: BACKUP_FORMAT_VERSION,
         orgId,
         createdAt: new Date().toISOString(),
+        schemaSha256,
       }) + "\n",
     );
 
@@ -183,6 +334,13 @@ export async function streamOrgBackup(orgId: string, sink: Writable): Promise<Ba
     sink.destroy(err as Error);
     throw err;
   } finally {
+    if (deploymentLock) {
+      await client
+        .query("select pg_advisory_unlock_shared(hashtextextended($1, 0))", [
+          "openbooks:deployment-bootstrap",
+        ])
+        .catch(() => {});
+    }
     client.release();
   }
 }

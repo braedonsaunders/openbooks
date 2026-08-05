@@ -66,6 +66,7 @@ try {
   const manifest = {
     format: "openbooks-local-backup-manifest",
     version: 1,
+    backupFormatVersion: 2,
     orgId,
     createdAt: new Date().toISOString(),
     file: out,

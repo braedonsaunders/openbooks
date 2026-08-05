@@ -113,10 +113,12 @@ test(
         effectiveRatePercent: string;
       };
       assert.equal(payload.pretaxBookIncome, "1000000.0000");
-      assert.equal(payload.currentTax, "265000.0000");
-      // Expense = 265,000 + 53,000 DTL − 21,200 DTA + 10,000 VA = 306,800.
-      assert.equal(payload.totalExpense, "306800.0000");
-      assert.equal(payload.effectiveRatePercent, "30.68");
+      // Originating net taxable difference 120,000 → taxable profit 880,000,
+      // current tax 233,200. Pure timing cancels in the total, so total =
+      // statutory 265,000 + 10,000 valuation allowance = 275,000.
+      assert.equal(payload.currentTax, "233200.0000");
+      assert.equal(payload.totalExpense, "275000.0000");
+      assert.equal(payload.effectiveRatePercent, "27.50");
       assert.equal(run.differences.length, 2);
 
       // Post through the kernel.
@@ -132,11 +134,11 @@ test(
       const byAccount = new Map(
         lines.rows.map((l) => [l.account_id, l.amount]),
       );
-      assert.equal(byAccount.get(payable), "-265000.0000");
+      assert.equal(byAccount.get(payable), "-233200.0000");
       assert.equal(byAccount.get(dta), "21200.0000");
       assert.equal(byAccount.get(dtl), "-53000.0000");
       assert.equal(byAccount.get(va), "-10000.0000");
-      assert.equal(byAccount.get(expense), "306800.0000");
+      assert.equal(byAccount.get(expense), "275000.0000");
       assert.equal(
         isZero(sum(lines.rows.map((line) => line.amount))),
         true,

@@ -15,7 +15,8 @@
       "viewer": "查看者"
     },
     "organizations": "组织",
-    "superAdmin": "超级管理员"
+    "superAdmin": "超级管理员",
+    "security": "登录安全"
   },
   "language": {
     "label": "语言",

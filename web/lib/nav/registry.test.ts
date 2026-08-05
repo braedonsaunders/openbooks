@@ -54,6 +54,7 @@ test('default workspaces follow the approved journey-oriented information archit
     'wip-billing',
     'timesheets',
     'field-tickets',
+    'payroll',
     'items',
     'inventory',
     'equipment',

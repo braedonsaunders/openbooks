@@ -6,11 +6,14 @@
  * general ledger is read back. Nothing is stubbed.
  */
 
+import { sql } from "drizzle-orm";
+import { db } from "../../db.ts";
 import {
   applyInventoryIssuesForInvoice,
   applyInventoryReceiptsForBill,
   getOnHand,
 } from "../../inventory.ts";
+import { reverseInventoryWritedown, writeDownInventoryToNrv } from "../../inventory-nrv.ts";
 import { capture, draftDocument, deps, postNewDocument } from "../ledger-helpers.ts";
 import { postDocument } from "../../posting.ts";
 import type { CaseContext, ConformanceCase } from "../types.ts";
@@ -370,9 +373,6 @@ export const INVENTORY_CASES: readonly ConformanceCase[] = [
     },
   },
 
-  // -------------------------------------------------------------------------
-  // Declared gaps
-  // -------------------------------------------------------------------------
   {
     id: "inv-lower-of-cost-and-nrv",
     title: "Inventory is written down to net realisable value when NRV falls below cost",
@@ -399,16 +399,14 @@ export const INVENTORY_CASES: readonly ConformanceCase[] = [
           "Inventory measured using first-in first-out or average cost is measured at the lower of cost and net realisable value.",
       },
     ],
-    support: "not-implemented",
+    support: "supported",
     tier: "ledger",
-    gap:
-      "There is no value-only inventory remeasurement. `adjustInventory` changes QUANTITY — writing inventory down through it would remove units that physically exist and misstate the count. The only cost-layer revaluation path in the engine is landed-cost allocation, which increases carrying value. A period-end lower-of-cost-and-NRV write-down must therefore be booked as a manual journal, leaving the inventory subledger and the general ledger disagreeing by the amount of the write-down.",
     assertion:
-      "When net realisable value falls below cost, the carrying amount of inventory is reduced to NRV, the loss is recognised immediately, and the on-hand QUANTITY is unchanged.",
+      "When net realisable value falls below cost, the carrying amount of inventory is reduced to NRV through the cost layers themselves — the loss is recognised immediately, the on-hand QUANTITY is unchanged, and the inventory subledger stays in agreement with the general ledger.",
     facts: [
       "100 units on hand at a cost of 3.00 each, carried at 300.00.",
       "Net realisable value falls to 2.00 per unit, or 200.00 in total.",
-      "A write-down of 100.00 is recognised as an expense; 100 units remain on hand.",
+      "A write-down of 100.00 is recognised as an expense; 100 units remain on hand at a carrying amount of 200.00.",
     ],
     expected: {
       entries: [
@@ -421,6 +419,33 @@ export const INVENTORY_CASES: readonly ConformanceCase[] = [
         },
       ],
       values: { remainingQuantity: "100.0000", remainingValue: "200.0000" },
+    },
+    run: async (ctx) => {
+      const ledger = ctx.ledger!;
+      const item = ledger.items.fifo;
+      await receiveViaBill(ctx, {
+        number: "CONF-NRV-1",
+        itemId: item,
+        quantity: "100",
+        unitCost: "3",
+        amount: "300",
+      });
+
+      const writedown = await capture(ctx, "write-down to net realisable value", async () => {
+        await writeDownInventoryToNrv(ledger.orgId, ledger.actorId, {
+          itemId: item,
+          stockLocationId: ledger.stockLocationId,
+          subsidiaryId: ledger.subsidiaryId,
+          date: ledger.date,
+          nrvPerUnit: "2",
+        });
+      });
+
+      const onHand = await getOnHand(ledger.orgId, item, ledger.stockLocationId);
+      return {
+        entries: [writedown],
+        values: { remainingQuantity: onHand.quantity, remainingValue: onHand.value },
+      };
     },
   },
 
@@ -443,20 +468,89 @@ export const INVENTORY_CASES: readonly ConformanceCase[] = [
           "A write-down of inventory to the lower of cost and net realisable value creates a new cost basis that is not subsequently written back up.",
       },
     ],
-    support: "not-implemented",
+    support: "supported",
     tier: "ledger",
-    gap:
-      "This requirement cannot be implemented until lower-of-cost-and-NRV measurement exists (see inv-lower-of-cost-and-NRV). It additionally needs a reporting-framework policy switch: the same fact pattern must reverse under IFRS and must NOT reverse under US GAAP. The organisation already carries an `asc740`/`ias12` framework flag for income tax; inventory has no equivalent.",
     assertion:
-      "Under IFRS a recovered net realisable value reverses the earlier write-down up to original cost; under US GAAP the written-down amount is the new cost basis and no reversal is recognised.",
+      "The same recovery in net realisable value reverses the write-down under IFRS — capped so cumulative reversals never exceed the cumulative write-down — and is refused outright under US GAAP, where the written-down amount is the new cost basis. The answer comes from the organisation's configured reporting framework, not from which function was called.",
     facts: [
       "100 units at cost 3.00 written down to NRV 2.00, a write-down of 100.00.",
       "Net realisable value later recovers to 2.80 per unit.",
       "Under IFRS the carrying amount returns to 280.00, reversing 80.00 of the write-down.",
-      "Under US GAAP the carrying amount stays at 200.00 and nothing is reversed.",
+      "Under US GAAP the reversal is refused and the carrying amount stays at 200.00.",
     ],
     expected: {
-      values: { ifrsCarryingAmount: "280.0000", usGaapCarryingAmount: "200.0000" },
+      entries: [
+        {
+          step: "IFRS reversal to revised NRV",
+          lines: [
+            { role: "inventory", amount: "80.0000" },
+            { role: "inventoryAdjustment", amount: "-80.0000" },
+          ],
+        },
+      ],
+      values: {
+        ifrsCarryingAmount: "280.0000",
+        usGaapReversalRefused: "true",
+      },
+    },
+    run: async (ctx) => {
+      const ledger = ctx.ledger!;
+      const item = ledger.items.fifo;
+      await receiveViaBill(ctx, {
+        number: "CONF-NRV-2",
+        itemId: item,
+        quantity: "100",
+        unitCost: "3",
+        amount: "300",
+      });
+
+      const setFramework = (framework: "us_gaap" | "ifrs") =>
+        db.execute(sql`
+          update orgs set settings = settings || ${JSON.stringify({ reportingFramework: framework })}::jsonb
+           where id = ${ledger.orgId}`);
+
+      await setFramework("ifrs");
+      await writeDownInventoryToNrv(ledger.orgId, ledger.actorId, {
+        itemId: item,
+        stockLocationId: ledger.stockLocationId,
+        subsidiaryId: ledger.subsidiaryId,
+        date: ledger.date,
+        nrvPerUnit: "2",
+      });
+
+      const reversal = await capture(ctx, "IFRS reversal to revised NRV", async () => {
+        await reverseInventoryWritedown(ledger.orgId, ledger.actorId, {
+          itemId: item,
+          stockLocationId: ledger.stockLocationId,
+          subsidiaryId: ledger.subsidiaryId,
+          date: ledger.date,
+          nrvPerUnit: "2.80",
+        });
+      });
+      const ifrsOnHand = await getOnHand(ledger.orgId, item, ledger.stockLocationId);
+
+      // The identical recovery under US GAAP must be refused.
+      await setFramework("us_gaap");
+      let refused = false;
+      try {
+        await reverseInventoryWritedown(ledger.orgId, ledger.actorId, {
+          itemId: item,
+          stockLocationId: ledger.stockLocationId,
+          subsidiaryId: ledger.subsidiaryId,
+          date: ledger.date,
+          nrvPerUnit: "3.00",
+        });
+      } catch {
+        refused = true;
+      }
+
+      return {
+        entries: [reversal],
+        values: {
+          ifrsCarryingAmount: ifrsOnHand.value,
+          usGaapReversalRefused: String(refused),
+        },
+      };
     },
   },
 ];

@@ -573,6 +573,16 @@ export const NAV_MODULES: NavModule[] = [
     requiredPermission: 'time.read',
     featureKey: 'fieldTickets',
   },
+  {
+    key: 'payroll',
+    href: '/payroll',
+    label: 'Payroll',
+    iconKey: 'wallet',
+    group: 'operations',
+    subgroup: 'people',
+    requiredPermission: 'payroll.read',
+    featureKey: 'payroll',
+  },
 
   // Insights — reports, native analytics, custom dashboards, and saved views.
   {
@@ -805,6 +815,7 @@ export const DEFAULT_NAV_ORDER: Record<NavGroupKey, readonly string[]> = {
     'wip-billing',
     'timesheets',
     'field-tickets',
+    'payroll',
     'items',
     'inventory',
     'equipment',

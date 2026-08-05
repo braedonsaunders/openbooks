@@ -63,6 +63,18 @@ export const accounts = pgTable(
     subsidiaryIncludeChildren: boolean("subsidiary_include_children").notNull().default(true),
     /** Reconcilable accounts (bank, card, clearing) get statement matching. */
     reconcilable: boolean("reconcilable").notNull().default(false),
+    /**
+     * IAS 21 monetary-item override for period-end FX retranslation.
+     * null  → infer from type: bank, receivable, and payable accounts are
+     *         monetary; everything else is not.
+     * true  → retranslate this account too (foreign-currency loans and other
+     *         monetary balances carried outside the default types). Ignored
+     *         for income/expense/equity types — only balance-sheet items are
+     *         monetary.
+     * false → exclude even a default-type account (e.g. a payable-typed
+     *         account used for non-monetary deferrals).
+     */
+    monetary: boolean("monetary"),
     /** Which dimensions are required when posting here, e.g. ["project"]. */
     requiredDimensions: jsonb("required_dimensions").$type<string[]>().notNull().default([]),
     custom: jsonb("custom").notNull().default({}),

@@ -634,6 +634,12 @@ async function main(): Promise<void> {
   const runtimeConfig = runtimeDatabaseConfig();
   const constrainedSchemaOwnerMigration =
     env.OPENBOOKS_CONSTRAINED_SCHEMA_OWNER_MIGRATION === "1";
+  const restoreTarget = env.OPENBOOKS_RESTORE_TARGET === "1";
+  if (restoreTarget && constrainedSchemaOwnerMigration) {
+    throw new Error(
+      "OPENBOOKS_RESTORE_TARGET and constrained schema-owner migration modes cannot be combined",
+    );
+  }
   if (env.NODE_ENV === "production" && !runtimeConfig) {
     throw new Error(
       "OPENBOOKS_RUNTIME_DB_URL is required for production bootstrap; migrations and application traffic must use separate database roles",
@@ -676,6 +682,20 @@ async function main(): Promise<void> {
       if (runtimeConfig) await ensureRuntimeDatabaseRole(runtimeConfig);
       await ensureReadRole(runtimeConfig?.roleName);
       await seedCurrencies();
+      if (restoreTarget) {
+        const organizations = (await db.execute(
+          sql`select count(*)::int as count from orgs`,
+        )) as unknown as { rows: { count: number }[] };
+        if (organizations.rows[0]?.count !== 0) {
+          throw new Error(
+            "OPENBOOKS_RESTORE_TARGET requires a new database with zero organizations",
+          );
+        }
+        console.log(
+          "[bootstrap] schema-only restore target ready; no organization or administrator was seeded",
+        );
+        return;
+      }
       const primaryOrgId = await ensureOrg();
       const organizations = (await db.execute(
         sql`select id from orgs order by created_at`,

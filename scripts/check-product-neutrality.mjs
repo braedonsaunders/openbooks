@@ -1,5 +1,6 @@
 import { execFileSync } from "node:child_process";
-import { readFileSync } from "node:fs";
+import { createHash } from "node:crypto";
+import { existsSync, readFileSync } from "node:fs";
 
 const joined = (...parts) => parts.join("");
 
@@ -24,20 +25,44 @@ const vendorPatterns = [
   new RegExp(joined("One", "World"), "i"),
 ];
 
-// Known customer, tenant, predecessor-codebase, installed-SuiteApp, account,
-// and incident identifiers must never enter tracked product files. Split the
-// literals here so this audit does not whitelist itself by containing them.
-const privateProvenancePatterns = [
-  new RegExp(joined("Ras", "saun"), "i"),
-  new RegExp(joined("Bir", "la"), "i"),
-  new RegExp(joined("Admin", "App2"), "i"),
-  new RegExp(joined("Beacon", "HS"), "i"),
-  new RegExp(joined("Gan", "try"), "i"),
-  new RegExp(joined("863", "8714")),
-  new RegExp(joined("635", "982")),
-  new RegExp(joined("647", "409")),
-  new RegExp(joined("647", "410")),
+// Fingerprints keep customer, tenant, account and incident identifiers out of
+// the prevention control itself. Candidates are checked both as ordinary
+// tokens and as underscore-preserving source identifiers.
+const privateProvenanceHashes = new Set([
+  "fa32bdd07499522b9e099829d524820571854df53a467b14b08ebd3d2286d6ce",
+  "cbd74271cc98249a368d5e1b7c6f0636ad4132fa123a6f90e6df50731ed375f3",
+  "b7d43aed608d1cbb1afefb42e2be6763530e5aee6994d25867246c8fa4703bd9",
+  "2a8883bc38f9bc430dbe4349245808633c55ed72db3e383832d905b2dfa44416",
+  "3014637776d42a85266a46eecaa689d23eed6e49a3cea1f282afce1001b796c7",
+  "a8cfc74482c018974f6b9e56c865ba1d718007bc295a305d4ead3964d5f09e5d",
+  "9241579e6ad3afa278e55151a0c2751af9a9c655b2db25d35a4845f6267689c8",
+  "6e5e825c558c5d993bb79cd4384690edb8bf2ed67d5c623baaf34dcbc78aeb77",
+  "dae3be6c1355614ec0d577941b51fbbb961465f589b6cff36b3de0359280c72f",
+  "2624169ff3689d21f7dda5f47e2abecca8fb714e94227a21f47948a41e5909d8",
+  "3d0b6788d0209c7fde7a398c2a27f6c53aeb4dcada97cf98104320f9f367cbf2",
+  "a9ed492dcb98579d9b98479b4c1374dab9ee234e529e7ebb54c5ef7d39a6914f",
+  "674523586ff93cc6290f7d949b831d1c2599412995a0aafe962f06c3ce893578",
+]);
+
+const privatePathPatterns = [
+  /(?:^|\/)\.local\/tenant-migrations(?:\/|$)/i,
+  /(?:^|\/)account-data(?:\/|$)/i,
+  /(?:^|\/)extraction(?:\/|$)/i,
+  /(?:^|\/)objects-list\.txt$/i,
 ];
+
+function containsPrivateProvenance(value) {
+  const lower = value.toLowerCase();
+  const candidates = new Set([
+    ...lower.split(/[^a-z0-9]+/).filter(Boolean),
+    ...lower.split(/[^a-z0-9_]+/).filter(Boolean),
+  ]);
+  return [...candidates].some((candidate) =>
+    privateProvenanceHashes.has(
+      createHash("sha256").update(candidate).digest("hex"),
+    ),
+  );
+}
 
 const connectorPaths = [
   /^\.gitignore$/,
@@ -50,7 +75,7 @@ const connectorPaths = [
   /^engine\/src\/(?:netsuite|qbo\.ts$|xero\.ts$|odoo\.ts$|erpnext\.ts$|dynamics\.ts$|qbd\/|sync\/)/,
   /^engine\/src\/worker\/migration-worker\.ts$/,
   /^engine\/src\/harness\/ledger-parity\//,
-  /^extraction\//,
+  /^engine\/src\/harness\/differential\//,
   /^integrations\//,
   /^scripts\/verify-financial-release\.ts$/,
   /^schema\/src\/(?:extension|qbd)\.ts$/,
@@ -89,11 +114,16 @@ const publicFiles = execFileSync(
 const violations = [];
 
 for (const filePath of publicFiles) {
+  // A tracked file deleted in the working tree is no longer part of the
+  // candidate public snapshot, even before its deletion is staged.
+  if (!existsSync(filePath)) continue;
   // TypeScript incremental state is a generated compiler cache, not product
   // copy or source. It embeds every imported filename and string literal.
   if (filePath.endsWith(".tsbuildinfo")) continue;
-  const provenancePathMatch = firstMatch(filePath, privateProvenancePatterns);
-  if (provenancePathMatch) {
+  if (
+    privatePathPatterns.some((pattern) => pattern.test(filePath)) ||
+    containsPrivateProvenance(filePath)
+  ) {
     violations.push(`${filePath}: private provenance identifier in path`);
   }
 
@@ -112,11 +142,9 @@ for (const filePath of publicFiles) {
   }
   if (source.includes("\0")) continue;
 
-  const provenanceMatch = firstMatch(source, privateProvenancePatterns);
-  if (provenanceMatch) {
-    const line = source.slice(0, provenanceMatch.index).split("\n").length;
+  if (containsPrivateProvenance(source)) {
     violations.push(
-      `${filePath}:${line}: private provenance identifier in public content`,
+      `${filePath}: private provenance identifier in public content`,
     );
   }
 

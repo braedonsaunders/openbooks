@@ -37,7 +37,17 @@ export interface CreateDocInput {
 
 /** Build the PostingDeps a document needs from the org's control accounts. */
 export function postingDeps(world: SimOrg): PostingDeps {
-  return { control: { ar: world.accounts.ar!, ap: world.accounts.ap!, bank: world.accounts.bank! } };
+  return {
+    control: {
+      ar: world.accounts.ar!,
+      ap: world.accounts.ap!,
+      bank: world.accounts.bank!,
+      // Route employee reimbursements to their configured control account —
+      // the kernel falls back to AP when this is omitted, which would strand
+      // expense reports outside the employee-payable subledger the org wired.
+      ...(world.accounts.employeePayable ? { employeePayable: world.accounts.employeePayable } : {}),
+    },
+  };
 }
 
 /** Insert a document header + lines as a DRAFT (not posted). Returns its id. */

@@ -22,6 +22,7 @@ import {
   LayoutPanelLeft,
   LogOut,
   Palette,
+  ShieldCheck,
   ShieldAlert,
   type LucideIcon,
 } from 'lucide-react'
@@ -222,6 +223,18 @@ export function AccountMenu({
               sub={layoutLabel}
               onClick={() => setView('layout')}
             />
+            <Link
+              href="/settings/security"
+              onClick={close}
+              className="group relative flex flex-col gap-2 rounded-xl border border-slate-200 bg-white p-3 transition-colors hover:border-slate-300 hover:bg-slate-50 dark:border-slate-800 dark:bg-slate-900 dark:hover:border-slate-700 dark:hover:bg-slate-800/60"
+            >
+              <span className="grid h-9 w-9 place-items-center rounded-lg bg-emerald-50 text-emerald-600 dark:bg-emerald-950/40 dark:text-emerald-400">
+                <ShieldCheck size={18} />
+              </span>
+              <span className="truncate text-sm font-medium text-slate-900 dark:text-slate-100">
+                {t('security')}
+              </span>
+            </Link>
             {environments.isSuperAdmin && (
               <Link
                 href="/platform"

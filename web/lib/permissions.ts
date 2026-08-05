@@ -84,6 +84,13 @@ export const PERMISSION_CATALOGUE = [
   "time.read",
   "time.manage",
   "time.approve",
+  // Payroll — a deliberately separate duty set: wages and deductions are
+  // confidential, so none of these ride on time.* or admin.setup.manage.
+  // read = see runs/stubs; manage = setup, profiles, components; run =
+  // calculate/commit pay runs (posting additionally requires gl.post).
+  "payroll.read",
+  "payroll.manage",
+  "payroll.run",
   // Custom records — user-defined record types + their generated modules
   "records.read",
   "records.create",
@@ -292,6 +299,15 @@ export const PERMISSION_GROUPS: {
     ],
   },
   {
+    key: "payroll",
+    labelKey: "permissions.groups.payroll",
+    permissions: [
+      { key: "payroll.read", labelKey: permissionLabelKey("payroll.read") },
+      { key: "payroll.manage", labelKey: permissionLabelKey("payroll.manage") },
+      { key: "payroll.run", labelKey: permissionLabelKey("payroll.run") },
+    ],
+  },
+  {
     key: "records",
     labelKey: "permissions.groups.records",
     permissions: [
@@ -458,6 +474,9 @@ export const BUILT_IN_ROLES: Record<
       "time.read",
       "time.manage",
       "time.approve",
+      "payroll.read",
+      "payroll.manage",
+      "payroll.run",
       "assistant.use",
       "assistant.write",
       "sql.execute",

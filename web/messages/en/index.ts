@@ -52,6 +52,7 @@ import salesOrders from './salesOrders.json'
 import sync from './sync.json'
 import tax from './tax.json'
 import fieldTickets from './fieldTickets.json'
+import payroll from './payroll.json'
 import timesheets from './timesheets.json'
 import laborPricing from './labor-pricing.json'
 import applications from './applications.json'
@@ -110,6 +111,7 @@ export default {
   sync,
   tax,
   fieldTickets,
+  payroll,
   timesheets,
   applications,
   compliance,

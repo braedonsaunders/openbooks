@@ -19,7 +19,6 @@
       <object>customrecord_ncfar_deprmethod</object>
       <object>customrecord_ncfar_altdepreciation</object>
       <object>customrecord_ncfar_assettype</object>
-      <object>customrecord_bit_time_type</object>
     </objects>
   </dependencies>
 </manifest>

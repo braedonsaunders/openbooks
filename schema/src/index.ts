@@ -61,3 +61,6 @@ export * from "./qbd";
 export * from "./psp-settlements";
 export * from "./tax-rate-providers";
 export * from "./income-tax";
+export * from "./auth";
+export * from "./payroll";
+export * from "./leases";

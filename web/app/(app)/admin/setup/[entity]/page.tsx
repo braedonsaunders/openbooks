@@ -85,6 +85,13 @@ async function loadEntityOptions(source: string, orgId: string): Promise<RefOpti
        where p.org_id = ${orgId} and p.is_active order by p.display_name`)) as any
     return customers.rows as RefOption[]
   }
+  if (source === 'vendors') {
+    const vendors = (await db.execute(sql`
+      select p.id as value, p.display_name as label from parties p
+       join vendor_roles v on v.party_id = p.id and v.org_id = p.org_id and v.is_active
+       where p.org_id = ${orgId} and p.is_active order by p.display_name`)) as any
+    return vendors.rows as RefOption[]
+  }
   if (source === 'projects') {
     const projects = (await db.execute(sql`
       select id as value, case when coalesce(code,'') <> '' then code || ' · ' || name else name end as label

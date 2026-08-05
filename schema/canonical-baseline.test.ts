@@ -5,11 +5,13 @@ import test from "node:test";
 const baselinePath = "schema/migrations/generated/0001_baseline.sql";
 const baseline = readFileSync(baselinePath, "utf8");
 
-test("fresh installations have one canonical schema baseline", () => {
-  assert.deepEqual(
-    readdirSync("schema/migrations/generated").filter((file) => file.endsWith(".sql")),
-    ["0001_baseline.sql"],
-  );
+test("fresh installations have one canonical baseline followed by ordered forward migrations", () => {
+  const generated = readdirSync("schema/migrations/generated")
+    .filter((file) => file.endsWith(".sql"))
+    .sort();
+  assert.equal(generated[0], "0001_baseline.sql");
+  assert.ok(generated.includes("0002_auth_security.sql"));
+  assert.ok(generated.every((file) => /^\d{4}_[a-z0-9_]+\.sql$/.test(file)));
   assert.deepEqual(
     readdirSync("schema/migrations").filter((file) => file.endsWith(".sql")).sort(),
     ["environments.sql"],
@@ -18,6 +20,18 @@ test("fresh installations have one canonical schema baseline", () => {
   assert.match(baseline, /CREATE FUNCTION public\.je_check_posted_balance/);
   assert.match(baseline, /CREATE POLICY org_isolation/);
   assert.match(baseline, /SELECT public\.openbooks_refresh_query_catalog\(\)/);
+});
+
+test("authentication hardening is an additive migration", () => {
+  const authMigration = readFileSync(
+    "schema/migrations/generated/0002_auth_security.sql",
+    "utf8",
+  );
+  assert.match(authMigration, /create table public\.auth_sessions/i);
+  assert.match(authMigration, /create table public\.auth_login_events/i);
+  assert.match(authMigration, /create table public\.auth_mfa_factors/i);
+  assert.match(authMigration, /create table public\.auth_oidc_identities/i);
+  assert.match(authMigration, /references public\.users\(id\) on delete cascade/i);
 });
 
 test("the canonical catalog contains no upgrade-only evidence model", () => {

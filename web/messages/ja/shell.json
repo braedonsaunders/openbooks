@@ -15,7 +15,8 @@
       "viewer": "閲覧者"
     },
     "organizations": "組織",
-    "superAdmin": "スーパー管理者"
+    "superAdmin": "スーパー管理者",
+    "security": "サインインのセキュリティ"
   },
   "language": {
     "label": "言語",

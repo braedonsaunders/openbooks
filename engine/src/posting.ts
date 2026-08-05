@@ -760,6 +760,26 @@ export const RULES: Record<string, RuleFn> = {
     }),
 
   /**
+   * Pay run: the committed payroll GL projection. commitPayRun materialized a
+   * balanced, signed line set (DR wages/burden, CR withholding liabilities and
+   * per-employee net pay) — the rule maps it 1:1 like a journal. Employee
+   * parties ride the net-pay legs so the payable can settle per person.
+   */
+  pay_run: (doc, lines, deps) =>
+    lines.map((l) => {
+      if (!l.accountId) throw new PostingError("pay run line is missing an account");
+      const partyId = l.partyId ?? null;
+      return {
+        accountId: l.accountId,
+        amount: l.amount,
+        memo: l.description,
+        partyId,
+        isOpenItem: controlLineIsOpenItem(l.accountId, partyId, deps.openItemAccountIds),
+        ...dims(doc, l),
+      };
+    }),
+
+  /**
    * Check: a direct bank disbursement. DR the line accounts (expense or the
    * AP/liability being paid), CR bank. Like vendor_payment but the debit side
    * is the document's own line accounts. Purchase-side tax (taxPaid).
@@ -945,9 +965,20 @@ async function resolveOpenItemAccounts(
   runner: Pick<typeof db, "execute">,
   orgId: string,
 ): Promise<Set<string>> {
+  // Open-item capability follows from control designation, not only from
+  // account type: the industry presets wire the employee-reimbursements
+  // control (settings.controlAccounts.employeePayable) to a
+  // liability_current_other account, and an expense report's control line
+  // must still be an open item there or it can never be settled through the
+  // payment-application engine.
   const r = (await runner.execute(sql`
     select id from accounts
-     where org_id = ${orgId} and type in ('asset_receivable', 'liability_payable')`)) as unknown as {
+     where org_id = ${orgId} and type in ('asset_receivable', 'liability_payable')
+    union
+    select (settings->'controlAccounts'->>'employeePayable')::uuid as id
+      from orgs
+     where id = ${orgId}
+       and settings->'controlAccounts'->>'employeePayable' is not null`)) as unknown as {
     rows: { id: string }[];
   };
   return new Set(r.rows.map((x) => x.id));

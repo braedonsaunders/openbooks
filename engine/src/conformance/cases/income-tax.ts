@@ -38,18 +38,18 @@ export const INCOME_TAX_CASES: readonly ConformanceCase[] = [
     facts: [
       "Pretax book income of 1,000,000.00.",
       "A non-deductible permanent difference of 50,000.00.",
-      "A taxable temporary difference of 200,000.00 arising on fixed assets, giving a deferred tax liability.",
+      "A taxable temporary difference of 200,000.00 originating this year on fixed assets, giving a deferred tax liability.",
       "The enacted rate is 25%.",
-      "Current tax is 25% of (1,000,000 + 50,000) = 262,500.00.",
+      "Taxable profit is 1,000,000 + 50,000 − 200,000 = 850,000.00; current tax is 212,500.00.",
       "The deferred tax liability of 200,000 at 25% is 50,000.00, all of it arising this year.",
-      "Total tax expense is 312,500.00.",
+      "Total tax expense is 262,500.00 — the timing difference shifts tax between current and deferred without changing the total.",
     ],
     expected: {
       values: {
-        taxableIncome: "1050000.0000",
-        currentTax: "262500.0000",
+        taxableIncome: "850000.0000",
+        currentTax: "212500.0000",
         deferredExpense: "50000.0000",
-        totalExpense: "312500.0000",
+        totalExpense: "262500.0000",
         deferredTaxLiability: "50000.0000",
       },
     },
@@ -403,12 +403,11 @@ export const INCOME_TAX_CASES: readonly ConformanceCase[] = [
     }),
   },
 
-  // -------------------------------------------------------------------------
-  // Partial conformance — a real measurement divergence, recorded rather than
-  // hidden.
-  // -------------------------------------------------------------------------
   {
     id: "tax-current-tax-omits-temporary-differences",
+    // The id records this register entry's history: it began life as a partial
+    // whose limitation was exactly this omission. Ids are stable; the title and
+    // status carry the current truth.
     title: "Current tax is measured on taxable profit for the period",
     citations: [
       {
@@ -426,21 +425,25 @@ export const INCOME_TAX_CASES: readonly ConformanceCase[] = [
           "Current tax for the period is recognised as a liability to the extent unpaid, measured on taxable profit for that period.",
       },
     ],
-    support: "partial",
+    support: "supported",
     tier: "computation",
-    limitation:
-      "Current tax is computed from book income adjusted for PERMANENT differences and loss carryforwards only. Originating and reversing TEMPORARY differences drive the deferred computation but do not adjust taxable income, so the current-tax figure is not taxable profit as ASC 740-10-30-2 and IAS 12.12 define it. Total tax expense (current plus deferred) is unaffected because the same differences flow through deferred tax, but the split between current and deferred — and therefore income tax payable — is misstated whenever temporary differences exist. Entities must reconcile the current-tax line to the filed return before publishing the tax note.",
     assertion:
-      "Permanent differences and utilised loss carryforwards adjust taxable income and therefore current tax; this case asserts the part that is implemented.",
+      "Taxable profit reflects permanent differences, utilised loss carryforwards, AND the year's originating movement in temporary differences — so income tax payable is the amount actually owed on the return, and the current/deferred split is right whenever timing differences exist.",
     facts: [
       "Pretax book income of 800,000.00.",
       "A non-deductible permanent difference of 30,000.00.",
       "A loss carryforward of 100,000.00 is utilised.",
-      "Taxable income is 730,000.00 and current tax at 25% is 182,500.00.",
-      "No temporary differences are present, so this case is unaffected by the limitation above.",
+      "A taxable temporary difference of 40,000.00 originates this year (tax depreciation ahead of book).",
+      "Taxable profit is 800,000 + 30,000 − 100,000 − 40,000 = 690,000.00; current tax at 25% is 172,500.00.",
+      "The 40,000.00 difference gives a deferred tax liability of 10,000.00; total tax expense is 182,500.00.",
     ],
     expected: {
-      values: { taxableIncome: "730000.0000", currentTax: "182500.0000" },
+      values: {
+        taxableIncome: "690000.0000",
+        currentTax: "172500.0000",
+        deferredExpense: "10000.0000",
+        totalExpense: "182500.0000",
+      },
     },
     run: () => {
       const provision = buildProvision({
@@ -449,10 +452,22 @@ export const INCOME_TAX_CASES: readonly ConformanceCase[] = [
         permanentDifferences: [{ description: "Non-deductible expenses", amount: "30000.00" }],
         lossCarryforwardUsed: "100000.00",
         valuationAllowance: "0",
-        differences: [],
+        differences: [
+          {
+            category: "fixed_assets",
+            description: "Accelerated tax depreciation",
+            difference: "40000.00",
+            source: "manual",
+          },
+        ],
       });
       return {
-        values: { taxableIncome: provision.taxableIncome, currentTax: provision.currentTax },
+        values: {
+          taxableIncome: provision.taxableIncome,
+          currentTax: provision.currentTax,
+          deferredExpense: provision.deferredExpense,
+          totalExpense: provision.totalExpense,
+        },
       };
     },
   },
