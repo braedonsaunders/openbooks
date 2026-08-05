@@ -14,7 +14,6 @@ SELECT pg_catalog.set_config('search_path', '', false);
 SET check_function_bodies = false;
 SET xmloption = content;
 SET client_min_messages = warning;
-
 --
 -- Name: openbooks_query; Type: SCHEMA; Schema: -; Owner: -
 --
@@ -2534,7 +2533,11 @@ declare
     'temporary_differences', 'time_entries', 'time_types', 'trades',
     'transfer_order_lines', 'transfer_orders', 'vendor_pay_application_lines',
     'vendor_pay_applications', 'vendor_retainage_releases', 'wip_holds',
-    'wip_prebill_events', 'wip_prebill_lines', 'wip_prebills', 'worker_comp_groups'
+    'wip_prebill_events', 'wip_prebill_lines', 'wip_prebills', 'worker_comp_groups',
+    'employee_pay_components', 'employee_payroll_profiles',
+    'pay_components', 'pay_runs', 'pay_schedules', 'pay_stub_lines', 'pay_stubs',
+    'payroll_opening_balances', 'union_agreements', 'union_classifications',
+    'union_fringes'
   ];
 begin
   -- Public base tables are never query-console surfaces. Revoke both current
@@ -2924,6 +2927,27 @@ CREATE FUNCTION public.period_module_is_closed(p_org uuid, p_period uuid, p_book
     false
   )
 $$;
+
+
+--
+-- Name: posted_document_financial_guard(); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.posted_document_financial_guard() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+begin
+  if coalesce(current_setting('openbooks.sandbox_wipe', true), 'off') = 'on' then
+    return new;
+  end if;
+  if openbooks_sandbox_wipe_allowed(old.org_id) then
+    return new;
+  end if;
+  if coalesce(current_setting('openbooks.amend', true), 'off') <> 'on' then
+    raise exception 'document % is % — its financial identity (totals, dates, currency, party, kind, number) is immutable outside the governed amend path', old.id, old.status;
+  end if;
+  return new;
+end $$;
 
 
 --
@@ -3967,10 +3991,6 @@ BEGIN
 END $$;
 
 
-SET default_tablespace = '';
-
-SET default_table_access_method = heap;
-
 --
 -- Name: account_group_members; Type: TABLE; Schema: public; Owner: -
 --
@@ -4169,10 +4189,18 @@ CREATE TABLE public.accounts (
     updated_by uuid,
     subsidiary_id uuid,
     subsidiary_include_children boolean DEFAULT true NOT NULL,
+    monetary boolean,
     CONSTRAINT accounts_reconcilable_currency_required CHECK (((NOT reconcilable) OR (currency_restriction IS NOT NULL)))
 );
 
 ALTER TABLE ONLY public.accounts FORCE ROW LEVEL SECURITY;
+
+
+--
+-- Name: COLUMN accounts.monetary; Type: COMMENT; Schema: public; Owner: -
+--
+
+COMMENT ON COLUMN public.accounts.monetary IS 'IAS 21 monetary-item override for FX retranslation: null = infer from type (bank/receivable/payable), true = retranslate (balance-sheet types only), false = exclude.';
 
 
 --
@@ -4723,7 +4751,7 @@ ALTER TABLE ONLY public.billing_request_field_tickets FORCE ROW LEVEL SECURITY;
 -- Name: billing_request_field_tickets; Type: VIEW; Schema: openbooks_query; Owner: -
 --
 
-CREATE VIEW openbooks_query.billing_request_field_tickets AS
+CREATE VIEW openbooks_query.billing_request_field_tickets WITH (security_barrier='true') AS
  SELECT id,
     org_id,
     billing_request_id,
@@ -5001,6 +5029,114 @@ CREATE VIEW openbooks_query.budget_scenarios WITH (security_barrier='true') AS
     approved_at,
     approved_by
    FROM public.budget_scenarios
+  WHERE (org_id = public.openbooks_query_org_id());
+
+
+--
+-- Name: cam_allocations; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.cam_allocations (
+    id uuid DEFAULT public.uuid_generate_v7() NOT NULL,
+    org_id uuid NOT NULL,
+    pool_id uuid NOT NULL,
+    lease_id uuid NOT NULL,
+    share_percent numeric(19,4) NOT NULL,
+    budget_allocation numeric(19,4) DEFAULT 0 NOT NULL,
+    actual_allocation numeric(19,4),
+    billed_estimate numeric(19,4) DEFAULT 0 NOT NULL,
+    reconciliation_amount numeric(19,4),
+    invoice_document_id uuid,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    created_by uuid,
+    updated_at timestamp with time zone DEFAULT now() NOT NULL,
+    updated_by uuid,
+    CONSTRAINT cam_allocations_share CHECK (((share_percent >= (0)::numeric) AND (share_percent <= (100)::numeric)))
+);
+
+ALTER TABLE ONLY public.cam_allocations FORCE ROW LEVEL SECURITY;
+
+
+--
+-- Name: cam_allocations; Type: VIEW; Schema: openbooks_query; Owner: -
+--
+
+CREATE VIEW openbooks_query.cam_allocations WITH (security_barrier='true') AS
+ SELECT id,
+    org_id,
+    pool_id,
+    lease_id,
+    share_percent,
+    budget_allocation,
+    actual_allocation,
+    billed_estimate,
+    reconciliation_amount,
+    invoice_document_id,
+    created_at,
+    created_by,
+    updated_at,
+    updated_by
+   FROM public.cam_allocations
+  WHERE (org_id = public.openbooks_query_org_id());
+
+
+--
+-- Name: cam_pools; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.cam_pools (
+    id uuid DEFAULT public.uuid_generate_v7() NOT NULL,
+    org_id uuid NOT NULL,
+    property_id uuid NOT NULL,
+    name text NOT NULL,
+    fiscal_year integer NOT NULL,
+    period_starts_on date NOT NULL,
+    period_ends_on date NOT NULL,
+    allocation_basis text DEFAULT 'rentable_area'::text NOT NULL,
+    budget_amount numeric(19,4) DEFAULT 0 NOT NULL,
+    actual_amount numeric(19,4),
+    expense_account_ids jsonb DEFAULT '[]'::jsonb NOT NULL,
+    status text DEFAULT 'draft'::text NOT NULL,
+    finalized_at timestamp with time zone,
+    finalized_by uuid,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    created_by uuid,
+    updated_at timestamp with time zone DEFAULT now() NOT NULL,
+    updated_by uuid,
+    CONSTRAINT cam_pools_basis_chk CHECK ((allocation_basis = ANY (ARRAY['rentable_area'::text, 'equal'::text, 'custom'::text]))),
+    CONSTRAINT cam_pools_budget_nonnegative CHECK ((budget_amount >= (0)::numeric)),
+    CONSTRAINT cam_pools_expense_accounts_array CHECK ((jsonb_typeof(expense_account_ids) = 'array'::text)),
+    CONSTRAINT cam_pools_status_chk CHECK ((status = ANY (ARRAY['draft'::text, 'open'::text, 'finalized'::text, 'invoiced'::text]))),
+    CONSTRAINT cam_pools_window CHECK ((period_ends_on >= period_starts_on))
+);
+
+ALTER TABLE ONLY public.cam_pools FORCE ROW LEVEL SECURITY;
+
+
+--
+-- Name: cam_pools; Type: VIEW; Schema: openbooks_query; Owner: -
+--
+
+CREATE VIEW openbooks_query.cam_pools WITH (security_barrier='true') AS
+ SELECT id,
+    org_id,
+    property_id,
+    name,
+    fiscal_year,
+    period_starts_on,
+    period_ends_on,
+    allocation_basis,
+    budget_amount,
+    actual_amount,
+    expense_account_ids,
+    status,
+    finalized_at,
+    finalized_by,
+    created_at,
+    created_by,
+    updated_at,
+    updated_by
+   FROM public.cam_pools
   WHERE (org_id = public.openbooks_query_org_id());
 
 
@@ -7874,6 +8010,126 @@ CREATE VIEW openbooks_query.dunning_log WITH (security_barrier='true') AS
 
 
 --
+-- Name: employee_pay_components; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.employee_pay_components (
+    id uuid DEFAULT public.uuid_generate_v7() NOT NULL,
+    org_id uuid NOT NULL,
+    employee_party_id uuid NOT NULL,
+    component_id uuid NOT NULL,
+    value numeric(19,4),
+    effective_from date NOT NULL,
+    effective_to date,
+    is_active boolean DEFAULT true NOT NULL,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    created_by uuid,
+    updated_at timestamp with time zone DEFAULT now() NOT NULL,
+    updated_by uuid,
+    CONSTRAINT employee_pay_components_range CHECK (((effective_to IS NULL) OR (effective_to >= effective_from)))
+);
+
+ALTER TABLE ONLY public.employee_pay_components FORCE ROW LEVEL SECURITY;
+
+
+--
+-- Name: employee_pay_components; Type: VIEW; Schema: openbooks_query; Owner: -
+--
+
+CREATE VIEW openbooks_query.employee_pay_components WITH (security_barrier='true') AS
+ SELECT id,
+    org_id,
+    employee_party_id,
+    component_id,
+    value,
+    effective_from,
+    effective_to,
+    is_active,
+    created_at,
+    created_by,
+    updated_at,
+    updated_by
+   FROM public.employee_pay_components;
+
+
+--
+-- Name: employee_payroll_profiles; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.employee_payroll_profiles (
+    id uuid DEFAULT public.uuid_generate_v7() NOT NULL,
+    org_id uuid NOT NULL,
+    employee_party_id uuid NOT NULL,
+    pay_schedule_id uuid NOT NULL,
+    province text NOT NULL,
+    pay_basis text DEFAULT 'hourly'::text NOT NULL,
+    federal_claim_code integer,
+    federal_claim_amount numeric(19,4),
+    provincial_claim_code integer,
+    provincial_claim_amount numeric(19,4),
+    additional_tax_per_period numeric(19,4),
+    prescribed_zone_deduction numeric(19,4),
+    authorized_annual_deductions numeric(19,4),
+    authorized_federal_credits numeric(19,4),
+    authorized_provincial_credits numeric(19,4),
+    cpp_exempt boolean DEFAULT false NOT NULL,
+    ei_exempt boolean DEFAULT false NOT NULL,
+    tax_exempt boolean DEFAULT false NOT NULL,
+    vacation_percent numeric(7,4),
+    vacation_method text DEFAULT 'accrue'::text NOT NULL,
+    is_active boolean DEFAULT true NOT NULL,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    created_by uuid,
+    updated_at timestamp with time zone DEFAULT now() NOT NULL,
+    updated_by uuid,
+    union_agreement_id uuid,
+    union_classification_id uuid,
+    CONSTRAINT employee_payroll_profiles_fed_code CHECK (((federal_claim_code IS NULL) OR ((federal_claim_code >= 0) AND (federal_claim_code <= 10)))),
+    CONSTRAINT employee_payroll_profiles_pay_basis CHECK ((pay_basis = ANY (ARRAY['hourly'::text, 'salary'::text]))),
+    CONSTRAINT employee_payroll_profiles_prov_code CHECK (((provincial_claim_code IS NULL) OR ((provincial_claim_code >= 0) AND (provincial_claim_code <= 10)))),
+    CONSTRAINT employee_payroll_profiles_vacation CHECK (((vacation_percent IS NULL) OR (vacation_percent >= (0)::numeric))),
+    CONSTRAINT employee_payroll_profiles_vacation_method CHECK ((vacation_method = ANY (ARRAY['accrue'::text, 'pay_each_period'::text])))
+);
+
+ALTER TABLE ONLY public.employee_payroll_profiles FORCE ROW LEVEL SECURITY;
+
+
+--
+-- Name: employee_payroll_profiles; Type: VIEW; Schema: openbooks_query; Owner: -
+--
+
+CREATE VIEW openbooks_query.employee_payroll_profiles WITH (security_barrier='true') AS
+ SELECT id,
+    org_id,
+    employee_party_id,
+    pay_schedule_id,
+    province,
+    pay_basis,
+    federal_claim_code,
+    federal_claim_amount,
+    provincial_claim_code,
+    provincial_claim_amount,
+    additional_tax_per_period,
+    prescribed_zone_deduction,
+    authorized_annual_deductions,
+    authorized_federal_credits,
+    authorized_provincial_credits,
+    cpp_exempt,
+    ei_exempt,
+    tax_exempt,
+    vacation_percent,
+    vacation_method,
+    is_active,
+    created_at,
+    created_by,
+    updated_at,
+    updated_by,
+    union_agreement_id,
+    union_classification_id
+   FROM public.employee_payroll_profiles;
+
+
+--
 -- Name: employee_roles; Type: TABLE; Schema: public; Owner: -
 --
 
@@ -9703,6 +9959,165 @@ CREATE VIEW openbooks_query.landed_cost_vouchers WITH (security_barrier='true') 
 
 
 --
+-- Name: lease_charges; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.lease_charges (
+    id uuid DEFAULT public.uuid_generate_v7() NOT NULL,
+    org_id uuid NOT NULL,
+    lease_id uuid NOT NULL,
+    charge_type text NOT NULL,
+    description text NOT NULL,
+    amount numeric(19,4) NOT NULL,
+    frequency text DEFAULT 'monthly'::text NOT NULL,
+    effective_from date NOT NULL,
+    effective_to date,
+    income_account_id uuid,
+    item_id uuid,
+    tax_code_id uuid,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    created_by uuid,
+    updated_at timestamp with time zone DEFAULT now() NOT NULL,
+    updated_by uuid,
+    CONSTRAINT lease_charges_amount_positive CHECK ((amount > (0)::numeric)),
+    CONSTRAINT lease_charges_frequency_chk CHECK ((frequency = ANY (ARRAY['monthly'::text, 'quarterly'::text, 'annually'::text, 'one_time'::text]))),
+    CONSTRAINT lease_charges_type_chk CHECK ((charge_type = ANY (ARRAY['base_rent'::text, 'cam'::text, 'parking'::text, 'storage'::text, 'utility'::text, 'late_fee'::text, 'other'::text]))),
+    CONSTRAINT lease_charges_window CHECK (((effective_to IS NULL) OR (effective_to >= effective_from)))
+);
+
+ALTER TABLE ONLY public.lease_charges FORCE ROW LEVEL SECURITY;
+
+
+--
+-- Name: lease_charges; Type: VIEW; Schema: openbooks_query; Owner: -
+--
+
+CREATE VIEW openbooks_query.lease_charges WITH (security_barrier='true') AS
+ SELECT id,
+    org_id,
+    lease_id,
+    charge_type,
+    description,
+    amount,
+    frequency,
+    effective_from,
+    effective_to,
+    income_account_id,
+    item_id,
+    tax_code_id,
+    created_at,
+    created_by,
+    updated_at,
+    updated_by
+   FROM public.lease_charges
+  WHERE (org_id = public.openbooks_query_org_id());
+
+
+--
+-- Name: lease_escalations; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.lease_escalations (
+    id uuid DEFAULT public.uuid_generate_v7() NOT NULL,
+    org_id uuid NOT NULL,
+    lease_id uuid NOT NULL,
+    effective_on date NOT NULL,
+    method text NOT NULL,
+    value numeric(19,4) NOT NULL,
+    previous_amount numeric(19,4),
+    new_amount numeric(19,4),
+    status text DEFAULT 'scheduled'::text NOT NULL,
+    applied_at timestamp with time zone,
+    applied_by uuid,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    created_by uuid,
+    updated_at timestamp with time zone DEFAULT now() NOT NULL,
+    updated_by uuid,
+    CONSTRAINT lease_escalations_method_chk CHECK ((method = ANY (ARRAY['percent'::text, 'fixed'::text, 'new_amount'::text]))),
+    CONSTRAINT lease_escalations_status_chk CHECK ((status = ANY (ARRAY['scheduled'::text, 'applied'::text, 'cancelled'::text]))),
+    CONSTRAINT lease_escalations_value_positive CHECK ((value > (0)::numeric))
+);
+
+ALTER TABLE ONLY public.lease_escalations FORCE ROW LEVEL SECURITY;
+
+
+--
+-- Name: lease_escalations; Type: VIEW; Schema: openbooks_query; Owner: -
+--
+
+CREATE VIEW openbooks_query.lease_escalations WITH (security_barrier='true') AS
+ SELECT id,
+    org_id,
+    lease_id,
+    effective_on,
+    method,
+    value,
+    previous_amount,
+    new_amount,
+    status,
+    applied_at,
+    applied_by,
+    created_at,
+    created_by,
+    updated_at,
+    updated_by
+   FROM public.lease_escalations
+  WHERE (org_id = public.openbooks_query_org_id());
+
+
+--
+-- Name: lease_schedule_lines; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.lease_schedule_lines (
+    id uuid DEFAULT public.uuid_generate_v7() NOT NULL,
+    org_id uuid NOT NULL,
+    lease_id uuid NOT NULL,
+    charge_id uuid NOT NULL,
+    period_starts_on date NOT NULL,
+    period_ends_on date NOT NULL,
+    due_on date NOT NULL,
+    amount numeric(19,4) NOT NULL,
+    status text DEFAULT 'scheduled'::text NOT NULL,
+    invoice_document_id uuid,
+    source_schedule_id uuid,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    created_by uuid,
+    updated_at timestamp with time zone DEFAULT now() NOT NULL,
+    updated_by uuid,
+    CONSTRAINT lease_schedule_amount_positive CHECK ((amount > (0)::numeric)),
+    CONSTRAINT lease_schedule_status_chk CHECK ((status = ANY (ARRAY['scheduled'::text, 'invoiced'::text, 'credited'::text, 'cancelled'::text]))),
+    CONSTRAINT lease_schedule_window CHECK ((period_ends_on >= period_starts_on))
+);
+
+ALTER TABLE ONLY public.lease_schedule_lines FORCE ROW LEVEL SECURITY;
+
+
+--
+-- Name: lease_schedule_lines; Type: VIEW; Schema: openbooks_query; Owner: -
+--
+
+CREATE VIEW openbooks_query.lease_schedule_lines WITH (security_barrier='true') AS
+ SELECT id,
+    org_id,
+    lease_id,
+    charge_id,
+    period_starts_on,
+    period_ends_on,
+    due_on,
+    amount,
+    status,
+    invoice_document_id,
+    source_schedule_id,
+    created_at,
+    created_by,
+    updated_at,
+    updated_by
+   FROM public.lease_schedule_lines
+  WHERE (org_id = public.openbooks_query_org_id());
+
+
+--
 -- Name: lien_waivers; Type: TABLE; Schema: public; Owner: -
 --
 
@@ -9865,6 +10280,67 @@ CREATE VIEW openbooks_query.lots WITH (security_barrier='true') AS
     updated_at,
     updated_by
    FROM public.lots
+  WHERE (org_id = public.openbooks_query_org_id());
+
+
+--
+-- Name: managed_properties; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.managed_properties (
+    id uuid DEFAULT public.uuid_generate_v7() NOT NULL,
+    org_id uuid NOT NULL,
+    subsidiary_id uuid NOT NULL,
+    location_id uuid,
+    fixed_asset_id uuid,
+    code text NOT NULL,
+    name text NOT NULL,
+    property_type text NOT NULL,
+    status text DEFAULT 'active'::text NOT NULL,
+    currency text NOT NULL,
+    address jsonb DEFAULT '{}'::jsonb NOT NULL,
+    rent_income_account_id uuid,
+    cam_income_account_id uuid,
+    deposit_liability_account_id uuid,
+    default_bank_account_id uuid,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    created_by uuid,
+    updated_at timestamp with time zone DEFAULT now() NOT NULL,
+    updated_by uuid,
+    custom jsonb DEFAULT '{}'::jsonb NOT NULL,
+    CONSTRAINT managed_properties_status_chk CHECK ((status = ANY (ARRAY['active'::text, 'inactive'::text, 'sold'::text]))),
+    CONSTRAINT managed_properties_type_chk CHECK ((property_type = ANY (ARRAY['residential'::text, 'commercial'::text, 'mixed_use'::text, 'industrial'::text, 'other'::text])))
+);
+
+ALTER TABLE ONLY public.managed_properties FORCE ROW LEVEL SECURITY;
+
+
+--
+-- Name: managed_properties; Type: VIEW; Schema: openbooks_query; Owner: -
+--
+
+CREATE VIEW openbooks_query.managed_properties WITH (security_barrier='true') AS
+ SELECT id,
+    org_id,
+    subsidiary_id,
+    location_id,
+    fixed_asset_id,
+    code,
+    name,
+    property_type,
+    status,
+    currency,
+    address,
+    rent_income_account_id,
+    cam_income_account_id,
+    deposit_liability_account_id,
+    default_bank_account_id,
+    created_at,
+    created_by,
+    updated_at,
+    updated_by,
+    custom
+   FROM public.managed_properties
   WHERE (org_id = public.openbooks_query_org_id());
 
 
@@ -10245,6 +10721,292 @@ CREATE VIEW openbooks_query.pay_applications WITH (security_barrier='true') AS
     approved_by
    FROM public.pay_applications
   WHERE (org_id = public.openbooks_query_org_id());
+
+
+--
+-- Name: pay_components; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.pay_components (
+    id uuid DEFAULT public.uuid_generate_v7() NOT NULL,
+    org_id uuid NOT NULL,
+    code text NOT NULL,
+    name text NOT NULL,
+    kind text NOT NULL,
+    system_key text,
+    basis text DEFAULT 'fixed_amount'::text NOT NULL,
+    value numeric(19,4),
+    taxable boolean DEFAULT true NOT NULL,
+    pensionable boolean DEFAULT true NOT NULL,
+    insurable boolean DEFAULT true NOT NULL,
+    vacationable boolean DEFAULT true NOT NULL,
+    non_periodic boolean DEFAULT false NOT NULL,
+    tax_treatment text DEFAULT 'none'::text NOT NULL,
+    expense_account_id uuid,
+    liability_account_id uuid,
+    remittance_party_id uuid,
+    sequence integer DEFAULT 100 NOT NULL,
+    is_active boolean DEFAULT true NOT NULL,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    created_by uuid,
+    updated_at timestamp with time zone DEFAULT now() NOT NULL,
+    updated_by uuid,
+    CONSTRAINT pay_components_basis CHECK ((basis = ANY (ARRAY['fixed_amount'::text, 'per_hour'::text, 'percent_of_gross'::text]))),
+    CONSTRAINT pay_components_kind CHECK ((kind = ANY (ARRAY['earning'::text, 'deduction'::text, 'employer_contribution'::text]))),
+    CONSTRAINT pay_components_system_key CHECK (((system_key IS NULL) OR (system_key = ANY (ARRAY['base_pay'::text, 'overtime'::text, 'bonus'::text, 'vacation_accrual'::text, 'vacation_payout'::text, 'cpp'::text, 'cpp2'::text, 'ei'::text, 'qpip'::text, 'income_tax'::text])))),
+    CONSTRAINT pay_components_tax_treatment CHECK ((tax_treatment = ANY (ARRAY['none'::text, 'pension_f'::text, 'union_dues'::text, 'alimony'::text])))
+);
+
+ALTER TABLE ONLY public.pay_components FORCE ROW LEVEL SECURITY;
+
+
+--
+-- Name: pay_components; Type: VIEW; Schema: openbooks_query; Owner: -
+--
+
+CREATE VIEW openbooks_query.pay_components WITH (security_barrier='true') AS
+ SELECT id,
+    org_id,
+    code,
+    name,
+    kind,
+    system_key,
+    basis,
+    value,
+    taxable,
+    pensionable,
+    insurable,
+    vacationable,
+    non_periodic,
+    tax_treatment,
+    expense_account_id,
+    liability_account_id,
+    remittance_party_id,
+    sequence,
+    is_active,
+    created_at,
+    created_by,
+    updated_at,
+    updated_by
+   FROM public.pay_components;
+
+
+--
+-- Name: pay_runs; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.pay_runs (
+    document_id uuid NOT NULL,
+    org_id uuid NOT NULL,
+    pay_schedule_id uuid NOT NULL,
+    period_start date NOT NULL,
+    period_end date NOT NULL,
+    pay_date date NOT NULL,
+    tax_year integer NOT NULL,
+    run_status text DEFAULT 'draft'::text NOT NULL,
+    gross_total numeric(19,4) DEFAULT 0 NOT NULL,
+    net_total numeric(19,4) DEFAULT 0 NOT NULL,
+    employer_cost_total numeric(19,4) DEFAULT 0 NOT NULL,
+    employee_count integer DEFAULT 0 NOT NULL,
+    calculated_at timestamp with time zone,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    created_by uuid,
+    updated_at timestamp with time zone DEFAULT now() NOT NULL,
+    updated_by uuid,
+    CONSTRAINT pay_runs_pay_date CHECK ((pay_date >= period_end)),
+    CONSTRAINT pay_runs_period_order CHECK ((period_end >= period_start)),
+    CONSTRAINT pay_runs_run_status CHECK ((run_status = ANY (ARRAY['draft'::text, 'calculated'::text, 'committed'::text])))
+);
+
+ALTER TABLE ONLY public.pay_runs FORCE ROW LEVEL SECURITY;
+
+
+--
+-- Name: pay_runs; Type: VIEW; Schema: openbooks_query; Owner: -
+--
+
+CREATE VIEW openbooks_query.pay_runs WITH (security_barrier='true') AS
+ SELECT document_id,
+    org_id,
+    pay_schedule_id,
+    period_start,
+    period_end,
+    pay_date,
+    tax_year,
+    run_status,
+    gross_total,
+    net_total,
+    employer_cost_total,
+    employee_count,
+    calculated_at,
+    created_at,
+    created_by,
+    updated_at,
+    updated_by
+   FROM public.pay_runs;
+
+
+--
+-- Name: pay_schedules; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.pay_schedules (
+    id uuid DEFAULT public.uuid_generate_v7() NOT NULL,
+    org_id uuid NOT NULL,
+    name text NOT NULL,
+    frequency text NOT NULL,
+    periods_per_year integer NOT NULL,
+    anchor_period_end date NOT NULL,
+    pay_date_offset_days integer DEFAULT 0 NOT NULL,
+    is_default boolean DEFAULT false NOT NULL,
+    is_active boolean DEFAULT true NOT NULL,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    created_by uuid,
+    updated_at timestamp with time zone DEFAULT now() NOT NULL,
+    updated_by uuid,
+    CONSTRAINT pay_schedules_frequency CHECK ((frequency = ANY (ARRAY['weekly'::text, 'biweekly'::text, 'semi_monthly'::text, 'monthly'::text]))),
+    CONSTRAINT pay_schedules_offset CHECK (((pay_date_offset_days >= 0) AND (pay_date_offset_days <= 31))),
+    CONSTRAINT pay_schedules_periods CHECK ((periods_per_year = ANY (ARRAY[12, 24, 26, 27, 52, 53])))
+);
+
+ALTER TABLE ONLY public.pay_schedules FORCE ROW LEVEL SECURITY;
+
+
+--
+-- Name: pay_schedules; Type: VIEW; Schema: openbooks_query; Owner: -
+--
+
+CREATE VIEW openbooks_query.pay_schedules WITH (security_barrier='true') AS
+ SELECT id,
+    org_id,
+    name,
+    frequency,
+    periods_per_year,
+    anchor_period_end,
+    pay_date_offset_days,
+    is_default,
+    is_active,
+    created_at,
+    created_by,
+    updated_at,
+    updated_by
+   FROM public.pay_schedules;
+
+
+--
+-- Name: pay_stub_lines; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.pay_stub_lines (
+    id uuid DEFAULT public.uuid_generate_v7() NOT NULL,
+    org_id uuid NOT NULL,
+    stub_id uuid NOT NULL,
+    component_id uuid,
+    kind text NOT NULL,
+    description text NOT NULL,
+    hours numeric(12,2),
+    rate numeric(19,4),
+    amount numeric(19,4) NOT NULL,
+    project_id uuid,
+    department_id uuid,
+    time_type_id uuid,
+    sequence integer DEFAULT 100 NOT NULL,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    created_by uuid,
+    updated_at timestamp with time zone DEFAULT now() NOT NULL,
+    updated_by uuid,
+    CONSTRAINT pay_stub_lines_kind CHECK ((kind = ANY (ARRAY['earning'::text, 'deduction'::text, 'employer_contribution'::text])))
+);
+
+ALTER TABLE ONLY public.pay_stub_lines FORCE ROW LEVEL SECURITY;
+
+
+--
+-- Name: pay_stub_lines; Type: VIEW; Schema: openbooks_query; Owner: -
+--
+
+CREATE VIEW openbooks_query.pay_stub_lines WITH (security_barrier='true') AS
+ SELECT id,
+    org_id,
+    stub_id,
+    component_id,
+    kind,
+    description,
+    hours,
+    rate,
+    amount,
+    project_id,
+    department_id,
+    time_type_id,
+    sequence,
+    created_at,
+    created_by,
+    updated_at,
+    updated_by
+   FROM public.pay_stub_lines;
+
+
+--
+-- Name: pay_stubs; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.pay_stubs (
+    id uuid DEFAULT public.uuid_generate_v7() NOT NULL,
+    org_id uuid NOT NULL,
+    pay_run_document_id uuid NOT NULL,
+    employee_party_id uuid NOT NULL,
+    province text NOT NULL,
+    periods_per_year integer NOT NULL,
+    pay_date date NOT NULL,
+    tax_year integer NOT NULL,
+    federal_claim numeric(19,4) DEFAULT 0 NOT NULL,
+    provincial_claim numeric(19,4) DEFAULT 0 NOT NULL,
+    currency_code text NOT NULL,
+    gross numeric(19,4) DEFAULT 0 NOT NULL,
+    pensionable_earnings numeric(19,4) DEFAULT 0 NOT NULL,
+    insurable_earnings numeric(19,4) DEFAULT 0 NOT NULL,
+    net_pay numeric(19,4) DEFAULT 0 NOT NULL,
+    employer_cost numeric(19,4) DEFAULT 0 NOT NULL,
+    vacation_accrued numeric(19,4) DEFAULT 0 NOT NULL,
+    factors jsonb DEFAULT '{}'::jsonb NOT NULL,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    created_by uuid,
+    updated_at timestamp with time zone DEFAULT now() NOT NULL,
+    updated_by uuid,
+    CONSTRAINT pay_stubs_net_nonnegative CHECK ((net_pay >= (0)::numeric))
+);
+
+ALTER TABLE ONLY public.pay_stubs FORCE ROW LEVEL SECURITY;
+
+
+--
+-- Name: pay_stubs; Type: VIEW; Schema: openbooks_query; Owner: -
+--
+
+CREATE VIEW openbooks_query.pay_stubs WITH (security_barrier='true') AS
+ SELECT id,
+    org_id,
+    pay_run_document_id,
+    employee_party_id,
+    province,
+    periods_per_year,
+    pay_date,
+    tax_year,
+    federal_claim,
+    provincial_claim,
+    currency_code,
+    gross,
+    pensionable_earnings,
+    insurable_earnings,
+    net_pay,
+    employer_cost,
+    vacation_accrued,
+    factors,
+    created_at,
+    created_by,
+    updated_at,
+    updated_by
+   FROM public.pay_stubs;
 
 
 --
@@ -10669,6 +11431,60 @@ CREATE VIEW openbooks_query.payment_terms WITH (security_barrier='true') AS
     custom
    FROM public.payment_terms
   WHERE (org_id = public.openbooks_query_org_id());
+
+
+--
+-- Name: payroll_opening_balances; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.payroll_opening_balances (
+    id uuid DEFAULT public.uuid_generate_v7() NOT NULL,
+    org_id uuid NOT NULL,
+    employee_party_id uuid NOT NULL,
+    tax_year integer NOT NULL,
+    pensionable_ytd numeric(19,4) DEFAULT 0 NOT NULL,
+    insurable_ytd numeric(19,4) DEFAULT 0 NOT NULL,
+    cpp_ytd numeric(19,4) DEFAULT 0 NOT NULL,
+    cpp2_ytd numeric(19,4) DEFAULT 0 NOT NULL,
+    ei_ytd numeric(19,4) DEFAULT 0 NOT NULL,
+    qpip_ytd numeric(19,4) DEFAULT 0 NOT NULL,
+    taxable_ytd numeric(19,4) DEFAULT 0 NOT NULL,
+    tax_ytd numeric(19,4) DEFAULT 0 NOT NULL,
+    non_periodic_ytd numeric(19,4) DEFAULT 0 NOT NULL,
+    vacation_balance numeric(19,4) DEFAULT 0 NOT NULL,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    created_by uuid,
+    updated_at timestamp with time zone DEFAULT now() NOT NULL,
+    updated_by uuid
+);
+
+ALTER TABLE ONLY public.payroll_opening_balances FORCE ROW LEVEL SECURITY;
+
+
+--
+-- Name: payroll_opening_balances; Type: VIEW; Schema: openbooks_query; Owner: -
+--
+
+CREATE VIEW openbooks_query.payroll_opening_balances WITH (security_barrier='true') AS
+ SELECT id,
+    org_id,
+    employee_party_id,
+    tax_year,
+    pensionable_ytd,
+    insurable_ytd,
+    cpp_ytd,
+    cpp2_ytd,
+    ei_ytd,
+    qpip_ytd,
+    taxable_ytd,
+    tax_ytd,
+    non_periodic_ytd,
+    vacation_balance,
+    created_at,
+    created_by,
+    updated_at,
+    updated_by
+   FROM public.payroll_opening_balances;
 
 
 --
@@ -11152,6 +11968,144 @@ CREATE VIEW openbooks_query.projects WITH (security_barrier='true') AS
 
 
 --
+-- Name: property_leases; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.property_leases (
+    id uuid DEFAULT public.uuid_generate_v7() NOT NULL,
+    org_id uuid NOT NULL,
+    property_id uuid NOT NULL,
+    unit_id uuid,
+    tenant_id uuid NOT NULL,
+    lease_number text NOT NULL,
+    status text DEFAULT 'draft'::text NOT NULL,
+    starts_on date NOT NULL,
+    ends_on date,
+    move_in_on date,
+    move_out_on date,
+    billing_day integer DEFAULT 1 NOT NULL,
+    payment_terms_days integer DEFAULT 0 NOT NULL,
+    security_deposit_required numeric(19,4) DEFAULT 0 NOT NULL,
+    cam_method text DEFAULT 'none'::text NOT NULL,
+    cam_share_percent numeric(19,4),
+    late_fee_type text DEFAULT 'none'::text NOT NULL,
+    late_fee_value numeric(19,4) DEFAULT 0 NOT NULL,
+    grace_days integer DEFAULT 0 NOT NULL,
+    auto_invoice boolean DEFAULT true NOT NULL,
+    auto_post boolean DEFAULT false NOT NULL,
+    activated_at timestamp with time zone,
+    activated_by uuid,
+    terminated_at timestamp with time zone,
+    terminated_by uuid,
+    termination_reason text,
+    notes text,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    created_by uuid,
+    updated_at timestamp with time zone DEFAULT now() NOT NULL,
+    updated_by uuid,
+    CONSTRAINT property_leases_billing_day CHECK (((billing_day >= 1) AND (billing_day <= 31))),
+    CONSTRAINT property_leases_cam_method_chk CHECK ((cam_method = ANY (ARRAY['none'::text, 'fixed'::text, 'pro_rata'::text]))),
+    CONSTRAINT property_leases_cam_share CHECK (((cam_share_percent IS NULL) OR ((cam_share_percent >= (0)::numeric) AND (cam_share_percent <= (100)::numeric)))),
+    CONSTRAINT property_leases_deposit CHECK ((security_deposit_required >= (0)::numeric)),
+    CONSTRAINT property_leases_late_fee CHECK ((((late_fee_type = 'none'::text) AND (late_fee_value = (0)::numeric)) OR ((late_fee_type = 'fixed'::text) AND (late_fee_value > (0)::numeric)) OR ((late_fee_type = 'percent'::text) AND (late_fee_value > (0)::numeric) AND (late_fee_value <= (100)::numeric)))),
+    CONSTRAINT property_leases_late_fee_type_chk CHECK ((late_fee_type = ANY (ARRAY['none'::text, 'fixed'::text, 'percent'::text]))),
+    CONSTRAINT property_leases_status_chk CHECK ((status = ANY (ARRAY['draft'::text, 'active'::text, 'notice'::text, 'expired'::text, 'terminated'::text, 'cancelled'::text]))),
+    CONSTRAINT property_leases_terms CHECK (((payment_terms_days >= 0) AND (grace_days >= 0))),
+    CONSTRAINT property_leases_window CHECK (((ends_on IS NULL) OR (ends_on >= starts_on)))
+);
+
+ALTER TABLE ONLY public.property_leases FORCE ROW LEVEL SECURITY;
+
+
+--
+-- Name: property_leases; Type: VIEW; Schema: openbooks_query; Owner: -
+--
+
+CREATE VIEW openbooks_query.property_leases WITH (security_barrier='true') AS
+ SELECT id,
+    org_id,
+    property_id,
+    unit_id,
+    tenant_id,
+    lease_number,
+    status,
+    starts_on,
+    ends_on,
+    move_in_on,
+    move_out_on,
+    billing_day,
+    payment_terms_days,
+    security_deposit_required,
+    cam_method,
+    cam_share_percent,
+    late_fee_type,
+    late_fee_value,
+    grace_days,
+    auto_invoice,
+    auto_post,
+    activated_at,
+    activated_by,
+    terminated_at,
+    terminated_by,
+    termination_reason,
+    notes,
+    created_at,
+    created_by,
+    updated_at,
+    updated_by
+   FROM public.property_leases
+  WHERE (org_id = public.openbooks_query_org_id());
+
+
+--
+-- Name: property_units; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.property_units (
+    id uuid DEFAULT public.uuid_generate_v7() NOT NULL,
+    org_id uuid NOT NULL,
+    property_id uuid NOT NULL,
+    code text NOT NULL,
+    name text,
+    unit_type text,
+    rentable_area numeric(19,4),
+    bedrooms integer,
+    status text DEFAULT 'vacant'::text NOT NULL,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    created_by uuid,
+    updated_at timestamp with time zone DEFAULT now() NOT NULL,
+    updated_by uuid,
+    CONSTRAINT property_units_area_positive CHECK (((rentable_area IS NULL) OR (rentable_area > (0)::numeric))),
+    CONSTRAINT property_units_bedrooms_nonnegative CHECK (((bedrooms IS NULL) OR (bedrooms >= 0))),
+    CONSTRAINT property_units_status_chk CHECK ((status = ANY (ARRAY['vacant'::text, 'occupied'::text, 'notice'::text, 'offline'::text])))
+);
+
+ALTER TABLE ONLY public.property_units FORCE ROW LEVEL SECURITY;
+
+
+--
+-- Name: property_units; Type: VIEW; Schema: openbooks_query; Owner: -
+--
+
+CREATE VIEW openbooks_query.property_units WITH (security_barrier='true') AS
+ SELECT id,
+    org_id,
+    property_id,
+    code,
+    name,
+    unit_type,
+    rentable_area,
+    bedrooms,
+    status,
+    created_at,
+    created_by,
+    updated_at,
+    updated_by
+   FROM public.property_units
+  WHERE (org_id = public.openbooks_query_org_id());
+
+
+--
 -- Name: recognition_rules; Type: TABLE; Schema: public; Owner: -
 --
 
@@ -11458,10 +12412,18 @@ CREATE TABLE public.revenue_contracts (
     updated_at timestamp with time zone DEFAULT now() NOT NULL,
     updated_by uuid,
     currency text,
-    project_id uuid
+    project_id uuid,
+    pricing jsonb DEFAULT '{}'::jsonb NOT NULL
 );
 
 ALTER TABLE ONLY public.revenue_contracts FORCE ROW LEVEL SECURITY;
+
+
+--
+-- Name: COLUMN revenue_contracts.pricing; Type: COMMENT; Schema: public; Owner: -
+--
+
+COMMENT ON COLUMN public.revenue_contracts.pricing IS 'ASC 606 step-3 evidence: variable-consideration estimate + constraint (606-10-32-11) and significant-financing-component split (606-10-32-15). The resolved price lands in total_transaction_price.';
 
 
 --
@@ -11757,6 +12719,63 @@ CREATE VIEW openbooks_query.schedule_task_assignments WITH (security_barrier='tr
     created_by,
     updated_by
    FROM public.schedule_task_assignments
+  WHERE (org_id = public.openbooks_query_org_id());
+
+
+--
+-- Name: security_deposit_transactions; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.security_deposit_transactions (
+    id uuid DEFAULT public.uuid_generate_v7() NOT NULL,
+    org_id uuid NOT NULL,
+    lease_id uuid NOT NULL,
+    kind text NOT NULL,
+    occurred_on date NOT NULL,
+    amount numeric(19,4) NOT NULL,
+    bank_account_id uuid,
+    offset_account_id uuid,
+    applied_document_id uuid,
+    journal_entry_id uuid NOT NULL,
+    memo text,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    created_by uuid,
+    updated_at timestamp with time zone DEFAULT now() NOT NULL,
+    updated_by uuid,
+    reversal_of_id uuid,
+    import_key text,
+    CONSTRAINT security_deposits_account_shape CHECK ((((kind <> ALL (ARRAY['received'::text, 'refunded'::text])) OR (bank_account_id IS NOT NULL)) AND ((kind <> ALL (ARRAY['interest'::text, 'adjustment_increase'::text, 'adjustment_decrease'::text, 'applied'::text])) OR (offset_account_id IS NOT NULL)))),
+    CONSTRAINT security_deposits_amount_positive CHECK ((amount > (0)::numeric)),
+    CONSTRAINT security_deposits_application_shape CHECK (((kind = 'applied'::text) = (applied_document_id IS NOT NULL))),
+    CONSTRAINT security_deposits_kind_chk CHECK ((kind = ANY (ARRAY['received'::text, 'interest'::text, 'applied'::text, 'refunded'::text, 'adjustment_increase'::text, 'adjustment_decrease'::text])))
+);
+
+ALTER TABLE ONLY public.security_deposit_transactions FORCE ROW LEVEL SECURITY;
+
+
+--
+-- Name: security_deposit_transactions; Type: VIEW; Schema: openbooks_query; Owner: -
+--
+
+CREATE VIEW openbooks_query.security_deposit_transactions WITH (security_barrier='true') AS
+ SELECT id,
+    org_id,
+    lease_id,
+    kind,
+    occurred_on,
+    amount,
+    bank_account_id,
+    offset_account_id,
+    applied_document_id,
+    journal_entry_id,
+    memo,
+    created_at,
+    created_by,
+    updated_at,
+    updated_by,
+    reversal_of_id,
+    import_key
+   FROM public.security_deposit_transactions
   WHERE (org_id = public.openbooks_query_org_id());
 
 
@@ -14134,6 +15153,139 @@ CREATE VIEW openbooks_query.transfer_orders WITH (security_barrier='true') AS
 
 
 --
+-- Name: union_agreements; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.union_agreements (
+    id uuid DEFAULT public.uuid_generate_v7() NOT NULL,
+    org_id uuid NOT NULL,
+    name text NOT NULL,
+    union_name text,
+    local_number text,
+    remittance_party_id uuid,
+    is_active boolean DEFAULT true NOT NULL,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    created_by uuid,
+    updated_at timestamp with time zone DEFAULT now() NOT NULL,
+    updated_by uuid
+);
+
+ALTER TABLE ONLY public.union_agreements FORCE ROW LEVEL SECURITY;
+
+
+--
+-- Name: union_agreements; Type: VIEW; Schema: openbooks_query; Owner: -
+--
+
+CREATE VIEW openbooks_query.union_agreements WITH (security_barrier='true') AS
+ SELECT id,
+    org_id,
+    name,
+    union_name,
+    local_number,
+    remittance_party_id,
+    is_active,
+    created_at,
+    created_by,
+    updated_at,
+    updated_by
+   FROM public.union_agreements;
+
+
+--
+-- Name: union_classifications; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.union_classifications (
+    id uuid DEFAULT public.uuid_generate_v7() NOT NULL,
+    org_id uuid NOT NULL,
+    agreement_id uuid NOT NULL,
+    code text NOT NULL,
+    name text NOT NULL,
+    is_active boolean DEFAULT true NOT NULL,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    created_by uuid,
+    updated_at timestamp with time zone DEFAULT now() NOT NULL,
+    updated_by uuid
+);
+
+ALTER TABLE ONLY public.union_classifications FORCE ROW LEVEL SECURITY;
+
+
+--
+-- Name: union_classifications; Type: VIEW; Schema: openbooks_query; Owner: -
+--
+
+CREATE VIEW openbooks_query.union_classifications WITH (security_barrier='true') AS
+ SELECT id,
+    org_id,
+    agreement_id,
+    code,
+    name,
+    is_active,
+    created_at,
+    created_by,
+    updated_at,
+    updated_by
+   FROM public.union_classifications;
+
+
+--
+-- Name: union_fringes; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.union_fringes (
+    id uuid DEFAULT public.uuid_generate_v7() NOT NULL,
+    org_id uuid NOT NULL,
+    agreement_id uuid NOT NULL,
+    classification_id uuid,
+    code text NOT NULL,
+    name text NOT NULL,
+    calc text NOT NULL,
+    value numeric(19,4) NOT NULL,
+    paid_by text NOT NULL,
+    job_costed boolean DEFAULT true NOT NULL,
+    component_id uuid,
+    sequence integer DEFAULT 100 NOT NULL,
+    is_active boolean DEFAULT true NOT NULL,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    created_by uuid,
+    updated_at timestamp with time zone DEFAULT now() NOT NULL,
+    updated_by uuid,
+    CONSTRAINT union_fringes_calc CHECK ((calc = ANY (ARRAY['per_hour_worked'::text, 'percent_of_gross'::text]))),
+    CONSTRAINT union_fringes_paid_by CHECK ((paid_by = ANY (ARRAY['employer'::text, 'employee'::text]))),
+    CONSTRAINT union_fringes_value_nonnegative CHECK ((value >= (0)::numeric))
+);
+
+ALTER TABLE ONLY public.union_fringes FORCE ROW LEVEL SECURITY;
+
+
+--
+-- Name: union_fringes; Type: VIEW; Schema: openbooks_query; Owner: -
+--
+
+CREATE VIEW openbooks_query.union_fringes WITH (security_barrier='true') AS
+ SELECT id,
+    org_id,
+    agreement_id,
+    classification_id,
+    code,
+    name,
+    calc,
+    value,
+    paid_by,
+    job_costed,
+    component_id,
+    sequence,
+    is_active,
+    created_at,
+    created_by,
+    updated_at,
+    updated_by
+   FROM public.union_fringes;
+
+
+--
 -- Name: vendor_pay_application_lines; Type: TABLE; Schema: public; Owner: -
 --
 
@@ -15181,7 +16333,7 @@ CREATE TABLE public.application_idempotency_keys (
     created_at timestamp with time zone DEFAULT now() NOT NULL,
     expires_at timestamp with time zone DEFAULT (now() + '30 days'::interval) NOT NULL,
     CONSTRAINT application_idempotency_completion_shape CHECK ((((completed_at IS NULL) AND (response IS NULL)) OR ((completed_at IS NOT NULL) AND (response IS NOT NULL)))),
-    CONSTRAINT application_idempotency_key_format CHECK ((((length(idempotency_key) >= 8) AND (length(idempotency_key) <= 200)) AND (idempotency_key ~ '^[A-Za-z0-9._:-]+$'::text))),
+    CONSTRAINT application_idempotency_key_format CHECK (((length(idempotency_key) >= 8) AND (length(idempotency_key) <= 200) AND (idempotency_key ~ '^[A-Za-z0-9._:-]+$'::text))),
     CONSTRAINT application_idempotency_keys_request_hash_check CHECK ((request_hash ~ '^[0-9a-f]{64}$'::text)),
     CONSTRAINT application_idempotency_keys_source_check CHECK ((source = ANY (ARRAY['api'::text, 'mcp'::text, 'assistant'::text]))),
     CONSTRAINT application_idempotency_operation_format CHECK ((operation ~ '^[a-z][a-z0-9_.-]{2,99}$'::text))
@@ -15254,6 +16406,129 @@ CREATE TABLE public.audit_log (
 );
 
 ALTER TABLE ONLY public.audit_log FORCE ROW LEVEL SECURITY;
+
+
+--
+-- Name: auth_login_challenges; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.auth_login_challenges (
+    id uuid DEFAULT public.uuid_generate_v7() NOT NULL,
+    user_id uuid NOT NULL,
+    email_hash text NOT NULL,
+    auth_method text NOT NULL,
+    network_hash text,
+    user_agent_hash text,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    expires_at timestamp with time zone NOT NULL,
+    consumed_at timestamp with time zone,
+    CONSTRAINT auth_login_challenges_auth_method_check CHECK ((auth_method = ANY (ARRAY['password'::text, 'oidc'::text]))),
+    CONSTRAINT auth_login_challenges_check CHECK ((expires_at > created_at))
+);
+
+
+--
+-- Name: auth_login_events; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.auth_login_events (
+    id uuid DEFAULT public.uuid_generate_v7() NOT NULL,
+    user_id uuid,
+    email_hash text NOT NULL,
+    network_hash text,
+    user_agent_hash text,
+    outcome text NOT NULL,
+    auth_method text NOT NULL,
+    occurred_at timestamp with time zone DEFAULT now() NOT NULL,
+    CONSTRAINT auth_login_events_auth_method_check CHECK ((auth_method = ANY (ARRAY['password'::text, 'oidc'::text]))),
+    CONSTRAINT auth_login_events_outcome_check CHECK ((outcome = ANY (ARRAY['success'::text, 'failure'::text, 'locked'::text, 'rate_limited'::text, 'mfa_required'::text, 'mfa_failure'::text, 'oidc_failure'::text])))
+);
+
+
+--
+-- Name: auth_login_state; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.auth_login_state (
+    email_hash text NOT NULL,
+    user_id uuid,
+    failure_count integer DEFAULT 0 NOT NULL,
+    last_failed_at timestamp with time zone,
+    locked_until timestamp with time zone,
+    updated_at timestamp with time zone DEFAULT now() NOT NULL,
+    CONSTRAINT auth_login_state_failure_count_check CHECK ((failure_count >= 0))
+);
+
+
+--
+-- Name: auth_mfa_factors; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.auth_mfa_factors (
+    id uuid DEFAULT public.uuid_generate_v7() NOT NULL,
+    user_id uuid NOT NULL,
+    secret_encrypted text NOT NULL,
+    recovery_code_hashes jsonb DEFAULT '[]'::jsonb NOT NULL,
+    enabled_at timestamp with time zone,
+    last_used_step integer,
+    setup_session_id uuid,
+    setup_expires_at timestamp with time zone,
+    setup_attempt_count integer DEFAULT 0 NOT NULL,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    updated_at timestamp with time zone DEFAULT now() NOT NULL,
+    CONSTRAINT auth_mfa_factors_check CHECK ((((enabled_at IS NULL) AND (setup_session_id IS NOT NULL) AND (setup_expires_at IS NOT NULL)) OR ((enabled_at IS NOT NULL) AND (setup_session_id IS NULL) AND (setup_expires_at IS NULL) AND (setup_attempt_count = 0)))),
+    CONSTRAINT auth_mfa_factors_recovery_code_hashes_check CHECK ((jsonb_typeof(recovery_code_hashes) = 'array'::text)),
+    CONSTRAINT auth_mfa_factors_setup_attempt_count_check CHECK ((setup_attempt_count >= 0))
+);
+
+
+--
+-- Name: auth_oidc_identities; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.auth_oidc_identities (
+    id uuid DEFAULT public.uuid_generate_v7() NOT NULL,
+    issuer text NOT NULL,
+    subject text NOT NULL,
+    user_id uuid NOT NULL,
+    email_at_link text NOT NULL,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    last_login_at timestamp with time zone
+);
+
+
+--
+-- Name: auth_rate_limit_buckets; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.auth_rate_limit_buckets (
+    bucket_key text NOT NULL,
+    window_started_at timestamp with time zone DEFAULT now() NOT NULL,
+    attempt_count integer DEFAULT 0 NOT NULL,
+    updated_at timestamp with time zone DEFAULT now() NOT NULL,
+    CONSTRAINT auth_rate_limit_buckets_attempt_count_check CHECK ((attempt_count >= 0))
+);
+
+
+--
+-- Name: auth_sessions; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.auth_sessions (
+    id uuid DEFAULT public.uuid_generate_v7() NOT NULL,
+    user_id uuid NOT NULL,
+    token_hash text NOT NULL,
+    auth_method text NOT NULL,
+    network_hash text,
+    user_agent_hash text,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    last_seen_at timestamp with time zone DEFAULT now() NOT NULL,
+    expires_at timestamp with time zone NOT NULL,
+    revoked_at timestamp with time zone,
+    revocation_reason text,
+    CONSTRAINT auth_sessions_auth_method_check CHECK ((auth_method = ANY (ARRAY['password'::text, 'oidc'::text]))),
+    CONSTRAINT auth_sessions_check CHECK (((revoked_at IS NOT NULL) OR (revocation_reason IS NULL)))
+);
 
 
 --
@@ -15348,64 +16623,6 @@ CREATE TABLE public.bank_feed_connections (
 );
 
 ALTER TABLE ONLY public.bank_feed_connections FORCE ROW LEVEL SECURITY;
-
-
---
--- Name: cam_allocations; Type: TABLE; Schema: public; Owner: -
---
-
-CREATE TABLE public.cam_allocations (
-    id uuid DEFAULT public.uuid_generate_v7() NOT NULL,
-    org_id uuid NOT NULL,
-    pool_id uuid NOT NULL,
-    lease_id uuid NOT NULL,
-    share_percent numeric(19,4) NOT NULL,
-    budget_allocation numeric(19,4) DEFAULT 0 NOT NULL,
-    actual_allocation numeric(19,4),
-    billed_estimate numeric(19,4) DEFAULT 0 NOT NULL,
-    reconciliation_amount numeric(19,4),
-    invoice_document_id uuid,
-    created_at timestamp with time zone DEFAULT now() NOT NULL,
-    created_by uuid,
-    updated_at timestamp with time zone DEFAULT now() NOT NULL,
-    updated_by uuid,
-    CONSTRAINT cam_allocations_share CHECK (((share_percent >= (0)::numeric) AND (share_percent <= (100)::numeric)))
-);
-
-ALTER TABLE ONLY public.cam_allocations FORCE ROW LEVEL SECURITY;
-
-
---
--- Name: cam_pools; Type: TABLE; Schema: public; Owner: -
---
-
-CREATE TABLE public.cam_pools (
-    id uuid DEFAULT public.uuid_generate_v7() NOT NULL,
-    org_id uuid NOT NULL,
-    property_id uuid NOT NULL,
-    name text NOT NULL,
-    fiscal_year integer NOT NULL,
-    period_starts_on date NOT NULL,
-    period_ends_on date NOT NULL,
-    allocation_basis text DEFAULT 'rentable_area'::text NOT NULL,
-    budget_amount numeric(19,4) DEFAULT 0 NOT NULL,
-    actual_amount numeric(19,4),
-    expense_account_ids jsonb DEFAULT '[]'::jsonb NOT NULL,
-    status text DEFAULT 'draft'::text NOT NULL,
-    finalized_at timestamp with time zone,
-    finalized_by uuid,
-    created_at timestamp with time zone DEFAULT now() NOT NULL,
-    created_by uuid,
-    updated_at timestamp with time zone DEFAULT now() NOT NULL,
-    updated_by uuid,
-    CONSTRAINT cam_pools_basis_chk CHECK ((allocation_basis = ANY (ARRAY['rentable_area'::text, 'equal'::text, 'custom'::text]))),
-    CONSTRAINT cam_pools_budget_nonnegative CHECK ((budget_amount >= (0)::numeric)),
-    CONSTRAINT cam_pools_expense_accounts_array CHECK ((jsonb_typeof(expense_account_ids) = 'array'::text)),
-    CONSTRAINT cam_pools_status_chk CHECK ((status = ANY (ARRAY['draft'::text, 'open'::text, 'finalized'::text, 'invoiced'::text]))),
-    CONSTRAINT cam_pools_window CHECK ((period_ends_on >= period_starts_on))
-);
-
-ALTER TABLE ONLY public.cam_pools FORCE ROW LEVEL SECURITY;
 
 
 --
@@ -16383,89 +17600,119 @@ ALTER TABLE ONLY public.insight_dashboards FORCE ROW LEVEL SECURITY;
 
 
 --
--- Name: lease_charges; Type: TABLE; Schema: public; Owner: -
+-- Name: inventory_writedowns; Type: TABLE; Schema: public; Owner: -
 --
 
-CREATE TABLE public.lease_charges (
+CREATE TABLE public.inventory_writedowns (
     id uuid DEFAULT public.uuid_generate_v7() NOT NULL,
     org_id uuid NOT NULL,
-    lease_id uuid NOT NULL,
-    charge_type text NOT NULL,
-    description text NOT NULL,
+    item_id uuid NOT NULL,
+    stock_location_id uuid NOT NULL,
+    subsidiary_id uuid NOT NULL,
+    kind text DEFAULT 'writedown'::text NOT NULL,
+    date date NOT NULL,
+    quantity numeric(19,4) NOT NULL,
+    previous_value numeric(19,4) NOT NULL,
+    new_value numeric(19,4) NOT NULL,
     amount numeric(19,4) NOT NULL,
-    frequency text DEFAULT 'monthly'::text NOT NULL,
-    effective_from date NOT NULL,
-    effective_to date,
-    income_account_id uuid,
-    item_id uuid,
-    tax_code_id uuid,
+    reversed_amount numeric(19,4) DEFAULT 0 NOT NULL,
+    reverses_writedown_id uuid,
+    framework text NOT NULL,
+    journal_entry_id uuid NOT NULL,
+    memo text,
     created_at timestamp with time zone DEFAULT now() NOT NULL,
     created_by uuid,
     updated_at timestamp with time zone DEFAULT now() NOT NULL,
     updated_by uuid,
-    CONSTRAINT lease_charges_amount_positive CHECK ((amount > (0)::numeric)),
-    CONSTRAINT lease_charges_frequency_chk CHECK ((frequency = ANY (ARRAY['monthly'::text, 'quarterly'::text, 'annually'::text, 'one_time'::text]))),
-    CONSTRAINT lease_charges_type_chk CHECK ((charge_type = ANY (ARRAY['base_rent'::text, 'cam'::text, 'parking'::text, 'storage'::text, 'utility'::text, 'late_fee'::text, 'other'::text]))),
-    CONSTRAINT lease_charges_window CHECK (((effective_to IS NULL) OR (effective_to >= effective_from)))
+    CONSTRAINT inventory_writedowns_amount_positive CHECK ((amount > (0)::numeric)),
+    CONSTRAINT inventory_writedowns_framework_chk CHECK ((framework = ANY (ARRAY['us_gaap'::text, 'ifrs'::text]))),
+    CONSTRAINT inventory_writedowns_kind_chk CHECK ((kind = ANY (ARRAY['writedown'::text, 'reversal'::text]))),
+    CONSTRAINT inventory_writedowns_reversed_bounds CHECK (((reversed_amount >= (0)::numeric) AND (reversed_amount <= amount)))
 );
 
-ALTER TABLE ONLY public.lease_charges FORCE ROW LEVEL SECURITY;
+ALTER TABLE ONLY public.inventory_writedowns FORCE ROW LEVEL SECURITY;
 
 
 --
--- Name: lease_escalations; Type: TABLE; Schema: public; Owner: -
+-- Name: lease_agreement_schedule_lines; Type: TABLE; Schema: public; Owner: -
 --
 
-CREATE TABLE public.lease_escalations (
+CREATE TABLE public.lease_agreement_schedule_lines (
     id uuid DEFAULT public.uuid_generate_v7() NOT NULL,
     org_id uuid NOT NULL,
     lease_id uuid NOT NULL,
-    effective_on date NOT NULL,
-    method text NOT NULL,
-    value numeric(19,4) NOT NULL,
-    previous_amount numeric(19,4),
-    new_amount numeric(19,4),
-    status text DEFAULT 'scheduled'::text NOT NULL,
-    applied_at timestamp with time zone,
-    applied_by uuid,
-    created_at timestamp with time zone DEFAULT now() NOT NULL,
-    created_by uuid,
-    updated_at timestamp with time zone DEFAULT now() NOT NULL,
-    updated_by uuid,
-    CONSTRAINT lease_escalations_method_chk CHECK ((method = ANY (ARRAY['percent'::text, 'fixed'::text, 'new_amount'::text]))),
-    CONSTRAINT lease_escalations_status_chk CHECK ((status = ANY (ARRAY['scheduled'::text, 'applied'::text, 'cancelled'::text]))),
-    CONSTRAINT lease_escalations_value_positive CHECK ((value > (0)::numeric))
-);
-
-ALTER TABLE ONLY public.lease_escalations FORCE ROW LEVEL SECURITY;
-
-
---
--- Name: lease_schedule_lines; Type: TABLE; Schema: public; Owner: -
---
-
-CREATE TABLE public.lease_schedule_lines (
-    id uuid DEFAULT public.uuid_generate_v7() NOT NULL,
-    org_id uuid NOT NULL,
-    lease_id uuid NOT NULL,
-    charge_id uuid NOT NULL,
-    period_starts_on date NOT NULL,
-    period_ends_on date NOT NULL,
+    sequence integer NOT NULL,
     due_on date NOT NULL,
-    amount numeric(19,4) NOT NULL,
-    status text DEFAULT 'scheduled'::text NOT NULL,
-    invoice_document_id uuid,
-    source_schedule_id uuid,
+    period_start date NOT NULL,
+    period_end date NOT NULL,
+    opening_liability numeric(19,4) NOT NULL,
+    payment numeric(19,4) NOT NULL,
+    interest numeric(19,4) NOT NULL,
+    principal numeric(19,4) NOT NULL,
+    closing_liability numeric(19,4) NOT NULL,
+    amortization numeric(19,4),
+    single_cost numeric(19,4),
+    rou_adjustment numeric(19,4),
+    payment_entry_id uuid,
+    amortization_entry_id uuid,
+    posted_at timestamp with time zone,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    created_by uuid,
+    updated_at timestamp with time zone DEFAULT now() NOT NULL,
+    updated_by uuid
+);
+
+ALTER TABLE ONLY public.lease_agreement_schedule_lines FORCE ROW LEVEL SECURITY;
+
+
+--
+-- Name: lease_agreements; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.lease_agreements (
+    id uuid DEFAULT public.uuid_generate_v7() NOT NULL,
+    org_id uuid NOT NULL,
+    subsidiary_id uuid NOT NULL,
+    lease_number text NOT NULL,
+    description text,
+    status text DEFAULT 'draft'::text NOT NULL,
+    commencement_on date NOT NULL,
+    term_periods integer NOT NULL,
+    payment_frequency text DEFAULT 'monthly'::text NOT NULL,
+    payment_timing text DEFAULT 'arrears'::text NOT NULL,
+    payment_amount numeric(19,4) NOT NULL,
+    annual_discount_rate_percent numeric(19,10) NOT NULL,
+    classification text DEFAULT 'finance'::text NOT NULL,
+    classification_inputs jsonb DEFAULT '{}'::jsonb NOT NULL,
+    exemption text,
+    initial_liability numeric(19,4),
+    initial_rou_asset numeric(19,4),
+    rou_asset_account_id uuid NOT NULL,
+    lease_liability_account_id uuid NOT NULL,
+    interest_expense_account_id uuid NOT NULL,
+    amortization_expense_account_id uuid NOT NULL,
+    lease_expense_account_id uuid NOT NULL,
+    payment_account_id uuid NOT NULL,
+    department_id uuid,
+    project_id uuid,
+    location_id uuid,
+    commencement_entry_id uuid,
+    custom jsonb DEFAULT '{}'::jsonb NOT NULL,
     created_at timestamp with time zone DEFAULT now() NOT NULL,
     created_by uuid,
     updated_at timestamp with time zone DEFAULT now() NOT NULL,
     updated_by uuid,
-    CONSTRAINT lease_schedule_amount_positive CHECK ((amount > (0)::numeric)),
-    CONSTRAINT lease_schedule_status_chk CHECK ((status = ANY (ARRAY['scheduled'::text, 'invoiced'::text, 'credited'::text, 'cancelled'::text]))),
-    CONSTRAINT lease_schedule_window CHECK ((period_ends_on >= period_starts_on))
+    CONSTRAINT lease_agreements_classification_chk CHECK ((classification = ANY (ARRAY['finance'::text, 'operating'::text]))),
+    CONSTRAINT lease_agreements_exemption_chk CHECK (((exemption IS NULL) OR (exemption = ANY (ARRAY['short_term'::text, 'low_value'::text])))),
+    CONSTRAINT lease_agreements_frequency_chk CHECK ((payment_frequency = ANY (ARRAY['monthly'::text, 'quarterly'::text, 'annual'::text]))),
+    CONSTRAINT lease_agreements_payment_positive CHECK ((payment_amount > (0)::numeric)),
+    CONSTRAINT lease_agreements_rate_nonnegative CHECK ((annual_discount_rate_percent >= (0)::numeric)),
+    CONSTRAINT lease_agreements_status_chk CHECK ((status = ANY (ARRAY['draft'::text, 'active'::text, 'terminated'::text, 'complete'::text]))),
+    CONSTRAINT lease_agreements_term_positive CHECK ((term_periods > 0)),
+    CONSTRAINT lease_agreements_timing_chk CHECK ((payment_timing = ANY (ARRAY['arrears'::text, 'advance'::text])))
 );
 
-ALTER TABLE ONLY public.lease_schedule_lines FORCE ROW LEVEL SECURITY;
+ALTER TABLE ONLY public.lease_agreements FORCE ROW LEVEL SECURITY;
 
 
 --
@@ -16489,38 +17736,6 @@ CREATE TABLE public.list_views (
 );
 
 ALTER TABLE ONLY public.list_views FORCE ROW LEVEL SECURITY;
-
-
---
--- Name: managed_properties; Type: TABLE; Schema: public; Owner: -
---
-
-CREATE TABLE public.managed_properties (
-    id uuid DEFAULT public.uuid_generate_v7() NOT NULL,
-    org_id uuid NOT NULL,
-    subsidiary_id uuid NOT NULL,
-    location_id uuid,
-    fixed_asset_id uuid,
-    code text NOT NULL,
-    name text NOT NULL,
-    property_type text NOT NULL,
-    status text DEFAULT 'active'::text NOT NULL,
-    currency text NOT NULL,
-    address jsonb DEFAULT '{}'::jsonb NOT NULL,
-    rent_income_account_id uuid,
-    cam_income_account_id uuid,
-    deposit_liability_account_id uuid,
-    default_bank_account_id uuid,
-    created_at timestamp with time zone DEFAULT now() NOT NULL,
-    created_by uuid,
-    updated_at timestamp with time zone DEFAULT now() NOT NULL,
-    updated_by uuid,
-    custom jsonb DEFAULT '{}'::jsonb NOT NULL,
-    CONSTRAINT managed_properties_status_chk CHECK ((status = ANY (ARRAY['active'::text, 'inactive'::text, 'sold'::text]))),
-    CONSTRAINT managed_properties_type_chk CHECK ((property_type = ANY (ARRAY['residential'::text, 'commercial'::text, 'mixed_use'::text, 'industrial'::text, 'other'::text])))
-);
-
-ALTER TABLE ONLY public.managed_properties FORCE ROW LEVEL SECURITY;
 
 
 --
@@ -16908,82 +18123,6 @@ CREATE TABLE public.pdf_templates (
 );
 
 ALTER TABLE ONLY public.pdf_templates FORCE ROW LEVEL SECURITY;
-
-
---
--- Name: property_leases; Type: TABLE; Schema: public; Owner: -
---
-
-CREATE TABLE public.property_leases (
-    id uuid DEFAULT public.uuid_generate_v7() NOT NULL,
-    org_id uuid NOT NULL,
-    property_id uuid NOT NULL,
-    unit_id uuid,
-    tenant_id uuid NOT NULL,
-    lease_number text NOT NULL,
-    status text DEFAULT 'draft'::text NOT NULL,
-    starts_on date NOT NULL,
-    ends_on date,
-    move_in_on date,
-    move_out_on date,
-    billing_day integer DEFAULT 1 NOT NULL,
-    payment_terms_days integer DEFAULT 0 NOT NULL,
-    security_deposit_required numeric(19,4) DEFAULT 0 NOT NULL,
-    cam_method text DEFAULT 'none'::text NOT NULL,
-    cam_share_percent numeric(19,4),
-    late_fee_type text DEFAULT 'none'::text NOT NULL,
-    late_fee_value numeric(19,4) DEFAULT 0 NOT NULL,
-    grace_days integer DEFAULT 0 NOT NULL,
-    auto_invoice boolean DEFAULT true NOT NULL,
-    auto_post boolean DEFAULT false NOT NULL,
-    activated_at timestamp with time zone,
-    activated_by uuid,
-    terminated_at timestamp with time zone,
-    terminated_by uuid,
-    termination_reason text,
-    notes text,
-    created_at timestamp with time zone DEFAULT now() NOT NULL,
-    created_by uuid,
-    updated_at timestamp with time zone DEFAULT now() NOT NULL,
-    updated_by uuid,
-    CONSTRAINT property_leases_billing_day CHECK (((billing_day >= 1) AND (billing_day <= 31))),
-    CONSTRAINT property_leases_cam_method_chk CHECK ((cam_method = ANY (ARRAY['none'::text, 'fixed'::text, 'pro_rata'::text]))),
-    CONSTRAINT property_leases_cam_share CHECK (((cam_share_percent IS NULL) OR ((cam_share_percent >= (0)::numeric) AND (cam_share_percent <= (100)::numeric)))),
-    CONSTRAINT property_leases_deposit CHECK ((security_deposit_required >= (0)::numeric)),
-    CONSTRAINT property_leases_late_fee CHECK ((((late_fee_type = 'none'::text) AND (late_fee_value = (0)::numeric)) OR ((late_fee_type = 'fixed'::text) AND (late_fee_value > (0)::numeric)) OR ((late_fee_type = 'percent'::text) AND (late_fee_value > (0)::numeric) AND (late_fee_value <= (100)::numeric)))),
-    CONSTRAINT property_leases_late_fee_type_chk CHECK ((late_fee_type = ANY (ARRAY['none'::text, 'fixed'::text, 'percent'::text]))),
-    CONSTRAINT property_leases_status_chk CHECK ((status = ANY (ARRAY['draft'::text, 'active'::text, 'notice'::text, 'expired'::text, 'terminated'::text, 'cancelled'::text]))),
-    CONSTRAINT property_leases_terms CHECK (((payment_terms_days >= 0) AND (grace_days >= 0))),
-    CONSTRAINT property_leases_window CHECK (((ends_on IS NULL) OR (ends_on >= starts_on)))
-);
-
-ALTER TABLE ONLY public.property_leases FORCE ROW LEVEL SECURITY;
-
-
---
--- Name: property_units; Type: TABLE; Schema: public; Owner: -
---
-
-CREATE TABLE public.property_units (
-    id uuid DEFAULT public.uuid_generate_v7() NOT NULL,
-    org_id uuid NOT NULL,
-    property_id uuid NOT NULL,
-    code text NOT NULL,
-    name text,
-    unit_type text,
-    rentable_area numeric(19,4),
-    bedrooms integer,
-    status text DEFAULT 'vacant'::text NOT NULL,
-    created_at timestamp with time zone DEFAULT now() NOT NULL,
-    created_by uuid,
-    updated_at timestamp with time zone DEFAULT now() NOT NULL,
-    updated_by uuid,
-    CONSTRAINT property_units_area_positive CHECK (((rentable_area IS NULL) OR (rentable_area > (0)::numeric))),
-    CONSTRAINT property_units_bedrooms_nonnegative CHECK (((bedrooms IS NULL) OR (bedrooms >= 0))),
-    CONSTRAINT property_units_status_chk CHECK ((status = ANY (ARRAY['vacant'::text, 'occupied'::text, 'notice'::text, 'offline'::text])))
-);
-
-ALTER TABLE ONLY public.property_units FORCE ROW LEVEL SECURITY;
 
 
 --
@@ -17455,37 +18594,6 @@ CREATE TABLE public.script_runs (
 );
 
 ALTER TABLE ONLY public.script_runs FORCE ROW LEVEL SECURITY;
-
-
---
--- Name: security_deposit_transactions; Type: TABLE; Schema: public; Owner: -
---
-
-CREATE TABLE public.security_deposit_transactions (
-    id uuid DEFAULT public.uuid_generate_v7() NOT NULL,
-    org_id uuid NOT NULL,
-    lease_id uuid NOT NULL,
-    kind text NOT NULL,
-    occurred_on date NOT NULL,
-    amount numeric(19,4) NOT NULL,
-    bank_account_id uuid,
-    offset_account_id uuid,
-    applied_document_id uuid,
-    journal_entry_id uuid NOT NULL,
-    memo text,
-    created_at timestamp with time zone DEFAULT now() NOT NULL,
-    created_by uuid,
-    updated_at timestamp with time zone DEFAULT now() NOT NULL,
-    updated_by uuid,
-    reversal_of_id uuid,
-    import_key text,
-    CONSTRAINT security_deposits_account_shape CHECK ((((kind <> ALL (ARRAY['received'::text, 'refunded'::text])) OR (bank_account_id IS NOT NULL)) AND ((kind <> ALL (ARRAY['interest'::text, 'adjustment_increase'::text, 'adjustment_decrease'::text, 'applied'::text])) OR (offset_account_id IS NOT NULL)))),
-    CONSTRAINT security_deposits_amount_positive CHECK ((amount > (0)::numeric)),
-    CONSTRAINT security_deposits_application_shape CHECK (((kind = 'applied'::text) = (applied_document_id IS NOT NULL))),
-    CONSTRAINT security_deposits_kind_chk CHECK ((kind = ANY (ARRAY['received'::text, 'interest'::text, 'applied'::text, 'refunded'::text, 'adjustment_increase'::text, 'adjustment_decrease'::text])))
-);
-
-ALTER TABLE ONLY public.security_deposit_transactions FORCE ROW LEVEL SECURITY;
 
 
 --
@@ -18137,6 +19245,62 @@ ALTER TABLE ONLY public.asset_events
 
 ALTER TABLE ONLY public.audit_log
     ADD CONSTRAINT audit_log_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: auth_login_challenges auth_login_challenges_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.auth_login_challenges
+    ADD CONSTRAINT auth_login_challenges_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: auth_login_events auth_login_events_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.auth_login_events
+    ADD CONSTRAINT auth_login_events_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: auth_login_state auth_login_state_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.auth_login_state
+    ADD CONSTRAINT auth_login_state_pkey PRIMARY KEY (email_hash);
+
+
+--
+-- Name: auth_mfa_factors auth_mfa_factors_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.auth_mfa_factors
+    ADD CONSTRAINT auth_mfa_factors_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: auth_oidc_identities auth_oidc_identities_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.auth_oidc_identities
+    ADD CONSTRAINT auth_oidc_identities_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: auth_rate_limit_buckets auth_rate_limit_buckets_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.auth_rate_limit_buckets
+    ADD CONSTRAINT auth_rate_limit_buckets_pkey PRIMARY KEY (bucket_key);
+
+
+--
+-- Name: auth_sessions auth_sessions_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.auth_sessions
+    ADD CONSTRAINT auth_sessions_pkey PRIMARY KEY (id);
 
 
 --
@@ -18820,6 +19984,22 @@ ALTER TABLE ONLY public.email_log
 
 
 --
+-- Name: employee_pay_components employee_pay_components_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.employee_pay_components
+    ADD CONSTRAINT employee_pay_components_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: employee_payroll_profiles employee_payroll_profiles_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.employee_payroll_profiles
+    ADD CONSTRAINT employee_payroll_profiles_pkey PRIMARY KEY (id);
+
+
+--
 -- Name: employee_roles employee_roles_party_id_unique; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -19196,6 +20376,14 @@ ALTER TABLE ONLY public.inventory_provisional_settlements
 
 
 --
+-- Name: inventory_writedowns inventory_writedowns_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.inventory_writedowns
+    ADD CONSTRAINT inventory_writedowns_pkey PRIMARY KEY (id);
+
+
+--
 -- Name: invoice_backups invoice_backups_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -19353,6 +20541,22 @@ ALTER TABLE ONLY public.landed_cost_voucher_targets
 
 ALTER TABLE ONLY public.landed_cost_vouchers
     ADD CONSTRAINT landed_cost_vouchers_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: lease_agreement_schedule_lines lease_agreement_schedule_lines_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.lease_agreement_schedule_lines
+    ADD CONSTRAINT lease_agreement_schedule_lines_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: lease_agreements lease_agreements_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.lease_agreements
+    ADD CONSTRAINT lease_agreements_pkey PRIMARY KEY (id);
 
 
 --
@@ -19524,6 +20728,46 @@ ALTER TABLE ONLY public.pay_applications
 
 
 --
+-- Name: pay_components pay_components_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.pay_components
+    ADD CONSTRAINT pay_components_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: pay_runs pay_runs_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.pay_runs
+    ADD CONSTRAINT pay_runs_pkey PRIMARY KEY (document_id);
+
+
+--
+-- Name: pay_schedules pay_schedules_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.pay_schedules
+    ADD CONSTRAINT pay_schedules_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: pay_stub_lines pay_stub_lines_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.pay_stub_lines
+    ADD CONSTRAINT pay_stub_lines_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: pay_stubs pay_stubs_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.pay_stubs
+    ADD CONSTRAINT pay_stubs_pkey PRIMARY KEY (id);
+
+
+--
 -- Name: payment_attempts payment_attempts_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -19657,6 +20901,14 @@ ALTER TABLE ONLY public.payment_surcharge_rules
 
 ALTER TABLE ONLY public.payment_terms
     ADD CONSTRAINT payment_terms_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: payroll_opening_balances payroll_opening_balances_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.payroll_opening_balances
+    ADD CONSTRAINT payroll_opening_balances_pkey PRIMARY KEY (id);
 
 
 --
@@ -20468,6 +21720,30 @@ ALTER TABLE ONLY public.transfer_orders
 
 
 --
+-- Name: union_agreements union_agreements_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.union_agreements
+    ADD CONSTRAINT union_agreements_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: union_classifications union_classifications_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.union_classifications
+    ADD CONSTRAINT union_classifications_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: union_fringes union_fringes_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.union_fringes
+    ADD CONSTRAINT union_fringes_pkey PRIMARY KEY (id);
+
+
+--
 -- Name: user_dashboard_layouts user_dashboard_layouts_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -21088,6 +22364,153 @@ CREATE INDEX audit_log_row ON public.audit_log USING btree (table_name, row_id);
 
 
 --
+-- Name: auth_login_challenges_expiry; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX auth_login_challenges_expiry ON public.auth_login_challenges USING btree (expires_at);
+
+
+--
+-- Name: auth_login_challenges_user; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX auth_login_challenges_user ON public.auth_login_challenges USING btree (user_id, expires_at);
+
+
+--
+-- Name: auth_login_events_email_failure_time; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX auth_login_events_email_failure_time ON public.auth_login_events USING btree (email_hash, occurred_at) WHERE (outcome = ANY (ARRAY['failure'::text, 'mfa_failure'::text]));
+
+
+--
+-- Name: auth_login_events_email_time; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX auth_login_events_email_time ON public.auth_login_events USING btree (email_hash, occurred_at);
+
+
+--
+-- Name: auth_login_events_network_failure_time; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX auth_login_events_network_failure_time ON public.auth_login_events USING btree (network_hash, occurred_at) WHERE (outcome = ANY (ARRAY['failure'::text, 'mfa_failure'::text]));
+
+
+--
+-- Name: auth_login_events_network_time; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX auth_login_events_network_time ON public.auth_login_events USING btree (network_hash, occurred_at);
+
+
+--
+-- Name: auth_login_events_retention; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX auth_login_events_retention ON public.auth_login_events USING btree (occurred_at);
+
+
+--
+-- Name: auth_login_events_user_failure_time; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX auth_login_events_user_failure_time ON public.auth_login_events USING btree (user_id, occurred_at) WHERE (outcome = ANY (ARRAY['failure'::text, 'mfa_failure'::text]));
+
+
+--
+-- Name: auth_login_events_user_time; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX auth_login_events_user_time ON public.auth_login_events USING btree (user_id, occurred_at);
+
+
+--
+-- Name: auth_login_state_locked; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX auth_login_state_locked ON public.auth_login_state USING btree (locked_until);
+
+
+--
+-- Name: auth_login_state_updated; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX auth_login_state_updated ON public.auth_login_state USING btree (updated_at);
+
+
+--
+-- Name: auth_login_state_user; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX auth_login_state_user ON public.auth_login_state USING btree (user_id);
+
+
+--
+-- Name: auth_mfa_factors_setup_expiry; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX auth_mfa_factors_setup_expiry ON public.auth_mfa_factors USING btree (setup_expires_at);
+
+
+--
+-- Name: auth_mfa_factors_user; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE UNIQUE INDEX auth_mfa_factors_user ON public.auth_mfa_factors USING btree (user_id);
+
+
+--
+-- Name: auth_oidc_identities_subject; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE UNIQUE INDEX auth_oidc_identities_subject ON public.auth_oidc_identities USING btree (issuer, subject);
+
+
+--
+-- Name: auth_oidc_identities_user; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX auth_oidc_identities_user ON public.auth_oidc_identities USING btree (user_id);
+
+
+--
+-- Name: auth_oidc_identities_user_issuer; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE UNIQUE INDEX auth_oidc_identities_user_issuer ON public.auth_oidc_identities USING btree (user_id, issuer);
+
+
+--
+-- Name: auth_rate_limit_buckets_updated; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX auth_rate_limit_buckets_updated ON public.auth_rate_limit_buckets USING btree (updated_at);
+
+
+--
+-- Name: auth_sessions_expiry; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX auth_sessions_expiry ON public.auth_sessions USING btree (expires_at);
+
+
+--
+-- Name: auth_sessions_token_hash; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE UNIQUE INDEX auth_sessions_token_hash ON public.auth_sessions USING btree (token_hash);
+
+
+--
+-- Name: auth_sessions_user_active; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX auth_sessions_user_active ON public.auth_sessions USING btree (user_id, revoked_at, expires_at);
+
+
+--
 -- Name: backup_policies_due; Type: INDEX; Schema: public; Owner: -
 --
 
@@ -21099,6 +22522,13 @@ CREATE INDEX backup_policies_due ON public.backup_policies USING btree (next_run
 --
 
 CREATE INDEX backup_runs_live ON public.backup_runs USING btree (org_id, created_at DESC) WHERE ((status = 'completed'::text) AND (purged_at IS NULL));
+
+
+--
+-- Name: backup_runs_one_inflight_per_org; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE UNIQUE INDEX backup_runs_one_inflight_per_org ON public.backup_runs USING btree (org_id) WHERE (status = ANY (ARRAY['queued'::text, 'running'::text]));
 
 
 --
@@ -22159,6 +23589,27 @@ CREATE INDEX email_log_status ON public.email_log USING btree (org_id, status, c
 
 
 --
+-- Name: employee_pay_components_employee; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX employee_pay_components_employee ON public.employee_pay_components USING btree (org_id, employee_party_id, effective_from);
+
+
+--
+-- Name: employee_payroll_profiles_employee; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE UNIQUE INDEX employee_payroll_profiles_employee ON public.employee_payroll_profiles USING btree (org_id, employee_party_id);
+
+
+--
+-- Name: employee_payroll_profiles_schedule; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX employee_payroll_profiles_schedule ON public.employee_payroll_profiles USING btree (org_id, pay_schedule_id);
+
+
+--
 -- Name: equipment_units_charge_item; Type: INDEX; Schema: public; Owner: -
 --
 
@@ -22330,30 +23781,7 @@ CREATE INDEX files_folder_name ON public.files USING btree (org_id, folder_id, n
 -- Name: files_name_trgm; Type: INDEX; Schema: public; Owner: -
 --
 
-DO $trigram_indexes$
-BEGIN
-  IF EXISTS (
-    SELECT 1
-      FROM pg_opclass
-     WHERE opcname = 'gin_trgm_ops'
-       AND opcmethod = (SELECT oid FROM pg_am WHERE amname = 'gin')
-  ) THEN
-    CREATE INDEX files_name_trgm ON public.files USING gin (name public.gin_trgm_ops);
-    CREATE INDEX idx_accounts_name_trgm ON public.accounts USING gin (name public.gin_trgm_ops);
-    CREATE INDEX idx_accounts_number_trgm ON public.accounts USING gin (number public.gin_trgm_ops);
-    CREATE INDEX idx_documents_memo_trgm ON public.documents USING gin (memo public.gin_trgm_ops);
-    CREATE INDEX idx_documents_number_trgm ON public.documents USING gin (document_number public.gin_trgm_ops);
-    CREATE INDEX idx_documents_reference_trgm ON public.documents USING gin (reference_number public.gin_trgm_ops);
-    CREATE INDEX idx_items_code_trgm ON public.items USING gin (code public.gin_trgm_ops);
-    CREATE INDEX idx_items_name_trgm ON public.items USING gin (name public.gin_trgm_ops);
-    CREATE INDEX idx_parties_display_name_trgm ON public.parties USING gin (display_name public.gin_trgm_ops);
-    CREATE INDEX idx_parties_email_trgm ON public.parties USING gin (email public.gin_trgm_ops);
-    CREATE INDEX idx_parties_legal_name_trgm ON public.parties USING gin (legal_name public.gin_trgm_ops);
-    CREATE INDEX idx_projects_code_trgm ON public.projects USING gin (code public.gin_trgm_ops);
-    CREATE INDEX idx_projects_name_trgm ON public.projects USING gin (name public.gin_trgm_ops);
-  END IF;
-END
-$trigram_indexes$;
+CREATE INDEX files_name_trgm ON public.files USING gin (name public.gin_trgm_ops);
 
 
 --
@@ -22647,14 +24075,14 @@ CREATE INDEX fx_rates_provider ON public.fx_rates USING btree (provider_config_i
 -- Name: idx_accounts_name_trgm; Type: INDEX; Schema: public; Owner: -
 --
 
--- Created conditionally by the trigram-index block above.
+CREATE INDEX idx_accounts_name_trgm ON public.accounts USING gin (name public.gin_trgm_ops);
 
 
 --
 -- Name: idx_accounts_number_trgm; Type: INDEX; Schema: public; Owner: -
 --
 
--- Created conditionally by the trigram-index block above.
+CREATE INDEX idx_accounts_number_trgm ON public.accounts USING gin (number public.gin_trgm_ops);
 
 
 --
@@ -22668,14 +24096,14 @@ CREATE INDEX idx_document_lines_amount ON public.document_lines USING btree (amo
 -- Name: idx_documents_memo_trgm; Type: INDEX; Schema: public; Owner: -
 --
 
--- Created conditionally by the trigram-index block above.
+CREATE INDEX idx_documents_memo_trgm ON public.documents USING gin (memo public.gin_trgm_ops);
 
 
 --
 -- Name: idx_documents_number_trgm; Type: INDEX; Schema: public; Owner: -
 --
 
--- Created conditionally by the trigram-index block above.
+CREATE INDEX idx_documents_number_trgm ON public.documents USING gin (document_number public.gin_trgm_ops);
 
 
 --
@@ -22689,56 +24117,56 @@ CREATE INDEX idx_documents_org_total ON public.documents USING btree (org_id, to
 -- Name: idx_documents_reference_trgm; Type: INDEX; Schema: public; Owner: -
 --
 
--- Created conditionally by the trigram-index block above.
+CREATE INDEX idx_documents_reference_trgm ON public.documents USING gin (reference_number public.gin_trgm_ops);
 
 
 --
 -- Name: idx_items_code_trgm; Type: INDEX; Schema: public; Owner: -
 --
 
--- Created conditionally by the trigram-index block above.
+CREATE INDEX idx_items_code_trgm ON public.items USING gin (code public.gin_trgm_ops);
 
 
 --
 -- Name: idx_items_name_trgm; Type: INDEX; Schema: public; Owner: -
 --
 
--- Created conditionally by the trigram-index block above.
+CREATE INDEX idx_items_name_trgm ON public.items USING gin (name public.gin_trgm_ops);
 
 
 --
 -- Name: idx_parties_display_name_trgm; Type: INDEX; Schema: public; Owner: -
 --
 
--- Created conditionally by the trigram-index block above.
+CREATE INDEX idx_parties_display_name_trgm ON public.parties USING gin (display_name public.gin_trgm_ops);
 
 
 --
 -- Name: idx_parties_email_trgm; Type: INDEX; Schema: public; Owner: -
 --
 
--- Created conditionally by the trigram-index block above.
+CREATE INDEX idx_parties_email_trgm ON public.parties USING gin (email public.gin_trgm_ops);
 
 
 --
 -- Name: idx_parties_legal_name_trgm; Type: INDEX; Schema: public; Owner: -
 --
 
--- Created conditionally by the trigram-index block above.
+CREATE INDEX idx_parties_legal_name_trgm ON public.parties USING gin (legal_name public.gin_trgm_ops);
 
 
 --
 -- Name: idx_projects_code_trgm; Type: INDEX; Schema: public; Owner: -
 --
 
--- Created conditionally by the trigram-index block above.
+CREATE INDEX idx_projects_code_trgm ON public.projects USING gin (code public.gin_trgm_ops);
 
 
 --
 -- Name: idx_projects_name_trgm; Type: INDEX; Schema: public; Owner: -
 --
 
--- Created conditionally by the trigram-index block above.
+CREATE INDEX idx_projects_name_trgm ON public.projects USING gin (name public.gin_trgm_ops);
 
 
 --
@@ -22935,6 +24363,13 @@ CREATE INDEX inventory_provisional_settlement_entry ON public.inventory_provisio
 --
 
 CREATE INDEX inventory_provisional_settlement_receipt ON public.inventory_provisional_settlements USING btree (receipt_movement_id);
+
+
+--
+-- Name: inventory_writedowns_item; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX inventory_writedowns_item ON public.inventory_writedowns USING btree (org_id, item_id, stock_location_id);
 
 
 --
@@ -23267,6 +24702,34 @@ CREATE INDEX layer_consumptions_movement ON public.cost_layer_consumptions USING
 
 
 --
+-- Name: lease_agreement_schedule_lease_seq; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE UNIQUE INDEX lease_agreement_schedule_lease_seq ON public.lease_agreement_schedule_lines USING btree (lease_id, sequence);
+
+
+--
+-- Name: lease_agreement_schedule_org_due; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX lease_agreement_schedule_org_due ON public.lease_agreement_schedule_lines USING btree (org_id, due_on);
+
+
+--
+-- Name: lease_agreements_org_number; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE UNIQUE INDEX lease_agreements_org_number ON public.lease_agreements USING btree (org_id, lease_number);
+
+
+--
+-- Name: lease_agreements_org_status; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX lease_agreements_org_status ON public.lease_agreements USING btree (org_id, status);
+
+
+--
 -- Name: lease_charges_effective; Type: INDEX; Schema: public; Owner: -
 --
 
@@ -23547,10 +25010,80 @@ CREATE UNIQUE INDEX pay_applications_project_number ON public.pay_applications U
 
 
 --
+-- Name: pay_components_org_code; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE UNIQUE INDEX pay_components_org_code ON public.pay_components USING btree (org_id, code);
+
+
+--
+-- Name: pay_components_org_kind; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX pay_components_org_kind ON public.pay_components USING btree (org_id, kind);
+
+
+--
+-- Name: pay_components_org_system; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE UNIQUE INDEX pay_components_org_system ON public.pay_components USING btree (org_id, system_key, kind);
+
+
+--
 -- Name: pay_instructions_run; Type: INDEX; Schema: public; Owner: -
 --
 
 CREATE INDEX pay_instructions_run ON public.payment_instructions USING btree (payment_run_id);
+
+
+--
+-- Name: pay_runs_org_period; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX pay_runs_org_period ON public.pay_runs USING btree (org_id, period_start, period_end);
+
+
+--
+-- Name: pay_runs_schedule_period; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE UNIQUE INDEX pay_runs_schedule_period ON public.pay_runs USING btree (org_id, pay_schedule_id, period_end);
+
+
+--
+-- Name: pay_schedules_org_name; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE UNIQUE INDEX pay_schedules_org_name ON public.pay_schedules USING btree (org_id, name);
+
+
+--
+-- Name: pay_stub_lines_project; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX pay_stub_lines_project ON public.pay_stub_lines USING btree (org_id, project_id);
+
+
+--
+-- Name: pay_stub_lines_stub; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX pay_stub_lines_stub ON public.pay_stub_lines USING btree (stub_id, sequence);
+
+
+--
+-- Name: pay_stubs_employee_year; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX pay_stubs_employee_year ON public.pay_stubs USING btree (org_id, employee_party_id, tax_year, pay_date);
+
+
+--
+-- Name: pay_stubs_run_employee; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE UNIQUE INDEX pay_stubs_run_employee ON public.pay_stubs USING btree (pay_run_document_id, employee_party_id);
 
 
 --
@@ -23726,6 +25259,13 @@ CREATE INDEX payment_settlements_status ON public.payment_settlements USING btre
 --
 
 CREATE INDEX payment_surcharge_rules_org ON public.payment_surcharge_rules USING btree (org_id, is_active, effective_from);
+
+
+--
+-- Name: payroll_opening_balances_employee_year; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE UNIQUE INDEX payroll_opening_balances_employee_year ON public.payroll_opening_balances USING btree (org_id, employee_party_id, tax_year);
 
 
 --
@@ -25185,6 +26725,34 @@ CREATE INDEX transfer_orders_org_status ON public.transfer_orders USING btree (o
 
 
 --
+-- Name: union_agreements_org_name; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE UNIQUE INDEX union_agreements_org_name ON public.union_agreements USING btree (org_id, name);
+
+
+--
+-- Name: union_classifications_agreement_code; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE UNIQUE INDEX union_classifications_agreement_code ON public.union_classifications USING btree (agreement_id, code);
+
+
+--
+-- Name: union_fringes_agreement; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX union_fringes_agreement ON public.union_fringes USING btree (org_id, agreement_id);
+
+
+--
+-- Name: union_fringes_agreement_code; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE UNIQUE INDEX union_fringes_agreement_code ON public.union_fringes USING btree (agreement_id, code);
+
+
+--
 -- Name: user_dashboard_layouts_unique; Type: INDEX; Schema: public; Owner: -
 --
 
@@ -25259,6 +26827,13 @@ CREATE UNIQUE INDEX user_scripts_endpoint_slug ON public.user_scripts USING btre
 --
 
 CREATE INDEX user_scripts_trigger ON public.user_scripts USING btree (org_id, trigger_point, document_kind, is_active);
+
+
+--
+-- Name: users_login_email_ci; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX users_login_email_ci ON public.users USING btree (lower(email)) WHERE is_active;
 
 
 --
@@ -25714,6 +27289,13 @@ CREATE CONSTRAINT TRIGGER document_posted_period_identity_guard AFTER INSERT OR 
 --
 
 CREATE TRIGGER documents_extra_dims_guard BEFORE INSERT OR UPDATE OF org_id, extra_dims ON public.documents FOR EACH ROW EXECUTE FUNCTION public.row_extra_dims_guard();
+
+
+--
+-- Name: documents documents_posted_financial_guard; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER documents_posted_financial_guard BEFORE UPDATE OF total, subtotal, tax_total, currency, fx_rate, document_date, posting_date, party_id, kind, document_number ON public.documents FOR EACH ROW WHEN (((old.status = ANY (ARRAY['posted'::text, 'reversed'::text])) AND ((new.total IS DISTINCT FROM old.total) OR (new.subtotal IS DISTINCT FROM old.subtotal) OR (new.tax_total IS DISTINCT FROM old.tax_total) OR (new.currency IS DISTINCT FROM old.currency) OR (new.fx_rate IS DISTINCT FROM old.fx_rate) OR (new.document_date IS DISTINCT FROM old.document_date) OR (new.posting_date IS DISTINCT FROM old.posting_date) OR (new.party_id IS DISTINCT FROM old.party_id) OR (new.kind IS DISTINCT FROM old.kind) OR (new.document_number IS DISTINCT FROM old.document_number)))) EXECUTE FUNCTION public.posted_document_financial_guard();
 
 
 --
@@ -27004,6 +28586,62 @@ ALTER TABLE ONLY public.asset_events
 
 ALTER TABLE ONLY public.asset_events
     ADD CONSTRAINT asset_events_reverses_event_fkey FOREIGN KEY (reverses_event_id) REFERENCES public.asset_events(id) DEFERRABLE;
+
+
+--
+-- Name: auth_login_challenges auth_login_challenges_user_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.auth_login_challenges
+    ADD CONSTRAINT auth_login_challenges_user_id_fkey FOREIGN KEY (user_id) REFERENCES public.users(id) ON DELETE CASCADE DEFERRABLE;
+
+
+--
+-- Name: auth_login_events auth_login_events_user_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.auth_login_events
+    ADD CONSTRAINT auth_login_events_user_id_fkey FOREIGN KEY (user_id) REFERENCES public.users(id) ON DELETE SET NULL DEFERRABLE;
+
+
+--
+-- Name: auth_login_state auth_login_state_user_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.auth_login_state
+    ADD CONSTRAINT auth_login_state_user_id_fkey FOREIGN KEY (user_id) REFERENCES public.users(id) ON DELETE CASCADE DEFERRABLE;
+
+
+--
+-- Name: auth_mfa_factors auth_mfa_factors_setup_session_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.auth_mfa_factors
+    ADD CONSTRAINT auth_mfa_factors_setup_session_id_fkey FOREIGN KEY (setup_session_id) REFERENCES public.auth_sessions(id) ON DELETE CASCADE DEFERRABLE;
+
+
+--
+-- Name: auth_mfa_factors auth_mfa_factors_user_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.auth_mfa_factors
+    ADD CONSTRAINT auth_mfa_factors_user_id_fkey FOREIGN KEY (user_id) REFERENCES public.users(id) ON DELETE CASCADE DEFERRABLE;
+
+
+--
+-- Name: auth_oidc_identities auth_oidc_identities_user_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.auth_oidc_identities
+    ADD CONSTRAINT auth_oidc_identities_user_id_fkey FOREIGN KEY (user_id) REFERENCES public.users(id) ON DELETE CASCADE DEFERRABLE;
+
+
+--
+-- Name: auth_sessions auth_sessions_user_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.auth_sessions
+    ADD CONSTRAINT auth_sessions_user_id_fkey FOREIGN KEY (user_id) REFERENCES public.users(id) ON DELETE CASCADE DEFERRABLE;
 
 
 --
@@ -29095,6 +30733,102 @@ ALTER TABLE ONLY public.documents
 
 
 --
+-- Name: employee_pay_components employee_pay_components_component_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.employee_pay_components
+    ADD CONSTRAINT employee_pay_components_component_id_fkey FOREIGN KEY (component_id) REFERENCES public.pay_components(id) ON DELETE CASCADE DEFERRABLE;
+
+
+--
+-- Name: employee_pay_components employee_pay_components_created_by_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.employee_pay_components
+    ADD CONSTRAINT employee_pay_components_created_by_fkey FOREIGN KEY (created_by) REFERENCES public.users(id) ON DELETE SET NULL DEFERRABLE;
+
+
+--
+-- Name: employee_pay_components employee_pay_components_employee_party_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.employee_pay_components
+    ADD CONSTRAINT employee_pay_components_employee_party_id_fkey FOREIGN KEY (employee_party_id) REFERENCES public.parties(id) ON DELETE CASCADE DEFERRABLE;
+
+
+--
+-- Name: employee_pay_components employee_pay_components_org_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.employee_pay_components
+    ADD CONSTRAINT employee_pay_components_org_id_fkey FOREIGN KEY (org_id) REFERENCES public.orgs(id) ON DELETE CASCADE DEFERRABLE;
+
+
+--
+-- Name: employee_pay_components employee_pay_components_updated_by_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.employee_pay_components
+    ADD CONSTRAINT employee_pay_components_updated_by_fkey FOREIGN KEY (updated_by) REFERENCES public.users(id) ON DELETE SET NULL DEFERRABLE;
+
+
+--
+-- Name: employee_payroll_profiles employee_payroll_profiles_created_by_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.employee_payroll_profiles
+    ADD CONSTRAINT employee_payroll_profiles_created_by_fkey FOREIGN KEY (created_by) REFERENCES public.users(id) ON DELETE SET NULL DEFERRABLE;
+
+
+--
+-- Name: employee_payroll_profiles employee_payroll_profiles_employee_party_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.employee_payroll_profiles
+    ADD CONSTRAINT employee_payroll_profiles_employee_party_id_fkey FOREIGN KEY (employee_party_id) REFERENCES public.parties(id) ON DELETE CASCADE DEFERRABLE;
+
+
+--
+-- Name: employee_payroll_profiles employee_payroll_profiles_org_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.employee_payroll_profiles
+    ADD CONSTRAINT employee_payroll_profiles_org_id_fkey FOREIGN KEY (org_id) REFERENCES public.orgs(id) ON DELETE CASCADE DEFERRABLE;
+
+
+--
+-- Name: employee_payroll_profiles employee_payroll_profiles_pay_schedule_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.employee_payroll_profiles
+    ADD CONSTRAINT employee_payroll_profiles_pay_schedule_id_fkey FOREIGN KEY (pay_schedule_id) REFERENCES public.pay_schedules(id) DEFERRABLE;
+
+
+--
+-- Name: employee_payroll_profiles employee_payroll_profiles_union_agreement_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.employee_payroll_profiles
+    ADD CONSTRAINT employee_payroll_profiles_union_agreement_id_fkey FOREIGN KEY (union_agreement_id) REFERENCES public.union_agreements(id) ON DELETE SET NULL DEFERRABLE;
+
+
+--
+-- Name: employee_payroll_profiles employee_payroll_profiles_union_classification_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.employee_payroll_profiles
+    ADD CONSTRAINT employee_payroll_profiles_union_classification_id_fkey FOREIGN KEY (union_classification_id) REFERENCES public.union_classifications(id) ON DELETE SET NULL DEFERRABLE;
+
+
+--
+-- Name: employee_payroll_profiles employee_payroll_profiles_updated_by_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.employee_payroll_profiles
+    ADD CONSTRAINT employee_payroll_profiles_updated_by_fkey FOREIGN KEY (updated_by) REFERENCES public.users(id) ON DELETE SET NULL DEFERRABLE;
+
+
+--
 -- Name: employee_roles employee_roles_department_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -30679,6 +32413,14 @@ ALTER TABLE ONLY public.landed_cost_vouchers
 
 
 --
+-- Name: lease_agreement_schedule_lines lease_agreement_schedule_lines_lease_fk; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.lease_agreement_schedule_lines
+    ADD CONSTRAINT lease_agreement_schedule_lines_lease_fk FOREIGN KEY (lease_id) REFERENCES public.lease_agreements(id) ON DELETE CASCADE DEFERRABLE;
+
+
+--
 -- Name: lease_charges lease_charges_income_org_fk; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -31028,6 +32770,230 @@ ALTER TABLE ONLY public.party_subsidiaries
 
 ALTER TABLE ONLY public.party_subsidiaries
     ADD CONSTRAINT party_subsidiaries_subsidiary_id_fkey FOREIGN KEY (subsidiary_id) REFERENCES public.subsidiaries(id) DEFERRABLE;
+
+
+--
+-- Name: pay_components pay_components_created_by_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.pay_components
+    ADD CONSTRAINT pay_components_created_by_fkey FOREIGN KEY (created_by) REFERENCES public.users(id) ON DELETE SET NULL DEFERRABLE;
+
+
+--
+-- Name: pay_components pay_components_expense_account_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.pay_components
+    ADD CONSTRAINT pay_components_expense_account_id_fkey FOREIGN KEY (expense_account_id) REFERENCES public.accounts(id) ON DELETE SET NULL DEFERRABLE;
+
+
+--
+-- Name: pay_components pay_components_liability_account_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.pay_components
+    ADD CONSTRAINT pay_components_liability_account_id_fkey FOREIGN KEY (liability_account_id) REFERENCES public.accounts(id) ON DELETE SET NULL DEFERRABLE;
+
+
+--
+-- Name: pay_components pay_components_org_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.pay_components
+    ADD CONSTRAINT pay_components_org_id_fkey FOREIGN KEY (org_id) REFERENCES public.orgs(id) ON DELETE CASCADE DEFERRABLE;
+
+
+--
+-- Name: pay_components pay_components_remittance_party_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.pay_components
+    ADD CONSTRAINT pay_components_remittance_party_id_fkey FOREIGN KEY (remittance_party_id) REFERENCES public.parties(id) ON DELETE SET NULL DEFERRABLE;
+
+
+--
+-- Name: pay_components pay_components_updated_by_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.pay_components
+    ADD CONSTRAINT pay_components_updated_by_fkey FOREIGN KEY (updated_by) REFERENCES public.users(id) ON DELETE SET NULL DEFERRABLE;
+
+
+--
+-- Name: pay_runs pay_runs_created_by_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.pay_runs
+    ADD CONSTRAINT pay_runs_created_by_fkey FOREIGN KEY (created_by) REFERENCES public.users(id) ON DELETE SET NULL DEFERRABLE;
+
+
+--
+-- Name: pay_runs pay_runs_document_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.pay_runs
+    ADD CONSTRAINT pay_runs_document_id_fkey FOREIGN KEY (document_id) REFERENCES public.documents(id) ON DELETE CASCADE DEFERRABLE;
+
+
+--
+-- Name: pay_runs pay_runs_org_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.pay_runs
+    ADD CONSTRAINT pay_runs_org_id_fkey FOREIGN KEY (org_id) REFERENCES public.orgs(id) ON DELETE CASCADE DEFERRABLE;
+
+
+--
+-- Name: pay_runs pay_runs_pay_schedule_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.pay_runs
+    ADD CONSTRAINT pay_runs_pay_schedule_id_fkey FOREIGN KEY (pay_schedule_id) REFERENCES public.pay_schedules(id) DEFERRABLE;
+
+
+--
+-- Name: pay_runs pay_runs_updated_by_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.pay_runs
+    ADD CONSTRAINT pay_runs_updated_by_fkey FOREIGN KEY (updated_by) REFERENCES public.users(id) ON DELETE SET NULL DEFERRABLE;
+
+
+--
+-- Name: pay_schedules pay_schedules_created_by_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.pay_schedules
+    ADD CONSTRAINT pay_schedules_created_by_fkey FOREIGN KEY (created_by) REFERENCES public.users(id) ON DELETE SET NULL DEFERRABLE;
+
+
+--
+-- Name: pay_schedules pay_schedules_org_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.pay_schedules
+    ADD CONSTRAINT pay_schedules_org_id_fkey FOREIGN KEY (org_id) REFERENCES public.orgs(id) ON DELETE CASCADE DEFERRABLE;
+
+
+--
+-- Name: pay_schedules pay_schedules_updated_by_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.pay_schedules
+    ADD CONSTRAINT pay_schedules_updated_by_fkey FOREIGN KEY (updated_by) REFERENCES public.users(id) ON DELETE SET NULL DEFERRABLE;
+
+
+--
+-- Name: pay_stub_lines pay_stub_lines_component_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.pay_stub_lines
+    ADD CONSTRAINT pay_stub_lines_component_id_fkey FOREIGN KEY (component_id) REFERENCES public.pay_components(id) ON DELETE SET NULL DEFERRABLE;
+
+
+--
+-- Name: pay_stub_lines pay_stub_lines_created_by_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.pay_stub_lines
+    ADD CONSTRAINT pay_stub_lines_created_by_fkey FOREIGN KEY (created_by) REFERENCES public.users(id) ON DELETE SET NULL DEFERRABLE;
+
+
+--
+-- Name: pay_stub_lines pay_stub_lines_department_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.pay_stub_lines
+    ADD CONSTRAINT pay_stub_lines_department_id_fkey FOREIGN KEY (department_id) REFERENCES public.departments(id) ON DELETE SET NULL DEFERRABLE;
+
+
+--
+-- Name: pay_stub_lines pay_stub_lines_org_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.pay_stub_lines
+    ADD CONSTRAINT pay_stub_lines_org_id_fkey FOREIGN KEY (org_id) REFERENCES public.orgs(id) ON DELETE CASCADE DEFERRABLE;
+
+
+--
+-- Name: pay_stub_lines pay_stub_lines_project_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.pay_stub_lines
+    ADD CONSTRAINT pay_stub_lines_project_id_fkey FOREIGN KEY (project_id) REFERENCES public.projects(id) ON DELETE SET NULL DEFERRABLE;
+
+
+--
+-- Name: pay_stub_lines pay_stub_lines_stub_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.pay_stub_lines
+    ADD CONSTRAINT pay_stub_lines_stub_id_fkey FOREIGN KEY (stub_id) REFERENCES public.pay_stubs(id) ON DELETE CASCADE DEFERRABLE;
+
+
+--
+-- Name: pay_stub_lines pay_stub_lines_time_type_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.pay_stub_lines
+    ADD CONSTRAINT pay_stub_lines_time_type_id_fkey FOREIGN KEY (time_type_id) REFERENCES public.time_types(id) ON DELETE SET NULL DEFERRABLE;
+
+
+--
+-- Name: pay_stub_lines pay_stub_lines_updated_by_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.pay_stub_lines
+    ADD CONSTRAINT pay_stub_lines_updated_by_fkey FOREIGN KEY (updated_by) REFERENCES public.users(id) ON DELETE SET NULL DEFERRABLE;
+
+
+--
+-- Name: pay_stubs pay_stubs_created_by_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.pay_stubs
+    ADD CONSTRAINT pay_stubs_created_by_fkey FOREIGN KEY (created_by) REFERENCES public.users(id) ON DELETE SET NULL DEFERRABLE;
+
+
+--
+-- Name: pay_stubs pay_stubs_currency_code_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.pay_stubs
+    ADD CONSTRAINT pay_stubs_currency_code_fkey FOREIGN KEY (currency_code) REFERENCES public.currencies(code) DEFERRABLE;
+
+
+--
+-- Name: pay_stubs pay_stubs_employee_party_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.pay_stubs
+    ADD CONSTRAINT pay_stubs_employee_party_id_fkey FOREIGN KEY (employee_party_id) REFERENCES public.parties(id) ON DELETE CASCADE DEFERRABLE;
+
+
+--
+-- Name: pay_stubs pay_stubs_org_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.pay_stubs
+    ADD CONSTRAINT pay_stubs_org_id_fkey FOREIGN KEY (org_id) REFERENCES public.orgs(id) ON DELETE CASCADE DEFERRABLE;
+
+
+--
+-- Name: pay_stubs pay_stubs_pay_run_document_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.pay_stubs
+    ADD CONSTRAINT pay_stubs_pay_run_document_id_fkey FOREIGN KEY (pay_run_document_id) REFERENCES public.pay_runs(document_id) ON DELETE CASCADE DEFERRABLE;
+
+
+--
+-- Name: pay_stubs pay_stubs_updated_by_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.pay_stubs
+    ADD CONSTRAINT pay_stubs_updated_by_fkey FOREIGN KEY (updated_by) REFERENCES public.users(id) ON DELETE SET NULL DEFERRABLE;
 
 
 --
@@ -31444,6 +33410,38 @@ ALTER TABLE ONLY public.payment_settlements
 
 ALTER TABLE ONLY public.payment_settlements
     ADD CONSTRAINT payment_settlements_reversal_entry_id_fkey FOREIGN KEY (reversal_entry_id) REFERENCES public.journal_entries(id) DEFERRABLE;
+
+
+--
+-- Name: payroll_opening_balances payroll_opening_balances_created_by_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.payroll_opening_balances
+    ADD CONSTRAINT payroll_opening_balances_created_by_fkey FOREIGN KEY (created_by) REFERENCES public.users(id) ON DELETE SET NULL DEFERRABLE;
+
+
+--
+-- Name: payroll_opening_balances payroll_opening_balances_employee_party_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.payroll_opening_balances
+    ADD CONSTRAINT payroll_opening_balances_employee_party_id_fkey FOREIGN KEY (employee_party_id) REFERENCES public.parties(id) ON DELETE CASCADE DEFERRABLE;
+
+
+--
+-- Name: payroll_opening_balances payroll_opening_balances_org_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.payroll_opening_balances
+    ADD CONSTRAINT payroll_opening_balances_org_id_fkey FOREIGN KEY (org_id) REFERENCES public.orgs(id) ON DELETE CASCADE DEFERRABLE;
+
+
+--
+-- Name: payroll_opening_balances payroll_opening_balances_updated_by_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.payroll_opening_balances
+    ADD CONSTRAINT payroll_opening_balances_updated_by_fkey FOREIGN KEY (updated_by) REFERENCES public.users(id) ON DELETE SET NULL DEFERRABLE;
 
 
 --
@@ -33111,6 +35109,118 @@ ALTER TABLE ONLY public.time_entries
 
 
 --
+-- Name: union_agreements union_agreements_created_by_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.union_agreements
+    ADD CONSTRAINT union_agreements_created_by_fkey FOREIGN KEY (created_by) REFERENCES public.users(id) ON DELETE SET NULL DEFERRABLE;
+
+
+--
+-- Name: union_agreements union_agreements_org_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.union_agreements
+    ADD CONSTRAINT union_agreements_org_id_fkey FOREIGN KEY (org_id) REFERENCES public.orgs(id) ON DELETE CASCADE DEFERRABLE;
+
+
+--
+-- Name: union_agreements union_agreements_remittance_party_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.union_agreements
+    ADD CONSTRAINT union_agreements_remittance_party_id_fkey FOREIGN KEY (remittance_party_id) REFERENCES public.parties(id) ON DELETE SET NULL DEFERRABLE;
+
+
+--
+-- Name: union_agreements union_agreements_updated_by_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.union_agreements
+    ADD CONSTRAINT union_agreements_updated_by_fkey FOREIGN KEY (updated_by) REFERENCES public.users(id) ON DELETE SET NULL DEFERRABLE;
+
+
+--
+-- Name: union_classifications union_classifications_agreement_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.union_classifications
+    ADD CONSTRAINT union_classifications_agreement_id_fkey FOREIGN KEY (agreement_id) REFERENCES public.union_agreements(id) ON DELETE CASCADE DEFERRABLE;
+
+
+--
+-- Name: union_classifications union_classifications_created_by_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.union_classifications
+    ADD CONSTRAINT union_classifications_created_by_fkey FOREIGN KEY (created_by) REFERENCES public.users(id) ON DELETE SET NULL DEFERRABLE;
+
+
+--
+-- Name: union_classifications union_classifications_org_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.union_classifications
+    ADD CONSTRAINT union_classifications_org_id_fkey FOREIGN KEY (org_id) REFERENCES public.orgs(id) ON DELETE CASCADE DEFERRABLE;
+
+
+--
+-- Name: union_classifications union_classifications_updated_by_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.union_classifications
+    ADD CONSTRAINT union_classifications_updated_by_fkey FOREIGN KEY (updated_by) REFERENCES public.users(id) ON DELETE SET NULL DEFERRABLE;
+
+
+--
+-- Name: union_fringes union_fringes_agreement_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.union_fringes
+    ADD CONSTRAINT union_fringes_agreement_id_fkey FOREIGN KEY (agreement_id) REFERENCES public.union_agreements(id) ON DELETE CASCADE DEFERRABLE;
+
+
+--
+-- Name: union_fringes union_fringes_classification_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.union_fringes
+    ADD CONSTRAINT union_fringes_classification_id_fkey FOREIGN KEY (classification_id) REFERENCES public.union_classifications(id) ON DELETE CASCADE DEFERRABLE;
+
+
+--
+-- Name: union_fringes union_fringes_component_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.union_fringes
+    ADD CONSTRAINT union_fringes_component_id_fkey FOREIGN KEY (component_id) REFERENCES public.pay_components(id) ON DELETE SET NULL DEFERRABLE;
+
+
+--
+-- Name: union_fringes union_fringes_created_by_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.union_fringes
+    ADD CONSTRAINT union_fringes_created_by_fkey FOREIGN KEY (created_by) REFERENCES public.users(id) ON DELETE SET NULL DEFERRABLE;
+
+
+--
+-- Name: union_fringes union_fringes_org_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.union_fringes
+    ADD CONSTRAINT union_fringes_org_id_fkey FOREIGN KEY (org_id) REFERENCES public.orgs(id) ON DELETE CASCADE DEFERRABLE;
+
+
+--
+-- Name: union_fringes union_fringes_updated_by_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.union_fringes
+    ADD CONSTRAINT union_fringes_updated_by_fkey FOREIGN KEY (updated_by) REFERENCES public.users(id) ON DELETE SET NULL DEFERRABLE;
+
+
+--
 -- Name: user_dashboard_layouts user_dashboard_layouts_org_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -34141,6 +36251,18 @@ ALTER TABLE public.dunning_stages ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.email_log ENABLE ROW LEVEL SECURITY;
 
 --
+-- Name: employee_pay_components; Type: ROW SECURITY; Schema: public; Owner: -
+--
+
+ALTER TABLE public.employee_pay_components ENABLE ROW LEVEL SECURITY;
+
+--
+-- Name: employee_payroll_profiles; Type: ROW SECURITY; Schema: public; Owner: -
+--
+
+ALTER TABLE public.employee_payroll_profiles ENABLE ROW LEVEL SECURITY;
+
+--
 -- Name: employee_roles; Type: ROW SECURITY; Schema: public; Owner: -
 --
 
@@ -34411,6 +36533,12 @@ ALTER TABLE public.inventory_provisional_costs ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.inventory_provisional_settlements ENABLE ROW LEVEL SECURITY;
 
 --
+-- Name: inventory_writedowns; Type: ROW SECURITY; Schema: public; Owner: -
+--
+
+ALTER TABLE public.inventory_writedowns ENABLE ROW LEVEL SECURITY;
+
+--
 -- Name: invoice_backups; Type: ROW SECURITY; Schema: public; Owner: -
 --
 
@@ -34523,6 +36651,18 @@ ALTER TABLE public.landed_cost_voucher_targets ENABLE ROW LEVEL SECURITY;
 --
 
 ALTER TABLE public.landed_cost_vouchers ENABLE ROW LEVEL SECURITY;
+
+--
+-- Name: lease_agreement_schedule_lines; Type: ROW SECURITY; Schema: public; Owner: -
+--
+
+ALTER TABLE public.lease_agreement_schedule_lines ENABLE ROW LEVEL SECURITY;
+
+--
+-- Name: lease_agreements; Type: ROW SECURITY; Schema: public; Owner: -
+--
+
+ALTER TABLE public.lease_agreements ENABLE ROW LEVEL SECURITY;
 
 --
 -- Name: lease_charges; Type: ROW SECURITY; Schema: public; Owner: -
@@ -36229,6 +38369,34 @@ COMMENT ON POLICY org_isolation ON public.email_log IS 'openbooks:org_isolation:
 
 
 --
+-- Name: employee_pay_components org_isolation; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY org_isolation ON public.employee_pay_components USING (((current_setting('app.bypass_rls'::text, true) = 'on'::text) OR ((org_id)::text = current_setting('app.current_org'::text, true)))) WITH CHECK (((current_setting('app.bypass_rls'::text, true) = 'on'::text) OR ((org_id)::text = current_setting('app.current_org'::text, true))));
+
+
+--
+-- Name: POLICY org_isolation ON employee_pay_components; Type: COMMENT; Schema: public; Owner: -
+--
+
+COMMENT ON POLICY org_isolation ON public.employee_pay_components IS 'openbooks:org_isolation:v1';
+
+
+--
+-- Name: employee_payroll_profiles org_isolation; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY org_isolation ON public.employee_payroll_profiles USING (((current_setting('app.bypass_rls'::text, true) = 'on'::text) OR ((org_id)::text = current_setting('app.current_org'::text, true)))) WITH CHECK (((current_setting('app.bypass_rls'::text, true) = 'on'::text) OR ((org_id)::text = current_setting('app.current_org'::text, true))));
+
+
+--
+-- Name: POLICY org_isolation ON employee_payroll_profiles; Type: COMMENT; Schema: public; Owner: -
+--
+
+COMMENT ON POLICY org_isolation ON public.employee_payroll_profiles IS 'openbooks:org_isolation:v1';
+
+
+--
 -- Name: employee_roles org_isolation; Type: POLICY; Schema: public; Owner: -
 --
 
@@ -36775,6 +38943,20 @@ COMMENT ON POLICY org_isolation ON public.inventory_provisional_settlements IS '
 
 
 --
+-- Name: inventory_writedowns org_isolation; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY org_isolation ON public.inventory_writedowns USING (((current_setting('app.bypass_rls'::text, true) = 'on'::text) OR ((org_id)::text = current_setting('app.current_org'::text, true)))) WITH CHECK (((current_setting('app.bypass_rls'::text, true) = 'on'::text) OR ((org_id)::text = current_setting('app.current_org'::text, true))));
+
+
+--
+-- Name: POLICY org_isolation ON inventory_writedowns; Type: COMMENT; Schema: public; Owner: -
+--
+
+COMMENT ON POLICY org_isolation ON public.inventory_writedowns IS 'openbooks:org_isolation:v1';
+
+
+--
 -- Name: invoice_backups org_isolation; Type: POLICY; Schema: public; Owner: -
 --
 
@@ -37038,6 +39220,34 @@ CREATE POLICY org_isolation ON public.landed_cost_vouchers USING (((current_sett
 --
 
 COMMENT ON POLICY org_isolation ON public.landed_cost_vouchers IS 'openbooks:org_isolation:v1';
+
+
+--
+-- Name: lease_agreement_schedule_lines org_isolation; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY org_isolation ON public.lease_agreement_schedule_lines USING (((current_setting('app.bypass_rls'::text, true) = 'on'::text) OR ((org_id)::text = current_setting('app.current_org'::text, true)))) WITH CHECK (((current_setting('app.bypass_rls'::text, true) = 'on'::text) OR ((org_id)::text = current_setting('app.current_org'::text, true))));
+
+
+--
+-- Name: POLICY org_isolation ON lease_agreement_schedule_lines; Type: COMMENT; Schema: public; Owner: -
+--
+
+COMMENT ON POLICY org_isolation ON public.lease_agreement_schedule_lines IS 'openbooks:org_isolation:v1';
+
+
+--
+-- Name: lease_agreements org_isolation; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY org_isolation ON public.lease_agreements USING (((current_setting('app.bypass_rls'::text, true) = 'on'::text) OR ((org_id)::text = current_setting('app.current_org'::text, true)))) WITH CHECK (((current_setting('app.bypass_rls'::text, true) = 'on'::text) OR ((org_id)::text = current_setting('app.current_org'::text, true))));
+
+
+--
+-- Name: POLICY org_isolation ON lease_agreements; Type: COMMENT; Schema: public; Owner: -
+--
+
+COMMENT ON POLICY org_isolation ON public.lease_agreements IS 'openbooks:org_isolation:v1';
 
 
 --
@@ -37321,6 +39531,76 @@ COMMENT ON POLICY org_isolation ON public.pay_applications IS 'openbooks:org_iso
 
 
 --
+-- Name: pay_components org_isolation; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY org_isolation ON public.pay_components USING (((current_setting('app.bypass_rls'::text, true) = 'on'::text) OR ((org_id)::text = current_setting('app.current_org'::text, true)))) WITH CHECK (((current_setting('app.bypass_rls'::text, true) = 'on'::text) OR ((org_id)::text = current_setting('app.current_org'::text, true))));
+
+
+--
+-- Name: POLICY org_isolation ON pay_components; Type: COMMENT; Schema: public; Owner: -
+--
+
+COMMENT ON POLICY org_isolation ON public.pay_components IS 'openbooks:org_isolation:v1';
+
+
+--
+-- Name: pay_runs org_isolation; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY org_isolation ON public.pay_runs USING (((current_setting('app.bypass_rls'::text, true) = 'on'::text) OR ((org_id)::text = current_setting('app.current_org'::text, true)))) WITH CHECK (((current_setting('app.bypass_rls'::text, true) = 'on'::text) OR ((org_id)::text = current_setting('app.current_org'::text, true))));
+
+
+--
+-- Name: POLICY org_isolation ON pay_runs; Type: COMMENT; Schema: public; Owner: -
+--
+
+COMMENT ON POLICY org_isolation ON public.pay_runs IS 'openbooks:org_isolation:v1';
+
+
+--
+-- Name: pay_schedules org_isolation; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY org_isolation ON public.pay_schedules USING (((current_setting('app.bypass_rls'::text, true) = 'on'::text) OR ((org_id)::text = current_setting('app.current_org'::text, true)))) WITH CHECK (((current_setting('app.bypass_rls'::text, true) = 'on'::text) OR ((org_id)::text = current_setting('app.current_org'::text, true))));
+
+
+--
+-- Name: POLICY org_isolation ON pay_schedules; Type: COMMENT; Schema: public; Owner: -
+--
+
+COMMENT ON POLICY org_isolation ON public.pay_schedules IS 'openbooks:org_isolation:v1';
+
+
+--
+-- Name: pay_stub_lines org_isolation; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY org_isolation ON public.pay_stub_lines USING (((current_setting('app.bypass_rls'::text, true) = 'on'::text) OR ((org_id)::text = current_setting('app.current_org'::text, true)))) WITH CHECK (((current_setting('app.bypass_rls'::text, true) = 'on'::text) OR ((org_id)::text = current_setting('app.current_org'::text, true))));
+
+
+--
+-- Name: POLICY org_isolation ON pay_stub_lines; Type: COMMENT; Schema: public; Owner: -
+--
+
+COMMENT ON POLICY org_isolation ON public.pay_stub_lines IS 'openbooks:org_isolation:v1';
+
+
+--
+-- Name: pay_stubs org_isolation; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY org_isolation ON public.pay_stubs USING (((current_setting('app.bypass_rls'::text, true) = 'on'::text) OR ((org_id)::text = current_setting('app.current_org'::text, true)))) WITH CHECK (((current_setting('app.bypass_rls'::text, true) = 'on'::text) OR ((org_id)::text = current_setting('app.current_org'::text, true))));
+
+
+--
+-- Name: POLICY org_isolation ON pay_stubs; Type: COMMENT; Schema: public; Owner: -
+--
+
+COMMENT ON POLICY org_isolation ON public.pay_stubs IS 'openbooks:org_isolation:v1';
+
+
+--
 -- Name: payment_attempts org_isolation; Type: POLICY; Schema: public; Owner: -
 --
 
@@ -37556,6 +39836,20 @@ CREATE POLICY org_isolation ON public.payment_terms USING (((current_setting('ap
 --
 
 COMMENT ON POLICY org_isolation ON public.payment_terms IS 'openbooks:org_isolation:v1';
+
+
+--
+-- Name: payroll_opening_balances org_isolation; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY org_isolation ON public.payroll_opening_balances USING (((current_setting('app.bypass_rls'::text, true) = 'on'::text) OR ((org_id)::text = current_setting('app.current_org'::text, true)))) WITH CHECK (((current_setting('app.bypass_rls'::text, true) = 'on'::text) OR ((org_id)::text = current_setting('app.current_org'::text, true))));
+
+
+--
+-- Name: POLICY org_isolation ON payroll_opening_balances; Type: COMMENT; Schema: public; Owner: -
+--
+
+COMMENT ON POLICY org_isolation ON public.payroll_opening_balances IS 'openbooks:org_isolation:v1';
 
 
 --
@@ -38861,6 +41155,48 @@ COMMENT ON POLICY org_isolation ON public.transfer_orders IS 'openbooks:org_isol
 
 
 --
+-- Name: union_agreements org_isolation; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY org_isolation ON public.union_agreements USING (((current_setting('app.bypass_rls'::text, true) = 'on'::text) OR ((org_id)::text = current_setting('app.current_org'::text, true)))) WITH CHECK (((current_setting('app.bypass_rls'::text, true) = 'on'::text) OR ((org_id)::text = current_setting('app.current_org'::text, true))));
+
+
+--
+-- Name: POLICY org_isolation ON union_agreements; Type: COMMENT; Schema: public; Owner: -
+--
+
+COMMENT ON POLICY org_isolation ON public.union_agreements IS 'openbooks:org_isolation:v1';
+
+
+--
+-- Name: union_classifications org_isolation; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY org_isolation ON public.union_classifications USING (((current_setting('app.bypass_rls'::text, true) = 'on'::text) OR ((org_id)::text = current_setting('app.current_org'::text, true)))) WITH CHECK (((current_setting('app.bypass_rls'::text, true) = 'on'::text) OR ((org_id)::text = current_setting('app.current_org'::text, true))));
+
+
+--
+-- Name: POLICY org_isolation ON union_classifications; Type: COMMENT; Schema: public; Owner: -
+--
+
+COMMENT ON POLICY org_isolation ON public.union_classifications IS 'openbooks:org_isolation:v1';
+
+
+--
+-- Name: union_fringes org_isolation; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY org_isolation ON public.union_fringes USING (((current_setting('app.bypass_rls'::text, true) = 'on'::text) OR ((org_id)::text = current_setting('app.current_org'::text, true)))) WITH CHECK (((current_setting('app.bypass_rls'::text, true) = 'on'::text) OR ((org_id)::text = current_setting('app.current_org'::text, true))));
+
+
+--
+-- Name: POLICY org_isolation ON union_fringes; Type: COMMENT; Schema: public; Owner: -
+--
+
+COMMENT ON POLICY org_isolation ON public.union_fringes IS 'openbooks:org_isolation:v1';
+
+
+--
 -- Name: user_dashboard_layouts org_isolation; Type: POLICY; Schema: public; Owner: -
 --
 
@@ -39159,6 +41495,36 @@ ALTER TABLE public.pay_application_lines ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.pay_applications ENABLE ROW LEVEL SECURITY;
 
 --
+-- Name: pay_components; Type: ROW SECURITY; Schema: public; Owner: -
+--
+
+ALTER TABLE public.pay_components ENABLE ROW LEVEL SECURITY;
+
+--
+-- Name: pay_runs; Type: ROW SECURITY; Schema: public; Owner: -
+--
+
+ALTER TABLE public.pay_runs ENABLE ROW LEVEL SECURITY;
+
+--
+-- Name: pay_schedules; Type: ROW SECURITY; Schema: public; Owner: -
+--
+
+ALTER TABLE public.pay_schedules ENABLE ROW LEVEL SECURITY;
+
+--
+-- Name: pay_stub_lines; Type: ROW SECURITY; Schema: public; Owner: -
+--
+
+ALTER TABLE public.pay_stub_lines ENABLE ROW LEVEL SECURITY;
+
+--
+-- Name: pay_stubs; Type: ROW SECURITY; Schema: public; Owner: -
+--
+
+ALTER TABLE public.pay_stubs ENABLE ROW LEVEL SECURITY;
+
+--
 -- Name: payment_attempts; Type: ROW SECURITY; Schema: public; Owner: -
 --
 
@@ -39259,6 +41625,12 @@ ALTER TABLE public.payment_surcharge_rules ENABLE ROW LEVEL SECURITY;
 --
 
 ALTER TABLE public.payment_terms ENABLE ROW LEVEL SECURITY;
+
+--
+-- Name: payroll_opening_balances; Type: ROW SECURITY; Schema: public; Owner: -
+--
+
+ALTER TABLE public.payroll_opening_balances ENABLE ROW LEVEL SECURITY;
 
 --
 -- Name: pdf_templates; Type: ROW SECURITY; Schema: public; Owner: -
@@ -39919,6 +42291,24 @@ ALTER TABLE public.transfer_order_lines ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.transfer_orders ENABLE ROW LEVEL SECURITY;
 
 --
+-- Name: union_agreements; Type: ROW SECURITY; Schema: public; Owner: -
+--
+
+ALTER TABLE public.union_agreements ENABLE ROW LEVEL SECURITY;
+
+--
+-- Name: union_classifications; Type: ROW SECURITY; Schema: public; Owner: -
+--
+
+ALTER TABLE public.union_classifications ENABLE ROW LEVEL SECURITY;
+
+--
+-- Name: union_fringes; Type: ROW SECURITY; Schema: public; Owner: -
+--
+
+ALTER TABLE public.union_fringes ENABLE ROW LEVEL SECURITY;
+
+--
 -- Name: user_dashboard_layouts; Type: ROW SECURITY; Schema: public; Owner: -
 --
 
@@ -40187,6 +42577,20 @@ GRANT SELECT ON TABLE openbooks_query.budget_lines TO openbooks_read;
 --
 
 GRANT SELECT ON TABLE openbooks_query.budget_scenarios TO openbooks_read;
+
+
+--
+-- Name: TABLE cam_allocations; Type: ACL; Schema: openbooks_query; Owner: -
+--
+
+GRANT SELECT ON TABLE openbooks_query.cam_allocations TO openbooks_read;
+
+
+--
+-- Name: TABLE cam_pools; Type: ACL; Schema: openbooks_query; Owner: -
+--
+
+GRANT SELECT ON TABLE openbooks_query.cam_pools TO openbooks_read;
 
 
 --
@@ -40568,6 +42972,20 @@ GRANT SELECT ON TABLE openbooks_query.dunning_log TO openbooks_read;
 
 
 --
+-- Name: TABLE employee_pay_components; Type: ACL; Schema: openbooks_query; Owner: -
+--
+
+GRANT SELECT ON TABLE openbooks_query.employee_pay_components TO openbooks_read;
+
+
+--
+-- Name: TABLE employee_payroll_profiles; Type: ACL; Schema: openbooks_query; Owner: -
+--
+
+GRANT SELECT ON TABLE openbooks_query.employee_payroll_profiles TO openbooks_read;
+
+
+--
 -- Name: TABLE employee_roles; Type: ACL; Schema: openbooks_query; Owner: -
 --
 
@@ -40806,6 +43224,27 @@ GRANT SELECT ON TABLE openbooks_query.landed_cost_vouchers TO openbooks_read;
 
 
 --
+-- Name: TABLE lease_charges; Type: ACL; Schema: openbooks_query; Owner: -
+--
+
+GRANT SELECT ON TABLE openbooks_query.lease_charges TO openbooks_read;
+
+
+--
+-- Name: TABLE lease_escalations; Type: ACL; Schema: openbooks_query; Owner: -
+--
+
+GRANT SELECT ON TABLE openbooks_query.lease_escalations TO openbooks_read;
+
+
+--
+-- Name: TABLE lease_schedule_lines; Type: ACL; Schema: openbooks_query; Owner: -
+--
+
+GRANT SELECT ON TABLE openbooks_query.lease_schedule_lines TO openbooks_read;
+
+
+--
 -- Name: TABLE lien_waivers; Type: ACL; Schema: openbooks_query; Owner: -
 --
 
@@ -40824,6 +43263,13 @@ GRANT SELECT ON TABLE openbooks_query.locations TO openbooks_read;
 --
 
 GRANT SELECT ON TABLE openbooks_query.lots TO openbooks_read;
+
+
+--
+-- Name: TABLE managed_properties; Type: ACL; Schema: openbooks_query; Owner: -
+--
+
+GRANT SELECT ON TABLE openbooks_query.managed_properties TO openbooks_read;
 
 
 --
@@ -40883,6 +43329,41 @@ GRANT SELECT ON TABLE openbooks_query.pay_applications TO openbooks_read;
 
 
 --
+-- Name: TABLE pay_components; Type: ACL; Schema: openbooks_query; Owner: -
+--
+
+GRANT SELECT ON TABLE openbooks_query.pay_components TO openbooks_read;
+
+
+--
+-- Name: TABLE pay_runs; Type: ACL; Schema: openbooks_query; Owner: -
+--
+
+GRANT SELECT ON TABLE openbooks_query.pay_runs TO openbooks_read;
+
+
+--
+-- Name: TABLE pay_schedules; Type: ACL; Schema: openbooks_query; Owner: -
+--
+
+GRANT SELECT ON TABLE openbooks_query.pay_schedules TO openbooks_read;
+
+
+--
+-- Name: TABLE pay_stub_lines; Type: ACL; Schema: openbooks_query; Owner: -
+--
+
+GRANT SELECT ON TABLE openbooks_query.pay_stub_lines TO openbooks_read;
+
+
+--
+-- Name: TABLE pay_stubs; Type: ACL; Schema: openbooks_query; Owner: -
+--
+
+GRANT SELECT ON TABLE openbooks_query.pay_stubs TO openbooks_read;
+
+
+--
 -- Name: TABLE payment_events; Type: ACL; Schema: openbooks_query; Owner: -
 --
 
@@ -40939,6 +43420,13 @@ GRANT SELECT ON TABLE openbooks_query.payment_terms TO openbooks_read;
 
 
 --
+-- Name: TABLE payroll_opening_balances; Type: ACL; Schema: openbooks_query; Owner: -
+--
+
+GRANT SELECT ON TABLE openbooks_query.payroll_opening_balances TO openbooks_read;
+
+
+--
 -- Name: TABLE performance_obligations; Type: ACL; Schema: openbooks_query; Owner: -
 --
 
@@ -40992,6 +43480,20 @@ GRANT SELECT ON TABLE openbooks_query.project_types TO openbooks_read;
 --
 
 GRANT SELECT ON TABLE openbooks_query.projects TO openbooks_read;
+
+
+--
+-- Name: TABLE property_leases; Type: ACL; Schema: openbooks_query; Owner: -
+--
+
+GRANT SELECT ON TABLE openbooks_query.property_leases TO openbooks_read;
+
+
+--
+-- Name: TABLE property_units; Type: ACL; Schema: openbooks_query; Owner: -
+--
+
+GRANT SELECT ON TABLE openbooks_query.property_units TO openbooks_read;
 
 
 --
@@ -41083,6 +43585,13 @@ GRANT SELECT ON TABLE openbooks_query.schedule_resources TO openbooks_read;
 --
 
 GRANT SELECT ON TABLE openbooks_query.schedule_task_assignments TO openbooks_read;
+
+
+--
+-- Name: TABLE security_deposit_transactions; Type: ACL; Schema: openbooks_query; Owner: -
+--
+
+GRANT SELECT ON TABLE openbooks_query.security_deposit_transactions TO openbooks_read;
 
 
 --
@@ -41401,6 +43910,27 @@ GRANT SELECT ON TABLE openbooks_query.transfer_orders TO openbooks_read;
 
 
 --
+-- Name: TABLE union_agreements; Type: ACL; Schema: openbooks_query; Owner: -
+--
+
+GRANT SELECT ON TABLE openbooks_query.union_agreements TO openbooks_read;
+
+
+--
+-- Name: TABLE union_classifications; Type: ACL; Schema: openbooks_query; Owner: -
+--
+
+GRANT SELECT ON TABLE openbooks_query.union_classifications TO openbooks_read;
+
+
+--
+-- Name: TABLE union_fringes; Type: ACL; Schema: openbooks_query; Owner: -
+--
+
+GRANT SELECT ON TABLE openbooks_query.union_fringes TO openbooks_read;
+
+
+--
 -- Name: TABLE vendor_pay_application_lines; Type: ACL; Schema: openbooks_query; Owner: -
 --
 
@@ -41461,69 +43991,6 @@ GRANT SELECT ON TABLE openbooks_query.wip_prebills TO openbooks_read;
 --
 
 GRANT SELECT ON TABLE openbooks_query.worker_comp_groups TO openbooks_read;
-
-
---
--- Name: TABLE cam_allocations; Type: ACL; Schema: public; Owner: -
---
-
-GRANT SELECT ON TABLE public.cam_allocations TO openbooks_read;
-
-
---
--- Name: TABLE cam_pools; Type: ACL; Schema: public; Owner: -
---
-
-GRANT SELECT ON TABLE public.cam_pools TO openbooks_read;
-
-
---
--- Name: TABLE lease_charges; Type: ACL; Schema: public; Owner: -
---
-
-GRANT SELECT ON TABLE public.lease_charges TO openbooks_read;
-
-
---
--- Name: TABLE lease_escalations; Type: ACL; Schema: public; Owner: -
---
-
-GRANT SELECT ON TABLE public.lease_escalations TO openbooks_read;
-
-
---
--- Name: TABLE lease_schedule_lines; Type: ACL; Schema: public; Owner: -
---
-
-GRANT SELECT ON TABLE public.lease_schedule_lines TO openbooks_read;
-
-
---
--- Name: TABLE managed_properties; Type: ACL; Schema: public; Owner: -
---
-
-GRANT SELECT ON TABLE public.managed_properties TO openbooks_read;
-
-
---
--- Name: TABLE property_leases; Type: ACL; Schema: public; Owner: -
---
-
-GRANT SELECT ON TABLE public.property_leases TO openbooks_read;
-
-
---
--- Name: TABLE property_units; Type: ACL; Schema: public; Owner: -
---
-
-GRANT SELECT ON TABLE public.property_units TO openbooks_read;
-
-
---
--- Name: TABLE security_deposit_transactions; Type: ACL; Schema: public; Owner: -
---
-
-GRANT SELECT ON TABLE public.security_deposit_transactions TO openbooks_read;
 
 
 -- Rebuild the reviewed query catalog after every canonical table exists. This

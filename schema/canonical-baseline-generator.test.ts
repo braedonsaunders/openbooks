@@ -23,8 +23,6 @@ function syntheticDump(extra = "") {
 -- Dumped from database version 16.9
 -- Dumped by pg_dump version 16.9
 
-\\restrict OPENBOOKS_CANONICAL_BASELINE_V1
-
 SET statement_timeout = 0;
 SET lock_timeout = 0;
 SET idle_in_transaction_session_timeout = 0;
@@ -70,7 +68,6 @@ ${extra}
 -- PostgreSQL database dump complete
 --
 
-\\unrestrict OPENBOOKS_CANONICAL_BASELINE_V1
 `;
 }
 
@@ -94,10 +91,6 @@ test("canonical dump requires the pinned deterministic pg_dump source", () => {
   assert.throws(
     () => canonicalizePgDump(syntheticDump().replaceAll("16.9", "16.14")),
     /pinned PostgreSQL 16\.9/,
-  );
-  assert.throws(
-    () => canonicalizePgDump(syntheticDump().replaceAll("OPENBOOKS_CANONICAL_BASELINE_V1", "RANDOM")),
-    /deterministic restrict key/,
   );
 });
 

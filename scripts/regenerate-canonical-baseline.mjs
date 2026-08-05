@@ -11,7 +11,9 @@ import { pathToFileURL } from "node:url";
  *   --no-tablespaces --no-table-access-method --no-security-labels
  *   --no-publications --no-subscriptions --strict-names --schema=public
  *   --schema=openbooks_query --exclude-table=public._applied_migrations
- *   --restrict-key=OPENBOOKS_CANONICAL_BASELINE_V1
+ *
+ * PostgreSQL 16.9 predates psql's restrict-key metacommands. The transformer
+ * rejects every psql metacommand, so its output remains node-postgres-safe.
  */
 
 const HEADER = `-- OpenBooks canonical PostgreSQL baseline.
@@ -108,10 +110,6 @@ function addReviewedPayrollRelations(source) {
 
 export function canonicalizePgDump(rawDump) {
   let source = rawDump.replace(/\r\n?/g, "\n");
-  if (!source.includes("\\restrict OPENBOOKS_CANONICAL_BASELINE_V1")
-      || !source.includes("\\unrestrict OPENBOOKS_CANONICAL_BASELINE_V1")) {
-    throw new Error("pg_dump must use the canonical deterministic restrict key");
-  }
   if (!/Dumped from database version 16\.9(?:\D|$)/.test(source)
       || !/Dumped by pg_dump version 16\.9(?:\D|$)/.test(source)) {
     throw new Error("pg_dump source and client must use the pinned PostgreSQL 16.9 image");

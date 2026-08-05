@@ -220,7 +220,7 @@ curl http://localhost:4780/api/v1/health?include=worker
 # Follow application logs
 docker compose --env-file .env.compose logs -f web worker
 
-# Pull a new published image and apply forward migrations
+# Pull a new published image and apply any future migrations
 # First set OPENBOOKS_IMAGE to a post-clean, scanned digest reference.
 ./scripts/compose-up.sh
 
@@ -549,19 +549,20 @@ replicas in a single cutover. Replacing `OPENBOOKS_DATA_KEY` requires a planned
 decrypt-and-re-encrypt migration for stored TOTP and provider secrets; changing
 it in place makes existing ciphertext unreadable.
 
-Migration `0129_auth_security.sql` is additive and forward-only. Before an
-upgrade, take and test a database backup. A deployment can disable OIDC by
-removing its optional environment variables, but it should not delete the new
-authentication tables as a rollback: doing so invalidates revocation, lockout,
-MFA, and session evidence. Restore the pre-upgrade database backup if a complete
-rollback is required.
+The prerelease canonical baseline includes the complete stateful authentication
+catalog; there is no legacy authentication migration in a fresh installation.
+Before any future upgrade, take and test a database backup. A deployment can
+disable OIDC by removing its optional environment variables, but it must not
+delete authentication tables as a rollback: doing so invalidates revocation,
+lockout, MFA, and session evidence. Restore the pre-upgrade database backup if a
+complete rollback is required.
 
 ## Architecture
 
 OpenBooks is an npm-workspaces monorepo:
 
 ```text
-schema/       Drizzle schema, canonical SQL baseline, forward migrations,
+schema/       Drizzle schema, canonical SQL baseline, future migrations,
               row-level security, and accounting-kernel controls
 engine/       Posting, subledgers, money math, close, assets, inventory,
               workflow runtime, workers, migration adapters, and simulation
