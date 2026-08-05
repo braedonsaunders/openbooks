@@ -3,7 +3,7 @@ import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import test from 'node:test'
 
-const source = readFileSync(join(import.meta.dirname, 'core.ts'), 'utf8')
+const source = readFileSync(join(import.meta.dirname, 'open-items.ts'), 'utf8')
 const customerHome = readFileSync(join(import.meta.dirname, '..', 'module-home', 'customers.ts'), 'utf8')
 const purchasingHome = readFileSync(join(import.meta.dirname, '..', 'module-home', 'purchasing.ts'), 'utf8')
 
