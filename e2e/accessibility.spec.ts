@@ -25,6 +25,10 @@ test("authenticated reports hub has no automatically detectable WCAG A/AA violat
   try {
     await page.goto("/reports");
     await expect(page.locator("main")).toBeVisible();
+    const setupWizard = page.getByTestId("setup-wizard");
+    if (await setupWizard.isVisible()) {
+      await expect(setupWizard).toHaveCSS("opacity", "1");
+    }
 
     const results = await new AxeBuilder({ page }).withTags(wcagTags).analyze();
     expect(
