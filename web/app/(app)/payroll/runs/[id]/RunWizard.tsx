@@ -31,6 +31,7 @@ import {
   cn,
 } from '@openbooks/ui'
 import { useMoney } from '../../../../../components/money-provider'
+import { PagedTable, type PagedColumn } from '../../../../../components/paged-table'
 import { RunStatusBadge, runDisplayStatus } from '../../_ui/run-status'
 
 export type WizardStep = 'period' | 'review' | 'gl' | 'finish'
@@ -545,54 +546,58 @@ function PeriodStep({
             {calculated ? t('wizard.period.calculatedNote') : t('wizard.period.hint')}
           </span>
         </div>
-        <Table>
-          <TableHeader>
-            <TableRow>
-              <TableHead>{t('run.stub.employee')}</TableHead>
-              <TableHead>{t('profiles.columns.basis')}</TableHead>
-              <TableHead className="text-right">{t('wizard.period.approvedHours')}</TableHead>
-              <TableHead className="text-right">{calculated ? t('columns.gross') : ''}</TableHead>
-              <TableHead>{t('columns.status')}</TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {roster.length === 0 && (
-              <TableRow>
-                <TableCell colSpan={5} className="text-slate-500 dark:text-slate-400">
-                  {t('wizard.period.empty')}
-                </TableCell>
-              </TableRow>
-            )}
-            {roster.map((row) => {
-              const hours = calculated
-                ? (stubHours.get(row.employee_party_id) ?? 0)
-                : Number(row.approved_hours)
-              const stub = stubByEmployee.get(row.employee_party_id)
-              const zeroHours = row.pay_basis === 'hourly' && hours === 0
-              return (
-                <TableRow key={row.employee_party_id}>
-                  <TableCell className="font-medium">{row.name}</TableCell>
-                  <TableCell>{t(`profiles.basis.${row.pay_basis}`)}</TableCell>
-                  <TableCell className="text-right tabular-nums">
-                    {row.pay_basis === 'hourly' || hours > 0 ? hours.toFixed(2) : '—'}
-                  </TableCell>
-                  <TableCell className="text-right tabular-nums">
-                    {calculated && stub ? fmt(stub.gross) : ''}
-                  </TableCell>
-                  <TableCell>
-                    {!row.has_wage ? (
-                      <Badge variant="destructive">{t('wizard.period.wageMissing')}</Badge>
-                    ) : zeroHours ? (
-                      <Badge variant="warning">{t('wizard.period.zeroHours')}</Badge>
-                    ) : (
-                      <Badge variant="success">{t('wizard.period.ready')}</Badge>
-                    )}
-                  </TableCell>
-                </TableRow>
-              )
-            })}
-          </TableBody>
-        </Table>
+<div className="p-3">
+          <PagedTable
+            rows={roster}
+            columns={([
+              {
+                key: 'employee', header: t('run.stub.employee'),
+                search: (row) => row.name,
+                cell: (row) => <span className="font-medium">{row.name}</span>,
+              },
+              {
+                key: 'basis', header: t('profiles.columns.basis'),
+                cell: (row) => t(`profiles.basis.${row.pay_basis}`),
+              },
+              {
+                key: 'hours', header: t('wizard.period.approvedHours'), align: 'right',
+                cell: (row) => {
+                  const hours = calculated
+                    ? (stubHours.get(row.employee_party_id) ?? 0)
+                    : Number(row.approved_hours)
+                  return row.pay_basis === 'hourly' || hours > 0 ? hours.toFixed(2) : '—'
+                },
+              },
+              {
+                key: 'gross', header: calculated ? t('columns.gross') : '', align: 'right',
+                cell: (row) => {
+                  const stub = stubByEmployee.get(row.employee_party_id)
+                  return calculated && stub ? fmt(stub.gross) : ''
+                },
+              },
+              {
+                key: 'status', header: t('columns.status'),
+                cell: (row) => {
+                  const hours = calculated
+                    ? (stubHours.get(row.employee_party_id) ?? 0)
+                    : Number(row.approved_hours)
+                  const zeroHours = row.pay_basis === 'hourly' && hours === 0
+                  return !row.has_wage ? (
+                    <Badge variant="destructive">{t('wizard.period.wageMissing')}</Badge>
+                  ) : zeroHours ? (
+                    <Badge variant="warning">{t('wizard.period.zeroHours')}</Badge>
+                  ) : (
+                    <Badge variant="success">{t('wizard.period.ready')}</Badge>
+                  )
+                },
+              },
+            ] as PagedColumn<RosterRow>[])}
+            pageSize={15}
+            searchable
+            empty={<p className="p-2 text-sm text-slate-500 dark:text-slate-400">{t('wizard.period.empty')}</p>}
+            rowKey={(row) => row.employee_party_id}
+          />
+        </div>
       </div>
     </div>
   )
@@ -679,64 +684,62 @@ function ReviewStep({
       )}
 
       <div className="overflow-x-auto rounded-xl border border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900">
-        <Table>
-          <TableHeader>
-            <TableRow>
-              <TableHead>{t('run.stub.employee')}</TableHead>
-              <TableHead>{t('run.stub.province')}</TableHead>
-              <TableHead className="text-right">{t('columns.gross')}</TableHead>
-              <TableHead className="text-right">{t('run.stub.cpp')}</TableHead>
-              <TableHead className="text-right">{t('run.stub.ei')}</TableHead>
-              <TableHead className="text-right">{t('run.stub.tax')}</TableHead>
-              <TableHead className="text-right">{t('columns.net')}</TableHead>
-              <TableHead className="text-right">{t('wizard.review.varianceColumn')}</TableHead>
-              <TableHead className="text-right">{t('run.employerCost')}</TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {stubs.length === 0 && (
-              <TableRow>
-                <TableCell colSpan={9} className="text-slate-500 dark:text-slate-400">
-                  {calculated ? t('run.empty') : t('wizard.review.needsCalculation')}
-                </TableCell>
-              </TableRow>
-            )}
-            {stubs.map((stub) => {
-              const s = statutory(stub)
-              const delta = variance(stub)
-              return (
-                <TableRow key={stub.id} className="cursor-pointer" onClick={() => setOpenStub(stub)}>
-                  <TableCell className="font-medium text-teal-700 dark:text-teal-300">
-                    {stub.employee_name}
-                  </TableCell>
-                  <TableCell>{stub.province}</TableCell>
-                  <TableCell className="text-right tabular-nums">{fmt(stub.gross)}</TableCell>
-                  <TableCell className="text-right tabular-nums">{fmt(s.cpp)}</TableCell>
-                  <TableCell className="text-right tabular-nums">{fmt(s.ei)}</TableCell>
-                  <TableCell className="text-right tabular-nums">{fmt(s.tax)}</TableCell>
-                  <TableCell className="text-right font-medium tabular-nums">{fmt(stub.net_pay)}</TableCell>
-                  <TableCell className="text-right tabular-nums">
-                    {delta === null ? (
-                      <span className="text-xs text-slate-400">{t('wizard.review.newEmployee')}</span>
-                    ) : (
-                      <span
-                        className={cn(
-                          delta.flagged
-                            ? 'font-semibold text-amber-600 dark:text-amber-400'
-                            : 'text-slate-500 dark:text-slate-400',
-                        )}
-                      >
-                        {delta.percent > 0 ? '+' : ''}
-                        {delta.percent.toFixed(1)}%
-                      </span>
-                    )}
-                  </TableCell>
-                  <TableCell className="text-right tabular-nums">{fmt(stub.employer_cost)}</TableCell>
-                </TableRow>
-              )
-            })}
-          </TableBody>
-        </Table>
+<div className="p-3">
+          <PagedTable
+            rows={stubs}
+            columns={([
+              {
+                key: 'employee', header: t('run.stub.employee'),
+                search: (stub) => `${stub.employee_name} ${stub.province}`,
+                cell: (stub) => (
+                  <span className="font-medium text-teal-700 dark:text-teal-300">{stub.employee_name}</span>
+                ),
+              },
+              { key: 'province', header: t('run.stub.province'), cell: (stub) => stub.province },
+              { key: 'gross', header: t('columns.gross'), align: 'right', cell: (stub) => fmt(stub.gross) },
+              { key: 'cpp', header: t('run.stub.cpp'), align: 'right', cell: (stub) => fmt(statutory(stub).cpp) },
+              { key: 'ei', header: t('run.stub.ei'), align: 'right', cell: (stub) => fmt(statutory(stub).ei) },
+              { key: 'tax', header: t('run.stub.tax'), align: 'right', cell: (stub) => fmt(statutory(stub).tax) },
+              {
+                key: 'net', header: t('columns.net'), align: 'right',
+                cell: (stub) => <span className="font-medium">{fmt(stub.net_pay)}</span>,
+              },
+              {
+                key: 'variance', header: t('wizard.review.varianceColumn'), align: 'right',
+                cell: (stub) => {
+                  const delta = variance(stub)
+                  return delta === null ? (
+                    <span className="text-xs text-slate-400">{t('wizard.review.newEmployee')}</span>
+                  ) : (
+                    <span
+                      className={cn(
+                        delta.flagged
+                          ? 'font-semibold text-amber-600 dark:text-amber-400'
+                          : 'text-slate-500 dark:text-slate-400',
+                      )}
+                    >
+                      {delta.percent > 0 ? '+' : ''}
+                      {delta.percent.toFixed(1)}%
+                    </span>
+                  )
+                },
+              },
+              {
+                key: 'employerCost', header: t('run.employerCost'), align: 'right',
+                cell: (stub) => fmt(stub.employer_cost),
+              },
+            ] as PagedColumn<StubRow>[])}
+            pageSize={20}
+            searchable
+            empty={
+              <p className="p-2 text-sm text-slate-500 dark:text-slate-400">
+                {calculated ? t('run.empty') : t('wizard.review.needsCalculation')}
+              </p>
+            }
+            rowKey={(stub) => stub.id}
+            onRowClick={(stub) => setOpenStub(stub)}
+          />
+        </div>
       </div>
 
       {openStub && (
@@ -1096,25 +1099,44 @@ function GlStep({
       </div>
 
       <div className="overflow-x-auto rounded-xl border border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900">
-        <Table>
-          <TableHeader>
-            <TableRow>
-              <TableHead>{t('wizard.gl.account')}</TableHead>
-              <TableHead>{t('wizard.gl.description')}</TableHead>
-              <TableHead className="text-right">{t('wizard.gl.debits')}</TableHead>
-              <TableHead className="text-right">{t('wizard.gl.credits')}</TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {legRows(debits, false)}
-            {legRows(credits, true)}
-            <TableRow className="border-t-2 border-slate-200 bg-slate-50 font-semibold dark:border-slate-700 dark:bg-slate-950/40">
-              <TableCell colSpan={2}>{t('wizard.gl.balanced')}</TableCell>
-              <TableCell className="text-right tabular-nums">{fmt(gl.debitTotal)}</TableCell>
-              <TableCell className="text-right tabular-nums">{fmt(creditTotal)}</TableCell>
-            </TableRow>
-          </TableBody>
-        </Table>
+<div className="p-3">
+          <PagedTable
+            rows={[...debits, ...credits]}
+            columns={([
+              {
+                key: 'account', header: t('wizard.gl.account'),
+                search: (leg) => `${leg.accountLabel} ${leg.partyName ?? ''} ${leg.projectName ?? ''}`,
+                cell: (leg) => (
+                  <span>
+                    {leg.accountLabel}
+                    {leg.partyName ? <span className="ml-1.5 text-xs text-slate-400">{leg.partyName}</span> : null}
+                    {leg.projectName ? <span className="ml-1.5 text-xs text-slate-400">{leg.projectName}</span> : null}
+                  </span>
+                ),
+              },
+              { key: 'description', header: t('wizard.gl.description'), cell: (leg) => leg.description },
+              {
+                key: 'debit', header: t('wizard.gl.debits'), align: 'right',
+                cell: (leg) => (Number(leg.amount) > 0 ? fmt(leg.amount) : ''),
+              },
+              {
+                key: 'credit', header: t('wizard.gl.credits'), align: 'right',
+                cell: (leg) => (Number(leg.amount) < 0 ? fmt(Math.abs(Number(leg.amount))) : ''),
+              },
+            ] as PagedColumn<GlLeg>[])}
+            pageSize={25}
+            searchable
+            empty={<p className="p-2 text-sm text-slate-500 dark:text-slate-400">{t('wizard.gl.hint')}</p>}
+            rowKey={(leg, index) => `${leg.accountId}-${index}`}
+            footer={
+              <TableRow className="border-t-2 border-slate-200 bg-slate-50 font-semibold dark:border-slate-700 dark:bg-slate-950/40">
+                <TableCell colSpan={2}>{t('wizard.gl.balanced')}</TableCell>
+                <TableCell className="text-right tabular-nums">{fmt(gl.debitTotal)}</TableCell>
+                <TableCell className="text-right tabular-nums">{fmt(creditTotal)}</TableCell>
+              </TableRow>
+            }
+          />
+        </div>
       </div>
 
       {canCommit && (
@@ -1239,20 +1261,31 @@ function FinishStep({
             </h3>
             <p className="text-xs text-slate-400 dark:text-slate-500">{t('wizard.finish.remittanceHint')}</p>
           </div>
-          <Table>
-            <TableBody>
-              {remittance.map((row, index) => (
-                <TableRow key={index}>
-                  <TableCell className="font-medium">{row.account_label}</TableCell>
-                  <TableCell className="text-right tabular-nums">{fmt(Math.abs(Number(row.amount)))}</TableCell>
+<div className="p-3">
+            <PagedTable
+              rows={remittance}
+              columns={([
+                {
+                  key: 'account', header: t('wizard.gl.account'),
+                  search: (row) => row.account_label,
+                  cell: (row) => <span className="font-medium">{row.account_label}</span>,
+                },
+                {
+                  key: 'amount', header: t('wizard.finish.amount'), align: 'right',
+                  cell: (row) => fmt(Math.abs(Number(row.amount))),
+                },
+              ] as PagedColumn<RemittanceRow>[])}
+              pageSize={15}
+              empty={<p className="p-2 text-sm text-slate-500 dark:text-slate-400">{t('wizard.finish.remittanceHint')}</p>}
+              rowKey={(row, index) => `${row.account_label}-${index}`}
+              footer={
+                <TableRow className="border-t-2 border-slate-200 bg-slate-50 font-semibold dark:border-slate-700 dark:bg-slate-950/40">
+                  <TableCell>{t('wizard.finish.netPay')}</TableCell>
+                  <TableCell className="text-right tabular-nums">{fmt(run.net_total)}</TableCell>
                 </TableRow>
-              ))}
-              <TableRow className="border-t-2 border-slate-200 bg-slate-50 font-semibold dark:border-slate-700 dark:bg-slate-950/40">
-                <TableCell>{t('wizard.finish.netPay')}</TableCell>
-                <TableCell className="text-right tabular-nums">{fmt(run.net_total)}</TableCell>
-              </TableRow>
-            </TableBody>
-          </Table>
+              }
+            />
+          </div>
         </div>
 
         <div className="rounded-xl border border-slate-200 bg-white p-4 dark:border-slate-800 dark:bg-slate-900">
