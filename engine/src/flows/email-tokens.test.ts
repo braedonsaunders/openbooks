@@ -1,6 +1,18 @@
-import { test } from "node:test";
+import { after, before, test } from "node:test";
 import assert from "node:assert/strict";
 import { createEmailActionToken, verifyEmailActionToken } from "./email-tokens.ts";
+import { env } from "../db.ts";
+
+const priorEmailSecret = env.FLOWS_EMAIL_SECRET;
+
+before(() => {
+  env.FLOWS_EMAIL_SECRET = "openbooks-test-only-flow-secret";
+});
+
+after(() => {
+  if (priorEmailSecret === undefined) delete env.FLOWS_EMAIL_SECRET;
+  else env.FLOWS_EMAIL_SECRET = priorEmailSecret;
+});
 
 /**
  * One-click email-approval tokens are the ENTIRE grant on a public, sessionless

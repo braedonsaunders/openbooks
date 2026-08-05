@@ -36,7 +36,6 @@ export const GL_MUTATION_SOURCE_FILES = [
   "revenue-recognition.ts",
   "sync/source-deletions.ts",
   "sync/trueup.ts",
-  "validation/repair-posted-tax-project-dimensions.ts",
 ] as const;
 
 /**
