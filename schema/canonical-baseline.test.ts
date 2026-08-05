@@ -27,6 +27,7 @@ test("the baseline contains standards, payroll, authentication, and operational 
     "inventory_writedowns",
     "pay_schedules",
     "pay_components",
+    "pay_run_adjustments",
     "employee_payroll_profiles",
     "employee_pay_components",
     "pay_runs",
@@ -62,6 +63,26 @@ test("the canonical catalog contains no upgrade-only evidence model", () => {
   }
 });
 
+test("pay-run adjustments ship inside the tenant-safe canonical baseline", () => {
+  assert.match(baseline, /CREATE TABLE public\.pay_run_adjustments/);
+  assert.match(
+    baseline,
+    /ALTER TABLE ONLY public\.pay_run_adjustments FORCE ROW LEVEL SECURITY/,
+  );
+  assert.match(
+    baseline,
+    /CREATE POLICY org_isolation ON public\.pay_run_adjustments/,
+  );
+  assert.match(
+    baseline,
+    /COMMENT ON POLICY org_isolation ON public\.pay_run_adjustments IS 'openbooks:org_isolation:v1'/,
+  );
+  assert.match(
+    baseline,
+    /ALTER TABLE public\.pay_run_adjustments ENABLE ROW LEVEL SECURITY/,
+  );
+});
+
 test("external source identities are scoped by tenant and source system", () => {
   assert.match(baseline, /CREATE UNIQUE INDEX parties_org_source_identity/);
   assert.match(baseline, /CREATE UNIQUE INDEX projects_org_source_identity/);
@@ -79,6 +100,7 @@ test("the governed query catalog exposes views, never access-control tables", ()
   for (const relation of [
     "pay_schedules",
     "pay_components",
+    "pay_run_adjustments",
     "employee_payroll_profiles",
     "employee_pay_components",
     "pay_runs",

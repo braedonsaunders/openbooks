@@ -43,6 +43,7 @@ $extension$;
 const PAYROLL_QUERY_RELATIONS = Object.freeze([
   "pay_schedules",
   "pay_components",
+  "pay_run_adjustments",
   "employee_payroll_profiles",
   "employee_pay_components",
   "pay_runs",
@@ -88,7 +89,7 @@ function addReviewedPayrollRelations(source) {
     functionSql = replaceExactly(
       functionSql,
       /\n  \];/g,
-      `,\n    'employee_pay_components', 'employee_payroll_profiles',\n    'pay_components', 'pay_runs', 'pay_schedules', 'pay_stub_lines', 'pay_stubs',\n    'payroll_opening_balances', 'union_agreements', 'union_classifications',\n    'union_fringes'\n  ];`,
+      `,\n    'employee_pay_components', 'employee_payroll_profiles',\n    'pay_components', 'pay_run_adjustments', 'pay_runs', 'pay_schedules',\n    'pay_stub_lines', 'pay_stubs', 'payroll_opening_balances',\n    'union_agreements', 'union_classifications', 'union_fringes'\n  ];`,
       "query-catalog allowlist terminator",
     );
   }
@@ -152,6 +153,7 @@ export function canonicalizePgDump(rawDump) {
 
   for (const required of [
     "CREATE TABLE public.orgs",
+    "CREATE TABLE public.pay_run_adjustments",
     "CREATE TABLE public.pay_runs",
     "CREATE TABLE public.auth_sessions",
     "CREATE FUNCTION public.openbooks_refresh_query_catalog()",

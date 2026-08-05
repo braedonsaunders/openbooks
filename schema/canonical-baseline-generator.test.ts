@@ -58,6 +58,7 @@ COMMENT ON SCHEMA public IS 'standard public schema';
 ${queryFunction}
 
 CREATE TABLE public.orgs (id uuid);
+CREATE TABLE public.pay_run_adjustments (id uuid);
 CREATE TABLE public.pay_runs (id uuid);
 CREATE TABLE public.auth_sessions (id uuid);
 ALTER TABLE ONLY public.user_org_access FORCE ROW LEVEL SECURITY;
@@ -78,6 +79,7 @@ test("canonical dump transformation is deterministic and restores reviewed payro
   assert.match(first, /^-- OpenBooks canonical PostgreSQL baseline\./);
   assert.match(first, /CREATE EXTENSION IF NOT EXISTS pg_trgm/);
   assert.match(first, /'employee_pay_components'/);
+  assert.match(first, /'pay_run_adjustments'/);
   assert.match(first, /'payroll_opening_balances'/);
   assert.match(first, /'union_fringes'/);
   assert.match(first, /SELECT public\.openbooks_refresh_query_catalog\(\);/);
