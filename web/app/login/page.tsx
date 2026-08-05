@@ -132,7 +132,7 @@ function LoginForm() {
             <h1 className="text-2xl font-bold tracking-tight text-slate-900 dark:text-white">
               open<span className="text-teal-600 dark:text-teal-400">books</span>
             </h1>
-            <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">{t('tagline')}</p>
+            <p className="mt-1 text-sm text-slate-600 dark:text-slate-400">{t('tagline')}</p>
           </div>
 
           <form onSubmit={submit} className="space-y-4">
@@ -212,10 +212,10 @@ function LoginForm() {
 
 export default function Login() {
   return (
-    <div className="grid h-full min-h-screen place-items-center bg-gradient-to-b from-white to-slate-100 p-4 pt-32 dark:from-slate-950 dark:to-slate-900">
+    <main className="grid h-full min-h-screen place-items-center bg-gradient-to-b from-white to-slate-100 p-4 pt-32 dark:from-slate-950 dark:to-slate-900">
       <Suspense>
         <LoginForm />
       </Suspense>
-    </div>
+    </main>
   )
 }

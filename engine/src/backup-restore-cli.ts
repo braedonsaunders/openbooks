@@ -13,8 +13,8 @@
  *     --org=<uuid> --confirm-empty-target=<same-uuid> \
  *     --report=/secure/acme-restore-report.json
  *
- * Add --reset-mfa only when the source OPENBOOKS_DATA_KEY is unavailable and
- * the operator has an approved user-notification/re-enrollment procedure.
+ * Add --reset-mfa only for an approved factor-revocation/re-enrollment event.
+ * It never bypasses the source OPENBOOKS_DATA_KEY requirement.
  */
 import { existsSync } from "node:fs";
 import { writeFile } from "node:fs/promises";
@@ -63,6 +63,7 @@ const report = await restoreOrgBackup({
   expectedRowCount: manifest?.rowCount,
   expectedTableCount: manifest?.tableCount,
   allowLegacyV1: args.has("allow-legacy-v1"),
+  allowLegacyV2WithoutKeyCheck: args.has("allow-legacy-v2-without-key-check"),
   resetMfaFactors: args.has("reset-mfa"),
 });
 await writeFile(reportPath, `${JSON.stringify(report, null, 2)}\n`, {

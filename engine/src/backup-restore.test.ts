@@ -6,6 +6,7 @@ import { join } from "node:path";
 import test from "node:test";
 import { gzipSync } from "node:zlib";
 import { inspectBackupArchive } from "./backup-restore.ts";
+import { BACKUP_FORMAT_VERSION } from "./backup-format.ts";
 
 async function fixture(lines: string[]): Promise<{
   root: string;
@@ -31,10 +32,11 @@ test("archive inspection authenticates counts and preserves numeric row JSON ver
   const f = await fixture([
     JSON.stringify({
       format: "openbooks-backup",
-      version: 2,
+      version: BACKUP_FORMAT_VERSION,
       orgId,
       createdAt: "2026-08-04T12:00:00.000Z",
       schemaSha256: "a".repeat(64),
+      dataKeyCheck: "enc:v1:AA==:AA==:AA==",
     }),
     `{"t":"orgs","r":{"id":"${orgId}","name":"Restore Drill"}}`,
     `{"t":"journal_lines","r":{"id":"${randomUUID()}","org_id":"${orgId}","amount":${amount}}}`,
@@ -70,10 +72,11 @@ test("archive inspection rejects a tenant-boundary violation before database acc
   const f = await fixture([
     JSON.stringify({
       format: "openbooks-backup",
-      version: 2,
+      version: BACKUP_FORMAT_VERSION,
       orgId,
       createdAt: "2026-08-04T12:00:00.000Z",
       schemaSha256: "b".repeat(64),
+      dataKeyCheck: "enc:v1:AA==:AA==:AA==",
     }),
     `{"t":"orgs","r":{"id":"${orgId}"}}`,
     `{"t":"accounts","r":{"id":"${randomUUID()}","org_id":"${randomUUID()}"}}`,
@@ -111,6 +114,42 @@ test("format-v1 archives require an explicit schema-risk override", async () => 
       }),
       /legacy format-v1 backup has no schema fingerprint/,
     );
+  } finally {
+    await rm(f.root, { recursive: true, force: true });
+  }
+});
+
+test("format-v2 archives require an explicit missing-key-canary override", async () => {
+  const orgId = randomUUID();
+  const f = await fixture([
+    JSON.stringify({
+      format: "openbooks-backup",
+      version: 2,
+      orgId,
+      createdAt: "2026-08-04T12:00:00.000Z",
+      schemaSha256: "c".repeat(64),
+    }),
+    `{"t":"orgs","r":{"id":"${orgId}"}}`,
+    JSON.stringify({ meta: { tables: [{ name: "orgs", rows: 1 }], totalRows: 1 } }),
+  ]);
+  try {
+    await assert.rejects(
+      inspectBackupArchive({
+        archivePath: f.archive,
+        expectedSha256: f.sha256,
+        expectedOrgId: orgId,
+        spoolDir: f.spool,
+      }),
+      /legacy format-v2 backup has no data-key canary/,
+    );
+    const inspected = await inspectBackupArchive({
+      archivePath: f.archive,
+      expectedSha256: f.sha256,
+      expectedOrgId: orgId,
+      spoolDir: join(f.root, "spool-v2-override"),
+      allowLegacyV2WithoutKeyCheck: true,
+    });
+    assert.equal(inspected.header.version, 2);
   } finally {
     await rm(f.root, { recursive: true, force: true });
   }

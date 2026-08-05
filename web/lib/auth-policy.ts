@@ -6,6 +6,13 @@ export const NETWORK_ATTEMPT_LIMIT = 30;
 export const MFA_ATTEMPT_LIMIT = 10;
 export const AUTH_EVENT_RETENTION_DAYS = 90;
 export const LOGIN_CHALLENGE_TTL_S = 5 * 60;
+export const MFA_SETUP_TTL_S = 10 * 60;
+export const MFA_SETUP_ATTEMPT_LIMIT = 5;
+/** Coarse fail-safe when no trustworthy client address is available. */
+export const DEPLOYMENT_LOGIN_WINDOW_S = 60;
+// Emergency KDF ceiling for unknown identities only. Known users never become
+// unavailable because this coarse deployment bucket is saturated.
+export const DEPLOYMENT_LOGIN_ATTEMPT_LIMIT = 600;
 
 const LOCK_THRESHOLD = 5;
 const FAILURE_RESET_MS = 60 * 60 * 1000;
@@ -120,4 +127,23 @@ export function slidingWindowRetryAfter(
   if (!oldestAttempt) return windowSeconds;
   const expiresAt = oldestAttempt.getTime() + windowSeconds * 1000;
   return Math.max(1, Math.ceil((expiresAt - now.getTime()) / 1000));
+}
+
+/** Never expose account-specific lockout state in an invalid-login response. */
+export function publicLoginFailure(input: {
+  kind: "invalid" | "rate_limited";
+  retryAfter: number;
+}) {
+  if (input.kind === "rate_limited") {
+    return {
+      status: 429 as const,
+      body: { error: "invalid credentials", retryAfter: input.retryAfter },
+      retryAfterHeader: String(input.retryAfter),
+    };
+  }
+  return {
+    status: 401 as const,
+    body: { error: "invalid credentials" },
+    retryAfterHeader: null,
+  };
 }

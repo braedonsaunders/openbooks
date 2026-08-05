@@ -1,4 +1,4 @@
-import { createHmac, randomBytes, timingSafeEqual } from "node:crypto";
+import { createHash, createHmac, randomBytes, timingSafeEqual } from "node:crypto";
 
 const BASE32 = "ABCDEFGHIJKLMNOPQRSTUVWXYZ234567";
 
@@ -109,4 +109,40 @@ export function generateRecoveryCodes(count = 10): string[] {
 export function normalizeRecoveryCode(value: string): string | null {
   const normalized = value.toUpperCase().replace(/[^A-Z2-7]/g, "");
   return normalized.length === 12 ? normalized : null;
+}
+
+/**
+ * Recovery codes carry 60 random bits. Salted, versioned SHA-256 hashes keep
+ * them independent of rotatable session-signing keys and prevent precomputed
+ * tables if the database is disclosed.
+ */
+export function hashRecoveryCode(userId: string, normalizedCode: string): string {
+  const salt = randomBytes(16);
+  const digest = createHash("sha256")
+    .update("openbooks:mfa-recovery:s1\0")
+    .update(userId)
+    .update("\0")
+    .update(salt)
+    .update(normalizedCode)
+    .digest("hex");
+  return `s1:${salt.toString("hex")}:${digest}`;
+}
+
+export function verifyRecoveryCodeHash(
+  userId: string,
+  normalizedCode: string,
+  storedHash: string,
+): boolean {
+  const match = storedHash.match(/^s1:([0-9a-f]{32}):([0-9a-f]{64})$/i);
+  if (!match) return false;
+  const salt = Buffer.from(match[1], "hex");
+  const expected = Buffer.from(match[2], "hex");
+  const actual = createHash("sha256")
+    .update("openbooks:mfa-recovery:s1\0")
+    .update(userId)
+    .update("\0")
+    .update(salt)
+    .update(normalizedCode)
+    .digest();
+  return expected.length === actual.length && timingSafeEqual(expected, actual);
 }

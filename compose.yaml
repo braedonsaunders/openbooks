@@ -128,7 +128,7 @@ services:
       minio-init:
         condition: service_completed_successfully
     ports:
-      - "${OPENBOOKS_PORT:-4780}:3000"
+      - "${OPENBOOKS_BIND_ADDRESS:-127.0.0.1}:${OPENBOOKS_PORT:-4780}:3000"
     healthcheck:
       test:
         - CMD

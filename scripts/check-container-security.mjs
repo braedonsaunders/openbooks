@@ -1,4 +1,4 @@
-import { readFileSync, readdirSync } from "node:fs";
+import { existsSync, readFileSync, readdirSync } from "node:fs";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -9,8 +9,12 @@ const dockerfile = readFileSync(new URL("../Dockerfile", import.meta.url), "utf8
 const example = readFileSync(new URL("../.env.compose.example", import.meta.url), "utf8");
 const databaseRuntime = readFileSync(new URL("../engine/src/db.ts", import.meta.url), "utf8");
 const devDeploy = readFileSync(new URL("../.github/workflows/deploy-dev.yml", import.meta.url), "utf8");
-const haBootstrap = readFileSync(new URL("../deploy/ha/bootstrap-job.yaml", import.meta.url), "utf8");
-const haApplication = readFileSync(new URL("../deploy/ha/application.yaml", import.meta.url), "utf8");
+const haBootstrap = readFileSync(new URL("../deploy/ha/base/bootstrap/bootstrap-job.yaml", import.meta.url), "utf8");
+const haApplication = readFileSync(new URL("../deploy/ha/base/runtime/application.yaml", import.meta.url), "utf8");
+const haNetworkPolicy = readFileSync(new URL("../deploy/ha/base/runtime/network-policy.yaml", import.meta.url), "utf8");
+const haBootstrapOverlay = readFileSync(new URL("../deploy/ha/bootstrap/kustomization.yaml", import.meta.url), "utf8");
+const haRuntimeOverlay = readFileSync(new URL("../deploy/ha/runtime/kustomization.yaml", import.meta.url), "utf8");
+const haImage = readFileSync(new URL("../deploy/ha/image/kustomization.yaml", import.meta.url), "utf8");
 const simCompose = readFileSync(new URL("../engine/src/sim/docker-compose.yml", import.meta.url), "utf8");
 const workflowDir = join(repoRoot, ".github", "workflows");
 const workflows = readdirSync(workflowDir)
@@ -40,8 +44,8 @@ rejectPattern(
 const deploymentYaml = [
   { name: "compose.yaml", source: compose },
   { name: "engine/src/sim/docker-compose.yml", source: simCompose },
-  { name: "deploy/ha/bootstrap-job.yaml", source: haBootstrap },
-  { name: "deploy/ha/application.yaml", source: haApplication },
+  { name: "deploy/ha/base/bootstrap/bootstrap-job.yaml", source: haBootstrap },
+  { name: "deploy/ha/base/runtime/application.yaml", source: haApplication },
   ...workflows,
 ];
 for (const { name, source } of deploymentYaml) {
@@ -92,8 +96,36 @@ requirePattern(
   /^\s*image:\s*\$\{OPENBOOKS_IMAGE:\?[^}]+\}\s*$/m,
   "OpenBooks application image is not an explicitly required full reference",
 );
+if (existsSync(join(repoRoot, "deploy", "ha", "kustomization.yaml"))) {
+  throw new Error("container security check failed: deploy/ha must not be directly applyable; use ordered overlays");
+}
+requirePattern(
+  haBootstrapOverlay,
+  /resources:[\s\S]*?\.\.\/base\/configuration[\s\S]*?\.\.\/base\/bootstrap/,
+  "HA bootstrap overlay is not isolated from runtime workloads",
+);
+requirePattern(
+  haRuntimeOverlay,
+  /resources:[\s\S]*?\.\.\/base\/configuration[\s\S]*?\.\.\/base\/runtime/,
+  "HA runtime overlay is missing its isolated runtime base",
+);
 rejectPattern(
-  `${compose}\n${haBootstrap}\n${haApplication}`,
+  haBootstrap,
+  /openbooks-runtime|SESSION_SECRET|OPENBOOKS_DATA_KEY|S3_SECRET_ACCESS_KEY|OPENBOOKS_INTERNAL_TOKEN/,
+  "HA bootstrap receives the broad runtime secret",
+);
+requirePattern(
+  haNetworkPolicy,
+  /name:\s*openbooks-default-deny-ingress[\s\S]*?policyTypes:\s*[\s\S]*?- Ingress/,
+  "HA runtime has no default-deny ingress policy",
+);
+requirePattern(
+  haNetworkPolicy,
+  /openbooks\.network\/trusted-proxy:\s*"true"/,
+  "HA trusted-proxy ingress policy does not fail closed on explicit labels",
+);
+rejectPattern(
+  `${compose}\n${haBootstrap}\n${haApplication}\n${haImage}`,
   /ghcr\.io\/braedonsaunders\/openbooks/i,
   "a historical public OpenBooks package reference remains in deployment configuration",
 );
@@ -104,6 +136,11 @@ for (const [label, manifest] of [["bootstrap", haBootstrap], ["application", haA
     `HA ${label} manifest is not fail-closed on an intentionally non-runnable image`,
   );
 }
+requirePattern(
+  haImage,
+  /newName:\s*example\.invalid\/openbooks[\s\S]*?digest:\s*sha256:0{64}/,
+  "the single HA image override is not fail-closed on an intentionally non-runnable digest",
+);
 
 requirePattern(
   compose,

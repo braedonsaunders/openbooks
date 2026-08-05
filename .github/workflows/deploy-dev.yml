@@ -238,6 +238,8 @@ jobs:
             -G "$base/api/compose.one" --data-urlencode "composeId=$COMPOSE_ID")"
           env_text="$(jq -r '.env // ""' <<<"$current")"
           if grep -q '^OPENBOOKS_TAG=' <<<"$env_text"; then
+            # Anchored, line-oriented env-file replacement is intentional.
+            # shellcheck disable=SC2001
             new_env="$(sed "s|^OPENBOOKS_TAG=.*|OPENBOOKS_TAG=${NEW_TAG}|" <<<"$env_text")"
           else
             new_env="$(printf '%s\nOPENBOOKS_TAG=%s\n' "$env_text" "$NEW_TAG")"
@@ -310,4 +312,3 @@ jobs:
           done
           echo "::error::Application never became healthy"
           exit 1
-

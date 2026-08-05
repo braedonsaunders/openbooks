@@ -3,13 +3,16 @@ const EXACT_PUBLIC_PATHS = new Set([
   "/api/login",
   "/api/auth/methods",
   "/api/flows/email-action",
+  "/api/v1/health",
+  "/api/v1/openapi",
+  "/api/v1/schema",
   "/favicon.ico",
   "/icon.svg",
 ]);
 
 const PUBLIC_SEGMENT_ROOTS = [
   "/api/auth/oidc",
-  "/api/v1",
+  "/api/v1/records",
   "/pay",
   "/api/pay",
   "/api/payments/webhooks",

@@ -22,7 +22,7 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
   if (!isUuid(id)) return NextResponse.json({ error: "not found" }, { status: 404 });
 
   const res = (await db.execute(sql`
-    select id, file_name, object_key, status, purged_at
+    select id, file_name, object_key, status, purged_at, sha256, byte_size::text as byte_size
       from backup_runs where id = ${id} and org_id = ${orgId}`)) as unknown as {
     rows: {
       id: string;
@@ -30,10 +30,12 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
       object_key: string | null;
       status: string;
       purged_at: string | null;
+      sha256: string | null;
+      byte_size: string | null;
     }[];
   };
   const run = res.rows[0];
-  if (!run || run.status !== "completed" || run.purged_at || !run.object_key) {
+  if (!run || run.status !== "completed" || run.purged_at || !run.object_key || !run.sha256 || !run.byte_size) {
     return NextResponse.json({ error: "backup not found" }, { status: 404 });
   }
 
@@ -57,12 +59,22 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
   if (!object.Body) {
     return NextResponse.json({ error: "backup object is missing from storage" }, { status: 404 });
   }
+  if (
+    object.Metadata?.sha256 !== run.sha256 ||
+    typeof object.ContentLength !== "number" ||
+    String(object.ContentLength) !== run.byte_size
+  ) {
+    console.error(`[backup] stored object metadata mismatch for run ${run.id}`);
+    return NextResponse.json({ error: "backup object failed integrity metadata validation" }, { status: 502 });
+  }
 
   const base = (run.file_name ?? "backup").replace(/\.json\.gz$/, "");
   const headers: Record<string, string> = {
     "Content-Type": "application/gzip",
     "Content-Disposition": contentDisposition("attachment", base, "json.gz"),
     "Cache-Control": "no-store",
+    "Content-Digest": `sha-256=:${Buffer.from(run.sha256, "hex").toString("base64")}:`,
+    "X-OpenBooks-SHA256": run.sha256,
   };
   if (typeof object.ContentLength === "number") {
     headers["Content-Length"] = String(object.ContentLength);

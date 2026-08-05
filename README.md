@@ -457,7 +457,9 @@ crossing the binary floating-point boundary.
 OpenBooks combines:
 
 - revocable server-side sessions with signed, production-secure cookies and
-  scrypt password hashes;
+  asynchronous, versioned scrypt password hashes (legacy hashes are upgraded
+  after a successful credential check); request-path KDF work is capped at four
+  active jobs plus a 32-request FIFO queue per web process;
 - database-backed login throttling, privacy-preserving failure events, and
   escalating temporary account lockout shared by every web replica;
 - first-party TOTP authenticator MFA with one-time recovery codes, plus generic
@@ -487,13 +489,18 @@ sign-out revokes the current record rather than only deleting its browser
 cookie. Session, login-limit, and MFA-challenge state is stored in PostgreSQL,
 so it remains effective when several web replicas are deployed.
 The stateful session format intentionally invalidates cookies issued by builds
-before migration `0002`; users sign in again once after this upgrade. Apply the
-migration before rolling out the web image. Mixed old/new web replicas are not
-supported during this authentication cutover.
+before migration `0129`; users sign in again once after this upgrade. Apply the
+migration first, then replace all old web replicas as one coordinated or
+blue/green cutover. Do not use a mixed-version rolling deployment for this one
+authentication-format transition. Homogeneous replicas are supported afterward.
 
 TOTP MFA is enabled by each user from **Account → Sign-in security**. Setup
-produces ten one-time recovery codes. Recovery codes are shown once and stored
-only as keyed hashes; the TOTP secret is encrypted with `OPENBOOKS_DATA_KEY`.
+requires the current password, is bound to the initiating session, expires after
+ten minutes, and is discarded after five incorrect confirmation codes. Enabling
+MFA revokes every other active session and produces ten one-time recovery codes.
+Recovery codes are shown once and stored only as versioned, per-code salted
+hashes; they do not depend on `SESSION_SECRET`. The TOTP secret is encrypted
+with `OPENBOOKS_DATA_KEY`.
 Replacing recovery codes or disabling MFA requires both the current password
 and a current MFA/recovery credential, and failed reauthentication participates
 in the same distributed lockout policy as sign-in.
@@ -514,14 +521,35 @@ the provider supplies a boolean `email_verified: true` claim. Ambiguous email
 matches fail closed. Subsequent sign-ins use the stable subject mapping. Local
 TOTP MFA, when enabled for that user, is still required after OIDC.
 
-Per-identity login limiting is always active. Set `OPENBOOKS_TRUST_PROXY=1` only
+Per-identity login limiting and a high, coarse deployment-wide password-attempt
+ceiling are always active. When saturated, the latter skips dummy password-KDF
+work and new state for unknown identifiers but deliberately remains fail-open
+for real users, so it cannot become a system-wide lockout. Unknown identifiers
+normally receive the same HMAC-only lockout accounting as users; those rows
+expire after one quiet hour to bound unique-identifier spray. Set
+`OPENBOOKS_TRUST_PROXY=1` only
 when a trusted reverse proxy strips incoming forwarding headers and writes its
 own `X-Forwarded-For` or `X-Real-IP`; this additionally enables per-network
 limits without trusting attacker-supplied addresses. Production session and
 authentication cookies are always `Secure`; this cannot be disabled by an
-environment override.
+environment override. Production health checks and authentication handling also
+reject a missing, short, placeholder, or obviously repetitive `SESSION_SECRET`;
+supply at least 32 cryptographically random bytes.
 
-Migration `0002_auth_security.sql` is additive and forward-only. Before an
+If a web process's bounded KDF queue is full, both known and unknown identities
+receive the ordinary delayed invalid-credentials response. Capacity exhaustion
+does not increment account lockout state and never reveals whether the supplied
+email exists.
+
+Rotating `SESSION_SECRET` deliberately logs out every browser, invalidates any
+in-progress OIDC flow, and starts new privacy-hash namespaces for short-lived
+login throttling. Stale login-state rows are pruned automatically. Salted MFA
+recovery-code hashes are unaffected. Coordinate the new key across all web
+replicas in a single cutover. Replacing `OPENBOOKS_DATA_KEY` requires a planned
+decrypt-and-re-encrypt migration for stored TOTP and provider secrets; changing
+it in place makes existing ciphertext unreadable.
+
+Migration `0129_auth_security.sql` is additive and forward-only. Before an
 upgrade, take and test a database backup. A deployment can disable OIDC by
 removing its optional environment variables, but it should not delete the new
 authentication tables as a rollback: doing so invalidates revocation, lockout,

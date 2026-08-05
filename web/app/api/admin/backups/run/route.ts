@@ -25,20 +25,25 @@ export async function POST() {
     );
   }
 
-  // One in-flight backup per org: a second run while one is queued/running
-  // would race the same snapshot tables and double the storage churn.
-  const active = (await db.execute(sql`
-    select id from backup_runs
-     where org_id = ${orgId} and status in ('queued', 'running')
-     limit 1`)) as unknown as { rows: { id: string }[] };
-  if (active.rows.length > 0) {
-    return NextResponse.json({ error: "a backup is already in progress" }, { status: 409 });
+  // The partial unique index on backup_runs is the single in-flight guard.
+  // Relying on a preceding SELECT would leave a check-then-insert race between
+  // concurrent requests and the scheduler.
+  let run: { rows: { id: string }[] };
+  try {
+    run = (await db.execute(sql`
+      insert into backup_runs (org_id, kind, status, actor_id)
+      values (${orgId}, 'manual', 'queued', ${actor.id})
+      returning id`)) as unknown as { rows: { id: string }[] };
+  } catch (error) {
+    const postgresError = error as { code?: string; constraint?: string };
+    if (
+      postgresError.code === "23505" &&
+      postgresError.constraint === "backup_runs_one_inflight_per_org"
+    ) {
+      return NextResponse.json({ error: "a backup is already in progress" }, { status: 409 });
+    }
+    throw error;
   }
-
-  const run = (await db.execute(sql`
-    insert into backup_runs (org_id, kind, status, actor_id)
-    values (${orgId}, 'manual', 'queued', ${actor.id})
-    returning id`)) as unknown as { rows: { id: string }[] };
   const runId = run.rows[0].id;
 
   await enqueueBackupRun({ op: "run", runId, orgId }, { jobId: runId });

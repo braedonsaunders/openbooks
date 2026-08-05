@@ -1,6 +1,11 @@
 import { sql } from "drizzle-orm";
 import { enqueueBackupRun } from "@openbooks/jobs";
-import { computeNextRunAt } from "../backup.ts";
+import {
+  auditBackupEvent,
+  computeNextRunAt,
+  deleteBackupObject,
+  headBackupObject,
+} from "../backup.ts";
 import { db } from "../db.ts";
 
 /**
@@ -10,8 +15,8 @@ import { db } from "../db.ts";
  * backup_runs ledger row and enqueues its execution.
  *
  * Also reconciles two failure shapes:
- *   - a run stuck 'running' for >6h means the worker died mid-export → fail it
- *     (its next_run_at already advanced, so the schedule simply moves on);
+ *   - a run with no worker heartbeat for >6h means the worker died mid-export
+ *     → reconcile it (its next_run_at already advanced, so the schedule moves on);
  *   - a run stuck 'queued' for >10min means its BullMQ job was lost (Redis
  *     flush etc.) → re-enqueue with the same jobId (a no-op if already queued).
  */
@@ -45,13 +50,74 @@ export async function tick(): Promise<void> {
   if (running) return;
   running = true;
   try {
-    // Worker died mid-export — surface as a failed run instead of hanging.
-    await db.execute(sql`
-      update backup_runs
-         set status = 'failed',
-             error = 'worker stopped before the export completed',
-             completed_at = now(), updated_at = now()
-       where status = 'running' and started_at < now() - interval '6 hours'`);
+    // Reconcile deterministic upload intents left by a worker failure. A fully
+    // uploaded object (matching both ledger hash and size) is finalized; an
+    // absent/mismatched object is cleaned and failed. Storage outages leave the
+    // row running so a later tick can decide without destroying evidence.
+    const staleRunning = (await db.execute(sql`
+      select id, org_id, object_key, sha256, byte_size::text as byte_size
+        from backup_runs
+       where status = 'running' and updated_at < now() - interval '6 hours'
+       limit 25`)) as unknown as {
+      rows: { id: string; org_id: string; object_key: string | null; sha256: string | null; byte_size: string | null }[];
+    };
+    for (const run of staleRunning.rows) {
+      let recovered = false;
+      if (run.object_key && run.sha256 && run.byte_size) {
+        try {
+          const object = await headBackupObject(run.object_key);
+          recovered = object.Metadata?.sha256 === run.sha256 && String(object.ContentLength) === run.byte_size;
+          if (!recovered) await deleteBackupObject(run.object_key);
+        } catch (error) {
+          if ((error as { name?: string }).name !== "NotFound" && (error as { name?: string }).name !== "NoSuchKey") {
+            console.error(`[backup-scheduler] cannot reconcile ${run.id}; will retry:`, (error as Error).message);
+            continue;
+          }
+        }
+      }
+      if (recovered) {
+        const finalized = (await db.execute(sql`
+          update backup_runs
+             set status = 'completed', error = null, completed_at = now(), updated_at = now()
+           where id = ${run.id} and status = 'running'
+             and updated_at < now() - interval '6 hours'
+           returning id`)) as unknown as { rows: { id: string }[] };
+        if (finalized.rows[0]) {
+          await auditBackupEvent({
+            orgId: run.org_id,
+            tableName: "backup_runs",
+            rowId: run.id,
+            actorId: null,
+            changes: { event: "backup_upload_reconciled", sha256: run.sha256 },
+          });
+        }
+      } else {
+        await db.execute(sql`
+          update backup_runs
+             set status = 'failed', object_key = null,
+                 error = 'worker stopped before the upload could be verified',
+                 completed_at = now(), updated_at = now()
+           where id = ${run.id} and status = 'running'
+             and updated_at < now() - interval '6 hours'`);
+      }
+    }
+
+    // A synchronous cleanup may have failed after a known failed run. Retry
+    // those deterministic keys until no hidden object remains.
+    const failedUploads = (await db.execute(sql`
+      select id, object_key from backup_runs
+       where status = 'failed' and object_key is not null and purged_at is null
+       limit 25`)) as unknown as { rows: { id: string; object_key: string }[] };
+    for (const run of failedUploads.rows) {
+      try {
+        await deleteBackupObject(run.object_key);
+        await db.execute(sql`
+          update backup_runs set object_key = null, updated_at = now()
+           where id = ${run.id} and status = 'failed' and object_key = ${run.object_key}`);
+      } catch (error) {
+        console.error(`[backup-scheduler] orphan cleanup failed for ${run.object_key}:`, (error as Error).message);
+      }
+    }
 
     const due = (await db.execute(sql`
       select org_id, frequency, hour_utc, day_of_week, day_of_month
@@ -71,17 +137,34 @@ export async function tick(): Promise<void> {
         },
         new Date(),
       );
-      const claimed = (await db.execute(sql`
-        update backup_policies
-           set next_run_at = ${next.toISOString()}, updated_at = now()
-         where org_id = ${policy.org_id} and enabled and next_run_at <= now()
-         returning org_id`)) as unknown as { rowCount: number };
-      if (!claimed.rowCount) continue;
-
-      const run = (await db.execute(sql`
-        insert into backup_runs (org_id, kind, status)
-        values (${policy.org_id}, 'scheduled', 'queued')
-        returning id`)) as unknown as { rows: { id: string }[] };
+      let run: { rows: { id: string }[] };
+      try {
+        // One statement is the atomic boundary: if the ledger insert fails
+        // (including because a manual run is already in flight), PostgreSQL
+        // also rolls back the policy advance. A later tick can retry it.
+        run = (await db.execute(sql`
+          with claimed as (
+            update backup_policies
+               set next_run_at = ${next.toISOString()}, updated_at = now()
+             where org_id = ${policy.org_id}
+               and enabled
+               and next_run_at <= now()
+             returning org_id
+          )
+          insert into backup_runs (org_id, kind, status)
+          select org_id, 'scheduled', 'queued' from claimed
+          returning id`)) as unknown as { rows: { id: string }[] };
+      } catch (error) {
+        const postgresError = error as { code?: string; constraint?: string };
+        if (
+          postgresError.code === "23505" &&
+          postgresError.constraint === "backup_runs_one_inflight_per_org"
+        ) {
+          continue;
+        }
+        throw error;
+      }
+      if (run.rows.length === 0) continue;
       await enqueueBackupRun(
         { op: "run", runId: run.rows[0].id, orgId: policy.org_id },
         { jobId: run.rows[0].id },

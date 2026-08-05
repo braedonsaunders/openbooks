@@ -103,10 +103,32 @@ export const authMfaFactors = pgTable(
     recoveryCodeHashes: jsonb("recovery_code_hashes").$type<string[]>().notNull().default([]),
     enabledAt: timestamp("enabled_at", { withTimezone: true }),
     lastUsedStep: integer("last_used_step"),
+    /** Pending enrollment is short-lived and bound to its initiating session. */
+    setupSessionId: uuid("setup_session_id"),
+    setupExpiresAt: timestamp("setup_expires_at", { withTimezone: true }),
+    setupAttemptCount: integer("setup_attempt_count").notNull().default(0),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   },
-  (t) => [uniqueIndex("auth_mfa_factors_user").on(t.userId)],
+  (t) => [
+    uniqueIndex("auth_mfa_factors_user").on(t.userId),
+    index("auth_mfa_factors_setup_expiry").on(t.setupExpiresAt),
+  ],
+);
+
+/**
+ * Small fixed-window ingress buckets. The deployment-wide row provides a
+ * coarse abuse ceiling even when no trusted reverse proxy supplies client IPs.
+ */
+export const authRateLimitBuckets = pgTable(
+  "auth_rate_limit_buckets",
+  {
+    bucketKey: text("bucket_key").primaryKey(),
+    windowStartedAt: timestamp("window_started_at", { withTimezone: true }).notNull().defaultNow(),
+    attemptCount: integer("attempt_count").notNull().default(0),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [index("auth_rate_limit_buckets_updated").on(t.updatedAt)],
 );
 
 /** Short-lived, one-use bridge between primary authentication and local MFA. */

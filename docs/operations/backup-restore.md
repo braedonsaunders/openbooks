@@ -16,7 +16,7 @@ schedule. A backup that has not been restored is unverified.
 
 ## Organization archive
 
-### Create and authenticate the archive
+### Create the archive and record integrity evidence
 
 Run against the source deployment with an absolute output path on encrypted,
 operator-controlled storage:
@@ -32,7 +32,17 @@ The command writes the gzip archive and an adjacent
 `.manifest.json`, both mode `0600`. It refuses to overwrite either file. The
 manifest records the SHA-256, organization, table count, and row count. Keep the
 archive and manifest together, but copy them to a failure domain separate from
-the OpenBooks host.
+the OpenBooks host. The adjacent manifest detects corruption only if its hash is
+retained through a separately trusted channel (for example immutable backup
+catalog metadata or a signed evidence log); an attacker who can replace both
+files can replace the unsigned hash too.
+
+The admin UI follows the same rule for stored backups: select **Archive** and
+**Manifest** for the same completed row. It shows the full SHA-256 and the
+archive response also carries `Content-Digest` and `X-OpenBooks-SHA256` headers.
+The former one-response **Download now** stream is disabled because a hash known
+only after streaming cannot provide a precomputed integrity sidecar; it is not a
+supported restore input.
 
 The archive can contain financial records, password hashes, personal data, and
 encrypted provider configuration and MFA seeds. Apply the same access,
@@ -51,16 +61,22 @@ home login identity owned by another tenant, so copying it would either leak the
 other tenant's identity or produce a broken foreign key. Review and re-create
 approved cross-tenant grants after restore. Durable `auth_mfa_factors` and
 issuer/subject-scoped `auth_oidc_identities` for users whose home org is being
-archived are included. `auth_sessions`, `auth_login_challenges`,
+archived are included. Incomplete MFA enrollment rows (`enabled_at is null`)
+are short-lived session-bound state and are excluded. Enabled factors carry
+versioned, per-code salted recovery hashes that do not depend on the rotatable
+`SESSION_SECRET`; restore rejects an unknown hash format. `auth_sessions`, `auth_login_challenges`,
 `auth_login_state`, and `auth_login_events` are not: restore must not revive a
 bearer credential, a half-finished login, stale lockout state, or a partial
 security ledger.
 
-### What format v2 proves
+### What format v3 proves
 
 Before any restore write, OpenBooks:
 
 - hashes the compressed bytes and compares the result with the manifest;
+- decrypts a format-level AEAD canary before database access, proving the
+  configured `OPENBOOKS_DATA_KEY` is the source key even when the tenant has no
+  MFA factors or other encrypted rows;
 - validates every row envelope and rejects rows crossing the organization boundary;
 - reconciles every per-table count and the total against the archive footer;
 - compares the archive's deterministic table/column, constraint, and tracked-migration fingerprint with the target; and
@@ -70,6 +86,12 @@ Format-v1 archives predate the schema fingerprint. They are refused by default.
 `--allow-legacy-v1` is an exceptional override, not a compatibility promise;
 use it only after independently proving the source and target migration catalogs
 are identical.
+
+Format-v2 archives have a schema fingerprint but predate the data-key canary.
+They are also refused by default. The exceptional
+`--allow-legacy-v2-without-key-check` override is only for an operator who has
+independently proven that `OPENBOOKS_DATA_KEY` is the source key; an archive
+with no decryptable ciphertext cannot prove that fact itself.
 
 ### Restore into an isolated empty target
 
@@ -95,6 +117,9 @@ are identical.
 
    ```bash
    OPENBOOKS_RESTORE_DB_URL=postgres://schema_owner:REDACTED@db/openbooks_restore \
+   OPENBOOKS_DATA_KEY=SOURCE_32_BYTE_KEY_FROM_SECRET_MANAGER \
+   SESSION_SECRET=SOURCE_SESSION_SECRET_FROM_SECRET_MANAGER \
+   NODE_ENV=production \
    npx tsx engine/src/backup-restore-cli.ts \
      --in=/secure/openbooks/acme-backup.json.gz \
      --manifest=/secure/openbooks/acme-backup.json.gz.manifest.json \
@@ -117,28 +142,38 @@ state—and a stored backup snapshots its own ledger row while it is running—t
 restore marks archived `queued` or `running` backup runs failed with an explicit
 recovery reason. This prevents phantom work from blocking future backups.
 
-The normal restore also authenticates every restored MFA ciphertext by
-decrypting it with the configured `OPENBOOKS_DATA_KEY` inside the uncommitted
-restore transaction; plaintext is never printed or returned. Use the original
-source key. A missing/wrong key rolls the entire restore back instead of leaving
-users with silently unusable MFA.
+The restore also authenticates every restored MFA ciphertext inside the
+uncommitted transaction; plaintext is never printed or returned. A missing or
+wrong source key is rejected by the archive-level canary before database access,
+so MFA, connection, bank, payment, provider, and TIN ciphertext cannot silently
+be restored under a different key.
 
-If that key is irretrievably unavailable, repeat the isolated restore with the
-explicit `--reset-mfa` option. The restore report records the number of factors
-removed and OIDC identities remain issuer-scoped and intact. Keep the target off
-the public network, notify affected users, reset credentials according to the
-incident-response policy, require supervised MFA re-enrollment, and verify the
-IdP issuer/client configuration before admitting normal traffic. This is a
-break-glass recovery path, not a key-rotation mechanism.
+Organization email-provider credentials are a distinct legacy case: they are
+AES-GCM sealed under a key derived from `SESSION_SECRET`. If the archived
+organization has one, restore authenticates it inside the same uncommitted
+transaction and fails unless the source `SESSION_SECRET` is present. Preserve
+both source keys for recovery; session invalidation after a full deployment
+restore does not authorize discarding the old secret before encrypted email
+configuration has been re-sealed or explicitly reset.
+
+`--reset-mfa` is an explicit factor-revocation option, not a data-key bypass.
+The source key remains mandatory; the report records factors removed and OIDC
+identities remain issuer-scoped and intact. Keep the target off the public
+network, notify affected users, reset credentials according to the incident
+response policy, require supervised MFA re-enrollment, and verify the IdP
+issuer/client configuration before admitting normal traffic. If the source data
+key is irretrievably unavailable, this organization archive cannot safely make
+the encrypted fields usable; recover the key or execute a separately reviewed
+credential-reset/migration incident procedure.
 
    The report is written only after commit and is created mode `0600` without
 overwriting existing evidence.
 
-For a scheduled/stored backup downloaded from object storage, pass the
-authenticated SHA-256 recorded in its completed `backup_runs` ledger entry as
-`--sha256=<64-lowercase-hex>` instead of `--manifest`. Exactly one evidence
-source is required. Do not copy a hash from an unauthenticated location next to
-a suspect archive.
+For a scheduled/stored backup, download its authenticated UI manifest and pass
+it as `--manifest`. A controlled operator can alternatively pass the full
+SHA-256 recorded in its completed `backup_runs` ledger entry as
+`--sha256=<64-lowercase-hex>`. Exactly one evidence source is required. Do not
+copy a hash from an unauthenticated location next to a suspect archive.
 
 ### Object storage is a separate required recovery set
 
@@ -161,7 +196,8 @@ cross-failure-domain S3 versioning or replication. Retain:
 - a restorable PostgreSQL base backup and WAL/PITR history;
 - the complete object-storage bucket and versions required by retention policy;
 - the exact application image digest and infrastructure versions;
-- `.env`/secret-manager values, especially `OPENBOOKS_DATA_KEY`;
+- `.env`/secret-manager values, especially `OPENBOOKS_DATA_KEY` and the source
+  `SESSION_SECRET` needed by encrypted organization email configuration;
 - TLS, DNS, email, identity-provider, network-policy, and monitoring configuration; and
 - the tested recovery runbook and prior drill reports.
 
@@ -172,8 +208,8 @@ support them and their point-in-time consistency is understood. Never copy a
 live PostgreSQL data directory as ordinary files.
 
 Restore a deployment backup into new infrastructure. Verify checksums before
-opening it, recover PostgreSQL and object storage, apply the original data key,
-and, before exposing web traffic, invalidate point-in-time active authentication
+opening it, recover PostgreSQL and object storage, apply the original data key
+and source `SESSION_SECRET`, and, before exposing web traffic, invalidate point-in-time active authentication
 state:
 
 ```sql

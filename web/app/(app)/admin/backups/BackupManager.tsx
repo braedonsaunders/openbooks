@@ -134,8 +134,8 @@ export function BackupManager({
           <AlertTitle>Object storage is not configured</AlertTitle>
           <AlertDescription>
             This deployment has no S3 object storage (S3_ENDPOINT / S3_BUCKET / credentials), so stored and
-            scheduled backups are unavailable. <strong>Download now</strong> still works — it streams a fresh
-            backup straight to your browser.
+            scheduled backups are unavailable. Browser-only streaming is intentionally disabled because it
+            cannot deliver restore-grade hash evidence. Use the operator <code>backup-local-cli.ts</code> workflow.
           </AlertDescription>
         </Alert>
       )}
@@ -150,17 +150,12 @@ export function BackupManager({
       )}
 
       <Card className="p-4">
-        <h2 className="text-sm font-semibold text-slate-900 dark:text-slate-100">Download now</h2>
+        <h2 className="text-sm font-semibold text-slate-900 dark:text-slate-100">Restore-grade exports</h2>
         <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
-          A consistent point-in-time export of the entire organization — every table, including the audit
-          history — as a gzip-compressed JSON Lines (.json.gz) archive. The download is recorded in the audit
-          log.
+          Create a stored backup below, then download both its <strong>Archive</strong> and <strong>Manifest</strong>.
+          The manifest carries the full SHA-256 and counts required by the restore CLI; keep both files together.
+          A raw browser stream without that evidence is not supported as a restore input.
         </p>
-        <div className="mt-4">
-          <Button onClick={() => window.location.assign("/api/admin/backups/download")}>
-            Download backup (.json.gz)
-          </Button>
-        </div>
       </Card>
 
       <Card className="p-4">
@@ -330,8 +325,8 @@ export function BackupManager({
                           ? `${run.rowCount.toLocaleString()} rows · ${run.tableCount ?? 0} tables`
                           : "—"}
                       </td>
-                      <td className="py-2.5 pr-4 font-mono text-xs text-slate-500 dark:text-slate-400">
-                        {run.sha256 ? `${run.sha256.slice(0, 12)}…` : "—"}
+                      <td className="max-w-72 py-2.5 pr-4 font-mono text-xs break-all text-slate-500 dark:text-slate-400">
+                        {run.sha256 ?? "—"}
                       </td>
                       <td className="py-2.5 pr-4 whitespace-nowrap">
                         {run.purgedAt ? (
@@ -349,7 +344,13 @@ export function BackupManager({
                               href={`/api/admin/backups/${run.id}/download`}
                               className="mr-3 text-xs font-medium text-teal-700 hover:underline dark:text-teal-400"
                             >
-                              Download
+                              Archive
+                            </a>
+                            <a
+                              href={`/api/admin/backups/${run.id}/manifest`}
+                              className="mr-3 text-xs font-medium text-teal-700 hover:underline dark:text-teal-400"
+                            >
+                              Manifest
                             </a>
                             <button
                               type="button"

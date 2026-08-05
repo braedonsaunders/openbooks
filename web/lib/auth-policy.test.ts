@@ -5,6 +5,7 @@ import {
   hasExpectedOrigin,
   nextLockoutState,
   normalizeLoginEmail,
+  publicLoginFailure,
   safeReturnTo,
   slidingWindowRetryAfter,
   useSecureCookies,
@@ -67,4 +68,17 @@ test("browser mutations reject a cross-origin Origin header", () => {
   assert.equal(hasExpectedOrigin(sameOrigin), true);
   assert.equal(hasExpectedOrigin(crossOrigin), false);
   assert.equal(hasExpectedOrigin(sameOrigin, { OPENBOOKS_APP_URL: "https://different.example" }), false);
+});
+
+test("invalid-login responses do not reveal whether an account is locked", () => {
+  assert.deepEqual(
+    publicLoginFailure({ kind: "invalid", retryAfter: 0 }),
+    publicLoginFailure({ kind: "invalid", retryAfter: 60 * 60 }),
+  );
+  assert.deepEqual(publicLoginFailure({ kind: "invalid", retryAfter: 300 }), {
+    status: 401,
+    body: { error: "invalid credentials" },
+    retryAfterHeader: null,
+  });
+  assert.equal(publicLoginFailure({ kind: "rate_limited", retryAfter: 30 }).status, 429);
 });

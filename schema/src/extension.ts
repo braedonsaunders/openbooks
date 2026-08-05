@@ -9,6 +9,7 @@ import {
   uniqueIndex,
   uuid,
 } from "drizzle-orm/pg-core";
+import { sql } from "drizzle-orm";
 import { auditColumns, id, orgRef } from "./helpers";
 
 /**
@@ -183,7 +184,11 @@ export const users = pgTable(
     lastLoginAt: timestamp("last_login_at", { withTimezone: true }),
     ...auditColumns,
   },
-  (t) => [uniqueIndex("users_org_email").on(t.orgId, t.email)],
+  (t) => [
+    uniqueIndex("users_org_email").on(t.orgId, t.email),
+    // Login and first-use OIDC linking resolve a global, case-folded identity.
+    index("users_login_email_ci").on(sql`lower(${t.email})`).where(sql`${t.isActive}`),
+  ],
 );
 
 /**

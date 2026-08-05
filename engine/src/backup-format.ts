@@ -32,14 +32,25 @@ export const ORGLESS_BACKUP_TABLES = [
 export const ORG_SCOPED_BACKUP_EXCLUSIONS = ["user_org_access"] as const;
 
 export const BACKUP_FORMAT = "openbooks-backup" as const;
-export const BACKUP_FORMAT_VERSION = 2 as const;
+export const BACKUP_FORMAT_VERSION = 3 as const;
+export const BACKUP_DATA_KEY_CHECK_PLAINTEXT = "openbooks-backup-data-key-check:v1" as const;
 
 export interface BackupHeaderV2 {
+  format: typeof BACKUP_FORMAT;
+  version: 2;
+  orgId: string;
+  createdAt: string;
+  schemaSha256: string;
+}
+
+export interface BackupHeaderV3 {
   format: typeof BACKUP_FORMAT;
   version: typeof BACKUP_FORMAT_VERSION;
   orgId: string;
   createdAt: string;
   schemaSha256: string;
+  /** AEAD canary proving restore has the source OPENBOOKS_DATA_KEY. */
+  dataKeyCheck: string;
 }
 
 export interface BackupSchemaColumn {

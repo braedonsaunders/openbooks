@@ -114,9 +114,14 @@ async function runAdversarialProbes(runDir: string, manifest: RunManifest, world
 
   for (const probe of probes) {
     if (!rng.chance(probe.chance)) continue;
+    // An unexpected exception inside a probe is itself a finding — halt with
+    // a defect bundle rather than crashing the (resumable) run.
     const result = await withSimClock(manifest.simDate, () =>
       withOrgContext(manifest.orgId, () => probe.run()),
-    );
+    ).catch((e: unknown): InvariantResult => ({
+      pass: false,
+      failures: [{ invariant: probe.name, detail: `probe threw: ${(e as Error).message}` }],
+    }));
     ran.push(probe.name);
     if (result.pass) {
       recordCoverage(manifest, probe.name);
