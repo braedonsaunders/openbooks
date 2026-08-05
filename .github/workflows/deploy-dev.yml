@@ -12,7 +12,7 @@ on:
         default: false
 
 concurrency:
-  group: deploy-dev-prelaunch-adoption
+  group: deploy-dev-prelaunch-adoption-final
   cancel-in-progress: false
 
 permissions:
