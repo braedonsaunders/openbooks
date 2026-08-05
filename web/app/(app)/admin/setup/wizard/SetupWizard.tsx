@@ -1,6 +1,7 @@
 'use client'
 
 import { useMemo, useRef, useState } from 'react'
+import Link from 'next/link'
 import { usePathname, useRouter } from 'next/navigation'
 import { useLocale, useTranslations } from 'next-intl'
 import { toast } from 'sonner'
@@ -33,6 +34,7 @@ import {
   Sparkles,
   Stethoscope,
   Users,
+  Wallet,
   Warehouse,
   X,
 } from 'lucide-react'
@@ -53,10 +55,13 @@ import {
 
 // ─── Types ────────────────────────────────────────────────────────────────
 
-type StepKey = 'welcome' | 'company' | 'industry' | 'profile' | 'rhythm' | 'operations' | 'launch' | 'review' | 'applying' | 'done'
-const STEPS: StepKey[] = ['welcome', 'company', 'industry', 'profile', 'rhythm', 'operations', 'launch', 'review', 'applying', 'done']
+type StepKey = 'welcome' | 'company' | 'industry' | 'profile' | 'rhythm' | 'operations' | 'payroll' | 'launch' | 'review' | 'applying' | 'done'
+const BASE_STEPS: StepKey[] = ['welcome', 'company', 'industry', 'profile', 'rhythm', 'operations', 'launch', 'review', 'applying', 'done']
 
-type ToggleKey = 'inventory' | 'timeTracking' | 'multiSubsidiary' | 'multiCurrency' | 'projects' | 'subscriptionBilling' | 'orders' | 'crm' | 'bankFeeds' | 'onlinePayments' | 'fixedAssets'
+type ToggleKey = 'inventory' | 'timeTracking' | 'multiSubsidiary' | 'multiCurrency' | 'projects' | 'subscriptionBilling' | 'orders' | 'crm' | 'bankFeeds' | 'onlinePayments' | 'fixedAssets' | 'payroll'
+
+/** Payroll jurisdiction packs offered by the wizard (US is announced, not shipped). */
+type PayrollPack = 'CA' | null
 
 // ─── Icon map ─────────────────────────────────────────────────────────────
 
@@ -123,9 +128,20 @@ export function SetupWizard(props: {
   const [toggles, setToggles] = useState<Record<ToggleKey, boolean>>(props.initial.features)
   const [featureChoices, setFeatureChoices] = useState<Record<string, boolean>>(props.initial.allFeatures)
   const [includeSampleCompany, setIncludeSampleCompany] = useState(false)
+  const [payrollPack, setPayrollPack] = useState<PayrollPack>('CA')
   const countries = useMemo(() => countryOptions(locale), [locale])
 
-  const step = STEPS[stepIdx]
+  // The Payroll step only exists when the module is switched on — it is an
+  // optional module step, inserted after Operations where it was enabled.
+  const steps = useMemo<StepKey[]>(
+    () =>
+      toggles.payroll
+        ? BASE_STEPS.flatMap((key): StepKey[] => (key === 'operations' ? ['operations', 'payroll'] : [key]))
+        : BASE_STEPS,
+    [toggles.payroll],
+  )
+
+  const step = steps[stepIdx]
 
   // When an industry is selected, prefill the toggles from its feature preset
   const selectedIndustry = useMemo(
@@ -190,7 +206,7 @@ export function SetupWizard(props: {
   async function apply() {
     if (stepTransitionLocked.current) return
     setBusy(true)
-    setStepIdx(STEPS.indexOf('applying'))
+    setStepIdx(steps.indexOf('applying'))
     try {
       const res = await fetch('/api/admin/setup/wizard', {
         method: 'PUT',
@@ -210,6 +226,19 @@ export function SetupWizard(props: {
         const err = await res.json().catch(() => ({ error: 'failed' }))
         throw new Error(err.error ?? 'failed')
       }
+      // Payroll module chosen with a country pack: install it now (statutory
+      // component seed + pack marker), mirroring the sample-company follow-up.
+      if (toggles.payroll && payrollPack === 'CA') {
+        const pack = await fetch('/api/payroll/settings', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ action: 'install-pack', country: 'CA' }),
+        })
+        if (!pack.ok) {
+          const detail = await pack.json().catch(() => ({}))
+          toast.error(detail.error ?? t('payroll.installError'))
+        }
+      }
       if (includeSampleCompany && industryKey) {
         const sample = await fetch('/api/data/sample-companies', {
           method: 'POST',
@@ -222,13 +251,13 @@ export function SetupWizard(props: {
         }
       }
       // Show the done step briefly, then close
-      setStepIdx(STEPS.indexOf('done'))
+      setStepIdx(steps.indexOf('done'))
       setTimeout(() => {
         close()
       }, 2500)
     } catch (e) {
       toast.error((e as Error).message)
-      setStepIdx(STEPS.indexOf('review'))
+      setStepIdx(steps.indexOf('review'))
     } finally {
       setBusy(false)
     }
@@ -241,7 +270,7 @@ export function SetupWizard(props: {
     if (stepTransitionLocked.current) return
     stepTransitionLocked.current = true
     setTransitioning(true)
-    setStepIdx((current) => Math.max(0, Math.min(STEPS.indexOf('review'), current + delta)))
+    setStepIdx((current) => Math.max(0, Math.min(steps.indexOf('review'), current + delta)))
     window.setTimeout(() => {
       stepTransitionLocked.current = false
       setTransitioning(false)
@@ -249,7 +278,7 @@ export function SetupWizard(props: {
   }
 
   function next() {
-    if (stepIdx < STEPS.indexOf('review')) moveStep(1)
+    if (stepIdx < steps.indexOf('review')) moveStep(1)
   }
   function back() {
     if (stepIdx > 0) moveStep(-1)
@@ -283,6 +312,7 @@ export function SetupWizard(props: {
       bankFeeds: recommended.bankFeeds ?? false,
       onlinePayments: recommended.onlinePayments ?? false,
       fixedAssets: recommended.fixedAssets ?? false,
+      payroll: recommended.payroll ?? false,
     })
   }
 
@@ -309,7 +339,7 @@ export function SetupWizard(props: {
   const canNext =
     step === 'company' ? name.trim().length > 0 : step === 'industry' ? industryKey !== null : true
 
-  const progressSteps = STEPS.slice(1, 8) // company → industry → profile → rhythm → operations → launch → review
+  const progressSteps = steps.slice(1, steps.indexOf('applying')) // company → … → review
   const progressIdx = Math.max(0, stepIdx - 1)
 
   // ─── Render ───────────────────────────────────────────────────────────
@@ -342,7 +372,7 @@ export function SetupWizard(props: {
           className="relative flex max-h-[90vh] w-full max-w-3xl flex-col overflow-hidden rounded-2xl bg-white shadow-2xl dark:bg-slate-900"
         >
           {/* Progress bar */}
-          {stepIdx > 0 && stepIdx < STEPS.indexOf('applying') && (
+          {stepIdx > 0 && stepIdx < steps.indexOf('applying') && (
             <div className="flex items-center gap-2 px-6 pt-5">
               {progressSteps.map((s, i) => (
                 <div
@@ -430,6 +460,9 @@ export function SetupWizard(props: {
                     }}
                   />
                 )}
+                {step === 'payroll' && (
+                  <PayrollStep t={t} pack={payrollPack} setPack={setPayrollPack} />
+                )}
                 {step === 'launch' && (
                   <LaunchStep
                     t={t}
@@ -464,6 +497,8 @@ export function SetupWizard(props: {
                     featureKeys={reviewFeatureKeys}
                     featureTitle={(key) => tAdmin(`features.${key}.title`)}
                     includeSampleCompany={includeSampleCompany}
+                    payrollOn={toggles.payroll}
+                    payrollPack={payrollPack}
                     seedChartOfAccounts={Boolean(
                       props.canSwitchIndustry
                       && selectedIndustry
@@ -478,7 +513,7 @@ export function SetupWizard(props: {
           </div>
 
           {/* Footer navigation */}
-          {stepIdx < STEPS.indexOf('applying') && stepIdx < STEPS.indexOf('done') && (
+          {stepIdx < steps.indexOf('applying') && stepIdx < steps.indexOf('done') && (
             <div className="flex items-center justify-between border-t border-slate-200 px-6 py-4 dark:border-slate-800 sm:px-10">
               {stepIdx > 0 ? (
                 <button
@@ -892,6 +927,7 @@ function OperationsStep(props: {
     { key: 'subscriptionBilling', icon: Repeat },
     { key: 'orders', icon: Download },
     { key: 'crm', icon: HeartHandshake },
+    { key: 'payroll', icon: Wallet },
   ]
   const structureItems: { key: ToggleKey; icon: typeof Building2 }[] = [
     { key: 'multiSubsidiary', icon: Building2 },
@@ -998,6 +1034,81 @@ function RhythmStep(props: {
         </div>
       </fieldset>
       <p className="rounded-lg bg-slate-50 p-3 text-xs leading-relaxed text-slate-500 dark:bg-slate-800/60 dark:text-slate-400">{props.t('rhythm.note')}</p>
+    </div>
+  )
+}
+
+function PayrollStep(props: {
+  t: ReturnType<typeof useTranslations<'admin.setup.wizard'>>
+  pack: PayrollPack
+  setPack: (value: PayrollPack) => void
+}) {
+  const { t, pack, setPack } = props
+  const canadaSelected = pack === 'CA'
+  return (
+    <div className="space-y-6">
+      <div>
+        <h2 className="text-xl font-bold tracking-tight text-slate-900 dark:text-slate-100">{t('payroll.title')}</h2>
+        <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">{t('payroll.description')}</p>
+      </div>
+      <fieldset className="space-y-3">
+        <legend className="text-sm font-semibold text-slate-800 dark:text-slate-100">{t('payroll.packQuestion')}</legend>
+        <div className="grid gap-3 sm:grid-cols-2">
+          <button
+            type="button"
+            aria-pressed={canadaSelected}
+            onClick={() => setPack(canadaSelected ? null : 'CA')}
+            className={cn(
+              'relative flex items-start gap-3 rounded-xl border p-4 text-left transition-colors',
+              canadaSelected
+                ? 'border-teal-500 bg-teal-50 ring-2 ring-teal-500/20 dark:border-teal-400 dark:bg-teal-950/40'
+                : 'border-slate-200 hover:border-slate-300 hover:bg-slate-50 dark:border-slate-700 dark:hover:bg-slate-800/60',
+            )}
+          >
+            <span className={cn('rounded-lg p-2', canadaSelected ? 'bg-teal-600 text-white' : 'bg-slate-100 text-slate-400 dark:bg-slate-800')}>
+              <Landmark size={18} />
+            </span>
+            <span className="min-w-0">
+              <span className="block text-sm font-semibold text-slate-900 dark:text-slate-100">{t('payroll.packs.canada.title')}</span>
+              <span className="mt-0.5 block text-xs leading-relaxed text-slate-500 dark:text-slate-400">{t('payroll.packs.canada.description')}</span>
+            </span>
+            {canadaSelected && (
+              <span className="absolute right-3 top-3 flex h-5 w-5 items-center justify-center rounded-full bg-teal-500">
+                <Check className="text-white" size={12} strokeWidth={3} />
+              </span>
+            )}
+          </button>
+          <div className="flex items-start gap-3 rounded-xl border border-slate-200 bg-slate-50 p-4 opacity-60 dark:border-slate-800 dark:bg-slate-800/50">
+            <span className="rounded-lg bg-slate-100 p-2 text-slate-400 dark:bg-slate-800">
+              <Landmark size={18} />
+            </span>
+            <span className="min-w-0">
+              <span className="block text-sm font-semibold text-slate-900 dark:text-slate-100">{t('payroll.packs.us.title')}</span>
+              <span className="mt-0.5 block text-xs leading-relaxed text-slate-500 dark:text-slate-400">{t('payroll.packs.us.description')}</span>
+            </span>
+          </div>
+        </div>
+      </fieldset>
+      <div className="space-y-2 rounded-xl border border-slate-200 bg-slate-50/70 p-4 dark:border-slate-700 dark:bg-slate-950/40">
+        <p className="text-sm font-semibold text-slate-800 dark:text-slate-100">{t('payroll.checklist.title')}</p>
+        <ul className="space-y-1.5 text-xs leading-relaxed text-slate-500 dark:text-slate-400">
+          <li>
+            {t('payroll.checklist.pack')}
+          </li>
+          <li>
+            {t('payroll.checklist.accounts')}{' '}
+            <Link href={'/admin/setup/payroll?tab=accounts' as never} className="font-medium text-teal-700 hover:underline dark:text-teal-300">
+              {t('payroll.checklist.accountsLink')}
+            </Link>
+          </li>
+          <li>
+            {t('payroll.checklist.schedule')}{' '}
+            <Link href={'/admin/setup/payroll?tab=schedules' as never} className="font-medium text-teal-700 hover:underline dark:text-teal-300">
+              {t('payroll.checklist.scheduleLink')}
+            </Link>
+          </li>
+        </ul>
+      </div>
     </div>
   )
 }
@@ -1146,9 +1257,11 @@ function ReviewStep(props: {
   featureKeys: string[]
   featureTitle: (key: string) => string
   includeSampleCompany: boolean
+  payrollOn: boolean
+  payrollPack: PayrollPack
   seedChartOfAccounts: boolean
 }) {
-  const { t, name, legalName, country, currency, fiscalMonth, teamSize, complexity, bookStart, taxPosition, monthlyActivity, closeCadence, industry, featureKeys, featureTitle, includeSampleCompany, seedChartOfAccounts } = props
+  const { t, name, legalName, country, currency, fiscalMonth, teamSize, complexity, bookStart, taxPosition, monthlyActivity, closeCadence, industry, featureKeys, featureTitle, includeSampleCompany, payrollOn, payrollPack, seedChartOfAccounts } = props
   const fiscalMonthName = new Intl.DateTimeFormat(undefined, { month: 'long', timeZone: 'UTC' }).format(
     new Date(Date.UTC(2026, fiscalMonth - 1, 1)),
   )
@@ -1176,6 +1289,12 @@ function ReviewStep(props: {
           label={t('review.sampleCompany')}
           value={includeSampleCompany ? t('review.sampleCompanyYes') : t('review.sampleCompanyNo')}
         />
+        {payrollOn && (
+          <ReviewRow
+            label={t('review.payrollPack')}
+            value={payrollPack === 'CA' ? t('review.payrollPackCanada') : t('review.payrollPackNone')}
+          />
+        )}
         {industry && (
           <>
             <ReviewRow label={t('review.industry')} value={t(`industries.${industry.key}.title`)} />

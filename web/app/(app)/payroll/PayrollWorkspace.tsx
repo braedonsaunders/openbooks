@@ -162,11 +162,11 @@ export function PayrollWorkspace(props: {
         </div>
         {props.canManage && (
           <div className="flex items-center gap-2 text-xs">
-            <Link href="/admin/setup/pay-schedules" className="font-medium text-teal-700 hover:underline dark:text-teal-300">
+            <Link href={'/admin/setup/payroll?tab=schedules' as never} className="font-medium text-teal-700 hover:underline dark:text-teal-300">
               {t('links.paySchedules')}
             </Link>
             <span className="text-slate-300 dark:text-slate-700">·</span>
-            <Link href="/admin/setup/pay-components" className="font-medium text-teal-700 hover:underline dark:text-teal-300">
+            <Link href={'/admin/setup/payroll?tab=components' as never} className="font-medium text-teal-700 hover:underline dark:text-teal-300">
               {t('links.payComponents')}
             </Link>
           </div>

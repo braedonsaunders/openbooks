@@ -2862,6 +2862,10 @@
         "multiCurrency": {
           "title": "Multi-currency",
           "description": "Transact in foreign currencies with exchange rates and revaluation."
+        },
+        "payroll": {
+          "title": "Payroll",
+          "description": "Run payroll with statutory withholding country packs."
         }
       },
       "rhythm": {
@@ -2934,7 +2938,10 @@
         "accounts": "accounts",
         "features": "Features enabled",
         "note": "This creates your accounting foundation and starting workspace. The readiness guide will show anything still needed before your first live posting. Every optional capability remains adjustable from Company Settings → Features.",
-        "notePreserved": "This updates company classification and workspace recommendations without changing the existing chart or posted history. Every optional capability remains adjustable from Company Settings → Features."
+        "notePreserved": "This updates company classification and workspace recommendations without changing the existing chart or posted history. Every optional capability remains adjustable from Company Settings → Features.",
+        "payrollPack": "Payroll country pack",
+        "payrollPackCanada": "Canada (CRA T4127)",
+        "payrollPackNone": "None — install later from Payroll setup"
       },
       "applying": {
         "title": "Setting up your books…",
@@ -2989,6 +2996,30 @@
           "title": "Healthcare Practice",
           "description": "Medical and dental practices. Patient AR, medical supplies, and equipment."
         }
+      },
+      "payroll": {
+        "title": "Set up payroll",
+        "description": "Payroll runs on installable country packs — each pack brings that jurisdiction's statutory withholding engine and components.",
+        "packQuestion": "Which country pack should be installed?",
+        "packs": {
+          "canada": {
+            "title": "Canada",
+            "description": "CRA T4127 statutory engine, all provinces & territories, verified against CRA PDOC."
+          },
+          "us": {
+            "title": "United States",
+            "description": "Planned — not yet available."
+          }
+        },
+        "checklist": {
+          "title": "Finishing payroll after this walkthrough",
+          "pack": "The selected country pack installs automatically when you apply this setup.",
+          "accounts": "Point the posting accounts (wages, net pay, withholding liabilities) at your chart in",
+          "accountsLink": "Payroll setup → Accounts & posting",
+          "schedule": "Create your first pay schedule in",
+          "scheduleLink": "Payroll setup → Pay schedules"
+        },
+        "installError": "Payroll was enabled, but the country pack could not be installed. You can install it from Payroll setup → Country packs."
       }
     }
   },
@@ -3271,7 +3302,7 @@
     },
     "payroll": {
       "title": "Payroll",
-      "description": "Canadian payroll: pay schedules, employee TD1 profiles, CRA statutory withholdings (T4127), pay runs, and remittance liabilities."
+      "description": "Pay runs, pay schedules, employee profiles, statutory withholding country packs, and remittance liabilities. Canada (CRA T4127) available today; United States planned."
     },
     "projectScheduling": {
       "title": "Project Scheduling",

@@ -1331,6 +1331,7 @@ export const SETUP_ENTITIES: SetupEntity[] = [
     table: 'pay_schedules',
     groupKey: 'workforce',
     featureKey: 'payroll',
+    rehomed: true, // subtab of the Payroll setup workspace
     iconKey: 'calendar',
     orgScoped: true,
     actorCols: true,
@@ -1359,6 +1360,7 @@ export const SETUP_ENTITIES: SetupEntity[] = [
     table: 'pay_components',
     groupKey: 'workforce',
     featureKey: 'payroll',
+    rehomed: true, // subtab of the Payroll setup workspace
     iconKey: 'coins',
     orgScoped: true,
     actorCols: true,
@@ -1400,6 +1402,7 @@ export const SETUP_ENTITIES: SetupEntity[] = [
     table: 'union_agreements',
     groupKey: 'workforce',
     featureKey: 'payroll',
+    rehomed: true, // subtab of the Payroll setup workspace
     iconKey: 'users',
     orgScoped: true,
     actorCols: true,

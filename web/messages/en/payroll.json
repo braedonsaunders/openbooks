@@ -1,6 +1,6 @@
 {
   "title": "Payroll",
-  "description": "Pay runs, employee payroll profiles, and CRA statutory withholdings.",
+  "description": "Pay runs, employee payroll profiles, and statutory withholdings.",
   "tabs": {
     "runs": "Pay runs",
     "employees": "Employees ({count})"
@@ -110,12 +110,9 @@
   },
   "settingsPage": {
     "title": "Payroll",
-    "description": "Control accounts for the pay-run posting, the wages destination, and the CRA remittance vendor.",
-    "schedulesLink": "Pay schedules",
-    "componentsLink": "Pay components",
+    "description": "Install payroll country packs, wire the posting accounts, and manage pay schedules, components, and union agreements.",
     "saved": "Saved.",
     "save": "Save",
-    "seeded": "Standard components installed.",
     "accounts": {
       "title": "Control accounts",
       "description": "Where committed pay runs post. The burden account falls back to wage expense when unset."
@@ -129,12 +126,6 @@
       "laborClearing": "Labor clearing (wash standard cost)",
       "help": "Labor clearing washes the standard cost posted at time approval; it needs the labor clearing control account from Labor Costing."
     },
-    "seed": {
-      "title": "Standard components",
-      "description": "Install the statutory component set (base pay, overtime, bonus, vacation, CPP, EI, QPIP, income tax). Existing components are left untouched.",
-      "count": "{count} installed",
-      "action": "Seed standard components"
-    },
     "fields": {
       "wageExpenseAccountId": "Wage expense",
       "burdenExpenseAccountId": "Employer burden expense",
@@ -145,6 +136,37 @@
       "vacationPayableAccountId": "Vacation payable",
       "wagesTo": "Wages post to",
       "craRemittancePartyId": "CRA remittance vendor"
+    },
+    "tabsAria": "Payroll setup sections",
+    "tabs": {
+      "packs": "Country packs",
+      "accounts": "Accounts & posting",
+      "schedules": "Pay schedules",
+      "components": "Components",
+      "union": "Union"
+    },
+    "packs": {
+      "installed": "Installed",
+      "planned": "Planned",
+      "plannedAction": "Not yet available",
+      "install": "Install pack",
+      "reinstall": "Re-run component seed",
+      "installSuccess": "Country pack installed.",
+      "componentCount": "{count, plural, one {# statutory component installed} other {# statutory components installed}}",
+      "hint": "Installing a pack seeds the statutory pay components and switches on that jurisdiction's withholding engine. Existing components are never overwritten.",
+      "canada": {
+        "title": "Canada",
+        "description": "Statutory withholding for Canadian pay runs, remittances, and year-end.",
+        "edition": "{edition, selectordinal, one {#st} two {#nd} few {#rd} other {#th}} edition (effective {effective})",
+        "engine": "CRA T4127 statutory engine —",
+        "coverage": "All provinces & territories. Quebec: QPP, QPIP, and the federal side; provincial income tax is administered by Revenu Québec and is not included.",
+        "components": "Statutory pay components: base pay, overtime, bonus, vacation, income tax, CPP, EI, QPIP.",
+        "verified": "Verified penny-exact against CRA PDOC."
+      },
+      "us": {
+        "title": "United States",
+        "description": "Federal and state withholding for US pay runs. Planned — not yet available."
+      }
     }
   }
 }
