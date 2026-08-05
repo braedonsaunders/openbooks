@@ -9,6 +9,7 @@ import {
   createScratchOrg,
   createScratchUser,
   dropScratchOrg,
+  dropScratchOrgReporting,
   orgRowCounts,
   seedDraftDocument,
 } from "./test-fixtures.ts";
@@ -88,7 +89,7 @@ test("dropScratchOrg removes every org-scoped row", { skip: !DB }, async () => {
     // And a second call is an idempotent no-op.
     await dropScratchOrg(org.orgId);
   } finally {
-    if (!dropped) await dropScratchOrg(org.orgId).catch(() => {});
+    if (!dropped) await dropScratchOrgReporting(org.orgId);
   }
 });
 

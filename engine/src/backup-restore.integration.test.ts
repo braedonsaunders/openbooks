@@ -16,7 +16,7 @@ import {
   sealSecret as sealEmailSecret,
   unsealSecret as unsealEmailSecret,
 } from "@openbooks/emails";
-import { createScratchOrg, createScratchUser, dropScratchOrg } from "./test-fixtures.ts";
+import { createScratchOrg, createScratchUser, dropScratchOrg, dropScratchOrgReporting } from "./test-fixtures.ts";
 
 const ENABLED = !!process.env.OPENBOOKS_DB_URL && !!process.env.OPENBOOKS_DATA_KEY && process.env.OPENBOOKS_RESTORE_DRILL === "1";
 
@@ -104,9 +104,11 @@ test("offline drill exports, removes, restores, and revalidates an organization"
 
     const archiveLines = gunzipSync(await readFile(archive)).toString("utf8").split("\n");
     const tamperedHeader = JSON.parse(archiveLines[0]!) as { dataKeyCheck: string };
-    tamperedHeader.dataKeyCheck = `${tamperedHeader.dataKeyCheck.slice(0, -1)}${
-      tamperedHeader.dataKeyCheck.endsWith("A") ? "B" : "A"
-    }`;
+    // Flip the first IV character: the canary ends in the base64 auth tag,
+    // whose trailing '=' padding Node's lenient decoder ignores — flipping THE
+    // LAST char was a no-op tamper that decoded to the same bytes.
+    const canaryBody = tamperedHeader.dataKeyCheck.slice("enc:v1:".length);
+    tamperedHeader.dataKeyCheck = `enc:v1:${canaryBody[0] === "A" ? "B" : "A"}${canaryBody.slice(1)}`;
     archiveLines[0] = JSON.stringify(tamperedHeader);
     const wrongDataKeyBytes = gzipSync(archiveLines.join("\n"));
     await writeFile(wrongDataKeyArchive, wrongDataKeyBytes, { mode: 0o600 });
@@ -236,8 +238,8 @@ test("offline drill exports, removes, restores, and revalidates an organization"
     assert.equal(resetAuth.rows[0].mfa_count, 0);
     assert.equal(resetAuth.rows[0].oidc_count, 1);
   } finally {
-    await dropScratchOrg(source.orgId).catch(() => {});
-    await dropScratchOrg(external.orgId).catch(() => {});
+    await dropScratchOrgReporting(source.orgId);
+    await dropScratchOrgReporting(external.orgId);
     await rm(root, { recursive: true, force: true });
   }
 });
@@ -267,8 +269,8 @@ test("one-org export rejects outbound cross-organization foreign keys", { skip: 
       values (${production.orgId}, ${sandbox.orgId}, 'External sandbox dependency', 'draft')`);
     await expectRejectedExport(production.orgId, "production.json.gz", /change_sets_sandbox_org_id_fkey/);
   } finally {
-    await dropScratchOrg(sandbox.orgId).catch(() => {});
-    await dropScratchOrg(production.orgId).catch(() => {});
+    await dropScratchOrgReporting(sandbox.orgId);
+    await dropScratchOrgReporting(production.orgId);
     await rm(root, { recursive: true, force: true });
   }
 });
