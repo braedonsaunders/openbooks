@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/db.ts'
+import { US_STATES } from '@openbooks/engine/src/payroll/us/rates.ts'
 import { guardFeaturePermission } from '../../../../lib/feature-gates'
 import { canonicalDecimal, compareDecimal } from '../../../../lib/exact-decimal'
 import { isUuid } from '../../../../lib/list-params'
@@ -8,15 +9,17 @@ import { isUuid } from '../../../../lib/list-params'
 export const dynamic = 'force-dynamic'
 
 /**
- * Employee payroll profiles (TD1 facts: schedule, province, claim codes,
+ * Employee payroll profiles (TD1/W-4 facts: schedule, jurisdiction, claims,
  * exemptions, vacation policy). One profile per employee — POST upserts on the
- * employee. TD1 amounts and exemptions are confidential; the whole surface is
- * gated on payroll.manage.
+ * employee. Claim amounts and exemptions are confidential; the whole surface
+ * is gated on payroll.manage.
  */
 
 const PROVINCES = new Set([
   'AB', 'BC', 'MB', 'NB', 'NL', 'NS', 'NT', 'NU', 'ON', 'PE', 'QC', 'SK', 'YT', 'ZZ',
 ])
+
+const FILING_STATUSES = new Set(['single', 'married_joint', 'head_household'])
 
 const MONEY_KEYS = [
   'federalClaimAmount',
@@ -26,6 +29,9 @@ const MONEY_KEYS = [
   'authorizedAnnualDeductions',
   'authorizedFederalCredits',
   'authorizedProvincialCredits',
+  'dependentCredits',
+  'otherIncomeAnnual',
+  'deductionsAnnual',
 ] as const
 
 function claimCode(value: unknown): number | null | 'invalid' {
@@ -40,10 +46,13 @@ export async function GET() {
   if (gate instanceof NextResponse) return gate
   const profiles = (await db.execute(sql`
     select prof.id, prof.employee_party_id, p.display_name as employee_name,
-           prof.pay_schedule_id, s.name as schedule_name, prof.province, prof.pay_basis,
+           prof.pay_schedule_id, s.name as schedule_name, prof.country, prof.province, prof.pay_basis,
            prof.federal_claim_code, prof.federal_claim_amount,
            prof.provincial_claim_code, prof.provincial_claim_amount,
            prof.additional_tax_per_period, prof.cpp_exempt, prof.ei_exempt, prof.tax_exempt,
+           prof.filing_status, prof.multiple_jobs, prof.dependent_credits,
+           prof.other_income_annual, prof.deductions_annual,
+           prof.w4_pre_2020, prof.w4_allowances, prof.fica_exempt, prof.futa_exempt,
            prof.vacation_percent, prof.vacation_method, prof.is_active
       from employee_payroll_profiles prof
       join parties p on p.id = prof.employee_party_id and p.org_id = prof.org_id
@@ -62,8 +71,28 @@ export async function POST(req: Request) {
 
   if (!isUuid(body.employeePartyId)) return NextResponse.json({ error: 'employeePartyId required' }, { status: 422 })
   if (!isUuid(body.payScheduleId)) return NextResponse.json({ error: 'payScheduleId required' }, { status: 422 })
+  const country = body.country === 'US' ? 'US' : 'CA'
   const province = String(body.province ?? '')
-  if (!PROVINCES.has(province)) return NextResponse.json({ error: 'invalid province' }, { status: 422 })
+  if (country === 'US') {
+    if (!(US_STATES as readonly string[]).includes(province)) {
+      return NextResponse.json({ error: 'invalid state' }, { status: 422 })
+    }
+  } else if (!PROVINCES.has(province)) {
+    return NextResponse.json({ error: 'invalid province' }, { status: 422 })
+  }
+  const filingStatus = body.filingStatus == null || body.filingStatus === ''
+    ? null : String(body.filingStatus)
+  if (filingStatus !== null && !FILING_STATUSES.has(filingStatus)) {
+    return NextResponse.json({ error: 'invalid filingStatus' }, { status: 422 })
+  }
+  let w4Allowances: number | null = null
+  if (body.w4Allowances !== null && body.w4Allowances !== undefined && body.w4Allowances !== '') {
+    const n = Number(body.w4Allowances)
+    if (!Number.isInteger(n) || n < 0 || n > 99) {
+      return NextResponse.json({ error: 'invalid w4Allowances' }, { status: 422 })
+    }
+    w4Allowances = n
+  }
   const payBasis = body.payBasis === 'salary' ? 'salary' : 'hourly'
   const vacationMethod = body.vacationMethod === 'pay_each_period' ? 'pay_each_period' : 'accrue'
 
@@ -81,6 +110,9 @@ export async function POST(req: Request) {
     authorizedAnnualDeductions: null,
     authorizedFederalCredits: null,
     authorizedProvincialCredits: null,
+    dependentCredits: null,
+    otherIncomeAnnual: null,
+    deductionsAnnual: null,
   }
   for (const key of MONEY_KEYS) {
     const raw = body[key]
@@ -113,21 +145,28 @@ export async function POST(req: Request) {
 
   await db.execute(sql`
     insert into employee_payroll_profiles
-      (org_id, employee_party_id, pay_schedule_id, province, pay_basis,
+      (org_id, employee_party_id, pay_schedule_id, country, province, pay_basis,
        federal_claim_code, federal_claim_amount, provincial_claim_code, provincial_claim_amount,
        additional_tax_per_period, prescribed_zone_deduction, authorized_annual_deductions,
        authorized_federal_credits, authorized_provincial_credits,
+       filing_status, multiple_jobs, dependent_credits, other_income_annual, deductions_annual,
+       w4_pre_2020, w4_allowances, fica_exempt, futa_exempt,
        cpp_exempt, ei_exempt, tax_exempt, vacation_percent, vacation_method, is_active,
        created_by, updated_by)
-    values (${orgId}, ${body.employeePartyId}, ${body.payScheduleId}, ${province}, ${payBasis},
+    values (${orgId}, ${body.employeePartyId}, ${body.payScheduleId}, ${country}, ${province}, ${payBasis},
             ${federalClaimCode}, ${money.federalClaimAmount}, ${provincialClaimCode}, ${money.provincialClaimAmount},
             ${money.additionalTaxPerPeriod}, ${money.prescribedZoneDeduction}, ${money.authorizedAnnualDeductions},
             ${money.authorizedFederalCredits}, ${money.authorizedProvincialCredits},
+            ${filingStatus}, ${body.multipleJobs === true}, ${money.dependentCredits},
+            ${money.otherIncomeAnnual}, ${money.deductionsAnnual},
+            ${body.w4Pre2020 === true}, ${w4Allowances},
+            ${body.ficaExempt === true}, ${body.futaExempt === true},
             ${body.cppExempt === true}, ${body.eiExempt === true}, ${body.taxExempt === true},
             ${vacationPercent}, ${vacationMethod}, ${body.isActive !== false},
             ${userId}, ${userId})
     on conflict (org_id, employee_party_id)
-    do update set pay_schedule_id = excluded.pay_schedule_id, province = excluded.province,
+    do update set pay_schedule_id = excluded.pay_schedule_id, country = excluded.country,
+                  province = excluded.province,
                   pay_basis = excluded.pay_basis,
                   federal_claim_code = excluded.federal_claim_code,
                   federal_claim_amount = excluded.federal_claim_amount,
@@ -138,6 +177,12 @@ export async function POST(req: Request) {
                   authorized_annual_deductions = excluded.authorized_annual_deductions,
                   authorized_federal_credits = excluded.authorized_federal_credits,
                   authorized_provincial_credits = excluded.authorized_provincial_credits,
+                  filing_status = excluded.filing_status, multiple_jobs = excluded.multiple_jobs,
+                  dependent_credits = excluded.dependent_credits,
+                  other_income_annual = excluded.other_income_annual,
+                  deductions_annual = excluded.deductions_annual,
+                  w4_pre_2020 = excluded.w4_pre_2020, w4_allowances = excluded.w4_allowances,
+                  fica_exempt = excluded.fica_exempt, futa_exempt = excluded.futa_exempt,
                   cpp_exempt = excluded.cpp_exempt, ei_exempt = excluded.ei_exempt,
                   tax_exempt = excluded.tax_exempt, vacation_percent = excluded.vacation_percent,
                   vacation_method = excluded.vacation_method, is_active = excluded.is_active,

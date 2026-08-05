@@ -58,9 +58,10 @@ export const FEATURES: FeatureDef[] = [
   // Schedule-of-values billing remains a project-type procedure, not a gate.
   { key: 'projects', defaultEnabled: true, category: 'operations', navModules: ['projects', 'field-tickets', 'lien-waivers'] },
   { key: 'timeTracking', defaultEnabled: true, category: 'operations', navModules: ['timesheets'], parentKey: 'projects' },
-  // Payroll — Canadian (T4127) statutory engine, pay runs, stubs, remittance
-  // liabilities. Off by default: enabling payroll is a deliberate adoption
-  // decision (TD1 profiles, control accounts, schedules must be configured).
+  // Payroll — country-pack statutory engines (CA T4127, US Pub 15-T), pay
+  // runs, stubs, remittance liabilities. Off by default: enabling payroll is
+  // a deliberate adoption decision (TD1/W-4 profiles, control accounts,
+  // schedules must be configured).
   { key: 'payroll', defaultEnabled: false, category: 'operations', navModules: ['payroll'], recommends: ['timeTracking'] },
   { key: 'fieldTickets', defaultEnabled: false, category: 'operations', navModules: ['field-tickets'], parentKey: 'projects' },
   // Project scheduling: critical-path Gantt, work-breakdown outline, working

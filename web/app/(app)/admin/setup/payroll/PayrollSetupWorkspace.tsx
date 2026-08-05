@@ -5,8 +5,9 @@ import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { useTranslations } from 'next-intl'
 import { toast } from 'sonner'
-import { Button, Label, Select } from '@openbooks/ui'
-import type { PayrollSettings } from '@openbooks/engine/src/payroll-run.ts'
+import { Button, Input, Label, Select } from '@openbooks/ui'
+import type { PayrollSettings, UsPayrollConfig } from '@openbooks/engine/src/payroll-run.ts'
+import { US_STATES } from '@openbooks/engine/src/payroll/us/rates.ts'
 
 // Generic, jurisdiction-free slots only. Statutory liabilities (CPP/EI/income
 // tax/…) are declared by the installed country packs and rendered from
@@ -20,10 +21,17 @@ export interface PackSlots {
   slots: { key: string; accountId: string | null }[]
 }
 
+interface SuiRow {
+  state: string
+  rate: string
+  wageBase: string
+}
+
 /** Accounts & posting tab — generic accounts + pack-declared statutory slots. */
 export function PayrollSetupWorkspace(props: {
   settings: PayrollSettings
   packs: PackSlots[]
+  us: UsPayrollConfig
   accounts: { id: string; label: string }[]
   vendors: { id: string; label: string }[]
 }) {
@@ -41,6 +49,13 @@ export function PayrollSetupWorkspace(props: {
   )
   const [wagesTo, setWagesTo] = useState<'expense' | 'labor_clearing'>(props.settings.wagesTo)
   const [craRemittancePartyId, setCraRemittancePartyId] = useState(props.settings.craRemittancePartyId ?? '')
+  const usInstalled = props.packs.some((pack) => pack.country === 'US')
+  const [futaRate, setFutaRate] = useState(props.us.futaRate ?? '')
+  const [suiRows, setSuiRows] = useState<SuiRow[]>(() =>
+    Object.entries(props.us.sui).map(([state, entry]) => ({
+      state, rate: entry.rate, wageBase: entry.wageBase,
+    })),
+  )
 
   async function save() {
     setBusy(true)
@@ -56,6 +71,16 @@ export function PayrollSetupWorkspace(props: {
             country,
             Object.fromEntries(Object.entries(slots).map(([key, value]) => [key, value || null])),
           ])),
+          ...(usInstalled
+            ? {
+                us: {
+                  futaRate: futaRate || null,
+                  sui: Object.fromEntries(suiRows
+                    .filter((row) => row.state && row.rate && row.wageBase)
+                    .map((row) => [row.state, { rate: row.rate, wageBase: row.wageBase }])),
+                },
+              }
+            : {}),
         }),
       })
       const j = await res.json()
@@ -150,6 +175,85 @@ export function PayrollSetupWorkspace(props: {
                 </div>
               ) : null}
             </div>
+            {pack.country === 'US' ? (
+              <div className="space-y-3 border-t border-slate-100 pt-3 dark:border-slate-800">
+                <div>
+                  <h4 className="text-sm font-medium text-slate-900 dark:text-slate-100">{t('usConfig.title')}</h4>
+                  <p className="text-sm text-slate-500 dark:text-slate-400">{t('usConfig.description')}</p>
+                </div>
+                <div className="grid gap-3 sm:grid-cols-2">
+                  <div>
+                    <Label htmlFor="ps-futa-rate">{t('usConfig.futaRate')}</Label>
+                    <Input
+                      id="ps-futa-rate"
+                      inputMode="decimal"
+                      value={futaRate}
+                      onChange={(e) => setFutaRate(e.target.value)}
+                      placeholder="0.006"
+                    />
+                    <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">{t('usConfig.futaRateHelp')}</p>
+                  </div>
+                </div>
+                <div className="space-y-2">
+                  <Label>{t('usConfig.suiTitle')}</Label>
+                  <p className="text-xs text-slate-500 dark:text-slate-400">{t('usConfig.suiHelp')}</p>
+                  {suiRows.map((row, index) => (
+                    <div key={index} className="flex flex-wrap items-end gap-2">
+                      <div>
+                        <Label htmlFor={`ps-sui-state-${index}`}>{t('usConfig.suiState')}</Label>
+                        <Select
+                          id={`ps-sui-state-${index}`}
+                          value={row.state}
+                          onChange={(e) => setSuiRows((rows) =>
+                            rows.map((r, i) => (i === index ? { ...r, state: e.target.value } : r)))}
+                        >
+                          <option value="">—</option>
+                          {US_STATES.map((state) => (
+                            <option key={state} value={state}>{state}</option>
+                          ))}
+                        </Select>
+                      </div>
+                      <div>
+                        <Label htmlFor={`ps-sui-rate-${index}`}>{t('usConfig.suiRate')}</Label>
+                        <Input
+                          id={`ps-sui-rate-${index}`}
+                          inputMode="decimal"
+                          className="w-28"
+                          value={row.rate}
+                          onChange={(e) => setSuiRows((rows) =>
+                            rows.map((r, i) => (i === index ? { ...r, rate: e.target.value } : r)))}
+                          placeholder="0.027"
+                        />
+                      </div>
+                      <div>
+                        <Label htmlFor={`ps-sui-base-${index}`}>{t('usConfig.suiWageBase')}</Label>
+                        <Input
+                          id={`ps-sui-base-${index}`}
+                          inputMode="decimal"
+                          className="w-32"
+                          value={row.wageBase}
+                          onChange={(e) => setSuiRows((rows) =>
+                            rows.map((r, i) => (i === index ? { ...r, wageBase: e.target.value } : r)))}
+                          placeholder="9000"
+                        />
+                      </div>
+                      <Button
+                        variant="ghost"
+                        onClick={() => setSuiRows((rows) => rows.filter((_, i) => i !== index))}
+                      >
+                        {t('usConfig.removeState')}
+                      </Button>
+                    </div>
+                  ))}
+                  <Button
+                    variant="outline"
+                    onClick={() => setSuiRows((rows) => [...rows, { state: '', rate: '', wageBase: '' }])}
+                  >
+                    {t('usConfig.addState')}
+                  </Button>
+                </div>
+              </div>
+            ) : null}
           </section>
         ))
       )}
