@@ -3,6 +3,7 @@ import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/db.ts'
 import { calculatePayRun, commitPayRun, PayrollError, previewPayRunGl } from '@openbooks/engine/src/payroll-run.ts'
 import { recordPayRunPayment } from '@openbooks/engine/src/payroll-payment.ts'
+import { emailRunStubs } from '../../../../../lib/payroll-outputs'
 import { mutatePayRunAdjustment } from '@openbooks/engine/src/payroll-run-adjustments.ts'
 import { guardFeaturePermission } from '../../../../../lib/feature-gates'
 import { isUuid } from '../../../../../lib/list-params'
@@ -150,6 +151,10 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
         },
       })
       return NextResponse.json({ ok: true })
+    }
+    if (body.action === 'email-stubs') {
+      const result = await emailRunStubs(gate.user.orgId, id)
+      return NextResponse.json({ ok: true, ...result })
     }
     if (body.action === 'record-payment') {
       if (!isUuid(body.bankAccountId)) return NextResponse.json({ error: 'choose a bank account' }, { status: 422 })

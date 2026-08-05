@@ -135,7 +135,12 @@
       "viewPayment": "View payment entry",
       "bankAccount": "Bank account",
       "recordPayment": "Record payment",
-      "paymentRecorded": "Payment recorded — net pay settled."
+      "paymentRecorded": "Payment recorded — net pay settled.",
+      "printStubs": "Print all stubs",
+      "register": "Payroll register",
+      "emailStubs": "Email stubs",
+      "stubsEmailed": "{sent, plural, one {# stub} other {# stubs}} emailed.",
+      "stubsEmailedPartial": "{sent} emailed; skipped (no email or failed): {skipped}"
     },
     "adjust": {
       "title": "Adjustments",
@@ -455,5 +460,12 @@
       "box5": "Box 5 Medicare wages",
       "box6": "Box 6 Medicare tax"
     }
+  },
+  "register": {
+    "title": "Payroll register",
+    "print": "Print",
+    "cppFica": "CPP / FICA",
+    "otherDeductions": "Other deductions",
+    "totals": "Totals ({count, plural, one {# employee} other {# employees}})"
   }
 }
