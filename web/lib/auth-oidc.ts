@@ -7,7 +7,9 @@ import { verifyOidcIdToken, type VerifiedOidcClaims } from "./auth-oidc-token";
 
 export const OIDC_FLOW_COOKIE = "ob_oidc_flow";
 const FLOW_TTL_S = 10 * 60;
-const SESSION_SECRET = requireSessionSecret(env);
+function sessionSecret(): string {
+  return requireSessionSecret(env);
+}
 
 type OidcConfig = {
   issuer: string;
@@ -118,7 +120,7 @@ async function jwks(url: string): Promise<Record<string, unknown>[]> {
 }
 
 function flowSignature(payload: string): string {
-  return createHmac("sha256", SESSION_SECRET)
+  return createHmac("sha256", sessionSecret())
     .update(`openbooks:oidc-flow:${payload}`)
     .digest("base64url");
 }
