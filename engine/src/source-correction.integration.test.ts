@@ -507,6 +507,47 @@ test(
       };
       assert.deepEqual(afterFailedReplay.rows, beforeFailedReplay.rows);
 
+      const convergedRetry = await db.transaction(async (tx) => {
+        await tx.execute(
+          sql`select set_config('app.current_org', ${org.orgId}, true)`,
+        );
+        await tx.execute(sql`set local openbooks.amend = on`);
+        await tx.execute(sql`set local openbooks.migration = on`);
+        await tx.execute(sql`
+          update documents set subtotal = 130, total = 130, updated_at = now()
+           where id = ${documentId}
+        `);
+        await tx.execute(sql`
+          update document_lines set unit_price = 130, amount = 130, updated_at = now()
+           where document_id = ${documentId}
+        `);
+        return regenerateGlImpactTx(tx, documentId, deps, actorId, {
+          actorId,
+          requestId,
+          reason: "Authorized retry after an atomic connector replay failure",
+          replayMode: "authenticated_connector_historical_replay",
+        });
+      });
+      assert.equal(convergedRetry.changed, true);
+      const afterConvergedRetry = (await db.execute(sql`
+        select line.amount::text as amount,
+               (select count(*)::int from journal_entries
+                 where source_document_id = ${documentId}) as entries,
+               (select coalesce(sum(journal_line.amount), 0)::text
+                  from journal_lines journal_line
+                  join journal_entries journal_entry
+                    on journal_entry.id = journal_line.entry_id
+                 where journal_entry.source_document_id = ${documentId}
+                   and journal_line.account_id = ${org.accounts.cogs}) as cogs_total
+          from document_lines line
+         where line.document_id = ${documentId}
+      `)) as unknown as {
+        rows: Array<{ amount: string; entries: number; cogs_total: string }>;
+      };
+      assert.deepEqual(afterConvergedRetry.rows, [
+        { amount: "130.0000", entries: 5, cogs_total: "130.0000" },
+      ]);
+
       await db.execute(sql`
         insert into documents
           (id, org_id, kind, document_number, party_id, subsidiary_id,
@@ -544,7 +585,7 @@ test(
           from journal_entries
          where source_document_id = ${documentId}
       `);
-      assert.equal((chain.rows[0] as { entries: number }).entries, 3);
+      assert.equal((chain.rows[0] as { entries: number }).entries, 5);
       assert.notEqual(corrected.entryId, originalEntryId);
     } finally {
       await dropScratchOrg(org.orgId);

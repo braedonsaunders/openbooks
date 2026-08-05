@@ -313,6 +313,26 @@ export async function verifyCurrentLedgerState(
   orgId: string,
 ): Promise<SourceLedgerVerification> {
   const refKey = source.refKey;
+  // A connector proves the projection it owns, not unrelated native activity
+  // that happens to use an account imported from that source. Source documents
+  // carry the adapter ref on their document; connector-only residual true-ups
+  // carry the explicit sourceProjection marker below. Without this boundary a
+  // valid OpenBooks-native posting on a mapped account poisons mirror parity,
+  // even though no connector write drifted.
+  const sourceProjection = sql`(
+    exists (
+      select 1
+        from documents source_document
+       where source_document.id = e.source_document_id
+         and source_document.org_id = e.org_id
+         and source_document.custom->>${refKey} is not null
+    )
+    or (
+      e.custom->'sourceProjection'->>'kind' = 'connector_trueup'
+      and e.custom->'sourceProjection'->>'sourceName' = ${source.name}
+      and e.custom->'sourceProjection'->>'refKey' = ${refKey}
+    )
+  )`;
   const theirs = await source.trialBalance();
   const ours = (await db.execute(sql`
     select a.custom->>${refKey} as ref, sum(l.amount) as bal
@@ -323,6 +343,7 @@ export async function verifyCurrentLedgerState(
         on a.id = l.account_id and a.org_id = l.org_id
      where l.org_id = ${orgId}
        and e.status in ('posted', 'reversed')
+       and ${sourceProjection}
        and a.custom->>${refKey} is not null
      group by 1
   `)) as unknown as { rows: { ref: string; bal: string }[] };
@@ -375,6 +396,7 @@ export async function verifyCurrentLedgerState(
         on a.id = l.account_id and a.org_id = l.org_id
      where l.org_id = ${orgId}
        and e.status in ('posted', 'reversed')
+       and ${sourceProjection}
        and a.custom->>${refKey} is not null
      group by 1, 2, 3
     having sum(l.amount) <> 0
@@ -408,6 +430,7 @@ export async function verifyCurrentLedgerState(
           on a.id = l.account_id and a.org_id = l.org_id
        where l.org_id = ${orgId}
          and e.status in ('posted', 'reversed')
+         and ${sourceProjection}
          and p.custom->>${refKey} is not null
          and a.custom->>${refKey} is not null
        group by 1, 2, 3, 4
