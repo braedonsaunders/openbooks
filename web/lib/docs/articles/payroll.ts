@@ -2,11 +2,11 @@ import type { DocArticle } from "../types";
 
 export const payroll: DocArticle = {
   slug: "payroll",
-  title: "Canadian Payroll",
+  title: "Payroll",
   category: "projects",
   order: 6,
   summary:
-    "Run Canadian payroll: CRA T4127 statutory deductions, pay schedules, TD1 profiles, pay runs, union fringes, and GL posting.",
+    "Run payroll with installable country packs: CRA T4127 (Canada) and IRS Pub 15-T (US) statutory engines, pay schedules, TD1/W-4 profiles, pay runs, union fringes, and GL posting.",
   updated: "2026-08-04",
   keywords: [
     "payroll",
@@ -18,6 +18,13 @@ export const payroll: DocArticle = {
     "income tax",
     "TD1",
     "T4127",
+    "W-4",
+    "Pub 15-T",
+    "FICA",
+    "Social Security",
+    "Medicare",
+    "FUTA",
+    "SUI",
     "claim code",
     "vacation pay",
     "union",
@@ -28,18 +35,31 @@ export const payroll: DocArticle = {
     "stub",
   ],
   related: ["labor-costing", "overhead-costing"],
-  body: `# Canadian Payroll
+  body: `# Payroll
 
 Payroll is an optional feature (Setup → Features → Payroll, off by default).
-It computes Canadian statutory deductions with the CRA T4127 formulas — the
-same publication the CRA gives payroll software vendors — using constants
+Statutory withholding is provided by installable country packs — install the
+jurisdictions you employ in under Setup → Payroll → Country packs, and one
+pay run can mix employees across them.
+
+The Canada pack computes statutory deductions with the CRA T4127 formulas —
+the same publication the CRA gives payroll software vendors — using constants
 pinned to the edition in force on each pay date. The CRA publishes the guide
 twice a year (January and July); each edition ships with OpenBooks as
 versioned data, never as user-editable formulas, and every calculation stores
 its full factor trace (A, K1 through K4, T1 through T4, and so on) on the pay
 stub so any amount can be explained line by line.
 
-## What the engine covers
+The United States pack computes federal withholding with the IRS Publication
+15-T percentage method for automated payroll systems, plus Social Security,
+Medicare (including Additional Medicare), FUTA, and configurable state
+unemployment insurance. It currently covers federal taxes and the nine states
+with no wage withholding (Alaska, Florida, Nevada, New Hampshire, South
+Dakota, Tennessee, Texas, Washington, Wyoming); employees in other states
+fail calculation with a clear error rather than producing incomplete stubs —
+state income tax ships in a later wave.
+
+## What the Canada engine covers
 
 - Federal and provincial/territorial income tax for every jurisdiction,
   including the Ontario surtax, Ontario Health Premium, Ontario and BC tax
@@ -55,6 +75,21 @@ stub so any amount can be explained line by line.
 - Quebec provincial income tax is administered by Revenu Quebec and is out of
   scope; QPP, QPIP, and the federal side of Quebec employment are handled.
 
+## What the US engine covers
+
+- Federal income tax with the Pub 15-T annual percentage method: 2020-or-later
+  W-4s (filing status, the Step 2 multiple-jobs checkbox, Step 3 dependent
+  credits, Step 4 other income, deductions, and extra withholding) and
+  2019-or-earlier W-4s via withholding allowances.
+- Social Security with the annual wage-base maximum, Medicare with the
+  employee-only Additional Medicare tax over 200,000 dollars, and the
+  employer matches.
+- Supplemental wages (bonuses, retroactive pay) at the optional flat rate,
+  with the mandatory higher rate past 1,000,000 dollars year to date.
+- FUTA at a configurable effective rate (for credit-reduction states) and
+  state unemployment insurance at the employer's own experience rate and each
+  state's wage base, entered in Setup → Payroll → Accounts & posting.
+
 ## Setup
 
 1. **Accounts** — Setup → Payroll: wage expense, employer burden expense, net
@@ -69,9 +104,10 @@ stub so any amount can be explained line by line.
    pre-1997 alimony (F2).
 3. **Schedules** — weekly, biweekly, semi-monthly, or monthly, anchored to any
    period end. Years with 27 or 53 pay days are supported explicitly.
-4. **Employees** — each employee gets a payroll profile: schedule, province of
-   employment, TD1 claim codes, exemptions, vacation percent (accrue or pay
-   each period), and union membership. Wages are not entered here: payroll
+4. **Employees** — each employee gets a payroll profile: schedule, country
+   and province or state of employment, TD1 claim codes or W-4 elections,
+   exemptions, vacation percent (accrue or pay each period), and union
+   membership. Wages are not entered here: payroll
    resolves the same effective-dated employee wage the costing engine uses,
    so job cost and pay never disagree.
 5. **Opening balances** — adopting mid-year, enter each employee's

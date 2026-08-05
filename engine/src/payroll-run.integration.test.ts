@@ -5,11 +5,13 @@ import { sql } from "drizzle-orm";
 import { db } from "./db.ts";
 import { add, cmp, neg, sum } from "./money.ts";
 import { calculateT4127 } from "./payroll/canada/t4127.ts";
+import { calculatePub15T } from "./payroll/us/pub15t.ts";
+import { setPackSlotAccount } from "./payroll/packs.ts";
 import {
   calculatePayRun, commitPayRun, createPayRun, seedPayrollComponents,
 } from "./payroll-run.ts";
 import { unionRemittanceReport, upsertUnionFringe } from "./payroll-union.ts";
-import { createScratchOrg, dropScratchOrg, seedFlowActors } from "./test-fixtures.ts";
+import { createScratchOrg, dropScratchOrgReporting, seedFlowActors } from "./test-fixtures.ts";
 
 const DB = !!process.env.OPENBOOKS_DB_URL;
 
@@ -167,7 +169,7 @@ test(
       assert.equal(stub2.rows[0]!.factors.C, expected2.cpp);
       assert.equal(stub2.rows[0]!.factors.EI, expected2.ei);
     } finally {
-      await dropScratchOrg(org.orgId).catch(() => {});
+      await dropScratchOrgReporting(org.orgId);
     }
   },
 );
@@ -326,7 +328,236 @@ test(
       const duesRow = report.find((r) => r.fringeCode === "DUES");
       assert.equal(duesRow?.amount, "48.0000");
     } finally {
-      await dropScratchOrg(org.orgId).catch(() => {});
+      await dropScratchOrgReporting(org.orgId);
+    }
+  },
+);
+
+test(
+  "US pay run end to end: salaried Texas employee, W-4 MFJ, FICA/FUTA/SUI, balanced GL",
+  { skip: !DB },
+  async () => {
+    const org = await createScratchOrg();
+    const actorId = (await seedFlowActors(org.orgId)).adminId;
+    try {
+      const account = async (number: string, name: string, type: string) => {
+        const id = randomUUID();
+        await db.execute(sql`
+          insert into accounts (id, org_id, number, name, type, is_summary, is_active, eliminate,
+                                reconcilable, required_dimensions, custom, subsidiary_include_children)
+          values (${id}, ${org.orgId}, ${number}, ${name}, ${type}, false, true, false, false,
+                  '[]'::jsonb, '{}'::jsonb, true)`);
+        return id;
+      };
+      const wageExpense = await account("6000", "Wages expense", "expense");
+      const burdenExpense = await account("6010", "Payroll burden", "expense");
+      const netPayable = await account("2300", "Wages payable", "liability_current");
+      const irsPayable = await account("2330", "Federal payroll taxes payable", "liability_current");
+      const futaPayable = await account("2340", "FUTA payable", "liability_current");
+      const sutaPayable = await account("2350", "SUI payable", "liability_current");
+      await db.execute(sql`
+        update orgs set settings = settings || ${JSON.stringify({
+          payroll: {
+            wageExpenseAccountId: wageExpense,
+            burdenExpenseAccountId: burdenExpense,
+            netPayAccountId: netPayable,
+            wagesTo: "expense",
+            countries: ["US"],
+            us: { sui: { TX: { rate: "0.027", wageBase: "9000" } } },
+          },
+        })}::jsonb where id = ${org.orgId}`);
+
+      await seedPayrollComponents(org.orgId, actorId, "US");
+      // Statutory liabilities land on the components via the pack slots.
+      await setPackSlotAccount(org.orgId, actorId, "US", "fit", irsPayable);
+      await setPackSlotAccount(org.orgId, actorId, "US", "fica", irsPayable);
+      await setPackSlotAccount(org.orgId, actorId, "US", "futa", futaPayable);
+      await setPackSlotAccount(org.orgId, actorId, "US", "suta", sutaPayable);
+
+      // Salaried Texas employee, married filing jointly: $104,000/yr biweekly.
+      const employeeId = randomUUID();
+      await db.execute(sql`
+        insert into parties (id, org_id, kind, display_name, is_active, custom)
+        values (${employeeId}, ${org.orgId}, 'person', 'Tex Worker', true, '{}'::jsonb)`);
+      await db.execute(sql`
+        insert into labor_cost_rates (org_id, employee_party_id, currency, rate, basis, annual_hours,
+                                      effective_from, is_active, created_by, updated_by)
+        values (${org.orgId}, ${employeeId}, 'USD', '104000', 'year', 2080, '2026-01-01', true,
+                ${actorId}, ${actorId})`);
+      const scheduleId = randomUUID();
+      await db.execute(sql`
+        insert into pay_schedules (id, org_id, name, frequency, periods_per_year, anchor_period_end,
+                                   pay_date_offset_days, is_active, created_by, updated_by)
+        values (${scheduleId}, ${org.orgId}, 'Biweekly US', 'biweekly', 26, '2026-07-18', 3, true,
+                ${actorId}, ${actorId})`);
+      await db.execute(sql`
+        insert into employee_payroll_profiles (org_id, employee_party_id, pay_schedule_id, country,
+                                               province, pay_basis, filing_status, is_active,
+                                               created_by, updated_by)
+        values (${org.orgId}, ${employeeId}, ${scheduleId}, 'US', 'TX', 'salary', 'married_joint',
+                true, ${actorId}, ${actorId})`);
+
+      // A second employee in a taxing state must error per-employee, not crash the run.
+      const caStateEmployee = randomUUID();
+      await db.execute(sql`
+        insert into parties (id, org_id, kind, display_name, is_active, custom)
+        values (${caStateEmployee}, ${org.orgId}, 'person', 'Cali Worker', true, '{}'::jsonb)`);
+      await db.execute(sql`
+        insert into labor_cost_rates (org_id, employee_party_id, currency, rate, basis, effective_from,
+                                      is_active, created_by, updated_by)
+        values (${org.orgId}, ${caStateEmployee}, 'USD', '30', 'hour', '2026-01-01', true,
+                ${actorId}, ${actorId})`);
+      await db.execute(sql`
+        insert into employee_payroll_profiles (org_id, employee_party_id, pay_schedule_id, country,
+                                               province, pay_basis, filing_status, is_active,
+                                               created_by, updated_by)
+        values (${org.orgId}, ${caStateEmployee}, ${scheduleId}, 'US', 'CA', 'hourly', 'single',
+                true, ${actorId}, ${actorId})`);
+      await db.execute(sql`
+        insert into time_entries (org_id, employee_party_id, worked_on, hours, status, is_billable,
+                                  billing_status, costing_basis, created_by, updated_by)
+        values (${org.orgId}, ${caStateEmployee}, '2026-07-08', 8, 'approved', false,
+                'unbilled', 'actual', ${actorId}, ${actorId})`);
+
+      const run = await createPayRun({
+        orgId: org.orgId, actorId, payScheduleId: scheduleId,
+        periodStart: "2026-07-05", periodEnd: "2026-07-18",
+      });
+      const result = await calculatePayRun({ orgId: org.orgId, documentId: run.documentId, actorId });
+      assert.equal(result.employees, 1);
+      assert.equal(result.errors.length, 1);
+      assert.match(result.errors[0]!.message, /state income tax withholding for CA/);
+
+      const stubs = (await db.execute(sql`
+        select * from pay_stubs where org_id = ${org.orgId} and pay_run_document_id = ${run.documentId}
+      `)) as unknown as { rows: Record<string, string>[] };
+      assert.equal(stubs.rows.length, 1);
+      const stub = stubs.rows[0]!;
+      assert.equal(stub.gross, "4000.0000"); // 104,000 / 26
+      assert.equal(stub.province, "TX");
+
+      // The stub must match the Pub 15-T engine called directly with the same facts.
+      const expected = calculatePub15T({
+        payDate: "2026-07-21", periodsPerYear: 26, wages: "4000.00",
+        filingStatus: "married_joint",
+        sui: { rate: "0.027", wageBase: "9000" },
+      });
+      const factors = stub.factors as unknown as Record<string, string>;
+      assert.equal(factors.FIT, expected.fit);
+      assert.equal(factors.SS, expected.ss);
+      assert.equal(factors.MED, expected.medicare);
+      assert.equal(factors.FUTA, expected.futa);
+      assert.equal(factors.SUTA, expected.suta);
+      // Hand-worked: AAWA 104,000 − 12,900 = 91,100 → 2,480 + 12% × 47,000
+      // = 8,120 → ÷26 = 312.31; SS 248.00; Medicare 58.00; FUTA 24.00 (first
+      // 7,000 at 0.6%); SUI 108.00 (2.7% of 4,000 under the 9,000 base).
+      assert.equal(expected.fit, "312.3100");
+      assert.equal(expected.ss, "248.0000");
+      assert.equal(expected.medicare, "58.0000");
+      assert.equal(expected.futa, "24.0000");
+      assert.equal(expected.suta, "108.0000");
+
+      const deductions = sum([expected.fit, expected.ss, expected.medicare]);
+      assert.equal(stub.net_pay, add("4000.0000", neg(deductions)));
+      assert.equal(stub.employer_cost,
+        sum([expected.ssEmployer, expected.medicareEmployer, expected.futa, expected.suta]));
+
+      await commitPayRun({ orgId: org.orgId, documentId: run.documentId, actorId });
+      const lines = (await db.execute(sql`
+        select account_id, amount, party_id from document_lines
+         where org_id = ${org.orgId} and document_id = ${run.documentId}
+      `)) as unknown as { rows: { account_id: string; amount: string; party_id: string | null }[] };
+      assert.equal(cmp(sum(lines.rows.map((l) => l.amount)), "0"), 0, "GL projection balances");
+      const sutaLeg = lines.rows.find((l) => l.account_id === sutaPayable);
+      assert.ok(sutaLeg, "SUI liability posts to its slot account");
+      assert.equal(sutaLeg!.amount, neg(expected.suta));
+
+      // Second run: YTD wage bases carry — FUTA has 3,000 of room left.
+      const run2 = await createPayRun({ orgId: org.orgId, actorId, payScheduleId: scheduleId });
+      await calculatePayRun({ orgId: org.orgId, documentId: run2.documentId, actorId });
+      const stub2 = (await db.execute(sql`
+        select factors from pay_stubs
+         where org_id = ${org.orgId} and pay_run_document_id = ${run2.documentId}
+           and employee_party_id = ${employeeId}
+      `)) as unknown as { rows: { factors: Record<string, string> }[] };
+      assert.equal(stub2.rows[0]!.factors.FUTA, "18.0000"); // min(4,000, 7,000 − 4,000) × 0.6%
+      assert.equal(stub2.rows[0]!.factors.SS, "248.0000"); // far from the wage base
+    } finally {
+      await dropScratchOrgReporting(org.orgId);
+    }
+  },
+);
+
+test(
+  "subsidiary-scoped schedule: entity currency and employee filtering",
+  { skip: !DB },
+  async () => {
+    const org = await createScratchOrg();
+    const actorId = (await seedFlowActors(org.orgId)).adminId;
+    try {
+      await seedPayrollComponents(org.orgId, actorId);
+      const usSubId = randomUUID();
+      await db.execute(sql`
+        insert into subsidiaries (id, org_id, parent_id, name, base_currency, country, tax_ids,
+                                  is_elimination, is_active, custom)
+        values (${usSubId}, ${org.orgId}, ${org.subsidiaryId}, 'US Entity', 'USD', 'US',
+                '{}'::jsonb, false, true, '{}'::jsonb)`);
+
+      const mkEmployee = async (name: string, subsidiaryId: string | null, currency: string) => {
+        const id = randomUUID();
+        await db.execute(sql`
+          insert into parties (id, org_id, kind, display_name, subsidiary_id, is_active, custom)
+          values (${id}, ${org.orgId}, 'person', ${name}, ${subsidiaryId}, true, '{}'::jsonb)`);
+        await db.execute(sql`
+          insert into labor_cost_rates (org_id, employee_party_id, currency, rate, basis,
+                                        effective_from, is_active, created_by, updated_by)
+          values (${org.orgId}, ${id}, ${currency}, '40', 'hour', '2026-01-01', true, ${actorId}, ${actorId})`);
+        return id;
+      };
+      const rootEmployee = await mkEmployee("Root Rita", org.subsidiaryId, "CAD");
+      const usEmployee = await mkEmployee("Scoped Sam", usSubId, "USD");
+
+      const scheduleId = randomUUID();
+      await db.execute(sql`
+        insert into pay_schedules (id, org_id, name, frequency, periods_per_year, anchor_period_end,
+                                   pay_date_offset_days, subsidiary_id, is_active, created_by, updated_by)
+        values (${scheduleId}, ${org.orgId}, 'US biweekly', 'biweekly', 26, '2026-07-18', 3,
+                ${usSubId}, true, ${actorId}, ${actorId})`);
+      for (const [employee, province] of [[rootEmployee, "ON"], [usEmployee, "ON"]] as const) {
+        await db.execute(sql`
+          insert into employee_payroll_profiles (org_id, employee_party_id, pay_schedule_id, province,
+                                                 pay_basis, federal_claim_code, provincial_claim_code,
+                                                 is_active, created_by, updated_by)
+          values (${org.orgId}, ${employee}, ${scheduleId}, ${province}, 'hourly', 1, 1, true,
+                  ${actorId}, ${actorId})`);
+        await db.execute(sql`
+          insert into time_entries (org_id, employee_party_id, worked_on, hours, status, is_billable,
+                                    billing_status, costing_basis, created_by, updated_by)
+          values (${org.orgId}, ${employee}, '2026-07-14', 8, 'approved', false,
+                  'unbilled', 'actual', ${actorId}, ${actorId})`);
+      }
+
+      const run = await createPayRun({
+        orgId: org.orgId, actorId, payScheduleId: scheduleId,
+        periodStart: "2026-07-05", periodEnd: "2026-07-18",
+      });
+      // The run document carries the schedule's entity and its currency
+      const doc = ((await db.execute(sql`
+        select subsidiary_id, currency from documents where id = ${run.documentId}
+      `)) as unknown as { rows: { subsidiary_id: string; currency: string }[] }).rows[0]!;
+      assert.equal(doc.subsidiary_id, usSubId);
+      assert.equal(doc.currency, "USD");
+
+      // Only the scoped subsidiary's employee is included
+      const result = await calculatePayRun({ orgId: org.orgId, documentId: run.documentId, actorId });
+      assert.deepEqual(result.errors, []);
+      assert.equal(result.employees, 1);
+      const stubs = ((await db.execute(sql`
+        select employee_party_id from pay_stubs where pay_run_document_id = ${run.documentId}
+      `)) as unknown as { rows: { employee_party_id: string }[] }).rows;
+      assert.deepEqual(stubs.map((s) => s.employee_party_id), [usEmployee]);
+    } finally {
+      await dropScratchOrgReporting(org.orgId);
     }
   },
 );

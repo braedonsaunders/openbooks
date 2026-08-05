@@ -3,7 +3,7 @@ import { getTranslations } from 'next-intl/server'
 import { sql } from 'drizzle-orm'
 import { cn } from '@openbooks/ui'
 import { db } from '@openbooks/engine/src/db.ts'
-import { payrollSettings } from '@openbooks/engine/src/payroll-run.ts'
+import { payrollSettings, usPayrollConfig } from '@openbooks/engine/src/payroll-run.ts'
 import { packSlotState } from '@openbooks/engine/src/payroll/packs.ts'
 import { RATES_2026_JAN, RATES_2026_JUL } from '@openbooks/engine/src/payroll/canada/rates.ts'
 import { can, requirePermission } from '../../../../../lib/authz'
@@ -133,12 +133,16 @@ async function AccountsTab({ orgId }: { orgId: string }) {
   ]
   const blob = blobRes.rows[0]?.p ?? {}
   const installed = Array.isArray(blob.countries) ? blob.countries.map(String) : []
-  const packs = await packSlotState(orgId, installed, blob)
+  const [packs, us] = await Promise.all([
+    packSlotState(orgId, installed, blob),
+    usPayrollConfig(orgId),
+  ])
 
   return (
     <PayrollSetupWorkspace
       settings={settings}
       packs={packs}
+      us={us}
       accounts={accountsRes.rows.map((account) => ({
         id: account.id,
         label: account.number ? `${account.number} · ${account.name}` : account.name,

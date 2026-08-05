@@ -1343,6 +1343,7 @@ export const SETUP_ENTITIES: SetupEntity[] = [
       { key: 'periodsPerYear', kind: 'number' },
       { key: 'anchorPeriodEnd', kind: 'date' },
       { key: 'payDateOffsetDays', kind: 'number' },
+      { key: 'subsidiaryId', kind: 'ref', ref: 'subsidiaries' },
       { key: 'isActive', kind: 'badge-active' },
     ],
     fields: [
@@ -1350,6 +1351,8 @@ export const SETUP_ENTITIES: SetupEntity[] = [
       { key: 'frequency', kind: 'select', required: true, options: PAY_FREQUENCIES },
       { key: 'periodsPerYear', kind: 'integer', required: true },
       { key: 'anchorPeriodEnd', kind: 'date', required: true },
+      // Legal entity this calendar pays; empty = org-wide (root subsidiary).
+      { key: 'subsidiaryId', kind: 'ref', ref: 'subsidiaries' },
       { key: 'payDateOffsetDays', kind: 'integer', keepDefault: true },
       { key: 'isDefault', kind: 'boolean' },
       { key: 'isActive', kind: 'boolean' },

@@ -13,8 +13,8 @@ import { db } from "../db.ts";
  * orgs.settings.payroll keys named here; new configuration always writes
  * the components.
  *
- * A future US pack declares its own slots (FIT withholding, FICA, FUTA/SUTA)
- * the same way — nothing in the settings UI or the commit path is
+ * The US pack declares its slots (FIT withholding, FICA, FUTA, SUTA) the
+ * same way — nothing in the settings UI or the commit path is
  * Canada-specific.
  */
 
@@ -44,7 +44,16 @@ export const PAYROLL_COUNTRY_PACKS: Record<string, PayrollCountryPack> = {
       { key: "vacation", componentCodes: ["VAC"], legacySettingsKey: "vacationPayableAccountId" },
     ],
   },
-  US: { country: "US", installable: false, statutorySlots: [] },
+  US: {
+    country: "US",
+    installable: true,
+    statutorySlots: [
+      { key: "fit", componentCodes: ["FIT"] },
+      { key: "fica", componentCodes: ["SS", "MED", "MED2", "SS-ER", "MED-ER"] },
+      { key: "futa", componentCodes: ["FUTA"] },
+      { key: "suta", componentCodes: ["SUTA"] },
+    ],
+  },
 };
 
 export interface PackSlotState {

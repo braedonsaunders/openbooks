@@ -48,12 +48,18 @@ export const paySchedules = pgTable(
     anchorPeriodEnd: date("anchor_period_end").notNull(),
     /** Days from period end to the cheque/deposit date. */
     payDateOffsetDays: integer("pay_date_offset_days").notNull().default(0),
+    /** Legal entity this calendar pays. Null = org-wide (root subsidiary).
+     * Scoped schedules pin their runs' entity + currency and only include
+     * employees belonging to that subsidiary — one org can run a Canadian
+     * CAD schedule beside a US USD schedule this way. */
+    subsidiaryId: uuid("subsidiary_id"),
     isDefault: boolean("is_default").notNull().default(false),
     isActive: boolean("is_active").notNull().default(true),
     ...auditColumns,
   },
   (t) => [
     uniqueIndex("pay_schedules_org_name").on(t.orgId, t.name),
+    index("pay_schedules_subsidiary").on(t.orgId, t.subsidiaryId),
     check("pay_schedules_periods", sql`${t.periodsPerYear} in (12, 24, 26, 27, 52, 53)`),
     check("pay_schedules_offset", sql`${t.payDateOffsetDays} >= 0 and ${t.payDateOffsetDays} <= 31`),
   ],
@@ -76,13 +82,16 @@ export const payComponents = pgTable(
     }).notNull(),
     /**
      * Engine-computed statutory components; null for user components.
-     * cpp/cpp2/ei/qpip pairs exist for both employee and employer sides via
-     * kind; income tax is a single combined CRA withholding component.
+     * cpp/cpp2/ei/qpip (CA) and ss/medicare (US) pairs exist for both
+     * employee and employer sides via kind; income_tax (CRA) and fit (IRS)
+     * are single combined withholding components; futa/suta are
+     * employer-only.
      */
     systemKey: text("system_key", {
       enum: [
         "base_pay", "overtime", "bonus", "vacation_accrual", "vacation_payout",
         "cpp", "cpp2", "ei", "qpip", "income_tax",
+        "fit", "ss", "medicare", "medicare_addl", "futa", "suta",
       ],
     }),
     /** How a user component's amount is produced (statutory rows ignore this). */
@@ -123,7 +132,7 @@ export const payComponents = pgTable(
   ],
 );
 
-/** Per-employee payroll facts: TD1 claims, province, schedule, exemptions. */
+/** Per-employee payroll facts: TD1/W-4 claims, jurisdiction, schedule, exemptions. */
 export const employeePayrollProfiles = pgTable(
   "employee_payroll_profiles",
   {
@@ -131,7 +140,10 @@ export const employeePayrollProfiles = pgTable(
     orgId: orgRef(),
     employeePartyId: uuid("employee_party_id").notNull(),
     payScheduleId: uuid("pay_schedule_id").notNull(),
-    /** Province of employment (T4127 jurisdiction), e.g. 'ON', 'QC', 'ZZ'. */
+    /** Statutory country pack this employee runs under. */
+    country: text("country", { enum: ["CA", "US"] }).notNull().default("CA"),
+    /** Jurisdiction of employment within the country: T4127 province ('ON',
+     * 'QC', 'ZZ') for Canada, state postal code ('TX', 'WA', …) for the US. */
     province: text("province").notNull(),
     payBasis: text("pay_basis", { enum: ["hourly", "salary"] }).notNull().default("hourly"),
     /** TD1 federal claim: code 0–10, or an exact amount which wins over code. */
@@ -147,8 +159,25 @@ export const employeePayrollProfiles = pgTable(
     authorizedProvincialCredits: money("authorized_provincial_credits"),
     cppExempt: boolean("cpp_exempt").notNull().default(false),
     eiExempt: boolean("ei_exempt").notNull().default(false),
-    /** Claim code E / CRA letter: no income tax (statutory still deducted). */
+    /** Claim code E / CRA letter / W-4 "Exempt": no income tax withholding
+     * (statutory contributions still deducted). */
     taxExempt: boolean("tax_exempt").notNull().default(false),
+    /** US W-4 (2020 or later): Step 1(c), Step 2 checkbox, Step 3 annual
+     * credits, Step 4(a)/(b) annual amounts. Step 4(c) reuses
+     * additional_tax_per_period. */
+    filingStatus: text("filing_status", {
+      enum: ["single", "married_joint", "head_household"],
+    }),
+    multipleJobs: boolean("multiple_jobs").notNull().default(false),
+    dependentCredits: money("dependent_credits"),
+    otherIncomeAnnual: money("other_income_annual"),
+    deductionsAnnual: money("deductions_annual"),
+    /** 2019-or-earlier W-4 on file: withhold from allowances instead. */
+    w4Pre2020: boolean("w4_pre_2020").notNull().default(false),
+    w4Allowances: integer("w4_allowances"),
+    /** US statutory exemptions (F-1 students, some family employment). */
+    ficaExempt: boolean("fica_exempt").notNull().default(false),
+    futaExempt: boolean("futa_exempt").notNull().default(false),
     /** Vacation pay percent (4.00 = 4%) and whether it accrues or pays out. */
     vacationPercent: numeric("vacation_percent", { precision: 7, scale: 4 }),
     vacationMethod: text("vacation_method", {
@@ -169,6 +198,8 @@ export const employeePayrollProfiles = pgTable(
       sql`${t.provincialClaimCode} is null or (${t.provincialClaimCode} >= 0 and ${t.provincialClaimCode} <= 10)`),
     check("employee_payroll_profiles_vacation",
       sql`${t.vacationPercent} is null or ${t.vacationPercent} >= 0`),
+    check("employee_payroll_profiles_allowances",
+      sql`${t.w4Allowances} is null or ${t.w4Allowances} >= 0`),
   ],
 );
 

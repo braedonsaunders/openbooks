@@ -1,9 +1,11 @@
 import { NextResponse } from 'next/server'
 import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/db.ts'
-import { payrollSettings, seedPayrollComponents } from '@openbooks/engine/src/payroll-run.ts'
+import { payrollSettings, seedPayrollComponents, usPayrollConfig } from '@openbooks/engine/src/payroll-run.ts'
 import { packSlotState, PAYROLL_COUNTRY_PACKS, setPackSlotAccount } from '@openbooks/engine/src/payroll/packs.ts'
+import { US_STATES } from '@openbooks/engine/src/payroll/us/rates.ts'
 import { guardFeaturePermission } from '../../../../lib/feature-gates'
+import { canonicalDecimal, compareDecimal } from '../../../../lib/exact-decimal'
 import { isUuid } from '../../../../lib/list-params'
 
 export const dynamic = 'force-dynamic'
@@ -33,8 +35,8 @@ const ACCOUNT_KEYS = [
   'vacationPayableAccountId',
 ] as const
 
-/** Payroll jurisdiction packs the org can install (US is announced, not shipped). */
-const INSTALLABLE_COUNTRIES = ['CA'] as const
+/** Payroll jurisdiction packs the org can install. */
+const INSTALLABLE_COUNTRIES = ['CA', 'US'] as const
 const KNOWN_COUNTRIES = ['CA', 'US'] as const
 
 async function currentPayrollBlob(orgId: string): Promise<Record<string, unknown>> {
@@ -86,8 +88,11 @@ export async function GET() {
     pickerOptions(gate.user.orgId),
   ])
   const installed = Array.isArray(blob.countries) ? blob.countries.map(String) : []
-  const packs = await packSlotState(gate.user.orgId, installed, blob)
-  return NextResponse.json({ settings, packs, ...options })
+  const [packs, us] = await Promise.all([
+    packSlotState(gate.user.orgId, installed, blob),
+    usPayrollConfig(gate.user.orgId),
+  ])
+  return NextResponse.json({ settings, packs, us, ...options })
 }
 
 export async function PUT(req: Request) {
@@ -122,6 +127,40 @@ export async function PUT(req: Request) {
       return NextResponse.json({ error: 'invalid countries' }, { status: 422 })
     }
     settings.countries = [...new Set(countries.map(String))]
+  }
+
+  // US pack configuration: effective FUTA rate (credit-reduction states) and
+  // per-state SUI rates/wage bases — experience-rated, so always org-entered.
+  if ('us' in body) {
+    const us = body.us
+    if (typeof us !== 'object' || us === null || Array.isArray(us)) {
+      return NextResponse.json({ error: 'invalid us config' }, { status: 422 })
+    }
+    const clean: { futaRate?: string; sui: Record<string, { rate: string; wageBase: string }> } = { sui: {} }
+    if (us.futaRate !== null && us.futaRate !== undefined && us.futaRate !== '') {
+      const rate = canonicalDecimal(us.futaRate, 4)
+      if (rate === null || compareDecimal(rate, '0') < 0 || compareDecimal(rate, '0.2') > 0) {
+        return NextResponse.json({ error: 'invalid us.futaRate' }, { status: 422 })
+      }
+      clean.futaRate = rate
+    }
+    const sui = us.sui ?? {}
+    if (typeof sui !== 'object' || sui === null || Array.isArray(sui)) {
+      return NextResponse.json({ error: 'invalid us.sui' }, { status: 422 })
+    }
+    for (const [state, entry] of Object.entries(sui as Record<string, { rate?: unknown; wageBase?: unknown }>)) {
+      if (!(US_STATES as readonly string[]).includes(state)) {
+        return NextResponse.json({ error: `invalid SUI state ${state}` }, { status: 422 })
+      }
+      const rate = canonicalDecimal(entry?.rate, 4)
+      const wageBase = canonicalDecimal(entry?.wageBase, 2)
+      if (rate === null || compareDecimal(rate, '0') < 0 || compareDecimal(rate, '0.2') > 0
+        || wageBase === null || compareDecimal(wageBase, '0') < 0) {
+        return NextResponse.json({ error: `invalid SUI entry for ${state}` }, { status: 422 })
+      }
+      clean.sui[state] = { rate, wageBase }
+    }
+    settings.us = clean
   }
 
   // Pack-declared statutory slots: { [country]: { [slotKey]: accountId|null } }.
@@ -165,7 +204,7 @@ export async function POST(req: Request) {
   if (gate instanceof NextResponse) return gate
   const body = await req.json().catch(() => ({}))
   if (body.action === 'seed-components') {
-    await seedPayrollComponents(gate.user.orgId, gate.user.id)
+    await seedPayrollComponents(gate.user.orgId, gate.user.id, body.country === 'US' ? 'US' : 'CA')
     return NextResponse.json({ ok: true })
   }
   if (body.action === 'install-pack') {
@@ -173,9 +212,9 @@ export async function POST(req: Request) {
     if (!(INSTALLABLE_COUNTRIES as readonly string[]).includes(country)) {
       return NextResponse.json({ error: 'unknown country pack' }, { status: 422 })
     }
-    // The Canada pack = the statutory component set (T4127 engine wiring) plus
-    // the pack marker the setup workspace and wizard read back.
-    await seedPayrollComponents(gate.user.orgId, gate.user.id)
+    // A pack = its statutory component set (the engine wiring) plus the pack
+    // marker the setup workspace and wizard read back.
+    await seedPayrollComponents(gate.user.orgId, gate.user.id, country as 'CA' | 'US')
     const settings = await currentPayrollBlob(gate.user.orgId)
     const countries = Array.isArray(settings.countries) ? settings.countries.map(String) : []
     settings.countries = [...new Set([...countries, country])]

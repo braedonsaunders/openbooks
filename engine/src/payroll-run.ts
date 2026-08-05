@@ -3,6 +3,8 @@ import { db } from "./db.ts";
 import { add, cmp, mulDecimal, mulPercent, neg, roundMoney, sum } from "./money.ts";
 import { calculateT4127, type T4127Input } from "./payroll/canada/t4127.ts";
 import type { Province } from "./payroll/canada/rates.ts";
+import { calculatePub15T } from "./payroll/us/pub15t.ts";
+import { NO_WITHHOLDING_STATES, US_STATES } from "./payroll/us/rates.ts";
 import { laborCostingSettings } from "./labor-costing.ts";
 
 /**
@@ -42,6 +44,32 @@ export interface PayrollSettings {
   craRemittancePartyId: string | null;
 }
 
+/**
+ * US pack org configuration (orgs.settings.payroll.us): the effective FUTA
+ * rate (credit-reduction states raise it past the default 0.6%) and the
+ * employer's state unemployment accounts — SUI rates are experience-rated
+ * per employer, so they are org-entered settings, never engine constants.
+ */
+export interface UsPayrollConfig {
+  futaRate: string | null;
+  sui: Record<string, { rate: string; wageBase: string }>;
+}
+
+export async function usPayrollConfig(orgId: string): Promise<UsPayrollConfig> {
+  const r = (await db.execute(
+    sql`select settings#>'{payroll,us}' as u from orgs where id = ${orgId}`,
+  )) as unknown as { rows: { u: Record<string, unknown> | null }[] };
+  const u = r.rows[0]?.u ?? {};
+  const sui: UsPayrollConfig["sui"] = {};
+  const rawSui = (u.sui ?? {}) as Record<string, { rate?: unknown; wageBase?: unknown }>;
+  for (const [state, entry] of Object.entries(rawSui)) {
+    if (entry && entry.rate != null && entry.wageBase != null) {
+      sui[state] = { rate: String(entry.rate), wageBase: String(entry.wageBase) };
+    }
+  }
+  return { futaRate: u.futaRate != null ? String(u.futaRate) : null, sui };
+}
+
 export async function payrollSettings(orgId: string): Promise<PayrollSettings> {
   const r = (await db.execute(
     sql`select settings->'payroll' as p, settings->'controlAccounts' as c from orgs where id = ${orgId}`,
@@ -62,27 +90,50 @@ export async function payrollSettings(orgId: string): Promise<PayrollSettings> {
 
 export class PayrollError extends Error {}
 
-/** Statutory + baseline components every payroll org needs; idempotent. */
-export async function seedPayrollComponents(orgId: string, actorId: string | null): Promise<void> {
-  const rows: {
-    code: string; name: string; kind: string; systemKey: string | null;
-    basis?: string; taxable?: boolean; pensionable?: boolean; insurable?: boolean;
-    vacationable?: boolean; nonPeriodic?: boolean; sequence: number;
-  }[] = [
-    { code: "BASE", name: "Base pay", kind: "earning", systemKey: "base_pay", basis: "per_hour", sequence: 10 },
-    { code: "OT", name: "Overtime", kind: "earning", systemKey: "overtime", basis: "per_hour", sequence: 20 },
-    { code: "BONUS", name: "Bonus", kind: "earning", systemKey: "bonus", nonPeriodic: true, vacationable: false, sequence: 30 },
-    { code: "VACPAY", name: "Vacation pay", kind: "earning", systemKey: "vacation_payout", vacationable: false, sequence: 40 },
-    { code: "TAX", name: "Income tax", kind: "deduction", systemKey: "income_tax", sequence: 110 },
-    { code: "CPP", name: "CPP", kind: "deduction", systemKey: "cpp", sequence: 120 },
-    { code: "CPP2", name: "CPP (second additional)", kind: "deduction", systemKey: "cpp2", sequence: 130 },
-    { code: "EI", name: "EI", kind: "deduction", systemKey: "ei", sequence: 140 },
-    { code: "QPIP", name: "QPIP", kind: "deduction", systemKey: "qpip", sequence: 150 },
-    { code: "CPP-ER", name: "CPP (employer)", kind: "employer_contribution", systemKey: "cpp", sequence: 210 },
-    { code: "EI-ER", name: "EI (employer)", kind: "employer_contribution", systemKey: "ei", sequence: 220 },
-    { code: "QPIP-ER", name: "QPIP (employer)", kind: "employer_contribution", systemKey: "qpip", sequence: 230 },
-    { code: "VAC", name: "Vacation accrual", kind: "employer_contribution", systemKey: "vacation_accrual", sequence: 240 },
-  ];
+interface SeedComponent {
+  code: string; name: string; kind: string; systemKey: string | null;
+  basis?: string; taxable?: boolean; pensionable?: boolean; insurable?: boolean;
+  vacationable?: boolean; nonPeriodic?: boolean; sequence: number;
+}
+
+/** Jurisdiction-free earning baseline shared by every country pack. */
+const BASELINE_COMPONENTS: SeedComponent[] = [
+  { code: "BASE", name: "Base pay", kind: "earning", systemKey: "base_pay", basis: "per_hour", sequence: 10 },
+  { code: "OT", name: "Overtime", kind: "earning", systemKey: "overtime", basis: "per_hour", sequence: 20 },
+  { code: "BONUS", name: "Bonus", kind: "earning", systemKey: "bonus", nonPeriodic: true, vacationable: false, sequence: 30 },
+  { code: "VACPAY", name: "Vacation pay", kind: "earning", systemKey: "vacation_payout", vacationable: false, sequence: 40 },
+];
+
+const CA_COMPONENTS: SeedComponent[] = [
+  { code: "TAX", name: "Income tax", kind: "deduction", systemKey: "income_tax", sequence: 110 },
+  { code: "CPP", name: "CPP", kind: "deduction", systemKey: "cpp", sequence: 120 },
+  { code: "CPP2", name: "CPP (second additional)", kind: "deduction", systemKey: "cpp2", sequence: 130 },
+  { code: "EI", name: "EI", kind: "deduction", systemKey: "ei", sequence: 140 },
+  { code: "QPIP", name: "QPIP", kind: "deduction", systemKey: "qpip", sequence: 150 },
+  { code: "CPP-ER", name: "CPP (employer)", kind: "employer_contribution", systemKey: "cpp", sequence: 210 },
+  { code: "EI-ER", name: "EI (employer)", kind: "employer_contribution", systemKey: "ei", sequence: 220 },
+  { code: "QPIP-ER", name: "QPIP (employer)", kind: "employer_contribution", systemKey: "qpip", sequence: 230 },
+  { code: "VAC", name: "Vacation accrual", kind: "employer_contribution", systemKey: "vacation_accrual", sequence: 240 },
+];
+
+// US statutory set. `pensionable` generalizes to FICA-taxable and `insurable`
+// to FUTA/SUI-taxable for US employees (see calculateStub).
+const US_COMPONENTS: SeedComponent[] = [
+  { code: "FIT", name: "Federal income tax", kind: "deduction", systemKey: "fit", sequence: 110 },
+  { code: "SS", name: "Social Security", kind: "deduction", systemKey: "ss", sequence: 120 },
+  { code: "MED", name: "Medicare", kind: "deduction", systemKey: "medicare", sequence: 130 },
+  { code: "MED2", name: "Additional Medicare", kind: "deduction", systemKey: "medicare_addl", sequence: 135 },
+  { code: "SS-ER", name: "Social Security (employer)", kind: "employer_contribution", systemKey: "ss", sequence: 210 },
+  { code: "MED-ER", name: "Medicare (employer)", kind: "employer_contribution", systemKey: "medicare", sequence: 220 },
+  { code: "FUTA", name: "Federal unemployment (FUTA)", kind: "employer_contribution", systemKey: "futa", sequence: 230 },
+  { code: "SUTA", name: "State unemployment (SUI)", kind: "employer_contribution", systemKey: "suta", sequence: 250 },
+];
+
+/** Statutory + baseline components for a country pack; idempotent. */
+export async function seedPayrollComponents(
+  orgId: string, actorId: string | null, country: "CA" | "US" = "CA",
+): Promise<void> {
+  const rows = [...BASELINE_COMPONENTS, ...(country === "US" ? US_COMPONENTS : CA_COMPONENTS)];
   for (const c of rows) {
     await db.execute(sql`
       insert into pay_components (org_id, code, name, kind, system_key, basis, taxable, pensionable,
@@ -163,9 +214,9 @@ export async function createPayRun(input: {
   const { orgId, actorId } = input;
   return await db.transaction(async (tx) => {
     const s = (await tx.execute(sql`
-      select id, frequency, periods_per_year, anchor_period_end, pay_date_offset_days
+      select id, frequency, periods_per_year, anchor_period_end, pay_date_offset_days, subsidiary_id
         from pay_schedules where org_id = ${orgId} and id = ${input.payScheduleId} and is_active
-    `)) as unknown as { rows: ScheduleRow[] };
+    `)) as unknown as { rows: (ScheduleRow & { subsidiary_id: string | null })[] };
     const schedule = s.rows[0];
     if (!schedule) throw new PayrollError("pay schedule not found");
 
@@ -184,13 +235,23 @@ export async function createPayRun(input: {
       iso(new Date(at(periodEnd).getTime() + schedule.pay_date_offset_days * DAY));
     const taxYear = Number(payDate.slice(0, 4));
 
-    const sub = (await tx.execute(sql`
-      select s.id, s.base_currency as currency_code from subsidiaries s
-       where s.org_id = ${orgId} and s.parent_id is null and s.is_active
-       order by s.created_at limit 1
+    // Scoped schedules pin the run to their legal entity (and its currency);
+    // org-wide schedules keep the historical root-subsidiary behaviour.
+    const sub = (await tx.execute(schedule.subsidiary_id
+      ? sql`
+        select s.id, s.base_currency as currency_code from subsidiaries s
+         where s.org_id = ${orgId} and s.id = ${schedule.subsidiary_id} and s.is_active`
+      : sql`
+        select s.id, s.base_currency as currency_code from subsidiaries s
+         where s.org_id = ${orgId} and s.parent_id is null and s.is_active
+         order by s.created_at limit 1
     `)) as unknown as { rows: { id: string; currency_code: string | null }[] };
     const subsidiary = sub.rows[0];
-    if (!subsidiary) throw new PayrollError("no active root subsidiary");
+    if (!subsidiary) {
+      throw new PayrollError(schedule.subsidiary_id
+        ? "the pay schedule's subsidiary is missing or inactive"
+        : "no active root subsidiary");
+    }
 
     const seq = (await tx.execute(sql`
       insert into number_sequences (org_id, document_kind, subsidiary_id, prefix)
@@ -270,6 +331,41 @@ async function employeeYtd(
   return r.rows[0]!;
 }
 
+interface UsYtdRow {
+  fica: string;
+  futa: string;
+  supplemental: string;
+}
+
+/**
+ * US YTD state for the wage-base caps: the caps compare cumulative WAGES
+ * (not contributions) against the base, so the generic pensionable/insurable
+ * stub columns — FICA and FUTA/SUI wages for US employees — plus the same
+ * opening-balance columns are the whole story.
+ */
+async function usEmployeeYtd(
+  tx: Pick<typeof db, "execute">, orgId: string, employeePartyId: string,
+  taxYear: number, excludeDocumentId: string,
+): Promise<UsYtdRow> {
+  const r = (await tx.execute(sql`
+    select
+      coalesce((select pensionable_ytd from payroll_opening_balances
+                 where org_id = ${orgId} and employee_party_id = ${employeePartyId} and tax_year = ${taxYear}), 0)
+      + coalesce(sum(s.pensionable_earnings), 0) as fica,
+      coalesce((select insurable_ytd from payroll_opening_balances
+                 where org_id = ${orgId} and employee_party_id = ${employeePartyId} and tax_year = ${taxYear}), 0)
+      + coalesce(sum(s.insurable_earnings), 0) as futa,
+      coalesce((select non_periodic_ytd from payroll_opening_balances
+                 where org_id = ${orgId} and employee_party_id = ${employeePartyId} and tax_year = ${taxYear}), 0)
+      + coalesce(sum((s.factors->>'B')::numeric), 0) as supplemental
+    from pay_stubs s
+    join pay_runs r on r.document_id = s.pay_run_document_id and r.run_status = 'committed'
+    where s.org_id = ${orgId} and s.employee_party_id = ${employeePartyId}
+      and s.tax_year = ${taxYear} and s.pay_run_document_id <> ${excludeDocumentId}
+  `)) as unknown as { rows: UsYtdRow[] };
+  return r.rows[0]!;
+}
+
 /** Employee-scope pay rate straight from labor_cost_rates (one-table doctrine). */
 async function resolvePayRate(
   tx: Pick<typeof db, "execute">, orgId: string, employeePartyId: string, onDate: string,
@@ -316,6 +412,12 @@ export async function calculatePayRun(input: {
       return c;
     };
 
+    // A subsidiary-scoped schedule pays only that entity's employees; an
+    // org-wide schedule keeps everyone (the historical behaviour).
+    const scheduleScope = (await tx.execute(sql`
+      select subsidiary_id from pay_schedules where org_id = ${orgId} and id = ${run.pay_schedule_id}
+    `)) as unknown as { rows: { subsidiary_id: string | null }[] };
+    const scopedSubsidiaryId = scheduleScope.rows[0]?.subsidiary_id ?? null;
     const employees = (await tx.execute(sql`
       select p.id as party_id, p.display_name, prof.*
         from employee_payroll_profiles prof
@@ -324,11 +426,13 @@ export async function calculatePayRun(input: {
        where prof.org_id = ${orgId} and prof.pay_schedule_id = ${run.pay_schedule_id}
          and prof.is_active
          and (er.terminated_on is null or er.terminated_on >= ${run.period_start})
+         and (${scopedSubsidiaryId}::uuid is null or p.subsidiary_id = ${scopedSubsidiaryId}::uuid)
        order by p.display_name
     `)) as unknown as { rows: Record<string, string | null>[] };
 
     await tx.execute(sql`delete from pay_stubs where org_id = ${orgId} and pay_run_document_id = ${documentId}`);
 
+    const usConfig = await usPayrollConfig(orgId);
     const errors: { employee: string; message: string }[] = [];
     let grossTotal = "0"; let netTotal = "0"; let employerTotal = "0"; let count = 0;
     const P = Number(run.periods_per_year ?? 0) || undefined;
@@ -338,7 +442,7 @@ export async function calculatePayRun(input: {
       try {
         const result = await calculateStub(tx, {
           orgId, actorId, documentId, run, emp,
-          periodsPerYear: P, need, components: components.rows,
+          periodsPerYear: P, need, components: components.rows, usConfig,
         });
         grossTotal = add(grossTotal, result.gross);
         netTotal = add(netTotal, result.net);
@@ -368,6 +472,7 @@ async function calculateStub(
     periodsPerYear: number | undefined;
     need: (systemKey: string, kind: string) => Record<string, unknown>;
     components: Record<string, unknown>[];
+    usConfig: UsPayrollConfig;
   },
 ): Promise<StubComputation> {
   const { orgId, actorId, documentId, run, emp } = ctx;
@@ -545,7 +650,9 @@ async function calculateStub(
     }
   }
 
-  // T4127 inputs from the line set
+  // Statutory inputs from the line set. For US employees the flags
+  // generalize: taxable → FIT wages, pensionable → FICA (Social Security /
+  // Medicare) wages, insurable → FUTA and SUI wages.
   const earning = (predicate: (l: Line) => boolean) =>
     sum(lines.filter((l) => l.kind === "earning" && !l.accrualOnly && predicate(l)).map((l) => l.amount));
   const deduction = (treatment: string) =>
@@ -557,37 +664,6 @@ async function calculateStub(
   const pensionable = earning((l) => l.pensionable ?? true);
   const insurable = earning((l) => l.insurable ?? true);
 
-  const ytd = await employeeYtd(tx, orgId, employeePartyId, taxYear, documentId);
-  const province = (emp.province ?? "ON") as Province;
-
-  const t4127Input: T4127Input = {
-    payDate: run.pay_date, province, periodsPerYear: P,
-    income, nonPeriodic, pensionable, insurable,
-    pensionDeductions: deduction("pension_f"),
-    alimonyDeductions: deduction("alimony"),
-    unionDues: deduction("union_dues"),
-    prescribedZoneDeduction: emp.prescribed_zone_deduction ?? undefined,
-    authorizedAnnualDeductions: emp.authorized_annual_deductions ?? undefined,
-    authorizedFederalCredits: emp.authorized_federal_credits ?? undefined,
-    authorizedProvincialCredits: emp.authorized_provincial_credits ?? undefined,
-    additionalTaxPerPeriod: emp.additional_tax_per_period ?? undefined,
-    federalClaim: emp.federal_claim_amount ?? undefined,
-    federalClaimCode: emp.federal_claim_amount == null && emp.federal_claim_code != null
-      ? Number(emp.federal_claim_code) : undefined,
-    provincialClaim: emp.provincial_claim_amount ?? undefined,
-    provincialClaimCode: emp.provincial_claim_amount == null && emp.provincial_claim_code != null
-      ? Number(emp.provincial_claim_code) : undefined,
-    taxExempt: emp.tax_exempt === "true" || emp.tax_exempt === true as unknown as string,
-    cppExempt: emp.cpp_exempt === "true" || emp.cpp_exempt === true as unknown as string,
-    eiExempt: emp.ei_exempt === "true" || emp.ei_exempt === true as unknown as string,
-    ytd: {
-      cpp: ytd.cpp, cpp2: ytd.cpp2, ei: ytd.ei, qpip: ytd.qpip,
-      pensionable: ytd.pensionable, nonPeriodic: ytd.non_periodic,
-      nonPeriodicCppEnhancedDeductions: ytd.f5b,
-    },
-  };
-  const statutory = calculateT4127(t4127Input);
-
   const pushStatutory = (
     systemKey: string, kind: "deduction" | "employer_contribution",
     description: string, amount: string, sequence: number, accrualOnly = false,
@@ -596,15 +672,109 @@ async function calculateStub(
     const c = ctx.need(systemKey, kind);
     lines.push({ componentId: c.id as string, kind, description, amount, sequence, accrualOnly });
   };
-  pushStatutory("income_tax", "deduction", "Income tax", statutory.totalTax, 110);
-  pushStatutory("cpp", "deduction", province === "QC" ? "QPP" : "CPP", statutory.cpp, 120);
-  pushStatutory("cpp2", "deduction", province === "QC" ? "QPP2" : "CPP2", statutory.cpp2, 130);
-  pushStatutory("ei", "deduction", "EI", statutory.ei, 140);
-  pushStatutory("qpip", "deduction", "QPIP", statutory.qpip, 150);
-  pushStatutory("cpp", "employer_contribution",
-    province === "QC" ? "QPP (employer)" : "CPP (employer)", statutory.cppEmployer, 210);
-  pushStatutory("ei", "employer_contribution", "EI (employer)", statutory.eiEmployer, 220);
-  pushStatutory("qpip", "employer_contribution", "QPIP (employer)", statutory.qpipEmployer, 230);
+
+  const bool = (value: string | null | undefined) =>
+    value === "true" || (value as unknown) === true;
+  const country = emp.country === "US" ? "US" : "CA";
+  const province = (emp.province ?? (country === "US" ? "" : "ON"));
+  let factors: Record<string, string>;
+
+  if (country === "US") {
+    if (!(US_STATES as readonly string[]).includes(province)) {
+      throw new PayrollError(`unknown US state "${province}" on the payroll profile`);
+    }
+    if (!NO_WITHHOLDING_STATES.has(province)) {
+      throw new PayrollError(
+        `state income tax withholding for ${province} is not yet supported — `
+        + `the US pack currently covers the nine no-withholding states`,
+      );
+    }
+    const ytd = await usEmployeeYtd(tx, orgId, employeePartyId, taxYear, documentId);
+    const filingStatus = (emp.filing_status ?? "single") as "single" | "married_joint" | "head_household";
+    const statutory = calculatePub15T({
+      payDate: run.pay_date, periodsPerYear: P,
+      wages: income, supplemental: nonPeriodic,
+      ficaWages: pensionable, futaWages: insurable,
+      filingStatus,
+      multipleJobs: bool(emp.multiple_jobs),
+      dependentCredits: emp.dependent_credits ?? undefined,
+      otherIncomeAnnual: emp.other_income_annual ?? undefined,
+      deductionsAnnual: emp.deductions_annual ?? undefined,
+      extraPerPeriod: emp.additional_tax_per_period ?? undefined,
+      pre2020: bool(emp.w4_pre_2020)
+        ? { allowances: Number(emp.w4_allowances ?? 0), married: filingStatus === "married_joint" }
+        : undefined,
+      fitExempt: bool(emp.tax_exempt),
+      ficaExempt: bool(emp.fica_exempt),
+      futaExempt: bool(emp.futa_exempt),
+      futaEffectiveRate: ctx.usConfig.futaRate ?? undefined,
+      sui: ctx.usConfig.sui[province],
+      ytd: {
+        ssWages: ytd.fica, medicareWages: ytd.fica,
+        futaWages: ytd.futa, suiWages: ytd.futa,
+        supplemental: ytd.supplemental,
+      },
+    });
+    pushStatutory("fit", "deduction", "Federal income tax", statutory.fit, 110);
+    pushStatutory("ss", "deduction", "Social Security", statutory.ss, 120);
+    pushStatutory("medicare", "deduction", "Medicare", statutory.medicare, 130);
+    pushStatutory("medicare_addl", "deduction", "Additional Medicare", statutory.additionalMedicare, 135);
+    pushStatutory("ss", "employer_contribution", "Social Security (employer)", statutory.ssEmployer, 210);
+    pushStatutory("medicare", "employer_contribution", "Medicare (employer)", statutory.medicareEmployer, 220);
+    pushStatutory("futa", "employer_contribution", "Federal unemployment (FUTA)", statutory.futa, 230);
+    pushStatutory("suta", "employer_contribution", "State unemployment (SUI)", statutory.suta, 250);
+    factors = {
+      ...statutory.factors,
+      B: nonPeriodic, I: income, PI: pensionable, IE: insurable,
+    };
+  } else {
+
+    const ytd = await employeeYtd(tx, orgId, employeePartyId, taxYear, documentId);
+
+    const t4127Input: T4127Input = {
+      payDate: run.pay_date, province: province as Province, periodsPerYear: P,
+      income, nonPeriodic, pensionable, insurable,
+      pensionDeductions: deduction("pension_f"),
+      alimonyDeductions: deduction("alimony"),
+      unionDues: deduction("union_dues"),
+      prescribedZoneDeduction: emp.prescribed_zone_deduction ?? undefined,
+      authorizedAnnualDeductions: emp.authorized_annual_deductions ?? undefined,
+      authorizedFederalCredits: emp.authorized_federal_credits ?? undefined,
+      authorizedProvincialCredits: emp.authorized_provincial_credits ?? undefined,
+      additionalTaxPerPeriod: emp.additional_tax_per_period ?? undefined,
+      federalClaim: emp.federal_claim_amount ?? undefined,
+      federalClaimCode: emp.federal_claim_amount == null && emp.federal_claim_code != null
+        ? Number(emp.federal_claim_code) : undefined,
+      provincialClaim: emp.provincial_claim_amount ?? undefined,
+      provincialClaimCode: emp.provincial_claim_amount == null && emp.provincial_claim_code != null
+        ? Number(emp.provincial_claim_code) : undefined,
+      taxExempt: emp.tax_exempt === "true" || emp.tax_exempt === true as unknown as string,
+      cppExempt: emp.cpp_exempt === "true" || emp.cpp_exempt === true as unknown as string,
+      eiExempt: emp.ei_exempt === "true" || emp.ei_exempt === true as unknown as string,
+      ytd: {
+        cpp: ytd.cpp, cpp2: ytd.cpp2, ei: ytd.ei, qpip: ytd.qpip,
+        pensionable: ytd.pensionable, nonPeriodic: ytd.non_periodic,
+        nonPeriodicCppEnhancedDeductions: ytd.f5b,
+      },
+    };
+    const statutory = calculateT4127(t4127Input);
+
+    pushStatutory("income_tax", "deduction", "Income tax", statutory.totalTax, 110);
+    pushStatutory("cpp", "deduction", province === "QC" ? "QPP" : "CPP", statutory.cpp, 120);
+    pushStatutory("cpp2", "deduction", province === "QC" ? "QPP2" : "CPP2", statutory.cpp2, 130);
+    pushStatutory("ei", "deduction", "EI", statutory.ei, 140);
+    pushStatutory("qpip", "deduction", "QPIP", statutory.qpip, 150);
+    pushStatutory("cpp", "employer_contribution",
+      province === "QC" ? "QPP (employer)" : "CPP (employer)", statutory.cppEmployer, 210);
+    pushStatutory("ei", "employer_contribution", "EI (employer)", statutory.eiEmployer, 220);
+    pushStatutory("qpip", "employer_contribution", "QPIP (employer)", statutory.qpipEmployer, 230);
+
+    factors = {
+      ...statutory.factors,
+      B: nonPeriodic, I: income, PI: pensionable, IE: insurable,
+      QPIP: statutory.qpip, EI_ER: statutory.eiEmployer, QPIP_ER: statutory.qpipEmployer,
+    };
+  }
 
   const deductions = sum(lines.filter((l) => l.kind === "deduction").map((l) => l.amount));
   const net = add(gross, neg(deductions));
@@ -612,12 +782,6 @@ async function calculateStub(
   const employerCost = sum(
     lines.filter((l) => l.kind === "employer_contribution").map((l) => l.amount),
   );
-
-  const factors: Record<string, string> = {
-    ...statutory.factors,
-    B: nonPeriodic, I: income, PI: pensionable, IE: insurable,
-    QPIP: statutory.qpip, EI_ER: statutory.eiEmployer, QPIP_ER: statutory.qpipEmployer,
-  };
 
   const stub = (await tx.execute(sql`
     insert into pay_stubs (org_id, pay_run_document_id, employee_party_id, province,
