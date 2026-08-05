@@ -67,148 +67,13 @@ const US_STATES = [
 ] as const
 const FILING_STATUSES = ['single', 'married_joint', 'head_household'] as const
 
-/**
- * Employees tab of the payroll home — the payroll-profile roster with its
- * editor drawer (TD1 facts, schedule, exemptions, vacation policy). Rendered
- * only for payroll.manage.
- */
-export function EmployeesPanel(props: {
-  profiles: ProfileRow[]
-  employees: { id: string; name: string }[]
-  schedules: ScheduleOption[]
-}) {
-  const t = useTranslations('payroll')
-  const router = useRouter()
-  const [editing, setEditing] = useState<ProfileRow | null>(null)
-  const [creatingFor, setCreatingFor] = useState('')
-
-  const withoutProfile = props.employees.filter(
-    (employee) => !props.profiles.some((profile) => profile.employee_party_id === employee.id),
-  )
-
-  return (
-    <div className="space-y-4">
-      <div className="flex flex-wrap items-end gap-2">
-        <div>
-          <Label htmlFor="pr-add-employee">{t('profiles.addEmployee')}</Label>
-          <Select id="pr-add-employee" value={creatingFor} onChange={(e) => setCreatingFor(e.target.value)}>
-            <option value="">—</option>
-            {withoutProfile.map((employee) => (
-              <option key={employee.id} value={employee.id}>
-                {employee.name}
-              </option>
-            ))}
-          </Select>
-        </div>
-        <Button
-          variant="outline"
-          disabled={!creatingFor}
-          onClick={() => {
-            const employee = withoutProfile.find((candidate) => candidate.id === creatingFor)
-            if (!employee) return
-            setEditing({
-              id: '',
-              employee_party_id: employee.id,
-              employee_name: employee.name,
-              pay_schedule_id: props.schedules[0]?.id ?? '',
-              schedule_name: null,
-              country: 'CA',
-              province: 'ON',
-              pay_basis: 'hourly',
-              federal_claim_code: 1,
-              federal_claim_amount: null,
-              provincial_claim_code: 1,
-              provincial_claim_amount: null,
-              additional_tax_per_period: null,
-              cpp_exempt: false,
-              ei_exempt: false,
-              tax_exempt: false,
-              filing_status: null,
-              multiple_jobs: false,
-              dependent_credits: null,
-              other_income_annual: null,
-              deductions_annual: null,
-              w4_pre_2020: false,
-              w4_allowances: null,
-              fica_exempt: false,
-              futa_exempt: false,
-              vacation_percent: null,
-              vacation_method: 'accrue',
-              is_active: true,
-            })
-          }}
-        >
-          <Plus size={14} aria-hidden /> {t('profiles.new')}
-        </Button>
-      </div>
-      <div className="overflow-x-auto rounded-xl border border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900">
-        <Table>
-          <TableHeader>
-            <TableRow>
-              <TableHead>{t('profiles.columns.employee')}</TableHead>
-              <TableHead>{t('profiles.columns.schedule')}</TableHead>
-              <TableHead>{t('profiles.columns.province')}</TableHead>
-              <TableHead>{t('profiles.columns.basis')}</TableHead>
-              <TableHead>{t('profiles.columns.claims')}</TableHead>
-              <TableHead>{t('profiles.columns.vacation')}</TableHead>
-              <TableHead>{t('profiles.columns.status')}</TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {props.profiles.length === 0 && (
-              <TableRow>
-                <TableCell colSpan={7} className="text-slate-500 dark:text-slate-400">
-                  {t('empty.profiles')}
-                </TableCell>
-              </TableRow>
-            )}
-            {props.profiles.map((profile) => (
-              <TableRow key={profile.id} className="cursor-pointer" onClick={() => setEditing(profile)}>
-                <TableCell className="font-medium">{profile.employee_name}</TableCell>
-                <TableCell>{profile.schedule_name ?? '—'}</TableCell>
-                <TableCell>{profile.province}</TableCell>
-                <TableCell>{t(`profiles.basis.${profile.pay_basis}`)}</TableCell>
-                <TableCell className="whitespace-nowrap">
-                  {profile.federal_claim_amount ?? profile.federal_claim_code ?? '—'} /{' '}
-                  {profile.provincial_claim_amount ?? profile.provincial_claim_code ?? '—'}
-                </TableCell>
-                <TableCell>
-                  {profile.vacation_percent
-                    ? `${profile.vacation_percent}% · ${t(`profiles.vacation.${profile.vacation_method}`)}`
-                    : '—'}
-                </TableCell>
-                <TableCell>
-                  <Badge variant={profile.is_active ? 'success' : 'secondary'}>
-                    {profile.is_active ? t('profiles.active') : t('profiles.inactive')}
-                  </Badge>
-                </TableCell>
-              </TableRow>
-            ))}
-          </TableBody>
-        </Table>
-      </div>
-
-      {editing && (
-        <ProfileEditor
-          profile={editing}
-          schedules={props.schedules}
-          onClose={() => setEditing(null)}
-          onSaved={() => {
-            setEditing(null)
-            setCreatingFor('')
-            router.refresh()
-          }}
-        />
-      )}
-    </div>
-  )
-}
-
-function ProfileEditor(props: {
+export function ProfileEditor(props: {
   profile: ProfileRow
   schedules: ScheduleOption[]
   onClose: () => void
   onSaved: () => void
+  /** Render as a plain section (inside another drawer/tab) instead of a Drawer. */
+  inline?: boolean
 }) {
   const t = useTranslations('payroll.profiles')
   const p = props.profile
@@ -285,23 +150,19 @@ function ProfileEditor(props: {
 
   const claimCodes = ['', ...Array.from({ length: 11 }, (_, i) => String(i))]
 
-  return (
-    <Drawer
-      open
-      onClose={props.onClose}
-      title={p.employee_name}
-      description={t('editorDescription')}
-      footer={
-        <div className="flex justify-end gap-2">
-          <Button variant="ghost" onClick={props.onClose} disabled={busy}>
-            {t('cancel')}
-          </Button>
-          <Button onClick={save} disabled={busy || !payScheduleId}>
-            {t('save')}
-          </Button>
-        </div>
-      }
-    >
+  const footer = (
+    <div className="flex justify-end gap-2">
+      {!props.inline && (
+        <Button variant="ghost" onClick={props.onClose} disabled={busy}>
+          {t('cancel')}
+        </Button>
+      )}
+      <Button onClick={save} disabled={busy || !payScheduleId}>
+        {t('save')}
+      </Button>
+    </div>
+  )
+  const body = (
       <div className="space-y-4">
         <div className="grid gap-3 sm:grid-cols-2">
           <div>
@@ -520,6 +381,24 @@ function ProfileEditor(props: {
           ))}
         </div>
       </div>
+  )
+  if (props.inline) {
+    return (
+      <div className="space-y-4">
+        {body}
+        {footer}
+      </div>
+    )
+  }
+  return (
+    <Drawer
+      open
+      onClose={props.onClose}
+      title={p.employee_name}
+      description={t('editorDescription')}
+      footer={footer}
+    >
+      {body}
     </Drawer>
   )
 }

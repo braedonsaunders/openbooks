@@ -36,7 +36,8 @@
       "contacts": "Contacts",
       "addresses": "Addresses",
       "accounting": "Accounting",
-      "wages": "Wage rates"
+      "wages": "Wage rates",
+      "payroll": "Payroll"
     },
     "wages": {
       "title": "Wage rates",
@@ -194,7 +195,10 @@
     "effectiveFrom": "Effective from",
     "effectiveTo": "Effective to",
     "dateBasis": "Schedule date",
-    "dateBasisOptions": { "usage_date": "Usage / transaction date", "project_start": "Project start date" },
+    "dateBasisOptions": {
+      "usage_date": "Usage / transaction date",
+      "project_start": "Project start date"
+    },
     "empty": "No labor rate card assigned — the organization default applies.",
     "noBooks": "Create a Labor Pricing rate card first.",
     "rateBookRequired": "Choose a labor rate card",
@@ -202,7 +206,11 @@
     "confirmDelete": "Remove this Labor Pricing assignment?",
     "search": "Search assigned rate cards…",
     "statusFilter": "Assignment status",
-    "status": { "active": "Active", "inactive": "Inactive", "all": "All statuses" },
+    "status": {
+      "active": "Active",
+      "inactive": "Inactive",
+      "all": "All statuses"
+    },
     "openPricing": "Open pricing",
     "count": "{count, plural, one {# assignment} other {# assignments}}",
     "errors": {

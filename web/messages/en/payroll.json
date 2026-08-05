@@ -7,7 +7,10 @@
   },
   "home": {
     "tabs": {
-      "overview": "Overview"
+      "overview": "Payroll",
+      "runs": "Pay runs",
+      "remittances": "Remittances",
+      "yearEnd": "Year-end"
     },
     "actions": {
       "viewRuns": "Pay runs",
@@ -270,7 +273,11 @@
       "single": "Single or married filing separately",
       "married_joint": "Married filing jointly",
       "head_household": "Head of household"
-    }
+    },
+    "loading": "Loading payroll profile…",
+    "loadFailed": "Could not load the payroll profile.",
+    "noSchedules": "Create a pay schedule before setting up payroll profiles.",
+    "openSchedules": "Open pay schedules"
   },
   "settingsPage": {
     "title": "Payroll",
