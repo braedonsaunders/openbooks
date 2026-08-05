@@ -154,6 +154,11 @@ export default async function PayRunPage({
           ? 'review'
           : 'period'
 
+  const bankAccounts = ((await db.execute(sql`
+    select id, concat_ws(' · ', number, name) as label from accounts
+     where org_id = ${orgId} and type = 'asset_bank' and is_active and not is_summary
+     order by number nulls last, name`)) as unknown as { rows: { id: string; label: string }[] }).rows
+
   const moduleTabs = await groupTabs('payroll', '/payroll/runs')
 
   return (
@@ -175,6 +180,7 @@ export default async function PayRunPage({
         adjustments={adjustmentsRes.rows}
         adjustableComponents={adjustableRes.rows}
         remittance={run.run_status === 'committed' ? remitRes.rows : []}
+        bankAccounts={bankAccounts}
         canRun={can(authz, 'payroll.run')}
         initialStep={initialStep}
       />

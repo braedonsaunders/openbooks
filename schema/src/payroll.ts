@@ -249,6 +249,9 @@ export const payRuns = pgTable(
     employerCostTotal: money("employer_cost_total").notNull().default("0"),
     employeeCount: integer("employee_count").notNull().default(0),
     calculatedAt: timestamp("calculated_at", { withTimezone: true }),
+    /** Set by recordPayRunPayment: the DR-payable/CR-bank settlement entry. */
+    paidAt: timestamp("paid_at", { withTimezone: true }),
+    paidEntryId: uuid("paid_entry_id"),
     ...auditColumns,
   },
   (t) => [
