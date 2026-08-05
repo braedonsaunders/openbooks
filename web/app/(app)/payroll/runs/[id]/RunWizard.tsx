@@ -108,6 +108,61 @@ interface GlLeg {
 /** Net-pay variance beyond this (either direction) flags a stub for review. */
 const VARIANCE_FLAG_PERCENT = 15
 
+/**
+ * Human names for the statutory trace factors (CRA T4127 notation + the US
+ * Pub 15-T trace). Domain constants, not UI copy — the CRA/IRS letter codes
+ * stay visible beside them so the trace still maps to the guides.
+ */
+const FACTOR_LABELS: Record<string, string> = {
+  // Inputs
+  I: 'Periodic income this period',
+  B: 'Bonus / non-periodic pay this period',
+  PI: 'Pensionable earnings this period',
+  IE: 'Insurable earnings this period',
+  // CRA T4127
+  A: 'Annual taxable income',
+  A_step2: 'Annual taxable income excluding this bonus',
+  C: 'CPP/QPP contribution',
+  C2: 'Second additional CPP/QPP (CPP2)',
+  EI: 'EI premium',
+  EI_ER: 'EI premium (employer)',
+  QPIP: 'QPIP premium',
+  QPIP_ER: 'QPIP premium (employer)',
+  F5: 'Enhanced-CPP tax deduction',
+  F5A: 'Enhanced-CPP deduction on periodic pay',
+  F5B: 'Enhanced-CPP deduction on the bonus',
+  TC: 'Federal TD1 claim amount',
+  TCP: 'Provincial TD1 claim amount',
+  K1: 'Federal personal credit',
+  K2: 'Federal CPP/EI credit',
+  K4: 'Canada employment amount credit',
+  K1P: 'Provincial personal credit',
+  K2P: 'Provincial CPP/EI credit',
+  K4P: 'Provincial employment amount credit',
+  K5P: 'Provincial supplemental credit',
+  T3: 'Basic federal tax (annual)',
+  T1: 'Federal tax (annual)',
+  T4: 'Basic provincial tax (annual)',
+  V1: 'Ontario surtax',
+  V2: 'Ontario Health Premium',
+  S: 'Provincial tax reduction',
+  T2: 'Provincial tax (annual)',
+  T: 'Income tax this period',
+  TB: 'Tax on the bonus (payable now)',
+  // IRS Pub 15-T
+  AAWA: 'Annual adjusted wage amount',
+  FIT: 'Federal income tax this period',
+  FIT_S: 'Federal tax on supplemental wages',
+  SS: 'Social Security tax',
+  SS_TAXABLE: 'Social Security taxable wages',
+  MED: 'Medicare tax',
+  MED2: 'Additional Medicare tax',
+  FUTA: 'Federal unemployment (employer)',
+  SUTA: 'State unemployment (employer)',
+  TW: 'Taxable wages this period',
+  TWP: 'Projected annual taxable wages',
+}
+
 /** Statutory splits surfaced as stub-roster columns, read off the factors trace. */
 function statutory(stub: StubRow) {
   const f = stub.factors ?? {}
@@ -630,6 +685,7 @@ function StubDrawer({
   const t = useTranslations('payroll')
   const s = statutory(stub)
   const factorEntries = Object.entries(stub.factors ?? {}).sort(([a], [b]) => a.localeCompare(b))
+  const factorLabel = (key: string) => FACTOR_LABELS[key] ?? key
   return (
     <Drawer
       open
@@ -715,10 +771,13 @@ function StubDrawer({
           <h4 className="mb-2 text-xs font-semibold tracking-wider text-slate-400 uppercase dark:text-slate-500">
             {t('run.stub.trace')}
           </h4>
-          <dl className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-0.5 text-sm">
+          <dl className="grid grid-cols-[1fr_auto] gap-x-4 gap-y-0.5 text-sm">
             {factorEntries.map(([key, value]) => (
               <Fragment key={key}>
-                <dt className="font-mono text-xs text-slate-500 dark:text-slate-400">{key}</dt>
+                <dt className="text-slate-600 dark:text-slate-300">
+                  {factorLabel(key)}
+                  <span className="ml-1.5 font-mono text-[10px] text-slate-400 dark:text-slate-500">{key}</span>
+                </dt>
                 <dd className="text-right tabular-nums">{value}</dd>
               </Fragment>
             ))}
