@@ -94,7 +94,10 @@ enabled on **327 tables**.
 | A5 | Depreciation supports straight-line, declining balance, double declining, sum-of-years-digits, units of production, and custom formulas, across alternate books. | Service | `engine/src/depreciation.integration.test.ts` |
 | A6 | Impairment and disposal arithmetic is a pure function that refuses to emit an unbalanced entry. | Service | Conformance cases `ppe-impairment-to-fair-value`, `ppe-disposal-gain-loss` |
 | A7 | **Independent recomputation.** A differential harness drives the same economic events through OpenBooks and a separate, independently written accounting system and compares functional-currency general-ledger impact at every lifecycle checkpoint, **with zero rounding tolerance**. | Harness | `engine/src/harness/ledger-parity/` |
-| A8 | **Standards conformance.** Requirements of ASC 606/IFRS 15, IAS 2/ASC 330, IAS 21, ASC 360/IAS 16, and ASC 740/IAS 12 are encoded as executable fixtures with exact expected entries. | Corpus | `npm -w engine run conformance -- report` |
+| A8 | **Standards conformance.** Requirements of ASC 606/IFRS 15, ASC 842/IFRS 16, IAS 2/ASC 330, IAS 21, ASC 360/IAS 16, and ASC 740/IAS 12 are encoded as executable fixtures with exact expected entries. | Corpus | `npm -w engine run conformance -- report` |
+| A9 | Lease liabilities are measured at the exact present value of the payments on BigInt rationals — a 5%/12 monthly rate is carried as the exact fraction, never a truncated decimal — and every schedule retires to exactly zero. | Service | `engine/src/leases.test.ts`, `engine/src/present-value.ts` |
+| A10 | Inventory NRV write-downs remeasure value only: quantity is untouched, the change distributes across cost layers with no lost cent, and the subledger stays equal to the general ledger. | Service | `engine/src/inventory-nrv.integration.test.ts` |
+| A11 | Current tax is measured on taxable profit: the year's originating or reversing movement in temporary differences adjusts taxable income, so income tax payable is the amount owed on the return. | Service | Conformance case `tax-current-tax-omits-temporary-differences` |
 
 ### Cutoff
 *Transactions and events are recorded in the correct accounting period.*
@@ -190,30 +193,23 @@ usable for planning.
 or penetration test has been performed. There is no SOC 1, SOC 2, ISO 27001, or
 PCI DSS attestation, and no government filing certification.
 
-**Measurement gaps identified by our own conformance corpus.** These are
-published in full with the shortfall described in each case:
+**Measurement gaps identified by our own conformance corpus.** The corpus's
+first publication identified five measurement gaps — no lessee lease
+accounting, no lower-of-cost-and-NRV inventory measurement, current tax
+computed without temporary differences, narrow foreign-currency retranslation
+scope, and no ASC 606 variable-consideration constraint or financing-component
+split. Each has since been implemented as product capability with its own
+schema, engine code, and tests, and its conformance case now passes exactly.
+What remains published:
 
-- **No lessee lease accounting.** ASC 842 and IFRS 16 right-of-use assets and
-  lease liabilities are not implemented. Leases are accounted for as cash is
-  paid, which is the pre-2019 treatment. Lessor-side property rent billing
-  exists but is not derived from a lease classification test and does not
-  level escalating rents on a straight-line basis.
-- **No lower-of-cost-and-net-realisable-value inventory measurement.** There is
-  no value-only inventory remeasurement, so an NRV write-down must be booked as
-  a manual journal, leaving the inventory subledger and the general ledger
-  disagreeing by the amount of the write-down.
-- **Current tax excludes temporary differences.** Current tax is computed from
-  book income adjusted for permanent differences and loss carryforwards only.
-  Total tax expense is unaffected, but the split between current and deferred —
-  and therefore income tax payable — is misstated whenever temporary
-  differences exist. Reconcile the current-tax line to the filed return before
-  publishing the tax note.
-- **Foreign-currency retranslation scope is narrow.** Period-end retranslation
-  covers bank, receivable, and payable accounts. Foreign-currency loans, other
-  long-term debt, and other monetary balances outside those types are not
-  retranslated and need a manual adjustment.
-- **No variable-consideration constraint and no significant-financing-component
-  adjustment** under ASC 606 / IFRS 15.
+- **Impairment restoration is not framework-gated.** A written-down
+  held-and-used asset can be written back up through remeasurement; US GAAP
+  prohibits that restoration (ASC 360-10-35-20) and IAS 36 caps a reversal at
+  depreciated historical cost. Neither rule is enforced yet.
+- **Lessor straight-line levelling is not wired into tenant billing.**
+  Classification, levelling, and sales-type commencement are engine
+  capabilities; property-management rent invoices still recognise as billed
+  unless the levelled schedule is applied through the lease module.
 
 **Coverage gaps.** Browser end-to-end coverage is a smoke tier only. There is
 no automated segregation-of-duties conflict report, no automated

@@ -1,37 +1,46 @@
 /**
  * Leases — ASC 842 and IFRS 16.
  *
- * Every case in this file is a DECLARED GAP. The product has no lessee
- * accounting: there is no right-of-use asset, no lease liability, no discount
- * rate, and no lease classification test.
+ * The lessee model is implemented in engine/src/leases.ts: liability at the
+ * present value of unpaid payments, right-of-use asset at cost, exact-decimal
+ * interest/principal/amortization schedules, the US GAAP operating single-cost
+ * model, framework-resolved classification, and the short-term/low-value
+ * elections. The initial-recognition and exemption cases run against the REAL
+ * service and kernel; the schedule cases assert the same engine arithmetic the
+ * service persists.
  *
- * What does exist is lessor-side property management — properties, units,
- * tenant leases, recurring rent charges, escalations and common-area
- * recoveries — which bills rent to tenants and recognises it as revenue. That
- * is a different requirement from the ones below and is not a partial
- * implementation of them.
- *
- * These cases are published rather than omitted so that the corpus states the
- * scope of the gap precisely, and so the target accounting is already encoded
- * for whoever implements the module.
- *
- * The worked figures below use a five-year lease with annual arrears payments
- * of 20,000.00 and a 5% discount rate. The present-value factor for a five-year
- * ordinary annuity at 5% is 4.3294766708, giving an opening liability of
- * 86,589.5334.
+ * The worked example throughout: five annual arrears payments of 20,000.00 at
+ * 5%. Annuity factor 4.3294766708 → opening liability 86,589.5334.
  */
 
-import type { ConformanceCase } from "../types.ts";
+import { randomUUID } from "node:crypto";
+import { sql } from "drizzle-orm";
+import { db } from "../../db.ts";
+import { add, neg, toUnits, fromUnits } from "../../money.ts";
+import {
+  classifyLease,
+  classifyLessorLease,
+  commenceLease,
+  createLeaseAgreement,
+  lessorStraightLineSchedule,
+  measureLesseeLease,
+  postDueLeaseSchedules,
+  salesTypeCommencement,
+} from "../../leases.ts";
+import { capture } from "../ledger-helpers.ts";
+import type { CaseContext, ConformanceCase } from "../types.ts";
 
-const LESSEE_GAP =
-  "There is no lessee lease accounting. No schema exists for lease contracts, " +
-  "discount rates, lease terms, renewal or termination options, or payment " +
-  "schedules; nothing computes a present value; and no right-of-use asset or " +
-  "lease liability is ever recognised. Leases entered into as lessee are " +
-  "accounted for only as the cash payments are made, which is the pre-ASC 842 " +
-  "and pre-IFRS 16 treatment. Any entity with material leases must maintain " +
-  "the lease schedule and the balance-sheet amounts outside the system and " +
-  "post them by manual journal.";
+/** The lease-account bundle every ledger-tier lease case passes the service. */
+function leaseAccounts(ctx: CaseContext) {
+  return {
+    rouAsset: ctx.roles.rouAsset,
+    leaseLiability: ctx.roles.leaseLiability,
+    interestExpense: ctx.roles.leaseInterestExpense,
+    amortizationExpense: ctx.roles.rouAmortization,
+    leaseExpense: ctx.roles.leaseExpense,
+    payment: ctx.roles.bank,
+  };
+}
 
 export const LEASE_CASES: readonly ConformanceCase[] = [
   {
@@ -60,13 +69,12 @@ export const LEASE_CASES: readonly ConformanceCase[] = [
           "At the commencement date a lessee measures the right-of-use asset at cost.",
       },
     ],
-    support: "not-implemented",
-    tier: "computation",
-    gap: LESSEE_GAP,
+    support: "supported",
+    tier: "ledger",
     assertion:
-      "Entering into a lease puts both an asset and a liability on the balance sheet at commencement, so leased capacity and the obligation to pay for it are visible rather than off balance sheet.",
+      "Commencing a lease puts both an asset and a liability on the balance sheet at the exact present value of the payments — leased capacity and the obligation to pay for it are visible, not off balance sheet, and the discounting is exact to the hundredth of a cent.",
     facts: [
-      "A five-year lease commencing 2026-01-01.",
+      "A five-year lease commencing 2026-07-15.",
       "Annual payments of 20,000.00 in arrears; 100,000.00 undiscounted in total.",
       "The incremental borrowing rate is 5%.",
       "The present value of the payments is 86,589.5334.",
@@ -82,6 +90,38 @@ export const LEASE_CASES: readonly ConformanceCase[] = [
         },
       ],
       values: { openingLiability: "86589.5334", undiscountedPayments: "100000.0000" },
+    },
+    run: async (ctx) => {
+      const ledger = ctx.ledger!;
+      const { leaseId } = await createLeaseAgreement(ledger.orgId, ledger.actorId, {
+        subsidiaryId: ledger.subsidiaryId,
+        leaseNumber: "CONF-LEASE-1",
+        commencementOn: "2026-07-15",
+        termPeriods: 5,
+        paymentFrequency: "annual",
+        paymentAmount: "20000",
+        annualDiscountRatePercent: "5",
+        classificationInputs: { transfersOwnership: true },
+        accounts: leaseAccounts(ctx),
+      });
+
+      let commenced: Awaited<ReturnType<typeof commenceLease>>;
+      const entry = await capture(ctx, "commencement", async () => {
+        commenced = await commenceLease(ledger.orgId, leaseId, ledger.actorId);
+      });
+
+      const schedule = (await db.execute(sql`
+        select coalesce(sum(payment), 0)::text as total from lease_agreement_schedule_lines
+         where org_id = ${ledger.orgId} and lease_id = ${leaseId}`)) as unknown as {
+        rows: { total: string }[];
+      };
+      return {
+        entries: [entry],
+        values: {
+          openingLiability: commenced!.liability,
+          undiscountedPayments: fromUnits(toUnits(schedule.rows[0]!.total)),
+        },
+      };
     },
   },
 
@@ -104,15 +144,14 @@ export const LEASE_CASES: readonly ConformanceCase[] = [
           "A lessee presents interest expense on the lease liability separately from the depreciation charge on the right-of-use asset.",
       },
     ],
-    support: "not-implemented",
+    support: "supported",
     tier: "computation",
-    gap: LESSEE_GAP,
     assertion:
-      "A finance lease produces a front-loaded total charge and puts the interest element into finance costs rather than operating expenses, which changes reported operating profit and every leverage and coverage ratio computed from it.",
+      "A finance lease produces a front-loaded total charge with the interest element presented in finance costs rather than operating expenses — the split that changes reported operating profit and every coverage ratio computed from it.",
     facts: [
       "Opening liability 86,589.5334 at 5%.",
       "Year one interest is 4,329.4767.",
-      "The right-of-use asset amortises straight-line over five years at 17,317.9067 a year.",
+      "The right-of-use asset amortises straight-line over five years; year one carries 17,317.9067.",
       "The 20,000.00 payment reduces the liability by 15,670.5233 after interest.",
       "Total year-one charge is 21,647.3834, more than the 20,000.00 cash paid.",
     ],
@@ -135,6 +174,37 @@ export const LEASE_CASES: readonly ConformanceCase[] = [
         },
       ],
     },
+    run: (ctx) => {
+      const m = measureLesseeLease({
+        payment: "20000",
+        periods: 5,
+        annualRatePercent: "5",
+        periodsPerYear: 1,
+        timing: "arrears",
+        model: "finance",
+      });
+      const y1 = m.schedule[0]!;
+      const principal = add(y1.payment, neg(y1.interest));
+      return {
+        entries: [
+          {
+            step: "year 1 payment",
+            lines: [
+              { accountId: ctx.roles.leaseInterestExpense, amount: y1.interest },
+              { accountId: ctx.roles.leaseLiability, amount: principal },
+              { accountId: ctx.roles.bank, amount: neg(y1.payment) },
+            ],
+          },
+          {
+            step: "year 1 amortisation",
+            lines: [
+              { accountId: ctx.roles.rouAmortization, amount: y1.amortization! },
+              { accountId: ctx.roles.rouAsset, amount: neg(y1.amortization!) },
+            ],
+          },
+        ],
+      };
+    },
   },
 
   {
@@ -156,18 +226,15 @@ export const LEASE_CASES: readonly ConformanceCase[] = [
           "A lessee classifies a lease as a finance lease when it meets any of the specified criteria, and as an operating lease otherwise.",
       },
     ],
-    support: "not-implemented",
+    support: "supported",
     tier: "computation",
-    gap:
-      LESSEE_GAP +
-      " There is additionally no lease classification test, so the finance/operating distinction that drives the entire US GAAP presentation difference cannot be made.",
     assertion:
-      "Under US GAAP an operating lease charges one flat amount to operating expenses each year, while still carrying the asset and liability on the balance sheet — a presentation that differs from IFRS for identical economics.",
+      "A lease meeting no finance criterion classifies as operating under US GAAP and charges one flat amount to operating expense each year — while still carrying the asset and liability on the balance sheet, the liability unwinding on the interest method and the right-of-use asset absorbing the difference.",
     facts: [
       "The same five-year, 20,000.00-a-year lease at 5%.",
-      "Total lease cost is 100,000.00 over five years, or 20,000.00 a year straight-line.",
-      "Year one: the liability unwinds by 15,670.5233 after 4,329.4767 of imputed interest, and the right-of-use asset reduces by the same amount so the two stay aligned.",
-      "No interest is presented separately; the whole 20,000.00 is one operating lease cost.",
+      "No classification criterion is met, so US GAAP classifies it as operating.",
+      "Total lease cost is 100,000.00 over five years, 20,000.00 a year straight-line.",
+      "Year one: imputed interest is 4,329.4767; the liability unwinds by 15,670.5233 and the right-of-use asset reduces by the same amount, keeping the two aligned.",
     ],
     expected: {
       entries: [
@@ -181,7 +248,36 @@ export const LEASE_CASES: readonly ConformanceCase[] = [
           ],
         },
       ],
-      values: { annualStraightLineCost: "20000.0000" },
+      values: { classification: "operating", annualStraightLineCost: "20000.0000" },
+    },
+    run: (ctx) => {
+      const classification = classifyLease(
+        { leaseTermMonths: 60, economicLifeMonths: 300, pvOfPayments: "86589.5334", fairValue: "400000" },
+        "us_gaap",
+      );
+      const m = measureLesseeLease({
+        payment: "20000",
+        periods: 5,
+        annualRatePercent: "5",
+        periodsPerYear: 1,
+        timing: "arrears",
+        model: classification.model,
+      });
+      const y1 = m.schedule[0]!;
+      return {
+        entries: [
+          {
+            step: "year 1",
+            lines: [
+              { accountId: ctx.roles.leaseExpense, amount: y1.singleCost! },
+              { accountId: ctx.roles.bank, amount: neg(y1.payment) },
+              { accountId: ctx.roles.leaseLiability, amount: add(y1.payment, neg(y1.interest)) },
+              { accountId: ctx.roles.rouAsset, amount: neg(y1.rouAdjustment!) },
+            ],
+          },
+        ],
+        values: { classification: classification.model, annualStraightLineCost: y1.singleCost! },
+      };
     },
   },
 
@@ -204,25 +300,56 @@ export const LEASE_CASES: readonly ConformanceCase[] = [
           "A lessee depreciates the right-of-use asset applying the depreciation requirements for property, plant and equipment.",
       },
     ],
-    support: "not-implemented",
+    support: "supported",
     tier: "computation",
-    gap:
-      LESSEE_GAP +
-      " A dual-reporting entity additionally needs the same lease to produce the IFRS single-model result and the US GAAP operating-lease result from one set of source data.",
     assertion:
-      "The identical lease produces a different expense profile under IFRS than under US GAAP — front-loaded rather than flat — which is why a dual-reporting entity cannot use one set of numbers for both.",
+      "The identical lease produces a front-loaded charge under IFRS and a flat charge under US GAAP — the classification step is skipped entirely under IFRS, and a dual-reporting entity gets each framework's answer from the same source data by switching the configured framework.",
     facts: [
-      "The same five-year, 20,000.00-a-year lease at 5%.",
-      "IFRS reports 4,329.4767 of interest plus 17,317.9067 of depreciation in year one, totalling 21,647.3834.",
-      "US GAAP reports a flat 20,000.00 operating lease cost in the same year.",
-      "The year-one difference between the two frameworks is 1,647.3834.",
+      "The same five-year, 20,000.00-a-year lease at 5%, meeting no US GAAP finance criterion.",
+      "IFRS ignores the criteria and applies the single model: year one carries 4,329.4767 of interest plus 17,317.9067 of depreciation, totalling 21,647.3834.",
+      "US GAAP classifies it operating: a flat 20,000.00 lease cost in the same year.",
+      "The year-one difference between the frameworks is 1,647.3834.",
     ],
     expected: {
       values: {
+        ifrsModel: "finance",
+        usGaapModel: "operating",
         ifrsYear1Charge: "21647.3834",
         usGaapOperatingYear1Charge: "20000.0000",
         frameworkDifference: "1647.3834",
       },
+    },
+    run: () => {
+      const criteria = {}; // no finance criterion met
+      const ifrs = classifyLease(criteria, "ifrs");
+      const usGaap = classifyLease(criteria, "us_gaap");
+      const ifrsMeasure = measureLesseeLease({
+        payment: "20000",
+        periods: 5,
+        annualRatePercent: "5",
+        periodsPerYear: 1,
+        timing: "arrears",
+        model: ifrs.model,
+      });
+      const usMeasure = measureLesseeLease({
+        payment: "20000",
+        periods: 5,
+        annualRatePercent: "5",
+        periodsPerYear: 1,
+        timing: "arrears",
+        model: usGaap.model,
+      });
+      const ifrsY1 = add(ifrsMeasure.schedule[0]!.interest, ifrsMeasure.schedule[0]!.amortization!);
+      const usY1 = usMeasure.schedule[0]!.singleCost!;
+      return {
+        values: {
+          ifrsModel: ifrs.model,
+          usGaapModel: usGaap.model,
+          ifrsYear1Charge: ifrsY1,
+          usGaapOperatingYear1Charge: usY1,
+          frameworkDifference: add(ifrsY1, neg(usY1)),
+        },
+      };
     },
   },
 
@@ -245,21 +372,21 @@ export const LEASE_CASES: readonly ConformanceCase[] = [
           "A lessee may elect, by class of underlying asset, not to recognise a right-of-use asset and lease liability for short-term leases.",
       },
     ],
-    support: "not-implemented",
-    tier: "computation",
-    gap:
-      "Without lessee lease accounting there is nothing to exempt from. When the module is built, the election must be recorded per class of underlying asset, applied consistently, and disclosed — an election taken silently is itself an audit finding.",
+    support: "supported",
+    tier: "ledger",
     assertion:
-      "An elected short-term lease charges rent straight-line to expense and recognises no asset or liability, and the election is recorded so it can be applied consistently and disclosed.",
+      "An elected short-term lease recognises no asset or liability at commencement and charges rent straight to expense as paid — and the election is validated against eligibility, so a thirteen-month lease cannot quietly take it.",
     facts: [
-      "A nine-month lease with no purchase option, at 1,000.00 a month.",
-      "The short-term exemption is elected for this class of asset.",
-      "Expense is 1,000.00 a month with no right-of-use asset and no lease liability.",
+      "A nine-month lease at 1,000.00 a month with no purchase option, commencing 2026-01-01.",
+      "The short-term exemption is elected.",
+      "Commencement recognises nothing; each month charges 1,000.00 to lease expense.",
+      "The election is recorded on the lease as evidence of the policy applied.",
     ],
     expected: {
       entries: [
+        { step: "commencement", lines: [] },
         {
-          step: "monthly rent",
+          step: "month 1 rent",
           lines: [
             { role: "leaseExpense", amount: "1000.0000" },
             { role: "bank", amount: "-1000.0000" },
@@ -267,6 +394,36 @@ export const LEASE_CASES: readonly ConformanceCase[] = [
         },
       ],
       values: { rouAssetRecognised: "0.0000", leaseLiabilityRecognised: "0.0000" },
+    },
+    run: async (ctx) => {
+      const ledger = ctx.ledger!;
+      const { leaseId } = await createLeaseAgreement(ledger.orgId, ledger.actorId, {
+        subsidiaryId: ledger.subsidiaryId,
+        leaseNumber: "CONF-LEASE-ST",
+        commencementOn: "2026-01-01",
+        termPeriods: 9,
+        paymentFrequency: "monthly",
+        paymentAmount: "1000",
+        annualDiscountRatePercent: "6",
+        exemption: "short_term",
+        accounts: leaseAccounts(ctx),
+      });
+
+      let commenced: Awaited<ReturnType<typeof commenceLease>>;
+      const commencement = await capture(ctx, "commencement", async () => {
+        commenced = await commenceLease(ledger.orgId, leaseId, ledger.actorId);
+      });
+      const month1 = await capture(ctx, "month 1 rent", async () => {
+        await postDueLeaseSchedules(ledger.orgId, "2026-01-31", ledger.actorId);
+      });
+
+      return {
+        entries: [commencement, month1],
+        values: {
+          rouAssetRecognised: fromUnits(toUnits(commenced!.rouAsset)),
+          leaseLiabilityRecognised: fromUnits(toUnits(commenced!.liability)),
+        },
+      };
     },
   },
 
@@ -296,16 +453,17 @@ export const LEASE_CASES: readonly ConformanceCase[] = [
           "A lessor classifies a lease as a sales-type, direct financing, or operating lease and applies the corresponding recognition model.",
       },
     ],
-    support: "not-implemented",
-    tier: "ledger",
-    gap:
-      "The property-management module bills tenant rent and recognises it as revenue when charged, which resembles operating-lease lessor accounting but is not derived from a classification test. There is no assessment of whether a lease transfers substantially all the risks and rewards of ownership, no sales-type or direct-financing treatment, no net investment in the lease, and no straight-line levelling of escalating rents — an escalating lease is recognised as billed rather than levelled over the term.",
+    support: "partial",
+    tier: "computation",
+    limitation:
+      "Lessor classification, straight-line levelling of escalating rents, and sales-type commencement (derecognition plus selling profit) are engine capabilities. The property-management tenant-billing pipeline does not yet post the levelling accrual automatically — rent invoices recognise as billed unless the levelled schedule from the lease module is applied. Direct-financing deferral of selling profit is not modelled separately from sales-type.",
     assertion:
-      "A lessor tests each lease against the classification criteria, recognises operating-lease rent evenly over the term regardless of the billing pattern, and derecognises the underlying asset for a sales-type lease.",
+      "A lessor tests each lease against the classification criteria; an operating lease's escalating rent levels to straight-line income with the accrual returning to exactly zero over the term; a sales-type lease derecognises the asset and takes selling profit at commencement.",
     facts: [
       "A five-year operating lease with rent rising from 10,000.00 to 14,000.00 a year, totalling 60,000.00.",
-      "Straight-line income is 12,000.00 a year regardless of the amount billed.",
-      "In year one the 2,000.00 billed short of the straight-line amount is accrued as a receivable.",
+      "No transfer-of-risks criterion is met, so it classifies as operating.",
+      "Straight-line income is 12,000.00 a year regardless of billing; year one accrues a 2,000.00 receivable.",
+      "Separately, a sales-type lease with a net investment of 90,000.00 over a carrying amount of 75,000.00 recognises 15,000.00 of selling profit at commencement.",
     ],
     expected: {
       entries: [
@@ -318,7 +476,49 @@ export const LEASE_CASES: readonly ConformanceCase[] = [
           ],
         },
       ],
-      values: { straightLineAnnualIncome: "12000.0000" },
+      values: {
+        classification: "operating",
+        straightLineAnnualIncome: "12000.0000",
+        salesTypeSellingProfit: "15000.0000",
+      },
+    },
+    run: (ctx) => {
+      const { classification } = classifyLessorLease({
+        leaseTermMonths: 60,
+        economicLifeMonths: 480,
+        pvOfPayments: "51000",
+        fairValue: "400000",
+      });
+      const schedule = lessorStraightLineSchedule(["10000", "11000", "12000", "13000", "14000"]);
+      const y1 = schedule[0]!;
+
+      const salesType = salesTypeCommencement({
+        netInvestment: "90000",
+        carryingAmount: "75000",
+        accounts: {
+          netInvestmentAccountId: `probe:${randomUUID()}`,
+          assetAccountId: `probe:${randomUUID()}`,
+          sellingProfitAccountId: `probe:${randomUUID()}`,
+        },
+      });
+
+      return {
+        entries: [
+          {
+            step: "year 1 straight-line rent",
+            lines: [
+              { accountId: ctx.roles.ar, amount: y1.billed },
+              { accountId: ctx.roles.contractAsset, amount: y1.accrualDelta },
+              { accountId: ctx.roles.revenue, amount: neg(y1.income) },
+            ],
+          },
+        ],
+        values: {
+          classification,
+          straightLineAnnualIncome: y1.income,
+          salesTypeSellingProfit: salesType.sellingProfit,
+        },
+      };
     },
   },
 ];

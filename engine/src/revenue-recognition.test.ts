@@ -5,7 +5,9 @@ import {
   allocateByRelativeSSP,
   apportion,
   computeRecognitionSchedule,
+  estimateVariableConsideration,
   fairValueRangeFlag,
+  separateFinancingComponent,
   type RecognitionInput,
 } from "./revenue-recognition.ts";
 
@@ -240,4 +242,95 @@ test("cumulative column tracks recognized-to-date and ends at the total", () => 
   });
   assert.equal(toUnits(plan[0].cumulative), toUnits("100"));
   assert.equal(toUnits(plan[11].cumulative), toUnits("1200"));
+});
+
+// ---------------------------------------------------------------------------
+// Step 3 — transaction price: variable consideration + financing component
+// ---------------------------------------------------------------------------
+
+test("expected-value estimation probability-weights the outcomes (606-10-32-8)", () => {
+  const v = estimateVariableConsideration({
+    method: "expected_value",
+    outcomes: [
+      { amount: "10000", probabilityPercent: "50" },
+      { amount: "6000", probabilityPercent: "30" },
+      { amount: "0", probabilityPercent: "20" },
+    ],
+  });
+  assert.equal(v.estimate, "6800.0000"); // 5,000 + 1,800 + 0
+  assert.equal(v.constrained, "6800.0000");
+  assert.equal(v.constrainedOut, "0.0000");
+});
+
+test("most-likely-amount takes the single highest-probability outcome and refuses a tie", () => {
+  const v = estimateVariableConsideration({
+    method: "most_likely_amount",
+    outcomes: [
+      { amount: "20000", probabilityPercent: "60" },
+      { amount: "0", probabilityPercent: "40" },
+    ],
+  });
+  assert.equal(v.estimate, "20000.0000");
+  assert.throws(
+    () =>
+      estimateVariableConsideration({
+        method: "most_likely_amount",
+        outcomes: [
+          { amount: "20000", probabilityPercent: "50" },
+          { amount: "0", probabilityPercent: "50" },
+        ],
+      }),
+    /ambiguous/,
+  );
+});
+
+test("the constraint caps the estimate and carries the held-back amount (606-10-32-11)", () => {
+  const v = estimateVariableConsideration({
+    method: "most_likely_amount",
+    outcomes: [
+      { amount: "20000", probabilityPercent: "60" },
+      { amount: "0", probabilityPercent: "40" },
+    ],
+    constraintLimit: "12000",
+  });
+  assert.equal(v.constrained, "12000.0000");
+  assert.equal(v.constrainedOut, "8000.0000");
+});
+
+test("probabilities must sum to exactly 100 percent", () => {
+  assert.throws(
+    () =>
+      estimateVariableConsideration({
+        method: "expected_value",
+        outcomes: [{ amount: "100", probabilityPercent: "99.99" }],
+      }),
+    /sum to exactly 100/,
+  );
+});
+
+test("financing component: revenue at the cash selling price, accretion lands exactly (606-10-32-15)", () => {
+  const f = separateFinancingComponent({
+    consideration: "121000",
+    annualRatePercent: "10",
+    years: 2,
+  });
+  assert.equal(f.cashSellingPrice, "100000.0000"); // 121,000 / 1.21 exactly
+  assert.equal(f.financingComponent, "21000.0000");
+  assert.equal(f.accretion[0].interest, "10000.0000");
+  assert.equal(f.accretion[1].interest, "11000.0000");
+  assert.equal(f.accretion[1].closing, "121000.0000");
+});
+
+test("financing accretion absorbs rounding in the final year and still lands on the billed amount", () => {
+  const f = separateFinancingComponent({
+    consideration: "50000",
+    annualRatePercent: "7.25",
+    years: 3,
+  });
+  // PV = 50,000 / 1.0725^3 — irrational in decimal; the accretion must still
+  // land on exactly 50,000.0000.
+  const last = f.accretion[f.accretion.length - 1];
+  assert.equal(last.closing, "50000.0000");
+  const interestSum = f.accretion.reduce((a, p) => a + toUnits(p.interest), 0n);
+  assert.equal(interestSum, toUnits(f.financingComponent));
 });

@@ -233,15 +233,20 @@ hundredth of a cent is a failure.**
 
 Requirements the product does not implement are **published as gaps**, never
 omitted and never counted as passing. The test suite asserts that each gap is
-*still a gap*, so the day someone implements leases, the build fails and tells
+*still a gap*, so the day someone implements one, the build fails and tells
 them to reclassify the case rather than letting this page quietly understate
 what the software does.
 
-Gaps currently published include: no lessee lease accounting under ASC 842 or
-IFRS 16; no lower-of-cost-and-net-realisable-value inventory measurement;
-current tax computed without temporary differences; foreign-currency
-retranslation limited to bank, receivable and payable accounts; and no variable
-consideration constraint under ASC 606.
+The corpus has already done its job once: its first publication identified five
+measurement gaps — no lessee lease accounting, no lower-of-cost-and-NRV
+inventory measurement, current tax computed without temporary differences,
+foreign-currency retranslation limited to three account types, and no variable
+consideration constraint — and each was then implemented as real product
+capability (schema, engine, and tests) and its case flipped from GAP to
+passing. The remaining published gap: restoration of an impaired held-and-used
+asset is not yet blocked under US GAAP (ASC 360-10-35-20) nor capped under
+IAS 36. One partial: lessor straight-line levelling is engine arithmetic that
+the property-management billing pipeline does not yet apply automatically.
 
 Full detail, including the shortfall text for every gap and partial:
 **[docs/trust/conformance-matrix.md](docs/trust/conformance-matrix.md)** and
