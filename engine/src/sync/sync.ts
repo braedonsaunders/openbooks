@@ -1762,6 +1762,8 @@ export async function runSync(
                   actorId: postedChangeAuthorization.actorId,
                   requestId: run!.id,
                   reason: `Controller-authorized ${source.name} append-only source correction for transaction ${doc.sourceRef}; policy authorized ${postedChangeAuthorization.authorizedAt.toISOString()}`,
+                  replayMode:
+                    "authenticated_connector_historical_replay" as const,
                 }
               : undefined;
             await regenerateGlImpactTx(

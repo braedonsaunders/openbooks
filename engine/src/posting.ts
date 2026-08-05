@@ -127,6 +127,14 @@ export interface SourceCorrectionAuthorization {
   requestId: string;
   /** Human-readable business reason retained with the correction chain. */
   reason: string;
+  /**
+   * A running connector mirror may need to reproduce an upstream historical
+   * correction inside a period OpenBooks has since closed.  This mode is not a
+   * caller-trusted close override: the database validates requestId + actorId
+   * against the active sync run and the connection's controller-authorized
+   * append-only policy before any closed-period ledger write can occur.
+   */
+  replayMode?: "authenticated_connector_historical_replay";
 }
 
 export interface TaxPostingComponent {
@@ -1985,23 +1993,46 @@ export async function regenerateGlImpactTx(
       )
     `);
 
+  let authenticatedHistoricalReplay = false;
+  if (
+    correction.replayMode === "authenticated_connector_historical_replay"
+  ) {
+    await tx.execute(sql`
+      select
+        set_config('openbooks.connector_replay', 'on', true),
+        set_config('openbooks.connector_replay_request', ${correction.requestId}, true),
+        set_config('openbooks.connector_replay_actor', ${correction.actorId}, true)
+    `);
+    const authorization = (await tx.execute(sql`
+      select connector_historical_replay_authorized(${doc.orgId}) as allowed
+    `)) as unknown as { rows: Array<{ allowed: boolean }> };
+    if (authorization.rows[0]?.allowed !== true) {
+      throw new PostingError(
+        "closed-period connector replay is not authorized by the active sync run and connection policy",
+      );
+    }
+    authenticatedHistoricalReplay = true;
+  }
+
   const module = closeModuleForDocument(doc.kind);
-  await assertPeriodModulesOpen(tx, {
-    orgId: doc.orgId,
-    periodId: entry.periodId,
-    bookId: entry.bookId,
-    subsidiaryIds: existing.map((line) => line.subsidiaryId),
-    modules: [module],
-    allowImportedLocks: true,
-  });
-  await assertPeriodModulesOpen(tx, {
-    orgId: doc.orgId,
-    periodId: period.id,
-    bookId: entry.bookId,
-    subsidiaryIds: kernelLines.map((line) => line.subsidiaryId),
-    modules: [module],
-    allowImportedLocks: true,
-  });
+  if (!authenticatedHistoricalReplay) {
+    await assertPeriodModulesOpen(tx, {
+      orgId: doc.orgId,
+      periodId: entry.periodId,
+      bookId: entry.bookId,
+      subsidiaryIds: existing.map((line) => line.subsidiaryId),
+      modules: [module],
+      allowImportedLocks: true,
+    });
+    await assertPeriodModulesOpen(tx, {
+      orgId: doc.orgId,
+      periodId: period.id,
+      bookId: entry.bookId,
+      subsidiaryIds: kernelLines.map((line) => line.subsidiaryId),
+      modules: [module],
+      allowImportedLocks: true,
+    });
+  }
 
   const evidence = {
     mode: "append_only_source_correction",
@@ -2017,6 +2048,12 @@ export async function regenerateGlImpactTx(
       postingDate,
       periodId: period.id,
     },
+    historicalReplay: authenticatedHistoricalReplay
+      ? {
+          mode: "authenticated_connector_historical_replay",
+          periodLocksPreserved: true,
+        }
+      : null,
   };
   const [reversal] = await tx
     .insert(schema.journalEntries)
@@ -2296,5 +2333,13 @@ export async function regenerateGlImpactTx(
       ${correction.actorId}, ${correction.requestId}
     )
   `);
+  if (authenticatedHistoricalReplay) {
+    await tx.execute(sql`
+      select
+        set_config('openbooks.connector_replay', 'off', true),
+        set_config('openbooks.connector_replay_request', '', true),
+        set_config('openbooks.connector_replay_actor', '', true)
+    `);
+  }
   return { entryId: replacement.id, changed: true };
 }
