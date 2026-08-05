@@ -136,6 +136,58 @@ function documentStarter(meta: PdfRecordTypeMeta, accent: string): StarterTempla
 }
 
 /** Debit/credit starter for journal entries. */
+function payStubStarter(meta: PdfRecordTypeMeta, accent: string): StarterTemplate {
+  const sourceHtml =
+    `<div style="${FONT}color:${INK};">` +
+    `<table style="width:100%;border-collapse:collapse;margin:0 0 6px;"><tbody><tr>` +
+    `<td style="vertical-align:bottom;"><div style="font-size:19px;font-weight:800;color:${accent};">{{org_name}}</div></td>` +
+    `<td style="vertical-align:bottom;text-align:right;">` +
+    `<div style="font-size:26px;font-weight:800;letter-spacing:.02em;text-transform:uppercase;color:${INK};">${meta.docTitle}</div>` +
+    `<div style="font-size:12px;color:${MUTED};padding-top:2px;">{{document_number}}</div>` +
+    `</td>` +
+    `</tr></tbody></table>` +
+    `<div style="height:3px;background:${accent};margin:0 0 22px;"></div>` +
+    `<table style="width:100%;border-collapse:collapse;margin:0 0 24px;"><tbody><tr>` +
+    metaCell('Employee', 'employee_name') +
+    metaCell('Period', 'period_start') +
+    metaCell('To', 'period_end') +
+    metaCell('Pay date', 'pay_date') +
+    `</tr></tbody></table>` +
+    `<table style="width:100%;border-collapse:collapse;margin:0 0 14px;"><tbody>` +
+    `<tr>${th('Earnings')}${th('Hours', 'right', '70px')}${th('Rate', 'right', '80px')}${th('Amount', 'right', '92px')}</tr>` +
+    `<tr data-each="earnings">${td('description')}${td('hours', 'right')}${td('rate', 'right')}${td('amount', 'right')}</tr>` +
+    `</tbody></table>` +
+    `<table style="width:100%;border-collapse:collapse;margin:0 0 14px;"><tbody>` +
+    `<tr>${th('Deductions')}${th('Amount', 'right', '92px')}</tr>` +
+    `<tr data-each="deductions">${td('description')}${td('amount', 'right')}</tr>` +
+    `</tbody></table>` +
+    `<table style="width:100%;border-collapse:collapse;margin:0 0 26px;"><tbody><tr>` +
+    `<td style="vertical-align:top;">` +
+    `<div style="font-size:9px;letter-spacing:.1em;text-transform:uppercase;color:${FAINT};padding-bottom:4px;">Employer contributions</div>` +
+    `<table style="border-collapse:collapse;"><tbody>` +
+    `<tr data-each="employer_contributions"><td style="font-size:10.5px;color:${MUTED};padding:2px 14px 2px 0;">{{description}}</td>` +
+    `<td style="font-size:10.5px;color:${MUTED};text-align:right;">{{amount}}</td></tr>` +
+    `</tbody></table>` +
+    `</td>` +
+    `<td style="vertical-align:top;text-align:right;width:280px;">` +
+    `<table style="border-collapse:collapse;margin-left:auto;"><tbody>` +
+    totalsRow('Gross pay', 'gross') +
+    totalsRow('Total deductions', 'total_deductions') +
+    totalsRow('Net pay', 'net_pay', { strong: true, accent }) +
+    `</tbody></table>` +
+    `<div style="font-size:10px;color:${MUTED};padding-top:10px;">YTD gross {{ytd_gross}} · YTD tax {{ytd_tax}} · YTD net {{ytd_net}}</div>` +
+    `</td>` +
+    `</tr></tbody></table>` +
+    `<div style="border-top:1px solid ${RULE};padding-top:10px;font-size:9.5px;color:${FAINT};">Printed {{printed_date}} · {{org_name}} · Confidential</div>` +
+    `</div>`
+
+  return {
+    sourceHtml,
+    headerHtml: '',
+    footerHtml: `{{org_name}} · ${meta.docTitle} {{document_number}} · Page {{page}} of {{pages}}`,
+  }
+}
+
 function journalStarter(meta: PdfRecordTypeMeta, accent: string): StarterTemplate {
   const sourceHtml =
     `<div style="${FONT}color:${INK};">` +
@@ -261,6 +313,7 @@ function fieldTicketStarter(meta: PdfRecordTypeMeta, accent: string): StarterTem
 export function starterTemplate(meta: PdfRecordTypeMeta, accent?: string | null): StarterTemplate {
   const color = accent && /^#[0-9a-fA-F]{3,8}$/.test(accent) ? accent : '#0f766e'
   if (meta.key === 'journal_entry') return journalStarter(meta, color)
+  if (meta.key === 'pay_stub') return payStubStarter(meta, color)
   if (meta.key === 'field_ticket') return fieldTicketStarter(meta, color)
   return documentStarter(meta, color)
 }

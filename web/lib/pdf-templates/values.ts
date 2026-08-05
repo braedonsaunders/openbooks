@@ -222,6 +222,75 @@ async function loadJournalValues(orgId: string, id: string): Promise<PdfRecordVa
 }
 
 /** Load + format the merge values for one record. Null when not found. */
+async function loadPayStubValues(orgId: string, id: string): Promise<PdfRecordValues | null> {
+  const r = (await db.execute(sql`
+    select s.*, r.period_start, r.period_end, d.document_number,
+           p.display_name as employee_name
+      from pay_stubs s
+      join pay_runs r on r.document_id = s.pay_run_document_id
+      join documents d on d.id = r.document_id
+      join parties p on p.id = s.employee_party_id and p.org_id = s.org_id
+     where s.id = ${id} and s.org_id = ${orgId}
+  `)) as unknown as { rows: Record<string, any>[] }
+  const stub = r.rows[0]
+  if (!stub) return null
+
+  const [org, locale] = await Promise.all([orgRow(orgId), resolveLocale()])
+  const { money } = createMoneyFormatter(locale, stub.currency_code ?? org.base_currency)
+
+  const lines = (await db.execute(sql`
+    select l.kind, l.description, l.hours, l.rate, l.amount
+      from pay_stub_lines l
+     where l.stub_id = ${id} and l.org_id = ${orgId}
+     order by l.sequence
+  `)) as unknown as { rows: Record<string, any>[] }
+
+  // YTD across committed runs up to and including this stub's pay date.
+  const ytd = (await db.execute(sql`
+    select coalesce(sum(s.gross), 0) as gross, coalesce(sum(s.net_pay), 0) as net,
+           coalesce(sum((s.factors->>'T')::numeric + coalesce((s.factors->>'TB')::numeric, 0)), 0) as tax
+      from pay_stubs s
+      join pay_runs r on r.document_id = s.pay_run_document_id and r.run_status = 'committed'
+     where s.org_id = ${orgId} and s.employee_party_id = ${stub.employee_party_id}
+       and s.tax_year = ${stub.tax_year} and s.pay_date <= ${stub.pay_date}
+  `)) as unknown as { rows: { gross: string; net: string; tax: string }[] }
+
+  const byKind = (kind: string) => lines.rows
+    .filter((l) => l.kind === kind)
+    .map((l) => ({
+      description: l.description ?? '',
+      hours: l.hours != null ? Number(l.hours).toFixed(2) : '',
+      rate: l.rate != null ? money(Number(l.rate)) : '',
+      amount: money(Number(l.amount ?? 0)),
+    }))
+  const deductionsTotal = lines.rows
+    .filter((l) => l.kind === 'deduction')
+    .reduce((total, l) => total + Number(l.amount ?? 0), 0)
+
+  const values: Record<string, unknown> = {
+    employee_name: stub.employee_name ?? '',
+    document_number: stub.document_number ?? '',
+    period_start: fmtDate(stub.period_start, locale),
+    period_end: fmtDate(stub.period_end, locale),
+    pay_date: fmtDate(stub.pay_date, locale),
+    province: stub.province ?? '',
+    currency: stub.currency_code ?? '',
+    gross: money(Number(stub.gross ?? 0)),
+    total_deductions: money(deductionsTotal),
+    net_pay: money(Number(stub.net_pay ?? 0)),
+    vacation_accrued: money(Number(stub.vacation_accrued ?? 0)),
+    ytd_gross: money(Number(ytd.rows[0]?.gross ?? 0)),
+    ytd_tax: money(Number(ytd.rows[0]?.tax ?? 0)),
+    ytd_net: money(Number(ytd.rows[0]?.net ?? 0)),
+    org_name: org.name,
+    printed_date: new Date().toLocaleDateString(locale, { year: 'numeric', month: 'short', day: 'numeric' }),
+    earnings: byKind('earning'),
+    deductions: byKind('deduction'),
+    employer_contributions: byKind('employer_contribution'),
+  }
+  return { values, reference: `${stub.document_number ?? 'Pay stub'} ${stub.employee_name ?? ''}`.trim() }
+}
+
 export async function loadPdfRecordValues(
   recordType: string,
   orgId: string,
@@ -230,6 +299,7 @@ export async function loadPdfRecordValues(
   const meta = PDF_RECORD_TYPE_BY_KEY[recordType]
   if (!meta) return null
   if (meta.key === 'journal_entry') return loadJournalValues(orgId, id)
+  if (meta.key === 'pay_stub') return loadPayStubValues(orgId, id)
   if (meta.key === 'field_ticket') return loadFieldTicketValues(orgId, id)
   return loadDocumentValues(meta, orgId, id)
 }
@@ -388,6 +458,12 @@ export async function findSamplePdfRecordId(recordType: string, orgId: string): 
   if (meta.key === 'journal_entry') {
     const r = (await db.execute(sql`
       select id from journal_entries where org_id = ${orgId} order by created_at desc limit 1
+    `)) as unknown as { rows: { id: string }[] }
+    return r.rows[0]?.id ?? null
+  }
+  if (meta.key === 'pay_stub') {
+    const r = (await db.execute(sql`
+      select id from pay_stubs where org_id = ${orgId} order by created_at desc limit 1
     `)) as unknown as { rows: { id: string }[] }
     return r.rows[0]?.id ?? null
   }
