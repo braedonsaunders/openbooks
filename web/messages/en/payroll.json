@@ -130,7 +130,12 @@
       "nextTitle": "What's next",
       "nextRemit": "Remit the withheld amounts to their agencies with a vendor bill (CRA, union funds, benefit carriers).",
       "nextPay": "Pay employees from the net pay payable account — the payment relieves the liability this run just recorded.",
-      "amount": "Amount"
+      "amount": "Amount",
+      "paid": "Paid",
+      "viewPayment": "View payment entry",
+      "bankAccount": "Bank account",
+      "recordPayment": "Record payment",
+      "paymentRecorded": "Payment recorded — net pay settled."
     },
     "adjust": {
       "title": "Adjustments",

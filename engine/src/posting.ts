@@ -773,7 +773,7 @@ export const RULES: Record<string, RuleFn> = {
    * per-employee net pay) — the rule maps it 1:1 like a journal. Employee
    * parties ride the net-pay legs so the payable can settle per person.
    */
-  pay_run: (doc, lines, deps) =>
+  pay_run: (doc, lines) =>
     lines.map((l) => {
       if (!l.accountId) throw new PostingError("pay run line is missing an account");
       const partyId = l.partyId ?? null;
@@ -782,7 +782,10 @@ export const RULES: Record<string, RuleFn> = {
         amount: l.amount,
         memo: l.description,
         partyId,
-        isOpenItem: controlLineIsOpenItem(l.accountId, partyId, deps.openItemAccountIds),
+        // commitPayRun puts a party ONLY on the per-employee net-pay legs —
+        // those are open items by construction (settled by the payment
+        // journal), regardless of the payable account's configured type.
+        isOpenItem: partyId != null,
         ...dims(doc, l),
       };
     }),
