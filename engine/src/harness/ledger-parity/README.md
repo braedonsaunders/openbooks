@@ -64,7 +64,6 @@ npm -w engine run harness:ledger-parity -- run-project-recognition
 npm -w engine run harness:ledger-parity -- run-consolidation
 npm -w engine run harness:ledger-parity -- run-income-tax-provision
 npm -w engine run harness:ledger-parity -- run-sync-corrections
-npm -w engine run harness:ledger-parity -- run-controlled-repairs
 npm -w engine run harness:ledger-parity -- run-tax
 npm -w engine run harness:ledger-parity -- run-posting-rules
 npm -w engine run harness:ledger-parity -- run-inventory

@@ -1,8 +1,8 @@
 import assert from "node:assert/strict";
 import { createHmac, randomUUID } from "node:crypto";
-import test from "node:test";
+import test, { after, before } from "node:test";
 import { sql } from "drizzle-orm";
-import { db } from "./db.ts";
+import { db, env } from "./db.ts";
 import { sealJson } from "./secrets.ts";
 import {
   createCheckoutSession,
@@ -13,6 +13,16 @@ import { postDocument } from "./posting.ts";
 import { createScratchOrg, createScratchUser, dropScratchOrg } from "./test-fixtures.ts";
 
 const DB = !!process.env.OPENBOOKS_DB_URL;
+const priorDataKey = env.OPENBOOKS_DATA_KEY;
+
+before(() => {
+  env.OPENBOOKS_DATA_KEY = "00".repeat(32);
+});
+
+after(() => {
+  if (priorDataKey === undefined) delete env.OPENBOOKS_DATA_KEY;
+  else env.OPENBOOKS_DATA_KEY = priorDataKey;
+});
 
 /**
  * The full acceptance loop against a real org: link → checkout → signed
