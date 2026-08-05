@@ -10,7 +10,7 @@ import type { ModuleHomeTab } from './ui'
  * (nav-module names for cockpits — never a context-dependent "Overview").
  */
 
-export type TabGroup = 'customers' | 'purchasing' | 'banking' | 'accounting'
+export type TabGroup = 'customers' | 'purchasing' | 'banking' | 'accounting' | 'payroll'
 
 // DASHBOARDS ONLY — record lists (bills, invoices, expense reports, …) are
 // menu destinations, never strip tabs. A tab must land on a cockpit/dashboard.
@@ -32,6 +32,14 @@ const GROUP_TABS: Record<TabGroup, { href: string; ns: string; key: string }[]> 
     { href: '/accounting', ns: 'accounting', key: 'home.title' },
     { href: '/close', ns: 'nav', key: 'modules.close' },
     { href: '/analytics/financial-health', ns: 'accounting', key: 'home.tabs.health' },
+  ],
+  payroll: [
+    { href: '/payroll', ns: 'payroll', key: 'home.tabs.overview' },
+    { href: '/payroll/runs', ns: 'payroll', key: 'home.tabs.runs' },
+    { href: '/payroll/remittances', ns: 'payroll', key: 'home.tabs.remittances' },
+    { href: '/payroll/year-end', ns: 'payroll', key: 'home.tabs.yearEnd' },
+    // The NATIVE employee entity list — payroll deliberately has no second one.
+    { href: '/entities/employees', ns: 'nav', key: 'modules.employees' },
   ],
 }
 

@@ -41,6 +41,7 @@ import { DocTypeBadge, docTypeMeta } from '../../../components/doc-type-badge'
 import type { LineGridColumn } from '../../../components/line-grid'
 import { TransactionDrawer } from '../../../components/transaction-drawer'
 import { EmployeeWageRates } from './EmployeeWageRates'
+import { PayrollProfileTab } from '../payroll/_ui/PayrollProfileTab'
 import { RateBookAssignmentSection } from './RateBookAssignmentSection'
 import { ApprovalActions } from '../../../components/approval-actions'
 import { ApprovalHistory } from '../../../components/approval-history'
@@ -169,7 +170,8 @@ const serializeContacts = (rows: ContactRow[]) => rows.map(({ id: _id, ...contac
   isActive: contact.isActive === 'true',
 }))
 
-export type PartyTab = 'overview' | 'invoicing' | 'pricing' | 'transactions' | 'activities' | 'contacts' | 'addresses' | 'accounting' | 'wages'
+// Payroll profile editing lives here, on the native employee entity.
+export type PartyTab = 'overview' | 'invoicing' | 'pricing' | 'transactions' | 'activities' | 'contacts' | 'addresses' | 'accounting' | 'wages' | 'payroll'
 
 const checkboxClass = 'h-4 w-4 rounded border-slate-300 text-teal-600 focus:ring-teal-500'
 const field = 'space-y-1.5'
@@ -188,6 +190,7 @@ export function PartyDrawer({
   canManage,
   canReadActivities = false,
   canManageWages = false,
+  canManagePayroll = false,
   role,
   initialTab = 'overview',
   initialMode = 'view',
@@ -212,6 +215,8 @@ export function PartyDrawer({
   canReadActivities?: boolean
   /** admin.setup.manage — wage data is confidential; gates the Wages tab. */
   canManageWages?: boolean
+  /** payroll.manage + the payroll feature enabled — shows the Payroll tab. */
+  canManagePayroll?: boolean
   /** When set, the drawer was opened from a role-scoped list (Customers /
    *  Vendors / Employees): only that role's fields render — the underlying
    *  multi-role party model stays hidden from end users — and saving always
@@ -233,7 +238,11 @@ export function PartyDrawer({
   const router = useRouter()
   const pathname = usePathname()
   const searchParams = useSearchParams()
-  const allowedInitialTab = initialTab === 'wages' && (role !== 'employee' || !canManageWages) ? 'overview' : initialTab
+  const allowedInitialTab =
+    (initialTab === 'wages' && (role !== 'employee' || !canManageWages)) ||
+    (initialTab === 'payroll' && (role !== 'employee' || !canManagePayroll))
+      ? 'overview'
+      : initialTab
   const [tab, setTab] = useState<PartyTab>(allowedInitialTab)
   useEffect(() => setTab(allowedInitialTab), [allowedInitialTab])
   const p = payload.party
@@ -672,6 +681,7 @@ export function PartyDrawer({
     { key: 'addresses', label: t('tabs.addresses'), count: addresses.length },
     ...(!effectiveLayout || !role || role === 'vendor' ? [{ key: 'accounting' as const, label: role === 'vendor' && effectiveLayout ? t('bankAccountsHeading') : t('tabs.accounting') }] : []),
     ...(role === 'employee' && canManageWages ? [{ key: 'wages' as const, label: t('tabs.wages') }] : []),
+    ...(role === 'employee' && canManagePayroll ? [{ key: 'payroll' as const, label: t('tabs.payroll') }] : []),
   ]
 
   const selectForm = (formId: string) => {
@@ -1308,6 +1318,9 @@ export function PartyDrawer({
         ) : null}
 
         {tab === 'wages' && role === 'employee' && canManageWages ? <EmployeeWageRates partyId={String(p.id)} /> : null}
+        {tab === 'payroll' && role === 'employee' && canManagePayroll ? (
+          <PayrollProfileTab partyId={String(p.id)} partyName={String(p.display_name ?? '')} />
+        ) : null}
       </div>
 
       <Drawer

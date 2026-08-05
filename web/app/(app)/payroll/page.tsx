@@ -1,17 +1,17 @@
 import { getMoneyFormatter } from '@/lib/money-server'
 import Link from 'next/link'
 import { getTranslations } from 'next-intl/server'
-import { AlertTriangle, ArrowRight, List } from 'lucide-react'
+import { AlertTriangle, ArrowRight } from 'lucide-react'
 import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/db.ts'
 import { Badge, Button, PageHeader, cn } from '@openbooks/ui'
 import { ListPageLayout } from '../../../components/page-layout'
 import { HomeStatTile, HomePanel } from '../../../components/module-home/client'
 import { LiveDirectory, ModuleHomeTabs, type DirectoryItem } from '../../../components/module-home/ui'
+import { groupTabs } from '../../../components/module-home/group-tabs'
 import { requirePermission, can } from '../../../lib/authz'
 import { requireFeatureEnabled } from '../../../lib/feature-gates'
 import { payrollHome, type PayrollScheduleCard } from '../../../lib/module-home/payroll'
-import { EmployeesPanel, type ProfileRow } from './_ui/EmployeesPanel'
 import { StartRunButton } from './_ui/NewRunButton'
 import { RunStatusBadge } from './_ui/run-status'
 
@@ -27,8 +27,9 @@ export async function generateMetadata() {
  * cards are the hero (period, pay date, and the one smart action: Start /
  * Resume / Review), flanked by YTD vitals, the previous completed period, the
  * exception queues (missing profiles / wages — surfaced BEFORE a run trips on
- * them), and the live directory. The Employees tab keeps the payroll-profile
- * roster and its editor drawer (payroll.manage).
+ * them), and the live directory. Employees live on the NATIVE entity list
+ * (/entities/employees) — payroll deliberately has no second roster; profiles
+ * are a tab on the employee drawer.
  */
 export default async function PayrollHomePage({
   searchParams,
@@ -42,81 +43,18 @@ export default async function PayrollHomePage({
   const canManage = can(authz, 'payroll.manage')
   const t = await getTranslations('payroll')
   const { money, moneyCompact } = await getMoneyFormatter()
-  const sp = await searchParams
-  const tab = sp.tab === 'employees' && canManage ? 'employees' : 'overview'
+  void (await searchParams)
 
   const home = await payrollHome(orgId)
-
-  const tabs = canManage
-    ? [
-        { href: '/payroll', label: t('home.tabs.overview'), active: tab === 'overview' },
-        {
-          href: '/payroll?tab=employees',
-          label: t('tabs.employees', { count: home.activeEmployees }),
-          active: tab === 'employees',
-        },
-      ]
-    : []
+  const tabs = await groupTabs('payroll', '/payroll')
 
   const header = (
     <PageHeader
       title={t('title')}
       description={t('description')}
-      actions={
-        <div className="flex items-center gap-3">
-          <Button variant="outline" asChild>
-            <Link href={'/payroll/runs' as never}>
-              <List size={14} />
-              {t('home.actions.viewRuns')}
-            </Link>
-          </Button>
-          <Button variant="outline" asChild>
-            <Link href={'/payroll/remittances' as never}>{t('home.actions.remittances')}</Link>
-          </Button>
-          <Button variant="outline" asChild>
-            <Link href={'/payroll/year-end' as never}>{t('home.actions.yearEnd')}</Link>
-          </Button>
-          <ModuleHomeTabs tabs={tabs} />
-        </div>
-      }
+      actions={<ModuleHomeTabs tabs={tabs} />}
     />
   )
-
-  // ---- Employees tab: the profile roster + editor drawer (payroll.manage) ----
-  if (tab === 'employees') {
-    const [profilesRes, employeesRes] = (await Promise.all([
-      db.execute(sql`
-        select prof.id, prof.employee_party_id, p.display_name as employee_name,
-               prof.pay_schedule_id, s.name as schedule_name, prof.country, prof.province, prof.pay_basis,
-               prof.federal_claim_code, prof.federal_claim_amount,
-               prof.provincial_claim_code, prof.provincial_claim_amount,
-               prof.additional_tax_per_period, prof.cpp_exempt, prof.ei_exempt, prof.tax_exempt,
-               prof.filing_status, prof.multiple_jobs, prof.dependent_credits,
-               prof.other_income_annual, prof.deductions_annual, prof.w4_pre_2020,
-               prof.w4_allowances, prof.fica_exempt, prof.futa_exempt,
-               prof.vacation_percent, prof.vacation_method, prof.is_active
-          from employee_payroll_profiles prof
-          join parties p on p.id = prof.employee_party_id and p.org_id = prof.org_id
-          left join pay_schedules s on s.id = prof.pay_schedule_id
-         where prof.org_id = ${orgId}
-         order by p.display_name`),
-      db.execute(sql`
-        select p.id, p.display_name as name from parties p
-         join employee_roles er on er.party_id = p.id and er.org_id = p.org_id and er.is_active
-         where p.org_id = ${orgId} and p.is_active
-         order by p.display_name`),
-    ])) as unknown as [{ rows: ProfileRow[] }, { rows: { id: string; name: string }[] }]
-
-    return (
-      <ListPageLayout header={header}>
-        <EmployeesPanel
-          profiles={profilesRes.rows}
-          employees={employeesRes.rows}
-          schedules={home.schedules.map((s) => ({ id: s.id, name: s.name, frequency: s.frequency }))}
-        />
-      </ListPageLayout>
-    )
-  }
 
   // ---- Overview ----
   const directory: DirectoryItem[] = [
@@ -133,7 +71,7 @@ export default async function PayrollHomePage({
     ...(canManage
       ? [
           {
-            href: '/payroll?tab=employees',
+            href: '/entities/employees',
             label: t('home.directory.employees'),
             iconKey: 'users',
             badge: { value: String(home.activeEmployees), hint: t('home.directory.employeesHint') },
@@ -298,14 +236,14 @@ export default async function PayrollHomePage({
                   {home.exceptions.missingProfiles.map((e) => (
                     <ExceptionRow
                       key={`p-${e.id}`}
-                      href={canManage ? '/payroll?tab=employees' : '/payroll'}
+                      href={'/entities/employees'}
                       tone="negative"
                       text={t('home.exceptions.missingProfile', { name: e.name })}
                     />
                   ))}
                   {home.exceptions.missingProfilesTotal > home.exceptions.missingProfiles.length && (
                     <ExceptionRow
-                      href={canManage ? '/payroll?tab=employees' : '/payroll'}
+                      href={'/entities/employees'}
                       tone="negative"
                       text={t('home.exceptions.moreMissingProfiles', {
                         count: home.exceptions.missingProfilesTotal - home.exceptions.missingProfiles.length,

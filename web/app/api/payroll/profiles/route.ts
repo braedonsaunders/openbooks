@@ -41,9 +41,34 @@ function claimCode(value: unknown): number | null | 'invalid' {
   return n
 }
 
-export async function GET() {
+export async function GET(req: Request) {
   const gate = await guardFeaturePermission('payroll.manage', 'payroll')
   if (gate instanceof NextResponse) return gate
+  const employee = new URL(req.url).searchParams.get('employee')
+  if (employee) {
+    // Drawer-tab variant: one employee's profile (or null) + the schedules.
+    if (!isUuid(employee)) return NextResponse.json({ error: 'invalid employee' }, { status: 422 })
+    const [profileRes, schedulesRes] = (await Promise.all([
+      db.execute(sql`
+        select prof.id, prof.employee_party_id, p.display_name as employee_name,
+               prof.pay_schedule_id, s.name as schedule_name, prof.country, prof.province, prof.pay_basis,
+               prof.federal_claim_code, prof.federal_claim_amount,
+               prof.provincial_claim_code, prof.provincial_claim_amount,
+               prof.additional_tax_per_period, prof.cpp_exempt, prof.ei_exempt, prof.tax_exempt,
+               prof.filing_status, prof.multiple_jobs, prof.dependent_credits,
+               prof.other_income_annual, prof.deductions_annual,
+               prof.w4_pre_2020, prof.w4_allowances, prof.fica_exempt, prof.futa_exempt,
+               prof.vacation_percent, prof.vacation_method, prof.is_active
+          from employee_payroll_profiles prof
+          join parties p on p.id = prof.employee_party_id and p.org_id = prof.org_id
+          left join pay_schedules s on s.id = prof.pay_schedule_id
+         where prof.org_id = ${gate.user.orgId} and prof.employee_party_id = ${employee}`),
+      db.execute(sql`
+        select id, name, frequency from pay_schedules
+         where org_id = ${gate.user.orgId} and is_active order by name`),
+    ])) as unknown as [{ rows: unknown[] }, { rows: unknown[] }]
+    return NextResponse.json({ profile: profileRes.rows[0] ?? null, schedules: schedulesRes.rows })
+  }
   const profiles = (await db.execute(sql`
     select prof.id, prof.employee_party_id, p.display_name as employee_name,
            prof.pay_schedule_id, s.name as schedule_name, prof.country, prof.province, prof.pay_basis,

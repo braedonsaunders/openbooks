@@ -5,6 +5,7 @@ import { db } from '@openbooks/engine/src/db.ts'
 import { PageHeader } from '@openbooks/ui'
 import { ListPageLayout } from '../../../../components/page-layout'
 import { can, requirePermission } from '../../../../lib/authz'
+import { isFeatureEnabled } from '../../../../lib/features'
 import { isUuid, pickString } from '../../../../lib/list-params'
 import { loadFieldDefs } from '../../../../lib/custom-fields'
 import { loadParty } from '../../../api/parties/_lib'
@@ -42,6 +43,7 @@ export default async function EntityRole({
   const newLabel = t(`roles.${slug}.newLabel`)
 
   const authz = await requirePermission('parties.read')
+  const payrollEnabled = await isFeatureEnabled(authz.user.orgId, 'payroll')
   const canManage = can(authz, 'parties.manage')
   const orgId = authz.user.orgId
 
@@ -52,6 +54,7 @@ export default async function EntityRole({
   const requestedPartyTab = pickString(sp.partyTab)
   const partyTab: PartyTab = requestedPartyTab === 'transactions' || requestedPartyTab === 'activities' || requestedPartyTab === 'contacts'
     || requestedPartyTab === 'addresses' || requestedPartyTab === 'accounting' || requestedPartyTab === 'wages'
+    || requestedPartyTab === 'payroll'
     ? requestedPartyTab
     : 'overview'
   const [openParty, pickers] = await Promise.all([
@@ -92,6 +95,7 @@ export default async function EntityRole({
           canManage={canManage}
           canReadActivities={can(authz, 'crm.activities.read')}
           canManageWages={can(authz, 'admin.setup.manage')}
+          canManagePayroll={payrollEnabled && can(authz, 'payroll.manage')}
           role={role}
           initialTab={partyTab}
           initialMode={pickString(sp.mode) === 'edit' ? 'edit' : 'view'}
