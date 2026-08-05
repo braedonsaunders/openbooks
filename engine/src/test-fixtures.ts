@@ -295,180 +295,347 @@ export async function seedDraftDocument(
   return id;
 }
 
-/** Remove all scratch-org data, bypassing the kernel's posted-entry immutability. */
-export async function dropScratchOrg(orgId: string): Promise<void> {
+// ---------------------------------------------------------------------------
+// Teardown. Schema-driven: the set of tables to clear is enumerated from
+// information_schema at runtime, so a new org_id table can never silently
+// leak scratch rows onto the shared dev database — it is either deleted by a
+// generic pass or reported by the final zero-rows verification. The pass
+// structure and the core delete order are the validated 2026-08-04 mass-purge
+// runbook (memory: openbooks-org-teardown).
+// ---------------------------------------------------------------------------
+
+type TeardownTx = Parameters<Parameters<typeof db.transaction>[0]>[0];
+
+const SQL_IDENT = /^[a-z_][a-z0-9_]*$/;
+
+function qualified(table: string) {
+  if (!SQL_IDENT.test(table)) throw new Error(`unsafe table identifier: ${table}`);
+  return sql.raw(`public."${table}"`);
+}
+
+/**
+ * Kernel-guard bypasses for the teardown transaction: `openbooks.amend` lets
+ * posted documents/journal entries be deleted, `openbooks.sandbox_wipe` (with
+ * the org flagged env_kind='sandbox') satisfies the append-only evidence
+ * guards, and `app.bypass_rls` makes the wipe authoritative even for direct
+ * callers outside the test runner's ambient bypass.
+ */
+async function setTeardownGucs(tx: TeardownTx): Promise<void> {
+  await tx.execute(sql`
+    select set_config('openbooks.amend', 'on', true),
+           set_config('openbooks.sandbox_wipe', 'on', true),
+           set_config('app.bypass_rls', 'on', true)`);
+}
+
+/** Every base table in public that carries an org_id column. */
+export async function listOrgIdTables(): Promise<string[]> {
+  const result = (await db.execute(sql`
+    select c.table_name as "tableName"
+      from information_schema.columns c
+      join information_schema.tables t
+        on t.table_schema = c.table_schema and t.table_name = c.table_name
+     where c.table_schema = 'public'
+       and c.column_name = 'org_id'
+       and t.table_type = 'BASE TABLE'
+     order by c.table_name`)) as unknown as { rows: { tableName: string }[] };
+  return result.rows.map((r) => r.tableName);
+}
+
+/**
+ * Rows still present for the org across every org_id table (plus the orgs row
+ * itself), keyed by table name. Empty object = fully deleted.
+ */
+export async function orgRowCounts(orgId: string): Promise<Record<string, number>> {
+  const tables = await listOrgIdTables();
+  const counts: Record<string, number> = {};
   await db.transaction(async (tx) => {
-    // Bypass the posted-entry immutability guard AND the root-subsidiary delete
-    // guard (the latter needs the org flagged sandbox + the wipe GUC).
-    await tx.execute(sql`set local openbooks.amend = 'on'`);
-    await tx.execute(sql`set local openbooks.sandbox_wipe = 'on'`);
-    // Defer FK checks to commit so the circular documents ↔ journal_entries
-    // (and paired-movement) references don't dictate a delete order.
-    await tx.execute(sql`set constraints all deferred`);
-    await tx.execute(sql`update orgs set env_kind = 'sandbox' where id = ${orgId}`);
-    // inv_move_guard blocks deleting POSTED movements but allows posted→pending;
-    // demote them first so the delete can proceed.
-    await tx.execute(sql`update inventory_movements set status = 'pending' where org_id = ${orgId}`);
-    // documents.posted_entry_id ↔ journal_entries.source_document_id is a
-    // genuine cycle of NOT DEFERRABLE FKs. The exact-period invariant forbids
-    // a posted row with either identity missing, so the sandbox-only teardown
-    // demotes status and clears both identities in the same guarded update.
-    await tx.execute(sql`update documents
-      set status = 'draft', posted_entry_id = null, posting_period_id = null
-      where org_id = ${orgId}`);
-    await tx.execute(sql`delete from tax_group_members where tax_group_id in (select id from tax_groups where org_id = ${orgId})`);
-    await tx.execute(sql`delete from file_blobs where version_id in (select v.id from file_versions v join files f on f.id=v.file_id where f.org_id=${orgId})`);
-    await tx.execute(sql`delete from file_versions where file_id in (select id from files where org_id=${orgId})`);
-    const tables = [
-      // Income-tax provision (runs reference their journals).
-      "temporary_differences",
-      "tax_provision_runs",
-      "income_tax_rates",
-      // Payment acceptance + PSP settlement (no FK enforcement, but keep
-      // scratch tenants hermetic — leftover provider configs would let other
-      // tests' webhook signatures resolve the wrong org).
-      "payment_attempts",
-      "payment_links",
-      "payment_surcharge_rules",
-      "psp_settlement_lines",
-      "psp_settlement_batches",
-      "psp_provider_configs",
-      // Banking evidence references users, reconciliations, and journal lines.
-      "reconciliation_matches",
-      "bank_statement_lines",
-      "bank_statements",
-      "reconciliations",
-      "bank_match_rules",
-      "report_delivery_outbox",
-      "report_run_artifacts",
-      "report_runs",
-      "report_schedules",
-      "report_definitions",
-      "email_log",
-      // Financial-close evidence is append-only in production. Delete it
-      // explicitly while the sandbox org still exists so the guarded
-      // teardown can verify the sandbox-wipe authorization before the final
-      // org delete cascades.
-      "close_events",
-      "close_signoffs",
-      "close_task_evidence",
-      "close_exceptions",
-      "close_automation_executions",
-      "close_run_tasks",
-      "close_reopen_requests",
-      "close_runs",
-      "close_blueprint_dependencies",
-      "close_blueprint_steps",
-      "close_automation_rules",
-      "close_reporting_packages",
-      "close_blueprints",
-      "close_policies",
-      "period_locks",
-      "flow_run_effects",
-      "flow_gates",
-      "flow_runs",
-      "flows",
-      "approval_delegations",
-      "notifications",
-      "role_assignments",
-      "app_roles",
-      // Lessee lease accounting + NRV evidence (standards capabilities).
-      "lease_agreement_schedule_lines",
-      "lease_agreements",
-      "inventory_writedowns",
-      // Property management (tenant leases); rows reference accounts/parties.
-      "lease_schedule_lines",
-      "lease_escalations",
-      "lease_charges",
-      "security_deposit_transactions",
-      "property_leases",
-      "property_units",
-      "managed_properties",
-      "cost_layer_consumptions",
-      "inventory_provisional_settlements",
-      "inventory_provisional_costs",
-      "landed_cost_allocations",
-      "landed_cost_voucher_targets",
-      "landed_cost_vouchers",
-      "cost_layer_weights",
-      "cost_layers",
-      "inventory_movements",
-      "transfer_order_lines",
-      "transfer_orders",
-      "serials",
-      "lots",
-      "charge_rate_components",
-      "recognition_schedule_lines",
-      "recognition_schedules",
-      "performance_obligations",
-      "revenue_contracts",
-      "applications",
-      "document_links",
-      "document_line_tax_components",
-      "document_lines",
-      "depreciation_schedule_lines",
-      "depreciation_inputs",
-      "depreciation_schedules",
-      "depreciation_book_policies",
-      "asset_events",
-      "fixed_assets",
-      "asset_categories",
-      "depreciation_methods",
-      "file_attachments",
-      "files",
-      "folders",
-      // Journal lines reference accounts, tax codes, parties, and entries;
-      // entries reference documents — so this whole block precedes all four.
-      "journal_lines",
-      "ownership_consolidation_entries",
-      "journal_entries",
-      "ownership_consolidation_runs",
-      "subsidiary_ownership_interests",
-      "documents",
-      "tax_report_lines",
-      "tax_registrations",
-      "tax_return_forms",
-      // Versioned country-pack manifests are immutable except during the
-      // explicit sandbox wipe authorized at the start of this transaction.
-      "tax_country_pack_installations",
-      "tax_rates",
-      "tax_groups",
-      "tax_codes",
-      "tax_jurisdictions",
-      "equipment_units",
-      "labor_rate_adjustment_targets",
-      "labor_rate_adjustments",
-      "labor_rate_terms",
-      "labor_rate_version_scopes",
-      "labor_rate_version_policies",
-      "item_rate_lines",
-      "item_rate_profiles",
-      "item_rate_book_assignments",
-      "item_rate_versions",
-      "item_rate_books",
-      "item_inventory_profiles",
-      "bom_components",
-      "items",
-      "recognition_rules",
-      "projects",
-      "parties",
-      "stock_locations",
-      "locations",
-      "users",
-      "accounting_periods",
-      "fiscal_calendars",
-      "accounting_books",
-      "subsidiaries",
-      "accounts",
-      // Trigger-seeded on org insert; must go while the org row still exists —
-      // segment_definition_guard's sandbox-wipe check looks the org up by id,
-      // so a cascade from `delete from orgs` arrives too late and is rejected.
-      "segment_definitions",
-      "project_types",
-    ];
-    for (const t of tables) {
-      await tx.execute(sql`delete from ${sql.raw(t)} where org_id = ${orgId}`);
-    }
-    await tx.execute(sql`delete from orgs where id = ${orgId}`);
+    await setTeardownGucs(tx);
+    const union = sql.join(
+      [
+        sql`select 'orgs'::text as "tableName", count(*)::int as n from orgs where id = ${orgId}`,
+        ...tables.map(
+          (t) => sql`select ${t}::text as "tableName", count(*)::int as n from ${qualified(t)} where org_id = ${orgId}`,
+        ),
+      ],
+      sql` union all `,
+    );
+    const result = (await tx.execute(union)) as unknown as { rows: { tableName: string; n: number }[] };
+    for (const row of result.rows) if (Number(row.n) > 0) counts[row.tableName] = Number(row.n);
   });
+  return counts;
+}
+
+/**
+ * The interlocked core the generic passes cannot clear, children first.
+ * Tx A holds the document/journal/time/inventory web — the only genuine FK
+ * cycle (documents.posted_entry_id ↔ journal_entries.source_document_id) is
+ * resolved by deferring ONLY documents_posted_entry_id_fkey, never
+ * `set constraints all deferred` (a large deferred check queue made COMMIT
+ * hang for minutes on the shared DB).
+ */
+const CORE_A = [
+  "inventory_provisional_costs",
+  "cost_layers",
+  "inventory_movements",
+  "recognition_schedules",
+  "performance_obligations",
+  "revenue_contracts",
+  "document_lines",
+  "time_entries",
+  "journal_lines",
+  "journal_entries",
+  "documents",
+];
+
+/** Tx B: the master-data parents everything above referenced, children first. */
+const CORE_B = [
+  "serials",
+  "lots",
+  "stock_locations",
+  "locations",
+  "projects",
+  "project_types",
+  "time_types",
+  // equipment_units.charge_item_id references items.
+  "equipment_units",
+  "item_rate_versions",
+  "item_rate_books",
+  "items",
+  "recognition_rules",
+  // payment_cards.holder_party_id references parties.
+  "payment_cards",
+  "parties",
+  "tax_groups",
+  "tax_codes",
+  "tax_jurisdictions",
+  "departments",
+  "asset_categories",
+  "depreciation_methods",
+  "accounting_periods",
+  "accounting_books",
+  "fiscal_calendars",
+  "accounts",
+  "subsidiaries",
+  // created_by references make users a parent of nearly everything above.
+  "users",
+];
+
+/**
+ * Evidence tables whose delete guards have NO sandbox-wipe bypass (they raise
+ * unconditionally). When rows exist the only teardown path is disabling the
+ * specific guard trigger for the duration of one transaction — the ALTER takes
+ * an exclusive lock, so concurrent writers wait and never see the gap.
+ */
+const GUARDED_EVIDENCE: { table: string; trigger: string }[] = [
+  { table: "field_ticket_labor_lines", trigger: "field_ticket_labor_line_immutable" },
+  { table: "field_ticket_labor_snapshots", trigger: "field_ticket_labor_snapshot_retention" },
+  { table: "project_financial_profile_versions", trigger: "project_financial_profile_version_guard" },
+];
+
+/**
+ * One generic pass in a single round trip: a server-side DO block attempts
+ * `delete … where org_id` per table, each inside its own exception subblock
+ * (a savepoint), and reports the failures. ~340 per-table transactions from
+ * the client took ~20s against the remote dev DB; this takes one.
+ */
+async function bulkDeletePass(
+  orgId: string,
+  tables: string[],
+): Promise<{ table: string; error: string }[]> {
+  for (const t of tables) {
+    if (!SQL_IDENT.test(t)) throw new Error(`unsafe table identifier: ${t}`);
+  }
+  return await db.transaction(async (tx) => {
+    await setTeardownGucs(tx);
+    await tx.execute(sql`
+      select set_config('openbooks.teardown_org', ${orgId}, true),
+             set_config('openbooks.teardown_tables', ${tables.join(",")}, true)`);
+    await tx.execute(sql`
+      create temp table if not exists scratch_teardown_failures
+        (table_name text, error text) on commit drop`);
+    await tx.execute(sql`
+      do $teardown$
+      declare
+        v_org uuid := current_setting('openbooks.teardown_org')::uuid;
+        v_table text;
+      begin
+        foreach v_table in array string_to_array(current_setting('openbooks.teardown_tables'), ',') loop
+          begin
+            execute format('delete from public.%I where org_id = $1', v_table) using v_org;
+          exception when others then
+            insert into scratch_teardown_failures values (v_table, sqlerrm);
+          end;
+        end loop;
+      end
+      $teardown$`);
+    const r = (await tx.execute(sql`
+      select table_name as "table", error from scratch_teardown_failures`)) as unknown as {
+      rows: { table: string; error: string }[];
+    };
+    return r.rows;
+  });
+}
+
+/**
+ * Repeat delete passes until every table succeeded or a pass makes no
+ * progress. Deferred constraint triggers surface at COMMIT of the whole bulk
+ * pass, where the exception subblocks can't catch them — that aborts every
+ * delete in the pass, so fall back to one transaction per table to isolate
+ * (and report) the offender. Returns the tables that still fail, with the
+ * last error per table for diagnostics.
+ */
+async function genericDeletePasses(
+  orgId: string,
+  tables: string[],
+): Promise<{ remaining: string[]; errors: Map<string, unknown> }> {
+  let remaining = tables;
+  const errors = new Map<string, unknown>();
+  for (let pass = 0; pass < 10 && remaining.length > 0; pass++) {
+    let failed: string[];
+    try {
+      const failures = await bulkDeletePass(orgId, remaining);
+      failed = failures.map((f) => f.table);
+      for (const t of remaining) errors.delete(t);
+      for (const f of failures) errors.set(f.table, new Error(f.error));
+    } catch {
+      failed = [];
+      for (const t of remaining) {
+        try {
+          await db.transaction(async (tx) => {
+            await setTeardownGucs(tx);
+            await tx.execute(sql`delete from ${qualified(t)} where org_id = ${orgId}`);
+          });
+          errors.delete(t);
+        } catch (e) {
+          failed.push(t);
+          errors.set(t, e);
+        }
+      }
+    }
+    if (failed.length === remaining.length) break; // no progress
+    remaining = failed;
+  }
+  return { remaining, errors };
+}
+
+/**
+ * Remove ALL scratch-org data and verify nothing is left. Refuses any org not
+ * named 'Scratch %' — the shared dev database also holds real production
+ * data, so the guard is absolute. Idempotent: a repeat call (or a call after
+ * a partial failure) resumes and finishes the wipe.
+ */
+export async function dropScratchOrg(orgId: string): Promise<void> {
+  // Hard scope guard. If the orgs row is gone the wipe already completed
+  // (orgs is deleted last); if it exists under any other name, refuse.
+  const orgRow = await db.transaction(async (tx) => {
+    await setTeardownGucs(tx);
+    const r = (await tx.execute(sql`select name from orgs where id = ${orgId}`)) as unknown as {
+      rows: { name: string }[];
+    };
+    return r.rows[0];
+  });
+  if (!orgRow) return;
+  if (!orgRow.name.startsWith("Scratch ")) {
+    throw new Error(
+      `dropScratchOrg refused: org ${orgId} is named ${JSON.stringify(orgRow.name)}, not 'Scratch %'`,
+    );
+  }
+
+  const orgTables = await listOrgIdTables();
+  const present = new Set(orgTables);
+  const coreA = CORE_A.filter((t) => present.has(t));
+  const coreB = CORE_B.filter((t) => present.has(t));
+  const core = new Set([...coreA, ...coreB]);
+
+  // Prep: flag the org sandbox (sandbox-wipe guards check env_kind), park
+  // users inactive BEFORE role_assignments go (role_assignments_active_user_guard
+  // forbids leaving an ACTIVE user roleless), demote posted inventory
+  // movements (inv_move_guard allows posted→pending but not delete-posted),
+  // and clear the known non-org_id children reachable only through parents.
+  await db.transaction(async (tx) => {
+    await setTeardownGucs(tx);
+    await tx.execute(sql`update orgs set env_kind = 'sandbox' where id = ${orgId} and name like 'Scratch %'`);
+    await tx.execute(sql`update users set is_active = false where org_id = ${orgId}`);
+    await tx.execute(sql`update inventory_movements set status = 'pending' where org_id = ${orgId} and status = 'posted'`);
+    await tx.execute(sql`delete from file_blobs where version_id in
+      (select v.id from file_versions v join files f on f.id = v.file_id where f.org_id = ${orgId})`);
+    await tx.execute(sql`delete from file_versions where file_id in (select id from files where org_id = ${orgId})`);
+    await tx.execute(sql`delete from tax_group_members where tax_group_id in (select id from tax_groups where org_id = ${orgId})`);
+  });
+
+  // Evidence tables with unconditional delete guards: disable the specific
+  // guard trigger, delete, re-enable — all inside one transaction, and only
+  // when rows actually exist (the ALTER needs table ownership and a brief
+  // exclusive lock, so don't pay for it on every teardown).
+  for (const { table, trigger } of GUARDED_EVIDENCE) {
+    if (!present.has(table)) continue;
+    if (!SQL_IDENT.test(trigger)) throw new Error(`unsafe trigger identifier: ${trigger}`);
+    await db.transaction(async (tx) => {
+      await setTeardownGucs(tx);
+      const r = (await tx.execute(
+        sql`select 1 as x from ${qualified(table)} where org_id = ${orgId} limit 1`,
+      )) as unknown as { rows: unknown[] };
+      if (r.rows.length === 0) return;
+      await tx.execute(sql.raw(`alter table public."${table}" disable trigger ${trigger}`));
+      await tx.execute(sql`delete from ${qualified(table)} where org_id = ${orgId}`);
+      await tx.execute(sql.raw(`alter table public."${table}" enable trigger ${trigger}`));
+    });
+  }
+
+  // Generic passes over every non-core org_id table. Deleting a child never
+  // violates an FK, so repeated passes clear whole dependency chains; what
+  // stays blocked is (a) the interlocked core and (b) parents of the core,
+  // retried after tx A below.
+  let { remaining } = await genericDeletePasses(
+    orgId,
+    orgTables.filter((t) => !core.has(t)),
+  );
+
+  // Tx A — the interlocked heavy core, children first. time_entries ↔
+  // document_lines cross-reference each other (invoiced_by_line_id /
+  // time_entry_id), so null the time side, then delete lines before entries.
+  await db.transaction(async (tx) => {
+    await setTeardownGucs(tx);
+    await tx.execute(sql`update time_entries
+      set invoiced_by_line_id = null, cost_journal_entry_id = null
+      where org_id = ${orgId}`);
+    for (const t of coreA) {
+      if (t === "journal_entries") {
+        // documents.posted_entry_id → journal_entries is the one genuine
+        // cycle; it is DEFERRABLE, so defer just it for the JE+document pair.
+        await tx.execute(sql`set constraints documents_posted_entry_id_fkey deferred`);
+      }
+      await tx.execute(sql`delete from ${qualified(t)} where org_id = ${orgId}`);
+    }
+  });
+
+  // Anything that was still blocked (e.g. parents of inventory_movements like
+  // transfer_order_lines) unblocks once the core is gone.
+  if (remaining.length > 0) {
+    const retry = await genericDeletePasses(orgId, remaining);
+    remaining = retry.remaining;
+    if (remaining.length > 0) {
+      const detail = remaining
+        .map((t) => `${t}: ${retry.errors.get(t) instanceof Error ? (retry.errors.get(t) as Error).message : String(retry.errors.get(t))}`)
+        .join("; ");
+      throw new Error(`dropScratchOrg(${orgId}) could not clear tables — ${detail}`);
+    }
+  }
+
+  // Tx B — master-data parents, then the org row itself (name-guarded again).
+  await db.transaction(async (tx) => {
+    await setTeardownGucs(tx);
+    for (const t of coreB) {
+      await tx.execute(sql`delete from ${qualified(t)} where org_id = ${orgId}`);
+    }
+    await tx.execute(sql`delete from orgs where id = ${orgId} and name like 'Scratch %'`);
+  });
+
+  // Verify: zero rows across every org_id table (and no orgs row). A leak
+  // here means the schema grew a shape this teardown doesn't understand —
+  // fail loudly instead of littering the shared database.
+  const leftovers = await orgRowCounts(orgId);
+  if (Object.keys(leftovers).length > 0) {
+    throw new Error(`dropScratchOrg(${orgId}) left rows behind: ${JSON.stringify(leftovers)}`);
+  }
 }
