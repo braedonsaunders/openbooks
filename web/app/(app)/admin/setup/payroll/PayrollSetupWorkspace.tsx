@@ -4,8 +4,7 @@ import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { useTranslations } from 'next-intl'
 import { toast } from 'sonner'
-import { Sparkles } from 'lucide-react'
-import { Badge, Button, Label, Select } from '@openbooks/ui'
+import { Button, Label, Select } from '@openbooks/ui'
 import type { PayrollSettings } from '@openbooks/engine/src/payroll-run.ts'
 
 const ACCOUNT_KEYS = [
@@ -20,11 +19,11 @@ const ACCOUNT_KEYS = [
 
 type AccountKey = (typeof ACCOUNT_KEYS)[number]
 
+/** Accounts & posting tab — the orgs.settings.payroll form (accounts, wages destination, CRA vendor). */
 export function PayrollSetupWorkspace(props: {
   settings: PayrollSettings
   accounts: { id: string; label: string }[]
   vendors: { id: string; label: string }[]
-  systemComponentCount: number
 }) {
   const t = useTranslations('payroll.settingsPage')
   const router = useRouter()
@@ -50,25 +49,6 @@ export function PayrollSetupWorkspace(props: {
       const j = await res.json()
       if (!res.ok) throw new Error(j.error ?? 'failed')
       toast.success(t('saved'))
-      router.refresh()
-    } catch (e) {
-      toast.error((e as Error).message)
-    } finally {
-      setBusy(false)
-    }
-  }
-
-  async function seed() {
-    setBusy(true)
-    try {
-      const res = await fetch('/api/payroll/settings', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action: 'seed-components' }),
-      })
-      const j = await res.json()
-      if (!res.ok) throw new Error(j.error ?? 'failed')
-      toast.success(t('seeded'))
       router.refresh()
     } catch (e) {
       toast.error((e as Error).message)
@@ -134,21 +114,6 @@ export function PayrollSetupWorkspace(props: {
               ))}
             </Select>
           </div>
-        </div>
-      </section>
-
-      <section className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-slate-200 bg-white p-4 dark:border-slate-800 dark:bg-slate-900">
-        <div>
-          <h3 className="text-sm font-semibold text-slate-900 dark:text-slate-100">{t('seed.title')}</h3>
-          <p className="text-sm text-slate-500 dark:text-slate-400">{t('seed.description')}</p>
-        </div>
-        <div className="flex items-center gap-2">
-          {props.systemComponentCount > 0 && (
-            <Badge variant="success">{t('seed.count', { count: props.systemComponentCount })}</Badge>
-          )}
-          <Button variant="outline" onClick={seed} disabled={busy}>
-            <Sparkles size={14} aria-hidden /> {t('seed.action')}
-          </Button>
         </div>
       </section>
 

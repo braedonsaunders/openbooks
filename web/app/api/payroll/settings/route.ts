@@ -9,10 +9,13 @@ export const dynamic = 'force-dynamic'
 
 /**
  * Payroll org settings (orgs.settings.payroll) — the control accounts the
- * commit projection posts to, the wages destination, and the CRA remittance
- * vendor. PUT replaces the payroll subtree only (jsonb_set merge, same shape
- * as the labor-costing route) so sibling settings keys are never clobbered.
- * POST { action: 'seed-components' } installs the statutory component set.
+ * commit projection posts to, the wages destination, the CRA remittance
+ * vendor, and the installed country packs. PUT merges into the payroll
+ * subtree only (jsonb_set, same shape as the labor-costing route) so sibling
+ * settings keys are never clobbered; keys absent from the body keep their
+ * stored value. POST { action: 'seed-components' } installs the statutory
+ * component set; POST { action: 'install-pack', country } seeds it AND
+ * records the pack under settings.payroll.countries.
  */
 
 const ACCOUNT_KEYS = [
@@ -24,6 +27,30 @@ const ACCOUNT_KEYS = [
   'taxPayableAccountId',
   'vacationPayableAccountId',
 ] as const
+
+/** Payroll jurisdiction packs the org can install (US is announced, not shipped). */
+const INSTALLABLE_COUNTRIES = ['CA'] as const
+const KNOWN_COUNTRIES = ['CA', 'US'] as const
+
+async function currentPayrollBlob(orgId: string): Promise<Record<string, unknown>> {
+  const r = (await db.execute(
+    sql`select settings->'payroll' as p from orgs where id = ${orgId}`,
+  )) as unknown as { rows: { p: Record<string, unknown> | null }[] }
+  return r.rows[0]?.p ?? {}
+}
+
+async function writePayrollBlob(
+  orgId: string,
+  actorId: string,
+  settings: Record<string, unknown>,
+): Promise<void> {
+  await db.execute(sql`
+    update orgs set settings = jsonb_set(coalesce(settings, '{}'::jsonb), '{payroll}', ${JSON.stringify(settings)}::jsonb)
+     where id = ${orgId}`)
+  await db.execute(sql`
+    insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
+    values (${orgId}, 'orgs', ${orgId}, 'update', ${JSON.stringify({ payroll: settings })}, ${actorId})`)
+}
 
 async function pickerOptions(orgId: string) {
   const [accounts, vendors] = (await Promise.all([
@@ -61,25 +88,35 @@ export async function PUT(req: Request) {
   const orgId = gate.user.orgId
   const body = await req.json().catch(() => ({}))
 
-  const settings: Record<string, string | null> = {}
+  const settings: Record<string, unknown> = await currentPayrollBlob(orgId)
   for (const key of ACCOUNT_KEYS) {
+    if (!(key in body)) continue
     const v = body[key] ?? null
     if (v !== null && !isUuid(v)) return NextResponse.json({ error: `invalid ${key}` }, { status: 422 })
     settings[key] = v
   }
-  const party = body.craRemittancePartyId ?? null
-  if (party !== null && !isUuid(party)) {
-    return NextResponse.json({ error: 'invalid craRemittancePartyId' }, { status: 422 })
+  if ('craRemittancePartyId' in body) {
+    const party = body.craRemittancePartyId ?? null
+    if (party !== null && !isUuid(party)) {
+      return NextResponse.json({ error: 'invalid craRemittancePartyId' }, { status: 422 })
+    }
+    settings.craRemittancePartyId = party
   }
-  settings.craRemittancePartyId = party
-  settings.wagesTo = body.wagesTo === 'labor_clearing' ? 'labor_clearing' : 'expense'
+  if ('wagesTo' in body) {
+    settings.wagesTo = body.wagesTo === 'labor_clearing' ? 'labor_clearing' : 'expense'
+  }
+  if ('countries' in body) {
+    const countries = body.countries
+    if (
+      !Array.isArray(countries)
+      || countries.some((c) => !(KNOWN_COUNTRIES as readonly string[]).includes(String(c)))
+    ) {
+      return NextResponse.json({ error: 'invalid countries' }, { status: 422 })
+    }
+    settings.countries = [...new Set(countries.map(String))]
+  }
 
-  await db.execute(sql`
-    update orgs set settings = jsonb_set(coalesce(settings, '{}'::jsonb), '{payroll}', ${JSON.stringify(settings)}::jsonb)
-     where id = ${orgId}`)
-  await db.execute(sql`
-    insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
-    values (${orgId}, 'orgs', ${orgId}, 'update', ${JSON.stringify({ payroll: settings })}, ${gate.user.id})`)
+  await writePayrollBlob(orgId, gate.user.id, settings)
   return NextResponse.json({ ok: true })
 }
 
@@ -89,6 +126,20 @@ export async function POST(req: Request) {
   const body = await req.json().catch(() => ({}))
   if (body.action === 'seed-components') {
     await seedPayrollComponents(gate.user.orgId, gate.user.id)
+    return NextResponse.json({ ok: true })
+  }
+  if (body.action === 'install-pack') {
+    const country = String(body.country ?? '')
+    if (!(INSTALLABLE_COUNTRIES as readonly string[]).includes(country)) {
+      return NextResponse.json({ error: 'unknown country pack' }, { status: 422 })
+    }
+    // The Canada pack = the statutory component set (T4127 engine wiring) plus
+    // the pack marker the setup workspace and wizard read back.
+    await seedPayrollComponents(gate.user.orgId, gate.user.id)
+    const settings = await currentPayrollBlob(gate.user.orgId)
+    const countries = Array.isArray(settings.countries) ? settings.countries.map(String) : []
+    settings.countries = [...new Set([...countries, country])]
+    await writePayrollBlob(gate.user.orgId, gate.user.id, settings)
     return NextResponse.json({ ok: true })
   }
   return NextResponse.json({ error: 'unknown action' }, { status: 400 })

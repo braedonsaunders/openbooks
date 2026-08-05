@@ -62,6 +62,7 @@ export default async function WizardPage() {
           bankFeeds: featureEnabled(features, 'bankFeeds'),
           onlinePayments: featureEnabled(features, 'onlinePayments'),
           fixedAssets: featureEnabled(features, 'fixedAssets'),
+          payroll: featureEnabled(features, 'payroll'),
         },
         allFeatures: Object.fromEntries(
           FEATURES.map((feature) => [feature.key, featureEnabled(features, feature.key)]),

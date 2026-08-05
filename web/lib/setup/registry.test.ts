@@ -33,6 +33,9 @@ test('re-homed entities stay in the CRUD registry but leave the setup rail', () 
     'tax-first-year-rules',
     'depreciation-methods',
     'depreciation-book-policies',
+    'pay-schedules',
+    'pay-components',
+    'union-agreements',
   ]
   const byGroup = setupEntitiesByGroup()
   const allVisible = [...byGroup.values()].flat().map((entity) => entity.key)
