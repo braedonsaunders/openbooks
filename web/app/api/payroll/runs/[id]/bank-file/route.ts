@@ -27,6 +27,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
       headers: {
         'Content-Type': file.contentType,
         'Content-Disposition': `attachment; filename="${file.filename}"`,
+        'Cache-Control': 'no-store',
       },
     })
   } catch (error) {

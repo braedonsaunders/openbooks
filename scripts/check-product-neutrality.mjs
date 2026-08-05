@@ -51,6 +51,22 @@ const privatePathPatterns = [
   /(?:^|\/)objects-list\.txt$/i,
 ];
 
+// Executable operator helpers must never carry a workstation's resolved tenant
+// or actor identity into the public product. Tests and fixtures may use stable
+// UUIDs, but runnable source must resolve its target from explicit arguments or
+// environment input and keep tenant-specific repair/setup scripts private.
+const executableSourcePattern = /\.(?:[cm]?[jt]sx?)$/i;
+const fixtureSourcePattern = /(?:^|\/)(?:__tests__|fixtures?|tests?)(?:\/|$)|\.(?:test|spec)\.[cm]?[jt]sx?$/i;
+const hardcodedOperatorIdentityPattern = new RegExp(
+  `\\bconst\\s+(?:${joined("ORG", "(?:_ID)?")}|${joined("TENANT", "(?:_ID)?")}|${joined("ACTOR", "(?:_ID)?")})\\s*=\\s*["']` +
+    `[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}["']`,
+  "i",
+);
+const oneShotMutationPattern = new RegExp(
+  `${joined("One", "-shot")}:[\\s\\S]{0,800}\\b(?:insert\\s+into|update|delete\\s+from)\\b`,
+  "i",
+);
+
 function containsPrivateProvenance(value) {
   const lower = value.toLowerCase();
   const candidates = new Set([
@@ -141,6 +157,16 @@ for (const filePath of publicFiles) {
     continue;
   }
   if (source.includes("\0")) continue;
+
+  if (
+    executableSourcePattern.test(filePath) &&
+    !fixtureSourcePattern.test(filePath) &&
+    (hardcodedOperatorIdentityPattern.test(source) || oneShotMutationPattern.test(source))
+  ) {
+    violations.push(
+      `${filePath}: executable tenant-specific operator helper belongs outside the public product`,
+    );
+  }
 
   if (containsPrivateProvenance(source)) {
     violations.push(
