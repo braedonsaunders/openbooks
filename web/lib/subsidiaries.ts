@@ -1,6 +1,6 @@
 import "server-only";
 import { sql } from "drizzle-orm";
-import { db } from "@openbooks/engine/src/db.ts";
+import { db, withBypassContext } from "@openbooks/engine/src/db.ts";
 import type { SubsidiaryRestriction } from "@openbooks/schema";
 import { subsidiaryFeatureEnabled } from "./features";
 
@@ -103,12 +103,26 @@ export function subtreeIds(all: Pick<SubsidiaryOption, "id" | "parentId">[], sub
  * `and subsidiary_id = any(...)` only when non-null.
  */
 export async function allowedSubsidiaryIds(userId: string): Promise<Set<string> | null> {
-  const r = (await db.execute(sql`
-    select r.subsidiary_restriction as restriction
-      from role_assignments a join app_roles r on r.id = a.role_id
-     where a.user_id = ${userId}`)) as unknown as {
-    rows: { restriction: SubsidiaryRestriction | null }[];
-  };
+  // Identity-layer lookup: the user's assignments and super-admin flag live in
+  // their HOME org, which is invisible under another org's RLS context when a
+  // member is acting cross-org (org switch). Read them with the identity
+  // bypass, exactly like the auth bootstrap — otherwise a cross-org actor
+  // resolves an empty set and every list filters to nothing.
+  const identity = await withBypassContext(async () => {
+    const su = (await db.execute(sql`
+      select is_super_admin from users where id = ${userId}`)) as unknown as {
+      rows: { is_super_admin: boolean }[];
+    };
+    const assignments = (await db.execute(sql`
+      select r.subsidiary_restriction as restriction
+        from role_assignments a join app_roles r on r.id = a.role_id
+       where a.user_id = ${userId}`)) as unknown as {
+      rows: { restriction: SubsidiaryRestriction | null }[];
+    };
+    return { superAdmin: su.rows[0]?.is_super_admin === true, rows: assignments.rows as { restriction: SubsidiaryRestriction | null }[] };
+  });
+  if (identity.superAdmin) return null;
+  const r = identity;
   if (r.rows.length === 0) return new Set();
   const restrictions = r.rows.map((row) => row.restriction ?? { mode: "all" as const });
   if (restrictions.some((x) => x.mode === "all")) return null;
