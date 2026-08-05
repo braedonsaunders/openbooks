@@ -228,7 +228,7 @@ function subScope(col: ReturnType<typeof sql>, subIds?: string[]) {
   return subIds && subIds.length > 0 ? sql` and ${col} = any(${`{${subIds.join(",")}}`}::uuid[])` : sql``;
 }
 
-export async function openItems(side: Side, asOf: string, subIds?: string[]): Promise<OpenItem[]> {
+export async function openItems(orgId: string, side: Side, asOf: string, subIds?: string[]): Promise<OpenItem[]> {
   const acctType = side === "ar" ? "asset_receivable" : "liability_payable";
   const signFilter = side === "ap" ? sql`jl.amount < 0` : sql`jl.amount > 0`;
   // The CASH cockpit deals in payable/receivable DOCUMENTS — the things a
@@ -237,7 +237,9 @@ export async function openItems(side: Side, asOf: string, subIds?: string[]): Pr
   // belong to aging/reconciliation surfaces, but they are NOT payables: an
   // accrual journal must never appear in "Open payables" or the pay-run
   // planner. Settlements drain from BOTH application roles (a journal-netted
-  // bill is just as paid as a payment-settled one).
+  // bill is just as paid as a payment-settled one). A corrected document may
+  // retain reversed historical entries forever; posted_entry_id identifies
+  // the one current projection that operational aging is allowed to count.
   const kindFilter = side === "ap"
     ? sql`d.kind in ('vendor_bill', 'expense_report')`
     : sql`d.kind = 'customer_invoice'`;
@@ -247,11 +249,13 @@ export async function openItems(side: Side, asOf: string, subIds?: string[]): Pr
              je.source_document_id as doc_id,
              abs(jl.amount) - coalesce((
                select sum(x.amount) from applications x
-                where (x.to_line_id = jl.id or x.from_line_id = jl.id) and x.unapplied_at is null
+                where x.org_id = ${orgId}
+                  and (x.to_line_id = jl.id or x.from_line_id = jl.id)
+                  and x.unapplied_at is null
              ), 0) as remaining
         from journal_lines jl
-        join journal_entries je on je.id = jl.entry_id and je.status in ('posted', 'reversed')
-        join accounts a on a.id = jl.account_id
+        join journal_entries je on je.id = jl.entry_id and je.org_id = ${orgId} and je.status = 'posted'
+        join accounts a on a.id = jl.account_id and a.org_id = ${orgId}
        where jl.is_open_item and a.type = ${acctType} and ${signFilter}
          and je.posting_date <= ${asOf}${subScope(sql`jl.subsidiary_id`, subIds)}
     )
@@ -259,7 +263,8 @@ export async function openItems(side: Side, asOf: string, subIds?: string[]): Pr
            coalesce(p.display_name, 'Unspecified') as party_name,
            oi.tran_date, oi.due_date, oi.remaining
       from oi
-      join documents d on d.id = oi.doc_id and ${kindFilter}
+      join documents d on d.id = oi.doc_id and d.org_id = ${orgId}
+       and d.posted_entry_id = oi.entry_id and d.status = 'posted' and ${kindFilter}
       left join parties p on p.id = oi.party_id
      where oi.remaining > 0.005
   `)) as any;
