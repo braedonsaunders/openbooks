@@ -1,7 +1,7 @@
 #!/bin/sh
 set -eu
 
-repo_dir=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
+repo_dir=$(CDPATH='' cd -- "$(dirname -- "$0")/.." && pwd)
 env_file="$repo_dir/.env.compose"
 
 official_openbooks_image=ghcr.io/braedonsaunders/openbooks:0.1.0-alpha.3
