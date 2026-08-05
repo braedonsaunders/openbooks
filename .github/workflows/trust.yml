@@ -152,7 +152,15 @@ jobs:
           npm --prefix engine run --silent sim -- run "$RUN"
 
       - name: Assert the ledger invariants and emit a checkpoint
-        run: npm --prefix engine run --silent harness
+        run: |
+          ORG_ID=$(node -e '
+            const { readFileSync } = require("node:fs");
+            const { join } = require("node:path");
+            const manifest = JSON.parse(readFileSync(join(process.env.SIM_RUN, "manifest.json"), "utf8"));
+            if (!manifest.orgId) throw new Error("simulation manifest is missing orgId");
+            process.stdout.write(manifest.orgId);
+          ')
+          npm --prefix engine run --silent harness -- "$ORG_ID"
 
       - name: Summary
         if: always()
