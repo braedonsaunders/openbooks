@@ -4,6 +4,8 @@ import {
   form941Worksheet, t4Slips, t4Summary, w2Slips,
 } from '@openbooks/engine/src/payroll-yearend.ts'
 import { ListPageLayout } from '../../../../components/page-layout'
+import { groupTabs } from '../../../../components/module-home/group-tabs'
+import { ModuleHomeTabs } from '../../../../components/module-home/ui'
 import { requirePermission } from '../../../../lib/authz'
 import { requireFeatureEnabled } from '../../../../lib/feature-gates'
 import { pickString } from '../../../../lib/list-params'
@@ -37,6 +39,8 @@ export default async function PayrollYearEndPage({
     w2Slips(orgId, year),
   ])
 
+  const moduleTabs = await groupTabs('payroll', '/payroll/year-end')
+
   return (
     <ListPageLayout
       header={
@@ -44,6 +48,7 @@ export default async function PayrollYearEndPage({
           title={`${t('title')} ${year}`}
           description={t('description')}
           back={{ href: '/payroll', label: t('back') }}
+          actions={<ModuleHomeTabs tabs={moduleTabs} />}
         />
       }
     >

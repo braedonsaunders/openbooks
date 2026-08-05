@@ -5,6 +5,8 @@ import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/db.ts'
 import { PageHeader } from '@openbooks/ui'
 import { ListPageLayout } from '../../../../components/page-layout'
+import { groupTabs } from '../../../../components/module-home/group-tabs'
+import { ModuleHomeTabs } from '../../../../components/module-home/ui'
 import { RecordListView } from '../../../../components/record-list-view'
 import { requirePermission, can } from '../../../../lib/authz'
 import { requireFeatureEnabled } from '../../../../lib/feature-gates'
@@ -45,6 +47,8 @@ export default async function PayRunsPage({
 
   const newButton = canRun ? <NewRunButton schedules={schedules} /> : undefined
 
+  const moduleTabs = await groupTabs('payroll', '/payroll/runs')
+
   return (
     <ListPageLayout
       header={
@@ -52,7 +56,12 @@ export default async function PayRunsPage({
           title={t('list.title')}
           description={t('list.description')}
           back={{ href: '/payroll', label: t('title') }}
-          actions={newButton}
+          actions={
+            <div className="flex items-center gap-3">
+              {newButton}
+              <ModuleHomeTabs tabs={moduleTabs} />
+            </div>
+          }
         />
       }
     >
