@@ -6,7 +6,7 @@
 #         database role.
 
 # --- deps: workspace-aware install ------------------------------------------
-FROM node:24-bookworm-slim@sha256:cd84903a12dbd26b46f1f3b8144a2568c41c5d37ddd0c7a80a34c7a19786b35f AS deps
+FROM node:24-trixie-slim@sha256:0711b541c1c33a8a530ac4f0d391baa9a15b3d804695b1b24a47daa5fb60e74d AS deps
 WORKDIR /app
 COPY package.json package-lock.json ./
 COPY schema/package.json schema/
@@ -44,7 +44,7 @@ RUN npx esbuild engine/src/worker/index.ts \
       --outfile=/out/worker.mjs
 
 # --- runtime ------------------------------------------------------------------
-FROM node:24-bookworm-slim@sha256:cd84903a12dbd26b46f1f3b8144a2568c41c5d37ddd0c7a80a34c7a19786b35f AS runtime
+FROM node:24-trixie-slim@sha256:0711b541c1c33a8a530ac4f0d391baa9a15b3d804695b1b24a47daa5fb60e74d AS runtime
 WORKDIR /app
 ARG OPENBOOKS_VERSION=development
 # HTML-authored reports and forms are printed by the shared Chromium renderer.
@@ -52,12 +52,24 @@ ARG OPENBOOKS_VERSION=development
 # image so PDF availability and typography never depend on the host machine.
 RUN apt-get update \
     && apt-get install -y --no-install-recommends \
-      chromium=151.0.7922.71-1~deb12u1 \
-      fonts-liberation=1:1.07.4-11 \
-      fonts-noto-core=20201225-1 \
-      fonts-noto-cjk=1:20220127+repack1-1 \
-      fonts-noto-color-emoji=2.042-0+deb12u1 \
-    && rm -rf /var/lib/apt/lists/*
+      chromium=151.0.7922.71-1~deb13u1 \
+      fonts-liberation=1:2.1.5-3 \
+      fonts-noto-core=20201225-2 \
+      fonts-noto-cjk=1:20240730+repack1-1 \
+      fonts-noto-color-emoji=2.051-0+deb13u1 \
+    && rm -rf \
+      /var/lib/apt/lists/* \
+      /usr/local/lib/node_modules/corepack \
+      /usr/local/lib/node_modules/npm \
+      /opt/yarn-* \
+    && rm -f \
+      /usr/local/bin/corepack \
+      /usr/local/bin/npm \
+      /usr/local/bin/npx \
+      /usr/local/bin/pnpm \
+      /usr/local/bin/pnpx \
+      /usr/local/bin/yarn \
+      /usr/local/bin/yarnpkg
 ENV NODE_ENV=production \
     OPENBOOKS_VERSION=${OPENBOOKS_VERSION} \
     NEXT_TELEMETRY_DISABLED=1 \
