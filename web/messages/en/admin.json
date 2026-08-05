@@ -2338,6 +2338,9 @@
         "t4a022": "T4A 022 — Income tax deducted"
       }
     },
+    "payroll": {
+      "navTitle": "Payroll"
+    },
     "laborCosting": {
       "navTitle": "Labor Costing",
       "title": "Labor Costing",
@@ -2676,6 +2679,7 @@
         "activeSubscriptions": "{count, plural, one {# active subscription} other {# active subscriptions}}",
         "advancedSubscriptionContracts": "{count, plural, one {# active versioned subscription contract} other {# active versioned subscription contracts}}",
         "openOrders": "{count, plural, one {# issued order with an unconverted balance} other {# issued orders with unconverted balances}}",
+        "postedPayRuns": "{count, plural, one {# posted pay run in the ledger} other {# posted pay runs in the ledger}}",
         "submittedTimeEntries": "{count, plural, one {# submitted time entry awaiting review} other {# submitted time entries awaiting review}}",
         "activeBankFeeds": "{count, plural, one {# active bank-feed connection} other {# active bank-feed connections}}",
         "activeBankImportSchedules": "{count, plural, one {# active SFTP bank-import schedule} other {# active SFTP bank-import schedules}}",
@@ -3264,6 +3268,10 @@
     "fieldTickets": {
       "title": "Field tickets",
       "description": "Signed crew timesheets for T&M work: the foreman records the whole crew's hours plus equipment and materials, the customer signs, and invoices are built from the signed tickets."
+    },
+    "payroll": {
+      "title": "Payroll",
+      "description": "Canadian payroll: pay schedules, employee TD1 profiles, CRA statutory withholdings (T4127), pay runs, and remittance liabilities."
     },
     "projectScheduling": {
       "title": "Project Scheduling",
