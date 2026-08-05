@@ -4,8 +4,8 @@ import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { useTranslations } from 'next-intl'
 import { toast } from 'sonner'
-import { Play, Plus } from 'lucide-react'
-import { Button, Label, Select } from '@openbooks/ui'
+import { ChevronDown, Play, Plus } from 'lucide-react'
+import { Button, Popover } from '@openbooks/ui'
 
 /** POST /api/payroll/runs and land in the wizard. */
 async function createRun(payScheduleId: string, router: ReturnType<typeof useRouter>) {
@@ -43,41 +43,58 @@ export function StartRunButton({ payScheduleId, size = 'sm' }: { payScheduleId: 
   )
 }
 
-/** Schedule picker + create — the runs-list header's New button. */
+/** "New pay run" — house dropdown pattern: one schedule = plain button,
+ *  several = a Popover menu of schedules (mirrors NewDocumentButton). */
 export function NewRunButton({ schedules }: { schedules: { id: string; name: string }[] }) {
   const t = useTranslations('payroll')
   const router = useRouter()
+  const [open, setOpen] = useState(false)
   const [busy, setBusy] = useState(false)
-  const [scheduleId, setScheduleId] = useState(schedules[0]?.id ?? '')
-  return (
-    <div className="flex items-end gap-2">
-      <div>
-        <Label htmlFor="pr-schedule" className="sr-only">
-          {t('newRun.schedule')}
-        </Label>
-        <Select id="pr-schedule" value={scheduleId} onChange={(e) => setScheduleId(e.target.value)}>
-          {schedules.length === 0 && <option value="">{t('newRun.noSchedules')}</option>}
-          {schedules.map((schedule) => (
-            <option key={schedule.id} value={schedule.id}>
-              {schedule.name}
-            </option>
-          ))}
-        </Select>
-      </div>
-      <Button
-        disabled={busy || !scheduleId}
-        onClick={async () => {
-          setBusy(true)
-          try {
-            await createRun(scheduleId, router)
-          } catch (e) {
-            toast.error((e as Error).message)
-            setBusy(false)
-          }
-        }}
-      >
+
+  async function start(scheduleId: string) {
+    setOpen(false)
+    setBusy(true)
+    try {
+      await createRun(scheduleId, router)
+    } catch (e) {
+      toast.error((e as Error).message)
+      setBusy(false)
+    }
+  }
+
+  if (schedules.length === 0) return null
+  if (schedules.length === 1) {
+    return (
+      <Button onClick={() => void start(schedules[0]!.id)} disabled={busy}>
         <Plus size={14} aria-hidden /> {t('newRun.create')}
       </Button>
-    </div>
+    )
+  }
+  return (
+    <Popover
+      open={open}
+      onOpenChange={setOpen}
+      align="end"
+      trigger={
+        <Button onClick={() => setOpen((v) => !v)} disabled={busy}>
+          <Plus size={14} aria-hidden /> {t('newRun.create')}
+          <ChevronDown size={14} className="opacity-60" />
+        </Button>
+      }
+    >
+      <div className="p-1">
+        {schedules.map((schedule) => (
+          <button
+            key={schedule.id}
+            type="button"
+            disabled={busy}
+            onClick={() => void start(schedule.id)}
+            className="flex w-full items-center rounded px-2.5 py-1.5 text-left text-sm text-slate-700 hover:bg-slate-100 disabled:opacity-50 dark:text-slate-200 dark:hover:bg-slate-800"
+          >
+            {schedule.name}
+          </button>
+        ))}
+      </div>
+    </Popover>
   )
 }

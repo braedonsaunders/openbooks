@@ -47,7 +47,6 @@ export default async function PayrollYearEndPage({
         <PageHeader
           title={`${t('title')} ${year}`}
           description={t('description')}
-          back={{ href: '/payroll', label: t('back') }}
           actions={<ModuleHomeTabs tabs={moduleTabs} />}
         />
       }
