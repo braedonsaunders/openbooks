@@ -639,3 +639,16 @@ export async function dropScratchOrg(orgId: string): Promise<void> {
     throw new Error(`dropScratchOrg(${orgId}) left rows behind: ${JSON.stringify(leftovers)}`);
   }
 }
+
+/**
+ * dropScratchOrg for finally blocks: a teardown failure must not replace the
+ * test's own in-flight error, but silently swallowing it is how leaked orgs
+ * went unnoticed for months — report it and let the test result stand.
+ */
+export async function dropScratchOrgReporting(orgId: string): Promise<void> {
+  try {
+    await dropScratchOrg(orgId);
+  } catch (error) {
+    console.error(`scratch-org teardown failed for ${orgId} (rows may be leaked on the shared dev DB):`, error);
+  }
+}
