@@ -3,7 +3,7 @@
 !.env.example
 !.env.compose.example
 .env.compose
-extraction/*-sdf/project.json
+/extraction/
 node_modules/
 gl-dump/
 web/.env.local
@@ -11,21 +11,6 @@ web/.env.local
 web/.next/
 .next/
 *.tsbuildinfo
-
-# large connector extraction data dumps (regenerate via extraction scripts)
-extraction/account-data/
-extraction/transactions/
-extraction/transactions_dump.log
-extraction/reconciliation-report.json
-extraction/objects-list.txt
-
-# raw connector XML metadata extractions and vendor schemas
-# schema (regenerable reference, not source; kept local, out of the repo)
-extraction/*-sdf/
-extraction/standard-schema/
-extraction/**/*.xml
-extraction/**/*.xsd
-extraction/**/*.wsdl
 
 engine/*.log
 
@@ -35,60 +20,12 @@ dump.rdb
 .backups/
 .local/
 
-# regenerable time-entry dump
-extraction/account-data/timebill.ndjson
-
 # Python bytecode cache
 __pycache__/
 *.pyc
 
-# local-only connector workflow references
-docs/*-workflows-*.md
-
-# Private tenant migration operators. These remain on the operator workstation
-# at their original paths so their relative imports and runbooks keep working,
-# but they are not part of the source-neutral OpenBooks product.
-engine/src/validation/backfill-job-lines.ts
-engine/src/validation/backfill-line-markup.ts
-engine/src/validation/backfill-ticket-costlines.ts
-engine/src/validation/fix-percent-units.ts
-engine/src/validation/fix-scope-refs.ts
-engine/src/validation/flow-status.ts
-engine/src/validation/ft-batch-replay.ts
-engine/src/validation/ft-source-completeness.ts
-engine/src/validation/import-field-ticket-draft-time.ts
-engine/src/validation/import-field-ticket-labor-evidence.ts
-engine/src/validation/job-line-audit.ts
-engine/src/validation/field-ticket-time-reconcile.ts
-engine/src/validation/normalize-imported-field-tickets.ts
-engine/src/validation/seed-rate-adjustments.ts
-engine/src/validation/link-job-rate-cards.ts
-engine/src/validation/repair-invoice-line-commercial-provenance.ts
-engine/src/validation/repair-posted-tax-project-dimensions.ts
-engine/src/validation/tax-project-dimension-repair-contract.ts
-engine/src/validation/tax-project-dimension-repair-contract.test.ts
-engine/src/validation/legacy-cost-recon.ts
-engine/src/validation/legacy-replay.ts
-engine/src/validation/legacy-timeline-replay.ts
-engine/src/validation/merge-dup-projects.ts
-engine/src/validation/parity-report.ts
-engine/src/validation/reconcile-archival-field-ticket-labor.ts
-engine/src/validation/resync-sandbox.ts
-engine/src/validation/retire-legacy-field-ticket-json.ts
-engine/src/validation/verify-field-ticket-labor-evidence.ts
-engine/src/validation/verify-native-field-ticket-storage.ts
-engine/src/validation/tenant-source-identity-map.ts
-engine/src/sync/[g]antry-config-cli.ts
-
-# Private extraction operators and source-system metadata. The public in-app
-# connector does not depend on these workstation utilities.
-extraction/*.py
-extraction/netsuite-sdf/
-extraction/standard-schema/
-
 # generated report/pdf output
 output/
-/Deposit Detail Report, July 31, 2026.pdf
 
 # scratch/test artifacts
 tmp/
