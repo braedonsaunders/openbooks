@@ -4,6 +4,8 @@ import { PageHeader } from '@openbooks/ui'
 import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/db.ts'
 import { ListPageLayout } from '../../../../../components/page-layout'
+import { groupTabs } from '../../../../../components/module-home/group-tabs'
+import { ModuleHomeTabs } from '../../../../../components/module-home/ui'
 import { requirePermission, can } from '../../../../../lib/authz'
 import { requireFeatureEnabled } from '../../../../../lib/feature-gates'
 import { isUuid } from '../../../../../lib/list-params'
@@ -152,6 +154,8 @@ export default async function PayRunPage({
           ? 'review'
           : 'period'
 
+  const moduleTabs = await groupTabs('payroll', '/payroll/runs')
+
   return (
     <ListPageLayout
       header={
@@ -159,6 +163,7 @@ export default async function PayRunPage({
           title={`${t('run.title')} ${run.document_number}`}
           description={`${run.schedule_name ?? ''} · ${run.period_start} – ${run.period_end}`.replace(/^ · /, '')}
           back={{ href: '/payroll/runs', label: t('list.title') }}
+          actions={<ModuleHomeTabs tabs={moduleTabs} />}
         />
       }
     >
