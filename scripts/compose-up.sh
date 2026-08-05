@@ -4,25 +4,60 @@ set -eu
 repo_dir=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
 env_file="$repo_dir/.env.compose"
 
-configured_openbooks_image=${OPENBOOKS_IMAGE:-}
+official_openbooks_image=ghcr.io/braedonsaunders/openbooks:0.1.0-alpha.3
+supplied_openbooks_image=${OPENBOOKS_IMAGE:-}
+configured_openbooks_image=$supplied_openbooks_image
 if [ -z "$configured_openbooks_image" ] && [ -f "$env_file" ]; then
   configured_openbooks_image=$(sed -n 's/^OPENBOOKS_IMAGE=//p' "$env_file" | tail -1)
 fi
 if [ -z "$configured_openbooks_image" ]; then
-  echo "OPENBOOKS_IMAGE is required. Use only a post-clean, scanned image pinned by digest." >&2
-  echo "Example: OPENBOOKS_IMAGE=registry.example/openbooks@sha256:<64 hex> ./scripts/compose-up.sh" >&2
-  exit 1
+  configured_openbooks_image=$official_openbooks_image
 fi
+
 if ! printf '%s\n' "$configured_openbooks_image" | grep -Eq '^.+@sha256:[0-9a-f]{64}$'; then
-  echo "OPENBOOKS_IMAGE must be an immutable sha256 digest reference, not a tag." >&2
-  exit 1
+  if [ "$configured_openbooks_image" != "$official_openbooks_image" ]; then
+    echo "OPENBOOKS_IMAGE must be an immutable sha256 digest reference." >&2
+    echo "The only tag accepted by the installer is the official release: $official_openbooks_image" >&2
+    exit 1
+  fi
+
+  echo "Resolving $official_openbooks_image to its immutable multi-platform digest..."
+  docker pull "$official_openbooks_image"
+  configured_openbooks_image=$(
+    docker image inspect "$official_openbooks_image" \
+      --format '{{range .RepoDigests}}{{println .}}{{end}}' \
+      | sed -n '\|^ghcr.io/braedonsaunders/openbooks@sha256:[0-9a-f]\{64\}$|p' \
+      | head -1
+  )
+  if ! printf '%s\n' "$configured_openbooks_image" | grep -Eq '^ghcr\.io/braedonsaunders/openbooks@sha256:[0-9a-f]{64}$'; then
+    echo "Docker did not return an immutable digest for $official_openbooks_image." >&2
+    exit 1
+  fi
+  echo "Using $configured_openbooks_image"
 fi
+
 case "$configured_openbooks_image" in
   example.invalid/*)
-    echo "The example.invalid OpenBooks image is intentionally non-runnable; replace it with the approved post-clean digest." >&2
+    echo "The example.invalid OpenBooks image is intentionally non-runnable; replace it with the approved release digest." >&2
     exit 1
     ;;
 esac
+
+if [ -n "$supplied_openbooks_image" ] && [ -f "$env_file" ]; then
+  current_openbooks_image=$(sed -n 's/^OPENBOOKS_IMAGE=//p' "$env_file" | tail -1)
+  if [ "$current_openbooks_image" != "$configured_openbooks_image" ]; then
+    next_env_file="$env_file.tmp.$$"
+    awk -v image="$configured_openbooks_image" '
+      BEGIN { replaced = 0 }
+      /^OPENBOOKS_IMAGE=/ { print "OPENBOOKS_IMAGE=" image; replaced = 1; next }
+      { print }
+      END { if (!replaced) print "OPENBOOKS_IMAGE=" image }
+    ' "$env_file" > "$next_env_file"
+    chmod 600 "$next_env_file"
+    mv "$next_env_file" "$env_file"
+    echo "Updated $env_file to the resolved image digest."
+  fi
+fi
 
 random_hex() {
   byte_count=$1
