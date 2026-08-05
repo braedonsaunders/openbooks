@@ -147,6 +147,13 @@ async function runAdversarialProbes(runDir: string, manifest: RunManifest, world
 
 export interface RegenSweepResult {
   documents: number;
+  /**
+   * Documents whose entry was REVERSED through the governed reversal path.
+   * A reversed entry is closed ledger history with no live projection to
+   * regenerate (je_guard doctrine); the reversal-pair-nets-to-zero probe is
+   * the invariant that covers them. Counted, never silently skipped.
+   */
+  reversedSkipped: number;
   changed: { documentId: string; kind: string }[];
   failures: { documentId: string; kind: string; error: string }[];
   trialBalanceBefore: string;
@@ -177,14 +184,20 @@ async function tbFingerprint(orgId: string): Promise<string> {
 export async function regenSweep(orgId: string): Promise<RegenSweepResult> {
   const deps: PostingDeps = { ...(await paymentControlDeps(orgId)), migration: true };
   const docs = (await db.execute(sql`
-    select id, kind from documents
-     where org_id = ${orgId} and status = 'posted' and posted_entry_id is not null
-     order by created_at`)) as unknown as { rows: { id: string; kind: string }[] };
+    select d.id, d.kind, e.status as entry_status from documents d
+      join journal_entries e on e.id = d.posted_entry_id
+     where d.org_id = ${orgId} and d.status = 'posted'
+     order by d.created_at`)) as unknown as { rows: { id: string; kind: string; entry_status: string }[] };
 
   const before = await tbFingerprint(orgId);
   const changed: RegenSweepResult["changed"] = [];
   const failures: RegenSweepResult["failures"] = [];
+  let reversedSkipped = 0;
   for (const doc of docs.rows) {
+    if (doc.entry_status === "reversed") {
+      reversedSkipped++;
+      continue;
+    }
     try {
       const res = await db.transaction((tx) => regenerateGlImpactTx(tx, doc.id, deps, "mirror"));
       if (res.changed) changed.push({ documentId: doc.id, kind: doc.kind });
@@ -196,6 +209,7 @@ export async function regenSweep(orgId: string): Promise<RegenSweepResult> {
 
   return {
     documents: docs.rows.length,
+    reversedSkipped,
     changed,
     failures,
     trialBalanceBefore: before,
