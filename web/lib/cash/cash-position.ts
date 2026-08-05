@@ -177,8 +177,8 @@ export async function cashPosition(
   const grid = buildWeekGrid(asOfIso, horizonWeeks);
 
   const [arItems, apItems, arStats, apStats, banks, catConfigs, accountRows, vendorRows] = await Promise.all([
-    openItems("ar", asOfIso, subIds),
-    openItems("ap", asOfIso, subIds),
+    openItems(orgId, "ar", asOfIso, subIds),
+    openItems(orgId, "ap", asOfIso, subIds),
     paymentStats("ar", asOfIso),
     paymentStats("ap", asOfIso),
     bankBalances(asOfIso, subIds),

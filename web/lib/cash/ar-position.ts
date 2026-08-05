@@ -99,8 +99,8 @@ export async function arPosition(
   const grid = buildWeekGrid(asOfIso, horizonWeeks);
 
   const [arItems, apItems, arStats, apStats, banks, catConfigs] = await Promise.all([
-    openItems("ar", asOfIso),
-    openItems("ap", asOfIso),
+    openItems(orgId, "ar", asOfIso),
+    openItems(orgId, "ap", asOfIso),
     paymentStats("ar", asOfIso),
     paymentStats("ap", asOfIso),
     bankBalances(asOfIso),
