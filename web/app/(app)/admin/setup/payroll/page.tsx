@@ -4,6 +4,7 @@ import { sql } from 'drizzle-orm'
 import { cn } from '@openbooks/ui'
 import { db } from '@openbooks/engine/src/db.ts'
 import { payrollSettings } from '@openbooks/engine/src/payroll-run.ts'
+import { packSlotState } from '@openbooks/engine/src/payroll/packs.ts'
 import { RATES_2026_JAN, RATES_2026_JUL } from '@openbooks/engine/src/payroll/canada/rates.ts'
 import { can, requirePermission } from '../../../../../lib/authz'
 import { requireFeatureEnabled } from '../../../../../lib/feature-gates'
@@ -113,8 +114,9 @@ async function PacksTab({ orgId }: { orgId: string }) {
 }
 
 async function AccountsTab({ orgId }: { orgId: string }) {
-  const [settings, accountsRes, vendorsRes] = (await Promise.all([
+  const [settings, blobRes, accountsRes, vendorsRes] = (await Promise.all([
     payrollSettings(orgId),
+    db.execute(sql`select settings->'payroll' as p from orgs where id = ${orgId}`),
     db.execute(sql`
       select id, number, name from accounts
        where org_id = ${orgId} and not is_summary and is_active
@@ -125,13 +127,18 @@ async function AccountsTab({ orgId }: { orgId: string }) {
        where p.org_id = ${orgId} and p.is_active order by p.display_name`),
   ])) as unknown as [
     Awaited<ReturnType<typeof payrollSettings>>,
+    { rows: { p: Record<string, unknown> | null }[] },
     { rows: { id: string; number: string | null; name: string }[] },
     { rows: { id: string; name: string }[] },
   ]
+  const blob = blobRes.rows[0]?.p ?? {}
+  const installed = Array.isArray(blob.countries) ? blob.countries.map(String) : []
+  const packs = await packSlotState(orgId, installed, blob)
 
   return (
     <PayrollSetupWorkspace
       settings={settings}
+      packs={packs}
       accounts={accountsRes.rows.map((account) => ({
         id: account.id,
         label: account.number ? `${account.number} · ${account.name}` : account.name,
