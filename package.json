@@ -1,0 +1,52 @@
+{
+  "name": "openbooks",
+  "version": "0.1.0-alpha.3",
+  "private": true,
+  "license": "AGPL-3.0-or-later",
+  "workspaces": [
+    "schema",
+    "engine",
+    "web",
+    "packages/*"
+  ],
+  "devDependencies": {
+    "@axe-core/playwright": "4.12.1",
+    "@playwright/test": "^1.62.0",
+    "drizzle-kit": "1.0.0-rc.4",
+    "next": "16.3.0",
+    "typescript": "^7.0.2"
+  },
+  "dependencies": {
+    "cron-parser": "^5.6.2"
+  },
+  "overrides": {
+    "@ai-sdk/gateway": "3.0.150",
+    "@ai-sdk/provider-utils": "4.0.39",
+    "exceljs": {
+      "uuid": "11.1.1"
+    },
+    "minimatch@3.1.5": {
+      "brace-expansion": "1.1.18"
+    },
+    "minimatch@5.1.9": {
+      "brace-expansion": "2.1.4"
+    },
+    "next": {
+      ".": "16.3.0",
+      "postcss": "8.5.25",
+      "sharp": "0.35.0"
+    },
+    "hono": "4.12.34"
+  },
+  "scripts": {
+    "worker": "tsx engine/src/worker/index.ts",
+    "check:dependencies": "npm audit --omit=dev --audit-level=moderate",
+    "check:history-hygiene": "node scripts/check-history-hygiene.mjs",
+    "check:product-neutrality": "node scripts/check-product-neutrality.mjs",
+    "check:container-security": "node scripts/check-container-security.mjs",
+    "test:load-harness": "node --test scripts/load-smoke.test.mjs",
+    "test:load": "node scripts/load-smoke.mjs",
+    "test": "npm run check:product-neutrality && OPENBOOKS_TRUSTED_TEST_BYPASS=1 node --import tsx --import ./engine/src/test-database-bypass.ts --test --test-force-exit 'engine/src/**/*.test.ts' 'packages/**/*.test.ts' 'web/lib/**/*.test.ts' 'schema/**/*.test.ts'",
+    "verify:release": "npm run check:dependencies && npm run check:container-security && npm run typecheck --workspaces --if-present && npm test && npm -w web run build"
+  }
+}

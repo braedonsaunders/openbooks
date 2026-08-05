@@ -1,0 +1,131 @@
+{
+  "accountMenu": {
+    "account": "Compte",
+    "menuAriaLabel": "Menu du compte",
+    "theme": "Thème",
+    "language": "Langue",
+    "menuLayout": "Disposition du menu",
+    "signOut": "Fermer la session",
+    "signingOut": "Fermeture de la session…",
+    "roles": {
+      "admin": "Administrateur",
+      "controller": "Contrôleur",
+      "accountant": "Comptable",
+      "approver": "Approbateur",
+      "viewer": "Lecteur"
+    },
+    "organizations": "Organisations",
+    "superAdmin": "Super administrateur",
+    "security": "Sécurité de connexion"
+  },
+  "language": {
+    "label": "Langue",
+    "orgDefault": "Valeur par défaut de l’organisation",
+    "saveFailed": "Impossible d’enregistrer votre préférence de langue"
+  },
+  "menuMode": {
+    "label": "Disposition du menu",
+    "orgDefault": "Valeur par défaut de l’organisation",
+    "saveFailed": "Impossible d’enregistrer votre préférence de disposition du menu",
+    "options": {
+      "sidebar": "Barre latérale",
+      "topbar": "Barre de menus supérieure"
+    }
+  },
+  "topNav": {
+    "ariaLabel": "Principal",
+    "more": "Plus"
+  },
+  "apps": {
+    "ariaLabel": "Ouvrir les applications",
+    "title": "Applications"
+  },
+  "globalCreate": {
+    "ariaLabel": "Créer",
+    "title": "Créer",
+    "description": "Commencez un véritable brouillon sans interrompre votre travail.",
+    "createFailed": "Impossible de créer le brouillon",
+    "groups": {
+      "sales": "Ventes",
+      "purchases": "Achats",
+      "accounting": "Comptabilité",
+      "peopleAndLists": "Personnes et listes"
+    },
+    "items": {
+      "invoice": "Facture client",
+      "creditMemo": "Note de crédit",
+      "estimate": "Devis",
+      "salesOrder": "Commande client",
+      "customerPayment": "Paiement client",
+      "bill": "Facture fournisseur",
+      "vendorCredit": "Crédit fournisseur",
+      "purchaseOrder": "Bon de commande",
+      "vendorPayment": "Paiement fournisseur",
+      "journal": "Écriture de journal",
+      "expense": "Note de frais",
+      "cardCharge": "Débit de carte",
+      "cardRefund": "Remboursement sur carte",
+      "check": "Chèque",
+      "deposit": "Dépôt bancaire",
+      "transfer": "Virement bancaire",
+      "asset": "Immobilisation",
+      "customer": "Client",
+      "vendor": "Fournisseur",
+      "employee": "Employé",
+      "item": "Article ou service",
+      "project": "Projet"
+    }
+  },
+  "relatedParty": {
+    "loadFailed": "Impossible d’ouvrir cette fiche"
+  },
+  "globalSearch": {
+    "ariaLabel": "Rechercher",
+    "placeholder": "Rechercher partout…",
+    "clear": "Effacer la recherche",
+    "searching": "Recherche…",
+    "noMatches": "Aucun résultat pour « {query} »",
+    "navigate": "naviguer",
+    "open": "ouvrir",
+    "close": "fermer",
+    "resultCount": "{count, plural, one {# résultat} other {# résultats}}",
+    "groups": {
+      "contacts": "Contacts",
+      "transactions": "Transactions",
+      "accounts": "Comptes",
+      "items": "Articles",
+      "projects": "Projets"
+    }
+  },
+  "meta": {
+    "description": "La suite de gestion ouverte. Menez vos affaires à livres ouverts."
+  },
+  "brand": {
+    "home": "Aller au tableau de bord"
+  },
+  "sidebar": {
+    "expand": "Déployer la barre latérale",
+    "collapse": "Réduire la barre latérale"
+  },
+  "mobileNav": {
+    "openMenu": "Ouvrir le menu",
+    "menu": "Menu",
+    "primaryAriaLabel": "Principal"
+  },
+  "themeToggle": {
+    "label": "Thème",
+    "options": {
+      "light": "Clair",
+      "system": "Système",
+      "dark": "Sombre"
+    },
+    "current": "Thème : {theme}",
+    "currentHint": "Thème : {theme} (cliquez pour changer)"
+  },
+  "notifications": {
+    "ariaLabel": "Notifications",
+    "title": "Notifications",
+    "empty": "Vous êtes à jour",
+    "markAllRead": "Tout marquer comme lu"
+  }
+}

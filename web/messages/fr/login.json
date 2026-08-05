@@ -1,0 +1,15 @@
+{
+  "tagline": "menez vos affaires à livres ouverts",
+  "password": "Mot de passe",
+  "invalidCredentials": "Courriel ou mot de passe invalide",
+  "signIn": "Ouvrir une session",
+  "signingIn": "Ouverture de session…",
+  "mfaCode": "Code d’authentification ou de récupération",
+  "mfaPlaceholder": "123456",
+  "mfaHelp": "Saisissez le code à six chiffres ou un code de récupération à usage unique.",
+  "invalidMfa": "Ce code d’authentification est invalide ou expiré",
+  "verify": "Vérifier",
+  "or": "ou",
+  "sso": "Authentification unique",
+  "ssoFailed": "L’authentification unique n’a pas pu être terminée"
+}

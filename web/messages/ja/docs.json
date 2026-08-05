@@ -1,0 +1,28 @@
+{
+  "title": "ドキュメント",
+  "searchPlaceholder": "ドキュメントを検索…",
+  "noResults": "一致する記事がありません。",
+  "browseMenu": "ドキュメントを見る",
+  "expandAll": "すべて展開",
+  "collapseAll": "すべて折りたたむ",
+  "expandSection": "{title} を展開",
+  "collapseSection": "{title} を折りたたむ",
+  "lastUpdated": "最終更新 {date}",
+  "related": "関連記事",
+  "breadcrumb": "ドキュメントのパンくずリスト",
+  "articleNavigation": "記事のナビゲーション",
+  "previous": "前へ",
+  "next": "次へ",
+  "home": {
+    "title": "ドキュメント",
+    "subtitle": "会計モデルを理解し、組織を構成し、日々のワークフローを実行し、別のシステムから安全に移行します。",
+    "eyebrow": "OpenBooks ヘルプセンター",
+    "startHere": "ここから始める",
+    "step": "ステップ {number}",
+    "switchingTitle": "別のシステムから移行しますか？",
+    "switchingSubtitle": "使い慣れた概念とワークフローを対応付ける入門ガイドから始めてください。",
+    "browseTitle": "すべてのドキュメントを見る",
+    "browseSubtitle": "トピック別にガイド全体を参照するか、サイドバーから検索できます。",
+    "articleCount": "{count} 件の記事"
+  }
+}

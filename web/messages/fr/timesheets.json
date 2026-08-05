@@ -1,0 +1,57 @@
+{
+  "list": {
+    "title": "Feuilles de temps hebdomadaires",
+    "description": "Le temps des employés par semaine — saisissez, soumettez et approuvez les heures sur chaque chantier.",
+    "newButton": "Nouvelle feuille de temps",
+    "emptyTitle": "Aucune feuille de temps pour l’instant",
+    "emptyDescription": "Les saisies de temps se regroupent ici en feuilles de temps hebdomadaires. Créez-en une pour consigner des heures sur un chantier.",
+    "week": "Semaine",
+    "unnamed": "(sans nom)"
+  },
+  "labels": {
+    "totalHours": "Total des heures",
+    "billableHours": "Heures facturables",
+    "serviceItem": "Article de service",
+    "timeType": "Type de temps",
+    "bill": "Facturer",
+    "billable": "Facturable",
+    "dailyTotals": "Totaux quotidiens"
+  },
+  "status": {
+    "submitted": "Soumise",
+    "empty": "Aucune heure"
+  },
+  "days": {
+    "sun": "Dim",
+    "mon": "Lun",
+    "tue": "Mar",
+    "wed": "Mer",
+    "thu": "Jeu",
+    "fri": "Ven",
+    "sat": "Sam"
+  },
+  "grid": {
+    "title": "Feuille de temps hebdomadaire",
+    "selectEmployee": "Sélectionner un employé…",
+    "submitForApproval": "Soumettre pour approbation",
+    "prev": "Préc.",
+    "thisWeek": "Cette semaine",
+    "weekOf": "Semaine du {from} au {to}",
+    "approvedReadOnly": "Les feuilles de temps approuvées sont en lecture seule.",
+    "viewOnly": "Vous avez un accès en lecture seule.",
+    "noEmployee": "Aucun employé sélectionné. Choisissez un employé ci-dessus pour saisir du temps.",
+    "discardConfirm": "Abandonner les modifications non enregistrées?",
+    "networkError": "Erreur réseau",
+    "saved": "Feuille de temps enregistrée",
+    "saveBeforeSubmit": "Enregistrez vos modifications avant de soumettre",
+    "submittedToast": "Soumise pour approbation",
+    "approvedToast": "Feuille de temps approuvée",
+    "addLine": "Ajouter une ligne",
+    "projectPlaceholder": "Projet…",
+    "lineProjectAria": "Projet de la ligne {line}",
+    "lineItemAria": "Article de la ligne {line}",
+    "lineBillableAria": "Ligne {line} facturable",
+    "lineHoursAria": "Ligne {line}, heures de {day}",
+    "removeLineAria": "Retirer la ligne {line}"
+  }
+}

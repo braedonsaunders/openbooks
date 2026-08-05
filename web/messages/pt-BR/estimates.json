@@ -1,0 +1,12 @@
+{
+  "list": {
+    "title": "Orçamentos",
+    "description": "Orçamentos de clientes que não geram lançamento — emita e depois converta em pedido de venda ou fatura.",
+    "searchPlaceholder": "Buscar orçamentos, clientes, memorando…",
+    "converted": "Convertido",
+    "emptyTitle": "Nenhum orçamento ainda",
+    "emptyDescription": "Crie o primeiro orçamento para iniciar o fluxo de pedido a recebimento.",
+    "newButton": "Novo orçamento",
+    "createDraftFailed": "Não foi possível criar um orçamento rascunho"
+  }
+}

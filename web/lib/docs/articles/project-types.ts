@@ -1,0 +1,229 @@
+import type { DocArticle } from '../types'
+
+export const projectTypes: DocArticle = {
+  slug: 'project-types',
+  title: 'Project Types',
+  category: 'projects',
+  order: 1,
+  summary:
+    'Configure profitability, invoicing, costing, pricing, and supporting-document requirements by project class.',
+  updated: '2026-07-23',
+  keywords: [
+    'project type',
+    'profitability',
+    'invoicing',
+    'backup',
+    'overhead',
+    'billing method',
+    'fixed price',
+    'time and materials',
+    'cost plus',
+    'not to exceed',
+    'P&L',
+    'markup',
+    'source platform',
+  ],
+  body: `# Project Types
+
+A **project type** is the configurable classification that drives a project's
+profitability, invoicing, and backup behaviour. Each project references a
+project type containing three profiles:
+
+- **Profitability** — how each P&L measure is sourced or derived, plus the order
+  of the P&L statement shown on a project's Financials tab.
+- **Invoicing** — how invoice lines are built, which account they credit, and how
+  revenue is recognized.
+- **Backup** — whether an invoice needs a backup package and what it contains.
+
+You manage project types under **Settings → Company Setup → Project
+Types**. Five built-in types are provided with controlled defaults and may be
+used directly or duplicated and modified: **Time & Materials**, **Fixed Price**, **Cost-Plus**,
+**Not-to-Exceed**, and **Schedule of Values**.
+
+---
+
+## General
+
+The **General** tab holds the type's identity and defaults:
+
+- **Name** and **Key** — the display name and a stable key. The key is generated
+  from the name if you leave it blank; keep it stable once projects use the type.
+- **Description** — shown to users when they pick a type on a project.
+- **Billing classification** — the governed commercial model
+  (**time_and_materials**, **fixed_price**, or **cost_plus**) used by controlled
+  billing constraints and transaction snapshots. The profiles below define the
+  detailed workflow and accounting policy.
+- **Sort order** and **Status** — ordering in pickers and whether the type is
+  selectable.
+
+---
+
+## Profitability profile
+
+The Profitability tab defines how each measure on a project's profitability
+statement is computed. Each measure has a configurable **source**.
+
+The **Billing procedure** on the Invoicing tab chooses the operational workflow:
+
+- **Standard billing requests** — date ranges, selected time, milestones, or
+  controlled draws generate a draft project invoice.
+- **Applications for payment** — a Schedule of Values, cumulative applications,
+  change orders, and retainage generate the project invoice. This procedure is
+  part of Projects and is not a separate organization feature.
+
+**Progress/interim**, **final**, and **retainage release** are invoice or
+application stages. They are not billing methods and are never feature toggles.
+
+### Controlled Applications for Payment lifecycle
+
+Applications for Payment use an enforced maker-checker workflow:
+
+1. A preparer creates a **Draft** and enters the current draw by SOV line.
+2. **Submit** persists and validates every draw line atomically, including
+   cumulative overbilling and retainage bounds.
+3. A different user with AR approval permission moves the application to
+   **Approved**. The preparer cannot approve their own application.
+4. A user with AR posting permission creates the controlled draft customer
+   invoice. The application becomes **Invoiced** and cannot generate another.
+
+Only one draft/submitted/approved application can exist for a project at a time.
+Once an SOV line has appeared in an application it is immutable; contract changes
+must flow through an independently approved change order. An additive change may
+create a new SOV line or revise an existing one. A deductive change must identify
+an existing line and cannot reduce it below zero or below the amount already
+invoiced. Retainage releases are reserved against the GL-backed retained balance
+so concurrent draft releases cannot exceed funds held.
+
+### Price and backlog
+
+- **Total price method** — how the contract/selling price is determined:
+  - **Contract Field** — the fixed contract value entered on the project.
+  - **Billable Value** — the statistical value of all billable work (used for
+    time & materials).
+  - **Not To Exceed** — billable value capped at the contract value.
+  - **Cost Plus** — cost times one plus the markup percent.
+- **Could-be-invoiced formula** — the backlog definition:
+  - **Price Minus Invoiced** — contract price less what has been invoiced.
+  - **Unbilled Billable** — the value of billable work not yet invoiced.
+
+### Cost sources
+
+- **Actual cost source** — where posted cost comes from:
+  - **Account Types** — sum posted GL to a set of account types (expense, COGS…).
+  - **Account Group** — sum posted GL to a named account-group dimension (for
+    example a **cost_pool** classification). Account groups are configured under
+    **Company Setup → Account Groups**.
+- **Labor cost source** — how labor cost is measured: **In Actual Cost** (already
+  included in actual cost), **Time Rate** (hours times cost rate), **Payroll JE**
+  (from posted payroll journals), or **Account Group**.
+- **Overhead method** — each job's allocated share of indirect company costs. This
+  is a statistical managerial value on the project P&L, not a ledger posting
+  (the real indirect costs are already expensed in the GL; posting overhead onto
+  jobs too would double-count). Methods:
+  - **None** — no overhead on this type.
+  - **Percent Of Labor** — labor cost times a flat percentage.
+  - **Per Labor Hour** — project hours times a flat dollar rate.
+  - **Rate Engine** — per-department hourly rates applied to the project's
+    labor, using the rate effective on each time entry's work date. Rates come
+    only from the published, effective-dated rate card (**Company Settings →
+    Projects → Overhead Rates**), so job costs are stable and closed periods
+    never change. The **Overhead Model** workspace (Company Settings →
+    Projects) computes each department's rate from actuals — overhead pool
+    divided by labor hours — as an analytical preview; **Publish rates**
+    publishes those values to the rate card. The **Setup wizard** configures the
+    method, rates, and applicable project types.
+  - **Posted GL Account Group** — sum project-tagged GL posted to an overhead
+    account group.
+- **Cost budget source** — **Wbs Estimates** (roll up the project's work-breakdown
+  estimates) or **None**.
+- **Committed cost from** — which open documents count as committed: **Purchase
+  Order**, **Sales Order**, or both. The committed amount is the unbilled
+  remainder of those documents.
+- **Total cost components** — which base measures sum into **Total cost**
+  (actual cost, committed cost, labor cost, overhead). Only select a component once,
+  so you do not double-count — for example, do not add **Labor Cost** separately
+  if labor is already inside **Actual Cost**.
+
+### P&L statement layout
+
+The **P&L statement layout** editor controls the exact rows shown on a project's
+Financials tab, in order. Each line has:
+
+- a **measure** (Invoiced to date, Total job price, Actual cost, Gross profit, …), and
+- a **variant** — **Line** (a normal row), **Subtotal** (an emphasized running
+  subtotal), or **Total** (the bottom-line figure).
+
+Use the up/down controls to reorder, the remove control to delete a line, and
+**Add line** to append one. A typical layout runs revenue rows, a price subtotal,
+cost rows, a cost subtotal, budget rows, then a gross-profit total.
+
+---
+
+## Invoicing profile
+
+The Invoicing tab controls how invoices are generated for projects of this type:
+
+- **Allowed bases** and **Default basis** — which billing bases the request form
+  offers (date range, draw amount, time selection, milestone) and which is
+  preselected.
+- **Line builder** — how invoice lines are constructed: **T&M Actual** (one line
+  per unbilled billable entry), **Milestone**, **Draw**, or **Cost Plus**.
+- **Revenue account** — which account invoice lines credit: the item's income
+  account, an **unbilled receivable** (contract-asset) account, or a fixed
+  account.
+- **Recognition** — the revenue-recognition policy: **As Invoiced**, **Percent
+  Complete (cost)**, or **Milestone**.
+
+### Invoicing preference cascade
+
+The type supplies the defaults, but a customer or an individual project can
+override the overridable subset (default basis, backup required, backup format,
+invoice template). Overrides resolve in this order, most specific wins:
+
+~~~
+project type  →  customer  →  project
+~~~
+
+So a type might default to time-selection billing with costed-timesheet backup,
+a particular customer might require purchases-only backup, and one of that
+customer's projects might override the default basis again. Set customer-level
+preferences on the customer record; set project-level preferences on the project.
+
+---
+
+## Backup profile
+
+The Backup tab controls the invoice backup package — the supporting pages
+attached to an invoice:
+
+- **Required** — whether an invoice for this type needs backup by default.
+- **Default backup type** — the default package format (costed timesheets,
+  timesheets + purchases, purchases only, purchases + shop time, quote only, none).
+- **Allowed backup types** — the formats a user may choose from on the billing
+  request. The request form is constrained to this set.
+
+Because backup settings flow through the same cascade as invoicing, a customer or
+project can require backup even when the type does not, or narrow the allowed
+formats further.
+
+---
+
+## Aligning an external costing model
+
+Configurable measure sources allow a project type to align with an external
+costing model. Use the following procedure:
+
+1. Set **Invoiced to date** to count the same customer documents the source
+   system counts.
+2. Point **Actual cost** (and **Overhead**) at the account groups that mirror the
+   source cost pools.
+3. Choose the **Total price method** and **Could-be-invoiced formula** that match
+   the source definitions.
+4. Confirm the numbers against a sample of known projects before relying on them.
+
+If you are migrating from a system that applies overhead as a per-labor-hour rate
+by department, use the **Rate Engine** method with the **standard** rate source and
+import (or enter) your historical rates on the Overhead Rates card — effective
+dating preserves the original rates for prior periods.
+`,
+}

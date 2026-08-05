@@ -1,0 +1,42 @@
+{
+  "metaTitle": "API 文档",
+  "title": "API 文档",
+  "description": "自文档化的 REST API。记录类型、字段和权限均由数据库架构实时生成 — 包括您的自定义记录和字段。",
+  "searchPlaceholder": "搜索记录类型…",
+  "baseUrl": "/api/v1",
+  "auth": {
+    "title": "身份验证",
+    "description": "将您的 API 密钥作为 bearer token 传递。密钥具有作用域限制 — 仅当密钥的作用域和所有者的权限均覆盖某请求时，该请求才被允许。"
+  },
+  "customBadge": "自定义",
+  "requires": "read:",
+  "writesRequire": "write:",
+  "fields": {
+    "field": "字段",
+    "type": "类型",
+    "required": "必填",
+    "description": "说明",
+    "yes": "是"
+  },
+  "console": {
+    "referenceTab": "参考",
+    "consoleTab": "控制台",
+    "recordTypes": "记录类型",
+    "tokenLabel": "API 密钥",
+    "tokenPlaceholder": "ob_live_…",
+    "tokenNote": "从 API 密钥页面粘贴一个密钥。它仅保留在此浏览器标签页中，并且仅发送至此 API。",
+    "needToken": "在上方输入 API 密钥以发送请求。",
+    "method": "方法",
+    "requestBody": "请求正文",
+    "send": "发送",
+    "sending": "发送中…",
+    "resetBody": "重置正文",
+    "response": "响应",
+    "responseIdle": "发送请求以在此处查看响应。",
+    "readOnly": "此记录类型通过 API 为只读。",
+    "status": "状态",
+    "time": "耗时",
+    "idPlaceholder": "记录 id (uuid)",
+    "selectType": "选择一个记录类型以构建请求。"
+  }
+}

@@ -1,0 +1,68 @@
+{
+  "list": {
+    "title": "Lançamentos",
+    "description": "{count, plural, one {# lançamento lançado} other {# lançamentos lançados}} · auditados; períodos fechados são imutáveis.",
+    "searchPlaceholder": "Buscar número do lançamento ou memorando…",
+    "originFilter": "Origem",
+    "draftsHeading": "Lançamentos em rascunho — ainda não lançados",
+    "columns": {
+      "entry": "Lançamento",
+      "origin": "Origem",
+      "debits": "Débitos"
+    }
+  },
+  "origins": {
+    "manual": "Manual",
+    "closing": "Encerramento",
+    "allocation": "Rateio",
+    "revaluation": "Reavaliação",
+    "laborBurden": "Encargos de mão de obra",
+    "depreciation": "Depreciação",
+    "revenueRecognition": "Reconhecimento de receita",
+    "fxSettlement": "Liquidação cambial",
+    "translation": "Conversão"
+  },
+  "detail": {
+    "notFound": "Lançamento não encontrado",
+    "origin": "origem: {origin}",
+    "reverses": "estorna {number}",
+    "openItemBadge": "item em aberto",
+    "totals": "Totais",
+    "columns": {
+      "debit": "Débito",
+      "credit": "Crédito",
+      "openItem": "Item em aberto"
+    }
+  },
+  "newButton": {
+    "label": "Novo lançamento",
+    "createFailed": "Não foi possível criar um lançamento rascunho"
+  },
+  "drawer": {
+    "draftDescription": "Rascunho — as alterações são salvas automaticamente. Débitos e créditos devem estar balanceados para lançar.",
+    "autosaveWithParty": "{party} · as alterações são salvas automaticamente",
+    "autosave": "as alterações são salvas automaticamente",
+    "postFailed": "Falha ao lançar",
+    "postedToast": "Lançado no razão",
+    "autosaveFailed": "Falha ao salvar automaticamente",
+    "viewGlImpact": "Ver impacto no razão",
+    "allChangesSaved": "Todas as alterações salvas",
+    "saveFailedRetry": "Falha ao salvar — corrija e tente novamente",
+    "unsavedChanges": "Alterações não salvas…",
+    "deleteTitle": "Excluir este lançamento?",
+    "deleteDraftBody": "Isso exclui permanentemente o lançamento rascunho. Isso não pode ser desfeito.",
+    "deletePostedBody": "Isso exclui permanentemente o lançamento e remove seu impacto no razão. Isso não pode ser desfeito.",
+    "deleted": "Lançamento excluído",
+    "deleteFailed": "Falha ao excluir",
+    "totals": "Débitos <strong>{debits}</strong> · Créditos <strong>{credits}</strong>",
+    "outOfBalance": "Desbalanceado · {amount}",
+    "balanced": "Balanceado",
+    "referenceNumber": "Nº de referência",
+    "noParty": "Sem parte",
+    "accountPlaceholder": "Conta…",
+    "columns": {
+      "debit": "Débito",
+      "credit": "Crédito"
+    }
+  }
+}

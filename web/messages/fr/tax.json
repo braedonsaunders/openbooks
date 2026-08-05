@@ -1,0 +1,174 @@
+{
+  "title": "Déclarations fiscales",
+  "description": "Préparez les déclarations gouvernementales à partir du grand livre et conservez ce qui a été déposé.",
+  "setup": "Configuration des déclarations",
+  "notice": "Avis",
+  "period": "du {from} au {to}",
+  "form": "Déclaration",
+  "from": "Du",
+  "to": "Au",
+  "compute": "Calculer",
+  "computing": "Calcul…",
+  "empty": "Choisissez une déclaration et une période, puis calculez.",
+  "adjustmentAria": "Ajustement pour {label}",
+  "adjustmentPlaceholder": "0,00",
+  "columns": {
+    "line": "Ligne",
+    "description": "Description",
+    "amount": "Montant"
+  },
+  "noForms": {
+    "title": "Aucune déclaration configurée",
+    "description": "Importez un module de juridiction ou créez une déclaration dans Configuration → Taxes.",
+    "openSetup": "Ouvrir la configuration fiscale"
+  },
+  "export": {
+    "label": "Export de travail",
+    "pdf": "PDF de travail",
+    "csv": "CSV de travail",
+    "xlsx": "Excel de travail"
+  },
+  "official": {
+    "download": "Formulaire officiel rempli"
+  },
+  "submission": {
+    "title": "Comment déposer cette déclaration",
+    "description": "Après avoir révisé la déclaration, utilisez le canal et l’action configurés ci-dessous.",
+    "channelLabel": "Canal de dépôt",
+    "actionLabel": "Action requise",
+    "openGovernment": "Ouvrir les instructions de dépôt",
+    "exportNotice": "Les exports de travail servent à la révision et aux dossiers. Ils ne sont pas des fichiers de dépôt gouvernementaux, sauf indication explicite du mode configuré.",
+    "gst34Notice": "La GST34 est normalement saisie dans Mon dossier d’entreprise ou IMPÔTNET TPS/TVH. Le fichier .tax téléversable ne peut être produit que par un logiciel homologué par l’ARC; les formats PDF, CSV et Excel ne sont pas acceptés."
+  },
+  "channels": {
+    "print_pdf": "Imprimer et poster",
+    "file_upload": "Téléversement électronique",
+    "efile_api": "API de télédéclaration",
+    "portal_manual": "Portail gouvernemental"
+  },
+  "governmentFormats": {
+    "portal_entry": "Saisir la déclaration en ligne",
+    "certified_file": "Fichier gouvernemental certifié",
+    "api": "Logiciel ou API compatible requis",
+    "paper": "Formulaire papier officiel"
+  },
+  "history": {
+    "title": "Déclarations précédentes",
+    "description": "Instantanés versionnés et immuables des déclarations préparées et déposées.",
+    "search": "Rechercher dans l’historique…",
+    "statusLabel": "Statut",
+    "empty": "Aucune déclaration enregistrée ne correspond à ces filtres.",
+    "save": "Enregistrer dans l’historique",
+    "saving": "Enregistrement…",
+    "saved": "Instantané de la déclaration enregistré",
+    "status": {
+      "prepared": "Préparée",
+      "filed": "Déposée"
+    },
+    "columns": {
+      "form": "Déclaration",
+      "period": "Période",
+      "version": "Version",
+      "status": "Statut",
+      "reference": "Référence",
+      "saved": "Enregistrée"
+    },
+    "drawerDescription": "du {from} au {to} · version {version}",
+    "formCode": "Code de déclaration",
+    "country": "Pays",
+    "reference": "Confirmation ou référence gouvernementale",
+    "referencePlaceholder": "Numéro de confirmation ou référence du reçu",
+    "filedAt": "Déposée le",
+    "markFiledHint": "Ne marquez cet instantané comme déposé qu’après son acceptation par le gouvernement. Cette action est irréversible.",
+    "markFiled": "Marquer comme déposée",
+    "markingFiled": "Marquage…",
+    "filedSuccess": "Déclaration marquée comme déposée",
+    "line": "Ligne",
+    "lineDescription": "Description",
+    "amount": "Montant",
+    "hash": "SHA-256 de l’instantané : {hash}",
+    "snapshotWatermark": "Instantané immuable enregistré · SHA-256 {hash}",
+    "export": {
+      "pdf": "PDF",
+      "xlsx": "Excel",
+      "csv": "CSV"
+    }
+  },
+  "provisions": {
+    "title": "Provision d'impôt sur le résultat",
+    "description": "ASC 740 / IAS 12 — impôt exigible et différé, provision pour dépréciation et rapprochement des taux.",
+    "empty": "Aucune provision. Calculez la première provision annuelle pour commencer.",
+    "columns": {
+      "fiscalYear": "Exercice",
+      "version": "Version",
+      "status": "Statut",
+      "totalExpense": "Charge totale",
+      "effectiveRate": "Taux effectif",
+      "created": "Créée"
+    },
+    "status": {
+      "draft": "brouillon",
+      "posted": "comptabilisée",
+      "superseded": "remplacée"
+    },
+    "post": "Comptabiliser",
+    "posting": "Comptabilisation…",
+    "categories": {
+      "fixed_assets": "Immobilisations",
+      "revenue_recognition": "Reconnaissance du revenu",
+      "provisions": "Provisions",
+      "loss_carryforward": "Report déficitaire",
+      "other": "Autre"
+    },
+    "compute": {
+      "button": "Calculer la provision",
+      "title": "Calculer la provision de l'exercice",
+      "fiscalYear": "Exercice",
+      "permanent": "Différences permanentes",
+      "temporary": "Différences temporaires supplémentaires",
+      "addLine": "Ajouter une ligne",
+      "descriptionPlaceholder": "Description",
+      "lossUsed": "Report déficitaire utilisé",
+      "valuationAllowance": "Provision pour dépréciation",
+      "cancel": "Annuler",
+      "compute": "Calculer",
+      "computing": "Calcul…",
+      "categories": {
+        "fixed_assets": "Immobilisations",
+        "revenue_recognition": "Reconnaissance du revenu",
+        "provisions": "Provisions",
+        "loss_carryforward": "Report déficitaire",
+        "other": "Autre"
+      },
+      "valuationAllowanceIas12": "Ajustement de comptabilisation de l'IDA"
+    },
+    "detail": {
+      "title": "Provision {year} · v{version}",
+      "reconciliation": "Rapprochement des taux",
+      "amount": "Montant",
+      "percent": "% du résultat",
+      "pretax": "Résultat comptable avant impôt",
+      "total": "Charge d'impôt totale",
+      "taxableIncome": "Résultat imposable",
+      "currentTax": "Impôt exigible",
+      "deferredExpense": "Impôt différé (mouvement)",
+      "balances": {
+        "dta": "Impôt différé actif (brut)",
+        "dtl": "Impôt différé passif",
+        "va": "Provision pour dépréciation",
+        "vaIas12": "Ajustement de comptabilisation de l'IDA"
+      },
+      "differences": "Différences temporaires",
+      "noDifferences": "Aucune différence temporaire mesurée.",
+      "columns": {
+        "item": "Élément",
+        "bookBasis": "Base comptable",
+        "taxBasis": "Base fiscale",
+        "difference": "Différence",
+        "effect": "Effet d'impôt"
+      },
+      "auto": "auto",
+      "manual": "manuel"
+    }
+  }
+}

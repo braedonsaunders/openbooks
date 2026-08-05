@@ -1,0 +1,68 @@
+{
+  "list": {
+    "title": "日记账",
+    "description": "{count, plural, one {# 条已过账分录} other {# 条已过账分录}} · 已审计；已结账期间不可更改。",
+    "searchPlaceholder": "搜索分录编号或摘要……",
+    "originFilter": "来源",
+    "draftsHeading": "日记账草稿——尚未过账",
+    "columns": {
+      "entry": "分录",
+      "origin": "来源",
+      "debits": "借方"
+    }
+  },
+  "origins": {
+    "manual": "手工",
+    "closing": "结账",
+    "allocation": "分摊",
+    "revaluation": "重估",
+    "laborBurden": "人工附加成本",
+    "depreciation": "折旧",
+    "revenueRecognition": "收入确认",
+    "fxSettlement": "外汇结算",
+    "translation": "折算"
+  },
+  "detail": {
+    "notFound": "未找到分录",
+    "origin": "来源：{origin}",
+    "reverses": "冲销 {number}",
+    "openItemBadge": "未清项",
+    "totals": "合计",
+    "columns": {
+      "debit": "借方",
+      "credit": "贷方",
+      "openItem": "未清项"
+    }
+  },
+  "newButton": {
+    "label": "新建日记账",
+    "createFailed": "无法创建日记账草稿"
+  },
+  "drawer": {
+    "draftDescription": "草稿——更改自动保存。借贷必须平衡才能过账。",
+    "autosaveWithParty": "{party} · 更改自动保存",
+    "autosave": "更改自动保存",
+    "postFailed": "过账失败",
+    "postedToast": "已过账至总账",
+    "autosaveFailed": "自动保存失败",
+    "viewGlImpact": "查看总账影响",
+    "allChangesSaved": "所有更改已保存",
+    "saveFailedRetry": "保存失败——修正后重试",
+    "unsavedChanges": "有未保存的更改……",
+    "deleteTitle": "删除此日记账？",
+    "deleteDraftBody": "此操作将永久删除该日记账草稿。此操作无法撤销。",
+    "deletePostedBody": "此操作将永久删除该日记账并移除其总账影响。此操作无法撤销。",
+    "deleted": "已删除日记账",
+    "deleteFailed": "删除失败",
+    "totals": "借方 <strong>{debits}</strong> · 贷方 <strong>{credits}</strong>",
+    "outOfBalance": "不平衡 · {amount}",
+    "balanced": "已平衡",
+    "referenceNumber": "参考编号",
+    "noParty": "无往来单位",
+    "accountPlaceholder": "科目……",
+    "columns": {
+      "debit": "借方",
+      "credit": "贷方"
+    }
+  }
+}

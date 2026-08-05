@@ -1,0 +1,64 @@
+{
+  "title": "应用",
+  "description": "可打开的已安装应用。",
+  "searchPlaceholder": "搜索已安装的应用…",
+  "version": "版本 {version}",
+  "noDescription": "未提供说明。",
+  "actions": {
+    "library": "应用库",
+    "documentation": "文档",
+    "open": "打开应用",
+    "openAria": "打开 {name}"
+  },
+  "empty": {
+    "title": "尚未安装应用",
+    "description": "浏览应用库，为您的组织查找扩展功能。",
+    "action": "浏览应用库"
+  },
+  "noResults": {
+    "title": "未找到应用",
+    "description": "请尝试其他名称、键或说明。"
+  },
+  "library": {
+    "title": "应用库",
+    "description": "发现并为您的组织安装扩展功能。",
+    "searchPlaceholder": "搜索应用库…",
+    "install": "安装",
+    "update": "更新",
+    "installed": "已安装",
+    "installing": "正在安装…",
+    "installSuccess": "已安装“{name}”",
+    "updateSuccess": "已更新“{name}”",
+    "installFailed": "应用安装失败。",
+    "empty": {
+      "title": "应用库为空",
+      "description": "发布的应用可用后会显示在此处。"
+    },
+    "noResults": {
+      "title": "未找到应用",
+      "description": "请尝试其他名称、键或说明。"
+    }
+  },
+  "frame": {
+    "loading": "加载中…",
+    "failedTitle": "无法打开此应用。",
+    "failedHint": "请尝试刷新。如果问题持续出现，请联系您的管理员。"
+  },
+  "admin": {
+    "title": "应用",
+    "description": "构建和安装应用包；每个应用都拥有隔离的前端和受控的后端。",
+    "searchPlaceholder": "搜索应用…",
+    "status": "状态",
+    "statuses": { "installed": "已安装", "disabled": "已禁用" },
+    "columns": {
+      "name": "名称",
+      "key": "键",
+      "version": "版本",
+      "endpoints": "端点",
+      "runs": "运行次数",
+      "status": "状态",
+      "updated": "更新时间"
+    },
+    "empty": "还没有应用。您可以创建一个可直接打开的初始应用，或导入 .zip 包。"
+  }
+}

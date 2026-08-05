@@ -1,0 +1,154 @@
+{
+  "hub": {
+    "title": "分析",
+    "description": "原生智能仪表板——盈利能力、现金、客户、供应商及取证风险，实时从您的账簿计算得出。",
+    "searchPlaceholder": "搜索分析…",
+    "noMatches": "没有仪表板符合您的搜索。",
+    "planned": "计划中",
+    "groups": {
+      "profitability": "盈利能力与业绩",
+      "operations": "现金与运营",
+      "relationships": "客户与供应商",
+      "forensics": "风险与取证"
+    },
+    "cards": {
+      "financialHealthTitle": "财务健康",
+      "financialHealthDesc": "带综合健康评分的利润率与比率记分卡",
+      "trueCostTitle": "真实成本",
+      "trueCostDesc": "间接费用负担吸收与销售定价构建器",
+      "utilizationTitle": "利用率",
+      "utilizationDesc": "可计费工时、利用率与服务项目利润",
+      "customerTitle": "客户智能",
+      "customerDesc": "客户分层、生命周期价值与客户盈利能力",
+      "vendorTitle": "供应商绩效",
+      "vendorDesc": "采购集中度、付款行为与供应商记分卡",
+      "sentinelTitle": "Sentinel",
+      "sentinelDesc": "取证式交易完整性与异常检测",
+      "spendVelocityTitle": "支出速率",
+      "spendVelocityDesc": "支出加速、订阅蔓延与影子 IT",
+      "cashflowTitle": "现金流",
+      "cashflowDesc": "每周现金预测、资金续航与应付/应收账龄"
+    }
+  },
+  "financialHealth": {
+    "title": "财务健康",
+    "description": "带综合健康评分的盈利能力、效率与经营比率。",
+    "backToHub": "分析",
+    "tabs": {
+      "overview": "概览",
+      "margin": "利润率",
+      "items": "项目",
+      "segments": "分层",
+      "forecast": "预测",
+      "scenarios": "情景",
+      "budget": "预算",
+      "drivers": "驱动因素",
+      "ratios": "比率",
+      "configuration": "配置"
+    },
+    "kpi": {
+      "revenue": "收入",
+      "grossMargin": "毛利率",
+      "operatingIncome": "营业利润",
+      "breakeven": "盈亏平衡"
+    },
+    "kpiSub": {
+      "growth": "同比 {pct}",
+      "grossProfit": "毛利：{amount}",
+      "opex": "运营费用：{amount}",
+      "perMonth": "每月"
+    },
+    "score": {
+      "title": "财务健康评分",
+      "overall": "总体",
+      "excellent": "优秀",
+      "good": "良好",
+      "average": "一般",
+      "needsWork": "有待改进"
+    },
+    "categories": {
+      "profitability": "盈利能力",
+      "efficiency": "效率",
+      "operating": "运营"
+    },
+    "subKpi": {
+      "roic": "ROIC",
+      "ebitdaMargin": "EBITDA 利润率",
+      "opLeverage": "经营杠杆",
+      "rule40": "40 法则"
+    },
+    "subKpiSub": {
+      "returnOnCapital": "投入资本回报率",
+      "earningsMargin": "盈利利润率",
+      "sensitivity": "敏感度",
+      "growthProfit": "增长 + 利润"
+    },
+    "gridHint": "点击任意比率查看详情",
+    "pnl": {
+      "title": "损益汇总",
+      "lineItem": "明细项",
+      "amount": "金额",
+      "pctRevenue": "占收入 %",
+      "revenue": "收入",
+      "cogs": "销售成本",
+      "grossProfit": "毛利",
+      "opex": "营业费用",
+      "operatingIncome": "营业利润",
+      "otherIncome": "其他收入",
+      "otherExpense": "其他费用",
+      "netIncome": "净利润"
+    },
+    "budget": {
+      "measuredAgainst": "对照 <strong>{name}</strong>（{year} 财年，{status}）衡量——所选范围内的预算行。在 <link>预算</link>中管理情景。",
+      "totalBudget": "预算总额",
+      "budgetedAccounts": "{count, plural, one {# 个已编列预算的科目} other {# 个已编列预算的科目}}",
+      "totalActual": "实际总额",
+      "normalizedIncome": "收入符号已标准化",
+      "overBudget": "超预算",
+      "onWatch": "{count} 项关注",
+      "coverage": "覆盖率",
+      "coverageSub": "有预算行的科目",
+      "tableTitle": "预算与实际对比（{count}）",
+      "search": "搜索科目…",
+      "csv": "CSV",
+      "all": "全部",
+      "status": { "on-track": "正常", "watch": "关注", "over": "超支", "no-budget": "无预算" },
+      "columns": { "account": "科目", "type": "类型", "budget": "预算", "actual": "实际", "progress": "进度", "variance": "差异", "variancePct": "差异 %", "status": "状态" },
+      "showing": "显示第 {from}–{to} 项，共 {total} 个科目",
+      "previous": "上一页",
+      "next": "下一页",
+      "noBudgetTitle": "本期间没有正式预算",
+      "noBudgetDescription": "创建并批准一个预算情景，以查看真实的科目级差异。此仪表板不以合成的基准目标替代。",
+      "createBudget": "创建预算"
+    }
+  },
+  "customer": {
+    "title": "客户智能",
+    "backToHub": "分析"
+  },
+  "vendor": {
+    "title": "供应商绩效",
+    "backToHub": "分析"
+  },
+  "cashflow": {
+    "title": "现金流",
+    "backToHub": "分析"
+  },
+  "trueCost": {
+    "title": "真实成本",
+    "backToHub": "分析",
+    "configureInSetup": "在设置中配置 →"
+  },
+  "utilization": {
+    "title": "利用率",
+    "backToHub": "分析"
+  },
+  "spendVelocity": {
+    "title": "支出速率",
+    "backToHub": "分析"
+  },
+  "sentinel": {
+    "title": "Sentinel",
+    "backToHub": "分析"
+  }
+}

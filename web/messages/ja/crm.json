@@ -1,0 +1,273 @@
+{
+  "stages": { "lead": "リード", "prospect": "見込み客", "customer": "得意先" },
+  "fields": {
+    "accountName": "アカウント名",
+    "lifecycleStage": "ライフサイクルステージ",
+    "status": "ステータス",
+    "owner": "担当者",
+    "territory": "テリトリー",
+    "leadSource": "リードソース",
+    "phone": "電話",
+    "website": "ウェブサイト",
+    "industry": "業種",
+    "category": "カテゴリー",
+    "annualRevenue": "年間売上高",
+    "employeeCount": "従業員数",
+    "qualificationScore": "評価スコア",
+    "nextAction": "次のアクション",
+    "lastActivity": "最終アクティビティ",
+    "unassigned": "未割り当て",
+    "activityType": "アクティビティタイプ",
+    "subject": "件名",
+    "priority": "優先度",
+    "assignedTo": "担当者",
+    "start": "開始",
+    "end": "終了",
+    "due": "期日",
+    "date": "日付",
+    "relatedType": "関連レコードタイプ",
+    "relatedRecord": "関連レコード",
+    "notes": "備考",
+    "title": "タイトル",
+    "account": "アカウント",
+    "customer": "得意先",
+    "primaryContact": "主担当者",
+    "salesTeam": "営業チーム",
+    "probability": "確度",
+    "forecastCategory": "予測カテゴリー",
+    "expectedClose": "成約予定日",
+    "currency": "通貨",
+    "nextStep": "次のステップ",
+    "item": "品目またはサービス",
+    "description": "説明",
+    "quantity": "数量",
+    "unitPrice": "単価",
+    "winLossReason": "受注/失注理由",
+    "number": "番号",
+    "projectedAmount": "予測金額",
+    "periodStart": "期間開始",
+    "periodEnd": "期間終了"
+  },
+  "accounts": {
+    "newFallback": "新規アカウント",
+    "search": "名前、メール、電話で検索",
+    "activities": "最近のアクティビティ",
+    "opportunities": "商談",
+    "noActivities": "記録されたアクティビティはありません。",
+    "noOpportunities": "紐づく商談はありません。",
+    "lead": {
+      "title": "リード",
+      "description": "新しい関係を獲得、評価、割り当て、ルーティングします。",
+      "new": "新規リード",
+      "emptyTitle": "リードがありません",
+      "emptyDescription": "リードを作成して評価を開始します。"
+    },
+    "prospect": {
+      "title": "見込み客",
+      "description": "評価済みの関係を売上へと育成します。",
+      "new": "新規見込み客",
+      "emptyTitle": "見込み客がありません",
+      "emptyDescription": "評価済みのリードや商談アカウントがここに表示されます。"
+    }
+  },
+  "activities": {
+    "title": "アクティビティ",
+    "description": "すべての関係にわたる通話、訪問、イベント、メール、メモ、フォローアップタスク。",
+    "new": "新規アクティビティ",
+    "newFallback": "新規アクティビティ",
+    "search": "アクティビティの件名とメモを検索",
+    "emptyTitle": "アクティビティがありません",
+    "emptyDescription": "通話、訪問、メモ、メール、イベント、タスクを記録します。"
+  },
+  "activityKinds": {
+    "task": "タスク",
+    "call": "通話",
+    "event": "訪問またはイベント",
+    "email": "メール",
+    "note": "メモ"
+  },
+  "activityStatuses": {
+    "planned": "予定",
+    "in_progress": "進行中",
+    "completed": "完了",
+    "cancelled": "キャンセル"
+  },
+  "priorities": {
+    "low": "低",
+    "normal": "通常",
+    "high": "高",
+    "urgent": "緊急"
+  },
+  "relatedTypes": { "account": "アカウント", "opportunity": "商談" },
+  "opportunities": {
+    "title": "商談",
+    "description": "パイプラインステージ、売上レンジ、チーム、製品、営業ドキュメントを管理します。",
+    "new": "新規商談",
+    "newFallback": "新規商談",
+    "search": "商談、番号、アカウントを検索",
+    "emptyTitle": "商談がありません",
+    "emptyDescription": "商談を作成してパイプラインの構築を開始します。",
+    "lines": "製品とサービス",
+    "addLine": "明細を追加",
+    "selectItem": "品目を選択",
+    "createEstimate": "見積を作成",
+    "estimateCreated": "見積を作成しました",
+    "estimateFailed": "見積を作成できませんでした。"
+  },
+  "forecastCategories": {
+    "omitted": "除外",
+    "worst_case": "最悪ケース",
+    "most_likely": "最有力",
+    "upside": "上振れ"
+  },
+  "forecasts": {
+    "title": "予測とノルマ",
+    "description": "パイプライン、確度加重売上、成約実績、割り当てられたノルマを比較します。",
+    "apply": "適用",
+    "summary": "予測サマリー",
+    "pipeline": "パイプライン",
+    "weighted": "加重",
+    "mostLikely": "最有力",
+    "closed": "成約",
+    "quotas": "ノルマ",
+    "target": "目標",
+    "quota": "ノルマ",
+    "manageQuotas": "ノルマを管理",
+    "history": "スナップショット履歴",
+    "asOf": "基準日時",
+    "snapshotType": "種類",
+    "override": "上書き",
+    "snapshotCount": "この期間の{count, plural, =0 {スナップショットはありません} one {スナップショット#件} other {スナップショット#件}}。",
+    "snapshotKinds": {
+      "calculated": "計算値",
+      "rep_override": "担当者による上書き",
+      "manager_override": "マネージャーによる上書き"
+    },
+    "emptyForecastTitle": "この期間の予測はありません",
+    "emptyForecastDescription": "選択した期間の進行中の商談と計上済み売上がここに表示されます。",
+    "emptyQuotaTitle": "この期間のノルマはありません",
+    "emptyQuotaDescription": "担当者またはチームにノルマを割り当て、目標に対する実績を追跡します。",
+    "emptyHistoryTitle": "保存済みスナップショットはありません",
+    "emptyHistoryDescription": "スナップショットを保存すると、この期間の予測を後で比較できます。",
+    "saveSnapshot": "スナップショットを保存",
+    "savingSnapshot": "保存中…",
+    "snapshotCreated": "予測スナップショットを保存しました",
+    "snapshotFailed": "予測スナップショットを保存できませんでした。"
+  },
+  "setup": {
+    "title": "CRM",
+    "description": "ライフサイクルステータス、商談ステージ、リードソース、テリトリー、営業チーム、ノルマを設定します。",
+    "sequence": "並び順",
+    "priority": "優先度",
+    "defaultOwner": "デフォルト担当者",
+    "manager": "マネージャー",
+    "empty": "一致する設定レコードはありません。",
+    "openRecord": "{name}を開く",
+    "percent": "{value}%",
+    "memberCount": "{count, plural, one {#名のメンバー} other {#名のメンバー}}",
+    "created": "CRM設定レコードを作成しました",
+    "updated": "CRM設定レコードを更新しました",
+    "new": {
+      "accountStatuses": "新規アカウントステータス",
+      "opportunityStatuses": "新規商談ステージ",
+      "sources": "新規リードソース",
+      "territories": "新規テリトリー",
+      "teams": "新規営業チーム",
+      "quotas": "新規ノルマ"
+    },
+    "search": {
+      "accountStatuses": "アカウントステータスを検索",
+      "opportunityStatuses": "商談ステージを検索",
+      "sources": "リードソースを検索",
+      "territories": "テリトリーを検索",
+      "teams": "営業チームを検索",
+      "quotas": "ノルマを検索"
+    },
+    "drawer": {
+      "new": {
+        "accountStatuses": "新規アカウントステータス",
+        "opportunityStatuses": "新規商談ステージ",
+        "sources": "新規リードソース",
+        "territories": "新規テリトリー",
+        "teams": "新規営業チーム",
+        "quotas": "新規ノルマ"
+      },
+      "edit": {
+        "accountStatuses": "アカウントステータスを編集",
+        "opportunityStatuses": "商談ステージを編集",
+        "sources": "リードソースを編集",
+        "territories": "テリトリーを編集",
+        "teams": "営業チームを編集",
+        "quotas": "ノルマを編集"
+      },
+      "description": {
+        "accountStatuses": "関係のライフサイクル分類と評価の挙動を制御します。",
+        "opportunityStatuses": "パイプラインの確度、予測の扱い、成約の挙動を制御します。",
+        "sources": "CRM全体で使用する正規化された獲得ソースを管理します。",
+        "territories": "所有権と確定的なルーティングルールを設定します。",
+        "teams": "この営業チームのマネージャーとアクティブなメンバーを割り当てます。",
+        "quotas": "1人の営業担当者またはチームに対して期間目標を設定します。"
+      }
+    },
+    "fields": {
+      "name": "名前",
+      "matchMode": "ルールのマッチング",
+      "rules": "ルーティングルール",
+      "rulesHint": "任意。各ルールはフィールドを値と照合してリードをここにルーティングします。フィールド: region、country、annualRevenue。演算子: equals、contains、in、gte、lte。",
+      "rulesPlaceholder": "[{ \"field\": \"region\", \"operator\": \"equals\", \"value\": \"West\" }]",
+      "members": "チームメンバー",
+      "targetType": "対象タイプ",
+      "isQualified": "評価済みステータス",
+      "isClosed": "成約ステータス",
+      "isWon": "受注ステータス",
+      "isDefault": "デフォルト",
+      "isActive": "有効"
+    },
+    "states": {
+      "active": "有効",
+      "inactive": "無効",
+      "yes": "はい",
+      "no": "いいえ"
+    },
+    "matchModes": { "all": "すべてのルールに一致", "any": "いずれかのルールに一致" },
+    "targetTypes": { "user": "営業担当者", "team": "営業チーム" },
+    "validation": {
+      "nameRequired": "名前を入力してください。",
+      "invalidRules": "ルーティングルールは有効なJSON配列である必要があります。"
+    },
+    "tabs": {
+      "accountStatuses": "アカウントステータス",
+      "opportunityStatuses": "商談ステージ",
+      "sources": "リードソース",
+      "territories": "テリトリー",
+      "teams": "営業チーム",
+      "quotas": "ノルマ"
+    },
+    "columns": {
+      "name": "名前",
+      "lifecycle_stage": "ライフサイクルステージ",
+      "sequence": "並び順",
+      "probability": "確度",
+      "default_forecast_category": "予測カテゴリー",
+      "description": "説明",
+      "priority": "優先度",
+      "owner_name": "担当者",
+      "manager_name": "マネージャー",
+      "period_start": "期間開始",
+      "period_end": "期間終了",
+      "amount": "金額",
+      "is_qualified": "評価済み",
+      "is_closed": "成約",
+      "is_active": "ステータス",
+      "member_count": "メンバー",
+      "target_name": "対象",
+      "currency": "通貨"
+    }
+  },
+  "validation": {
+    "nameRequired": "アカウント名を入力してください。",
+    "subjectRequired": "アクティビティの件名を入力してください。",
+    "titleRequired": "商談のタイトルを入力してください。"
+  },
+  "feedback": { "createFailed": "下書きを作成できませんでした。" }
+}

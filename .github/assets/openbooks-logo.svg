@@ -1,0 +1,67 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 238 56" width="238" height="56" role="img" aria-label="openbooks">
+  <!-- openbooks animated brand lockup (light variant). Self-contained CSS-only:
+       the open ledger draws itself spine → covers, the entry lines write across
+       the pages, then the "openbooks" wordmark rises in — and the whole logo
+       redraws on a 12s cycle. Resting styles are the fully drawn logo; intros
+       start hidden via fill-mode:backwards, so renderers that disable image
+       animation still show the complete lockup.
+       Mirror of web/components/brand-logo.tsx — keep in sync. -->
+  <style>
+    @keyframes draw { from { stroke-dashoffset: 1 } }
+    @keyframes rise { from { opacity: 0; transform: translateY(4px) } }
+    @keyframes shimmer { 0%, 100% { opacity: 1 } 50% { opacity: 0.45 } }
+    @keyframes cycle {
+      0% { stroke-dashoffset: 0; opacity: 1 }
+      2% { stroke-dashoffset: 0; opacity: 0 }
+      2.05% { stroke-dashoffset: 1; opacity: 1; animation-timing-function: cubic-bezier(0.4, 0, 0.2, 1) }
+      7% { stroke-dashoffset: 0 }
+      100% { stroke-dashoffset: 0 }
+    }
+    @keyframes wordCycle {
+      0% { opacity: 1 } 2% { opacity: 0 } 6% { opacity: 0 } 9% { opacity: 1 } 100% { opacity: 1 }
+    }
+    .s {
+      stroke-dasharray: 1;
+      animation:
+        draw 0.55s cubic-bezier(0.4, 0, 0.2, 1) var(--bd, 0s) backwards,
+        cycle 12s linear calc(var(--bd, 0s) + 12s) infinite;
+    }
+    .e {
+      stroke-dasharray: 1;
+      animation:
+        draw 0.4s ease-out var(--bd, 0s) backwards,
+        cycle 12s linear calc(var(--bd, 0s) + 12s) infinite,
+        shimmer 3s ease-in-out var(--bp, 0s) infinite;
+    }
+    .w {
+      transform-box: fill-box; transform-origin: left;
+      animation:
+        rise 0.6s cubic-bezier(0.4, 0, 0.2, 1) 0.9s backwards,
+        wordCycle 12s linear 12.9s infinite;
+    }
+    @media (prefers-reduced-motion: reduce) {
+      .s, .e, .w { animation: none }
+    }
+  </style>
+  <!-- open ledger mark -->
+  <g transform="translate(0 5)">
+    <g fill="none" stroke="#0f172a" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round">
+      <path class="s" style="--bd:.05s" pathLength="1" d="M24 13 V 40" />
+      <path class="s" style="--bd:.19s" pathLength="1" d="M24 13 C 18 7.5 10 6 4.5 8.5 V 35.5 C 10 33.5 18 34.5 24 40" />
+      <path class="s" style="--bd:.33s" pathLength="1" d="M24 13 C 30 7.5 38 6 43.5 8.5 V 35.5 C 38 33.5 30 34.5 24 40" />
+    </g>
+    <g fill="none" stroke="#0f766e" stroke-width="2.6" stroke-linecap="round">
+      <path class="e" style="--bd:.55s;--bp:0s"  pathLength="1" d="M9.5 15.5 C 13 14.8 17 15.6 20 17.4" />
+      <path class="e" style="--bd:.65s;--bp:.5s" pathLength="1" d="M9.5 21.5 C 13 20.8 17 21.6 20 23.4" />
+      <path class="e" style="--bd:.75s;--bp:1s"  pathLength="1" d="M9.5 27.5 C 13 26.8 17 27.6 20 29.4" />
+      <path class="e" style="--bd:.85s;--bp:0s"  pathLength="1" d="M28 17.4 C 31 15.6 35 14.8 38.5 15.5" />
+      <path class="e" style="--bd:.95s;--bp:.5s" pathLength="1" d="M28 23.4 C 31 21.6 35 20.8 38.5 21.5" />
+      <path class="e" style="--bd:1.05s;--bp:1s" pathLength="1" d="M28 29.4 C 31 27.6 35 26.8 38.5 27.5" />
+    </g>
+  </g>
+  <!-- wordmark: "open" (ink) + "books" (brand teal) -->
+  <text class="w" x="64" y="38" font-size="34" font-weight="700" letter-spacing="-1.2"
+        font-family="ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Helvetica, Arial, sans-serif">
+    <tspan fill="#0f172a">open</tspan><tspan fill="#0f766e">books</tspan>
+  </text>
+</svg>

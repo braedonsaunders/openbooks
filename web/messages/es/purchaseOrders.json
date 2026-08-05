@@ -1,0 +1,57 @@
+{
+  "list": {
+    "title": "Órdenes de compra",
+    "description": "Compromisos con proveedores sin contabilización — emítalas y luego conviértalas en una factura al recibir.",
+    "searchPlaceholder": "Buscar órdenes de compra, proveedores, notas…",
+    "converted": "Convertida",
+    "emptyTitle": "Aún no hay órdenes de compra",
+    "emptyDescription": "Cree la primera orden de compra para iniciar el flujo de compra a pago.",
+    "newButton": "Nueva orden de compra",
+    "createDraftFailed": "No se pudo crear un borrador de orden de compra"
+  },
+  "shared": {
+    "kinds": {
+      "salesOrder": "Orden de venta",
+      "invoice": "Factura",
+      "bill": "Factura de proveedor"
+    },
+    "docKind": "{kind, select, quote {Cotización} sales_order {Orden de venta} purchase_order {Orden de compra} customer_invoice {Factura} vendor_bill {Factura de proveedor} other {{kind}}}",
+    "partyLabel": "{kind, select, purchase_order {Proveedor} other {Cliente}}",
+    "selectPartyPlaceholder": "{kind, select, purchase_order {Seleccionar proveedor…} other {Seleccionar cliente…}}",
+    "dateLabel": "{kind, select, quote {Fecha de la cotización} other {Fecha de la orden}}",
+    "expiryLabel": "{kind, select, quote {Fecha de vencimiento} sales_order {Fecha de envío / entrega} purchase_order {Fecha esperada} other {Fecha}}",
+    "draftAutosave": "Borrador — los cambios se guardan automáticamente.",
+    "issue": "Emitir",
+    "convertTo": "Convertir a {target}",
+    "convertCreated": "{target} {number} creada",
+    "convertFailed": "La conversión falló",
+    "actionFailed": "La acción falló",
+    "autosaveFailed": "Falló el guardado automático",
+    "toastIssued": "Emitida",
+    "toastVoided": "Anulada",
+    "voidConfirmTitle": "¿Anular este documento?",
+    "voidConfirmMessage": "Anular cancela la orden. Esta acción no se puede deshacer.",
+    "convertedProgress": "Convertido {billed}/{ordered}",
+    "fullyConverted": "Totalmente convertida",
+    "allChangesSaved": "Todos los cambios guardados",
+    "saveFailedRetry": "Error al guardar — corrija y reintente",
+    "unsavedChanges": "Cambios sin guardar…",
+    "totals": {
+      "subtotal": "Subtotal {amount}",
+      "tax": "Impuesto {amount}",
+      "total": "Total {amount}"
+    },
+    "columns": {
+      "item": "Artículo",
+      "account": "{kind, select, purchase_order {Cuenta} other {Cuenta de ingresos}}",
+      "accountPlaceholder": "Cuenta…",
+      "qty": "Cant.",
+      "unitPrice": "Precio unitario",
+      "taxAmount": "Impuesto",
+      "noTax": "Sin impuesto"
+    },
+    "linksTitle": "Origen / Convertido en",
+    "linkCreatedFrom": "Creado a partir de",
+    "linkConvertedInto": "Convertido en"
+  }
+}

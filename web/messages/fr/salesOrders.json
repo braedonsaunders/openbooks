@@ -1,0 +1,12 @@
+{
+  "list": {
+    "title": "Commandes clients",
+    "description": "Commandes clients confirmées — émettez-les, puis convertissez-les en facture au fil de la facturation.",
+    "searchPlaceholder": "Rechercher commandes clients, clients, mémo…",
+    "converted": "Convertie",
+    "emptyTitle": "Aucune commande client pour l’instant",
+    "emptyDescription": "Créez une commande client, ou convertissez-en une à partir d’une soumission.",
+    "newButton": "Nouvelle commande client",
+    "createDraftFailed": "Impossible de créer une commande client brouillon"
+  }
+}

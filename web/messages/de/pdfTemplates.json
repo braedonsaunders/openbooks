@@ -1,0 +1,54 @@
+{
+  "title": "PDF-Vorlagen",
+  "description": "Gestalten Sie ansprechende druckbare Dokumente und weisen Sie sie Rechnungen, Buchungen und allen anderen Transaktionen zu",
+  "newTemplate": "Neue Vorlage",
+  "list": {
+    "name": "Name",
+    "paper": "Papier",
+    "default": "Standard",
+    "builtInStarter": "Integrierte Startvorlage",
+    "builtIn": "Integriert",
+    "starterHint": "Wird gedruckt, wenn keine benutzerdefinierte Vorlage vorhanden ist — duplizieren, um sie anzupassen",
+    "duplicate": "Duplizieren",
+    "isDefault": "Standard"
+  },
+  "editor": {
+    "back": "PDF-Vorlagen",
+    "design": "Design",
+    "code": "HTML",
+    "preview": "Vorschau",
+    "margins": "Ränder",
+    "portrait": "Hochformat",
+    "landscape": "Querformat",
+    "headerPlaceholder": "Laufende Kopfzeile (optional) — Merge-Tokens erlaubt",
+    "footerPlaceholder": "Laufende Fußzeile — Seitenzahlen unterstützt",
+    "saved": "Vorlage gespeichert",
+    "saveFailed": "Speichern fehlgeschlagen",
+    "makeDefault": "Standard für diesen Datensatztyp",
+    "active": "Aktiv",
+    "previewHint": "Gerendert von genau der Engine, die das echte Dokument druckt, zusammengeführt mit Ihrem neuesten Datensatz.",
+    "refreshPreview": "Vorschau aktualisieren",
+    "previewFailed": "Vorschau fehlgeschlagen",
+    "deleteConfirm": "Diese Vorlage löschen? Datensätze fallen auf das Standarddesign zurück.",
+    "blockContent": "Inhalt",
+    "blockFields": "Datensatzfelder",
+    "blockTables": "Tabellen"
+  },
+  "pdfButton": {
+    "label": "PDF",
+    "defaultTemplate": "Standarddesign",
+    "failed": "PDF-Vorlagen konnten nicht geladen werden"
+  },
+  "send": {
+    "label": "Senden",
+    "to": "Empfänger",
+    "toPlaceholder": "kunde@beispiel.com",
+    "message": "Nachricht (optional)",
+    "messagePlaceholder": "Notiz hinzufügen…",
+    "action": "E-Mail senden",
+    "sending": "Wird gesendet…",
+    "sent": "An {to} gesendet",
+    "noRecipient": "Geben Sie eine Empfänger-E-Mail-Adresse ein",
+    "failed": "Die E-Mail konnte nicht gesendet werden"
+  }
+}

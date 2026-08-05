@@ -1,0 +1,38 @@
+name: Feature request
+description: Propose a scoped accounting, workflow, platform, or operational capability
+title: "[Feature]: "
+labels:
+  - enhancement
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem
+      description: Describe the real business or accounting problem, not only the desired screen.
+    validations:
+      required: true
+  - type: textarea
+    id: current
+    attributes:
+      label: Current workflow
+      description: How is this handled today, including approvals and exceptions?
+    validations:
+      required: true
+  - type: textarea
+    id: treatment
+    attributes:
+      label: Accounting and control treatment
+      description: Posting, lifecycle, permissions, audit, close, effective dating, and correction implications
+    validations:
+      required: true
+  - type: textarea
+    id: outcome
+    attributes:
+      label: Desired outcome
+    validations:
+      required: true
+  - type: textarea
+    id: jurisdiction
+    attributes:
+      label: Jurisdiction or industry context
+      description: Include standards or primary references where relevant.

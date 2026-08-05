@@ -1,0 +1,131 @@
+{
+  "accountMenu": {
+    "account": "Konto",
+    "menuAriaLabel": "Kontomenü",
+    "theme": "Design",
+    "language": "Sprache",
+    "menuLayout": "Menülayout",
+    "signOut": "Abmelden",
+    "signingOut": "Wird abgemeldet…",
+    "roles": {
+      "admin": "Administrator",
+      "controller": "Controller",
+      "accountant": "Buchhalter",
+      "approver": "Genehmiger",
+      "viewer": "Betrachter"
+    },
+    "organizations": "Organisationen",
+    "superAdmin": "Super-Admin",
+    "security": "Anmeldesicherheit"
+  },
+  "language": {
+    "label": "Sprache",
+    "orgDefault": "Organisationsstandard",
+    "saveFailed": "Ihre Spracheinstellung konnte nicht gespeichert werden"
+  },
+  "menuMode": {
+    "label": "Menülayout",
+    "orgDefault": "Organisationsstandard",
+    "saveFailed": "Ihre Menülayout-Einstellung konnte nicht gespeichert werden",
+    "options": {
+      "sidebar": "Seitenleiste",
+      "topbar": "Obere Menüleiste"
+    }
+  },
+  "topNav": {
+    "ariaLabel": "Primär",
+    "more": "Mehr"
+  },
+  "apps": {
+    "ariaLabel": "Apps öffnen",
+    "title": "Apps"
+  },
+  "globalCreate": {
+    "ariaLabel": "Neu erstellen",
+    "title": "Neu erstellen",
+    "description": "Starten Sie einen echten Entwurf und bleiben Sie in Bewegung.",
+    "createFailed": "Entwurf konnte nicht erstellt werden",
+    "groups": {
+      "sales": "Verkauf",
+      "purchases": "Einkauf",
+      "accounting": "Buchhaltung",
+      "peopleAndLists": "Personen & Listen"
+    },
+    "items": {
+      "invoice": "Ausgangsrechnung",
+      "creditMemo": "Gutschrift",
+      "estimate": "Angebot",
+      "salesOrder": "Kundenauftrag",
+      "customerPayment": "Kundenzahlung",
+      "bill": "Eingangsrechnung",
+      "vendorCredit": "Lieferantengutschrift",
+      "purchaseOrder": "Bestellung",
+      "vendorPayment": "Lieferantenzahlung",
+      "journal": "Buchung",
+      "expense": "Spesenabrechnung",
+      "cardCharge": "Kartenbelastung",
+      "cardRefund": "Kartenerstattung",
+      "check": "Scheck",
+      "deposit": "Bankeinzahlung",
+      "transfer": "Banküberweisung",
+      "asset": "Anlagevermögen",
+      "customer": "Kunde",
+      "vendor": "Lieferant",
+      "employee": "Mitarbeiter",
+      "item": "Artikel oder Dienstleistung",
+      "project": "Projekt"
+    }
+  },
+  "relatedParty": {
+    "loadFailed": "Dieser Datensatz konnte nicht geöffnet werden"
+  },
+  "globalSearch": {
+    "ariaLabel": "Suchen",
+    "placeholder": "Alles durchsuchen…",
+    "clear": "Suche löschen",
+    "searching": "Wird gesucht…",
+    "noMatches": "Keine Treffer für „{query}“",
+    "navigate": "navigieren",
+    "open": "öffnen",
+    "close": "schließen",
+    "resultCount": "{count, plural, one {# Ergebnis} other {# Ergebnisse}}",
+    "groups": {
+      "contacts": "Kontakte",
+      "transactions": "Transaktionen",
+      "accounts": "Konten",
+      "items": "Artikel",
+      "projects": "Projekte"
+    }
+  },
+  "meta": {
+    "description": "Die offene Business-Suite. Betrieben mit offenen Büchern."
+  },
+  "brand": {
+    "home": "Zum Dashboard"
+  },
+  "sidebar": {
+    "expand": "Seitenleiste erweitern",
+    "collapse": "Seitenleiste einklappen"
+  },
+  "mobileNav": {
+    "openMenu": "Menü öffnen",
+    "menu": "Menü",
+    "primaryAriaLabel": "Primär"
+  },
+  "themeToggle": {
+    "label": "Design",
+    "options": {
+      "light": "Hell",
+      "system": "System",
+      "dark": "Dunkel"
+    },
+    "current": "Design: {theme}",
+    "currentHint": "Design: {theme} (zum Ändern klicken)"
+  },
+  "notifications": {
+    "ariaLabel": "Benachrichtigungen",
+    "title": "Benachrichtigungen",
+    "empty": "Sie sind auf dem neuesten Stand",
+    "markAllRead": "Alle als gelesen markieren"
+  }
+}

@@ -1,0 +1,162 @@
+{
+  "list": {
+    "metaTitle": "Documentos",
+    "title": "Arquivo",
+    "description": "Navegue, faça upload e gerencie documentos em toda a sua organização.",
+    "searchPlaceholder": "Buscar arquivos e pastas…",
+    "allFiles": "Todos os arquivos",
+    "rootFolder": "Arquivo",
+    "systemAttachments": "Anexos",
+    "empty": {
+      "title": "Nenhum arquivo nesta pasta",
+      "description": "Faça upload de arquivos ou crie uma pasta para começar.",
+      "allTitle": "Nenhum arquivo ainda",
+      "allDescription": "Faça upload do seu primeiro arquivo para preencher o Arquivo."
+    },
+    "folderRow": "Pasta"
+  },
+  "systemFolders": { "apCapture": "Captura de contas a pagar" },
+  "columns": {
+    "name": "Nome",
+    "size": "Tamanho",
+    "modified": "Modificado",
+    "createdBy": "Criado por",
+    "type": "Tipo",
+    "location": "Localização"
+  },
+  "folderTree": {
+    "expand": "Expandir",
+    "collapse": "Recolher"
+  },
+  "actions": {
+    "newFolder": "Nova pasta",
+    "upload": "Fazer upload",
+    "download": "Baixar",
+    "rename": "Renomear",
+    "move": "Mover",
+    "replace": "Substituir",
+    "delete": "Excluir",
+    "attachExisting": "Anexar existente",
+    "detach": "Desanexar"
+  },
+  "folder": {
+    "create": {
+      "title": "Nova pasta",
+      "description": "Crie uma pasta para organizar seus arquivos.",
+      "nameLabel": "Nome da pasta",
+      "namePlaceholder": "Nome da pasta",
+      "parentLabel": "Pasta pai",
+      "submit": "Criar pasta"
+    },
+    "edit": {
+      "title": "Editar pasta",
+      "nameLabel": "Nome da pasta",
+      "parentLabel": "Pasta pai",
+      "private": "Pasta privada",
+      "privateHint": "Apenas você e os administradores podem ver esta pasta.",
+      "inactive": "Inativa",
+      "inactiveHint": "Oculte esta pasta das listas.",
+      "save": "Salvar"
+    },
+    "delete": {
+      "title": "Excluir esta pasta?",
+      "body": "Todos os arquivos desta pasta serão excluídos permanentemente. Isso não pode ser desfeito."
+    },
+    "systemNoDelete": "Pastas do sistema não podem ser excluídas ou renomeadas.",
+    "subfolderCount": "{count, plural, one {# pasta} other {# pastas}}",
+    "fileCount": "{count, plural, one {# arquivo} other {# arquivos}}",
+    "deleteBlocked": "Esta pasta contém arquivos anexados a registros e não pode ser excluída."
+  },
+  "file": {
+    "drawer": {
+      "title": "Detalhes do arquivo",
+      "name": "Nome",
+      "folder": "Pasta",
+      "type": "Tipo",
+      "size": "Tamanho",
+      "created": "Criado",
+      "createdBy": "Criado por",
+      "modified": "Modificado",
+      "modifiedBy": "Modificado por",
+      "versions": "Versões",
+      "version": "Versão {number}",
+      "current": "atual",
+      "noVersions": "Nenhuma versão anterior.",
+      "moveTo": "Mover para a pasta",
+      "replaceTitle": "Substituir arquivo",
+      "replaceBody": "Faça upload de uma nova versão deste arquivo. A versão anterior será preservada no histórico de versões.",
+      "attachedTo": "Anexado a registros",
+      "notAttached": "Não anexado a nenhum registro.",
+      "delete": {
+        "title": "Excluir este arquivo?",
+        "body": "O arquivo será excluído permanentemente do Arquivo e desanexado de todos os registros. Isso não pode ser desfeito."
+      }
+    },
+    "preview": {
+      "title": "Pré-visualização",
+      "loading": "Carregando arquivo…",
+      "loadFailed": "Não foi possível carregar o conteúdo deste arquivo.",
+      "tooLarge": "Este arquivo é grande demais para ser visualizado aqui.",
+      "unsupported": "Este tipo de arquivo não pode ser visualizado. Baixe-o para abrir."
+    }
+  },
+  "upload": {
+    "dropFiles": "Solte os arquivos aqui ou <browse>procure</browse>",
+    "acceptHint": "PDF, imagens, CSV, XLSX, DOCX, TXT · até 25 MB",
+    "tooLarge": "{name} excede o limite de 25 MB",
+    "uploading": "{count, plural, one {Enviando # arquivo…} other {Enviando # arquivos…}}",
+    "selectFolder": "Selecione uma pasta para enviar…"
+  },
+  "attach": {
+    "title": "Anexar arquivo",
+    "description": "Anexe um arquivo do Arquivo a este registro.",
+    "searchPlaceholder": "Buscar arquivos…",
+    "empty": "Nenhum arquivo encontrado.",
+    "attachExisting": "Anexar arquivo existente",
+    "uploadNew": "Enviar novo arquivo"
+  },
+  "toasts": {
+    "folderCreated": "Pasta criada",
+    "folderCreateFailed": "Não foi possível criar a pasta",
+    "folderRenamed": "Pasta renomeada",
+    "folderRenameFailed": "Não foi possível renomear a pasta",
+    "folderMoved": "Pasta movida",
+    "folderMoveFailed": "Não foi possível mover a pasta",
+    "folderDeleted": "Pasta excluída",
+    "folderDeleteFailed": "Não foi possível excluir a pasta",
+    "fileRenamed": "Arquivo renomeado",
+    "fileRenameFailed": "Não foi possível renomear o arquivo",
+    "fileMoved": "Arquivo movido",
+    "fileMoveFailed": "Não foi possível mover o arquivo",
+    "fileDeleted": "Arquivo excluído",
+    "fileDeleteFailed": "Não foi possível excluir o arquivo",
+    "fileReplaced": "Nova versão enviada",
+    "fileReplaceFailed": "Não foi possível enviar a nova versão",
+    "uploaded": "{name} enviado",
+    "uploadFailed": "Não foi possível enviar {name}",
+    "attached": "Arquivo anexado",
+    "attachFailed": "Não foi possível anexar o arquivo",
+    "detached": "Arquivo desanexado",
+    "detachFailed": "Não foi possível desanexar o arquivo",
+    "linkCopied": "Link copiado",
+    "linkCopyFailed": "Não foi possível copiar o link"
+  },
+  "fileTypes": {
+    "pdf": "PDF",
+    "image": "Imagem",
+    "csv": "CSV",
+    "spreadsheet": "Planilha",
+    "document": "Documento",
+    "text": "Texto",
+    "other": "Arquivo"
+  },
+  "rowMenu": {
+    "open": "Abrir",
+    "openFolder": "Abrir pasta",
+    "copyLink": "Copiar link"
+  },
+  "rename": {
+    "fileTitle": "Renomear arquivo",
+    "folderTitle": "Renomear pasta"
+  }
+}

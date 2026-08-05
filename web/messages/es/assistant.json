@@ -1,0 +1,69 @@
+{
+  "title": "Asistente de IA",
+  "history": "Historial",
+  "newChat": "Nueva conversación",
+  "deleteChat": "Eliminar conversación",
+  "rename": "Renombrar",
+  "chatActions": "Acciones de la conversación",
+  "openHistory": "Abrir la lista de conversaciones",
+  "deleteConfirm": "¿Eliminar esta conversación? Esta acción no se puede deshacer.",
+  "noConversations": "Aún no hay conversaciones.",
+  "welcomeTitle": "¿Cómo puedo ayudar con los libros?",
+  "welcome": "Pregunte sobre sus libros: saldos, estados financieros, antigüedad, facturas o asientos concretos. El asistente solo ve lo que sus permisos permiten.",
+  "placeholder": "Pregunte sobre sus cuentas, transacciones o informes…",
+  "send": "Enviar",
+  "stop": "Detener",
+  "writeHint": "El asistente puede redactar asientos de diario, pero nada se guarda hasta que haga clic en Aplicar — y los borradores aún deben ser contabilizados por usted.",
+  "suggestions": {
+    "s1": "¿Cómo nos fue el mes pasado? Resume el estado de resultados.",
+    "s2": "¿A qué proveedores debemos más, y hay algo con más de 90 días?",
+    "s3": "¿Cuál es el saldo actual de nuestras cuentas bancarias?",
+    "s4": "Encuentra los asientos de gastos más grandes contabilizados este mes."
+  },
+  "errors": {
+    "notConfigured": "El asistente aún no está configurado. Un administrador puede activarlo en Administración → IA.",
+    "failed": "El asistente no pudo responder. Inténtelo de nuevo.",
+    "deleteFailed": "No se pudo eliminar la conversación.",
+    "renameFailed": "No se pudo renombrar la conversación."
+  },
+  "card": {
+    "input": "Entrada",
+    "result": "Resultado"
+  },
+  "tools": {
+    "whoami": "Verificación de sus accesos",
+    "find_accounts": "Búsqueda en el plan de cuentas",
+    "account_register": "Lectura de un registro de cuenta",
+    "find_journal_entries": "Búsqueda de asientos de diario",
+    "get_journal_entry": "Lectura de un asiento de diario",
+    "find_documents": "Búsqueda de documentos",
+    "get_document": "Lectura de un documento",
+    "find_parties": "Consulta de terceros",
+    "profit_and_loss": "Estado de resultados generado",
+    "balance_sheet": "Balance general generado",
+    "trial_balance": "Balanza de comprobación generada",
+    "aging": "Informe de antigüedad generado",
+    "cash_flow": "Estado de flujo de efectivo generado",
+    "draft_journal_entry": "Asiento de diario redactado"
+  },
+  "proposal": {
+    "title": "Asiento de diario redactado — revise antes de aplicar",
+    "account": "Cuenta",
+    "debit": "Débito",
+    "credit": "Crédito",
+    "apply": "Aplicar como borrador",
+    "applying": "Aplicando…",
+    "discard": "Descartar",
+    "discarded": "Borrador descartado.",
+    "created": "Borrador {number} guardado.",
+    "open": "Abrir",
+    "failed": "No se pudo aplicar el borrador."
+  },
+  "launcher": {
+    "open": "Preguntar al asistente",
+    "label": "Preguntar al asistente",
+    "placeholder": "Pregunte lo que quiera sobre sus libros…",
+    "submit": "Preguntar",
+    "hint": "Intro para preguntar · Esc para cerrar · abre el asistente"
+  }
+}

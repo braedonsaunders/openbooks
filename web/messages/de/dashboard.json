@@ -1,0 +1,132 @@
+{
+  "title": "Dashboard",
+  "orgDescription": "{name} · {currency} · {book}",
+  "greeting": {
+    "morning": "Guten Morgen",
+    "afternoon": "Guten Tag",
+    "evening": "Guten Abend"
+  },
+  "header": {
+    "customize": "Anpassen"
+  },
+  "widgets": {
+    "journalLines": "Journalzeilen",
+    "activeAccounts": "Aktive Konten",
+    "entriesToday": "Buchungen heute",
+    "pendingApprovals": "Ausstehende Genehmigungen",
+    "ledgerBalance": "Hauptbuchsaldo",
+    "recentEntries": "Neueste Buchungen",
+    "pendingApprovalsList": "Ausstehende Genehmigungen",
+    "myApprovals": "Meine Genehmigungen",
+    "inProgress": "In Bearbeitung",
+    "cashBalance": "Barbestand",
+    "openReceivables": "Offene Forderungen",
+    "overdueReceivables": "Überfällige Forderungen",
+    "openPayables": "Offene Verbindlichkeiten",
+    "overduePayables": "Überfällige Verbindlichkeiten"
+  },
+  "metricContext": {
+    "today": "Heute gebucht",
+    "awaitingDecision": "Wartet auf Entscheidung",
+    "baseCurrency": "Basiswährung · {currency}",
+    "outstanding": "Ausstehend",
+    "pastDue": "Überfällig"
+  },
+  "categories": {
+    "kpi": "Kennzahlen",
+    "gl": "Hauptbuch",
+    "ap": "Verbindlichkeiten",
+    "ar": "Forderungen",
+    "personal": "Persönlich",
+    "admin": "Verwaltung"
+  },
+  "catalog": {
+    "journalLines": "Gesamtzahl der gebuchten Journalzeilen.",
+    "activeAccounts": "Aktive Konten im Kontenplan.",
+    "entriesToday": "Heute gebuchte Buchungen.",
+    "pendingApprovals": "Genehmigungsanfragen, die auf eine Entscheidung warten.",
+    "ledgerBalance": "Saldo aller Journalzeilen; ausgeglichene Bücher sollten null ergeben.",
+    "recentEntries": "Die fünf zuletzt gebuchten Buchungen.",
+    "pendingApprovalsList": "Die neuesten Genehmigungsanfragen, die auf eine Entscheidung warten.",
+    "inProgress": "Ihre Entwürfe von Eingangsrechnungen, Ausgangsrechnungen und Buchungen.",
+    "myApprovals": "Ihrer Rolle zugewiesene Genehmigungsanfragen.",
+    "quickActions": "Verknüpfungen für Ihre häufigsten Aufgaben.",
+    "cashBalance": "Gebuchter Saldo der Bankkonten in Basiswährung.",
+    "openReceivables": "Unbezahlte Ausgangsrechnungen in Basiswährung.",
+    "overdueReceivables": "Ausgangsrechnungen nach ihrem Fälligkeitsdatum in Basiswährung.",
+    "openPayables": "Unbezahlte Eingangsrechnungen in Basiswährung.",
+    "overduePayables": "Eingangsrechnungen nach ihrem Fälligkeitsdatum in Basiswährung."
+  },
+  "grid": {
+    "customizing": "Dashboard wird angepasst",
+    "save": "Speichern",
+    "saved": "Layout gespeichert",
+    "saveFailed": "Layout konnte nicht gespeichert werden",
+    "reset": "Zurücksetzen",
+    "resetDone": "Layout auf Standard zurückgesetzt",
+    "resetFailed": "Layout konnte nicht zurückgesetzt werden",
+    "resetConfirm": "Auf das Standardlayout für Ihre Rolle zurücksetzen? Ihre Anpassungen gehen verloren.",
+    "addWidget": "Widget hinzufügen",
+    "closePalette": "Schließen",
+    "remove": "Widget entfernen",
+    "cardMissing": "Karte nicht verfügbar",
+    "unknownWidget": "Unbekanntes Widget: {id}"
+  },
+  "palette": {
+    "title": "Widgets",
+    "subtitle": "Klicken, um zu Ihrem Dashboard hinzuzufügen",
+    "close": "Schließen",
+    "added": "Hinzugefügt",
+    "empty": "Keine Widgets zum Hinzufügen verfügbar.",
+    "libraryCards": "Insight-Karten"
+  },
+  "customize": {
+    "title": "Dashboard anpassen",
+    "back": "Zurück zum Dashboard",
+    "roleLabel": "Standardlayout für: {role}"
+  },
+  "quickActions": {
+    "title": "Schnellaktionen",
+    "customize": "Anpassen",
+    "empty": "Noch keine Schnellaktionen",
+    "addFirst": "Fügen Sie Ihre erste Aktion hinzu",
+    "editor": {
+      "title": "Schnellaktionen anpassen",
+      "description": "Verknüpfungskacheln hinzufügen, neu anordnen und entfernen.",
+      "addAction": "Aktion hinzufügen",
+      "edit": "Aktion bearbeiten",
+      "cancel": "Abbrechen",
+      "save": "Speichern",
+      "saved": "Schnellaktionen gespeichert",
+      "saveFailed": "Schnellaktionen konnten nicht gespeichert werden",
+      "loadFailed": "Optionen konnten nicht geladen werden",
+      "back": "Zurück",
+      "common": "Häufig",
+      "customUrl": "Benutzerdefinierte URL",
+      "label": "Bezeichnung",
+      "labelPlaceholder": "Neue Eingangsrechnung",
+      "link": "Link",
+      "linkHint": "Interner Pfad (/ar) oder https-URL",
+      "icon": "Symbol",
+      "color": "Farbe",
+      "preview": "Vorschau",
+      "unnamed": "Unbenannt",
+      "searchPlaceholder": "Aktionen suchen…",
+      "loading": "Wird geladen…",
+      "noResults": "Keine Ergebnisse",
+      "maxReached": "Maximal {count} Aktionen",
+      "invalidUrl": "Der Link muss ein interner Pfad oder eine http(s)-URL sein"
+    }
+  },
+  "home": {
+    "customize": "Anpassen",
+    "customizeHint": "Ordnen Sie die Karten auf Ihrer Startseite neu an",
+    "browseInsights": "Alle Insights",
+    "noBoard": "Noch kein Start-Dashboard",
+    "noBoardBody": "Erstellen Sie Karten in Insights, ordnen Sie sie auf einem Dashboard an und legen Sie es dann als Startseite fest.",
+    "openInsights": "Insights öffnen",
+    "personalBadge": "Ihre Seite",
+    "roleBadge": "Rollenstandard",
+    "systemBadge": "Unternehmensstandard"
+  }
+}

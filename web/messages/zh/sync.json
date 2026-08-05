@@ -1,0 +1,193 @@
+{
+  "title": "迁移与镜像",
+  "description": "连接外部会计系统，一键迁移，然后每日镜像，以并行进行 A/B 运行。",
+  "connections": {
+    "heading": "连接",
+    "add": "添加连接",
+    "loading": "加载中…",
+    "empty": {
+      "title": "尚无连接。",
+      "hint": "添加源会计系统以开始迁移。"
+    },
+    "status": {
+      "active": "已启用",
+      "paused": "已暂停",
+      "error": "错误",
+      "unconfigured": "未配置"
+    },
+    "mirrorBadge": "镜像：{schedule}",
+    "lastRun": "上次运行：{lastRun} · 已同步至：{cursor}"
+  },
+  "actions": {
+    "connect": "连接",
+    "reconnect": "重新连接",
+    "test": "测试",
+    "mirrorNow": "立即镜像",
+    "syncAttachments": "同步附件",
+    "syncProjectFinancials": "同步项目财务",
+    "preflight": "同步前验证",
+    "runMigration": "运行迁移",
+    "pauseMirror": "暂停镜像",
+    "enableMirror": "启用镜像",
+    "edit": "编辑",
+    "downloadQwc": "下载 Web Connector"
+  },
+  "runs": {
+    "heading": "最近运行",
+    "columns": {
+      "started": "开始时间",
+      "kind": "类型",
+      "status": "状态",
+      "trigger": "触发方式",
+      "result": "结果"
+    },
+    "kind": {
+      "full_migration": "完整迁移",
+      "incremental": "增量",
+      "attachments": "附件",
+      "full_preflight": "完整预检",
+      "project_financials": "项目财务",
+      "targeted_repair": "定向修复",
+      "mirror": "镜像"
+    },
+    "status": {
+      "ok": "成功",
+      "failed": "失败",
+      "running": "运行中"
+    },
+    "progress": {
+      "attachments": "正在清点并导入源附件"
+    },
+    "stats": {
+      "attachments": "{files} 个源文件 · {links} 个交易链接 · {created} 个新文件",
+      "projectFinancials": "{projects} 个源项目（{projectChanges} 个变更）· {source} 条源工时记录 · {exact} 条精确 · {changed} 个计费状态已核对",
+      "docs": "+{new} 份单据 · {amended} 份修订 · {unchanged} 份未变",
+      "applied": "已应用 {count}",
+      "tb": "试算平衡 {matches}/{accounts}",
+      "tbOff": "（{count} 项不符）",
+      "openItems": "未结项 {matches}/{checked}",
+      "periods": "期间 {matches}/{checked}",
+      "projectPeriods": "项目/科目期间 {matches}/{checked}",
+      "preflightDocs": "{source} 个源文档 · {new} 个新增 · {amended} 个变更 · {unchanged} 个精确匹配",
+      "sourceBook": "{kind} {ref}",
+      "preflightBlockers": "{count} 个阻碍项"
+    }
+  },
+  "toast": {
+    "loadFailed": "加载连接失败（HTTP {status}）",
+    "authorized": "连接已授权",
+    "authDenied": "授权被拒绝",
+    "authFailed": "授权失败（{status}）",
+    "queuingMigration": "正在排队完整迁移…",
+    "queuingPreflight": "正在排队只读全量验证…",
+    "queuingMirror": "正在排队镜像…",
+    "queuingAttachments": "正在排队附件同步…",
+    "queuingProjectFinancials": "正在将项目财务同步加入队列…",
+    "migrationQueued": "迁移已排队——我们将在后台运行",
+    "preflightQueued": "验证已排队——不会更改会计数据或文档",
+    "mirrorQueued": "镜像已排队——正在后台运行",
+    "attachmentsQueued": "附件同步已排队——正在后台运行",
+    "projectFinancialsQueued": "项目财务同步已加入队列 — 不会更改单据、总账、文件或 PDF",
+    "runFailed": "无法将运行加入队列（HTTP {status}）",
+    "runErrors": {
+      "CONNECTION_NOT_FOUND": "该连接已不存在。",
+      "CONNECTION_UNCONFIGURED": "请先添加凭据，再运行此连接。",
+      "INVALID_MODE": "请选择有效的迁移操作。",
+      "ATTACHMENTS_UNSUPPORTED": "此连接不支持附件迁移。",
+      "PROJECT_FINANCIALS_UNSUPPORTED": "此连接不提供项目财务输入同步。"
+    },
+    "testing": "正在测试连接…",
+    "connected": "已连接",
+    "connectedDetail": "已连接——{detail}",
+    "testFailed": "连接失败：{error}",
+    "unknownError": "未知错误",
+    "removed": "连接已移除",
+    "created": "连接已创建",
+    "updated": "连接已更新",
+    "copied": "重定向 URI 已复制",
+    "copyFailed": "无法复制——请手动选择并复制文本"
+  },
+  "confirmDelete": "删除连接“{name}”？已迁移的数据将保留；仅移除此链接。",
+  "drawer": {
+    "addTitle": "添加连接",
+    "editTitle": "编辑连接",
+    "description": "连接外部会计系统。凭据在静态存储时加密，且不会再次显示。",
+    "cancel": "取消",
+    "saving": "保存中…",
+    "saveChanges": "保存更改",
+    "create": "创建连接",
+    "system": "系统",
+    "selectSystem": "选择系统…",
+    "name": "连接名称",
+    "select": "选择…",
+    "credentials": "凭据（静态存储时加密，不会再次显示）",
+    "keepCurrent": "留空以保留当前值"
+  },
+  "oauth": {
+    "title": "在 <link>{portal}</link> 中进行一次性应用设置",
+    "redirectLabel": "需注册的重定向 URI：",
+    "copy": "复制"
+  },
+  "netsuite": {
+    "setupTitle": "NetSuite 提取桥接器",
+    "setupHint": "安装只读 RESTlet 和 Map/Reduce 软件包，然后测试连接。不会向交易记录附加任何脚本。",
+    "documentation": "文档"
+  },
+  "qbd": {
+    "setupTitle": "QuickBooks Desktop 设置",
+    "setupHint": "保存后，从连接卡片下载 Web Connector 文件。在运行 QuickBooks 的 Windows 计算机上导入，以 QuickBooks 管理员身份批准只读访问，并在 Web Connector 中输入此密码。",
+    "lastContact": "Web Connector 上次连接：{time}",
+    "notConnected": "Web Connector 尚未连接",
+    "capture": "采集 {status}：{completed}/{total} 个请求",
+    "captureStatus": { "queued": "排队中", "running": "运行中", "complete": "已完成", "failed": "失败", "cancelled": "已取消" },
+    "documentation": "文档",
+    "qwcDescription": "用于会计迁移和核对的只读连接器"
+  },
+  "sources": {
+    "netsuite": {
+      "blurb": "安装只读提取桥接器，并使用专用令牌角色连接。交易、核销、会计控制和删除仅在验证通过后导入。",
+      "fields": {
+        "account": { "label": "账户 ID", "help": "NetSuite 账户领域。" },
+        "host": { "label": "SuiteTalk 主机" }, "baseCurrency": { "label": "本位币" },
+        "bridgeScriptId": { "label": "桥接脚本 ID", "help": "留空以使用 customscript_openbooks_bridge_rl。" },
+        "bridgeDeploymentId": { "label": "部署 ID", "help": "留空以使用 customdeploy_openbooks_bridge_rl。" },
+        "mappingJson": { "label": "账户字段映射", "help": "可选 JSON，用于将自定义字段和记录映射到 OpenBooks 概念。" },
+        "consumerKey": { "label": "使用者密钥" }, "consumerSecret": { "label": "使用者机密" },
+        "tokenKey": { "label": "令牌 ID" }, "tokenSecret": { "label": "令牌机密" }
+      }
+    },
+    "odoo": {
+      "blurb": "使用您的 Odoo URL、数据库、用户和 API 密钥连接（设置 → 我的个人资料 → 账户安全 → API 密钥）。发票、账单、付款和日记账将通过真实过账引擎原生迁移和镜像。"
+    },
+    "erpnext": {
+      "blurb": "使用您的 ERPNext URL 和 API 密钥 + 密钥连接（用户 → 设置 → API 访问）。发票、账单、付款条目和日记账将通过真实过账引擎原生迁移和镜像。"
+    },
+    "qbd": {
+      "blurb": "通过 Intuit Web Connector 连接 QuickBooks Desktop。首次授权和采集期间必须保持 QuickBooks 打开；无需配置 Windows 入站防火墙规则。",
+      "options": { "US": "美国", "CA": "加拿大", "UK": "英国", "AU": "澳大利亚", "NZ": "新西兰" },
+      "fields": {
+        "historyStartDate": { "label": "历史开始日期", "help": "要迁移的最早记账日期。每次镜像都会重新检查完整范围，以检测历史修改和删除。" },
+        "region": { "label": "QuickBooks 地区" },
+        "baseCurrency": { "label": "本位币" },
+        "companyFile": { "label": "公司文件路径（可选）", "help": "留空则使用 Web Connector 运行时已打开的公司。" },
+        "webConnectorPassword": { "label": "Web Connector 密码", "help": "导入 .QWC 文件后，在 QuickBooks Web Connector 中输入一次此密码。" }
+      }
+    },
+    "qbo": {
+      "blurb": "输入您的 Intuit 应用的客户端 ID + 密钥（developer.intuit.com → Keys & credentials），保存后点击“连接”以授权某个公司。发票、账单、付款、贷记、日记账和存款将原生迁移和镜像。",
+      "steps": [
+        "创建一个应用（QuickBooks Online and Payments），并使用 com.intuit.quickbooks.accounting 范围。",
+        "在 Keys & credentials 下，添加下方所示的重定向 URI（沙盒公司使用 Development keys，正式公司使用 Production keys）。",
+        "将客户端 ID 和客户端密钥复制到此表单中，保存后点击“连接”。"
+      ]
+    },
+    "xero": {
+      "blurb": "输入您的 Xero 应用的客户端 ID + 密钥（developer.xero.com → My Apps），保存后点击“连接”以授权某个组织。发票、账单、贷记通知单、付款、日记账和银行交易将原生迁移和镜像。",
+      "steps": [
+        "创建一个新应用（集成类型：Web 应用）；公司 URL 可使用本站点的地址。",
+        "将下方所示的重定向 URI 添加到该应用的 OAuth 2.0 重定向 URI 中。",
+        "复制客户端 ID，生成客户端密钥，将两者粘贴到此表单中，保存后点击“连接”。"
+      ]
+    }
+  }
+}

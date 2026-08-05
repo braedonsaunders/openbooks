@@ -1,0 +1,60 @@
+{
+  "title": "PDF Templates",
+  "description": "Author beautiful printable documents and assign them to invoices, journals, and every other transaction",
+  "newTemplate": "New template",
+  "list": {
+    "name": "Name",
+    "paper": "Paper",
+    "default": "Default",
+    "builtInStarter": "Built-in starter",
+    "builtIn": "Built-in",
+    "starterHint": "Printed when no custom template exists — duplicate it to customize",
+    "duplicate": "Duplicate",
+    "isDefault": "Default",
+    "type": "Record type",
+    "allTypes": "All record types",
+    "previewNote": "Read-only preview of the built-in starter design, rendered with sample data. Duplicate it to make an editable template.",
+    "previewFailed": "Could not render the preview",
+    "empty": "No templates match.",
+    "starterNamed": "{type} starter"
+  },
+  "editor": {
+    "back": "PDF Templates",
+    "design": "Design",
+    "code": "HTML",
+    "preview": "Preview",
+    "margins": "Margins",
+    "portrait": "Portrait",
+    "landscape": "Landscape",
+    "headerPlaceholder": "Running header (optional) — merge tokens allowed",
+    "footerPlaceholder": "Running footer — page numbers supported",
+    "saved": "Template saved",
+    "saveFailed": "Save failed",
+    "makeDefault": "Default for this record type",
+    "active": "Active",
+    "previewHint": "Rendered by the exact engine that prints the real document, merged with your most recent record.",
+    "refreshPreview": "Refresh preview",
+    "previewFailed": "Preview failed",
+    "deleteConfirm": "Delete this template? Records will fall back to the default design.",
+    "blockContent": "Content",
+    "blockFields": "Record fields",
+    "blockTables": "Tables"
+  },
+  "pdfButton": {
+    "label": "PDF",
+    "defaultTemplate": "Standard design",
+    "failed": "Could not load PDF templates"
+  },
+  "send": {
+    "label": "Send",
+    "to": "Recipient",
+    "toPlaceholder": "customer@example.com",
+    "message": "Message (optional)",
+    "messagePlaceholder": "Add a note…",
+    "action": "Send email",
+    "sending": "Sending…",
+    "sent": "Sent to {to}",
+    "noRecipient": "Enter a recipient email address",
+    "failed": "Could not send the email"
+  }
+}

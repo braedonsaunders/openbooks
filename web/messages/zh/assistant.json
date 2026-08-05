@@ -1,0 +1,70 @@
+{
+  "title": "AI 助手",
+  "history": "历史记录",
+  "newChat": "新建对话",
+  "deleteChat": "删除对话",
+  "rename": "重命名",
+  "chatActions": "对话操作",
+  "openHistory": "打开对话列表",
+  "deleteConfirm": "删除此对话？此操作无法撤销。",
+  "noConversations": "暂无对话。",
+  "welcomeTitle": "我能为账务提供什么帮助？",
+  "welcome": "咨询您的账务——余额、财务报表、账龄、具体的应付账单或分录。助手只能看到您的权限所允许的内容。",
+  "notConfiguredTitle": "助手尚未设置",
+  "placeholder": "咨询您的科目、交易或报表……",
+  "send": "发送",
+  "stop": "停止",
+  "writeHint": "助手可以起草日记账分录，但在您点击“应用”之前不会保存任何内容——草稿仍需由您过账。",
+  "suggestions": {
+    "s1": "我们上个月表现如何？请汇总损益表。",
+    "s2": "我们欠哪些供应商最多，是否有超过 90 天的？",
+    "s3": "我们银行账户现在的余额是多少？",
+    "s4": "查找本月过账的最大费用分录。"
+  },
+  "errors": {
+    "notConfigured": "助手尚未配置。管理员可在“系统管理 → AI”下启用它。",
+    "failed": "助手无法响应。请重试。",
+    "deleteFailed": "无法删除该对话。",
+    "renameFailed": "无法重命名该对话。"
+  },
+  "card": {
+    "input": "输入",
+    "result": "结果"
+  },
+  "tools": {
+    "whoami": "已检查您的访问权限",
+    "find_accounts": "已搜索会计科目表",
+    "account_register": "已读取科目明细账",
+    "find_journal_entries": "已搜索日记账分录",
+    "get_journal_entry": "已读取日记账分录",
+    "find_documents": "已搜索单据",
+    "get_document": "已读取单据",
+    "find_parties": "已查询往来单位",
+    "profit_and_loss": "已运行损益表",
+    "balance_sheet": "已运行资产负债表",
+    "trial_balance": "已运行试算平衡表",
+    "aging": "已运行账龄报表",
+    "cash_flow": "已运行现金流量表",
+    "draft_journal_entry": "已起草日记账分录"
+  },
+  "proposal": {
+    "title": "已起草日记账分录——应用前请审核",
+    "account": "科目",
+    "debit": "借方",
+    "credit": "贷方",
+    "apply": "应用为草稿",
+    "applying": "正在应用……",
+    "discard": "放弃",
+    "discarded": "已放弃草稿。",
+    "created": "已保存草稿 {number}。",
+    "open": "打开",
+    "failed": "无法应用该草稿。"
+  },
+  "launcher": {
+    "open": "询问助手",
+    "label": "询问助手",
+    "placeholder": "咨询关于您账务的任何问题……",
+    "submit": "询问",
+    "hint": "回车提问 · Esc 关闭 · 打开助手"
+  }
+}

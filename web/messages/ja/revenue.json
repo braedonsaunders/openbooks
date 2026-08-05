@@ -1,0 +1,53 @@
+{
+  "list": {
+    "title": "収益認識",
+    "description": "契約、履行義務、認識スケジュール(ASC 606)。",
+    "searchPlaceholder": "契約を検索…",
+    "emptyTitle": "収益契約はまだありません",
+    "emptyDescription": "認識ルール付きの品目を含む請求書を記帳して、履行義務とスケジュールを作成します。",
+    "runRecognition": "認識を実行"
+  },
+  "labels": {
+    "contract": "契約",
+    "customer": "得意先",
+    "total": "合計",
+    "recognized": "認識済み",
+    "deferred": "繰延"
+  },
+  "status": {
+    "draft": "下書き",
+    "active": "有効",
+    "complete": "完了",
+    "cancelled": "キャンセル済み"
+  },
+  "obligationStatus": {
+    "open": "オープン",
+    "satisfied": "充足済み",
+    "cancelled": "キャンセル済み"
+  },
+  "method": {
+    "point_in_time": "一時点",
+    "straight_line_even": "定額法、均等",
+    "straight_line_prorate_first_last": "定額法、日割り",
+    "straight_line_daily": "定額法、日次",
+    "percent_complete": "進捗度",
+    "milestone": "マイルストーン",
+    "usage": "使用量"
+  },
+  "run": {
+    "failed": "認識の実行に失敗しました",
+    "posted": "{count, plural, one {# 件の仕訳} other {# 件の仕訳}}(合計 {amount})を認識しました",
+    "someSkipped": "{count} 件スキップしました",
+    "nothingDue": "認識対象の項目はありません"
+  },
+  "drawer": {
+    "obligations": "履行義務",
+    "noSchedule": "スケジュールはまだ作成されていません",
+    "period": "期間",
+    "planned": "計画",
+    "recognized": "認識済み",
+    "postedStatus": "記帳済み",
+    "plannedStatus": "計画",
+    "fairValueOutOfRange": "公正価値レンジ外（{low} – {high}）"
+  }
+}

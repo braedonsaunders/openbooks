@@ -1,0 +1,61 @@
+{
+  "list": {
+    "title": "発注書",
+    "description": "元帳に記帳しない仕入先へのコミットメント — 発行後、入荷時に仕入請求書へ変換します。",
+    "searchPlaceholder": "発注書、仕入先、メモを検索…",
+    "converted": "変換済み",
+    "emptyTitle": "発注書はまだありません",
+    "emptyDescription": "最初の発注書を作成して調達から支払いまでのワークフローを開始します。",
+    "newButton": "新規発注書",
+    "createDraftFailed": "下書き発注書を作成できませんでした"
+  },
+  "shared": {
+    "kinds": {
+      "salesOrder": "受注",
+      "invoice": "請求書",
+      "bill": "仕入請求書"
+    },
+    "docKind": "{kind, select, quote {見積} sales_order {受注} purchase_order {発注書} customer_invoice {請求書} vendor_bill {仕入請求書} other {{kind}}}",
+    "partyLabel": "{kind, select, purchase_order {仕入先} other {得意先}}",
+    "selectPartyPlaceholder": "{kind, select, purchase_order {仕入先を選択…} other {得意先を選択…}}",
+    "dateLabel": "{kind, select, quote {見積日} other {注文日}}",
+    "expiryLabel": "{kind, select, quote {有効期限} sales_order {出荷 / 期日} purchase_order {入荷予定日} other {日付}}",
+    "draftAutosave": "下書き — 変更は自動的に保存されます。",
+    "issue": "発行",
+    "convertTo": "{target} に変換",
+    "convertCreated": "{target} {number} を作成しました",
+    "convertFailed": "変換に失敗しました",
+    "actionFailed": "アクションに失敗しました",
+    "autosaveFailed": "自動保存に失敗しました",
+    "toastIssued": "発行しました",
+    "toastVoided": "無効化しました",
+    "voidConfirmTitle": "この書類を無効化しますか?",
+    "voidConfirmMessage": "無効化すると注文がキャンセルされます。この操作は取り消せません。",
+    "deleteConfirmTitle": "この注文を削除しますか?",
+    "deleteConfirmMessage": "注文とその明細行を完全に削除します。この操作は取り消せません。",
+    "toastDeleted": "注文を削除しました",
+    "issueHint": "この注文を発行するには、得意先または仕入先と少なくとも1つの明細行を追加してください。",
+    "convertedProgress": "変換済み {billed}/{ordered}",
+    "fullyConverted": "全量変換済み",
+    "allChangesSaved": "すべての変更を保存しました",
+    "saveFailedRetry": "保存に失敗しました — 修正して再試行してください",
+    "unsavedChanges": "未保存の変更…",
+    "totals": {
+      "subtotal": "小計 {amount}",
+      "tax": "税 {amount}",
+      "total": "合計 {amount}"
+    },
+    "columns": {
+      "item": "品目",
+      "account": "{kind, select, purchase_order {勘定} other {収益勘定}}",
+      "accountPlaceholder": "勘定…",
+      "qty": "数量",
+      "unitPrice": "単価",
+      "taxAmount": "税額",
+      "noTax": "税なし"
+    },
+    "linksTitle": "オリジン / 変換先",
+    "linkCreatedFrom": "作成元",
+    "linkConvertedInto": "変換先"
+  }
+}

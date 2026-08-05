@@ -1,0 +1,132 @@
+{
+  "title": "仪表板",
+  "orgDescription": "{name} · {currency} · {book}",
+  "greeting": {
+    "morning": "早上好",
+    "afternoon": "下午好",
+    "evening": "晚上好"
+  },
+  "header": {
+    "customize": "自定义"
+  },
+  "widgets": {
+    "journalLines": "日记账明细行",
+    "activeAccounts": "启用科目",
+    "entriesToday": "今日分录",
+    "pendingApprovals": "待审批",
+    "ledgerBalance": "总账余额",
+    "recentEntries": "最近的日记账分录",
+    "pendingApprovalsList": "待审批",
+    "myApprovals": "我的审批",
+    "inProgress": "进行中",
+    "cashBalance": "现金余额",
+    "openReceivables": "未结应收",
+    "overdueReceivables": "逾期应收",
+    "openPayables": "未结应付",
+    "overduePayables": "逾期应付"
+  },
+  "metricContext": {
+    "today": "今日已过账",
+    "awaitingDecision": "等待处理",
+    "baseCurrency": "本位币 · {currency}",
+    "outstanding": "未结",
+    "pastDue": "逾期"
+  },
+  "categories": {
+    "kpi": "要点",
+    "gl": "总账",
+    "ap": "应付",
+    "ar": "应收",
+    "personal": "个人",
+    "admin": "管理"
+  },
+  "catalog": {
+    "journalLines": "已过账日记账明细行总数。",
+    "activeAccounts": "会计科目表中的启用科目。",
+    "entriesToday": "今日已过账的日记账分录。",
+    "pendingApprovals": "等待处理的审批请求。",
+    "ledgerBalance": "所有日记账明细行的净额；账目平衡时应为零。",
+    "recentEntries": "最近过账的五笔日记账分录。",
+    "pendingApprovalsList": "最新的等待处理审批请求。",
+    "inProgress": "您的草稿账单、发票和日记账分录。",
+    "myApprovals": "分配给您角色的审批请求。",
+    "quickActions": "常用任务的快捷方式。",
+    "cashBalance": "以本位币计的银行账户已过账余额。",
+    "openReceivables": "以本位币计的未付客户发票。",
+    "overdueReceivables": "以本位币计的已逾期客户发票。",
+    "openPayables": "以本位币计的未付应付账单。",
+    "overduePayables": "以本位币计的已逾期应付账单。"
+  },
+  "grid": {
+    "customizing": "正在自定义您的仪表板",
+    "save": "保存",
+    "saved": "布局已保存",
+    "saveFailed": "保存布局失败",
+    "reset": "重置",
+    "resetDone": "布局已重置为默认",
+    "resetFailed": "重置布局失败",
+    "resetConfirm": "重置为您角色的默认布局？您的自定义设置将丢失。",
+    "addWidget": "添加小组件",
+    "closePalette": "关闭",
+    "remove": "移除小组件",
+    "cardMissing": "卡片不可用",
+    "unknownWidget": "未知小组件：{id}"
+  },
+  "palette": {
+    "title": "小组件",
+    "subtitle": "点击以添加到您的仪表板",
+    "close": "关闭",
+    "added": "已添加",
+    "empty": "没有可添加的小组件。",
+    "libraryCards": "洞察卡片"
+  },
+  "customize": {
+    "title": "自定义仪表板",
+    "back": "返回仪表板",
+    "roleLabel": "以下角色的默认布局：{role}"
+  },
+  "quickActions": {
+    "title": "快捷操作",
+    "customize": "自定义",
+    "empty": "尚无快捷操作",
+    "addFirst": "添加您的第一个操作",
+    "editor": {
+      "title": "自定义快捷操作",
+      "description": "添加、重新排序和移除快捷方式磁贴。",
+      "addAction": "添加操作",
+      "edit": "编辑操作",
+      "cancel": "取消",
+      "save": "保存",
+      "saved": "快捷操作已保存",
+      "saveFailed": "保存快捷操作失败",
+      "loadFailed": "加载选项失败",
+      "back": "返回",
+      "common": "常用",
+      "customUrl": "自定义 URL",
+      "label": "标签",
+      "labelPlaceholder": "新建账单",
+      "link": "链接",
+      "linkHint": "内部路径（/ar）或 https URL",
+      "icon": "图标",
+      "color": "颜色",
+      "preview": "预览",
+      "unnamed": "未命名",
+      "searchPlaceholder": "搜索操作…",
+      "loading": "加载中…",
+      "noResults": "无结果",
+      "maxReached": "最多 {count} 个操作",
+      "invalidUrl": "链接必须是内部路径或 http(s) URL"
+    }
+  },
+  "home": {
+    "customize": "自定义",
+    "customizeHint": "重新排列主页看板上的卡片",
+    "browseInsights": "全部洞察",
+    "noBoard": "尚无主页仪表板",
+    "noBoardBody": "在洞察中构建卡片，将其排列在仪表板上，然后设为主页看板。",
+    "openInsights": "打开洞察",
+    "personalBadge": "您的看板",
+    "roleBadge": "角色默认",
+    "systemBadge": "公司默认"
+  }
+}

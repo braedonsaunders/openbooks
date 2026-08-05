@@ -1,0 +1,53 @@
+{
+  "list": {
+    "title": "收入确认",
+    "description": "合同、履约义务及确认计划（ASC 606）。",
+    "searchPlaceholder": "搜索合同…",
+    "emptyTitle": "暂无收入合同",
+    "emptyDescription": "过账一张带有确认规则条目的发票，即可创建履约义务与计划。",
+    "runRecognition": "运行收入确认"
+  },
+  "labels": {
+    "contract": "合同",
+    "customer": "客户",
+    "total": "总额",
+    "recognized": "已确认",
+    "deferred": "递延"
+  },
+  "status": {
+    "draft": "草稿",
+    "active": "生效中",
+    "complete": "已完成",
+    "cancelled": "已取消"
+  },
+  "obligationStatus": {
+    "open": "未完成",
+    "satisfied": "已履行",
+    "cancelled": "已取消"
+  },
+  "method": {
+    "point_in_time": "时点确认",
+    "straight_line_even": "直线法，均摊",
+    "straight_line_prorate_first_last": "直线法，按比例分摊",
+    "straight_line_daily": "直线法，按日",
+    "percent_complete": "完工百分比",
+    "milestone": "里程碑",
+    "usage": "使用量"
+  },
+  "run": {
+    "failed": "收入确认运行失败",
+    "posted": "已确认 {count, plural, one {# 笔分录} other {# 笔分录}}，合计 {amount}",
+    "someSkipped": "已跳过 {count} 笔",
+    "nothingDue": "无到期可确认项"
+  },
+  "drawer": {
+    "obligations": "履约义务",
+    "noSchedule": "尚未生成计划",
+    "period": "期间",
+    "planned": "计划",
+    "recognized": "已确认",
+    "postedStatus": "已过账",
+    "plannedStatus": "计划",
+    "fairValueOutOfRange": "超出公允价值区间（{low} – {high}）"
+  }
+}

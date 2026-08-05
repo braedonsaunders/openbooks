@@ -1,0 +1,57 @@
+{
+  "list": {
+    "title": "週次タイムシート",
+    "description": "週単位の従業員の労働時間 — すべてのジョブにわたって時間を入力、提出、承認します。",
+    "newButton": "新規タイムシート",
+    "emptyTitle": "タイムシートはまだありません",
+    "emptyDescription": "時間入力はここで週次タイムシートに集約されます。ジョブに対して時間を記録するには、タイムシートを作成してください。",
+    "week": "週",
+    "unnamed": "(名称未設定)"
+  },
+  "labels": {
+    "totalHours": "合計時間",
+    "billableHours": "請求可能時間",
+    "serviceItem": "サービス品目",
+    "timeType": "時間タイプ",
+    "bill": "請求",
+    "billable": "請求可能",
+    "dailyTotals": "日次合計"
+  },
+  "status": {
+    "submitted": "提出済み",
+    "empty": "時間なし"
+  },
+  "days": {
+    "sun": "日",
+    "mon": "月",
+    "tue": "火",
+    "wed": "水",
+    "thu": "木",
+    "fri": "金",
+    "sat": "土"
+  },
+  "grid": {
+    "title": "週次タイムシート",
+    "selectEmployee": "従業員を選択…",
+    "submitForApproval": "承認のために提出",
+    "prev": "前へ",
+    "thisWeek": "今週",
+    "weekOf": "{from} – {to} の週",
+    "approvedReadOnly": "承認済みのタイムシートは読み取り専用です。",
+    "viewOnly": "閲覧のみのアクセス権です。",
+    "noEmployee": "従業員が選択されていません。時間を入力するには、上で従業員を選択してください。",
+    "discardConfirm": "未保存の変更を破棄しますか?",
+    "networkError": "ネットワークエラー",
+    "saved": "タイムシートを保存しました",
+    "saveBeforeSubmit": "提出する前に変更を保存してください",
+    "submittedToast": "承認のために提出しました",
+    "approvedToast": "タイムシートを承認しました",
+    "addLine": "行を追加",
+    "projectPlaceholder": "プロジェクト…",
+    "lineProjectAria": "行 {line} のプロジェクト",
+    "lineItemAria": "行 {line} の品目",
+    "lineBillableAria": "行 {line} の請求可能",
+    "lineHoursAria": "行 {line} の {day} の時間",
+    "removeLineAria": "行 {line} を削除"
+  }
+}

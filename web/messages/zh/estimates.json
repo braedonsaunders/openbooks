@@ -1,0 +1,12 @@
+{
+  "list": {
+    "title": "报价单",
+    "description": "不过账的客户报价 — 先发出，再转换为销售订单或发票。",
+    "searchPlaceholder": "搜索报价单、客户、备注…",
+    "converted": "已转换",
+    "emptyTitle": "暂无报价单",
+    "emptyDescription": "创建第一张报价单，开始从订单到收款的流程。",
+    "newButton": "新建报价单",
+    "createDraftFailed": "无法创建草稿报价单"
+  }
+}

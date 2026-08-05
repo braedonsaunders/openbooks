@@ -1,0 +1,103 @@
+{
+  "list": {
+    "title": "Plan de cuentas",
+    "description": "Saldos actuales con signo natural (acumulado para el balance general, del ejercicio fiscal en curso para resultados), consolidados a través de cuentas de resumen.",
+    "searchPlaceholder": "Buscar por número o nombre…",
+    "views": {
+      "list": "Lista",
+      "hierarchy": "Jerarquía"
+    },
+    "newAccount": "Nueva cuenta",
+    "viewRegister": "Ver registro",
+    "expand": "Expandir cuenta",
+    "collapse": "Contraer cuenta",
+    "badges": {
+      "inactive": "inactiva",
+      "summary": "resumen"
+    }
+  },
+  "types": {
+    "assetBank": "Banco",
+    "assetReceivable": "Cuentas por cobrar",
+    "assetCurrentOther": "Otros activos circulantes",
+    "assetFixed": "Activos fijos",
+    "assetOther": "Otros activos",
+    "liabilityPayable": "Cuentas por pagar",
+    "liabilityCard": "Tarjetas corporativas",
+    "liabilityCurrentOther": "Otros pasivos circulantes",
+    "liabilityLongTerm": "Pasivos a largo plazo",
+    "equity": "Capital",
+    "income": "Ingresos",
+    "incomeOther": "Otros ingresos",
+    "cogs": "Costo de ventas",
+    "expense": "Gastos",
+    "expenseOther": "Otros gastos",
+    "expenseDeferred": "Gastos diferidos"
+  },
+  "classes": {
+    "asset": "Activos",
+    "liability": "Pasivos",
+    "equity": "Capital",
+    "income": "Ingresos",
+    "expense": "Gastos"
+  },
+  "drawer": {
+    "saved": "Cuenta guardada",
+    "created": "Cuenta creada",
+    "newTitle": "Nueva cuenta",
+    "newDescription": "Cree una cuenta de contabilización o de resumen. Los saldos iniciales deben registrarse mediante un asiento equilibrado.",
+    "create": "Crear cuenta",
+    "typeLocked": "El tipo no puede cambiar después de que exista actividad en el libro mayor.",
+    "parent": "Cuenta principal",
+    "currencyRestriction": "Restricción de moneda",
+    "anyCurrency": "Cualquier moneda",
+    "allSubsidiaries": "Todas las subsidiarias",
+    "summary": "Cuenta de resumen",
+    "reconcilable": "Conciliable",
+    "eliminate": "Eliminar en la consolidación",
+    "includeSubsidiaries": "Incluir subsidiarias secundarias",
+    "requiredDimensions": "Dimensiones obligatorias de contabilización",
+    "dimensions": {
+      "department": "Departamento",
+      "location": "Ubicación",
+      "class": "Clase",
+      "project": "Proyecto",
+      "party": "Tercero"
+    },
+    "errors": {
+      "name_required": "El nombre de la cuenta es obligatorio.",
+      "invalid_type": "Seleccione un tipo de cuenta válido.",
+      "type_has_transactions": "El tipo no puede cambiar después de que exista actividad en el libro mayor.",
+      "invalid_parent": "Seleccione una cuenta principal válida.",
+      "parent_must_be_summary": "La cuenta principal debe ser una cuenta de resumen.",
+      "parent_type_mismatch": "La cuenta principal y la secundaria deben usar el mismo tipo de cuenta.",
+      "parent_cycle": "Esa cuenta principal crearía una jerarquía circular.",
+      "summary_reconcilable_conflict": "Una cuenta de resumen no puede ser conciliable.",
+      "summary_has_transactions": "Una cuenta con actividad no puede convertirse en una cuenta de resumen.",
+      "summary_has_children": "Una cuenta con cuentas secundarias activas debe seguir siendo de resumen.",
+      "inactive_has_children": "Desactive primero las cuentas secundarias activas.",
+      "invalid_currency": "Seleccione una moneda válida.",
+      "invalid_subsidiary": "Seleccione una subsidiaria válida.",
+      "invalid_dimensions": "Seleccione dimensiones obligatorias válidas.",
+      "invalid_custom_fields": "Revise los valores de los campos personalizados.",
+      "number_in_use": "Ese número de cuenta ya está en uso.",
+      "account_changed": "Esta cuenta cambió mientras la editaba. Vuelva a abrirla e inténtelo de nuevo.",
+      "invalid_idempotency_key": "No se pudo reintentar la solicitud de cuenta de forma segura.",
+      "save_failed": "No se pudo guardar la cuenta."
+    },
+    "monetary": "Reconversión cambiaria (partida monetaria)",
+    "monetaryDefault": "Según el tipo de cuenta",
+    "monetaryAlways": "Reconvertir siempre",
+    "monetaryNever": "No reconvertir nunca"
+  },
+  "register": {
+    "notFound": "Cuenta no encontrada",
+    "subtitle": "registro · {count, plural, one {# línea} other {# líneas}} · saldo acumulado {balance}",
+    "periodFilter": "Filtrado a {label}",
+    "columns": {
+      "entry": "Asiento",
+      "debit": "Débito",
+      "credit": "Crédito"
+    }
+  }
+}

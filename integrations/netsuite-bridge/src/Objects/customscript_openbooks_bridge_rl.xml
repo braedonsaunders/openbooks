@@ -1,0 +1,19 @@
+<restlet scriptid="customscript_openbooks_bridge_rl">
+  <description>Read-only, versioned extraction gateway for OpenBooks.</description>
+  <isinactive>F</isinactive>
+  <name>OpenBooks Extraction Bridge</name>
+  <notifyadmins>F</notifyadmins>
+  <notifyemails></notifyemails>
+  <notifyowner>T</notifyowner>
+  <notifyuser>F</notifyuser>
+  <scriptfile>[/SuiteScripts/OpenBooks/openbooks_bridge_restlet.js]</scriptfile>
+  <scriptdeployments>
+    <scriptdeployment scriptid="customdeploy_openbooks_bridge_rl">
+      <allroles>T</allroles>
+      <isdeployed>T</isdeployed>
+      <loglevel>ERROR</loglevel>
+      <status>RELEASED</status>
+      <title>OpenBooks Extraction Bridge</title>
+    </scriptdeployment>
+  </scriptdeployments>
+</restlet>

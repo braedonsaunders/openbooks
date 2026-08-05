@@ -1,0 +1,88 @@
+{
+  "title": "Consola de consultas",
+  "subtitle": "PostgreSQL real, solo lectura. Rol SELECT, tiempo límite 10s. ⌘⏎ para ejecutar.",
+  "description": "PostgreSQL real — no un dialecto de consulta. Se ejecuta en modo de solo lectura con un rol limitado a SELECT y un tiempo máximo de 10 segundos. ⌘⏎ para ejecutar.",
+  "readOnlyBadge": "Solo lectura",
+  "run": "Ejecutar",
+  "running": "Ejecutando…",
+  "clear": "Limpiar",
+  "rowLimit": "Límite",
+  "editorPlaceholder": "select … from journal_lines l join accounts a on a.id = l.account_id …",
+  "failed": "Falló",
+  "queryError": "Error de consulta",
+  "rowCount": "{count, plural, one {# fila} other {# filas}}",
+  "truncated": "Truncado en {max}",
+  "ranSelection": "Selección ejecutada",
+  "resultsIdle": "Aún no hay resultados",
+  "resultsIdleHint": "Los resultados aparecen aquí",
+  "filterResults": "Filtrar filas…",
+  "copyCsv": "Copiar",
+  "copiedCsv": "Resultados copiados como CSV",
+  "copyFailed": "Error al copiar",
+  "runToSeeResults": "Ejecuta una consulta para ver resultados",
+  "runHint": "Escribe SQL arriba y pulsa Ejecutar o ⌘⏎. Selecciona texto para ejecutar solo eso.",
+  "emptyResultSet": "La consulta no devolvió columnas",
+  "noFilterMatch": "Ninguna fila coincide con el filtro",
+  "rail": {
+    "schema": "Esquema",
+    "snippets": "Fragmentos",
+    "history": "Historial"
+  },
+  "schema": {
+    "searchPlaceholder": "Buscar tablas y columnas…",
+    "noMatch": "No hay tablas coincidentes",
+    "insertTable": "Clic para insertar el nombre de la tabla",
+    "insertColumn": "Clic para insertar el nombre de la columna",
+    "showSchema": "Mostrar esquema",
+    "browseRows": "Explorar filas",
+    "insertTableName": "Insertar nombre de tabla",
+    "insertSelectTemplate": "Insertar plantilla SELECT"
+  },
+  "history": {
+    "count": "{count, plural, one {# consulta} other {# consultas}}",
+    "clear": "Limpiar",
+    "rows": "{count, plural, one {# fila} other {# filas}}",
+    "failed": "Falló",
+    "empty": "Las consultas que ejecutes aparecen aquí"
+  },
+  "snippetSaved": "«{name}» guardada",
+  "snippets": {
+    "save": "Guardar",
+    "namePlaceholder": "Nombra esta consulta…",
+    "savedHeading": "Guardadas",
+    "examplesHeading": "Ejemplos",
+    "delete": "Eliminar fragmento",
+    "trialBalance": {
+      "label": "Balance de comprobación",
+      "description": "Saldo con signo por cuenta, solo distintos de cero."
+    },
+    "topAccounts": {
+      "label": "Mayores saldos",
+      "description": "Las 15 cuentas con el mayor saldo absoluto."
+    },
+    "recentEntries": {
+      "label": "Asientos recientes",
+      "description": "Los 50 asientos más recientes con estado y origen."
+    },
+    "monthlyActivity": {
+      "label": "Actividad mensual",
+      "description": "Asientos contabilizados y débitos totales por mes."
+    },
+    "unbalancedEntries": {
+      "label": "Asientos descuadrados",
+      "description": "Asientos cuyas líneas no suman cero."
+    },
+    "entriesByOrigin": {
+      "label": "Asientos por origen",
+      "description": "Recuento de asientos agrupados por su origen."
+    },
+    "tableSizes": {
+      "label": "Resumen del catálogo de consultas",
+      "description": "Vistas de informes gobernadas y su número de columnas disponibles."
+    },
+    "listColumns": {
+      "label": "Listar todas las columnas",
+      "description": "Cada columna disponible del catálogo de consultas gobernado con su tipo."
+    }
+  }
+}

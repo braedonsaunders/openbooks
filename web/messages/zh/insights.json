@@ -1,0 +1,281 @@
+{
+  "title": "洞察",
+  "tabs": {
+    "cards": "卡片",
+    "dashboards": "仪表板"
+  },
+  "viz": {
+    "table": "表格",
+    "bar": "柱状图",
+    "line": "折线图",
+    "area": "面积图",
+    "pie": "饼图",
+    "empty": {
+      "noData": "此查询无数据。",
+      "pickFields": "选择一个维度和至少一个度量以生成图表。"
+    },
+    "noRows": "无行。",
+    "values": {
+      "yes": "是",
+      "no": "否",
+      "active": "启用",
+      "inactive": "停用"
+    }
+  },
+  "status": {
+    "published": "已发布"
+  },
+  "actions": {
+    "publish": "发布",
+    "unpublish": "取消发布"
+  },
+  "autosave": {
+    "saved": "所有更改已保存",
+    "unsaved": "有未保存的更改…",
+    "failed": "自动保存失败"
+  },
+  "errors": {
+    "queryFailed": "查询失败",
+    "updateFailed": "更新失败"
+  },
+  "empty": {
+    "dashboardNoCards": "此仪表板尚无卡片。"
+  },
+  "cards": {
+    "description": "基于对总账的查询构建图表和表格卡片，然后将它们排布到仪表板上。",
+    "searchPlaceholder": "搜索卡片…",
+    "emptyTitle": "暂无卡片",
+    "emptyDescription": "构建您的第一张卡片 — 选择数据源，确定要度量和分组的内容，并选择图表。",
+    "sourceColumn": "数据源",
+    "chartColumn": "图表",
+    "newButton": "新建卡片",
+    "createDraftFailed": "无法创建草稿卡片"
+  },
+  "dashboards": {
+    "description": "将已发布的卡片排布到共享仪表板上。",
+    "searchPlaceholder": "搜索仪表板…",
+    "emptyTitle": "暂无仪表板",
+    "emptyDescription": "创建一个仪表板，然后将已发布的卡片放到上面。",
+    "cardsColumn": "卡片",
+    "newButton": "新建仪表板",
+    "createDraftFailed": "无法创建草稿仪表板"
+  },
+  "cardStudio": {
+    "untitled": "未命名卡片",
+    "autosaveHint": "更改自动保存。预览实时更新。",
+    "nameRequiredToPublish": "为卡片命名以将其发布",
+    "saveFailedRetry": "保存失败 — 请修正后重试",
+    "namePlaceholder": "按部门统计每月支出",
+    "sourceLabel": "数据源",
+    "measuresTitle": "度量",
+    "measuresEmpty": "添加要聚合的度量（或留空以生成明细表）。",
+    "ofRows": "行数",
+    "selectFieldPlaceholder": "选择字段…",
+    "removeMeasure": "移除度量",
+    "groupByTitle": "分组依据",
+    "groupByEmpty": "按维度对行分组以进行汇总。",
+    "binExact": "精确",
+    "bins": {
+      "day": "按日",
+      "week": "按周",
+      "month": "按月",
+      "quarter": "按季度",
+      "year": "按年"
+    },
+    "removeDimension": "移除维度",
+    "filtersTitle": "筛选器",
+    "filtersEmpty": "无筛选器 — 该卡片涵盖所有行。",
+    "removeFilter": "移除筛选器",
+    "filterPlaceholderList": "a, b, c",
+    "filterPlaceholderNumber": "30",
+    "filterPlaceholderDate": "YYYY-MM-DD",
+    "filterPlaceholderValue": "值",
+    "previewRequestFailed": "预览请求失败",
+    "runningPreview": "正在运行预览…",
+    "buildToPreview": "构建查询以进行预览。",
+    "rowCount": "{count, plural, one {# 行} other {# 行}}",
+    "capped": "（上限 10,000）",
+    "duration": "{ms} 毫秒",
+    "publishedToast": "卡片已发布",
+    "draftToast": "卡片已退回草稿",
+    "deleteConfirm": "删除此卡片？它将从所有仪表板中移除。",
+    "deleteFailed": "无法删除卡片",
+    "deletedToast": "卡片已删除"
+  },
+  "vizSettings": {
+    "category": "类别",
+    "auto": "自动",
+    "value": "值",
+    "allMeasures": "所有度量",
+    "stacked": "堆叠",
+    "horizontal": "水平",
+    "smooth": "平滑",
+    "showValues": "数值",
+    "hideLegend": "隐藏图例"
+  },
+  "cardTile": {
+    "loadFailed": "无法加载此卡片"
+  },
+  "builder": {
+    "back": "仪表板",
+    "untitled": "未命名仪表板",
+    "pinToHome": "固定到主页",
+    "unpin": "取消固定",
+    "namePlaceholder": "高管概览",
+    "addCard": "添加卡片：",
+    "noPublishedCards": "尚无已发布的卡片。<link>构建并发布一张卡片</link>以将其放在此处。",
+    "emptyEditor": "在上方添加已发布的卡片以构建此仪表板。",
+    "widths": {
+      "third": "三分之一",
+      "half": "二分之一",
+      "twoThirds": "三分之二",
+      "full": "整宽"
+    },
+    "heights": {
+      "short": "矮",
+      "medium": "中",
+      "tall": "高"
+    },
+    "cardWidth": "卡片宽度",
+    "cardHeight": "卡片高度",
+    "removeCard": "移除卡片",
+    "unavailableCard": "此卡片不可用（已删除或未发布）。",
+    "pinnedToast": "已固定到您的主页",
+    "unpinnedToast": "已取消固定",
+    "pinFailed": "无法更新固定",
+    "publishedToast": "仪表板已发布",
+    "draftToast": "仪表板已退回草稿",
+    "deleteConfirm": "删除此仪表板？",
+    "deletedToast": "仪表板已删除",
+    "deleteFailed": "无法删除仪表板"
+  },
+  "catalog": {
+    "sources": {
+      "ledger_lines": {
+        "label": "总账明细",
+        "description": "每一条日记账明细及其分录、科目、往来方和维度 — 完整的总账明细。"
+      },
+      "documents": {
+        "label": "文档",
+        "description": "业务文档 — 应付账单、发票、付款、订单 — 附带往来方和维度标签。"
+      },
+      "parties": {
+        "label": "往来方",
+        "description": "客户、供应商和员工 — 每个往来方一行，附带其角色标志。"
+      },
+      "accounts": {
+        "label": "科目",
+        "description": "会计科目表 — 编号、名称、类型和过账标志。"
+      }
+    },
+    "fields": {
+      "ledger_lines": {
+        "posting_date": "过账日期",
+        "entry_number": "分录 #",
+        "entry_status": "分录状态",
+        "entry_origin": "来源",
+        "account_number": "科目 #",
+        "account_name": "科目",
+        "account_type": "科目类型",
+        "party": "往来方",
+        "department": "部门",
+        "project": "项目",
+        "location": "地点",
+        "class": "类别",
+        "memo": "摘要",
+        "amount": "金额（本位币）",
+        "debit": "借方",
+        "credit": "贷方",
+        "quantity": "数量",
+        "currency": "币种"
+      },
+      "documents": {
+        "kind": "类型",
+        "document_number": "文档 #",
+        "party": "往来方",
+        "status": "状态",
+        "document_date": "文档日期",
+        "due_date": "到期日",
+        "department": "部门",
+        "project": "项目",
+        "currency": "币种",
+        "subtotal": "小计",
+        "tax_total": "税",
+        "total": "合计",
+        "document_count": "文档"
+      },
+      "parties": {
+        "display_name": "名称",
+        "kind": "类型",
+        "is_active": "启用",
+        "is_customer": "客户",
+        "is_vendor": "供应商",
+        "is_employee": "员工",
+        "hired_on": "入职日期",
+        "created_at": "创建时间"
+      },
+      "accounts": {
+        "number": "科目 #",
+        "name": "名称",
+        "type": "类型",
+        "is_summary": "汇总",
+        "is_active": "启用",
+        "account_count": "科目"
+      }
+    }
+  },
+  "aggs": {
+    "sum": "求和",
+    "avg": "平均值",
+    "count": "计数",
+    "min": "最小值",
+    "max": "最大值"
+  },
+  "operators": {
+    "eq": "等于",
+    "neq": "不等于",
+    "in": "是其中任一",
+    "not_in": "均不是",
+    "gt": "大于",
+    "gte": "在此日期当天或之后 / ≥",
+    "lt": "小于",
+    "lte": "在此日期当天或之前 / ≤",
+    "contains": "包含",
+    "is_null": "为空",
+    "is_not_null": "已设置",
+    "last_n_days": "在最近 N 天内",
+    "this_month": "为本月",
+    "this_quarter": "为本季度",
+    "this_year": "为本年",
+    "ytd": "年初至今"
+  },
+  "measureLabels": {
+    "count": "计数",
+    "sum": "{field}合计",
+    "avg": "{field}平均值",
+    "min": "{field}最小值",
+    "max": "{field}最大值",
+    "binned": "{field}（{bin}）",
+    "bins": {
+      "day": "日",
+      "week": "周",
+      "month": "月",
+      "quarter": "季度",
+      "year": "年"
+    }
+  },
+  "compileErrors": {
+    "unknown_source": "未知数据源“{subject}”",
+    "unknown_field": "未知字段“{subject}”",
+    "unknown_aggregation": "未知聚合“{subject}”",
+    "aggregation_needs_field": "“{subject}”聚合需要一个字段",
+    "not_a_dimension": "“{subject}”无法用于分组",
+    "not_a_measure": "“{subject}”不是数值度量",
+    "unknown_operator": "未知筛选运算符“{subject}”",
+    "unknown_bin": "未知日期分桶“{subject}”",
+    "contains_needs_text": "“包含”筛选器需要一个文本值",
+    "last_n_days_needs_number": "“在最近 N 天内”筛选器需要一个数字",
+    "no_columns": "该查询未选择任何列",
+    "timeout": "查询耗时过长 — 请缩小范围或添加筛选器。"
+  }
+}

@@ -1,0 +1,54 @@
+{
+  "views": {
+    "new": "新規ビュー",
+    "list": {
+      "title": "ビュー",
+      "description": "元帳、書類、取引先、勘定に対する、名前付きで共有可能なクエリ — 明細行またはグループ化した集計。閲覧、エクスポート、再利用できます。",
+      "scopeLabel": "範囲",
+      "searchPlaceholder": "ビューを検索…",
+      "scopeAll": "すべて",
+      "scopeShared": "共有",
+      "scopePrivate": "プライベート",
+      "emptyTitle": "ビューはまだありません",
+      "emptyDescription": "最初のビューを作成して元帳を照会し、いつでも再利用できます。",
+      "columns": {
+        "name": "名称",
+        "source": "ソース",
+        "scope": "範囲",
+        "updated": "更新日"
+      },
+      "scope": {
+        "shared": "共有",
+        "private": "プライベート"
+      },
+      "runAction": "実行",
+      "editAction": "編集"
+    },
+    "studio": {
+      "untitled": "無題のビュー",
+      "autosaveHint": "変更は自動的に保存されます。",
+      "scopeLabel": "範囲",
+      "scope": {
+        "private": "プライベート — 自分のみ",
+        "shared": "共有 — 全員"
+      },
+      "exportPdf": "PDF",
+      "exportXlsx": "Excel",
+      "exportCsv": "CSV",
+      "deleteConfirm": "このビューを削除しますか?",
+      "viewResults": "結果を表示"
+    },
+    "run": {
+      "editSearch": "ビューを編集",
+      "backToList": "ビュー",
+      "resultsTitle": "結果",
+      "rowsRange": "{total} 行中 {from}–{to} を表示",
+      "lastUpdated": "更新 {when}",
+      "refreshHint": "結果は現在のデータに対してリアルタイムで実行されます。",
+      "emptyTitle": "一致する行がありません",
+      "emptyDescription": "検索条件またはフィルターを調整して再度実行してください。",
+      "notFoundTitle": "ビューが見つかりません",
+      "notFoundDescription": "削除されたか、アクセス権がない可能性があります。"
+    }
+  }
+}

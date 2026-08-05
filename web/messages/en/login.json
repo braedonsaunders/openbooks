@@ -1,0 +1,15 @@
+{
+  "tagline": "run on open books",
+  "password": "Password",
+  "invalidCredentials": "Invalid email or password",
+  "signIn": "Sign in",
+  "signingIn": "Signing in…",
+  "mfaCode": "Authenticator or recovery code",
+  "mfaPlaceholder": "123456",
+  "mfaHelp": "Enter the six-digit code from your authenticator, or a one-time recovery code.",
+  "invalidMfa": "That authentication code is invalid or expired",
+  "verify": "Verify",
+  "or": "or",
+  "sso": "Single sign-on",
+  "ssoFailed": "Single sign-on could not be completed"
+}

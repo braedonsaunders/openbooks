@@ -1,0 +1,270 @@
+{
+  "page": {
+    "title": "付款",
+    "description": "从选择到结算，管理付款活动和银行批次。",
+    "newPayment": "新建付款",
+    "newRun": "新建付款批次",
+    "tabs": {
+      "payments": "付款",
+      "runs": "付款批次"
+    }
+  },
+  "list": {
+    "searchPlaceholder": "{side, select, ap {搜索付款、供应商、参考号…} other {搜索付款、客户、参考号…}}",
+    "newLabel": "{side, select, ap {新建付款} other {新建客户收款}}",
+    "columns": {
+      "document": "{side, select, ap {付款} other {客户收款}}",
+      "payment": "付款",
+      "bankAccount": "银行账户",
+      "ref": "参考号"
+    },
+    "empty": {
+      "title": "{side, select, ap {暂无付款} other {暂无客户收款}}",
+      "description": "{side, select, ap {记录第一笔供应商付款以开始结算未结应付账单。} other {记录第一笔客户收款以开始结算未结发票。}}"
+    }
+  },
+  "newButton": {
+    "createDraftFailed": "无法创建草稿"
+  },
+  "drawer": {
+    "draftHint": "草稿 — 更改自动保存。",
+    "viewGlImpact": "查看总账影响",
+    "postAction": "{side, select, ap {付款并过账} other {收款并过账}}",
+    "bankAccount": "银行账户",
+    "selectPartyPlaceholder": "{side, select, ap {选择供应商…} other {选择客户…}}",
+    "selectBankAccountPlaceholder": "选择银行账户…",
+    "referencePlaceholder": "支票 / 电汇参考号…",
+    "openItems": "{side, select, ap {未结应付账单} other {未结发票}}",
+    "amountReceived": "收款金额",
+    "autoApply": "自动核销",
+    "autoApplyFailed": "无法建议核销方案",
+    "autoApplyNone": "没有未结项与此金额匹配",
+    "autoApplyDone": "已核销至 {count, plural, one {# 项} other {# 项}}（{strategy}）",
+    "autoApplyStrategy": {
+      "reference": "按参考号",
+      "exact": "精确匹配",
+      "fifo": "先进先出",
+      "none": "无"
+    },
+    "selectPartyHint": "{side, select, ap {选择供应商以列出其未结项。} other {选择客户以列出其未结项。}}",
+    "loadingOpenItems": "正在加载未结项…",
+    "noOpenItems": "{side, select, ap {此供应商无未结应付账单。} other {此客户无未结发票。}}",
+    "columns": {
+      "apply": "核销",
+      "document": "文档",
+      "due": "到期",
+      "original": "原始金额",
+      "appliedToDate": "累计已核销",
+      "open": "未结",
+      "appliedOn": "核销日期",
+      "applied": "已核销",
+      "rateEvidence": "汇率凭证"
+    },
+    "targetAmount": "核销金额（{currency}）",
+    "sourceAmount": "付款金额（{currency}）",
+    "settlementRate": "汇率：每 {source} 兑换 {target}",
+    "rateReferencePlaceholder": "银行通知或合同参考…",
+    "rateSource": { "manual": "手工汇率", "contractual": "合同汇率", "provider": "租户汇率" },
+    "applyAriaLabel": "核销至 {document}",
+    "invalidAllocation": "金额必须为正数、不超过未结余额，并按有凭证的结算汇率精确勾稽。",
+    "appliedTo": "已核销至",
+    "voidedNote": "此付款已作废；其过账已冲回。",
+    "noLiveApplications": "无有效核销。",
+    "kind": {
+      "vendorBill": "应付账单",
+      "customerInvoice": "发票",
+      "expenseReport": "费用报销单",
+      "journal": "日记账",
+      "entry": "分录"
+    },
+    "saveState": {
+      "saved": "所有更改已保存",
+      "error": "保存失败 — 请修正后重试",
+      "dirty": "有未保存的更改…"
+    },
+    "applyingSummary": "{count, plural, one {正在核销 # 项} other {正在核销 # 项}} · <total>合计 {amount}</total>",
+    "totalAmount": "合计 {amount}",
+    "toasts": {
+      "loadOpenItemsFailed": "无法加载未结项",
+      "autosaveFailed": "自动保存失败",
+      "postFailed": "过账失败",
+      "posted": "{side, select, ap {付款已过账并核销} other {客户收款已过账并核销}}"
+    }
+  },
+  "eft": {
+    "notConfiguredTitle": "尚未配置 EFT 发起",
+    "notConfiguredListDescription": "付款批次仍可组建，但在管理员完成 EFT 发起设置前，银行文件导出将被禁用。缺失字段：{missing}。",
+    "notConfiguredDrawerDescription": "在管理员完成 EFT 发起设置前，银行文件导出将被禁用。缺失字段：{missing}。"
+  },
+  "configuration": {
+    "notConfiguredTitle": "付款设置未完成",
+    "notConfiguredDescription": "在组建付款批次前，请先在<setup>付款与银行设置</setup>中创建一个资金配置文件。",
+    "collectionsNotConfiguredTitle": "直接扣款设置未完成",
+    "collectionsNotConfiguredDescription": "在组建收款批次前，请先在<setup>付款与银行设置</setup>中创建一个扣款银行配置文件和授权。",
+    "runNotReadyTitle": "此付款批次尚未就绪",
+    "runNotReadyDescription": "在生成文件前请完成配置文件的配置。缺失或无效：{missing}。"
+  },
+  "runBuilder": {
+    "title": "新建付款批次",
+    "description": "选择资金账户和应付账单，然后创建一个草稿批次以供复核。",
+    "collectionTitle": "新建直接扣款批次",
+    "collectionDescription": "选择收款配置文件和未结发票，然后创建一个草稿批次以供复核。",
+    "noOpenBills": "没有带未结余额的已过账应付账单匹配。",
+    "noOpenInvoices": "没有带未结余额的已过账发票匹配。",
+    "selectAllAriaLabel": "选择本页所有应付账单",
+    "selectAriaLabel": "选择 {document}",
+    "columns": {
+      "bill": "应付账单",
+      "invoice": "发票",
+      "due": "到期",
+      "ref": "参考号",
+      "bankDetails": "银行明细",
+      "mandate": "扣款授权",
+      "openBalance": "未结余额"
+    },
+    "bankApproved": "已存档",
+    "bankMissing": "缺失",
+    "mandateActive": "有效",
+    "mandateMissing": "缺失",
+    "payFromBankAccount": "付款银行配置文件",
+    "selectBankAccountPlaceholder": "选择一个付款配置文件…",
+    "noBankAccounts": "无有效付款配置文件",
+    "fundsDate": "资金日期",
+    "captureDiscounts": "获取可用的提前付款折扣",
+    "applyCredits": "核销可用的供应商贷项",
+    "selectedForPayment": "已选择付款",
+    "selectedForCollection": "已选择收款",
+    "selectionSummary": "{count, plural, one {# 张应付账单} other {# 张应付账单}} · <total>{amount}</total>",
+    "collectionSummary": "{count, plural, one {# 张发票} other {# 张发票}} · <total>{amount}</total>",
+    "createRun": "创建付款批次",
+    "createCollectionRun": "创建收款批次",
+    "toasts": {
+      "createFailed": "无法创建付款批次",
+      "created": "付款批次 {number} 已创建"
+    }
+  },
+  "runs": {
+    "collectionRunsHeading": "直接扣款批次",
+    "collectionDescription": "审批、生成、投递、过账并结算客户收款文件。",
+    "openInvoicesHeading": "未结发票",
+    "openInvoicesDescription": "在选择前审查未结发票和扣款授权就绪情况。",
+    "invoicesSearchPlaceholder": "搜索发票或客户…",
+    "openBillsHeading": "待付未结应付账单",
+    "openBillsDescription": "跨供应商选择应付账单；每个供应商成为一条付款指令。",
+    "billsSearchPlaceholder": "搜索应付账单、供应商、参考号…",
+    "runsHeading": "付款批次",
+    "description": "审查草稿、导出银行文件并确认已过账的付款。",
+    "searchPlaceholder": "搜索批次或银行账户…",
+    "noRunsYet": "暂无付款批次。在应付账单准备付款时创建第一个批次。",
+    "noCollectionRunsYet": "暂无直接扣款批次。在已授权发票准备收款时创建第一个批次。",
+    "columns": {
+      "run": "批次",
+      "bankAccount": "银行账户",
+      "method": "方式",
+      "fundsDate": "资金日期",
+      "payments": "付款"
+    },
+    "method": {
+      "eft": "EFT",
+      "ach": "ACH",
+      "sepa": "SEPA",
+      "wire": "电汇",
+      "cheque": "支票",
+      "direct_debit": "直接扣款",
+      "positive_pay": "Positive Pay",
+      "custom": "自定义"
+    },
+    "status": {
+      "confirmed": "已确认",
+      "generated": "文件已生成",
+      "delivered": "已投递",
+      "settled": "已结算",
+      "returned": "已退回",
+      "partially_failed": "部分失败",
+      "rejected": "已拒绝",
+      "rolled_back": "已回滚"
+    }
+  },
+  "runDrawer": {
+    "descriptionEft": "来自 {bank} 的付款批次",
+    "descriptionEftWithDate": "来自 {bank} 的付款批次 · 资金日期 {date}",
+    "bankAccountFallback": "银行账户",
+    "cancelRun": "取消批次",
+    "downloadFile": "下载文件",
+    "downloadBlockedTitle": "请先解决配置文件和银行明细问题",
+    "submitRun": "提交审批",
+    "approve": "批准批次",
+    "reject": "拒绝批次",
+    "generateFile": "生成文件",
+    "approveFile": "批准文件",
+    "rejectFile": "拒绝文件",
+    "reprocess": "重新处理",
+    "rollback": "回滚",
+    "postPayments": "过账付款",
+    "paymentsSummary": "{count, plural, one {# 笔付款} other {# 笔付款}} · <total>合计 {amount}</total>",
+    "payeesMissingBankDetails": "银行明细无效的往来对手方",
+    "filesTitle": "付款文件",
+    "sourcesTitle": "源交易",
+    "instructionsTitle": "付款指令",
+    "searchInstructions": "搜索指令…",
+    "activityTitle": "最近活动",
+    "systemActor": "系统",
+    "adjustments": "折扣 {discount} · 贷项 {credit}",
+    "reason": "原因",
+    "reasonRequired": "请输入原因。它将保留在付款审计追踪中。",
+    "recordOutcome": "记录结果",
+    "outcome": { "title": "银行结果", "description": "记录 {payee} 的结算或退回。", "status": "结果", "settled": "已结算", "returned": "已退回", "rejected": "被银行拒绝", "effectiveOn": "生效日期", "bankReference": "银行参考号", "returnCode": "退回代码", "returnReason": "退回原因", "reversalWarning": "退回或拒绝将冲回已过账的付款并重新打开受影响的应付账单。" },
+    "columns": {
+      "payee": "收款方",
+      "payment": "付款",
+      "bankDetails": "银行明细"
+    },
+    "bankApproved": "已存档",
+    "instructionStatus": {
+      "pending": "待处理",
+      "approved": "已批准",
+      "generated": "已生成",
+      "sent": "已发送",
+      "settled": "已结算",
+      "returned": "已退回",
+      "rejected": "已拒绝",
+      "failed": "已失败",
+      "reversed": "已冲回",
+      "cancelled": "已取消"
+    },
+    "fileStatus": { "generated": "已生成", "pending_approval": "待审批", "approved": "已批准", "rejected": "已拒绝", "delivered": "已投递", "superseded": "已被替代", "voided": "已作废" },
+    "events": {
+      "run_created": "付款批次已创建", "run_submitted": "付款批次已提交", "run_approved": "付款批次已批准", "run_rejected": "付款批次已拒绝",
+      "file_generated": "付款文件已生成", "file_reprocessed": "付款文件已重新处理", "file_approved": "付款文件已批准", "file_rejected": "付款文件已拒绝",
+      "file_downloaded": "付款文件已下载", "file_delivered_sftp": "付款文件已通过 SFTP 投递", "run_rolled_back": "付款批次已回滚",
+      "file_delivery_failed": "付款文件投递失败",
+      "instruction_settled": "付款已结算", "instruction_returned": "付款已退回", "instruction_rejected": "付款已拒绝"
+    },
+    "confirmPost": "将 {count, plural, one {# 笔付款} other {# 笔付款}}（合计 {total}）过账至总账并核销到所选应付账单？",
+    "confirmCancel": "取消批次 {number}？其草稿付款将被删除；尚无任何过账。",
+    "toasts": {
+      "postFailed": "过账失败",
+      "postedWithFailures": "{count} 笔已过账；失败：{failures}",
+      "posted": "{count, plural, one {# 笔付款已过账并核销} other {# 笔付款已过账并核销}}",
+      "cancelFailed": "无法取消批次",
+      "cancelled": "批次已取消",
+      "deliverFailed": "无法投递文件",
+      "delivered": "已投递至 {path}"
+      ,"actionFailed": "付款操作失败"
+      ,"submitted": "付款批次已提交"
+      ,"fileGenerated": "付款文件已生成"
+      ,"runApproved": "付款批次已批准"
+      ,"runRejected": "付款批次已拒绝"
+      ,"fileApproved": "付款文件已批准"
+      ,"fileRejected": "付款文件已拒绝"
+      ,"fileReprocessed": "付款文件已重新处理"
+      ,"rolledBack": "付款批次已回滚"
+      ,"outcomeFailed": "无法记录银行结果"
+      ,"outcomeSaved": "银行结果已记录"
+    },
+    "deliverSftp": "投递至 SFTP",
+    "deliverHint": "将此批次的付款文件投递到银行或合作伙伴的 SFTP 文件夹供其提取。",
+    "sftpServer": "SFTP 登录账号",
+    "noSftpServers": "暂无 SFTP 登录账号。请在 设置 → SFTP 中添加一个。"
+  }
+}

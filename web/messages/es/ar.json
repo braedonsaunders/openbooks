@@ -1,0 +1,165 @@
+{
+  "list": {
+    "title": "Facturas de cliente",
+    "description": "Facturas y notas de crédito de cliente — sus cuentas por cobrar: borrador → aprobación → contabilizadas a través del kernel.",
+    "searchPlaceholder": "Buscar facturas, notas de crédito, clientes, referencias…",
+    "emptyTitle": "Aún no hay facturas de cliente",
+    "emptyDescription": "Registre la primera factura o nota de crédito de cliente para iniciar el flujo de cuentas por cobrar.",
+    "columns": {
+      "number": "Número",
+      "invoice": "Factura",
+      "ref": "Ref."
+    }
+  },
+  "kinds": {
+    "invoice": "Factura",
+    "credit": "Nota de crédito"
+  },
+  "actions": {
+    "new": "Nuevo",
+    "newInvoice": "Nueva factura",
+    "newCredit": "Nueva nota de crédito",
+    "submitForApproval": "Enviar para aprobación"
+  },
+  "drawer": {
+    "editingHint": "Editando — Guarde para aplicar los cambios",
+    "viewGlImpact": "Ver impacto en el libro mayor",
+    "dateLabel": "Fecha de la factura",
+    "dueDate": "Fecha de vencimiento",
+    "reference": "N.º de ref. del cliente",
+    "accountColumn": "Cuenta de ingresos",
+    "accountPlaceholder": "Cuenta…",
+    "noTax": "Sin impuesto",
+    "taxAmountColumn": "Impuesto",
+    "selectCustomerPlaceholder": "Seleccionar cliente…",
+    "selectVendorPlaceholder": "Seleccionar proveedor…",
+    "subtotalAmount": "Subtotal {amount}",
+    "taxTotalAmount": "Impuesto {amount}",
+    "totalAmount": "Total {amount}",
+    "balanceDueAmount": "Saldo pendiente {amount}",
+    "saveState": {
+      "saved": "Todos los cambios guardados",
+      "error": "Error al guardar — corrija y reintente",
+      "dirty": "Cambios sin guardar…"
+    },
+    "deleteTitle": "¿Eliminar este documento?",
+    "deleteDraftBody": "Esto elimina permanentemente el borrador. No se puede deshacer.",
+    "deletePostedBody": "Esto elimina permanentemente el documento y su impacto en el libro mayor. No se puede deshacer.",
+    "formLabel": "Formulario",
+    "formSetPreferred": "Definir como preferido",
+    "formSetPreferredDone": "Formulario preferido guardado",
+    "formPreferredCleared": "Formulario preferido borrado",
+    "formPreferredFailed": "No se pudo guardar el formulario preferido"
+  },
+  "toasts": {
+    "actionFailed": "La acción falló",
+    "submitted": "Enviado para aprobación",
+    "posted": "Contabilizado en el libro mayor",
+    "createDraftFailed": "No se pudo crear un borrador",
+    "deleted": "Documento eliminado",
+    "deleteFailed": "Error al eliminar"
+  },
+  "cockpit": {
+    "title": "Cuentas por cobrar",
+    "description": "Su centro de control de cobros: cuánto le deben, qué está vencido y qué cobrar esta semana.",
+    "tabs": {
+      "overview": "Resumen",
+      "invoices": "Facturas"
+    },
+    "current": "al corriente",
+    "customer": "Cliente",
+    "overdueCol": "Vencido",
+    "openCol": "Abierto",
+    "noReceivables": "No hay cuentas por cobrar abiertas. Todo está cobrado.",
+    "customerSearch": "Buscar clientes…",
+    "customerStatus": "Estado del cliente",
+    "customerOverdueOnly": "Con saldo vencido",
+    "configure": "Cómo funciona",
+    "configTitle": "Modelo de cobros",
+    "configDescription": "Cómo se ordena la lista de trabajo y se predicen las fechas de cobro. Solo lectura: los cobros no tienen límite; el motor predice cuándo pagan los clientes.",
+    "stats": {
+      "openReceivables": "Cuentas por cobrar abiertas",
+      "overdue": "Vencido",
+      "overdueSub": "{count, plural, one {# factura} other {# facturas}} · {pct}% de lo abierto",
+      "expectedThisWeek": "Previsto esta semana",
+      "next30": "Próximos 30 días",
+      "dso": "Días de ventas pendientes (DSO)",
+      "dsoSub": "Promedio de días para cobrar",
+      "days": "{n} d"
+    },
+    "panels": {
+      "worklist": "Lista de trabajo de cobros",
+      "aging": "Antigüedad de saldos",
+      "schedule": "Calendario de cobros",
+      "scheduleHint": "Cobros previstos durante {weeks} semanas — seleccione una semana",
+      "byCustomer": "Cuentas por cobrar por cliente"
+    },
+    "worklist": {
+      "overdueToChase": "Vencido por gestionar",
+      "expectedThisWeek": "Previsto esta semana",
+      "customer": "Cliente",
+      "prediction": "Predicción",
+      "due": "Vencimiento",
+      "amount": "Importe",
+      "selected": "{count} seleccionadas · {amount}",
+      "build": "Crear lote de cobros",
+      "empty": "No se prevén cobros en el horizonte.",
+      "search": "Buscar cobros…",
+      "status": "Estado del cobro",
+      "overdueOnly": "Vencido",
+      "upcoming": "Próximo",
+      "selectInvoice": "Seleccionar la factura de {customer}",
+      "daysOverdue": "{count} d de atraso",
+      "methods": {
+        "statistical": "Estadístico",
+        "dueDate": "Fecha de vencimiento",
+        "overduePush": "Aplazamiento por atraso",
+        "globalAverage": "Promedio global"
+      }
+    },
+    "model": {
+      "title": "Cómo se predicen los cobros",
+      "worklistOrder": {
+        "label": "Orden de la lista",
+        "value": "Más vencidas primero",
+        "note": "La lista se ordena por días de atraso y luego por mayor importe; las facturas vencidas aparecen preseleccionadas"
+      },
+      "prediction": {
+        "label": "Predicción de fecha de cobro",
+        "value": "Estadístico → Vencimiento → Promedio global",
+        "note": "Promedio de días de cobro por cliente (+½σ de margen), nunca antes del vencimiento"
+      },
+      "overduePush": {
+        "label": "Aplazamiento por atraso",
+        "value": "+7 / +14 / +28 días",
+        "note": "Las facturas vencidas se desplazan según su atraso (≤30 / ≤60 / >60 días)"
+      },
+      "businessDay": {
+        "label": "Ajuste a día hábil",
+        "value": "Activado",
+        "note": "Las fechas previstas en fin de semana pasan al siguiente día hábil"
+      },
+      "dso": {
+        "label": "Promedio de días para cobrar (DSO)",
+        "value": "{dso} d",
+        "note": "Valor alternativo cuando el cliente no tiene historial de pagos"
+      },
+      "recurring": "Los cobros recurrentes (subvenciones, alquileres, suscripciones) se incorporan al pronóstico como categorías; configúrelos en el <cashCockpit>panel de tesorería</cashCockpit>.",
+      "documentation": "Leer la guía de cuentas por cobrar"
+    }
+  },
+  "paymentLinks": {
+    "title": "Enlaces de pago en línea",
+    "create": "Crear enlace",
+    "empty": "Sin enlaces de pago.",
+    "copyLink": "Copiar enlace",
+    "copied": "Copiado",
+    "void": "Anular",
+    "status": {
+      "active": "activo",
+      "paid": "pagado",
+      "void": "anulado",
+      "expired": "caducado"
+    }
+  }
+}

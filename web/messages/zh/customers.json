@@ -1,0 +1,64 @@
+{
+  "home": {
+    "title": "客户",
+    "description": "从客户关系到回款的工作区 — 商机、销售、开票与催收一站式管理。",
+    "subsidiary": "子公司",
+    "tabs": {
+      "overview": "概览"
+    },
+    "vitals": {
+      "openAr": "未收账款",
+      "openArSub": "{count} 张未结发票",
+      "overdue": "逾期",
+      "overdueSub": "{count} 张发票",
+      "pipeline": "商机（本季度）",
+      "pipelineSub": "加权 {weighted}",
+      "closedQuarter": "本季度已开票",
+      "dso": "应收周转天数",
+      "dsoSub": "平均回款天数",
+      "days": "{n} 天",
+      "activeCustomers": "活跃客户",
+      "quotesOrders": "未结报价与订单",
+      "quotesOrdersSub": "{quotes} 个报价 · {orders} 个订单",
+      "collectedWeek": "本周回款",
+      "collectedWeekSub": "{count} 笔收款 · 7 天"
+    },
+    "hero": {
+      "title": "重点客户",
+      "hint": "未结余额最大的客户及其商机",
+      "empty": "没有未收账款。",
+      "customer": "客户",
+      "openOpps": "商机",
+      "openInvoices": "发票",
+      "oldestDue": "最早到期",
+      "overdue": "逾期",
+      "open": "未结"
+    },
+    "trend": {
+      "title": "回款趋势",
+      "hint": "近 13 周已入账收款",
+      "series": "已收款"
+    },
+    "directory": {
+      "title": "工作区",
+      "opportunitiesHint": "个进行中商机",
+      "estimatesHint": "份未结报价",
+      "salesOrdersHint": "张未结销售订单",
+      "invoicesHint": "逾期 {overdue}",
+      "receiptsHint": "本周收款",
+      "customersHint": "位活跃客户"
+    },
+    "attention": {
+      "title": "需要关注",
+      "allClear": "一切正常 — 无需催收。",
+      "overdueCustomer": "{customer} 逾期 {amount}"
+    },
+    "pulse": {
+      "title": "应收脉搏",
+      "open": "未结",
+      "overdue": "逾期",
+      "dso": "DSO",
+      "cta": "打开应收账款"
+    }
+  }
+}

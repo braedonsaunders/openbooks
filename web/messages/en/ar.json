@@ -1,0 +1,165 @@
+{
+  "list": {
+    "title": "Invoices",
+    "description": "Customer invoices and credit memos — your accounts receivable: draft → approval → posted through the kernel.",
+    "searchPlaceholder": "Search invoices, credits, customers, refs…",
+    "emptyTitle": "No invoices yet",
+    "emptyDescription": "Enter the first customer invoice or credit memo to start the AR workflow.",
+    "columns": {
+      "number": "Number",
+      "invoice": "Invoice",
+      "ref": "Ref"
+    }
+  },
+  "kinds": {
+    "invoice": "Invoice",
+    "credit": "Credit"
+  },
+  "actions": {
+    "new": "New",
+    "newInvoice": "New invoice",
+    "newCredit": "New customer credit",
+    "submitForApproval": "Submit for approval"
+  },
+  "drawer": {
+    "editingHint": "Editing — Save to apply changes",
+    "viewGlImpact": "View GL impact",
+    "dateLabel": "Invoice date",
+    "dueDate": "Due date",
+    "reference": "Customer ref #",
+    "accountColumn": "Income account",
+    "accountPlaceholder": "Account…",
+    "noTax": "No tax",
+    "taxAmountColumn": "Tax amt",
+    "selectCustomerPlaceholder": "Select customer…",
+    "selectVendorPlaceholder": "Select vendor…",
+    "subtotalAmount": "Subtotal {amount}",
+    "taxTotalAmount": "Tax {amount}",
+    "totalAmount": "Total {amount}",
+    "balanceDueAmount": "Balance due {amount}",
+    "saveState": {
+      "saved": "All changes saved",
+      "error": "Save failed — fix and retry",
+      "dirty": "Unsaved changes…"
+    },
+    "deleteTitle": "Delete this document?",
+    "deleteDraftBody": "This permanently deletes the draft. This cannot be undone.",
+    "deletePostedBody": "This permanently deletes the document and removes its ledger impact. This cannot be undone.",
+    "formLabel": "Form",
+    "formSetPreferred": "Set as my preferred",
+    "formSetPreferredDone": "Preferred form saved",
+    "formPreferredCleared": "Preferred form cleared",
+    "formPreferredFailed": "Could not save the preferred form"
+  },
+  "toasts": {
+    "actionFailed": "Action failed",
+    "submitted": "Submitted for approval",
+    "posted": "Posted to the ledger",
+    "createDraftFailed": "Could not create a draft",
+    "deleted": "Document deleted",
+    "deleteFailed": "Delete failed"
+  },
+  "cockpit": {
+    "title": "Accounts Receivable",
+    "description": "Your receivables control center — what you're owed, what's overdue, and what to collect this week.",
+    "tabs": {
+      "overview": "Overview",
+      "invoices": "Invoices"
+    },
+    "current": "current",
+    "customer": "Customer",
+    "overdueCol": "Overdue",
+    "openCol": "Open",
+    "noReceivables": "No open receivables. Everything is collected.",
+    "customerSearch": "Search customers…",
+    "customerStatus": "Customer status",
+    "customerOverdueOnly": "Has overdue balance",
+    "configure": "How it works",
+    "configTitle": "Collections model",
+    "configDescription": "How the worklist is ordered and collection dates are predicted. Read-only — collections have no cap; the engine predicts when customers pay.",
+    "stats": {
+      "openReceivables": "Open receivables",
+      "overdue": "Overdue",
+      "overdueSub": "{count} invoices · {pct}% of open",
+      "expectedThisWeek": "Expected this week",
+      "next30": "Next 30 days",
+      "dso": "Days sales outstanding (DSO)",
+      "dsoSub": "Avg days to collect",
+      "days": "{n}d"
+    },
+    "panels": {
+      "worklist": "Collections worklist",
+      "aging": "Receivables aging",
+      "schedule": "Cash-in schedule",
+      "scheduleHint": "Predicted collections over {weeks} weeks — click a week",
+      "byCustomer": "Receivables by customer"
+    },
+    "worklist": {
+      "overdueToChase": "Overdue to chase",
+      "expectedThisWeek": "Expected this week",
+      "customer": "Customer",
+      "prediction": "Prediction",
+      "due": "Due",
+      "amount": "Amount",
+      "selected": "{count} selected · {amount}",
+      "build": "Build collection run",
+      "empty": "No collections predicted in the horizon.",
+      "search": "Search collections…",
+      "status": "Collection status",
+      "overdueOnly": "Overdue",
+      "upcoming": "Upcoming",
+      "selectInvoice": "Select invoice for {customer}",
+      "daysOverdue": "{count}d overdue",
+      "methods": {
+        "statistical": "Statistical",
+        "dueDate": "Due date",
+        "overduePush": "Overdue push",
+        "globalAverage": "Global average"
+      }
+    },
+    "model": {
+      "title": "How collections are predicted",
+      "worklistOrder": {
+        "label": "Worklist order",
+        "value": "Most overdue first",
+        "note": "The chase list sorts by days overdue, then largest amount — overdue invoices come pre-selected"
+      },
+      "prediction": {
+        "label": "Collection-date prediction",
+        "value": "Statistical → Due date → Global average",
+        "note": "Per-customer average collection days (+½σ buffer), floored at the due date"
+      },
+      "overduePush": {
+        "label": "Overdue push",
+        "value": "+7 / +14 / +28 days",
+        "note": "Overdue invoices move forward based on how overdue they are (≤30 / ≤60 / >60 days)"
+      },
+      "businessDay": {
+        "label": "Business-day adjustment",
+        "value": "On",
+        "note": "Predicted weekend dates move to the next business day"
+      },
+      "dso": {
+        "label": "Average days to collect (DSO)",
+        "value": "{dso}d",
+        "note": "Fallback used when a customer has no payment history"
+      },
+      "recurring": "Recurring inflows (grants, rent received, subscriptions) join the forecast as categories — configure them in the <cashCockpit>Cash cockpit</cashCockpit>.",
+      "documentation": "Read the accounts-receivable guide"
+    }
+  },
+  "paymentLinks": {
+    "title": "Online payment links",
+    "create": "Create link",
+    "empty": "No payment links yet.",
+    "copyLink": "Copy link",
+    "copied": "Copied",
+    "void": "Void",
+    "status": {
+      "active": "active",
+      "paid": "paid",
+      "void": "void",
+      "expired": "expired"
+    }
+  }
+}

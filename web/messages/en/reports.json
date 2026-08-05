@@ -1,0 +1,941 @@
+{
+  "hub": {
+    "title": "Reports",
+    "description": "Statements are computed live from the ledger — never cached snapshots.",
+    "savedViews": "Saved views",
+    "cards": {
+      "pnlTitle": "Profit & Loss",
+      "pnlDescription": "Income statement — fiscal-year presets, comparatives, breakout by department, custom layouts",
+      "balanceSheetTitle": "Balance Sheet",
+      "balanceSheetDescription": "Financial position as of any date, retained earnings computed",
+      "trialBalanceTitle": "Trial Balance",
+      "trialBalanceDescription": "Every account with debits, credits, and net balance",
+      "payablesTitle": "Payables by Vendor",
+      "payablesDescription": "Outstanding AP position per party",
+      "receivablesTitle": "Receivables by Customer",
+      "receivablesDescription": "Outstanding AR position per party",
+      "agingTitle": "AR / AP Aging",
+      "agingDescription": "Open-item balances per party, bucketed by age past due",
+      "cashFlowTitle": "Cash Flow Statement",
+      "cashFlowDescription": "Direct method — operating, investing and financing, tied to bank movements",
+      "generalLedgerTitle": "General Ledger",
+      "generalLedgerDescription": "Per-account posted activity with a running balance — the audit-ready detail behind every statement",
+      "journalTitle": "Journal",
+      "journalDescription": "Every posted journal entry with its lines — the chronological book of original entry",
+      "registersTitle": "A/R & A/P Registers",
+      "registersDescription": "Per-customer and per-vendor transaction registers with running balances",
+      "budgetTitle": "Budget vs Actual",
+      "budgetDescription": "Actuals against a budget scenario, by account, with variance $ and %",
+      "projectProfitabilityTitle": "Project Profitability",
+      "projectProfitabilityDescription": "Revenue, cost and margin by project — ties to the P&L, with approved job hours",
+      "ordersTitle": "Order pipeline",
+      "ordersDescription": "Open quotes, sales orders and purchase orders — count, value and conversion",
+      "cashFlowIndirectTitle": "Cash Flow (Indirect)",
+      "cashFlowIndirectDescription": "GAAP indirect method — net income reconciled to operating cash with working-capital detail"
+    },
+    "groups": {
+      "financial": "Financial Statements",
+      "ledger": "General Ledger",
+      "receivablesPayables": "Receivables & Payables",
+      "budgeting": "Budgeting",
+      "custom": "Custom & Saved",
+      "projects": "Projects",
+      "orders": "Sales & orders"
+    },
+    "customStudio": {
+      "title": "Custom report builder",
+      "description": "Build, save and schedule your own reports over the ledger"
+    },
+    "searchPlaceholder": "Search reports…",
+    "noMatches": "No reports match your search."
+  },
+  "statement": {
+    "sectionTotal": "Total {section}",
+    "other": "Other",
+    "otherTotal": "Total Other",
+    "accumulatedEarnings": "Accumulated earnings (computed)",
+    "translationAdjustment": "Cumulative translation adjustment"
+  },
+  "saveView": {
+    "namePrompt": "Name this view:",
+    "save": "Save view",
+    "savedToast": "Saved “{name}”",
+    "saveFailed": "Could not save this view"
+  },
+  "dimensionFilter": {
+    "departmentAria": "Department filter",
+    "allDepartments": "All departments",
+    "projectAria": "Project filter",
+    "allProjects": "All projects"
+  },
+  "filterBar": {
+    "period": "Period",
+    "subsidiary": "Subsidiary",
+    "asOf": "As of",
+    "from": "From",
+    "to": "To",
+    "customer": "Customer",
+    "allCustomers": "All customers",
+    "breakout": "Breakout",
+    "breakoutNone": "Total",
+    "breakoutOpts": {
+      "department": "Department",
+      "project": "Project",
+      "location": "Location",
+      "class": "Class",
+      "month": "Month",
+      "quarter": "Quarter"
+    },
+    "compare": "Compare",
+    "compareNone": "None",
+    "comparePriorPeriod": "Prior period",
+    "comparePriorYear": "Prior year",
+    "basis": "Basis",
+    "basisAccrual": "Accrual",
+    "basisCash": "Cash",
+    "department": "Department filter",
+    "project": "Project filter",
+    "location": "Location filter",
+    "class": "Class filter",
+    "allDepartments": "All departments",
+    "allProjects": "All projects",
+    "allLocations": "All locations",
+    "allClasses": "All classes",
+    "allSegment": "All {name}",
+    "scale": "Scale",
+    "scaleActual": "Actual",
+    "scaleThousands": "Thousands",
+    "scaleMillions": "Millions",
+    "showZeros": "Show zeros",
+    "truncated": "Some breakout columns were hidden to keep the report readable.",
+    "options": "Options",
+    "expandAll": "Expand all",
+    "collapseAll": "Collapse all",
+    "expandSection": "Expand {section}",
+    "collapseSection": "Collapse {section}"
+  },
+  "balanceSheet": {
+    "title": "Balance Sheet",
+    "asOf": "as of {date}",
+    "assets": "Assets",
+    "liabilities": "Liabilities",
+    "equity": "Equity",
+    "equation": "A = L + E",
+    "balanced": "balanced",
+    "offBy": "off by {amount}",
+    "liabilitiesAndEquity": "Total Liabilities and Equity"
+  },
+  "pnl": {
+    "title": "Profit & Loss",
+    "dateRange": "{from} → {to}",
+    "vsPriorYear": "vs prior year",
+    "revenue": "Revenue",
+    "grossProfit": "Gross profit",
+    "netIncome": "Net income",
+    "costOfGoodsSold": "Cost of Goods Sold",
+    "expenses": "Expenses",
+    "totalRevenue": "Total Revenue",
+    "columns": {
+      "current": "Current",
+      "priorYear": "Prior year",
+      "delta": "Δ",
+      "deltaPct": "Δ%"
+    }
+  },
+  "trialBalance": {
+    "title": "Trial Balance",
+    "description": "as of {date} · {count, plural, one {# account} other {# accounts}} with activity",
+    "columns": {
+      "debits": "Debits",
+      "credits": "Credits"
+    },
+    "totals": "Totals"
+  },
+  "partners": {
+    "payablesTitle": "Payables by Vendor",
+    "receivablesTitle": "Receivables by Customer",
+    "description": "Net position per party, from open-item ledger lines.",
+    "payables": "Payables",
+    "receivables": "Receivables",
+    "searchPlaceholder": "Search party…",
+    "totalOutstanding": "Total outstanding",
+    "partiesWithBalance": "Parties with balance",
+    "columns": {
+      "outstanding": "Outstanding",
+      "glLines": "GL lines"
+    },
+    "noPartyOnLines": "(no party on lines)"
+  },
+  "aging": {
+    "receivablesTitle": "AR Aging",
+    "payablesTitle": "AP Aging",
+    "asOf": "open items as of {date}",
+    "receivables": "Receivables",
+    "payables": "Payables",
+    "noParty": "(no party)",
+    "empty": "No open items as of this date.",
+    "columns": {
+      "total": "Total",
+      "due": "Due",
+      "age": "Age (days)",
+      "bucket": "Bucket"
+    },
+    "buckets": {
+      "current": "Current",
+      "b1": "1–30",
+      "b2": "31–60",
+      "b3": "61–90",
+      "b4": "90+"
+    },
+    "summary": "Summary",
+    "detail": "Detail"
+  },
+  "cashFlow": {
+    "title": "Cash Flow Statement",
+    "dateRange": "{from} → {to}",
+    "openingCash": "Opening cash",
+    "closingCash": "Closing cash",
+    "netChange": "Net change in cash",
+    "empty": "No cash movements in this period.",
+    "sections": {
+      "operating": "Operating activities",
+      "investing": "Investing activities",
+      "financing": "Financing activities"
+    },
+    "subtotal": "Net cash from {section}",
+    "reconciliation": "Opening + net change = closing",
+    "reconciled": "reconciled",
+    "offBy": "off by {amount}"
+  },
+  "cashFlowIndirect": {
+    "title": "Cash Flow Statement (Indirect Method)",
+    "dateRange": "{from} → {to}",
+    "openingCash": "Opening cash",
+    "closingCash": "Closing cash",
+    "netChange": "Net change in cash",
+    "empty": "No cash movements in this period.",
+    "netIncome": "Net income",
+    "adjustmentsHeader": "Adjustments to reconcile net income to net cash",
+    "wcHeader": "Changes in operating working capital",
+    "sections": {
+      "operating": "Operating activities",
+      "investing": "Investing activities",
+      "financing": "Financing activities"
+    },
+    "adjustments": {
+      "depreciation": "Depreciation and amortization",
+      "disposal": "(Gain) loss on disposal of assets",
+      "unrealizedFx": "Unrealized foreign exchange (gain) loss"
+    },
+    "subtotals": {
+      "operating": "Net cash provided by (used in) operating activities",
+      "investing": "Net cash provided by (used in) investing activities",
+      "financing": "Net cash provided by (used in) financing activities"
+    },
+    "fxEffect": "Effect of exchange rate changes on cash",
+    "reconciliation": "Opening + net change = closing",
+    "reconciled": "reconciled",
+    "offBy": "off by {amount}"
+  },
+  "custom": {
+    "kind": {
+      "builtIn": "Built-in",
+      "custom": "Custom"
+    },
+    "running": "Running…",
+    "list": {
+      "title": "Custom Reports",
+      "description": "Build, save, run and schedule reports over the ledger — detail rows or grouped summaries, with filters, breakouts and measures.",
+      "searchPlaceholder": "Search reports…",
+      "kindFilterLabel": "Kind",
+      "emptyTitle": "No reports yet",
+      "emptyDescription": "Build your first custom report to get started.",
+      "columns": {
+        "report": "Report",
+        "kind": "Kind"
+      },
+      "summarySummarize": "Summary of {source} · {groups, plural, one {# group} other {# groups}}, {measures, plural, one {# measure} other {# measures}}",
+      "summaryRows": "{source} detail · {columns, plural, one {# column} other {# columns}}"
+    },
+    "actions": {
+      "run": "Run",
+      "clone": "Clone",
+      "loadFailed": "Could not load report",
+      "cloneFailed": "Could not clone report",
+      "cloned": "Report cloned",
+      "copyName": "{name} (copy)",
+      "deleteConfirm": "Delete this report? Its schedules and run history are removed too.",
+      "deleteFailed": "Could not delete report",
+      "deleted": "Report deleted"
+    },
+    "newButton": {
+      "label": "New report",
+      "untitledName": "Untitled report",
+      "createFailed": "Could not create a report"
+    },
+    "filterTree": {
+      "match": "Match",
+      "allOfFollowing": "ALL of the following",
+      "anyOfFollowing": "ANY of the following",
+      "noConditions": "No conditions — the report returns every row.",
+      "addCondition": "Condition",
+      "addGroup": "Group",
+      "noValue": "(no value)",
+      "valuePlaceholder": "value",
+      "listPlaceholder": "comma-separated values",
+      "removeConditionAria": "Remove condition"
+    },
+    "resultView": {
+      "noRows": "No rows match this report."
+    },
+    "builder": {
+      "namePlaceholder": "Report name",
+      "descriptionPlaceholder": "Description (optional)",
+      "allChangesSaved": "All changes saved",
+      "unsavedChanges": "Unsaved changes…",
+      "runAndSchedule": "Run & schedule",
+      "source": "Source",
+      "mode": "Mode",
+      "detailRows": "Detail rows",
+      "summarize": "Summarize",
+      "sortBy": "Sort by",
+      "sortDefault": "Default",
+      "direction": "Direction",
+      "descending": "Descending",
+      "ascending": "Ascending",
+      "rowLimit": "Row limit",
+      "rowLimitHint": "Capped at 10,000 rows. Previews show the first {previewRows}.",
+      "pageSetup": {
+        "title": "PDF page setup",
+        "hint": "Controls how this report prints to PDF (paper, orientation, density, margins).",
+        "paper": "Paper size",
+        "paperLetter": "Letter",
+        "paperA4": "A4",
+        "paperLegal": "Legal",
+        "orientation": "Orientation",
+        "landscape": "Landscape",
+        "portrait": "Portrait",
+        "density": "Density",
+        "densityStandard": "Standard",
+        "densityCompact": "Compact (more rows per page)",
+        "marginMm": "Margins (mm)"
+      },
+      "livePreview": "Live preview",
+      "previewFailed": "Preview failed",
+      "runningPreview": "Running preview…",
+      "previewEmptyHint": "Adjust the report to see a live preview.",
+      "columns": "Columns",
+      "sectionBy": "Section by (optional)",
+      "noSections": "No sections",
+      "sectionByHint": "Buckets detail rows into titled sections by this column.",
+      "groupBy": "Group by",
+      "noGroupsHint": "No groups — measures roll up to a single grand total.",
+      "measures": "Measures",
+      "noBin": "No bin",
+      "removeGroupAria": "Remove group",
+      "removeMeasureAria": "Remove measure",
+      "bin": {
+        "day": "by day",
+        "week": "by week",
+        "month": "by month",
+        "quarter": "by quarter",
+        "year": "by year",
+        "fiscal_period": "by fiscal period",
+        "fiscal_quarter": "by fiscal quarter",
+        "fiscal_year": "by fiscal year"
+      },
+      "agg": {
+        "count": "Count of rows",
+        "countDistinct": "Distinct count",
+        "sum": "Sum",
+        "avg": "Average",
+        "min": "Min",
+        "max": "Max"
+      },
+      "running": "Running…",
+      "selectedColumns": "Selected columns",
+      "addColumn": "Add column",
+      "labelOverridePlaceholder": "Rename…",
+      "moveUpAria": "Move up",
+      "moveDownAria": "Move down",
+      "removeColumnAria": "Remove column",
+      "thenBy": "Then by",
+      "addSortLevel": "Add sort level",
+      "removeSortAria": "Remove sort level",
+      "noColumnsSelected": "No columns selected — add at least one.",
+      "tabs": {
+        "data": "Data",
+        "filter": "Filter",
+        "format": "Format"
+      }
+    },
+    "runner": {
+      "downloadCsv": "Download CSV",
+      "downloadPdf": "Download PDF",
+      "downloadXlsx": "Download Excel",
+      "runNow": "Run now",
+      "runFailed": "Report run failed",
+      "runComplete": "Report run complete",
+      "emptyHint": "Run the report to see results here. Runs are saved and downloadable as CSV.",
+      "scheduledDelivery": "Scheduled delivery",
+      "recentRuns": "Recent runs",
+      "columns": {
+        "trigger": "Trigger",
+        "rows": "Rows",
+        "finished": "Finished",
+        "delivery": "Delivery"
+      },
+      "status": {
+        "succeeded": "Succeeded",
+        "running": "Running",
+        "queued": "Queued",
+        "failed": "Failed"
+      },
+      "trigger": {
+        "manual": "Manual",
+        "scheduled": "Scheduled"
+      },
+      "deliveryEvidence": "{sent}/{total} sent · {failed} failed · {suppressed} suppressed",
+      "pdf": "PDF evidence",
+      "csv": "CSV"
+    }
+  },
+  "schedule": {
+    "updateFailed": "Update failed",
+    "paused": "Schedule paused",
+    "resumed": "Schedule resumed",
+    "deleteConfirm": "Delete this schedule?",
+    "deleted": "Schedule deleted",
+    "noScheduleYet": "No delivery schedule yet.",
+    "addOneHint": "Add one to email this report on a cadence.",
+    "pausedBadge": "Paused",
+    "pause": "Pause",
+    "resume": "Resume",
+    "deleteAria": "Delete schedule",
+    "recipientsTo": "To {emails}",
+    "noRecipients": "No recipients set",
+    "nextRun": "Next run {time}",
+    "addSchedule": "Add schedule",
+    "cadence": "Cadence",
+    "cadences": {
+      "daily": "Daily",
+      "weekly": "Weekly",
+      "monthly": "Monthly"
+    },
+    "dayOfWeek": "Day of week",
+    "weekdays": {
+      "sunday": "Sunday",
+      "monday": "Monday",
+      "tuesday": "Tuesday",
+      "wednesday": "Wednesday",
+      "thursday": "Thursday",
+      "friday": "Friday",
+      "saturday": "Saturday"
+    },
+    "dayOfMonth": "Day of month",
+    "time": "Time",
+    "timezone": "Timezone",
+    "recipients": "Recipients",
+    "recipientsPlaceholder": "finance@example.com, cfo@example.com",
+    "recipientsHint": "Comma-separated email addresses. Delivery is queued for the worker (see below).",
+    "saveSchedule": "Save schedule",
+    "saved": "Schedule saved",
+    "saveFailed": "Could not save schedule",
+    "describe": {
+      "daily": "Daily at {time} ({zone})",
+      "weekly": "Weekly on {day} at {time} ({zone})",
+      "monthly": "Monthly on day {dayOfMonth} at {time} ({zone})",
+      "weekdays": {
+        "sun": "Sunday",
+        "mon": "Monday",
+        "tue": "Tuesday",
+        "wed": "Wednesday",
+        "thu": "Thursday",
+        "fri": "Friday",
+        "sat": "Saturday"
+      }
+    }
+  },
+  "catalog": {
+    "entities": {
+      "ledger_lines": {
+        "label": "Ledger lines",
+        "description": "Every journal line with its entry, account, party and dimensions — the full general-ledger detail, posted or draft."
+      },
+      "documents": {
+        "label": "Transactions",
+        "description": "Every transaction — bills, invoices, credits, payments, expense reports, checks, card charges, journals, orders and quotes. Filter Type to focus on one or more kinds."
+      },
+      "parties": {
+        "label": "Parties",
+        "description": "Customers, vendors and employees — one row per party with its role flags and employee detail."
+      },
+      "accounts": {
+        "label": "Accounts",
+        "description": "The chart of accounts — number, name, type and posting flags."
+      },
+      "transaction_lines": {
+        "label": "Transaction lines",
+        "description": "Line-level transaction detail across every type — item, account, quantities, amounts, billing state and dimensions."
+      },
+      "journal_entries": {
+        "label": "Journal entries",
+        "description": "Journal-entry headers — number, posting date, status, origin and memo."
+      },
+      "items": {
+        "label": "Items",
+        "description": "The item & service catalog — services, inventory, labor, charges and discounts with rates and accounts."
+      },
+      "projects": {
+        "label": "Projects",
+        "description": "Projects / jobs — status, customer, billing method, schedule and PO number."
+      },
+      "timesheets": {
+        "label": "Time entries",
+        "description": "Timesheet entries — employee, date, hours, billable state, project and approval status."
+      },
+      "fixed_assets": {
+        "label": "Fixed assets",
+        "description": "The fixed-asset register — status, acquisition, cost, custodian and dimensions."
+      },
+      "tax_codes": {
+        "label": "Tax codes",
+        "description": "Tax codes — jurisdiction, scope and recoverability."
+      }
+    },
+    "columns": {
+      "ledger_lines": {
+        "posting_date": "Posting date",
+        "entry_number": "Entry #",
+        "entry_status": "Entry status",
+        "origin": "Origin",
+        "account_number": "Account #",
+        "account_name": "Account",
+        "account_type": "Account type",
+        "party_name": "Party",
+        "department": "Department",
+        "project": "Project",
+        "location": "Location",
+        "class": "Class",
+        "memo": "Memo",
+        "amount": "Amount (base)",
+        "currency": "Currency",
+        "txn_amount": "Amount (txn)",
+        "quantity": "Quantity",
+        "unit": "Unit",
+        "due_date": "Due date",
+        "is_open_item": "Open item",
+        "reconciled_at": "Reconciled at",
+        "entry_id": "Entry (id)",
+        "account_id": "Account (id)",
+        "party_id": "Party (id)"
+      },
+      "documents": {
+        "kind": "Type",
+        "document_number": "Document #",
+        "party_name": "Party",
+        "document_date": "Document date",
+        "posting_date": "Posting date",
+        "due_date": "Due date",
+        "status": "Status",
+        "currency": "Currency",
+        "subtotal": "Subtotal",
+        "tax_total": "Tax",
+        "total": "Total",
+        "reference_number": "Reference #",
+        "billing_method": "Billing method",
+        "payment_hold_reason": "Payment hold",
+        "expected_pay_date": "Expected pay date",
+        "department": "Department",
+        "project": "Project",
+        "memo": "Memo",
+        "created_at": "Created at",
+        "id": "Transaction (id)",
+        "party_id": "Party (id)",
+        "is_final_invoice": "Final invoice",
+        "location": "Location",
+        "class": "Class"
+      },
+      "parties": {
+        "display_name": "Name",
+        "legal_name": "Legal name",
+        "kind": "Kind",
+        "short_code": "Short code",
+        "email": "Email",
+        "phone": "Phone",
+        "is_active": "Active",
+        "is_customer": "Customer",
+        "is_vendor": "Vendor",
+        "is_employee": "Employee",
+        "employee_number": "Employee #",
+        "hired_on": "Hired on",
+        "terminated_on": "Terminated on",
+        "created_at": "Created at",
+        "id": "Party (id)"
+      },
+      "accounts": {
+        "number": "Account #",
+        "name": "Name",
+        "type": "Type",
+        "description": "Description",
+        "is_summary": "Summary",
+        "is_active": "Active",
+        "reconcilable": "Reconcilable",
+        "currency_restriction": "Currency restriction",
+        "created_at": "Created at",
+        "id": "Account (id)",
+        "parent_id": "Parent (id)"
+      },
+      "transaction_lines": {
+        "kind": "Type",
+        "document_number": "Document #",
+        "document_date": "Document date",
+        "status": "Status",
+        "party_name": "Party",
+        "line_number": "Line #",
+        "item_name": "Item",
+        "account_number": "Account #",
+        "account_name": "Account",
+        "description": "Description",
+        "quantity": "Quantity",
+        "unit": "Unit",
+        "unit_price": "Unit price",
+        "amount": "Amount",
+        "tax_amount": "Tax amount",
+        "is_billable": "Billable",
+        "quantity_fulfilled": "Qty fulfilled",
+        "quantity_billed": "Qty billed",
+        "employee_name": "Employee",
+        "department": "Department",
+        "project": "Project",
+        "location": "Location",
+        "class": "Class",
+        "created_at": "Created at",
+        "id": "Line (id)",
+        "document_id": "Transaction (id)"
+      },
+      "journal_entries": {
+        "entry_number": "Entry #",
+        "posting_date": "Posting date",
+        "status": "Status",
+        "origin": "Origin",
+        "memo": "Memo",
+        "created_at": "Created at",
+        "id": "Entry (id)",
+        "source_document_id": "Source transaction (id)"
+      },
+      "items": {
+        "code": "Code",
+        "name": "Name",
+        "kind": "Type",
+        "category": "Category",
+        "default_rate": "Default rate",
+        "unit": "Unit",
+        "income_account": "Income account",
+        "expense_account": "Expense account",
+        "show_on_timesheet": "On timesheets",
+        "is_active": "Active",
+        "created_at": "Created at",
+        "id": "Item (id)"
+      },
+      "projects": {
+        "code": "Code",
+        "name": "Name",
+        "status": "Status",
+        "customer_name": "Customer",
+        "manager_name": "Manager",
+        "billing_method": "Billing method",
+        "customer_po_number": "Customer PO #",
+        "starts_on": "Starts on",
+        "ends_on": "Ends on",
+        "is_active": "Active",
+        "created_at": "Created at",
+        "id": "Project (id)"
+      },
+      "timesheets": {
+        "employee_name": "Employee",
+        "worked_on": "Worked on",
+        "hours": "Hours",
+        "status": "Status",
+        "is_billable": "Billable",
+        "project": "Project",
+        "item_name": "Service item",
+        "department": "Department",
+        "memo": "Memo",
+        "created_at": "Created at",
+        "id": "Time entry (id)"
+      },
+      "fixed_assets": {
+        "asset_number": "Asset #",
+        "name": "Name",
+        "status": "Status",
+        "category": "Category",
+        "acquired_on": "Acquired on",
+        "in_service_on": "In service on",
+        "acquisition_cost": "Acquisition cost",
+        "salvage_value": "Salvage value",
+        "serial_number": "Serial #",
+        "custodian_name": "Custodian",
+        "project": "Project",
+        "department": "Department",
+        "created_at": "Created at",
+        "id": "Asset (id)"
+      },
+      "tax_codes": {
+        "code": "Code",
+        "name": "Name",
+        "country": "Country",
+        "region": "Region",
+        "applies_to": "Applies to",
+        "recoverable_percent": "Recoverable %",
+        "is_active": "Active",
+        "id": "Tax code (id)"
+      }
+    },
+    "enumValues": {
+      "vendor_bill": "Bill",
+      "vendor_credit": "Vendor credit",
+      "vendor_payment": "Bill payment",
+      "customer_invoice": "Invoice",
+      "customer_credit": "Credit memo",
+      "customer_payment": "Customer payment",
+      "expense_report": "Expense report",
+      "check": "Check",
+      "card_charge": "Card charge",
+      "card_refund": "Card refund",
+      "transfer": "Transfer",
+      "journal": "Journal",
+      "purchase_order": "Purchase order",
+      "sales_order": "Sales order",
+      "quote": "Quote",
+      "draft": "Draft",
+      "pending_approval": "Pending approval",
+      "approved": "Approved",
+      "posted": "Posted",
+      "voided": "Voided",
+      "reversed": "Reversed",
+      "submitted": "Submitted",
+      "rejected": "Rejected",
+      "time_and_materials": "Time & materials",
+      "fixed_price": "Fixed price",
+      "cost_plus": "Cost plus",
+      "service": "Service",
+      "non_inventory": "Non-inventory",
+      "inventory": "Inventory",
+      "assembly": "Assembly",
+      "kit": "Kit",
+      "other_charge": "Other charge",
+      "labor": "Labor",
+      "absence": "Absence",
+      "discount": "Discount",
+      "quoted": "Quoted",
+      "awarded": "Awarded",
+      "active": "Active",
+      "substantially_complete": "Substantially complete",
+      "closed": "Closed",
+      "cancelled": "Cancelled",
+      "in_service": "In service",
+      "fully_depreciated": "Fully depreciated",
+      "disposed": "Disposed",
+      "written_off": "Written off",
+      "sales": "Sales",
+      "purchases": "Purchases",
+      "both": "Both"
+    }
+  },
+  "operators": {
+    "eq": "equals",
+    "neq": "not equals",
+    "in": "is any of",
+    "not_in": "is none of",
+    "gte": "on or after / ≥",
+    "lte": "on or before / ≤",
+    "is_null": "is empty",
+    "is_not_null": "is set",
+    "is_true": "is yes",
+    "is_false": "is no",
+    "contains": "contains",
+    "between_days_ago": "within last N days",
+    "due_within_days": "due within next N days",
+    "since_today": "is today",
+    "this_week": "is this week",
+    "this_month": "is this month",
+    "this_year": "is this year",
+    "before_now": "is in the past (overdue)",
+    "period_preset": "in fiscal period"
+  },
+  "aggs": {
+    "count": "Count",
+    "count_distinct": "Distinct count",
+    "sum": "Sum",
+    "avg": "Average",
+    "min": "Min",
+    "max": "Max"
+  },
+  "run": {
+    "results": "Results",
+    "summary": "Summary",
+    "section": "{label}: {value}",
+    "rowCount": "{count, plural, one {# row} other {# rows}}",
+    "groupCount": "{count, plural, one {# group} other {# groups}}",
+    "summaryRows": "Rows",
+    "summaryGroups": "Groups",
+    "summarySource": "Source",
+    "summaryTotal": "Total {measure}",
+    "none": "(none)",
+    "yes": "yes",
+    "no": "no",
+    "measureOf": "{fn} of {column}",
+    "breakoutBy": "{column} (by {bin})",
+    "bins": {
+      "day": "day",
+      "week": "week",
+      "month": "month",
+      "quarter": "quarter",
+      "year": "year",
+      "fiscal_period": "fiscal period",
+      "fiscal_quarter": "fiscal quarter",
+      "fiscal_year": "fiscal year"
+    },
+    "csvSection": "Section"
+  },
+  "export": {
+    "pdf": "PDF",
+    "xlsx": "Excel",
+    "csv": "CSV",
+    "columns": {
+      "accountNumber": "Account #",
+      "accountName": "Account",
+      "amount": "Amount",
+      "balance": "Balance",
+      "type": "Type",
+      "party": "Party",
+      "latestDue": "Latest due"
+    },
+    "print": "Print",
+    "printFailed": "Could not open the print dialog",
+    "export": "Export"
+  },
+  "builtIns": {
+    "ap-aging-by-vendor": {
+      "name": "AP aging by vendor",
+      "description": "Open payable ledger lines summed per vendor and due month. Negative totals are amounts owed (credit-normal payables)."
+    },
+    "open-ar-by-customer": {
+      "name": "Open AR by customer",
+      "description": "Outstanding receivable balance per customer from open ledger items. Positive totals are amounts owed to you."
+    },
+    "gl-activity-by-account-fy": {
+      "name": "GL activity by account (this FY)",
+      "description": "Posted journal activity this year, one row per account: net movement and line count. Covers the calendar year."
+    },
+    "expense-detail-by-department-fy": {
+      "name": "Expense detail by department (this FY)",
+      "description": "Posted expense and COGS lines this year, sectioned by department — date, entry, account, party, memo and amount."
+    }
+  },
+  "generalLedger": {
+    "title": "General Ledger",
+    "empty": "No posted activity in this period.",
+    "truncated": "Showing the first 5,000 lines — narrow the period or filter to an account to see everything.",
+    "opening": "Opening balance",
+    "closing": "Closing balance",
+    "columns": {
+      "date": "Date",
+      "entry": "Entry",
+      "detail": "Party / memo"
+    }
+  },
+  "journal": {
+    "title": "Journal",
+    "empty": "No posted entries in this period.",
+    "truncated": "Showing the first 4,000 lines — narrow the period to see everything.",
+    "columns": {
+      "detail": "Party / memo"
+    }
+  },
+  "registers": {
+    "arTitle": "A/R Register",
+    "apTitle": "A/P Register",
+    "receivables": "Receivables",
+    "payables": "Payables",
+    "truncated": "Showing the first 4,000 lines — narrow the period to see everything.",
+    "empty": "No activity in this period.",
+    "closing": "Closing"
+  },
+  "budget": {
+    "title": "Budget vs Actual",
+    "description": "Actual ledger activity against a budget scenario, by account.",
+    "noScenarios": "No budget scenarios yet. Create one to compare against actuals.",
+    "scenario": "Scenario",
+    "scenarioOption": "{name} · FY{year} · {status}",
+    "manage": "Manage budgets",
+    "actual": "Actual",
+    "budget": "Budget",
+    "variance": "Variance",
+    "variancePct": "Variance %"
+  },
+  "statements": {
+    "title": "Account Statement",
+    "opening": "Opening balance",
+    "closing": "Closing balance"
+  },
+  "detail": {
+    "title": "Transaction Detail",
+    "netTotal": "Net total",
+    "truncated": "Showing the first 2,000 lines — narrow the report to see everything.",
+    "empty": "No transactions behind this value.",
+    "backTo": "Back to {report}"
+  },
+  "drillDrawer": {
+    "title": "Supporting records",
+    "supporting": "The records behind the selected report value.",
+    "loadFailed": "Could not load the supporting records.",
+    "recordLoadFailed": "Could not open the transaction."
+  },
+  "flyout": {
+    "title": "Journal entry",
+    "openTransaction": "Open full transaction"
+  },
+  "projectProfitability": {
+    "title": "Project Profitability",
+    "empty": "No project activity in this period.",
+    "searchPlaceholder": "Search customers or jobs…",
+    "noCustomer": "Unassigned customer",
+    "expandCustomer": "Expand {customer}",
+    "collapseCustomer": "Collapse {customer}",
+    "projectScope": "Projects",
+    "activeProjects": "Active projects",
+    "allProjects": "All projects",
+    "columns": {
+      "customerJob": "Customer / Job",
+      "project": "Project",
+      "customer": "Customer",
+      "revenue": "Revenue",
+      "cogs": "COGS",
+      "grossProfit": "Gross profit",
+      "expenses": "Expenses",
+      "net": "Net profit",
+      "margin": "Margin",
+      "hours": "Hours"
+    }
+  },
+  "orders": {
+    "title": "Order pipeline",
+    "description": "Open backlog and conversion for quotes, sales orders and purchase orders.",
+    "columns": {
+      "type": "Type",
+      "open": "Open",
+      "openValue": "Open value",
+      "converted": "Converted",
+      "convRate": "Conversion",
+      "voided": "Voided"
+    },
+    "kinds": {
+      "quote": "Estimates",
+      "sales_order": "Sales orders",
+      "purchase_order": "Purchase orders"
+    },
+    "note": "Conversion is tracked via transaction links; historical source links may require migration."
+  }
+}

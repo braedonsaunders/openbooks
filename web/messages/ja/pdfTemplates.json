@@ -1,0 +1,54 @@
+{
+  "title": "PDF テンプレート",
+  "description": "美しい印刷用書類を作成し、請求書、仕訳、その他すべての取引に割り当てます",
+  "newTemplate": "新規テンプレート",
+  "list": {
+    "name": "名称",
+    "paper": "用紙",
+    "default": "既定",
+    "builtInStarter": "組み込みスターター",
+    "builtIn": "組み込み",
+    "starterHint": "カスタムテンプレートが存在しない場合に印刷されます — 複製してカスタマイズできます",
+    "duplicate": "複製",
+    "isDefault": "既定"
+  },
+  "editor": {
+    "back": "PDF テンプレート",
+    "design": "デザイン",
+    "code": "HTML",
+    "preview": "プレビュー",
+    "margins": "余白",
+    "portrait": "縦向き",
+    "landscape": "横向き",
+    "headerPlaceholder": "ランニングヘッダー(任意) — 差し込みトークンを使用できます",
+    "footerPlaceholder": "ランニングフッター — ページ番号に対応",
+    "saved": "テンプレートを保存しました",
+    "saveFailed": "保存に失敗しました",
+    "makeDefault": "このレコードタイプの既定にする",
+    "active": "有効",
+    "previewHint": "実際の書類を印刷するエンジンそのものでレンダリングし、最新のレコードと差し込んでいます。",
+    "refreshPreview": "プレビューを更新",
+    "previewFailed": "プレビューに失敗しました",
+    "deleteConfirm": "このテンプレートを削除しますか?レコードは既定のデザインにフォールバックします。",
+    "blockContent": "コンテンツ",
+    "blockFields": "レコードフィールド",
+    "blockTables": "テーブル"
+  },
+  "pdfButton": {
+    "label": "PDF",
+    "defaultTemplate": "標準デザイン",
+    "failed": "PDF テンプレートを読み込めませんでした"
+  },
+  "send": {
+    "label": "送信",
+    "to": "宛先",
+    "toPlaceholder": "customer@example.com",
+    "message": "メッセージ(任意)",
+    "messagePlaceholder": "メモを追加…",
+    "action": "メールを送信",
+    "sending": "送信中…",
+    "sent": "{to} に送信しました",
+    "noRecipient": "宛先のメールアドレスを入力してください",
+    "failed": "メールを送信できませんでした"
+  }
+}

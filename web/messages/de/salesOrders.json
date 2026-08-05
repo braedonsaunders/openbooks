@@ -1,0 +1,12 @@
+{
+  "list": {
+    "title": "Kundenaufträge",
+    "description": "Bestätigte Kundenaufträge — ausstellen und dann bei der Abrechnung in eine Ausgangsrechnung umwandeln.",
+    "searchPlaceholder": "Kundenaufträge, Kunden, Notiz durchsuchen…",
+    "converted": "Umgewandelt",
+    "emptyTitle": "Noch keine Kundenaufträge",
+    "emptyDescription": "Erstellen Sie einen Kundenauftrag oder wandeln Sie einen aus einem Angebot um.",
+    "newButton": "Neuer Kundenauftrag",
+    "createDraftFailed": "Kundenauftragsentwurf konnte nicht erstellt werden"
+  }
+}

@@ -1,0 +1,162 @@
+{
+  "list": {
+    "metaTitle": "文档",
+    "title": "文件柜",
+    "description": "浏览、上传和管理整个组织的文档。",
+    "searchPlaceholder": "搜索文件和文件夹…",
+    "allFiles": "所有文件",
+    "rootFolder": "文件柜",
+    "systemAttachments": "附件",
+    "empty": {
+      "title": "此文件夹中没有文件",
+      "description": "上传文件或创建文件夹以开始。",
+      "allTitle": "尚无文件",
+      "allDescription": "上传您的第一个文件以填充文件柜。"
+    },
+    "folderRow": "文件夹"
+  },
+  "systemFolders": { "apCapture": "应付采集" },
+  "columns": {
+    "name": "名称",
+    "size": "大小",
+    "modified": "修改时间",
+    "createdBy": "创建人",
+    "type": "类型",
+    "location": "位置"
+  },
+  "folderTree": {
+    "expand": "展开",
+    "collapse": "折叠"
+  },
+  "actions": {
+    "newFolder": "新建文件夹",
+    "upload": "上传",
+    "download": "下载",
+    "rename": "重命名",
+    "move": "移动",
+    "replace": "替换",
+    "delete": "删除",
+    "attachExisting": "附加现有文件",
+    "detach": "取消附加"
+  },
+  "folder": {
+    "create": {
+      "title": "新建文件夹",
+      "description": "创建文件夹以整理您的文件。",
+      "nameLabel": "文件夹名称",
+      "namePlaceholder": "文件夹名称",
+      "parentLabel": "上级文件夹",
+      "submit": "创建文件夹"
+    },
+    "edit": {
+      "title": "编辑文件夹",
+      "nameLabel": "文件夹名称",
+      "parentLabel": "上级文件夹",
+      "private": "私有文件夹",
+      "privateHint": "只有您和管理员可以看到此文件夹。",
+      "inactive": "停用",
+      "inactiveHint": "在列表中隐藏此文件夹。",
+      "save": "保存"
+    },
+    "delete": {
+      "title": "删除此文件夹？",
+      "body": "此文件夹中的所有文件将被永久删除。此操作无法撤销。"
+    },
+    "systemNoDelete": "系统文件夹无法删除或重命名。",
+    "subfolderCount": "{count, plural, one {# 个文件夹} other {# 个文件夹}}",
+    "fileCount": "{count, plural, one {# 个文件} other {# 个文件}}",
+    "deleteBlocked": "此文件夹包含已附加到记录的文件，无法删除。"
+  },
+  "file": {
+    "drawer": {
+      "title": "文件详情",
+      "name": "名称",
+      "folder": "文件夹",
+      "type": "类型",
+      "size": "大小",
+      "created": "创建时间",
+      "createdBy": "创建人",
+      "modified": "修改时间",
+      "modifiedBy": "修改人",
+      "versions": "版本",
+      "version": "版本 {number}",
+      "current": "当前",
+      "noVersions": "无历史版本。",
+      "moveTo": "移动到文件夹",
+      "replaceTitle": "替换文件",
+      "replaceBody": "上传此文件的新版本。旧版本将保留在版本历史中。",
+      "attachedTo": "已附加到记录",
+      "notAttached": "未附加到任何记录。",
+      "delete": {
+        "title": "删除此文件？",
+        "body": "该文件将从文件柜中永久删除，并从所有记录中取消附加。此操作无法撤销。"
+      }
+    },
+    "preview": {
+      "title": "预览",
+      "loading": "加载文件中…",
+      "loadFailed": "无法加载此文件的内容。",
+      "tooLarge": "此文件过大，无法在此预览。",
+      "unsupported": "此文件类型无法预览。请下载后打开。"
+    }
+  },
+  "upload": {
+    "dropFiles": "将文件拖放到此处或<browse>浏览</browse>",
+    "acceptHint": "PDF、图片、CSV、XLSX、DOCX、TXT · 最大 25 MB",
+    "tooLarge": "{name} 超过 25 MB 限制",
+    "uploading": "{count, plural, one {正在上传 # 个文件…} other {正在上传 # 个文件…}}",
+    "selectFolder": "选择要上传到的文件夹…"
+  },
+  "attach": {
+    "title": "附加文件",
+    "description": "将文件柜中的文件附加到此记录。",
+    "searchPlaceholder": "搜索文件…",
+    "empty": "未找到文件。",
+    "attachExisting": "附加现有文件",
+    "uploadNew": "上传新文件"
+  },
+  "toasts": {
+    "folderCreated": "文件夹已创建",
+    "folderCreateFailed": "无法创建文件夹",
+    "folderRenamed": "文件夹已重命名",
+    "folderRenameFailed": "无法重命名文件夹",
+    "folderMoved": "文件夹已移动",
+    "folderMoveFailed": "无法移动文件夹",
+    "folderDeleted": "文件夹已删除",
+    "folderDeleteFailed": "无法删除文件夹",
+    "fileRenamed": "文件已重命名",
+    "fileRenameFailed": "无法重命名文件",
+    "fileMoved": "文件已移动",
+    "fileMoveFailed": "无法移动文件",
+    "fileDeleted": "文件已删除",
+    "fileDeleteFailed": "无法删除文件",
+    "fileReplaced": "新版本已上传",
+    "fileReplaceFailed": "无法上传新版本",
+    "uploaded": "已上传 {name}",
+    "uploadFailed": "无法上传 {name}",
+    "attached": "文件已附加",
+    "attachFailed": "无法附加文件",
+    "detached": "文件已取消附加",
+    "detachFailed": "无法取消附加文件",
+    "linkCopied": "链接已复制",
+    "linkCopyFailed": "无法复制链接"
+  },
+  "fileTypes": {
+    "pdf": "PDF",
+    "image": "图片",
+    "csv": "CSV",
+    "spreadsheet": "电子表格",
+    "document": "文档",
+    "text": "文本",
+    "other": "文件"
+  },
+  "rowMenu": {
+    "open": "打开",
+    "openFolder": "打开文件夹",
+    "copyLink": "复制链接"
+  },
+  "rename": {
+    "fileTitle": "重命名文件",
+    "folderTitle": "重命名文件夹"
+  }
+}

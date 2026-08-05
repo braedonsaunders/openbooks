@@ -1,0 +1,193 @@
+{
+  "list": {
+    "title": "Items & Services",
+    "description": "The catalog behind every document line — services, labor, charges, and discounts.",
+    "searchPlaceholder": "Search name, code, category…",
+    "kindFilter": "Kind",
+    "emptyTitle": "No items yet",
+    "emptyDescription": "Add the first service, labor, or charge to start the catalog.",
+    "newButton": "New item",
+    "createDraftFailed": "Could not create a draft item",
+    "view": "View",
+    "viewCatalog": "Catalog",
+    "viewRateBooks": "Rate books"
+  },
+  "labels": {
+    "code": "Code",
+    "kind": "Kind",
+    "category": "Category",
+    "unit": "Unit",
+    "defaultRate": "Price",
+    "defaultCost": "Cost",
+    "recoveryAccount": "Cost recovery account",
+    "incomeAccount": "Income account",
+    "expenseAccount": "Expense account",
+    "taxCode": "Tax code"
+  },
+  "kinds": {
+    "service": "Service",
+    "non_inventory": "Non-inventory",
+    "inventory": "Inventory",
+    "assembly": "Assembly",
+    "kit": "Kit",
+    "other_charge": "Other charge",
+    "labor": "Labor",
+    "absence": "Absence",
+    "discount": "Discount",
+    "equipment_charge": "Equipment charge"
+  },
+  "drawer": {
+    "newItem": "New item",
+    "autosaveHint": "Changes save automatically.",
+    "activate": "Activate",
+    "deactivate": "Deactivate",
+    "nameToActivate": "Name the item to activate it",
+    "activated": "Item activated",
+    "deactivated": "Item deactivated",
+    "updateFailed": "Update failed",
+    "autosaveFailed": "Autosave failed",
+    "allSaved": "All changes saved",
+    "saveFailedRetry": "Save failed — fix and retry",
+    "unsavedChanges": "Unsaved changes…",
+    "namePlaceholder": "Item or service name…",
+    "codePlaceholder": "SVC-01",
+    "categoryPlaceholder": "Services",
+    "unitPlaceholder": "hr",
+    "noIncomeAccount": "No income account",
+    "noExpenseAccount": "No expense account",
+    "noRecoveryAccount": "No recovery account",
+    "selectAccount": "Select account…",
+    "showOnTimesheet": "Show on timesheet"
+  },
+  "rates": {
+    "title": "Advanced rate pricing",
+    "description": "Optional dated, scoped, or package-tier pricing. Ordinary items use the Price and Cost above without a rate book.",
+    "documentation": "Documentation",
+    "configure": "Configure rate pricing",
+    "newVersion": "New rate version",
+    "notSet": "Not set",
+    "guide": {
+      "title": "How pricing works for this item",
+      "simpleMode": "Simple Price & Cost",
+      "advancedMode": "Advanced rates enabled",
+      "simpleDescription": "This item prices directly from its Price and Cost. No dates or rate-book assignment are required.",
+      "advancedDescription": "Matching rate books and tiers override the simple values; Price and Cost remain the final fallback.",
+      "price": "Customer price",
+      "priceHelp": "The amount charged per unit when no advanced bill rate matches.",
+      "cost": "Internal cost",
+      "costHelp": "The job-cost amount per unit; it is not the customer price.",
+      "advanced": "Rate profile",
+      "configured": "Configured · base unit {unit}",
+      "notConfigured": "Not configured",
+      "advancedHelp": "Supports dated rate books, day/week/month packages, currencies, and scoped overrides.",
+      "simpleHelp": "Configure this only when the item needs more than one simple Price and Cost.",
+      "resolutionTitle": "Resolution order",
+      "simpleResolution": "Item Price → customer charge. Item Cost → internal job cost.",
+      "advancedResolution": "Project rate book → customer rate book → equipment-unit override → organization assignment → default rate book → item Price/Cost fallback.",
+      "rateTypes": "Cost rate is internal cost; bill rate is customer price. Time-type rates only override labor premiums such as overtime. Fair-value prices are for revenue allocation and never choose the transaction price."
+    },
+    "rateBook": "Rate book",
+    "standardBook": "Standard rate book",
+    "effectiveFrom": "Effective from",
+    "effectiveTo": "Effective to",
+    "baseUnit": "Base unit",
+    "policy": "Pricing policy",
+    "presentation": "Invoice presentation",
+    "defaults": {
+      "day": "Day",
+      "week": "Week",
+      "month": "Month"
+    },
+    "policies": {
+      "capped_ladder": "Capped ladder",
+      "lowest_cost": "Lowest-cost combination"
+    },
+    "presentations": {
+      "rate_components": "Show rate components",
+      "summary": "Single summary line"
+    },
+    "unitCode": "Unit code",
+    "unitName": "Unit name",
+    "baseQuantity": "Base quantity",
+    "costRate": "Cost rate",
+    "billRate": "Bill rate",
+    "addUnit": "Add rate unit",
+    "saveFailed": "Could not save rates",
+    "saved": "Rate version saved",
+    "empty": "No rate versions yet.",
+    "rates": "Rates",
+    "tierOverrides": "Time-type rates:",
+    "tierAuto": "auto"
+  },
+  "costing": {
+    "title": "Inventory costing",
+    "description": "How stock for this item is valued and tracked — method, accounts, and reorder points.",
+    "configure": "Configure costing",
+    "empty": "No costing profile yet — configure one before receiving stock.",
+    "method": "Costing method",
+    "methods": {
+      "fifo": "FIFO",
+      "moving_average": "Moving average",
+      "standard": "Standard cost"
+    },
+    "tracking": "Tracking",
+    "trackingOptions": {
+      "none": "None",
+      "lot": "Lot",
+      "serial": "Serial"
+    },
+    "baseUnit": "Base unit",
+    "assetAccount": "Inventory asset account",
+    "cogsAccount": "COGS account",
+    "adjustmentAccount": "Adjustment account",
+    "varianceAccount": "Variance account",
+    "receivedNotBilledAccount": "Received-not-billed account",
+    "standardCost": "Standard cost",
+    "reorderPoint": "Reorder point",
+    "preferredStockLevel": "Preferred stock level",
+    "selectAccount": "Select an account",
+    "allowNegativeInventory": "Allow negative inventory",
+    "negativeCostBasis": "Provisional cost basis",
+    "provisionalUnitCost": "Configured provisional unit cost",
+    "negativeCostBasisOptions": {
+      "last_receipt": "Last receipt cost",
+      "standard": "Standard cost",
+      "configured": "Configured cost"
+    }
+  },
+  "fairValue": {
+    "title": "Fair value prices",
+    "description": "Dated standalone selling prices (SSP) per currency, used to allocate bundle revenue across obligations.",
+    "new": "New price",
+    "currency": "Currency",
+    "unitPrice": "Unit price",
+    "lowValue": "Low value",
+    "highValue": "High value",
+    "effectiveFrom": "Effective from",
+    "effectiveTo": "Effective to",
+    "empty": "No fair value prices yet — the single SSP above is used.",
+    "confirmDelete": "Remove this fair value price?"
+  },
+  "revrec": {
+    "title": "Revenue recognition",
+    "hint": "Defer and recognize this item's revenue over time (ASC 606)",
+    "rule": "Recognition rule",
+    "noRule": "Recognize immediately",
+    "selectRule": "Select a rule",
+    "deferredAccount": "Deferred revenue account",
+    "ruleDefault": "Use rule default",
+    "standaloneSellingPrice": "Standalone selling price",
+    "createPlansOn": "Create plan on",
+    "createPlansOnOptions": {
+      "billing": "Billing",
+      "fulfillment": "Fulfillment",
+      "arrangement": "Arrangement creation"
+    },
+    "allocation": "Revenue allocation",
+    "allocationOptions": {
+      "normal": "Normal",
+      "exclude": "Exclude",
+      "software": "Software (residual)"
+    }
+  }
+}

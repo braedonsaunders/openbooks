@@ -1,0 +1,361 @@
+{
+  "title": "Subcontractor Compliance",
+  "description": "Certificates of insurance, lien waivers, and year-end information returns for the people you pay.",
+  "tabs": {
+    "overview": "Overview",
+    "vendors": "Subcontractors",
+    "lienWaivers": "Lien Waivers",
+    "informationReturns": "Information Returns"
+  },
+  "setup": {
+    "prompt": "Nothing is enforced yet. Define the counterparty classes and the certificates each one must carry.",
+    "action": "Configure compliance"
+  },
+  "stats": {
+    "tracked": "Tracked subcontractors",
+    "trackedHint": "{count} policies in force",
+    "compliant": "Covered",
+    "compliantHint": "{expiring} expiring soon",
+    "blocked": "Blocked",
+    "blockedHint": "{bills} bills affected",
+    "exposure": "Blocked exposure",
+    "exposureHint": "Payable that cannot be released"
+  },
+  "panels": {
+    "blocked": "Payments the control is holding",
+    "blockedHint": "Re-evaluated live against today's evidence",
+    "blockedEmpty": "Nothing is being held. Every open subcontractor bill clears.",
+    "expiring": "Expiring this month",
+    "expiringHint": "Chase these before they lapse",
+    "expiringEmpty": "No certificate is inside its warning window.",
+    "waivers": "Lien waivers outstanding",
+    "waiversHint": "Requested or received but not yet signed",
+    "waiversEmpty": "No waiver is waiting on a signature.",
+    "waiversAction": "All waivers",
+    "readiness": "1099 readiness — {year}",
+    "readinessHint": "Fix these before January",
+    "readinessEmpty": "Every reportable vendor has what a filing needs.",
+    "readinessAction": "Filings"
+  },
+  "empty": {
+    "title": "No subcontractors are being tracked yet",
+    "description": "Assign a compliance class to a vendor to start requiring certificates of it."
+  },
+  "states": {
+    "compliant": "Covered",
+    "expiring": "Expiring",
+    "waived": "Waived",
+    "missing": "Missing",
+    "expired": "Expired",
+    "insufficient": "Insufficient",
+    "awaiting_verification": "Unverified",
+    "rejected": "Rejected"
+  },
+  "reasons": {
+    "no_evidence": "nothing on file",
+    "rejected": "rejected",
+    "awaiting_verification": "awaiting verification",
+    "not_yet_effective": "not yet effective",
+    "expired": "expired",
+    "coverage_below_minimum": "per-occurrence limit below the minimum",
+    "aggregate_below_minimum": "aggregate limit below the minimum",
+    "coverage_currency_mismatch": "limit stated in another currency",
+    "coverage_amount_missing": "no limit shown on the certificate",
+    "missing_additional_insured": "not named as additional insured",
+    "missing_waiver_of_subrogation": "no waiver of subrogation",
+    "missing_primary_noncontributory": "not primary and non-contributory"
+  },
+  "decision": {
+    "cleared": "Clear",
+    "warned": "Warning",
+    "blocked": "Blocked",
+    "overridden": "Overridden"
+  },
+  "certificateStatus": {
+    "pending_review": "Pending review",
+    "active": "Verified",
+    "rejected": "Rejected",
+    "superseded": "Superseded"
+  },
+  "waiverStatus": {
+    "draft": "Draft",
+    "requested": "Requested",
+    "received": "Received",
+    "signed": "Signed",
+    "rejected": "Rejected",
+    "void": "Void"
+  },
+  "filingStatus": {
+    "draft": "Draft",
+    "computed": "Computed",
+    "finalized": "Finalized",
+    "filed": "Filed",
+    "void": "Void"
+  },
+  "recipientStatus": {
+    "included": "Filing",
+    "excluded": "Excluded",
+    "corrected": "Corrected",
+    "void": "Void"
+  },
+  "filingChannel": {
+    "iris": "IRS IRIS",
+    "fire": "IRS FIRE",
+    "provider": "Filing provider",
+    "paper": "Paper",
+    "other": "Other"
+  },
+  "direction": {
+    "received": "From subcontractor",
+    "issued": "Issued by us"
+  },
+  "waiverType": {
+    "conditional_progress": "Conditional — progress",
+    "unconditional_progress": "Unconditional — progress",
+    "conditional_final": "Conditional — final",
+    "unconditional_final": "Unconditional — final"
+  },
+  "waiverTypeHint": {
+    "conditional_progress": "Releases work through the date only once the payment clears the bank.",
+    "unconditional_progress": "Releases work through the date immediately — even if the payment is never honoured.",
+    "conditional_final": "Releases the entire contract, including retention, once final payment clears.",
+    "unconditional_final": "Releases the entire contract, including retention, immediately and unconditionally."
+  },
+  "taxClassification": {
+    "individual": "Individual",
+    "sole_proprietor": "Sole proprietor",
+    "partnership": "Partnership",
+    "c_corp": "C corporation",
+    "s_corp": "S corporation",
+    "llc": "LLC",
+    "trust_estate": "Trust or estate",
+    "government": "Government",
+    "nonprofit": "Non-profit",
+    "other": "Other"
+  },
+  "tinType": {
+    "ein": "EIN",
+    "ssn": "SSN",
+    "itin": "ITIN",
+    "atin": "ATIN",
+    "sin": "SIN (Canada)",
+    "bn": "Business Number (Canada)",
+    "unknown": "Unknown"
+  },
+  "readiness": {
+    "unflagged": "Paid over the threshold but not flagged reportable",
+    "missingTin": "No TIN on file",
+    "noForm": "No information return assigned"
+  },
+  "vendors": {
+    "title": "Subcontractor compliance matrix",
+    "description": "One row per tracked subcontractor, one column per policy. The same evaluation the pay run performs.",
+    "columns": {
+      "vendor": "Subcontractor",
+      "class": "Class",
+      "status": "Status",
+      "exposure": "Open payable"
+    },
+    "filters": {
+      "class": "Class",
+      "allClasses": "All classes",
+      "state": "Status",
+      "allStates": "All statuses",
+      "attention": "Needs attention",
+      "expiring": "Expiring soon"
+    },
+    "empty": {
+      "title": "No tracked subcontractors match",
+      "description": "Assign a compliance class on a vendor's Compliance tab to bring it into the matrix."
+    }
+  },
+  "drawer": {
+    "tabs": {
+      "certificates": "Certificates",
+      "identification": "Tax identification",
+      "exceptions": "Exceptions",
+      "aria": "Compliance sections"
+    }
+  },
+  "certificates": {
+    "empty": "Nothing on file for this subcontractor yet.",
+    "recordTitle": "Record a certificate",
+    "record": "Record certificate",
+    "recordHint": "Recorded as pending review. Someone else has to verify it before it counts.",
+    "noPolicies": "No policy applies to this subcontractor's class yet.",
+    "noExpiry": "no expiry",
+    "limits": "Per occurrence {occurrence} · aggregate {aggregate}",
+    "additionalInsured": "Additional insured",
+    "waiverOfSubrogation": "Waiver of subrogation",
+    "primaryNoncontributory": "Primary and non-contributory",
+    "verify": "Verify",
+    "reject": "Reject",
+    "rejectTitle": "Reject this certificate",
+    "rejectReason": "Why is it being rejected?",
+    "verifiedBy": "Verified by {who} on {when}",
+    "selfVerifyBlocked": "A certificate must be verified by someone other than the person who recorded it."
+  },
+  "exceptions": {
+    "intro": "An exception is the only way past a blocking requirement. It always expires and is always recorded.",
+    "empty": "No exception is in force.",
+    "grantTitle": "Grant an exception",
+    "grant": "Grant exception",
+    "grantHint": "Maximum 120 days. A longer suspension is a policy change, not an exception.",
+    "revoke": "Revoke",
+    "revokeTitle": "Revoke this exception",
+    "revokeReason": "Why is it being revoked?",
+    "window": "{from} → {to}"
+  },
+  "lienWaivers": {
+    "title": "Lien waivers",
+    "description": "Statutory releases exchanged for construction payment — received from subcontractors, issued to owners.",
+    "new": "New waiver",
+    "create": "Create waiver",
+    "columns": {
+      "number": "Waiver",
+      "direction": "Direction",
+      "party": "Party",
+      "project": "Project",
+      "type": "Type",
+      "through": "Through",
+      "amount": "Amount",
+      "status": "Status",
+      "jurisdiction": "Jurisdiction",
+      "bill": "Bill covered",
+      "requested": "Requested"
+    },
+    "filters": {
+      "direction": "Direction",
+      "allDirections": "All directions",
+      "status": "Status",
+      "allStatuses": "All statuses"
+    },
+    "empty": {
+      "title": "No lien waivers yet",
+      "description": "Create one when you request a release from a subcontractor, or issue one with an application for payment."
+    },
+    "jurisdictionHint": "The statute whose form this follows, e.g. US-CA or CA-ON. Printed on the document.",
+    "editTitle": "Release terms",
+    "notesHint": "Exceptions and disputed claims printed on the waiver.",
+    "copyFromBill": "Copy the amount from a bill…",
+    "request": "Mark requested",
+    "receive": "Mark received",
+    "reject": "Reject",
+    "rejectTitle": "Reject this waiver",
+    "rejectReason": "Why is it being rejected?",
+    "void": "Void",
+    "voidTitle": "Void this waiver",
+    "voidReason": "Why is it being voided?",
+    "recordSignature": "Record the executed waiver",
+    "recordSignatureHint": "Marking a waiver signed is what releases a blocked payment. Only do it once the executed document is in hand.",
+    "signedByName": "Signed by",
+    "signedByTitle": "Title",
+    "signedAt": "Date signed",
+    "notarized": "Notarised",
+    "markSigned": "Mark signed",
+    "signedBy": "Signed by {who} {title} on {when}",
+    "printForm": "Print form",
+    "executedCopy": "Executed copy",
+    "executedCopyHint": "Attach the scanned signed waiver here. It stays in the File Cabinet and is linked to this record.",
+    "errors": {
+      "partyAndProject": "Pick both a party and a project — a lien is a claim against a specific project."
+    }
+  },
+  "informationReturns": {
+    "title": "Information returns",
+    "description": "1099-NEC, 1099-MISC and T4A, computed from the cash you actually paid in the calendar year.",
+    "new": "Open a filing",
+    "create": "Open filing",
+    "orgRoot": "Whole organisation",
+    "columns": {
+      "year": "Year",
+      "form": "Form",
+      "entity": "Filing entity",
+      "recipients": "Recipients",
+      "total": "Reported",
+      "status": "Status",
+      "attention": "Attention",
+      "vendor": "Vendor",
+      "issue": "Issue",
+      "classification": "Classification",
+      "paid": "Paid",
+      "recipient": "Recipient",
+      "tin": "TIN"
+    },
+    "empty": {
+      "title": "No filings yet",
+      "description": "Open a filing for a completed calendar year and compute it from the ledger."
+    },
+    "excluded": "+{count} excluded",
+    "missingTin": "{count} without a TIN",
+    "readinessTitle": "Readiness — {year}",
+    "readinessDescription": "Vendors that will make a filing wrong if nobody chases them first.",
+    "readinessClear": "Every reportable vendor has a TIN and an assigned form.",
+    "detailDescription": "{entity} · reporting threshold {threshold}",
+    "compute": "Compute from ledger",
+    "recompute": "Recompute",
+    "computed": "Computed {count} recipients with {exceptions} exceptions to review.",
+    "finalize": "Finalize",
+    "markFiled": "Record as filed",
+    "printCopies": "Recipient copies",
+    "exportTransmittal": "Transmittal file",
+    "void": "Void filing",
+    "voidTitle": "Void this filing",
+    "voidReason": "Why is it being voided?",
+    "frozenNotice": "This filing is frozen. Amounts and exclusions reflect what was transmitted; corrections go on a new filing.",
+    "noRecipients": "Nothing computed yet. Compute the filing to trace the year's payments.",
+    "adjust": "Adjust",
+    "adjustDescription": "Adjustments are signed deltas against the ledger figure, so the trace is never overwritten.",
+    "adjustReason": "Reason for the adjustment",
+    "delta": "delta",
+    "ledgerFigure": "Ledger: {value}",
+    "exclude": "Exclude this recipient from the filing",
+    "exclusionReason": "Reason for exclusion",
+    "channel": "Filing channel",
+    "reference": "Confirmation reference",
+    "referenceHint": "The receipt or submission id the channel returned.",
+    "filedVia": "Filed via {channel} · {reference}",
+    "footnote": "Amounts are the cash paid in the calendar year, traced through applications to each bill's expense accounts. An asterisk marks a figure a person adjusted."
+  },
+  "fields": {
+    "requirement": "Requirement",
+    "select": "Select…",
+    "none": "None",
+    "issuer": "Insurer or issuing authority",
+    "policyNumber": "Policy or certificate number",
+    "effectiveFrom": "Effective from",
+    "expiresOn": "Expires on",
+    "expiryRequired": "This requirement needs an expiry date.",
+    "coverageAmount": "Per-occurrence limit",
+    "aggregateAmount": "Aggregate limit",
+    "coverageCurrency": "Limit currency",
+    "coverageCurrencyHint": "Must be {currency} — limits are never converted for comparison.",
+    "project": "Project",
+    "allProjects": "All projects",
+    "supersedes": "Renews",
+    "notes": "Notes",
+    "reason": "Reason",
+    "save": "Save",
+    "complianceClass": "Compliance class",
+    "complianceClassHint": "No class means this vendor is not tracked and never blocks a payment.",
+    "notTracked": "Not tracked",
+    "taxClassification": "Tax classification",
+    "unknown": "Unknown",
+    "reportable": "Reportable on an information return",
+    "informationReturnForm": "Form",
+    "inheritClass": "Inherit from class",
+    "notReportable": "Not reportable",
+    "informationReturnBox": "Default box",
+    "defaultBox": "Form default",
+    "tinType": "TIN type",
+    "tin": "Taxpayer identification number",
+    "tinPlaceholder": "9 digits",
+    "tinHint": "Sealed at rest. Only the last four digits are ever shown again.",
+    "backupWithholding": "Subject to backup withholding"
+  },
+  "errors": {
+    "saveFailed": "That could not be saved.",
+    "pickRequirement": "Pick the requirement this certificate satisfies.",
+    "exceptionIncomplete": "An exception needs a requirement and an end date."
+  }
+}

@@ -1,0 +1,941 @@
+{
+  "hub": {
+    "title": "レポート",
+    "description": "財務諸表は総勘定元帳からライブで計算されます。キャッシュされたスナップショットは使用しません。",
+    "savedViews": "保存済みビュー",
+    "cards": {
+      "pnlTitle": "損益計算書",
+      "pnlDescription": "損益計算書 — 会計年度プリセット、比較、部門別内訳、カスタムレイアウト",
+      "balanceSheetTitle": "貸借対照表",
+      "balanceSheetDescription": "任意の日付時点の財政状態、利益剰余金を自動計算",
+      "trialBalanceTitle": "試算表",
+      "trialBalanceDescription": "借方、貸方、純残高を含む全勘定",
+      "payablesTitle": "仕入先別買掛金",
+      "payablesDescription": "取引先ごとの未払買掛金残高",
+      "receivablesTitle": "得意先別売掛金",
+      "receivablesDescription": "取引先ごとの未収売掛金残高",
+      "agingTitle": "売掛金／買掛金の年齢分析",
+      "agingDescription": "取引先ごとの未消込残高を、期日超過の経過期間別に区分",
+      "cashFlowTitle": "キャッシュフロー計算書",
+      "cashFlowDescription": "直接法 — 営業、投資、財務活動を銀行の入出金に紐付け",
+      "generalLedgerTitle": "総勘定元帳",
+      "generalLedgerDescription": "勘定ごとの記帳済み活動と累計残高 — すべての財務諸表を裏付ける監査対応の明細",
+      "journalTitle": "仕訳帳",
+      "journalDescription": "各明細を含むすべての記帳済み仕訳 — 原始記入の時系列帳簿",
+      "registersTitle": "売掛金／買掛金補助簿",
+      "registersDescription": "得意先別・仕入先別の取引補助簿と累計残高",
+      "budgetTitle": "予算実績比較",
+      "budgetDescription": "予算シナリオに対する実績を勘定別に、差異の金額と％で表示",
+      "projectProfitabilityTitle": "プロジェクト収益性",
+      "projectProfitabilityDescription": "プロジェクト別の収益、原価、利益 — 損益計算書に紐付き、承認済みの作業時間を含む",
+      "ordersTitle": "受注パイプライン",
+      "ordersDescription": "未処理の見積、受注、発注書 — 件数、金額、転換率",
+      "cashFlowIndirectTitle": "キャッシュ・フロー（間接法）",
+      "cashFlowIndirectDescription": "間接法 — 当期純利益を営業キャッシュ・フローに調整（運転資本明細付き）"
+    },
+    "groups": {
+      "financial": "財務諸表",
+      "ledger": "総勘定元帳",
+      "receivablesPayables": "売掛金・買掛金",
+      "budgeting": "予算管理",
+      "custom": "カスタム・保存済み",
+      "projects": "プロジェクト",
+      "orders": "販売・受注"
+    },
+    "customStudio": {
+      "title": "カスタムレポートビルダー",
+      "description": "総勘定元帳をもとに独自のレポートを作成、保存、スケジュール設定します"
+    },
+    "searchPlaceholder": "レポートを検索…",
+    "noMatches": "検索に一致するレポートはありません。"
+  },
+  "statement": {
+    "sectionTotal": "{section}合計",
+    "other": "その他",
+    "otherTotal": "その他合計",
+    "accumulatedEarnings": "累積利益（計算値）",
+    "translationAdjustment": "累積換算調整額"
+  },
+  "saveView": {
+    "namePrompt": "このビューに名前を付けてください：",
+    "save": "ビューを保存",
+    "savedToast": "「{name}」を保存しました",
+    "saveFailed": "このビューを保存できませんでした"
+  },
+  "dimensionFilter": {
+    "departmentAria": "部門フィルター",
+    "allDepartments": "すべての部門",
+    "projectAria": "プロジェクトフィルター",
+    "allProjects": "すべてのプロジェクト"
+  },
+  "filterBar": {
+    "period": "期間",
+    "subsidiary": "子会社",
+    "asOf": "基準日",
+    "from": "開始",
+    "to": "終了",
+    "customer": "顧客",
+    "allCustomers": "すべての顧客",
+    "breakout": "内訳",
+    "breakoutNone": "合計",
+    "breakoutOpts": {
+      "department": "部門",
+      "project": "プロジェクト",
+      "location": "拠点",
+      "class": "クラス",
+      "month": "月",
+      "quarter": "四半期"
+    },
+    "compare": "比較",
+    "compareNone": "なし",
+    "comparePriorPeriod": "前期",
+    "comparePriorYear": "前年",
+    "basis": "会計基準",
+    "basisAccrual": "発生主義",
+    "basisCash": "現金主義",
+    "department": "部門フィルター",
+    "project": "プロジェクトフィルター",
+    "location": "拠点フィルター",
+    "class": "クラスフィルター",
+    "allDepartments": "すべての部門",
+    "allProjects": "すべてのプロジェクト",
+    "allLocations": "すべての拠点",
+    "allClasses": "すべてのクラス",
+    "allSegment": "すべての{name}",
+    "scale": "単位",
+    "scaleActual": "実数",
+    "scaleThousands": "千単位",
+    "scaleMillions": "百万単位",
+    "showZeros": "ゼロを表示",
+    "truncated": "レポートを読みやすく保つため、一部の内訳列を非表示にしました。",
+    "options": "オプション",
+    "expandAll": "すべて展開",
+    "collapseAll": "すべて折りたたむ",
+    "expandSection": "{section}を展開",
+    "collapseSection": "{section}を折りたたむ"
+  },
+  "balanceSheet": {
+    "title": "貸借対照表",
+    "asOf": "{date}時点",
+    "assets": "資産",
+    "liabilities": "負債",
+    "equity": "純資産",
+    "equation": "資産 = 負債 + 純資産",
+    "balanced": "均衡",
+    "offBy": "{amount}の差異",
+    "liabilitiesAndEquity": "負債・純資産合計"
+  },
+  "pnl": {
+    "title": "損益計算書",
+    "dateRange": "{from} → {to}",
+    "vsPriorYear": "前年比",
+    "revenue": "収益",
+    "grossProfit": "売上総利益",
+    "netIncome": "純利益",
+    "costOfGoodsSold": "売上原価",
+    "expenses": "費用",
+    "totalRevenue": "収益合計",
+    "columns": {
+      "current": "当期",
+      "priorYear": "前年",
+      "delta": "Δ",
+      "deltaPct": "Δ%"
+    }
+  },
+  "trialBalance": {
+    "title": "試算表",
+    "description": "{date}時点 · 活動のある{count, plural, one {# 勘定} other {# 勘定}}",
+    "columns": {
+      "debits": "借方",
+      "credits": "貸方"
+    },
+    "totals": "合計"
+  },
+  "partners": {
+    "payablesTitle": "仕入先別買掛金",
+    "receivablesTitle": "得意先別売掛金",
+    "description": "未消込元帳明細に基づく取引先ごとの純残高。",
+    "payables": "買掛金",
+    "receivables": "売掛金",
+    "searchPlaceholder": "取引先を検索…",
+    "totalOutstanding": "未払・未収合計",
+    "partiesWithBalance": "残高のある取引先",
+    "columns": {
+      "outstanding": "未払・未収残高",
+      "glLines": "元帳明細"
+    },
+    "noPartyOnLines": "（明細に取引先なし）"
+  },
+  "aging": {
+    "receivablesTitle": "売掛金年齢分析",
+    "payablesTitle": "買掛金年齢分析",
+    "asOf": "{date}時点の未消込項目",
+    "receivables": "売掛金",
+    "payables": "買掛金",
+    "noParty": "（取引先なし）",
+    "empty": "この日付時点で未消込項目はありません。",
+    "columns": {
+      "total": "合計",
+      "due": "期日",
+      "age": "経過日数",
+      "bucket": "区分"
+    },
+    "buckets": {
+      "current": "期日内",
+      "b1": "1〜30",
+      "b2": "31〜60",
+      "b3": "61〜90",
+      "b4": "90以上"
+    },
+    "summary": "サマリー",
+    "detail": "明細"
+  },
+  "cashFlow": {
+    "title": "キャッシュフロー計算書",
+    "dateRange": "{from} → {to}",
+    "openingCash": "期首現金",
+    "closingCash": "期末現金",
+    "netChange": "現金の純増減",
+    "empty": "この期間に現金の増減はありません。",
+    "sections": {
+      "operating": "営業活動",
+      "investing": "投資活動",
+      "financing": "財務活動"
+    },
+    "subtotal": "{section}による純キャッシュ",
+    "reconciliation": "期首 + 純増減 = 期末",
+    "reconciled": "照合済み",
+    "offBy": "{amount}の差異"
+  },
+  "cashFlowIndirect": {
+    "title": "キャッシュ・フロー計算書（間接法）",
+    "dateRange": "{from} → {to}",
+    "openingCash": "期首現金",
+    "closingCash": "期末現金",
+    "netChange": "現金の純増減",
+    "empty": "この期間に現金の増減はありません。",
+    "netIncome": "当期純利益",
+    "adjustmentsHeader": "当期純利益をネットキャッシュに調整する項目",
+    "wcHeader": "営業運転資本の増減",
+    "sections": {
+      "operating": "営業活動",
+      "investing": "投資活動",
+      "financing": "財務活動"
+    },
+    "adjustments": {
+      "depreciation": "減価償却費および償却費",
+      "disposal": "資産売却（益）損",
+      "unrealizedFx": "未実現為替（益）損"
+    },
+    "subtotals": {
+      "operating": "営業活動によるキャッシュ・フロー",
+      "investing": "投資活動によるキャッシュ・フロー",
+      "financing": "財務活動によるキャッシュ・フロー"
+    },
+    "fxEffect": "為替変動による現金への影響",
+    "reconciliation": "期首 + 純増減 = 期末",
+    "reconciled": "照合済み",
+    "offBy": "{amount}の差異"
+  },
+  "custom": {
+    "kind": {
+      "builtIn": "組み込み",
+      "custom": "カスタム"
+    },
+    "running": "実行中…",
+    "list": {
+      "title": "カスタムレポート",
+      "description": "総勘定元帳をもとにレポートを作成、保存、実行、スケジュール設定します — 明細行またはグループ別サマリーを、フィルター、内訳、測定値とともに。",
+      "searchPlaceholder": "レポートを検索…",
+      "kindFilterLabel": "種類",
+      "emptyTitle": "まだレポートがありません",
+      "emptyDescription": "最初のカスタムレポートを作成して始めましょう。",
+      "columns": {
+        "report": "レポート",
+        "kind": "種類"
+      },
+      "summarySummarize": "{source}のサマリー · {groups, plural, one {# グループ} other {# グループ}}、{measures, plural, one {# 測定値} other {# 測定値}}",
+      "summaryRows": "{source}の明細 · {columns, plural, one {# 列} other {# 列}}"
+    },
+    "actions": {
+      "run": "実行",
+      "clone": "複製",
+      "loadFailed": "レポートを読み込めませんでした",
+      "cloneFailed": "レポートを複製できませんでした",
+      "cloned": "レポートを複製しました",
+      "copyName": "{name}（コピー）",
+      "deleteConfirm": "このレポートを削除しますか？ スケジュールと実行履歴も削除されます。",
+      "deleteFailed": "レポートを削除できませんでした",
+      "deleted": "レポートを削除しました"
+    },
+    "newButton": {
+      "label": "新規レポート",
+      "untitledName": "無題のレポート",
+      "createFailed": "レポートを作成できませんでした"
+    },
+    "filterTree": {
+      "match": "一致条件",
+      "allOfFollowing": "以下のすべて",
+      "anyOfFollowing": "以下のいずれか",
+      "noConditions": "条件なし — レポートはすべての行を返します。",
+      "addCondition": "条件",
+      "addGroup": "グループ",
+      "noValue": "（値なし）",
+      "valuePlaceholder": "値",
+      "listPlaceholder": "カンマ区切りの値",
+      "removeConditionAria": "条件を削除"
+    },
+    "resultView": {
+      "noRows": "このレポートに一致する行はありません。"
+    },
+    "builder": {
+      "namePlaceholder": "レポート名",
+      "descriptionPlaceholder": "説明（任意）",
+      "allChangesSaved": "すべての変更を保存しました",
+      "unsavedChanges": "未保存の変更…",
+      "runAndSchedule": "実行とスケジュール",
+      "source": "データソース",
+      "mode": "モード",
+      "detailRows": "明細行",
+      "summarize": "集計",
+      "sortBy": "並べ替え基準",
+      "sortDefault": "デフォルト",
+      "direction": "方向",
+      "descending": "降順",
+      "ascending": "昇順",
+      "rowLimit": "行数上限",
+      "rowLimitHint": "上限は10,000行です。プレビューは最初の{previewRows}行を表示します。",
+      "pageSetup": {
+        "title": "PDFページ設定",
+        "hint": "このレポートのPDF印刷方法を制御します（用紙、向き、密度、余白）。",
+        "paper": "用紙サイズ",
+        "paperLetter": "レター",
+        "paperA4": "A4",
+        "paperLegal": "リーガル",
+        "orientation": "向き",
+        "landscape": "横",
+        "portrait": "縦",
+        "density": "密度",
+        "densityStandard": "標準",
+        "densityCompact": "コンパクト（ページあたりの行数を増やす）",
+        "marginMm": "余白（mm）"
+      },
+      "livePreview": "ライブプレビュー",
+      "previewFailed": "プレビューに失敗しました",
+      "runningPreview": "プレビューを実行中…",
+      "previewEmptyHint": "レポートを調整するとライブプレビューが表示されます。",
+      "columns": "列",
+      "sectionBy": "セクション区分（任意）",
+      "noSections": "セクションなし",
+      "sectionByHint": "この列で明細行をタイトル付きセクションに区分します。",
+      "groupBy": "グループ化",
+      "noGroupsHint": "グループなし — 測定値は単一の総合計に集約されます。",
+      "measures": "測定値",
+      "noBin": "区分なし",
+      "removeGroupAria": "グループを削除",
+      "removeMeasureAria": "測定値を削除",
+      "bin": {
+        "day": "日別",
+        "week": "週別",
+        "month": "月別",
+        "quarter": "四半期別",
+        "year": "年別",
+        "fiscal_period": "会計期間別",
+        "fiscal_quarter": "会計四半期別",
+        "fiscal_year": "会計年度別"
+      },
+      "agg": {
+        "count": "行数",
+        "countDistinct": "個別件数",
+        "sum": "合計",
+        "avg": "平均",
+        "min": "最小",
+        "max": "最大"
+      },
+      "running": "実行中…",
+      "selectedColumns": "選択済みの列",
+      "addColumn": "列を追加",
+      "labelOverridePlaceholder": "名前を変更…",
+      "moveUpAria": "上へ移動",
+      "moveDownAria": "下へ移動",
+      "removeColumnAria": "列を削除",
+      "thenBy": "次の基準",
+      "addSortLevel": "並べ替えレベルを追加",
+      "removeSortAria": "並べ替えレベルを削除",
+      "noColumnsSelected": "列が選択されていません — 少なくとも1つ追加してください。",
+      "tabs": {
+        "data": "データ",
+        "filter": "フィルター",
+        "format": "書式"
+      }
+    },
+    "runner": {
+      "downloadCsv": "CSVをダウンロード",
+      "downloadPdf": "PDFをダウンロード",
+      "downloadXlsx": "Excelをダウンロード",
+      "runNow": "今すぐ実行",
+      "runFailed": "レポートの実行に失敗しました",
+      "runComplete": "レポートの実行が完了しました",
+      "emptyHint": "レポートを実行するとここに結果が表示されます。実行結果は保存され、CSVとしてダウンロードできます。",
+      "scheduledDelivery": "定期配信",
+      "recentRuns": "最近の実行",
+      "columns": {
+        "trigger": "トリガー",
+        "rows": "行数",
+        "finished": "完了",
+        "delivery": "配信"
+      },
+      "status": {
+        "succeeded": "成功",
+        "running": "実行中",
+        "queued": "キュー待ち",
+        "failed": "失敗"
+      },
+      "trigger": {
+        "manual": "手動",
+        "scheduled": "スケジュール"
+      },
+      "deliveryEvidence": "{sent}/{total} 送信済み · {failed} 失敗 · {suppressed} 抑止",
+      "pdf": "PDF証跡",
+      "csv": "CSV"
+    }
+  },
+  "schedule": {
+    "updateFailed": "更新に失敗しました",
+    "paused": "スケジュールを一時停止しました",
+    "resumed": "スケジュールを再開しました",
+    "deleteConfirm": "このスケジュールを削除しますか？",
+    "deleted": "スケジュールを削除しました",
+    "noScheduleYet": "配信スケジュールはまだありません。",
+    "addOneHint": "追加すると、このレポートを定期的にメール送信できます。",
+    "pausedBadge": "一時停止中",
+    "pause": "一時停止",
+    "resume": "再開",
+    "deleteAria": "スケジュールを削除",
+    "recipientsTo": "宛先 {emails}",
+    "noRecipients": "宛先が設定されていません",
+    "nextRun": "次回実行 {time}",
+    "addSchedule": "スケジュールを追加",
+    "cadence": "頻度",
+    "cadences": {
+      "daily": "毎日",
+      "weekly": "毎週",
+      "monthly": "毎月"
+    },
+    "dayOfWeek": "曜日",
+    "weekdays": {
+      "sunday": "日曜日",
+      "monday": "月曜日",
+      "tuesday": "火曜日",
+      "wednesday": "水曜日",
+      "thursday": "木曜日",
+      "friday": "金曜日",
+      "saturday": "土曜日"
+    },
+    "dayOfMonth": "日付",
+    "time": "時刻",
+    "timezone": "タイムゾーン",
+    "recipients": "宛先",
+    "recipientsPlaceholder": "finance@example.com, cfo@example.com",
+    "recipientsHint": "カンマ区切りのメールアドレス。配信はワーカーのキューに登録されます（下記参照）。",
+    "saveSchedule": "スケジュールを保存",
+    "saved": "スケジュールを保存しました",
+    "saveFailed": "スケジュールを保存できませんでした",
+    "describe": {
+      "daily": "毎日 {time}（{zone}）",
+      "weekly": "毎週 {day} {time}（{zone}）",
+      "monthly": "毎月 {dayOfMonth}日 {time}（{zone}）",
+      "weekdays": {
+        "sun": "日曜日",
+        "mon": "月曜日",
+        "tue": "火曜日",
+        "wed": "水曜日",
+        "thu": "木曜日",
+        "fri": "金曜日",
+        "sat": "土曜日"
+      }
+    }
+  },
+  "catalog": {
+    "entities": {
+      "ledger_lines": {
+        "label": "元帳明細",
+        "description": "仕訳、勘定、取引先、ディメンションを含むすべての仕訳明細 — 記帳済みまたは下書きの総勘定元帳の全明細。"
+      },
+      "documents": {
+        "label": "取引",
+        "description": "すべての取引 — 仕入請求書、請求書、クレジット、支払、経費精算、小切手、カード請求、仕訳、受発注、見積。種類で絞り込んで1つ以上の種別に焦点を当てられます。"
+      },
+      "parties": {
+        "label": "取引先",
+        "description": "得意先、仕入先、従業員 — 取引先ごとに1行、役割フラグと従業員詳細付き。"
+      },
+      "accounts": {
+        "label": "勘定",
+        "description": "会計科目表 — 番号、名称、種類、記帳フラグ。"
+      },
+      "transaction_lines": {
+        "label": "取引明細",
+        "description": "すべての種別にわたる明細レベルの取引詳細 — 品目、勘定、数量、金額、請求状態、ディメンション。"
+      },
+      "journal_entries": {
+        "label": "仕訳",
+        "description": "仕訳ヘッダー — 番号、記帳日、ステータス、発生元、摘要。"
+      },
+      "items": {
+        "label": "品目",
+        "description": "品目・サービスカタログ — サービス、在庫、労務、課金、値引きを、レートと勘定付きで。"
+      },
+      "projects": {
+        "label": "プロジェクト",
+        "description": "プロジェクト／ジョブ — ステータス、得意先、請求方法、スケジュール、発注番号。"
+      },
+      "timesheets": {
+        "label": "作業時間入力",
+        "description": "タイムシート入力 — 従業員、日付、時間、請求可否、プロジェクト、承認ステータス。"
+      },
+      "fixed_assets": {
+        "label": "固定資産",
+        "description": "固定資産台帳 — ステータス、取得、原価、管理者、ディメンション。"
+      },
+      "tax_codes": {
+        "label": "税コード",
+        "description": "税コード — 管轄、適用範囲、控除可否。"
+      }
+    },
+    "columns": {
+      "ledger_lines": {
+        "posting_date": "記帳日",
+        "entry_number": "仕訳番号",
+        "entry_status": "仕訳ステータス",
+        "origin": "発生元",
+        "account_number": "勘定番号",
+        "account_name": "勘定",
+        "account_type": "勘定種類",
+        "party_name": "取引先",
+        "department": "部門",
+        "project": "プロジェクト",
+        "location": "拠点",
+        "class": "クラス",
+        "memo": "摘要",
+        "amount": "金額（基軸通貨）",
+        "currency": "通貨",
+        "txn_amount": "金額（取引通貨）",
+        "quantity": "数量",
+        "unit": "単位",
+        "due_date": "期日",
+        "is_open_item": "未消込項目",
+        "reconciled_at": "消込日時",
+        "entry_id": "仕訳（ID）",
+        "account_id": "勘定（ID）",
+        "party_id": "取引先（ID）"
+      },
+      "documents": {
+        "kind": "種類",
+        "document_number": "書類番号",
+        "party_name": "取引先",
+        "document_date": "書類日付",
+        "posting_date": "記帳日",
+        "due_date": "期日",
+        "status": "ステータス",
+        "currency": "通貨",
+        "subtotal": "小計",
+        "tax_total": "税",
+        "total": "合計",
+        "reference_number": "参照番号",
+        "billing_method": "請求方法",
+        "payment_hold_reason": "支払保留",
+        "expected_pay_date": "支払予定日",
+        "department": "部門",
+        "project": "プロジェクト",
+        "memo": "摘要",
+        "created_at": "作成日時",
+        "id": "取引（ID）",
+        "party_id": "取引先（ID）",
+        "is_final_invoice": "最終請求書",
+        "location": "拠点",
+        "class": "クラス"
+      },
+      "parties": {
+        "display_name": "名称",
+        "legal_name": "正式名称",
+        "kind": "種別",
+        "short_code": "略称コード",
+        "email": "メール",
+        "phone": "電話",
+        "is_active": "有効",
+        "is_customer": "得意先",
+        "is_vendor": "仕入先",
+        "is_employee": "従業員",
+        "employee_number": "従業員番号",
+        "hired_on": "入社日",
+        "terminated_on": "退職日",
+        "created_at": "作成日時",
+        "id": "取引先（ID）"
+      },
+      "accounts": {
+        "number": "勘定番号",
+        "name": "名称",
+        "type": "種類",
+        "description": "説明",
+        "is_summary": "集計",
+        "is_active": "有効",
+        "reconcilable": "消込可能",
+        "currency_restriction": "通貨制限",
+        "created_at": "作成日時",
+        "id": "勘定（ID）",
+        "parent_id": "親（ID）"
+      },
+      "transaction_lines": {
+        "kind": "種類",
+        "document_number": "書類番号",
+        "document_date": "書類日付",
+        "status": "ステータス",
+        "party_name": "取引先",
+        "line_number": "明細番号",
+        "item_name": "品目",
+        "account_number": "勘定番号",
+        "account_name": "勘定",
+        "description": "説明",
+        "quantity": "数量",
+        "unit": "単位",
+        "unit_price": "単価",
+        "amount": "金額",
+        "tax_amount": "税額",
+        "is_billable": "請求可能",
+        "quantity_fulfilled": "履行数量",
+        "quantity_billed": "請求済み数量",
+        "employee_name": "従業員",
+        "department": "部門",
+        "project": "プロジェクト",
+        "location": "拠点",
+        "class": "クラス",
+        "created_at": "作成日時",
+        "id": "明細（ID）",
+        "document_id": "取引（ID）"
+      },
+      "journal_entries": {
+        "entry_number": "仕訳番号",
+        "posting_date": "記帳日",
+        "status": "ステータス",
+        "origin": "発生元",
+        "memo": "摘要",
+        "created_at": "作成日時",
+        "id": "仕訳（ID）",
+        "source_document_id": "元取引（ID）"
+      },
+      "items": {
+        "code": "コード",
+        "name": "名称",
+        "kind": "種類",
+        "category": "カテゴリ",
+        "default_rate": "デフォルトレート",
+        "unit": "単位",
+        "income_account": "収益勘定",
+        "expense_account": "費用勘定",
+        "show_on_timesheet": "タイムシートに表示",
+        "is_active": "有効",
+        "created_at": "作成日時",
+        "id": "品目（ID）"
+      },
+      "projects": {
+        "code": "コード",
+        "name": "名称",
+        "status": "ステータス",
+        "customer_name": "得意先",
+        "manager_name": "管理者",
+        "billing_method": "請求方法",
+        "customer_po_number": "得意先発注番号",
+        "starts_on": "開始日",
+        "ends_on": "終了日",
+        "is_active": "有効",
+        "created_at": "作成日時",
+        "id": "プロジェクト（ID）"
+      },
+      "timesheets": {
+        "employee_name": "従業員",
+        "worked_on": "作業日",
+        "hours": "時間",
+        "status": "ステータス",
+        "is_billable": "請求可能",
+        "project": "プロジェクト",
+        "item_name": "サービス品目",
+        "department": "部門",
+        "memo": "摘要",
+        "created_at": "作成日時",
+        "id": "作業時間入力（ID）"
+      },
+      "fixed_assets": {
+        "asset_number": "資産番号",
+        "name": "名称",
+        "status": "ステータス",
+        "category": "カテゴリ",
+        "acquired_on": "取得日",
+        "in_service_on": "使用開始日",
+        "acquisition_cost": "取得原価",
+        "salvage_value": "残存価額",
+        "serial_number": "シリアル番号",
+        "custodian_name": "管理者",
+        "project": "プロジェクト",
+        "department": "部門",
+        "created_at": "作成日時",
+        "id": "資産（ID）"
+      },
+      "tax_codes": {
+        "code": "コード",
+        "name": "名称",
+        "country": "国",
+        "region": "地域",
+        "applies_to": "適用対象",
+        "recoverable_percent": "控除可能％",
+        "is_active": "有効",
+        "id": "税コード（ID）"
+      }
+    },
+    "enumValues": {
+      "vendor_bill": "仕入請求書",
+      "vendor_credit": "仕入先クレジット",
+      "vendor_payment": "支払",
+      "customer_invoice": "請求書",
+      "customer_credit": "クレジットメモ",
+      "customer_payment": "得意先支払",
+      "expense_report": "経費精算",
+      "check": "小切手",
+      "card_charge": "カード請求",
+      "card_refund": "カード返金",
+      "transfer": "振替",
+      "journal": "仕訳",
+      "purchase_order": "発注書",
+      "sales_order": "受注",
+      "quote": "見積",
+      "draft": "下書き",
+      "pending_approval": "承認待ち",
+      "approved": "承認済み",
+      "posted": "記帳済み",
+      "voided": "取消済み",
+      "reversed": "逆仕訳済み",
+      "submitted": "提出済み",
+      "rejected": "却下",
+      "time_and_materials": "実費精算",
+      "fixed_price": "固定価格",
+      "cost_plus": "コストプラス",
+      "service": "サービス",
+      "non_inventory": "非在庫",
+      "inventory": "在庫",
+      "assembly": "アセンブリ",
+      "kit": "キット",
+      "other_charge": "その他課金",
+      "labor": "労務",
+      "absence": "欠勤",
+      "discount": "値引き",
+      "quoted": "見積済み",
+      "awarded": "受注済み",
+      "active": "進行中",
+      "substantially_complete": "実質完了",
+      "closed": "終了",
+      "cancelled": "キャンセル",
+      "in_service": "使用中",
+      "fully_depreciated": "償却完了",
+      "disposed": "処分済み",
+      "written_off": "償却済み",
+      "sales": "売上",
+      "purchases": "仕入",
+      "both": "両方"
+    }
+  },
+  "operators": {
+    "eq": "が次と等しい",
+    "neq": "が次と等しくない",
+    "in": "が次のいずれか",
+    "not_in": "が次のいずれでもない",
+    "gte": "以降 / ≥",
+    "lte": "以前 / ≤",
+    "is_null": "が空である",
+    "is_not_null": "が設定されている",
+    "is_true": "がはい",
+    "is_false": "がいいえ",
+    "contains": "を含む",
+    "between_days_ago": "過去N日以内",
+    "due_within_days": "今後N日以内に期日",
+    "since_today": "が今日",
+    "this_week": "が今週",
+    "this_month": "が今月",
+    "this_year": "が今年",
+    "before_now": "が過去（期日超過）",
+    "period_preset": "が会計期間内"
+  },
+  "aggs": {
+    "count": "件数",
+    "count_distinct": "個別件数",
+    "sum": "合計",
+    "avg": "平均",
+    "min": "最小",
+    "max": "最大"
+  },
+  "run": {
+    "results": "結果",
+    "summary": "サマリー",
+    "section": "{label}：{value}",
+    "rowCount": "{count, plural, one {# 行} other {# 行}}",
+    "groupCount": "{count, plural, one {# グループ} other {# グループ}}",
+    "summaryRows": "行数",
+    "summaryGroups": "グループ",
+    "summarySource": "データソース",
+    "summaryTotal": "{measure}合計",
+    "none": "（なし）",
+    "yes": "はい",
+    "no": "いいえ",
+    "measureOf": "{column}の{fn}",
+    "breakoutBy": "{column}（{bin}別）",
+    "bins": {
+      "day": "日",
+      "week": "週",
+      "month": "月",
+      "quarter": "四半期",
+      "year": "年",
+      "fiscal_period": "会計期間",
+      "fiscal_quarter": "会計四半期",
+      "fiscal_year": "会計年度"
+    },
+    "csvSection": "セクション"
+  },
+  "export": {
+    "pdf": "PDF",
+    "xlsx": "Excel",
+    "csv": "CSV",
+    "columns": {
+      "accountNumber": "勘定番号",
+      "accountName": "勘定",
+      "amount": "金額",
+      "balance": "残高",
+      "type": "種類",
+      "party": "取引先",
+      "latestDue": "最終期日"
+    },
+    "print": "印刷",
+    "printFailed": "印刷ダイアログを開けませんでした",
+    "export": "エクスポート"
+  },
+  "builtIns": {
+    "ap-aging-by-vendor": {
+      "name": "仕入先別買掛金年齢分析",
+      "description": "未消込の買掛金元帳明細を仕入先および期日月ごとに合計します。マイナスの合計は債務額（貸方残の買掛金）です。"
+    },
+    "open-ar-by-customer": {
+      "name": "得意先別未収売掛金",
+      "description": "未消込の元帳項目に基づく得意先ごとの未収売掛金残高。プラスの合計は貴社への債権額です。"
+    },
+    "gl-activity-by-account-fy": {
+      "name": "勘定別GL活動（今年度）",
+      "description": "今年の記帳済み仕訳活動を勘定ごとに1行で表示：純増減と明細数。暦年を対象とします。"
+    },
+    "expense-detail-by-department-fy": {
+      "name": "部門別費用明細（今年度）",
+      "description": "今年の記帳済み費用および売上原価明細を部門別に区分 — 日付、仕訳、勘定、取引先、摘要、金額。"
+    }
+  },
+  "generalLedger": {
+    "title": "総勘定元帳",
+    "empty": "この期間に記帳済みの活動はありません。",
+    "truncated": "最初の5,000明細を表示中 — 期間を絞り込むか勘定でフィルターするとすべて表示されます。",
+    "opening": "期首残高",
+    "closing": "期末残高",
+    "columns": {
+      "date": "日付",
+      "entry": "仕訳",
+      "detail": "取引先／摘要"
+    }
+  },
+  "journal": {
+    "title": "仕訳帳",
+    "empty": "この期間に記帳済みの仕訳はありません。",
+    "truncated": "最初の4,000明細を表示中 — 期間を絞り込むとすべて表示されます。",
+    "columns": {
+      "detail": "取引先／摘要"
+    }
+  },
+  "registers": {
+    "arTitle": "売掛金補助簿",
+    "apTitle": "買掛金補助簿",
+    "receivables": "売掛金",
+    "payables": "買掛金",
+    "truncated": "最初の4,000明細を表示中 — 期間を絞り込むとすべて表示されます。",
+    "empty": "この期間に活動はありません。",
+    "closing": "期末"
+  },
+  "budget": {
+    "title": "予算実績比較",
+    "description": "予算シナリオに対する実際の元帳活動を勘定別に表示します。",
+    "noScenarios": "予算シナリオはまだありません。実績と比較するために作成してください。",
+    "scenario": "シナリオ",
+    "scenarioOption": "{name} · {year}年度 · {status}",
+    "manage": "予算を管理",
+    "actual": "実績",
+    "budget": "予算",
+    "variance": "差異",
+    "variancePct": "差異％"
+  },
+  "statements": {
+    "title": "勘定明細書",
+    "opening": "期首残高",
+    "closing": "期末残高"
+  },
+  "detail": {
+    "title": "取引明細",
+    "netTotal": "純合計",
+    "truncated": "最初の2,000明細を表示中 — レポートを絞り込むとすべて表示されます。",
+    "empty": "この値の背後に取引はありません。",
+    "backTo": "{report}に戻る"
+  },
+  "drillDrawer": {
+    "title": "根拠レコード",
+    "supporting": "選択したレポート値の根拠となるレコードです。",
+    "loadFailed": "根拠レコードを読み込めませんでした。",
+    "recordLoadFailed": "取引を開けませんでした。"
+  },
+  "flyout": {
+    "title": "仕訳",
+    "openTransaction": "取引全体を開く"
+  },
+  "projectProfitability": {
+    "title": "プロジェクト収益性",
+    "empty": "この期間にプロジェクト活動はありません。",
+    "searchPlaceholder": "顧客またはジョブを検索…",
+    "noCustomer": "顧客未割り当て",
+    "expandCustomer": "{customer}を展開",
+    "collapseCustomer": "{customer}を折りたたむ",
+    "projectScope": "プロジェクト",
+    "activeProjects": "有効なプロジェクト",
+    "allProjects": "すべてのプロジェクト",
+    "columns": {
+      "customerJob": "顧客 / ジョブ",
+      "project": "プロジェクト",
+      "customer": "得意先",
+      "revenue": "収益",
+      "cogs": "売上原価",
+      "grossProfit": "売上総利益",
+      "expenses": "費用",
+      "net": "純利益",
+      "margin": "利益率",
+      "hours": "時間"
+    }
+  },
+  "orders": {
+    "title": "受注パイプライン",
+    "description": "見積、受注、発注書の未処理バックログと転換率。",
+    "columns": {
+      "type": "種類",
+      "open": "未処理",
+      "openValue": "未処理金額",
+      "converted": "転換済み",
+      "convRate": "転換率",
+      "voided": "取消済み"
+    },
+    "kinds": {
+      "quote": "見積",
+      "sales_order": "受注",
+      "purchase_order": "発注書"
+    },
+    "note": "変換は取引リンクで追跡されます。履歴上の移行元リンクは移行が必要な場合があります。"
+  }
+}

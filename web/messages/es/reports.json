@@ -1,0 +1,941 @@
+{
+  "hub": {
+    "title": "Informes",
+    "description": "Los estados financieros se calculan en vivo desde el libro mayor — nunca son instantáneas en caché.",
+    "savedViews": "Vistas guardadas",
+    "cards": {
+      "pnlTitle": "Estado de resultados",
+      "pnlDescription": "Estado de resultados — valores predefinidos por ejercicio fiscal, comparativos, desglose por departamento, diseños personalizados",
+      "balanceSheetTitle": "Balance general",
+      "balanceSheetDescription": "Situación financiera a cualquier fecha, con utilidades retenidas calculadas",
+      "trialBalanceTitle": "Balanza de comprobación",
+      "trialBalanceDescription": "Cada cuenta con débitos, créditos y saldo neto",
+      "payablesTitle": "Cuentas por pagar por proveedor",
+      "payablesDescription": "Posición pendiente de cuentas por pagar por tercero",
+      "receivablesTitle": "Cuentas por cobrar por cliente",
+      "receivablesDescription": "Posición pendiente de cuentas por cobrar por tercero",
+      "agingTitle": "Antigüedad de CxC / CxP",
+      "agingDescription": "Saldos de partidas abiertas por tercero, agrupados por antigüedad",
+      "cashFlowTitle": "Estado de flujo de efectivo",
+      "cashFlowDescription": "Método directo — operación, inversión y financiamiento, conciliado con movimientos bancarios",
+      "generalLedgerTitle": "Libro mayor",
+      "generalLedgerDescription": "Actividad registrada por cuenta con saldo acumulado — el detalle listo para auditoría detrás de cada estado",
+      "journalTitle": "Libro diario",
+      "journalDescription": "Cada asiento registrado con sus líneas — el libro cronológico de entrada original",
+      "registersTitle": "Registros de CxC y CxP",
+      "registersDescription": "Registros de transacciones por cliente y proveedor con saldos acumulados",
+      "budgetTitle": "Presupuesto vs Real",
+      "budgetDescription": "Valores reales frente a un escenario de presupuesto, por cuenta, con variación $ y %",
+      "projectProfitabilityTitle": "Rentabilidad por proyecto",
+      "projectProfitabilityDescription": "Ingresos, costo y margen por proyecto — cuadra con el estado de resultados, con horas aprobadas",
+      "ordersTitle": "Flujo de pedidos",
+      "ordersDescription": "Presupuestos, órdenes de venta y de compra abiertos — cantidad, valor y conversión",
+      "cashFlowIndirectTitle": "Flujo de caja (indirecto)",
+      "cashFlowIndirectDescription": "Método indirecto — resultado neto conciliado con el efectivo operativo con detalle de capital de trabajo"
+    },
+    "groups": {
+      "financial": "Estados financieros",
+      "ledger": "Libro mayor",
+      "receivablesPayables": "Cuentas por cobrar y pagar",
+      "budgeting": "Presupuestos",
+      "custom": "Personalizados y guardados",
+      "projects": "Proyectos",
+      "orders": "Ventas y pedidos"
+    },
+    "customStudio": {
+      "title": "Constructor de informes",
+      "description": "Cree, guarde y programe sus propios informes sobre el libro mayor"
+    },
+    "searchPlaceholder": "Buscar informes…",
+    "noMatches": "Ningún informe coincide con tu búsqueda."
+  },
+  "statement": {
+    "sectionTotal": "Total {section}",
+    "other": "Otros",
+    "otherTotal": "Total Otros",
+    "accumulatedEarnings": "Utilidades acumuladas (calculadas)",
+    "translationAdjustment": "Ajuste de conversión acumulado"
+  },
+  "saveView": {
+    "namePrompt": "Nombre para esta vista:",
+    "save": "Guardar vista",
+    "savedToast": "Se guardó “{name}”",
+    "saveFailed": "No se pudo guardar esta vista"
+  },
+  "dimensionFilter": {
+    "departmentAria": "Filtro de departamento",
+    "allDepartments": "Todos los departamentos",
+    "projectAria": "Filtro de proyecto",
+    "allProjects": "Todos los proyectos"
+  },
+  "filterBar": {
+    "period": "Período",
+    "subsidiary": "Subsidiaria",
+    "asOf": "A fecha de",
+    "from": "Desde",
+    "to": "Hasta",
+    "customer": "Cliente",
+    "allCustomers": "Todos los clientes",
+    "breakout": "Desglose",
+    "breakoutNone": "Total",
+    "breakoutOpts": {
+      "department": "Departamento",
+      "project": "Proyecto",
+      "location": "Ubicación",
+      "class": "Clase",
+      "month": "Mes",
+      "quarter": "Trimestre"
+    },
+    "compare": "Comparar",
+    "compareNone": "Ninguno",
+    "comparePriorPeriod": "Período anterior",
+    "comparePriorYear": "Año anterior",
+    "basis": "Base",
+    "basisAccrual": "Devengo",
+    "basisCash": "Caja",
+    "department": "Filtro de departamento",
+    "project": "Filtro de proyecto",
+    "location": "Filtro de ubicación",
+    "class": "Filtro de clase",
+    "allDepartments": "Todos los departamentos",
+    "allProjects": "Todos los proyectos",
+    "allLocations": "Todas las ubicaciones",
+    "allClasses": "Todas las clases",
+    "allSegment": "Todos los elementos de {name}",
+    "scale": "Escala",
+    "scaleActual": "Real",
+    "scaleThousands": "Miles",
+    "scaleMillions": "Millones",
+    "showZeros": "Mostrar ceros",
+    "truncated": "Se ocultaron algunas columnas de desglose para mantener el informe legible.",
+    "options": "Opciones",
+    "expandAll": "Expandir todo",
+    "collapseAll": "Contraer todo",
+    "expandSection": "Expandir {section}",
+    "collapseSection": "Contraer {section}"
+  },
+  "balanceSheet": {
+    "title": "Balance general",
+    "asOf": "al {date}",
+    "assets": "Activos",
+    "liabilities": "Pasivos",
+    "equity": "Capital",
+    "equation": "A = P + C",
+    "balanced": "cuadrado",
+    "offBy": "descuadre de {amount}",
+    "liabilitiesAndEquity": "Total pasivo y patrimonio"
+  },
+  "pnl": {
+    "title": "Estado de resultados",
+    "dateRange": "{from} → {to}",
+    "vsPriorYear": "vs. año anterior",
+    "revenue": "Ingresos",
+    "grossProfit": "Utilidad bruta",
+    "netIncome": "Utilidad neta",
+    "costOfGoodsSold": "Costo de ventas",
+    "expenses": "Gastos",
+    "totalRevenue": "Total Ingresos",
+    "columns": {
+      "current": "Actual",
+      "priorYear": "Año anterior",
+      "delta": "Δ",
+      "deltaPct": "Δ%"
+    }
+  },
+  "trialBalance": {
+    "title": "Balanza de comprobación",
+    "description": "al {date} · {count, plural, one {# cuenta} other {# cuentas}} con movimientos",
+    "columns": {
+      "debits": "Débitos",
+      "credits": "Créditos"
+    },
+    "totals": "Totales"
+  },
+  "partners": {
+    "payablesTitle": "Cuentas por pagar por proveedor",
+    "receivablesTitle": "Cuentas por cobrar por cliente",
+    "description": "Posición neta por tercero, a partir de líneas del libro mayor de partidas abiertas.",
+    "payables": "Cuentas por pagar",
+    "receivables": "Cuentas por cobrar",
+    "searchPlaceholder": "Buscar tercero…",
+    "totalOutstanding": "Total pendiente",
+    "partiesWithBalance": "Terceros con saldo",
+    "columns": {
+      "outstanding": "Pendiente",
+      "glLines": "Líneas del mayor"
+    },
+    "noPartyOnLines": "(sin tercero en las líneas)"
+  },
+  "aging": {
+    "receivablesTitle": "Antigüedad de CxC",
+    "payablesTitle": "Antigüedad de CxP",
+    "asOf": "partidas abiertas al {date}",
+    "receivables": "Cuentas por cobrar",
+    "payables": "Cuentas por pagar",
+    "noParty": "(sin tercero)",
+    "empty": "No hay partidas abiertas a esta fecha.",
+    "columns": {
+      "total": "Total",
+      "due": "Vence",
+      "age": "Antigüedad (días)",
+      "bucket": "Rango"
+    },
+    "buckets": {
+      "current": "Corriente",
+      "b1": "1–30",
+      "b2": "31–60",
+      "b3": "61–90",
+      "b4": "90+"
+    },
+    "summary": "Resumen",
+    "detail": "Detalle"
+  },
+  "cashFlow": {
+    "title": "Estado de flujo de efectivo",
+    "dateRange": "{from} → {to}",
+    "openingCash": "Efectivo inicial",
+    "closingCash": "Efectivo final",
+    "netChange": "Variación neta de efectivo",
+    "empty": "No hay movimientos de efectivo en este período.",
+    "sections": {
+      "operating": "Actividades de operación",
+      "investing": "Actividades de inversión",
+      "financing": "Actividades de financiamiento"
+    },
+    "subtotal": "Flujo neto de {section}",
+    "reconciliation": "Inicial + variación neta = final",
+    "reconciled": "conciliado",
+    "offBy": "descuadre de {amount}"
+  },
+  "cashFlowIndirect": {
+    "title": "Estado de flujo de efectivo (método indirecto)",
+    "dateRange": "{from} → {to}",
+    "openingCash": "Efectivo inicial",
+    "closingCash": "Efectivo final",
+    "netChange": "Variación neta de efectivo",
+    "empty": "No hay movimientos de efectivo en este período.",
+    "netIncome": "Resultado neto",
+    "adjustmentsHeader": "Ajustes para conciliar el resultado neto con el efectivo",
+    "wcHeader": "Variaciones en el capital de trabajo operativo",
+    "sections": {
+      "operating": "Actividades de operación",
+      "investing": "Actividades de inversión",
+      "financing": "Actividades de financiamiento"
+    },
+    "adjustments": {
+      "depreciation": "Depreciación y amortización",
+      "disposal": "(Ganancia) pérdida por enajenación de activos",
+      "unrealizedFx": "Diferencia de cambio no realizada (ganancia) pérdida"
+    },
+    "subtotals": {
+      "operating": "Efectivo neto de actividades operativas",
+      "investing": "Efectivo neto de actividades de inversión",
+      "financing": "Efectivo neto de actividades de financiación"
+    },
+    "fxEffect": "Efecto de las variaciones cambiarias sobre el efectivo",
+    "reconciliation": "Inicial + variación neta = final",
+    "reconciled": "conciliado",
+    "offBy": "descuadre de {amount}"
+  },
+  "custom": {
+    "kind": {
+      "builtIn": "Integrado",
+      "custom": "Personalizado"
+    },
+    "running": "Ejecutando…",
+    "list": {
+      "title": "Informes personalizados",
+      "description": "Cree, guarde, ejecute y programe informes sobre el libro mayor — filas de detalle o resúmenes agrupados, con filtros, desgloses y medidas.",
+      "searchPlaceholder": "Buscar informes…",
+      "kindFilterLabel": "Clase",
+      "emptyTitle": "Aún no hay informes",
+      "emptyDescription": "Cargue los informes integrados o cree su primer informe personalizado para comenzar.",
+      "columns": {
+        "report": "Informe",
+        "kind": "Clase"
+      },
+      "summarySummarize": "Resumen de {source} · {groups, plural, one {# grupo} other {# grupos}}, {measures, plural, one {# medida} other {# medidas}}",
+      "summaryRows": "Detalle de {source} · {columns, plural, one {# columna} other {# columnas}}"
+    },
+    "actions": {
+      "run": "Ejecutar",
+      "clone": "Duplicar",
+      "loadFailed": "No se pudo cargar el informe",
+      "cloneFailed": "No se pudo duplicar el informe",
+      "cloned": "Informe duplicado",
+      "copyName": "{name} (copia)",
+      "deleteConfirm": "¿Eliminar este informe? Sus programaciones y su historial de ejecuciones también se eliminan.",
+      "deleteFailed": "No se pudo eliminar el informe",
+      "deleted": "Informe eliminado"
+    },
+    "newButton": {
+      "label": "Nuevo informe",
+      "untitledName": "Informe sin título",
+      "createFailed": "No se pudo crear el informe"
+    },
+    "filterTree": {
+      "match": "Coincidir con",
+      "allOfFollowing": "TODAS las siguientes",
+      "anyOfFollowing": "CUALQUIERA de las siguientes",
+      "noConditions": "Sin condiciones — el informe devuelve todas las filas.",
+      "addCondition": "Condición",
+      "addGroup": "Grupo",
+      "noValue": "(sin valor)",
+      "valuePlaceholder": "valor",
+      "listPlaceholder": "valores separados por comas",
+      "removeConditionAria": "Quitar condición"
+    },
+    "resultView": {
+      "noRows": "Ninguna fila coincide con este informe."
+    },
+    "builder": {
+      "namePlaceholder": "Nombre del informe",
+      "descriptionPlaceholder": "Descripción (opcional)",
+      "allChangesSaved": "Todos los cambios guardados",
+      "unsavedChanges": "Cambios sin guardar…",
+      "runAndSchedule": "Ejecutar y programar",
+      "source": "Origen",
+      "mode": "Modo",
+      "detailRows": "Filas de detalle",
+      "summarize": "Resumir",
+      "sortBy": "Ordenar por",
+      "sortDefault": "Predeterminado",
+      "direction": "Dirección",
+      "descending": "Descendente",
+      "ascending": "Ascendente",
+      "rowLimit": "Límite de filas",
+      "rowLimitHint": "Limitado a 10,000 filas. Las vistas previas muestran las primeras {previewRows}.",
+      "pageSetup": {
+        "title": "Configuración de página PDF",
+        "hint": "Controla cómo se imprime este informe en PDF (papel, orientación, densidad, márgenes).",
+        "paper": "Tamaño de papel",
+        "paperLetter": "Carta",
+        "paperA4": "A4",
+        "paperLegal": "Legal",
+        "orientation": "Orientación",
+        "landscape": "Horizontal",
+        "portrait": "Vertical",
+        "density": "Densidad",
+        "densityStandard": "Estándar",
+        "densityCompact": "Compacta (más filas por página)",
+        "marginMm": "Márgenes (mm)"
+      },
+      "livePreview": "Vista previa en vivo",
+      "previewFailed": "La vista previa falló",
+      "runningPreview": "Ejecutando vista previa…",
+      "previewEmptyHint": "Ajuste el informe para ver una vista previa en vivo.",
+      "columns": "Columnas",
+      "sectionBy": "Seccionar por (opcional)",
+      "noSections": "Sin secciones",
+      "sectionByHint": "Agrupa las filas de detalle en secciones con título según esta columna.",
+      "groupBy": "Agrupar por",
+      "noGroupsHint": "Sin grupos — las medidas se consolidan en un único total general.",
+      "measures": "Medidas",
+      "noBin": "Sin intervalo",
+      "removeGroupAria": "Quitar grupo",
+      "removeMeasureAria": "Quitar medida",
+      "bin": {
+        "day": "por día",
+        "week": "por semana",
+        "month": "por mes",
+        "quarter": "por trimestre",
+        "year": "por año",
+        "fiscal_period": "por período fiscal",
+        "fiscal_quarter": "por trimestre fiscal",
+        "fiscal_year": "por ejercicio fiscal"
+      },
+      "agg": {
+        "count": "Cantidad de filas",
+        "countDistinct": "Cantidad de valores distintos",
+        "sum": "Suma",
+        "avg": "Promedio",
+        "min": "Mín",
+        "max": "Máx"
+      },
+      "running": "Ejecutando…",
+      "selectedColumns": "Columnas seleccionadas",
+      "addColumn": "Agregar columna",
+      "labelOverridePlaceholder": "Renombrar…",
+      "moveUpAria": "Subir",
+      "moveDownAria": "Bajar",
+      "removeColumnAria": "Quitar columna",
+      "thenBy": "Luego por",
+      "addSortLevel": "Agregar nivel de orden",
+      "removeSortAria": "Quitar nivel de orden",
+      "noColumnsSelected": "No hay columnas seleccionadas: agregue al menos una.",
+      "tabs": {
+        "data": "Datos",
+        "filter": "Filtro",
+        "format": "Formato"
+      }
+    },
+    "runner": {
+      "downloadCsv": "Descargar CSV",
+      "downloadPdf": "Descargar PDF",
+      "downloadXlsx": "Descargar Excel",
+      "runNow": "Ejecutar ahora",
+      "runFailed": "La ejecución del informe falló",
+      "runComplete": "Ejecución del informe completada",
+      "emptyHint": "Ejecute el informe para ver los resultados aquí. Las ejecuciones se guardan y se pueden descargar como CSV.",
+      "scheduledDelivery": "Envío programado",
+      "recentRuns": "Ejecuciones recientes",
+      "columns": {
+        "trigger": "Disparador",
+        "rows": "Filas",
+        "finished": "Finalizada",
+        "delivery": "Entrega"
+      },
+      "status": {
+        "succeeded": "Correcta",
+        "running": "En ejecución",
+        "queued": "En cola",
+        "failed": "Fallida"
+      },
+      "trigger": {
+        "manual": "Manual",
+        "scheduled": "Programada"
+      },
+      "deliveryEvidence": "{sent}/{total} enviados · {failed} fallidos · {suppressed} bloqueados",
+      "pdf": "Evidencia PDF",
+      "csv": "CSV"
+    }
+  },
+  "schedule": {
+    "updateFailed": "La actualización falló",
+    "paused": "Programación pausada",
+    "resumed": "Programación reanudada",
+    "deleteConfirm": "¿Eliminar esta programación?",
+    "deleted": "Programación eliminada",
+    "noScheduleYet": "Aún no hay una programación de envío.",
+    "addOneHint": "Agregue una para enviar este informe por correo electrónico con una frecuencia definida.",
+    "pausedBadge": "Pausada",
+    "pause": "Pausar",
+    "resume": "Reanudar",
+    "deleteAria": "Eliminar programación",
+    "recipientsTo": "Para {emails}",
+    "noRecipients": "Sin destinatarios definidos",
+    "nextRun": "Próxima ejecución {time}",
+    "addSchedule": "Agregar programación",
+    "cadence": "Frecuencia",
+    "cadences": {
+      "daily": "Diaria",
+      "weekly": "Semanal",
+      "monthly": "Mensual"
+    },
+    "dayOfWeek": "Día de la semana",
+    "weekdays": {
+      "sunday": "Domingo",
+      "monday": "Lunes",
+      "tuesday": "Martes",
+      "wednesday": "Miércoles",
+      "thursday": "Jueves",
+      "friday": "Viernes",
+      "saturday": "Sábado"
+    },
+    "dayOfMonth": "Día del mes",
+    "time": "Hora",
+    "timezone": "Zona horaria",
+    "recipients": "Destinatarios",
+    "recipientsPlaceholder": "finance@example.com, cfo@example.com",
+    "recipientsHint": "Direcciones de correo electrónico separadas por comas. El envío se pone en cola para el worker (vea más abajo).",
+    "saveSchedule": "Guardar programación",
+    "saved": "Programación guardada",
+    "saveFailed": "No se pudo guardar la programación",
+    "describe": {
+      "daily": "Diariamente a las {time} ({zone})",
+      "weekly": "Semanalmente el {day} a las {time} ({zone})",
+      "monthly": "Mensualmente el día {dayOfMonth} a las {time} ({zone})",
+      "weekdays": {
+        "sun": "domingo",
+        "mon": "lunes",
+        "tue": "martes",
+        "wed": "miércoles",
+        "thu": "jueves",
+        "fri": "viernes",
+        "sat": "sábado"
+      }
+    }
+  },
+  "catalog": {
+    "entities": {
+      "ledger_lines": {
+        "label": "Líneas del mayor",
+        "description": "Detalle de líneas de asiento unido a asiento, cuenta, tercero y dimensiones — el libro mayor en bruto. Una fila por línea de asiento contabilizada (o en borrador)."
+      },
+      "documents": {
+        "label": "Transacciones",
+        "description": "Todas las transacciones: facturas de proveedor y cliente, créditos, pagos, informes de gastos, cheques, cargos de tarjeta, asientos, órdenes y cotizaciones. Filtre el tipo para centrarse en una o varias."
+      },
+      "parties": {
+        "label": "Terceros",
+        "description": "Clientes, proveedores y empleados — una fila por tercero con sus indicadores de rol y el detalle de empleado."
+      },
+      "accounts": {
+        "label": "Cuentas",
+        "description": "El plan de cuentas — número, nombre, tipo e indicadores de contabilización."
+      },
+      "transaction_lines": {
+        "label": "Líneas de transacción",
+        "description": "Detalle de transacciones a nivel de línea para todos los tipos: artículo, cuenta, cantidades, importes, estado de facturación y dimensiones."
+      },
+      "journal_entries": {
+        "label": "Asientos de diario",
+        "description": "Encabezados de asientos: número, fecha de contabilización, estado, origen y nota."
+      },
+      "items": {
+        "label": "Artículos",
+        "description": "El catálogo de artículos y servicios: servicios, inventario, mano de obra, cargos y descuentos con tarifas y cuentas."
+      },
+      "projects": {
+        "label": "Proyectos",
+        "description": "Proyectos / obras: estado, cliente, método de facturación, calendario y n.º de OC."
+      },
+      "timesheets": {
+        "label": "Registros de tiempo",
+        "description": "Registros de hojas de horas: empleado, fecha, horas, facturable, proyecto y estado de aprobación."
+      },
+      "fixed_assets": {
+        "label": "Activos fijos",
+        "description": "El registro de activos fijos: estado, adquisición, costo, custodio y dimensiones."
+      },
+      "tax_codes": {
+        "label": "Códigos de impuesto",
+        "description": "Códigos de impuesto: jurisdicción, alcance y recuperabilidad."
+      }
+    },
+    "columns": {
+      "ledger_lines": {
+        "posting_date": "Fecha de contabilización",
+        "entry_number": "N.º de asiento",
+        "entry_status": "Estado del asiento",
+        "origin": "Origen",
+        "account_number": "N.º de cuenta",
+        "account_name": "Cuenta",
+        "account_type": "Tipo de cuenta",
+        "party_name": "Tercero",
+        "department": "Departamento",
+        "project": "Proyecto",
+        "location": "Ubicación",
+        "class": "Clase",
+        "memo": "Memo",
+        "amount": "Importe (base)",
+        "currency": "Moneda",
+        "txn_amount": "Importe (transacción)",
+        "quantity": "Cantidad",
+        "unit": "Unidad",
+        "due_date": "Fecha de vencimiento",
+        "is_open_item": "Partida abierta",
+        "reconciled_at": "Fecha de conciliación",
+        "entry_id": "Asiento (id)",
+        "account_id": "Cuenta (id)",
+        "party_id": "Tercero (id)"
+      },
+      "documents": {
+        "kind": "Tipo",
+        "document_number": "N.º de documento",
+        "party_name": "Tercero",
+        "document_date": "Fecha del documento",
+        "posting_date": "Fecha de contabilización",
+        "due_date": "Fecha de vencimiento",
+        "status": "Estado",
+        "currency": "Moneda",
+        "subtotal": "Subtotal",
+        "tax_total": "Impuesto",
+        "total": "Total",
+        "reference_number": "N.º de referencia",
+        "billing_method": "Método de facturación",
+        "payment_hold_reason": "Retención de pago",
+        "expected_pay_date": "Fecha prevista de pago",
+        "department": "Departamento",
+        "project": "Proyecto",
+        "memo": "Memo",
+        "created_at": "Fecha de creación",
+        "id": "Transacción (id)",
+        "party_id": "Tercero (id)",
+        "is_final_invoice": "Factura final",
+        "location": "Ubicación",
+        "class": "Clase"
+      },
+      "parties": {
+        "display_name": "Nombre",
+        "legal_name": "Razón social",
+        "kind": "Clase",
+        "short_code": "Código corto",
+        "email": "Correo electrónico",
+        "phone": "Teléfono",
+        "is_active": "Activo",
+        "is_customer": "Cliente",
+        "is_vendor": "Proveedor",
+        "is_employee": "Empleado",
+        "employee_number": "N.º de empleado",
+        "hired_on": "Fecha de contratación",
+        "terminated_on": "Fecha de baja",
+        "created_at": "Fecha de creación",
+        "id": "Tercero (id)"
+      },
+      "accounts": {
+        "number": "N.º de cuenta",
+        "name": "Nombre",
+        "type": "Tipo",
+        "description": "Descripción",
+        "is_summary": "De resumen",
+        "is_active": "Activa",
+        "reconcilable": "Conciliable",
+        "currency_restriction": "Restricción de moneda",
+        "created_at": "Fecha de creación",
+        "id": "Cuenta (id)",
+        "parent_id": "Cuenta padre (id)"
+      },
+      "transaction_lines": {
+        "kind": "Tipo",
+        "document_number": "N.º de documento",
+        "document_date": "Fecha del documento",
+        "status": "Estado",
+        "party_name": "Tercero",
+        "line_number": "N.º de línea",
+        "item_name": "Artículo",
+        "account_number": "N.º de cuenta",
+        "account_name": "Cuenta",
+        "description": "Descripción",
+        "quantity": "Cantidad",
+        "unit": "Unidad",
+        "unit_price": "Precio unitario",
+        "amount": "Importe",
+        "tax_amount": "Importe de impuesto",
+        "is_billable": "Facturable",
+        "quantity_fulfilled": "Cant. entregada",
+        "quantity_billed": "Cant. facturada",
+        "employee_name": "Empleado",
+        "department": "Departamento",
+        "project": "Proyecto",
+        "location": "Ubicación",
+        "class": "Clase",
+        "created_at": "Creado el",
+        "id": "Línea (id)",
+        "document_id": "Transacción (id)"
+      },
+      "journal_entries": {
+        "entry_number": "N.º de asiento",
+        "posting_date": "Fecha de contabilización",
+        "status": "Estado",
+        "origin": "Origen",
+        "memo": "Nota",
+        "created_at": "Creado el",
+        "id": "Asiento (id)",
+        "source_document_id": "Transacción de origen (id)"
+      },
+      "items": {
+        "code": "Código",
+        "name": "Nombre",
+        "kind": "Tipo",
+        "category": "Categoría",
+        "default_rate": "Tarifa predeterminada",
+        "unit": "Unidad",
+        "income_account": "Cuenta de ingresos",
+        "expense_account": "Cuenta de gastos",
+        "show_on_timesheet": "En hojas de horas",
+        "is_active": "Activo",
+        "created_at": "Creado el",
+        "id": "Artículo (id)"
+      },
+      "projects": {
+        "code": "Código",
+        "name": "Nombre",
+        "status": "Estado",
+        "customer_name": "Cliente",
+        "manager_name": "Gerente",
+        "billing_method": "Método de facturación",
+        "customer_po_number": "N.º OC cliente",
+        "starts_on": "Inicia el",
+        "ends_on": "Termina el",
+        "is_active": "Activo",
+        "created_at": "Creado el",
+        "id": "Proyecto (id)"
+      },
+      "timesheets": {
+        "employee_name": "Empleado",
+        "worked_on": "Trabajado el",
+        "hours": "Horas",
+        "status": "Estado",
+        "is_billable": "Facturable",
+        "project": "Proyecto",
+        "item_name": "Artículo de servicio",
+        "department": "Departamento",
+        "memo": "Nota",
+        "created_at": "Creado el",
+        "id": "Registro de tiempo (id)"
+      },
+      "fixed_assets": {
+        "asset_number": "N.º de activo",
+        "name": "Nombre",
+        "status": "Estado",
+        "category": "Categoría",
+        "acquired_on": "Adquirido el",
+        "in_service_on": "En servicio el",
+        "acquisition_cost": "Costo de adquisición",
+        "salvage_value": "Valor residual",
+        "serial_number": "N.º de serie",
+        "custodian_name": "Custodio",
+        "project": "Proyecto",
+        "department": "Departamento",
+        "created_at": "Creado el",
+        "id": "Activo (id)"
+      },
+      "tax_codes": {
+        "code": "Código",
+        "name": "Nombre",
+        "country": "País",
+        "region": "Región",
+        "applies_to": "Se aplica a",
+        "recoverable_percent": "% recuperable",
+        "is_active": "Activo",
+        "id": "Código de impuesto (id)"
+      }
+    },
+    "enumValues": {
+      "vendor_bill": "Factura de proveedor",
+      "vendor_credit": "Crédito de proveedor",
+      "vendor_payment": "Pago a proveedor",
+      "customer_invoice": "Factura de cliente",
+      "customer_credit": "Nota de crédito",
+      "customer_payment": "Pago de cliente",
+      "expense_report": "Informe de gastos",
+      "check": "Cheque",
+      "card_charge": "Cargo de tarjeta",
+      "card_refund": "Reembolso de tarjeta",
+      "transfer": "Transferencia",
+      "journal": "Asiento de diario",
+      "purchase_order": "Orden de compra",
+      "sales_order": "Orden de venta",
+      "quote": "Cotización",
+      "draft": "Borrador",
+      "pending_approval": "Pendiente de aprobación",
+      "approved": "Aprobado",
+      "posted": "Contabilizado",
+      "voided": "Anulado",
+      "reversed": "Revertido",
+      "submitted": "Enviado",
+      "rejected": "Rechazado",
+      "time_and_materials": "Tiempo y materiales",
+      "fixed_price": "Precio fijo",
+      "cost_plus": "Costo más margen",
+      "service": "Servicio",
+      "non_inventory": "Sin inventario",
+      "inventory": "Inventario",
+      "assembly": "Ensamblaje",
+      "kit": "Kit",
+      "other_charge": "Otro cargo",
+      "labor": "Mano de obra",
+      "absence": "Ausencia",
+      "discount": "Descuento",
+      "quoted": "Cotizado",
+      "awarded": "Adjudicado",
+      "active": "Activo",
+      "substantially_complete": "Sustancialmente completo",
+      "closed": "Cerrado",
+      "cancelled": "Cancelado",
+      "in_service": "En servicio",
+      "fully_depreciated": "Totalmente depreciado",
+      "disposed": "Enajenado",
+      "written_off": "Dado de baja",
+      "sales": "Ventas",
+      "purchases": "Compras",
+      "both": "Ambos"
+    }
+  },
+  "operators": {
+    "eq": "es igual a",
+    "neq": "es distinto de",
+    "in": "es cualquiera de",
+    "not_in": "no es ninguno de",
+    "gte": "en o después de / ≥",
+    "lte": "en o antes de / ≤",
+    "is_null": "está vacío",
+    "is_not_null": "tiene valor",
+    "is_true": "es sí",
+    "is_false": "es no",
+    "contains": "contiene",
+    "between_days_ago": "en los últimos N días",
+    "due_within_days": "vence en los próximos N días",
+    "since_today": "es hoy",
+    "this_week": "es esta semana",
+    "this_month": "es este mes",
+    "this_year": "es este año",
+    "before_now": "está en el pasado (vencido)",
+    "period_preset": "en período fiscal"
+  },
+  "aggs": {
+    "count": "Cantidad",
+    "count_distinct": "Cantidad de valores distintos",
+    "sum": "Suma",
+    "avg": "Promedio",
+    "min": "Mín",
+    "max": "Máx"
+  },
+  "run": {
+    "results": "Resultados",
+    "summary": "Resumen",
+    "section": "{label}: {value}",
+    "rowCount": "{count, plural, one {# fila} other {# filas}}",
+    "groupCount": "{count, plural, one {# grupo} other {# grupos}}",
+    "summaryRows": "Filas",
+    "summaryGroups": "Grupos",
+    "summarySource": "Origen",
+    "summaryTotal": "Total {measure}",
+    "none": "(ninguno)",
+    "yes": "sí",
+    "no": "no",
+    "measureOf": "{fn} de {column}",
+    "breakoutBy": "{column} (por {bin})",
+    "bins": {
+      "day": "día",
+      "week": "semana",
+      "month": "mes",
+      "quarter": "trimestre",
+      "year": "año",
+      "fiscal_period": "período fiscal",
+      "fiscal_quarter": "trimestre fiscal",
+      "fiscal_year": "ejercicio fiscal"
+    },
+    "csvSection": "Sección"
+  },
+  "builtIns": {
+    "ap-aging-by-vendor": {
+      "name": "Antigüedad de cuentas por pagar por proveedor",
+      "description": "Líneas del mayor de cuentas por pagar abiertas, sumadas por proveedor y mes de vencimiento. Los totales negativos son importes adeudados (cuentas por pagar de naturaleza acreedora)."
+    },
+    "open-ar-by-customer": {
+      "name": "Cuentas por cobrar abiertas por cliente",
+      "description": "Saldo pendiente de cuentas por cobrar por cliente, a partir de partidas abiertas del libro mayor. Los totales positivos son importes que le adeudan."
+    },
+    "gl-activity-by-account-fy": {
+      "name": "Actividad del mayor por cuenta (este ejercicio fiscal)",
+      "description": "Actividad de asientos contabilizados este año, una fila por cuenta: movimiento neto y cantidad de líneas. Usa el año calendario hasta que estén disponibles los operadores de período fiscal."
+    },
+    "expense-detail-by-department-fy": {
+      "name": "Detalle de gastos por departamento (este ejercicio fiscal)",
+      "description": "Líneas de gastos y costo de ventas contabilizadas este año, seccionadas por departamento — fecha, asiento, cuenta, tercero, memo e importe."
+    }
+  },
+  "generalLedger": {
+    "title": "Libro mayor",
+    "empty": "Sin actividad registrada en este período.",
+    "truncated": "Mostrando las primeras 5.000 líneas — reduzca el período o filtre por cuenta para ver todo.",
+    "opening": "Saldo inicial",
+    "closing": "Saldo final",
+    "columns": {
+      "date": "Fecha",
+      "entry": "Asiento",
+      "detail": "Tercero / nota"
+    }
+  },
+  "journal": {
+    "title": "Libro diario",
+    "empty": "Sin asientos registrados en este período.",
+    "truncated": "Mostrando las primeras 4.000 líneas — reduzca el período para ver todo.",
+    "columns": {
+      "detail": "Tercero / nota"
+    }
+  },
+  "registers": {
+    "arTitle": "Registro de CxC",
+    "apTitle": "Registro de CxP",
+    "receivables": "Cuentas por cobrar",
+    "payables": "Cuentas por pagar",
+    "truncated": "Mostrando las primeras 4.000 líneas — reduzca el período para ver todo.",
+    "empty": "Sin actividad en este período.",
+    "closing": "Cierre"
+  },
+  "budget": {
+    "title": "Presupuesto vs Real",
+    "description": "Actividad real del mayor frente a un escenario de presupuesto, por cuenta.",
+    "noScenarios": "Aún no hay escenarios de presupuesto. Cree uno para comparar con los valores reales.",
+    "scenario": "Escenario",
+    "scenarioOption": "{name} · AF{year} · {status}",
+    "manage": "Gestionar presupuestos",
+    "actual": "Real",
+    "budget": "Presupuesto",
+    "variance": "Variación",
+    "variancePct": "Variación %"
+  },
+  "statements": {
+    "title": "Estado de cuenta",
+    "opening": "Saldo inicial",
+    "closing": "Saldo final"
+  },
+  "detail": {
+    "title": "Detalle de transacciones",
+    "netTotal": "Total neto",
+    "truncated": "Mostrando las primeras 2.000 líneas — acote el informe para ver todo.",
+    "empty": "No hay transacciones detrás de este valor.",
+    "backTo": "Volver a {report}"
+  },
+  "drillDrawer": {
+    "title": "Registros de respaldo",
+    "supporting": "Los registros que componen el valor seleccionado del informe.",
+    "loadFailed": "No se pudieron cargar los registros de respaldo.",
+    "recordLoadFailed": "No se pudo abrir la transacción."
+  },
+  "flyout": {
+    "title": "Asiento contable",
+    "openTransaction": "Abrir transacción completa"
+  },
+  "export": {
+    "pdf": "PDF",
+    "xlsx": "Excel",
+    "csv": "CSV",
+    "columns": {
+      "accountNumber": "N.º de cuenta",
+      "accountName": "Cuenta",
+      "amount": "Importe",
+      "balance": "Saldo",
+      "type": "Tipo",
+      "party": "Tercero",
+      "latestDue": "Último vencimiento"
+    },
+    "print": "Imprimir",
+    "printFailed": "No se pudo abrir el cuadro de impresión",
+    "export": "Exportar"
+  },
+  "projectProfitability": {
+    "title": "Rentabilidad por proyecto",
+    "empty": "Sin actividad de proyectos en este período.",
+    "searchPlaceholder": "Buscar clientes o proyectos…",
+    "noCustomer": "Cliente sin asignar",
+    "expandCustomer": "Expandir {customer}",
+    "collapseCustomer": "Contraer {customer}",
+    "projectScope": "Proyectos",
+    "activeProjects": "Proyectos activos",
+    "allProjects": "Todos los proyectos",
+    "columns": {
+      "customerJob": "Cliente / Proyecto",
+      "project": "Proyecto",
+      "customer": "Cliente",
+      "revenue": "Ingresos",
+      "cogs": "Costo de ventas",
+      "grossProfit": "Utilidad bruta",
+      "expenses": "Gastos",
+      "net": "Utilidad neta",
+      "margin": "Margen",
+      "hours": "Horas"
+    }
+  },
+  "orders": {
+    "title": "Flujo de pedidos",
+    "description": "Cartera abierta y conversión de presupuestos, órdenes de venta y de compra.",
+    "columns": {
+      "type": "Tipo",
+      "open": "Abiertos",
+      "openValue": "Valor abierto",
+      "converted": "Convertidos",
+      "convRate": "Conversión",
+      "voided": "Anulados"
+    },
+    "kinds": {
+      "quote": "Presupuestos",
+      "sales_order": "Órdenes de venta",
+      "purchase_order": "Órdenes de compra"
+    },
+    "note": "La conversión se rastrea mediante enlaces de transacciones; los enlaces históricos del origen pueden requerir migración."
+  }
+}

@@ -1,0 +1,270 @@
+{
+  "page": {
+    "title": "Pagamentos",
+    "description": "Gerencie a atividade de pagamentos e as remessas bancárias, da seleção à liquidação.",
+    "newPayment": "Novo pagamento",
+    "newRun": "Nova remessa de pagamento",
+    "tabs": {
+      "payments": "Pagamentos",
+      "runs": "Remessas de pagamento"
+    }
+  },
+  "list": {
+    "searchPlaceholder": "{side, select, ap {Buscar pagamentos, fornecedores, refs…} other {Buscar pagamentos, clientes, refs…}}",
+    "newLabel": "{side, select, ap {Novo pagamento} other {Novo recebimento}}",
+    "columns": {
+      "document": "{side, select, ap {Pagamento} other {Recebimento}}",
+      "payment": "Pagamento",
+      "bankAccount": "Conta bancária",
+      "ref": "Ref"
+    },
+    "empty": {
+      "title": "{side, select, ap {Nenhum pagamento ainda} other {Nenhum recebimento ainda}}",
+      "description": "{side, select, ap {Registre o primeiro pagamento a fornecedor para começar a liquidar contas a pagar em aberto.} other {Registre o primeiro recebimento de cliente para começar a liquidar faturas em aberto.}}"
+    }
+  },
+  "newButton": {
+    "createDraftFailed": "Não foi possível criar um rascunho"
+  },
+  "drawer": {
+    "draftHint": "Rascunho — as alterações são salvas automaticamente.",
+    "viewGlImpact": "Ver impacto no razão",
+    "postAction": "{side, select, ap {Pagar e lançar} other {Receber e lançar}}",
+    "bankAccount": "Conta bancária",
+    "selectPartyPlaceholder": "{side, select, ap {Selecionar fornecedor…} other {Selecionar cliente…}}",
+    "selectBankAccountPlaceholder": "Selecionar conta bancária…",
+    "referencePlaceholder": "Ref de cheque / EFT…",
+    "openItems": "{side, select, ap {Contas a pagar em aberto} other {Faturas em aberto}}",
+    "amountReceived": "Valor recebido",
+    "autoApply": "Aplicar automaticamente",
+    "autoApplyFailed": "Não foi possível sugerir uma aplicação",
+    "autoApplyNone": "Nenhum item em aberto corresponde a este valor",
+    "autoApplyDone": "Aplicado a {count, plural, one {# item} other {# itens}} ({strategy})",
+    "autoApplyStrategy": {
+      "reference": "por referência",
+      "exact": "correspondência exata",
+      "fifo": "mais antigos primeiro",
+      "none": "nenhum"
+    },
+    "selectPartyHint": "{side, select, ap {Selecione um fornecedor para listar seus itens em aberto.} other {Selecione um cliente para listar seus itens em aberto.}}",
+    "loadingOpenItems": "Carregando itens em aberto…",
+    "noOpenItems": "{side, select, ap {Nenhuma conta a pagar em aberto para este fornecedor.} other {Nenhuma fatura em aberto para este cliente.}}",
+    "columns": {
+      "apply": "Aplicar",
+      "document": "Documento",
+      "due": "Vencimento",
+      "original": "Original",
+      "appliedToDate": "Aplicado até a data",
+      "open": "Em aberto",
+      "appliedOn": "Aplicado em",
+      "applied": "Aplicado",
+      "rateEvidence": "Evidência da taxa"
+    },
+    "targetAmount": "Valor aplicado ({currency})",
+    "sourceAmount": "Valor do pagamento ({currency})",
+    "settlementRate": "Taxa: {target} por {source}",
+    "rateReferencePlaceholder": "Aviso bancário ou referência contratual…",
+    "rateSource": { "manual": "Taxa manual", "contractual": "Taxa contratual", "provider": "Taxa cambial do locatário" },
+    "applyAriaLabel": "Aplicar a {document}",
+    "invalidAllocation": "Os valores devem ser positivos, respeitar o saldo em aberto e fechar exatamente pela taxa de liquidação comprovada.",
+    "appliedTo": "Aplicado a",
+    "voidedNote": "Este pagamento foi cancelado; seu lançamento foi estornado.",
+    "noLiveApplications": "Nenhuma aplicação ativa.",
+    "kind": {
+      "vendorBill": "Conta a pagar",
+      "customerInvoice": "Fatura",
+      "expenseReport": "Relatório de despesas",
+      "journal": "Lançamento",
+      "entry": "Lançamento"
+    },
+    "saveState": {
+      "saved": "Todas as alterações salvas",
+      "error": "Falha ao salvar — corrija e tente novamente",
+      "dirty": "Alterações não salvas…"
+    },
+    "applyingSummary": "{count, plural, one {Aplicando # item} other {Aplicando # itens}} · <total>Total {amount}</total>",
+    "totalAmount": "Total {amount}",
+    "toasts": {
+      "loadOpenItemsFailed": "Não foi possível carregar os itens em aberto",
+      "autosaveFailed": "Falha no salvamento automático",
+      "postFailed": "O lançamento falhou",
+      "posted": "{side, select, ap {Pagamento lançado e aplicado} other {Recebimento lançado e aplicado}}"
+    }
+  },
+  "eft": {
+    "notConfiguredTitle": "A originação de EFT não está configurada",
+    "notConfiguredListDescription": "As remessas de pagamento ainda podem ser montadas, mas a exportação de arquivo bancário fica desativada até que um administrador conclua a configuração de originação de EFT. Campos ausentes: {missing}.",
+    "notConfiguredDrawerDescription": "A exportação de arquivo bancário fica desativada até que um administrador conclua a configuração de originação de EFT. Campos ausentes: {missing}."
+  },
+  "configuration": {
+    "notConfiguredTitle": "A configuração de pagamentos está incompleta",
+    "notConfiguredDescription": "Crie um perfil de financiamento em <setup>Configuração de Pagamentos e Bancos</setup> antes de montar uma remessa de pagamento.",
+    "collectionsNotConfiguredTitle": "A configuração de débito automático está incompleta",
+    "collectionsNotConfiguredDescription": "Crie um perfil bancário de débito e mandatos em <setup>Configuração de Pagamentos e Bancos</setup> antes de montar uma remessa de cobrança.",
+    "runNotReadyTitle": "Esta remessa de pagamento não está pronta",
+    "runNotReadyDescription": "Conclua a configuração do perfil antes de gerar um arquivo. Ausente ou inválido: {missing}."
+  },
+  "runBuilder": {
+    "title": "Nova remessa de pagamento",
+    "description": "Escolha a conta de financiamento e as contas a pagar e, em seguida, crie uma remessa rascunho para revisão.",
+    "collectionTitle": "Nova remessa de débito automático",
+    "collectionDescription": "Escolha o perfil de cobrança e as faturas em aberto e, em seguida, crie uma remessa rascunho para revisão.",
+    "noOpenBills": "Nenhuma conta a pagar lançada com saldo em aberto corresponde.",
+    "noOpenInvoices": "Nenhuma fatura lançada com saldo em aberto corresponde.",
+    "selectAllAriaLabel": "Selecionar todas as contas a pagar nesta página",
+    "selectAriaLabel": "Selecionar {document}",
+    "columns": {
+      "bill": "Conta a pagar",
+      "invoice": "Fatura",
+      "due": "Vencimento",
+      "ref": "Ref",
+      "bankDetails": "Dados bancários",
+      "mandate": "Mandato de débito",
+      "openBalance": "Saldo em aberto"
+    },
+    "bankApproved": "em arquivo",
+    "bankMissing": "ausente",
+    "mandateActive": "ativo",
+    "mandateMissing": "ausente",
+    "payFromBankAccount": "Perfil bancário de pagamento",
+    "selectBankAccountPlaceholder": "Selecionar um perfil de pagamento…",
+    "noBankAccounts": "Nenhum perfil de pagamento ativo",
+    "fundsDate": "Data dos fundos",
+    "captureDiscounts": "Capturar descontos por pagamento antecipado disponíveis",
+    "applyCredits": "Aplicar créditos de fornecedor disponíveis",
+    "selectedForPayment": "Selecionado para pagamento",
+    "selectedForCollection": "Selecionado para cobrança",
+    "selectionSummary": "{count, plural, one {# conta a pagar} other {# contas a pagar}} · <total>{amount}</total>",
+    "collectionSummary": "{count, plural, one {# fatura} other {# faturas}} · <total>{amount}</total>",
+    "createRun": "Criar remessa de pagamento",
+    "createCollectionRun": "Criar remessa de cobrança",
+    "toasts": {
+      "createFailed": "Não foi possível criar a remessa de pagamento",
+      "created": "Remessa de pagamento {number} criada"
+    }
+  },
+  "runs": {
+    "collectionRunsHeading": "Remessas de débito automático",
+    "collectionDescription": "Aprove, gere, entregue, lance e liquide arquivos de cobrança de clientes.",
+    "openInvoicesHeading": "Faturas em aberto",
+    "openInvoicesDescription": "Revise as faturas em aberto e a prontidão do mandato de débito antes da seleção.",
+    "invoicesSearchPlaceholder": "Buscar faturas ou clientes…",
+    "openBillsHeading": "Contas a pagar em aberto",
+    "openBillsDescription": "Selecione contas a pagar de vários fornecedores; cada fornecedor se torna uma instrução de pagamento.",
+    "billsSearchPlaceholder": "Buscar contas a pagar, fornecedores, refs…",
+    "runsHeading": "Remessas de pagamento",
+    "description": "Revise rascunhos, exporte arquivos bancários e confirme pagamentos lançados.",
+    "searchPlaceholder": "Buscar remessas ou contas bancárias…",
+    "noRunsYet": "Nenhuma remessa de pagamento ainda. Crie a primeira remessa quando as contas a pagar estiverem prontas.",
+    "noCollectionRunsYet": "Nenhuma remessa de débito automático ainda. Crie a primeira remessa quando as faturas autorizadas estiverem prontas para cobrança.",
+    "columns": {
+      "run": "Remessa",
+      "bankAccount": "Conta bancária",
+      "method": "Método",
+      "fundsDate": "Data dos fundos",
+      "payments": "Pagamentos"
+    },
+    "method": {
+      "eft": "EFT",
+      "ach": "ACH",
+      "sepa": "SEPA",
+      "wire": "Wire",
+      "cheque": "Cheque",
+      "direct_debit": "Débito automático",
+      "positive_pay": "Positive Pay",
+      "custom": "Personalizado"
+    },
+    "status": {
+      "confirmed": "Confirmada",
+      "generated": "Arquivo gerado",
+      "delivered": "Entregue",
+      "settled": "Liquidada",
+      "returned": "Devolvida",
+      "partially_failed": "Parcialmente falha",
+      "rejected": "Rejeitada",
+      "rolled_back": "Revertida"
+    }
+  },
+  "runDrawer": {
+    "descriptionEft": "Remessa de pagamento de {bank}",
+    "descriptionEftWithDate": "Remessa de pagamento de {bank} · fundos {date}",
+    "bankAccountFallback": "conta bancária",
+    "cancelRun": "Cancelar remessa",
+    "downloadFile": "Baixar arquivo",
+    "downloadBlockedTitle": "Resolva primeiro os problemas de perfil e dados bancários",
+    "submitRun": "Enviar para aprovação",
+    "approve": "Aprovar remessa",
+    "reject": "Rejeitar remessa",
+    "generateFile": "Gerar arquivo",
+    "approveFile": "Aprovar arquivo",
+    "rejectFile": "Rejeitar arquivo",
+    "reprocess": "Reprocessar",
+    "rollback": "Reverter",
+    "postPayments": "Lançar pagamentos",
+    "paymentsSummary": "{count, plural, one {# pagamento} other {# pagamentos}} · <total>Total {amount}</total>",
+    "payeesMissingBankDetails": "Contrapartes com dados bancários inválidos",
+    "filesTitle": "Arquivos de pagamento",
+    "sourcesTitle": "Transações de origem",
+    "instructionsTitle": "Instruções de pagamento",
+    "searchInstructions": "Buscar instruções…",
+    "activityTitle": "Atividade recente",
+    "systemActor": "Sistema",
+    "adjustments": "Desconto {discount} · crédito {credit}",
+    "reason": "Motivo",
+    "reasonRequired": "Informe um motivo. Ele é mantido na trilha de auditoria do pagamento.",
+    "recordOutcome": "Registrar resultado",
+    "outcome": { "title": "Resultado bancário", "description": "Registre a liquidação ou uma devolução para {payee}.", "status": "Resultado", "settled": "Liquidado", "returned": "Devolvido", "rejected": "Rejeitado pelo banco", "effectiveOn": "Data efetiva", "bankReference": "Referência bancária", "returnCode": "Código de devolução", "returnReason": "Motivo da devolução", "reversalWarning": "Uma devolução ou rejeição estorna o pagamento lançado e reabre as contas a pagar afetadas." },
+    "columns": {
+      "payee": "Beneficiário",
+      "payment": "Pagamento",
+      "bankDetails": "Dados bancários"
+    },
+    "bankApproved": "em arquivo",
+    "instructionStatus": {
+      "pending": "pendente",
+      "approved": "aprovada",
+      "generated": "gerada",
+      "sent": "enviada",
+      "settled": "liquidada",
+      "returned": "devolvida",
+      "rejected": "rejeitada",
+      "failed": "falha",
+      "reversed": "estornada",
+      "cancelled": "cancelada"
+    },
+    "fileStatus": { "generated": "gerado", "pending_approval": "aguardando aprovação", "approved": "aprovado", "rejected": "rejeitado", "delivered": "entregue", "superseded": "substituído", "voided": "cancelado" },
+    "events": {
+      "run_created": "Remessa de pagamento criada", "run_submitted": "Remessa de pagamento enviada", "run_approved": "Remessa de pagamento aprovada", "run_rejected": "Remessa de pagamento rejeitada",
+      "file_generated": "Arquivo de pagamento gerado", "file_reprocessed": "Arquivo de pagamento reprocessado", "file_approved": "Arquivo de pagamento aprovado", "file_rejected": "Arquivo de pagamento rejeitado",
+      "file_downloaded": "Arquivo de pagamento baixado", "file_delivered_sftp": "Arquivo de pagamento entregue por SFTP", "run_rolled_back": "Remessa de pagamento revertida",
+      "file_delivery_failed": "Falha na entrega do arquivo de pagamento",
+      "instruction_settled": "Pagamento liquidado", "instruction_returned": "Pagamento devolvido", "instruction_rejected": "Pagamento rejeitado"
+    },
+    "confirmPost": "{count, plural, one {Lançar # pagamento} other {Lançar # pagamentos}} totalizando {total} no razão e aplicá-los às contas a pagar selecionadas?",
+    "confirmCancel": "Cancelar a remessa {number}? Seus pagamentos rascunho são excluídos; nada foi lançado.",
+    "toasts": {
+      "postFailed": "O lançamento falhou",
+      "postedWithFailures": "{count} lançados; falhas: {failures}",
+      "posted": "{count, plural, one {# pagamento lançado e aplicado} other {# pagamentos lançados e aplicados}}",
+      "cancelFailed": "Não foi possível cancelar a remessa",
+      "cancelled": "Remessa cancelada",
+      "deliverFailed": "Não foi possível entregar o arquivo",
+      "delivered": "Entregue em {path}"
+      ,"actionFailed": "A ação de pagamento falhou"
+      ,"submitted": "Remessa de pagamento enviada"
+      ,"fileGenerated": "Arquivo de pagamento gerado"
+      ,"runApproved": "Remessa de pagamento aprovada"
+      ,"runRejected": "Remessa de pagamento rejeitada"
+      ,"fileApproved": "Arquivo de pagamento aprovado"
+      ,"fileRejected": "Arquivo de pagamento rejeitado"
+      ,"fileReprocessed": "Arquivo de pagamento reprocessado"
+      ,"rolledBack": "Remessa de pagamento revertida"
+      ,"outcomeFailed": "Não foi possível registrar o resultado bancário"
+      ,"outcomeSaved": "Resultado bancário registrado"
+    },
+    "deliverSftp": "Entregar via SFTP",
+    "deliverHint": "Entregue o arquivo de pagamento desta remessa na pasta SFTP de um banco ou parceiro para que eles o busquem.",
+    "sftpServer": "Login SFTP",
+    "noSftpServers": "Nenhum login SFTP ainda. Adicione um em Configuração → SFTP."
+  }
+}

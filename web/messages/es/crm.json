@@ -1,0 +1,281 @@
+{
+  "stages": {
+    "lead": "Cliente potencial",
+    "prospect": "Prospecto",
+    "customer": "Cliente"
+  },
+  "fields": {
+    "accountName": "Nombre de la cuenta",
+    "lifecycleStage": "Etapa del ciclo de vida",
+    "status": "Estado",
+    "owner": "Responsable",
+    "territory": "Territorio",
+    "leadSource": "Origen del cliente potencial",
+    "phone": "Teléfono",
+    "website": "Sitio web",
+    "industry": "Sector",
+    "category": "Categoría",
+    "annualRevenue": "Ingresos anuales",
+    "employeeCount": "Empleados",
+    "qualificationScore": "Puntuación de calificación",
+    "nextAction": "Próxima acción",
+    "lastActivity": "Última actividad",
+    "unassigned": "Sin asignar",
+    "activityType": "Tipo de actividad",
+    "subject": "Asunto",
+    "priority": "Prioridad",
+    "assignedTo": "Asignado a",
+    "start": "Inicio",
+    "end": "Fin",
+    "due": "Vencimiento",
+    "date": "Fecha",
+    "relatedType": "Tipo de registro relacionado",
+    "relatedRecord": "Registro relacionado",
+    "notes": "Notas",
+    "title": "Título",
+    "account": "Cuenta",
+    "customer": "Cliente",
+    "primaryContact": "Contacto principal",
+    "salesTeam": "Equipo de ventas",
+    "probability": "Probabilidad",
+    "forecastCategory": "Categoría de previsión",
+    "expectedClose": "Cierre previsto",
+    "currency": "Moneda",
+    "nextStep": "Próximo paso",
+    "item": "Artículo o servicio",
+    "description": "Descripción",
+    "quantity": "Cantidad",
+    "unitPrice": "Precio unitario",
+    "winLossReason": "Motivo de ganancia o pérdida",
+    "number": "Número",
+    "projectedAmount": "Importe previsto",
+    "periodStart": "Inicio del período",
+    "periodEnd": "Fin del período"
+  },
+  "accounts": {
+    "newFallback": "Nueva cuenta",
+    "search": "Buscar por nombre, correo o teléfono",
+    "activities": "Actividades recientes",
+    "opportunities": "Oportunidades",
+    "noActivities": "No se han registrado actividades.",
+    "noOpportunities": "No hay oportunidades vinculadas.",
+    "lead": {
+      "title": "Clientes potenciales",
+      "description": "Captura, califica, asigna y dirige nuevas relaciones.",
+      "new": "Nuevo cliente potencial",
+      "emptyTitle": "No hay clientes potenciales",
+      "emptyDescription": "Crea un cliente potencial para comenzar la calificación."
+    },
+    "prospect": {
+      "title": "Prospectos",
+      "description": "Convierte relaciones calificadas en ingresos.",
+      "new": "Nuevo prospecto",
+      "emptyTitle": "No hay prospectos",
+      "emptyDescription": "Los clientes potenciales calificados y las cuentas de oportunidades aparecen aquí."
+    }
+  },
+  "activities": {
+    "title": "Actividades",
+    "description": "Llamadas, visitas, eventos, correos, notas y seguimientos para cada relación.",
+    "new": "Nueva actividad",
+    "newFallback": "Nueva actividad",
+    "search": "Buscar asuntos y notas de actividades",
+    "emptyTitle": "No hay actividades",
+    "emptyDescription": "Registra una llamada, visita, nota, correo, evento o tarea."
+  },
+  "activityKinds": {
+    "task": "Tarea",
+    "call": "Llamada",
+    "event": "Visita o evento",
+    "email": "Correo",
+    "note": "Nota"
+  },
+  "activityStatuses": {
+    "planned": "Planificada",
+    "in_progress": "En curso",
+    "completed": "Completada",
+    "cancelled": "Cancelada"
+  },
+  "priorities": {
+    "low": "Baja",
+    "normal": "Normal",
+    "high": "Alta",
+    "urgent": "Urgente"
+  },
+  "relatedTypes": { "account": "Cuenta", "opportunity": "Oportunidad" },
+  "opportunities": {
+    "title": "Oportunidades",
+    "description": "Gestiona etapas del canal, rangos de ingresos, equipos, productos y documentos de venta.",
+    "new": "Nueva oportunidad",
+    "newFallback": "Nueva oportunidad",
+    "search": "Buscar oportunidades, números y cuentas",
+    "emptyTitle": "No hay oportunidades",
+    "emptyDescription": "Crea una oportunidad para comenzar a desarrollar el canal.",
+    "lines": "Productos y servicios",
+    "addLine": "Añadir línea",
+    "selectItem": "Seleccionar un artículo",
+    "createEstimate": "Crear presupuesto",
+    "estimateCreated": "Presupuesto creado",
+    "estimateFailed": "No se pudo crear el presupuesto."
+  },
+  "forecastCategories": {
+    "omitted": "Omitida",
+    "worst_case": "Peor caso",
+    "most_likely": "Más probable",
+    "upside": "Potencial"
+  },
+  "forecasts": {
+    "title": "Previsiones y cuotas",
+    "description": "Compara el canal, los ingresos ponderados, las ventas cerradas y las cuotas asignadas.",
+    "apply": "Aplicar",
+    "summary": "Resumen de previsión",
+    "pipeline": "Canal",
+    "weighted": "Ponderado",
+    "mostLikely": "Más probable",
+    "closed": "Cerrado",
+    "quotas": "Cuotas",
+    "target": "Objetivo",
+    "quota": "Cuota",
+    "manageQuotas": "Gestionar cuotas",
+    "history": "Historial de instantáneas",
+    "asOf": "A fecha de",
+    "snapshotType": "Tipo",
+    "override": "Ajuste",
+    "snapshotCount": "{count, plural, =0 {Ninguna instantánea} one {# instantánea} other {# instantáneas}} para este período.",
+    "snapshotKinds": {
+      "calculated": "Calculada",
+      "rep_override": "Ajuste del representante",
+      "manager_override": "Ajuste del gerente"
+    },
+    "emptyForecastTitle": "No hay previsión para este período",
+    "emptyForecastDescription": "Las oportunidades abiertas y las ventas contabilizadas del período seleccionado aparecerán aquí.",
+    "emptyQuotaTitle": "No hay cuotas en este período",
+    "emptyQuotaDescription": "Asigna una cuota a un representante o equipo para comparar el rendimiento con un objetivo.",
+    "emptyHistoryTitle": "No hay instantáneas guardadas",
+    "emptyHistoryDescription": "Guarda una instantánea para conservar la previsión de este período y compararla más adelante.",
+    "saveSnapshot": "Guardar instantánea",
+    "savingSnapshot": "Guardando…",
+    "snapshotCreated": "Instantánea de previsión guardada",
+    "snapshotFailed": "No se pudo guardar la instantánea."
+  },
+  "setup": {
+    "title": "CRM",
+    "description": "Configura estados, etapas de oportunidad, orígenes, territorios, equipos y cuotas para este inquilino.",
+    "sequence": "Secuencia",
+    "priority": "Prioridad",
+    "defaultOwner": "Responsable predeterminado",
+    "manager": "Gerente",
+    "empty": "No hay registros de configuración coincidentes.",
+    "openRecord": "Abrir {name}",
+    "percent": "{value} %",
+    "memberCount": "{count, plural, one {# miembro} other {# miembros}}",
+    "created": "Registro de configuración de CRM creado",
+    "updated": "Registro de configuración de CRM actualizado",
+    "new": {
+      "accountStatuses": "Nuevo estado de cuenta",
+      "opportunityStatuses": "Nueva etapa de oportunidad",
+      "sources": "Nuevo origen de cliente potencial",
+      "territories": "Nuevo territorio",
+      "teams": "Nuevo equipo de ventas",
+      "quotas": "Nueva cuota"
+    },
+    "search": {
+      "accountStatuses": "Buscar estados de cuenta",
+      "opportunityStatuses": "Buscar etapas de oportunidad",
+      "sources": "Buscar orígenes de clientes potenciales",
+      "territories": "Buscar territorios",
+      "teams": "Buscar equipos de ventas",
+      "quotas": "Buscar cuotas"
+    },
+    "drawer": {
+      "new": {
+        "accountStatuses": "Nuevo estado de cuenta",
+        "opportunityStatuses": "Nueva etapa de oportunidad",
+        "sources": "Nuevo origen de cliente potencial",
+        "territories": "Nuevo territorio",
+        "teams": "Nuevo equipo de ventas",
+        "quotas": "Nueva cuota"
+      },
+      "edit": {
+        "accountStatuses": "Editar estado de cuenta",
+        "opportunityStatuses": "Editar etapa de oportunidad",
+        "sources": "Editar origen de cliente potencial",
+        "territories": "Editar territorio",
+        "teams": "Editar equipo de ventas",
+        "quotas": "Editar cuota"
+      },
+      "description": {
+        "accountStatuses": "Controla la clasificación del ciclo de vida y el comportamiento de calificación.",
+        "opportunityStatuses": "Controla la probabilidad, la previsión y el comportamiento de cierre del canal.",
+        "sources": "Mantén los orígenes de adquisición normalizados utilizados en CRM.",
+        "territories": "Configura la propiedad y las reglas de asignación deterministas.",
+        "teams": "Asigna un gerente y los miembros activos de este equipo de ventas.",
+        "quotas": "Establece un objetivo de período para un representante o equipo de ventas."
+      }
+    },
+    "fields": {
+      "name": "Nombre",
+      "matchMode": "Coincidencia de reglas",
+      "rules": "Reglas de asignación (JSON)",
+      "members": "Miembros del equipo",
+      "targetType": "Tipo de objetivo",
+      "isQualified": "Estado calificado",
+      "isClosed": "Estado cerrado",
+      "isWon": "Estado ganado",
+      "isDefault": "Predeterminado",
+      "isActive": "Activo"
+    },
+    "states": {
+      "active": "Activo",
+      "inactive": "Inactivo",
+      "yes": "Sí",
+      "no": "No"
+    },
+    "matchModes": {
+      "all": "Cumplir todas las reglas",
+      "any": "Cumplir cualquier regla"
+    },
+    "targetTypes": {
+      "user": "Representante de ventas",
+      "team": "Equipo de ventas"
+    },
+    "validation": {
+      "nameRequired": "Introduce un nombre.",
+      "invalidRules": "Las reglas de asignación deben ser una matriz JSON válida."
+    },
+    "tabs": {
+      "accountStatuses": "Estados de cuentas",
+      "opportunityStatuses": "Etapas de oportunidades",
+      "sources": "Orígenes de clientes potenciales",
+      "territories": "Territorios",
+      "teams": "Equipos de ventas",
+      "quotas": "Cuotas"
+    },
+    "columns": {
+      "name": "Nombre",
+      "lifecycle_stage": "Etapa del ciclo de vida",
+      "sequence": "Secuencia",
+      "probability": "Probabilidad",
+      "default_forecast_category": "Categoría de previsión",
+      "description": "Descripción",
+      "priority": "Prioridad",
+      "owner_name": "Responsable",
+      "manager_name": "Gerente",
+      "period_start": "Inicio del período",
+      "period_end": "Fin del período",
+      "amount": "Importe",
+      "is_qualified": "Calificado",
+      "is_closed": "Cerrado",
+      "is_active": "Estado",
+      "member_count": "Miembros",
+      "target_name": "Objetivo",
+      "currency": "Moneda"
+    }
+  },
+  "validation": {
+    "nameRequired": "Introduce un nombre de cuenta.",
+    "subjectRequired": "Introduce un asunto para la actividad.",
+    "titleRequired": "Introduce un título para la oportunidad."
+  },
+  "feedback": { "createFailed": "No se pudo crear el borrador." }
+}

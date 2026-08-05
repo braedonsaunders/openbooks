@@ -1,0 +1,89 @@
+{
+  "title": "承認",
+  "description": "フローとポリシーをまたいであなたの対応を待っている項目と、あなた自身が提出した申請の状況をまとめて表示します。",
+  "tabs": {
+    "mine": "自分の承認",
+    "submitted": "自分が提出した申請",
+    "all": "すべての承認"
+  },
+  "empty": {
+    "title": "対応待ちの項目はありません",
+    "description": "あなたに割り当て、ルーティング、または委任された承認がここに表示されます。"
+  },
+  "emptySubmitted": {
+    "title": "保留中の申請はありません",
+    "description": "承認のために提出した書類が、承認待ちの間ここに表示されます。"
+  },
+  "emptyAll": {
+    "title": "保留中の項目はありません",
+    "description": "この組織には保留中の承認はありません。"
+  },
+  "table": {
+    "document": "書類",
+    "kind": "種別",
+    "step": "ステップ",
+    "decision": "判断",
+    "approval": "承認",
+    "requested": "申請日",
+    "assignee": "担当者",
+    "pendingWith": "承認待ちの担当者",
+    "waitingSince": "待機開始日"
+  },
+  "kinds": {
+    "vendor_bill": "仕入請求書",
+    "customer_invoice": "請求書",
+    "expense_report": "経費精算書",
+    "journal": "仕訳",
+    "purchase_order": "発注書",
+    "sales_order": "受注",
+    "quote": "見積",
+    "field_ticket": "作業票",
+    "close_run": "期間決算"
+  },
+  "decide": {
+    "rejectionReason": "却下理由:",
+    "decisionFailed": "判断に失敗しました"
+  },
+  "aging": {
+    "days": "{days}日"
+  },
+  "bulk": {
+    "selected": "{count} 件選択中",
+    "selectAll": "すべて選択",
+    "selectRow": "{document} を選択",
+    "approveSelected": "選択項目を承認",
+    "rejectSelected": "選択項目を却下",
+    "rejectTitle": "{count} 件の承認を却下しますか?",
+    "reasonLabel": "却下理由(選択したすべての項目に適用されます)",
+    "approvedCount": "{count} 件承認しました",
+    "rejectedCount": "{count} 件却下しました",
+    "failedCount": "{count} 件失敗しました({error})"
+  },
+  "ooo": {
+    "button": "不在",
+    "title": "不在",
+    "description": "不在の間、受け取る承認を代理者にルーティングします。",
+    "delegateTo": "委任先",
+    "delegatePlaceholder": "代理者を選択…",
+    "from": "開始",
+    "until": "終了",
+    "invalid": "代理者と有効な期間を選択してください",
+    "saved": "委任を設定しました",
+    "unavailable": "委任サービスはまだ利用できません",
+    "banner": "あなたの承認は {date} まで {name} に委任されています",
+    "endNow": "今すぐ終了",
+    "ended": "委任を終了しました"
+  },
+  "gates": {
+    "rejectTitle": "この承認を却下しますか?",
+    "waitingOthers": "記録しました — 他の承認者の対応を待っています",
+    "delegate": "委任",
+    "delegatePlaceholder": "委任先…",
+    "delegated": "承認を委任しました",
+    "badges": {
+      "quorumAll": "すべての承認者",
+      "reminder": "リマインダー {date}",
+      "escalates": "エスカレーション {date}"
+    }
+  }
+}

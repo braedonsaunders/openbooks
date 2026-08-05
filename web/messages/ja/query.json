@@ -1,0 +1,88 @@
+{
+  "title": "クエリコンソール",
+  "subtitle": "本物の PostgreSQL、読み取り専用。SELECT のみ許可のロール、10秒タイムアウト。⌘⏎ で実行。",
+  "description": "本物の PostgreSQL — クエリ方言ではありません。SELECT のみ許可のロールで読み取り専用として実行され、10秒のタイムアウトがあります。⌘⏎ で実行。",
+  "readOnlyBadge": "読み取り専用",
+  "run": "実行",
+  "running": "実行中…",
+  "clear": "クリア",
+  "rowLimit": "上限",
+  "editorPlaceholder": "select … from journal_lines l join accounts a on a.id = l.account_id …",
+  "failed": "失敗しました",
+  "queryError": "クエリエラー",
+  "rowCount": "{count, plural, one {# 行} other {# 行}}",
+  "truncated": "{max} 件で切り詰められました",
+  "ranSelection": "選択範囲を実行しました",
+  "resultsIdle": "まだ結果はありません",
+  "resultsIdleHint": "結果はここに表示されます",
+  "filterResults": "行をフィルター…",
+  "copyCsv": "コピー",
+  "copiedCsv": "結果を CSV としてコピーしました",
+  "copyFailed": "コピーに失敗しました",
+  "runToSeeResults": "クエリを実行して結果を表示します",
+  "runHint": "上に SQL を書き、実行を押すか ⌘⏎ を押します。テキストを選択すると、その部分だけを実行します。",
+  "emptyResultSet": "クエリは列を返しませんでした",
+  "noFilterMatch": "フィルターに一致する行はありません",
+  "rail": {
+    "schema": "スキーマ",
+    "snippets": "スニペット",
+    "history": "履歴"
+  },
+  "schema": {
+    "searchPlaceholder": "テーブルと列を検索…",
+    "noMatch": "一致するテーブルがありません",
+    "insertTable": "クリックしてテーブル名を挿入",
+    "insertColumn": "クリックして列名を挿入",
+    "showSchema": "スキーマを表示",
+    "browseRows": "行を参照",
+    "insertTableName": "テーブル名を挿入",
+    "insertSelectTemplate": "SELECTテンプレートを挿入"
+  },
+  "history": {
+    "count": "{count, plural, one {# 件のクエリ} other {# 件のクエリ}}",
+    "clear": "クリア",
+    "rows": "{count, plural, one {# 行} other {# 行}}",
+    "failed": "失敗しました",
+    "empty": "実行したクエリがここに表示されます"
+  },
+  "snippetSaved": "「{name}」を保存しました",
+  "snippets": {
+    "save": "保存",
+    "namePlaceholder": "このクエリに名前を付ける…",
+    "savedHeading": "保存済み",
+    "examplesHeading": "サンプル",
+    "delete": "スニペットを削除",
+    "trialBalance": {
+      "label": "試算表",
+      "description": "勘定ごとの符号付き残高、ゼロ以外のみ。"
+    },
+    "topAccounts": {
+      "label": "残高上位",
+      "description": "絶対残高が最も大きい15勘定。"
+    },
+    "recentEntries": {
+      "label": "最近の仕訳",
+      "description": "ステータスとオリジン付きの直近50件の仕訳。"
+    },
+    "monthlyActivity": {
+      "label": "月次活動",
+      "description": "月ごとの記帳済み仕訳と借方合計。"
+    },
+    "unbalancedEntries": {
+      "label": "貸借不一致の仕訳",
+      "description": "明細行がゼロに相殺されない仕訳。"
+    },
+    "entriesByOrigin": {
+      "label": "オリジン別の仕訳",
+      "description": "ソースのオリジンごとにグループ化した仕訳件数。"
+    },
+    "tableSizes": {
+      "label": "クエリカタログ概要",
+      "description": "管理されたレポートビューと利用可能な列数。"
+    },
+    "listColumns": {
+      "label": "すべての列を一覧",
+      "description": "管理されたクエリカタログで利用可能なすべての列と型。"
+    }
+  }
+}

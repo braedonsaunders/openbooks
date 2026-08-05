@@ -1,0 +1,141 @@
+{
+  "list": {
+    "title": "Articles et services",
+    "description": "Le catalogue derrière chaque ligne de document — services, main-d’œuvre, frais et remises.",
+    "searchPlaceholder": "Rechercher nom, code, catégorie…",
+    "kindFilter": "Type",
+    "emptyTitle": "Aucun article pour l’instant",
+    "emptyDescription": "Ajoutez un premier service, poste de main-d’œuvre ou frais pour démarrer le catalogue.",
+    "newButton": "Nouvel article",
+    "createDraftFailed": "Impossible de créer un article brouillon"
+  },
+  "labels": {
+    "code": "Code",
+    "kind": "Type",
+    "category": "Catégorie",
+    "unit": "Unité",
+    "defaultRate": "Prix",
+    "defaultCost": "Coût",
+    "recoveryAccount": "Compte de récupération des coûts",
+    "incomeAccount": "Compte de produits",
+    "expenseAccount": "Compte de charges",
+    "taxCode": "Code de taxe"
+  },
+  "kinds": {
+    "service": "Service",
+    "non_inventory": "Hors inventaire",
+    "inventory": "Inventaire",
+    "assembly": "Assemblage",
+    "kit": "Trousse",
+    "other_charge": "Autres frais",
+    "labor": "Main-d’œuvre",
+    "absence": "Absence",
+    "discount": "Remise",
+    "equipment_charge": "Frais d’équipement"
+  },
+  "drawer": {
+    "newItem": "Nouvel article",
+    "autosaveHint": "Les modifications s’enregistrent automatiquement.",
+    "activate": "Activer",
+    "deactivate": "Désactiver",
+    "nameToActivate": "Nommez l’article pour l’activer",
+    "activated": "Article activé",
+    "deactivated": "Article désactivé",
+    "updateFailed": "Échec de la mise à jour",
+    "autosaveFailed": "Échec de l’enregistrement automatique",
+    "allSaved": "Toutes les modifications sont enregistrées",
+    "saveFailedRetry": "Échec de l’enregistrement — corrigez et réessayez",
+    "unsavedChanges": "Modifications non enregistrées…",
+    "namePlaceholder": "Nom de l’article ou du service…",
+    "codePlaceholder": "SVC-01",
+    "categoryPlaceholder": "Services",
+    "unitPlaceholder": "h",
+    "noIncomeAccount": "Aucun compte de produits",
+    "noExpenseAccount": "Aucun compte de charges",
+    "noRecoveryAccount": "Aucun compte de récupération",
+    "selectAccount": "Sélectionner un compte…",
+    "showOnTimesheet": "Afficher sur la feuille de temps"
+  },
+  "rates": {
+    "title": "Tarification avancée",
+    "description": "Tarification facultative par date, portée ou forfait. Les articles ordinaires utilisent le Prix et le Coût ci-dessus sans grille tarifaire.",
+    "documentation": "Documentation",
+    "configure": "Configurer la tarification",
+    "newVersion": "Nouvelle version tarifaire",
+    "notSet": "Non défini",
+    "guide": {
+      "title": "Fonctionnement du prix de cet article",
+      "simpleMode": "Prix et coût simples",
+      "advancedMode": "Tarifs avancés activés",
+      "simpleDescription": "Cet article utilise directement son Prix et son Coût. Aucune date ni affectation de grille n’est requise.",
+      "advancedDescription": "Les grilles et paliers correspondants remplacent les valeurs simples; Prix et Coût restent le dernier recours.",
+      "price": "Prix client",
+      "priceHelp": "Montant facturé par unité lorsqu’aucun tarif de facturation avancé ne correspond.",
+      "cost": "Coût interne",
+      "costHelp": "Coût de chantier par unité; ce n’est pas le prix client.",
+      "advanced": "Profil tarifaire",
+      "configured": "Configuré · unité de base {unit}",
+      "notConfigured": "Non configuré",
+      "advancedHelp": "Prend en charge les grilles datées, forfaits jour/semaine/mois, devises et dérogations ciblées.",
+      "simpleHelp": "À configurer seulement si l’article nécessite plus d’un Prix et Coût simples.",
+      "resolutionTitle": "Ordre de résolution",
+      "simpleResolution": "Prix de l’article → facturation client. Coût de l’article → coût interne du chantier.",
+      "advancedResolution": "Grille du projet → grille du client → dérogation équipement → affectation organisation → grille par défaut → Prix/Coût de l’article.",
+      "rateTypes": "Le tarif de coût est interne; le tarif de facturation est le prix client. Les tarifs par type d’heure ne remplacent que les primes de main-d’œuvre comme les heures supplémentaires. Les prix de juste valeur servent uniquement à répartir les produits."
+    },
+    "rateBook": "Grille tarifaire",
+    "standardBook": "Grille tarifaire standard",
+    "effectiveFrom": "En vigueur à partir du",
+    "effectiveTo": "En vigueur jusqu’au",
+    "baseUnit": "Unité de base",
+    "policy": "Politique tarifaire",
+    "presentation": "Présentation sur la facture",
+    "defaults": {
+      "day": "Jour",
+      "week": "Semaine",
+      "month": "Mois"
+    },
+    "policies": {
+      "capped_ladder": "Paliers plafonnés",
+      "lowest_cost": "Combinaison au coût minimal"
+    },
+    "presentations": {
+      "rate_components": "Afficher les composantes tarifaires",
+      "summary": "Ligne récapitulative unique"
+    },
+    "unitCode": "Code d’unité",
+    "unitName": "Nom de l’unité",
+    "baseQuantity": "Quantité de base",
+    "costRate": "Tarif de coût",
+    "billRate": "Tarif de facturation",
+    "addUnit": "Ajouter une unité tarifaire",
+    "saveFailed": "Impossible d’enregistrer les tarifs",
+    "saved": "Version tarifaire enregistrée",
+    "empty": "Aucune version tarifaire.",
+    "rates": "Tarifs",
+    "tierOverrides": "Taux par type d'heure :",
+    "tierAuto": "auto"
+  },
+  "revrec": {
+    "title": "Comptabilisation des produits",
+    "hint": "Différer et comptabiliser les produits de cet article dans le temps (ASC 606)",
+    "rule": "Règle de comptabilisation",
+    "noRule": "Comptabiliser immédiatement",
+    "selectRule": "Sélectionner une règle",
+    "deferredAccount": "Compte de produits différés",
+    "ruleDefault": "Valeur par défaut de la règle",
+    "standaloneSellingPrice": "Prix de vente autonome",
+    "createPlansOn": "Créer le plan lors de",
+    "createPlansOnOptions": {
+      "billing": "Facturation",
+      "fulfillment": "Exécution",
+      "arrangement": "Création de l'accord"
+    },
+    "allocation": "Répartition des produits",
+    "allocationOptions": {
+      "normal": "Normale",
+      "exclude": "Exclure",
+      "software": "Logiciel (résiduel)"
+    }
+  }
+}

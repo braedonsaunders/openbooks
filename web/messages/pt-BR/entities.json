@@ -1,0 +1,31 @@
+{
+  "roles": {
+    "customers": {
+      "title": "Clientes",
+      "description": "Empresas e pessoas que você fatura.",
+      "newLabel": "Novo cliente",
+      "emptyTitle": "Nenhum cliente ainda",
+      "emptyDescription": "Adicione o primeiro cliente para iniciar o cadastro."
+    },
+    "vendors": {
+      "title": "Fornecedores",
+      "description": "Fornecedores dos quais você compra e paga.",
+      "newLabel": "Novo fornecedor",
+      "emptyTitle": "Nenhum fornecedor ainda",
+      "emptyDescription": "Adicione o primeiro fornecedor para iniciar o cadastro."
+    },
+    "employees": {
+      "title": "Funcionários",
+      "description": "Pessoas na folha de pagamento e em relatórios de despesas.",
+      "newLabel": "Novo funcionário",
+      "emptyTitle": "Nenhum funcionário ainda",
+      "emptyDescription": "Adicione o primeiro funcionário para iniciar o cadastro."
+    }
+  },
+  "list": {
+    "searchPlaceholder": "Buscar nome, código, e-mail…",
+    "shortCode": "Código curto",
+    "phone": "Telefone",
+    "customerStatuses": { "existing": "Clientes existentes", "potential": "Clientes potenciais" }
+  }
+}

@@ -1,0 +1,162 @@
+{
+  "metaTitle": "継続的決算",
+  "title": "継続的決算",
+  "description": "決算の準備状況を継続的に監視し、証拠に基づく会計・財務の例外をレビュー用に提示します。",
+  "search": "検出結果を検索…",
+  "tabs": { "ariaLabel": "継続的決算のセクション", "findings": "検出結果", "reports": "レポート" },
+  "agents": {
+    "accounting": "会計",
+    "finance": "財務"
+  },
+  "metrics": {
+    "active": "アクティブ",
+    "critical": "重大",
+    "accounting": "会計の検出結果",
+    "finance": "財務の検出結果"
+  },
+  "filters": {
+    "agent": "エージェント",
+    "severity": "重大度"
+  },
+  "severity": {
+    "info": "情報",
+    "warning": "警告",
+    "critical": "重大"
+  },
+  "status": {
+    "open": "オープン",
+    "in_review": "レビュー中",
+    "resolved": "解決済み",
+    "dismissed": "却下済み"
+  },
+  "table": {
+    "finding": "検出結果",
+    "agent": "エージェント",
+    "severity": "重大度",
+    "materiality": "重要性",
+    "detected": "最終検出"
+  },
+  "findings": {
+    "unmatched_bank_activity": {
+      "title": "未照合の銀行取引",
+      "description": "銀行明細の取引が元帳の取引と照合されていません。"
+    },
+    "reconciliation_difference": {
+      "title": "消込差異",
+      "description": "進行中の銀行消込が明細残高と一致していません。"
+    },
+    "stale_accounting_documents": {
+      "title": "滞留している会計ドキュメント",
+      "description": "下書きまたは承認待ちの会計ドキュメントが、設定された経過期間を超えて未完了のままです。"
+    },
+    "missing_approved_budget": {
+      "title": "承認済み予算なし",
+      "description": "承認済みの予算が利用できないため、財務監視は実績を比較できません。"
+    },
+    "unfavorable_budget_variance": {
+      "title": "不利な予算差異",
+      "description": "実際の業績が承認済み予算より重要な水準で下回っています。"
+    },
+    "period_revenue_decline": {
+      "title": "売上の減少",
+      "description": "前の完了会計期間から売上が重要な水準で減少しました。"
+    },
+    "gross_margin_decline": {
+      "title": "売上総利益率の低下",
+      "description": "売上総利益率が前の完了期間から設定されたしきい値を超えて低下しました。"
+    }
+  },
+  "summary": {
+    "records": "{count, plural, one {#件のレコード} other {#件のレコード}}",
+    "review": "裏付けとなる証拠をレビューします"
+  },
+  "reports": {
+    "title": "エージェントレポート",
+    "description": "生成されたブリーフを開くか、PDFとしてエクスポートします。",
+    "search": "レポートを検索…",
+    "empty": "これらのフィルターに一致する生成済みレポートはありません。"
+  },
+  "narrative": {
+    "title": "最新のエージェントブリーフ",
+    "agent": "{agent}が生成",
+    "generated": "{date}に生成",
+    "generatedLabel": "生成日",
+    "open": "レポートを開く",
+    "downloadPdf": "PDF",
+    "executiveSummary": "エグゼクティブサマリー",
+    "highlights": "業績のハイライト",
+    "risks": "リスクと異常",
+    "recommendations": "推奨アクション",
+    "sources": "裏付けとなるソース",
+    "sourceLabel": "ソース",
+    "sourcePath": "製品内のパス"
+  },
+  "analysis": {
+    "title": "エージェント分析",
+    "rootCauses": "考えられる要因",
+    "recommendations": "推奨アクション",
+    "evidenceNotice": "モデルが生成した分析はリンクされたレコードに基づいており、引き続きレビューの対象となります。"
+  },
+  "empty": {
+    "title": "まだ検出結果がありません",
+    "description": "エージェントを有効化して最初のスキャンを実行してください。解消された状態は以降のスキャンで自動的に解決されます。",
+    "action": "エージェントを設定"
+  },
+  "details": {
+    "materiality": "重要性",
+    "confidence": "信頼度",
+    "lastDetected": "最終検出",
+    "summary": "サマリー",
+    "evidence": "裏付けとなる証拠",
+    "noEvidence": "この検出結果は前提条件の欠如に基づくため、表示するソースレコードはありません。",
+    "dismissalReason": "却下理由"
+  },
+  "fields": {
+    "account": "勘定",
+    "count": "レコード",
+    "oldestDate": "最古の日付",
+    "throughDate": "消込完了日",
+    "difference": "差異",
+    "budget": "予算",
+    "budgetAmount": "予算額",
+    "actual": "実績",
+    "variance": "差異",
+    "period": "期間",
+    "revenueChange": "売上の変化",
+    "marginChange": "利益率の変化",
+    "points": "ポイント"
+  },
+  "evidence": {
+    "bank_transaction": "銀行取引",
+    "document": "会計ドキュメント",
+    "reconciliation": "消込",
+    "budget_variance": "予算差異",
+    "period_comparison": "期間比較"
+  },
+  "actions": {
+    "settings": "エージェント設定",
+    "startReview": "レビューを開始",
+    "resolve": "解決",
+    "dismiss": "却下",
+    "reopen": "再オープン",
+    "openSource": "ソースを開く",
+    "cancel": "キャンセル",
+    "confirmDismiss": "検出結果を却下"
+  },
+  "dismiss": {
+    "title": "この検出結果を却下",
+    "description": "この有効な検出結果をアクティブなキューに残すべきでない理由を記録します。",
+    "placeholder": "却下の理由"
+  },
+  "feedback": {
+    "review": "検出結果をレビューに移動しました。",
+    "resolve": "検出結果を解決しました。",
+    "dismiss": "検出結果を却下しました。",
+    "reopen": "検出結果を再オープンしました。",
+    "actionFailed": "検出結果を更新できませんでした。",
+    "recorded": "フィードバックを記録しました。",
+    "wasHelpful": "この検出結果は役立ちましたか？",
+    "helpful": "役立った",
+    "notHelpful": "役立たなかった"
+  }
+}

@@ -1,0 +1,12 @@
+{
+  "list": {
+    "title": "見積",
+    "description": "元帳に記帳しない得意先向け見積 — 発行後、受注または請求書へ変換します。",
+    "searchPlaceholder": "見積、得意先、メモを検索…",
+    "converted": "変換済み",
+    "emptyTitle": "見積はまだありません",
+    "emptyDescription": "最初の見積を作成して受注から入金までのワークフローを開始します。",
+    "newButton": "新規見積",
+    "createDraftFailed": "下書き見積を作成できませんでした"
+  }
+}

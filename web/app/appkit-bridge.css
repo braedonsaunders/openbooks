@@ -1,0 +1,368 @@
+/* AppKit token bridge.
+ *
+ * The vendored `@appkit/*` packages (see vendor/appkit) style themselves with
+ * AppKit's semantic token utilities — `bg-surface`, `text-fg-muted`,
+ * `border-border`, `bg-primary-subtle`. the own components use raw
+ * Tailwind palette classes, so those utilities do not otherwise exist in this
+ * build. This file declares them.
+ *
+ * It is AppKit's own `@appkit/tokens/tokens.css`, minus the Tailwind import and
+ * dark-mode variant (globals.css already owns both). The channel values are
+ * AppKit's defaults, which are already the OpenBooks palette: teal-700 brand on
+ * slate surfaces. Rebranding either side means editing the channels here, never
+ * a vendored component.
+ *
+ * Regenerate from node_modules/@appkit/tokens/tokens.css when the vendored
+ * tarball is refreshed.
+ */
+
+
+
+/* ------------------------------------------------------------------------- */
+/* Raw channels — sRGB "R G B" triples so utilities can apply opacity          */
+/* (`bg-primary/40`). This is the ONE place brand values live. Swap teal for   */
+/* any hue and the entire system + both modes follow.                          */
+/* ------------------------------------------------------------------------- */
+:root {
+  /* Surfaces */
+  --ch-bg: 255 255 255; /* app canvas */
+  --ch-bg-subtle: 248 250 252; /* recessed regions, striping */
+  --ch-surface: 255 255 255; /* cards, panels */
+  --ch-surface-hover: 248 250 252;
+  --ch-elevated: 255 255 255; /* popovers, dropdowns, dialogs */
+  --ch-overlay: 15 23 42; /* modal scrim (used with opacity) */
+
+  /* Text / foreground */
+  --ch-fg: 15 23 42; /* primary */
+  --ch-fg-muted: 100 116 139; /* secondary */
+  --ch-fg-subtle: 148 163 184; /* tertiary, placeholder */
+
+  /* Borders */
+  --ch-border: 226 232 240;
+  --ch-border-strong: 203 213 225;
+  --ch-border-subtle: 241 245 249;
+
+  /* Brand */
+  --ch-primary: 15 118 110; /* teal-700 — the family accent */
+  --ch-primary-hover: 17 94 89;
+  --ch-primary-active: 19 78 74;
+  --ch-primary-fg: 255 255 255; /* text/icon on a primary fill */
+  --ch-primary-subtle: 240 253 250; /* tinted background */
+  --ch-signature-surface: 255 255 255; /* exported document paper */
+  --ch-signature-ink: 15 23 42; /* stable printed ink */
+
+  /* Semantic — each: solid / on-solid text / tinted background */
+  --ch-danger: 220 38 38;
+  --ch-danger-fg: 255 255 255;
+  --ch-danger-subtle: 254 242 242;
+  --ch-warning: 217 119 6;
+  --ch-warning-fg: 255 255 255;
+  --ch-warning-subtle: 255 251 235;
+  --ch-success: 22 163 74;
+  --ch-success-fg: 255 255 255;
+  --ch-success-subtle: 240 253 244;
+  --ch-info: 37 99 235;
+  --ch-info-fg: 255 255 255;
+  --ch-info-subtle: 239 246 255;
+
+  /* Focus ring */
+  --ch-ring: 20 184 166;
+
+  /* Shape */
+  --radius: 0.625rem;
+
+  /* Motion — one system, referenced by every transition/animation. */
+  --ease-out: cubic-bezier(0.22, 1, 0.36, 1);
+  --ease-in-out: cubic-bezier(0.65, 0, 0.35, 1);
+  --ease-spring: cubic-bezier(0.34, 1.56, 0.64, 1);
+  --duration-fast: 120ms;
+  --duration-base: 180ms;
+  --duration-slow: 320ms;
+
+  /* Elevation — soft, layered, mode-aware shadows. */
+  --shadow-sm: 0 1px 2px 0 rgb(15 23 42 / 0.05);
+  --shadow-md: 0 4px 12px -2px rgb(15 23 42 / 0.08), 0 2px 4px -2px rgb(15 23 42 / 0.06);
+  --shadow-lg: 0 12px 32px -8px rgb(15 23 42 / 0.14), 0 4px 8px -4px rgb(15 23 42 / 0.08);
+}
+
+.dark {
+  --ch-bg: 2 6 23; /* slate-950 */
+  --ch-bg-subtle: 15 23 42;
+  --ch-surface: 15 23 42; /* slate-900 */
+  --ch-surface-hover: 30 41 59;
+  --ch-elevated: 30 41 59; /* slate-800 */
+  --ch-overlay: 2 6 23;
+
+  --ch-fg: 241 245 249;
+  --ch-fg-muted: 148 163 184;
+  --ch-fg-subtle: 100 116 139;
+
+  --ch-border: 51 65 85;
+  --ch-border-strong: 71 85 105;
+  --ch-border-subtle: 30 41 59;
+
+  --ch-primary: 20 184 166; /* brighter teal reads better on dark */
+  --ch-primary-hover: 45 212 191;
+  --ch-primary-active: 94 234 212;
+  --ch-primary-fg: 4 47 46;
+  --ch-primary-subtle: 19 78 74;
+  --ch-signature-surface: 255 255 255;
+  --ch-signature-ink: 15 23 42;
+
+  --ch-danger: 248 113 113;
+  --ch-danger-fg: 69 10 10;
+  --ch-danger-subtle: 60 10 10;
+  --ch-warning: 251 191 36;
+  --ch-warning-fg: 66 32 6;
+  --ch-warning-subtle: 55 28 5;
+  --ch-success: 74 222 128;
+  --ch-success-fg: 5 46 22;
+  --ch-success-subtle: 6 40 20;
+  --ch-info: 96 165 250;
+  --ch-info-fg: 23 37 84;
+  --ch-info-subtle: 20 33 70;
+
+  --ch-ring: 45 212 191;
+
+  --shadow-sm: 0 1px 2px 0 rgb(0 0 0 / 0.4);
+  --shadow-md: 0 4px 12px -2px rgb(0 0 0 / 0.5), 0 2px 4px -2px rgb(0 0 0 / 0.4);
+  --shadow-lg: 0 12px 32px -8px rgb(0 0 0 / 0.6), 0 4px 8px -4px rgb(0 0 0 / 0.45);
+}
+
+/* System default: honor the OS preference before any JS runs, so there is no
+   flash and no pre-paint script. An explicit `.dark`/`.light` class (set by a
+   theme toggle) always wins. Keep these values in sync with `.dark` above. */
+@media (prefers-color-scheme: dark) {
+  :root:not(.light):not(.dark) {
+    --ch-bg: 2 6 23;
+    --ch-bg-subtle: 15 23 42;
+    --ch-surface: 15 23 42;
+    --ch-surface-hover: 30 41 59;
+    --ch-elevated: 30 41 59;
+    --ch-overlay: 2 6 23;
+    --ch-fg: 241 245 249;
+    --ch-fg-muted: 148 163 184;
+    --ch-fg-subtle: 100 116 139;
+    --ch-border: 51 65 85;
+    --ch-border-strong: 71 85 105;
+    --ch-border-subtle: 30 41 59;
+    --ch-primary: 20 184 166;
+    --ch-primary-hover: 45 212 191;
+    --ch-primary-active: 94 234 212;
+    --ch-primary-fg: 4 47 46;
+    --ch-primary-subtle: 19 78 74;
+    --ch-signature-surface: 255 255 255;
+    --ch-signature-ink: 15 23 42;
+    --ch-danger: 248 113 113;
+    --ch-danger-fg: 69 10 10;
+    --ch-danger-subtle: 60 10 10;
+    --ch-warning: 251 191 36;
+    --ch-warning-fg: 66 32 6;
+    --ch-warning-subtle: 55 28 5;
+    --ch-success: 74 222 128;
+    --ch-success-fg: 5 46 22;
+    --ch-success-subtle: 6 40 20;
+    --ch-info: 96 165 250;
+    --ch-info-fg: 23 37 84;
+    --ch-info-subtle: 20 33 70;
+    --ch-ring: 45 212 191;
+    --shadow-sm: 0 1px 2px 0 rgb(0 0 0 / 0.4);
+    --shadow-md: 0 4px 12px -2px rgb(0 0 0 / 0.5), 0 2px 4px -2px rgb(0 0 0 / 0.4);
+    --shadow-lg: 0 12px 32px -8px rgb(0 0 0 / 0.6), 0 4px 8px -4px rgb(0 0 0 / 0.45);
+  }
+}
+
+/* ------------------------------------------------------------------------- */
+/* Semantic tokens → Tailwind utilities. `inline` so a utility resolves the    */
+/* channel var at *use* time — that is what makes `.dark` overrides live       */
+/* without regenerating any utilities.                                         */
+/* ------------------------------------------------------------------------- */
+@theme inline {
+  --color-bg: rgb(var(--ch-bg));
+  --color-bg-subtle: rgb(var(--ch-bg-subtle));
+  --color-surface: rgb(var(--ch-surface));
+  --color-surface-hover: rgb(var(--ch-surface-hover));
+  --color-elevated: rgb(var(--ch-elevated));
+  --color-overlay: rgb(var(--ch-overlay));
+
+  --color-fg: rgb(var(--ch-fg));
+  --color-fg-muted: rgb(var(--ch-fg-muted));
+  --color-fg-subtle: rgb(var(--ch-fg-subtle));
+
+  --color-border: rgb(var(--ch-border));
+  --color-border-strong: rgb(var(--ch-border-strong));
+  --color-border-subtle: rgb(var(--ch-border-subtle));
+
+  --color-primary: rgb(var(--ch-primary));
+  --color-primary-hover: rgb(var(--ch-primary-hover));
+  --color-primary-active: rgb(var(--ch-primary-active));
+  --color-primary-fg: rgb(var(--ch-primary-fg));
+  --color-primary-subtle: rgb(var(--ch-primary-subtle));
+  --color-signature-surface: rgb(var(--ch-signature-surface));
+  --color-signature-ink: rgb(var(--ch-signature-ink));
+
+  --color-danger: rgb(var(--ch-danger));
+  --color-danger-fg: rgb(var(--ch-danger-fg));
+  --color-danger-subtle: rgb(var(--ch-danger-subtle));
+  --color-warning: rgb(var(--ch-warning));
+  --color-warning-fg: rgb(var(--ch-warning-fg));
+  --color-warning-subtle: rgb(var(--ch-warning-subtle));
+  --color-success: rgb(var(--ch-success));
+  --color-success-fg: rgb(var(--ch-success-fg));
+  --color-success-subtle: rgb(var(--ch-success-subtle));
+  --color-info: rgb(var(--ch-info));
+  --color-info-fg: rgb(var(--ch-info-fg));
+  --color-info-subtle: rgb(var(--ch-info-subtle));
+
+  --color-ring: rgb(var(--ch-ring));
+
+  --radius-sm: calc(var(--radius) - 4px);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) + 4px);
+
+  --shadow-sm: var(--shadow-sm);
+  --shadow-md: var(--shadow-md);
+  --shadow-lg: var(--shadow-lg);
+
+  --ease-spring: var(--ease-spring);
+
+  --default-transition-duration: var(--duration-base);
+  --default-transition-timing-function: var(--ease-out);
+}
+
+/* ------------------------------------------------------------------------- */
+/* Base layer — native-app ergonomics shared by every app in the suite.        */
+/* ------------------------------------------------------------------------- */
+@layer base {
+  *,
+  ::after,
+  ::before,
+  ::backdrop,
+  ::file-selector-button {
+    border-color: var(--color-border, currentColor);
+  }
+
+  html {
+    -webkit-text-size-adjust: 100%;
+  }
+  html,
+  body {
+    height: 100%;
+  }
+  body {
+    background-color: var(--color-bg);
+    color: var(--color-fg);
+    -webkit-tap-highlight-color: transparent;
+    overscroll-behavior-y: none;
+    font-synthesis-weight: none;
+    text-rendering: optimizeLegibility;
+  }
+  a,
+  button,
+  input,
+  select,
+  textarea,
+  [role='button'] {
+    touch-action: manipulation;
+  }
+
+  /* Route-boundary / scroll-container focus rings aren't real controls. */
+  .app-scroll:focus,
+  .app-scroll:focus-visible,
+  [tabindex='-1']:focus,
+  [tabindex='-1']:focus-visible {
+    outline: none;
+  }
+
+  /* Narrow, unobtrusive scrollbars for app-shell scroll regions. */
+  .app-scroll {
+    scrollbar-gutter: stable;
+  }
+
+  /* Skeleton shimmer — a left→right sweep. Works server-rendered (pure CSS);
+     reduced-motion users get a static placeholder. */
+  .appkit-shimmer::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    transform: translateX(-100%);
+    background: linear-gradient(
+      90deg,
+      transparent,
+      rgb(var(--ch-fg) / 0.06),
+      transparent
+    );
+    animation: appkit-shimmer 1.6s ease-in-out infinite;
+  }
+  @keyframes appkit-shimmer {
+    100% {
+      transform: translateX(100%);
+    }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .appkit-shimmer::after {
+      animation: none;
+    }
+  }
+
+  @keyframes appkit-indeterminate {
+    0% {
+      transform: translateX(-100%);
+    }
+    100% {
+      transform: translateX(350%);
+    }
+  }
+
+  /* Staggered table-row entrance — visible by default; @starting-style supplies
+     the transition origin, so it never depends on requestAnimationFrame (which
+     pauses in background/prerendered tabs) and never strands a row invisible.
+     Stagger is pure CSS via nth-child — no JS index, so it's hydration- and
+     StrictMode-safe. Rows past the 12th animate together. */
+  .appkit-row {
+    transition:
+      opacity var(--duration-base) var(--ease-out),
+      transform var(--duration-base) var(--ease-out);
+  }
+  @starting-style {
+    .appkit-row {
+      opacity: 0;
+      transform: translateY(4px);
+    }
+  }
+  .appkit-row:nth-child(1) { transition-delay: 0ms; }
+  .appkit-row:nth-child(2) { transition-delay: 20ms; }
+  .appkit-row:nth-child(3) { transition-delay: 40ms; }
+  .appkit-row:nth-child(4) { transition-delay: 60ms; }
+  .appkit-row:nth-child(5) { transition-delay: 80ms; }
+  .appkit-row:nth-child(6) { transition-delay: 100ms; }
+  .appkit-row:nth-child(7) { transition-delay: 120ms; }
+  .appkit-row:nth-child(8) { transition-delay: 140ms; }
+  .appkit-row:nth-child(9) { transition-delay: 160ms; }
+  .appkit-row:nth-child(10) { transition-delay: 180ms; }
+  .appkit-row:nth-child(11) { transition-delay: 200ms; }
+  .appkit-row:nth-child(n + 12) { transition-delay: 220ms; }
+  @media (prefers-reduced-motion: reduce) {
+    .appkit-row {
+      transition: none;
+    }
+  }
+  .app-scroll::-webkit-scrollbar {
+    width: 10px;
+    height: 10px;
+  }
+  .app-scroll::-webkit-scrollbar-thumb {
+    background: rgb(var(--ch-border-strong));
+    border-radius: 6px;
+    border: 2px solid transparent;
+    background-clip: padding-box;
+  }
+  .app-scroll::-webkit-scrollbar-thumb:hover {
+    background: rgb(var(--ch-fg-subtle));
+    background-clip: padding-box;
+  }
+  .app-scroll::-webkit-scrollbar-track {
+    background: transparent;
+  }
+}

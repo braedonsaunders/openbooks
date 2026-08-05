@@ -1,0 +1,15 @@
+{
+  "tagline": "mit offenen Büchern arbeiten",
+  "password": "Passwort",
+  "invalidCredentials": "Ungültige E-Mail-Adresse oder ungültiges Passwort",
+  "signIn": "Anmelden",
+  "signingIn": "Anmeldung läuft…",
+  "mfaCode": "Authenticator- oder Wiederherstellungscode",
+  "mfaPlaceholder": "123456",
+  "mfaHelp": "Geben Sie den sechsstelligen Code oder einen einmaligen Wiederherstellungscode ein.",
+  "invalidMfa": "Dieser Authentifizierungscode ist ungültig oder abgelaufen",
+  "verify": "Bestätigen",
+  "or": "oder",
+  "sso": "Einmalanmeldung",
+  "ssoFailed": "Die Einmalanmeldung konnte nicht abgeschlossen werden"
+}

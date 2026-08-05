@@ -1,0 +1,131 @@
+{
+  "accountMenu": {
+    "account": "账户",
+    "menuAriaLabel": "账户菜单",
+    "theme": "主题",
+    "language": "语言",
+    "menuLayout": "菜单布局",
+    "signOut": "退出登录",
+    "signingOut": "正在退出…",
+    "roles": {
+      "admin": "管理员",
+      "controller": "财务总监",
+      "accountant": "会计",
+      "approver": "审批人",
+      "viewer": "查看者"
+    },
+    "organizations": "组织",
+    "superAdmin": "超级管理员",
+    "security": "登录安全"
+  },
+  "language": {
+    "label": "语言",
+    "orgDefault": "组织默认",
+    "saveFailed": "无法保存您的语言偏好"
+  },
+  "menuMode": {
+    "label": "菜单布局",
+    "orgDefault": "组织默认",
+    "saveFailed": "无法保存您的菜单布局偏好",
+    "options": {
+      "sidebar": "侧边栏",
+      "topbar": "顶部菜单栏"
+    }
+  },
+  "topNav": {
+    "ariaLabel": "主要",
+    "more": "更多"
+  },
+  "apps": {
+    "ariaLabel": "打开应用",
+    "title": "应用"
+  },
+  "globalCreate": {
+    "ariaLabel": "新建",
+    "title": "新建",
+    "description": "创建真实草稿并持续推进。",
+    "createFailed": "无法创建草稿",
+    "groups": {
+      "sales": "销售",
+      "purchases": "采购",
+      "accounting": "会计",
+      "peopleAndLists": "人员与列表"
+    },
+    "items": {
+      "invoice": "发票",
+      "creditMemo": "贷记通知单",
+      "estimate": "报价单",
+      "salesOrder": "销售订单",
+      "customerPayment": "客户付款",
+      "bill": "账单",
+      "vendorCredit": "供应商贷记",
+      "purchaseOrder": "采购订单",
+      "vendorPayment": "供应商付款",
+      "journal": "日记账分录",
+      "expense": "费用报销单",
+      "cardCharge": "银行卡消费",
+      "cardRefund": "银行卡退款",
+      "check": "支票",
+      "deposit": "银行存款",
+      "transfer": "银行转账",
+      "asset": "固定资产",
+      "customer": "客户",
+      "vendor": "供应商",
+      "employee": "员工",
+      "item": "商品或服务",
+      "project": "项目"
+    }
+  },
+  "relatedParty": {
+    "loadFailed": "无法打开此记录"
+  },
+  "globalSearch": {
+    "ariaLabel": "搜索",
+    "placeholder": "搜索一切…",
+    "clear": "清除搜索",
+    "searching": "搜索中…",
+    "noMatches": "没有匹配“{query}”的结果",
+    "navigate": "导航",
+    "open": "打开",
+    "close": "关闭",
+    "resultCount": "{count, plural, one {# 条结果} other {# 条结果}}",
+    "groups": {
+      "contacts": "联系人",
+      "transactions": "交易",
+      "accounts": "科目",
+      "items": "商品",
+      "projects": "项目"
+    }
+  },
+  "meta": {
+    "description": "开放的商业套件。运行于开放账簿之上。"
+  },
+  "brand": {
+    "home": "前往仪表板"
+  },
+  "sidebar": {
+    "expand": "展开侧边栏",
+    "collapse": "折叠侧边栏"
+  },
+  "mobileNav": {
+    "openMenu": "打开菜单",
+    "menu": "菜单",
+    "primaryAriaLabel": "主要"
+  },
+  "themeToggle": {
+    "label": "主题",
+    "options": {
+      "light": "浅色",
+      "system": "跟随系统",
+      "dark": "深色"
+    },
+    "current": "主题：{theme}",
+    "currentHint": "主题：{theme}（点击更改）"
+  },
+  "notifications": {
+    "ariaLabel": "通知",
+    "title": "通知",
+    "empty": "您已处理完所有事项",
+    "markAllRead": "全部标为已读"
+  }
+}

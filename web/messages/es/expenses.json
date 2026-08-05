@@ -1,0 +1,87 @@
+{
+  "list": {
+    "title": "Informes de gastos",
+    "description": "Informes de gastos de empleados — borrador → aprobación → contabilizados contra la cuenta por pagar del empleado.",
+    "searchPlaceholder": "Buscar informes, empleados, notas…",
+    "emptyTitle": "Aún no hay informes de gastos",
+    "emptyDescription": "Registre el primer informe de gastos para iniciar el flujo de reembolso.",
+    "columns": {
+      "report": "Informe"
+    }
+  },
+  "actions": {
+    "newReport": "Nuevo informe de gastos",
+    "submitForApproval": "Enviar para aprobación"
+  },
+  "drawer": {
+    "autosaveHint": "Borrador — los cambios se guardan automáticamente.",
+    "viewGlImpact": "Ver impacto en el libro mayor",
+    "reportDate": "Fecha del informe",
+    "selectEmployeePlaceholder": "Seleccionar empleado…",
+    "accountPlaceholder": "Cuenta…",
+    "noTax": "Sin impuesto",
+    "deleteTitle": "¿Eliminar este informe de gastos?",
+    "deleteDraftBody": "Esto elimina permanentemente el informe de gastos en borrador. No se puede deshacer.",
+    "deletePostedBody": "Esto elimina permanentemente el informe de gastos y su impacto en el libro mayor. No se puede deshacer.",
+    "columns": {
+      "taxAmount": "Impuesto"
+    },
+    "saveState": {
+      "saved": "Todos los cambios guardados",
+      "dirty": "Cambios sin guardar…",
+      "error": "Error al guardar — corrija y reintente"
+    },
+    "totals": "Subtotal {subtotal} · Impuesto {tax} · <strong>Total {total}</strong>"
+  },
+  "toasts": {
+    "submitted": "Enviado para aprobación",
+    "posted": "Contabilizado en el libro mayor",
+    "actionFailed": "La acción falló",
+    "autosaveFailed": "Falló el guardado automático",
+    "deleted": "Informe de gastos eliminado",
+    "deleteFailed": "No se pudo eliminar",
+    "draftFailed": "No se pudo crear un borrador de informe de gastos"
+  },
+  "dashboard": {
+    "title": "Gastos",
+    "description": "Centro de control de informes de gastos — la cola de aprobación, gasto por empleado y categoría, y la tendencia del gasto.",
+    "vitals": {
+      "pending": "Pendiente de aprobación",
+      "pendingSub": "{count} informes",
+      "awaiting": "Pendiente de contabilizar",
+      "awaitingSub": "{count} aprobados",
+      "month": "Contabilizado este mes",
+      "monthSub": "{count} informes",
+      "highSpenders": "Mayores gastadores",
+      "highSpendersSub": ">20% de aumento vs anterior",
+      "creep": "Aumentos por categoría",
+      "creepSub": "categorías con subida >10%"
+    },
+    "panels": {
+      "categories": "Desglose por categoría",
+      "categoriesHint": "informes de gastos · 12 meses",
+      "trend": "Tendencia mensual",
+      "trendHint": "informes de gastos vs facturas de proveedores",
+      "queue": "Cola de aprobación",
+      "queueHint": "más antiguos primero",
+      "queueEmpty": "Nada pendiente de aprobación.",
+      "spenders": "Principales gastadores",
+      "spendersHint": "vs 12 meses anteriores",
+      "categoryTable": "Categorías",
+      "categoryTableHint": "actual vs 12 meses anteriores"
+    },
+    "table": {
+      "employee": "Empleado",
+      "spend": "Gasto",
+      "reports": "Informes",
+      "change": "Variación",
+      "category": "Categoría",
+      "current": "Actual",
+      "prior": "Anterior"
+    },
+    "series": {
+      "bills": "Facturas de proveedores",
+      "expenses": "Informes de gastos"
+    }
+  }
+}

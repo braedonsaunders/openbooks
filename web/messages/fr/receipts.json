@@ -1,0 +1,9 @@
+{
+  "page": {
+    "title": "Paiements clients",
+    "description": "Paiements clients reçus et appliqués aux factures clients ouvertes via le noyau.",
+    "newReceipt": "Nouveau paiement client",
+    "newCollectionRun": "Nouveau lot de prélèvements",
+    "tabs": { "receipts": "Encaissements", "collections": "Lots de prélèvements" }
+  }
+}

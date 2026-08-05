@@ -1,0 +1,52 @@
+{
+  "metaTitle": "Cierre continuo",
+  "title": "Cierre continuo",
+  "description": "Supervisa continuamente la preparación para el cierre y presenta excepciones contables y financieras respaldadas por evidencia.",
+  "search": "Buscar hallazgos…",
+  "tabs": { "ariaLabel": "Secciones del cierre continuo", "findings": "Hallazgos", "reports": "Informes" },
+  "agents": { "accounting": "Contabilidad", "finance": "Finanzas" },
+  "metrics": { "active": "Activos", "critical": "Críticos", "accounting": "Hallazgos contables", "finance": "Hallazgos financieros" },
+  "filters": { "agent": "Agente", "severity": "Gravedad" },
+  "severity": { "info": "Información", "warning": "Advertencia", "critical": "Crítico" },
+  "status": { "open": "Abierto", "in_review": "En revisión", "resolved": "Resuelto", "dismissed": "Descartado" },
+  "table": { "finding": "Hallazgo", "agent": "Agente", "severity": "Gravedad", "materiality": "Materialidad", "detected": "Última detección" },
+  "findings": {
+    "unmatched_bank_activity": { "title": "Actividad bancaria sin conciliar", "description": "Hay operaciones del estado bancario que aún no coinciden con transacciones del libro mayor." },
+    "reconciliation_difference": { "title": "Diferencia de conciliación", "description": "Una conciliación bancaria en curso no coincide con el saldo del estado." },
+    "stale_accounting_documents": { "title": "Documentos contables pendientes", "description": "Hay documentos contables en borrador o pendientes que superaron la antigüedad configurada." },
+    "missing_approved_budget": { "title": "No hay presupuesto aprobado", "description": "La supervisión financiera no puede comparar los datos reales porque no hay un presupuesto aprobado." },
+    "unfavorable_budget_variance": { "title": "Desviación presupuestaria desfavorable", "description": "El resultado real es materialmente peor que el presupuesto aprobado." },
+    "period_revenue_decline": { "title": "Disminución de ingresos", "description": "Los ingresos disminuyeron de forma material frente al período contable completado anterior." },
+    "gross_margin_decline": { "title": "Disminución del margen bruto", "description": "El margen bruto cayó más allá del umbral configurado frente al período completado anterior." }
+  },
+  "summary": { "records": "{count, plural, one {# registro} other {# registros}}", "review": "Revise la evidencia de respaldo" },
+  "reports": { "title": "Informes de agentes", "description": "Abra un resumen generado o expórtelo como PDF.", "search": "Buscar informes…", "empty": "Ningún informe generado coincide con estos filtros." },
+  "narrative": {
+    "title": "Último resumen del agente",
+    "agent": "Generado por {agent}",
+    "generated": "Generado el {date}",
+    "generatedLabel": "Generado",
+    "open": "Abrir informe",
+    "downloadPdf": "PDF",
+    "executiveSummary": "Resumen ejecutivo",
+    "highlights": "Aspectos destacados del rendimiento",
+    "risks": "Riesgos y anomalías",
+    "recommendations": "Acciones recomendadas",
+    "sources": "Fuentes de respaldo",
+    "sourceLabel": "Fuente",
+    "sourcePath": "Ruta en la aplicación"
+  },
+  "analysis": {
+    "title": "Análisis del agente",
+    "rootCauses": "Factores probables",
+    "recommendations": "Acciones recomendadas",
+    "evidenceNotice": "El análisis generado por el modelo se basa en los registros vinculados y sigue sujeto a revisión."
+  },
+  "empty": { "title": "Aún no hay hallazgos", "description": "Active un agente y ejecute su primer análisis. Las condiciones corregidas se resuelven automáticamente en análisis posteriores.", "action": "Configurar agentes" },
+  "details": { "materiality": "Materialidad", "confidence": "Confianza", "lastDetected": "Última detección", "summary": "Resumen", "evidence": "Evidencia de respaldo", "noEvidence": "Este hallazgo se basa en un requisito previo ausente, por lo que no hay registros fuente para mostrar.", "dismissalReason": "Motivo del descarte" },
+  "fields": { "account": "Cuenta", "count": "Registros", "oldestDate": "Fecha más antigua", "throughDate": "Conciliado hasta", "difference": "Diferencia", "budget": "Presupuesto", "budgetAmount": "Importe presupuestado", "actual": "Real", "variance": "Desviación", "period": "Períodos", "revenueChange": "Cambio en ingresos", "marginChange": "Cambio en margen", "points": "puntos" },
+  "evidence": { "bank_transaction": "Transacción bancaria", "document": "Documento contable", "reconciliation": "Conciliación", "budget_variance": "Desviación presupuestaria", "period_comparison": "Comparación de períodos" },
+  "actions": { "settings": "Configuración de agentes", "startReview": "Iniciar revisión", "resolve": "Resolver", "dismiss": "Descartar", "reopen": "Reabrir", "openSource": "Abrir origen", "cancel": "Cancelar", "confirmDismiss": "Descartar hallazgo" },
+  "dismiss": { "title": "Descartar este hallazgo", "description": "Registre por qué este resultado válido del detector no debe permanecer en la cola activa.", "placeholder": "Motivo del descarte" },
+  "feedback": { "review": "Hallazgo enviado a revisión.", "resolve": "Hallazgo resuelto.", "dismiss": "Hallazgo descartado.", "reopen": "Hallazgo reabierto.", "actionFailed": "No se pudo actualizar el hallazgo.", "recorded": "Comentarios registrados.", "wasHelpful": "¿Fue útil este hallazgo?", "helpful": "Útil", "notHelpful": "No útil" }
+}

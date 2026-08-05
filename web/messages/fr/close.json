@@ -1,0 +1,596 @@
+{
+  "title": "Clôture de période",
+  "description": "Clôturez les modules par période avec des contrôles de comptabilisation appliqués par la base de données.",
+  "workspaceDescription": "Exécutez une clôture contrôlée et documentée, de la préparation à la publication. Chaque approbation reste liée à l’état du grand livre qu’elle a validé.",
+  "importedPeriodLockReason": "Statut de période importé du système source",
+  "searchPlaceholder": "Rechercher des périodes…",
+  "stageNavigation": "Étapes de clôture",
+  "continuousValidation": "Validation continue avec le grand livre · dernière vérification {at}",
+  "runTitle": "Clôture de {period}",
+  "runDescription": "{book} · {blueprint} v{version}",
+  "filters": {
+    "book": "Livre comptable",
+    "fiscalYear": "Exercice",
+    "fyOption": "Exercice {year}",
+    "status": "Statut"
+  },
+  "table": {
+    "period": "Période",
+    "range": "Plage",
+    "entries": "Écritures",
+    "debits": "Débits",
+    "rangeValue": "{start} → {end}",
+    "status": "Statut",
+    "readiness": "Préparation",
+    "action": "Action"
+  },
+  "modules": {
+    "ar": "CC",
+    "ap": "CF",
+    "banking": "Banque",
+    "assets": "Immobilisations",
+    "tax": "Fiscalité",
+    "gl": "GL"
+  },
+  "status": { "closed": "fermée", "open": "ouverte" },
+  "runStatus": {
+    "not_started": "Non démarrée",
+    "draft": "Brouillon",
+    "in_progress": "En cours",
+    "review": "En révision",
+    "approved": "Approuvée",
+    "closed": "Clôturée",
+    "published": "Publiée",
+    "cancelled": "Annulée"
+  },
+  "stages": {
+    "scope": "Périmètre",
+    "readiness": "Préparation",
+    "execute": "Exécution",
+    "review": "Révision",
+    "lock": "Verrouillage",
+    "publish": "Publication"
+  },
+  "actions": {
+    "start": "Démarrer la clôture",
+    "starting": "Démarrage…",
+    "manageBooks": "Gérer les livres",
+    "resume": "Reprendre",
+    "backToPeriods": "Retour aux périodes",
+    "revalidate": "Revalider",
+    "runRevaluation": "Réévaluer les devises",
+    "runConsolidation": "Exécuter la consolidation",
+    "startTask": "Démarrer",
+    "complete": "Terminer",
+    "submitReview": "Soumettre à révision",
+    "approve": "Approuver",
+    "requestChanges": "Demander des modifications",
+    "addEvidence": "Ajouter une preuve",
+    "takeAction": "Agir",
+    "requestApproval": "Demander l’approbation",
+    "reviewApprovals": "Examiner les approbations",
+    "configureApprovalFlow": "Configurer le flux d’approbation",
+    "documentation": "Documentation",
+    "lockPeriod": "Verrouiller la période",
+    "publish": "Publier le dossier",
+    "downloadBinder": "Télécharger le dossier d’audit immuable"
+  },
+  "errors": { "actionFailed": "L’action de clôture n’a pas pu être effectuée" },
+  "messages": {
+    "refresh": "État de clôture actualisé",
+    "request_approval": "Clôture soumise à approbation",
+    "close": "Période verrouillée",
+    "publish": "Dossier de clôture publié",
+    "taskUpdated": "Tâche mise à jour",
+    "revaluationPosted": "Soldes en devises réévalués",
+    "consolidationPosted": "Ajustements de détention, taux et éliminations comptabilisés",
+    "evidenceAdded": "Preuve jointe",
+    "automationComplete": "Automatisation terminée"
+  },
+  "metrics": {
+    "readiness": "Préparation",
+    "liveLedger": "Contrôles en direct",
+    "progress": "Progression",
+    "tasksComplete": "{completed} tâches sur {total}",
+    "criticalPath": "Chemin critique",
+    "clear": "Dégagé",
+    "historicalDays": "Habituellement terminée au jour {days}",
+    "noPredictedBlocker": "Aucun blocage historique"
+  },
+  "scope": {
+    "title": "Périmètre de clôture",
+    "description": "Le contexte immuable de cette exécution.",
+    "period": "Période comptable",
+    "book": "Livre comptable",
+    "blueprint": "Modèle",
+    "target": "Date cible",
+    "entities": "Entités",
+    "selectedEntities": "{count, plural, one {# entité sélectionnée} other {# entités sélectionnées}}",
+    "allEntities": "Toutes les entités",
+    "package": "Dossier de rapports",
+    "noPackage": "Aucun dossier sélectionné"
+  },
+  "rehearsal": {
+    "title": "Répétition de clôture",
+    "description": "Créez un bac à sable à une date donnée pour tester les ajustements, la consolidation et les rapports sans toucher aux livres de production.",
+    "action": "Répéter dans un bac à sable"
+  },
+  "readiness": {
+    "title": "Préparation du grand livre",
+    "description": "Les diagnostics en direct détectent les blocages et invalident les approbations périmées lorsque les livres changent.",
+    "score": "prêt",
+    "clear": "Aucune exception bloquante ne subsiste."
+  },
+  "diagnostics": {
+    "drafts-open": {
+      "title": "Des activités non comptabilisées subsistent",
+      "message": "{count, plural, one {# opération provisoire ou en attente subsiste dans la période.} other {# opérations provisoires ou en attente subsistent dans la période.}}"
+    },
+    "bank-unreconciled": {
+      "title": "Des comptes de trésorerie doivent être rapprochés",
+      "message": "{count, plural, one {# compte rapprochable n’est pas validé jusqu’à la fin de période.} other {# comptes rapprochables ne sont pas validés jusqu’à la fin de période.}}"
+    },
+    "depreciation-unposted": {
+      "title": "Des amortissements restent à comptabiliser",
+      "message": "{count, plural, one {# ligne d’amortissement planifiée reste à comptabiliser.} other {# lignes d’amortissement planifiées restent à comptabiliser.}}"
+    },
+    "fx-missing": {
+      "title": "Des taux de change manquent",
+      "message": "{count, plural, one {# devise d’opération n’a pas de taux au comptant utilisable en fin de période.} other {# devises d’opération n’ont pas de taux au comptant utilisable en fin de période.}}"
+    },
+    "fx-unrevalued": {
+      "title": "Les soldes en devises ne sont pas réévalués",
+      "message": "{count, plural, one {# solde monétaire en devise n’a pas été réévalué au taux de fin de période.} other {# soldes monétaires en devises n’ont pas été réévalués au taux de fin de période.}}"
+    },
+    "intercompany-residual": {
+      "title": "L’activité intersociétés ne s’élimine pas",
+      "message": "{count, plural, one {# compte d’élimination présente un solde de groupe non nul.} other {# comptes d’élimination présentent un solde de groupe non nul.}}"
+    },
+    "material-variances": {
+      "title": "Les fluctuations significatives exigent une explication",
+      "message": "{count, plural, one {# compte dépasse les seuils de matérialité configurés.} other {# comptes dépassent les seuils de matérialité configurés.}}"
+    }
+  },
+  "severity": {
+    "info": "Information",
+    "warning": "Avertissement",
+    "error": "Erreur",
+    "critical": "Critique"
+  },
+  "workstreams": {
+    "readiness": "Préparation",
+    "banking": "Banque",
+    "ar": "Comptes clients",
+    "ap": "Comptes fournisseurs",
+    "assets": "Immobilisations",
+    "tax": "Fiscalité",
+    "payroll": "Paie",
+    "intercompany": "Intersociétés",
+    "gl": "Grand livre",
+    "review": "Révision",
+    "publish": "Publication"
+  },
+  "gates": {
+    "none": "Aucun contrôle",
+    "soft": "Contrôle souple",
+    "hard": "Contrôle strict"
+  },
+  "taskStatus": {
+    "blocked": "Bloquée",
+    "ready": "Prête",
+    "in_progress": "En cours",
+    "submitted": "En attente de révision",
+    "changes_requested": "Modifications demandées",
+    "complete": "Terminée",
+    "waived": "Dispensée",
+    "invalidated": "Revalidation requise"
+  },
+  "tasks": {
+    "dependencies": "Dépend de : {dependencies}",
+    "notePlaceholder": "Ajouter une note ou un résumé de preuve…"
+  },
+  "lock": {
+    "title": "Verrouillage contrôlé",
+    "description": "Les livres auxiliaires sont verrouillés avant le GL. La base de données refuse ensuite les comptabilisations.",
+    "blockedTitle": "Approbation bloquée",
+    "blockedDescription": "{count, plural, one {# tâche à contrôle strict reste} other {# tâches à contrôle strict restent}}.",
+    "approvalTitle": "Approbation indépendante et verrouillage",
+    "approvalDescription": "La personne ayant lancé l’exécution ne peut pas l’approuver définitivement. Toute modification du grand livre rouvre la révision.",
+    "complete": "Période verrouillée par {name}"
+  },
+  "lockStates": {
+    "open": "Ouverte",
+    "soft_closed": "Clôture souple",
+    "closed": "Clôturée"
+  },
+  "publish": {
+    "package": "Dossier de rapports de clôture",
+    "description": "Vérifiez les sorties configurées, puis figez le dossier de preuves et publiez-le.",
+    "complete": "Dossier publié par {name}",
+    "lockFirst": "Appliquez les verrous de période approuvés avant de publier.",
+    "awaitingApproval": "Terminez la révision et le flux d’approbation avant de publier."
+  },
+  "timeline": {
+    "title": "Chronologie immuable",
+    "description": "Tâches, preuves, invalidations, approbations, verrouillages et publication dans une seule piste d’audit.",
+    "system": "Système"
+  },
+  "events": {
+    "run": {
+      "started": "Exécution démarrée",
+      "data_changed": "Une modification du grand livre a invalidé des travaux",
+      "approval_requested": "Approbation de clôture demandée",
+      "approval_rejected": "Approbation de clôture refusée",
+      "approved": "Clôture approuvée définitivement",
+      "closed": "Verrous de période appliqués",
+      "published": "Dossier de clôture publié"
+    },
+    "task": {
+      "start": "Tâche démarrée",
+      "submit": "Tâche soumise",
+      "complete": "Tâche terminée",
+      "approve": "Tâche approuvée",
+      "request_changes": "Modifications demandées",
+      "waive": "Tâche dispensée",
+      "evidence_added": "Preuve jointe"
+    },
+    "automation": {
+      "completed": "Automatisation terminée",
+      "failed": "Échec de l’automatisation"
+    }
+  },
+  "reports": {
+    "balance-sheet": "Bilan",
+    "pnl": "Résultat",
+    "cash-flow": "Flux de trésorerie",
+    "trial-balance": "Balance de vérification",
+    "general-ledger": "Grand livre"
+  },
+  "defaultData": {
+    "calendar": { "name": "Calendrier fiscal standard" },
+    "blueprint": {
+      "name": "Clôture standard",
+      "description": "Clôture native du grand livre pour les fins de mois, de trimestre et d’exercice"
+    },
+    "policies": {
+      "materialVariance": {
+        "name": "Révision des écarts significatifs",
+        "description": "Signale les mouvements de comptes dépassant les seuils absolu et relatif."
+      },
+      "independentApproval": {
+        "name": "Approbation finale indépendante",
+        "description": "La personne ayant lancé l’exécution ne peut pas donner l’approbation finale."
+      },
+      "controlledReopen": {
+        "name": "Réouverture contrôlée",
+        "description": "Toute réouverture exige un motif, une approbation indépendante et une échéance."
+      }
+    },
+    "package": {
+      "name": "Dossier de clôture de gestion",
+      "description": "États financiers essentiels et dossier de preuves de clôture"
+    }
+  },
+  "defaultSteps": {
+    "drafts-cleared": {
+      "title": "Régler les opérations non comptabilisées",
+      "description": "Résoudre les journaux brouillons et les opérations appartenant à cette période."
+    },
+    "bank-reconciled": {
+      "title": "Rapprocher tous les comptes de trésorerie",
+      "description": "Tous les comptes rapprochables doivent être validés jusqu’à la fin de période."
+    },
+    "ar-cutoff": {
+      "title": "Terminer la césure des comptes clients",
+      "description": "Confirmer l’exhaustivité de la facturation, les encaissements non affectés, les crédits et l’ancienneté."
+    },
+    "ap-cutoff": {
+      "title": "Terminer la césure des comptes fournisseurs",
+      "description": "Confirmer l’exhaustivité des factures, les charges à payer, les crédits et la césure des paiements."
+    },
+    "depreciation-posted": {
+      "title": "Comptabiliser l’amortissement",
+      "description": "Exécuter l’amortissement planifié et résoudre les exceptions."
+    },
+    "fx-ready": {
+      "title": "Valider la couverture de change",
+      "description": "Chaque devise d’opération doit avoir un taux de fin de période utilisable."
+    },
+    "fx-revalued": {
+      "title": "Réévaluer les soldes en devises",
+      "description": "Restater les soldes ouverts en devises (banque, clients et fournisseurs) au taux de fin de période."
+    },
+    "intercompany-balanced": {
+      "title": "Rapprocher l’intersociétés",
+      "description": "Les comptes intersociétés doivent s’équilibrer avant les éliminations."
+    },
+    "consolidation": {
+      "title": "Calculer les taux et comptabiliser les éliminations",
+      "description": "Terminer les ajustements de consolidation des livres multi-entités."
+    },
+    "variance-review": {
+      "title": "Expliquer les variations significatives",
+      "description": "Examiner les mouvements par rapport à la période précédente et conserver les explications."
+    },
+    "controller-approval": {
+      "title": "Approbation du contrôleur",
+      "description": "Réviser indépendamment la préparation, les exceptions, les preuves et les rapports."
+    },
+    "lock-subledgers": {
+      "title": "Verrouiller les livres auxiliaires",
+      "description": "Verrouiller CC, CF, banque, immobilisations et fiscalité avant le GL."
+    },
+    "lock-gl": {
+      "title": "Verrouiller le grand livre",
+      "description": "Appliquer le verrou GL dans la base de données après tous les prérequis."
+    },
+    "publish-package": {
+      "title": "Publier le dossier de clôture",
+      "description": "Figer le dossier de clôture et publier les rapports configurés."
+    }
+  },
+  "setup": {
+    "title": "Périodes et clôture",
+    "description": "Concevez les calendriers, générez les périodes, gouvernez les verrous et réouvertures, versionnez les modèles et configurez contrôles, automatisations et dossiers.",
+    "tabs": {
+      "calendars": "Calendriers",
+      "periods": "Périodes",
+      "blueprints": "Modèles",
+      "policies": "Politiques",
+      "automation": "Automatisation",
+      "packages": "Dossiers de rapports"
+    },
+    "calendars": {
+      "title": "Calendriers fiscaux",
+      "description": "Définissez la transformation des exercices en périodes de comptabilisation.",
+      "startsMonth": "Débute au mois {month}",
+      "editTitle": "Modifier le calendrier",
+      "newTitle": "Nouveau calendrier",
+      "formDescription": "Les paramètres fondamentaux sont protégés dès qu’une activité existe.",
+      "anchorHint": "Date de début de l’exercice d’ancrage configuré.",
+      "configurationHint": "Configurez anchorFiscalYear et leapWeekYears, ou les exercices personnalisés et leurs plages de dates."
+    },
+    "periods": {
+      "title": "Périodes comptables et verrous",
+      "description": "Générez, recherchez, verrouillez, clôturez souplement et demandez des réouvertures par livre et module.",
+      "searchPlaceholder": "Rechercher des périodes comptables…",
+      "generateTitle": "Générer les périodes comptables",
+      "generateDescription": "Créez les périodes de comptabilisation d’un calendrier et d’un exercice.",
+      "moduleSummary": "{closed} modules sur {total} clôturés",
+      "lockedOn": "Verrouillée le {date}",
+      "lockTitle": "Confirmer le verrouillage",
+      "reopenTitle": "Demander une réouverture contrôlée",
+      "lockDescription": "{module} · {period}. Le motif est conservé dans l’historique immuable.",
+      "reopenRequests": "Demandes de réouverture",
+      "requestedBy": "Demandée par {name}"
+    },
+    "blueprints": {
+      "title": "Modèles de clôture",
+      "description": "Créez des graphes de dépendances réutilisables avec responsables, preuves, automatisation et contrôles.",
+      "stepCount": "{count, plural, one {# étape} other {# étapes}}",
+      "newTitle": "Nouveau modèle",
+      "newVersionTitle": "Créer une nouvelle version",
+      "versionHint": "Les exécutions publiées gardent leur version; une modification crée une nouvelle version immuable.",
+      "steps": "Étapes du graphe de dépendances"
+    },
+    "policies": {
+      "title": "Politiques de clôture",
+      "description": "Configurez l’importance relative, les verrous, la révision, la séparation des tâches et les exceptions.",
+      "formTitle": "Configuration de politique",
+      "rulesHint": "Les règles JSON avancées permettent des seuils et conditions propres au locataire sans déploiement."
+    },
+    "automation": {
+      "title": "Automatisation de clôture",
+      "description": "Réagissez aux événements par des notifications, affectations, contrôles, tâches, rapports ou flux.",
+      "formTitle": "Règle d’automatisation"
+    },
+    "packages": {
+      "title": "Dossiers de rapports",
+      "description": "Définissez les états, destinataires et paramètres de livraison publiés avec la clôture.",
+      "formTitle": "Dossier de rapports",
+      "reportCount": "{count, plural, one {# rapport} other {# rapports}}",
+      "recipientsHint": "Un destinataire par ligne."
+    },
+    "actions": {
+      "newCalendar": "Nouveau calendrier",
+      "newBlueprint": "Nouveau modèle",
+      "newPolicy": "Nouvelle politique",
+      "newAutomation": "Nouvelle automatisation",
+      "newPackage": "Nouveau dossier",
+      "save": "Enregistrer",
+      "saving": "Enregistrement…",
+      "saveVersion": "Enregistrer la nouvelle version",
+      "generate": "Générer les périodes",
+      "addStep": "Ajouter une étape",
+      "remove": "Retirer",
+      "close": "Clôturer",
+      "softClose": "Clôture souple",
+      "reopen": "Rouvrir",
+      "requestReopen": "Demander la réouverture",
+      "confirmClose": "Confirmer la clôture",
+      "approve": "Approuver",
+      "reject": "Refuser",
+      "cancel": "Annuler",
+      "manageBooks": "Gérer les livres",
+      "managePeriod": "Gérer {period}"
+    },
+    "fields": {
+      "name": "Nom",
+      "description": "Description",
+      "cadence": "Cadence",
+      "yearStartMonth": "Mois de début",
+      "weekStartsOn": "Début de semaine",
+      "anchorDate": "Date d’ancrage",
+      "timeZone": "Fuseau horaire",
+      "adjustmentPeriod": "Générer une période d’ajustement",
+      "defaultCalendar": "Calendrier fiscal par défaut",
+      "calendar": "Calendrier fiscal",
+      "book": "Livre comptable",
+      "fiscalYear": "Exercice",
+      "reason": "Motif",
+      "periodType": "Type de période",
+      "stepKey": "Clé stable",
+      "stepTitle": "Titre de l’étape",
+      "taskType": "Type de tâche",
+      "dueOffset": "Décalage d’échéance (jours ouvrables)",
+      "ownerRole": "Clé du rôle responsable",
+      "reviewerRole": "Clé du rôle réviseur",
+      "applicability": "Règles d’applicabilité",
+      "workstream": "Volet",
+      "gate": "Contrôle",
+      "completion": "Achèvement",
+      "dependencies": "Clés de dépendance",
+      "evidenceRequired": "Preuve requise",
+      "defaultBlueprint": "Modèle par défaut",
+      "code": "Code stable",
+      "policyType": "Type de politique",
+      "rules": "Règles",
+      "trigger": "Déclencheur",
+      "action": "Action",
+      "conditions": "Conditions",
+      "configuration": "Configuration",
+      "reports": "Rapports",
+      "recipients": "Destinataires",
+      "delivery": "Configuration de livraison",
+      "defaultPackage": "Dossier par défaut",
+      "active": "Actif"
+    },
+    "labels": {
+      "default": "Par défaut",
+      "active": "Actif",
+      "inactive": "Inactif"
+    },
+    "cadences": {
+      "monthly": "Mois civils",
+      "four_four_five": "Semaines 4-4-5",
+      "four_five_four": "Semaines 4-5-4",
+      "five_four_four": "Semaines 5-4-4",
+      "thirteen_period": "13 périodes de quatre semaines",
+      "custom": "Périodes personnalisées"
+    },
+    "weekdays": {
+      "0": "Dimanche",
+      "1": "Lundi",
+      "2": "Mardi",
+      "3": "Mercredi",
+      "4": "Jeudi",
+      "5": "Vendredi",
+      "6": "Samedi"
+    },
+    "states": {
+      "open": "Ouverte",
+      "soft_closed": "Clôture souple",
+      "partial": "Partiellement clôturée",
+      "closed": "Clôturée"
+    },
+    "modules": {
+      "ar": "CC",
+      "ap": "CF",
+      "banking": "Banque",
+      "assets": "Immobilisations",
+      "tax": "Fiscalité",
+      "gl": "GL"
+    },
+    "reopenStates": {
+      "requested": "Demandée",
+      "approved": "Approuvée",
+      "rejected": "Rejetée",
+      "expired": "Expirée",
+      "reclosed": "Refermée"
+    },
+    "periodTypes": {
+      "any": "Toute clôture",
+      "month": "Fin de mois",
+      "quarter": "Fin de trimestre",
+      "year": "Fin d’exercice",
+      "adjustment": "Ajustement"
+    },
+    "workstreams": {
+      "readiness": "Préparation",
+      "banking": "Banque",
+      "ar": "Comptes clients",
+      "ap": "Comptes fournisseurs",
+      "assets": "Immobilisations",
+      "tax": "Fiscalité",
+      "payroll": "Paie",
+      "intercompany": "Intersociétés",
+      "gl": "Grand livre",
+      "review": "Révision",
+      "publish": "Publication"
+    },
+    "gates": {
+      "none": "Aucun contrôle",
+      "soft": "Contrôle souple",
+      "hard": "Contrôle strict"
+    },
+    "completionModes": {
+      "manual": "Manuel",
+      "computed": "Calculé par le grand livre",
+      "automatic": "Automatique"
+    },
+    "taskTypes": {
+      "check": "Contrôle",
+      "action": "Action",
+      "reconciliation": "Rapprochement",
+      "journal": "Journal",
+      "approval": "Approbation",
+      "report": "Rapport",
+      "publish": "Publication"
+    },
+    "policyTypes": {
+      "materiality": "Importance relative",
+      "lock": "Verrouillage",
+      "review": "Révision",
+      "segregation": "Séparation des tâches",
+      "exception": "Exception"
+    },
+    "automationTriggers": {
+      "run_started": "Exécution démarrée",
+      "task_ready": "Tâche prête",
+      "exception_opened": "Exception ouverte",
+      "deadline_approaching": "Échéance prochaine",
+      "run_closed": "Exécution clôturée"
+    },
+    "automationActions": {
+      "notify": "Notifier",
+      "assign": "Affecter",
+      "run_check": "Exécuter un contrôle",
+      "complete_task": "Terminer la tâche",
+      "create_task": "Créer une tâche",
+      "generate_report": "Générer un rapport",
+      "start_flow": "Démarrer un flux"
+    },
+    "reports": {
+      "balance-sheet": "Bilan",
+      "pnl": "Résultat",
+      "cash-flow": "Flux de trésorerie",
+      "trial-balance": "Balance de vérification",
+      "general-ledger": "Grand livre"
+    },
+    "table": { "period": "Période", "range": "Plage", "entries": "Écritures", "status": "Statut" },
+    "empty": {
+      "calendars": "Aucun calendrier fiscal ne correspond à cette recherche.",
+      "periods": "Aucune période comptable ne correspond à ces filtres.",
+      "blueprints": "Aucun modèle de clôture ne correspond à cette recherche.",
+      "policies": "Aucune politique de clôture ne correspond à cette recherche.",
+      "automation": "Aucune règle d’automatisation ne correspond à cette recherche.",
+      "packages": "Aucun dossier de rapports ne correspond à cette recherche."
+    },
+    "messages": {
+      "calendarSaved": "Calendrier enregistré",
+      "periodsGenerated": "Périodes générées",
+      "lockSaved": "Verrou de période enregistré",
+      "reopenRequested": "Demande de réouverture soumise",
+      "reopenApproved": "Fenêtre de réouverture approuvée selon la politique configurée",
+      "reopenRejected": "Demande de réouverture refusée",
+      "blueprintSaved": "Version du modèle enregistrée",
+      "policySaved": "Politique enregistrée",
+      "automationSaved": "Règle d’automatisation enregistrée",
+      "packageSaved": "Dossier de rapports enregistré"
+    },
+    "errors": {
+      "actionFailed": "La modification n’a pas pu être enregistrée",
+      "invalidConfiguration": "La configuration doit être valide et complète"
+    }
+  }
+}

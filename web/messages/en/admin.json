@@ -1,0 +1,3467 @@
+{
+  "hub": {
+    "metaTitle": "Admin Center",
+    "title": "Admin Center",
+    "subtitle": "Everything that configures this workspace — company setup, people, and system.",
+    "groups": {
+      "company": "Company",
+      "people": "People & access",
+      "workspace": "Workspace",
+      "platform": "Platform & development",
+      "activity": "Activity & data",
+      "data": "Integrations & data"
+    },
+    "cards": {
+      "settings": {
+        "title": "Company & Accounting",
+        "description": "Organization identity, base currency, fiscal year & control accounts"
+      },
+      "users": {
+        "title": "Users",
+        "description": "Invite people, assign roles & permission overrides"
+      },
+      "roles": {
+        "title": "Roles",
+        "description": "Define roles and exactly what each one grants"
+      },
+      "navigation": {
+        "title": "Navigation",
+        "description": "Organize workspaces, menu labels, and mobile shortcuts"
+      },
+      "records": {
+        "title": "Custom Records",
+        "description": "Design your own record types — each becomes a full module with its own list & editor"
+      },
+      "customFields": {
+        "title": "Custom Fields",
+        "description": "Add typed fields to records across the app"
+      },
+      "customization": {
+        "title": "Forms & Views",
+        "description": "Customize transaction forms and saved list views per org and per user"
+      },
+      "pdfTemplates": {
+        "title": "PDF Templates",
+        "description": "Design printable PDF documents for invoices, journals, and every transaction"
+      },
+      "scripts": {
+        "title": "Scripts",
+        "description": "Sandboxed automation that runs on ledger events"
+      },
+      "apps": {
+        "title": "Apps",
+        "description": "Build and install app packages — a sandboxed frontend plus a governed backend"
+      },
+      "sandboxes": {
+        "title": "Environments",
+        "description": "Create, refresh, and promote isolated sandbox copies of production"
+      },
+      "backup": {
+        "title": "Backups",
+        "description": "Download, schedule & retain organization backups"
+      },
+      "apiKeys": {
+        "title": "API Keys",
+        "description": "Create scoped API keys for integrations and view usage logs"
+      },
+      "apiDocs": {
+        "title": "API Docs",
+        "description": "Browse the REST API reference for every record and transaction type"
+      },
+      "flows": {
+        "title": "Flows",
+        "description": "Build governed automations, approval gates, conditions, and actions"
+      },
+      "queryConsole": {
+        "title": "Query Console",
+        "description": "Run permission-controlled queries for analysis and integration work"
+      },
+      "audit": {
+        "title": "Audit Log",
+        "description": "Every write captured with actor and before/after diffs"
+      },
+      "sync": {
+        "title": "Migrations & Mirror",
+        "description": "Migrate from an accounting source, then mirror both systems during validation"
+      },
+      "ai": {
+        "title": "AI",
+        "description": "Provider, models, and encrypted API key for the assistant"
+      },
+      "setup": {
+        "title": "Setup",
+        "description": "Tax, dimensions, payment terms, numbering & other configuration"
+      },
+      "email": {
+        "title": "Email delivery",
+        "description": "Configure your email provider so scheduled reports can be sent"
+      }
+    }
+  },
+  "buildHub": {
+    "metaTitle": "Build",
+    "title": "Build",
+    "subtitle": "Everything you author on the platform — data model, forms & documents, automation, and the API.",
+    "groups": {
+      "model": "Data model",
+      "experience": "Forms & documents",
+      "automation": "Automation & apps",
+      "api": "API"
+    }
+  },
+  "audit": {
+    "title": "Audit Log",
+    "description": "A complete, tamper-proof history of every change, with full before/after detail and GL impact for posted amendments and deletions.",
+    "documentation": "Documentation",
+    "searchPlaceholder": "Search record type, user, or reference…",
+    "actionFilter": "Action",
+    "empty": {
+      "title": "No audit entries yet",
+      "description": "Changes to your records will appear here as they happen."
+    },
+    "table": {
+      "when": "When",
+      "actor": "User",
+      "action": "Action",
+      "tableName": "Record type",
+      "row": "Reference",
+      "changes": "Details"
+    },
+    "openEventAria": "Open {action} event for {recordType} from {when}",
+    "summaries": {
+      "snapshot": "Full before and after snapshot",
+      "metadata": "Record metadata",
+      "changeCount": "{count, plural, =0 {Event details} one {# changed field} other {# changed fields}}"
+    },
+    "drawer": {
+      "description": "Recorded by {actor} · {when}",
+      "tabsAria": "Audit event views",
+      "tabs": {
+        "changes": "Changes",
+        "before": "Before",
+        "after": "After"
+      },
+      "when": "Recorded",
+      "actor": "User",
+      "recordType": "Record type",
+      "reference": "Record reference",
+      "changedFields": "Changed fields",
+      "eventContext": "Event context",
+      "technicalDetails": "Technical details",
+      "beforeSnapshot": "Record before this event",
+      "afterSnapshot": "Record after this event",
+      "recordRemoved": "Record removed",
+      "recordRemovedDescription": "This event deleted the record, so there is no after snapshot.",
+      "field": "Field",
+      "before": "Before",
+      "after": "After",
+      "notSet": "Not set",
+      "yes": "Yes",
+      "no": "No",
+      "emptyCollection": "No values",
+      "item": "Item",
+      "lineItem": "Line {line}",
+      "itemCount": "{count, plural, one {# item} other {# items}}",
+      "propertyCount": "{count, plural, one {# property} other {# properties}}",
+      "itemPosition": "{current} of {total}",
+      "changeCount": "{count, plural, one {# change} other {# changes}}",
+      "noDifferences": "No before-and-after field differences were recorded for this event."
+    },
+    "systemActor": "system",
+    "actions": {
+      "insert": "insert",
+      "update": "update",
+      "delete": "delete",
+      "post": "post",
+      "void": "void",
+      "approve": "approve",
+      "reject": "reject"
+    },
+    "recordTypeFilter": "Record type",
+    "userFilter": "User",
+    "dateFrom": "From",
+    "dateTo": "To",
+    "clearDates": "Clear dates"
+  },
+  "customFields": {
+    "title": "Custom Fields",
+    "description": "Extend any module — document headers, transaction lines, parties, projects, accounts. Fields render everywhere the record does: drawers, line grids, and reporting.",
+    "searchPlaceholder": "Search fields…",
+    "targetFilter": "Target",
+    "table": {
+      "field": "Field",
+      "key": "Key",
+      "target": "Target",
+      "type": "Type",
+      "required": "Required",
+      "status": "Status"
+    },
+    "empty": "No custom fields yet.",
+    "statusActive": "active",
+    "statusArchived": "archived",
+    "newField": "New field",
+    "targets": {
+      "documents": {
+        "label": "Transaction header",
+        "description": "One value per transaction (bill, invoice, payment, expense report, journal)."
+      },
+      "documentLines": {
+        "label": "Transaction lines",
+        "description": "A column on every line of the chosen transaction type."
+      },
+      "parties": {
+        "label": "Parties",
+        "description": "Vendors, customers, and employees."
+      },
+      "projects": {
+        "label": "Projects",
+        "description": "Jobs / projects."
+      },
+      "managedProperties": {
+        "label": "Properties",
+        "description": "Managed real-estate properties."
+      },
+      "accounts": {
+        "label": "Accounts",
+        "description": "Chart of accounts."
+      },
+      "items": {
+        "label": "Items & Services",
+        "description": "Products and services."
+      },
+      "crmAccounts": {
+        "label": "CRM accounts",
+        "description": "Lead, prospect, and customer qualification profiles."
+      },
+      "crmActivities": {
+        "label": "CRM activities",
+        "description": "Calls, visits, events, emails, notes, and tasks."
+      },
+      "crmOpportunities": {
+        "label": "CRM opportunities",
+        "description": "Pipeline opportunities and forecast details."
+      }
+    },
+    "kinds": {
+      "header": {
+        "vendorBill": "Vendor bills",
+        "customerInvoice": "Customer invoices",
+        "vendorPayment": "Vendor payments",
+        "customerPayment": "Customer payments",
+        "expenseReport": "Expense reports",
+        "journal": "Journal entries",
+        "vendorCredit": "Vendor credits",
+        "customerCredit": "Customer credit memos",
+        "cardCharge": "Card charges",
+        "cardRefund": "Card refunds",
+        "check": "Checks"
+      },
+      "lines": {
+        "vendorBill": "Vendor bill lines",
+        "customerInvoice": "Customer invoice lines",
+        "expenseReport": "Expense report lines",
+        "journal": "Journal entry lines",
+        "vendorCredit": "Vendor credit lines",
+        "customerCredit": "Customer credit memo lines",
+        "cardCharge": "Card charge lines",
+        "cardRefund": "Card refund lines",
+        "check": "Check lines"
+      }
+    },
+    "types": {
+      "text": {
+        "label": "Text",
+        "help": "Single line of text."
+      },
+      "longText": {
+        "label": "Text area",
+        "help": "Multiple lines of text."
+      },
+      "number": {
+        "label": "Number",
+        "help": "A numeric value."
+      },
+      "currency": {
+        "label": "Currency",
+        "help": "A money amount (2 decimals)."
+      },
+      "date": {
+        "label": "Date",
+        "help": "A calendar date."
+      },
+      "boolean": {
+        "label": "Checkbox",
+        "help": "Yes / no."
+      },
+      "select": {
+        "label": "Dropdown (single)",
+        "help": "Choose one from a list."
+      },
+      "multiSelect": {
+        "label": "Dropdown (multiple)",
+        "help": "Choose any number from a list."
+      },
+      "reference": {
+        "label": "List / Record",
+        "help": "Link to another record (party, project, account, item)."
+      }
+    },
+    "drawer": {
+      "newTitle": "New custom field",
+      "editTitle": "Edit “{label}”",
+      "newDescription": "Extend a record type with your own field.",
+      "createField": "Create field",
+      "saveChanges": "Save changes",
+      "created": "Field created",
+      "updated": "Field updated",
+      "saveFailed": "Could not save the field",
+      "appliesTo": "Applies to",
+      "recordType": "Record type",
+      "whichTransactions": "Which transactions",
+      "allTypes": "All types",
+      "allTypesHint": "Leave as “All types” to apply the field to every kind.",
+      "allKindsSuffix": "all kinds",
+      "lockedAfterCreation": "· locked after creation (values already reference it)",
+      "label": "Label",
+      "labelPlaceholder": "PO Number",
+      "fieldKey": "Field key",
+      "permanent": "(permanent)",
+      "keyPlaceholder": "po_number",
+      "keyHint": "Auto-filled from the label; snake_case.",
+      "type": "Type",
+      "options": "Options",
+      "noOptions": "No options yet — add at least one.",
+      "addOptionPlaceholder": "Add an option…",
+      "removeOption": "Remove {option}",
+      "helpText": "Help text",
+      "optionalSuffix": "(optional)",
+      "helpTextPlaceholder": "Shown under the field",
+      "placeholder": "Placeholder",
+      "defaultValue": "Default value",
+      "min": "Min",
+      "max": "Max",
+      "showInList": "Show as a column in list views",
+      "referenceTable": "Referenced record type",
+      "referenceTableHint": "The field stores a link to a record of this type.",
+      "displayMode": "Display mode",
+      "displayNormal": "Normal (editable)",
+      "displayHidden": "Hidden (not shown on forms)",
+      "displayDisabled": "Disabled (shown read-only)",
+      "allowedRoles": "Visible to roles",
+      "allowedRolesHint": "Leave unchecked for all roles. Admins always see all fields.",
+      "roleAdmin": "Admin",
+      "roleController": "Controller",
+      "roleAccountant": "Accountant",
+      "roleApprover": "Approver",
+      "roleViewer": "Viewer"
+    }
+  },
+  "navigation": {
+    "title": "Navigation",
+    "description": "Customize every menu layout for the organization: organize workspaces, rename or hide destinations, add links, and choose up to four mobile shortcuts. Permission gates still apply.",
+    "groupLabelAria": "Group label",
+    "moveGroupUp": "Move group up",
+    "moveGroupDown": "Move group down",
+    "itemLabelAria": "Item label",
+    "showItem": "Show item",
+    "hideItem": "Hide item",
+    "moveItemUp": "Move item up",
+    "moveItemDown": "Move item down",
+    "moveToGroup": "Move to workspace",
+    "pinMobile": "Pin to mobile navigation",
+    "unpinMobile": "Remove from mobile navigation",
+    "mobileLimit": "Mobile navigation supports up to four pinned destinations",
+    "linkUrlPrompt": "Link URL (internal route or https://…):",
+    "linkLabelPrompt": "Label:",
+    "addLink": "Add link",
+    "deleteLink": "Delete link",
+    "addApp": "Add app shortcut…",
+    "removeApp": "Remove app shortcut",
+    "newGroupPrompt": "Workspace name:",
+    "addGroup": "Add workspace",
+    "deleteGroup": "Delete workspace",
+    "save": "Save navigation",
+    "saved": "Navigation saved",
+    "saveFailed": "Could not save",
+    "resetDefaults": "Reset to defaults"
+  },
+  "roles": {
+    "metaTitle": "Roles",
+    "title": "Roles",
+    "description": "Bundles of permissions you assign to users. Built-in roles ship with the app; create custom roles for anything finer-grained.",
+    "manageUsers": "Manage users",
+    "searchPlaceholder": "Search role name, key, or description…",
+    "typeFilter": "Type",
+    "builtIn": "Built-in",
+    "custom": "Custom",
+    "emptyTitle": "No roles yet",
+    "emptyDescription": "Run the role seed script (engine/src/seed-roles.ts) to create the built-in roles, or create a custom role.",
+    "noMatchTitle": "No matching roles",
+    "noMatchDescription": "Adjust the search or type filter.",
+    "table": {
+      "key": "Key",
+      "permissions": "Permissions",
+      "members": "Members"
+    },
+    "newRole": "New role",
+    "drawer": {
+      "newTitle": "New role",
+      "lockedDescription": "The Administrator role always carries every permission and cannot be edited.",
+      "builtInDescription": "Built-in role: the name and key are fixed, but you can adjust its permissions.",
+      "newDescription": "Name the role, then pick the permissions it grants.",
+      "deleteRole": "Delete role",
+      "createRole": "Create role",
+      "saveChanges": "Save changes",
+      "nameRequired": "Role name is required",
+      "saveFailed": "Saving the role failed",
+      "created": "Role created",
+      "updated": "Role updated",
+      "deleteConfirm": "Delete the “{name}” role? Users holding it lose its permissions immediately.",
+      "deleteFailed": "Deleting the role failed",
+      "deleted": "Role deleted",
+      "namePlaceholder": "AP clerk",
+      "keyPlaceholder": "ap_clerk",
+      "descriptionPlaceholder": "What is this role for?",
+      "permissionsHeading": "Permissions",
+      "selectedCount": "{count} selected",
+      "subsidiaryHeading": "Subsidiary access",
+      "subsidiaryModeAll": "All subsidiaries",
+      "subsidiaryModeSubtree": "A subsidiary and its children",
+      "subsidiaryModeList": "Specific subsidiaries",
+      "subsidiaryPlaceholder": "Choose a subsidiary…",
+      "subsidiarySearchPlaceholder": "Search subsidiaries…",
+      "subsidiaryRequired": "Choose a subsidiary",
+      "subsidiaryListRequired": "Select at least one subsidiary"
+    }
+  },
+  "scripts": {
+    "title": "Scripts",
+    "description": "Real JavaScript, run in a sandbox at document trigger points — validate, mutate whitelisted fields, or veto with ob.abort(). Every run is recorded.",
+    "searchPlaceholder": "Search scripts…",
+    "triggerFilter": "Trigger",
+    "table": {
+      "script": "Script",
+      "trigger": "Trigger",
+      "kind": "Kind",
+      "runs": "Runs",
+      "lastRun": "Last run",
+      "status": "Status"
+    },
+    "empty": "No scripts yet — automate a document workflow.",
+    "allKinds": "all",
+    "statusActive": "active",
+    "statusDisabled": "disabled",
+    "triggers": {
+      "beforeSubmit": "before submit",
+      "beforePost": "before post",
+      "afterPost": "after post",
+      "beforeVoid": "before void",
+      "scheduled": "scheduled",
+      "endpoint": "endpoint",
+      "bulk": "bulk",
+      "client": "client"
+    },
+    "kinds": {
+      "vendorBill": "vendor bill",
+      "customerInvoice": "customer invoice",
+      "vendorPayment": "vendor payment",
+      "customerPayment": "customer payment",
+      "expenseReport": "expense report",
+      "journal": "journal",
+      "vendorCredit": "vendor credit",
+      "customerCredit": "customer credit",
+      "cardCharge": "card charge",
+      "cardRefund": "card refund",
+      "check": "check",
+      "deposit": "deposit",
+      "transfer": "transfer",
+      "purchaseOrder": "purchase order",
+      "salesOrder": "sales order",
+      "quote": "quote"
+    },
+    "drawer": {
+      "newScript": "New script",
+      "newTitle": "New script",
+      "description": "Sandboxed JavaScript (QuickJS) — no filesystem or network. ob.query runs read-only SQL.",
+      "createScript": "Create script",
+      "saveScript": "Save script",
+      "created": "Script created",
+      "saved": "Script saved",
+      "saveFailed": "Could not save the script",
+      "namePlaceholder": "AP policy: big bills need a memo",
+      "trigger": "Trigger",
+      "documentKind": "Document kind",
+      "allKindsOption": "All kinds",
+      "cron": "Cron schedule",
+      "cronHint": "— min hr dom mon dow (UTC)",
+      "source": "Source",
+      "sourceHint": "— must define function main(ctx)",
+      "timeoutMs": "Timeout (ms)",
+      "runOrder": "Run order",
+      "recentRuns": "Recent runs",
+      "runNow": "Run now",
+      "runOk": "Ran in {ms} ms",
+      "runFailed": "Run failed",
+      "delete": "Delete",
+      "deleteConfirm": "Delete this script? Its run history is kept for audit.",
+      "deleteFailed": "Could not delete the script",
+      "deleted": "Script deleted",
+      "runStatus": {
+        "ok": "ok",
+        "aborted": "aborted",
+        "error": "error",
+        "timeout": "timeout"
+      },
+      "endpointSlug": "Endpoint slug",
+      "endpointUrl": "Callable URL",
+      "endpointUrlHint": "Send requests to this URL to run the script.",
+      "copyUrl": "Copy",
+      "urlCopied": "Endpoint URL copied",
+      "customRecordsGroup": "Custom records",
+      "builtInGroup": "Transactions",
+      "noRuns": "No runs yet — this script has never executed.",
+      "selectRun": "Select a run on the Recent Runs tab to inspect its log.",
+      "logEmpty": "This run produced no log output."
+    },
+    "tabs": {
+      "general": "General",
+      "code": "Code",
+      "runs": "Recent Runs",
+      "log": "Execution Log"
+    }
+  },
+  "apiKeys": {
+    "title": "API Keys",
+    "description": "Scoped API keys for integrations and automation. Each key carries a subset of permissions — a request is allowed only when both the key's scopes and the owner's effective permissions cover it.",
+    "searchPlaceholder": "Search keys, owners…",
+    "empty": "No API keys yet — create one to start building integrations.",
+    "table": {
+      "name": "Name",
+      "key": "Key",
+      "owner": "Owner",
+      "scopes": "Scopes",
+      "scopesCount": "{count, plural, one {# permission} other {# permissions}}",
+      "fullScope": "Full scope (inherits owner)",
+      "lastUsed": "Last used",
+      "status": "Status"
+    },
+    "statusActive": "active",
+    "statusRevoked": "revoked",
+    "drawer": {
+      "newKey": "New API key",
+      "newTitle": "New API key",
+      "description": "Create a scoped key for programmatic access to the REST API. The plaintext key is shown once — store it securely.",
+      "nameRequired": "A name is required",
+      "namePlaceholder": "Production sync integration",
+      "descriptionPlaceholder": "What is this key for?",
+      "saveFailed": "Could not save the key",
+      "created": "Key created",
+      "updated": "Key updated",
+      "revoke": "Revoke",
+      "revokeConfirm": "Revoke this key? All integrations using it will stop working immediately. This cannot be undone.",
+      "revokeFailed": "Could not revoke the key",
+      "revoked": "Key revoked",
+      "revokedNotice": "This key has been revoked and can no longer authenticate requests.",
+      "keyCreated": "Copy your API key",
+      "keyCreatedHint": "This is the only time the full key will be shown. Store it securely — you won't be able to see it again.",
+      "copy": "Copy",
+      "copied": "Copied to clipboard",
+      "createKey": "Create key",
+      "saveChanges": "Save changes",
+      "scopesHeading": "Permission scopes",
+      "scopesHint": "Select the permissions this key grants. Leave empty to inherit the owner's full permission set. A key never grants more than its owner has.",
+      "fullScope": "Full scope (inherits owner permissions)",
+      "scopesCount": "{count, plural, one {# permission selected} other {# permissions selected}}",
+      "rateLimitLabel": "Requests per minute",
+      "rateLimitPlaceholder": "Unlimited",
+      "rateLimitHint": "Maximum requests this key may make each minute. Leave blank for no limit."
+    }
+  },
+  "settings": {
+    "metaTitle": "Company & Accounting",
+    "title": "Company & Accounting",
+    "description": "Organization identity, base currency, fiscal calendar and the control accounts the ledger posts through.",
+    "organization": {
+      "title": "Organization",
+      "description": "How this company is identified across the app.",
+      "perEntityNote": "This company is your top-level entity — its legal name, country, and currency live here. Add subsidiaries beneath it, each with its own.",
+      "subsidiariesLink": "Open Subsidiaries",
+      "displayName": "Display name",
+      "displayNamePlaceholder": "Acme Manufacturing",
+      "displayNameHint": "The company name people see throughout OpenBooks. It does not need to match the registered legal name.",
+      "legalName": "Legal name",
+      "legalNamePlaceholder": "Acme Manufacturing Inc.",
+      "legalNameHint": "The company’s registered name for formal records, reports and documents.",
+      "country": "Country",
+      "countryPlaceholder": "Select a country…",
+      "countryHint": "Two-letter ISO code (e.g. CA, US, GB).",
+      "defaultLanguage": "Default language",
+      "defaultLanguageHint": "The language the app renders in for everyone who hasn’t picked their own in the account menu.",
+      "baseCurrency": "Base currency",
+      "baseCurrencyHint": "The reporting currency the ledger balances in. Add more currencies before switching.",
+      "reportPdfStyle": "Financial report PDF style",
+      "reportPdfStyleModern": "Modern (branded)",
+      "reportPdfStyleFormal": "Formal (GAAP)",
+      "reportPdfStyleHint": "How exported financial statements look: Modern uses your brand accent and a sans-serif face; Formal is a classic serif, greyscale, audit-ready statement."
+    },
+    "fiscal": {
+      "title": "Fiscal year",
+      "description": "The month your financial year begins. Everything fiscal-year-aware — reports, period close, presets — reads this.",
+      "startsIn": "Fiscal year starts in",
+      "runs": "Fiscal year runs",
+      "range": "{start} → {end}",
+      "warning": "Changing the start month re-labels <strong>every accounting period</strong> — their fiscal year, period number and name are re-derived from each period’s start date the moment you save. Journal entries and dates are untouched, but reports and period-close groupings will shift to the new calendar.",
+      "taxFramework": "Income tax framework",
+      "taxFrameworkHint": "Drives the income tax provision's recognition language (Company Settings → fiscal).",
+      "frameworkAsc740": "ASC 740 (US GAAP)",
+      "frameworkIas12": "IAS 12 (IFRS)"
+    },
+    "months": {
+      "january": "January",
+      "february": "February",
+      "march": "March",
+      "april": "April",
+      "may": "May",
+      "june": "June",
+      "july": "July",
+      "august": "August",
+      "september": "September",
+      "october": "October",
+      "november": "November",
+      "december": "December"
+    },
+    "controlAccounts": {
+      "title": "Control accounts",
+      "description": "The general-ledger accounts subledgers and tax post through. Only postable (non-summary) accounts appear.",
+      "defaultsNote": "These are the company-wide defaults. Any subsidiary can override them on its own record; blank overrides fall back to these.",
+      "selectPlaceholder": "Select an account…",
+      "searchPlaceholder": "Search accounts…",
+      "fields": {
+        "ar": {
+          "label": "Accounts receivable",
+          "hint": "Customer balances post here"
+        },
+        "ap": {
+          "label": "Accounts payable",
+          "hint": "Vendor balances post here"
+        },
+        "bank": {
+          "label": "Default bank",
+          "hint": "Default cash account for vendor and customer payments"
+        },
+        "taxCollected": {
+          "label": "Tax collected",
+          "hint": "Sales tax owed on invoices"
+        },
+        "taxPaid": {
+          "label": "Tax paid",
+          "hint": "Recoverable tax on bills"
+        },
+        "employeePayable": {
+          "label": "Employee payable",
+          "hint": "Expense reimbursements owed to staff"
+        },
+        "fxUnrealizedGainLoss": {
+          "label": "Unrealized FX gain/loss",
+          "hint": "Where period-end revaluation of foreign-currency balances is booked"
+        },
+        "fxRealizedGainLoss": {
+          "label": "Realized FX gain/loss",
+          "hint": "Where settlement-rate differences from foreign-currency payment applications are booked"
+        },
+        "retainagePayable": {
+          "label": "Retainage payable",
+          "hint": "Vendor progress-billing retainage held until an approved release"
+        },
+        "laborWip": {
+          "label": "Labor WIP / cost",
+          "hint": "Approved labor cost debits here (per project)"
+        },
+        "laborClearing": {
+          "label": "Labor clearing",
+          "hint": "Credited when labor is charged to a project; cleared by payroll"
+        },
+        "unbilledReceivable": {
+          "label": "Unbilled receivable (contract asset)",
+          "hint": "Fixed-price earned-but-unbilled revenue; relieved at invoicing"
+        },
+        "projectRevenue": {
+          "label": "Project revenue",
+          "hint": "Credited by percent-complete revenue recognition"
+        },
+        "incomeTaxExpense": {
+          "label": "Income tax expense",
+          "hint": "Debited by the income tax provision (ASC 740)"
+        },
+        "incomeTaxPayable": {
+          "label": "Income tax payable",
+          "hint": "Credited for the current tax provision"
+        },
+        "deferredTaxAsset": {
+          "label": "Deferred tax asset",
+          "hint": "Deductible temporary differences and loss carryforwards"
+        },
+        "deferredTaxLiability": {
+          "label": "Deferred tax liability",
+          "hint": "Taxable temporary differences"
+        },
+        "valuationAllowance": {
+          "label": "Valuation allowance",
+          "hint": "Contra deferred tax asset"
+        }
+      }
+    },
+    "revenue": {
+      "title": "Revenue recognition",
+      "description": "Policies for ASC 606 / IFRS 15 revenue allocation.",
+      "fairValueRangePolicy": {
+        "label": "Fair value range checking",
+        "warn": "Warn — flag out-of-range allocations for review",
+        "off": "Off — no range checking",
+        "hint": "When an invoice line's allocated per-unit price falls outside the item's fair value low/high range, the performance obligation is flagged for review on its revenue contract. Never blocks posting."
+      },
+      "learnMore": "Learn more."
+    },
+    "documentKinds": {
+      "vendorBill": "Vendor bill",
+      "customerInvoice": "Customer invoice",
+      "vendorPayment": "Vendor payment",
+      "customerPayment": "Customer payment",
+      "expenseReport": "Expense report",
+      "journal": "Journal"
+    },
+    "numbering": {
+      "title": "Document numbering",
+      "description": "Sequences that generate document numbers. Prefix and padding shown for each kind.",
+      "empty": "No sequences configured yet.",
+      "table": {
+        "document": "Document",
+        "prefix": "Prefix",
+        "next": "Next #",
+        "padding": "Padding",
+        "example": "Example"
+      }
+    },
+    "validation": {
+      "nameRequired": "Display name is required",
+      "countryRequired": "Country is required"
+    },
+    "saved": "Settings saved",
+    "savedPeriodsRederived": "Settings saved — accounting periods re-labelled to the new fiscal year",
+    "saveSettings": "Save settings"
+  },
+  "users": {
+    "metaTitle": "Users",
+    "title": "Users",
+    "description": "Who can sign in, and which roles they hold. Access is the union of explicitly assigned roles; users without a role have no role-granted access.",
+    "manageRoles": "Manage roles",
+    "searchPlaceholder": "Search name or email…",
+    "statusFilter": "Status",
+    "emptyTitle": "No users match",
+    "emptySearchDescription": "No users match your search. Try a different term or status filter.",
+    "emptyFilterDescription": "Try a different status filter.",
+    "table": {
+      "roles": "Roles",
+      "lastSignIn": "Last sign-in"
+    },
+    "you": "you",
+    "unassignedRole": "no role assigned",
+    "statusActive": "active",
+    "statusInactive": "inactive",
+    "requestFailed": "Request failed",
+    "editRolesFor": "Edit roles for {name}",
+    "rolesFor": "Roles — {name}",
+    "noRoles": "No roles yet — create one under Manage roles.",
+    "builtInBadge": "built-in",
+    "deactivateConfirm": "Deactivate {name}? They will be signed out and unable to sign in until reactivated.",
+    "deactivate": "Deactivate",
+    "reactivate": "Reactivate",
+    "deactivated": "{name} deactivated",
+    "reactivated": "{name} reactivated"
+  },
+  "permissions": {
+    "groups": {
+      "gl": "General ledger",
+      "close": "Periods & close",
+      "ap": "Accounts payable",
+      "ar": "Accounts receivable",
+      "reports": "Reports",
+      "budgets": "Budgets & forecasts",
+      "insights": "Insights",
+      "items": "Items & services",
+      "projects": "Projects & job costing",
+      "time": "Time & timesheets",
+      "payroll": "Payroll",
+      "records": "Custom records",
+      "assistant": "AI assistant",
+      "sql": "Query workbench",
+      "sync": "Migrations & Mirror",
+      "scripts": "Scripting",
+      "flows": "Flows",
+      "apps": "Apps",
+      "documents": "File Cabinet",
+      "admin": "Administration",
+      "assets": "Fixed assets & depreciation",
+      "data": "Import & Export",
+      "crm": "Customer relationship management",
+      "compliance": "Compliance"
+    },
+    "gl_read": "View journals and balances",
+    "gl_manage": "Manage the chart of accounts",
+    "gl_post": "Post journal entries",
+    "periods_manage": "Configure fiscal calendars, periods, and locks",
+    "close_read": "View close runs and evidence",
+    "close_run": "Execute close tasks and validation",
+    "close_approve": "Review, approve, and lock close runs",
+    "close_reopen": "Request and approve controlled reopenings",
+    "ap_read": "View bills",
+    "ap_create": "Create and submit bills",
+    "ap_approve": "Approve or reject bills",
+    "ap_post": "Post bills to the ledger",
+    "ap_pay": "Pay bills",
+    "ar_read": "View invoices",
+    "ar_create": "Create and submit invoices",
+    "ar_approve": "Approve or reject invoices",
+    "ar_post": "Post invoices to the ledger",
+    "ar_pay": "Record customer payments",
+    "reports_read": "View reports",
+    "reports_create": "Create and save reports",
+    "reports_schedule": "Schedule report delivery",
+    "budgets_read": "View budgets and forecasts",
+    "budgets_manage": "Create and edit budget drafts",
+    "budgets_approve": "Approve and archive official budgets",
+    "insights_read": "View insights and the library",
+    "insights_create": "Build cards and dashboards",
+    "insights_publish": "Publish to the shared library",
+    "items_read": "View items and services",
+    "items_manage": "Create and edit items",
+    "projects_read": "View projects and job costing",
+    "projects_manage": "Create and edit projects",
+    "time_read": "View timesheets",
+    "time_manage": "Enter and edit time",
+    "time_approve": "Approve timesheets",
+    "payroll_read": "View pay runs and stubs",
+    "payroll_manage": "Configure payroll and employee profiles",
+    "payroll_run": "Create, calculate, and commit pay runs",
+    "records_read": "View custom records",
+    "records_create": "Create and edit custom records",
+    "records_manage_types": "Design custom record types",
+    "assistant_use": "Use the AI assistant",
+    "assistant_write": "Let the assistant draft records",
+    "sql_execute": "Run read-only SQL queries",
+    "sync_run": "Run external-source syncs",
+    "scripts_manage": "Manage user scripts",
+    "scripts_execute": "Call endpoint scripts",
+    "flows_manage": "Author and manage flows",
+    "flows_approve": "Act on flow approval gates",
+    "apps_use": "Use installed apps",
+    "apps_manage": "Install and manage apps",
+    "parties_read": "View parties",
+    "parties_manage": "Manage parties",
+    "banking_read": "View banking",
+    "banking_reconcile": "Reconcile bank accounts",
+    "expenses_read": "View expense reports",
+    "expenses_create": "Enter expense reports",
+    "admin_custom_fields_manage": "Manage custom fields",
+    "admin_users_manage": "Manage users and role assignments",
+    "admin_roles_manage": "Manage roles and permissions",
+    "admin_nav_manage": "Customize navigation",
+    "admin_customization_manage": "Customize transaction forms and list views",
+    "admin_audit_read": "View the audit log",
+    "admin_ai_manage": "Manage AI settings",
+    "admin_sandboxes_manage": "Create and manage sandbox environments",
+    "admin_backups_manage": "Manage organization backups",
+    "api_keys_manage": "Manage API keys",
+    "assets_read": "View fixed assets and depreciation",
+    "assets_manage": "Create and edit assets, run depreciation",
+    "documents_read": "Browse the file cabinet",
+    "documents_manage": "Upload, move, rename, and delete files",
+    "admin_setup_manage": "Manage setup & configuration",
+    "data_export": "Export data",
+    "data_import": "Import data",
+    "crm_accounts_read": "View CRM accounts",
+    "crm_accounts_create": "Create leads and prospects",
+    "crm_accounts_manage": "Manage CRM accounts",
+    "crm_accounts_assign": "Assign and route CRM accounts",
+    "crm_activities_read": "View CRM activities",
+    "crm_activities_manage": "Create and manage CRM activities",
+    "crm_opportunities_read": "View opportunities",
+    "crm_opportunities_manage": "Create and manage opportunities",
+    "crm_opportunities_close": "Close won or lost opportunities",
+    "crm_forecasts_read": "View sales forecasts",
+    "crm_forecasts_manage": "Create forecast snapshots",
+    "crm_forecasts_override": "Override team forecasts",
+    "crm_setup_manage": "Manage CRM setup",
+    "compliance_read": "View subcontractor compliance",
+    "compliance_manage": "Record certificates, waivers and filings",
+    "compliance_verify": "Verify certificates",
+    "compliance_waive": "Grant compliance exceptions",
+    "compliance_file": "Finalize and file information returns"
+  },
+  "ai": {
+    "metaTitle": "AI settings",
+    "title": "AI settings",
+    "description": "Choose the AI provider the assistant uses. Your API key is encrypted at rest and never shown again after you save it.",
+    "enabledLabel": "Enable AI features",
+    "providerLabel": "Provider",
+    "baseUrlLabel": "Base URL",
+    "baseUrlRequired": "(required)",
+    "baseUrlOptional": "(optional override)",
+    "baseUrlDefault": "Leave blank to use the default: {url}",
+    "baseUrlHint": "A public HTTPS OpenAI-compatible endpoint.",
+    "keyLabel": "API key",
+    "keyPlaceholder": "Paste your provider API key",
+    "keySavedPlaceholder": "•••••••••••• (saved — type to replace)",
+    "keySavedHint": "A key is on file, encrypted at rest. Type a new one to replace it.",
+    "keyHint": "Stored encrypted at rest; it never leaves the server.",
+    "modelsLabel": "Models",
+    "fastModelLabel": "Fast model",
+    "fastModelHint": "quick lookups",
+    "smartModelLabel": "Smart model",
+    "smartModelHint": "the assistant",
+    "save": "Save settings",
+    "saved": "AI settings saved.",
+    "saveFailed": "The settings could not be saved.",
+    "keyCleared": "API key removed.",
+    "removeKey": "Remove API key",
+    "testConnection": "Test connection",
+    "testFailed": "The test request failed.",
+    "agents": {
+      "title": "Continuous close agents",
+      "description": "Continuously monitor close readiness and surface evidence-backed accounting and finance exceptions.",
+      "reviewWork": "Review findings",
+      "globallyDisabled": "AI features are off. Both agents and their scheduled runs are stopped, regardless of the controls below.",
+      "enabled": "Enabled",
+      "automaticRuns": "Run automatically",
+      "cadence": "Schedule",
+      "materiality": "Materiality threshold",
+      "materialityHint": "The default monetary floor used by controls unless a detector overrides it.",
+      "materialitySummary": "Materiality {amount}",
+      "cadences": {
+        "daily": "Daily",
+        "weekly": "Weekly"
+      },
+      "manualOnly": "Manual runs",
+      "controlsEnabled": "{count} of {total} controls on",
+      "configure": "Configure",
+      "drawerTitle": "Configure {agent}",
+      "drawerDescription": "Control scheduling, materiality, and exactly which accounting checks this agent evaluates.",
+      "operationTitle": "Agent operation",
+      "operationDescription": "Master availability and automatic execution for this agent.",
+      "detectorControlsTitle": "Detector controls",
+      "detectorControlsDescription": "Each control can be disabled independently and tuned to your operating thresholds.",
+      "controlOn": "On",
+      "controlOff": "Off",
+      "customMateriality": "Override the agent materiality for this control",
+      "detectorMateriality": "Control materiality threshold",
+      "inheritedMateriality": "Uses the agent threshold of {amount}.",
+      "disabledFindingBehavior": "Turning a control off stops that check. Existing findings remain available and are not marked resolved.",
+      "reasoningTitle": "Agent reasoning and narratives",
+      "reasoningDescription": "Give this agent the same governed read tools as the assistant so it can investigate evidence, connect drivers, and create reviewable analysis. It cannot change or post records.",
+      "reasoning": {
+        "rootCauseAnalysis": {
+          "title": "Root-cause analysis",
+          "description": "Investigate supporting transactions and explain the specific drivers behind each finding."
+        },
+        "recommendations": {
+          "title": "Recommended actions",
+          "description": "Suggest concrete, reviewable next steps based on the evidence gathered."
+        },
+        "narrative": {
+          "title": "Management narrative",
+          "description": "Create a close-readiness brief or financial performance summary from current reports and trends."
+        }
+      },
+      "modelTier": "Analysis model",
+      "modelTiers": {
+        "smart": "Smart model — deeper analysis",
+        "fast": "Fast model — lower cost"
+      },
+      "maxToolSteps": "Maximum tool steps",
+      "maxToolStepsHint": "Caps how many report and record lookups one run may perform (4–30).",
+      "resetRecommended": "Reset recommended defaults",
+      "cancel": "Cancel",
+      "saveConfiguration": "Save agent",
+      "configurationSaved": "Agent configuration saved.",
+      "configurationSaveFailed": "The agent configuration could not be saved.",
+      "parameterLabel": "{label} ({unit})",
+      "units": {
+        "days": "days",
+        "count": "items",
+        "percent": "%",
+        "multiple": "× materiality",
+        "points": "percentage points"
+      },
+      "parameters": {
+        "criticalAgeDays": "Critical after",
+        "criticalItemCount": "Critical item count",
+        "criticalMaterialityMultiple": "Critical materiality multiple",
+        "staleAfterDays": "Stale after",
+        "minimumVariancePercent": "Minimum unfavorable variance",
+        "criticalVariancePercent": "Critical unfavorable variance",
+        "minimumDeclinePercent": "Minimum revenue decline",
+        "criticalDeclinePercent": "Critical revenue decline",
+        "minimumDropPoints": "Minimum margin drop",
+        "criticalDropPoints": "Critical margin drop"
+      },
+      "detectors": {
+        "unmatched_bank_activity": {
+          "title": "Unmatched bank activity",
+          "description": "Finds unmatched statement lines by bank account, measures total exposure, and escalates aging, volume, or materiality concentrations."
+        },
+        "reconciliation_difference": {
+          "title": "Reconciliation differences",
+          "description": "Compares in-progress statement balances with reconciled ledger activity and flags every non-zero difference."
+        },
+        "stale_accounting_documents": {
+          "title": "Stale accounting documents",
+          "description": "Finds draft or pending bills, invoices, credits, expenses, and journals that have exceeded the configured age."
+        },
+        "missing_approved_budget": {
+          "title": "Missing approved budget",
+          "description": "Confirms that an approved budget covers the current operating period before variance analysis runs."
+        },
+        "unfavorable_budget_variance": {
+          "title": "Unfavorable budget variance",
+          "description": "Evaluates income shortfalls and expense overruns using exact amounts plus configurable percentage severity thresholds."
+        },
+        "period_revenue_decline": {
+          "title": "Period revenue decline",
+          "description": "Compares the two latest completed periods and flags material revenue deterioration."
+        },
+        "gross_margin_decline": {
+          "title": "Gross-margin decline",
+          "description": "Compares completed-period gross margin and flags material compression in percentage points."
+        }
+      },
+      "accounting": {
+        "title": "Accounting agent",
+        "description": "Continuous bookkeeping and close readiness controls.",
+        "coverage": "Checks unmatched bank activity, reconciliation differences, and stale draft or pending accounting documents."
+      },
+      "finance": {
+        "title": "Finance agent",
+        "description": "Continuous variance and performance controls.",
+        "coverage": "Checks approved-budget variances, revenue decline, gross-margin decline, and missing budget coverage."
+      },
+      "lastRun": "Last run: {date} · {status}",
+      "nextRun": "Next scheduled run: {date}",
+      "neverRun": "Not run yet",
+      "runNow": "Run now",
+      "scanComplete": "Scan complete: {detected} detected, {resolved} resolved.",
+      "scanFailed": "The agent scan failed.",
+      "runStatus": {
+        "completed": "completed",
+        "failed": "failed",
+        "skipped": "skipped",
+        "running": "running"
+      }
+    },
+    "documentCapture": {
+      "title": "AP document capture",
+      "description": "Extract vendor bills and credits into an evidence-backed review queue. This uses the same organization AI kill switch, while its document provider credential remains independently encrypted.",
+      "openQueue": "Open capture queue",
+      "enabled": "Enable AP document capture",
+      "globallyDisabled": "AI features are off. Document capture is stopped regardless of this control.",
+      "endpoint": "Document provider endpoint",
+      "endpointHint": "Your organization's public Azure AI Document Intelligence endpoint.",
+      "key": "Document provider API key",
+      "keyPlaceholder": "Paste the document provider key",
+      "removeKey": "Remove document provider key",
+      "keyRemoved": "Document provider key removed.",
+      "model": "Invoice model",
+      "confidence": "Review confidence threshold",
+      "confidenceHint": "Values below this 0–1 threshold are flagged for review.",
+      "autoDraft": "Automatically create drafts only for fully matched purchase orders",
+      "test": "Test document provider",
+      "testResult": {
+        "connected": "Connected to the document provider.",
+        "failed": "The document provider test failed.",
+        "missing": "Enter an endpoint and API key first."
+      }
+    },
+    "models": {
+      "load": "Load models",
+      "reload": "Reload models",
+      "loading": "Loading…",
+      "loaded": "{count, plural, one {# model available} other {# models available}}",
+      "loadError": "Could not load models.",
+      "none": "No models",
+      "pick": "Pick a model…",
+      "loadFirst": "Load models first, or type the id manually",
+      "pickFromList": "Pick from list",
+      "typeManually": "Type manually",
+      "current": "{id} (current)",
+      "hint": "Load the live model list with your API key, or type a model id manually.",
+      "idPlaceholder": "model id"
+    }
+  },
+  "setup": {
+    "title": "Setup",
+    "description": "Configure tax, dimensions, terms, and the reference data your books run on.",
+    "taxLibrary": {
+      "title": "Tax return library",
+      "open": "Library",
+      "description": "Import maintained return structures for Canada, the United Kingdom, Australia, New Zealand, and a United States state/local workpaper.",
+      "pack": "Jurisdiction pack",
+      "status": "Status",
+      "installed": "Installed",
+      "available": "Available",
+      "searchPlaceholder": "Search jurisdiction packs…",
+      "selectVisible": "Select all visible available packs",
+      "selectPack": "Select {name}",
+      "installSelected": "{count, plural, one {Install # selected pack} other {Install # selected packs}}",
+      "selectionCount": "{count, plural, =0 {No packs selected} one {# pack selected} other {# packs selected}}",
+      "resultCount": "{count, plural, one {# pack} other {# packs}}",
+      "pageOf": "Page {page} of {pages}",
+      "working": "Working…",
+      "installSuccess": "{count, plural, one {# tax return pack installed} other {# tax return packs installed}}",
+      "resetSuccess": "Tax return pack reset to library defaults",
+      "confirmReset": "Reset {name} to the maintained library defaults? This replaces its configured return boxes.",
+      "usNotice": "The United States has no federal sales-tax return. This workpaper must be customized for every state and local filing jurisdiction."
+    },
+    "taxSetup": {
+      "navTitle": "Tax Setup",
+      "title": "Tax Setup",
+      "subtitle": "Choose every country, province, territory, state, or district where tax obligations may arise. Canada and the United States include complete first-level jurisdiction coverage.",
+      "searchPlaceholder": "Search countries or jurisdictions…",
+      "provisioning": "Setting up…",
+      "provisionSelected": "{count, plural, =0 {Set up} one {Set up # jurisdiction} other {Set up # jurisdictions}}",
+      "provisionSuccess": "Created {jurisdictions} jurisdictions, {codes} tax codes and {groups} tax groups; prepared {nexus} nexus registrations",
+      "provisionHint": "Detailed packs create maintained jurisdiction, tax-code, rate, return, and nexus content. Country tax setup installs the parent return and effective-dated rates defined by that versioned country pack. Jurisdiction setup creates controlled reference data and an inactive nexus draft without inventing missing statutory content. Review every registration before going live.",
+      "installed": "Set up",
+      "detailedPack": "Detailed pack",
+      "countryTaxSetup": "Country tax setup",
+      "jurisdictionSetup": "Jurisdiction setup",
+      "countryPackReady": "Source-backed country pack",
+      "packInDevelopment": "Country pack in development",
+      "statesAvailable": "{count, plural, one {# jurisdiction available} other {# jurisdictions available}}",
+      "statesSelected": "{count, plural, one {# jurisdiction selected} other {# jurisdictions selected}}",
+      "toggleStates": "Show jurisdictions for {country}",
+      "step1": {
+        "title": "Choose where you do business",
+        "description": "Pick countries and expand them for complete province, territory, state, and district coverage. Each option shows whether a maintained detailed return pack is available."
+      },
+      "step2": {
+        "title": "Review jurisdictions",
+        "description": "The countries, states and localities your packs created. Add or nest more by hand.",
+        "stat": "{count, plural, =0 {No jurisdictions yet} one {# jurisdiction} other {# jurisdictions}}",
+        "cta": "Open jurisdictions"
+      },
+      "step3": {
+        "title": "Declare your nexus",
+        "description": "Record where the business is registered to collect and remit, its filing frequency, and the return it files.",
+        "stat": "{count, plural, =0 {No registrations yet} one {# registration} other {# registrations}}",
+        "cta": "Set up nexus"
+      }
+    },
+    "taxOfficial": {
+      "title": "Official filing form",
+      "description": "Upload an official fillable PDF only when the jurisdiction accepts or requires that form. Map its fields under Tax Return Boxes.",
+      "upload": "Upload official PDF",
+      "uploading": "Uploading…",
+      "uploaded": "Official form uploaded",
+      "remove": "Remove",
+      "removed": "Official form removed",
+      "none": "No official PDF uploaded"
+    },
+    "assetDepreciationSetup": {
+      "navTitle": "Book Depreciation",
+      "title": "Book Depreciation",
+      "description": "Configure reusable depreciation methods and the method, life and convention each accounting book applies to an asset category.",
+      "tabsAria": "Book depreciation setup sections",
+      "tabs": {
+        "methods": "Methods",
+        "books": "Book policies"
+      }
+    },
+    "taxDepreciationSetup": {
+      "navTitle": "Tax Depreciation",
+      "title": "Tax Depreciation",
+      "description": "Install country tax-depreciation packs and configure class assignments, regimes, classes, conventions and first-year rules. This is separate from sales-tax, VAT and nexus setup.",
+      "tabsAria": "Fixed asset setup sections",
+      "tabs": {
+        "overview": "Overview",
+        "categories": "Asset categories",
+        "regimes": "Tax regimes",
+        "classes": "Tax classes",
+        "firstYear": "First-year rules",
+        "methods": "Methods",
+        "books": "Book policies"
+      },
+      "packsTitle": "Country depreciation packs",
+      "packsDescription": "Installing a pack creates editable tenant configuration. Existing overrides are never replaced.",
+      "recommended": "Company country",
+      "installed": "Installed",
+      "install": "Install pack",
+      "installing": "Installing…",
+      "installFailed": "Could not install the depreciation pack",
+      "installedToast": "Installed {count} depreciation classes",
+      "assignmentFailed": "Could not save the tax class assignment",
+      "assignmentsTitle": "Asset-category class assignments",
+      "assignmentsDescription": "Choose the default tax class applied to assets in each category. Individual asset elections can override these defaults.",
+      "assetCategory": "Asset category",
+      "notAssigned": "Not assigned",
+      "classCount": "{count, plural, one {# class} other {# classes}}",
+      "models": {
+        "pool": "Class pool",
+        "macrs": "Per-asset MACRS"
+      },
+      "customizeTitle": "Customize",
+      "customizeDescription": "Country packs are starting points. Add custom regimes and classes or override any seeded value.",
+      "links": {
+        "regimes": {
+          "title": "Regimes",
+          "description": "Country, calculation model and asset class attribute."
+        },
+        "classes": {
+          "title": "Classes and methods",
+          "description": "Rates, recovery periods, MACRS systems, methods and conventions."
+        },
+        "firstYear": {
+          "title": "First-year rules",
+          "description": "Effective-dated acceleration and first-year eligibility."
+        },
+        "assignments": {
+          "title": "Asset-category assignments",
+          "description": "Assign each asset category to a regime class in Tax attributes."
+        }
+      }
+    },
+    "taxBoxes": {
+      "description": "Mapped, calculated, and manual boxes for {code}.",
+      "calculatedNote": "Each box belongs to this return; mapped boxes select the tax code whose activity they summarize.",
+      "new": "New tax return box",
+      "searchPlaceholder": "Search return boxes…",
+      "source": "Source",
+      "empty": "No return boxes match this return and search.",
+      "mapped": "Mapped",
+      "calculated": "Calculated",
+      "manual": "Manual"
+    },
+    "taxRates": {
+      "description": "Effective-dated rates for {code}.",
+      "new": "New tax rate",
+      "searchPlaceholder": "Search tax rates…",
+      "empty": "No tax rates match this code and search."
+    },
+    "segmentValues": {
+      "description": "Selectable values for the {name} segment.",
+      "new": "New value",
+      "searchPlaceholder": "Search values…",
+      "empty": "No values yet — add the first one.",
+      "builtinTitle": "Built-in dimension",
+      "builtinNotice": "{name} is a built-in dimension. Its values are managed on the {name} tab.",
+      "builtinNoticeNoLink": "{name} is a built-in dimension. Its values are managed on their own dedicated tab.",
+      "builtinLink": "Open {name}"
+    },
+    "new": "New",
+    "learnMore": "Learn more.",
+    "empty": "Nothing here yet.",
+    "statusActive": "Active",
+    "statusArchived": "Archived",
+    "yes": "Yes",
+    "selectPlaceholder": "Select…",
+    "searchPlaceholder": "Search…",
+    "created": "Created",
+    "updated": "Saved",
+    "deleted": "Deleted",
+    "confirmDelete": "Delete this record? This cannot be undone.",
+    "validation": {
+      "required": "{field} is required"
+    },
+    "drawer": {
+      "newTitle": "New {name}",
+      "editTitle": "Edit {name}",
+      "tabs": {
+        "ariaLabel": "Configuration sections",
+        "details": "Details"
+      }
+    },
+    "errors": {
+      "duplicate": "A record with that code already exists.",
+      "inUse": "This record is in use and can't be deleted.",
+      "primaryRequired": "Choose another accounting book as primary before removing primary status from this one.",
+      "primaryActiveRequired": "The primary accounting book must remain active.",
+      "archiveOnly": "Accounting books are retained for ledger history and can only be archived.",
+      "invalidUrl": "Enter a valid http:// or https:// government filing URL.",
+      "invalidDepreciationFormula": "Enter a valid depreciation formula using the documented variables and operators."
+    },
+    "groups": {
+      "company": "Company",
+      "accounting": "Accounting",
+      "taxes": "Taxes",
+      "dimensions": "Dimensions",
+      "billing": "Billing & numbering",
+      "workforce": "Workforce",
+      "assets": "Assets",
+      "currency": "Currency",
+      "revenue": "Revenue",
+      "inventory": "Inventory",
+      "projects": "Projects",
+      "compliance": "Compliance"
+    },
+    "fxProvider": {
+      "title": "Exchange rate provider",
+      "description": "Import daily spot rates into your organization's currencies and keep them current automatically.",
+      "provider": "Provider",
+      "providers": {
+        "bank_of_canada": "Bank of Canada",
+        "ecb": "European Central Bank",
+        "open_exchange_rates": "Open Exchange Rates"
+      },
+      "providerHelp": {
+        "bank_of_canada": "Official daily averages with CAD as the source anchor. No API key required.",
+        "ecb": "Official business-day reference rates with EUR as the source anchor. No API key required.",
+        "open_exchange_rates": "Broad commercial coverage using your own API key. Plan limits may apply."
+      },
+      "displayName": "Configuration name",
+      "displayNamePlaceholder": "Daily corporate rates",
+      "baseCurrency": "Base currency",
+      "selectCurrency": "Select a currency…",
+      "schedule": "Synchronization schedule",
+      "schedules": {
+        "manual": "Manual only",
+        "daily": "Daily",
+        "weekdays": "Weekdays",
+        "weekly": "Weekly"
+      },
+      "syncHourUtc": "Synchronization hour (UTC)",
+      "lookbackDays": "Revision lookback (days)",
+      "currencies": "Currencies to import",
+      "addCurrency": "Add a currency…",
+      "searchCurrencies": "Search currencies…",
+      "removeCurrency": "Remove {currency}",
+      "noCurrencies": "Add at least one foreign currency.",
+      "apiKey": "Provider API key",
+      "apiKeyPlaceholder": "Enter your API key",
+      "secretStored": "A sealed key is stored — enter a value to replace it",
+      "clearSecret": "Remove the stored API key",
+      "enabled": "Enable provider synchronization",
+      "saved": "Exchange rate provider saved.",
+      "test": "Test provider",
+      "testPassed": "Provider returned {observations} observations and {rates} normalized rates.",
+      "testFailed": "The provider test failed.",
+      "syncNow": "Synchronize now",
+      "syncPassed": "Imported {observations} observations and processed {rates} normalized rates.",
+      "syncFailed": "Exchange rate synchronization failed.",
+      "health": "Provider health",
+      "lastSuccess": "Last successful import",
+      "lastObservation": "Latest observation",
+      "nextSync": "Next synchronization",
+      "latestRun": "Latest run",
+      "noRuns": "The provider has not been run yet.",
+      "runStatus": {
+        "running": "Running",
+        "ok": "Successful",
+        "failed": "Failed"
+      },
+      "runSummary": "{observations} observations · {inserted} inserted · {updated} updated · {preserved} manual overrides preserved",
+      "overridePolicy": "Rates edited in Setup become protected manual overrides. Provider imports never replace them."
+    },
+    "paymentOperations": {
+      "title": "Payments & Banking",
+      "description": "Configure payment rails, funding profiles, schedules, approvals, delivery, and debit mandates.",
+      "tabs": {
+        "profiles": "Bank profiles",
+        "formats": "Payment formats",
+        "schedules": "Schedules",
+        "mandates": "Debit mandates"
+      },
+      "search": {
+        "profiles": "Search profiles…",
+        "formats": "Search formats…",
+        "schedules": "Search schedules…",
+        "mandates": "Search mandates…"
+      },
+      "state": "State",
+      "new": {
+        "profiles": "New profile",
+        "formats": "New custom format",
+        "schedules": "New schedule",
+        "mandates": "New mandate"
+      },
+      "columns": {
+        "name": "Name",
+        "bank": "Funding account",
+        "format": "Format",
+        "currency": "Currency",
+        "delivery": "Delivery",
+        "approval": "Run approval",
+        "status": "Status",
+        "code": "Code",
+        "rail": "Rail",
+        "direction": "Direction",
+        "profile": "Profile",
+        "cron": "Schedule",
+        "nextRun": "Next run",
+        "action": "Action",
+        "reference": "Reference",
+        "party": "Counterparty",
+        "scheme": "Scheme",
+        "signedOn": "Signed",
+        "expiresOn": "Expires"
+      },
+      "states": {
+        "active": "Active",
+        "archived": "Archived",
+        "pending": "Pending",
+        "suspended": "Suspended",
+        "revoked": "Revoked",
+        "expired": "Expired"
+      },
+      "rails": {
+        "cpa005_credit": "CPA-005 credit",
+        "nacha_credit": "NACHA credit",
+        "sepa_credit": "SEPA credit",
+        "nacha_debit": "NACHA debit",
+        "sepa_debit": "SEPA debit",
+        "positive_pay": "Positive Pay",
+        "wire": "Wire",
+        "cheque": "Cheque",
+        "custom": "Custom"
+      },
+      "directions": {
+        "credit": "Credit",
+        "debit": "Debit",
+        "both": "Credit and debit"
+      },
+      "actions": {
+        "create_draft": "Create draft",
+        "submit_for_approval": "Submit for approval"
+      },
+      "schemes": {
+        "nacha": "NACHA",
+        "sepa_core": "SEPA Core",
+        "sepa_b2b": "SEPA B2B",
+        "custom": "Custom"
+      },
+      "fields": {
+        "name": "Name",
+        "currency": "Currency",
+        "bankAccount": "Funding account",
+        "format": "Payment format",
+        "subsidiary": "Subsidiary",
+        "country": "Country",
+        "sftpServer": "Existing SFTP server",
+        "sftpFolder": "Outbound folder",
+        "requireRunApproval": "Require payment-run approval",
+        "requireFileApproval": "Require generated-file approval",
+        "autoRemittance": "Send remittance advice automatically",
+        "discountAccount": "Early-payment discount account",
+        "positivePayAccountReference": "Institution account reference",
+        "active": "Active",
+        "code": "Code",
+        "direction": "Direction",
+        "extension": "File extension",
+        "contentType": "Content type",
+        "formatterScript": "Formatter JavaScript",
+        "profile": "Bank profile",
+        "cron": "Schedule",
+        "cronHint": "Pick a preset, or enter a custom schedule (cron syntax) for full control.",
+        "timezone": "Time zone",
+        "action": "When due",
+        "party": "Counterparty",
+        "partyBankAccount": "Approved bank account",
+        "scheme": "Mandate scheme",
+        "reference": "Mandate reference",
+        "status": "Status",
+        "signedOn": "Signed on",
+        "validFrom": "Valid from",
+        "expiresOn": "Expires on"
+      },
+      "secretFields": {
+        "originatorId": "Originator ID",
+        "originatorShortName": "Short name",
+        "originatorLongName": "Long name",
+        "dataCentre": "Data centre",
+        "institution": "Institution",
+        "transit": "Transit",
+        "account": "Account number",
+        "transactionCode": "Transaction code",
+        "odfiRouting": "ODFI routing",
+        "immediateDestination": "Immediate destination",
+        "immediateOrigin": "Immediate origin",
+        "destinationName": "Destination name",
+        "originName": "Origin name",
+        "companyName": "Company name",
+        "companyId": "Company ID",
+        "entryClassCode": "Entry class",
+        "entryDescription": "Entry description",
+        "originatorName": "Originator name",
+        "originatorIban": "Originator IBAN",
+        "originatorBic": "Originator BIC",
+        "creditorId": "Creditor ID"
+      },
+      "originator": {
+        "title": "Originator credentials",
+        "newHint": "Stored encrypted for your organization and this profile.",
+        "editHint": "Credentials are write-only. Leave every field blank to keep the saved values."
+      },
+      "accounting": {
+        "title": "Accounting and bank references",
+        "noDiscountAccount": "Do not capture discounts",
+        "hint": "The discount account records savings earned when a run captures an available payment-term discount."
+      },
+      "delivery": {
+        "title": "Delivery",
+        "manual": "Manual download",
+        "existingSftpHint": "SFTP servers are managed once in the existing SFTP setup. This profile only selects one for delivery."
+      },
+      "criteria": {
+        "title": "Selection criteria",
+        "dueThroughDays": "Include bills due within (days)",
+        "minimumAmount": "Minimum bill amount",
+        "maximumRunAmount": "Maximum run amount",
+        "captureDiscounts": "Capture available early-payment discounts",
+        "applyCredits": "Apply available credits"
+      },
+      "drawer": {
+        "new": {
+          "profiles": "New bank profile",
+          "formats": "New custom payment format",
+          "schedules": "New payment schedule",
+          "mandates": "New debit mandate"
+        },
+        "edit": {
+          "profiles": "Edit bank profile",
+          "formats": "Edit payment format",
+          "schedules": "Edit payment schedule",
+          "mandates": "Edit debit mandate"
+        },
+        "description": {
+          "profiles": "Connect a funding account to a payment rail and delivery policy.",
+          "formats": "Define file metadata and sandboxed JavaScript for a custom bank format.",
+          "schedules": "Select eligible transactions on a repeatable schedule.",
+          "mandates": "Record the authorization required to collect funds from a counterparty."
+        }
+      },
+      "select": "Select…",
+      "allSubsidiaries": "All subsidiaries",
+      "schedulePresets": {
+        "daily": "Daily",
+        "weekdays": "Weekdays",
+        "weekly": "Weekly (Mon)",
+        "monthly": "Monthly (1st)"
+      },
+      "empty": "No records to show.",
+      "manualDelivery": "Manual download",
+      "runApproval": "Required",
+      "automatic": "Automatic",
+      "any": "Any",
+      "builtInFormatHint": "This built-in formatter is maintained by the payment engine. Its executable definition cannot be edited here.",
+      "save": "Save",
+      "saving": "Saving…",
+      "saved": "Saved",
+      "cancel": "Cancel",
+      "saveFailed": "Could not save the configuration."
+    },
+    "entities": {
+      "company": {
+        "title": "Company & Accounting",
+        "description": "Organization identity, base currency, fiscal year, and control accounts."
+      },
+      "tax-jurisdictions": {
+        "title": "Tax Jurisdictions",
+        "singularTitle": "Tax Jurisdiction",
+        "description": "The countries, states and localities that levy indirect tax — the spine of your nexus."
+      },
+      "tax-registrations": {
+        "title": "Tax Nexus",
+        "singularTitle": "Tax Registration",
+        "description": "Where the business is registered to collect and remit, its filing frequency, and the return it files."
+      },
+      "tax-codes": {
+        "title": "Tax Codes",
+        "singularTitle": "Tax Code",
+        "description": "Rates you charge and pay, and the accounts they post to."
+      },
+      "tax-rates": {
+        "title": "Tax Rates",
+        "singularTitle": "Tax Rate",
+        "description": "Effective-dated rate history for each tax code."
+      },
+      "tax-groups": {
+        "title": "Tax Groups",
+        "description": "Bundle several tax codes to apply together on a line."
+      },
+      "tax-return-forms": {
+        "title": "Tax Returns",
+        "description": "Configure a government tax return: its boxes, how each is computed, and how it is filed."
+      },
+      "tax-report-lines": {
+        "title": "Tax Return Boxes",
+        "singularTitle": "Tax Return Box",
+        "description": "Map tax codes onto the boxes of a tax return, or compute a box from other boxes."
+      },
+      "tax-regimes": {
+        "title": "Tax Depreciation Regimes",
+        "singularTitle": "Tax Depreciation Regime",
+        "description": "Configurable pooled tax-depreciation regimes. Built-ins ship for Canada (CCA), the UK, Australia and New Zealand; add your own or override a built-in."
+      },
+      "tax-pool-classes": {
+        "title": "Tax Depreciation Classes",
+        "singularTitle": "Tax Depreciation Class",
+        "description": "Per-regime pool classes: rate, method, first-year fraction and recapture behavior. Overrides the built-in class table."
+      },
+      "tax-first-year-rules": {
+        "title": "First-Year Rules",
+        "singularTitle": "First-Year Rule",
+        "description": "Dated first-year rules per regime/class (half-year rule, accelerated investment incentive, immediate expensing)."
+      },
+      "classes": {
+        "title": "Classes",
+        "description": "A reporting dimension for slicing transactions."
+      },
+      "segment-definitions": {
+        "title": "Segments",
+        "description": "Every reporting dimension in one place — the five built-ins (Subsidiary, Department, Location, Class, Project) plus any custom segments you add. Open a custom segment to manage its values here; built-in values live on their own Classes, Departments, and Locations tabs."
+      },
+      "segment-values": {
+        "title": "Values",
+        "description": "Manage the selectable values and hierarchies for custom segments."
+      },
+      "departments": {
+        "title": "Departments",
+        "description": "A reporting dimension for slicing transactions."
+      },
+      "locations": {
+        "title": "Locations",
+        "description": "A reporting dimension for slicing transactions."
+      },
+      "payment-terms": {
+        "title": "Payment Terms",
+        "description": "Net and early-payment discount terms for bills and invoices."
+      },
+      "number-sequences": {
+        "title": "Number Sequences",
+        "description": "Control the prefix, next number, and length for each document or custom record. Custom-record sequences are created automatically. Gapless numbering means every number is accounted for with no skipped values."
+      },
+      "time-types": {
+        "title": "Time Types",
+        "description": "Cost multipliers and billable defaults for timesheets."
+      },
+      "pay-schedules": {
+        "title": "Pay Schedules",
+        "description": "Pay frequency calendars: periods per year, the anchor period end, and the pay-date offset."
+      },
+      "pay-components": {
+        "title": "Pay Components",
+        "description": "Earnings, deductions, and employer contributions with their tax treatment, GL accounts, and remittance vendors."
+      },
+      "union-agreements": {
+        "title": "Union Agreements",
+        "description": "Collective agreements: the union, local, and the vendor union remittances are paid to."
+      },
+      "worker-comp-groups": {
+        "title": "Worker Comp Groups",
+        "description": "Workers' compensation rate groups for labor costing."
+      },
+      "asset-categories": {
+        "title": "Asset Categories",
+        "description": "Default depreciation method and accounts for fixed assets."
+      },
+      "depreciation-methods": {
+        "title": "Depreciation Methods",
+        "description": "Author custom depreciation formulas — the formula builder."
+      },
+      "depreciation-book-policies": {
+        "title": "Book Depreciation Policies",
+        "description": "Per-book, per-category method for multi-book depreciation."
+      },
+      "currencies": {
+        "title": "Currencies",
+        "description": "Currency codes and their minor-unit precision."
+      },
+      "sftp": {
+        "title": "SFTP"
+      },
+      "payment-operations": {
+        "title": "Payments & Banking",
+        "description": "Payment formats, funding profiles, schedules, and debit mandates."
+      },
+      "account-groups": {
+        "title": "Account Groups",
+        "description": "Reporting classifications of your chart of accounts (e.g. cost pools). Groups auto-classify accounts by rule, with per-account overrides."
+      },
+      "subsidiaries": {
+        "title": "Subsidiaries",
+        "description": "The legal entities inside your organization — a consolidation tree with one root."
+      },
+      "intercompany-pairs": {
+        "title": "Intercompany Pairs",
+        "description": "Due-from / due-to account mappings for transactions that cross two subsidiaries."
+      },
+      "subsidiary-ownership-interests": {
+        "title": "Subsidiary Ownership",
+        "singularTitle": "Ownership Interest",
+        "description": "Effective-dated ownership, acquisition, NCI, and equity-method policy for consolidation."
+      },
+      "accounting-books": {
+        "title": "Accounting Books",
+        "singular": "accounting book",
+        "description": "Manage the primary, tax, statutory, and reporting books that own ledger entries and close controls."
+      },
+      "fx-rates": {
+        "title": "Exchange Rates",
+        "description": "Your organization's daily rates used to post foreign-currency transactions."
+      },
+      "consolidated-fx-rates": {
+        "title": "Consolidated Exchange Rates",
+        "description": "Period current, average, and historical rates used for subsidiary consolidation."
+      },
+      "item-rate-books": {
+        "title": "Item Rate Books",
+        "description": "Customer, project, and organization rate books used for equipment and other item charges."
+      },
+      "item-rate-book-assignments": {
+        "title": "Rate Book Assignments",
+        "description": "Choose which effective-dated rate book applies to a customer or project."
+      },
+      "recognition-rules": {
+        "title": "Recognition Rules",
+        "description": "How revenue is recognized over time — method, timing, and accounts (ASC 606)."
+      },
+      "fair-value-prices": {
+        "title": "Fair Value Prices",
+        "description": "Standalone selling prices used to allocate bundle revenue across obligations."
+      },
+      "stock-locations": {
+        "title": "Stock Locations",
+        "description": "Physical bins, zones, and warehouses under the locations dimension."
+      },
+      "item-inventory-profiles": {
+        "title": "Item Costing",
+        "description": "Costing method, inventory accounts, tracking, and standard cost per item."
+      },
+      "bom-components": {
+        "title": "Bill of Materials",
+        "description": "Components consumed to build each assembly item."
+      },
+      "overhead-rates": {
+        "title": "Overhead Rates",
+        "description": "Effective-dated overhead rates applied to labor cost.",
+        "singular": "Overhead Rate"
+      },
+      "overhead-model": {
+        "title": "Overhead",
+        "description": "The rate engine behind project overhead — cost pools, allocation bases, the department rate matrix, and profiles. Projects using the rate-engine overhead method apply these rates to their labor hours.",
+        "docs": "Documentation",
+        "viewAnalytics": "View analytics",
+        "publish": "Publish rates",
+        "wizard": "Setup wizard",
+        "publishTitle": "Publish to the rate card",
+        "publishHint": "Locks the engine’s computed rates into effective-dated rows on the Overhead Rates card. Projects cost overhead from these published rates until you publish again — prior periods keep their original rates.",
+        "publishConfirm": "Publish",
+        "publishDone": "Rates published to the rate card",
+        "cancel": "Cancel",
+        "wizardTitle": "Set up project overhead",
+        "wizardDone": "Overhead configured",
+        "wizardIntro": "Overhead gives every job its share of the cost of running the company — a managerial figure on the project P&L, never a ledger posting. Job overhead is always costed from published, effective-dated rates, so closed periods never change. Pick how rates are determined:",
+        "recommended": "Recommended",
+        "effectiveFrom": "Effective from",
+        "liveNow": "Computed from actuals: ${rate}/hr",
+        "flatPercent": "Overhead % of labor cost",
+        "flatPerHour": "Overhead $ per labor hour",
+        "applyHint": "Apply this overhead method to the selected project types. Their P&L gains an Overhead line included in total job cost.",
+        "stepOf": "Step {step} of {total}",
+        "back": "Back",
+        "next": "Next",
+        "finish": "Finish",
+        "approach": {
+          "rate_card": {
+            "title": "Department rate card",
+            "desc": "Effective-dated $/hour rates by department, published from the engine or entered manually. Job costs are stable and auditable — past periods always keep the rates that were in effect."
+          },
+          "per_hour": {
+            "title": "Flat $ per labor hour",
+            "desc": "One company-wide dollar rate per labor hour. Simple, no departments."
+          },
+          "percent": {
+            "title": "Percent of labor cost",
+            "desc": "Overhead as a % markup on labor cost. Common in professional services."
+          }
+        },
+        "current": "Current configuration",
+        "ratesActive": "{count} published rates in effect from {date}",
+        "noRates": "No published rates yet — run the setup wizard or publish rates.",
+        "methodNone": "No overhead",
+        "methodCard": "Department rate card",
+        "methodPct": "{rate}% of labor cost",
+        "methodHr": "${rate}/labor hour",
+        "methodGl": "Posted GL (account group)",
+        "working": "Saving…",
+        "step1t": "Classify overhead costs",
+        "step1d": "{count} categories on the Categories tab below; {unassigned} accounts unassigned. Group every indirect expense account so nothing is missed.",
+        "step2t": "Review computed rates",
+        "step2d": "The Matrix tab shows each department’s rate from actuals — currently ${rate}/hr composite. A preview only; it never costs jobs directly.",
+        "step3t": "Publish & apply",
+        "application": {
+          "title": "Ledger application",
+          "hint": "How overhead reaches the books. Report-only keeps it statistical. Net-zero pair posts each project's share to the overhead account WITH the project tag and reverses the same amount without it — job-cost views carry overhead, the account and company P&L net to zero.",
+          "modes": {
+            "report_only": "Report only",
+            "net_zero_pair": "Net-zero pair",
+            "off": "Off"
+          },
+          "account": "Overhead applied account",
+          "save": "Save",
+          "saved": "Overhead application saved",
+          "entry": "Entry",
+          "date": "Date",
+          "projects": "Projects",
+          "total": "Applied",
+          "status": "Status",
+          "autoHint": "Overhead applies automatically: when hours are approved, each entry's share (hours × the published department rate on the worked day) posts with the same approval — no month-end step, and it never waits for payroll.",
+          "backfillPrompt": "{entries} approved entries (~{hours}h) predate this mode and aren't carrying overhead yet.",
+          "backfill": "Apply to past hours",
+          "backfilled": "Applied ${total} of overhead across {entries} past entries"
+        },
+        "lifecycle": {
+          "title": "Rate lifecycle",
+          "hint": "Who maintains the published rate card the standard method and the net-zero pair read.",
+          "modes": {
+            "manual": "Manual",
+            "scheduled": "Scheduled",
+            "live": "Live"
+          },
+          "modeHints": {
+            "manual": "The engine calculates and recommends; a person reviews the drift below and clicks Publish.",
+            "scheduled": "The worker snapshots the live composite rates into the card at the start of each period.",
+            "live": "Project types read the live engine directly (rate source \"live\"); the published card is advisory only."
+          },
+          "cadences": {
+            "monthly": "Monthly",
+            "quarterly": "Quarterly"
+          },
+          "save": "Save",
+          "saved": "Rate lifecycle saved",
+          "department": "Department",
+          "published": "Published $/h",
+          "live": "Live $/h",
+          "drift": "Drift"
+        },
+        "laborCostingLink": "Labor costing",
+        "tabs": {
+          "model": "Model",
+          "rates": "Rates",
+          "lifecycle": "Rate lifecycle",
+          "application": "Ledger application"
+        }
+      },
+      "compliance-classes": {
+        "title": "Counterparty classes",
+        "singular": "Counterparty class",
+        "description": "What kind of counterparty a vendor is, and what payment control that carries."
+      },
+      "compliance-requirements": {
+        "title": "Compliance requirements",
+        "singular": "Compliance requirement",
+        "description": "One row per policy: what must be on file, the limits it must show, and what a lapse does."
+      },
+      "information-return-box-rules": {
+        "title": "Information return boxes",
+        "singular": "Box rule",
+        "description": "Which 1099/T4A box an account’s spend belongs in. Anything unmapped falls to the vendor’s default box."
+      },
+      "income-tax-rates": {
+        "title": "Income Tax Rates",
+        "singularTitle": "Income Tax Rate",
+        "description": "Enacted income tax rates by jurisdiction, effective-dated — they drive the ASC 740 provision."
+      }
+    },
+    "fields": {
+      "code": "Code",
+      "name": "Name",
+      "appliesTo": "Applies to",
+      "jurisdictionId": "Jurisdiction",
+      "level": "Level",
+      "taxType": "Tax type",
+      "filingFrequency": "Filing frequency",
+      "registrationNumber": "Registration number",
+      "returnFormCode": "Return form",
+      "classAttribute": "Asset class attribute",
+      "countryCode": "Country",
+      "calculationModel": "Calculation model",
+      "regime": "Regime",
+      "classCode": "Class code",
+      "rate": "Rate",
+      "method": "Method",
+      "firstYearFraction": "First-year fraction",
+      "allowRecapture": "Allow recapture",
+      "allowTerminalLoss": "Allow terminal loss",
+      "costCap": "Cost cap",
+      "depreciationSystem": "Depreciation system",
+      "macrsMethod": "MACRS method",
+      "recoveryPeriodYears": "Recovery period (years)",
+      "taxAttributes": "Tax attributes (JSON)",
+      "enhancedMultiplier": "Enhanced multiplier",
+      "acquiredFrom": "Acquired from",
+      "acquiredTo": "Acquired to",
+      "recoverablePercent": "Recoverable %",
+      "calculationType": "Calculation type",
+      "withholdingAccountId": "Withholding account",
+      "priceIncludesTax": "Price includes tax",
+      "compoundOnPrevious": "Compound on previous components",
+      "roundingScale": "Tax rounding decimals",
+      "isActive": "Active",
+      "isPrimary": "Primary book",
+      "country": "Country",
+      "region": "Region",
+      "collectedAccountId": "Tax collected account",
+      "paidAccountId": "Tax paid account",
+      "taxCodeId": "Tax code",
+      "ratePercent": "Rate",
+      "effectiveFrom": "Effective from",
+      "effectiveTo": "Effective to",
+      "members": "Tax codes",
+      "reportCode": "Report code",
+      "lineCode": "Line code",
+      "label": "Label",
+      "basis": "Basis",
+      "sign": "Sign",
+      "submissionChannel": "Filing method",
+      "governmentFormat": "Government format",
+      "submissionUrl": "Government filing URL",
+      "officialPdfFileId": "Official PDF",
+      "watermark": "Watermark",
+      "sequence": "Order",
+      "formula": "Formula",
+      "pdfField": "PDF field",
+      "parentId": "Parent",
+      "netDays": "Net days",
+      "discountDays": "Discount days",
+      "discountPercent": "Discount %",
+      "documentKind": "Document or record",
+      "prefix": "Prefix",
+      "nextNumber": "Next number",
+      "padding": "Padding",
+      "gapless": "Gapless",
+      "classification": "Classification",
+      "costMultiplier": "Cost multiplier",
+      "isBillableDefault": "Billable by default",
+      "showOnFieldTicket": "Show on field tickets",
+      "frequency": "Frequency",
+      "periodsPerYear": "Periods per year",
+      "anchorPeriodEnd": "Anchor period end",
+      "payDateOffsetDays": "Pay date offset (days)",
+      "value": "Value",
+      "taxable": "Taxable",
+      "pensionable": "Pensionable",
+      "insurable": "Insurable",
+      "vacationable": "Counts toward vacation pay",
+      "nonPeriodic": "Non-periodic (bonus method)",
+      "taxTreatment": "Tax treatment",
+      "expenseAccountId": "Expense account",
+      "liabilityAccountId": "Liability account",
+      "remittancePartyId": "Remittance vendor",
+      "unionName": "Union",
+      "localNumber": "Local number",
+      "category": "Category",
+      "postsGl": "Posts to GL",
+      "bookId": "Book",
+      "categoryId": "Asset category",
+      "convention": "Convention",
+      "lifeMonths": "Life (months)",
+      "departmentId": "Department",
+      "defaultMethod": "Default method",
+      "defaultConvention": "Depreciation convention",
+      "endOfLife": "End of life",
+      "defaultLifeMonths": "Default life (months)",
+      "assetAccountId": "Inventory asset account",
+      "accumulatedDepreciationAccountId": "Accumulated depreciation account",
+      "depreciationExpenseAccountId": "Depreciation expense account",
+      "gainLossAccountId": "Gain / loss account",
+      "minorUnits": "Minor units",
+      "key": "Key",
+      "dimension": "Dimension",
+      "color": "Colour",
+      "sortOrder": "Sort order",
+      "legalName": "Legal name",
+      "baseCurrency": "Base currency",
+      "isElimination": "Elimination",
+      "fromSubsidiaryId": "From subsidiary",
+      "toSubsidiaryId": "To subsidiary",
+      "dueFromAccountId": "Due-from account",
+      "dueToAccountId": "Due-to account",
+      "parentSubsidiaryId": "Parent subsidiary",
+      "ownershipPercent": "Ownership %",
+      "acquisitionDate": "Acquisition date",
+      "acquisitionCost": "Acquisition cost",
+      "fairValueNetAssets": "Fair value of net assets",
+      "acquisitionRate": "Acquisition FX rate",
+      "nciMeasurement": "NCI measurement",
+      "nciFairValue": "NCI fair value",
+      "investmentAccountId": "Investment account",
+      "equityIncomeAccountId": "Equity income account",
+      "distributionAccountId": "Distribution account",
+      "distributionIncomeAccountId": "Distribution income account",
+      "nciEquityAccountId": "NCI equity account",
+      "nciIncomeAccountId": "NCI income account",
+      "goodwillAccountId": "Goodwill account",
+      "fairValueAdjustmentAccountId": "Fair-value adjustment account",
+      "asOf": "As of",
+      "fromCurrency": "From currency",
+      "toCurrency": "To currency",
+      "rateType": "Rate type",
+      "source": "Source",
+      "periodId": "Accounting period",
+      "currentRate": "Current rate",
+      "averageRate": "Average rate",
+      "historicalRate": "Historical rate",
+      "subsidiaryId": "Subsidiary",
+      "subsidiaryIncludeChildren": "Include child subsidiaries",
+      "pluralName": "Plural name",
+      "sourceKind": "Source",
+      "isHierarchical": "Hierarchical",
+      "showOnHeader": "Show on transaction header",
+      "showOnLines": "Show on transaction lines",
+      "showInReports": "Show in reports",
+      "allowAccountRequirement": "Allow as an account requirement",
+      "segmentId": "Segment",
+      "description": "Description",
+      "recognitionPeriods": "Recognition periods",
+      "startDateSource": "Start date source",
+      "endDateSource": "End date source",
+      "periodOffset": "Period offset",
+      "startOffsetDays": "Start offset (days)",
+      "initialAmountPercent": "Initial amount %",
+      "deferredAccountId": "Deferred revenue account",
+      "recognizedAccountId": "Recognized revenue account",
+      "isForecast": "Forecast rule",
+      "itemId": "Item",
+      "unitPrice": "Unit price",
+      "lowValue": "Low value",
+      "highValue": "High value",
+      "currency": "Currency",
+      "locationId": "Location",
+      "kind": "Kind",
+      "costingMethod": "Costing method",
+      "tracking": "Tracking",
+      "cogsAccountId": "COGS account",
+      "adjustmentAccountId": "Adjustment account",
+      "varianceAccountId": "Variance account",
+      "standardCost": "Standard cost",
+      "baseUnit": "Base unit",
+      "reorderPoint": "Reorder point",
+      "preferredStockLevel": "Preferred stock level",
+      "receivedNotBilledAccountId": "Received-not-billed account",
+      "assemblyItemId": "Assembly item",
+      "componentItemId": "Component item",
+      "quantityPer": "Quantity per",
+      "rateKind": "Rate type",
+      "rateBookId": "Rate book",
+      "customerId": "Customer",
+      "projectId": "Project",
+      "isDefault": "Default",
+      "billMultiplier": "Bill multiplier",
+      "lienWaiverEnforcement": "Lien waiver control",
+      "defaultLienWaiverType": "Default waiver form",
+      "defaultInformationReturn": "Default information return",
+      "classId": "Applies to class",
+      "enforcement": "On failure",
+      "requiresExpiry": "Must carry an expiry",
+      "graceDays": "Grace days",
+      "expiryWarningDays": "Warn before expiry (days)",
+      "minCoverageAmount": "Minimum per-occurrence limit",
+      "minAggregateAmount": "Minimum aggregate limit",
+      "coverageCurrency": "Limit currency",
+      "requiresAdditionalInsured": "Requires additional insured",
+      "requiresWaiverOfSubrogation": "Requires waiver of subrogation",
+      "requiresPrimaryNoncontributory": "Requires primary and non-contributory",
+      "requiresVerification": "Requires second-person verification",
+      "formType": "Form",
+      "box": "Box"
+    },
+    "fieldHelp": {
+      "gapless": "Gapless means every number in the sequence must be accounted for, with no skipped numbers. Enable it only when your legal or audit requirements require uninterrupted numbering.",
+      "lienWaiverEnforcement": "Block means a bill for this class cannot be paid until a signed waiver covers it.",
+      "defaultLienWaiverType": "Pre-selected when you create a waiver for one of these counterparties.",
+      "defaultInformationReturn": "Used when a vendor of this class does not name a form itself.",
+      "complianceRequirementClass": "Leave empty to apply to every tracked counterparty.",
+      "complianceEnforcement": "Block payment stops the money; block bill stops the bill being recorded at all.",
+      "requiresExpiry": "On for insurance; off for a W-9, which does not expire.",
+      "graceDaysHint": "0",
+      "expiryWarningDaysHint": "30",
+      "minCoverageAmount": "Certificates below this limit are refused. Limits are never converted between currencies.",
+      "coverageCurrency": "Required once a minimum limit is set — a limit is a money amount and must be comparable.",
+      "requiresVerification": "Whoever records a certificate can never be the one who verifies it.",
+      "informationReturnBox": "Boxes are statutory. What you configure is which of your accounts feeds which box."
+    },
+    "options": {
+      "payFrequency": {
+        "weekly": "Weekly",
+        "biweekly": "Biweekly",
+        "semiMonthly": "Semi-monthly",
+        "monthly": "Monthly"
+      },
+      "payComponentKind": {
+        "earning": "Earning",
+        "deduction": "Deduction",
+        "employerContribution": "Employer contribution"
+      },
+      "payComponentBasis": {
+        "fixedAmount": "Fixed amount",
+        "perHour": "Per hour",
+        "percentOfGross": "Percent of gross"
+      },
+      "payTaxTreatment": {
+        "none": "After-tax",
+        "pensionF": "Pension (RPP/RRSP, factor F)",
+        "unionDues": "Union dues (U1)",
+        "alimony": "Alimony (F2)"
+      },
+      "timeClassification": {
+        "regular": "Regular",
+        "overtime": "Overtime",
+        "doubleTime": "Double time",
+        "other": "Other"
+      },
+      "sourceKind": {
+        "builtin": "Built-in",
+        "custom": "Custom"
+      },
+      "appliesTo": {
+        "sales": "Sales",
+        "purchases": "Purchases",
+        "both": "Both"
+      },
+      "taxCalculationType": {
+        "standard": "Standard tax",
+        "withholding": "Withholding tax",
+        "reverseCharge": "Reverse charge"
+      },
+      "jurisdictionLevel": {
+        "country": "Country",
+        "state": "State / Province",
+        "county": "County",
+        "city": "City",
+        "special": "Special district",
+        "federal": "Federal"
+      },
+      "taxType": {
+        "vat": "VAT",
+        "gst": "GST",
+        "hst": "HST",
+        "pst": "PST",
+        "qst": "QST",
+        "salesUse": "Sales & use tax",
+        "consumption": "Consumption tax",
+        "other": "Other"
+      },
+      "filingFrequency": {
+        "monthly": "Monthly",
+        "bimonthly": "Bi-monthly",
+        "quarterly": "Quarterly",
+        "semiannual": "Semi-annual",
+        "annual": "Annual"
+      },
+      "poolMethod": {
+        "declining": "Declining balance",
+        "straightLine": "Straight line"
+      },
+      "taxDepreciationModel": {
+        "pool": "Class pool",
+        "macrs": "Per-asset MACRS"
+      },
+      "macrsSystem": {
+        "gds": "GDS",
+        "ads": "ADS"
+      },
+      "macrsMethod": {
+        "200db": "200% declining balance",
+        "150db": "150% declining balance",
+        "straightLine": "Straight line"
+      },
+      "taxDepreciationConvention": {
+        "halfYear": "Half-year",
+        "midQuarter": "Mid-quarter",
+        "midMonth": "Mid-month"
+      },
+      "rateDateBasis": {
+        "usageDate": "Usage date",
+        "projectStart": "Project start date"
+      },
+      "basis": {
+        "collected": "Tax collected (output)",
+        "paid": "Tax paid / ITCs (input)",
+        "net": "Net amount",
+        "tax": "Tax amount"
+      },
+      "sign": {
+        "positive": "Add (+)",
+        "negative": "Subtract (−)"
+      },
+      "channel": {
+        "printPdf": "Print & mail (official PDF)",
+        "fileUpload": "Electronic file upload",
+        "efileApi": "E-file (API)",
+        "portalManual": "Government portal (enter by hand)"
+      },
+      "governmentFormat": {
+        "portalEntry": "Online portal entry",
+        "certifiedFile": "Certified government file",
+        "api": "Compatible software / API",
+        "paper": "Official paper form"
+      },
+      "method": {
+        "straightLine": "Straight line",
+        "decliningBalance": "Declining balance",
+        "doubleDeclining": "Double declining",
+        "unitsOfProduction": "Units of production",
+        "manual": "Manual"
+      },
+      "convention": {
+        "fullMonth": "Full month",
+        "midMonth": "Mid-month",
+        "halfYear": "Half-year"
+      },
+      "endOfLife": {
+        "fullyDepreciate": "Fully depreciate",
+        "retainBalance": "Retain balance"
+      },
+      "fxRateType": {
+        "spot": "Spot",
+        "average": "Average",
+        "historical": "Historical"
+      },
+      "rateSource": {
+        "derived": "Derived",
+        "manual": "Manual"
+      },
+      "consolidationMethod": {
+        "full": "Full consolidation",
+        "proportionate": "Proportionate consolidation",
+        "equity": "Equity method"
+      },
+      "nciMeasurement": {
+        "proportionate": "Proportionate share of net assets",
+        "fairValue": "Fair value"
+      },
+      "recognitionMethod": {
+        "pointInTime": "Point in time",
+        "straightLineEven": "Straight-line, even periods",
+        "straightLineProrate": "Straight-line, prorate first & last",
+        "straightLineDaily": "Straight-line, exact days",
+        "percentComplete": "Percent complete",
+        "milestone": "Milestone",
+        "usage": "Usage"
+      },
+      "startDateSource": {
+        "obligation": "Obligation start",
+        "document": "Document date",
+        "fulfillment": "Fulfillment",
+        "event": "Event",
+        "contract": "Contract start"
+      },
+      "endDateSource": {
+        "term": "Term length",
+        "obligation": "Obligation end",
+        "contract": "Contract end"
+      },
+      "costingMethod": {
+        "fifo": "FIFO",
+        "movingAverage": "Moving average",
+        "standard": "Standard cost"
+      },
+      "tracking": {
+        "none": "None",
+        "lot": "Lot",
+        "serial": "Serial"
+      },
+      "stockLocationKind": {
+        "warehouse": "Warehouse",
+        "zone": "Zone",
+        "bin": "Bin",
+        "staging": "Staging",
+        "transit": "Transit",
+        "quarantine": "Quarantine"
+      },
+      "overheadMethod": {
+        "live": "Live",
+        "standard": "Standard"
+      },
+      "overheadRateKind": {
+        "per_hour": "$/hour",
+        "percent": "% of labor"
+      },
+      "complianceCategory": {
+        "insurance": "Insurance",
+        "taxForm": "Tax form",
+        "licence": "Licence",
+        "bond": "Bond",
+        "safety": "Safety",
+        "other": "Other"
+      },
+      "complianceEnforcement": {
+        "advisory": "Report only",
+        "warn": "Warn on payment",
+        "blockPayment": "Block payment",
+        "blockBill": "Block the bill"
+      },
+      "lienWaiverEnforcement": {
+        "none": "Not tracked",
+        "warn": "Warn",
+        "block": "Block payment"
+      },
+      "lienWaiverType": {
+        "conditionalProgress": "Conditional — progress",
+        "unconditionalProgress": "Unconditional — progress",
+        "conditionalFinal": "Conditional — final",
+        "unconditionalFinal": "Unconditional — final"
+      },
+      "informationReturnForm": {
+        "none": "Not reportable",
+        "nec": "1099-NEC",
+        "misc": "1099-MISC",
+        "t4a": "T4A"
+      },
+      "informationReturnBox": {
+        "nec1": "NEC 1 — Nonemployee compensation",
+        "nec2": "NEC 2 — Direct sales of $5,000 or more",
+        "nec4": "NEC 4 — Federal income tax withheld",
+        "misc1": "MISC 1 — Rents",
+        "misc2": "MISC 2 — Royalties",
+        "misc3": "MISC 3 — Other income",
+        "misc4": "MISC 4 — Federal income tax withheld",
+        "misc5": "MISC 5 — Fishing boat proceeds",
+        "misc6": "MISC 6 — Medical and health care payments",
+        "misc8": "MISC 8 — Substitute payments",
+        "misc9": "MISC 9 — Crop insurance proceeds",
+        "misc10": "MISC 10 — Gross proceeds paid to an attorney",
+        "misc11": "MISC 11 — Fish purchased for resale",
+        "misc12": "MISC 12 — Section 409A deferrals",
+        "misc14": "MISC 14 — Excess golden parachute payments",
+        "misc15": "MISC 15 — Nonqualified deferred compensation",
+        "t4a020": "T4A 020 — Self-employed commissions",
+        "t4a048": "T4A 048 — Fees for services",
+        "t4a022": "T4A 022 — Income tax deducted"
+      },
+      "payComponentCountry": {
+        "CA": "Canada",
+        "US": "United States"
+      }
+    },
+    "payroll": {
+      "navTitle": "Payroll"
+    },
+    "laborCosting": {
+      "navTitle": "Labor Costing",
+      "title": "Labor Costing",
+      "description": "What an hour of labor costs: effective-dated wages, the estimate components applied before payroll actuals arrive, and how standard cost posts to jobs. Overhead is configured separately in the Overhead Model.",
+      "save": "Save settings",
+      "saved": "Labor costing settings saved",
+      "rateRequired": "Enter a rate",
+      "scopeRequired": "Pick an employee or trade",
+      "rateSaved": "Rate saved",
+      "tradePrefix": "Trade:",
+      "orgDefault": "Organization default",
+      "rates": {
+        "title": "Wage rates",
+        "hint": "Company-wide fallbacks resolve by job title, trade, department, subsidiary, then organization default. Employee-specific wage history remains on each employee record.",
+        "scope": "Scope",
+        "scopeTrade": "Trade",
+        "scopeJobTitle": "Job title",
+        "scopeDepartment": "Department",
+        "scopeSubsidiary": "Subsidiary",
+        "scopeOrg": "Org default",
+        "who": "Who",
+        "rate": "Rate",
+        "currency": "Currency",
+        "basis": "Basis",
+        "perHour": "per hour",
+        "perYear": "per year",
+        "from": "From",
+        "to": "To",
+        "add": "Add rate",
+        "emptyFiltered": "No wage rates match these filters.",
+        "hr": "hr",
+        "yr": "yr",
+        "search": "Search rates…",
+        "status": "Status",
+        "statusActive": "Active and scheduled",
+        "statusCurrent": "Current",
+        "statusScheduled": "Scheduled",
+        "statusEnded": "Ended",
+        "openRate": "Open wage rate for {scope}",
+        "selectTrade": "Select a trade",
+        "select": {
+          "job_title": "Select a job title",
+          "trade": "Select a trade",
+          "department": "Select a department",
+          "subsidiary": "Select a subsidiary"
+        },
+        "annualHours": "Annual hours",
+        "annualHoursRequired": "Enter annual hours greater than zero",
+        "hourlyEquivalent": "Hourly equivalent: {amount}",
+        "notes": "Notes",
+        "endDateHint": "Leave blank to keep this rate open-ended.",
+        "invalidEndDate": "The end date cannot be before the start date",
+        "drawerNewTitle": "New wage rate",
+        "drawerNewDescription": "Add an effective-dated wage fallback for a workforce scope.",
+        "drawerEditTitle": "Edit wage rate",
+        "drawerEditDescription": "Update the effective-dated wage rate for {scope}.",
+        "rateUpdated": "Wage rate updated",
+        "rateDeleted": "Wage rate deleted",
+        "confirmDelete": "Delete this rate? Time already costed keeps its snapshot; future approvals will resolve without it.",
+        "employeeNote": "{covered} of {total} employees resolve to a wage. Per-employee wages and raise history live on each employee's record (Operations → Employees)."
+      },
+      "components": {
+        "title": "Cost estimate components",
+        "hint": "Added on top of the wage to make pre-payroll job cost realistic (statutory burden, per diem). Replaced by real payroll costs when actuals post — never a permanent layer.",
+        "name": "Name",
+        "kind": "Kind",
+        "value": "Value",
+        "percentOfWage": "% of wage",
+        "perHour": "$ per hour",
+        "perDay": "$ per day",
+        "scalesOt": "scales with OT",
+        "remove": "Remove component",
+        "newBurden": "Payroll burden (est.)",
+        "addBurden": "Add burden %",
+        "newPerDiem": "Per diem",
+        "addPerDiem": "Add per diem",
+        "hoursPerDay": "Hours per day",
+        "annualHours": "Annual hours (salary)",
+        "example": "Example at a {wage}/h wage:",
+        "exampleReg": "Regular",
+        "exampleOt": "Overtime ×1.5",
+        "exampleDt": "Double ×2",
+        "presetLead": "Quick start:",
+        "presetCa": "Canada ~13%",
+        "presetCaName": "Statutory burden — CPP, EI, WSIB, EHT, vacation (est.)",
+        "presetUs": "US ~30%",
+        "presetUsName": "Payroll burden — FICA, FUTA/SUTA, workers comp (est.)",
+        "workerComp": "Worker comp (per group)",
+        "addWorkerComp": "Add worker comp",
+        "newWorkerComp": "Worker comp (WSIB)",
+        "workerCompHint": "Rate comes from each employee's assigned worker-comp group (Setup → Workforce → Worker Comp Groups; assign on the employee record). The value here is only the fallback % when an employee has no group."
+      },
+      "posting": {
+        "title": "Posting",
+        "hint": "With posting on, approved time posts DR labor WIP (by project) / CR labor clearing at the standard cost rate. Payroll actuals later clear the same account; the residue is your payroll variance.",
+        "modeOff": "Off — snapshot rates only",
+        "modePost": "Post standard cost to jobs",
+        "laborWip": "Labor WIP / job cost account",
+        "laborClearing": "Labor clearing account",
+        "overheadNote": "Overhead is not part of this rate — it is applied by the Overhead Model as its own layer.",
+        "payrollVariance": "Payroll variance account"
+      },
+      "reconciliation": {
+        "title": "Payroll reconciliation",
+        "subsidiary": "Subsidiary",
+        "hint": "Standard labor credits the clearing account at approval; the payroll journal (imported or manual) debits the same account. The residue is your payroll variance — post it out when the period is done.",
+        "from": "From",
+        "to": "To",
+        "load": "Load",
+        "standardPosted": "Standard labor posted",
+        "payrollPosted": "Payroll actuals matched",
+        "periodVariance": "Period variance",
+        "openBalance": "Clearing balance (all time)",
+        "postVariance": "Post variance",
+        "variancePosted": "Posted ${amount} payroll variance",
+        "project": "Project",
+        "standardCost": "Standard cost"
+      },
+      "billing": {
+        "title": "Bill-out rate cards",
+        "hint": "Effective-dated customer and project labor pricing. Each card keeps its currency, item-level regular/OT/DT rates, general adjustments, negotiated terms, and assignment history.",
+        "search": "Search bill-out cards…",
+        "add": "New rate card",
+        "card": "Rate card",
+        "currency": "Currency",
+        "period": "Effective period",
+        "items": "Items",
+        "assignments": "Assignments",
+        "status": "Status",
+        "empty": "No bill-out rate cards match these filters.",
+        "newTitle": "New bill-out rate card",
+        "newDescription": "Create the shared book first, then add effective-dated item rates.",
+        "createInItemHint": "Rate-card creation uses the shared item rate-book workspace so labor, service, and equipment prices stay in one pricing engine. Return here to review labor-specific terms and assignments.",
+        "openRateBooks": "Open rate books",
+        "effectiveFrom": "Effective from",
+        "effectiveTo": "Effective to",
+        "derivation": "Missing tier behavior",
+        "scopes": "Dimension scopes",
+        "allScopes": "No dimension restriction",
+        "itemRates": "Item and time-type rates",
+        "item": "Item",
+        "regular": "Regular",
+        "adjustments": "Adjustments",
+        "appliesTo": "Applies to",
+        "wholeCard": "Whole card",
+        "revise": "Create revision",
+        "reviseHint": "A revision preserves this version and starts a new effective-dated copy.",
+        "historicalHint": "This is a historical version. Open the latest version to create a revision.",
+        "revisionTitle": "New rate-card revision",
+        "revisionDescription": "Base item rates, scopes, and terms are copied. Adjustments below may apply to the whole card or a specific item.",
+        "revisionEffectiveFrom": "New version effective from",
+        "adjustmentNumber": "Adjustment {number}",
+        "removeAdjustment": "Remove adjustment",
+        "adjustmentName": "Name",
+        "adjustmentCode": "Code",
+        "category": "Category",
+        "calculation": "Calculation",
+        "presentation": "Invoice presentation",
+        "adjustmentValue": "Value",
+        "adjustmentUnit": "Unit",
+        "referenceText": "Description or contract reference",
+        "addAdjustment": "Add adjustment",
+        "saveRevision": "Save revision",
+        "revisionSaved": "Rate-card revision saved",
+        "categories": {
+          "markup": "Markup",
+          "travel": "Travel",
+          "allowance": "Allowance",
+          "minimum": "Minimum",
+          "surcharge": "Surcharge",
+          "other": "Other"
+        },
+        "calculations": {
+          "percent": "Percentage",
+          "fixed": "Fixed amount",
+          "per_hour": "Per hour",
+          "per_day": "Per day",
+          "distance": "Distance",
+          "time": "Time",
+          "text": "Informational text"
+        },
+        "presentations": {
+          "included": "Included in rate",
+          "separate": "Separate line",
+          "informational": "Informational"
+        },
+        "errors": {
+          "notFound": "Rate card not found.",
+          "effectiveDate": "Choose an effective date.",
+          "adjustments": "Adjustment data is invalid.",
+          "item": "Choose a valid active item.",
+          "name": "Every adjustment needs a name and code.",
+          "duplicateCode": "Adjustment codes must be unique for each item.",
+          "category": "Choose a valid category.",
+          "calculation": "Choose a valid calculation.",
+          "presentation": "Choose a valid invoice presentation.",
+          "value": "Enter a non-negative adjustment value.",
+          "latestOnly": "Open the latest version before creating a revision.",
+          "afterLatest": "The new effective date must be after the latest version.",
+          "save": "Could not save the rate-card revision."
+        },
+        "terms": "Negotiated terms",
+        "none": "None",
+        "derivations": {
+          "explicit": "Explicit rates",
+          "time_type_multipliers": "Time-type multipliers"
+        },
+        "scopeTypes": {
+          "department": "Department",
+          "subsidiary": "Subsidiary",
+          "location": "Location",
+          "class": "Class",
+          "trade": "Trade",
+          "job_title": "Job title",
+          "other": "Other"
+        }
+      },
+      "docs": "Documentation",
+      "checklist": {
+        "wages": "Wage rates",
+        "burden": "Burden estimate",
+        "posting": "Job posting",
+        "trueup": "Payroll true-up",
+        "wagesDetail": "{covered} of {total} employees resolve to a rate",
+        "burdenDone": "{count} component(s) configured",
+        "burdenNone": "No components — pre-payroll cost = raw wage",
+        "postingOn": "Standard cost posts to jobs at approval",
+        "postingAccounts": "Turn on requires WIP + clearing accounts",
+        "postingOff": "Off — rates snapshot only",
+        "trueupReady": "Variance account mapped — reconcile below",
+        "trueupNone": "Map a variance account to close periods",
+        "launchWizard": "Setup guide"
+      },
+      "wizard": {
+        "title": "Set up labor costing",
+        "description": "A guided setup for wage fallbacks, payroll burden, and ledger posting.",
+        "back": "Back",
+        "next": "Next",
+        "apply": "Apply setup",
+        "applying": "Applying…",
+        "done": "Labor costing configured",
+        "q1": "How do you want to estimate payroll burden?",
+        "q1Hint": "The employer costs your wages cause — taxes, insurance, vacation. An estimate keeps job costs realistic before payroll runs; real payroll replaces it.",
+        "burden": {
+          "canada": "Canada — statutory ~13%",
+          "canadaHint": "CPP, EI, WSIB, EHT, vacation pay. A sensible starting estimate; refine anytime.",
+          "us": "United States — construction ~30%",
+          "usHint": "FICA, FUTA/SUTA, workers comp. Typical range is 25–40%.",
+          "custom": "Custom percentage",
+          "customHint": "You know your number — enter it.",
+          "customPct": "% of wage",
+          "skip": "Skip for now",
+          "skipHint": "Job costs will show raw wages only until you add components."
+        },
+        "customBurdenName": "Payroll burden (est.)",
+        "q2": "Where do wages come from?",
+        "q2Hint": "Every employee gets their own wage. Search and fill the crew — anyone left blank can use the optional fallback below, and salaried staff can be refined in the workspace afterward.",
+        "orgRate": "Default hourly wage (everyone without a specific rate)",
+        "tradeRates": "Per-trade rates (optional — beats the default)",
+        "perEmployeeLater": "You can add exact per-employee rates in the workspace any time — they beat trade and default rates.",
+        "q3": "Post labor cost to your jobs?",
+        "q3Hint": "With posting on, approving time writes standard labor cost into the ledger against each project, anticipating payroll.",
+        "posting": {
+          "off": "Not yet — just track rates",
+          "offHint": "Time gets costed for reports; nothing posts to the GL.",
+          "post": "Yes — post standard cost at approval",
+          "postHint": "DR labor WIP (by project) / CR labor clearing. Payroll actuals clear the same account later.",
+          "wip": "Labor WIP / job cost account",
+          "clearing": "Labor clearing account",
+          "variance": "Payroll variance account (optional — for the month-end true-up)",
+          "varianceLater": "Choose later"
+        },
+        "review": "Ready to apply:",
+        "reviewBurden": "Burden estimate: {name} at {pct}%",
+        "reviewNoBurden": "No burden estimate (raw wages only)",
+        "reviewOrgRate": "Default wage ${rate}/h.",
+        "reviewNoOrgRate": "No default wage.",
+        "reviewTradeRates": "+ {count} trade rate(s).",
+        "reviewPosting": "Standard cost will post to jobs at approval",
+        "reviewNoPosting": "Posting stays off — you can enable it later",
+        "reviewExample": "Example at a {wage}/h wage:",
+        "exReg": "Regular",
+        "exOt": "OT ×1.5",
+        "exDt": "DT ×2",
+        "reviewNote": "Everything here is editable in the workspace afterward — the guide just fills in the same settings.",
+        "nextSteps": "After this: overhead",
+        "nextOverhead": "Labor costing covers wages and statutory burden. Your company's OVERHEAD (rent, admin, fleet…) is a separate layer with its own guided setup — classify costs, review computed rates, and apply them to project types.",
+        "nextOverheadLink": "Open the Overhead Model",
+        "searchEmployees": "Search employees…",
+        "ratePlaceholder": "0.00",
+        "ratedCount": "{rated} of {total} employees have a wage",
+        "fallbackRate": "Optional fallback rate for employees without a wage yet",
+        "fallbackHint": "Keeps job costing working while records are being filled in — most companies leave this empty.",
+        "reviewEmployeeRates": "Wages for {count} employee(s).",
+        "reviewFallback": "Fallback {rate}/h for anyone unrated.",
+        "wagesOnRecord": "Each employee's wage (and raise history) is set on their employee record — exactly where you manage everything else about them. Nothing to fill in here.",
+        "openEmployees": "Open Employees",
+        "reviewWagesOnRecord": "Wages come from each employee's record."
+      },
+      "unsaved": "Unsaved changes",
+      "discard": "Discard",
+      "related": {
+        "overhead": "Overhead Model",
+        "overheadHint": "The company-cost layer — pools, department rates, and how overhead reaches jobs.",
+        "rateBooks": "Item Rate Books",
+        "rateBooksHint": "What you charge — bill-out rates per item and customer, with reg/OT/DT tiers.",
+        "timeTypes": "Time Types",
+        "timeTypesHint": "Regular, overtime, double-time — the cost and bill multipliers this page uses."
+      },
+      "tabs": {
+        "rates": "Wage rates",
+        "billing": "Bill-out rate cards",
+        "components": "Burden estimate",
+        "posting": "Posting",
+        "reconciliation": "Payroll reconciliation"
+      }
+    },
+    "features": {
+      "navTitle": "Features",
+      "title": "Features",
+      "description": "Switch optional modules on or off for your company. Turning a feature off hides it everywhere — its data is never deleted.",
+      "runWizard": "Run setup wizard",
+      "enabled": "{name} enabled",
+      "disabled": "{name} disabled",
+      "countOn": "{n} of {total} on",
+      "blockedReason": "Can't turn off — {items}.",
+      "affectsNote": "Turning off hides {items} — the data is kept and returns if you re-enable.",
+      "confirmDisable": "Turn off {name}?\n\nThis hides {items}. The data is kept and comes back if you re-enable.",
+      "impacts": {
+        "subsidiaryTxns": "{count, plural, one {# subsidiary has} other {# subsidiaries have}} posted transactions",
+        "foreignTxns": "{count, plural, one {# foreign-currency posting} other {# foreign-currency postings}}",
+        "reconciliations": "{count, plural, one {# reconciliation} other {# reconciliations}}",
+        "bankStatements": "{count, plural, one {# bank statement} other {# bank statements}}",
+        "assets": "{count, plural, one {# fixed asset} other {# fixed assets}}",
+        "inventoryMovements": "{count, plural, one {# inventory movement} other {# inventory movements}}",
+        "activeSubscriptions": "{count, plural, one {# active subscription} other {# active subscriptions}}",
+        "advancedSubscriptionContracts": "{count, plural, one {# active versioned subscription contract} other {# active versioned subscription contracts}}",
+        "openOrders": "{count, plural, one {# issued order with an unconverted balance} other {# issued orders with unconverted balances}}",
+        "postedPayRuns": "{count, plural, one {# posted pay run in the ledger} other {# posted pay runs in the ledger}}",
+        "submittedTimeEntries": "{count, plural, one {# submitted time entry awaiting review} other {# submitted time entries awaiting review}}",
+        "activeBankFeeds": "{count, plural, one {# active bank-feed connection} other {# active bank-feed connections}}",
+        "activeBankImportSchedules": "{count, plural, one {# active SFTP bank-import schedule} other {# active SFTP bank-import schedules}}",
+        "activeScripts": "{count, plural, one {# active script} other {# active scripts}}",
+        "activeApiKeys": "{count, plural, one {# active API key} other {# active API keys}}",
+        "projects": "{count, plural, one {# project} other {# projects}}",
+        "activeProjects": "{count, plural, one {# active project} other {# active projects}}",
+        "openProjectBillingRequests": "{count, plural, one {# open project billing request} other {# open project billing requests}}",
+        "openPayApplications": "{count, plural, one {# open application for payment} other {# open applications for payment}}",
+        "outstandingRetainage": "outstanding retainage",
+        "openFieldTickets": "{count, plural, one {# open field ticket} other {# open field tickets}}",
+        "scheduledTasks": "{count, plural, one {# scheduled activity} other {# scheduled activities}}",
+        "openProjectDocuments": "{count, plural, one {# unposted project document} other {# unposted project documents}}",
+        "openProjectTimeEntries": "{count, plural, one {# unapproved project time entry} other {# unapproved project time entries}}",
+        "openChangeOrders": "{count, plural, one {# draft change order} other {# draft change orders}}",
+        "activeSubcontracts": "{count, plural, one {# active subcontract} other {# active subcontracts}}",
+        "openVendorPayApplications": "{count, plural, one {# vendor pay application in progress} other {# vendor pay applications in progress}}",
+        "activeSubcontractPaymentControls": "{count, plural, one {# active subcontract payment control} other {# active subcontract payment controls}}",
+        "openPrebills": "{count, plural, one {# prebill awaiting completion} other {# prebills awaiting completion}}",
+        "activeWipHolds": "{count, plural, one {# active WIP hold} other {# active WIP holds}}",
+        "activePropertyLeases": "{count, plural, one {# active property lease} other {# active property leases}}",
+        "securityDepositTransactions": "{count, plural, one {# security-deposit transaction} other {# security-deposit transactions}}",
+        "revenueSchedules": "{count, plural, one {# deferred-revenue schedule} other {# deferred-revenue schedules}}",
+        "controlCheckUnavailable": "an integrity check that could not be completed",
+        "trackedVendors": "{count, plural, one {# tracked subcontractor} other {# tracked subcontractors}}",
+        "activeCertificates": "{count, plural, one {# current certificate} other {# current certificates}}",
+        "blockingCompliancePolicies": "{count, plural, one {# policy that blocks payment} other {# policies that block payment}}",
+        "openLienWaivers": "{count, plural, one {# lien waiver awaiting signature} other {# lien waivers awaiting signature}}",
+        "draftInformationReturns": "{count, plural, one {# information return in progress} other {# information returns in progress}}",
+        "unfiledInformationReturns": "{count, plural, one {# finalized information return that has not been filed} other {# finalized information returns that have not been filed}}"
+      },
+      "errors": {
+        "blocked": "This feature can't be turned off — its data is load-bearing for the ledger.",
+        "dependency": "Turn on the required feature first: {features}.",
+        "dependents": "Turn off the dependent feature first: {features}."
+      },
+      "categories": {
+        "sales": "Sales & customers",
+        "operations": "Operations",
+        "accounting": "Accounting",
+        "platform": "Platform"
+      }
+    },
+    "readiness": {
+      "navTitle": "Go-live guide"
+    },
+    "invoicing": {
+      "navTitle": "Invoicing"
+    },
+    "bankFeeds": {
+      "navTitle": "Bank Feeds"
+    },
+    "paymentProviders": {
+      "title": "Payment Providers",
+      "description": "Hosted checkout providers for customer payment links on invoices. Payout and fee reconciliation stays under Banking → PSP settlements.",
+      "saved": "Saved.",
+      "enableAcceptance": "Enable payment links",
+      "apiKey": "API key / secret",
+      "webhookSecret": "Webhook secret",
+      "publishableKey": "Publishable key",
+      "merchantAccount": "Merchant account",
+      "secretConfigured": "Configured — enter to replace",
+      "receiptBankAccount": "Receipt bank account",
+      "surchargeRule": "Surcharge rule",
+      "noSurcharge": "No surcharge",
+      "save": "Save",
+      "surchargeRules": "Surcharge rules",
+      "surchargeHint": "Optional processing fees added on top of the invoice total at checkout. The fee posts to the income account on receipt.",
+      "ruleName": "Name",
+      "ruleCalc": "Calculation",
+      "ruleProvider": "Provider",
+      "ruleEffective": "Effective",
+      "deactivate": "Deactivate",
+      "inactive": "inactive",
+      "percent": "Percent",
+      "fixed": "Fixed amount",
+      "cap": "Cap (optional)",
+      "allProviders": "All providers",
+      "paymentMethod": "Payment method",
+      "methodAll": "All methods",
+      "methodCard": "Card",
+      "methodBankDebit": "Bank debit",
+      "effectiveFrom": "Effective from",
+      "addRule": "Add rule",
+      "calcPercent": "Percent of invoice",
+      "calcFixed": "Fixed amount",
+      "calcBoth": "Percent + fixed",
+      "feeIncomeAccount": "Fee income account",
+      "webhookUrl": "Webhook URL",
+      "webhookHint": "Paste this endpoint into the provider's dashboard to receive payment events.",
+      "copy": "Copy",
+      "copied": "Copied",
+      "testConnection": "Test connection",
+      "testing": "Testing…"
+    },
+    "wizard": {
+      "skip": "Skip for now",
+      "back": "Back",
+      "next": "Continue",
+      "apply": "Set up my books",
+      "error": "Something went wrong. Please try again.",
+      "welcome": {
+        "title": "Let's set up your books",
+        "description": "Tell us how your company works and OpenBooks will shape a focused starting workspace around it. You'll review every choice before anything changes.",
+        "f1": "Chart of accounts",
+        "f2": "A workspace that fits",
+        "f3": "A guided go-live"
+      },
+      "company": {
+        "title": "Tell us about your business",
+        "description": "These details establish your accounting foundation. Name and legal details remain editable; base currency, industry, and fiscal calendar lock after your first posting.",
+        "name": "Business name",
+        "namePlaceholder": "e.g. Saunders Construction Ltd.",
+        "legalName": "Legal name (optional)",
+        "legalNamePlaceholder": "Registered legal entity name",
+        "country": "Country",
+        "currency": "Base currency",
+        "fiscalYear": "Fiscal year starts in"
+      },
+      "industry": {
+        "title": "What's your industry?",
+        "description": "We'll recommend a chart of accounts and relevant capabilities for the way your industry works. You review the recommendation before it is applied.",
+        "search": "Search industries…",
+        "locked": "Your industry can't be changed after transactions have been posted, but you can still customize your chart of accounts and features individually.",
+        "classificationOnly": "Your existing chart and posted history will be preserved. This first-time classification only tunes workspace and feature recommendations."
+      },
+      "profile": {
+        "title": "Meet your company where it is",
+        "description": "OpenBooks can stay beautifully simple today and reveal deeper controls as your team and accounting needs grow.",
+        "teamQuestion": "How many people will work in OpenBooks?",
+        "complexityQuestion": "How is financial work reviewed?",
+        "adapting": "OpenBooks uses these concrete working habits—not a vague company-size label—to recommend controls. You will review every enabled capability before anything is applied.",
+        "team": {
+          "solo": {
+            "title": "Just me",
+            "description": "Owner, bookkeeper, or founder"
+          },
+          "small": {
+            "title": "2–10 people",
+            "description": "A small team with shared work"
+          },
+          "medium": {
+            "title": "11–50 people",
+            "description": "Defined responsibilities and reviewers"
+          },
+          "large": {
+            "title": "51+ people",
+            "description": "Specialized teams and stronger controls"
+          }
+        },
+        "complexity": {
+          "essentials": {
+            "title": "Owner-managed",
+            "description": "The same trusted person can prepare, review, post, and close the books."
+          },
+          "growing": {
+            "title": "Team review",
+            "description": "People share the work and important transactions should have a clear reviewer."
+          },
+          "advanced": {
+            "title": "Formal controls",
+            "description": "Duties are separated and approvals, evidence, and close sign-off must be governed."
+          }
+        }
+      },
+      "operations": {
+        "title": "How do you operate?",
+        "description": "Confirm the work you actually do and the financial structure you operate. Your industry answers are already reflected below.",
+        "workTitle": "Work your company does",
+        "structureTitle": "Financial structure",
+        "structureDescription": "Answer these directly. OpenBooks never assumes extra legal entities or foreign-currency accounting from headcount or industry.",
+        "note": "This is a reviewable starting point. Every switch remains authoritative and adjustable under Company Settings → Features, with data-preserving safety checks.",
+        "projects": {
+          "title": "Projects & job costing",
+          "description": "Track jobs with budgets, costing, billing, and profitability."
+        },
+        "timeTracking": {
+          "title": "Time tracking",
+          "description": "Timesheets with submission, approval, and cost/bill rate tracking."
+        },
+        "inventory": {
+          "title": "Inventory",
+          "description": "Stock tracking, locations, item costing, and assemblies."
+        },
+        "subscriptionBilling": {
+          "title": "Subscription billing",
+          "description": "Plans and subscriptions that auto-generate recurring invoices."
+        },
+        "orders": {
+          "title": "Estimates & orders",
+          "description": "Use estimates, sales orders, and purchase orders before invoices or bills."
+        },
+        "crm": {
+          "title": "Sales pipeline",
+          "description": "Track leads, opportunities, activities, and forecasts before a sale."
+        },
+        "multiSubsidiary": {
+          "title": "Multiple entities",
+          "description": "Run more than one legal entity with consolidation and intercompany."
+        },
+        "multiCurrency": {
+          "title": "Multi-currency",
+          "description": "Transact in foreign currencies with exchange rates and revaluation."
+        },
+        "payroll": {
+          "title": "Payroll",
+          "description": "Run payroll with statutory withholding country packs."
+        }
+      },
+      "rhythm": {
+        "title": "Set your accounting rhythm",
+        "description": "Volume changes how much automation helps. Close cadence changes which routines OpenBooks should put in front of you.",
+        "activityQuestion": "Roughly how much activity do you handle each month?",
+        "activityHint": "Count customer and vendor documents, expenses, payments, and bank or card transactions—not journal lines.",
+        "activity": {
+          "light": {
+            "title": "Under 100",
+            "description": "A focused workflow with little automation overhead."
+          },
+          "steady": {
+            "title": "100–1,000",
+            "description": "Enough activity for imports, rules, and ongoing review to save time."
+          },
+          "high": {
+            "title": "More than 1,000",
+            "description": "Automation and continuous monitoring should be ready from the start."
+          }
+        },
+        "closeQuestion": "How often do you intend to formally close and report the books?",
+        "close": {
+          "monthly": {
+            "title": "Every month",
+            "description": "Recommended for timely management reporting and early error detection."
+          },
+          "quarterly": {
+            "title": "Every quarter",
+            "description": "A lighter formal cycle, with banking still reconciled throughout the quarter."
+          },
+          "annual": {
+            "title": "At year-end",
+            "description": "Minimal formal close cadence; routine reconciliation remains important."
+          }
+        },
+        "note": "These are starting preferences, not limits. OpenBooks will never weaken posting integrity or close controls because activity is low."
+      },
+      "launch": {
+        "title": "Shape your go-live",
+        "description": "A few final answers let the readiness guide focus on the work between setup and your first live posting.",
+        "booksQuestion": "Where are the books starting?",
+        "books": {
+          "fresh": {
+            "title": "Starting fresh",
+            "description": "There are no prior balances to bring over; the ledger starts from zero."
+          },
+          "migrate": {
+            "title": "Moving existing books",
+            "description": "Opening balances, open invoices and bills, and a cutover date need verification."
+          }
+        },
+        "taxQuestion": "Does this company collect sales tax, GST/HST, or VAT?",
+        "tax": {
+          "registered": "Yes, registered",
+          "not_registered": "No, not required",
+          "unsure": "Not sure yet"
+        },
+        "toolsQuestion": "Which of these should be ready from day one?",
+        "features": {
+          "bankFeeds": {
+            "title": "Connected banking",
+            "description": "Automatically bring in bank activity."
+          },
+          "onlinePayments": {
+            "title": "Online payments",
+            "description": "Let customers pay from invoices."
+          },
+          "fixedAssets": {
+            "title": "Asset depreciation",
+            "description": "Track assets and depreciation schedules."
+          }
+        },
+        "sample": {
+          "question": "Would you like a company you can explore immediately?",
+          "title": "Create an industry sample company",
+          "description": "A realistic company with transactions, projects, reports, and closed periods—matched to the industry you chose.",
+          "safety": "It is a separate, clearly marked workspace. Sample entries never enter these books, and outbound email, payments, APIs, and integrations are disabled.",
+          "error": "Your live company was configured, but the optional sample company could not be prepared. You can retry under Import & Export."
+        }
+      },
+      "review": {
+        "title": "Review your setup",
+        "description": "Here's what we'll configure. Click 'Set up my books' to apply everything.",
+        "companyName": "Business name",
+        "legalName": "Legal name",
+        "notProvided": "Not provided",
+        "country": "Country",
+        "currency": "Currency",
+        "fiscalYear": "Fiscal year starts",
+        "teamSize": "OpenBooks team",
+        "complexity": "Starting workspace",
+        "bookStart": "Ledger starting point",
+        "taxPosition": "Tax position",
+        "monthlyActivity": "Monthly activity",
+        "closeCadence": "Formal close",
+        "sampleCompany": "Exploration workspace",
+        "sampleCompanyYes": "Create a separate industry sample company",
+        "sampleCompanyNo": "Not now",
+        "industry": "Industry",
+        "chartOfAccounts": "Chart of accounts",
+        "chartPreserved": "Existing chart preserved",
+        "accounts": "accounts",
+        "features": "Features enabled",
+        "note": "This creates your accounting foundation and starting workspace. The readiness guide will show anything still needed before your first live posting. Every optional capability remains adjustable from Company Settings → Features.",
+        "notePreserved": "This updates company classification and workspace recommendations without changing the existing chart or posted history. Every optional capability remains adjustable from Company Settings → Features.",
+        "payrollPack": "Payroll country pack",
+        "payrollPackCanada": "Canada (CRA T4127)",
+        "payrollPackNone": "None — install later from Payroll setup"
+      },
+      "applying": {
+        "title": "Setting up your books…",
+        "description": "Creating your chart of accounts, configuring features, and mapping control accounts."
+      },
+      "done": {
+        "title": "Your starting workspace is ready",
+        "description": "Next, the go-live guide will verify the remaining company, tax, numbering, banking, and opening-balance decisions before you post live activity."
+      },
+      "industries": {
+        "general_business": {
+          "title": "General Business",
+          "description": "A standard setup that works for any company. No industry-specific assumptions."
+        },
+        "construction_contractor": {
+          "title": "Construction & Trade",
+          "description": "Contractors, trades, and builders. Job costing, progress billing, retainage, and field tickets."
+        },
+        "professional_services": {
+          "title": "Professional Services",
+          "description": "Consultants, agencies, and advisors. Time tracking, project profitability, and retainer billing."
+        },
+        "engineering_architecture": {
+          "title": "Engineering & Architecture",
+          "description": "EPC and AEC firms. WBS, phase billing, equipment costing, and progress billing."
+        },
+        "it_software_saas": {
+          "title": "Software & SaaS",
+          "description": "Subscription billing, ASC 606 revenue recognition, and deferred revenue tracking."
+        },
+        "accounting_firm": {
+          "title": "Accounting Practice",
+          "description": "Bookkeeping and accounting firms. Multi-client, trust accounting, and engagement tracking."
+        },
+        "wholesale_distribution": {
+          "title": "Wholesale & Distribution",
+          "description": "Distributors and wholesalers. Inventory, landed cost, GRNI, and stock locations."
+        },
+        "property_management": {
+          "title": "Property Management",
+          "description": "Rental portfolios and property managers. Recurring rent, CAM, security deposits, and fixed assets."
+        },
+        "nonprofit": {
+          "title": "Non-Profit",
+          "description": "Charities and non-profits. Grant tracking, fund accounting, donations, and restricted net assets."
+        },
+        "manufacturing": {
+          "title": "Manufacturing",
+          "description": "Light and discrete manufacturing. BOMs, raw materials, WIP, finished goods, and overhead."
+        },
+        "healthcare_practice": {
+          "title": "Healthcare Practice",
+          "description": "Medical and dental practices. Patient AR, medical supplies, and equipment."
+        }
+      },
+      "payroll": {
+        "title": "Set up payroll",
+        "description": "Payroll runs on installable country packs — each pack brings that jurisdiction's statutory withholding engine and components.",
+        "packQuestion": "Which country pack should be installed?",
+        "packs": {
+          "canada": {
+            "title": "Canada",
+            "description": "CRA T4127 statutory engine, all provinces & territories, verified against CRA PDOC."
+          },
+          "us": {
+            "title": "United States",
+            "description": "Planned — not yet available."
+          }
+        },
+        "checklist": {
+          "title": "Finishing payroll after this walkthrough",
+          "pack": "The selected country pack installs automatically when you apply this setup.",
+          "accounts": "Point the posting accounts (wages, net pay, withholding liabilities) at your chart in",
+          "accountsLink": "Payroll setup → Accounts & posting",
+          "schedule": "Create your first pay schedule in",
+          "scheduleLink": "Payroll setup → Pay schedules"
+        },
+        "installError": "Payroll was enabled, but the country pack could not be installed. You can install it from Payroll setup → Country packs."
+      }
+    },
+    "filterAll": "All"
+  },
+  "flows": {
+    "title": "Flows",
+    "description": "Visual automations over your records — a trigger starts a run, conditions branch, actions do the work, and approval gates pause for people.",
+    "searchPlaceholder": "Search flows…",
+    "subjectFilter": "Record type",
+    "table": {
+      "flow": "Flow",
+      "subject": "Record type",
+      "nodes": "Nodes",
+      "lastRun": "Last run",
+      "updated": "Updated",
+      "status": "Status"
+    },
+    "empty": {
+      "title": "No flows yet",
+      "description": "A flow starts at a trigger, branches on conditions, pauses at approval gates, and finishes with actions — emails, notifications, field updates, and status changes.",
+      "cta": "New flow"
+    },
+    "statusEnabled": "enabled",
+    "statusDisabled": "disabled",
+    "neverRan": "never",
+    "new": {
+      "button": "New flow",
+      "title": "New flow",
+      "description": "Pick the record type this flow runs over. You'll design the steps next.",
+      "name": "Name",
+      "namePlaceholder": "e.g. Bill approval over $10,000",
+      "subject": "Record type",
+      "subjectPlaceholder": "Choose a record type…",
+      "create": "Create flow",
+      "failed": "Could not create the flow"
+    },
+    "actions": {
+      "enable": "Enable",
+      "disable": "Disable",
+      "delete": "Delete",
+      "deleteConfirmTitle": "Delete flow",
+      "deleteConfirm": "Delete “{name}”? Its run history is removed too.",
+      "deleted": "Flow deleted",
+      "deleteFailed": "Could not delete the flow",
+      "updateFailed": "Could not update the flow"
+    },
+    "builder": {
+      "save": "Save",
+      "saved": "Flow saved",
+      "saveFailed": "Could not save the flow",
+      "unsaved": "Unsaved changes",
+      "enabledToggle": "Enabled",
+      "namePlaceholder": "Flow name",
+      "errorsTitle": "Fix these to save the flow",
+      "warningsTitle": "Warnings — the flow saves, but may not run as expected",
+      "warningsBadge": "{count, plural, one {# warning} other {# warnings}}",
+      "tabs": {
+        "canvas": "Canvas",
+        "runs": "Runs"
+      },
+      "palette": {
+        "title": "Add",
+        "trigger": "Trigger",
+        "condition": "Condition",
+        "action": "Action",
+        "gate": "Approval"
+      },
+      "canvasEmpty": {
+        "title": "Start with a trigger",
+        "description": "Triggers start a run, conditions branch it, approval gates pause it for people, and actions finish the work. Add a trigger, then drag from its handle to connect the next step."
+      },
+      "inspector": {
+        "empty": "Select a node to configure it",
+        "deleteNode": "Delete node",
+        "nodeId": "Node"
+      }
+    },
+    "node": {
+      "trigger": "Trigger",
+      "condition": "Condition",
+      "action": "Action",
+      "gate": "Approval",
+      "conditionDefault": "If…",
+      "gateDefault": "Approval"
+    },
+    "edge": {
+      "then": "then",
+      "else": "else",
+      "approve": "approve",
+      "reject": "reject"
+    },
+    "trigger": {
+      "kind": "When",
+      "kinds": {
+        "on_create": "A record is created",
+        "on_update": "A record is updated",
+        "on_submit": "A record is submitted for approval",
+        "before_post": "Before a record posts",
+        "after_post": "After a record posts",
+        "before_void": "Before a record is voided",
+        "status_change": "The status changes",
+        "on_field_value": "A field matches a condition",
+        "scheduled": "On a schedule",
+        "manual": "A user clicks a button"
+      },
+      "from": "From status",
+      "to": "To status",
+      "anyStatus": "Any status",
+      "rule": "When the record matches",
+      "cron": "Cron schedule",
+      "cronHint": "minute · hour · day of month · month · day of week",
+      "cronExample": "e.g. 0 8 * * 1 = Mondays at 08:00",
+      "timezone": "Time zone (optional)",
+      "selectRecords": "Run once for each matching record",
+      "selectRecordsHint": "The schedule searches this record type and starts a separate run for every match.",
+      "selectRule": "Record filter (optional)",
+      "selectRuleAdd": "Add record filter",
+      "selectRuleRemove": "Remove record filter",
+      "selectLimit": "Maximum records per run",
+      "buttonLabel": "Button label",
+      "confirmText": "Confirmation message (optional)",
+      "requirePermission": "Required permission (optional)",
+      "permissionPlaceholder": "Choose a permission…",
+      "showIf": "Only show the button when…",
+      "showIfAdd": "Add visibility condition",
+      "showIfRemove": "Remove visibility condition",
+      "buttonPreview": "Record button preview",
+      "buttonHint": "This button appears in the record header when the flow is enabled and its permission and visibility conditions pass.",
+      "defaultButtonLabel": "Run flow"
+    },
+    "condition": {
+      "rule": "Branch when",
+      "label": "Label (optional)",
+      "labelPlaceholder": "e.g. Over $10,000",
+      "hint": "The “then” branch runs when the rule passes; “else” runs when it fails."
+    },
+    "action": {
+      "kind": "Action",
+      "kinds": {
+        "send_email": "Send an email",
+        "notify": "Send an in-app notification",
+        "set_field": "Set a field",
+        "change_status": "Change the status",
+        "post_document": "Post the document",
+        "lock_record": "Lock the record",
+        "unlock_record": "Unlock the record"
+      },
+      "recipients": "Recipients",
+      "subject": "Subject",
+      "body": "Body",
+      "attachPdf": "Attach the record PDF",
+      "attachPdfHint": "Uses your organization's active PDF template for this record type.",
+      "interpolationHint": "Insert record values with '{{'field'}}' tokens",
+      "availableFields": "Available fields",
+      "title": "Title",
+      "notifyBody": "Message (optional)",
+      "href": "Link to open (optional)",
+      "field": "Field",
+      "value": "Value",
+      "valueSource": "Value source",
+      "valueSources": {
+        "literal": "A fixed value",
+        "today": "Today's date",
+        "now": "Current date and time",
+        "currentUser": "Current user's name",
+        "expression": "Existing formula expression"
+      },
+      "expressionPreserved": "This existing formula expression is preserved. Formula editing is available through the form expression builder.",
+      "status": "New status",
+      "postDocumentHint": "Posts the document to the ledger through the normal posting pipeline. Nothing to configure.",
+      "lockReason": "Lock reason",
+      "lockReasonPlaceholder": "e.g. Approved — payment is final",
+      "lockExemptRoles": "Exempt roles",
+      "lockExemptHint": "Admins are always exempt; selected roles may still edit.",
+      "unlockHint": "Removes the flow lock so the record can be edited again."
+    },
+    "gate": {
+      "title": "Title",
+      "titlePlaceholder": "e.g. Controller approval",
+      "assignees": "Approvers",
+      "mode": "Quorum",
+      "modeAny": "Any one may decide",
+      "modeAll": "All must approve",
+      "signature": "Require a typed signature",
+      "preventSelfApproval": "Prevent self-approval",
+      "preventSelfApprovalHint": "The submitter is removed from the approver list; if necessary, the request routes to their supervisor.",
+      "reminderAfter": "Remind after (hours)",
+      "escalateAfter": "Escalate after (hours)",
+      "escalateTo": "Escalate to",
+      "noEscalation": "No escalation",
+      "hint": "The run pauses here until the approver quorum decides, then continues on the “approve” or “reject” branch."
+    },
+    "targets": {
+      "types": {
+        "user": "A specific user",
+        "role": "Everyone in a role",
+        "submitter": "The submitter",
+        "supervisor": "The submitter's supervisor",
+        "field": "A record field (user)",
+        "email": "Email address(es)"
+      },
+      "add": "Add recipient",
+      "addAssignee": "Add approver",
+      "remove": "Remove",
+      "pickUser": "Choose a user…",
+      "pickRole": "Choose a role…",
+      "pickField": "Choose a field…",
+      "emailPlaceholder": "ops@example.com, cfo@example.com"
+    },
+    "logic": {
+      "groupAnd": "All of…",
+      "groupOr": "Any of…",
+      "groupNot": "Not…",
+      "ops": {
+        "eq": "equals",
+        "ne": "does not equal",
+        "gt": "is greater than",
+        "gte": "is at least",
+        "lt": "is less than",
+        "lte": "is at most",
+        "in": "is one of",
+        "notIn": "is not one of",
+        "isSet": "is set",
+        "isNotSet": "is empty"
+      },
+      "addRule": "Add condition",
+      "addGroup": "Add group",
+      "remove": "Remove",
+      "valuePlaceholder": "Value",
+      "listPlaceholder": "Comma-separated values",
+      "true": "True",
+      "false": "False"
+    },
+    "runs": {
+      "title": "Recent runs",
+      "empty": {
+        "title": "No runs yet",
+        "description": "Enable the flow and trigger it — every run lands here with its status and any error."
+      },
+      "status": {
+        "running": "running",
+        "waiting": "waiting",
+        "completed": "completed",
+        "failed": "failed",
+        "cancelled": "cancelled"
+      },
+      "table": {
+        "status": "Status",
+        "trigger": "Trigger",
+        "subject": "Record",
+        "started": "Started",
+        "finished": "Finished",
+        "error": "Error"
+      }
+    }
+  },
+  "features": {
+    "crm": {
+      "title": "CRM",
+      "description": "Leads, prospects, opportunities, activities, and sales forecasts."
+    },
+    "orders": {
+      "title": "Quotes & orders",
+      "description": "Estimates, sales orders, and purchase orders with conversion to invoices and bills."
+    },
+    "revenueRecognition": {
+      "title": "Revenue recognition",
+      "description": "Recognition rules, schedules, and deferred revenue for contracts."
+    },
+    "projects": {
+      "title": "Projects & job costing",
+      "description": "Jobs with budgets, costing, billing, and profitability."
+    },
+    "timeTracking": {
+      "title": "Time tracking",
+      "description": "Personal weekly timesheets with submission and approval."
+    },
+    "fieldTickets": {
+      "title": "Field tickets",
+      "description": "Signed crew timesheets for T&M work: the foreman records the whole crew's hours plus equipment and materials, the customer signs, and invoices are built from the signed tickets."
+    },
+    "payroll": {
+      "title": "Payroll",
+      "description": "Pay runs, pay schedules, employee profiles, statutory withholding country packs, and remittance liabilities. Canada (CRA T4127) available today; United States planned."
+    },
+    "projectScheduling": {
+      "title": "Project Scheduling",
+      "description": "Gantt charts, critical path, and resource leveling for project schedules."
+    },
+    "inventory": {
+      "title": "Inventory",
+      "description": "Stock tracking, locations, item costing, and assemblies."
+    },
+    "equipment": {
+      "title": "Equipment & rentals",
+      "description": "Equipment units, rate ladders, and usage charges to jobs."
+    },
+    "expenses": {
+      "title": "Expense reports",
+      "description": "Employee expense capture, approval, and reimbursement."
+    },
+    "multiSubsidiary": {
+      "title": "Multi-subsidiary",
+      "description": "Run more than one legal entity with its own currency and books, then consolidate. Turns on subsidiaries, intercompany, and consolidated exchange rates."
+    },
+    "multiCurrency": {
+      "title": "Multi-currency",
+      "description": "Transact in currencies other than your base currency, with exchange rates, revaluation, and realized/unrealized FX gain and loss. Turns on the exchange-rate feed and rate tables."
+    },
+    "banking": {
+      "title": "Banking",
+      "description": "Bank feeds, statement matching, reconciliation, and rules."
+    },
+    "fixedAssets": {
+      "title": "Fixed assets",
+      "description": "Asset registers, depreciation books, and tax depreciation."
+    },
+    "budgets": {
+      "title": "Budgets",
+      "description": "Budgeting by account and dimension with report comparison."
+    },
+    "continuousClose": {
+      "title": "Continuous close",
+      "description": "Always-on close checks in addition to the period close."
+    },
+    "advancedClose": {
+      "title": "Advanced close governance",
+      "description": "Evidence-heavy close blueprints, independent approval routing, controlled locks, and governed close-package publication. Core month-end close remains available when this is off."
+    },
+    "flows": {
+      "title": "Flows & approvals",
+      "description": "Workflow automation: triggers, conditions, approval gates."
+    },
+    "apps": {
+      "title": "Apps",
+      "description": "Installable extensions and the app marketplace."
+    },
+    "scripts": {
+      "title": "Scripts",
+      "description": "Run sandboxed JavaScript at controlled transaction, schedule, bulk, client, and endpoint trigger points."
+    },
+    "apiAccess": {
+      "title": "REST API",
+      "description": "Create scoped API keys and expose the versioned, tenant-aware REST API and its live reference."
+    },
+    "mcpAccess": {
+      "title": "MCP access",
+      "description": "Expose governed OpenBooks tools to MCP clients through scoped API-key authentication."
+    },
+    "queryConsole": {
+      "title": "Query console",
+      "description": "Allow authorized users to run read-only, tenant-scoped SQL against the live reporting schema."
+    },
+    "bankFeeds": {
+      "title": "Bank Feeds",
+      "description": "Automated bank connectivity — SFTP file drops and Plaid, GoCardless, and TrueLayer live feeds."
+    },
+    "subscriptionBilling": {
+      "title": "Subscription Billing",
+      "description": "Plans and subscriptions that auto-generate recurring invoices (SaaS / retainer)."
+    },
+    "advancedSubscriptions": {
+      "title": "Advanced subscription lifecycle",
+      "description": "Versioned plans, multiple components, trials, renewals, co-terming, amendments, and advance or arrears billing."
+    },
+    "subcontracts": {
+      "title": "Subcontracts & AP progress billing",
+      "description": "Vendor commitments, subcontract changes, vendor SOVs and pay applications, retainage payable, releases, joint checks, and payment holds."
+    },
+    "wipBilling": {
+      "title": "WIP & prebilling",
+      "description": "Review billable project work, hold or adjust lines with evidence, approve prebills, and monitor WIP aging, realization, and leakage."
+    },
+    "propertyManagement": {
+      "title": "Property management",
+      "description": "Properties, units, tenant leases, recurring rent, escalations, late fees, security deposits, and CAM reconciliation."
+    },
+    "onlinePayments": {
+      "title": "Online Payments",
+      "description": "Hosted payment links on invoices (Stripe / Adyen / GoCardless bank debit), surcharge rules, and webhooks that auto-apply receipts to open items."
+    },
+    "subcontractorCompliance": {
+      "title": "Subcontractor compliance",
+      "description": "Certificates of insurance, lien waivers, and 1099-NEC/MISC and T4A information returns, with payment holds when a subcontractor's coverage lapses."
+    }
+  }
+}

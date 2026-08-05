@@ -1,0 +1,2308 @@
+{
+  "hub": {
+    "metaTitle": "Verwaltungszentrum",
+    "title": "Verwaltungszentrum",
+    "subtitle": "Alles, was diesen Arbeitsbereich konfiguriert — Unternehmenseinrichtung, Personen und System.",
+    "groups": {
+      "company": "Unternehmen",
+      "people": "Personen & Zugriff",
+      "workspace": "Arbeitsbereich",
+      "activity": "Aktivität & Daten",
+      "data": "Integrationen & Daten"
+    },
+    "cards": {
+      "settings": {
+        "title": "Unternehmen & Buchhaltung",
+        "description": "Organisationsidentität, Basiswährung, Geschäftsjahr & Kontrollkonten"
+      },
+      "users": {
+        "title": "Benutzer",
+        "description": "Personen einladen, Rollen & Berechtigungsüberschreibungen zuweisen"
+      },
+      "roles": {
+        "title": "Rollen",
+        "description": "Rollen definieren und genau festlegen, was jede gewährt"
+      },
+      "navigation": {
+        "title": "Navigation",
+        "description": "Arbeitsbereiche, Menübeschriftungen und mobile Verknüpfungen organisieren"
+      },
+      "records": {
+        "title": "Benutzerdefinierte Datensätze",
+        "description": "Entwerfen Sie Ihre eigenen Datensatztypen — jeder wird zu einem vollständigen Modul mit eigener Liste & eigenem Editor"
+      },
+      "customFields": {
+        "title": "Benutzerdefinierte Felder",
+        "description": "Typisierte Felder zu Datensätzen in der gesamten App hinzufügen"
+      },
+      "customization": {
+        "title": "Formulare & Ansichten",
+        "description": "Transaktionsformulare und gespeicherte Listenansichten pro Organisation und pro Benutzer anpassen"
+      },
+      "pdfTemplates": {
+        "title": "PDF-Vorlagen",
+        "description": "Druckbare PDF-Dokumente für Ausgangsrechnungen, Journale und jede Transaktion entwerfen"
+      },
+      "scripts": {
+        "title": "Skripte",
+        "description": "Isolierte Automatisierung, die bei Hauptbuchereignissen ausgeführt wird"
+      },
+      "apps": {
+        "title": "Apps",
+        "description": "App-Pakete erstellen und installieren — ein isoliertes Frontend plus ein kontrolliertes Backend"
+      },
+      "sandboxes": {
+        "title": "Umgebungen",
+        "description": "Isolierte Sandbox-Kopien der Produktion erstellen, aktualisieren und hochstufen"
+      },
+      "backup": {
+        "title": "Sicherungen",
+        "description": "Sicherungen herunterladen, planen und aufbewahren"
+      },
+      "apiKeys": {
+        "title": "API-Schlüssel",
+        "description": "Bereichsbezogene API-Schlüssel für Integrationen erstellen und Nutzungsprotokolle anzeigen"
+      },
+      "apiDocs": {
+        "title": "API-Dokumentation",
+        "description": "Durchsuchen Sie die REST-API-Referenz für jeden Datensatz- und Transaktionstyp"
+      },
+      "audit": {
+        "title": "Prüfprotokoll",
+        "description": "Jeder Schreibvorgang erfasst mit Akteur und Vorher-/Nachher-Vergleich"
+      },
+      "sync": {
+        "title": "Migrationen & Spiegelung",
+        "description": "Migrieren Sie aus einem Quellbuchhaltungssystem und spiegeln Sie beide Systeme während der Validierung"
+      },
+      "ai": {
+        "title": "KI",
+        "description": "Anbieter, Modelle und verschlüsselter API-Schlüssel für den Assistenten"
+      },
+      "setup": {
+        "title": "Einrichtung",
+        "description": "Steuer, Dimensionen, Zahlungsbedingungen, Nummerierung & sonstige Konfiguration"
+      },
+      "email": {
+        "title": "E-Mail-Zustellung",
+        "description": "Konfigurieren Sie Ihren E-Mail-Anbieter, damit geplante Berichte gesendet werden können"
+      }
+    }
+  },
+  "buildHub": {
+    "metaTitle": "Erstellen",
+    "title": "Erstellen",
+    "subtitle": "Alles, was Sie auf der Plattform erstellen — Datenmodell, Formulare & Dokumente, Automatisierung und die API.",
+    "groups": {
+      "model": "Datenmodell",
+      "experience": "Formulare & Dokumente",
+      "automation": "Automatisierung & Apps",
+      "api": "API"
+    }
+  },
+  "audit": {
+    "title": "Prüfprotokoll",
+    "description": "Eine vollständige, manipulationssichere Historie jeder Änderung, mit vollständigen Vorher-/Nachher-Details und Hauptbuchauswirkung für gebuchte Änderungen und Löschungen.",
+    "searchPlaceholder": "Datensatztyp, Benutzer oder Referenz suchen…",
+    "actionFilter": "Aktion",
+    "empty": {
+      "title": "Noch keine Prüfeinträge",
+      "description": "Änderungen an Ihren Datensätzen werden hier angezeigt, sobald sie auftreten."
+    },
+    "table": {
+      "when": "Wann",
+      "actor": "Benutzer",
+      "action": "Aktion",
+      "tableName": "Datensatztyp",
+      "row": "Referenz",
+      "changes": "Änderungen"
+    },
+    "systemActor": "System",
+    "actions": {
+      "insert": "einfügen",
+      "update": "aktualisieren",
+      "delete": "löschen",
+      "post": "buchen",
+      "void": "stornieren",
+      "approve": "genehmigen",
+      "reject": "ablehnen"
+    },
+    "recordTypeFilter": "Datensatztyp",
+    "userFilter": "Benutzer",
+    "dateFrom": "Von",
+    "dateTo": "Bis",
+    "clearDates": "Datumsangaben löschen"
+  },
+  "customFields": {
+    "title": "Benutzerdefinierte Felder",
+    "description": "Erweitern Sie jedes Modul – Dokumentenköpfe, Transaktionszeilen, Parteien, Projekte, Konten. Felder werden überall dort dargestellt, wo der Datensatz erscheint: in Schubladen, Zeilenrastern und in der Berichterstattung.",
+    "searchPlaceholder": "Felder durchsuchen…",
+    "targetFilter": "Ziel",
+    "table": {
+      "field": "Feld",
+      "key": "Schlüssel",
+      "target": "Ziel",
+      "type": "Typ",
+      "required": "Erforderlich",
+      "status": "Status"
+    },
+    "empty": "Noch keine benutzerdefinierten Felder.",
+    "statusActive": "aktiv",
+    "statusArchived": "archiviert",
+    "newField": "Neues Feld",
+    "targets": {
+      "documents": {
+        "label": "Transaktionskopf",
+        "description": "Ein Wert pro Transaktion (Eingangsrechnung, Ausgangsrechnung, Zahlung, Spesenabrechnung, Journal)."
+      },
+      "documentLines": {
+        "label": "Transaktionszeilen",
+        "description": "Eine Spalte in jeder Zeile des gewählten Transaktionstyps."
+      },
+      "parties": {
+        "label": "Parteien",
+        "description": "Lieferanten, Kunden und Mitarbeiter."
+      },
+      "projects": {
+        "label": "Projekte",
+        "description": "Aufträge / Projekte."
+      },
+      "managedProperties": {
+        "label": "Immobilien",
+        "description": "Verwaltete Immobilienobjekte."
+      },
+      "accounts": {
+        "label": "Konten",
+        "description": "Kontenplan."
+      },
+      "items": {
+        "label": "Artikel & Leistungen",
+        "description": "Produkte und Dienstleistungen."
+      },
+      "crmAccounts": {
+        "label": "CRM-Konten",
+        "description": "Qualifizierungsprofile für Leads, Interessenten und Kunden."
+      },
+      "crmActivities": {
+        "label": "CRM-Aktivitäten",
+        "description": "Anrufe, Besuche, Ereignisse, E-Mails, Notizen und Aufgaben."
+      },
+      "crmOpportunities": {
+        "label": "CRM-Verkaufschancen",
+        "description": "Pipeline-Verkaufschancen und Prognosedetails."
+      }
+    },
+    "kinds": {
+      "header": {
+        "vendorBill": "Eingangsrechnungen",
+        "customerInvoice": "Ausgangsrechnungen",
+        "vendorPayment": "Lieferantenzahlungen",
+        "customerPayment": "Kundenzahlungen",
+        "expenseReport": "Spesenabrechnungen",
+        "journal": "Buchungen",
+        "vendorCredit": "Lieferantengutschriften",
+        "customerCredit": "Kundengutschriften",
+        "cardCharge": "Kartenbelastungen",
+        "cardRefund": "Kartenrückerstattungen",
+        "check": "Schecks"
+      },
+      "lines": {
+        "vendorBill": "Eingangsrechnungszeilen",
+        "customerInvoice": "Ausgangsrechnungszeilen",
+        "expenseReport": "Spesenabrechnungszeilen",
+        "journal": "Buchungszeilen",
+        "vendorCredit": "Lieferantengutschriftszeilen",
+        "customerCredit": "Kundengutschriftszeilen",
+        "cardCharge": "Kartenbelastungszeilen",
+        "cardRefund": "Kartenrückerstattungszeilen",
+        "check": "Scheckzeilen"
+      }
+    },
+    "types": {
+      "text": {
+        "label": "Text",
+        "help": "Einzelne Textzeile."
+      },
+      "longText": {
+        "label": "Textbereich",
+        "help": "Mehrere Textzeilen."
+      },
+      "number": {
+        "label": "Zahl",
+        "help": "Ein numerischer Wert."
+      },
+      "currency": {
+        "label": "Währung",
+        "help": "Ein Geldbetrag (2 Dezimalstellen)."
+      },
+      "date": {
+        "label": "Datum",
+        "help": "Ein Kalenderdatum."
+      },
+      "boolean": {
+        "label": "Kontrollkästchen",
+        "help": "Ja / Nein."
+      },
+      "select": {
+        "label": "Dropdown (einzeln)",
+        "help": "Eines aus einer Liste auswählen."
+      },
+      "multiSelect": {
+        "label": "Dropdown (mehrere)",
+        "help": "Beliebig viele aus einer Liste auswählen."
+      },
+      "reference": {
+        "label": "Liste / Datensatz",
+        "help": "Verknüpfung zu einem anderen Datensatz (Partei, Projekt, Konto, Artikel)."
+      }
+    },
+    "drawer": {
+      "newTitle": "Neues benutzerdefiniertes Feld",
+      "editTitle": "„{label}“ bearbeiten",
+      "newDescription": "Erweitern Sie einen Datensatztyp um Ihr eigenes Feld.",
+      "createField": "Feld erstellen",
+      "saveChanges": "Änderungen speichern",
+      "created": "Feld erstellt",
+      "updated": "Feld aktualisiert",
+      "saveFailed": "Das Feld konnte nicht gespeichert werden",
+      "appliesTo": "Gilt für",
+      "recordType": "Datensatztyp",
+      "whichTransactions": "Welche Transaktionen",
+      "allTypes": "Alle Typen",
+      "allTypesHint": "Belassen Sie es bei „Alle Typen“, um das Feld auf jede Art anzuwenden.",
+      "allKindsSuffix": "alle Arten",
+      "lockedAfterCreation": "· nach der Erstellung gesperrt (Werte verweisen bereits darauf)",
+      "label": "Beschriftung",
+      "labelPlaceholder": "Bestellnummer",
+      "fieldKey": "Feldschlüssel",
+      "permanent": "(dauerhaft)",
+      "keyPlaceholder": "po_number",
+      "keyHint": "Automatisch aus der Beschriftung ausgefüllt; snake_case.",
+      "type": "Typ",
+      "options": "Optionen",
+      "noOptions": "Noch keine Optionen – fügen Sie mindestens eine hinzu.",
+      "addOptionPlaceholder": "Eine Option hinzufügen…",
+      "removeOption": "{option} entfernen",
+      "helpText": "Hilfetext",
+      "optionalSuffix": "(optional)",
+      "helpTextPlaceholder": "Wird unter dem Feld angezeigt",
+      "placeholder": "Platzhalter",
+      "defaultValue": "Standardwert",
+      "min": "Min",
+      "max": "Max",
+      "showInList": "Als Spalte in Listenansichten anzeigen",
+      "referenceTable": "Referenzierter Datensatztyp",
+      "referenceTableHint": "Das Feld speichert eine Verknüpfung zu einem Datensatz dieses Typs.",
+      "displayMode": "Anzeigemodus",
+      "displayNormal": "Normal (bearbeitbar)",
+      "displayHidden": "Ausgeblendet (nicht in Formularen angezeigt)",
+      "displayDisabled": "Deaktiviert (schreibgeschützt angezeigt)",
+      "allowedRoles": "Sichtbar für Rollen",
+      "allowedRolesHint": "Nicht aktiviert lassen für alle Rollen. Administratoren sehen immer alle Felder.",
+      "roleAdmin": "Administrator",
+      "roleController": "Controller",
+      "roleAccountant": "Buchhalter",
+      "roleApprover": "Genehmiger",
+      "roleViewer": "Betrachter"
+    }
+  },
+  "navigation": {
+    "title": "Navigation",
+    "description": "Passen Sie jedes Menülayout für die Organisation an: Arbeitsbereiche organisieren, Ziele umbenennen oder ausblenden, Links hinzufügen und bis zu vier mobile Verknüpfungen auswählen. Berechtigungsprüfungen gelten weiterhin.",
+    "groupLabelAria": "Gruppenbeschriftung",
+    "moveGroupUp": "Gruppe nach oben verschieben",
+    "moveGroupDown": "Gruppe nach unten verschieben",
+    "itemLabelAria": "Elementbeschriftung",
+    "showItem": "Element anzeigen",
+    "hideItem": "Element ausblenden",
+    "moveItemUp": "Element nach oben verschieben",
+    "moveItemDown": "Element nach unten verschieben",
+    "moveToGroup": "In Arbeitsbereich verschieben",
+    "pinMobile": "An mobile Navigation anheften",
+    "unpinMobile": "Aus mobiler Navigation entfernen",
+    "mobileLimit": "Die mobile Navigation unterstützt bis zu vier angeheftete Ziele",
+    "linkUrlPrompt": "Link-URL (interne Route oder https://…):",
+    "linkLabelPrompt": "Beschriftung:",
+    "addLink": "Link hinzufügen",
+    "deleteLink": "Link löschen",
+    "addApp": "App-Verknüpfung hinzufügen…",
+    "removeApp": "App-Verknüpfung entfernen",
+    "newGroupPrompt": "Arbeitsbereichsname:",
+    "addGroup": "Arbeitsbereich hinzufügen",
+    "deleteGroup": "Arbeitsbereich löschen",
+    "save": "Navigation speichern",
+    "saved": "Navigation gespeichert",
+    "saveFailed": "Speichern fehlgeschlagen",
+    "resetDefaults": "Auf Standardwerte zurücksetzen"
+  },
+  "roles": {
+    "metaTitle": "Rollen",
+    "title": "Rollen",
+    "description": "Bündel von Berechtigungen, die Sie Benutzern zuweisen. Integrierte Rollen werden mit der App geliefert; erstellen Sie benutzerdefinierte Rollen für alles Feinkörnigere.",
+    "manageUsers": "Benutzer verwalten",
+    "searchPlaceholder": "Rollenname, Schlüssel oder Beschreibung suchen…",
+    "typeFilter": "Typ",
+    "builtIn": "Integriert",
+    "custom": "Benutzerdefiniert",
+    "emptyTitle": "Noch keine Rollen",
+    "emptyDescription": "Führen Sie das Rollen-Seed-Skript (engine/src/seed-roles.ts) aus, um die integrierten Rollen zu erstellen, oder erstellen Sie eine benutzerdefinierte Rolle.",
+    "noMatchTitle": "Keine passenden Rollen",
+    "noMatchDescription": "Passen Sie die Suche oder den Typfilter an.",
+    "table": {
+      "key": "Schlüssel",
+      "permissions": "Berechtigungen",
+      "members": "Mitglieder"
+    },
+    "newRole": "Neue Rolle",
+    "drawer": {
+      "newTitle": "Neue Rolle",
+      "lockedDescription": "Die Administratorrolle trägt immer jede Berechtigung und kann nicht bearbeitet werden.",
+      "builtInDescription": "Integrierte Rolle: Name und Schlüssel sind fest, aber Sie können ihre Berechtigungen anpassen.",
+      "newDescription": "Benennen Sie die Rolle, und wählen Sie dann die Berechtigungen aus, die sie gewährt.",
+      "deleteRole": "Rolle löschen",
+      "createRole": "Rolle erstellen",
+      "saveChanges": "Änderungen speichern",
+      "nameRequired": "Rollenname ist erforderlich",
+      "saveFailed": "Speichern der Rolle fehlgeschlagen",
+      "created": "Rolle erstellt",
+      "updated": "Rolle aktualisiert",
+      "deleteConfirm": "Die Rolle „{name}“ löschen? Benutzer, die sie besitzen, verlieren ihre Berechtigungen sofort.",
+      "deleteFailed": "Löschen der Rolle fehlgeschlagen",
+      "deleted": "Rolle gelöscht",
+      "namePlaceholder": "Kreditorensachbearbeiter",
+      "keyPlaceholder": "ap_clerk",
+      "descriptionPlaceholder": "Wofür ist diese Rolle?",
+      "permissionsHeading": "Berechtigungen",
+      "selectedCount": "{count} ausgewählt",
+      "subsidiaryHeading": "Tochtergesellschaftszugriff",
+      "subsidiaryModeAll": "Alle Tochtergesellschaften",
+      "subsidiaryModeSubtree": "Eine Tochtergesellschaft und ihre untergeordneten Einheiten",
+      "subsidiaryModeList": "Bestimmte Tochtergesellschaften",
+      "subsidiaryPlaceholder": "Tochtergesellschaft auswählen…",
+      "subsidiarySearchPlaceholder": "Tochtergesellschaften suchen…",
+      "subsidiaryRequired": "Tochtergesellschaft auswählen",
+      "subsidiaryListRequired": "Wählen Sie mindestens eine Tochtergesellschaft aus"
+    }
+  },
+  "scripts": {
+    "title": "Skripte",
+    "description": "Echtes JavaScript, ausgeführt in einer Sandbox an Dokument-Triggerpunkten — validieren, freigegebene Felder ändern oder mit ob.abort() ablehnen. Jede Ausführung wird aufgezeichnet.",
+    "searchPlaceholder": "Skripte suchen…",
+    "triggerFilter": "Trigger",
+    "table": {
+      "script": "Skript",
+      "trigger": "Trigger",
+      "kind": "Art",
+      "runs": "Ausführungen",
+      "lastRun": "Letzte Ausführung",
+      "status": "Status"
+    },
+    "empty": "Noch keine Skripte — automatisieren Sie einen Dokument-Workflow.",
+    "allKinds": "alle",
+    "statusActive": "aktiv",
+    "statusDisabled": "deaktiviert",
+    "triggers": {
+      "beforeSubmit": "vor Übermittlung",
+      "beforePost": "vor Buchung",
+      "afterPost": "nach Buchung",
+      "beforeVoid": "vor Stornierung",
+      "scheduled": "geplant",
+      "endpoint": "Endpunkt",
+      "bulk": "Massenverarbeitung",
+      "client": "Client"
+    },
+    "kinds": {
+      "vendorBill": "Eingangsrechnung",
+      "customerInvoice": "Ausgangsrechnung",
+      "vendorPayment": "Lieferantenzahlung",
+      "customerPayment": "Kundenzahlung",
+      "expenseReport": "Spesenabrechnung",
+      "journal": "Journal",
+      "vendorCredit": "Lieferantengutschrift",
+      "customerCredit": "Kundengutschrift",
+      "cardCharge": "Kartenbelastung",
+      "cardRefund": "Kartenerstattung",
+      "check": "Scheck",
+      "deposit": "Einzahlung",
+      "transfer": "Umbuchung",
+      "purchaseOrder": "Bestellung",
+      "salesOrder": "Kundenauftrag",
+      "quote": "Angebot"
+    },
+    "drawer": {
+      "newScript": "Neues Skript",
+      "newTitle": "Neues Skript",
+      "description": "Isoliertes JavaScript (QuickJS) — kein Dateisystem oder Netzwerk. ob.query führt schreibgeschütztes SQL aus.",
+      "createScript": "Skript erstellen",
+      "saveScript": "Skript speichern",
+      "created": "Skript erstellt",
+      "saved": "Skript gespeichert",
+      "saveFailed": "Skript konnte nicht gespeichert werden",
+      "namePlaceholder": "Kreditorenrichtlinie: Große Eingangsrechnungen benötigen eine Notiz",
+      "trigger": "Trigger",
+      "documentKind": "Dokumentart",
+      "allKindsOption": "Alle Arten",
+      "cron": "Cron-Zeitplan",
+      "cronHint": "— min hr dom mon dow (UTC)",
+      "source": "Quellcode",
+      "sourceHint": "— muss die Funktion main(ctx) definieren",
+      "timeoutMs": "Zeitüberschreitung (ms)",
+      "runOrder": "Ausführungsreihenfolge",
+      "recentRuns": "Letzte Ausführungen",
+      "runNow": "Jetzt ausführen",
+      "runOk": "Ausgeführt in {ms} ms",
+      "runFailed": "Ausführung fehlgeschlagen",
+      "delete": "Löschen",
+      "deleteConfirm": "Dieses Skript löschen? Sein Ausführungsverlauf wird für Prüfzwecke aufbewahrt.",
+      "deleteFailed": "Skript konnte nicht gelöscht werden",
+      "deleted": "Skript gelöscht",
+      "runStatus": {
+        "ok": "ok",
+        "aborted": "abgebrochen",
+        "error": "Fehler",
+        "timeout": "Zeitüberschreitung"
+      },
+      "endpointSlug": "Endpunkt-Slug",
+      "endpointUrl": "Aufrufbare URL",
+      "endpointUrlHint": "Senden Sie Anfragen an diese URL, um das Skript auszuführen.",
+      "copyUrl": "Kopieren",
+      "urlCopied": "Endpunkt-URL kopiert",
+      "customRecordsGroup": "Benutzerdefinierte Datensätze",
+      "builtInGroup": "Transaktionen",
+      "noRuns": "Noch keine Ausführungen — dieses Skript wurde nie ausgeführt.",
+      "selectRun": "Wählen Sie eine Ausführung im Tab „Letzte Ausführungen“ aus, um ihr Protokoll zu prüfen.",
+      "logEmpty": "Diese Ausführung hat keine Protokollausgabe erzeugt."
+    },
+    "tabs": {
+      "general": "Allgemein",
+      "code": "Code",
+      "runs": "Letzte Ausführungen",
+      "log": "Ausführungsprotokoll"
+    }
+  },
+  "apiKeys": {
+    "title": "API-Schlüssel",
+    "description": "Bereichsbezogene API-Schlüssel für Integrationen und Automatisierung. Jeder Schlüssel trägt eine Teilmenge von Berechtigungen — eine Anfrage ist nur zulässig, wenn sowohl die Bereiche des Schlüssels als auch die effektiven Berechtigungen des Eigentümers sie abdecken.",
+    "searchPlaceholder": "Schlüssel, Eigentümer suchen…",
+    "empty": "Noch keine API-Schlüssel — erstellen Sie einen, um mit dem Aufbau von Integrationen zu beginnen.",
+    "table": {
+      "name": "Name",
+      "key": "Schlüssel",
+      "owner": "Eigentümer",
+      "scopes": "Bereiche",
+      "scopesCount": "{count, plural, one {# Berechtigung} other {# Berechtigungen}}",
+      "fullScope": "Voller Bereich (erbt vom Eigentümer)",
+      "lastUsed": "Zuletzt verwendet",
+      "status": "Status"
+    },
+    "statusActive": "aktiv",
+    "statusRevoked": "widerrufen",
+    "drawer": {
+      "newKey": "Neuer API-Schlüssel",
+      "newTitle": "Neuer API-Schlüssel",
+      "description": "Erstellen Sie einen bereichsbezogenen Schlüssel für den programmatischen Zugriff auf die REST-API. Der Klartextschlüssel wird einmal angezeigt — bewahren Sie ihn sicher auf.",
+      "nameRequired": "Ein Name ist erforderlich",
+      "namePlaceholder": "Produktions-Synchronisationsintegration",
+      "descriptionPlaceholder": "Wofür ist dieser Schlüssel?",
+      "saveFailed": "Schlüssel konnte nicht gespeichert werden",
+      "created": "Schlüssel erstellt",
+      "updated": "Schlüssel aktualisiert",
+      "revoke": "Widerrufen",
+      "revokeConfirm": "Diesen Schlüssel widerrufen? Alle Integrationen, die ihn verwenden, funktionieren sofort nicht mehr. Dies kann nicht rückgängig gemacht werden.",
+      "revokeFailed": "Schlüssel konnte nicht widerrufen werden",
+      "revoked": "Schlüssel widerrufen",
+      "revokedNotice": "Dieser Schlüssel wurde widerrufen und kann keine Anfragen mehr authentifizieren.",
+      "keyCreated": "Kopieren Sie Ihren API-Schlüssel",
+      "keyCreatedHint": "Dies ist das einzige Mal, dass der vollständige Schlüssel angezeigt wird. Bewahren Sie ihn sicher auf — Sie können ihn nicht erneut sehen.",
+      "copy": "Kopieren",
+      "copied": "In die Zwischenablage kopiert",
+      "createKey": "Schlüssel erstellen",
+      "saveChanges": "Änderungen speichern",
+      "scopesHeading": "Berechtigungsbereiche",
+      "scopesHint": "Wählen Sie die Berechtigungen aus, die dieser Schlüssel gewährt. Leer lassen, um den vollständigen Berechtigungssatz des Eigentümers zu erben. Ein Schlüssel gewährt nie mehr, als sein Eigentümer hat.",
+      "fullScope": "Voller Bereich (erbt Eigentümerberechtigungen)",
+      "scopesCount": "{count, plural, one {# Berechtigung ausgewählt} other {# Berechtigungen ausgewählt}}"
+    }
+  },
+  "settings": {
+    "metaTitle": "Unternehmen & Buchhaltung",
+    "title": "Unternehmen & Buchhaltung",
+    "description": "Organisationsidentität, Basiswährung, Geschäftsjahreskalender und die Kontrollkonten, über die das Hauptbuch bucht.",
+    "organization": {
+      "title": "Organisation",
+      "description": "Wie dieses Unternehmen in der gesamten App identifiziert wird.",
+      "displayName": "Anzeigename",
+      "displayNamePlaceholder": "Acme Manufacturing",
+      "displayNameHint": "Der Firmenname, der in OpenBooks angezeigt wird. Er muss nicht dem eingetragenen rechtlichen Namen entsprechen.",
+      "legalName": "Rechtlicher Name",
+      "legalNamePlaceholder": "Acme Manufacturing Inc.",
+      "legalNameHint": "Der eingetragene Firmenname für formelle Aufzeichnungen, Berichte und Dokumente.",
+      "country": "Land",
+      "countryPlaceholder": "Land auswählen…",
+      "countryHint": "Zweistelliger ISO-Code (z. B. CA, US, GB).",
+      "defaultLanguage": "Standardsprache",
+      "defaultLanguageHint": "Die Sprache, in der die App für alle angezeigt wird, die im Kontomenü keine eigene ausgewählt haben.",
+      "baseCurrency": "Basiswährung",
+      "baseCurrencyHint": "Die Berichtswährung, in der das Hauptbuch ausgeglichen wird. Fügen Sie weitere Währungen hinzu, bevor Sie wechseln.",
+      "reportPdfStyle": "PDF-Stil für Finanzberichte",
+      "reportPdfStyleModern": "Modern (mit Branding)",
+      "reportPdfStyleFormal": "Formell (GAAP)",
+      "reportPdfStyleHint": "Wie exportierte Finanzberichte aussehen: Modern verwendet Ihre Markenakzentfarbe und eine serifenlose Schrift; Formell ist ein klassischer, serifenbetonter, graustufiger, prüfungsbereiter Abschluss."
+    },
+    "fiscal": {
+      "title": "Geschäftsjahr",
+      "description": "Der Monat, in dem Ihr Geschäftsjahr beginnt. Alles, was das Geschäftsjahr berücksichtigt — Berichte, Periodenabschluss, Voreinstellungen — liest dies.",
+      "startsIn": "Geschäftsjahr beginnt im",
+      "runs": "Geschäftsjahr läuft",
+      "range": "{start} → {end}",
+      "warning": "Das Ändern des Startmonats beschriftet <strong>jede Buchungsperiode</strong> neu — ihr Geschäftsjahr, ihre Periodennummer und ihr Name werden im Moment des Speicherns aus dem Startdatum jeder Periode neu abgeleitet. Buchungen und Datumsangaben bleiben unberührt, aber Berichte und Periodenabschluss-Gruppierungen verschieben sich in den neuen Kalender.",
+      "taxFramework": "Ertragsteuer-Standard",
+      "taxFrameworkHint": "Bestimmt die Begrifflichkeit der Steuerabgrenzung (Einstellungen → Geschäftsjahr).",
+      "frameworkAsc740": "ASC 740 (US GAAP)",
+      "frameworkIas12": "IAS 12 (IFRS)"
+    },
+    "months": {
+      "january": "Januar",
+      "february": "Februar",
+      "march": "März",
+      "april": "April",
+      "may": "Mai",
+      "june": "Juni",
+      "july": "Juli",
+      "august": "August",
+      "september": "September",
+      "october": "Oktober",
+      "november": "November",
+      "december": "Dezember"
+    },
+    "controlAccounts": {
+      "title": "Kontrollkonten",
+      "description": "Die Hauptbuchkonten, über die Nebenbücher und Steuer buchen. Es werden nur bebuchbare (Nicht-Sammel-)Konten angezeigt.",
+      "selectPlaceholder": "Konto auswählen…",
+      "searchPlaceholder": "Konten suchen…",
+      "fields": {
+        "ar": {
+          "label": "Forderungen aus Lieferungen und Leistungen",
+          "hint": "Kundensalden werden hier gebucht"
+        },
+        "ap": {
+          "label": "Verbindlichkeiten aus Lieferungen und Leistungen",
+          "hint": "Lieferantensalden werden hier gebucht"
+        },
+        "bank": {
+          "label": "Standardbank",
+          "hint": "Standard-Geldkonto für Lieferanten- und Kundenzahlungen"
+        },
+        "taxCollected": {
+          "label": "Vereinnahmte Steuer",
+          "hint": "Auf Ausgangsrechnungen geschuldete Umsatzsteuer"
+        },
+        "taxPaid": {
+          "label": "Gezahlte Steuer",
+          "hint": "Erstattungsfähige Steuer auf Eingangsrechnungen"
+        },
+        "employeePayable": {
+          "label": "Verbindlichkeiten gegenüber Mitarbeitern",
+          "hint": "Den Mitarbeitern geschuldete Spesenerstattungen"
+        },
+        "fxUnrealizedGainLoss": {
+          "label": "Nicht realisierter Währungsgewinn/-verlust",
+          "hint": "Wo die Neubewertung von Fremdwährungssalden zum Periodenende gebucht wird"
+        },
+        "fxRealizedGainLoss": {
+          "label": "Realisierter Währungsgewinn/-verlust",
+          "hint": "Hier werden Kursdifferenzen aus der Begleichung von Fremdwährungszahlungen gebucht"
+        },
+        "laborWip": {
+          "label": "Arbeits-WIP / -Kosten",
+          "hint": "Genehmigte Arbeitskosten werden hier belastet (pro Projekt)"
+        },
+        "laborClearing": {
+          "label": "Arbeitsverrechnung",
+          "hint": "Wird gutgeschrieben, wenn Arbeit einem Projekt belastet wird; wird durch die Lohnabrechnung ausgeglichen"
+        },
+        "unbilledReceivable": {
+          "label": "Nicht abgerechnete Forderung (Vertragsvermögenswert)",
+          "hint": "Festpreis-Umsatz, der verdient, aber nicht abgerechnet wurde; wird bei der Rechnungsstellung aufgelöst"
+        },
+        "projectRevenue": {
+          "label": "Projektumsatz",
+          "hint": "Wird durch die Umsatzrealisierung nach Fertigstellungsgrad gutgeschrieben"
+        },
+        "incomeTaxExpense": {
+          "label": "Ertragsteueraufwand",
+          "hint": "Soll durch die Ertragsteuerabgrenzung (ASC 740)"
+        },
+        "incomeTaxPayable": {
+          "label": "Ertragsteuerverbindlichkeit",
+          "hint": "Haben für die laufende Steuer"
+        },
+        "deferredTaxAsset": {
+          "label": "Aktive latente Steuern",
+          "hint": "Abzugsfähige temporäre Differenzen und Verlustvorträge"
+        },
+        "deferredTaxLiability": {
+          "label": "Passive latente Steuern",
+          "hint": "Steuerpflichtige temporäre Differenzen"
+        },
+        "valuationAllowance": {
+          "label": "Wertberichtigung",
+          "hint": "Gegenkonto zu aktiven latenten Steuern"
+        }
+      }
+    },
+    "revenue": {
+      "title": "Umsatzrealisierung",
+      "description": "Richtlinien für die Umsatzallokation nach ASC 606 / IFRS 15.",
+      "fairValueRangePolicy": {
+        "label": "Fair-Value-Bandbreitenprüfung",
+        "warn": "Warnen — Allokationen außerhalb der Bandbreite zur Prüfung markieren",
+        "off": "Aus — keine Bandbreitenprüfung",
+        "hint": "Liegt der zugeteilte Stückpreis einer Rechnungszeile außerhalb der Unter-/Obergrenze des beizulegenden Zeitwerts des Artikels, wird die Leistungsverpflichtung im Umsatzvertrag zur Prüfung markiert. Die Buchung wird nie blockiert."
+      },
+      "learnMore": "Mehr erfahren."
+    },
+    "documentKinds": {
+      "vendorBill": "Eingangsrechnung",
+      "customerInvoice": "Ausgangsrechnung",
+      "vendorPayment": "Lieferantenzahlung",
+      "customerPayment": "Kundenzahlung",
+      "expenseReport": "Spesenabrechnung",
+      "journal": "Journal"
+    },
+    "numbering": {
+      "title": "Dokumentnummerierung",
+      "description": "Sequenzen, die Dokumentnummern generieren. Präfix und Auffüllung werden für jede Art angezeigt.",
+      "empty": "Noch keine Sequenzen konfiguriert.",
+      "table": {
+        "document": "Dokument",
+        "prefix": "Präfix",
+        "next": "Nächste Nr.",
+        "padding": "Auffüllung",
+        "example": "Beispiel"
+      }
+    },
+    "validation": {
+      "nameRequired": "Anzeigename ist erforderlich",
+      "countryRequired": "Land ist erforderlich"
+    },
+    "saved": "Einstellungen gespeichert",
+    "savedPeriodsRederived": "Einstellungen gespeichert — Buchungsperioden auf das neue Geschäftsjahr umbeschriftet",
+    "saveSettings": "Einstellungen speichern"
+  },
+  "users": {
+    "metaTitle": "Benutzer",
+    "title": "Benutzer",
+    "description": "Wer sich anmelden kann und welche Rollen er hat. Der Zugriff eines Benutzers ist die Vereinigung seiner zugewiesenen Rollen; Benutzer ohne Zuweisung greifen auf ihre Altrolle zurück.",
+    "manageRoles": "Rollen verwalten",
+    "searchPlaceholder": "Name oder E-Mail suchen…",
+    "statusFilter": "Status",
+    "emptyTitle": "Keine Benutzer gefunden",
+    "emptySearchDescription": "Keine Benutzer entsprechen Ihrer Suche. Versuchen Sie einen anderen Begriff oder Statusfilter.",
+    "emptyFilterDescription": "Versuchen Sie einen anderen Statusfilter.",
+    "table": {
+      "roles": "Rollen",
+      "lastSignIn": "Letzte Anmeldung"
+    },
+    "you": "Sie",
+    "statusActive": "aktiv",
+    "statusInactive": "inaktiv",
+    "requestFailed": "Anfrage fehlgeschlagen",
+    "editRolesFor": "Rollen für {name} bearbeiten",
+    "rolesFor": "Rollen — {name}",
+    "noRoles": "Noch keine Rollen — erstellen Sie eine unter „Rollen verwalten“.",
+    "builtInBadge": "integriert",
+    "deactivateConfirm": "{name} deaktivieren? Die Person wird abgemeldet und kann sich erst nach Reaktivierung wieder anmelden.",
+    "deactivate": "Deaktivieren",
+    "reactivate": "Reaktivieren",
+    "deactivated": "{name} deaktiviert",
+    "reactivated": "{name} reaktiviert"
+  },
+  "permissions": {
+    "groups": {
+      "gl": "Hauptbuch",
+      "close": "Perioden & Abschluss",
+      "ap": "Kreditorenbuchhaltung",
+      "ar": "Debitorenbuchhaltung",
+      "reports": "Berichte",
+      "budgets": "Budgets & Prognosen",
+      "insights": "Insights",
+      "items": "Artikel & Dienstleistungen",
+      "projects": "Projekte & Auftragskalkulation",
+      "time": "Zeit & Zeiterfassung",
+      "records": "Benutzerdefinierte Datensätze",
+      "assistant": "KI-Assistent",
+      "sql": "Abfrage-Werkbank",
+      "sync": "Migrationen & Spiegelung",
+      "scripts": "Skripterstellung",
+      "flows": "Flows",
+      "apps": "Apps",
+      "documents": "Dateiablage",
+      "admin": "Verwaltung",
+      "assets": "Anlagevermögen & Abschreibung",
+      "data": "Import & Export",
+      "crm": "Kundenbeziehungsmanagement"
+    },
+    "gl_read": "Journale und Salden anzeigen",
+    "gl_manage": "Kontenplan verwalten",
+    "gl_post": "Buchungen buchen",
+    "periods_manage": "Geschäftsjahreskalender, Perioden und Sperren konfigurieren",
+    "close_read": "Abschlussläufe und Nachweise anzeigen",
+    "close_run": "Abschlussaufgaben und Validierung ausführen",
+    "close_approve": "Abschlussläufe prüfen, genehmigen und sperren",
+    "close_reopen": "Kontrollierte Wiedereröffnungen anfordern und genehmigen",
+    "ap_read": "Eingangsrechnungen anzeigen",
+    "ap_create": "Eingangsrechnungen erstellen und übermitteln",
+    "ap_approve": "Eingangsrechnungen genehmigen oder ablehnen",
+    "ap_post": "Eingangsrechnungen im Hauptbuch buchen",
+    "ap_pay": "Eingangsrechnungen bezahlen",
+    "ar_read": "Ausgangsrechnungen anzeigen",
+    "ar_create": "Ausgangsrechnungen erstellen und übermitteln",
+    "ar_approve": "Ausgangsrechnungen genehmigen oder ablehnen",
+    "ar_post": "Ausgangsrechnungen im Hauptbuch buchen",
+    "ar_pay": "Kundenzahlungen erfassen",
+    "reports_read": "Berichte anzeigen",
+    "reports_create": "Berichte erstellen und speichern",
+    "reports_schedule": "Berichtszustellung planen",
+    "budgets_read": "Budgets und Prognosen anzeigen",
+    "budgets_manage": "Budgetentwürfe erstellen und bearbeiten",
+    "budgets_approve": "Offizielle Budgets genehmigen und archivieren",
+    "insights_read": "Insights und die Bibliothek anzeigen",
+    "insights_create": "Karten und Dashboards erstellen",
+    "insights_publish": "In der gemeinsamen Bibliothek veröffentlichen",
+    "items_read": "Artikel und Dienstleistungen anzeigen",
+    "items_manage": "Artikel erstellen und bearbeiten",
+    "projects_read": "Projekte und Auftragskalkulation anzeigen",
+    "projects_manage": "Projekte erstellen und bearbeiten",
+    "time_read": "Zeiterfassungen anzeigen",
+    "time_manage": "Zeit erfassen und bearbeiten",
+    "time_approve": "Zeiterfassungen genehmigen",
+    "records_read": "Benutzerdefinierte Datensätze anzeigen",
+    "records_create": "Benutzerdefinierte Datensätze erstellen und bearbeiten",
+    "records_manage_types": "Benutzerdefinierte Datensatztypen entwerfen",
+    "assistant_use": "Den KI-Assistenten verwenden",
+    "assistant_write": "Den Assistenten Datensätze entwerfen lassen",
+    "sql_execute": "Schreibgeschützte SQL-Abfragen ausführen",
+    "sync_run": "Synchronisierungen externer Quellen ausführen",
+    "scripts_manage": "Benutzerskripte verwalten",
+    "scripts_execute": "Endpunktskripte aufrufen",
+    "flows_manage": "Flows erstellen und verwalten",
+    "flows_approve": "Flow-Genehmigungstore bearbeiten",
+    "apps_use": "Installierte Apps verwenden",
+    "apps_manage": "Apps installieren und verwalten",
+    "parties_read": "Geschäftspartner anzeigen",
+    "parties_manage": "Geschäftspartner verwalten",
+    "banking_read": "Banking anzeigen",
+    "banking_reconcile": "Bankkonten abstimmen",
+    "expenses_read": "Spesenabrechnungen anzeigen",
+    "expenses_create": "Spesenabrechnungen erfassen",
+    "admin_custom_fields_manage": "Benutzerdefinierte Felder verwalten",
+    "admin_users_manage": "Benutzer und Rollenzuweisungen verwalten",
+    "admin_roles_manage": "Rollen und Berechtigungen verwalten",
+    "admin_nav_manage": "Navigation anpassen",
+    "admin_customization_manage": "Transaktionsformulare und Listenansichten anpassen",
+    "admin_audit_read": "Prüfprotokoll anzeigen",
+    "admin_ai_manage": "KI-Einstellungen verwalten",
+    "admin_sandboxes_manage": "Sandbox-Umgebungen erstellen und verwalten",
+    "admin_backups_manage": "Organisationssicherungen verwalten",
+    "api_keys_manage": "API-Schlüssel verwalten",
+    "assets_read": "Anlagevermögen und Abschreibung anzeigen",
+    "assets_manage": "Anlagen erstellen und bearbeiten, Abschreibung ausführen",
+    "documents_read": "Dateiablage durchsuchen",
+    "documents_manage": "Dateien hochladen, verschieben, umbenennen und löschen",
+    "admin_setup_manage": "Einrichtung & Konfiguration verwalten",
+    "data_export": "Daten exportieren",
+    "data_import": "Daten importieren",
+    "crm_accounts_read": "CRM-Konten anzeigen",
+    "crm_accounts_create": "Leads und Interessenten erstellen",
+    "crm_accounts_manage": "CRM-Konten verwalten",
+    "crm_accounts_assign": "CRM-Konten zuweisen und weiterleiten",
+    "crm_activities_read": "CRM-Aktivitäten anzeigen",
+    "crm_activities_manage": "CRM-Aktivitäten erstellen und verwalten",
+    "crm_opportunities_read": "Verkaufschancen anzeigen",
+    "crm_opportunities_manage": "Verkaufschancen erstellen und verwalten",
+    "crm_opportunities_close": "Gewonnene oder verlorene Verkaufschancen abschließen",
+    "crm_forecasts_read": "Verkaufsprognosen anzeigen",
+    "crm_forecasts_manage": "Prognose-Momentaufnahmen erstellen",
+    "crm_forecasts_override": "Teamprognosen überschreiben",
+    "crm_setup_manage": "CRM-Einrichtung verwalten"
+  },
+  "ai": {
+    "metaTitle": "KI-Einstellungen",
+    "title": "KI-Einstellungen",
+    "description": "Wählen Sie den KI-Anbieter, den der Assistent verwendet. Ihr API-Schlüssel wird verschlüsselt gespeichert und nach dem Speichern nie wieder angezeigt.",
+    "enabledLabel": "KI-Funktionen aktivieren",
+    "providerLabel": "Anbieter",
+    "baseUrlLabel": "Basis-URL",
+    "baseUrlRequired": "(erforderlich)",
+    "baseUrlOptional": "(optionale Überschreibung)",
+    "baseUrlDefault": "Leer lassen, um den Standard zu verwenden: {url}",
+    "baseUrlHint": "Ein öffentlicher, OpenAI-kompatibler HTTPS-Endpunkt.",
+    "keyLabel": "API-Schlüssel",
+    "keyPlaceholder": "Fügen Sie den API-Schlüssel Ihres Anbieters ein",
+    "keySavedPlaceholder": "•••••••••••• (gespeichert – tippen, um zu ersetzen)",
+    "keySavedHint": "Ein Schlüssel ist hinterlegt und verschlüsselt gespeichert. Geben Sie einen neuen ein, um ihn zu ersetzen.",
+    "keyHint": "Verschlüsselt gespeichert; verlässt niemals den Server.",
+    "modelsLabel": "Modelle",
+    "fastModelLabel": "Schnelles Modell",
+    "fastModelHint": "schnelle Abfragen",
+    "smartModelLabel": "Intelligentes Modell",
+    "smartModelHint": "der Assistent",
+    "save": "Einstellungen speichern",
+    "saved": "KI-Einstellungen gespeichert.",
+    "saveFailed": "Die Einstellungen konnten nicht gespeichert werden.",
+    "keyCleared": "API-Schlüssel entfernt.",
+    "removeKey": "API-Schlüssel entfernen",
+    "testConnection": "Verbindung testen",
+    "testFailed": "Die Testanfrage ist fehlgeschlagen.",
+    "agents": {
+      "title": "Agenten für den kontinuierlichen Abschluss",
+      "description": "Überwachen Sie kontinuierlich die Abschlussbereitschaft und decken Sie beleggestützte buchhalterische und finanzielle Ausnahmen auf.",
+      "reviewWork": "Ergebnisse prüfen",
+      "globallyDisabled": "KI-Funktionen sind deaktiviert. Beide Agenten und ihre geplanten Läufe sind gestoppt, unabhängig von den Steuerungen unten.",
+      "enabled": "Aktiviert",
+      "automaticRuns": "Automatisch ausführen",
+      "cadence": "Zeitplan",
+      "materiality": "Wesentlichkeitsschwelle",
+      "materialityHint": "Die standardmäßige monetäre Untergrenze, die von Steuerungen verwendet wird, sofern ein Detektor sie nicht überschreibt.",
+      "materialitySummary": "Wesentlichkeit {amount}",
+      "cadences": {
+        "daily": "Täglich",
+        "weekly": "Wöchentlich"
+      },
+      "manualOnly": "Manuelle Läufe",
+      "controlsEnabled": "{count} von {total} Steuerungen aktiv",
+      "configure": "Konfigurieren",
+      "drawerTitle": "{agent} konfigurieren",
+      "drawerDescription": "Steuern Sie Zeitplanung, Wesentlichkeit und genau, welche buchhalterischen Prüfungen dieser Agent auswertet.",
+      "operationTitle": "Agentenbetrieb",
+      "operationDescription": "Übergeordnete Verfügbarkeit und automatische Ausführung für diesen Agenten.",
+      "detectorControlsTitle": "Detektorsteuerungen",
+      "detectorControlsDescription": "Jede Steuerung kann unabhängig deaktiviert und auf Ihre Betriebsschwellen abgestimmt werden.",
+      "controlOn": "Ein",
+      "controlOff": "Aus",
+      "customMateriality": "Agenten-Wesentlichkeit für diese Steuerung überschreiben",
+      "detectorMateriality": "Wesentlichkeitsschwelle der Steuerung",
+      "inheritedMateriality": "Verwendet die Agentenschwelle von {amount}.",
+      "disabledFindingBehavior": "Das Deaktivieren einer Steuerung stoppt diese Prüfung. Bestehende Feststellungen bleiben verfügbar und werden nicht als behoben markiert.",
+      "reasoningTitle": "Agentenschlussfolgerung und Erzählungen",
+      "reasoningDescription": "Geben Sie diesem Agenten dieselben kontrollierten Lesewerkzeuge wie dem Assistenten, damit er Belege untersuchen, Treiber verknüpfen und prüfbare Analysen erstellen kann. Er kann keine Datensätze ändern oder buchen.",
+      "reasoning": {
+        "rootCauseAnalysis": {
+          "title": "Ursachenanalyse",
+          "description": "Untersuchen Sie zugrunde liegende Transaktionen und erläutern Sie die konkreten Treiber hinter jeder Feststellung."
+        },
+        "recommendations": {
+          "title": "Empfohlene Maßnahmen",
+          "description": "Schlagen Sie konkrete, prüfbare nächste Schritte auf Grundlage der gesammelten Belege vor."
+        },
+        "narrative": {
+          "title": "Management-Erzählung",
+          "description": "Erstellen Sie aus aktuellen Berichten und Trends eine Kurzdarstellung zur Abschlussbereitschaft oder eine Zusammenfassung der Finanzleistung."
+        }
+      },
+      "modelTier": "Analysemodell",
+      "modelTiers": {
+        "smart": "Intelligentes Modell – tiefere Analyse",
+        "fast": "Schnelles Modell – geringere Kosten"
+      },
+      "maxToolSteps": "Maximale Werkzeugschritte",
+      "maxToolStepsHint": "Begrenzt, wie viele Bericht- und Datensatzabfragen ein Lauf durchführen darf (4–30).",
+      "resetRecommended": "Empfohlene Standardwerte zurücksetzen",
+      "cancel": "Abbrechen",
+      "saveConfiguration": "Agent speichern",
+      "configurationSaved": "Agentenkonfiguration gespeichert.",
+      "configurationSaveFailed": "Die Agentenkonfiguration konnte nicht gespeichert werden.",
+      "parameterLabel": "{label} ({unit})",
+      "units": {
+        "days": "Tage",
+        "count": "Elemente",
+        "percent": "%",
+        "multiple": "× Wesentlichkeit",
+        "points": "Prozentpunkte"
+      },
+      "parameters": {
+        "criticalAgeDays": "Kritisch nach",
+        "criticalItemCount": "Kritische Anzahl Elemente",
+        "criticalMaterialityMultiple": "Kritisches Wesentlichkeitsvielfaches",
+        "staleAfterDays": "Veraltet nach",
+        "minimumVariancePercent": "Minimale ungünstige Abweichung",
+        "criticalVariancePercent": "Kritische ungünstige Abweichung",
+        "minimumDeclinePercent": "Minimaler Umsatzrückgang",
+        "criticalDeclinePercent": "Kritischer Umsatzrückgang",
+        "minimumDropPoints": "Minimaler Margenrückgang",
+        "criticalDropPoints": "Kritischer Margenrückgang"
+      },
+      "detectors": {
+        "unmatched_bank_activity": {
+          "title": "Nicht zugeordnete Bankaktivität",
+          "description": "Findet nicht zugeordnete Kontoauszugszeilen nach Bankkonto, misst das Gesamtrisiko und eskaliert Konzentrationen bei Alterung, Volumen oder Wesentlichkeit."
+        },
+        "reconciliation_difference": {
+          "title": "Abstimmungsdifferenzen",
+          "description": "Vergleicht in Bearbeitung befindliche Kontoauszugssalden mit abgestimmter Hauptbuchaktivität und kennzeichnet jede von null abweichende Differenz."
+        },
+        "stale_accounting_documents": {
+          "title": "Veraltete Buchhaltungsdokumente",
+          "description": "Findet Entwürfe oder ausstehende Eingangsrechnungen, Ausgangsrechnungen, Gutschriften, Ausgaben und Buchungen, die das konfigurierte Alter überschritten haben."
+        },
+        "missing_approved_budget": {
+          "title": "Fehlendes genehmigtes Budget",
+          "description": "Bestätigt, dass ein genehmigtes Budget den aktuellen Betriebszeitraum abdeckt, bevor die Abweichungsanalyse ausgeführt wird."
+        },
+        "unfavorable_budget_variance": {
+          "title": "Ungünstige Budgetabweichung",
+          "description": "Bewertet Ertragsdefizite und Ausgabenüberschreitungen anhand exakter Beträge sowie konfigurierbarer prozentualer Schweregradschwellen."
+        },
+        "period_revenue_decline": {
+          "title": "Umsatzrückgang im Zeitraum",
+          "description": "Vergleicht die beiden zuletzt abgeschlossenen Zeiträume und kennzeichnet eine wesentliche Umsatzverschlechterung."
+        },
+        "gross_margin_decline": {
+          "title": "Rückgang der Bruttomarge",
+          "description": "Vergleicht die Bruttomarge abgeschlossener Zeiträume und kennzeichnet eine wesentliche Verringerung in Prozentpunkten."
+        }
+      },
+      "accounting": {
+        "title": "Buchhaltungsagent",
+        "description": "Kontinuierliche Buchführungs- und Abschlussbereitschaftssteuerungen.",
+        "coverage": "Prüft nicht zugeordnete Bankaktivität, Abstimmungsdifferenzen sowie veraltete Entwürfe oder ausstehende Buchhaltungsdokumente."
+      },
+      "finance": {
+        "title": "Finanzagent",
+        "description": "Kontinuierliche Abweichungs- und Leistungssteuerungen.",
+        "coverage": "Prüft Abweichungen gegenüber genehmigten Budgets, Umsatzrückgang, Rückgang der Bruttomarge und fehlende Budgetabdeckung."
+      },
+      "lastRun": "Letzter Lauf: {date} · {status}",
+      "nextRun": "Nächster geplanter Lauf: {date}",
+      "neverRun": "Noch nicht ausgeführt",
+      "runNow": "Jetzt ausführen",
+      "scanComplete": "Scan abgeschlossen: {detected} erkannt, {resolved} behoben.",
+      "scanFailed": "Der Agenten-Scan ist fehlgeschlagen.",
+      "runStatus": {
+        "completed": "abgeschlossen",
+        "failed": "fehlgeschlagen",
+        "skipped": "übersprungen",
+        "running": "läuft"
+      }
+    },
+    "documentCapture": {
+      "title": "AP-Dokumentenerfassung",
+      "description": "Extrahieren Sie Eingangsrechnungen und Gutschriften in eine beleggestützte Prüfwarteschlange. Dies verwendet denselben KI-Notausschalter der Organisation, während die Anmeldedaten des Dokumentenanbieters weiterhin unabhängig verschlüsselt bleiben.",
+      "openQueue": "Erfassungswarteschlange öffnen",
+      "enabled": "AP-Dokumentenerfassung aktivieren",
+      "globallyDisabled": "KI-Funktionen sind deaktiviert. Die Dokumentenerfassung ist unabhängig von dieser Steuerung gestoppt.",
+      "endpoint": "Endpunkt des Dokumentenanbieters",
+      "endpointHint": "Der öffentliche Azure-AI-Document-Intelligence-Endpunkt Ihrer Organisation.",
+      "key": "API-Schlüssel des Dokumentenanbieters",
+      "keyPlaceholder": "Fügen Sie den Schlüssel des Dokumentenanbieters ein",
+      "removeKey": "Schlüssel des Dokumentenanbieters entfernen",
+      "keyRemoved": "Schlüssel des Dokumentenanbieters entfernt.",
+      "model": "Rechnungsmodell",
+      "confidence": "Konfidenzschwelle für die Prüfung",
+      "confidenceHint": "Werte unterhalb dieser Schwelle von 0–1 werden zur Prüfung gekennzeichnet.",
+      "autoDraft": "Entwürfe nur für vollständig abgeglichene Bestellungen automatisch erstellen",
+      "test": "Dokumentenanbieter testen",
+      "testResult": {
+        "connected": "Mit dem Dokumentenanbieter verbunden.",
+        "failed": "Der Test des Dokumentenanbieters ist fehlgeschlagen.",
+        "missing": "Geben Sie zuerst einen Endpunkt und einen API-Schlüssel ein."
+      }
+    },
+    "models": {
+      "load": "Modelle laden",
+      "reload": "Modelle neu laden",
+      "loading": "Wird geladen…",
+      "loaded": "{count, plural, one {# Modell verfügbar} other {# Modelle verfügbar}}",
+      "loadError": "Modelle konnten nicht geladen werden.",
+      "none": "Keine Modelle",
+      "pick": "Modell auswählen…",
+      "loadFirst": "Laden Sie zuerst die Modelle oder geben Sie die ID manuell ein",
+      "pickFromList": "Aus Liste auswählen",
+      "typeManually": "Manuell eingeben",
+      "current": "{id} (aktuell)",
+      "hint": "Laden Sie die Live-Modellliste mit Ihrem API-Schlüssel oder geben Sie eine Modell-ID manuell ein.",
+      "idPlaceholder": "Modell-ID"
+    }
+  },
+  "setup": {
+    "title": "Einrichtung",
+    "description": "Konfigurieren Sie Steuern, Dimensionen, Zahlungsbedingungen und die Referenzdaten, auf denen Ihre Buchhaltung basiert.",
+    "laborCosting": {
+      "rates": {
+        "hint": "Fallback-Sätze werden nach Stellenbezeichnung, Gewerk, Abteilung, Tochtergesellschaft und Organisationsstandard aufgelöst. Der individuelle Verlauf bleibt beim Mitarbeiter.",
+        "scopeJobTitle": "Stellenbezeichnung",
+        "scopeDepartment": "Abteilung",
+        "scopeSubsidiary": "Tochtergesellschaft",
+        "currency": "Währung",
+        "drawerNewDescription": "Fügen Sie einen datierten Lohnsatz für einen Personalbereich hinzu.",
+        "select": {
+          "job_title": "Stellenbezeichnung auswählen",
+          "trade": "Gewerk auswählen",
+          "department": "Abteilung auswählen",
+          "subsidiary": "Tochtergesellschaft auswählen"
+        }
+      },
+      "reconciliation": {
+        "subsidiary": "Tochtergesellschaft"
+      },
+      "billing": {
+        "title": "Abrechnungssatzkarten",
+        "hint": "Datierte, mehrwährungsfähige Arbeitspreise je Kunde und Projekt mit Artikel-/Zeitart-Sätzen, allgemeinen Anpassungen, Vertragsbedingungen und Zuordnungshistorie.",
+        "search": "Satzkarten suchen…",
+        "add": "Neue Satzkarte",
+        "card": "Satzkarte",
+        "currency": "Währung",
+        "period": "Gültigkeitszeitraum",
+        "items": "Artikel",
+        "assignments": "Zuordnungen",
+        "status": "Status",
+        "empty": "Keine passende Satzkarte.",
+        "newTitle": "Neue Abrechnungssatzkarte",
+        "newDescription": "Erstellen Sie zuerst das gemeinsame Satzbuch und danach datierte Artikelsätze.",
+        "createInItemHint": "Die Erstellung erfolgt im gemeinsamen Satzbuch-Arbeitsbereich, damit Arbeit, Dienstleistungen und Geräte dieselbe Preislogik verwenden. Bedingungen und Zuordnungen sehen Sie anschließend hier.",
+        "openRateBooks": "Satzbücher öffnen",
+        "effectiveFrom": "Gültig ab",
+        "effectiveTo": "Gültig bis",
+        "derivation": "Fehlende Stufe",
+        "scopes": "Dimensionsbereiche",
+        "allScopes": "Keine Dimensionseinschränkung",
+        "itemRates": "Artikel- und Zeitartensätze",
+        "item": "Artikel",
+        "regular": "Regulär",
+        "adjustments": "Anpassungen",
+        "appliesTo": "Gilt für",
+        "wholeCard": "Gesamte Satzkarte",
+        "revise": "Revision erstellen",
+        "reviseHint": "Eine Revision bewahrt diese Version und startet eine neue datierte Kopie.",
+        "historicalHint": "Dies ist eine historische Version. Öffnen Sie für eine Revision die neueste Version.",
+        "revisionTitle": "Neue Satzkartenrevision",
+        "revisionDescription": "Basispreise, Bereiche und Bedingungen werden kopiert. Anpassungen können für die ganze Karte oder einen Artikel gelten.",
+        "revisionEffectiveFrom": "Neue Version gültig ab",
+        "adjustmentNumber": "Anpassung {number}",
+        "removeAdjustment": "Anpassung entfernen",
+        "adjustmentName": "Name",
+        "adjustmentCode": "Code",
+        "category": "Kategorie",
+        "calculation": "Berechnung",
+        "presentation": "Rechnungsdarstellung",
+        "adjustmentValue": "Wert",
+        "adjustmentUnit": "Einheit",
+        "referenceText": "Beschreibung oder Vertragsverweis",
+        "addAdjustment": "Anpassung hinzufügen",
+        "saveRevision": "Revision speichern",
+        "revisionSaved": "Satzkartenrevision gespeichert",
+        "categories": {
+          "markup": "Aufschlag",
+          "travel": "Reise",
+          "allowance": "Zulage",
+          "minimum": "Minimum",
+          "surcharge": "Zuschlag",
+          "other": "Sonstige"
+        },
+        "calculations": {
+          "percent": "Prozent",
+          "fixed": "Festbetrag",
+          "per_hour": "Pro Stunde",
+          "per_day": "Pro Tag",
+          "distance": "Entfernung",
+          "time": "Zeit",
+          "text": "Informationstext"
+        },
+        "presentations": {
+          "included": "Im Satz enthalten",
+          "separate": "Separate Zeile",
+          "informational": "Informativ"
+        },
+        "errors": {
+          "notFound": "Satzkarte nicht gefunden.",
+          "effectiveDate": "Wählen Sie ein Gültigkeitsdatum.",
+          "adjustments": "Die Anpassungsdaten sind ungültig.",
+          "item": "Wählen Sie einen gültigen aktiven Artikel.",
+          "name": "Jede Anpassung benötigt Name und Code.",
+          "duplicateCode": "Codes müssen je Artikel eindeutig sein.",
+          "category": "Wählen Sie eine gültige Kategorie.",
+          "calculation": "Wählen Sie eine gültige Berechnung.",
+          "presentation": "Wählen Sie eine gültige Darstellung.",
+          "value": "Geben Sie einen nicht negativen Wert ein.",
+          "latestOnly": "Öffnen Sie die neueste Version.",
+          "afterLatest": "Das Datum muss nach der neuesten Version liegen.",
+          "save": "Die Revision konnte nicht gespeichert werden."
+        },
+        "terms": "Vereinbarte Bedingungen",
+        "none": "Keine",
+        "derivations": {
+          "explicit": "Explizite Sätze",
+          "time_type_multipliers": "Zeitartenmultiplikatoren"
+        },
+        "scopeTypes": {
+          "department": "Abteilung",
+          "subsidiary": "Tochtergesellschaft",
+          "location": "Standort",
+          "class": "Klasse",
+          "trade": "Gewerk",
+          "job_title": "Stellenbezeichnung",
+          "other": "Sonstige"
+        }
+      },
+      "tabs": {
+        "billing": "Abrechnungssätze"
+      }
+    },
+    "taxLibrary": {
+      "title": "Bibliothek für Steuererklärungen",
+      "open": "Bibliothek",
+      "description": "Importieren Sie gepflegte Erklärungsstrukturen für Kanada, das Vereinigte Königreich, Australien, Neuseeland sowie ein Arbeitsblatt für US-Bundesstaaten/Kommunen.",
+      "pack": "Zuständigkeitspaket",
+      "status": "Status",
+      "installed": "Installiert",
+      "available": "Verfügbar",
+      "searchPlaceholder": "Zuständigkeitspakete durchsuchen…",
+      "selectVisible": "Alle sichtbaren verfügbaren Pakete auswählen",
+      "selectPack": "{name} auswählen",
+      "installSelected": "{count, plural, one {# ausgewähltes Paket installieren} other {# ausgewählte Pakete installieren}}",
+      "selectionCount": "{count, plural, =0 {Keine Pakete ausgewählt} one {# Paket ausgewählt} other {# Pakete ausgewählt}}",
+      "resultCount": "{count, plural, one {# Paket} other {# Pakete}}",
+      "pageOf": "Seite {page} von {pages}",
+      "working": "Wird verarbeitet…",
+      "installSuccess": "{count, plural, one {# Steuererklärungspaket installiert} other {# Steuererklärungspakete installiert}}",
+      "resetSuccess": "Steuererklärungspaket auf Bibliotheksvorgaben zurückgesetzt",
+      "confirmReset": "{name} auf die gepflegten Bibliotheksvorgaben zurücksetzen? Dadurch werden die konfigurierten Erklärungsfelder ersetzt.",
+      "usNotice": "Die Vereinigten Staaten haben keine bundesweite Umsatzsteuererklärung. Dieses Arbeitsblatt muss für jede bundesstaatliche und kommunale Meldezuständigkeit angepasst werden."
+    },
+    "assetDepreciationSetup": {
+      "navTitle": "Book Depreciation",
+      "title": "Book Depreciation",
+      "description": "Configure reusable depreciation methods and the method, life and convention each accounting book applies to an asset category.",
+      "tabsAria": "Book depreciation setup sections",
+      "tabs": {
+        "methods": "Methods",
+        "books": "Book policies"
+      }
+    },
+    "taxDepreciationSetup": {
+      "navTitle": "Tax Depreciation",
+      "title": "Tax Depreciation",
+      "description": "Install country tax-depreciation packs and configure class assignments, regimes, classes, conventions and first-year rules. This is separate from sales-tax, VAT and nexus setup.",
+      "tabsAria": "Fixed asset setup sections",
+      "tabs": {
+        "overview": "Overview",
+        "categories": "Asset categories",
+        "regimes": "Tax regimes",
+        "classes": "Tax classes",
+        "firstYear": "First-year rules",
+        "methods": "Methods",
+        "books": "Book policies"
+      },
+      "packsTitle": "Country depreciation packs",
+      "packsDescription": "Installing a pack creates editable tenant configuration. Existing overrides are never replaced.",
+      "recommended": "Company country",
+      "installed": "Installed",
+      "install": "Install pack",
+      "installing": "Installing…",
+      "installFailed": "Could not install the depreciation pack",
+      "installedToast": "Installed {count} depreciation classes",
+      "assignmentFailed": "Could not save the tax class assignment",
+      "assignmentsTitle": "Asset-category class assignments",
+      "assignmentsDescription": "Choose the default tax class for each asset category.",
+      "assetCategory": "Asset category",
+      "notAssigned": "Not assigned",
+      "classCount": "{count, plural, one {# class} other {# classes}}",
+      "models": {
+        "pool": "Class pool",
+        "macrs": "Per-asset MACRS"
+      },
+      "customizeTitle": "Customize",
+      "customizeDescription": "Country packs are starting points; seeded values remain editable.",
+      "links": {
+        "regimes": {
+          "title": "Regimes",
+          "description": "Country, calculation model and asset class attribute."
+        },
+        "classes": {
+          "title": "Classes and methods",
+          "description": "Rates, recovery periods, methods and conventions."
+        },
+        "firstYear": {
+          "title": "First-year rules",
+          "description": "Effective-dated acceleration and eligibility."
+        },
+        "assignments": {
+          "title": "Asset-category assignments",
+          "description": "Assign categories to regime classes in Tax attributes."
+        }
+      }
+    },
+    "taxOfficial": {
+      "title": "Amtliches Meldeformular",
+      "description": "Laden Sie ein amtliches ausfüllbares PDF nur hoch, wenn die Zuständigkeit dieses Formular akzeptiert oder verlangt. Ordnen Sie seine Felder unter „Steuererklärungsfelder“ zu.",
+      "upload": "Amtliches PDF hochladen",
+      "uploading": "Wird hochgeladen…",
+      "uploaded": "Amtliches Formular hochgeladen",
+      "remove": "Entfernen",
+      "removed": "Amtliches Formular entfernt",
+      "none": "Kein amtliches PDF hochgeladen"
+    },
+    "taxBoxes": {
+      "description": "Zugeordnete, berechnete und manuelle Felder für {code}.",
+      "calculatedNote": "Jedes Feld gehört zu dieser Erklärung; zugeordnete Felder wählen den Steuercode aus, dessen Aktivität sie zusammenfassen.",
+      "new": "Neues Steuererklärungsfeld",
+      "searchPlaceholder": "Erklärungsfelder durchsuchen…",
+      "source": "Quelle",
+      "empty": "Keine Erklärungsfelder entsprechen dieser Erklärung und der Suche.",
+      "mapped": "Zugeordnet",
+      "calculated": "Berechnet",
+      "manual": "Manuell"
+    },
+    "taxRates": {
+      "description": "Steuersätze mit Gültigkeitsdatum für {code}.",
+      "new": "Neuer Steuersatz",
+      "searchPlaceholder": "Steuersätze durchsuchen…",
+      "empty": "Keine Steuersätze entsprechen diesem Code und der Suche."
+    },
+    "new": "Neu",
+    "learnMore": "Mehr erfahren.",
+    "empty": "Hier ist noch nichts.",
+    "statusActive": "Aktiv",
+    "statusArchived": "Archiviert",
+    "yes": "Ja",
+    "selectPlaceholder": "Auswählen…",
+    "searchPlaceholder": "Suchen…",
+    "created": "Erstellt",
+    "updated": "Gespeichert",
+    "deleted": "Gelöscht",
+    "confirmDelete": "Diesen Datensatz löschen? Dies kann nicht rückgängig gemacht werden.",
+    "validation": {
+      "required": "{field} ist erforderlich"
+    },
+    "drawer": {
+      "newTitle": "Neu: {name}",
+      "editTitle": "{name} bearbeiten",
+      "tabs": {
+        "ariaLabel": "Konfigurationsbereiche",
+        "details": "Details"
+      }
+    },
+    "errors": {
+      "duplicate": "Ein Datensatz mit diesem Code existiert bereits.",
+      "inUse": "Dieser Datensatz wird verwendet und kann nicht gelöscht werden.",
+      "primaryRequired": "Wählen Sie ein anderes Buchungsbuch als primär aus, bevor Sie diesem den Primärstatus entziehen.",
+      "primaryActiveRequired": "Das primäre Buchungsbuch muss aktiv bleiben.",
+      "archiveOnly": "Buchungsbücher werden für die Hauptbuchhistorie aufbewahrt und können nur archiviert werden.",
+      "invalidUrl": "Geben Sie eine gültige http://- oder https://-URL für die behördliche Meldung ein.",
+      "invalidDepreciationFormula": "Geben Sie eine gültige Abschreibungsformel mit den dokumentierten Variablen und Operatoren ein."
+    },
+    "groups": {
+      "company": "Unternehmen",
+      "accounting": "Buchhaltung",
+      "taxes": "Steuern",
+      "dimensions": "Dimensionen",
+      "billing": "Fakturierung & Nummerierung",
+      "workforce": "Personal",
+      "assets": "Anlagen",
+      "currency": "Währung",
+      "revenue": "Umsatz",
+      "inventory": "Lagerbestand"
+    },
+    "fxProvider": {
+      "title": "Wechselkursanbieter",
+      "description": "Importieren Sie tägliche Kassakurse in die Währungen Ihrer Organisation und halten Sie sie automatisch aktuell.",
+      "provider": "Anbieter",
+      "providers": {
+        "bank_of_canada": "Bank of Canada",
+        "ecb": "Europäische Zentralbank",
+        "open_exchange_rates": "Open Exchange Rates"
+      },
+      "providerHelp": {
+        "bank_of_canada": "Amtliche Tagesdurchschnitte mit CAD als Quellanker. Kein API-Schlüssel erforderlich.",
+        "ecb": "Amtliche Referenzkurse für Geschäftstage mit EUR als Quellanker. Kein API-Schlüssel erforderlich.",
+        "open_exchange_rates": "Breite kommerzielle Abdeckung mit Ihrem eigenen API-Schlüssel. Es können Tariflimits gelten."
+      },
+      "displayName": "Konfigurationsname",
+      "displayNamePlaceholder": "Tägliche Unternehmenskurse",
+      "baseCurrency": "Basiswährung",
+      "selectCurrency": "Eine Währung auswählen…",
+      "schedule": "Synchronisierungszeitplan",
+      "schedules": {
+        "manual": "Nur manuell",
+        "daily": "Täglich",
+        "weekdays": "Werktags",
+        "weekly": "Wöchentlich"
+      },
+      "syncHourUtc": "Synchronisierungsstunde (UTC)",
+      "lookbackDays": "Rückschauzeitraum für Revisionen (Tage)",
+      "currencies": "Zu importierende Währungen",
+      "addCurrency": "Eine Währung hinzufügen…",
+      "searchCurrencies": "Währungen suchen…",
+      "removeCurrency": "{currency} entfernen",
+      "noCurrencies": "Fügen Sie mindestens eine Fremdwährung hinzu.",
+      "apiKey": "API-Schlüssel des Anbieters",
+      "apiKeyPlaceholder": "Geben Sie Ihren API-Schlüssel ein",
+      "secretStored": "Ein versiegelter Schlüssel ist gespeichert — geben Sie einen Wert ein, um ihn zu ersetzen",
+      "clearSecret": "Den gespeicherten API-Schlüssel entfernen",
+      "enabled": "Anbieter-Synchronisierung aktivieren",
+      "saved": "Wechselkursanbieter gespeichert.",
+      "test": "Anbieter testen",
+      "testPassed": "Der Anbieter lieferte {observations} Beobachtungen und {rates} normalisierte Kurse.",
+      "testFailed": "Der Anbietertest ist fehlgeschlagen.",
+      "syncNow": "Jetzt synchronisieren",
+      "syncPassed": "{observations} Beobachtungen importiert und {rates} normalisierte Kurse verarbeitet.",
+      "syncFailed": "Die Wechselkurssynchronisierung ist fehlgeschlagen.",
+      "health": "Anbieterzustand",
+      "lastSuccess": "Letzter erfolgreicher Import",
+      "lastObservation": "Neueste Beobachtung",
+      "nextSync": "Nächste Synchronisierung",
+      "latestRun": "Letzter Lauf",
+      "noRuns": "Der Anbieter wurde noch nicht ausgeführt.",
+      "runStatus": {
+        "running": "Wird ausgeführt",
+        "ok": "Erfolgreich",
+        "failed": "Fehlgeschlagen"
+      },
+      "runSummary": "{observations} Beobachtungen · {inserted} eingefügt · {updated} aktualisiert · {preserved} manuelle Überschreibungen beibehalten",
+      "overridePolicy": "In der Einrichtung bearbeitete Kurse werden zu geschützten manuellen Überschreibungen. Anbieterimporte ersetzen sie niemals."
+    },
+    "paymentOperations": {
+      "title": "Zahlungen & Banking",
+      "description": "Konfigurieren Sie Zahlungswege, Finanzierungsprofile, Zeitpläne, Genehmigungen, Zustellung und Lastschriftmandate.",
+      "tabs": {
+        "profiles": "Bankprofile",
+        "formats": "Zahlungsformate",
+        "schedules": "Zeitpläne",
+        "mandates": "Lastschriftmandate"
+      },
+      "search": {
+        "profiles": "Profile suchen…",
+        "formats": "Formate suchen…",
+        "schedules": "Zeitpläne suchen…",
+        "mandates": "Mandate suchen…"
+      },
+      "state": "Status",
+      "new": {
+        "profiles": "Neues Profil",
+        "formats": "Neues benutzerdefiniertes Format",
+        "schedules": "Neuer Zeitplan",
+        "mandates": "Neues Mandat"
+      },
+      "columns": {
+        "name": "Name",
+        "bank": "Finanzierungskonto",
+        "format": "Format",
+        "currency": "Währung",
+        "delivery": "Zustellung",
+        "approval": "Laufgenehmigung",
+        "status": "Status",
+        "code": "Code",
+        "rail": "Zahlungsweg",
+        "direction": "Richtung",
+        "profile": "Profil",
+        "cron": "Zeitplan",
+        "nextRun": "Nächster Lauf",
+        "action": "Aktion",
+        "reference": "Referenz",
+        "party": "Gegenpartei",
+        "scheme": "Verfahren",
+        "signedOn": "Unterzeichnet",
+        "expiresOn": "Läuft ab"
+      },
+      "states": {
+        "active": "Aktiv",
+        "archived": "Archiviert",
+        "pending": "Ausstehend",
+        "suspended": "Ausgesetzt",
+        "revoked": "Widerrufen",
+        "expired": "Abgelaufen"
+      },
+      "rails": {
+        "cpa005_credit": "CPA-005 Gutschrift",
+        "nacha_credit": "NACHA Gutschrift",
+        "sepa_credit": "SEPA-Überweisung",
+        "nacha_debit": "NACHA Lastschrift",
+        "sepa_debit": "SEPA-Lastschrift",
+        "positive_pay": "Positive Pay",
+        "wire": "Überweisung",
+        "cheque": "Scheck",
+        "custom": "Benutzerdefiniert"
+      },
+      "directions": {
+        "credit": "Gutschrift",
+        "debit": "Lastschrift",
+        "both": "Gutschrift und Lastschrift"
+      },
+      "actions": {
+        "create_draft": "Entwurf erstellen",
+        "submit_for_approval": "Zur Genehmigung einreichen"
+      },
+      "schemes": {
+        "nacha": "NACHA",
+        "sepa_core": "SEPA Core",
+        "sepa_b2b": "SEPA B2B",
+        "custom": "Benutzerdefiniert"
+      },
+      "fields": {
+        "name": "Name",
+        "currency": "Währung",
+        "bankAccount": "Finanzierungskonto",
+        "format": "Zahlungsformat",
+        "subsidiary": "Tochtergesellschaft",
+        "country": "Land",
+        "sftpServer": "Vorhandener SFTP-Server",
+        "sftpFolder": "Ausgangsordner",
+        "requireRunApproval": "Genehmigung des Zahlungslaufs erforderlich",
+        "requireFileApproval": "Genehmigung der generierten Datei erforderlich",
+        "autoRemittance": "Zahlungsavis automatisch senden",
+        "discountAccount": "Konto für Skonto bei Frühzahlung",
+        "positivePayAccountReference": "Kontoreferenz des Instituts",
+        "active": "Aktiv",
+        "code": "Code",
+        "direction": "Richtung",
+        "extension": "Dateierweiterung",
+        "contentType": "Inhaltstyp",
+        "formatterScript": "Formatierer-JavaScript",
+        "profile": "Bankprofil",
+        "cron": "Zeitplan",
+        "cronHint": "Wählen Sie eine Vorgabe oder geben Sie einen benutzerdefinierten Zeitplan (Cron-Syntax) für volle Kontrolle ein.",
+        "timezone": "Zeitzone",
+        "action": "Bei Fälligkeit",
+        "party": "Gegenpartei",
+        "partyBankAccount": "Genehmigtes Bankkonto",
+        "scheme": "Mandatsverfahren",
+        "reference": "Mandatsreferenz",
+        "status": "Status",
+        "signedOn": "Unterzeichnet am",
+        "validFrom": "Gültig ab",
+        "expiresOn": "Läuft ab am"
+      },
+      "secretFields": {
+        "originatorId": "Auftraggeber-ID",
+        "originatorShortName": "Kurzname",
+        "originatorLongName": "Langname",
+        "dataCentre": "Rechenzentrum",
+        "institution": "Institut",
+        "transit": "Transit",
+        "account": "Kontonummer",
+        "transactionCode": "Transaktionscode",
+        "odfiRouting": "ODFI-Routing",
+        "immediateDestination": "Immediate Destination",
+        "immediateOrigin": "Immediate Origin",
+        "destinationName": "Zielname",
+        "originName": "Ursprungsname",
+        "companyName": "Firmenname",
+        "companyId": "Firmen-ID",
+        "entryClassCode": "Eintragsklasse",
+        "entryDescription": "Eintragsbeschreibung",
+        "originatorName": "Name des Auftraggebers",
+        "originatorIban": "IBAN des Auftraggebers",
+        "originatorBic": "BIC des Auftraggebers",
+        "creditorId": "Gläubiger-ID"
+      },
+      "originator": {
+        "title": "Auftraggeber-Anmeldedaten",
+        "newHint": "Verschlüsselt für Ihre Organisation und dieses Profil gespeichert.",
+        "editHint": "Anmeldedaten sind nur schreibbar. Lassen Sie alle Felder leer, um die gespeicherten Werte beizubehalten."
+      },
+      "accounting": {
+        "title": "Buchhaltungs- und Bankreferenzen",
+        "noDiscountAccount": "Keine Skonti erfassen",
+        "hint": "Das Skontokonto erfasst Einsparungen, die entstehen, wenn ein Lauf einen verfügbaren Skonto der Zahlungsbedingungen nutzt."
+      },
+      "delivery": {
+        "title": "Zustellung",
+        "manual": "Manueller Download",
+        "existingSftpHint": "SFTP-Server werden einmalig in der bestehenden SFTP-Einrichtung verwaltet. Dieses Profil wählt lediglich einen für die Zustellung aus."
+      },
+      "criteria": {
+        "title": "Auswahlkriterien",
+        "dueThroughDays": "Rechnungen einbeziehen, fällig innerhalb (Tage)",
+        "minimumAmount": "Mindestbetrag der Rechnung",
+        "maximumRunAmount": "Maximaler Laufbetrag",
+        "captureDiscounts": "Verfügbare Skonti bei Frühzahlung nutzen",
+        "applyCredits": "Verfügbare Gutschriften anwenden"
+      },
+      "drawer": {
+        "new": {
+          "profiles": "Neues Bankprofil",
+          "formats": "Neues benutzerdefiniertes Zahlungsformat",
+          "schedules": "Neuer Zahlungszeitplan",
+          "mandates": "Neues Lastschriftmandat"
+        },
+        "edit": {
+          "profiles": "Bankprofil bearbeiten",
+          "formats": "Zahlungsformat bearbeiten",
+          "schedules": "Zahlungszeitplan bearbeiten",
+          "mandates": "Lastschriftmandat bearbeiten"
+        },
+        "description": {
+          "profiles": "Verbinden Sie ein Finanzierungskonto mit einem Zahlungsweg und einer Zustellungsrichtlinie.",
+          "formats": "Definieren Sie Dateimetadaten und Sandbox-JavaScript für ein benutzerdefiniertes Bankformat.",
+          "schedules": "Wählen Sie berechtigte Transaktionen nach einem wiederholbaren Zeitplan aus.",
+          "mandates": "Erfassen Sie die erforderliche Autorisierung zum Einzug von Geldern von einer Gegenpartei."
+        }
+      },
+      "select": "Auswählen…",
+      "allSubsidiaries": "Alle Tochtergesellschaften",
+      "schedulePresets": {
+        "daily": "Täglich",
+        "weekdays": "Werktags",
+        "weekly": "Wöchentlich (Mo)",
+        "monthly": "Monatlich (1.)"
+      },
+      "empty": "Keine Datensätze anzuzeigen.",
+      "manualDelivery": "Manueller Download",
+      "runApproval": "Erforderlich",
+      "automatic": "Automatisch",
+      "any": "Beliebig",
+      "builtInFormatHint": "Dieser integrierte Formatierer wird von der Zahlungs-Engine gepflegt. Seine ausführbare Definition kann hier nicht bearbeitet werden.",
+      "save": "Speichern",
+      "saving": "Wird gespeichert…",
+      "saved": "Gespeichert",
+      "cancel": "Abbrechen",
+      "saveFailed": "Die Konfiguration konnte nicht gespeichert werden."
+    },
+    "entities": {
+      "company": {
+        "title": "Unternehmen & Buchhaltung",
+        "description": "Organisationsidentität, Basiswährung, Geschäftsjahr und Kontrollkonten."
+      },
+      "tax-codes": {
+        "title": "Steuercodes",
+        "singularTitle": "Steuercode",
+        "description": "Sätze, die Sie berechnen und zahlen, sowie die Konten, auf die sie gebucht werden."
+      },
+      "tax-rates": {
+        "title": "Steuersätze",
+        "singularTitle": "Steuersatz",
+        "description": "Datierte Satzhistorie für jeden Steuercode."
+      },
+      "tax-groups": {
+        "title": "Steuergruppen",
+        "description": "Bündeln Sie mehrere Steuercodes, um sie gemeinsam auf einer Position anzuwenden."
+      },
+      "tax-return-forms": {
+        "title": "Steuererklärungen",
+        "description": "Konfigurieren Sie eine behördliche Steuererklärung: ihre Felder, wie jedes berechnet wird und wie sie eingereicht wird."
+      },
+      "tax-report-lines": {
+        "title": "Steuererklärungsfelder",
+        "singularTitle": "Steuererklärungsfeld",
+        "description": "Ordnen Sie Steuercodes den Feldern einer Steuererklärung zu oder berechnen Sie ein Feld aus anderen Feldern."
+      },
+      "classes": {
+        "title": "Klassen",
+        "description": "Eine Berichtsdimension zum Aufschlüsseln von Transaktionen."
+      },
+      "segment-definitions": {
+        "title": "Segmente",
+        "description": "Konfigurieren Sie integrierte und benutzerdefinierte Buchungssegmente über Transaktionen, Konten und Berichte hinweg."
+      },
+      "segment-values": {
+        "title": "Segmentwerte",
+        "description": "Verwalten Sie die auswählbaren Werte und Hierarchien für benutzerdefinierte Segmente."
+      },
+      "departments": {
+        "title": "Abteilungen",
+        "description": "Eine Berichtsdimension zum Aufschlüsseln von Transaktionen."
+      },
+      "locations": {
+        "title": "Standorte",
+        "description": "Eine Berichtsdimension zum Aufschlüsseln von Transaktionen."
+      },
+      "payment-terms": {
+        "title": "Zahlungsbedingungen",
+        "description": "Netto- und Skontobedingungen für Eingangs- und Ausgangsrechnungen."
+      },
+      "number-sequences": {
+        "title": "Nummernkreise",
+        "description": "Steuern Sie Präfix, nächste Nummer und Länge für jeden Beleg oder benutzerdefinierten Datensatz. Folgen für benutzerdefinierte Datensätze werden bei der ersten Nummernvergabe automatisch erstellt."
+      },
+      "time-types": {
+        "title": "Zeitarten",
+        "description": "Kostenmultiplikatoren und Fakturierungsvorgaben für Zeiterfassungen."
+      },
+      "worker-comp-groups": {
+        "title": "Unfallversicherungsgruppen",
+        "description": "Beitragsgruppen der Arbeiterunfallversicherung für die Personalkostenrechnung."
+      },
+      "labor-burden-rates": {
+        "title": "Personalgemeinkostensätze",
+        "description": "Datierte Gemeinkostensätze, die auf Personalkosten angewendet werden."
+      },
+      "asset-categories": {
+        "title": "Anlagekategorien",
+        "description": "Standard-Abschreibungsmethode und -konten für Anlagevermögen."
+      },
+      "depreciation-methods": {
+        "title": "Abschreibungsmethoden",
+        "description": "Erstellen Sie benutzerdefinierte Abschreibungsformeln — der Formel-Builder."
+      },
+      "depreciation-book-policies": {
+        "title": "Buch-Abschreibungsrichtlinien",
+        "description": "Methode je Buch und Kategorie für die Mehrbuch-Abschreibung."
+      },
+      "currencies": {
+        "title": "Währungen",
+        "description": "Währungscodes und ihre Nebeneinheitengenauigkeit."
+      },
+      "sftp": {
+        "title": "SFTP"
+      },
+      "payment-operations": {
+        "title": "Zahlungen & Banking",
+        "description": "Zahlungsformate, Finanzierungsprofile, Zeitpläne und Lastschriftmandate."
+      },
+      "account-groups": {
+        "title": "Kontengruppen",
+        "description": "Berichtsklassifizierungen Ihres Kontenplans (z. B. Kostenpools). Gruppen klassifizieren Konten automatisch nach Regeln, mit Überschreibungen je Konto."
+      },
+      "subsidiaries": {
+        "title": "Tochtergesellschaften",
+        "description": "Die rechtlichen Einheiten innerhalb Ihrer Organisation — ein Konsolidierungsbaum mit einer Wurzel."
+      },
+      "intercompany-pairs": {
+        "title": "Intercompany-Paare",
+        "description": "Forderungs-/Verbindlichkeits-Kontenzuordnungen für Transaktionen, die zwei Tochtergesellschaften überspannen."
+      },
+      "accounting-books": {
+        "title": "Buchungsbücher",
+        "singular": "Buchungsbuch",
+        "description": "Verwalten Sie die primären, steuerlichen, gesetzlichen und Berichtsbücher, denen Hauptbuchbuchungen und Abschlusskontrollen gehören."
+      },
+      "fx-rates": {
+        "title": "Wechselkurse",
+        "description": "Die täglichen Kurse Ihrer Organisation zur Buchung von Fremdwährungstransaktionen."
+      },
+      "consolidated-fx-rates": {
+        "title": "Konsolidierte Wechselkurse",
+        "description": "Periodenaktuelle, durchschnittliche und historische Kurse für die Konsolidierung von Tochtergesellschaften."
+      },
+      "item-rate-books": {
+        "title": "Artikel-Satzbücher",
+        "description": "Satzbücher nach Kunde, Projekt und Organisation für Geräte und andere Artikelverrechnungen."
+      },
+      "item-rate-book-assignments": {
+        "title": "Satzbuchzuordnungen",
+        "description": "Legen Sie fest, welches zeitlich gültige Satzbuch für einen Kunden oder ein Projekt gilt."
+      },
+      "recognition-rules": {
+        "title": "Realisierungsregeln",
+        "description": "Wie Umsatz über die Zeit realisiert wird — Methode, Zeitpunkt und Konten (ASC 606)."
+      },
+      "fair-value-prices": {
+        "title": "Zeitwertpreise",
+        "description": "Eigenständige Verkaufspreise zur Aufteilung von Bündelumsatz auf Verpflichtungen."
+      },
+      "stock-locations": {
+        "title": "Lagerorte",
+        "description": "Physische Behälter, Zonen und Lager unter der Standortdimension."
+      },
+      "item-inventory-profiles": {
+        "title": "Artikelkalkulation",
+        "description": "Kalkulationsmethode, Bestandskonten, Nachverfolgung und Standardkosten je Artikel."
+      },
+      "bom-components": {
+        "title": "Stückliste",
+        "description": "Komponenten, die zum Bau jedes Baugruppenartikels verbraucht werden."
+      },
+      "income-tax-rates": {
+        "title": "Ertragsteuersätze",
+        "singularTitle": "Ertragsteuersatz",
+        "description": "Verabschiedete Ertragsteuersätze je Jurisdiktion, gültigkeitsdatiert — Grundlage der ASC-740-Abgrenzung."
+      }
+    },
+    "fields": {
+      "classAttribute": "Asset class attribute",
+      "countryCode": "Country",
+      "calculationModel": "Calculation model",
+      "regime": "Regime",
+      "classCode": "Class code",
+      "rate": "Kurs",
+      "method": "Methode",
+      "firstYearFraction": "First-year fraction",
+      "allowRecapture": "Allow recapture",
+      "allowTerminalLoss": "Allow terminal loss",
+      "costCap": "Cost cap",
+      "depreciationSystem": "Depreciation system",
+      "macrsMethod": "MACRS method",
+      "recoveryPeriodYears": "Recovery period (years)",
+      "taxAttributes": "Tax attributes (JSON)",
+      "enhancedMultiplier": "Enhanced multiplier",
+      "acquiredFrom": "Acquired from",
+      "acquiredTo": "Acquired to",
+      "code": "Code",
+      "name": "Name",
+      "appliesTo": "Gilt für",
+      "recoverablePercent": "Erstattungsfähig %",
+      "calculationType": "Berechnungsart",
+      "withholdingAccountId": "Quellensteuerkonto",
+      "priceIncludesTax": "Preis enthält Steuer",
+      "compoundOnPrevious": "Auf vorherige Komponenten aufschlagen",
+      "roundingScale": "Steuer-Rundungsstellen",
+      "isActive": "Aktiv",
+      "isPrimary": "Primäres Buch",
+      "country": "Land",
+      "region": "Region",
+      "collectedAccountId": "Konto vereinnahmte Steuer",
+      "paidAccountId": "Konto gezahlte Steuer",
+      "taxCodeId": "Steuercode",
+      "ratePercent": "Satz %",
+      "effectiveFrom": "Gültig ab",
+      "effectiveTo": "Gültig bis",
+      "members": "Steuercodes",
+      "reportCode": "Berichtscode",
+      "lineCode": "Positionscode",
+      "label": "Bezeichnung",
+      "basis": "Basis",
+      "sign": "Vorzeichen",
+      "submissionChannel": "Einreichungsmethode",
+      "governmentFormat": "Behördenformat",
+      "submissionUrl": "URL für behördliche Meldung",
+      "officialPdfFileId": "Amtliches PDF",
+      "watermark": "Wasserzeichen",
+      "sequence": "Reihenfolge",
+      "formula": "Formel",
+      "pdfField": "PDF-Feld",
+      "parentId": "Übergeordnet",
+      "netDays": "Nettotage",
+      "discountDays": "Skontotage",
+      "discountPercent": "Skonto %",
+      "documentKind": "Beleg",
+      "prefix": "Präfix",
+      "nextNumber": "Nächste Nummer",
+      "padding": "Auffüllung",
+      "gapless": "Lückenlos",
+      "classification": "Klassifizierung",
+      "costMultiplier": "Kostenmultiplikator",
+      "isBillableDefault": "Standardmäßig fakturierbar",
+      "showOnFieldTicket": "Auf Außendienstbelegen anzeigen",
+      "category": "Kategorie",
+      "postsGl": "Bucht ins Hauptbuch",
+      "bookId": "Buch",
+      "categoryId": "Anlagekategorie",
+      "convention": "Konvention",
+      "lifeMonths": "Nutzungsdauer (Monate)",
+      "departmentId": "Abteilung",
+      "defaultMethod": "Standardmethode",
+      "defaultConvention": "Abschreibungskonvention",
+      "endOfLife": "Nutzungsende",
+      "defaultLifeMonths": "Standard-Nutzungsdauer (Monate)",
+      "assetAccountId": "Bestandsanlagekonto",
+      "accumulatedDepreciationAccountId": "Konto kumulierte Abschreibung",
+      "depreciationExpenseAccountId": "Konto Abschreibungsaufwand",
+      "gainLossAccountId": "Gewinn-/Verlustkonto",
+      "minorUnits": "Nebeneinheiten",
+      "key": "Schlüssel",
+      "dimension": "Dimension",
+      "color": "Farbe",
+      "sortOrder": "Sortierreihenfolge",
+      "legalName": "Rechtlicher Name",
+      "baseCurrency": "Basiswährung",
+      "isElimination": "Eliminierung",
+      "fromSubsidiaryId": "Von Tochtergesellschaft",
+      "toSubsidiaryId": "An Tochtergesellschaft",
+      "dueFromAccountId": "Forderungskonto",
+      "dueToAccountId": "Verbindlichkeitskonto",
+      "asOf": "Stand",
+      "fromCurrency": "Von Währung",
+      "toCurrency": "In Währung",
+      "rateType": "Kursart",
+      "source": "Quelle",
+      "periodId": "Buchungsperiode",
+      "currentRate": "Aktueller Kurs",
+      "averageRate": "Durchschnittskurs",
+      "historicalRate": "Historischer Kurs",
+      "subsidiaryId": "Tochtergesellschaft",
+      "subsidiaryIncludeChildren": "Untergeordnete Tochtergesellschaften einbeziehen",
+      "pluralName": "Pluralname",
+      "sourceKind": "Quelle",
+      "isHierarchical": "Hierarchisch",
+      "showOnHeader": "Im Transaktionskopf anzeigen",
+      "showOnLines": "In Transaktionspositionen anzeigen",
+      "showInReports": "In Berichten anzeigen",
+      "allowAccountRequirement": "Als Kontoanforderung zulassen",
+      "segmentId": "Segment",
+      "description": "Beschreibung",
+      "recognitionPeriods": "Realisierungsperioden",
+      "startDateSource": "Quelle des Startdatums",
+      "endDateSource": "Quelle des Enddatums",
+      "periodOffset": "Periodenversatz",
+      "startOffsetDays": "Startversatz (Tage)",
+      "initialAmountPercent": "Anfangsbetrag %",
+      "deferredAccountId": "Konto abgegrenzter Umsatz",
+      "recognizedAccountId": "Konto realisierter Umsatz",
+      "isForecast": "Prognoseregel",
+      "itemId": "Artikel",
+      "unitPrice": "Stückpreis",
+      "lowValue": "Niedriger Wert",
+      "highValue": "Hoher Wert",
+      "currency": "Währung",
+      "locationId": "Standort",
+      "kind": "Art",
+      "costingMethod": "Kalkulationsmethode",
+      "tracking": "Nachverfolgung",
+      "cogsAccountId": "Konto Wareneinsatz",
+      "adjustmentAccountId": "Anpassungskonto",
+      "varianceAccountId": "Abweichungskonto",
+      "standardCost": "Standardkosten",
+      "baseUnit": "Basiseinheit",
+      "reorderPoint": "Meldebestand",
+      "preferredStockLevel": "Bevorzugter Lagerbestand",
+      "receivedNotBilledAccountId": "Konto erhalten, nicht berechnet",
+      "assemblyItemId": "Baugruppenartikel",
+      "componentItemId": "Komponentenartikel",
+      "quantityPer": "Menge pro",
+      "rateBookId": "Satzbuch",
+      "customerId": "Kunde",
+      "projectId": "Projekt",
+      "isDefault": "Standard"
+    },
+    "fieldHelp": {
+      "gapless": "Lückenlos bedeutet, dass jede Nummer in der Folge belegt sein muss und keine Nummer übersprungen wird. Aktivieren Sie dies nur, wenn gesetzliche oder prüfungsbezogene Vorgaben eine ununterbrochene Nummerierung verlangen."
+    },
+    "options": {
+      "timeClassification": {
+        "regular": "Regulär",
+        "overtime": "Überstunden",
+        "doubleTime": "Doppelte Zeit",
+        "other": "Sonstige"
+      },
+      "taxDepreciationModel": {
+        "pool": "Class pool",
+        "macrs": "Per-asset MACRS"
+      },
+      "macrsSystem": {
+        "gds": "GDS",
+        "ads": "ADS"
+      },
+      "macrsMethod": {
+        "200db": "200% declining balance",
+        "150db": "150% declining balance",
+        "straightLine": "Straight line"
+      },
+      "taxDepreciationConvention": {
+        "halfYear": "Half-year",
+        "midQuarter": "Mid-quarter",
+        "midMonth": "Mid-month"
+      },
+      "poolMethod": {
+        "declining": "Declining balance",
+        "straightLine": "Straight line"
+      },
+      "appliesTo": {
+        "sales": "Verkäufe",
+        "purchases": "Einkäufe",
+        "both": "Beide"
+      },
+      "taxCalculationType": {
+        "standard": "Standardsteuer",
+        "withholding": "Quellensteuer",
+        "reverseCharge": "Umkehr der Steuerschuld"
+      },
+      "rateDateBasis": {
+        "usageDate": "Nutzungsdatum",
+        "projectStart": "Projektstartdatum"
+      },
+      "basis": {
+        "collected": "Vereinnahmte Steuer (Output)",
+        "paid": "Gezahlte Steuer / Vorsteuer (Input)",
+        "net": "Nettobetrag",
+        "tax": "Steuerbetrag"
+      },
+      "sign": {
+        "positive": "Addieren (+)",
+        "negative": "Subtrahieren (−)"
+      },
+      "channel": {
+        "printPdf": "Drucken & versenden (amtliches PDF)",
+        "fileUpload": "Elektronischer Datei-Upload",
+        "efileApi": "E-Filing (API)",
+        "portalManual": "Behördenportal (manuelle Eingabe)"
+      },
+      "governmentFormat": {
+        "portalEntry": "Online-Portaleingabe",
+        "certifiedFile": "Zertifizierte Behördendatei",
+        "api": "Kompatible Software / API",
+        "paper": "Amtliches Papierformular"
+      },
+      "method": {
+        "straightLine": "Linear",
+        "decliningBalance": "Degressiv",
+        "doubleDeclining": "Doppelt degressiv",
+        "unitsOfProduction": "Leistungseinheiten",
+        "manual": "Manuell"
+      },
+      "convention": {
+        "fullMonth": "Ganzer Monat",
+        "midMonth": "Monatsmitte",
+        "halfYear": "Halbjahr"
+      },
+      "endOfLife": {
+        "fullyDepreciate": "Vollständig abschreiben",
+        "retainBalance": "Restwert beibehalten"
+      },
+      "burdenMethod": {
+        "live": "Live",
+        "standard": "Standard"
+      },
+      "fxRateType": {
+        "spot": "Kassakurs",
+        "average": "Durchschnitt",
+        "historical": "Historisch"
+      },
+      "rateSource": {
+        "derived": "Abgeleitet",
+        "manual": "Manuell"
+      },
+      "recognitionMethod": {
+        "pointInTime": "Zeitpunktbezogen",
+        "straightLineEven": "Linear, gleiche Perioden",
+        "straightLineProrate": "Linear, erste & letzte anteilig",
+        "straightLineDaily": "Linear, exakte Tage",
+        "percentComplete": "Fertigstellungsgrad",
+        "milestone": "Meilenstein",
+        "usage": "Nutzung"
+      },
+      "startDateSource": {
+        "obligation": "Beginn der Verpflichtung",
+        "document": "Belegdatum",
+        "fulfillment": "Erfüllung",
+        "event": "Ereignis",
+        "contract": "Vertragsbeginn"
+      },
+      "endDateSource": {
+        "term": "Laufzeitlänge",
+        "obligation": "Ende der Verpflichtung",
+        "contract": "Vertragsende"
+      },
+      "costingMethod": {
+        "fifo": "FIFO",
+        "movingAverage": "Gleitender Durchschnitt",
+        "standard": "Standardkosten"
+      },
+      "tracking": {
+        "none": "Keine",
+        "lot": "Charge",
+        "serial": "Seriennummer"
+      },
+      "stockLocationKind": {
+        "warehouse": "Lager",
+        "zone": "Zone",
+        "bin": "Behälter",
+        "staging": "Bereitstellung",
+        "transit": "Transit",
+        "quarantine": "Quarantäne"
+      }
+    },
+    "bankFeeds": {
+      "navTitle": "Bank Feeds"
+    },
+    "paymentProviders": {
+      "title": "Zahlungsanbieter",
+      "description": "Gehostete Checkout-Anbieter für Zahlungslinks auf Rechnungen. Die Auszahlungsabstimmung bleibt unter Bankwesen → PSP-Abrechnungen.",
+      "saved": "Gespeichert.",
+      "enableAcceptance": "Zahlungslinks aktivieren",
+      "apiKey": "API-Schlüssel / Secret",
+      "webhookSecret": "Webhook-Secret",
+      "publishableKey": "Öffentlicher Schlüssel",
+      "merchantAccount": "Händlerkonto",
+      "secretConfigured": "Konfiguriert — zum Ersetzen eingeben",
+      "receiptBankAccount": "Bankkonto für Zahlungseingänge",
+      "surchargeRule": "Entgeltregel",
+      "noSurcharge": "Kein Entgelt",
+      "save": "Speichern",
+      "surchargeRules": "Entgeltregeln",
+      "surchargeHint": "Optionale Bearbeitungsgebühren zusätzlich zum Rechnungsbetrag. Sie werden beim Zahlungseingang als Ertrag gebucht.",
+      "ruleName": "Name",
+      "ruleCalc": "Berechnung",
+      "ruleProvider": "Anbieter",
+      "ruleEffective": "Gültig",
+      "deactivate": "Deaktivieren",
+      "inactive": "inaktiv",
+      "percent": "Prozentsatz",
+      "fixed": "Festbetrag",
+      "cap": "Obergrenze (optional)",
+      "allProviders": "Alle Anbieter",
+      "paymentMethod": "Zahlungsmethode",
+      "methodAll": "Alle",
+      "methodCard": "Karte",
+      "methodBankDebit": "Lastschrift",
+      "effectiveFrom": "Gültig ab",
+      "addRule": "Regel hinzufügen",
+      "calcPercent": "Prozent vom Rechnungsbetrag",
+      "calcFixed": "Festbetrag",
+      "calcBoth": "Prozent + Festbetrag",
+      "feeIncomeAccount": "Ertragskonto für Gebühren",
+      "webhookUrl": "Webhook-URL",
+      "webhookHint": "Hinterlegen Sie diesen Endpunkt im Dashboard des Anbieters für Zahlungsereignisse.",
+      "copy": "Kopieren",
+      "copied": "Kopiert",
+      "testConnection": "Verbindung testen",
+      "testing": "Teste…"
+    }
+  },
+  "flows": {
+    "title": "Flows",
+    "description": "Visuelle Automatisierungen über Ihre Datensätze – ein Auslöser startet einen Lauf, Bedingungen verzweigen, Aktionen erledigen die Arbeit und Genehmigungsschranken pausieren für Personen.",
+    "searchPlaceholder": "Flows durchsuchen…",
+    "subjectFilter": "Datensatztyp",
+    "table": {
+      "flow": "Flow",
+      "subject": "Datensatztyp",
+      "nodes": "Knoten",
+      "lastRun": "Letzter Lauf",
+      "updated": "Aktualisiert",
+      "status": "Status"
+    },
+    "empty": {
+      "title": "Noch keine Flows",
+      "description": "Ein Flow beginnt bei einem Auslöser, verzweigt bei Bedingungen, pausiert bei Genehmigungsschranken und endet mit Aktionen – E-Mails, Benachrichtigungen, Feldaktualisierungen und Statusänderungen.",
+      "cta": "Neuer Flow"
+    },
+    "statusEnabled": "aktiviert",
+    "statusDisabled": "deaktiviert",
+    "neverRan": "nie",
+    "new": {
+      "button": "Neuer Flow",
+      "title": "Neuer Flow",
+      "description": "Wählen Sie den Datensatztyp, über den dieser Flow läuft. Die Schritte gestalten Sie als Nächstes.",
+      "name": "Name",
+      "namePlaceholder": "z. B. Eingangsrechnungsgenehmigung über 10.000 $",
+      "subject": "Datensatztyp",
+      "subjectPlaceholder": "Datensatztyp auswählen…",
+      "create": "Flow erstellen",
+      "failed": "Der Flow konnte nicht erstellt werden"
+    },
+    "actions": {
+      "enable": "Aktivieren",
+      "disable": "Deaktivieren",
+      "delete": "Löschen",
+      "deleteConfirmTitle": "Flow löschen",
+      "deleteConfirm": "„{name}“ löschen? Der Laufverlauf wird ebenfalls entfernt.",
+      "deleted": "Flow gelöscht",
+      "deleteFailed": "Der Flow konnte nicht gelöscht werden",
+      "updateFailed": "Der Flow konnte nicht aktualisiert werden"
+    },
+    "builder": {
+      "save": "Speichern",
+      "saved": "Flow gespeichert",
+      "saveFailed": "Der Flow konnte nicht gespeichert werden",
+      "unsaved": "Nicht gespeicherte Änderungen",
+      "enabledToggle": "Aktiviert",
+      "namePlaceholder": "Flow-Name",
+      "errorsTitle": "Beheben Sie diese Punkte, um den Flow zu speichern",
+      "warningsTitle": "Warnungen – der Flow wird gespeichert, läuft aber möglicherweise nicht wie erwartet",
+      "warningsBadge": "{count, plural, one {# Warnung} other {# Warnungen}}",
+      "tabs": {
+        "canvas": "Arbeitsfläche",
+        "runs": "Läufe"
+      },
+      "palette": {
+        "title": "Hinzufügen",
+        "trigger": "Auslöser",
+        "condition": "Bedingung",
+        "action": "Aktion",
+        "gate": "Genehmigung"
+      },
+      "canvasEmpty": {
+        "title": "Beginnen Sie mit einem Auslöser",
+        "description": "Auslöser starten einen Lauf, Bedingungen verzweigen ihn, Genehmigungsschranken pausieren ihn für Personen und Aktionen schließen die Arbeit ab. Fügen Sie einen Auslöser hinzu und ziehen Sie dann von seinem Griff, um den nächsten Schritt zu verbinden."
+      },
+      "inspector": {
+        "empty": "Wählen Sie einen Knoten aus, um ihn zu konfigurieren",
+        "deleteNode": "Knoten löschen",
+        "nodeId": "Knoten"
+      }
+    },
+    "node": {
+      "trigger": "Auslöser",
+      "condition": "Bedingung",
+      "action": "Aktion",
+      "gate": "Genehmigung",
+      "conditionDefault": "Wenn…",
+      "gateDefault": "Genehmigung"
+    },
+    "edge": {
+      "then": "dann",
+      "else": "sonst",
+      "approve": "genehmigen",
+      "reject": "ablehnen"
+    },
+    "trigger": {
+      "kind": "Wann",
+      "kinds": {
+        "on_create": "Ein Datensatz wird erstellt",
+        "on_update": "Ein Datensatz wird aktualisiert",
+        "on_submit": "Ein Datensatz wird zur Genehmigung eingereicht",
+        "before_post": "Bevor ein Datensatz gebucht wird",
+        "after_post": "Nachdem ein Datensatz gebucht wurde",
+        "before_void": "Bevor ein Datensatz storniert wird",
+        "status_change": "Der Status ändert sich",
+        "on_field_value": "Ein Feld erfüllt eine Bedingung",
+        "scheduled": "Nach einem Zeitplan",
+        "manual": "Ein Benutzer klickt auf eine Schaltfläche"
+      },
+      "from": "Von Status",
+      "to": "Zu Status",
+      "anyStatus": "Beliebiger Status",
+      "rule": "Wenn der Datensatz übereinstimmt",
+      "cron": "Cron-Zeitplan",
+      "cronHint": "Minute · Stunde · Tag des Monats · Monat · Wochentag",
+      "cronExample": "z. B. 0 8 * * 1 = montags um 08:00",
+      "timezone": "Zeitzone (optional)",
+      "selectRecords": "Einmal für jeden übereinstimmenden Datensatz ausführen",
+      "selectRecordsHint": "Der Zeitplan durchsucht diesen Datensatztyp und startet für jede Übereinstimmung einen eigenen Lauf.",
+      "selectRule": "Datensatzfilter (optional)",
+      "selectRuleAdd": "Datensatzfilter hinzufügen",
+      "selectRuleRemove": "Datensatzfilter entfernen",
+      "selectLimit": "Maximale Datensätze pro Lauf",
+      "buttonLabel": "Schaltflächenbeschriftung",
+      "confirmText": "Bestätigungsnachricht (optional)",
+      "requirePermission": "Erforderliche Berechtigung (optional)",
+      "permissionPlaceholder": "Berechtigung auswählen…",
+      "showIf": "Schaltfläche nur anzeigen, wenn…",
+      "showIfAdd": "Sichtbarkeitsbedingung hinzufügen",
+      "showIfRemove": "Sichtbarkeitsbedingung entfernen",
+      "buttonPreview": "Vorschau der Datensatzschaltfläche",
+      "buttonHint": "Diese Schaltfläche erscheint im Datensatzkopf, wenn der Flow aktiviert ist und seine Berechtigungs- und Sichtbarkeitsbedingungen erfüllt sind.",
+      "defaultButtonLabel": "Flow ausführen"
+    },
+    "condition": {
+      "rule": "Verzweigen, wenn",
+      "label": "Beschriftung (optional)",
+      "labelPlaceholder": "z. B. Über 10.000 $",
+      "hint": "Der Zweig „dann“ läuft, wenn die Regel erfüllt ist; „sonst“ läuft, wenn sie fehlschlägt."
+    },
+    "action": {
+      "kind": "Aktion",
+      "kinds": {
+        "send_email": "Eine E-Mail senden",
+        "notify": "Eine In-App-Benachrichtigung senden",
+        "set_field": "Ein Feld festlegen",
+        "change_status": "Den Status ändern",
+        "post_document": "Das Dokument buchen",
+        "lock_record": "Den Datensatz sperren",
+        "unlock_record": "Den Datensatz entsperren"
+      },
+      "recipients": "Empfänger",
+      "subject": "Betreff",
+      "body": "Textkörper",
+      "attachPdf": "Das Datensatz-PDF anhängen",
+      "attachPdfHint": "Verwendet die aktive PDF-Vorlage Ihrer Organisation für diesen Datensatztyp.",
+      "interpolationHint": "Fügen Sie Datensatzwerte mit '{{'field'}}'-Token ein",
+      "availableFields": "Verfügbare Felder",
+      "title": "Titel",
+      "notifyBody": "Nachricht (optional)",
+      "href": "Zu öffnender Link (optional)",
+      "field": "Feld",
+      "value": "Wert",
+      "valueSource": "Wertquelle",
+      "valueSources": {
+        "literal": "Ein fester Wert",
+        "today": "Heutiges Datum",
+        "now": "Aktuelles Datum und Uhrzeit",
+        "currentUser": "Name des aktuellen Benutzers",
+        "expression": "Bestehender Formelausdruck"
+      },
+      "expressionPreserved": "Dieser bestehende Formelausdruck bleibt erhalten. Die Formelbearbeitung ist über den Formelausdruckseditor des Formulars verfügbar.",
+      "status": "Neuer Status",
+      "postDocumentHint": "Bucht das Dokument über die normale Buchungspipeline in das Hauptbuch. Nichts zu konfigurieren.",
+      "lockReason": "Sperrgrund",
+      "lockReasonPlaceholder": "z. B. Genehmigt – Zahlung ist endgültig",
+      "lockExemptRoles": "Ausgenommene Rollen",
+      "lockExemptHint": "Administratoren sind immer ausgenommen; ausgewählte Rollen dürfen weiterhin bearbeiten.",
+      "unlockHint": "Entfernt die Flow-Sperre, sodass der Datensatz wieder bearbeitet werden kann."
+    },
+    "gate": {
+      "title": "Titel",
+      "titlePlaceholder": "z. B. Controller-Genehmigung",
+      "assignees": "Genehmiger",
+      "mode": "Quorum",
+      "modeAny": "Eine Person darf entscheiden",
+      "modeAll": "Alle müssen genehmigen",
+      "signature": "Eine getippte Signatur verlangen",
+      "preventSelfApproval": "Selbstgenehmigung verhindern",
+      "preventSelfApprovalHint": "Der Einreicher wird aus der Genehmigerliste entfernt; bei Bedarf wird die Anfrage an seinen Vorgesetzten weitergeleitet.",
+      "reminderAfter": "Erinnern nach (Stunden)",
+      "escalateAfter": "Eskalieren nach (Stunden)",
+      "escalateTo": "Eskalieren an",
+      "noEscalation": "Keine Eskalation",
+      "hint": "Der Lauf pausiert hier, bis das Genehmigerquorum entscheidet, und wird dann auf dem Zweig „genehmigen“ oder „ablehnen“ fortgesetzt."
+    },
+    "targets": {
+      "types": {
+        "user": "Ein bestimmter Benutzer",
+        "role": "Alle in einer Rolle",
+        "submitter": "Der Einreicher",
+        "supervisor": "Der Vorgesetzte des Einreichers",
+        "field": "Ein Datensatzfeld (Benutzer)",
+        "email": "E-Mail-Adresse(n)"
+      },
+      "add": "Empfänger hinzufügen",
+      "addAssignee": "Genehmiger hinzufügen",
+      "remove": "Entfernen",
+      "pickUser": "Benutzer auswählen…",
+      "pickRole": "Rolle auswählen…",
+      "pickField": "Feld auswählen…",
+      "emailPlaceholder": "ops@example.com, cfo@example.com"
+    },
+    "logic": {
+      "groupAnd": "Alle von…",
+      "groupOr": "Beliebige von…",
+      "groupNot": "Nicht…",
+      "ops": {
+        "eq": "ist gleich",
+        "ne": "ist ungleich",
+        "gt": "ist größer als",
+        "gte": "ist mindestens",
+        "lt": "ist kleiner als",
+        "lte": "ist höchstens",
+        "in": "ist eines von",
+        "notIn": "ist keines von",
+        "isSet": "ist gesetzt",
+        "isNotSet": "ist leer"
+      },
+      "addRule": "Bedingung hinzufügen",
+      "addGroup": "Gruppe hinzufügen",
+      "remove": "Entfernen",
+      "valuePlaceholder": "Wert",
+      "listPlaceholder": "Kommagetrennte Werte",
+      "true": "Wahr",
+      "false": "Falsch"
+    },
+    "runs": {
+      "title": "Letzte Läufe",
+      "empty": {
+        "title": "Noch keine Läufe",
+        "description": "Aktivieren Sie den Flow und lösen Sie ihn aus – jeder Lauf erscheint hier mit seinem Status und etwaigen Fehlern."
+      },
+      "status": {
+        "running": "läuft",
+        "waiting": "wartet",
+        "completed": "abgeschlossen",
+        "failed": "fehlgeschlagen",
+        "cancelled": "abgebrochen"
+      },
+      "table": {
+        "status": "Status",
+        "trigger": "Auslöser",
+        "subject": "Datensatz",
+        "started": "Gestartet",
+        "finished": "Abgeschlossen",
+        "error": "Fehler"
+      }
+    }
+  },
+  "features": {
+    "bankFeeds": {
+      "title": "Bank Feeds",
+      "description": "Automated bank connectivity — SFTP file drops and Plaid, GoCardless, and TrueLayer live feeds."
+    },
+    "subscriptionBilling": {
+      "title": "Subscription Billing",
+      "description": "Plans and subscriptions that auto-generate recurring invoices (SaaS / retainer)."
+    },
+    "onlinePayments": {
+      "title": "Online-Zahlungen",
+      "description": "Gehostete Zahlungslinks auf Rechnungen (Stripe / Adyen / GoCardless-Lastschrift), Entgeltregeln und Webhooks, die Zahlungseingänge automatisch zuordnen."
+    }
+  }
+}

@@ -1,0 +1,588 @@
+{
+  "title": "期末结账",
+  "description": "按会计期间结账各模块，配以数据库强制的过账管控。",
+  "workspaceDescription": "从就绪评估到发布，运行受控且有据可查的结账流程。每次审签都与其所批准的总账状态保持关联。",
+  "importedPeriodLockReason": "导入的源系统期间状态",
+  "searchPlaceholder": "搜索会计期间…",
+  "stageNavigation": "结账阶段",
+  "continuousValidation": "持续与总账校验 · 上次检查 {at}",
+  "runTitle": "{period} 结账",
+  "runDescription": "{book} · {blueprint} v{version}",
+  "filters": {
+    "book": "会计账簿",
+    "fiscalYear": "会计年度",
+    "fyOption": "FY {year}",
+    "status": "状态"
+  },
+  "table": {
+    "period": "会计期间",
+    "range": "范围",
+    "entries": "分录",
+    "debits": "借方",
+    "rangeValue": "{start} → {end}",
+    "status": "状态",
+    "readiness": "就绪度",
+    "action": "操作"
+  },
+  "modules": {
+    "ar": "应收",
+    "ap": "应付",
+    "banking": "银行",
+    "assets": "资产",
+    "tax": "税务",
+    "gl": "总账"
+  },
+  "status": { "closed": "已结账", "open": "未结账" },
+  "runStatus": {
+    "not_started": "未开始",
+    "draft": "草稿",
+    "in_progress": "进行中",
+    "review": "审核中",
+    "approved": "已审批",
+    "closed": "已结账",
+    "published": "已发布",
+    "cancelled": "已取消"
+  },
+  "stages": {
+    "scope": "范围",
+    "readiness": "就绪评估",
+    "execute": "执行",
+    "review": "审核",
+    "lock": "锁定",
+    "publish": "发布"
+  },
+  "actions": {
+    "start": "开始结账",
+    "starting": "正在开始…",
+    "manageBooks": "管理账簿",
+    "resume": "继续",
+    "backToPeriods": "返回会计期间",
+    "revalidate": "重新校验",
+    "runRevaluation": "运行外币重估",
+    "runConsolidation": "运行合并",
+    "startTask": "开始",
+    "complete": "完成",
+    "submitReview": "提交审核",
+    "approve": "审批",
+    "requestChanges": "要求修改",
+    "addEvidence": "添加证据",
+    "takeAction": "采取行动",
+    "requestApproval": "请求审批",
+    "reviewApprovals": "查看审批",
+    "configureApprovalFlow": "配置审批流程",
+    "documentation": "文档",
+    "lockPeriod": "锁定期间",
+    "publish": "发布结账包",
+    "downloadBinder": "下载不可变审计档案"
+  },
+  "errors": { "actionFailed": "无法完成该结账操作" },
+  "messages": {
+    "refresh": "结账状态已刷新",
+    "request_approval": "结账已提交审批",
+    "close": "期间已锁定",
+    "publish": "结账包已发布",
+    "taskUpdated": "任务已更新",
+    "revaluationPosted": "外币余额已重估",
+    "consolidationPosted": "所有权调整、汇率和抵销已过账",
+    "evidenceAdded": "证据已附加",
+    "automationComplete": "结账自动化已完成"
+  },
+  "metrics": {
+    "readiness": "就绪度",
+    "liveLedger": "实时总账管控",
+    "progress": "进度",
+    "tasksComplete": "{total} 项任务中已完成 {completed} 项",
+    "criticalPath": "关键路径",
+    "clear": "无阻碍",
+    "historicalDays": "历史上于第 {days} 天完成",
+    "noPredictedBlocker": "无历史阻碍项"
+  },
+  "scope": {
+    "title": "结账范围",
+    "description": "本次结账运行的不可变上下文。",
+    "period": "会计期间",
+    "book": "会计账簿",
+    "blueprint": "蓝图",
+    "target": "目标结账日期",
+    "entities": "实体",
+    "selectedEntities": "{count, plural, one {# 个已选实体} other {# 个已选实体}}",
+    "allEntities": "所有实体",
+    "package": "报告包",
+    "noPackage": "未选择报告包"
+  },
+  "rehearsal": {
+    "title": "结账预演",
+    "description": "创建一个截至指定时点的沙箱，以预演调整、合并和报表，而不影响正式账簿。",
+    "action": "在沙箱中预演"
+  },
+  "readiness": {
+    "title": "总账就绪度",
+    "description": "实时诊断可检测阻碍项，并在账簿变动时使过期的审签失效。",
+    "score": "就绪",
+    "clear": "无阻碍性总账异常。"
+  },
+  "diagnostics": {
+    "drafts-open": {
+      "title": "仍存在未过账活动",
+      "message": "{count, plural, one {本期间内仍有 # 笔草稿或待处理交易。} other {本期间内仍有 # 笔草稿或待处理交易。}}"
+    },
+    "bank-unreconciled": {
+      "title": "现金科目需要对账",
+      "message": "{count, plural, one {有 # 个可对账科目未截至期末完成审签。} other {有 # 个可对账科目未截至期末完成审签。}}"
+    },
+    "depreciation-unposted": {
+      "title": "折旧仍未过账",
+      "message": "{count, plural, one {仍有 # 条计划折旧行未过账。} other {仍有 # 条计划折旧行未过账。}}"
+    },
+    "fx-missing": {
+      "title": "缺少外币汇率",
+      "message": "{count, plural, one {有 # 种交易货币没有可用的期末即期汇率。} other {有 # 种交易货币没有可用的期末即期汇率。}}"
+    },
+    "fx-unrevalued": {
+      "title": "外币余额未重估",
+      "message": "{count, plural, one {有 # 项外币货币性余额未按期末汇率重估。} other {有 # 项外币货币性余额未按期末汇率重估。}}"
+    },
+    "intercompany-residual": {
+      "title": "关联方往来未能抵销",
+      "message": "{count, plural, one {有 # 个抵销科目存在非零的集团残值。} other {有 # 个抵销科目存在非零的集团残值。}}"
+    },
+    "material-variances": {
+      "title": "重大波动需要说明",
+      "message": "{count, plural, one {有 # 个科目超过已配置的重要性阈值。} other {有 # 个科目超过已配置的重要性阈值。}}"
+    }
+  },
+  "severity": {
+    "info": "信息",
+    "warning": "警告",
+    "error": "错误",
+    "critical": "严重"
+  },
+  "workstreams": {
+    "readiness": "就绪评估",
+    "banking": "银行",
+    "ar": "应收款",
+    "ap": "应付款",
+    "assets": "固定资产",
+    "tax": "税务",
+    "payroll": "薪酬",
+    "intercompany": "关联方往来",
+    "gl": "总账",
+    "review": "审核",
+    "publish": "发布"
+  },
+  "gates": { "none": "无关卡", "soft": "软关卡", "hard": "硬关卡" },
+  "taskStatus": {
+    "blocked": "受阻",
+    "ready": "就绪",
+    "in_progress": "进行中",
+    "submitted": "待审核",
+    "changes_requested": "已要求修改",
+    "complete": "完成",
+    "waived": "已豁免",
+    "invalidated": "需要重新校验"
+  },
+  "tasks": {
+    "dependencies": "依赖于：{dependencies}",
+    "notePlaceholder": "添加备注或证据摘要…"
+  },
+  "lock": {
+    "title": "受控期间锁定",
+    "description": "操作性子账在总账之前锁定。锁定应用后，数据库将拒绝任何过账。",
+    "blockedTitle": "审批受阻",
+    "blockedDescription": "{count, plural, one {仍有 # 项硬关卡任务} other {仍有 # 项硬关卡任务}}。",
+    "approvalTitle": "独立审批与锁定",
+    "approvalDescription": "结账运行的发起人不能提供最终审批。审批后的任何总账变动都将重新开启审核。",
+    "complete": "期间已由 {name} 锁定"
+  },
+  "lockStates": {
+    "open": "未锁定",
+    "soft_closed": "软结账",
+    "closed": "已结账"
+  },
+  "publish": {
+    "package": "结账报告包",
+    "description": "审核已配置的输出，然后冻结证据档案并发布报告包。",
+    "complete": "报告包已由 {name} 发布",
+    "lockFirst": "发布前请应用已批准的期间锁定。",
+    "awaitingApproval": "发布前请完成结账审核和审批流程。"
+  },
+  "timeline": {
+    "title": "不可变结账时间线",
+    "description": "任务、证据、失效、审批、锁定和发布，统一记录于一条审计轨迹中。",
+    "system": "系统"
+  },
+  "events": {
+    "run": {
+      "started": "结账运行已开始",
+      "data_changed": "总账变动使先前工作失效",
+      "approval_requested": "已请求结账审批",
+      "approval_rejected": "结账审批已拒绝",
+      "approved": "结账已获得最终审批",
+      "closed": "期间锁定已应用",
+      "published": "结账包已发布"
+    },
+    "task": {
+      "start": "任务已开始",
+      "submit": "任务已提交",
+      "complete": "任务已完成",
+      "approve": "任务已审批",
+      "request_changes": "已要求修改",
+      "waive": "任务已豁免",
+      "evidence_added": "证据已附加"
+    },
+    "automation": {
+      "completed": "自动化已完成",
+      "failed": "自动化失败"
+    }
+  },
+  "reports": {
+    "balance-sheet": "资产负债表",
+    "pnl": "利润表",
+    "cash-flow": "现金流量表",
+    "trial-balance": "试算平衡表",
+    "general-ledger": "总账"
+  },
+  "defaultData": {
+    "calendar": { "name": "标准会计日历" },
+    "blueprint": {
+      "name": "标准结账",
+      "description": "总账原生的月度、季度和年末结账"
+    },
+    "policies": {
+      "materialVariance": {
+        "name": "重大差异审核",
+        "description": "标记同时超过绝对阈值和百分比阈值的科目变动。"
+      },
+      "independentApproval": {
+        "name": "独立最终审批",
+        "description": "结账运行的发起人不能提供控制人最终审批。"
+      },
+      "controlledReopen": {
+        "name": "受控重新开启",
+        "description": "重新开启需要理由、独立审批和有效期。"
+      }
+    },
+    "package": {
+      "name": "管理结账包",
+      "description": "核心财务报表和结账证据档案"
+    }
+  },
+  "defaultSteps": {
+    "drafts-cleared": {
+      "title": "清理未过账和待处理交易",
+      "description": "处理属于本期间的草稿日记账和交易。"
+    },
+    "bank-reconciled": {
+      "title": "对账每个现金科目",
+      "description": "所有可对账科目都必须截至期末完成审签。"
+    },
+    "ar-cutoff": {
+      "title": "完成应收款截止",
+      "description": "确认开票完整性、未核销收款、贷记和账龄异常。"
+    },
+    "ap-cutoff": {
+      "title": "完成应付款截止",
+      "description": "确认发票完整性、未入账负债、贷记和付款截止。"
+    },
+    "depreciation-posted": {
+      "title": "过账固定资产折旧",
+      "description": "运行计划折旧并处理异常。"
+    },
+    "fx-ready": {
+      "title": "校验外币汇率覆盖情况",
+      "description": "每种交易货币都必须有可用的期末汇率。"
+    },
+    "fx-revalued": {
+      "title": "重估外币余额",
+      "description": "将未清的外币银行、应收和应付余额按期末汇率重新计价。"
+    },
+    "intercompany-balanced": {
+      "title": "对账关联方往来",
+      "description": "关联方科目必须在抵销前保持平衡。"
+    },
+    "consolidation": {
+      "title": "推导汇率并过账抵销",
+      "description": "完成多实体账簿的合并调整。"
+    },
+    "variance-review": {
+      "title": "说明重大波动",
+      "description": "对照上期审核科目变动并保留说明。"
+    },
+    "controller-approval": {
+      "title": "控制人审签",
+      "description": "独立审核就绪度、异常、证据和报告输出。"
+    },
+    "lock-subledgers": {
+      "title": "锁定操作性子账",
+      "description": "在总账之前锁定应收、应付、银行、资产和税务。"
+    },
+    "lock-gl": {
+      "title": "锁定总账",
+      "description": "在每项前置条件通过后，应用数据库强制的总账锁定。"
+    },
+    "publish-package": {
+      "title": "发布结账包",
+      "description": "冻结结账档案并发布已配置的报告包。"
+    }
+  },
+  "setup": {
+    "title": "会计期间与结账",
+    "description": "设计会计日历、生成期间、管理锁定与重新开启、对结账蓝图进行版本管理，并配置管控、自动化和报告包。",
+    "tabs": {
+      "calendars": "日历",
+      "periods": "会计期间",
+      "blueprints": "蓝图",
+      "policies": "政策",
+      "automation": "自动化",
+      "packages": "报告包"
+    },
+    "calendars": {
+      "title": "会计日历",
+      "description": "定义会计年度如何转化为过账期间。",
+      "startsMonth": "自第 {month} 个月开始",
+      "editTitle": "编辑会计日历",
+      "newTitle": "新建会计日历",
+      "formDescription": "一旦存在总账活动，日历基础设置即受保护。",
+      "anchorHint": "所配置锚定会计年度的开始日期。",
+      "configurationHint": "配置 anchorFiscalYear 和 leapWeekYears，或自定义年度和期间日期范围。"
+    },
+    "periods": {
+      "title": "会计期间与锁定",
+      "description": "按账簿和模块生成、搜索、锁定、软结账并申请受控重新开启。",
+      "searchPlaceholder": "搜索会计期间…",
+      "generateTitle": "生成会计期间",
+      "generateDescription": "为某个会计日历和年度创建过账期间。",
+      "moduleSummary": "{total} 个模块中已结账 {closed} 个",
+      "lockedOn": "锁定于 {date}",
+      "lockTitle": "确认期间锁定",
+      "reopenTitle": "申请受控重新开启",
+      "lockDescription": "{module} · {period}。理由将保留在不可变的结账历史中。",
+      "reopenRequests": "重新开启申请",
+      "requestedBy": "申请人 {name}"
+    },
+    "blueprints": {
+      "title": "结账蓝图",
+      "description": "构建可复用的依赖关系图，含负责人、证据、自动化以及硬关卡或软关卡。",
+      "stepCount": "{count, plural, one {# 个步骤} other {# 个步骤}}",
+      "newTitle": "新建结账蓝图",
+      "newVersionTitle": "创建新的蓝图版本",
+      "versionHint": "已发布的运行保留其原始版本；编辑将创建新的不可变版本。",
+      "steps": "依赖关系图步骤"
+    },
+    "policies": {
+      "title": "结账政策",
+      "description": "配置重要性、锁定、审核、职责分离和异常管控。",
+      "formTitle": "政策配置",
+      "rulesHint": "设置自定义重要性阈值并控制每项政策的适用范围——无需开发人员参与。"
+    },
+    "automation": {
+      "title": "结账自动化",
+      "description": "以通知、指派、检查、任务、报表或流程响应结账事件。",
+      "formTitle": "自动化规则"
+    },
+    "packages": {
+      "title": "报告包",
+      "description": "定义随结账一并发布的报表、收件人和投递配置。",
+      "formTitle": "报告包",
+      "reportCount": "{count, plural, one {# 张报表} other {# 张报表}}",
+      "recipientsHint": "每行一个收件人。"
+    },
+    "actions": {
+      "newCalendar": "新建日历",
+      "newBlueprint": "新建蓝图",
+      "newPolicy": "新建政策",
+      "newAutomation": "新建自动化",
+      "newPackage": "新建报告包",
+      "save": "保存",
+      "saving": "正在保存…",
+      "saveVersion": "保存为新版本",
+      "generate": "生成期间",
+      "addStep": "添加步骤",
+      "remove": "移除",
+      "close": "结账",
+      "softClose": "软结账",
+      "reopen": "重新开启",
+      "requestReopen": "申请重新开启",
+      "confirmClose": "确认结账",
+      "approve": "审批",
+      "reject": "拒绝",
+      "cancel": "取消",
+      "manageBooks": "管理账簿",
+      "managePeriod": "管理 {period}"
+    },
+    "fields": {
+      "name": "名称",
+      "description": "描述",
+      "cadence": "频率",
+      "yearStartMonth": "年度起始月份",
+      "weekStartsOn": "每周起始日",
+      "anchorDate": "锚定日期",
+      "timeZone": "时区",
+      "adjustmentPeriod": "生成调整期间",
+      "defaultCalendar": "默认会计日历",
+      "calendar": "会计日历",
+      "book": "会计账簿",
+      "fiscalYear": "会计年度",
+      "reason": "理由",
+      "periodType": "期间类型",
+      "stepKey": "稳定步骤键",
+      "stepTitle": "步骤标题",
+      "taskType": "任务类型",
+      "dueOffset": "到期偏移（工作日）",
+      "ownerRole": "默认负责人角色键",
+      "reviewerRole": "默认审核人角色键",
+      "applicability": "适用性规则",
+      "workstream": "工作流",
+      "gate": "关卡",
+      "completion": "完成方式",
+      "dependencies": "依赖键",
+      "evidenceRequired": "需要证据",
+      "defaultBlueprint": "默认结账蓝图",
+      "code": "稳定代码",
+      "policyType": "政策类型",
+      "rules": "规则",
+      "trigger": "触发条件",
+      "action": "操作",
+      "conditions": "条件",
+      "configuration": "配置",
+      "reports": "报表",
+      "recipients": "收件人",
+      "delivery": "投递配置",
+      "defaultPackage": "默认报告包",
+      "active": "启用"
+    },
+    "labels": {
+      "default": "默认",
+      "active": "启用",
+      "inactive": "停用"
+    },
+    "cadences": {
+      "monthly": "日历月",
+      "four_four_five": "4-4-5 周",
+      "four_five_four": "4-5-4 周",
+      "five_four_four": "5-4-4 周",
+      "thirteen_period": "13 个四周期间",
+      "custom": "自定义期间"
+    },
+    "weekdays": {
+      "0": "星期日",
+      "1": "星期一",
+      "2": "星期二",
+      "3": "星期三",
+      "4": "星期四",
+      "5": "星期五",
+      "6": "星期六"
+    },
+    "states": {
+      "open": "未锁定",
+      "soft_closed": "软结账",
+      "partial": "部分结账",
+      "closed": "已结账"
+    },
+    "modules": {
+      "ar": "应收",
+      "ap": "应付",
+      "banking": "银行",
+      "assets": "资产",
+      "tax": "税务",
+      "gl": "总账"
+    },
+    "reopenStates": {
+      "requested": "已申请",
+      "approved": "已批准",
+      "rejected": "已拒绝",
+      "expired": "已过期",
+      "reclosed": "已重新结账"
+    },
+    "periodTypes": {
+      "any": "任意结账",
+      "month": "月末",
+      "quarter": "季末",
+      "year": "年末",
+      "adjustment": "调整"
+    },
+    "workstreams": {
+      "readiness": "就绪评估",
+      "banking": "银行",
+      "ar": "应收款",
+      "ap": "应付款",
+      "assets": "固定资产",
+      "tax": "税务",
+      "payroll": "薪酬",
+      "intercompany": "关联方往来",
+      "gl": "总账",
+      "review": "审核",
+      "publish": "发布"
+    },
+    "gates": { "none": "无关卡", "soft": "软关卡", "hard": "硬关卡" },
+    "completionModes": {
+      "manual": "手动",
+      "computed": "总账计算",
+      "automatic": "自动"
+    },
+    "taskTypes": {
+      "check": "检查",
+      "action": "操作",
+      "reconciliation": "对账",
+      "journal": "日记账",
+      "approval": "审批",
+      "report": "报表",
+      "publish": "发布"
+    },
+    "policyTypes": {
+      "materiality": "重要性",
+      "lock": "锁定",
+      "review": "审核",
+      "segregation": "职责分离",
+      "exception": "异常"
+    },
+    "automationTriggers": {
+      "run_started": "运行已开始",
+      "task_ready": "任务变为就绪",
+      "exception_opened": "异常已开启",
+      "deadline_approaching": "临近截止日期",
+      "run_closed": "运行已结束"
+    },
+    "automationActions": {
+      "notify": "通知",
+      "assign": "指派",
+      "run_check": "运行检查",
+      "complete_task": "完成任务",
+      "create_task": "创建任务",
+      "generate_report": "生成报表",
+      "start_flow": "启动流程"
+    },
+    "reports": {
+      "balance-sheet": "资产负债表",
+      "pnl": "利润表",
+      "cash-flow": "现金流量表",
+      "trial-balance": "试算平衡表",
+      "general-ledger": "总账"
+    },
+    "table": { "period": "会计期间", "range": "范围", "entries": "分录", "status": "状态" },
+    "empty": {
+      "calendars": "没有与此搜索匹配的会计日历。",
+      "periods": "没有与这些筛选条件匹配的会计期间。",
+      "blueprints": "没有与此搜索匹配的结账蓝图。",
+      "policies": "没有与此搜索匹配的结账政策。",
+      "automation": "没有与此搜索匹配的自动化规则。",
+      "packages": "没有与此搜索匹配的报告包。"
+    },
+    "messages": {
+      "calendarSaved": "会计日历已保存",
+      "periodsGenerated": "会计期间已生成",
+      "lockSaved": "期间锁定已保存",
+      "reopenRequested": "重新开启申请已提交",
+      "reopenApproved": "重新开启窗口已按已配置政策批准",
+      "reopenRejected": "重新开启申请已拒绝",
+      "blueprintSaved": "结账蓝图版本已保存",
+      "policySaved": "结账政策已保存",
+      "automationSaved": "自动化规则已保存",
+      "packageSaved": "报告包已保存"
+    },
+    "errors": {
+      "actionFailed": "无法保存该设置更改",
+      "invalidConfiguration": "配置必须有效且完整"
+    }
+  }
+}

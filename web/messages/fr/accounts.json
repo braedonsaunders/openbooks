@@ -1,0 +1,103 @@
+{
+  "list": {
+    "title": "Plan comptable",
+    "description": "Soldes courants en signe naturel (bilan en cumulatif, résultats de l’exercice en cours), consolidés dans les comptes sommaires.",
+    "searchPlaceholder": "Rechercher un numéro ou un nom…",
+    "views": {
+      "list": "Liste",
+      "hierarchy": "Hiérarchie"
+    },
+    "newAccount": "Nouveau compte",
+    "viewRegister": "Voir le registre",
+    "expand": "Développer le compte",
+    "collapse": "Réduire le compte",
+    "badges": {
+      "inactive": "inactif",
+      "summary": "sommaire"
+    }
+  },
+  "types": {
+    "assetBank": "Banque",
+    "assetReceivable": "Comptes clients",
+    "assetCurrentOther": "Autres actifs à court terme",
+    "assetFixed": "Immobilisations",
+    "assetOther": "Autres actifs",
+    "liabilityPayable": "Comptes fournisseurs",
+    "liabilityCard": "Cartes de crédit d’entreprise",
+    "liabilityCurrentOther": "Autres passifs à court terme",
+    "liabilityLongTerm": "Passifs à long terme",
+    "equity": "Capitaux propres",
+    "income": "Produits",
+    "incomeOther": "Autres produits",
+    "cogs": "Coût des marchandises vendues",
+    "expense": "Charges",
+    "expenseOther": "Autres charges",
+    "expenseDeferred": "Charges reportées"
+  },
+  "classes": {
+    "asset": "Actifs",
+    "liability": "Passifs",
+    "equity": "Capitaux propres",
+    "income": "Produits",
+    "expense": "Charges"
+  },
+  "drawer": {
+    "saved": "Compte enregistré",
+    "created": "Compte créé",
+    "newTitle": "Nouveau compte",
+    "newDescription": "Créez un compte d’imputation ou récapitulatif. Les soldes d’ouverture doivent passer par une écriture équilibrée.",
+    "create": "Créer le compte",
+    "typeLocked": "Le type ne peut plus être modifié après une activité au grand livre.",
+    "parent": "Compte parent",
+    "currencyRestriction": "Restriction de devise",
+    "anyCurrency": "Toute devise",
+    "allSubsidiaries": "Toutes les filiales",
+    "summary": "Compte récapitulatif",
+    "reconcilable": "Rapprochable",
+    "eliminate": "Éliminer lors de la consolidation",
+    "includeSubsidiaries": "Inclure les filiales enfants",
+    "requiredDimensions": "Dimensions obligatoires à la comptabilisation",
+    "dimensions": {
+      "department": "Service",
+      "location": "Emplacement",
+      "class": "Classe",
+      "project": "Projet",
+      "party": "Tiers"
+    },
+    "errors": {
+      "name_required": "Le nom du compte est obligatoire.",
+      "invalid_type": "Choisissez un type de compte valide.",
+      "type_has_transactions": "Le type ne peut plus être modifié après une activité au grand livre.",
+      "invalid_parent": "Choisissez un compte parent valide.",
+      "parent_must_be_summary": "Le parent doit être un compte récapitulatif.",
+      "parent_type_mismatch": "Le parent et l’enfant doivent avoir le même type de compte.",
+      "parent_cycle": "Ce parent créerait une hiérarchie circulaire.",
+      "summary_reconcilable_conflict": "Un compte récapitulatif ne peut pas être rapprochable.",
+      "summary_has_transactions": "Un compte ayant une activité ne peut pas devenir récapitulatif.",
+      "summary_has_children": "Un compte ayant des enfants actifs doit rester récapitulatif.",
+      "inactive_has_children": "Désactivez d’abord les comptes enfants actifs.",
+      "invalid_currency": "Choisissez une devise valide.",
+      "invalid_subsidiary": "Choisissez une filiale valide.",
+      "invalid_dimensions": "Choisissez des dimensions obligatoires valides.",
+      "invalid_custom_fields": "Vérifiez les valeurs des champs personnalisés.",
+      "number_in_use": "Ce numéro de compte est déjà utilisé.",
+      "account_changed": "Ce compte a changé pendant votre modification. Rouvrez-le et réessayez.",
+      "invalid_idempotency_key": "La demande de compte n’a pas pu être relancée de façon sécuritaire.",
+      "save_failed": "Le compte n’a pas pu être enregistré."
+    },
+    "monetary": "Réévaluation de change (élément monétaire)",
+    "monetaryDefault": "Selon le type de compte",
+    "monetaryAlways": "Toujours réévaluer",
+    "monetaryNever": "Ne jamais réévaluer"
+  },
+  "register": {
+    "notFound": "Compte introuvable",
+    "subtitle": "registre · {count, plural, one {# ligne} other {# lignes}} · solde courant {balance}",
+    "periodFilter": "Filtré sur {label}",
+    "columns": {
+      "entry": "Écriture",
+      "debit": "Débit",
+      "credit": "Crédit"
+    }
+  }
+}

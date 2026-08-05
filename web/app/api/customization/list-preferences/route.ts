@@ -1,0 +1,41 @@
+import { NextResponse } from "next/server";
+import { sql } from "drizzle-orm";
+import { db } from "@openbooks/engine/src/db.ts";
+import { getAuthz } from "../../../../lib/authz";
+import { RECORD_TYPE_BY_KEY } from "@openbooks/customization";
+
+export const runtime = "nodejs";
+
+/**
+ * PUT /api/customization/list-preferences — set the signed-in user's default
+ * saved list view for a record type. Self-service. Body:
+ *   { recordType, viewId?: string | null }
+ */
+export async function PUT(req: Request) {
+  const authz = await getAuthz();
+  if (!authz) return NextResponse.json({ error: "unauthorized" }, { status: 401 });
+  const { user } = authz;
+  const body = (await req.json().catch(() => ({}))) as {
+    recordType?: string;
+    viewId?: string | null;
+  };
+  if (!body.recordType || !RECORD_TYPE_BY_KEY[body.recordType])
+    return NextResponse.json({ error: "unknown record type" }, { status: 400 });
+  const viewId = body.viewId ?? null;
+  if (viewId) {
+    // Must be a view this user can actually use: in-org, right record type,
+    // and either org-shared or their own personal view.
+    const owned = (await db.execute(sql`
+      select 1 from list_views
+       where id = ${viewId} and org_id = ${user.orgId} and record_type = ${body.recordType}
+         and (scope = 'org' or owner_id = ${user.id})
+    `)) as unknown as { rows: unknown[] };
+    if (!owned.rows[0]) return NextResponse.json({ error: "list view not found" }, { status: 404 });
+  }
+  await db.execute(sql`
+    insert into user_list_preferences (org_id, user_id, record_type, view_id, created_by, updated_by)
+    values (${user.orgId}, ${user.id}, ${body.recordType}, ${viewId}, ${user.id}, ${user.id})
+    on conflict (org_id, user_id, record_type) do update
+      set view_id = excluded.view_id, updated_at = now(), updated_by = ${user.id}`);
+  return NextResponse.json({ ok: true, viewId });
+}

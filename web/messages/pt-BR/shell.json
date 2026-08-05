@@ -1,0 +1,131 @@
+{
+  "accountMenu": {
+    "account": "Conta",
+    "menuAriaLabel": "Menu da conta",
+    "theme": "Tema",
+    "language": "Idioma",
+    "menuLayout": "Layout do menu",
+    "signOut": "Sair",
+    "signingOut": "Saindo…",
+    "roles": {
+      "admin": "Administrador",
+      "controller": "Controller",
+      "accountant": "Contador",
+      "approver": "Aprovador",
+      "viewer": "Visualizador"
+    },
+    "organizations": "Organizações",
+    "superAdmin": "Superadministrador",
+    "security": "Segurança de login"
+  },
+  "language": {
+    "label": "Idioma",
+    "orgDefault": "Padrão da organização",
+    "saveFailed": "Não foi possível salvar sua preferência de idioma"
+  },
+  "menuMode": {
+    "label": "Layout do menu",
+    "orgDefault": "Padrão da organização",
+    "saveFailed": "Não foi possível salvar sua preferência de layout do menu",
+    "options": {
+      "sidebar": "Barra lateral",
+      "topbar": "Barra de menu superior"
+    }
+  },
+  "topNav": {
+    "ariaLabel": "Primário",
+    "more": "Mais"
+  },
+  "apps": {
+    "ariaLabel": "Abrir apps",
+    "title": "Apps"
+  },
+  "globalCreate": {
+    "ariaLabel": "Criar novo",
+    "title": "Criar novo",
+    "description": "Inicie um rascunho real e continue avançando.",
+    "createFailed": "Não foi possível criar o rascunho",
+    "groups": {
+      "sales": "Vendas",
+      "purchases": "Compras",
+      "accounting": "Contabilidade",
+      "peopleAndLists": "Pessoas e listas"
+    },
+    "items": {
+      "invoice": "Fatura",
+      "creditMemo": "Memorando de crédito",
+      "estimate": "Orçamento",
+      "salesOrder": "Pedido de venda",
+      "customerPayment": "Pagamento de cliente",
+      "bill": "Conta a pagar",
+      "vendorCredit": "Crédito de fornecedor",
+      "purchaseOrder": "Pedido de compra",
+      "vendorPayment": "Pagamento a fornecedor",
+      "journal": "Lançamento contábil",
+      "expense": "Relatório de despesas",
+      "cardCharge": "Cobrança em cartão",
+      "cardRefund": "Reembolso em cartão",
+      "check": "Cheque",
+      "deposit": "Depósito bancário",
+      "transfer": "Transferência bancária",
+      "asset": "Ativo imobilizado",
+      "customer": "Cliente",
+      "vendor": "Fornecedor",
+      "employee": "Funcionário",
+      "item": "Item ou serviço",
+      "project": "Projeto"
+    }
+  },
+  "relatedParty": {
+    "loadFailed": "Não foi possível abrir este registro"
+  },
+  "globalSearch": {
+    "ariaLabel": "Buscar",
+    "placeholder": "Buscar em tudo…",
+    "clear": "Limpar busca",
+    "searching": "Buscando…",
+    "noMatches": "Nenhum resultado para “{query}”",
+    "navigate": "navegar",
+    "open": "abrir",
+    "close": "fechar",
+    "resultCount": "{count, plural, one {# resultado} other {# resultados}}",
+    "groups": {
+      "contacts": "Contatos",
+      "transactions": "Transações",
+      "accounts": "Contas",
+      "items": "Itens",
+      "projects": "Projetos"
+    }
+  },
+  "meta": {
+    "description": "A suite empresarial aberta. Rode com livros abertos."
+  },
+  "brand": {
+    "home": "Ir para o painel"
+  },
+  "sidebar": {
+    "expand": "Expandir barra lateral",
+    "collapse": "Recolher barra lateral"
+  },
+  "mobileNav": {
+    "openMenu": "Abrir menu",
+    "menu": "Menu",
+    "primaryAriaLabel": "Primário"
+  },
+  "themeToggle": {
+    "label": "Tema",
+    "options": {
+      "light": "Claro",
+      "system": "Sistema",
+      "dark": "Escuro"
+    },
+    "current": "Tema: {theme}",
+    "currentHint": "Tema: {theme} (clique para mudar)"
+  },
+  "notifications": {
+    "ariaLabel": "Notificações",
+    "title": "Notificações",
+    "empty": "Você está em dia",
+    "markAllRead": "Marcar tudo como lido"
+  }
+}

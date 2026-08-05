@@ -1,0 +1,2311 @@
+{
+  "hub": {
+    "metaTitle": "管理センター",
+    "title": "管理センター",
+    "subtitle": "このワークスペースを構成するすべて — 会社セットアップ、ユーザー、システム。",
+    "groups": {
+      "company": "会社",
+      "people": "ユーザーとアクセス",
+      "workspace": "ワークスペース",
+      "activity": "アクティビティとデータ",
+      "data": "連携とデータ"
+    },
+    "cards": {
+      "settings": {
+        "title": "会社と会計",
+        "description": "組織情報、基準通貨、会計年度と統制勘定"
+      },
+      "users": {
+        "title": "ユーザー",
+        "description": "ユーザーを招待し、ロールと権限の上書きを割り当て"
+      },
+      "roles": {
+        "title": "ロール",
+        "description": "ロールと、それぞれが付与する内容を正確に定義"
+      },
+      "navigation": {
+        "title": "ナビゲーション",
+        "description": "ワークスペース、メニューラベル、モバイルショートカットを整理"
+      },
+      "records": {
+        "title": "カスタムレコード",
+        "description": "独自のレコードタイプを設計 — それぞれが専用のリストとエディターを備えた完全なモジュールになります"
+      },
+      "customFields": {
+        "title": "カスタムフィールド",
+        "description": "アプリ全体のレコードに型付きフィールドを追加"
+      },
+      "customization": {
+        "title": "フォームとビュー",
+        "description": "組織ごと、ユーザーごとに取引フォームと保存済みリストビューをカスタマイズ"
+      },
+      "pdfTemplates": {
+        "title": "PDFテンプレート",
+        "description": "請求書、仕訳、およびすべての取引の印刷可能なPDFドキュメントを設計"
+      },
+      "scripts": {
+        "title": "スクリプト",
+        "description": "元帳イベントで実行されるサンドボックス化された自動化"
+      },
+      "apps": {
+        "title": "アプリ",
+        "description": "アプリパッケージを構築・インストール — サンドボックス化されたフロントエンドと統制されたバックエンド"
+      },
+      "sandboxes": {
+        "title": "環境",
+        "description": "本番の分離されたサンドボックスコピーを作成、更新、昇格"
+      },
+      "backup": {
+        "title": "バックアップ",
+        "description": "組織のバックアップをダウンロード・スケジュール・保持"
+      },
+      "apiKeys": {
+        "title": "APIキー",
+        "description": "連携用のスコープ付きAPIキーを作成し、使用ログを表示"
+      },
+      "apiDocs": {
+        "title": "APIドキュメント",
+        "description": "すべてのレコードおよび取引タイプのREST APIリファレンスを閲覧"
+      },
+      "audit": {
+        "title": "監査ログ",
+        "description": "すべての書き込みを実行者と変更前後の差分とともに記録"
+      },
+      "sync": {
+        "title": "移行とミラー",
+        "description": "移行元の会計システムから移行し、検証中は両方のシステムをミラーリング"
+      },
+      "ai": {
+        "title": "AI",
+        "description": "アシスタント用のプロバイダー、モデル、暗号化されたAPIキー"
+      },
+      "setup": {
+        "title": "セットアップ",
+        "description": "税、ディメンション、支払条件、採番、その他の構成"
+      },
+      "email": {
+        "title": "メール配信",
+        "description": "スケジュールされたレポートを送信できるよう、メールプロバイダーを設定"
+      }
+    }
+  },
+  "buildHub": {
+    "metaTitle": "ビルド",
+    "title": "ビルド",
+    "subtitle": "プラットフォーム上で作成するすべて — データモデル、フォームとドキュメント、自動化、そしてAPI。",
+    "groups": {
+      "model": "データモデル",
+      "experience": "フォームとドキュメント",
+      "automation": "自動化とアプリ",
+      "api": "API"
+    }
+  },
+  "audit": {
+    "title": "監査ログ",
+    "description": "すべての変更の完全で改ざん防止された履歴です。記帳済みの修正および削除については、変更前後の詳細とGLへの影響を全面的に記録します。",
+    "searchPlaceholder": "レコードタイプ、ユーザー、または参照を検索…",
+    "actionFilter": "アクション",
+    "empty": {
+      "title": "監査エントリーがまだありません",
+      "description": "レコードへの変更は、発生するとここに表示されます。"
+    },
+    "table": {
+      "when": "日時",
+      "actor": "ユーザー",
+      "action": "アクション",
+      "tableName": "レコードタイプ",
+      "row": "参照",
+      "changes": "変更"
+    },
+    "systemActor": "システム",
+    "actions": {
+      "insert": "挿入",
+      "update": "更新",
+      "delete": "削除",
+      "post": "記帳",
+      "void": "無効化",
+      "approve": "承認",
+      "reject": "却下"
+    },
+    "recordTypeFilter": "レコードタイプ",
+    "userFilter": "ユーザー",
+    "dateFrom": "開始日",
+    "dateTo": "終了日",
+    "clearDates": "日付をクリア"
+  },
+  "customFields": {
+    "title": "カスタムフィールド",
+    "description": "あらゆるモジュールを拡張できます。書類ヘッダー、取引明細行、取引先、プロジェクト、勘定など。フィールドはレコードが表示されるあらゆる場所（ドロワー、明細行グリッド、レポート）に表示されます。",
+    "searchPlaceholder": "フィールドを検索…",
+    "targetFilter": "対象",
+    "table": {
+      "field": "フィールド",
+      "key": "キー",
+      "target": "対象",
+      "type": "タイプ",
+      "required": "必須",
+      "status": "ステータス"
+    },
+    "empty": "カスタムフィールドはまだありません。",
+    "statusActive": "有効",
+    "statusArchived": "アーカイブ済み",
+    "newField": "新規フィールド",
+    "targets": {
+      "documents": {
+        "label": "取引ヘッダー",
+        "description": "取引（仕入請求書、請求書、支払、経費精算、仕訳）ごとに1つの値。"
+      },
+      "documentLines": {
+        "label": "取引明細行",
+        "description": "選択した取引タイプのすべての明細行に表示される列。"
+      },
+      "parties": {
+        "label": "取引先",
+        "description": "仕入先、得意先、従業員。"
+      },
+      "projects": {
+        "label": "プロジェクト",
+        "description": "ジョブ／プロジェクト。"
+      },
+      "managedProperties": {
+        "label": "物件",
+        "description": "管理対象の不動産物件。"
+      },
+      "accounts": {
+        "label": "勘定",
+        "description": "会計科目表。"
+      },
+      "items": {
+        "label": "品目・サービス",
+        "description": "製品およびサービス。"
+      },
+      "crmAccounts": {
+        "label": "CRMアカウント",
+        "description": "リード、見込み客、得意先の評価プロファイル。"
+      },
+      "crmActivities": {
+        "label": "CRMアクティビティ",
+        "description": "通話、訪問、イベント、メール、メモ、タスク。"
+      },
+      "crmOpportunities": {
+        "label": "CRM商談",
+        "description": "パイプライン上の商談と予測の詳細。"
+      }
+    },
+    "kinds": {
+      "header": {
+        "vendorBill": "仕入請求書",
+        "customerInvoice": "請求書",
+        "vendorPayment": "仕入先支払",
+        "customerPayment": "得意先入金",
+        "expenseReport": "経費精算",
+        "journal": "仕訳",
+        "vendorCredit": "仕入先クレジット",
+        "customerCredit": "得意先クレジットメモ",
+        "cardCharge": "カード請求",
+        "cardRefund": "カード返金",
+        "check": "小切手"
+      },
+      "lines": {
+        "vendorBill": "仕入請求書明細行",
+        "customerInvoice": "請求書明細行",
+        "expenseReport": "経費精算明細行",
+        "journal": "仕訳明細行",
+        "vendorCredit": "仕入先クレジット明細行",
+        "customerCredit": "得意先クレジットメモ明細行",
+        "cardCharge": "カード請求明細行",
+        "cardRefund": "カード返金明細行",
+        "check": "小切手明細行"
+      }
+    },
+    "types": {
+      "text": {
+        "label": "テキスト",
+        "help": "1行のテキスト。"
+      },
+      "longText": {
+        "label": "テキストエリア",
+        "help": "複数行のテキスト。"
+      },
+      "number": {
+        "label": "数値",
+        "help": "数値。"
+      },
+      "currency": {
+        "label": "通貨",
+        "help": "金額（小数2桁）。"
+      },
+      "date": {
+        "label": "日付",
+        "help": "カレンダーの日付。"
+      },
+      "boolean": {
+        "label": "チェックボックス",
+        "help": "はい／いいえ。"
+      },
+      "select": {
+        "label": "ドロップダウン（単一）",
+        "help": "リストから1つ選択します。"
+      },
+      "multiSelect": {
+        "label": "ドロップダウン（複数）",
+        "help": "リストから任意の数だけ選択します。"
+      },
+      "reference": {
+        "label": "リスト／レコード",
+        "help": "別のレコード（取引先、プロジェクト、勘定、品目）へのリンク。"
+      }
+    },
+    "drawer": {
+      "newTitle": "新規カスタムフィールド",
+      "editTitle": "「{label}」を編集",
+      "newDescription": "レコードタイプを独自のフィールドで拡張します。",
+      "createField": "フィールドを作成",
+      "saveChanges": "変更を保存",
+      "created": "フィールドを作成しました",
+      "updated": "フィールドを更新しました",
+      "saveFailed": "フィールドを保存できませんでした",
+      "appliesTo": "適用対象",
+      "recordType": "レコードタイプ",
+      "whichTransactions": "対象の取引",
+      "allTypes": "すべてのタイプ",
+      "allTypesHint": "「すべてのタイプ」のままにすると、フィールドがあらゆる種類に適用されます。",
+      "allKindsSuffix": "すべての種類",
+      "lockedAfterCreation": "· 作成後はロックされます（既に値が参照しています）",
+      "label": "ラベル",
+      "labelPlaceholder": "発注番号",
+      "fieldKey": "フィールドキー",
+      "permanent": "（永続）",
+      "keyPlaceholder": "po_number",
+      "keyHint": "ラベルから自動入力されます。snake_case。",
+      "type": "タイプ",
+      "options": "選択肢",
+      "noOptions": "選択肢がまだありません — 少なくとも1つ追加してください。",
+      "addOptionPlaceholder": "選択肢を追加…",
+      "removeOption": "{option}を削除",
+      "helpText": "ヘルプテキスト",
+      "optionalSuffix": "（任意）",
+      "helpTextPlaceholder": "フィールドの下に表示されます",
+      "placeholder": "プレースホルダー",
+      "defaultValue": "既定値",
+      "min": "最小",
+      "max": "最大",
+      "showInList": "リストビューに列として表示",
+      "referenceTable": "参照先レコードタイプ",
+      "referenceTableHint": "このフィールドはこのタイプのレコードへのリンクを保存します。",
+      "displayMode": "表示モード",
+      "displayNormal": "通常（編集可能）",
+      "displayHidden": "非表示（フォームに表示しない）",
+      "displayDisabled": "無効（読み取り専用で表示）",
+      "allowedRoles": "表示するロール",
+      "allowedRolesHint": "すべてのロールに表示する場合は未選択のままにします。管理者は常にすべてのフィールドを表示できます。",
+      "roleAdmin": "管理者",
+      "roleController": "コントローラー",
+      "roleAccountant": "会計担当者",
+      "roleApprover": "承認者",
+      "roleViewer": "閲覧者"
+    }
+  },
+  "navigation": {
+    "title": "ナビゲーション",
+    "description": "組織のすべてのメニューレイアウトをカスタマイズします。ワークスペースを整理し、遷移先の名称変更や非表示、リンクの追加を行い、最大4つのモバイルショートカットを選択できます。権限による制限は引き続き適用されます。",
+    "groupLabelAria": "グループラベル",
+    "moveGroupUp": "グループを上へ移動",
+    "moveGroupDown": "グループを下へ移動",
+    "itemLabelAria": "項目ラベル",
+    "showItem": "項目を表示",
+    "hideItem": "項目を非表示",
+    "moveItemUp": "項目を上へ移動",
+    "moveItemDown": "項目を下へ移動",
+    "moveToGroup": "ワークスペースへ移動",
+    "pinMobile": "モバイルナビゲーションに固定",
+    "unpinMobile": "モバイルナビゲーションから削除",
+    "mobileLimit": "モバイルナビゲーションでは最大4つまで遷移先を固定できます",
+    "linkUrlPrompt": "リンクURL（内部ルートまたは https://…）:",
+    "linkLabelPrompt": "ラベル:",
+    "addLink": "リンクを追加",
+    "deleteLink": "リンクを削除",
+    "addApp": "アプリのショートカットを追加…",
+    "removeApp": "アプリのショートカットを削除",
+    "newGroupPrompt": "ワークスペース名:",
+    "addGroup": "ワークスペースを追加",
+    "deleteGroup": "ワークスペースを削除",
+    "save": "ナビゲーションを保存",
+    "saved": "ナビゲーションを保存しました",
+    "saveFailed": "保存できませんでした",
+    "resetDefaults": "デフォルトにリセット"
+  },
+  "roles": {
+    "metaTitle": "ロール",
+    "title": "ロール",
+    "description": "ユーザーに割り当てる権限の束です。組み込みロールはアプリに付属しています。より細かい制御が必要な場合はカスタムロールを作成してください。",
+    "manageUsers": "ユーザーを管理",
+    "searchPlaceholder": "ロール名、キー、説明を検索…",
+    "typeFilter": "種類",
+    "builtIn": "組み込み",
+    "custom": "カスタム",
+    "emptyTitle": "ロールがまだありません",
+    "emptyDescription": "ロールシードスクリプト（engine/src/seed-roles.ts）を実行して組み込みロールを作成するか、カスタムロールを作成してください。",
+    "noMatchTitle": "一致するロールがありません",
+    "noMatchDescription": "検索または種類フィルターを調整してください。",
+    "table": {
+      "key": "キー",
+      "permissions": "権限",
+      "members": "メンバー"
+    },
+    "newRole": "新規ロール",
+    "drawer": {
+      "newTitle": "新規ロール",
+      "lockedDescription": "管理者ロールは常にすべての権限を持ち、編集できません。",
+      "builtInDescription": "組み込みロール: 名前とキーは固定されていますが、権限は調整できます。",
+      "newDescription": "ロールに名前を付け、付与する権限を選択してください。",
+      "deleteRole": "ロールを削除",
+      "createRole": "ロールを作成",
+      "saveChanges": "変更を保存",
+      "nameRequired": "ロール名は必須です",
+      "saveFailed": "ロールの保存に失敗しました",
+      "created": "ロールを作成しました",
+      "updated": "ロールを更新しました",
+      "deleteConfirm": "「{name}」ロールを削除しますか？このロールを保持しているユーザーは直ちにその権限を失います。",
+      "deleteFailed": "ロールの削除に失敗しました",
+      "deleted": "ロールを削除しました",
+      "namePlaceholder": "AP担当者",
+      "keyPlaceholder": "ap_clerk",
+      "descriptionPlaceholder": "このロールは何のためのものですか？",
+      "permissionsHeading": "権限",
+      "selectedCount": "{count} 件選択中",
+      "subsidiaryHeading": "子会社アクセス",
+      "subsidiaryModeAll": "すべての子会社",
+      "subsidiaryModeSubtree": "子会社とその配下",
+      "subsidiaryModeList": "特定の子会社",
+      "subsidiaryPlaceholder": "子会社を選択…",
+      "subsidiarySearchPlaceholder": "子会社を検索…",
+      "subsidiaryRequired": "子会社を選択してください",
+      "subsidiaryListRequired": "少なくとも1つの子会社を選択してください"
+    }
+  },
+  "scripts": {
+    "title": "スクリプト",
+    "description": "サンドボックス内でドキュメントのトリガーポイントで実行される実際のJavaScriptです。ホワイトリスト化されたフィールドを検証・変更したり、ob.abort()で拒否したりできます。すべての実行が記録されます。",
+    "searchPlaceholder": "スクリプトを検索…",
+    "triggerFilter": "トリガー",
+    "table": {
+      "script": "スクリプト",
+      "trigger": "トリガー",
+      "kind": "種別",
+      "runs": "実行回数",
+      "lastRun": "最終実行",
+      "status": "ステータス"
+    },
+    "empty": "スクリプトがまだありません。ドキュメントのワークフローを自動化しましょう。",
+    "allKinds": "すべて",
+    "statusActive": "有効",
+    "statusDisabled": "無効",
+    "triggers": {
+      "beforeSubmit": "提出前",
+      "beforePost": "記帳前",
+      "afterPost": "記帳後",
+      "beforeVoid": "無効化前",
+      "scheduled": "スケジュール実行",
+      "endpoint": "エンドポイント",
+      "bulk": "一括",
+      "client": "クライアント"
+    },
+    "kinds": {
+      "vendorBill": "仕入請求書",
+      "customerInvoice": "請求書",
+      "vendorPayment": "仕入先支払",
+      "customerPayment": "入金",
+      "expenseReport": "経費精算",
+      "journal": "仕訳",
+      "vendorCredit": "仕入先クレジット",
+      "customerCredit": "得意先クレジット",
+      "cardCharge": "カード請求",
+      "cardRefund": "カード返金",
+      "check": "小切手",
+      "deposit": "預入",
+      "transfer": "振替",
+      "purchaseOrder": "発注書",
+      "salesOrder": "受注",
+      "quote": "見積"
+    },
+    "drawer": {
+      "newScript": "新規スクリプト",
+      "newTitle": "新規スクリプト",
+      "description": "サンドボックス化されたJavaScript（QuickJS）。ファイルシステムやネットワークにはアクセスできません。ob.queryは読み取り専用のSQLを実行します。",
+      "createScript": "スクリプトを作成",
+      "saveScript": "スクリプトを保存",
+      "created": "スクリプトを作成しました",
+      "saved": "スクリプトを保存しました",
+      "saveFailed": "スクリプトを保存できませんでした",
+      "namePlaceholder": "APポリシー: 高額な請求書にはメモが必要",
+      "trigger": "トリガー",
+      "documentKind": "ドキュメント種別",
+      "allKindsOption": "すべての種別",
+      "cron": "Cronスケジュール",
+      "cronHint": "— 分 時 日 月 曜日（UTC）",
+      "source": "ソース",
+      "sourceHint": "— function main(ctx) を定義する必要があります",
+      "timeoutMs": "タイムアウト（ミリ秒）",
+      "runOrder": "実行順序",
+      "recentRuns": "最近の実行",
+      "runNow": "今すぐ実行",
+      "runOk": "{ms} ミリ秒で実行しました",
+      "runFailed": "実行に失敗しました",
+      "delete": "削除",
+      "deleteConfirm": "このスクリプトを削除しますか？実行履歴は監査のために保持されます。",
+      "deleteFailed": "スクリプトを削除できませんでした",
+      "deleted": "スクリプトを削除しました",
+      "runStatus": {
+        "ok": "成功",
+        "aborted": "中止",
+        "error": "エラー",
+        "timeout": "タイムアウト"
+      },
+      "endpointSlug": "エンドポイントスラッグ",
+      "endpointUrl": "呼び出し可能なURL",
+      "endpointUrlHint": "このURLにリクエストを送信するとスクリプトが実行されます。",
+      "copyUrl": "コピー",
+      "urlCopied": "エンドポイントURLをコピーしました",
+      "customRecordsGroup": "カスタムレコード",
+      "builtInGroup": "取引",
+      "noRuns": "実行がまだありません。このスクリプトは一度も実行されていません。",
+      "selectRun": "最近の実行タブで実行を選択すると、そのログを確認できます。",
+      "logEmpty": "この実行ではログ出力がありませんでした。"
+    },
+    "tabs": {
+      "general": "一般",
+      "code": "コード",
+      "runs": "最近の実行",
+      "log": "実行ログ"
+    }
+  },
+  "apiKeys": {
+    "title": "APIキー",
+    "description": "連携と自動化のためのスコープ付きAPIキーです。各キーは権限のサブセットを保持します。リクエストは、キーのスコープと所有者の実効権限の両方がカバーする場合にのみ許可されます。",
+    "searchPlaceholder": "キー、所有者を検索…",
+    "empty": "APIキーがまだありません。連携の構築を始めるには作成してください。",
+    "table": {
+      "name": "名前",
+      "key": "キー",
+      "owner": "所有者",
+      "scopes": "スコープ",
+      "scopesCount": "{count, plural, one {# 件の権限} other {# 件の権限}}",
+      "fullScope": "フルスコープ（所有者を継承）",
+      "lastUsed": "最終使用",
+      "status": "ステータス"
+    },
+    "statusActive": "有効",
+    "statusRevoked": "取り消し済み",
+    "drawer": {
+      "newKey": "新規APIキー",
+      "newTitle": "新規APIキー",
+      "description": "REST APIへのプログラムアクセス用にスコープ付きキーを作成します。平文のキーは一度だけ表示されます。安全に保管してください。",
+      "nameRequired": "名前は必須です",
+      "namePlaceholder": "本番同期連携",
+      "descriptionPlaceholder": "このキーは何のためのものですか？",
+      "saveFailed": "キーを保存できませんでした",
+      "created": "キーを作成しました",
+      "updated": "キーを更新しました",
+      "revoke": "取り消し",
+      "revokeConfirm": "このキーを取り消しますか？これを使用しているすべての連携が直ちに動作を停止します。この操作は元に戻せません。",
+      "revokeFailed": "キーを取り消せませんでした",
+      "revoked": "キーを取り消しました",
+      "revokedNotice": "このキーは取り消され、リクエストの認証には使用できなくなりました。",
+      "keyCreated": "APIキーをコピー",
+      "keyCreatedHint": "完全なキーが表示されるのはこの一度だけです。安全に保管してください。再度確認することはできません。",
+      "copy": "コピー",
+      "copied": "クリップボードにコピーしました",
+      "createKey": "キーを作成",
+      "saveChanges": "変更を保存",
+      "scopesHeading": "権限スコープ",
+      "scopesHint": "このキーが付与する権限を選択します。空のままにすると、所有者のフル権限セットを継承します。キーは所有者が持つ権限を超えて付与することはありません。",
+      "fullScope": "フルスコープ（所有者の権限を継承）",
+      "scopesCount": "{count, plural, one {# 件の権限を選択中} other {# 件の権限を選択中}}"
+    }
+  },
+  "settings": {
+    "metaTitle": "会社と会計",
+    "title": "会社と会計",
+    "description": "組織情報、基準通貨、会計カレンダー、および元帳が記帳を経由する統制勘定。",
+    "organization": {
+      "title": "組織",
+      "description": "この会社がアプリ全体でどのように識別されるか。",
+      "displayName": "表示名",
+      "displayNamePlaceholder": "Acme Manufacturing",
+      "displayNameHint": "OpenBooks 全体に表示される会社名です。登記上の正式名称と一致している必要はありません。",
+      "legalName": "正式名称",
+      "legalNamePlaceholder": "Acme Manufacturing Inc.",
+      "legalNameHint": "正式な記録、レポート、文書に使用する会社の登記名称です。",
+      "country": "国",
+      "countryPlaceholder": "国を選択…",
+      "countryHint": "2文字のISOコード（例: CA、US、GB）。",
+      "defaultLanguage": "デフォルト言語",
+      "defaultLanguageHint": "アカウントメニューで自分の言語を選択していないすべての人に対して、アプリが表示される言語です。",
+      "baseCurrency": "基準通貨",
+      "baseCurrencyHint": "元帳が均衡を保つレポート通貨です。切り替える前に通貨を追加してください。",
+      "reportPdfStyle": "財務レポートのPDFスタイル",
+      "reportPdfStyleModern": "モダン（ブランド）",
+      "reportPdfStyleFormal": "フォーマル（GAAP）",
+      "reportPdfStyleHint": "エクスポートした財務諸表の見た目です。モダンはブランドのアクセントカラーとサンセリフ体を使用し、フォーマルは古典的なセリフ体、グレースケール、監査対応の諸表です。"
+    },
+    "fiscal": {
+      "title": "会計年度",
+      "description": "財務年度が始まる月です。レポート、期末決算、プリセットなど、会計年度を認識するすべての機能がこれを参照します。",
+      "startsIn": "会計年度の開始月",
+      "runs": "会計年度の期間",
+      "range": "{start} → {end}",
+      "warning": "開始月を変更すると、<strong>すべての会計期間</strong>のラベルが付け直されます。保存した瞬間に、各期間の開始日から会計年度、期間番号、名称が再導出されます。仕訳と日付はそのままですが、レポートと期末決算のグループ分けは新しいカレンダーに合わせて変わります。",
+      "taxFramework": "所得税の会計基準",
+      "taxFrameworkHint": "税金計算の認識用語を決定します（会社設定 → 会計年度）。",
+      "frameworkAsc740": "ASC 740（米国会計基準）",
+      "frameworkIas12": "IAS 12（IFRS）"
+    },
+    "months": {
+      "january": "1月",
+      "february": "2月",
+      "march": "3月",
+      "april": "4月",
+      "may": "5月",
+      "june": "6月",
+      "july": "7月",
+      "august": "8月",
+      "september": "9月",
+      "october": "10月",
+      "november": "11月",
+      "december": "12月"
+    },
+    "controlAccounts": {
+      "title": "統制勘定",
+      "description": "補助元帳と税金が記帳を経由する総勘定元帳の勘定です。記帳可能な（集計でない）勘定のみが表示されます。",
+      "selectPlaceholder": "勘定を選択…",
+      "searchPlaceholder": "勘定を検索…",
+      "fields": {
+        "ar": {
+          "label": "売掛金",
+          "hint": "得意先残高がここに記帳されます"
+        },
+        "ap": {
+          "label": "買掛金",
+          "hint": "仕入先残高がここに記帳されます"
+        },
+        "bank": {
+          "label": "デフォルト銀行",
+          "hint": "仕入先および得意先への支払のデフォルト現金勘定"
+        },
+        "taxCollected": {
+          "label": "受取税額",
+          "hint": "請求書にかかる売上税の未払分"
+        },
+        "taxPaid": {
+          "label": "支払税額",
+          "hint": "仕入請求書における控除可能な税額"
+        },
+        "employeePayable": {
+          "label": "従業員未払金",
+          "hint": "従業員への経費立替の未払分"
+        },
+        "fxUnrealizedGainLoss": {
+          "label": "為替未実現損益",
+          "hint": "外貨建残高の期末再評価が計上される場所"
+        },
+        "fxRealizedGainLoss": {
+          "label": "実現為替差損益",
+          "hint": "外貨建て支払消込時の決済レート差額を計上する勘定"
+        },
+        "laborWip": {
+          "label": "労務仕掛品／原価",
+          "hint": "承認された労務原価がここに借方計上されます（プロジェクトごと）"
+        },
+        "laborClearing": {
+          "label": "労務清算",
+          "hint": "労務がプロジェクトに賦課されると貸方計上され、給与計算で清算されます"
+        },
+        "unbilledReceivable": {
+          "label": "未請求債権（契約資産）",
+          "hint": "固定価格の稼得済み未請求収益。請求時に取り崩されます"
+        },
+        "projectRevenue": {
+          "label": "プロジェクト収益",
+          "hint": "進捗度による収益認識で貸方計上されます"
+        },
+        "incomeTaxExpense": {
+          "label": "法人税等費用",
+          "hint": "税金計算（ASC 740）により借記"
+        },
+        "incomeTaxPayable": {
+          "label": "未払法人税等",
+          "hint": "当期税額の貸記先"
+        },
+        "deferredTaxAsset": {
+          "label": "繰延税金資産",
+          "hint": "将来減算一時差異および繰越欠損金"
+        },
+        "deferredTaxLiability": {
+          "label": "繰延税金負債",
+          "hint": "将来加算一時差異"
+        },
+        "valuationAllowance": {
+          "label": "評価性引当額",
+          "hint": "繰延税金資産の控除項目"
+        }
+      }
+    },
+    "revenue": {
+      "title": "収益認識",
+      "description": "ASC 606 / IFRS 15 の収益配分ポリシー。",
+      "fairValueRangePolicy": {
+        "label": "公正価値レンジチェック",
+        "warn": "警告 — レンジ外の配分をレビュー対象としてフラグ",
+        "off": "オフ — レンジチェックなし",
+        "hint": "請求書明細の配分単価が品目の公正価値の下限/上限レンジを外れた場合、履行義務が収益契約上でレビュー対象としてフラグされます。転記がブロックされることはありません。"
+      },
+      "learnMore": "詳細はこちら。"
+    },
+    "documentKinds": {
+      "vendorBill": "仕入請求書",
+      "customerInvoice": "請求書",
+      "vendorPayment": "仕入先支払",
+      "customerPayment": "入金",
+      "expenseReport": "経費精算",
+      "journal": "仕訳"
+    },
+    "numbering": {
+      "title": "ドキュメント採番",
+      "description": "ドキュメント番号を生成するシーケンスです。各種別のプレフィックスと桁埋めを表示します。",
+      "empty": "シーケンスがまだ設定されていません。",
+      "table": {
+        "document": "ドキュメント",
+        "prefix": "プレフィックス",
+        "next": "次の番号",
+        "padding": "桁埋め",
+        "example": "例"
+      }
+    },
+    "validation": {
+      "nameRequired": "表示名は必須です",
+      "countryRequired": "国は必須です"
+    },
+    "saved": "設定を保存しました",
+    "savedPeriodsRederived": "設定を保存しました。会計期間のラベルを新しい会計年度に付け直しました",
+    "saveSettings": "設定を保存"
+  },
+  "users": {
+    "metaTitle": "ユーザー",
+    "title": "ユーザー",
+    "description": "サインインできるユーザーと、保持しているロールです。ユーザーのアクセスは割り当てられたロールの和集合です。割り当てのないユーザーはレガシーロールにフォールバックします。",
+    "manageRoles": "ロールを管理",
+    "searchPlaceholder": "名前またはメールを検索…",
+    "statusFilter": "ステータス",
+    "emptyTitle": "一致するユーザーがいません",
+    "emptySearchDescription": "検索に一致するユーザーがいません。別のキーワードまたはステータスフィルターをお試しください。",
+    "emptyFilterDescription": "別のステータスフィルターをお試しください。",
+    "table": {
+      "roles": "ロール",
+      "lastSignIn": "最終サインイン"
+    },
+    "you": "あなた",
+    "statusActive": "有効",
+    "statusInactive": "無効",
+    "requestFailed": "リクエストに失敗しました",
+    "editRolesFor": "{name} のロールを編集",
+    "rolesFor": "ロール — {name}",
+    "noRoles": "ロールがまだありません。ロールの管理から作成してください。",
+    "builtInBadge": "組み込み",
+    "deactivateConfirm": "{name} を無効化しますか？サインアウトされ、再有効化されるまでサインインできなくなります。",
+    "deactivate": "無効化",
+    "reactivate": "再有効化",
+    "deactivated": "{name} を無効化しました",
+    "reactivated": "{name} を再有効化しました"
+  },
+  "permissions": {
+    "groups": {
+      "gl": "総勘定元帳",
+      "close": "会計期間と締め",
+      "ap": "買掛金",
+      "ar": "売掛金",
+      "reports": "レポート",
+      "budgets": "予算と予測",
+      "insights": "インサイト",
+      "items": "品目とサービス",
+      "projects": "プロジェクトと原価計算",
+      "time": "工数とタイムシート",
+      "records": "カスタムレコード",
+      "assistant": "AIアシスタント",
+      "sql": "クエリワークベンチ",
+      "sync": "移行とミラー",
+      "scripts": "スクリプト",
+      "flows": "フロー",
+      "apps": "アプリ",
+      "documents": "ファイルキャビネット",
+      "admin": "管理",
+      "assets": "固定資産と減価償却",
+      "data": "インポートとエクスポート",
+      "crm": "顧客関係管理"
+    },
+    "gl_read": "仕訳と残高を表示",
+    "gl_manage": "会計科目表を管理",
+    "gl_post": "仕訳を記帳",
+    "periods_manage": "会計カレンダー、期間、ロックを設定",
+    "close_read": "締め処理の実行状況と証跡を表示",
+    "close_run": "締めタスクと検証を実行",
+    "close_approve": "締め処理を確認、承認、ロック",
+    "close_reopen": "管理された再オープンを申請および承認",
+    "ap_read": "仕入請求書を表示",
+    "ap_create": "仕入請求書を作成および提出",
+    "ap_approve": "仕入請求書を承認または却下",
+    "ap_post": "仕入請求書を元帳に記帳",
+    "ap_pay": "仕入請求書を支払",
+    "ar_read": "請求書を表示",
+    "ar_create": "請求書を作成および提出",
+    "ar_approve": "請求書を承認または却下",
+    "ar_post": "請求書を元帳に記帳",
+    "ar_pay": "入金を記録",
+    "reports_read": "レポートを表示",
+    "reports_create": "レポートを作成および保存",
+    "reports_schedule": "レポート配信をスケジュール",
+    "budgets_read": "予算と予測を表示",
+    "budgets_manage": "予算下書きを作成および編集",
+    "budgets_approve": "正式な予算を承認およびアーカイブ",
+    "insights_read": "インサイトとライブラリを表示",
+    "insights_create": "カードとダッシュボードを作成",
+    "insights_publish": "共有ライブラリに公開",
+    "items_read": "品目とサービスを表示",
+    "items_manage": "品目を作成および編集",
+    "projects_read": "プロジェクトと原価計算を表示",
+    "projects_manage": "プロジェクトを作成および編集",
+    "time_read": "タイムシートを表示",
+    "time_manage": "工数を入力および編集",
+    "time_approve": "タイムシートを承認",
+    "records_read": "カスタムレコードを表示",
+    "records_create": "カスタムレコードを作成および編集",
+    "records_manage_types": "カスタムレコードタイプを設計",
+    "assistant_use": "AIアシスタントを使用",
+    "assistant_write": "アシスタントにレコードの下書きを許可",
+    "sql_execute": "読み取り専用のSQLクエリを実行",
+    "sync_run": "外部ソースの同期を実行",
+    "scripts_manage": "ユーザースクリプトを管理",
+    "scripts_execute": "エンドポイントスクリプトを呼び出し",
+    "flows_manage": "フローの作成および管理",
+    "flows_approve": "フロー承認ゲートで対応",
+    "apps_use": "インストール済みアプリを使用",
+    "apps_manage": "アプリのインストールおよび管理",
+    "parties_read": "取引先を表示",
+    "parties_manage": "取引先を管理",
+    "banking_read": "銀行取引を表示",
+    "banking_reconcile": "銀行口座を消込",
+    "expenses_read": "経費精算を表示",
+    "expenses_create": "経費精算を入力",
+    "admin_custom_fields_manage": "カスタムフィールドを管理",
+    "admin_users_manage": "ユーザーとロール割り当てを管理",
+    "admin_roles_manage": "ロールと権限を管理",
+    "admin_nav_manage": "ナビゲーションをカスタマイズ",
+    "admin_customization_manage": "取引フォームとリストビューをカスタマイズ",
+    "admin_audit_read": "監査ログを表示",
+    "admin_ai_manage": "AI設定を管理",
+    "admin_sandboxes_manage": "サンドボックス環境を作成および管理",
+    "admin_backups_manage": "組織のバックアップを管理",
+    "api_keys_manage": "APIキーを管理",
+    "assets_read": "固定資産と減価償却を表示",
+    "assets_manage": "資産を作成および編集し、減価償却を実行",
+    "documents_read": "ファイルキャビネットを閲覧",
+    "documents_manage": "ファイルのアップロード、移動、名称変更、削除",
+    "admin_setup_manage": "セットアップと構成を管理",
+    "data_export": "データをエクスポート",
+    "data_import": "データをインポート",
+    "crm_accounts_read": "CRMアカウントを表示",
+    "crm_accounts_create": "リードと見込客を作成",
+    "crm_accounts_manage": "CRMアカウントを管理",
+    "crm_accounts_assign": "CRMアカウントを割り当ておよび振り分け",
+    "crm_activities_read": "CRMアクティビティを表示",
+    "crm_activities_manage": "CRMアクティビティを作成および管理",
+    "crm_opportunities_read": "商談を表示",
+    "crm_opportunities_manage": "商談を作成および管理",
+    "crm_opportunities_close": "受注または失注の商談をクローズ",
+    "crm_forecasts_read": "販売予測を表示",
+    "crm_forecasts_manage": "予測スナップショットを作成",
+    "crm_forecasts_override": "チーム予測を上書き",
+    "crm_setup_manage": "CRMセットアップを管理"
+  },
+  "ai": {
+    "metaTitle": "AI設定",
+    "title": "AI設定",
+    "description": "アシスタントが使用するAIプロバイダーを選択します。APIキーは保存時に暗号化され、保存後は再表示されません。",
+    "enabledLabel": "AI機能を有効にする",
+    "providerLabel": "プロバイダー",
+    "baseUrlLabel": "ベースURL",
+    "baseUrlRequired": "（必須）",
+    "baseUrlOptional": "（任意の上書き）",
+    "baseUrlDefault": "空欄のままにすると既定値が使用されます: {url}",
+    "baseUrlHint": "公開されたHTTPS OpenAI互換エンドポイント。",
+    "keyLabel": "APIキー",
+    "keyPlaceholder": "プロバイダーのAPIキーを貼り付けてください",
+    "keySavedPlaceholder": "•••••••••••• （保存済み — 入力すると置き換わります）",
+    "keySavedHint": "キーは保存済みで、暗号化された状態で保管されています。新しいキーを入力すると置き換わります。",
+    "keyHint": "保存時に暗号化されて保管され、サーバーの外に出ることはありません。",
+    "modelsLabel": "モデル",
+    "fastModelLabel": "高速モデル",
+    "fastModelHint": "簡易な照会用",
+    "smartModelLabel": "高性能モデル",
+    "smartModelHint": "アシスタント用",
+    "save": "設定を保存",
+    "saved": "AI設定を保存しました。",
+    "saveFailed": "設定を保存できませんでした。",
+    "keyCleared": "APIキーを削除しました。",
+    "removeKey": "APIキーを削除",
+    "testConnection": "接続をテスト",
+    "testFailed": "テストリクエストが失敗しました。",
+    "agents": {
+      "title": "継続的決算エージェント",
+      "description": "決算準備状況を継続的に監視し、証跡に基づいた会計・財務上の例外を提示します。",
+      "reviewWork": "検出結果を確認",
+      "globallyDisabled": "AI機能はオフになっています。以下の設定に関わらず、両エージェントとそのスケジュール実行は停止しています。",
+      "enabled": "有効",
+      "automaticRuns": "自動実行する",
+      "cadence": "スケジュール",
+      "materiality": "重要性のしきい値",
+      "materialityHint": "検出器が上書きしない限り、各コントロールが使用する既定の金額下限。",
+      "materialitySummary": "重要性 {amount}",
+      "cadences": {
+        "daily": "毎日",
+        "weekly": "毎週"
+      },
+      "manualOnly": "手動実行",
+      "controlsEnabled": "{total}件中{count}件のコントロールが有効",
+      "configure": "設定",
+      "drawerTitle": "{agent}を設定",
+      "drawerDescription": "スケジュール、重要性、そしてこのエージェントが評価する会計チェックの内容を細かく制御します。",
+      "operationTitle": "エージェントの動作",
+      "operationDescription": "このエージェントの全体的な利用可否と自動実行を制御します。",
+      "detectorControlsTitle": "検出器コントロール",
+      "detectorControlsDescription": "各コントロールは個別に無効化でき、運用しきい値に合わせて調整できます。",
+      "controlOn": "オン",
+      "controlOff": "オフ",
+      "customMateriality": "このコントロールのエージェント重要性を上書きする",
+      "detectorMateriality": "コントロールの重要性しきい値",
+      "inheritedMateriality": "エージェントのしきい値 {amount} を使用します。",
+      "disabledFindingBehavior": "コントロールをオフにすると、そのチェックは停止します。既存の検出結果は引き続き利用でき、解決済みとしてマークされることはありません。",
+      "reasoningTitle": "エージェントの推論とナラティブ",
+      "reasoningDescription": "アシスタントと同じ統制された読み取りツールをこのエージェントに与え、証跡を調査し、要因を結び付け、レビュー可能な分析を作成できるようにします。レコードの変更や記帳はできません。",
+      "reasoning": {
+        "rootCauseAnalysis": {
+          "title": "根本原因分析",
+          "description": "裏付けとなる取引を調査し、各検出結果の背後にある具体的な要因を説明します。"
+        },
+        "recommendations": {
+          "title": "推奨アクション",
+          "description": "収集した証跡に基づき、具体的でレビュー可能な次のステップを提案します。"
+        },
+        "narrative": {
+          "title": "経営ナラティブ",
+          "description": "現在のレポートやトレンドから、決算準備状況の概要または財務パフォーマンスの要約を作成します。"
+        }
+      },
+      "modelTier": "分析モデル",
+      "modelTiers": {
+        "smart": "高性能モデル — より深い分析",
+        "fast": "高速モデル — 低コスト"
+      },
+      "maxToolSteps": "ツールステップの上限",
+      "maxToolStepsHint": "1回の実行で行えるレポートおよびレコードの照会回数の上限を設定します（4〜30）。",
+      "resetRecommended": "推奨される既定値にリセット",
+      "cancel": "キャンセル",
+      "saveConfiguration": "エージェントを保存",
+      "configurationSaved": "エージェントの設定を保存しました。",
+      "configurationSaveFailed": "エージェントの設定を保存できませんでした。",
+      "parameterLabel": "{label}（{unit}）",
+      "units": {
+        "days": "日",
+        "count": "件",
+        "percent": "%",
+        "multiple": "× 重要性",
+        "points": "パーセントポイント"
+      },
+      "parameters": {
+        "criticalAgeDays": "重大とする経過日数",
+        "criticalItemCount": "重大とする件数",
+        "criticalMaterialityMultiple": "重大とする重要性倍率",
+        "staleAfterDays": "滞留とする経過日数",
+        "minimumVariancePercent": "最小の不利差異",
+        "criticalVariancePercent": "重大な不利差異",
+        "minimumDeclinePercent": "最小の収益減少",
+        "criticalDeclinePercent": "重大な収益減少",
+        "minimumDropPoints": "最小の利益率低下",
+        "criticalDropPoints": "重大な利益率低下"
+      },
+      "detectors": {
+        "unmatched_bank_activity": {
+          "title": "未照合の銀行取引",
+          "description": "銀行口座ごとに未照合の明細行を検出し、総エクスポージャーを測定し、滞留・件数・重要性の集中を段階的にエスカレーションします。"
+        },
+        "reconciliation_difference": {
+          "title": "消込差異",
+          "description": "処理中の明細残高と消込済みの元帳取引を比較し、ゼロでない差異をすべてフラグ付けします。"
+        },
+        "stale_accounting_documents": {
+          "title": "滞留した会計書類",
+          "description": "設定された経過期間を超えた下書きまたは保留中の仕入請求書、請求書、クレジット、経費、仕訳を検出します。"
+        },
+        "missing_approved_budget": {
+          "title": "承認済み予算の欠如",
+          "description": "差異分析を実行する前に、承認済み予算が現在の運用期間をカバーしていることを確認します。"
+        },
+        "unfavorable_budget_variance": {
+          "title": "不利な予算差異",
+          "description": "正確な金額と設定可能な割合の深刻度しきい値を用いて、収益の不足と費用の超過を評価します。"
+        },
+        "period_revenue_decline": {
+          "title": "期間収益の減少",
+          "description": "直近の完了した2期間を比較し、重要な収益悪化をフラグ付けします。"
+        },
+        "gross_margin_decline": {
+          "title": "売上総利益率の低下",
+          "description": "完了した期間の売上総利益率を比較し、パーセントポイント単位の重要な圧縮をフラグ付けします。"
+        }
+      },
+      "accounting": {
+        "title": "会計エージェント",
+        "description": "継続的な記帳と決算準備状況のコントロール。",
+        "coverage": "未照合の銀行取引、消込差異、滞留した下書きまたは保留中の会計書類をチェックします。"
+      },
+      "finance": {
+        "title": "財務エージェント",
+        "description": "継続的な差異とパフォーマンスのコントロール。",
+        "coverage": "承認済み予算の差異、収益減少、売上総利益率の低下、予算カバレッジの欠如をチェックします。"
+      },
+      "lastRun": "最終実行: {date} · {status}",
+      "nextRun": "次回のスケジュール実行: {date}",
+      "neverRun": "未実行",
+      "runNow": "今すぐ実行",
+      "scanComplete": "スキャン完了: {detected}件検出、{resolved}件解決。",
+      "scanFailed": "エージェントのスキャンが失敗しました。",
+      "runStatus": {
+        "completed": "完了",
+        "failed": "失敗",
+        "skipped": "スキップ",
+        "running": "実行中"
+      }
+    },
+    "documentCapture": {
+      "title": "AP書類キャプチャ",
+      "description": "仕入請求書とクレジットを、証跡に基づいたレビュー待ち行列へ抽出します。組織のAIキルスイッチを共用しますが、書類プロバイダーの認証情報は独立して暗号化されたままです。",
+      "openQueue": "キャプチャ待ち行列を開く",
+      "enabled": "AP書類キャプチャを有効にする",
+      "globallyDisabled": "AI機能はオフになっています。この設定に関わらず、書類キャプチャは停止しています。",
+      "endpoint": "書類プロバイダーのエンドポイント",
+      "endpointHint": "組織の公開Azure AI Document Intelligenceエンドポイント。",
+      "key": "書類プロバイダーのAPIキー",
+      "keyPlaceholder": "書類プロバイダーのキーを貼り付けてください",
+      "removeKey": "書類プロバイダーのキーを削除",
+      "keyRemoved": "書類プロバイダーのキーを削除しました。",
+      "model": "請求書モデル",
+      "confidence": "レビュー用の信頼度しきい値",
+      "confidenceHint": "この0〜1のしきい値を下回る値はレビュー対象としてフラグ付けされます。",
+      "autoDraft": "完全に一致した発注書についてのみ自動的に下書きを作成する",
+      "test": "書類プロバイダーをテスト",
+      "testResult": {
+        "connected": "書類プロバイダーに接続しました。",
+        "failed": "書類プロバイダーのテストが失敗しました。",
+        "missing": "先にエンドポイントとAPIキーを入力してください。"
+      }
+    },
+    "models": {
+      "load": "モデルを読み込む",
+      "reload": "モデルを再読み込み",
+      "loading": "読み込み中…",
+      "loaded": "{count, plural, other {#件のモデルが利用可能}}",
+      "loadError": "モデルを読み込めませんでした。",
+      "none": "モデルなし",
+      "pick": "モデルを選択…",
+      "loadFirst": "先にモデルを読み込むか、IDを手動で入力してください",
+      "pickFromList": "リストから選択",
+      "typeManually": "手動で入力",
+      "current": "{id}（現在）",
+      "hint": "APIキーで最新のモデル一覧を読み込むか、モデルIDを手動で入力してください。",
+      "idPlaceholder": "モデルID"
+    }
+  },
+  "setup": {
+    "title": "セットアップ",
+    "description": "税、ディメンション、条件、および帳簿の基礎となる参照データを設定します。",
+    "laborCosting": {
+      "rates": {
+        "hint": "代替賃金レートは役職、職種、部門、子会社、組織既定値の順に解決されます。個人の履歴は従業員レコードに保持されます。",
+        "scopeJobTitle": "役職",
+        "scopeDepartment": "部門",
+        "scopeSubsidiary": "子会社",
+        "currency": "通貨",
+        "drawerNewDescription": "従業員範囲に有効日付きの賃金レートを追加します。",
+        "select": {
+          "job_title": "役職を選択",
+          "trade": "職種を選択",
+          "department": "部門を選択",
+          "subsidiary": "子会社を選択"
+        }
+      },
+      "reconciliation": {
+        "subsidiary": "子会社"
+      },
+      "billing": {
+        "title": "請求用労務レート表",
+        "hint": "顧客・プロジェクト別の有効日付き多通貨労務価格です。品目ごとの通常・残業・倍額レート、汎用調整、契約条件、割当履歴を保持します。",
+        "search": "レート表を検索…",
+        "add": "新しいレート表",
+        "card": "レート表",
+        "currency": "通貨",
+        "period": "有効期間",
+        "items": "品目",
+        "assignments": "割当",
+        "status": "ステータス",
+        "empty": "条件に一致するレート表はありません。",
+        "newTitle": "新しい請求用労務レート表",
+        "newDescription": "まず共有レートブックを作成し、有効日付きの品目レートを追加します。",
+        "createInItemHint": "労務・サービス・設備を同じ価格エンジンで扱うため、作成は共有レートブック画面で行います。条件と割当はここで確認できます。",
+        "openRateBooks": "レートブックを開く",
+        "effectiveFrom": "開始日",
+        "effectiveTo": "終了日",
+        "derivation": "不足階層の処理",
+        "scopes": "ディメンション範囲",
+        "allScopes": "ディメンション制限なし",
+        "itemRates": "品目・時間種別レート",
+        "item": "品目",
+        "regular": "通常",
+        "adjustments": "調整",
+        "appliesTo": "適用対象",
+        "wholeCard": "レート表全体",
+        "revise": "改訂版を作成",
+        "reviseHint": "現在の版を保持し、新しい有効日のコピーを作成します。",
+        "historicalHint": "これは履歴版です。最新版を開いて改訂版を作成してください。",
+        "revisionTitle": "新しいレート表改訂版",
+        "revisionDescription": "基本レート、範囲、条件をコピーします。調整はレート表全体または特定の品目に適用できます。",
+        "revisionEffectiveFrom": "新しい版の開始日",
+        "adjustmentNumber": "調整 {number}",
+        "removeAdjustment": "調整を削除",
+        "adjustmentName": "名前",
+        "adjustmentCode": "コード",
+        "category": "カテゴリ",
+        "calculation": "計算方法",
+        "presentation": "請求書表示",
+        "adjustmentValue": "値",
+        "adjustmentUnit": "単位",
+        "referenceText": "説明または契約参照",
+        "addAdjustment": "調整を追加",
+        "saveRevision": "改訂版を保存",
+        "revisionSaved": "レート表の改訂版を保存しました",
+        "categories": {
+          "markup": "上乗せ",
+          "travel": "出張",
+          "allowance": "手当",
+          "minimum": "最低額",
+          "surcharge": "追加料金",
+          "other": "その他"
+        },
+        "calculations": {
+          "percent": "割合",
+          "fixed": "固定額",
+          "per_hour": "時間単位",
+          "per_day": "日単位",
+          "distance": "距離",
+          "time": "時間",
+          "text": "案内文"
+        },
+        "presentations": {
+          "included": "レートに含む",
+          "separate": "別明細",
+          "informational": "参考表示"
+        },
+        "errors": {
+          "notFound": "レート表が見つかりません。",
+          "effectiveDate": "開始日を選択してください。",
+          "adjustments": "調整データが無効です。",
+          "item": "有効な品目を選択してください。",
+          "name": "各調整に名前とコードが必要です。",
+          "duplicateCode": "品目ごとのコードは一意である必要があります。",
+          "category": "有効なカテゴリを選択してください。",
+          "calculation": "有効な計算方法を選択してください。",
+          "presentation": "有効な表示方法を選択してください。",
+          "value": "0以上の値を入力してください。",
+          "latestOnly": "最新版を開いてください。",
+          "afterLatest": "新しい日付は最新版より後である必要があります。",
+          "save": "レート表の改訂版を保存できませんでした。"
+        },
+        "terms": "合意条件",
+        "none": "なし",
+        "derivations": {
+          "explicit": "明示レート",
+          "time_type_multipliers": "時間種別の倍率"
+        },
+        "scopeTypes": {
+          "department": "部門",
+          "subsidiary": "子会社",
+          "location": "ロケーション",
+          "class": "クラス",
+          "trade": "職種",
+          "job_title": "役職",
+          "other": "その他"
+        }
+      },
+      "tabs": {
+        "billing": "請求レート表"
+      }
+    },
+    "taxLibrary": {
+      "title": "税務申告ライブラリ",
+      "open": "ライブラリ",
+      "description": "カナダ、英国、オーストラリア、ニュージーランド、および米国の州・地方ワークペーパー向けに、保守された申告書構造をインポートします。",
+      "pack": "管轄区域パック",
+      "status": "状態",
+      "installed": "インストール済み",
+      "available": "利用可能",
+      "searchPlaceholder": "管轄区域パックを検索…",
+      "selectVisible": "表示中の利用可能なパックをすべて選択",
+      "selectPack": "{name}を選択",
+      "installSelected": "選択した{count}件のパックをインストール",
+      "selectionCount": "{count}件のパックを選択中",
+      "resultCount": "{count}件のパック",
+      "pageOf": "{pages}ページ中{page}ページ",
+      "working": "処理中…",
+      "installSuccess": "税務申告パックを{count}件インストールしました",
+      "resetSuccess": "税務申告パックをライブラリの既定値にリセットしました",
+      "confirmReset": "{name}を保守されたライブラリの既定値にリセットしますか？設定済みの申告ボックスが置き換えられます。",
+      "usNotice": "米国には連邦の売上税申告書がありません。このワークペーパーは、州および地方の申告管轄区域ごとにカスタマイズする必要があります。"
+    },
+    "assetDepreciationSetup": {
+      "navTitle": "Book Depreciation",
+      "title": "Book Depreciation",
+      "description": "Configure reusable depreciation methods and the method, life and convention each accounting book applies to an asset category.",
+      "tabsAria": "Book depreciation setup sections",
+      "tabs": {
+        "methods": "Methods",
+        "books": "Book policies"
+      }
+    },
+    "taxDepreciationSetup": {
+      "navTitle": "Tax Depreciation",
+      "title": "Tax Depreciation",
+      "description": "Install country tax-depreciation packs and configure class assignments, regimes, classes, conventions and first-year rules. This is separate from sales-tax, VAT and nexus setup.",
+      "tabsAria": "Fixed asset setup sections",
+      "tabs": {
+        "overview": "Overview",
+        "categories": "Asset categories",
+        "regimes": "Tax regimes",
+        "classes": "Tax classes",
+        "firstYear": "First-year rules",
+        "methods": "Methods",
+        "books": "Book policies"
+      },
+      "packsTitle": "Country depreciation packs",
+      "packsDescription": "Installing a pack creates editable tenant configuration. Existing overrides are never replaced.",
+      "recommended": "Company country",
+      "installed": "Installed",
+      "install": "Install pack",
+      "installing": "Installing…",
+      "installFailed": "Could not install the depreciation pack",
+      "installedToast": "Installed {count} depreciation classes",
+      "assignmentFailed": "Could not save the tax class assignment",
+      "assignmentsTitle": "Asset-category class assignments",
+      "assignmentsDescription": "Choose the default tax class for each asset category.",
+      "assetCategory": "Asset category",
+      "notAssigned": "Not assigned",
+      "classCount": "{count, plural, one {# class} other {# classes}}",
+      "models": {
+        "pool": "Class pool",
+        "macrs": "Per-asset MACRS"
+      },
+      "customizeTitle": "Customize",
+      "customizeDescription": "Country packs are starting points; seeded values remain editable.",
+      "links": {
+        "regimes": {
+          "title": "Regimes",
+          "description": "Country, calculation model and asset class attribute."
+        },
+        "classes": {
+          "title": "Classes and methods",
+          "description": "Rates, recovery periods, methods and conventions."
+        },
+        "firstYear": {
+          "title": "First-year rules",
+          "description": "Effective-dated acceleration and eligibility."
+        },
+        "assignments": {
+          "title": "Asset-category assignments",
+          "description": "Assign categories to regime classes in Tax attributes."
+        }
+      }
+    },
+    "taxOfficial": {
+      "title": "公式申告フォーム",
+      "description": "管轄区域がそのフォームを受け付ける、または要求する場合にのみ、公式の入力可能なPDFをアップロードしてください。各フィールドは「税務申告ボックス」でマッピングします。",
+      "upload": "公式PDFをアップロード",
+      "uploading": "アップロード中…",
+      "uploaded": "公式フォームをアップロードしました",
+      "remove": "削除",
+      "removed": "公式フォームを削除しました",
+      "none": "公式PDFがアップロードされていません"
+    },
+    "taxBoxes": {
+      "description": "{code} のマッピング済み・計算・手入力ボックスです。",
+      "calculatedNote": "各ボックスはこの申告書に属します。マッピング済みボックスでは、集計対象の税コードを選択します。",
+      "new": "税務申告ボックスを追加",
+      "searchPlaceholder": "申告ボックスを検索…",
+      "source": "ソース",
+      "empty": "この申告書と検索条件に一致する申告ボックスはありません。",
+      "mapped": "マッピング済み",
+      "calculated": "計算",
+      "manual": "手入力"
+    },
+    "taxRates": {
+      "description": "{code} の適用日付き税率です。",
+      "new": "税率を追加",
+      "searchPlaceholder": "税率を検索…",
+      "empty": "この税コードと検索条件に一致する税率はありません。"
+    },
+    "new": "新規",
+    "learnMore": "詳細はこちら。",
+    "empty": "ここにはまだ何もありません。",
+    "statusActive": "有効",
+    "statusArchived": "アーカイブ済み",
+    "yes": "はい",
+    "selectPlaceholder": "選択…",
+    "searchPlaceholder": "検索…",
+    "created": "作成しました",
+    "updated": "保存しました",
+    "deleted": "削除しました",
+    "confirmDelete": "このレコードを削除しますか？この操作は取り消せません。",
+    "validation": {
+      "required": "{field}は必須です"
+    },
+    "drawer": {
+      "newTitle": "新規{name}",
+      "editTitle": "{name}を編集",
+      "tabs": {
+        "ariaLabel": "設定セクション",
+        "details": "詳細"
+      }
+    },
+    "errors": {
+      "duplicate": "そのコードのレコードは既に存在します。",
+      "inUse": "このレコードは使用中のため削除できません。",
+      "primaryRequired": "このレコードから主要ステータスを外す前に、別の会計帳簿を主要に設定してください。",
+      "primaryActiveRequired": "主要な会計帳簿は有効なままにする必要があります。",
+      "archiveOnly": "会計帳簿は元帳履歴のために保持され、アーカイブのみ可能です。",
+      "invalidUrl": "有効なhttp://またはhttps://の政府提出URLを入力してください。",
+      "invalidDepreciationFormula": "文書化された変数と演算子を使用した有効な減価償却式を入力してください。"
+    },
+    "groups": {
+      "company": "会社",
+      "accounting": "会計",
+      "taxes": "税",
+      "dimensions": "ディメンション",
+      "billing": "請求と採番",
+      "workforce": "労働力",
+      "assets": "資産",
+      "currency": "通貨",
+      "revenue": "収益",
+      "inventory": "在庫"
+    },
+    "fxProvider": {
+      "title": "為替レートプロバイダー",
+      "description": "日次のスポットレートを組織の通貨にインポートし、自動的に最新の状態に保ちます。",
+      "provider": "プロバイダー",
+      "providers": {
+        "bank_of_canada": "Bank of Canada",
+        "ecb": "European Central Bank",
+        "open_exchange_rates": "Open Exchange Rates"
+      },
+      "providerHelp": {
+        "bank_of_canada": "CADを基準アンカーとする公式の日次平均レート。APIキーは不要です。",
+        "ecb": "EURを基準アンカーとする公式の営業日参照レート。APIキーは不要です。",
+        "open_exchange_rates": "ご自身のAPIキーを使用した広範な商用カバレッジ。プランの制限が適用される場合があります。"
+      },
+      "displayName": "構成名",
+      "displayNamePlaceholder": "日次の法人レート",
+      "baseCurrency": "基準通貨",
+      "selectCurrency": "通貨を選択…",
+      "schedule": "同期スケジュール",
+      "schedules": {
+        "manual": "手動のみ",
+        "daily": "毎日",
+        "weekdays": "平日",
+        "weekly": "毎週"
+      },
+      "syncHourUtc": "同期時刻（UTC）",
+      "lookbackDays": "改訂の遡及期間（日数）",
+      "currencies": "インポートする通貨",
+      "addCurrency": "通貨を追加…",
+      "searchCurrencies": "通貨を検索…",
+      "removeCurrency": "{currency}を削除",
+      "noCurrencies": "少なくとも1つの外貨を追加してください。",
+      "apiKey": "プロバイダーAPIキー",
+      "apiKeyPlaceholder": "APIキーを入力",
+      "secretStored": "封印されたキーが保存されています。値を入力すると置き換えられます",
+      "clearSecret": "保存されたAPIキーを削除",
+      "enabled": "プロバイダー同期を有効化",
+      "saved": "為替レートプロバイダーを保存しました。",
+      "test": "プロバイダーをテスト",
+      "testPassed": "プロバイダーは{observations}件の観測値と{rates}件の正規化レートを返しました。",
+      "testFailed": "プロバイダーのテストに失敗しました。",
+      "syncNow": "今すぐ同期",
+      "syncPassed": "{observations}件の観測値をインポートし、{rates}件の正規化レートを処理しました。",
+      "syncFailed": "為替レートの同期に失敗しました。",
+      "health": "プロバイダーの状態",
+      "lastSuccess": "最後に成功したインポート",
+      "lastObservation": "最新の観測値",
+      "nextSync": "次回の同期",
+      "latestRun": "最新の実行",
+      "noRuns": "プロバイダーはまだ実行されていません。",
+      "runStatus": {
+        "running": "実行中",
+        "ok": "成功",
+        "failed": "失敗"
+      },
+      "runSummary": "{observations}件の観測値 · {inserted}件挿入 · {updated}件更新 · {preserved}件の手動上書きを保持",
+      "overridePolicy": "セットアップで編集されたレートは、保護された手動の上書きになります。プロバイダーのインポートがそれらを置き換えることはありません。"
+    },
+    "paymentOperations": {
+      "title": "支払と銀行取引",
+      "description": "支払レール、資金調達プロファイル、スケジュール、承認、送付、および口座振替委任状を設定します。",
+      "tabs": {
+        "profiles": "銀行プロファイル",
+        "formats": "支払フォーマット",
+        "schedules": "スケジュール",
+        "mandates": "口座振替委任状"
+      },
+      "search": {
+        "profiles": "プロファイルを検索…",
+        "formats": "フォーマットを検索…",
+        "schedules": "スケジュールを検索…",
+        "mandates": "委任状を検索…"
+      },
+      "state": "状態",
+      "new": {
+        "profiles": "新規プロファイル",
+        "formats": "新規カスタムフォーマット",
+        "schedules": "新規スケジュール",
+        "mandates": "新規委任状"
+      },
+      "columns": {
+        "name": "名称",
+        "bank": "資金調達口座",
+        "format": "フォーマット",
+        "currency": "通貨",
+        "delivery": "送付",
+        "approval": "実行承認",
+        "status": "ステータス",
+        "code": "コード",
+        "rail": "レール",
+        "direction": "方向",
+        "profile": "プロファイル",
+        "cron": "スケジュール",
+        "nextRun": "次回実行",
+        "action": "アクション",
+        "reference": "参照",
+        "party": "取引相手",
+        "scheme": "スキーム",
+        "signedOn": "署名日",
+        "expiresOn": "有効期限"
+      },
+      "states": {
+        "active": "有効",
+        "archived": "アーカイブ済み",
+        "pending": "保留中",
+        "suspended": "一時停止",
+        "revoked": "取り消し済み",
+        "expired": "期限切れ"
+      },
+      "rails": {
+        "cpa005_credit": "CPA-005クレジット",
+        "nacha_credit": "NACHAクレジット",
+        "sepa_credit": "SEPAクレジット",
+        "nacha_debit": "NACHAデビット",
+        "sepa_debit": "SEPAデビット",
+        "positive_pay": "Positive Pay",
+        "wire": "電信送金",
+        "cheque": "小切手",
+        "custom": "カスタム"
+      },
+      "directions": {
+        "credit": "クレジット",
+        "debit": "デビット",
+        "both": "クレジットとデビット"
+      },
+      "actions": {
+        "create_draft": "下書きを作成",
+        "submit_for_approval": "承認のために提出"
+      },
+      "schemes": {
+        "nacha": "NACHA",
+        "sepa_core": "SEPA Core",
+        "sepa_b2b": "SEPA B2B",
+        "custom": "カスタム"
+      },
+      "fields": {
+        "name": "名称",
+        "currency": "通貨",
+        "bankAccount": "資金調達口座",
+        "format": "支払フォーマット",
+        "subsidiary": "子会社",
+        "country": "国",
+        "sftpServer": "既存のSFTPサーバー",
+        "sftpFolder": "送信フォルダー",
+        "requireRunApproval": "支払実行の承認を必須にする",
+        "requireFileApproval": "生成ファイルの承認を必須にする",
+        "autoRemittance": "送金通知を自動的に送信する",
+        "discountAccount": "早期支払割引勘定",
+        "positivePayAccountReference": "金融機関口座参照",
+        "active": "有効",
+        "code": "コード",
+        "direction": "方向",
+        "extension": "ファイル拡張子",
+        "contentType": "コンテンツタイプ",
+        "formatterScript": "フォーマッターJavaScript",
+        "profile": "銀行プロファイル",
+        "cron": "スケジュール",
+        "cronHint": "プリセットを選択するか、完全に制御するためにカスタムスケジュール（cron構文）を入力してください。",
+        "timezone": "タイムゾーン",
+        "action": "支払期日到来時",
+        "party": "取引相手",
+        "partyBankAccount": "承認済み銀行口座",
+        "scheme": "委任状スキーム",
+        "reference": "委任状参照",
+        "status": "ステータス",
+        "signedOn": "署名日",
+        "validFrom": "有効開始日",
+        "expiresOn": "有効期限"
+      },
+      "secretFields": {
+        "originatorId": "オリジネーターID",
+        "originatorShortName": "略称",
+        "originatorLongName": "正式名称",
+        "dataCentre": "データセンター",
+        "institution": "金融機関",
+        "transit": "トランジット",
+        "account": "口座番号",
+        "transactionCode": "取引コード",
+        "odfiRouting": "ODFIルーティング",
+        "immediateDestination": "即時送信先",
+        "immediateOrigin": "即時送信元",
+        "destinationName": "送信先名",
+        "originName": "送信元名",
+        "companyName": "会社名",
+        "companyId": "会社ID",
+        "entryClassCode": "エントリークラス",
+        "entryDescription": "エントリーの説明",
+        "originatorName": "オリジネーター名",
+        "originatorIban": "オリジネーターIBAN",
+        "originatorBic": "オリジネーターBIC",
+        "creditorId": "債権者ID"
+      },
+      "originator": {
+        "title": "オリジネーター認証情報",
+        "newHint": "組織およびこのプロファイル用に暗号化して保存されます。",
+        "editHint": "認証情報は書き込み専用です。保存された値を保持するには、すべてのフィールドを空白のままにしてください。"
+      },
+      "accounting": {
+        "title": "会計および銀行参照",
+        "noDiscountAccount": "割引を計上しない",
+        "hint": "割引勘定は、実行時に利用可能な支払条件割引を取得した際に得られた節約額を記録します。"
+      },
+      "delivery": {
+        "title": "送付",
+        "manual": "手動ダウンロード",
+        "existingSftpHint": "SFTPサーバーは既存のSFTP設定で一度だけ管理されます。このプロファイルは送付用に1つを選択するのみです。"
+      },
+      "criteria": {
+        "title": "選択条件",
+        "dueThroughDays": "支払期日が以下の日数以内の仕入請求書を含める（日数）",
+        "minimumAmount": "最小仕入請求書金額",
+        "maximumRunAmount": "最大実行金額",
+        "captureDiscounts": "利用可能な早期支払割引を取得する",
+        "applyCredits": "利用可能なクレジットを適用する"
+      },
+      "drawer": {
+        "new": {
+          "profiles": "新規銀行プロファイル",
+          "formats": "新規カスタム支払フォーマット",
+          "schedules": "新規支払スケジュール",
+          "mandates": "新規口座振替委任状"
+        },
+        "edit": {
+          "profiles": "銀行プロファイルを編集",
+          "formats": "支払フォーマットを編集",
+          "schedules": "支払スケジュールを編集",
+          "mandates": "口座振替委任状を編集"
+        },
+        "description": {
+          "profiles": "資金調達口座を支払レールおよび送付ポリシーに接続します。",
+          "formats": "カスタム銀行フォーマット用のファイルメタデータおよびサンドボックス化されたJavaScriptを定義します。",
+          "schedules": "繰り返し可能なスケジュールで対象取引を選択します。",
+          "mandates": "取引相手から資金を回収するために必要な承認を記録します。"
+        }
+      },
+      "select": "選択…",
+      "allSubsidiaries": "すべての子会社",
+      "schedulePresets": {
+        "daily": "毎日",
+        "weekdays": "平日",
+        "weekly": "毎週（月曜）",
+        "monthly": "毎月（1日）"
+      },
+      "empty": "表示するレコードがありません。",
+      "manualDelivery": "手動ダウンロード",
+      "runApproval": "必須",
+      "automatic": "自動",
+      "any": "任意",
+      "builtInFormatHint": "この組み込みフォーマッターは支払エンジンによって保守されています。その実行可能な定義はここでは編集できません。",
+      "save": "保存",
+      "saving": "保存中…",
+      "saved": "保存しました",
+      "cancel": "キャンセル",
+      "saveFailed": "構成を保存できませんでした。"
+    },
+    "entities": {
+      "company": {
+        "title": "会社と会計",
+        "description": "組織の識別情報、基準通貨、会計年度、および統制勘定。"
+      },
+      "tax-codes": {
+        "title": "税コード",
+        "singularTitle": "税コード",
+        "description": "課税および支払するレートと、それらが記帳される勘定。"
+      },
+      "tax-rates": {
+        "title": "税率",
+        "singularTitle": "税率",
+        "description": "各税コードの発効日付きレート履歴。"
+      },
+      "tax-groups": {
+        "title": "税グループ",
+        "description": "複数の税コードをまとめて明細行に一括適用します。"
+      },
+      "tax-return-forms": {
+        "title": "税務申告書",
+        "description": "政府の税務申告書を設定します。ボックス、各ボックスの計算方法、および提出方法。"
+      },
+      "tax-report-lines": {
+        "title": "税務申告ボックス",
+        "singularTitle": "税務申告ボックス",
+        "description": "税コードを税務申告書のボックスにマッピングするか、他のボックスからボックスを計算します。"
+      },
+      "classes": {
+        "title": "クラス",
+        "description": "取引を切り分けるためのレポートディメンション。"
+      },
+      "segment-definitions": {
+        "title": "セグメント",
+        "description": "取引、勘定、レポートにわたる組み込みおよびカスタムの会計セグメントを設定します。"
+      },
+      "segment-values": {
+        "title": "セグメント値",
+        "description": "カスタムセグメントの選択可能な値と階層を管理します。"
+      },
+      "departments": {
+        "title": "部門",
+        "description": "取引を切り分けるためのレポートディメンション。"
+      },
+      "locations": {
+        "title": "ロケーション",
+        "description": "取引を切り分けるためのレポートディメンション。"
+      },
+      "payment-terms": {
+        "title": "支払条件",
+        "description": "仕入請求書および請求書のネットおよび早期支払割引条件。"
+      },
+      "number-sequences": {
+        "title": "番号シーケンス",
+        "description": "各ドキュメントまたはカスタムレコードのプレフィックス、次の番号、桁数を管理します。カスタムレコードの採番ルールは、最初の番号を生成するときに自動作成されます。"
+      },
+      "time-types": {
+        "title": "工数タイプ",
+        "description": "タイムシートのコスト乗数および請求可能の既定値。"
+      },
+      "worker-comp-groups": {
+        "title": "労災保険グループ",
+        "description": "労務原価計算用の労災補償料率グループ。"
+      },
+      "labor-burden-rates": {
+        "title": "労務間接費率",
+        "description": "労務コストに適用される発効日付きの間接費率。"
+      },
+      "asset-categories": {
+        "title": "資産カテゴリ",
+        "description": "固定資産の既定の減価償却方法および勘定。"
+      },
+      "depreciation-methods": {
+        "title": "減価償却方法",
+        "description": "カスタムの減価償却計算式を作成します — 数式ビルダー。"
+      },
+      "depreciation-book-policies": {
+        "title": "帳簿別減価償却ポリシー",
+        "description": "複数帳簿減価償却のための、帳簿別・カテゴリ別の方法。"
+      },
+      "currencies": {
+        "title": "通貨",
+        "description": "通貨コードとその補助単位の精度。"
+      },
+      "sftp": {
+        "title": "SFTP"
+      },
+      "payment-operations": {
+        "title": "支払と銀行取引",
+        "description": "支払フォーマット、資金調達プロファイル、スケジュール、および口座振替委任状。"
+      },
+      "account-groups": {
+        "title": "勘定グループ",
+        "description": "会計科目表のレポート分類（例：コストプール）。グループはルールにより勘定を自動分類し、勘定ごとの上書きが可能です。"
+      },
+      "subsidiaries": {
+        "title": "子会社",
+        "description": "組織内の法的主体 — 1つのルートを持つ連結ツリー。"
+      },
+      "intercompany-pairs": {
+        "title": "会社間ペア",
+        "description": "2つの子会社にまたがる取引のための、対他勘定／対自勘定のマッピング。"
+      },
+      "accounting-books": {
+        "title": "会計帳簿",
+        "singular": "会計帳簿",
+        "description": "元帳エントリーと決算統制を保持する、主要、税務、法定、およびレポート用の帳簿を管理します。"
+      },
+      "fx-rates": {
+        "title": "為替レート",
+        "description": "外貨取引を記帳するために使用される、組織の日次レート。"
+      },
+      "consolidated-fx-rates": {
+        "title": "連結為替レート",
+        "description": "子会社連結に使用される、期末時点、平均、および歴史的レート。"
+      },
+      "item-rate-books": {
+        "title": "品目レート表",
+        "description": "設備およびその他の品目料金に使用する顧客別、プロジェクト別、組織別のレート表です。"
+      },
+      "item-rate-book-assignments": {
+        "title": "レート表の割り当て",
+        "description": "顧客またはプロジェクトに適用する発効日付きレート表を選択します。"
+      },
+      "recognition-rules": {
+        "title": "認識ルール",
+        "description": "収益が期間にわたってどのように認識されるか — 方法、タイミング、および勘定（ASC 606）。"
+      },
+      "fair-value-prices": {
+        "title": "公正価値価格",
+        "description": "バンドル収益を各履行義務に配分するために使用される独立販売価格。"
+      },
+      "stock-locations": {
+        "title": "在庫ロケーション",
+        "description": "ロケーションディメンション配下の物理的なビン、ゾーン、および倉庫。"
+      },
+      "item-inventory-profiles": {
+        "title": "品目原価計算",
+        "description": "品目ごとの原価計算方法、在庫勘定、追跡、および標準原価。"
+      },
+      "bom-components": {
+        "title": "部品表",
+        "description": "各組立品目を製造するために消費される部品。"
+      },
+      "income-tax-rates": {
+        "title": "所得税率",
+        "singularTitle": "所得税率",
+        "description": "管轄区別の制定所得税率（効力日付き）— ASC 740 税金計算の基礎。"
+      }
+    },
+    "fields": {
+      "classAttribute": "Asset class attribute",
+      "countryCode": "Country",
+      "calculationModel": "Calculation model",
+      "regime": "Regime",
+      "classCode": "Class code",
+      "rate": "レート",
+      "method": "方法",
+      "firstYearFraction": "First-year fraction",
+      "allowRecapture": "Allow recapture",
+      "allowTerminalLoss": "Allow terminal loss",
+      "costCap": "Cost cap",
+      "depreciationSystem": "Depreciation system",
+      "macrsMethod": "MACRS method",
+      "recoveryPeriodYears": "Recovery period (years)",
+      "taxAttributes": "Tax attributes (JSON)",
+      "enhancedMultiplier": "Enhanced multiplier",
+      "acquiredFrom": "Acquired from",
+      "acquiredTo": "Acquired to",
+      "code": "コード",
+      "name": "名称",
+      "appliesTo": "適用対象",
+      "recoverablePercent": "還付可能 %",
+      "calculationType": "計算種別",
+      "withholdingAccountId": "源泉徴収勘定",
+      "priceIncludesTax": "税込価格",
+      "compoundOnPrevious": "前の税要素に複利適用",
+      "roundingScale": "税額の丸め桁数",
+      "isActive": "有効",
+      "isPrimary": "主要帳簿",
+      "country": "国",
+      "region": "地域",
+      "collectedAccountId": "税収受勘定",
+      "paidAccountId": "税支払勘定",
+      "taxCodeId": "税コード",
+      "ratePercent": "税率 %",
+      "effectiveFrom": "発効開始日",
+      "effectiveTo": "発効終了日",
+      "members": "税コード",
+      "reportCode": "レポートコード",
+      "lineCode": "明細コード",
+      "label": "ラベル",
+      "basis": "基準",
+      "sign": "符号",
+      "submissionChannel": "提出方法",
+      "governmentFormat": "政府フォーマット",
+      "submissionUrl": "政府提出URL",
+      "officialPdfFileId": "公式PDF",
+      "watermark": "透かし",
+      "sequence": "順序",
+      "formula": "計算式",
+      "pdfField": "PDFフィールド",
+      "parentId": "親",
+      "netDays": "ネット日数",
+      "discountDays": "割引日数",
+      "discountPercent": "割引 %",
+      "documentKind": "ドキュメント",
+      "prefix": "プレフィックス",
+      "nextNumber": "次の番号",
+      "padding": "桁埋め",
+      "gapless": "連番（欠番なし）",
+      "classification": "分類",
+      "costMultiplier": "コスト乗数",
+      "isBillableDefault": "既定で請求可能",
+      "showOnFieldTicket": "フィールドチケットに表示",
+      "category": "カテゴリ",
+      "postsGl": "GLに記帳",
+      "bookId": "帳簿",
+      "categoryId": "資産カテゴリ",
+      "convention": "計上規約",
+      "lifeMonths": "耐用期間（月数）",
+      "departmentId": "部門",
+      "defaultMethod": "既定の方法",
+      "defaultConvention": "減価償却計上規約",
+      "endOfLife": "耐用期間終了時",
+      "defaultLifeMonths": "既定の耐用期間（月数）",
+      "assetAccountId": "在庫資産勘定",
+      "accumulatedDepreciationAccountId": "減価償却累計額勘定",
+      "depreciationExpenseAccountId": "減価償却費勘定",
+      "gainLossAccountId": "損益勘定",
+      "minorUnits": "補助単位",
+      "key": "キー",
+      "dimension": "ディメンション",
+      "color": "色",
+      "sortOrder": "並び順",
+      "legalName": "正式名称",
+      "baseCurrency": "基準通貨",
+      "isElimination": "消去",
+      "fromSubsidiaryId": "移動元子会社",
+      "toSubsidiaryId": "移動先子会社",
+      "dueFromAccountId": "対他勘定",
+      "dueToAccountId": "対自勘定",
+      "asOf": "基準日",
+      "fromCurrency": "換算元通貨",
+      "toCurrency": "換算先通貨",
+      "rateType": "レートタイプ",
+      "source": "ソース",
+      "periodId": "会計期間",
+      "currentRate": "期末時点レート",
+      "averageRate": "平均レート",
+      "historicalRate": "歴史的レート",
+      "subsidiaryId": "子会社",
+      "subsidiaryIncludeChildren": "子会社を含める",
+      "pluralName": "複数形の名称",
+      "sourceKind": "ソース",
+      "isHierarchical": "階層構造",
+      "showOnHeader": "取引ヘッダーに表示",
+      "showOnLines": "取引明細行に表示",
+      "showInReports": "レポートに表示",
+      "allowAccountRequirement": "勘定要件として許可",
+      "segmentId": "セグメント",
+      "description": "説明",
+      "recognitionPeriods": "認識期間",
+      "startDateSource": "開始日ソース",
+      "endDateSource": "終了日ソース",
+      "periodOffset": "期間オフセット",
+      "startOffsetDays": "開始オフセット（日数）",
+      "initialAmountPercent": "初期金額 %",
+      "deferredAccountId": "繰延収益勘定",
+      "recognizedAccountId": "認識済み収益勘定",
+      "isForecast": "予測ルール",
+      "itemId": "品目",
+      "unitPrice": "単価",
+      "lowValue": "下限値",
+      "highValue": "上限値",
+      "currency": "通貨",
+      "locationId": "ロケーション",
+      "kind": "種類",
+      "costingMethod": "原価計算方法",
+      "tracking": "追跡",
+      "cogsAccountId": "売上原価勘定",
+      "adjustmentAccountId": "調整勘定",
+      "varianceAccountId": "差異勘定",
+      "standardCost": "標準原価",
+      "baseUnit": "基本単位",
+      "reorderPoint": "発注点",
+      "preferredStockLevel": "推奨在庫水準",
+      "receivedNotBilledAccountId": "受領未請求勘定",
+      "assemblyItemId": "組立品目",
+      "componentItemId": "部品品目",
+      "quantityPer": "1単位あたり数量",
+      "rateBookId": "レート表",
+      "customerId": "顧客",
+      "projectId": "プロジェクト",
+      "isDefault": "既定"
+    },
+    "fieldHelp": {
+      "gapless": "欠番なしとは、連番のすべての番号が記録され、番号が飛ばないことを意味します。法令または監査要件で途切れない採番が必要な場合にのみ有効にしてください。"
+    },
+    "options": {
+      "timeClassification": {
+        "regular": "通常",
+        "overtime": "時間外",
+        "doubleTime": "倍時間",
+        "other": "その他"
+      },
+      "taxDepreciationModel": {
+        "pool": "Class pool",
+        "macrs": "Per-asset MACRS"
+      },
+      "macrsSystem": {
+        "gds": "GDS",
+        "ads": "ADS"
+      },
+      "macrsMethod": {
+        "200db": "200% declining balance",
+        "150db": "150% declining balance",
+        "straightLine": "Straight line"
+      },
+      "taxDepreciationConvention": {
+        "halfYear": "Half-year",
+        "midQuarter": "Mid-quarter",
+        "midMonth": "Mid-month"
+      },
+      "poolMethod": {
+        "declining": "Declining balance",
+        "straightLine": "Straight line"
+      },
+      "appliesTo": {
+        "sales": "販売",
+        "purchases": "購買",
+        "both": "両方"
+      },
+      "taxCalculationType": {
+        "standard": "標準税",
+        "withholding": "源泉徴収税",
+        "reverseCharge": "リバースチャージ"
+      },
+      "rateDateBasis": {
+        "usageDate": "利用日",
+        "projectStart": "プロジェクト開始日"
+      },
+      "basis": {
+        "collected": "税収受（アウトプット）",
+        "paid": "税支払／仕入税額控除（インプット）",
+        "net": "正味金額",
+        "tax": "税額"
+      },
+      "sign": {
+        "positive": "加算（+）",
+        "negative": "減算（−）"
+      },
+      "channel": {
+        "printPdf": "印刷・郵送（公式PDF）",
+        "fileUpload": "電子ファイルアップロード",
+        "efileApi": "電子申告（API）",
+        "portalManual": "政府ポータル（手入力）"
+      },
+      "governmentFormat": {
+        "portalEntry": "オンラインポータル入力",
+        "certifiedFile": "認証済み政府ファイル",
+        "api": "対応ソフトウェア／API",
+        "paper": "公式紙フォーム"
+      },
+      "method": {
+        "straightLine": "定額法",
+        "decliningBalance": "定率法",
+        "doubleDeclining": "倍額定率法",
+        "unitsOfProduction": "生産高比例法",
+        "manual": "手動"
+      },
+      "convention": {
+        "fullMonth": "月初計上",
+        "midMonth": "月央計上",
+        "halfYear": "半年計上"
+      },
+      "endOfLife": {
+        "fullyDepreciate": "全額償却",
+        "retainBalance": "残高を保持"
+      },
+      "burdenMethod": {
+        "live": "ライブ",
+        "standard": "標準"
+      },
+      "fxRateType": {
+        "spot": "スポット",
+        "average": "平均",
+        "historical": "歴史的"
+      },
+      "rateSource": {
+        "derived": "導出",
+        "manual": "手動"
+      },
+      "recognitionMethod": {
+        "pointInTime": "一時点",
+        "straightLineEven": "定額法、均等期間",
+        "straightLineProrate": "定額法、初回・最終を日割り",
+        "straightLineDaily": "定額法、正確な日数",
+        "percentComplete": "進捗度",
+        "milestone": "マイルストーン",
+        "usage": "使用量"
+      },
+      "startDateSource": {
+        "obligation": "履行義務開始",
+        "document": "ドキュメント日付",
+        "fulfillment": "履行",
+        "event": "イベント",
+        "contract": "契約開始"
+      },
+      "endDateSource": {
+        "term": "期間の長さ",
+        "obligation": "履行義務終了",
+        "contract": "契約終了"
+      },
+      "costingMethod": {
+        "fifo": "FIFO",
+        "movingAverage": "移動平均",
+        "standard": "標準原価"
+      },
+      "tracking": {
+        "none": "なし",
+        "lot": "ロット",
+        "serial": "シリアル"
+      },
+      "stockLocationKind": {
+        "warehouse": "倉庫",
+        "zone": "ゾーン",
+        "bin": "ビン",
+        "staging": "ステージング",
+        "transit": "輸送中",
+        "quarantine": "検疫"
+      }
+    },
+    "invoicing": {
+      "navTitle": "請求書"
+    },
+    "bankFeeds": {
+      "navTitle": "Bank Feeds"
+    },
+    "paymentProviders": {
+      "title": "決済プロバイダー",
+      "description": "請求書の顧客決済リンク向けホスト型チェックアウトプロバイダー。入金・手数料の照合は 銀行 → PSP決済 で行います。",
+      "saved": "保存しました。",
+      "enableAcceptance": "決済リンクを有効化",
+      "apiKey": "APIキー / シークレット",
+      "webhookSecret": "Webhookシークレット",
+      "publishableKey": "公開キー",
+      "merchantAccount": "マーチャントアカウント",
+      "secretConfigured": "設定済み — 入力で置換",
+      "receiptBankAccount": "入金銀行口座",
+      "surchargeRule": "サーチャージルール",
+      "noSurcharge": "サーチャージなし",
+      "save": "保存",
+      "surchargeRules": "サーチャージルール",
+      "surchargeHint": "チェックアウト時に請求額へ上乗せする任意の処理手数料。入金時に収益科目へ計上されます。",
+      "ruleName": "名称",
+      "ruleCalc": "計算方法",
+      "ruleProvider": "プロバイダー",
+      "ruleEffective": "有効期間",
+      "deactivate": "無効化",
+      "inactive": "無効",
+      "percent": "割合",
+      "fixed": "定額",
+      "cap": "上限（任意）",
+      "allProviders": "すべてのプロバイダー",
+      "paymentMethod": "決済方法",
+      "methodAll": "すべて",
+      "methodCard": "カード",
+      "methodBankDebit": "銀行引落",
+      "effectiveFrom": "有効開始日",
+      "addRule": "ルールを追加",
+      "calcPercent": "請求額の割合",
+      "calcFixed": "定額",
+      "calcBoth": "割合 + 定額",
+      "feeIncomeAccount": "手数料収益科目",
+      "webhookUrl": "Webhook URL",
+      "webhookHint": "このエンドポイントをプロバイダーのダッシュボードに登録して決済イベントを受信します。",
+      "copy": "コピー",
+      "copied": "コピー済み",
+      "testConnection": "接続テスト",
+      "testing": "テスト中…"
+    }
+  },
+  "flows": {
+    "title": "フロー",
+    "description": "レコードに対するビジュアルな自動化です。トリガーが実行を開始し、条件で分岐し、アクションが処理を行い、承認ゲートで担当者の対応を待ちます。",
+    "searchPlaceholder": "フローを検索…",
+    "subjectFilter": "レコードタイプ",
+    "table": {
+      "flow": "フロー",
+      "subject": "レコードタイプ",
+      "nodes": "ノード",
+      "lastRun": "最終実行",
+      "updated": "更新日時",
+      "status": "ステータス"
+    },
+    "empty": {
+      "title": "フローはまだありません",
+      "description": "フローはトリガーで開始し、条件で分岐し、承認ゲートで一時停止し、アクション（メール、通知、フィールド更新、ステータス変更）で完了します。",
+      "cta": "新規フロー"
+    },
+    "statusEnabled": "有効",
+    "statusDisabled": "無効",
+    "neverRan": "なし",
+    "new": {
+      "button": "新規フロー",
+      "title": "新規フロー",
+      "description": "このフローが対象とするレコードタイプを選択してください。次のステップで手順を設計します。",
+      "name": "名前",
+      "namePlaceholder": "例: 10,000ドル超の仕入請求書承認",
+      "subject": "レコードタイプ",
+      "subjectPlaceholder": "レコードタイプを選択…",
+      "create": "フローを作成",
+      "failed": "フローを作成できませんでした"
+    },
+    "actions": {
+      "enable": "有効化",
+      "disable": "無効化",
+      "delete": "削除",
+      "deleteConfirmTitle": "フローを削除",
+      "deleteConfirm": "「{name}」を削除しますか？実行履歴も削除されます。",
+      "deleted": "フローを削除しました",
+      "deleteFailed": "フローを削除できませんでした",
+      "updateFailed": "フローを更新できませんでした"
+    },
+    "builder": {
+      "save": "保存",
+      "saved": "フローを保存しました",
+      "saveFailed": "フローを保存できませんでした",
+      "unsaved": "未保存の変更",
+      "enabledToggle": "有効",
+      "namePlaceholder": "フロー名",
+      "errorsTitle": "フローを保存するには次の項目を修正してください",
+      "warningsTitle": "警告 — フローは保存されますが、期待どおりに実行されない可能性があります",
+      "warningsBadge": "{count, plural, other {#件の警告}}",
+      "tabs": {
+        "canvas": "キャンバス",
+        "runs": "実行"
+      },
+      "palette": {
+        "title": "追加",
+        "trigger": "トリガー",
+        "condition": "条件",
+        "action": "アクション",
+        "gate": "承認"
+      },
+      "canvasEmpty": {
+        "title": "トリガーから始めましょう",
+        "description": "トリガーが実行を開始し、条件で分岐し、承認ゲートで担当者の対応を待ち、アクションで処理を完了します。トリガーを追加し、そのハンドルからドラッグして次のステップに接続してください。"
+      },
+      "inspector": {
+        "empty": "設定するノードを選択してください",
+        "deleteNode": "ノードを削除",
+        "nodeId": "ノード"
+      }
+    },
+    "node": {
+      "trigger": "トリガー",
+      "condition": "条件",
+      "action": "アクション",
+      "gate": "承認",
+      "conditionDefault": "もし…",
+      "gateDefault": "承認"
+    },
+    "edge": {
+      "then": "その場合",
+      "else": "それ以外",
+      "approve": "承認",
+      "reject": "却下"
+    },
+    "trigger": {
+      "kind": "タイミング",
+      "kinds": {
+        "on_create": "レコードが作成されたとき",
+        "on_update": "レコードが更新されたとき",
+        "on_submit": "レコードが承認申請されたとき",
+        "before_post": "レコードの記帳前",
+        "after_post": "レコードの記帳後",
+        "before_void": "レコードの無効化前",
+        "status_change": "ステータスが変わったとき",
+        "on_field_value": "フィールドが条件に一致したとき",
+        "scheduled": "スケジュールに従って",
+        "manual": "ユーザーがボタンをクリックしたとき"
+      },
+      "from": "変更前ステータス",
+      "to": "変更後ステータス",
+      "anyStatus": "任意のステータス",
+      "rule": "レコードが一致する条件",
+      "cron": "Cronスケジュール",
+      "cronHint": "分 · 時 · 日 · 月 · 曜日",
+      "cronExample": "例: 0 8 * * 1 = 毎週月曜日の08:00",
+      "timezone": "タイムゾーン（任意）",
+      "selectRecords": "一致する各レコードに対して1回ずつ実行",
+      "selectRecordsHint": "スケジュールはこのレコードタイプを検索し、一致するごとに別々の実行を開始します。",
+      "selectRule": "レコードフィルター（任意）",
+      "selectRuleAdd": "レコードフィルターを追加",
+      "selectRuleRemove": "レコードフィルターを削除",
+      "selectLimit": "1回の実行あたりの最大レコード数",
+      "buttonLabel": "ボタンラベル",
+      "confirmText": "確認メッセージ（任意）",
+      "requirePermission": "必要な権限（任意）",
+      "permissionPlaceholder": "権限を選択…",
+      "showIf": "ボタンを表示する条件…",
+      "showIfAdd": "表示条件を追加",
+      "showIfRemove": "表示条件を削除",
+      "buttonPreview": "レコードボタンのプレビュー",
+      "buttonHint": "このボタンは、フローが有効で、その権限および表示条件を満たす場合にレコードヘッダーに表示されます。",
+      "defaultButtonLabel": "フローを実行"
+    },
+    "condition": {
+      "rule": "分岐する条件",
+      "label": "ラベル（任意）",
+      "labelPlaceholder": "例: 10,000ドル超",
+      "hint": "条件を満たすと「その場合」ブランチが実行され、満たさないと「それ以外」が実行されます。"
+    },
+    "action": {
+      "kind": "アクション",
+      "kinds": {
+        "send_email": "メールを送信",
+        "notify": "アプリ内通知を送信",
+        "set_field": "フィールドを設定",
+        "change_status": "ステータスを変更",
+        "post_document": "書類を記帳",
+        "lock_record": "レコードをロック",
+        "unlock_record": "レコードのロックを解除"
+      },
+      "recipients": "宛先",
+      "subject": "件名",
+      "body": "本文",
+      "attachPdf": "レコードのPDFを添付",
+      "attachPdfHint": "このレコードタイプに対する組織の有効なPDFテンプレートを使用します。",
+      "interpolationHint": "'{{'field'}}' トークンでレコードの値を挿入します",
+      "availableFields": "利用可能なフィールド",
+      "title": "タイトル",
+      "notifyBody": "メッセージ（任意）",
+      "href": "開くリンク（任意）",
+      "field": "フィールド",
+      "value": "値",
+      "valueSource": "値のソース",
+      "valueSources": {
+        "literal": "固定値",
+        "today": "今日の日付",
+        "now": "現在の日時",
+        "currentUser": "現在のユーザーの名前",
+        "expression": "既存の数式"
+      },
+      "expressionPreserved": "この既存の数式は保持されます。数式の編集はフォームの数式ビルダーから行えます。",
+      "status": "新しいステータス",
+      "postDocumentHint": "通常の記帳パイプラインを通じて書類を元帳に記帳します。設定する項目はありません。",
+      "lockReason": "ロック理由",
+      "lockReasonPlaceholder": "例: 承認済み — 支払いは確定",
+      "lockExemptRoles": "対象外のロール",
+      "lockExemptHint": "管理者は常に対象外です。選択したロールは引き続き編集できます。",
+      "unlockHint": "フローのロックを解除し、レコードを再び編集できるようにします。"
+    },
+    "gate": {
+      "title": "タイトル",
+      "titlePlaceholder": "例: コントローラー承認",
+      "assignees": "承認者",
+      "mode": "定足数",
+      "modeAny": "いずれか1名が判断可能",
+      "modeAll": "全員の承認が必要",
+      "signature": "署名の入力を必須にする",
+      "preventSelfApproval": "自己承認を禁止する",
+      "preventSelfApprovalHint": "申請者は承認者リストから除外されます。必要に応じて、リクエストはその上長に回されます。",
+      "reminderAfter": "リマインドまでの時間（時間）",
+      "escalateAfter": "エスカレーションまでの時間（時間）",
+      "escalateTo": "エスカレーション先",
+      "noEscalation": "エスカレーションなし",
+      "hint": "実行はここで承認者の定足数が判断するまで一時停止し、その後「承認」または「却下」のブランチへ進みます。"
+    },
+    "targets": {
+      "types": {
+        "user": "特定のユーザー",
+        "role": "ロールに属する全員",
+        "submitter": "申請者",
+        "supervisor": "申請者の上長",
+        "field": "レコードのフィールド（ユーザー）",
+        "email": "メールアドレス"
+      },
+      "add": "宛先を追加",
+      "addAssignee": "承認者を追加",
+      "remove": "削除",
+      "pickUser": "ユーザーを選択…",
+      "pickRole": "ロールを選択…",
+      "pickField": "フィールドを選択…",
+      "emailPlaceholder": "ops@example.com, cfo@example.com"
+    },
+    "logic": {
+      "groupAnd": "すべてに一致…",
+      "groupOr": "いずれかに一致…",
+      "groupNot": "次に一致しない…",
+      "ops": {
+        "eq": "が次に等しい",
+        "ne": "が次に等しくない",
+        "gt": "が次より大きい",
+        "gte": "が次以上",
+        "lt": "が次より小さい",
+        "lte": "が次以下",
+        "in": "が次のいずれか",
+        "notIn": "が次のいずれでもない",
+        "isSet": "が設定されている",
+        "isNotSet": "が空である"
+      },
+      "addRule": "条件を追加",
+      "addGroup": "グループを追加",
+      "remove": "削除",
+      "valuePlaceholder": "値",
+      "listPlaceholder": "カンマ区切りの値",
+      "true": "真",
+      "false": "偽"
+    },
+    "runs": {
+      "title": "最近の実行",
+      "empty": {
+        "title": "実行はまだありません",
+        "description": "フローを有効化してトリガーすると、各実行がステータスとエラーとともにここに表示されます。"
+      },
+      "status": {
+        "running": "実行中",
+        "waiting": "待機中",
+        "completed": "完了",
+        "failed": "失敗",
+        "cancelled": "キャンセル"
+      },
+      "table": {
+        "status": "ステータス",
+        "trigger": "トリガー",
+        "subject": "レコード",
+        "started": "開始",
+        "finished": "終了",
+        "error": "エラー"
+      }
+    }
+  },
+  "features": {
+    "bankFeeds": {
+      "title": "Bank Feeds",
+      "description": "Automated bank connectivity — SFTP file drops and Plaid, GoCardless, and TrueLayer live feeds."
+    },
+    "subscriptionBilling": {
+      "title": "Subscription Billing",
+      "description": "Plans and subscriptions that auto-generate recurring invoices (SaaS / retainer)."
+    },
+    "onlinePayments": {
+      "title": "オンライン決済",
+      "description": "請求書のホスト型決済リンク（Stripe / Adyen / GoCardless銀行引落）、サーチャージルール、入金を自動消込するWebhook。"
+    }
+  }
+}

@@ -1,0 +1,19 @@
+{
+  "title": "付款申请",
+  "description": "通过工程量清单、累计付款申请、变更单和保留款进行项目计费。",
+  "project": "项目",
+  "loading": "正在加载受控计费数据…",
+  "errors": { "load": "无法加载付款申请", "action": "操作失败" },
+  "empty": { "title": "没有符合条件的项目", "description": "启用使用付款申请的项目类型，然后将其分配给项目。", "manageProjectTypes": "管理项目类型" },
+  "summary": { "contractSum": "合同总额", "retainageHeld": "已扣保留款", "committedCost": "已承诺成本（未结采购单）" },
+  "sov": {
+    "title": "工程量清单", "item": "项目", "itemPlaceholder": "项目编号", "description": "说明", "scheduledValue": "计划价值", "retainagePercent": "保留款 %", "default": "默认", "delete": "删除", "deleteConfirm": "删除清单行“{description}”？", "empty": "尚无工程量清单行。", "defaultIncomeAccount": "默认收入科目", "addLine": "添加行"
+  },
+  "changeOrders": {
+    "title": "变更单", "number": "变更单编号", "description": "说明", "amount": "金额", "applyTo": "应用于", "newScheduleLine": "新建清单行（增加变更）", "deductiveHint": "扣减变更必须减少现有清单行。", "additiveHint": "选择要修订的清单行，或新建增加行。", "adjusts": "调整 {description}", "approve": "批准", "void": "作废", "voidConfirm": "作废变更单 {number}？审计历史将保留。", "add": "添加变更单", "empty": "没有变更单。", "status": { "draft": "草稿", "approved": "已批准", "void": "已作废" }
+  },
+  "payApplications": {
+    "title": "付款申请", "applicationNumber": "申请 #{number}", "retainage": "保留款", "enterDraws": "录入本期完成额", "hideDraws": "隐藏完成额", "approve": "批准", "createInvoice": "创建发票", "void": "作废", "voidConfirm": "作废申请 #{number}？完成额和审计历史将保留。", "item": "项目", "description": "说明", "workThisPeriod": "本期完成工作", "materialsStored": "现场存料", "submit": "提交审批", "submittedMessage": "申请已提交独立审批", "billedMessage": "已开票 {number} — 本期应付 {currentDue}，保留款 {retainage}", "empty": "没有付款申请。", "periodEnding": "期间截止日", "newApplication": "新建申请", "status": { "draft": "草稿", "submitted": "已提交", "approved": "已批准", "invoiced": "已开票", "posted": "已开票", "void": "已作废" }
+  },
+  "retainage": { "notConfigured": "尚未配置应收保留款控制科目；配置前，包含保留款的申请将无法开票。", "title": "释放保留款", "description": "将已扣保留款转为可收取应收账款。已扣：{held}", "amount": "金额", "release": "释放", "createdMessage": "已创建保留款释放发票 {number}，金额 {amount}" }
+}

@@ -1,0 +1,193 @@
+{
+  "title": "Migrationen & Spiegelung",
+  "description": "Verbinden Sie ein externes Buchhaltungssystem, migrieren Sie mit einem Klick und spiegeln Sie es dann täglich, um beide parallel im A/B-Betrieb laufen zu lassen.",
+  "connections": {
+    "heading": "Verbindungen",
+    "add": "Verbindung hinzufügen",
+    "loading": "Wird geladen…",
+    "empty": {
+      "title": "Noch keine Verbindungen.",
+      "hint": "Fügen Sie ein Buchhaltungs-Quellsystem hinzu, um eine Migration zu starten."
+    },
+    "status": {
+      "active": "Aktiv",
+      "paused": "Pausiert",
+      "error": "Fehler",
+      "unconfigured": "Nicht konfiguriert"
+    },
+    "mirrorBadge": "Spiegelung: {schedule}",
+    "lastRun": "Letzter Lauf: {lastRun} · Synchronisiert bis: {cursor}"
+  },
+  "actions": {
+    "connect": "Verbinden",
+    "reconnect": "Erneut verbinden",
+    "test": "Testen",
+    "mirrorNow": "Jetzt spiegeln",
+    "syncAttachments": "Anhänge synchronisieren",
+    "syncProjectFinancials": "Projektfinanzen synchronisieren",
+    "preflight": "Vor Synchronisierung prüfen",
+    "runMigration": "Migration ausführen",
+    "pauseMirror": "Spiegelung pausieren",
+    "enableMirror": "Spiegelung aktivieren",
+    "edit": "Bearbeiten",
+    "downloadQwc": "Web Connector herunterladen"
+  },
+  "runs": {
+    "heading": "Letzte Läufe",
+    "columns": {
+      "started": "Gestartet",
+      "kind": "Art",
+      "status": "Status",
+      "trigger": "Auslöser",
+      "result": "Ergebnis"
+    },
+    "kind": {
+      "full_migration": "Vollständige Migration",
+      "incremental": "Inkrementell",
+      "attachments": "Anhänge",
+      "full_preflight": "Vollständige Vorprüfung",
+      "project_financials": "Projektfinanzen",
+      "targeted_repair": "Gezielte Reparatur",
+      "mirror": "Spiegelung"
+    },
+    "status": {
+      "ok": "Erfolgreich",
+      "failed": "Fehlgeschlagen",
+      "running": "Läuft"
+    },
+    "progress": {
+      "attachments": "Quellanhänge werden inventarisiert und importiert"
+    },
+    "stats": {
+      "attachments": "{files} Quelldateien · {links} Transaktionsverknüpfungen · {created} neue Dateien",
+      "projectFinancials": "{projects} Quellprojekte ({projectChanges} geändert) · {source} Quellzeiteinträge · {exact} exakt · {changed} Abrechnungsstatus abgeglichen",
+      "docs": "+{new} Dok. · {amended} geändert · {unchanged} unverändert",
+      "applied": "{count} angewendet",
+      "tb": "SB {matches}/{accounts}",
+      "tbOff": "({count} abweichend)",
+      "openItems": "offene Posten {matches}/{checked}",
+      "periods": "Perioden {matches}/{checked}",
+      "projectPeriods": "Projekt-/Kontoperioden {matches}/{checked}",
+      "preflightDocs": "{source} Quelldokumente · {new} neu · {amended} geändert · {unchanged} exakt",
+      "sourceBook": "{kind} {ref}",
+      "preflightBlockers": "{count} Blockierungen"
+    }
+  },
+  "toast": {
+    "loadFailed": "Verbindungen konnten nicht geladen werden (HTTP {status})",
+    "authorized": "Verbindung autorisiert",
+    "authDenied": "Autorisierung wurde abgelehnt",
+    "authFailed": "Autorisierung fehlgeschlagen ({status})",
+    "queuingMigration": "Vollständige Migration wird eingereiht…",
+    "queuingPreflight": "Schreibgeschützte Gesamtprüfung wird eingereiht…",
+    "queuingMirror": "Spiegelung wird eingereiht…",
+    "queuingAttachments": "Anhangssynchronisierung wird eingereiht…",
+    "queuingProjectFinancials": "Projektfinanz-Synchronisierung wird eingereiht…",
+    "migrationQueued": "Migration eingereiht — wir führen sie im Hintergrund aus",
+    "preflightQueued": "Prüfung eingereiht — Buchhaltung und Dokumente werden nicht geändert",
+    "mirrorQueued": "Spiegelung eingereiht — läuft im Hintergrund",
+    "attachmentsQueued": "Anhangssynchronisierung eingereiht — läuft im Hintergrund",
+    "projectFinancialsQueued": "Projektfinanz-Synchronisierung eingereiht — Belege, Hauptbuch, Dateien und PDFs bleiben unverändert",
+    "runFailed": "Der Lauf konnte nicht eingereiht werden (HTTP {status})",
+    "runErrors": {
+      "CONNECTION_NOT_FOUND": "Die Verbindung ist nicht mehr vorhanden.",
+      "CONNECTION_UNCONFIGURED": "Fügen Sie Anmeldedaten hinzu, bevor Sie diese Verbindung ausführen.",
+      "INVALID_MODE": "Wählen Sie eine gültige Migrationsaktion.",
+      "ATTACHMENTS_UNSUPPORTED": "Diese Verbindung unterstützt keine Anhangsmigration.",
+      "PROJECT_FINANCIALS_UNSUPPORTED": "Diese Verbindung unterstützt keine Synchronisierung der Projektfinanz-Eingaben."
+    },
+    "testing": "Verbindung wird getestet…",
+    "connected": "Verbunden",
+    "connectedDetail": "Verbunden — {detail}",
+    "testFailed": "Verbindung fehlgeschlagen: {error}",
+    "unknownError": "unbekannter Fehler",
+    "removed": "Verbindung entfernt",
+    "created": "Verbindung erstellt",
+    "updated": "Verbindung aktualisiert",
+    "copied": "Redirect-URI kopiert",
+    "copyFailed": "Kopieren nicht möglich — markieren und kopieren Sie den Text manuell"
+  },
+  "confirmDelete": "Verbindung \"{name}\" löschen? Migrierte Daten bleiben erhalten; nur die Verknüpfung wird entfernt.",
+  "drawer": {
+    "addTitle": "Verbindung hinzufügen",
+    "editTitle": "Verbindung bearbeiten",
+    "description": "Verbinden Sie ein externes Buchhaltungssystem. Zugangsdaten werden ruhend verschlüsselt und nie wieder angezeigt.",
+    "cancel": "Abbrechen",
+    "saving": "Wird gespeichert…",
+    "saveChanges": "Änderungen speichern",
+    "create": "Verbindung erstellen",
+    "system": "System",
+    "selectSystem": "System auswählen…",
+    "name": "Verbindungsname",
+    "select": "Auswählen…",
+    "credentials": "Zugangsdaten (ruhend verschlüsselt, nie wieder angezeigt)",
+    "keepCurrent": "Leer lassen, um aktuelle beizubehalten"
+  },
+  "oauth": {
+    "title": "Einmalige App-Einrichtung im <link>{portal}</link>",
+    "redirectLabel": "Zu registrierende Redirect-URI:",
+    "copy": "Kopieren"
+  },
+  "netsuite": {
+    "setupTitle": "NetSuite-Extraktionsbrücke",
+    "setupHint": "Installieren Sie das schreibgeschützte RESTlet-/Map-Reduce-Paket und testen Sie die Verbindung. Transaktionen erhalten kein Skript.",
+    "documentation": "Dokumentation"
+  },
+  "qbd": {
+    "setupTitle": "QuickBooks Desktop einrichten",
+    "setupHint": "Laden Sie nach dem Speichern die Web-Connector-Datei von der Verbindungskarte herunter. Importieren Sie sie auf dem Windows-Computer mit QuickBooks, genehmigen Sie als QuickBooks-Administrator den schreibgeschützten Zugriff und geben Sie dieses Kennwort im Web Connector ein.",
+    "lastContact": "Letzter Web-Connector-Kontakt: {time}",
+    "notConnected": "Web Connector hat noch keine Verbindung hergestellt",
+    "capture": "Erfassung {status}: {completed}/{total} Anfragen",
+    "captureStatus": { "queued": "wartend", "running": "läuft", "complete": "abgeschlossen", "failed": "fehlgeschlagen", "cancelled": "abgebrochen" },
+    "documentation": "Dokumentation",
+    "qwcDescription": "Schreibgeschützter Connector für Buchhaltungsmigration und Abstimmung"
+  },
+  "sources": {
+    "netsuite": {
+      "blurb": "Installieren Sie die schreibgeschützte Extraktionsbrücke und verbinden Sie eine dedizierte Token-Rolle. Transaktionen, Zuordnungen, Kontrollen und Löschungen werden prüfungsgesteuert importiert.",
+      "fields": {
+        "account": { "label": "Konto-ID", "help": "Der NetSuite-Kontobereich." },
+        "host": { "label": "SuiteTalk-Host" }, "baseCurrency": { "label": "Basiswährung" },
+        "bridgeScriptId": { "label": "Brücken-Skript-ID", "help": "Leer lassen für customscript_openbooks_bridge_rl." },
+        "bridgeDeploymentId": { "label": "Bereitstellungs-ID", "help": "Leer lassen für customdeploy_openbooks_bridge_rl." },
+        "mappingJson": { "label": "Kontofeldzuordnungen", "help": "Optionales JSON für die Zuordnung benutzerdefinierter Felder und Datensätze zu OpenBooks-Konzepten." },
+        "consumerKey": { "label": "Consumer-Schlüssel" }, "consumerSecret": { "label": "Consumer-Geheimnis" },
+        "tokenKey": { "label": "Token-ID" }, "tokenSecret": { "label": "Token-Geheimnis" }
+      }
+    },
+    "odoo": {
+      "blurb": "Verbinden Sie sich mit Ihrer Odoo-URL, Datenbank, Benutzer und einem API-Schlüssel (Einstellungen → Mein Profil → Kontosicherheit → API-Schlüssel). Rechnungen, Eingangsrechnungen, Zahlungen und Journale werden nativ über die echte Buchungs-Engine migriert und gespiegelt."
+    },
+    "erpnext": {
+      "blurb": "Verbinden Sie sich mit Ihrer ERPNext-URL und einem API-Schlüssel + Secret (Benutzer → Einstellungen → API-Zugriff). Rechnungen, Eingangsrechnungen, Zahlungseinträge und Journale werden nativ über die echte Buchungs-Engine migriert und gespiegelt."
+    },
+    "qbd": {
+      "blurb": "Verbinden Sie QuickBooks Desktop über den Intuit Web Connector. QuickBooks muss für die einmalige Autorisierung und während der Erfassungen geöffnet sein; eine eingehende Windows-Firewallregel ist nicht erforderlich.",
+      "options": { "US": "Vereinigte Staaten", "CA": "Kanada", "UK": "Vereinigtes Königreich", "AU": "Australien", "NZ": "Neuseeland" },
+      "fields": {
+        "historyStartDate": { "label": "Beginn des Verlaufs", "help": "Das früheste zu migrierende Buchungsdatum. Jede Spiegelung prüft den gesamten Zeitraum erneut, um historische Änderungen und Löschungen zu erkennen." },
+        "region": { "label": "QuickBooks-Region" },
+        "baseCurrency": { "label": "Basiswährung" },
+        "companyFile": { "label": "Pfad zur Firmendatei (optional)", "help": "Leer lassen, um die beim Lauf des Web Connectors geöffnete Firma zu verwenden." },
+        "webConnectorPassword": { "label": "Web-Connector-Kennwort", "help": "Geben Sie dieses Kennwort nach dem Import der .QWC-Datei einmal in QuickBooks Web Connector ein." }
+      }
+    },
+    "qbo": {
+      "blurb": "Geben Sie die Client-ID + das Secret Ihrer Intuit-App ein (developer.intuit.com → Keys & credentials), speichern Sie und klicken Sie dann auf Verbinden, um ein Unternehmen zu autorisieren. Rechnungen, Eingangsrechnungen, Zahlungen, Gutschriften, Journale und Einzahlungen werden nativ migriert und gespiegelt.",
+      "steps": [
+        "Erstellen Sie eine App (QuickBooks Online and Payments) mit dem Scope com.intuit.quickbooks.accounting.",
+        "Fügen Sie unter Keys & credentials die unten angezeigte Redirect-URI hinzu (verwenden Sie Development-Keys für ein Sandbox-Unternehmen, Production-Keys für ein produktives).",
+        "Kopieren Sie die Client-ID und das Client-Secret in dieses Formular, speichern Sie und klicken Sie dann auf Verbinden."
+      ]
+    },
+    "xero": {
+      "blurb": "Geben Sie die Client-ID + das Secret Ihrer Xero-App ein (developer.xero.com → My Apps), speichern Sie und klicken Sie dann auf Verbinden, um eine Organisation zu autorisieren. Rechnungen, Eingangsrechnungen, Gutschriften, Zahlungen, Journale und Banktransaktionen werden nativ migriert und gespiegelt.",
+      "steps": [
+        "Erstellen Sie eine neue App (Integrationstyp: Web app); die Unternehmens-URL kann die Adresse dieser Website sein.",
+        "Fügen Sie die unten angezeigte Redirect-URI zu den OAuth-2.0-Redirect-URIs der App hinzu.",
+        "Kopieren Sie die Client-ID, generieren Sie ein Client-Secret, fügen Sie beide in dieses Formular ein, speichern Sie und klicken Sie dann auf Verbinden."
+      ]
+    }
+  }
+}

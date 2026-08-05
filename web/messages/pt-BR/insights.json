@@ -1,0 +1,281 @@
+{
+  "title": "Insights",
+  "tabs": {
+    "cards": "Cartões",
+    "dashboards": "Painéis"
+  },
+  "viz": {
+    "table": "Tabela",
+    "bar": "Barras",
+    "line": "Linhas",
+    "area": "Área",
+    "pie": "Pizza",
+    "empty": {
+      "noData": "Nenhum dado para esta consulta.",
+      "pickFields": "Escolha uma dimensão e pelo menos uma medida para plotar isto."
+    },
+    "noRows": "Nenhuma linha.",
+    "values": {
+      "yes": "Sim",
+      "no": "Não",
+      "active": "Ativo",
+      "inactive": "Inativo"
+    }
+  },
+  "status": {
+    "published": "Publicado"
+  },
+  "actions": {
+    "publish": "Publicar",
+    "unpublish": "Despublicar"
+  },
+  "autosave": {
+    "saved": "Todas as alterações salvas",
+    "unsaved": "Alterações não salvas…",
+    "failed": "Falha no salvamento automático"
+  },
+  "errors": {
+    "queryFailed": "A consulta falhou",
+    "updateFailed": "A atualização falhou"
+  },
+  "empty": {
+    "dashboardNoCards": "Este painel ainda não tem cartões."
+  },
+  "cards": {
+    "description": "Crie cartões de gráfico e tabela a partir de uma consulta ao razão e, em seguida, organize-os em painéis.",
+    "searchPlaceholder": "Buscar cartões…",
+    "emptyTitle": "Nenhum cartão ainda",
+    "emptyDescription": "Crie seu primeiro cartão — escolha uma origem, defina o que medir e agrupar, e escolha um gráfico.",
+    "sourceColumn": "Origem",
+    "chartColumn": "Gráfico",
+    "newButton": "Novo cartão",
+    "createDraftFailed": "Não foi possível criar um cartão rascunho"
+  },
+  "dashboards": {
+    "description": "Organize cartões publicados em painéis compartilhados.",
+    "searchPlaceholder": "Buscar painéis…",
+    "emptyTitle": "Nenhum painel ainda",
+    "emptyDescription": "Crie um painel e, em seguida, adicione seus cartões publicados a ele.",
+    "cardsColumn": "Cartões",
+    "newButton": "Novo painel",
+    "createDraftFailed": "Não foi possível criar um painel rascunho"
+  },
+  "cardStudio": {
+    "untitled": "Cartão sem título",
+    "autosaveHint": "As alterações são salvas automaticamente. A prévia é atualizada em tempo real.",
+    "nameRequiredToPublish": "Nomeie o cartão para publicá-lo",
+    "saveFailedRetry": "Falha ao salvar — corrija e tente novamente",
+    "namePlaceholder": "Gasto mensal por departamento",
+    "sourceLabel": "Origem",
+    "measuresTitle": "Medidas",
+    "measuresEmpty": "Adicione uma medida para agregar (ou deixe vazio para uma tabela de detalhes).",
+    "ofRows": "de linhas",
+    "selectFieldPlaceholder": "Selecionar campo…",
+    "removeMeasure": "Remover medida",
+    "groupByTitle": "Agrupar por",
+    "groupByEmpty": "Agrupe as linhas por uma dimensão para resumi-las.",
+    "binExact": "Exato",
+    "bins": {
+      "day": "por dia",
+      "week": "por semana",
+      "month": "por mês",
+      "quarter": "por trimestre",
+      "year": "por ano"
+    },
+    "removeDimension": "Remover dimensão",
+    "filtersTitle": "Filtros",
+    "filtersEmpty": "Nenhum filtro — o cartão cobre todas as linhas.",
+    "removeFilter": "Remover filtro",
+    "filterPlaceholderList": "a, b, c",
+    "filterPlaceholderNumber": "30",
+    "filterPlaceholderDate": "AAAA-MM-DD",
+    "filterPlaceholderValue": "Valor",
+    "previewRequestFailed": "A solicitação de prévia falhou",
+    "runningPreview": "Executando prévia…",
+    "buildToPreview": "Crie uma consulta para visualizar.",
+    "rowCount": "{count, plural, one {# linha} other {# linhas}}",
+    "capped": "(limitado a 10.000)",
+    "duration": "{ms} ms",
+    "publishedToast": "Cartão publicado",
+    "draftToast": "Cartão retornado a rascunho",
+    "deleteConfirm": "Excluir este cartão? Ele será removido de todos os painéis.",
+    "deleteFailed": "Não foi possível excluir o cartão",
+    "deletedToast": "Cartão excluído"
+  },
+  "vizSettings": {
+    "category": "Categoria",
+    "auto": "Automático",
+    "value": "Valor",
+    "allMeasures": "Todas as medidas",
+    "stacked": "Empilhado",
+    "horizontal": "Horizontal",
+    "smooth": "Suave",
+    "showValues": "Valores",
+    "hideLegend": "Ocultar legenda"
+  },
+  "cardTile": {
+    "loadFailed": "Não foi possível carregar este cartão"
+  },
+  "builder": {
+    "back": "Painéis",
+    "untitled": "Painel sem título",
+    "pinToHome": "Fixar na página inicial",
+    "unpin": "Desafixar",
+    "namePlaceholder": "Visão geral executiva",
+    "addCard": "Adicionar um cartão:",
+    "noPublishedCards": "Nenhum cartão publicado ainda. <link>Crie e publique um cartão</link> para colocá-lo aqui.",
+    "emptyEditor": "Adicione cartões publicados acima para montar este painel.",
+    "widths": {
+      "third": "Um terço",
+      "half": "Metade",
+      "twoThirds": "Dois terços",
+      "full": "Inteiro"
+    },
+    "heights": {
+      "short": "Baixo",
+      "medium": "Médio",
+      "tall": "Alto"
+    },
+    "cardWidth": "Largura do cartão",
+    "cardHeight": "Altura do cartão",
+    "removeCard": "Remover cartão",
+    "unavailableCard": "Este cartão está indisponível (excluído ou não publicado).",
+    "pinnedToast": "Fixado na sua página inicial",
+    "unpinnedToast": "Desafixado",
+    "pinFailed": "Não foi possível atualizar a fixação",
+    "publishedToast": "Painel publicado",
+    "draftToast": "Painel retornado a rascunho",
+    "deleteConfirm": "Excluir este painel?",
+    "deletedToast": "Painel excluído",
+    "deleteFailed": "Não foi possível excluir o painel"
+  },
+  "catalog": {
+    "sources": {
+      "ledger_lines": {
+        "label": "Linhas do razão",
+        "description": "Cada linha de lançamento com seu registro, conta, parte e dimensões — o detalhe completo do livro-razão."
+      },
+      "documents": {
+        "label": "Documentos",
+        "description": "Documentos de negócio — contas a pagar, faturas, pagamentos, pedidos — com rótulos de parte e dimensão."
+      },
+      "parties": {
+        "label": "Partes",
+        "description": "Clientes, fornecedores e funcionários — uma linha por parte com seus indicadores de papel."
+      },
+      "accounts": {
+        "label": "Contas",
+        "description": "O plano de contas — número, nome, tipo e indicadores de lançamento."
+      }
+    },
+    "fields": {
+      "ledger_lines": {
+        "posting_date": "Data de lançamento",
+        "entry_number": "Nº do lançamento",
+        "entry_status": "Status do lançamento",
+        "entry_origin": "Origem",
+        "account_number": "Nº da conta",
+        "account_name": "Conta",
+        "account_type": "Tipo de conta",
+        "party": "Parte",
+        "department": "Departamento",
+        "project": "Projeto",
+        "location": "Local",
+        "class": "Classe",
+        "memo": "Memo",
+        "amount": "Valor (base)",
+        "debit": "Débito",
+        "credit": "Crédito",
+        "quantity": "Quantidade",
+        "currency": "Moeda"
+      },
+      "documents": {
+        "kind": "Tipo",
+        "document_number": "Nº do documento",
+        "party": "Parte",
+        "status": "Status",
+        "document_date": "Data do documento",
+        "due_date": "Data de vencimento",
+        "department": "Departamento",
+        "project": "Projeto",
+        "currency": "Moeda",
+        "subtotal": "Subtotal",
+        "tax_total": "Imposto",
+        "total": "Total",
+        "document_count": "Documento"
+      },
+      "parties": {
+        "display_name": "Nome",
+        "kind": "Tipo",
+        "is_active": "Ativo",
+        "is_customer": "Cliente",
+        "is_vendor": "Fornecedor",
+        "is_employee": "Funcionário",
+        "hired_on": "Contratado em",
+        "created_at": "Criado em"
+      },
+      "accounts": {
+        "number": "Nº da conta",
+        "name": "Nome",
+        "type": "Tipo",
+        "is_summary": "Resumo",
+        "is_active": "Ativo",
+        "account_count": "Conta"
+      }
+    }
+  },
+  "aggs": {
+    "sum": "Soma",
+    "avg": "Média",
+    "count": "Contagem",
+    "min": "Mínimo",
+    "max": "Máximo"
+  },
+  "operators": {
+    "eq": "é igual a",
+    "neq": "é diferente de",
+    "in": "é qualquer um de",
+    "not_in": "não é nenhum de",
+    "gt": "maior que",
+    "gte": "em ou após / ≥",
+    "lt": "menor que",
+    "lte": "em ou antes / ≤",
+    "contains": "contém",
+    "is_null": "está vazio",
+    "is_not_null": "está preenchido",
+    "last_n_days": "nos últimos N dias",
+    "this_month": "é este mês",
+    "this_quarter": "é este trimestre",
+    "this_year": "é este ano",
+    "ytd": "acumulado do ano"
+  },
+  "measureLabels": {
+    "count": "Contagem",
+    "sum": "Total {field}",
+    "avg": "Média {field}",
+    "min": "Mín. {field}",
+    "max": "Máx. {field}",
+    "binned": "{field} ({bin})",
+    "bins": {
+      "day": "dia",
+      "week": "semana",
+      "month": "mês",
+      "quarter": "trimestre",
+      "year": "ano"
+    }
+  },
+  "compileErrors": {
+    "unknown_source": "Origem desconhecida “{subject}”",
+    "unknown_field": "Campo desconhecido “{subject}”",
+    "unknown_aggregation": "Agregação desconhecida “{subject}”",
+    "aggregation_needs_field": "A agregação “{subject}” precisa de um campo",
+    "not_a_dimension": "“{subject}” não pode ser usado para agrupar",
+    "not_a_measure": "“{subject}” não é uma medida numérica",
+    "unknown_operator": "Operador de filtro desconhecido “{subject}”",
+    "unknown_bin": "Agrupamento de data desconhecido “{subject}”",
+    "contains_needs_text": "O filtro “contém” precisa de um valor de texto",
+    "last_n_days_needs_number": "O filtro “nos últimos N dias” precisa de um número",
+    "no_columns": "A consulta não seleciona nenhuma coluna",
+    "timeout": "A consulta demorou demais — restrinja o intervalo ou adicione filtros."
+  }
+}

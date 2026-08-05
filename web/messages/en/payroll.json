@@ -1,0 +1,454 @@
+{
+  "title": "Payroll",
+  "description": "Pay runs, employee payroll profiles, and statutory withholdings.",
+  "tabs": {
+    "runs": "Pay runs",
+    "employees": "Employees ({count})"
+  },
+  "home": {
+    "tabs": {
+      "overview": "Payroll",
+      "runs": "Pay runs",
+      "remittances": "Remittances",
+      "yearEnd": "Year-end"
+    },
+    "actions": {
+      "viewRuns": "Pay runs",
+      "startRun": "Run payroll",
+      "resume": "Resume run",
+      "reviewPost": "Review & post",
+      "remittances": "Remittances",
+      "yearEnd": "Year-end"
+    },
+    "vitals": {
+      "employees": "On payroll",
+      "employeesSub": "active payroll profiles",
+      "periodsRan": "Pay periods {year}",
+      "periodsOf": "{ran} of {total}",
+      "periodsRanSub": "committed this tax year",
+      "ytdGross": "YTD gross",
+      "ytdEmployerCost": "+{amount} employer cost",
+      "ytdNet": "YTD net pay",
+      "ytdNetSub": "from committed runs",
+      "nextPayDate": "Next pay date",
+      "noSchedule": "no active schedule"
+    },
+    "current": {
+      "title": "Current pay period",
+      "noSchedules": "No active pay schedules yet — create one to start running payroll."
+    },
+    "frequency": {
+      "weekly": "Weekly",
+      "biweekly": "Biweekly",
+      "semi_monthly": "Semi-monthly",
+      "monthly": "Monthly"
+    },
+    "previous": {
+      "title": "Previous pay period",
+      "none": "No completed pay runs yet."
+    },
+    "exceptions": {
+      "title": "Needs attention",
+      "allClear": "All clear — every employee is ready for payroll.",
+      "missingProfile": "{name} has no payroll profile",
+      "moreMissingProfiles": "{count, plural, one {# more employee} other {# more employees}} without a payroll profile",
+      "missingWage": "{name} has no wage rate effective today",
+      "moreMissingWages": "{count, plural, one {# more employee} other {# more employees}} without a wage rate"
+    },
+    "directory": {
+      "title": "Explore payroll",
+      "runs": "Pay runs",
+      "runsHint": "in progress · {total} total",
+      "employees": "Employees",
+      "employeesHint": "active payroll profiles",
+      "setup": "Payroll setup",
+      "setupHint": "control accounts missing"
+    }
+  },
+  "list": {
+    "title": "Pay runs",
+    "description": "Every pay run — search, filter by stage and schedule, and open the processing wizard.",
+    "open": "Open run",
+    "stageFilter": "Stage"
+  },
+  "wizard": {
+    "stepsAria": "Pay run steps",
+    "steps": {
+      "period": "Period & employees",
+      "review": "Review stubs",
+      "gl": "GL preview & commit",
+      "finish": "Post & finish"
+    },
+    "voided": "This pay run was voided — it is read-only.",
+    "period": {
+      "taxYear": "Tax year",
+      "employeesTitle": "Included employees ({count})",
+      "hint": "Everyone with an active payroll profile on this schedule.",
+      "calculatedNote": "Hours and gross come from the calculated stubs.",
+      "approvedHours": "Approved hours",
+      "recalculate": "Recalculate",
+      "empty": "No employees have an active payroll profile on this schedule yet.",
+      "wageMissing": "No wage rate",
+      "zeroHours": "No approved hours",
+      "ready": "Ready"
+    },
+    "review": {
+      "exceptionsTitle": "{count, plural, one {# calculation exception} other {# calculation exceptions}}",
+      "varianceFlag": "{count, plural, one {# stub} other {# stubs}} moved more than ±{percent}% in net pay vs the employee's previous stub — worth a look.",
+      "varianceColumn": "Δ net",
+      "newEmployee": "first stub",
+      "needsCalculation": "Calculate the run to build stubs — nothing is locked in until you commit.",
+      "drawerDescription": "Pay lines and the statutory calculation trace for this stub.",
+      "drawerVariance": "Net pay moved {percent}% vs this employee's previous stub.",
+      "downloadPdf": "Download PDF",
+      "close": "Close"
+    },
+    "gl": {
+      "needsCalculation": "Calculate the run to preview its GL impact.",
+      "setupIncomplete": "Payroll setup is incomplete",
+      "openSetup": "Open Accounts & posting",
+      "retry": "Try again",
+      "loading": "Building the GL preview…",
+      "hint": "The exact journal commit will write — debits first, then credits. Nothing posts yet.",
+      "account": "Account",
+      "description": "Description",
+      "debits": "Debit",
+      "credits": "Credit",
+      "balanced": "Balanced",
+      "commitHint": "Commit freezes the stubs and writes these lines to the pay-run document. You can still review everything before posting."
+    },
+    "finish": {
+      "notCommitted": "Commit the run in the GL step before posting.",
+      "postTitle": "Ready to post",
+      "postHint": "Posting writes the journal entry and locks the run.",
+      "postedTitle": "Pay run posted",
+      "postedHint": "{number} is on the ledger.",
+      "viewJournal": "View journal entry",
+      "remittanceTitle": "Remittance summary",
+      "remittanceHint": "Credits by account — what this run now owes.",
+      "netPay": "Net pay to employees",
+      "nextTitle": "What's next",
+      "nextRemit": "Remit the withheld amounts to their agencies with a vendor bill (CRA, union funds, benefit carriers).",
+      "nextPay": "Pay employees from the net pay payable account — the payment relieves the liability this run just recorded.",
+      "amount": "Amount"
+    },
+    "adjust": {
+      "title": "Adjustments",
+      "applied": "Adjustment applied — stubs recalculated.",
+      "excludedLabel": "Excluded from this run:",
+      "include": "Include",
+      "exclude": "Exclude from this run",
+      "component": "Component",
+      "amount": "Amount",
+      "note": "Reason / note (optional)",
+      "replaceHelp": "Replace this component’s calculated lines instead of adding to them",
+      "add": "Add adjustment",
+      "remove": "Remove",
+      "replaces": "replaces calculated",
+      "earnings": "Earnings",
+      "deductions": "Deductions"
+    }
+  },
+  "links": {
+    "paySchedules": "Pay schedules",
+    "payComponents": "Pay components"
+  },
+  "checklist": {
+    "incomplete": "{count, plural, one {# payroll control account is} other {# payroll control accounts are}} not configured:",
+    "openSettings": "Open payroll setup"
+  },
+  "newRun": {
+    "schedule": "Pay schedule",
+    "noSchedules": "No active pay schedules",
+    "create": "New pay run"
+  },
+  "columns": {
+    "number": "Number",
+    "schedule": "Schedule",
+    "period": "Period",
+    "payDate": "Pay date",
+    "status": "Status",
+    "gross": "Gross",
+    "net": "Net",
+    "employees": "Employees"
+  },
+  "status": {
+    "draft": "Draft",
+    "calculated": "Calculated",
+    "committed": "Committed",
+    "posted": "Posted",
+    "void": "Void"
+  },
+  "empty": {
+    "runs": "No pay runs yet. Create one from a pay schedule to get started.",
+    "profiles": "No employee payroll profiles yet. Add one to include an employee in pay runs."
+  },
+  "run": {
+    "title": "Pay run",
+    "employerCost": "Employer cost",
+    "calculate": "Calculate",
+    "commit": "Commit",
+    "post": "Post",
+    "calculateDone": "Pay run calculated.",
+    "commitDone": "Pay run committed.",
+    "postDone": "Pay run posted.",
+    "empty": "No stubs yet — calculate the run to build them.",
+    "lineKind": {
+      "earning": "Earning",
+      "deduction": "Deduction",
+      "employer_contribution": "Employer"
+    },
+    "stub": {
+      "employee": "Employee",
+      "province": "Province",
+      "cpp": "CPP",
+      "ei": "EI",
+      "tax": "Tax",
+      "lines": "Pay lines",
+      "trace": "T4127 trace"
+    }
+  },
+  "profiles": {
+    "addEmployee": "Employee without a profile",
+    "new": "Add profile",
+    "saved": "Profile saved.",
+    "editorDescription": "TD1 facts, schedule, exemptions, and vacation policy for this employee.",
+    "save": "Save",
+    "cancel": "Cancel",
+    "active": "Active",
+    "inactive": "Inactive",
+    "columns": {
+      "employee": "Employee",
+      "schedule": "Schedule",
+      "province": "Province",
+      "basis": "Pay basis",
+      "claims": "Claims (fed / prov)",
+      "vacation": "Vacation",
+      "status": "Status"
+    },
+    "basis": {
+      "hourly": "Hourly",
+      "salary": "Salary"
+    },
+    "vacation": {
+      "accrue": "Accrue",
+      "pay_each_period": "Pay each period"
+    },
+    "fields": {
+      "schedule": "Pay schedule",
+      "province": "Province of employment",
+      "payBasis": "Pay basis",
+      "additionalTax": "Additional tax per period",
+      "federalClaimCode": "Federal claim code",
+      "federalClaimAmount": "Federal claim amount",
+      "provincialClaimCode": "Provincial claim code",
+      "provincialClaimAmount": "Provincial claim amount",
+      "claimAmountHint": "Overrides the claim code",
+      "vacationPercent": "Vacation percent",
+      "vacationMethod": "Vacation method",
+      "cppExempt": "CPP exempt",
+      "eiExempt": "EI exempt",
+      "taxExempt": "Income tax exempt",
+      "isActive": "Active",
+      "country": "Country",
+      "state": "State of employment",
+      "filingStatus": "Filing status (W-4 Step 1c)",
+      "dependentCredits": "Dependents & other credits, annual (W-4 Step 3)",
+      "otherIncomeAnnual": "Other income, annual (W-4 Step 4a)",
+      "deductionsAnnual": "Deductions, annual (W-4 Step 4b)",
+      "multipleJobs": "Multiple jobs / spouse works (W-4 Step 2 checkbox)",
+      "w4Pre2020": "W-4 on file is from 2019 or earlier",
+      "w4Allowances": "Withholding allowances (pre-2020 W-4)",
+      "ficaExempt": "FICA exempt",
+      "futaExempt": "FUTA/SUI exempt",
+      "fitExempt": "Federal income tax exempt (W-4 \"Exempt\")"
+    },
+    "country": {
+      "CA": "Canada",
+      "US": "United States"
+    },
+    "filingStatus": {
+      "single": "Single or married filing separately",
+      "married_joint": "Married filing jointly",
+      "head_household": "Head of household"
+    },
+    "loading": "Loading payroll profile…",
+    "loadFailed": "Could not load the payroll profile.",
+    "noSchedules": "Create a pay schedule before setting up payroll profiles.",
+    "openSchedules": "Open pay schedules"
+  },
+  "settingsPage": {
+    "title": "Payroll",
+    "description": "Install payroll country packs, wire the posting accounts, and manage pay schedules, components, and union agreements.",
+    "saved": "Saved.",
+    "save": "Save",
+    "accounts": {
+      "title": "Control accounts",
+      "description": "Where wages, employer burden, and net pay post. Statutory withholding accounts are configured per installed country pack below."
+    },
+    "posting": {
+      "title": "Posting",
+      "description": "How time-driven wages hit the ledger, and who statutory withholdings are remitted to."
+    },
+    "wagesTo": {
+      "expense": "Wage expense (with project splits)",
+      "laborClearing": "Labor clearing (wash standard cost)",
+      "help": "Labor clearing washes the standard cost posted at time approval; it needs the labor clearing control account from Labor Costing."
+    },
+    "fields": {
+      "wageExpenseAccountId": "Wage expense",
+      "burdenExpenseAccountId": "Employer burden expense",
+      "netPayAccountId": "Net pay payable",
+      "cppPayableAccountId": "CPP payable",
+      "eiPayableAccountId": "EI payable",
+      "taxPayableAccountId": "Income tax payable",
+      "vacationPayableAccountId": "Vacation payable",
+      "wagesTo": "Wages post to",
+      "craRemittancePartyId": "CRA remittance vendor"
+    },
+    "tabsAria": "Payroll setup sections",
+    "tabs": {
+      "packs": "Country packs",
+      "accounts": "Accounts & posting",
+      "schedules": "Pay schedules",
+      "components": "Components",
+      "union": "Union"
+    },
+    "packs": {
+      "installed": "Installed",
+      "install": "Install pack",
+      "reinstall": "Re-run component seed",
+      "installSuccess": "Country pack installed.",
+      "componentCount": "{count, plural, one {# statutory component installed} other {# statutory components installed}}",
+      "hint": "Installing a pack seeds the statutory pay components and switches on that jurisdiction's withholding engine. Existing components are never overwritten.",
+      "canada": {
+        "title": "Canada",
+        "description": "Statutory withholding for Canadian pay runs, remittances, and year-end.",
+        "edition": "{edition, selectordinal, one {#st} two {#nd} few {#rd} other {#th}} edition (effective {effective})",
+        "engine": "CRA T4127 statutory engine —",
+        "coverage": "All provinces & territories. Quebec: QPP, QPIP, and the federal side; provincial income tax is administered by Revenu Québec and is not included.",
+        "components": "Statutory pay components: base pay, overtime, bonus, vacation, income tax, CPP, EI, QPIP.",
+        "verified": "Verified penny-exact against CRA PDOC."
+      },
+      "us": {
+        "title": "United States",
+        "description": "Federal statutory withholding for US pay runs: income tax, Social Security, Medicare, and unemployment.",
+        "engine": "IRS Pub 15-T percentage-method engine (2026) with W-4 Steps 2–4 and pre-2020 allowances.",
+        "coverage": "Federal plus the nine no-withholding states (AK, FL, NV, NH, SD, TN, TX, WA, WY). State income tax withholding ships in a later wave.",
+        "components": "Statutory pay components: federal income tax, Social Security, Medicare (incl. Additional Medicare), FUTA, and SUI.",
+        "config": "SUI rates and wage bases are experience-rated per employer — enter yours under Accounts & posting."
+      },
+      "uninstall": "Uninstall",
+      "uninstallTitle": "Uninstall country pack",
+      "uninstallConfirm": "Remove this pack’s statutory components and switch off its withholding engine? Uninstalling is blocked while employees or payroll records still depend on the pack.",
+      "uninstallSuccess": "Country pack uninstalled."
+    },
+    "packAccounts": {
+      "none": "No payroll country pack is installed yet, so there are no statutory withholding accounts to configure.",
+      "installLink": "Install a country pack",
+      "CA": {
+        "title": "Canada — CRA statutory accounts",
+        "description": "Liability accounts for the amounts the CRA pack withholds and accrues. Each choice applies to every component the slot covers (employee and employer sides together).",
+        "slots": {
+          "income_tax": "Income tax payable",
+          "cpp": "CPP payable (includes CPP2)",
+          "ei": "EI payable",
+          "qpip": "QPIP payable (Quebec)",
+          "vacation": "Vacation payable"
+        }
+      },
+      "US": {
+        "title": "United States — federal statutory accounts",
+        "description": "Liability accounts for the amounts the US pack withholds and accrues. Each choice applies to every component the slot covers (employee and employer sides together).",
+        "slots": {
+          "fit": "Federal income tax payable",
+          "fica": "FICA payable (Social Security + Medicare)",
+          "futa": "FUTA payable",
+          "suta": "State unemployment payable"
+        }
+      }
+    },
+    "usConfig": {
+      "title": "Unemployment rates",
+      "description": "FUTA and state unemployment are employer-paid. SUI rates are experience-rated per employer, so they are entered here, never assumed.",
+      "futaRate": "Effective FUTA rate",
+      "futaRateHelp": "As a decimal: 0.006 is the standard 0.6% after the full state credit. Raise it for credit-reduction states.",
+      "suiTitle": "State unemployment insurance (SUI)",
+      "suiHelp": "One row per state you employ in: your assessed rate as a decimal (0.027 = 2.7%) and the state’s taxable wage base.",
+      "suiState": "State",
+      "suiRate": "Rate",
+      "suiWageBase": "Wage base",
+      "addState": "Add state",
+      "removeState": "Remove"
+    }
+  },
+  "remittances": {
+    "title": "Payroll remittances",
+    "description": "Accrued withholdings and employer contributions by destination for a period. Creating a bill debits the liability accounts and hands payment to AP.",
+    "back": "Payroll",
+    "from": "From",
+    "to": "To",
+    "apply": "Apply",
+    "empty": "No committed pay runs with remittable amounts in this period.",
+    "unassigned": "No remittance vendor assigned",
+    "assignVendor": "Assign a vendor on the components",
+    "context": "Gross payroll {gross} · {employees, plural, one {# employee} other {# employees}} in the period",
+    "withheld": "Withheld",
+    "employer": "Employer",
+    "noAccount": "No liability account",
+    "total": "Total to remit",
+    "createBill": "Create remittance bill",
+    "createAnother": "Create another bill",
+    "billCreated": "Draft bill {number} created — review and post it in AP.",
+    "apNote": "Remittance bills are ordinary vendor bills:",
+    "apLink": "open AP bills"
+  },
+  "yearEnd": {
+    "title": "Year-end",
+    "description": "T4 slips and Summary (Canada) and 941/W-2 worksheets (US), built from committed pay stubs — every box reconciles to the stub traces.",
+    "back": "Payroll",
+    "yearLabel": "Tax year",
+    "print": "Print",
+    "t4": {
+      "title": "T4 slips (Canada)",
+      "description": "Per-employee statement of remuneration paid. CPP shown includes CPP2 (boxes 16 + 16A); Quebec employees report QPP/QPIP in the corresponding boxes.",
+      "empty": "No committed Canadian pay stubs for this year.",
+      "employee": "Employee",
+      "province": "Prov.",
+      "box14": "Box 14 income",
+      "box16": "Box 16/16A CPP",
+      "box18": "Box 18 EI",
+      "box22": "Box 22 tax",
+      "box24": "Box 24 EI insurable",
+      "box26": "Box 26 pensionable",
+      "box44": "Box 44 dues"
+    },
+    "summary": {
+      "slips": "Slips",
+      "income": "Employment income",
+      "cpp": "CPP (employee + employer)",
+      "ei": "EI (employee + employer)",
+      "tax": "Income tax",
+      "remitted": "Remitted (posted bills)"
+    },
+    "us": {
+      "title": "United States",
+      "description": "Form 941 quarterly worksheet and W-2 box data for US-pack employees.",
+      "empty": "No committed US pay stubs for this year.",
+      "quarter": "Quarter",
+      "wages": "Wages",
+      "fit": "Federal tax",
+      "ssWages": "SS wages",
+      "ssTax": "SS tax (both)",
+      "medicareTax": "Medicare tax (both)",
+      "employee": "Employee",
+      "state": "State",
+      "box1": "Box 1 wages",
+      "box2": "Box 2 FIT",
+      "box3": "Box 3 SS wages",
+      "box4": "Box 4 SS tax",
+      "box5": "Box 5 Medicare wages",
+      "box6": "Box 6 Medicare tax"
+    }
+  }
+}

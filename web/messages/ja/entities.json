@@ -1,0 +1,31 @@
+{
+  "roles": {
+    "customers": {
+      "title": "得意先",
+      "description": "請求先となる会社や個人。",
+      "newLabel": "新規得意先",
+      "emptyTitle": "得意先はまだいません",
+      "emptyDescription": "最初の得意先を追加してディレクトリを開始します。"
+    },
+    "vendors": {
+      "title": "仕入先",
+      "description": "購入および支払いを行う仕入先。",
+      "newLabel": "新規仕入先",
+      "emptyTitle": "仕入先はまだいません",
+      "emptyDescription": "最初の仕入先を追加してディレクトリを開始します。"
+    },
+    "employees": {
+      "title": "従業員",
+      "description": "給与および経費精算の対象となる従業員。",
+      "newLabel": "新規従業員",
+      "emptyTitle": "従業員はまだいません",
+      "emptyDescription": "最初の従業員を追加してディレクトリを開始します。"
+    }
+  },
+  "list": {
+    "searchPlaceholder": "名称、コード、メールを検索…",
+    "shortCode": "短縮コード",
+    "phone": "電話番号",
+    "customerStatuses": { "existing": "既存顧客", "potential": "見込み顧客" }
+  }
+}

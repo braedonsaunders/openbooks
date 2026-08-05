@@ -1,0 +1,162 @@
+{
+  "list": {
+    "metaTitle": "Dokumente",
+    "title": "Dokumentenablage",
+    "description": "Durchsuchen, laden Sie hoch und verwalten Sie Dokumente in Ihrer gesamten Organisation.",
+    "searchPlaceholder": "Dateien und Ordner durchsuchen…",
+    "allFiles": "Alle Dateien",
+    "rootFolder": "Dokumentenablage",
+    "systemAttachments": "Anhänge",
+    "empty": {
+      "title": "Keine Dateien in diesem Ordner",
+      "description": "Laden Sie Dateien hoch oder erstellen Sie einen Ordner, um zu beginnen.",
+      "allTitle": "Noch keine Dateien",
+      "allDescription": "Laden Sie Ihre erste Datei hoch, um die Dokumentenablage zu füllen."
+    },
+    "folderRow": "Ordner"
+  },
+  "systemFolders": { "apCapture": "Erfassung Eingangsrechnungen" },
+  "columns": {
+    "name": "Name",
+    "size": "Größe",
+    "modified": "Geändert",
+    "createdBy": "Erstellt von",
+    "type": "Typ",
+    "location": "Standort"
+  },
+  "folderTree": {
+    "expand": "Erweitern",
+    "collapse": "Reduzieren"
+  },
+  "actions": {
+    "newFolder": "Neuer Ordner",
+    "upload": "Hochladen",
+    "download": "Herunterladen",
+    "rename": "Umbenennen",
+    "move": "Verschieben",
+    "replace": "Ersetzen",
+    "delete": "Löschen",
+    "attachExisting": "Vorhandene anhängen",
+    "detach": "Trennen"
+  },
+  "folder": {
+    "create": {
+      "title": "Neuer Ordner",
+      "description": "Erstellen Sie einen Ordner, um Ihre Dateien zu organisieren.",
+      "nameLabel": "Ordnername",
+      "namePlaceholder": "Ordnername",
+      "parentLabel": "Übergeordneter Ordner",
+      "submit": "Ordner erstellen"
+    },
+    "edit": {
+      "title": "Ordner bearbeiten",
+      "nameLabel": "Ordnername",
+      "parentLabel": "Übergeordneter Ordner",
+      "private": "Privater Ordner",
+      "privateHint": "Nur Sie und Administratoren können diesen Ordner sehen.",
+      "inactive": "Inaktiv",
+      "inactiveHint": "Diesen Ordner in Listen ausblenden.",
+      "save": "Speichern"
+    },
+    "delete": {
+      "title": "Diesen Ordner löschen?",
+      "body": "Alle Dateien in diesem Ordner werden dauerhaft gelöscht. Dies kann nicht rückgängig gemacht werden."
+    },
+    "systemNoDelete": "Systemordner können nicht gelöscht oder umbenannt werden.",
+    "subfolderCount": "{count, plural, one {# Ordner} other {# Ordner}}",
+    "fileCount": "{count, plural, one {# Datei} other {# Dateien}}",
+    "deleteBlocked": "Dieser Ordner enthält Dateien, die an Datensätze angehängt sind, und kann nicht gelöscht werden."
+  },
+  "file": {
+    "drawer": {
+      "title": "Dateidetails",
+      "name": "Name",
+      "folder": "Ordner",
+      "type": "Typ",
+      "size": "Größe",
+      "created": "Erstellt",
+      "createdBy": "Erstellt von",
+      "modified": "Geändert",
+      "modifiedBy": "Geändert von",
+      "versions": "Versionen",
+      "version": "Version {number}",
+      "current": "aktuell",
+      "noVersions": "Keine früheren Versionen.",
+      "moveTo": "In Ordner verschieben",
+      "replaceTitle": "Datei ersetzen",
+      "replaceBody": "Laden Sie eine neue Version dieser Datei hoch. Die vorherige Version wird im Versionsverlauf beibehalten.",
+      "attachedTo": "An Datensätze angehängt",
+      "notAttached": "An keinen Datensatz angehängt.",
+      "delete": {
+        "title": "Diese Datei löschen?",
+        "body": "Die Datei wird dauerhaft aus der Dokumentenablage gelöscht und von allen Datensätzen getrennt. Dies kann nicht rückgängig gemacht werden."
+      }
+    },
+    "preview": {
+      "title": "Vorschau",
+      "loading": "Datei wird geladen…",
+      "loadFailed": "Der Inhalt dieser Datei konnte nicht geladen werden.",
+      "tooLarge": "Diese Datei ist zu groß für eine Vorschau hier.",
+      "unsupported": "Für diesen Dateityp ist keine Vorschau möglich. Laden Sie ihn zum Öffnen herunter."
+    }
+  },
+  "upload": {
+    "dropFiles": "Dateien hier ablegen oder <browse>durchsuchen</browse>",
+    "acceptHint": "PDF, Bilder, CSV, XLSX, DOCX, TXT · bis zu 25 MB",
+    "tooLarge": "{name} überschreitet das Limit von 25 MB",
+    "uploading": "{count, plural, one {# Datei wird hochgeladen…} other {# Dateien werden hochgeladen…}}",
+    "selectFolder": "Wählen Sie einen Ordner zum Hochladen aus…"
+  },
+  "attach": {
+    "title": "Datei anhängen",
+    "description": "Hängen Sie eine Datei aus der Dokumentenablage an diesen Datensatz an.",
+    "searchPlaceholder": "Dateien durchsuchen…",
+    "empty": "Keine Dateien gefunden.",
+    "attachExisting": "Vorhandene Datei anhängen",
+    "uploadNew": "Neue Datei hochladen"
+  },
+  "toasts": {
+    "folderCreated": "Ordner erstellt",
+    "folderCreateFailed": "Ordner konnte nicht erstellt werden",
+    "folderRenamed": "Ordner umbenannt",
+    "folderRenameFailed": "Ordner konnte nicht umbenannt werden",
+    "folderMoved": "Ordner verschoben",
+    "folderMoveFailed": "Ordner konnte nicht verschoben werden",
+    "folderDeleted": "Ordner gelöscht",
+    "folderDeleteFailed": "Ordner konnte nicht gelöscht werden",
+    "fileRenamed": "Datei umbenannt",
+    "fileRenameFailed": "Datei konnte nicht umbenannt werden",
+    "fileMoved": "Datei verschoben",
+    "fileMoveFailed": "Datei konnte nicht verschoben werden",
+    "fileDeleted": "Datei gelöscht",
+    "fileDeleteFailed": "Datei konnte nicht gelöscht werden",
+    "fileReplaced": "Neue Version hochgeladen",
+    "fileReplaceFailed": "Neue Version konnte nicht hochgeladen werden",
+    "uploaded": "{name} hochgeladen",
+    "uploadFailed": "{name} konnte nicht hochgeladen werden",
+    "attached": "Datei angehängt",
+    "attachFailed": "Datei konnte nicht angehängt werden",
+    "detached": "Datei getrennt",
+    "detachFailed": "Datei konnte nicht getrennt werden",
+    "linkCopied": "Link kopiert",
+    "linkCopyFailed": "Link konnte nicht kopiert werden"
+  },
+  "fileTypes": {
+    "pdf": "PDF",
+    "image": "Bild",
+    "csv": "CSV",
+    "spreadsheet": "Tabelle",
+    "document": "Dokument",
+    "text": "Text",
+    "other": "Datei"
+  },
+  "rowMenu": {
+    "open": "Öffnen",
+    "openFolder": "Ordner öffnen",
+    "copyLink": "Link kopieren"
+  },
+  "rename": {
+    "fileTitle": "Datei umbenennen",
+    "folderTitle": "Ordner umbenennen"
+  }
+}

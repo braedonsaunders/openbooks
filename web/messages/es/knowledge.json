@@ -1,0 +1,54 @@
+{
+  "views": {
+    "new": "Nueva vista",
+    "list": {
+      "title": "Vistas",
+      "description": "Consultas con nombre y compartibles sobre el libro mayor, documentos, terceros y cuentas — filas de detalle o resúmenes agrupados. Navega, exporta y reutilízalas.",
+      "scopeLabel": "Ámbito",
+      "searchPlaceholder": "Buscar vistas…",
+      "scopeAll": "Todas",
+      "scopeShared": "Compartidas",
+      "scopePrivate": "Privadas",
+      "emptyTitle": "Aún no hay vistas",
+      "emptyDescription": "Crea tu primera vista para consultar el libro mayor y reutilizarla cuando quieras.",
+      "columns": {
+        "name": "Nombre",
+        "source": "Origen",
+        "scope": "Ámbito",
+        "updated": "Actualizada"
+      },
+      "scope": {
+        "shared": "Compartida",
+        "private": "Privada"
+      },
+      "runAction": "Ejecutar",
+      "editAction": "Editar"
+    },
+    "studio": {
+      "untitled": "Vista sin título",
+      "autosaveHint": "Los cambios se guardan automáticamente.",
+      "scopeLabel": "Ámbito",
+      "scope": {
+        "private": "Privada — solo tú",
+        "shared": "Compartida — todos"
+      },
+      "exportPdf": "PDF",
+      "exportXlsx": "Excel",
+      "exportCsv": "CSV",
+      "deleteConfirm": "¿Eliminar esta vista?",
+      "viewResults": "Ver resultados"
+    },
+    "run": {
+      "editSearch": "Editar vista",
+      "backToList": "Vistas",
+      "resultsTitle": "Resultados",
+      "rowsRange": "Mostrando {from}–{to} de {total} filas",
+      "lastUpdated": "Actualizado {when}",
+      "refreshHint": "Los resultados se ejecutan en vivo sobre los datos actuales.",
+      "emptyTitle": "Ninguna fila coincidió",
+      "emptyDescription": "Ajuste los criterios o filtros y vuelva a ejecutar.",
+      "notFoundTitle": "Vista no encontrada",
+      "notFoundDescription": "Puede que haya sido eliminada o que no tenga acceso."
+    }
+  }
+}

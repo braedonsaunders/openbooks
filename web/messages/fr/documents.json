@@ -1,0 +1,162 @@
+{
+  "list": {
+    "metaTitle": "Documents",
+    "title": "Gestionnaire de documents",
+    "description": "Parcourir, téléverser et gérer les documents de votre organisation.",
+    "searchPlaceholder": "Rechercher des fichiers et des dossiers…",
+    "allFiles": "Tous les fichiers",
+    "rootFolder": "Gestionnaire de documents",
+    "systemAttachments": "Pièces jointes",
+    "empty": {
+      "title": "Aucun fichier dans ce dossier",
+      "description": "Téléversez des fichiers ou créez un dossier pour commencer.",
+      "allTitle": "Aucun fichier",
+      "allDescription": "Téléversez votre premier fichier pour remplir le gestionnaire de documents."
+    },
+    "folderRow": "Dossier"
+  },
+  "systemFolders": { "apCapture": "Capture fournisseurs" },
+  "columns": {
+    "name": "Nom",
+    "size": "Taille",
+    "modified": "Modifié",
+    "createdBy": "Créé par",
+    "type": "Type",
+    "location": "Emplacement"
+  },
+  "folderTree": {
+    "expand": "Déplier",
+    "collapse": "Replier"
+  },
+  "actions": {
+    "newFolder": "Nouveau dossier",
+    "upload": "Téléverser",
+    "download": "Télécharger",
+    "rename": "Renommer",
+    "move": "Déplacer",
+    "replace": "Remplacer",
+    "delete": "Supprimer",
+    "attachExisting": "Joindre un fichier existant",
+    "detach": "Détacher"
+  },
+  "folder": {
+    "create": {
+      "title": "Nouveau dossier",
+      "description": "Créez un dossier pour organiser vos fichiers.",
+      "nameLabel": "Nom du dossier",
+      "namePlaceholder": "Nom du dossier",
+      "parentLabel": "Dossier parent",
+      "submit": "Créer le dossier"
+    },
+    "edit": {
+      "title": "Modifier le dossier",
+      "nameLabel": "Nom du dossier",
+      "parentLabel": "Dossier parent",
+      "private": "Dossier privé",
+      "privateHint": "Seuls vous et les administrateurs pouvez voir ce dossier.",
+      "inactive": "Inactif",
+      "inactiveHint": "Masquer ce dossier des listes.",
+      "save": "Enregistrer"
+    },
+    "delete": {
+      "title": "Supprimer ce dossier?",
+      "body": "Tous les fichiers de ce dossier seront définitivement supprimés. Cette action est irréversible."
+    },
+    "systemNoDelete": "Les dossiers système ne peuvent pas être supprimés ou renommés.",
+    "subfolderCount": "{count, plural, one {# dossier} other {# dossiers}}",
+    "fileCount": "{count, plural, one {# fichier} other {# fichiers}}",
+    "deleteBlocked": "Ce dossier contient des fichiers joints à des enregistrements et ne peut pas être supprimé."
+  },
+  "file": {
+    "drawer": {
+      "title": "Détails du fichier",
+      "name": "Nom",
+      "folder": "Dossier",
+      "type": "Type",
+      "size": "Taille",
+      "created": "Créé",
+      "createdBy": "Créé par",
+      "modified": "Modifié",
+      "modifiedBy": "Modifié par",
+      "versions": "Versions",
+      "version": "Version {number}",
+      "current": "actuelle",
+      "noVersions": "Aucune version précédente.",
+      "moveTo": "Déplacer vers le dossier",
+      "replaceTitle": "Remplacer le fichier",
+      "replaceBody": "Téléversez une nouvelle version de ce fichier. La version précédente sera conservée dans l'historique des versions.",
+      "attachedTo": "Joint à des enregistrements",
+      "notAttached": "Non joint à un enregistrement.",
+      "delete": {
+        "title": "Supprimer ce fichier?",
+        "body": "Le fichier sera définitivement supprimé du gestionnaire de documents et détaché de tous les enregistrements. Cette action est irréversible."
+      }
+    },
+    "preview": {
+      "title": "Aperçu",
+      "loading": "Chargement du fichier…",
+      "loadFailed": "Impossible de charger le contenu de ce fichier.",
+      "tooLarge": "Ce fichier est trop volumineux pour être prévisualisé ici.",
+      "unsupported": "Ce type de fichier ne peut pas être prévisualisé. Téléchargez-le pour l'ouvrir."
+    }
+  },
+  "upload": {
+    "dropFiles": "Déposez des fichiers ici ou <browse>parcourez</browse>",
+    "acceptHint": "PDF, images, CSV, XLSX, DOCX, TXT · jusqu'à 25 Mo",
+    "tooLarge": "{name} dépasse la limite de 25 Mo",
+    "uploading": "{count, plural, one {Téléversement de # fichier…} other {Téléversement de # fichiers…}}",
+    "selectFolder": "Sélectionnez un dossier de destination…"
+  },
+  "attach": {
+    "title": "Joindre un fichier",
+    "description": "Joindre un fichier du gestionnaire de documents à cet enregistrement.",
+    "searchPlaceholder": "Rechercher des fichiers…",
+    "empty": "Aucun fichier trouvé.",
+    "attachExisting": "Joindre un fichier existant",
+    "uploadNew": "Téléverser un nouveau fichier"
+  },
+  "toasts": {
+    "folderCreated": "Dossier créé",
+    "folderCreateFailed": "Impossible de créer le dossier",
+    "folderRenamed": "Dossier renommé",
+    "folderRenameFailed": "Impossible de renommer le dossier",
+    "folderMoved": "Dossier déplacé",
+    "folderMoveFailed": "Impossible de déplacer le dossier",
+    "folderDeleted": "Dossier supprimé",
+    "folderDeleteFailed": "Impossible de supprimer le dossier",
+    "fileRenamed": "Fichier renommé",
+    "fileRenameFailed": "Impossible de renommer le fichier",
+    "fileMoved": "Fichier déplacé",
+    "fileMoveFailed": "Impossible de déplacer le fichier",
+    "fileDeleted": "Fichier supprimé",
+    "fileDeleteFailed": "Impossible de supprimer le fichier",
+    "fileReplaced": "Nouvelle version téléversée",
+    "fileReplaceFailed": "Impossible de téléverser la nouvelle version",
+    "uploaded": "{name} téléversé",
+    "uploadFailed": "Impossible de téléverser {name}",
+    "attached": "Fichier joint",
+    "attachFailed": "Impossible de joindre le fichier",
+    "detached": "Fichier détaché",
+    "detachFailed": "Impossible de détacher le fichier",
+    "linkCopied": "Lien copié",
+    "linkCopyFailed": "Impossible de copier le lien"
+  },
+  "fileTypes": {
+    "pdf": "PDF",
+    "image": "Image",
+    "csv": "CSV",
+    "spreadsheet": "Tableur",
+    "document": "Document",
+    "text": "Texte",
+    "other": "Fichier"
+  },
+  "rowMenu": {
+    "open": "Ouvrir",
+    "openFolder": "Ouvrir le dossier",
+    "copyLink": "Copier le lien"
+  },
+  "rename": {
+    "fileTitle": "Renommer le fichier",
+    "folderTitle": "Renommer le dossier"
+  }
+}

@@ -1,0 +1,151 @@
+{
+  "title": "Bons de régie",
+  "description": "Feuilles d'heures d'équipe signées pour les travaux en régie — heures, équipement et matériaux saisis une fois, approuvés, signés par votre client et intégrés aux factures.",
+  "period": {
+    "shift": "Quart",
+    "daily": "Quotidien",
+    "weekly": "Hebdomadaire"
+  },
+  "status": {
+    "draft": "Brouillon",
+    "pending_approval": "Soumis",
+    "approved": "Approuvé",
+    "voided": "Annulé"
+  },
+  "list": {
+    "new": "Nouveau bon",
+    "create": "Créer",
+    "cancel": "Annuler",
+    "empty": "Aucun bon de régie pour l'instant.",
+    "projectRequired": "Choisissez un projet",
+    "pickProject": "Choisissez un projet…",
+    "number": "Bon",
+    "project": "Projet",
+    "customer": "Client",
+    "periodLabel": "Période",
+    "period": "Période",
+    "foreman": "Contremaître",
+    "hours": "Heures",
+    "itemsTotal": "Articles",
+    "status": "Statut",
+    "signature": "Signature",
+    "allStatuses": "Tous les statuts",
+    "allSignatures": "Toutes les signatures",
+    "unsigned": "Non envoyé",
+    "waiting": "Signature en attente",
+    "signed": "Signé",
+    "date": "Date",
+    "createFailed": "Impossible de créer le bon"
+  },
+  "editor": {
+    "tabs": { "time": "Temps", "items": "Articles", "tasks": "Tâches", "related": "Associés" },
+    "periodLocked": "Supprimez les heures saisies avant de modifier la période.",
+    "back": "Bons de régie",
+    "submit": "Soumettre",
+    "approve": "Approuver",
+    "reject": "Rejeter",
+    "saveHours": "Enregistrer les heures",
+    "cancel": "Annuler",
+    "confirmReject": "Confirmer le rejet",
+    "rejectReason": "Motif du rejet",
+    "rejectionNote": "Rejeté : {reason}",
+    "submitted": "Bon soumis",
+    "approved": "Bon approuvé — heures chiffrées et articles imputés au projet",
+    "rejected": "Bon rejeté",
+    "project": "Projet",
+    "customer": "Client",
+    "po": "BC du client",
+    "foreman": "Contremaître",
+    "workDescription": "Description des travaux",
+    "details": {
+      "title": "Détails du bon",
+      "hint": "Projet, client, date du bon et responsable sur le terrain."
+    },
+    "work": {
+      "title": "Résumé des travaux",
+      "hint": "Référence client et description claire des travaux réalisés."
+    },
+    "related": {
+      "title": "Fiches associées",
+      "hint": "Liens auditables entre ce bon, les frais, les demandes de facturation et les factures.",
+      "billingRequests": "Demandes de facturation",
+      "noBillingRequests": "Ce bon n’a pas été sélectionné pour la facturation.",
+      "selectedOn": "Sélectionné le {date}",
+      "documents": "Transactions liées",
+      "noDocuments": "Aucune transaction liée pour le moment.",
+      "linkType": {
+        "created_from": "Frais créé",
+        "bills": "Facturé par"
+      }
+    },
+    "form": {
+      "label": "Formulaire de la fiche",
+      "setPreferred": "Définir comme préféré",
+      "preferredSaved": "Formulaire préféré enregistré",
+      "preferredFailed": "Impossible d’enregistrer le formulaire préféré"
+    },
+    "crew": {
+      "title": "Heures de l'équipe",
+      "hint": "Une ligne par personne (optionnellement par classe). R / O / D = initiales des types d'heures.",
+      "employee": "Employé",
+      "laborItem": "Classe de travail",
+      "task": "Tâche du projet",
+      "addRow": "Ajouter une personne",
+      "removeRow": "Retirer la ligne",
+      "rowTotal": "Total",
+      "dayTotals": "Totaux par jour",
+      "total": "{hours} h au total"
+    },
+    "lines": {
+      "title": "Articles et équipement",
+      "hint": "Sélectionnez des articles facturables ou un équipement lié. Les tarifs respectent les grilles et leurs paliers.",
+      "item": "Article",
+      "pickItem": "Choisissez un article…",
+      "description": "Description",
+      "quantity": "Qté",
+      "rateUnit": "Unité tarifaire",
+      "rate": "Taux",
+      "amount": "Montant",
+      "equipment": "Unité d'équipement",
+      "pooledItem": "Aucune unité précise",
+      "rateSource": { "rate_book": "Tarif issu de la grille", "item_default": "Tarif par défaut de l'article" },
+      "add": "Ajouter une ligne",
+      "remove": "Retirer la ligne",
+      "empty": "Aucune ligne pour l'instant.",
+      "itemRequired": "Choisissez un article"
+    },
+    "tasks": { "title": "Tâches du projet", "hint": "Tâches WBS disponibles pour imputer les heures.", "code": "Code", "task": "Tâche", "estimatedHours": "Heures estimées" },
+    "totals": {
+      "title": "Totaux du bon",
+      "labor": "Main-d'œuvre",
+      "items": "Équipement et matériaux",
+      "grand": "Total général",
+      "previewNote": "La main-d'œuvre utilise des taux d'aperçu jusqu'à ce que l'approbation les fige.",
+      "snappedNote": "Les taux sont figés — l'historique de ce bon ne change jamais."
+    },
+    "signatures": {
+      "title": "Signatures",
+      "hint": "Envoyez le bon approuvé au client pour révision et signature.",
+      "customer": "Client",
+      "signedBy": "Signé — {name}",
+      "signedAt": "Signé {date}",
+      "waiting": "Signature en attente",
+      "notSent": "Pas encore envoyé",
+      "ready": "Prêt à envoyer",
+      "notReady": "Non prêt",
+      "draftHelp": "Soumettez et approuvez ce bon avant de l'envoyer au client pour signature.",
+      "pendingHelp": "Ce bon pourra être envoyé pour signature une fois approuvé.",
+      "sentTo": "Envoyé à",
+      "sentAt": "Envoyé",
+      "expiresAt": "Expiration du lien",
+      "deliveryHelp": "Le client reçoit une copie PDF et un lien de signature sécurisé valable 14 jours."
+    },
+    "sendSignature": "Envoyer pour signature",
+    "resendSignature": "Renvoyer la demande de signature",
+    "sendTo": "Envoyer à",
+    "sendMessage": "Message (optionnel)",
+    "send": "Envoyer",
+    "signatureSent": "Lien de signature envoyé à {to}",
+    "pdf": "PDF"
+  }
+}

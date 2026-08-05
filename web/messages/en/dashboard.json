@@ -1,0 +1,132 @@
+{
+  "title": "Dashboard",
+  "orgDescription": "{name} · {currency} · {book}",
+  "greeting": {
+    "morning": "Good morning",
+    "afternoon": "Good afternoon",
+    "evening": "Good evening"
+  },
+  "header": {
+    "customize": "Customize"
+  },
+  "widgets": {
+    "journalLines": "Journal lines",
+    "activeAccounts": "Active accounts",
+    "entriesToday": "Entries today",
+    "pendingApprovals": "Pending approvals",
+    "ledgerBalance": "Ledger balance",
+    "recentEntries": "Recent journal entries",
+    "pendingApprovalsList": "Pending approvals",
+    "myApprovals": "My approvals",
+    "inProgress": "In progress",
+    "cashBalance": "Cash balance",
+    "openReceivables": "Open receivables",
+    "overdueReceivables": "Overdue receivables",
+    "openPayables": "Open payables",
+    "overduePayables": "Overdue payables"
+  },
+  "metricContext": {
+    "today": "Posted today",
+    "awaitingDecision": "Awaiting a decision",
+    "baseCurrency": "Base currency · {currency}",
+    "outstanding": "Outstanding",
+    "pastDue": "Past due"
+  },
+  "categories": {
+    "kpi": "Headlines",
+    "gl": "General ledger",
+    "ap": "Payables",
+    "ar": "Receivables",
+    "personal": "Personal",
+    "admin": "Administration"
+  },
+  "catalog": {
+    "journalLines": "Total posted journal lines.",
+    "activeAccounts": "Active accounts in the chart of accounts.",
+    "entriesToday": "Journal entries posted today.",
+    "pendingApprovals": "Approval requests awaiting a decision.",
+    "ledgerBalance": "Net of all journal lines; balanced books should be zero.",
+    "recentEntries": "The five most recently posted journal entries.",
+    "pendingApprovalsList": "The newest approval requests awaiting a decision.",
+    "inProgress": "Your draft bills, invoices, and journal entries.",
+    "myApprovals": "Approval requests assigned to your role.",
+    "quickActions": "Shortcuts for your most common tasks.",
+    "cashBalance": "Posted balance of bank accounts in base currency.",
+    "openReceivables": "Unpaid customer invoices in base currency.",
+    "overdueReceivables": "Customer invoices past their due date in base currency.",
+    "openPayables": "Unpaid vendor bills in base currency.",
+    "overduePayables": "Vendor bills past their due date in base currency."
+  },
+  "grid": {
+    "customizing": "Customizing your dashboard",
+    "save": "Save",
+    "saved": "Layout saved",
+    "saveFailed": "Failed to save layout",
+    "reset": "Reset",
+    "resetDone": "Layout reset to default",
+    "resetFailed": "Failed to reset layout",
+    "resetConfirm": "Reset to the default layout for your role? Your customisations will be lost.",
+    "addWidget": "Add widget",
+    "closePalette": "Close",
+    "remove": "Remove widget",
+    "cardMissing": "Card unavailable",
+    "unknownWidget": "Unknown widget: {id}"
+  },
+  "palette": {
+    "title": "Widgets",
+    "subtitle": "Click to add to your dashboard",
+    "close": "Close",
+    "added": "Added",
+    "empty": "No widgets available to add.",
+    "libraryCards": "Insight cards"
+  },
+  "customize": {
+    "title": "Customize dashboard",
+    "back": "Back to dashboard",
+    "roleLabel": "Default layout for: {role}"
+  },
+  "quickActions": {
+    "title": "Quick actions",
+    "customize": "Customize",
+    "empty": "No quick actions yet",
+    "addFirst": "Add your first action",
+    "editor": {
+      "title": "Customize quick actions",
+      "description": "Add, reorder, and remove shortcut tiles.",
+      "addAction": "Add action",
+      "edit": "Edit action",
+      "cancel": "Cancel",
+      "save": "Save",
+      "saved": "Quick actions saved",
+      "saveFailed": "Failed to save quick actions",
+      "loadFailed": "Failed to load options",
+      "back": "Back",
+      "common": "Common",
+      "customUrl": "Custom URL",
+      "label": "Label",
+      "labelPlaceholder": "New bill",
+      "link": "Link",
+      "linkHint": "Internal path (/ar) or https URL",
+      "icon": "Icon",
+      "color": "Color",
+      "preview": "Preview",
+      "unnamed": "Unnamed",
+      "searchPlaceholder": "Search actions…",
+      "loading": "Loading…",
+      "noResults": "No results",
+      "maxReached": "Maximum {count} actions",
+      "invalidUrl": "Link must be an internal path or http(s) URL"
+    }
+  },
+  "home": {
+    "customize": "Customize",
+    "customizeHint": "Rearrange the cards on your home board",
+    "browseInsights": "All insights",
+    "noBoard": "No home dashboard yet",
+    "noBoardBody": "Build cards in Insights, arrange them on a dashboard, then set it as the home board.",
+    "openInsights": "Open Insights",
+    "personalBadge": "Your board",
+    "roleBadge": "Role default",
+    "systemBadge": "Company default"
+  }
+}

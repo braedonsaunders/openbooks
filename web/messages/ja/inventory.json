@@ -1,0 +1,78 @@
+{
+  "list": {
+    "title": "在庫",
+    "description": "手持在庫の評価額と在庫変動 — 原価計算は先入先出、移動平均、または標準原価。",
+    "searchPlaceholder": "品目または拠点を検索…",
+    "emptyTitle": "在庫はまだありません",
+    "emptyDescription": "セットアップで品目の原価計算プロファイルを構成してから、在庫を入荷します。",
+    "newButton": "新規変動",
+    "view": "表示"
+  },
+  "view": {
+    "onhand": "手持在庫",
+    "movements": "変動"
+  },
+  "labels": {
+    "item": "品目",
+    "location": "拠点",
+    "quantity": "数量",
+    "avgCost": "平均原価",
+    "value": "評価額",
+    "date": "日付",
+    "kind": "種別",
+    "unitCost": "単位原価"
+  },
+  "kind": {
+    "receipt": "入荷",
+    "issue": "出庫",
+    "transfer_out": "移動出庫",
+    "transfer_in": "移動入庫",
+    "adjustment": "調整",
+    "count": "棚卸",
+    "assembly_build": "組立生産",
+    "assembly_consume": "組立消費",
+    "return": "返品"
+  },
+  "drawer": {
+    "title": "在庫変動",
+    "post": "記帳",
+    "action": "アクション",
+    "actions": {
+      "receive": "入荷",
+      "issue": "出庫",
+      "adjust": "調整",
+      "transfer": "移動",
+      "build": "組立を生産",
+      "landed": "付帯費用"
+    },
+    "hint": {
+      "receive": "原価で在庫を追加します(借方 在庫 / 貸方 相手勘定)。",
+      "issue": "在庫を売上原価に振り替えて減らします(借方 売上原価 / 貸方 在庫)。",
+      "adjust": "調整勘定に対して手持数量を修正します。",
+      "transfer": "簿価のまま2つの拠点間で在庫を移動します。",
+      "build": "部品表(BOM)に従って構成部品を消費し、完成品を原価で生産します。",
+      "landed": "運賃や関税を品目の手持在庫レイヤーに資産計上します。"
+    },
+    "selectItem": "品目を選択",
+    "selectLocation": "拠点を選択",
+    "selectAccount": "勘定を選択",
+    "quantityDelta": "数量(+/-)",
+    "offsetAccount": "相手勘定",
+    "offsetHint": "入荷に対して貸方計上される勘定(クリアリング、検収未請求、または期首残高)。",
+    "memoPlaceholder": "任意のメモ",
+    "missingFields": "品目、拠点、数量は必須です",
+    "failed": "変動に失敗しました",
+    "posted": "変動を記帳しました({value})",
+    "fromLocation": "移動元拠点",
+    "toLocation": "移動先拠点",
+    "assemblyItem": "組立品目",
+    "amount": "金額",
+    "freightAccount": "運賃 / 関税勘定",
+    "freightHint": "現在運賃が計上されている勘定。在庫へ振り替えられます。",
+    "basis": "配賦基準",
+    "bases": {
+      "value": "金額按分",
+      "quantity": "数量按分"
+    }
+  }
+}

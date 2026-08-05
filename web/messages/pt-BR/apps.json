@@ -1,0 +1,64 @@
+{
+  "title": "Apps",
+  "description": "Apps instalados que você pode abrir.",
+  "searchPlaceholder": "Pesquisar apps instalados…",
+  "version": "Versão {version}",
+  "noDescription": "Nenhuma descrição fornecida.",
+  "actions": {
+    "library": "Biblioteca de Apps",
+    "documentation": "Documentação",
+    "open": "Abrir app",
+    "openAria": "Abrir {name}"
+  },
+  "empty": {
+    "title": "Nenhum app instalado",
+    "description": "Explore a Biblioteca de Apps para encontrar extensões para sua organização.",
+    "action": "Explorar a Biblioteca"
+  },
+  "noResults": {
+    "title": "Nenhum app encontrado",
+    "description": "Tente outro nome, chave ou descrição."
+  },
+  "library": {
+    "title": "Biblioteca de Apps",
+    "description": "Descubra e instale extensões para sua organização.",
+    "searchPlaceholder": "Pesquisar na Biblioteca de Apps…",
+    "install": "Instalar",
+    "update": "Atualizar",
+    "installed": "Instalado",
+    "installing": "Instalando…",
+    "installSuccess": "“{name}” foi instalado",
+    "updateSuccess": "“{name}” foi atualizado",
+    "installFailed": "Não foi possível instalar o app.",
+    "empty": {
+      "title": "A Biblioteca de Apps está vazia",
+      "description": "Os apps publicados aparecerão aqui quando estiverem disponíveis."
+    },
+    "noResults": {
+      "title": "Nenhum app encontrado",
+      "description": "Tente outro nome, chave ou descrição."
+    }
+  },
+  "frame": {
+    "loading": "Carregando…",
+    "failedTitle": "Não foi possível abrir este app.",
+    "failedHint": "Tente atualizar. Se continuar acontecendo, entre em contato com seu administrador."
+  },
+  "admin": {
+    "title": "Apps",
+    "description": "Crie e instale pacotes de apps com uma interface isolada e um backend controlado, separados por app.",
+    "searchPlaceholder": "Pesquisar apps…",
+    "status": "Status",
+    "statuses": { "installed": "Instalado", "disabled": "Desativado" },
+    "columns": {
+      "name": "Nome",
+      "key": "Chave",
+      "version": "Versão",
+      "endpoints": "Endpoints",
+      "runs": "Execuções",
+      "status": "Status",
+      "updated": "Atualizado"
+    },
+    "empty": "Ainda não há apps. Crie um app inicial pronto para abrir ou importe um pacote .zip."
+  }
+}

@@ -1,0 +1,87 @@
+{
+  "list": {
+    "title": "费用报销单",
+    "description": "员工费用报销单 — 草稿 → 审批 → 过账至员工应付款。",
+    "searchPlaceholder": "搜索报销单、员工、备注…",
+    "emptyTitle": "暂无费用报销单",
+    "emptyDescription": "录入第一张费用报销单，开始报销流程。",
+    "columns": {
+      "report": "报销单"
+    }
+  },
+  "actions": {
+    "newReport": "新建费用报销单",
+    "submitForApproval": "提交审批"
+  },
+  "drawer": {
+    "autosaveHint": "草稿 — 更改自动保存。",
+    "viewGlImpact": "查看总账影响",
+    "reportDate": "报销单日期",
+    "selectEmployeePlaceholder": "选择员工…",
+    "accountPlaceholder": "科目…",
+    "noTax": "无税",
+    "deleteTitle": "删除此费用报销单？",
+    "deleteDraftBody": "此操作将永久删除该草稿费用报销单。无法撤销。",
+    "deletePostedBody": "此操作将永久删除该费用报销单并移除其总账影响。无法撤销。",
+    "columns": {
+      "taxAmount": "税额"
+    },
+    "saveState": {
+      "saved": "所有更改已保存",
+      "dirty": "有未保存的更改…",
+      "error": "保存失败 — 请修正后重试"
+    },
+    "totals": "小计 {subtotal} · 税 {tax} · <strong>合计 {total}</strong>"
+  },
+  "toasts": {
+    "submitted": "已提交审批",
+    "posted": "已过账至总账",
+    "actionFailed": "操作失败",
+    "autosaveFailed": "自动保存失败",
+    "deleted": "费用报销单已删除",
+    "deleteFailed": "删除失败",
+    "draftFailed": "无法创建草稿费用报销单"
+  },
+  "dashboard": {
+    "title": "费用",
+    "description": "费用报销控制中心——审批流水线、按员工和类别的支出，以及费用支出趋势。",
+    "vitals": {
+      "pending": "待审批",
+      "pendingSub": "{count} 份报销单",
+      "awaiting": "待过账",
+      "awaitingSub": "{count} 份已批准",
+      "month": "本月已过账",
+      "monthSub": "{count} 份报销单",
+      "highSpenders": "高支出员工",
+      "highSpendersSub": "较上期增长 >20%",
+      "creep": "类别增长",
+      "creepSub": "增长 >10% 的类别"
+    },
+    "panels": {
+      "categories": "类别构成",
+      "categoriesHint": "费用报销单 · 12 个月",
+      "trend": "月度趋势",
+      "trendHint": "费用报销 vs 供应商账单",
+      "queue": "审批队列",
+      "queueHint": "最早的优先",
+      "queueEmpty": "没有待审批的报销单。",
+      "spenders": "支出排行",
+      "spendersHint": "对比前 12 个月",
+      "categoryTable": "类别",
+      "categoryTableHint": "当前 vs 前 12 个月"
+    },
+    "table": {
+      "employee": "员工",
+      "spend": "支出",
+      "reports": "报销单",
+      "change": "变化",
+      "category": "类别",
+      "current": "当前",
+      "prior": "上期"
+    },
+    "series": {
+      "bills": "供应商账单",
+      "expenses": "费用报销单"
+    }
+  }
+}

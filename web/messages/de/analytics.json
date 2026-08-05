@@ -1,0 +1,154 @@
+{
+  "hub": {
+    "title": "Analytik",
+    "description": "Native Intelligence-Dashboards — Rentabilität, Liquidität, Kunden, Lieferanten und forensisches Risiko, live aus Ihrem Hauptbuch berechnet.",
+    "searchPlaceholder": "Analytik durchsuchen…",
+    "noMatches": "Keine Dashboards entsprechen Ihrer Suche.",
+    "planned": "Geplant",
+    "groups": {
+      "profitability": "Rentabilität und Leistung",
+      "operations": "Liquidität und Betrieb",
+      "relationships": "Kunden und Lieferanten",
+      "forensics": "Risiko und Forensik"
+    },
+    "cards": {
+      "financialHealthTitle": "Finanzielle Gesundheit",
+      "financialHealthDesc": "Margen- und Kennzahlen-Scorecard mit einem zusammengesetzten Gesundheitswert",
+      "trueCostTitle": "Echte Kosten",
+      "trueCostDesc": "Gemeinkostenabsorption und Verkaufspreis-Builder",
+      "utilizationTitle": "Auslastung",
+      "utilizationDesc": "Fakturierbare Zeit, Auslastung und Gewinn nach Leistungsartikeln",
+      "customerTitle": "Kundenintelligenz",
+      "customerDesc": "Segmentierung, Lebenszeitwert und Kundenrentabilität",
+      "vendorTitle": "Lieferantenleistung",
+      "vendorDesc": "Ausgabenkonzentration, Zahlungsverhalten und Lieferanten-Scorecards",
+      "sentinelTitle": "Sentinel",
+      "sentinelDesc": "Forensische Transaktionsintegrität und Anomalieerkennung",
+      "spendVelocityTitle": "Ausgabendynamik",
+      "spendVelocityDesc": "Ausgabenbeschleunigung, Abonnementwildwuchs und Schatten-IT",
+      "cashflowTitle": "Cashflow",
+      "cashflowDesc": "Wöchentliche Liquiditätsprognose, Reichweite und Fälligkeitsstruktur der Verbindlichkeiten/Forderungen"
+    }
+  },
+  "financialHealth": {
+    "title": "Finanzielle Gesundheit",
+    "description": "Rentabilität, Effizienz und Betriebskennzahlen mit einem zusammengesetzten Gesundheitswert.",
+    "backToHub": "Analytik",
+    "tabs": {
+      "overview": "Übersicht",
+      "margin": "Marge",
+      "items": "Artikel",
+      "segments": "Segmente",
+      "forecast": "Prognose",
+      "scenarios": "Szenarien",
+      "budget": "Budget",
+      "drivers": "Treiber",
+      "ratios": "Kennzahlen",
+      "configuration": "Konfiguration"
+    },
+    "kpi": {
+      "revenue": "Umsatz",
+      "grossMargin": "Bruttomarge",
+      "operatingIncome": "Betriebsergebnis",
+      "breakeven": "Break-even"
+    },
+    "kpiSub": {
+      "growth": "im Jahresvergleich {pct}",
+      "grossProfit": "BG: {amount}",
+      "opex": "Betriebskosten: {amount}",
+      "perMonth": "pro Monat"
+    },
+    "score": {
+      "title": "Finanzieller Gesundheitswert",
+      "overall": "Gesamt",
+      "excellent": "Ausgezeichnet",
+      "good": "Gut",
+      "average": "Durchschnittlich",
+      "needsWork": "Verbesserungsbedarf"
+    },
+    "categories": {
+      "profitability": "Rentabilität",
+      "efficiency": "Effizienz",
+      "operating": "Betrieb"
+    },
+    "subKpi": {
+      "roic": "ROIC",
+      "ebitdaMargin": "EBITDA-Marge",
+      "opLeverage": "Operativer Hebel",
+      "rule40": "Rule of 40"
+    },
+    "subKpiSub": {
+      "returnOnCapital": "Rendite auf das investierte Kapital",
+      "earningsMargin": "Gewinnmarge",
+      "sensitivity": "Sensitivität",
+      "growthProfit": "Wachstum + Gewinn"
+    },
+    "gridHint": "Klicken Sie auf eine Kennzahl für Details",
+    "pnl": {
+      "title": "GuV-Zusammenfassung",
+      "lineItem": "Position",
+      "amount": "Betrag",
+      "pctRevenue": "% Umsatz",
+      "revenue": "Umsatz",
+      "cogs": "Umsatzkosten",
+      "grossProfit": "Bruttogewinn",
+      "opex": "Betriebsausgaben",
+      "operatingIncome": "Betriebsergebnis",
+      "otherIncome": "Sonstige Erträge",
+      "otherExpense": "Sonstige Aufwendungen",
+      "netIncome": "Jahresüberschuss"
+    },
+    "budget": {
+      "measuredAgainst": "Gemessen an <strong>{name}</strong> (GJ{year}, {status}) — Budgetpositionen über den ausgewählten Bereich. Verwalten Sie Szenarien in <link>Budgets</link>.",
+      "totalBudget": "Gesamtbudget",
+      "budgetedAccounts": "{count, plural, one {# budgetiertes Konto} other {# budgetierte Konten}}",
+      "totalActual": "Ist-Wert gesamt",
+      "normalizedIncome": "Ertragsvorzeichen normalisiert",
+      "overBudget": "Über Budget",
+      "onWatch": "{count} unter Beobachtung",
+      "coverage": "Abdeckung",
+      "coverageSub": "Konten mit einer Budgetposition",
+      "tableTitle": "Budget vs. Ist ({count})",
+      "search": "Konten durchsuchen…",
+      "csv": "CSV",
+      "all": "Alle",
+      "status": { "on-track": "Im Plan", "watch": "Beobachtung", "over": "Über", "no-budget": "Kein Budget" },
+      "columns": { "account": "Konto", "type": "Typ", "budget": "Budget", "actual": "Ist", "progress": "Fortschritt", "variance": "Abweichung", "variancePct": "Abweichung %", "status": "Status" },
+      "showing": "Anzeige {from}–{to} von {total} Konten",
+      "previous": "Zurück",
+      "next": "Weiter",
+      "noBudgetTitle": "Kein formelles Budget für diese Periode",
+      "noBudgetDescription": "Erstellen und genehmigen Sie ein Budgetszenario, um echte Abweichungen auf Kontoebene zu sehen. Dieses Dashboard ersetzt keine synthetischen Benchmark-Ziele.",
+      "createBudget": "Budget erstellen"
+    }
+  },
+  "customer": {
+    "title": "Kundenintelligenz",
+    "backToHub": "Analytik"
+  },
+  "vendor": {
+    "title": "Lieferantenleistung",
+    "backToHub": "Analytik"
+  },
+  "cashflow": {
+    "title": "Cashflow",
+    "backToHub": "Analytik"
+  },
+  "trueCost": {
+    "title": "Echte Kosten",
+    "backToHub": "Analytik",
+    "configureInSetup": "In den Einstellungen konfigurieren →"
+  },
+  "utilization": {
+    "title": "Auslastung",
+    "backToHub": "Analytik"
+  },
+  "spendVelocity": {
+    "title": "Ausgabendynamik",
+    "backToHub": "Analytik"
+  },
+  "sentinel": {
+    "title": "Sentinel",
+    "backToHub": "Analytik"
+  }
+}

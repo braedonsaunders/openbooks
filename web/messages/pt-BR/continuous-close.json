@@ -1,0 +1,162 @@
+{
+  "metaTitle": "Fechamento contínuo",
+  "title": "Fechamento contínuo",
+  "description": "Monitora continuamente a prontidão para o fechamento e destaca exceções contábeis e financeiras baseadas em evidências para revisão.",
+  "search": "Buscar constatações…",
+  "tabs": { "ariaLabel": "Seções de fechamento contínuo", "findings": "Constatações", "reports": "Relatórios" },
+  "agents": {
+    "accounting": "Contabilidade",
+    "finance": "Finanças"
+  },
+  "metrics": {
+    "active": "Ativas",
+    "critical": "Críticas",
+    "accounting": "Constatações contábeis",
+    "finance": "Constatações financeiras"
+  },
+  "filters": {
+    "agent": "Agente",
+    "severity": "Severidade"
+  },
+  "severity": {
+    "info": "Informação",
+    "warning": "Aviso",
+    "critical": "Crítica"
+  },
+  "status": {
+    "open": "Em aberto",
+    "in_review": "Em revisão",
+    "resolved": "Resolvida",
+    "dismissed": "Descartada"
+  },
+  "table": {
+    "finding": "Constatação",
+    "agent": "Agente",
+    "severity": "Severidade",
+    "materiality": "Materialidade",
+    "detected": "Última detecção"
+  },
+  "findings": {
+    "unmatched_bank_activity": {
+      "title": "Movimentação bancária não conciliada",
+      "description": "A movimentação do extrato bancário permanece não conciliada com transações do razão."
+    },
+    "reconciliation_difference": {
+      "title": "Diferença de conciliação",
+      "description": "Uma conciliação bancária em andamento não concorda com o saldo do extrato."
+    },
+    "stale_accounting_documents": {
+      "title": "Documentos contábeis pendentes",
+      "description": "Documentos contábeis em rascunho ou pendentes permaneceram inacabados além do tempo configurado."
+    },
+    "missing_approved_budget": {
+      "title": "Nenhum orçamento aprovado",
+      "description": "O monitoramento financeiro não pode comparar valores reais porque não há orçamento aprovado disponível."
+    },
+    "unfavorable_budget_variance": {
+      "title": "Variação orçamentária desfavorável",
+      "description": "O desempenho real é materialmente pior que o orçamento aprovado."
+    },
+    "period_revenue_decline": {
+      "title": "Queda de receita",
+      "description": "A receita caiu de forma material em relação ao período contábil anterior concluído."
+    },
+    "gross_margin_decline": {
+      "title": "Queda de margem bruta",
+      "description": "A margem bruta caiu além do limite configurado em relação ao período anterior concluído."
+    }
+  },
+  "summary": {
+    "records": "{count, plural, one {# registro} other {# registros}}",
+    "review": "Revise as evidências de suporte"
+  },
+  "reports": {
+    "title": "Relatórios do agente",
+    "description": "Abra um resumo gerado ou exporte-o como PDF.",
+    "search": "Buscar relatórios…",
+    "empty": "Nenhum relatório gerado corresponde a esses filtros."
+  },
+  "narrative": {
+    "title": "Resumo mais recente do agente",
+    "agent": "Gerado por {agent}",
+    "generated": "Gerado em {date}",
+    "generatedLabel": "Gerado",
+    "open": "Abrir relatório",
+    "downloadPdf": "PDF",
+    "executiveSummary": "Resumo executivo",
+    "highlights": "Destaques de desempenho",
+    "risks": "Riscos e anomalias",
+    "recommendations": "Ações recomendadas",
+    "sources": "Fontes de suporte",
+    "sourceLabel": "Fonte",
+    "sourcePath": "Caminho no produto"
+  },
+  "analysis": {
+    "title": "Análise do agente",
+    "rootCauses": "Prováveis fatores",
+    "recommendations": "Ações recomendadas",
+    "evidenceNotice": "A análise gerada pelo modelo é fundamentada nos registros vinculados e permanece sujeita a revisão."
+  },
+  "empty": {
+    "title": "Nenhuma constatação ainda",
+    "description": "Ative um agente e execute a primeira varredura. Condições sanadas são resolvidas automaticamente em varreduras posteriores.",
+    "action": "Configurar agentes"
+  },
+  "details": {
+    "materiality": "Materialidade",
+    "confidence": "Confiança",
+    "lastDetected": "Última detecção",
+    "summary": "Resumo",
+    "evidence": "Evidências de suporte",
+    "noEvidence": "Esta constatação baseia-se em um pré-requisito ausente, portanto não há registros de origem para exibir.",
+    "dismissalReason": "Motivo do descarte"
+  },
+  "fields": {
+    "account": "Conta",
+    "count": "Registros",
+    "oldestDate": "Data mais antiga",
+    "throughDate": "Conciliado até",
+    "difference": "Diferença",
+    "budget": "Orçamento",
+    "budgetAmount": "Valor orçado",
+    "actual": "Real",
+    "variance": "Variação",
+    "period": "Períodos",
+    "revenueChange": "Variação de receita",
+    "marginChange": "Variação de margem",
+    "points": "pontos"
+  },
+  "evidence": {
+    "bank_transaction": "Transação bancária",
+    "document": "Documento contábil",
+    "reconciliation": "Conciliação",
+    "budget_variance": "Variação orçamentária",
+    "period_comparison": "Comparação de períodos"
+  },
+  "actions": {
+    "settings": "Configurações do agente",
+    "startReview": "Iniciar revisão",
+    "resolve": "Resolver",
+    "dismiss": "Descartar",
+    "reopen": "Reabrir",
+    "openSource": "Abrir origem",
+    "cancel": "Cancelar",
+    "confirmDismiss": "Descartar constatação"
+  },
+  "dismiss": {
+    "title": "Descartar esta constatação",
+    "description": "Registre por que este resultado válido do detector não deve permanecer na fila ativa.",
+    "placeholder": "Motivo do descarte"
+  },
+  "feedback": {
+    "review": "Constatação movida para revisão.",
+    "resolve": "Constatação resolvida.",
+    "dismiss": "Constatação descartada.",
+    "reopen": "Constatação reaberta.",
+    "actionFailed": "Não foi possível atualizar a constatação.",
+    "recorded": "Feedback registrado.",
+    "wasHelpful": "Esta constatação foi útil?",
+    "helpful": "Útil",
+    "notHelpful": "Não útil"
+  }
+}

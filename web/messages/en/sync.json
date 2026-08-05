@@ -1,0 +1,253 @@
+{
+  "title": "Migrations & Mirror",
+  "description": "Connect an external accounting system, migrate in one click, then mirror it daily to A/B-run both in parallel.",
+  "connections": {
+    "heading": "Connections",
+    "add": "Add connection",
+    "loading": "Loading…",
+    "empty": {
+      "title": "No connections yet.",
+      "hint": "Add an accounting source to start a migration."
+    },
+    "status": {
+      "active": "Active",
+      "paused": "Paused",
+      "error": "Error",
+      "unconfigured": "Not configured"
+    },
+    "mirrorBadge": "Mirror: {schedule}",
+    "schedule": "Mirror schedule",
+    "mirrorHealth": "Mirror",
+    "attachmentHealth": "Attachments",
+    "sourceDeletions": "Transactions deleted at source",
+    "sourceDeletionHint": "Choose whether OpenBooks should retain the audited transaction or reverse and void it. Posted documents with payment applications must be unapplied first.",
+    "schedules": {
+      "hourly": "Hourly",
+      "every_6_hours": "Every 6 hours",
+      "daily": "Daily",
+      "weekly": "Weekly"
+    },
+    "lastRun": "Last run: {lastRun} · Synced through: {cursor}"
+  },
+  "actions": {
+    "connect": "Connect",
+    "reconnect": "Reconnect",
+    "test": "Test",
+    "mirrorNow": "Mirror now",
+    "syncAttachments": "Sync attachments",
+    "syncProjectFinancials": "Sync project financials",
+    "preflight": "Verify before sync",
+    "runMigration": "Run migration",
+    "pauseMirror": "Pause mirror",
+    "enableMirror": "Enable mirror",
+    "edit": "Edit",
+    "downloadQwc": "Download Web Connector",
+    "retainDeletion": "Retain with evidence",
+    "voidDeletion": "Reverse and void"
+  },
+  "runs": {
+    "heading": "Recent runs",
+    "columns": {
+      "started": "Started",
+      "kind": "Kind",
+      "status": "Status",
+      "trigger": "Trigger",
+      "result": "Result"
+    },
+    "kind": {
+      "full_migration": "Full migration",
+      "incremental": "Incremental",
+      "attachments": "Attachments",
+      "full_preflight": "Full preflight",
+      "project_financials": "Project financials",
+      "targeted_repair": "Targeted repair",
+      "mirror": "Mirror"
+    },
+    "status": {
+      "ok": "Succeeded",
+      "failed": "Failed",
+      "running": "Running"
+    },
+    "progress": {
+      "attachments": "Inventorying and importing source attachments"
+    },
+    "stats": {
+      "attachments": "{files} source files · {links} transaction links · {created} new files",
+      "projectFinancials": "{projects} source projects ({projectChanges} changed) · {source} source time entries · {exact} exact · {changed} billing states reconciled",
+      "docs": "+{new} docs · {amended} amended · {unchanged} unchanged",
+      "applied": "{count} applied",
+      "tb": "TB {matches}/{accounts}",
+      "tbOff": "({count} off)",
+      "openItems": "open items {matches}/{checked}",
+      "periods": "periods {matches}/{checked}",
+      "projectPeriods": "project/account periods {matches}/{checked}",
+      "preflightDocs": "{source} source docs · {new} new · {amended} changed · {unchanged} exact",
+      "sourceBook": "{kind} {ref}",
+      "preflightBlockers": "{count} blockers"
+    }
+  },
+  "toast": {
+    "loadFailed": "Failed to load connections (HTTP {status})",
+    "authorized": "Connection authorized",
+    "authDenied": "Authorization was declined",
+    "authFailed": "Authorization failed ({status})",
+    "queuingMigration": "Queuing full migration…",
+    "queuingPreflight": "Queuing read-only full-population verification…",
+    "queuingMirror": "Queuing mirror…",
+    "queuingAttachments": "Queuing attachment sync…",
+    "queuingProjectFinancials": "Queuing project-financial sync…",
+    "migrationQueued": "Migration queued — we'll run it in the background",
+    "preflightQueued": "Verification queued — no accounting or documents will be changed",
+    "mirrorQueued": "Mirror queued — running in the background",
+    "attachmentsQueued": "Attachment sync queued — running in the background",
+    "projectFinancialsQueued": "Project-financial sync queued — documents, GL, files, and PDFs will not be changed",
+    "runFailed": "Could not queue the run (HTTP {status})",
+    "runErrors": {
+      "CONNECTION_NOT_FOUND": "The connection no longer exists.",
+      "CONNECTION_UNCONFIGURED": "Add credentials before running this connection.",
+      "INVALID_MODE": "Choose a valid migration action.",
+      "ATTACHMENTS_UNSUPPORTED": "This connection does not support attachment migration.",
+      "PROJECT_FINANCIALS_UNSUPPORTED": "This connection does not expose project-financial input synchronization.",
+      "RUN_ALREADY_ACTIVE": "A run of this type is already active for this connection."
+    },
+    "testing": "Testing connection…",
+    "connected": "Connected",
+    "connectedDetail": "Connected — {detail}",
+    "testFailed": "Connection failed: {error}",
+    "unknownError": "unknown error",
+    "removed": "Connection removed",
+    "created": "Connection created",
+    "updated": "Connection updated",
+    "copied": "Redirect URI copied",
+    "copyFailed": "Could not copy — select and copy the text manually",
+    "deletionRetained": "Source deletion retained with controller evidence",
+    "deletionVoided": "Source-deleted transaction reversed and voided"
+  },
+  "confirmDelete": "Delete connection \"{name}\"? Migrated data stays; only the link is removed.",
+  "confirmRetainSourceDeletion": "Retain source-deleted transaction {ref} in OpenBooks and record this as the controller's decision?",
+  "confirmVoidSourceDeletion": "Reverse and void source-deleted transaction {ref}? This posts an accounting reversal and cannot be undone from this screen.",
+  "drawer": {
+    "addTitle": "Add connection",
+    "editTitle": "Edit connection",
+    "description": "Connect an external accounting system. Credentials are encrypted at rest and never shown again.",
+    "cancel": "Cancel",
+    "saving": "Saving…",
+    "saveChanges": "Save changes",
+    "create": "Create connection",
+    "system": "System",
+    "selectSystem": "Select a system…",
+    "name": "Connection name",
+    "select": "Select…",
+    "credentials": "Credentials (encrypted at rest, never displayed again)",
+    "keepCurrent": "Leave blank to keep current",
+    "postedChanges": {
+      "label": "Changes to posted source transactions",
+      "review": "Stop and require review",
+      "automatic": "Append reversal and replacement automatically",
+      "help": "Automatic corrections never rewrite posted history. OpenBooks retains the original, posts a linked reversal and replacement, transfers eligible applications, and still stops for reconciliations, closed periods, inventory, revenue recognition, or downstream documents."
+    }
+  },
+  "oauth": {
+    "title": "One-time app setup in the <link>{portal}</link>",
+    "redirectLabel": "Redirect URI to register:",
+    "copy": "Copy"
+  },
+  "netsuite": {
+    "setupTitle": "NetSuite extraction bridge",
+    "setupHint": "Install the read-only RESTlet and Map/Reduce bundle, then test this connection. No script is attached to transaction records.",
+    "documentation": "Documentation"
+  },
+  "qbd": {
+    "setupTitle": "QuickBooks Desktop setup",
+    "setupHint": "After saving, download the Web Connector file from the connection card. Import it on the Windows computer running QuickBooks, approve read-only access as the QuickBooks administrator, and enter this password in Web Connector.",
+    "lastContact": "Web Connector last contacted: {time}",
+    "notConnected": "Web Connector has not connected yet",
+    "capture": "Capture {status}: {completed}/{total} requests",
+    "captureStatus": {
+      "queued": "queued",
+      "running": "running",
+      "complete": "complete",
+      "failed": "failed",
+      "cancelled": "cancelled"
+    },
+    "documentation": "Documentation",
+    "qwcDescription": "Read-only accounting migration and reconciliation connector"
+  },
+  "sources": {
+    "netsuite": {
+      "blurb": "Install the read-only extraction bridge, then connect with a dedicated token-based role. Transactions, applications, accounting controls and deletions are mirrored through proof-gated imports.",
+      "fields": {
+        "account": {
+          "label": "Account ID",
+          "help": "The NetSuite account realm."
+        },
+        "host": { "label": "SuiteTalk host" },
+        "baseCurrency": { "label": "Base currency" },
+        "bridgeScriptId": {
+          "label": "Bridge script ID",
+          "help": "Leave blank to use customscript_openbooks_bridge_rl."
+        },
+        "bridgeDeploymentId": {
+          "label": "Bridge deployment ID",
+          "help": "Leave blank to use customdeploy_openbooks_bridge_rl."
+        },
+        "mappingJson": {
+          "label": "Account field mappings",
+          "help": "Optional JSON that maps account-specific custom fields and records to OpenBooks concepts."
+        },
+        "consumerKey": { "label": "Consumer key" },
+        "consumerSecret": { "label": "Consumer secret" },
+        "tokenKey": { "label": "Token ID" },
+        "tokenSecret": { "label": "Token secret" }
+      }
+    },
+    "odoo": {
+      "blurb": "Connect with your Odoo URL, database, user and an API key (Settings → My Profile → Account Security → API Keys). Invoices, bills, payments and journals migrate and mirror natively through the real posting engine."
+    },
+    "erpnext": {
+      "blurb": "Connect with your ERPNext URL and an API key + secret (User → Settings → API Access). Invoices, bills, payment entries and journals migrate and mirror natively through the real posting engine."
+    },
+    "qbd": {
+      "blurb": "Connect QuickBooks Desktop through Intuit's Web Connector. QuickBooks must be open for the one-time authorization and while captures run; no inbound Windows firewall rule is required.",
+      "options": {
+        "US": "United States",
+        "CA": "Canada",
+        "UK": "United Kingdom",
+        "AU": "Australia",
+        "NZ": "New Zealand"
+      },
+      "fields": {
+        "historyStartDate": {
+          "label": "History start date",
+          "help": "The earliest posting date to migrate. Each mirror rechecks this complete range so historical edits and deletions are detected."
+        },
+        "region": { "label": "QuickBooks region" },
+        "baseCurrency": { "label": "Base currency" },
+        "companyFile": {
+          "label": "Company file path (optional)",
+          "help": "Leave blank to use whichever company is open when Web Connector runs."
+        },
+        "webConnectorPassword": {
+          "label": "Web Connector password",
+          "help": "Enter this password once in QuickBooks Web Connector after importing the .QWC file."
+        }
+      }
+    },
+    "qbo": {
+      "blurb": "Enter your Intuit app's Client ID + Secret (developer.intuit.com → Keys & credentials), save, then click Connect to authorize a company. Invoices, bills, payments, credits, journals and deposits migrate and mirror natively.",
+      "steps": [
+        "Create an app (QuickBooks Online and Payments) with the com.intuit.quickbooks.accounting scope.",
+        "Under Keys & credentials, add the Redirect URI shown below (use Development keys for a sandbox company, Production keys for a live one).",
+        "Copy the Client ID and Client Secret into this form, save, then click Connect."
+      ]
+    },
+    "xero": {
+      "blurb": "Enter your Xero app's Client ID + Secret (developer.xero.com → My Apps), save, then click Connect to authorize an organisation. Invoices, bills, credit notes, payments, journals and bank transactions migrate and mirror natively.",
+      "steps": [
+        "Create a new app (integration type: Web app); the company URL can be this site's address.",
+        "Add the Redirect URI shown below to the app's OAuth 2.0 redirect URIs.",
+        "Copy the Client ID, generate a Client Secret, paste both into this form, save, then click Connect."
+      ]
+    }
+  }
+}

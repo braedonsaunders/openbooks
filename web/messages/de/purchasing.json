@@ -1,0 +1,62 @@
+{
+  "home": {
+    "title": "Einkauf",
+    "description": "Ihr Arbeitsbereich vom Einkauf bis zur Zahlung — Verpflichtungen, Rechnungen, Zahlungen und Lieferantenausgaben an einem Ort.",
+    "subsidiary": "Tochtergesellschaft",
+    "tabs": {
+      "overview": "Übersicht"
+    },
+    "vitals": {
+      "openAp": "Offene Verbindlichkeiten",
+      "openApSub": "{count} offene Rechnungen",
+      "overdue": "Überfällig",
+      "dueNext7": "Fällig in 7 Tagen",
+      "openPos": "Offene Bestellungen",
+      "openPosSub": "{count} Bestellungen",
+      "spend30d": "Ausgaben 30 Tage",
+      "spend30dSub": "Gebuchte Lieferantenrechnungen",
+      "activeVendors": "Aktive Lieferanten",
+      "paymentsWeek": "Zahlungen diese Woche",
+      "paymentsWeekSub": "{count} gebucht · letzte 7 Tage",
+      "unposted": "Nicht gebuchte Ausgaben",
+      "unpostedSub": "warten auf Buchung"
+    },
+    "hero": {
+      "title": "Lieferantenverpflichtungen",
+      "hint": "Offene Bestellungen neben offenen Rechnungen, größte Exponierung zuerst",
+      "empty": "Keine offenen Verpflichtungen oder Verbindlichkeiten.",
+      "vendor": "Lieferant",
+      "openPos": "Offene Bestellungen",
+      "openBills": "Rechnungen",
+      "oldestDue": "Älteste fällig",
+      "overdue": "Überfällig",
+      "billedOpen": "Offen fakturiert"
+    },
+    "trend": {
+      "title": "Ausgabentrend",
+      "hint": "13 Wochen gebuchte Rechnungen",
+      "series": "Fakturiert"
+    },
+    "directory": {
+      "title": "Arbeitsbereich",
+      "posHint": "{value} gebunden",
+      "billsHint": "{overdue} überfällig",
+      "paymentsHint": "Zahlungen diese Woche",
+      "expensesHint": "Buchung ausstehend",
+      "vendorsHint": "aktive Lieferanten"
+    },
+    "attention": {
+      "title": "Handlungsbedarf",
+      "allClear": "Alles klar — nichts überfällig.",
+      "overdueVendor": "{vendor} ist mit {amount} überfällig",
+      "unpostedExpenses": "{count} Spesenabrechnungen warten auf Buchung"
+    },
+    "pulse": {
+      "title": "Verbindlichkeits-Puls",
+      "open": "Offen",
+      "overdue": "Überfällig",
+      "due7": "Fällig in 7 Tagen",
+      "cta": "Kreditoren öffnen"
+    }
+  }
+}

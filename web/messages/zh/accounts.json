@@ -1,0 +1,103 @@
+{
+  "list": {
+    "title": "会计科目表",
+    "description": "本位符号的当前余额（资产负债表为累计，损益表为本财年），通过汇总科目向上汇总。",
+    "searchPlaceholder": "搜索编号或名称…",
+    "views": {
+      "list": "列表",
+      "hierarchy": "层级"
+    },
+    "newAccount": "新建科目",
+    "viewRegister": "查看明细账",
+    "expand": "展开科目",
+    "collapse": "折叠科目",
+    "badges": {
+      "inactive": "停用",
+      "summary": "汇总"
+    }
+  },
+  "types": {
+    "assetBank": "银行",
+    "assetReceivable": "应收账款",
+    "assetCurrentOther": "其他流动资产",
+    "assetFixed": "固定资产",
+    "assetOther": "其他资产",
+    "liabilityPayable": "应付账款",
+    "liabilityCard": "公司卡",
+    "liabilityCurrentOther": "其他流动负债",
+    "liabilityLongTerm": "长期负债",
+    "equity": "权益",
+    "income": "收入",
+    "incomeOther": "其他收入",
+    "cogs": "销售成本",
+    "expense": "费用",
+    "expenseOther": "其他费用",
+    "expenseDeferred": "递延费用"
+  },
+  "classes": {
+    "asset": "资产",
+    "liability": "负债",
+    "equity": "权益",
+    "income": "收入",
+    "expense": "费用"
+  },
+  "drawer": {
+    "saved": "科目已保存",
+    "created": "科目已创建",
+    "newTitle": "新建科目",
+    "newDescription": "创建过账科目或汇总科目。期初余额必须通过借贷平衡的分录录入。",
+    "create": "创建科目",
+    "typeLocked": "科目产生总账活动后，类型将无法更改。",
+    "parent": "上级科目",
+    "currencyRestriction": "币种限制",
+    "anyCurrency": "任意币种",
+    "allSubsidiaries": "所有子公司",
+    "summary": "汇总科目",
+    "reconcilable": "可对账",
+    "eliminate": "合并时抵销",
+    "includeSubsidiaries": "包含下级子公司",
+    "requiredDimensions": "必填过账维度",
+    "dimensions": {
+      "department": "部门",
+      "location": "地点",
+      "class": "类别",
+      "project": "项目",
+      "party": "往来方"
+    },
+    "errors": {
+      "name_required": "科目名称为必填项。",
+      "invalid_type": "请选择有效的科目类型。",
+      "type_has_transactions": "存在总账活动后，科目类型将无法更改。",
+      "invalid_parent": "请选择有效的上级科目。",
+      "parent_must_be_summary": "上级科目必须为汇总科目。",
+      "parent_type_mismatch": "上级科目和下级科目必须使用相同的科目类型。",
+      "parent_cycle": "该上级科目会造成科目层级循环。",
+      "summary_reconcilable_conflict": "汇总科目不能设为可对账。",
+      "summary_has_transactions": "存在总账活动的科目无法变为汇总科目。",
+      "summary_has_children": "含有活动下级的科目必须保持为汇总科目。",
+      "inactive_has_children": "请先停用此科目的活动下级科目。",
+      "invalid_currency": "请选择有效的币种。",
+      "invalid_subsidiary": "请选择有效的子公司。",
+      "invalid_dimensions": "请选择有效的必填维度。",
+      "invalid_custom_fields": "请检查自定义字段的值。",
+      "number_in_use": "该科目编号已被使用。",
+      "account_changed": "您编辑期间该科目已发生变化。请重新打开后再试。",
+      "invalid_idempotency_key": "无法安全地重试该科目请求。",
+      "save_failed": "无法保存该科目。"
+    },
+    "monetary": "外币重估（货币性项目）",
+    "monetaryDefault": "按账户类型",
+    "monetaryAlways": "始终重估",
+    "monetaryNever": "从不重估"
+  },
+  "register": {
+    "notFound": "未找到科目",
+    "subtitle": "明细账 · {count, plural, one {# 行} other {# 行}} · 累计余额 {balance}",
+    "periodFilter": "已筛选至 {label}",
+    "columns": {
+      "entry": "分录",
+      "debit": "借方",
+      "credit": "贷方"
+    }
+  }
+}
