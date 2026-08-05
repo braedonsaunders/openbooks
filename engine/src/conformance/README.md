@@ -102,9 +102,12 @@ one.
 
 ## Scope today
 
-Covered: ASC 606 / IFRS 15 revenue, IAS 2 / ASC 330 inventories, IAS 21 foreign
-currency, ASC 360 / IAS 16 long-lived assets, ASC 740 / IAS 12 income taxes,
-and ASC 842 / IFRS 16 leases (entirely as declared gaps).
+Covered: ASC 606 / IFRS 15 revenue (including variable-consideration
+constraint and financing-component separation), ASC 842 / IFRS 16 lessee
+leases, IAS 2 / ASC 330 inventories (including lower-of-cost-and-NRV with the
+framework-divergent reversal rule), IAS 21 foreign currency (including
+designated monetary items beyond trade balances), ASC 360 / IAS 16 long-lived
+assets, and ASC 740 / IAS 12 income taxes.
 
 Not yet covered, and therefore **not claimed**: business combinations,
 consolidation procedure, financial instruments, employee benefits, provisions

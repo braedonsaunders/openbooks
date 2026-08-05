@@ -512,7 +512,7 @@ export async function commenceLease(
       for (let i = 0; i < lease.term_periods; i++) {
         const b = boundaries[i]!;
         await tx.execute(sql`
-          insert into lease_schedule_lines
+          insert into lease_agreement_schedule_lines
             (id, org_id, lease_id, sequence, due_on, period_start, period_end,
              opening_liability, payment, interest, principal, closing_liability, single_cost,
              created_by, updated_by)
@@ -541,7 +541,7 @@ export async function commenceLease(
       const line = measurement.schedule[i]!;
       const b = boundaries[i]!;
       await tx.execute(sql`
-        insert into lease_schedule_lines
+        insert into lease_agreement_schedule_lines
           (id, org_id, lease_id, sequence, due_on, period_start, period_end,
            opening_liability, payment, interest, principal, closing_liability,
            amortization, single_cost, rou_adjustment, created_by, updated_by)
@@ -607,7 +607,7 @@ export async function postDueLeaseSchedules(
            l.payment::text as payment, l.interest::text as interest, l.principal::text as principal,
            l.amortization::text as amortization, l.single_cost::text as single_cost,
            l.rou_adjustment::text as rou_adjustment
-      from lease_schedule_lines l
+      from lease_agreement_schedule_lines l
       join lease_agreements a on a.id = l.lease_id and a.org_id = l.org_id
      where l.org_id = ${orgId} and a.status = 'active'
        and l.due_on <= ${asOfDate} and l.payment_entry_id is null
@@ -706,7 +706,7 @@ export async function postDueLeaseSchedules(
       }
 
       await tx.execute(sql`
-        update lease_schedule_lines
+        update lease_agreement_schedule_lines
            set payment_entry_id = ${entryIds[0]!},
                amortization_entry_id = ${entryIds[1] ?? null},
                posted_at = now(), updated_at = now(), updated_by = ${actorId}

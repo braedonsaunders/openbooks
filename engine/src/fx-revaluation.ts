@@ -79,9 +79,14 @@ export function computeRevaluation(
   }
   if (monetaryLines.length === 0) return { lines: [], netDelta: "0" };
   // Offset: a net debit to monetary accounts (a gain on assets / smaller
-  // liability) is credited to the gain/loss account, and vice versa.
+  // liability) is credited to the gain/loss account, and vice versa. When the
+  // per-account deltas offset EXACTLY (a USD asset against an equal USD
+  // liability), the entry already balances and a zero-amount offset line would
+  // be rejected by the kernel — omit it.
   return {
-    lines: [...monetaryLines, { accountId: unrealizedGainLossAccountId, amount: neg(netDelta) }],
+    lines: isZero(netDelta)
+      ? monetaryLines
+      : [...monetaryLines, { accountId: unrealizedGainLossAccountId, amount: neg(netDelta) }],
     netDelta,
   };
 }

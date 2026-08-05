@@ -23,6 +23,11 @@ export const GL_MUTATION_SOURCE_FILES = [
   "fx-revaluation.ts",
   "income-tax-provision.ts",
   "inventory.ts",
+  // Lessee lease accounting: commencement (ROU/liability), payment
+  // interest+principal, ROU amortization, and the operating single-cost model.
+  // (inventory-nrv.ts is NOT here: its GL writes go through inventory.ts's
+  // postInventoryEntry, which is already registered.)
+  "leases.ts",
   "payments.ts",
   "posting.ts",
   "project-recognition.ts",

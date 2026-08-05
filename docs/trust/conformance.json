@@ -1,10 +1,10 @@
 {
-  "at": "2026-08-04T23:45:56.249Z",
+  "at": "2026-08-05T00:24:42.826Z",
   "gitSha": null,
   "totals": {
-    "pass": 28,
+    "pass": 39,
     "fail": 0,
-    "gap": 11,
+    "gap": 1,
     "skipped": 0
   },
   "pass": true,
@@ -40,7 +40,7 @@
         "Standalone selling prices 50.00, 25.00 and 75.00 (total 150.00).",
         "Proportions are 1/3, 1/6 and 1/2 of the transaction price."
       ],
-      "ms": 20
+      "ms": 22
     },
     {
       "id": "rev-allocate-no-lost-cent",
@@ -173,7 +173,7 @@
         "The item carries a straight-line twelve-period recognition rule.",
         "Recognition is run as at 2026-07-31, the end of the first service month."
       ],
-      "ms": 106
+      "ms": 73
     },
     {
       "id": "rev-recognition-is-idempotent",
@@ -197,7 +197,7 @@
         "A twelve-month service obligation of 1,200.00 invoiced on 2026-07-15.",
         "Recognition is run for 2026-07-31, then run again for the same date."
       ],
-      "ms": 77
+      "ms": 52
     },
     {
       "id": "rev-obligation-created-per-line",
@@ -227,7 +227,7 @@
       "facts": [
         "One invoice with a single distinct twelve-month service promise."
       ],
-      "ms": 27
+      "ms": 35
     },
     {
       "id": "rev-variable-consideration-constraint",
@@ -244,22 +244,28 @@
           "requirement": "An entity includes variable consideration in the transaction price only to the extent it is probable that a significant revenue reversal will not occur."
         },
         {
+          "standard": "ASC 606",
+          "reference": "606-10-32-8",
+          "kind": "requirement",
+          "requirement": "Variable consideration is estimated using either the expected value or the most likely amount, whichever better predicts the entitled consideration."
+        },
+        {
           "standard": "IFRS 15",
           "reference": "IFRS 15.56",
           "kind": "requirement",
           "requirement": "Variable consideration is included in the transaction price only to the extent that it is highly probable no significant reversal will occur."
         }
       ],
-      "support": "not-implemented",
+      "support": "supported",
       "tier": "computation",
-      "status": "gap",
-      "assertion": "A contract with a performance bonus recognises only the constrained amount, and the estimate is revisited each reporting period.",
+      "status": "pass",
+      "assertion": "A contingent bonus is estimated by the stated method, the constraint caps what enters the transaction price, and the held-back amount is carried explicitly — so revenue can never include consideration management has judged subject to significant reversal.",
       "facts": [
-        "Fixed consideration 100,000 plus a 20,000 bonus contingent on early completion.",
-        "Management concludes only 12,000 of the bonus meets the constraint.",
-        "Transaction price is therefore 112,000, not 120,000."
+        "Fixed consideration 100,000.00 plus a 20,000.00 bonus contingent on early completion.",
+        "The bonus has two outcomes — earned (60%) or not (40%) — so the most-likely-amount method estimates 20,000.00.",
+        "Management concludes only 12,000.00 of the bonus meets the constraint.",
+        "The transaction price is therefore 112,000.00, with 8,000.00 constrained out until the uncertainty resolves."
       ],
-      "gap": "There is no model for estimating variable consideration (expected value or most-likely-amount), no constraint assessment, and no re-estimation at each reporting date. Contracts with rebates, refunds, penalties, price concessions or performance bonuses must be constrained manually outside the system.",
       "ms": 0
     },
     {
@@ -283,16 +289,16 @@
           "requirement": "The transaction price is adjusted for the effects of the time value of money where the contract contains a significant financing component."
         }
       ],
-      "support": "not-implemented",
+      "support": "supported",
       "tier": "computation",
-      "status": "gap",
-      "assertion": "Revenue on a contract paid materially in advance or arrears is recognised at the cash selling price, with the difference presented as interest.",
+      "status": "pass",
+      "assertion": "Revenue on a contract paid materially in arrears is measured at the cash selling price — the promised amount discounted at the rate a separate financing would carry — and the difference accretes as interest, year by year, landing exactly on the billed amount.",
       "facts": [
-        "Consideration of 121,000 receivable two years after control transfers.",
-        "A discount rate of 10% gives a cash selling price of 100,000.",
-        "Revenue is 100,000; the remaining 21,000 accretes as interest income over two years."
+        "Consideration of 121,000.00 receivable two years after control transfers.",
+        "A discount rate of 10% gives a cash selling price of 100,000.00.",
+        "Revenue at inception is 100,000.00; 21,000.00 accretes as interest.",
+        "Year one accretes 10,000.00 (10% of 100,000) and year two 11,000.00, carrying the receivable to exactly 121,000.00."
       ],
-      "gap": "Long-dated contracts are recognised at their undiscounted invoice amount. There is no discount-rate configuration, no present-value adjustment at inception, and no interest accretion between recognition and payment.",
       "ms": 0
     },
     {
@@ -322,18 +328,17 @@
           "requirement": "At the commencement date a lessee measures the right-of-use asset at cost."
         }
       ],
-      "support": "not-implemented",
-      "tier": "computation",
-      "status": "gap",
-      "assertion": "Entering into a lease puts both an asset and a liability on the balance sheet at commencement, so leased capacity and the obligation to pay for it are visible rather than off balance sheet.",
+      "support": "supported",
+      "tier": "ledger",
+      "status": "pass",
+      "assertion": "Commencing a lease puts both an asset and a liability on the balance sheet at the exact present value of the payments — leased capacity and the obligation to pay for it are visible, not off balance sheet, and the discounting is exact to the hundredth of a cent.",
       "facts": [
-        "A five-year lease commencing 2026-01-01.",
+        "A five-year lease commencing 2026-07-15.",
         "Annual payments of 20,000.00 in arrears; 100,000.00 undiscounted in total.",
         "The incremental borrowing rate is 5%.",
         "The present value of the payments is 86,589.5334."
       ],
-      "gap": "There is no lessee lease accounting. No schema exists for lease contracts, discount rates, lease terms, renewal or termination options, or payment schedules; nothing computes a present value; and no right-of-use asset or lease liability is ever recognised. Leases entered into as lessee are accounted for only as the cash payments are made, which is the pre-ASC 842 and pre-IFRS 16 treatment. Any entity with material leases must maintain the lease schedule and the balance-sheet amounts outside the system and post them by manual journal.",
-      "ms": 0
+      "ms": 10
     },
     {
       "id": "lease-finance-interest-and-amortization",
@@ -356,18 +361,17 @@
           "requirement": "A lessee presents interest expense on the lease liability separately from the depreciation charge on the right-of-use asset."
         }
       ],
-      "support": "not-implemented",
+      "support": "supported",
       "tier": "computation",
-      "status": "gap",
-      "assertion": "A finance lease produces a front-loaded total charge and puts the interest element into finance costs rather than operating expenses, which changes reported operating profit and every leverage and coverage ratio computed from it.",
+      "status": "pass",
+      "assertion": "A finance lease produces a front-loaded total charge with the interest element presented in finance costs rather than operating expenses — the split that changes reported operating profit and every coverage ratio computed from it.",
       "facts": [
         "Opening liability 86,589.5334 at 5%.",
         "Year one interest is 4,329.4767.",
-        "The right-of-use asset amortises straight-line over five years at 17,317.9067 a year.",
+        "The right-of-use asset amortises straight-line over five years; year one carries 17,317.9067.",
         "The 20,000.00 payment reduces the liability by 15,670.5233 after interest.",
         "Total year-one charge is 21,647.3834, more than the 20,000.00 cash paid."
       ],
-      "gap": "There is no lessee lease accounting. No schema exists for lease contracts, discount rates, lease terms, renewal or termination options, or payment schedules; nothing computes a present value; and no right-of-use asset or lease liability is ever recognised. Leases entered into as lessee are accounted for only as the cash payments are made, which is the pre-ASC 842 and pre-IFRS 16 treatment. Any entity with material leases must maintain the lease schedule and the balance-sheet amounts outside the system and post them by manual journal.",
       "ms": 0
     },
     {
@@ -390,17 +394,16 @@
           "requirement": "A lessee classifies a lease as a finance lease when it meets any of the specified criteria, and as an operating lease otherwise."
         }
       ],
-      "support": "not-implemented",
+      "support": "supported",
       "tier": "computation",
-      "status": "gap",
-      "assertion": "Under US GAAP an operating lease charges one flat amount to operating expenses each year, while still carrying the asset and liability on the balance sheet — a presentation that differs from IFRS for identical economics.",
+      "status": "pass",
+      "assertion": "A lease meeting no finance criterion classifies as operating under US GAAP and charges one flat amount to operating expense each year — while still carrying the asset and liability on the balance sheet, the liability unwinding on the interest method and the right-of-use asset absorbing the difference.",
       "facts": [
         "The same five-year, 20,000.00-a-year lease at 5%.",
-        "Total lease cost is 100,000.00 over five years, or 20,000.00 a year straight-line.",
-        "Year one: the liability unwinds by 15,670.5233 after 4,329.4767 of imputed interest, and the right-of-use asset reduces by the same amount so the two stay aligned.",
-        "No interest is presented separately; the whole 20,000.00 is one operating lease cost."
+        "No classification criterion is met, so US GAAP classifies it as operating.",
+        "Total lease cost is 100,000.00 over five years, 20,000.00 a year straight-line.",
+        "Year one: imputed interest is 4,329.4767; the liability unwinds by 15,670.5233 and the right-of-use asset reduces by the same amount, keeping the two aligned."
       ],
-      "gap": "There is no lessee lease accounting. No schema exists for lease contracts, discount rates, lease terms, renewal or termination options, or payment schedules; nothing computes a present value; and no right-of-use asset or lease liability is ever recognised. Leases entered into as lessee are accounted for only as the cash payments are made, which is the pre-ASC 842 and pre-IFRS 16 treatment. Any entity with material leases must maintain the lease schedule and the balance-sheet amounts outside the system and post them by manual journal. There is additionally no lease classification test, so the finance/operating distinction that drives the entire US GAAP presentation difference cannot be made.",
       "ms": 0
     },
     {
@@ -423,17 +426,16 @@
           "requirement": "A lessee depreciates the right-of-use asset applying the depreciation requirements for property, plant and equipment."
         }
       ],
-      "support": "not-implemented",
+      "support": "supported",
       "tier": "computation",
-      "status": "gap",
-      "assertion": "The identical lease produces a different expense profile under IFRS than under US GAAP — front-loaded rather than flat — which is why a dual-reporting entity cannot use one set of numbers for both.",
+      "status": "pass",
+      "assertion": "The identical lease produces a front-loaded charge under IFRS and a flat charge under US GAAP — the classification step is skipped entirely under IFRS, and a dual-reporting entity gets each framework's answer from the same source data by switching the configured framework.",
       "facts": [
-        "The same five-year, 20,000.00-a-year lease at 5%.",
-        "IFRS reports 4,329.4767 of interest plus 17,317.9067 of depreciation in year one, totalling 21,647.3834.",
-        "US GAAP reports a flat 20,000.00 operating lease cost in the same year.",
-        "The year-one difference between the two frameworks is 1,647.3834."
+        "The same five-year, 20,000.00-a-year lease at 5%, meeting no US GAAP finance criterion.",
+        "IFRS ignores the criteria and applies the single model: year one carries 4,329.4767 of interest plus 17,317.9067 of depreciation, totalling 21,647.3834.",
+        "US GAAP classifies it operating: a flat 20,000.00 lease cost in the same year.",
+        "The year-one difference between the frameworks is 1,647.3834."
       ],
-      "gap": "There is no lessee lease accounting. No schema exists for lease contracts, discount rates, lease terms, renewal or termination options, or payment schedules; nothing computes a present value; and no right-of-use asset or lease liability is ever recognised. Leases entered into as lessee are accounted for only as the cash payments are made, which is the pre-ASC 842 and pre-IFRS 16 treatment. Any entity with material leases must maintain the lease schedule and the balance-sheet amounts outside the system and post them by manual journal. A dual-reporting entity additionally needs the same lease to produce the IFRS single-model result and the US GAAP operating-lease result from one set of source data.",
       "ms": 0
     },
     {
@@ -457,17 +459,17 @@
           "requirement": "A lessee may elect, by class of underlying asset, not to recognise a right-of-use asset and lease liability for short-term leases."
         }
       ],
-      "support": "not-implemented",
-      "tier": "computation",
-      "status": "gap",
-      "assertion": "An elected short-term lease charges rent straight-line to expense and recognises no asset or liability, and the election is recorded so it can be applied consistently and disclosed.",
+      "support": "supported",
+      "tier": "ledger",
+      "status": "pass",
+      "assertion": "An elected short-term lease recognises no asset or liability at commencement and charges rent straight to expense as paid — and the election is validated against eligibility, so a thirteen-month lease cannot quietly take it.",
       "facts": [
-        "A nine-month lease with no purchase option, at 1,000.00 a month.",
-        "The short-term exemption is elected for this class of asset.",
-        "Expense is 1,000.00 a month with no right-of-use asset and no lease liability."
+        "A nine-month lease at 1,000.00 a month with no purchase option, commencing 2026-01-01.",
+        "The short-term exemption is elected.",
+        "Commencement recognises nothing; each month charges 1,000.00 to lease expense.",
+        "The election is recorded on the lease as evidence of the policy applied."
       ],
-      "gap": "Without lessee lease accounting there is nothing to exempt from. When the module is built, the election must be recorded per class of underlying asset, applied consistently, and disclosed — an election taken silently is itself an audit finding.",
-      "ms": 0
+      "ms": 10
     },
     {
       "id": "lease-lessor-classification",
@@ -496,16 +498,17 @@
           "requirement": "A lessor classifies a lease as a sales-type, direct financing, or operating lease and applies the corresponding recognition model."
         }
       ],
-      "support": "not-implemented",
-      "tier": "ledger",
-      "status": "gap",
-      "assertion": "A lessor tests each lease against the classification criteria, recognises operating-lease rent evenly over the term regardless of the billing pattern, and derecognises the underlying asset for a sales-type lease.",
+      "support": "partial",
+      "tier": "computation",
+      "status": "pass",
+      "assertion": "A lessor tests each lease against the classification criteria; an operating lease's escalating rent levels to straight-line income with the accrual returning to exactly zero over the term; a sales-type lease derecognises the asset and takes selling profit at commencement.",
       "facts": [
         "A five-year operating lease with rent rising from 10,000.00 to 14,000.00 a year, totalling 60,000.00.",
-        "Straight-line income is 12,000.00 a year regardless of the amount billed.",
-        "In year one the 2,000.00 billed short of the straight-line amount is accrued as a receivable."
+        "No transfer-of-risks criterion is met, so it classifies as operating.",
+        "Straight-line income is 12,000.00 a year regardless of billing; year one accrues a 2,000.00 receivable.",
+        "Separately, a sales-type lease with a net investment of 90,000.00 over a carrying amount of 75,000.00 recognises 15,000.00 of selling profit at commencement."
       ],
-      "gap": "The property-management module bills tenant rent and recognises it as revenue when charged, which resembles operating-lease lessor accounting but is not derived from a classification test. There is no assessment of whether a lease transfers substantially all the risks and rewards of ownership, no sales-type or direct-financing treatment, no net investment in the lease, and no straight-line levelling of escalating rents — an escalating lease is recognised as billed rather than levelled over the term.",
+      "limitation": "Lessor classification, straight-line levelling of escalating rents, and sales-type commencement (derecognition plus selling profit) are engine capabilities. The property-management tenant-billing pipeline does not yet post the levelling accrual automatically — rent invoices recognise as billed unless the levelled schedule from the lease module is applied. Direct-financing deferral of selling profit is not modelled separately from sales-type.",
       "ms": 0
     },
     {
@@ -532,7 +535,7 @@
         "The spot rate on 2026-07-15 is 1.3500 CAD per USD.",
         "The translated amount is CAD 1,350.00."
       ],
-      "ms": 23
+      "ms": 16
     },
     {
       "id": "fx-monetary-item-retranslated-at-closing-rate",
@@ -560,7 +563,7 @@
           "requirement": "Non-monetary items measured at historical cost are translated using the exchange rate at the date of the transaction and are not retranslated."
         }
       ],
-      "support": "partial",
+      "support": "supported",
       "tier": "ledger",
       "status": "pass",
       "assertion": "A foreign-currency receivable is restated to the closing rate at the reporting date, the movement is recognised immediately in profit or loss, and the revenue already recognised at the transaction-date rate is left untouched.",
@@ -571,8 +574,40 @@
         "The exchange gain of CAD 50.00 is recognised in profit or loss.",
         "Revenue stays at CAD 1,350.00 — it is not a monetary item and is not retranslated."
       ],
-      "limitation": "The monetary-item population is narrower than IAS 21.16 requires. Period-end retranslation covers accounts typed as bank, receivable and payable only. Foreign-currency loans and other long-term debt, accrued liabilities, and other monetary balances carried outside those three account types are NOT retranslated and must be adjusted by manual journal.",
-      "ms": 43
+      "ms": 25
+    },
+    {
+      "id": "fx-long-term-debt-retranslated",
+      "title": "A foreign-currency loan is a monetary item and is retranslated at the closing rate",
+      "standards": [
+        "IAS 21"
+      ],
+      "citations": [
+        {
+          "standard": "IAS 21",
+          "reference": "IAS 21.16",
+          "kind": "requirement",
+          "requirement": "Monetary items are units of currency held and assets and liabilities to be received or paid in a fixed or determinable number of units of currency — including debt, not only trade balances."
+        },
+        {
+          "standard": "IAS 21",
+          "reference": "IAS 21.23(a)",
+          "kind": "requirement",
+          "requirement": "At the end of each reporting period foreign currency monetary items are translated using the closing rate."
+        }
+      ],
+      "support": "supported",
+      "tier": "ledger",
+      "status": "pass",
+      "assertion": "A foreign-currency borrowing carried as long-term debt — outside the bank/receivable/payable account types — is retranslated at the closing rate once the account is designated a monetary item, so debt-heavy balance sheets are not silently left at historical rates.",
+      "facts": [
+        "The reporting currency is CAD.",
+        "A loan of USD 10,000.00 is drawn on 2026-07-15 at 1.3500: cash CAD 13,500.00, loan CAD 13,500.00.",
+        "The loan account is a long-term liability designated as a monetary item.",
+        "The closing rate on 2026-07-31 is 1.4000.",
+        "Both the USD cash (a default monetary item) and the USD loan restate by CAD 500.00 in opposite directions; the exchange loss on the loan offsets the gain on the cash."
+      ],
+      "ms": 24
     },
     {
       "id": "fx-retranslation-arithmetic",
@@ -667,7 +702,7 @@
         "Under FIFO the sale consumes 100 units at 2.00 and 50 units at 3.00, so cost of sales is 350.00.",
         "Fifty units remain, all from the second purchase, carried at 150.00."
       ],
-      "ms": 89
+      "ms": 68
     },
     {
       "id": "inv-weighted-average-cost-formula",
@@ -700,7 +735,7 @@
         "Sale: 150 units at 10.00 each, so cost of sales is 150 at 2.50 = 375.00.",
         "Fifty units remain at 2.50, carried at 125.00."
       ],
-      "ms": 163
+      "ms": 60
     },
     {
       "id": "inv-cost-expensed-against-revenue",
@@ -731,7 +766,7 @@
         "100 units purchased at 2.00 (200.00), then 40 units sold at 9.00 (360.00).",
         "Cost of sales is 40 at 2.00 = 80.00, recognised with the sale."
       ],
-      "ms": 52
+      "ms": 38
     },
     {
       "id": "inv-purchase-does-not-touch-profit",
@@ -754,7 +789,7 @@
       "facts": [
         "A vendor bill for 250 units at 4.00 each (1,000.00)."
       ],
-      "ms": 27
+      "ms": 23
     },
     {
       "id": "inv-lower-of-cost-and-nrv",
@@ -783,17 +818,16 @@
           "requirement": "Inventory measured using first-in first-out or average cost is measured at the lower of cost and net realisable value."
         }
       ],
-      "support": "not-implemented",
+      "support": "supported",
       "tier": "ledger",
-      "status": "gap",
-      "assertion": "When net realisable value falls below cost, the carrying amount of inventory is reduced to NRV, the loss is recognised immediately, and the on-hand QUANTITY is unchanged.",
+      "status": "pass",
+      "assertion": "When net realisable value falls below cost, the carrying amount of inventory is reduced to NRV through the cost layers themselves — the loss is recognised immediately, the on-hand QUANTITY is unchanged, and the inventory subledger stays in agreement with the general ledger.",
       "facts": [
         "100 units on hand at a cost of 3.00 each, carried at 300.00.",
         "Net realisable value falls to 2.00 per unit, or 200.00 in total.",
-        "A write-down of 100.00 is recognised as an expense; 100 units remain on hand."
+        "A write-down of 100.00 is recognised as an expense; 100 units remain on hand at a carrying amount of 200.00."
       ],
-      "gap": "There is no value-only inventory remeasurement. `adjustInventory` changes QUANTITY — writing inventory down through it would remove units that physically exist and misstate the count. The only cost-layer revaluation path in the engine is landed-cost allocation, which increases carrying value. A period-end lower-of-cost-and-NRV write-down must therefore be booked as a manual journal, leaving the inventory subledger and the general ledger disagreeing by the amount of the write-down.",
-      "ms": 0
+      "ms": 25
     },
     {
       "id": "inv-writedown-reversal-policy-divergence",
@@ -816,18 +850,17 @@
           "requirement": "A write-down of inventory to the lower of cost and net realisable value creates a new cost basis that is not subsequently written back up."
         }
       ],
-      "support": "not-implemented",
+      "support": "supported",
       "tier": "ledger",
-      "status": "gap",
-      "assertion": "Under IFRS a recovered net realisable value reverses the earlier write-down up to original cost; under US GAAP the written-down amount is the new cost basis and no reversal is recognised.",
+      "status": "pass",
+      "assertion": "The same recovery in net realisable value reverses the write-down under IFRS — capped so cumulative reversals never exceed the cumulative write-down — and is refused outright under US GAAP, where the written-down amount is the new cost basis. The answer comes from the organisation's configured reporting framework, not from which function was called.",
       "facts": [
         "100 units at cost 3.00 written down to NRV 2.00, a write-down of 100.00.",
         "Net realisable value later recovers to 2.80 per unit.",
         "Under IFRS the carrying amount returns to 280.00, reversing 80.00 of the write-down.",
-        "Under US GAAP the carrying amount stays at 200.00 and nothing is reversed."
+        "Under US GAAP the reversal is refused and the carrying amount stays at 200.00."
       ],
-      "gap": "This requirement cannot be implemented until lower-of-cost-and-NRV measurement exists (see inv-lower-of-cost-and-NRV). It additionally needs a reporting-framework policy switch: the same fact pattern must reverse under IFRS and must NOT reverse under US GAAP. The organisation already carries an `asc740`/`ias12` framework flag for income tax; inventory has no equivalent.",
-      "ms": 0
+      "ms": 38
     },
     {
       "id": "ppe-impairment-to-fair-value",
@@ -1028,11 +1061,11 @@
       "facts": [
         "Pretax book income of 1,000,000.00.",
         "A non-deductible permanent difference of 50,000.00.",
-        "A taxable temporary difference of 200,000.00 arising on fixed assets, giving a deferred tax liability.",
+        "A taxable temporary difference of 200,000.00 originating this year on fixed assets, giving a deferred tax liability.",
         "The enacted rate is 25%.",
-        "Current tax is 25% of (1,000,000 + 50,000) = 262,500.00.",
+        "Taxable profit is 1,000,000 + 50,000 − 200,000 = 850,000.00; current tax is 212,500.00.",
         "The deferred tax liability of 200,000 at 25% is 50,000.00, all of it arising this year.",
-        "Total tax expense is 312,500.00."
+        "Total tax expense is 262,500.00 — the timing difference shifts tax between current and deferred without changing the total."
       ],
       "ms": 0
     },
@@ -1241,18 +1274,18 @@
           "requirement": "Current tax for the period is recognised as a liability to the extent unpaid, measured on taxable profit for that period."
         }
       ],
-      "support": "partial",
+      "support": "supported",
       "tier": "computation",
       "status": "pass",
-      "assertion": "Permanent differences and utilised loss carryforwards adjust taxable income and therefore current tax; this case asserts the part that is implemented.",
+      "assertion": "Taxable profit reflects permanent differences, utilised loss carryforwards, AND the year's originating movement in temporary differences — so income tax payable is the amount actually owed on the return, and the current/deferred split is right whenever timing differences exist.",
       "facts": [
         "Pretax book income of 800,000.00.",
         "A non-deductible permanent difference of 30,000.00.",
         "A loss carryforward of 100,000.00 is utilised.",
-        "Taxable income is 730,000.00 and current tax at 25% is 182,500.00.",
-        "No temporary differences are present, so this case is unaffected by the limitation above."
+        "A taxable temporary difference of 40,000.00 originates this year (tax depreciation ahead of book).",
+        "Taxable profit is 800,000 + 30,000 − 100,000 − 40,000 = 690,000.00; current tax at 25% is 172,500.00.",
+        "The 40,000.00 difference gives a deferred tax liability of 10,000.00; total tax expense is 182,500.00."
       ],
-      "limitation": "Current tax is computed from book income adjusted for PERMANENT differences and loss carryforwards only. Originating and reversing TEMPORARY differences drive the deferred computation but do not adjust taxable income, so the current-tax figure is not taxable profit as ASC 740-10-30-2 and IAS 12.12 define it. Total tax expense (current plus deferred) is unaffected because the same differences flow through deferred tax, but the split between current and deferred — and therefore income tax payable — is misstated whenever temporary differences exist. Entities must reconcile the current-tax line to the filed return before publishing the tax note.",
       "ms": 0
     },
     {

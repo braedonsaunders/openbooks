@@ -8,11 +8,13 @@
 
 import { sql } from "drizzle-orm";
 import { db } from "../../db.ts";
-import { fromUnits, toUnits } from "../../money.ts";
+import { add, fromUnits, toUnits } from "../../money.ts";
 import {
   allocateByRelativeSSP,
   computeRecognitionSchedule,
+  estimateVariableConsideration,
   runRevenueRecognition,
+  separateFinancingComponent,
 } from "../../revenue-recognition.ts";
 import { capture, postNewDocument } from "../ledger-helpers.ts";
 import type { ConformanceCase } from "../types.ts";
@@ -433,9 +435,6 @@ export const REVENUE_CASES: readonly ConformanceCase[] = [
     },
   },
 
-  // -------------------------------------------------------------------------
-  // Declared gap
-  // -------------------------------------------------------------------------
   {
     id: "rev-variable-consideration-constraint",
     title: "Variable consideration is constrained to the amount not subject to significant reversal",
@@ -448,6 +447,13 @@ export const REVENUE_CASES: readonly ConformanceCase[] = [
           "An entity includes variable consideration in the transaction price only to the extent it is probable that a significant revenue reversal will not occur.",
       },
       {
+        standard: "ASC 606",
+        reference: "606-10-32-8",
+        kind: "requirement",
+        requirement:
+          "Variable consideration is estimated using either the expected value or the most likely amount, whichever better predicts the entitled consideration.",
+      },
+      {
         standard: "IFRS 15",
         reference: "IFRS 15.56",
         kind: "requirement",
@@ -455,19 +461,39 @@ export const REVENUE_CASES: readonly ConformanceCase[] = [
           "Variable consideration is included in the transaction price only to the extent that it is highly probable no significant reversal will occur.",
       },
     ],
-    support: "not-implemented",
+    support: "supported",
     tier: "computation",
-    gap:
-      "There is no model for estimating variable consideration (expected value or most-likely-amount), no constraint assessment, and no re-estimation at each reporting date. Contracts with rebates, refunds, penalties, price concessions or performance bonuses must be constrained manually outside the system.",
     assertion:
-      "A contract with a performance bonus recognises only the constrained amount, and the estimate is revisited each reporting period.",
+      "A contingent bonus is estimated by the stated method, the constraint caps what enters the transaction price, and the held-back amount is carried explicitly — so revenue can never include consideration management has judged subject to significant reversal.",
     facts: [
-      "Fixed consideration 100,000 plus a 20,000 bonus contingent on early completion.",
-      "Management concludes only 12,000 of the bonus meets the constraint.",
-      "Transaction price is therefore 112,000, not 120,000.",
+      "Fixed consideration 100,000.00 plus a 20,000.00 bonus contingent on early completion.",
+      "The bonus has two outcomes — earned (60%) or not (40%) — so the most-likely-amount method estimates 20,000.00.",
+      "Management concludes only 12,000.00 of the bonus meets the constraint.",
+      "The transaction price is therefore 112,000.00, with 8,000.00 constrained out until the uncertainty resolves.",
     ],
     expected: {
-      values: { transactionPrice: "112000.0000", constrainedOut: "8000.0000" },
+      values: {
+        estimate: "20000.0000",
+        transactionPrice: "112000.0000",
+        constrainedOut: "8000.0000",
+      },
+    },
+    run: () => {
+      const variable = estimateVariableConsideration({
+        method: "most_likely_amount",
+        outcomes: [
+          { amount: "20000", probabilityPercent: "60" },
+          { amount: "0", probabilityPercent: "40" },
+        ],
+        constraintLimit: "12000",
+      });
+      return {
+        values: {
+          estimate: variable.estimate,
+          transactionPrice: add("100000", variable.constrained),
+          constrainedOut: variable.constrainedOut,
+        },
+      };
     },
   },
 
@@ -490,19 +516,40 @@ export const REVENUE_CASES: readonly ConformanceCase[] = [
           "The transaction price is adjusted for the effects of the time value of money where the contract contains a significant financing component.",
       },
     ],
-    support: "not-implemented",
+    support: "supported",
     tier: "computation",
-    gap:
-      "Long-dated contracts are recognised at their undiscounted invoice amount. There is no discount-rate configuration, no present-value adjustment at inception, and no interest accretion between recognition and payment.",
     assertion:
-      "Revenue on a contract paid materially in advance or arrears is recognised at the cash selling price, with the difference presented as interest.",
+      "Revenue on a contract paid materially in arrears is measured at the cash selling price — the promised amount discounted at the rate a separate financing would carry — and the difference accretes as interest, year by year, landing exactly on the billed amount.",
     facts: [
-      "Consideration of 121,000 receivable two years after control transfers.",
-      "A discount rate of 10% gives a cash selling price of 100,000.",
-      "Revenue is 100,000; the remaining 21,000 accretes as interest income over two years.",
+      "Consideration of 121,000.00 receivable two years after control transfers.",
+      "A discount rate of 10% gives a cash selling price of 100,000.00.",
+      "Revenue at inception is 100,000.00; 21,000.00 accretes as interest.",
+      "Year one accretes 10,000.00 (10% of 100,000) and year two 11,000.00, carrying the receivable to exactly 121,000.00.",
     ],
     expected: {
-      values: { revenueAtInception: "100000.0000", interestOverTerm: "21000.0000" },
+      values: {
+        revenueAtInception: "100000.0000",
+        interestOverTerm: "21000.0000",
+        year1Interest: "10000.0000",
+        year2Interest: "11000.0000",
+        receivableAtMaturity: "121000.0000",
+      },
+    },
+    run: () => {
+      const financing = separateFinancingComponent({
+        consideration: "121000",
+        annualRatePercent: "10",
+        years: 2,
+      });
+      return {
+        values: {
+          revenueAtInception: financing.cashSellingPrice,
+          interestOverTerm: financing.financingComponent,
+          year1Interest: financing.accretion[0]!.interest,
+          year2Interest: financing.accretion[1]!.interest,
+          receivableAtMaturity: financing.accretion[1]!.closing,
+        },
+      };
     },
   },
 ];

@@ -111,8 +111,8 @@ export const leaseAgreements = pgTable(
  * writes the journal entry ids back, so posted-to-date is auditable and reruns
  * are idempotent.
  */
-export const leaseScheduleLines = pgTable(
-  "lease_schedule_lines",
+export const leaseAgreementScheduleLines = pgTable(
+  "lease_agreement_schedule_lines",
   {
     id: id(),
     orgId: orgRef(),
@@ -138,8 +138,8 @@ export const leaseScheduleLines = pgTable(
     ...auditColumns,
   },
   (t) => [
-    uniqueIndex("lease_schedule_lease_seq").on(t.leaseId, t.sequence),
-    index("lease_schedule_org_due").on(t.orgId, t.dueOn),
+    uniqueIndex("lease_agreement_schedule_lease_seq").on(t.leaseId, t.sequence),
+    index("lease_agreement_schedule_org_due").on(t.orgId, t.dueOn),
   ],
 );
 

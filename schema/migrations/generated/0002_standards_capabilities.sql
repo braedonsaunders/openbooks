@@ -4,7 +4,7 @@
 --    retranslation can cover foreign-currency loans and other monetary
 --    balances carried outside the default bank/receivable/payable types
 --    (and exclude a default-typed account that is not monetary).
--- 2. lease_agreements + lease_schedule_lines — lessee lease accounting under
+-- 2. lease_agreements + lease_agreement_schedule_lines — lessee lease accounting under
 --    ASC 842 / IFRS 16: liability at the present value of unpaid payments,
 --    right-of-use asset at cost, interest/principal/amortization schedule,
 --    US GAAP operating single-cost model, short-term/low-value elections.
@@ -70,7 +70,7 @@ CREATE TABLE IF NOT EXISTS public.lease_agreements (
 CREATE UNIQUE INDEX IF NOT EXISTS lease_agreements_org_number ON public.lease_agreements USING btree (org_id, lease_number);
 CREATE INDEX IF NOT EXISTS lease_agreements_org_status ON public.lease_agreements USING btree (org_id, status);
 
-CREATE TABLE IF NOT EXISTS public.lease_schedule_lines (
+CREATE TABLE IF NOT EXISTS public.lease_agreement_schedule_lines (
     id uuid DEFAULT public.uuid_generate_v7() NOT NULL,
     org_id uuid NOT NULL,
     lease_id uuid NOT NULL,
@@ -93,14 +93,14 @@ CREATE TABLE IF NOT EXISTS public.lease_schedule_lines (
     created_by uuid,
     updated_at timestamp with time zone DEFAULT now() NOT NULL,
     updated_by uuid,
-    CONSTRAINT lease_schedule_lines_pkey PRIMARY KEY (id)
+    CONSTRAINT lease_agreement_schedule_lines_pkey PRIMARY KEY (id)
 );
 
-CREATE UNIQUE INDEX IF NOT EXISTS lease_schedule_lease_seq ON public.lease_schedule_lines USING btree (lease_id, sequence);
-CREATE INDEX IF NOT EXISTS lease_schedule_org_due ON public.lease_schedule_lines USING btree (org_id, due_on);
+CREATE UNIQUE INDEX IF NOT EXISTS lease_agreement_schedule_lease_seq ON public.lease_agreement_schedule_lines USING btree (lease_id, sequence);
+CREATE INDEX IF NOT EXISTS lease_agreement_schedule_org_due ON public.lease_agreement_schedule_lines USING btree (org_id, due_on);
 
-ALTER TABLE public.lease_schedule_lines
-  ADD CONSTRAINT lease_schedule_lines_lease_fk
+ALTER TABLE public.lease_agreement_schedule_lines
+  ADD CONSTRAINT lease_agreement_schedule_lines_lease_fk
   FOREIGN KEY (lease_id) REFERENCES public.lease_agreements(id) ON DELETE CASCADE;
 
 CREATE TABLE IF NOT EXISTS public.inventory_writedowns (
