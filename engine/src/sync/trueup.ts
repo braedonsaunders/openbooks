@@ -121,6 +121,20 @@ export async function trueUpResidualGl(
           on e.id = jl.entry_id and e.org_id = jl.org_id
        where jl.org_id = ${orgId}
          and e.status in ('posted', 'reversed')
+         and (
+           exists (
+             select 1
+               from documents source_document
+              where source_document.id = e.source_document_id
+                and source_document.org_id = e.org_id
+                and source_document.custom->>${refKey} is not null
+           )
+           or (
+             e.custom->'sourceProjection'->>'kind' = 'connector_trueup'
+             and e.custom->'sourceProjection'->>'sourceName' = ${source.name}
+             and e.custom->'sourceProjection'->>'refKey' = ${refKey}
+           )
+         )
        group by jl.account_id, to_char(e.posting_date, 'YYYY-MM')
     `)) as unknown as {
       rows: { account_id: string; month: string; amount: string }[];
@@ -207,12 +221,20 @@ export async function trueUpResidualGl(
       await db.execute(sql`
         insert into journal_entries
           (id, org_id, book_id, subsidiary_id, entry_number, posting_date,
-           period_id, memo, status, origin, created_by, updated_by)
+           period_id, memo, status, origin, custom, created_by, updated_by)
         values
           (${entryId}, ${orgId}, ${bookId}, ${subsidiaryId},
            ${`TRUEUP-${month}-${entryId.slice(0, 8)}`}, ${endOn}, ${periodId},
            ${`Migration GL true-up ${source.name} ${month}`}, 'draft',
-           'migration', ${control.actorId ?? null}, ${control.actorId ?? null})
+           'migration', ${JSON.stringify({
+             sourceProjection: {
+               kind: "connector_trueup",
+               sourceName: source.name,
+               refKey,
+               syncRunId: control.syncRunId ?? null,
+             },
+           })}::jsonb,
+           ${control.actorId ?? null}, ${control.actorId ?? null})
       `);
       let lineNumber = 0;
       for (const [accountId, units] of entryLines) {

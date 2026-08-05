@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { randomUUID } from "node:crypto";
 import test from "node:test";
 import { sql } from "drizzle-orm";
 import { db } from "../db.ts";
@@ -42,6 +43,35 @@ test(
          where org_id = ${org.orgId} and id = ${org.accounts.clearing}
       `);
 
+      // Native OpenBooks activity may coexist on source-mapped accounts. It
+      // is not connector drift and must never be reversed by a source true-up.
+      const nativeEntryId = randomUUID();
+      await db.execute(sql`
+        insert into journal_entries
+          (id, org_id, book_id, subsidiary_id, entry_number, posting_date,
+           period_id, status, origin, created_by, updated_by)
+        values (
+          ${nativeEntryId}, ${org.orgId}, ${org.bookId}, ${org.subsidiaryId},
+          'NATIVE-COEXISTENCE', ${org.date}, ${org.periodId}, 'draft', 'manual',
+          ${actorId}, ${actorId}
+        )
+      `);
+      await db.execute(sql`
+        insert into journal_lines
+          (org_id, entry_id, line_number, account_id, subsidiary_id,
+           amount, currency, txn_amount, fx_rate, is_open_item)
+        values
+          (${org.orgId}, ${nativeEntryId}, 1, ${org.accounts.adjustment},
+           ${org.subsidiaryId}, 25, 'CAD', 25, 1, false),
+          (${org.orgId}, ${nativeEntryId}, 2, ${org.accounts.clearing},
+           ${org.subsidiaryId}, -25, 'CAD', -25, 1, false)
+      `);
+      await db.execute(sql`
+        update journal_entries
+           set status = 'posted', posted_at = now(), posted_by = ${actorId}
+         where id = ${nativeEntryId}
+      `);
+
       let sourceRows: SourceAccountMonthRow[] = [
         { accountRef: "A", month: "2026-07", amount: "100.0000" },
         { accountRef: "B", month: "2026-07", amount: "-100.0000" },
@@ -58,6 +88,10 @@ test(
       assert.deepEqual(
         { entries: first.entries, lines: first.lines },
         { entries: 1, lines: 2 },
+      );
+      assert.deepEqual(
+        first.byAccount.map((row) => row.amount).sort(),
+        ["-100.0000", "100.0000"],
       );
       const retry = await trueUpResidualGl(org.orgId, source, control);
       assert.deepEqual(retry, { entries: 0, lines: 0, byAccount: [] });
@@ -93,6 +127,9 @@ test(
                bool_and(
                  entry.status = 'posted'
                  and entry.origin = 'migration'
+                 and entry.custom->'sourceProjection'->>'kind' = 'connector_trueup'
+                 and entry.custom->'sourceProjection'->>'sourceName' = 'parity-source'
+                 and entry.custom->'sourceProjection'->>'refKey' = 'parityRef'
                  and entry.created_by = ${actorId}
                  and entry.posted_by = ${actorId}
                  and audit.actor_id = ${actorId}
