@@ -5,6 +5,130 @@
     "runs": "Pay runs",
     "employees": "Employees ({count})"
   },
+  "home": {
+    "tabs": {
+      "overview": "Overview"
+    },
+    "actions": {
+      "viewRuns": "Pay runs",
+      "startRun": "Run payroll",
+      "resume": "Resume run",
+      "reviewPost": "Review & post"
+    },
+    "vitals": {
+      "employees": "On payroll",
+      "employeesSub": "active payroll profiles",
+      "periodsRan": "Pay periods {year}",
+      "periodsOf": "{ran} of {total}",
+      "periodsRanSub": "committed this tax year",
+      "ytdGross": "YTD gross",
+      "ytdEmployerCost": "+{amount} employer cost",
+      "ytdNet": "YTD net pay",
+      "ytdNetSub": "from committed runs",
+      "nextPayDate": "Next pay date",
+      "noSchedule": "no active schedule"
+    },
+    "current": {
+      "title": "Current pay period",
+      "noSchedules": "No active pay schedules yet — create one to start running payroll."
+    },
+    "frequency": {
+      "weekly": "Weekly",
+      "biweekly": "Biweekly",
+      "semi_monthly": "Semi-monthly",
+      "monthly": "Monthly"
+    },
+    "previous": {
+      "title": "Previous pay period",
+      "none": "No completed pay runs yet."
+    },
+    "exceptions": {
+      "title": "Needs attention",
+      "allClear": "All clear — every employee is ready for payroll.",
+      "missingProfile": "{name} has no payroll profile",
+      "moreMissingProfiles": "{count, plural, one {# more employee} other {# more employees}} without a payroll profile",
+      "missingWage": "{name} has no wage rate effective today",
+      "moreMissingWages": "{count, plural, one {# more employee} other {# more employees}} without a wage rate"
+    },
+    "directory": {
+      "title": "Explore payroll",
+      "runs": "Pay runs",
+      "runsHint": "in progress · {total} total",
+      "employees": "Employees",
+      "employeesHint": "active payroll profiles",
+      "setup": "Payroll setup",
+      "setupHint": "control accounts missing"
+    }
+  },
+  "list": {
+    "title": "Pay runs",
+    "description": "Every pay run — search, filter by stage and schedule, and open the processing wizard.",
+    "open": "Open run",
+    "stageFilter": "Stage"
+  },
+  "wizard": {
+    "stepsAria": "Pay run steps",
+    "steps": {
+      "period": "Period & employees",
+      "review": "Review stubs",
+      "gl": "GL preview & commit",
+      "finish": "Post & finish"
+    },
+    "voided": "This pay run was voided — it is read-only.",
+    "period": {
+      "taxYear": "Tax year",
+      "employeesTitle": "Included employees ({count})",
+      "hint": "Everyone with an active payroll profile on this schedule.",
+      "calculatedNote": "Hours and gross come from the calculated stubs.",
+      "approvedHours": "Approved hours",
+      "recalculate": "Recalculate",
+      "empty": "No employees have an active payroll profile on this schedule yet.",
+      "wageMissing": "No wage rate",
+      "zeroHours": "No approved hours",
+      "ready": "Ready"
+    },
+    "review": {
+      "exceptionsTitle": "{count, plural, one {# calculation exception} other {# calculation exceptions}}",
+      "varianceFlag": "{count, plural, one {# stub} other {# stubs}} moved more than ±{percent}% in net pay vs the employee's previous stub — worth a look.",
+      "varianceColumn": "Δ net",
+      "newEmployee": "first stub",
+      "needsCalculation": "Calculate the run to build stubs — nothing is locked in until you commit.",
+      "drawerDescription": "Pay lines and the statutory calculation trace for this stub.",
+      "drawerVariance": "Net pay moved {percent}% vs this employee's previous stub.",
+      "downloadPdf": "Download PDF",
+      "close": "Close"
+    },
+    "gl": {
+      "needsCalculation": "Calculate the run to preview its GL impact.",
+      "setupIncomplete": "Payroll setup is incomplete",
+      "openSetup": "Open Accounts & posting",
+      "retry": "Try again",
+      "loading": "Building the GL preview…",
+      "hint": "The exact journal commit will write — debits first, then credits. Nothing posts yet.",
+      "account": "Account",
+      "description": "Description",
+      "debits": "Debit",
+      "credits": "Credit",
+      "balanced": "Balanced",
+      "commitHint": "Commit freezes the stubs and writes these lines to the pay-run document. You can still review everything before posting."
+    },
+    "finish": {
+      "notCommitted": "Commit the run in the GL step before posting.",
+      "postTitle": "Ready to post",
+      "postHint": "Posting writes the journal entry and locks the run.",
+      "postedTitle": "Pay run posted",
+      "postedHint": "{number} is on the ledger.",
+      "viewJournal": "View journal entry",
+      "bankFile": "Create bank file",
+      "bankFileDone": "Bank file downloaded.",
+      "remittanceTitle": "Remittance summary",
+      "remittanceHint": "Credits by account — what this run now owes.",
+      "netPay": "Net pay to employees",
+      "nextTitle": "What's next",
+      "nextRemit": "Remit the withheld amounts to their agencies with a vendor bill (CRA, union funds, benefit carriers).",
+      "nextPay": "Pay employees from the net pay payable account — the payment relieves the liability this run just recorded."
+    }
+  },
   "links": {
     "paySchedules": "Pay schedules",
     "payComponents": "Pay components"
@@ -105,7 +229,28 @@
       "cppExempt": "CPP exempt",
       "eiExempt": "EI exempt",
       "taxExempt": "Income tax exempt",
-      "isActive": "Active"
+      "isActive": "Active",
+      "country": "Country",
+      "state": "State of employment",
+      "filingStatus": "Filing status (W-4 Step 1c)",
+      "dependentCredits": "Dependents & other credits, annual (W-4 Step 3)",
+      "otherIncomeAnnual": "Other income, annual (W-4 Step 4a)",
+      "deductionsAnnual": "Deductions, annual (W-4 Step 4b)",
+      "multipleJobs": "Multiple jobs / spouse works (W-4 Step 2 checkbox)",
+      "w4Pre2020": "W-4 on file is from 2019 or earlier",
+      "w4Allowances": "Withholding allowances (pre-2020 W-4)",
+      "ficaExempt": "FICA exempt",
+      "futaExempt": "FUTA/SUI exempt",
+      "fitExempt": "Federal income tax exempt (W-4 \"Exempt\")"
+    },
+    "country": {
+      "CA": "Canada",
+      "US": "United States"
+    },
+    "filingStatus": {
+      "single": "Single or married filing separately",
+      "married_joint": "Married filing jointly",
+      "head_household": "Head of household"
     }
   },
   "settingsPage": {
@@ -147,8 +292,6 @@
     },
     "packs": {
       "installed": "Installed",
-      "planned": "Planned",
-      "plannedAction": "Not yet available",
       "install": "Install pack",
       "reinstall": "Re-run component seed",
       "installSuccess": "Country pack installed.",
@@ -165,7 +308,11 @@
       },
       "us": {
         "title": "United States",
-        "description": "Federal and state withholding for US pay runs. Planned — not yet available."
+        "description": "Federal statutory withholding for US pay runs: income tax, Social Security, Medicare, and unemployment.",
+        "engine": "IRS Pub 15-T percentage-method engine (2026) with W-4 Steps 2–4 and pre-2020 allowances.",
+        "coverage": "Federal plus the nine no-withholding states (AK, FL, NV, NH, SD, TN, TX, WA, WY). State income tax withholding ships in a later wave.",
+        "components": "Statutory pay components: federal income tax, Social Security, Medicare (incl. Additional Medicare), FUTA, and SUI.",
+        "config": "SUI rates and wage bases are experience-rated per employer — enter yours under Accounts & posting."
       }
     },
     "packAccounts": {
@@ -181,7 +328,30 @@
           "qpip": "QPIP payable (Quebec)",
           "vacation": "Vacation payable"
         }
+      },
+      "US": {
+        "title": "United States — federal statutory accounts",
+        "description": "Liability accounts for the amounts the US pack withholds and accrues. Each choice applies to every component the slot covers (employee and employer sides together).",
+        "slots": {
+          "fit": "Federal income tax payable",
+          "fica": "FICA payable (Social Security + Medicare)",
+          "futa": "FUTA payable",
+          "suta": "State unemployment payable"
+        }
       }
+    },
+    "usConfig": {
+      "title": "Unemployment rates",
+      "description": "FUTA and state unemployment are employer-paid. SUI rates are experience-rated per employer, so they are entered here, never assumed.",
+      "futaRate": "Effective FUTA rate",
+      "futaRateHelp": "As a decimal: 0.006 is the standard 0.6% after the full state credit. Raise it for credit-reduction states.",
+      "suiTitle": "State unemployment insurance (SUI)",
+      "suiHelp": "One row per state you employ in: your assessed rate as a decimal (0.027 = 2.7%) and the state’s taxable wage base.",
+      "suiState": "State",
+      "suiRate": "Rate",
+      "suiWageBase": "Wage base",
+      "addState": "Add state",
+      "removeState": "Remove"
     }
   }
 }
