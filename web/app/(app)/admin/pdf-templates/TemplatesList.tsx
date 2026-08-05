@@ -113,7 +113,7 @@ export function TemplatesList({
       header: t('list.name'),
       search: (row) =>
         row.kind === 'starter'
-          ? `${t('list.builtInStarter')} ${row.starter.label}`
+          ? t('list.starterNamed', { type: row.starter.label })
           : `${row.template.name} ${row.template.description ?? ''}`,
       cell: (row) =>
         row.kind === 'starter' ? (
@@ -121,7 +121,7 @@ export function TemplatesList({
             onClick={() => setPreview(row.starter)}
             className="text-left font-medium text-slate-700 hover:underline dark:text-slate-200"
           >
-            {t('list.builtInStarter')}
+            {t('list.starterNamed', { type: row.starter.label })}
             <span className="ml-2 text-xs font-normal text-slate-400">{t('list.starterHint')}</span>
           </button>
         ) : (
@@ -186,7 +186,7 @@ export function TemplatesList({
       align: 'right',
       cell: (row) =>
         row.kind === 'starter' ? (
-          <NewTemplateButton recordType={row.starter.recordType} asDuplicateOfStarter />
+          <NewTemplateButton recordType={row.starter.recordType} asDuplicateOfStarter defaultName={t('list.starterNamed', { type: row.starter.label })} />
         ) : (
           <DuplicateTemplateButton templateId={row.template.id} />
         ),
@@ -217,14 +217,19 @@ export function TemplatesList({
                 </option>
               ))}
             </Select>
-            {typeFilter ? <NewTemplateButton recordType={typeFilter} /> : null}
+            {typeFilter ? (
+              <NewTemplateButton
+                recordType={typeFilter}
+                defaultName={t('list.starterNamed', { type: labelByType.get(typeFilter) ?? '' })}
+              />
+            ) : null}
           </div>
         }
       />
       <Drawer
         open={preview !== null}
         onClose={() => setPreview(null)}
-        title={preview ? `${preview.label} — ${t('list.builtInStarter')}` : ''}
+        title={preview ? t('list.starterNamed', { type: preview.label }) : ''}
         description={t('list.previewNote')}
         size="lg"
         bodyClassName="p-0"

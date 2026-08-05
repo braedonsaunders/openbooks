@@ -15,7 +15,8 @@
     "allTypes": "All record types",
     "previewNote": "Read-only preview of the built-in starter design, rendered with sample data. Duplicate it to make an editable template.",
     "previewFailed": "Could not render the preview",
-    "empty": "No templates match."
+    "empty": "No templates match.",
+    "starterNamed": "{type} starter"
   },
   "editor": {
     "back": "PDF Templates",
