@@ -126,6 +126,22 @@ export default async function PayRunPage({
   const previousNet: Record<string, string> = {}
   for (const row of prevRes.rows) previousNet[row.employee_party_id] = row.net_pay
 
+  const [adjustmentsRes, adjustableRes] = (await Promise.all([
+    db.execute(sql`
+      select a.id, a.employee_party_id, a.adjustment_type, a.component_id, a.amount::text, a.hours::text,
+             a.replace_component, a.note, p.display_name as employee_name, c.name as component_name
+        from pay_run_adjustments a
+        join parties p on p.id = a.employee_party_id and p.org_id = a.org_id
+        left join pay_components c on c.id = a.component_id
+       where a.org_id = ${orgId} and a.pay_run_document_id = ${id}
+       order by p.display_name, a.created_at`),
+    db.execute(sql`
+      select id, code, name, kind from pay_components
+       where org_id = ${orgId} and is_active
+         and (system_key is null or system_key in ('base_pay','overtime','bonus','vacation_payout'))
+       order by sequence, code`),
+  ])) as unknown as [{ rows: any[] }, { rows: any[] }]
+
   const stepParam = sp.step as WizardStep | undefined
   const initialStep: WizardStep =
     stepParam && STEPS.includes(stepParam)
@@ -151,6 +167,8 @@ export default async function PayRunPage({
         stubs={stubs}
         roster={rosterRes.rows}
         previousNet={previousNet}
+        adjustments={adjustmentsRes.rows}
+        adjustableComponents={adjustableRes.rows}
         remittance={run.run_status === 'committed' ? remitRes.rows : []}
         canRun={can(authz, 'payroll.run')}
         initialStep={initialStep}

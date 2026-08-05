@@ -65,9 +65,27 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
     if (list) list.push(line)
     else linesByStub.set(stubId, [line])
   }
+  const [adjustments, adjustableComponents] = (await Promise.all([
+    db.execute(sql`
+      select a.id, a.employee_party_id, a.adjustment_type, a.component_id, a.amount, a.hours,
+             a.replace_component, a.note, p.display_name as employee_name, c.name as component_name
+        from pay_run_adjustments a
+        join parties p on p.id = a.employee_party_id and p.org_id = a.org_id
+        left join pay_components c on c.id = a.component_id
+       where a.org_id = ${orgId} and a.pay_run_document_id = ${id}
+       order by p.display_name, a.created_at`),
+    db.execute(sql`
+      select id, code, name, kind from pay_components
+       where org_id = ${orgId} and is_active
+         and (system_key is null or system_key in ('base_pay','overtime','bonus','vacation_payout'))
+       order by sequence, code`),
+  ])) as unknown as [{ rows: Record<string, unknown>[] }, { rows: Record<string, unknown>[] }]
+
   return NextResponse.json({
     run,
     stubs: stubs.rows.map((stub) => ({ ...stub, lines: linesByStub.get(String(stub.id)) ?? [] })),
+    adjustments: adjustments.rows,
+    adjustableComponents: adjustableComponents.rows,
   })
 }
 
@@ -88,6 +106,51 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
       // the route is already gated payroll.run.
       const result = await previewPayRunGl(gate.user.orgId, id)
       return NextResponse.json({ ok: true, ...result })
+    }
+    if (body.action === 'add-adjustment') {
+      const { employeePartyId, componentId, amount, hours, note, replaceComponent } = body
+      if (!isUuid(employeePartyId) || !isUuid(componentId) || typeof amount !== 'string' || !/^-?\d+(\.\d{1,2})?$/.test(amount)) {
+        return NextResponse.json({ error: 'invalid adjustment' }, { status: 422 })
+      }
+      const editable = (await db.execute(sql`
+        select 1 from pay_runs r join documents d on d.id = r.document_id
+         where r.org_id = ${gate.user.orgId} and r.document_id = ${id}
+           and r.run_status <> 'committed' and d.status = 'draft'`)) as unknown as { rows: unknown[] }
+      if (!editable.rows.length) return NextResponse.json({ error: 'pay run is not editable' }, { status: 422 })
+      // Statutory components are engine-computed — adjustments target pay inputs only.
+      const component = (await db.execute(sql`
+        select 1 from pay_components where org_id = ${gate.user.orgId} and id = ${componentId} and is_active
+           and (system_key is null or system_key in ('base_pay','overtime','bonus','vacation_payout'))`)) as unknown as { rows: unknown[] }
+      if (!component.rows.length) return NextResponse.json({ error: 'component cannot be adjusted' }, { status: 422 })
+      await db.execute(sql`
+        insert into pay_run_adjustments (org_id, pay_run_document_id, employee_party_id, adjustment_type,
+                                         component_id, amount, hours, replace_component, note, created_by, updated_by)
+        values (${gate.user.orgId}, ${id}, ${employeePartyId}, 'line', ${componentId}, ${amount},
+                ${hours ?? null}, ${replaceComponent === true}, ${note ?? null}, ${gate.user.id}, ${gate.user.id})`)
+      return NextResponse.json({ ok: true })
+    }
+    if (body.action === 'delete-adjustment') {
+      if (!isUuid(body.adjustmentId)) return NextResponse.json({ error: 'invalid adjustment' }, { status: 422 })
+      await db.execute(sql`
+        delete from pay_run_adjustments
+         where org_id = ${gate.user.orgId} and pay_run_document_id = ${id} and id = ${body.adjustmentId}`)
+      return NextResponse.json({ ok: true })
+    }
+    if (body.action === 'exclude-employee' || body.action === 'include-employee') {
+      if (!isUuid(body.employeePartyId)) return NextResponse.json({ error: 'invalid employee' }, { status: 422 })
+      if (body.action === 'exclude-employee') {
+        await db.execute(sql`
+          insert into pay_run_adjustments (org_id, pay_run_document_id, employee_party_id, adjustment_type,
+                                           created_by, updated_by)
+          values (${gate.user.orgId}, ${id}, ${body.employeePartyId}, 'exclude', ${gate.user.id}, ${gate.user.id})
+          on conflict do nothing`)
+      } else {
+        await db.execute(sql`
+          delete from pay_run_adjustments
+           where org_id = ${gate.user.orgId} and pay_run_document_id = ${id}
+             and employee_party_id = ${body.employeePartyId} and adjustment_type = 'exclude'`)
+      }
+      return NextResponse.json({ ok: true })
     }
     if (body.action === 'commit') {
       const result = await commitPayRun({ orgId: gate.user.orgId, documentId: id, actorId: gate.user.id })

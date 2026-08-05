@@ -105,6 +105,26 @@ interface GlLeg {
   description: string
 }
 
+export interface AdjustmentRow {
+  id: string
+  employee_party_id: string
+  adjustment_type: 'line' | 'exclude'
+  component_id: string | null
+  amount: string | null
+  hours: string | null
+  replace_component: boolean
+  note: string | null
+  employee_name: string
+  component_name: string | null
+}
+
+export interface ComponentOption {
+  id: string
+  code: string
+  name: string
+  kind: string
+}
+
 /** Net-pay variance beyond this (either direction) flags a stub for review. */
 const VARIANCE_FLAG_PERCENT = 15
 
@@ -185,6 +205,8 @@ export function RunWizard(props: {
   run: RunHeader
   stubs: StubRow[]
   roster: RosterRow[]
+  adjustments: AdjustmentRow[]
+  adjustableComponents: ComponentOption[]
   /** employee_party_id → net pay on the employee's previous committed stub. */
   previousNet: Record<string, string>
   /** Credit legs by account from the committed document lines (negative). */
@@ -273,6 +295,35 @@ export function RunWizard(props: {
         setStep('finish')
       }
       toast.success(t(`run.${action}Done`))
+      router.refresh()
+    } catch (e) {
+      toast.error((e as Error).message)
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  /** Apply an input adjustment, then recalculate so the stubs stay truthful. */
+  async function adjust(body: Record<string, unknown>) {
+    setBusy(true)
+    try {
+      const res = await fetch(`/api/payroll/runs/${run.document_id}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      })
+      const j = await res.json()
+      if (!res.ok) throw new Error(j.error ?? 'failed')
+      const recalc = await fetch(`/api/payroll/runs/${run.document_id}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'calculate' }),
+      })
+      const rj = await recalc.json()
+      if (!recalc.ok) throw new Error(rj.error ?? 'failed')
+      setCalcErrors(Array.isArray(rj.errors) ? rj.errors : [])
+      setGl({ state: 'idle', legs: [], debitTotal: '0', error: '' })
+      toast.success(t('wizard.adjust.applied'))
       router.refresh()
     } catch (e) {
       toast.error((e as Error).message)
@@ -389,6 +440,10 @@ export function RunWizard(props: {
       {step === 'review' && (
         <ReviewStep
           stubs={props.stubs}
+          adjustments={props.adjustments}
+          components={props.adjustableComponents}
+          canAdjust={props.canRun && run.run_status !== 'committed'}
+          onAdjust={adjust}
           previousNet={props.previousNet}
           calcErrors={calcErrors}
           calculated={calculated}
@@ -553,12 +608,20 @@ function ReviewStep({
   calcErrors,
   calculated,
   fmt,
+  adjustments,
+  components,
+  canAdjust,
+  onAdjust,
 }: {
   stubs: StubRow[]
   previousNet: Record<string, string>
   calcErrors: { employee: string; message: string }[]
   calculated: boolean
   fmt: (v: string | number | null | undefined) => string
+  adjustments: AdjustmentRow[]
+  components: ComponentOption[]
+  canAdjust: boolean
+  onAdjust: (body: Record<string, unknown>) => Promise<void>
 }) {
   const t = useTranslations('payroll')
   const [openStub, setOpenStub] = useState<StubRow | null>(null)
@@ -571,9 +634,28 @@ function ReviewStep({
   }
 
   const flagged = stubs.filter((stub) => variance(stub)?.flagged)
+  const excludedRows = adjustments.filter((a) => a.adjustment_type === 'exclude')
 
   return (
     <div className="space-y-4">
+      {excludedRows.length > 0 && (
+        <div className="flex flex-wrap items-center gap-2 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm dark:border-slate-800 dark:bg-slate-900">
+          <span className="text-slate-500 dark:text-slate-400">{t('wizard.adjust.excludedLabel')}</span>
+          {excludedRows.map((row) => (
+            <span key={row.id} className="inline-flex items-center gap-1.5 rounded-full border border-slate-300 px-2.5 py-0.5 dark:border-slate-700">
+              {row.employee_name}
+              {canAdjust && (
+                <button
+                  className="text-xs font-medium text-teal-700 hover:underline dark:text-teal-300"
+                  onClick={() => void onAdjust({ action: 'include-employee', employeePartyId: row.employee_party_id })}
+                >
+                  {t('wizard.adjust.include')}
+                </button>
+              )}
+            </span>
+          ))}
+        </div>
+      )}
       {calcErrors.length > 0 && (
         <div className="rounded-xl border border-amber-200/80 bg-amber-50 px-4 py-3 text-sm text-amber-800 dark:border-amber-800/60 dark:bg-amber-950/40 dark:text-amber-300">
           <p className="mb-1 flex items-center gap-2 font-semibold">
@@ -663,6 +745,12 @@ function ReviewStep({
           variance={variance(openStub)}
           onClose={() => setOpenStub(null)}
           fmt={fmt}
+          adjustments={adjustments.filter(
+            (a) => a.adjustment_type === 'line' && a.employee_party_id === openStub.employee_party_id,
+          )}
+          components={components}
+          canAdjust={canAdjust}
+          onAdjust={onAdjust}
         />
       )}
     </div>
@@ -676,16 +764,28 @@ function StubDrawer({
   variance,
   onClose,
   fmt,
+  adjustments,
+  components,
+  canAdjust,
+  onAdjust,
 }: {
   stub: StubRow
   variance: { percent: number; flagged: boolean } | null
   onClose: () => void
   fmt: (v: string | number | null | undefined) => string
+  adjustments: AdjustmentRow[]
+  components: ComponentOption[]
+  canAdjust: boolean
+  onAdjust: (body: Record<string, unknown>) => Promise<void>
 }) {
   const t = useTranslations('payroll')
   const s = statutory(stub)
   const factorEntries = Object.entries(stub.factors ?? {}).sort(([a], [b]) => a.localeCompare(b))
   const factorLabel = (key: string) => FACTOR_LABELS[key] ?? key
+  const [adjComponent, setAdjComponent] = useState('')
+  const [adjAmount, setAdjAmount] = useState('')
+  const [adjNote, setAdjNote] = useState('')
+  const [adjReplace, setAdjReplace] = useState(false)
   return (
     <Drawer
       open
@@ -700,9 +800,19 @@ function StubDrawer({
               {t('wizard.review.downloadPdf')}
             </a>
           </Button>
-          <Button variant="ghost" onClick={onClose}>
-            {t('wizard.review.close')}
-          </Button>
+          <span className="flex items-center gap-2">
+            {canAdjust && (
+              <Button
+                variant="outline"
+                onClick={() => void onAdjust({ action: 'exclude-employee', employeePartyId: stub.employee_party_id }).then(onClose)}
+              >
+                {t('wizard.adjust.exclude')}
+              </Button>
+            )}
+            <Button variant="ghost" onClick={onClose}>
+              {t('wizard.review.close')}
+            </Button>
+          </span>
         </div>
       }
     >
@@ -783,6 +893,94 @@ function StubDrawer({
             ))}
           </dl>
         </div>
+
+        {(canAdjust || adjustments.length > 0) && (
+          <div>
+            <h4 className="mb-2 text-xs font-semibold tracking-wider text-slate-400 uppercase dark:text-slate-500">
+              {t('wizard.adjust.title')}
+            </h4>
+            {adjustments.length > 0 && (
+              <ul className="mb-3 space-y-1 text-sm">
+                {adjustments.map((row) => (
+                  <li key={row.id} className="flex items-center justify-between gap-2">
+                    <span>
+                      {row.component_name}
+                      {row.replace_component ? ` · ${t('wizard.adjust.replaces')}` : ''}
+                      {row.note ? <span className="ml-1.5 text-xs text-slate-400">{row.note}</span> : null}
+                    </span>
+                    <span className="flex items-center gap-2">
+                      <span className="tabular-nums">{fmt(row.amount)}</span>
+                      {canAdjust && (
+                        <button
+                          className="text-xs font-medium text-rose-600 hover:underline dark:text-rose-400"
+                          onClick={() => void onAdjust({ action: 'delete-adjustment', adjustmentId: row.id })}
+                        >
+                          {t('wizard.adjust.remove')}
+                        </button>
+                      )}
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            )}
+            {canAdjust && (
+              <div className="space-y-2 rounded-lg border border-slate-200 p-3 dark:border-slate-800">
+                <div className="grid grid-cols-2 gap-2">
+                  <select
+                    aria-label={t('wizard.adjust.component')}
+                    value={adjComponent}
+                    onChange={(e) => setAdjComponent(e.target.value)}
+                    className="rounded-md border border-slate-300 bg-white px-2 py-1.5 text-sm dark:border-slate-700 dark:bg-slate-900"
+                  >
+                    <option value="">{t('wizard.adjust.component')}</option>
+                    {components.map((c) => (
+                      <option key={c.id} value={c.id}>{c.name}</option>
+                    ))}
+                  </select>
+                  <input
+                    aria-label={t('wizard.adjust.amount')}
+                    value={adjAmount}
+                    onChange={(e) => setAdjAmount(e.target.value)}
+                    placeholder={t('wizard.adjust.amount')}
+                    inputMode="decimal"
+                    className="rounded-md border border-slate-300 bg-white px-2 py-1.5 text-right text-sm tabular-nums dark:border-slate-700 dark:bg-slate-900"
+                  />
+                </div>
+                <input
+                  aria-label={t('wizard.adjust.note')}
+                  value={adjNote}
+                  onChange={(e) => setAdjNote(e.target.value)}
+                  placeholder={t('wizard.adjust.note')}
+                  className="w-full rounded-md border border-slate-300 bg-white px-2 py-1.5 text-sm dark:border-slate-700 dark:bg-slate-900"
+                />
+                <label className="flex items-center gap-2 text-xs text-slate-500 dark:text-slate-400">
+                  <input type="checkbox" checked={adjReplace} onChange={(e) => setAdjReplace(e.target.checked)} />
+                  {t('wizard.adjust.replaceHelp')}
+                </label>
+                <div className="flex justify-end">
+                  <Button
+                    size="sm"
+                    disabled={!adjComponent || !/^-?\d+(\.\d{1,2})?$/.test(adjAmount)}
+                    onClick={() => {
+                      void onAdjust({
+                        action: 'add-adjustment',
+                        employeePartyId: stub.employee_party_id,
+                        componentId: adjComponent,
+                        amount: adjAmount,
+                        note: adjNote || undefined,
+                        replaceComponent: adjReplace,
+                      }).then(() => {
+                        setAdjComponent(''); setAdjAmount(''); setAdjNote(''); setAdjReplace(false)
+                      })
+                    }}
+                  >
+                    {t('wizard.adjust.add')}
+                  </Button>
+                </div>
+              </div>
+            )}
+          </div>
+        )}
       </div>
     </Drawer>
   )

@@ -421,4 +421,35 @@ export const unionFringes = pgTable(
   ],
 );
 
+/**
+ * Run-level input adjustments — the controlled alternative to editing
+ * calculated stubs. 'line' adds a one-off amount against a component for one
+ * employee in one run (replaceComponent swaps out that component's derived
+ * lines instead of adding); 'exclude' drops the employee from the run.
+ * Calculate merges these as INPUTS and recomputes the statutory math, so
+ * CPP/EI/tax always remain the engine's numbers for the actual pay.
+ */
+export const payRunAdjustments = pgTable(
+  "pay_run_adjustments",
+  {
+    id: id(),
+    orgId: orgRef(),
+    payRunDocumentId: uuid("pay_run_document_id").notNull(),
+    employeePartyId: uuid("employee_party_id").notNull(),
+    adjustmentType: text("adjustment_type", { enum: ["line", "exclude"] }).notNull(),
+    componentId: uuid("component_id"),
+    amount: money("amount"),
+    /** Display-only context for hours-shaped one-offs (retro hours etc.). */
+    hours: numeric("hours", { precision: 12, scale: 2 }),
+    replaceComponent: boolean("replace_component").notNull().default(false),
+    note: text("note"),
+    ...auditColumns,
+  },
+  (t) => [
+    index("pay_run_adjustments_run").on(t.orgId, t.payRunDocumentId, t.employeePartyId),
+    check("pay_run_adjustments_line_shape",
+      sql`${t.adjustmentType} <> 'line' or (${t.componentId} is not null and ${t.amount} is not null)`),
+  ],
+);
+
 // Foreign keys are maintained in the migration (DEFERRABLE, per house rule).

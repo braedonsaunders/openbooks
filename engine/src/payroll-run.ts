@@ -436,12 +436,22 @@ export async function calculatePayRun(input: {
 
     await tx.execute(sql`delete from pay_stubs where org_id = ${orgId} and pay_run_document_id = ${documentId}`);
 
+    // Run-level input adjustments: exclusions drop the employee entirely;
+    // 'line' rows are merged into the stub's inputs inside calculateStub.
+    const excludedRows = (await tx.execute(sql`
+      select employee_party_id from pay_run_adjustments
+       where org_id = ${orgId} and pay_run_document_id = ${documentId}
+         and adjustment_type = 'exclude'
+    `)) as unknown as { rows: { employee_party_id: string }[] };
+    const excluded = new Set(excludedRows.rows.map((r) => r.employee_party_id));
+
     const usConfig = await usPayrollConfig(orgId);
     const errors: { employee: string; message: string }[] = [];
     let grossTotal = "0"; let netTotal = "0"; let employerTotal = "0"; let count = 0;
     const P = Number(run.periods_per_year ?? 0) || undefined;
 
     for (const emp of employees.rows) {
+      if (excluded.has(emp.party_id!)) continue;
       const name = emp.display_name ?? emp.party_id!;
       try {
         const result = await calculateStub(tx, {
@@ -589,6 +599,37 @@ async function calculateStub(
       taxable: c.taxable as boolean, pensionable: c.pensionable as boolean,
       insurable: c.insurable as boolean, vacationable: c.vacationable as boolean,
       nonPeriodic: c.non_periodic as boolean, taxTreatment: c.tax_treatment as string,
+    });
+  }
+
+  // Run-level 'line' adjustments — one-off inputs for THIS employee in THIS
+  // run. replaceComponent swaps out the component's derived lines (time,
+  // salary, or recurring) before the one-off amount lands; either way the
+  // statutory math below sees the adjusted inputs, never edited outputs.
+  const adjustments = (await tx.execute(sql`
+    select a.amount as adj_amount, a.hours as adj_hours, a.replace_component, a.note, c.*
+      from pay_run_adjustments a
+      join pay_components c on c.id = a.component_id
+     where a.org_id = ${orgId} and a.pay_run_document_id = ${documentId}
+       and a.employee_party_id = ${employeePartyId} and a.adjustment_type = 'line'
+     order by c.sequence, a.created_at
+  `)) as unknown as { rows: Record<string, unknown>[] };
+  for (const adj of adjustments.rows) {
+    if (adj.replace_component) {
+      for (let i = lines.length - 1; i >= 0; i--) {
+        if (lines[i]!.componentId === adj.id) lines.splice(i, 1);
+      }
+    }
+    const amount = roundMoney(String(adj.adj_amount), 2);
+    if (cmp(amount, "0") === 0) continue;
+    lines.push({
+      componentId: adj.id as string, kind: adj.kind as Line["kind"],
+      description: (adj.note as string | null) || (adj.name as string),
+      hours: adj.adj_hours != null ? String(adj.adj_hours) : undefined,
+      amount, sequence: Number(adj.sequence),
+      taxable: adj.taxable as boolean, pensionable: adj.pensionable as boolean,
+      insurable: adj.insurable as boolean, vacationable: adj.vacationable as boolean,
+      nonPeriodic: adj.non_periodic as boolean, taxTreatment: adj.tax_treatment as string,
     });
   }
 
