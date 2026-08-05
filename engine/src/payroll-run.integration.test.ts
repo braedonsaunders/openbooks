@@ -3,10 +3,13 @@ import { randomUUID } from "node:crypto";
 import test from "node:test";
 import { sql } from "drizzle-orm";
 import { db } from "./db.ts";
-import { add, cmp, neg, sum } from "./money.ts";
+import { add, cmp, neg, sum, toUnits } from "./money.ts";
 import { calculateT4127 } from "./payroll/canada/t4127.ts";
 import { calculatePub15T } from "./payroll/us/pub15t.ts";
 import { setPackSlotAccount } from "./payroll/packs.ts";
+import { encryptAccountNumber } from "./payments.ts";
+import { buildPayRunBankFile } from "./payroll-bank-file.ts";
+import { sealJson } from "./secrets.ts";
 import {
   calculatePayRun, commitPayRun, createPayRun, seedPayrollComponents,
 } from "./payroll-run.ts";
@@ -138,6 +141,44 @@ test(
          where org_id = ${org.orgId} and payroll_batch_ref = ${run.documentId}
       `)) as unknown as { rows: { n: number }[] };
       assert.equal(claimed.rows[0]!.n, 4);
+
+      // Bank file fails closed with the employee named while no approved
+      // account exists…
+      await assert.rejects(
+        buildPayRunBankFile({ orgId: org.orgId, documentId: run.documentId }),
+        /Terry Worker.*no approved bank account/,
+      );
+      // …then produces a CPA-005 file (format dispatch: cpa005 default) once
+      // the employee has an approved account and EFT origination is set up.
+      await db.execute(sql`
+        insert into party_bank_accounts (org_id, party_id, routing, account_number_encrypted,
+                                         account_last_four, approval_status, is_active,
+                                         created_by, updated_by)
+        values (${org.orgId}, ${employeeId}, ${JSON.stringify({ institution: "003", transit: "12345" })}::jsonb,
+                ${encryptAccountNumber("1234567")}, '4567', 'approved', true, ${actorId}, ${actorId})`);
+      const formatId = randomUUID();
+      await db.execute(sql`
+        insert into payment_formats (id, org_id, code, name, rail, direction, created_by, updated_by)
+        values (${formatId}, ${org.orgId}, 'CPA005', 'CPA-005 EFT', 'cpa005_credit', 'credit',
+                ${actorId}, ${actorId})`);
+      await db.execute(sql`
+        insert into payment_bank_profiles (org_id, name, bank_account_id, payment_format_id, currency,
+                                           originator_secrets_encrypted, created_by, updated_by)
+        values (${org.orgId}, 'Payroll EFT', ${wageExpense}, ${formatId}, 'CAD',
+                ${sealJson({
+                  originatorId: "OPENBOOKS1", originatorShortName: "OPENBOOKS",
+                  originatorLongName: "OpenBooks Test Org", dataCentre: "61000",
+                  institution: "003", transit: "12345", account: "9876543",
+                })}, ${actorId}, ${actorId})`);
+      const bankFile = await buildPayRunBankFile({ orgId: org.orgId, documentId: run.documentId });
+      assert.match(bankFile.filename, /^CPA005-PAY-.*\.txt$/);
+      const records = bankFile.content.split("\r\n").filter((r) => r.length > 0);
+      assert.equal(records[0]![0], "A");
+      assert.equal(records[1]![0], "C");
+      assert.equal(records[records.length - 1]![0], "Z");
+      assert.ok(records.every((r) => r.length === 1464), "fixed-width 1464-char records");
+      const netCents = String(toUnits(stub.net_pay) / 100n).padStart(10, "0");
+      assert.ok(records[1]!.includes(netCents), "C record carries the stub's net pay in cents");
 
       // Committed stubs feed YTD: a second run must see this run's CPP/EI
       const run2 = await createPayRun({

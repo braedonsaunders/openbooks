@@ -219,6 +219,60 @@ const FIELD_TICKET: PdfRecordTypeMeta = {
   ],
 }
 
+const PAY_STUB: PdfRecordTypeMeta = {
+  key: 'pay_stub',
+  label: 'Pay stub',
+  docKind: null,
+  docTitle: 'Pay Stub',
+  partyHeading: 'Employee',
+  readPermission: 'payroll.read',
+  fields: [
+    { key: 'employee_name', label: 'Employee', sample: 'Jordan Sparks' },
+    { key: 'document_number', label: 'Pay run number', sample: 'PAY-000012' },
+    { key: 'period_start', label: 'Period start', sample: 'Jul 5, 2026' },
+    { key: 'period_end', label: 'Period end', sample: 'Jul 18, 2026' },
+    { key: 'pay_date', label: 'Pay date', sample: 'Jul 21, 2026' },
+    { key: 'province', label: 'Province / state', sample: 'ON' },
+    { key: 'currency', label: 'Currency', sample: 'CAD' },
+    { key: 'gross', label: 'Gross pay', sample: '$2,400.00' },
+    { key: 'total_deductions', label: 'Total deductions', sample: '$505.31' },
+    { key: 'net_pay', label: 'Net pay', sample: '$1,894.69' },
+    { key: 'vacation_accrued', label: 'Vacation accrued', sample: '$96.00' },
+    { key: 'ytd_gross', label: 'YTD gross', sample: '$33,600.00' },
+    { key: 'ytd_tax', label: 'YTD income tax', sample: '$4,120.10' },
+    { key: 'ytd_net', label: 'YTD net pay', sample: '$26,525.66' },
+    ...ORG_FIELDS,
+  ],
+  collections: [
+    {
+      key: 'earnings',
+      label: 'Earnings',
+      fields: [
+        { key: 'description', label: 'Earning', sample: 'Regular' },
+        { key: 'hours', label: 'Hours', sample: '80.00' },
+        { key: 'rate', label: 'Rate', sample: '$30.00' },
+        { key: 'amount', label: 'Amount', sample: '$2,400.00' },
+      ],
+    },
+    {
+      key: 'deductions',
+      label: 'Deductions',
+      fields: [
+        { key: 'description', label: 'Deduction', sample: 'CPP' },
+        { key: 'amount', label: 'Amount', sample: '$110.99' },
+      ],
+    },
+    {
+      key: 'employer_contributions',
+      label: 'Employer contributions',
+      fields: [
+        { key: 'description', label: 'Contribution', sample: 'CPP (employer)' },
+        { key: 'amount', label: 'Amount', sample: '$110.99' },
+      ],
+    },
+  ],
+}
+
 /** Every record type a PDF template can target, in nav order. */
 export const PDF_RECORD_TYPES: PdfRecordTypeMeta[] = [
   docType({ key: 'customer_invoice', label: 'Customer invoice', docTitle: 'Invoice', partyHeading: 'Bill to', readPermission: 'ar.read', hasParty: true, hasDue: true, hasReference: true }),
@@ -237,6 +291,7 @@ export const PDF_RECORD_TYPES: PdfRecordTypeMeta[] = [
   docType({ key: 'journal', label: 'Journal (document)', docTitle: 'Journal Entry', partyHeading: null, readPermission: 'gl.read', hasParty: false, hasDue: false, hasReference: false }),
   FIELD_TICKET,
   JOURNAL_ENTRY,
+  PAY_STUB,
 ]
 
 export const PDF_RECORD_TYPE_BY_KEY: Record<string, PdfRecordTypeMeta> = Object.fromEntries(

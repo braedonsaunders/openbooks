@@ -639,7 +639,7 @@ function StubDrawer({
       footer={
         <div className="flex justify-between gap-2">
           <Button variant="outline" asChild>
-            <a href={`/api/payroll/stubs/${stub.id}/pdf`} target="_blank" rel="noreferrer">
+            <a href={`/api/record-pdf/pay_stub/${stub.id}`} target="_blank" rel="noreferrer">
               <FileDown size={14} aria-hidden />
               {t('wizard.review.downloadPdf')}
             </a>
