@@ -78,8 +78,8 @@ export async function cashflowData(orgId: string, horizonWeeks: number, asOfDate
   const grid = buildWeekGrid(asOfIso, horizonWeeks);
 
   const [arItems, apItems, arStats, apStats, banks, catConfigs, apCfg, accountRows] = await Promise.all([
-    openItems("ar", asOfIso),
-    openItems("ap", asOfIso),
+    openItems(orgId, "ar", asOfIso),
+    openItems(orgId, "ap", asOfIso),
     paymentStats("ar", asOfIso),
     paymentStats("ap", asOfIso),
     bankBalances(asOfIso),

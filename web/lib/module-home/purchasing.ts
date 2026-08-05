@@ -56,12 +56,16 @@ export async function purchasingHome(orgId: string, subIds?: string[]): Promise<
         select jl.party_id, jl.due_date,
                abs(jl.amount) - coalesce((
                  select sum(x.amount) from applications x
-                  where (x.to_line_id = jl.id or x.from_line_id = jl.id) and x.unapplied_at is null
+                  where x.org_id = ${orgId}
+                    and (x.to_line_id = jl.id or x.from_line_id = jl.id)
+                    and x.unapplied_at is null
                ), 0) as remaining
           from journal_lines jl
-          join journal_entries je on je.id = jl.entry_id and je.status in ('posted', 'reversed')
-          join accounts a on a.id = jl.account_id
-          join documents d on d.id = je.source_document_id and d.kind in ('vendor_bill', 'expense_report')
+          join journal_entries je on je.id = jl.entry_id and je.org_id = ${orgId} and je.status = 'posted'
+          join accounts a on a.id = jl.account_id and a.org_id = ${orgId}
+          join documents d on d.id = je.source_document_id and d.org_id = ${orgId}
+           and d.posted_entry_id = je.id and d.status = 'posted'
+           and d.kind in ('vendor_bill', 'expense_report')
          where jl.is_open_item and a.type = 'liability_payable' and jl.amount < 0${lineScope}
       )
       select coalesce(sum(remaining), 0) as outstanding,
@@ -76,12 +80,16 @@ export async function purchasingHome(orgId: string, subIds?: string[]): Promise<
         select jl.party_id, jl.due_date,
                abs(jl.amount) - coalesce((
                  select sum(x.amount) from applications x
-                  where (x.to_line_id = jl.id or x.from_line_id = jl.id) and x.unapplied_at is null
+                  where x.org_id = ${orgId}
+                    and (x.to_line_id = jl.id or x.from_line_id = jl.id)
+                    and x.unapplied_at is null
                ), 0) as remaining
           from journal_lines jl
-          join journal_entries je on je.id = jl.entry_id and je.status in ('posted', 'reversed')
-          join accounts a on a.id = jl.account_id
-          join documents d on d.id = je.source_document_id and d.kind in ('vendor_bill', 'expense_report')
+          join journal_entries je on je.id = jl.entry_id and je.org_id = ${orgId} and je.status = 'posted'
+          join accounts a on a.id = jl.account_id and a.org_id = ${orgId}
+          join documents d on d.id = je.source_document_id and d.org_id = ${orgId}
+           and d.posted_entry_id = je.id and d.status = 'posted'
+           and d.kind in ('vendor_bill', 'expense_report')
          where jl.is_open_item and a.type = 'liability_payable' and jl.amount < 0${lineScope}
       ), bills as (
         select party_id, sum(remaining) as billed_open,
