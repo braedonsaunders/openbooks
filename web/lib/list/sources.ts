@@ -11,6 +11,7 @@ import {
   PAYMENT_SORTS,
   BANK_TRANSACTION_ACCOUNT_MATCH,
   bankTransactionWhere,
+  payRunWhere,
   type AdhocFilters,
 } from '../customization/list-query'
 
@@ -50,6 +51,9 @@ export interface DocListSource {
   kindParamKey?: string
   /** Render and apply the common `from` / `to` date range controls. */
   dateRange?: boolean
+  /** Suppress the built-in document-status chips (sources whose quick filters
+   *  present a richer merged status, e.g. the pay-run lifecycle). */
+  hideStatusFilter?: boolean
   /** Source-specific WHERE extension for list-only aggregates. */
   where?: (
     kinds: readonly string[],
@@ -189,6 +193,63 @@ const SOURCES: Record<string, DocListSource> = {
     },
   }),
   purchase_order: documentSource({ recordType: 'purchase_order', kinds: ['purchase_order'], drawerParam: 'order', partyRole: 'vendor' }),
+  // Pay runs — 1:1 pay_runs extension joined for period/totals columns; the
+  // status column merges the run lifecycle with the document's posted state.
+  // Rows open the pay-run wizard (a full page), not a drawer, via the links
+  // override on the reference column. The where fn keeps its predicates
+  // EXISTS-based so the joinless count queries stay valid.
+  pay_run: {
+    recordType: 'pay_run',
+    kinds: ['pay_run'],
+    drawerParam: 'run',
+    dateRange: true,
+    joins: sql`join pay_runs pr on pr.document_id = d.id
+               left join pay_schedules ps on ps.id = pr.pay_schedule_id`,
+    builtInExpr: {
+      document_number: sql`d.document_number`,
+      schedule_name: sql`ps.name`,
+      period: sql`pr.period_start::text || ' – ' || pr.period_end::text`,
+      pay_date: sql`pr.pay_date::text`,
+      gross_total: sql`pr.gross_total`,
+      net_total: sql`pr.net_total`,
+      employee_count: sql`pr.employee_count::text`,
+      status: sql`case when d.status in ('draft', 'approved') then pr.run_status else d.status end`,
+    },
+    sorts: {
+      number: sql`d.document_number`,
+      schedule: sql`ps.name`,
+      period: sql`pr.period_end`,
+      date: sql`pr.pay_date`,
+      gross: sql`pr.gross_total`,
+      net: sql`pr.net_total`,
+      employees: sql`pr.employee_count`,
+      status: sql`d.status`,
+    },
+    links: {
+      document_number: (row: any) => `/payroll/runs/${row.id}`,
+    },
+    where: payRunWhere,
+    // The merged-stage chips replace the raw document-status chips (draft
+    // covers three run stages, so the built-in chip would mislead).
+    hideStatusFilter: true,
+    quickFilters: [
+      { paramKey: 'stage', filterKey: 'run_stage' },
+      {
+        paramKey: 'schedule',
+        filterKey: 'pay_schedule_id',
+        loadOptions: async (orgId) => {
+          const result = await db.execute(sql`
+            select s.id::text as value, s.name as label, count(pr.document_id)::int as count
+              from pay_schedules s
+              left join pay_runs pr on pr.pay_schedule_id = s.id and pr.org_id = s.org_id
+             where s.org_id = ${orgId}
+             group by s.id, s.name
+             order by s.name`) as any
+          return result.rows
+        },
+      },
+    ],
+  },
   bank_transaction: {
     recordType: 'bank_transaction',
     kinds: ['card_charge', 'card_refund', 'check', 'deposit', 'transfer'],

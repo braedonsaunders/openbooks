@@ -172,6 +172,9 @@ export default async function CustomizationPage({
         case 'equipment_item':
           result = await db.execute(sql`select id::text as value, concat_ws(' · ', code, name) as label from items where org_id=${authz.user.orgId} and kind='equipment_charge' and is_active order by name`)
           break
+        case 'pay_schedule':
+          result = await db.execute(sql`select id::text as value, name as label from pay_schedules where org_id=${authz.user.orgId} and is_active order by name`)
+          break
         case 'fixed_asset':
           result = await db.execute(sql`select id::text as value, concat_ws(' · ', asset_number, name) as label from fixed_assets where org_id=${authz.user.orgId} order by asset_number`)
           break

@@ -331,6 +331,42 @@ export function bankTransactionWhere(
   return sql.join(parts, sql` `)
 }
 
+/** Predicate matching a document's pay run against a run stage or schedule.
+ * EXISTS-based (no join aliases) so the shared status/kind count queries —
+ * which run without the source's joins — stay valid. */
+const PAY_RUN_STAGE_MATCH = (stage: string): SQL =>
+  stage === "posted"
+    ? sql`d.status = 'posted'`
+    : sql`d.status in ('draft', 'approved') and exists (
+        select 1 from pay_runs pr where pr.document_id = d.id and pr.run_status = ${stage})`;
+
+export function payRunWhere(
+  kinds: readonly string[],
+  view: ListViewConfig,
+  adhoc: AdhocFilters,
+  orgId: string,
+  allowedSubsidiaryIds?: Set<string> | null,
+): SQL {
+  const parts: SQL[] = [documentWhere(kinds, view, adhoc, orgId, allowedSubsidiaryIds)];
+  for (const clause of view.filters) {
+    const value = Array.isArray(clause.value) ? String(clause.value[0] ?? "") : String(clause.value ?? "");
+    if (clause.key === "run_stage" && value) {
+      if (clause.operator === "eq") parts.push(sql`and ${PAY_RUN_STAGE_MATCH(value)}`);
+      else if (clause.operator === "ne") parts.push(sql`and not (${PAY_RUN_STAGE_MATCH(value)})`);
+    } else if (clause.key === "pay_schedule_id" && value) {
+      const match = sql`exists (select 1 from pay_runs pr where pr.document_id = d.id and pr.pay_schedule_id = ${value})`;
+      if (clause.operator === "eq") parts.push(sql`and ${match}`);
+      else if (clause.operator === "ne") parts.push(sql`and not ${match}`);
+    }
+  }
+  if (adhoc.filters?.run_stage) parts.push(sql`and ${PAY_RUN_STAGE_MATCH(adhoc.filters.run_stage)}`);
+  if (adhoc.filters?.pay_schedule_id) {
+    parts.push(sql`and exists (
+      select 1 from pay_runs pr where pr.document_id = d.id and pr.pay_schedule_id = ${adhoc.filters.pay_schedule_id})`);
+  }
+  return sql.join(parts, sql` `);
+}
+
 /** Back-compat wrapper for the AP list. */
 export function vendorBillWhere(
   view: ListViewConfig,

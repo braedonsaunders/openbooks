@@ -1569,6 +1569,51 @@ const FIELD_TICKET: RecordTypeMeta = {
   ],
 };
 
+/**
+ * Pay runs — machine-built posting documents (kind 'pay_run'). The payroll
+ * wizard is the only editing surface, so the record type is list-only:
+ * saved views + custom columns ride the universal machinery, forms stay off.
+ * `run_stage` merges the run lifecycle (draft/calculated/committed) with the
+ * document's posted state; the list source maps it to SQL.
+ */
+const PAY_RUN: RecordTypeMeta = {
+  key: "pay_run",
+  labelKey: "customization.recordTypes.pay_run",
+  category: "transaction",
+  supportsForms: false,
+  customFieldTable: "documents",
+  customFieldLineTable: null,
+  headerFields: [],
+  lineFields: [],
+  listColumns: [
+    { key: "document_number", labelKey: "payroll.columns.number", kind: "reference", sortable: true, sortKey: "number", locked: true },
+    { key: "schedule_name", labelKey: "payroll.columns.schedule", kind: "text", sortable: true, sortKey: "schedule" },
+    { key: "period", labelKey: "payroll.columns.period", kind: "text", sortable: true, sortKey: "period" },
+    { key: "pay_date", labelKey: "payroll.columns.payDate", kind: "date", sortable: true, sortKey: "date", defaultWidth: 110 },
+    { key: "gross_total", labelKey: "payroll.columns.gross", kind: "amount", sortable: true, sortKey: "gross", defaultWidth: 120 },
+    { key: "net_total", labelKey: "payroll.columns.net", kind: "amount", sortable: true, sortKey: "net", defaultWidth: 120 },
+    { key: "employee_count", labelKey: "payroll.columns.employees", kind: "text", sortable: true, sortKey: "employees", defaultWidth: 100 },
+    { key: "status", labelKey: "common.labels.status", kind: "status", sortable: true, sortKey: "status", defaultWidth: 120 },
+    { key: "_actions", labelKey: "common.labels.actions", kind: "actions", defaultWidth: 44 },
+  ],
+  listFilters: [
+    {
+      key: "run_stage",
+      labelKey: "payroll.list.stageFilter",
+      kind: "select",
+      operators: OPERATORS_BY_KIND.select,
+      options: [
+        { value: "draft", labelKey: "payroll.status.draft" },
+        { value: "calculated", labelKey: "payroll.status.calculated" },
+        { value: "committed", labelKey: "payroll.status.committed" },
+        { value: "posted", labelKey: "payroll.status.posted" },
+      ],
+    },
+    { key: "pay_schedule_id", labelKey: "payroll.columns.schedule", kind: "entity_ref", operators: OPERATORS_BY_KIND.entity_ref, entitySource: "pay_schedule" },
+    DATE_FILTER,
+  ],
+};
+
 export const RECORD_TYPES: RecordTypeMeta[] = [
   VENDOR_BILL,
   VENDOR_CREDIT,
@@ -1607,6 +1652,7 @@ export const RECORD_TYPES: RecordTypeMeta[] = [
   VENDOR,
   EMPLOYEE,
   FIELD_TICKET,
+  PAY_RUN,
   PROJECT,
   FIXED_ASSET,
   PROPERTY,
