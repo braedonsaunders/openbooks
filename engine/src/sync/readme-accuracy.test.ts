@@ -41,11 +41,22 @@ test("README connector, locale, and container claims match shipped files", () =>
   }
 
   const compose = readFileSync("compose.yaml", "utf8");
+  const installer = readFileSync("scripts/compose-up.sh", "utf8");
+  const packageVersion = (JSON.parse(readFileSync("package.json", "utf8")) as { version: string }).version;
   assert.match(
     compose,
     /image: \$\{OPENBOOKS_IMAGE:\?OPENBOOKS_IMAGE must be a post-clean, scanned image pinned by digest\}/,
   );
   assert.doesNotMatch(compose, /ghcr\.io\/braedonsaunders\/openbooks/);
+  assert.match(readme, /### One-command Docker Compose installation/);
+  assert.match(readme, /\.\/scripts\/compose-up\.sh/);
   assert.match(readme, /OPENBOOKS_IMAGE='[^']+@sha256:[^']+'/);
-  assert.doesNotMatch(readme, /ghcr\.io\/braedonsaunders\/openbooks/);
+  assert.match(
+    installer,
+    new RegExp(`official_openbooks_image=ghcr\\.io/braedonsaunders/openbooks:${packageVersion.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}`),
+  );
+  assert.match(installer, /docker pull "\$official_openbooks_image"/);
+  assert.match(installer, /docker image inspect "\$official_openbooks_image"/);
+  assert.match(installer, /configured_openbooks_image=\$\([\s\S]*?@sha256/);
+  assert.match(installer, /OPENBOOKS_IMAGE=\$configured_openbooks_image/);
 });
