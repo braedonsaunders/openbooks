@@ -26,6 +26,7 @@
   "scripts": {
     "sync": "tsx src/sync/cli.ts",
     "demo": "tsx src/demo-e2e.ts",
+    "conformance": "tsx src/conformance/cli.ts",
     "harness": "tsx src/harness/cli.ts",
     "harness:ledger-parity": "tsx src/harness/ledger-parity/cli.ts",
     "sim": "tsx src/sim/cli.ts",

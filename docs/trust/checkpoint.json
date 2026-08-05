@@ -1,0 +1,108 @@
+{
+  "orgId": "fc0924bc-7561-495a-b12d-753e48bebb43",
+  "orgName": "SIM · Summit Ridge Construction",
+  "at": "2026-08-04T23:44:50.267Z",
+  "gitSha": "7761fe4a",
+  "cutoff": "2026-02-28",
+  "cutoffSource": "last-closed-gl-period",
+  "counts": {
+    "documents": 1037,
+    "postedDocuments": 401,
+    "postedEntries": 404,
+    "postedLines": 1275
+  },
+  "trialBalance": {
+    "debits": "8477460.7444",
+    "credits": "8477460.7444",
+    "accounts": 41
+  },
+  "controlTieOut": [
+    {
+      "account": "Contracts Receivable",
+      "number": "1200",
+      "kind": "asset_receivable",
+      "gl": "1129883.7544",
+      "subledger": "482383.7544",
+      "direct": "647500.0000",
+      "diff": "0.0000"
+    },
+    {
+      "account": "Retainage Receivable",
+      "number": "1210",
+      "kind": "asset_receivable",
+      "gl": "21012.0000",
+      "subledger": "0",
+      "direct": "21012.0000",
+      "diff": "0.0000"
+    },
+    {
+      "account": "Accounts Payable — Trade",
+      "number": "2010",
+      "kind": "liability_payable",
+      "gl": "-458013.2100",
+      "subledger": "-115013.2100",
+      "direct": "-343000.0000",
+      "diff": "0.0000"
+    }
+  ],
+  "checks": [
+    {
+      "name": "global-balance",
+      "ok": true,
+      "detail": "sum(all posted lines) = 0.0000 (want 0)"
+    },
+    {
+      "name": "per-entry-balance",
+      "ok": true,
+      "detail": "0 posted entries do not balance (want 0)"
+    },
+    {
+      "name": "open-balance-fresh",
+      "ok": true,
+      "detail": "0 closed-period documents have stale open_balance (want 0)"
+    },
+    {
+      "name": "overhead-pair-zero",
+      "ok": true,
+      "detail": "0 accounts moved by overhead_applied entries (want 0 — pairs must net to zero)"
+    },
+    {
+      "name": "overhead-burdens-jobs",
+      "ok": true,
+      "detail": "project-tagged overhead totals 0.00 (want >= 0 — burden must DEBIT jobs, not credit them)"
+    },
+    {
+      "name": "labor-clearing",
+      "ok": true,
+      "detail": "clearing balance = 0.0000 (standards − payroll − variance; informational)"
+    },
+    {
+      "name": "subledger-gl-tieout",
+      "ok": true,
+      "detail": "3 control accounts; worst |GL − subledger − directJE| = 0.0000"
+    }
+  ],
+  "timings": [
+    {
+      "report": "trial_balance",
+      "ms": 2,
+      "rows": 40
+    },
+    {
+      "report": "balance_sheet",
+      "ms": 1,
+      "rows": 13
+    },
+    {
+      "report": "profit_and_loss",
+      "ms": 2,
+      "rows": 16
+    },
+    {
+      "report": "ar_aging",
+      "ms": 2,
+      "rows": 5
+    }
+  ],
+  "pass": true
+}
