@@ -83,7 +83,7 @@ spec:
                 name: openbooks-runtime
           readinessProbe:
             httpGet:
-              path: /api/v1/health
+              path: /api/v1/health?include=dependencies
               port: http
             initialDelaySeconds: 5
             periodSeconds: 10
@@ -191,6 +191,26 @@ spec:
           env:
             - name: OPENBOOKS_INTERNAL_URL
               value: "http://openbooks-web:3000"
+          readinessProbe:
+            exec:
+              command:
+                - node
+                - -e
+                - "const s=require('node:fs').statSync('/tmp/openbooks-worker-ready');if(Date.now()-s.mtimeMs>45000)process.exit(1)"
+            initialDelaySeconds: 10
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 3
+          livenessProbe:
+            exec:
+              command:
+                - node
+                - -e
+                - "const s=require('node:fs').statSync('/tmp/openbooks-worker-alive');if(Date.now()-s.mtimeMs>60000)process.exit(1)"
+            initialDelaySeconds: 30
+            periodSeconds: 20
+            timeoutSeconds: 5
+            failureThreshold: 3
           resources:
             requests:
               cpu: 250m

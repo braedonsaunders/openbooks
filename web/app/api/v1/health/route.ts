@@ -1,7 +1,6 @@
 import { NextResponse } from "next/server";
-import { HeadBucketCommand } from "@aws-sdk/client-s3";
 import { getWorkerHeartbeat } from "@openbooks/jobs";
-import { getS3Client, s3Bucket, s3Enabled } from "@openbooks/engine/src/file-storage.ts";
+import { assertS3Ready, s3Enabled } from "@openbooks/engine/src/file-storage.ts";
 import { pool } from "@openbooks/engine/src/db.ts";
 
 export const runtime = "nodejs";
@@ -33,7 +32,7 @@ async function dependencyReadiness(): Promise<Record<"database" | "redis" | "obj
     // service during a worker-only incident.
     within(getWorkerHeartbeat()),
     s3Enabled
-      ? getS3Client().send(new HeadBucketCommand({ Bucket: s3Bucket() }), { abortSignal: controller.signal })
+      ? assertS3Ready(controller.signal)
       : requireS3
         ? Promise.reject(new Error("required object storage is not configured"))
         : Promise.resolve("disabled"),
