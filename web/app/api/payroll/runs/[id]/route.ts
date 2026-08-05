@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/db.ts'
 import { calculatePayRun, commitPayRun, PayrollError, previewPayRunGl } from '@openbooks/engine/src/payroll-run.ts'
+import { mutatePayRunAdjustment } from '@openbooks/engine/src/payroll-run-adjustments.ts'
 import { guardFeaturePermission } from '../../../../../lib/feature-gates'
 import { isUuid } from '../../../../../lib/list-params'
 
@@ -109,47 +110,44 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
     }
     if (body.action === 'add-adjustment') {
       const { employeePartyId, componentId, amount, hours, note, replaceComponent } = body
-      if (!isUuid(employeePartyId) || !isUuid(componentId) || typeof amount !== 'string' || !/^-?\d+(\.\d{1,2})?$/.test(amount)) {
+      if (
+        !isUuid(employeePartyId) || !isUuid(componentId) ||
+        typeof amount !== 'string' || !/^-?\d+(\.\d{1,2})?$/.test(amount) ||
+        (hours != null && (typeof hours !== 'string' || !/^\d+(\.\d{1,2})?$/.test(hours))) ||
+        (note != null && (typeof note !== 'string' || note.length > 500)) ||
+        (replaceComponent != null && typeof replaceComponent !== 'boolean')
+      ) {
         return NextResponse.json({ error: 'invalid adjustment' }, { status: 422 })
       }
-      const editable = (await db.execute(sql`
-        select 1 from pay_runs r join documents d on d.id = r.document_id
-         where r.org_id = ${gate.user.orgId} and r.document_id = ${id}
-           and r.run_status <> 'committed' and d.status = 'draft'`)) as unknown as { rows: unknown[] }
-      if (!editable.rows.length) return NextResponse.json({ error: 'pay run is not editable' }, { status: 422 })
-      // Statutory components are engine-computed — adjustments target pay inputs only.
-      const component = (await db.execute(sql`
-        select 1 from pay_components where org_id = ${gate.user.orgId} and id = ${componentId} and is_active
-           and (system_key is null or system_key in ('base_pay','overtime','bonus','vacation_payout'))`)) as unknown as { rows: unknown[] }
-      if (!component.rows.length) return NextResponse.json({ error: 'component cannot be adjusted' }, { status: 422 })
-      await db.execute(sql`
-        insert into pay_run_adjustments (org_id, pay_run_document_id, employee_party_id, adjustment_type,
-                                         component_id, amount, hours, replace_component, note, created_by, updated_by)
-        values (${gate.user.orgId}, ${id}, ${employeePartyId}, 'line', ${componentId}, ${amount},
-                ${hours ?? null}, ${replaceComponent === true}, ${note ?? null}, ${gate.user.id}, ${gate.user.id})`)
+      await mutatePayRunAdjustment({
+        orgId: gate.user.orgId,
+        documentId: id,
+        actorId: gate.user.id,
+        mutation: { action: 'add', employeePartyId, componentId, amount, hours, replaceComponent, note },
+      })
       return NextResponse.json({ ok: true })
     }
     if (body.action === 'delete-adjustment') {
       if (!isUuid(body.adjustmentId)) return NextResponse.json({ error: 'invalid adjustment' }, { status: 422 })
-      await db.execute(sql`
-        delete from pay_run_adjustments
-         where org_id = ${gate.user.orgId} and pay_run_document_id = ${id} and id = ${body.adjustmentId}`)
+      await mutatePayRunAdjustment({
+        orgId: gate.user.orgId,
+        documentId: id,
+        actorId: gate.user.id,
+        mutation: { action: 'delete', adjustmentId: body.adjustmentId },
+      })
       return NextResponse.json({ ok: true })
     }
     if (body.action === 'exclude-employee' || body.action === 'include-employee') {
       if (!isUuid(body.employeePartyId)) return NextResponse.json({ error: 'invalid employee' }, { status: 422 })
-      if (body.action === 'exclude-employee') {
-        await db.execute(sql`
-          insert into pay_run_adjustments (org_id, pay_run_document_id, employee_party_id, adjustment_type,
-                                           created_by, updated_by)
-          values (${gate.user.orgId}, ${id}, ${body.employeePartyId}, 'exclude', ${gate.user.id}, ${gate.user.id})
-          on conflict do nothing`)
-      } else {
-        await db.execute(sql`
-          delete from pay_run_adjustments
-           where org_id = ${gate.user.orgId} and pay_run_document_id = ${id}
-             and employee_party_id = ${body.employeePartyId} and adjustment_type = 'exclude'`)
-      }
+      await mutatePayRunAdjustment({
+        orgId: gate.user.orgId,
+        documentId: id,
+        actorId: gate.user.id,
+        mutation: {
+          action: body.action === 'exclude-employee' ? 'exclude' : 'include',
+          employeePartyId: body.employeePartyId,
+        },
+      })
       return NextResponse.json({ ok: true })
     }
     if (body.action === 'commit') {
