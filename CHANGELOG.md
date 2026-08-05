@@ -1,145 +1,86 @@
 # Changelog
 
-OpenBooks follows [Semantic Versioning](https://semver.org/) while the public API
-and deployment format stabilize. Alpha releases may contain breaking changes;
-each release will document required operator action.
+OpenBooks follows [Semantic Versioning](https://semver.org/) while its public
+API and deployment format stabilize. Alpha releases may contain breaking
+changes; each release documents required operator action.
 
 ## [0.1.0-alpha.3] - 2026-08-04
 
-### Added
+The first public community preview of OpenBooks.
 
-- Explicit company provisioning for feature defaults, customization, project
-  types, payment operations, CRM, and close configuration
-- Adapter-scoped source identities for generic, collision-safe migration and
-  mirror connectors
-- Database-backed release tests for row-level security, canonical schema
-  controls, source identity, setup provisioning, and README claims
+### Accounting and operations
 
-### Changed
+- PostgreSQL-enforced double-entry ledger, exact decimal money arithmetic,
+  periods and close controls, audit evidence, receivables, payables, payments,
+  banking, reconciliation, budgets, tax workpapers, and income-tax provisions
+- Multi-currency, multi-book, multi-subsidiary, intercompany, consolidation,
+  eliminations, non-controlling interest, and goodwill configuration
+- Inventory costing and reconciliation, fixed assets and tax pools, project
+  accounting, time and job costing, construction progress billing, retainage,
+  change orders, and project revenue recognition
+- Configurable transaction approvals and workflows, reports and analytics,
+  saved searches, exports, custom fields and records, scripts, apps, API keys,
+  backups, sandboxes, and optional AI assistance
 
-- Replaced the prerelease generated migration chain with one audited canonical
-  PostgreSQL baseline for clean installations
-- Made setup pages and GET endpoints read-only; provisioning now happens only
-  through bootstrap or explicit setup commands
-- Removed tenant-specific migration and reconciliation operators from the
-  public product while preserving the generic connector framework
-- Removed accounting currency fallbacks and historical repair behavior from
-  ordinary runtime paths
+### First-run experience
 
-### Security and integrity
-
-- Test-only database bypass now requires an explicit trusted test flag and is
-  rejected in production
-- Generic source identity uniqueness is enforced independently for every
-  organization and connector system
-- Product-neutrality checks now reject private tenant identifiers, incident
-  references, and operator artifacts in tracked or publishable files
-
-### Operator action
-
-- Fresh installs bootstrap directly from the canonical baseline.
-- Back up any earlier alpha database before upgrading. Because this is a
-  prerelease baseline reset, existing alpha installations require an
-  operator-reviewed catalog adoption or a fresh database; startup refuses to
-  guess through a migration digest mismatch.
-
-## [0.1.0-alpha.2] - 2026-08-01
-
-### Added
-
-- Adaptive first-run company setup and go-live readiness guidance, with a
-  multi-question operating profile and authoritative Company Settings feature
-  gates
-- Audited, RLS-isolated industry sample-company templates and one-click preview
-  imports
+- Adaptive company setup that uses industry, size, entity structure, currency,
+  operational complexity, and control requirements to shape the workspace
+- Three progressive operating profiles—Essentials, Growing, and Advanced—with
+  authoritative feature gates that remain fully adjustable in Company Settings
+- Go-live readiness guidance from company identity and fiscal calendar through
+  opening balances, controls, and first month-end close
+- RLS-isolated industry sample-company imports for evaluation and training
 - Maintained country tax packs for Canada, the United States, Australia, New
   Zealand, the United Kingdom, Germany, France, Spain, Italy, the Netherlands,
   Ireland, Singapore, India, South Africa, the UAE, and Japan
-- Governed tenant-scoped query console with schema browsing and table context
-  actions
-- Platform settings for apps, scripts, API keys, API documentation, MCP, query
-  tools, workflows, sandboxes, and optional AI assistance
 
-### Changed
+### Data, integrations, and platform
 
-- Replaced pre-launch compatibility fields and fallback models with canonical
-  project, close, reporting, bank-rule, custom-record, and period identities
-- Moved construction payment applications into normal project billing workflows
-- Made journal approvals use the same configurable Flow lifecycle as other
-  transactions
-- Upgraded to Next.js 16.2.12 and Drizzle 1.0.0-rc.4
-- Hardened the Docker Compose installer with separate database-owner and runtime
-  roles, explicit country/currency selection, health checks, and migration-first
-  startup
-
-### Security and integrity
-
-- Added production startup checks that reject database roles capable of
-  bypassing tenant RLS
-- Enforced tenant context across sample data, query tooling, application APIs,
-  scripting, integrations, and background workers
-- Added atomic/idempotent posting and payment operations, effective-dated tax
-  provisioning, and exact period identity controls
-
-### Operator action
-
-- Back up the database before upgrading. The container bootstrap applies all
-  tracked migrations before web and worker services start.
-- Deploy the web and worker processes from the same `v0.1.0-alpha.2` image. This
-  release removes pre-launch compatibility columns and requires schema and code
-  to move together.
-
-## [0.1.0-alpha.1] - 2026-07-30
-
-First packaged community release.
-
-### Included
-
-- PostgreSQL-enforced double-entry accounting kernel, exact money arithmetic,
-  organization row-level security, audit evidence, and period controls
-- General ledger, receivables, payables, payments, banking, reconciliation,
-  budgets, close, tax workpapers, and income-tax provisions
-- Multi-currency, multi-book, multi-subsidiary, intercompany, ownership
-  consolidation, eliminations, NCI, and goodwill configuration
-- Inventory subledger with FIFO, moving average, standard cost, landed costs,
-  lot/serial tracking, and GL reconciliation
-- Fixed assets, alternate depreciation books, tax pools, remeasurement,
-  impairment, disposal, and exact correction lineage
-- Projects, time, job costing, labor pricing, construction progress billing,
-  schedules of values, pay applications, retainage, change orders, field
-  tickets, subcontractor compliance, and project revenue recognition
-- CRM, orders, subscriptions, dunning, hosted payment links, PSP settlements,
-  and revenue-recognition schedules
-- Reports, analytics, saved searches, PDF/Excel/CSV export, SQL workbench,
-  custom fields/records/forms, JavaScript scripting, apps, workflows, API keys,
-  backups, sandboxes, and optional AI assistance
-- Migration tooling for NetSuite, QuickBooks Online, QuickBooks Desktop, Xero,
-  ERPNext, Odoo, and Microsoft Dynamics
+- Generic migration and mirror framework with adapter-scoped source identities
+  for NetSuite, QuickBooks, Xero, ERPNext, Odoo, and Microsoft Dynamics
+- Governed tenant-scoped query console with schema browsing, contextual table
+  actions, and access only through reviewed reporting views
+- Platform controls for apps, scripts, API documentation and keys, MCP, query
+  tools, workflows, sandboxes, and AI features
 - English, French, Spanish, German, Brazilian Portuguese, Chinese, and Japanese
   locale catalogs
-- Multi-platform GHCR image and self-contained Docker Compose installation
-- Formal first-run company setup with audited completion/deferral, industry
-  chart-of-accounts presets, authoritative feature dependencies, and a permanent
-  resume path in Company Settings
 
-### Verification
+### Deployment, security, and integrity
 
-- Release-suite unit and database integration tests passing at release
-  preparation
-- PostgreSQL-backed integration canary and full integration suite in CI
-- Playwright browser smoke suite
-- Release workflow typecheck, test, production build, multi-platform image
-  build, and image provenance attestation
+- One-command Docker Compose installation using separate database-owner and
+  constrained runtime roles, generated secrets, health checks, MinIO, Redis,
+  web, worker, and migration-first startup
+- Multi-platform GHCR image built once, scanned at the exact digest, retagged
+  without rebuilding, and published with provenance attestation
+- One audited canonical PostgreSQL baseline for clean installations, plus
+  release tests for row-level security, source identity, setup provisioning,
+  accounting invariants, and documented claims
+- Production startup rejection of database roles that can bypass tenant RLS;
+  tenant context is enforced across APIs, integrations, scripts, query tools,
+  and background jobs
+- Product-neutrality, history-hygiene, secret, dependency, container, and
+  workflow checks in the release and security pipelines
 
 ### Known limitations
 
-- Alpha software without independent accounting or security certification
-- No complete payroll/HCM, manufacturing/MRP, POS, e-commerce, native mobile,
-  or offline-first module
-- Tax packs are configurable workpapers and exports, not universal direct
-  electronic-filing certification
-- First-party MFA and SAML/OIDC SSO are not yet included
+- This is alpha software and has not completed an independent accounting audit,
+  security audit, or broad production validation. Start with test or parallel
+  books and reconcile all opening balances, tax treatment, permissions,
+  reports, backups, and jurisdiction-specific requirements.
+- Country packs provide maintained configuration, workpapers, and exports; they
+  are not universal electronic-filing certification or professional tax advice.
+- The included Compose deployment is a single-host installation. A separate HA
+  application-tier reference is provided, but operators remain responsible for
+  production-grade database, cache, object-storage, ingress, monitoring,
+  backup, and recovery infrastructure.
 
-[0.1.0-alpha.1]: https://github.com/braedonsaunders/openbooks/releases/tag/v0.1.0-alpha.1
-[0.1.0-alpha.2]: https://github.com/braedonsaunders/openbooks/releases/tag/v0.1.0-alpha.2
+### Operator action
+
+- Fresh installations bootstrap directly from the canonical baseline.
+- Keep the generated `.env.compose` file secure and back it up; it contains the
+  first administrator login and deployment secrets.
+- Before using OpenBooks as a system of record, complete a restore rehearsal and
+  the validation steps in the upgrade and backup runbooks.
+
 [0.1.0-alpha.3]: https://github.com/braedonsaunders/openbooks/releases/tag/v0.1.0-alpha.3
