@@ -630,3 +630,96 @@ test(
     }
   },
 );
+
+test(
+  "run adjustments: one-off bonus uses the bonus method, replace overrides, exclude drops the stub",
+  { skip: !DB },
+  async () => {
+    const org = await createScratchOrg();
+    const actorId = (await seedFlowActors(org.orgId)).adminId;
+    try {
+      await seedPayrollComponents(org.orgId, actorId);
+      const employeeId = randomUUID();
+      await db.execute(sql`
+        insert into parties (id, org_id, kind, display_name, is_active, custom)
+        values (${employeeId}, ${org.orgId}, 'person', 'Adjusted Avery', true, '{}'::jsonb)`);
+      await db.execute(sql`
+        insert into labor_cost_rates (org_id, employee_party_id, currency, rate, basis, annual_hours,
+                                      effective_from, is_active, created_by, updated_by)
+        values (${org.orgId}, ${employeeId}, 'CAD', '78000', 'year', '2080', '2026-01-01', true,
+                ${actorId}, ${actorId})`);
+      const scheduleId = randomUUID();
+      await db.execute(sql`
+        insert into pay_schedules (id, org_id, name, frequency, periods_per_year, anchor_period_end,
+                                   pay_date_offset_days, is_active, created_by, updated_by)
+        values (${scheduleId}, ${org.orgId}, 'Biweekly', 'biweekly', 26, '2026-07-18', 3, true,
+                ${actorId}, ${actorId})`);
+      await db.execute(sql`
+        insert into employee_payroll_profiles (org_id, employee_party_id, pay_schedule_id, province,
+                                               pay_basis, federal_claim_code, provincial_claim_code,
+                                               is_active, created_by, updated_by)
+        values (${org.orgId}, ${employeeId}, ${scheduleId}, 'ON', 'salary', 1, 1, true,
+                ${actorId}, ${actorId})`);
+      const run = await createPayRun({
+        orgId: org.orgId, actorId, payScheduleId: scheduleId,
+        periodStart: "2026-07-05", periodEnd: "2026-07-18",
+      });
+      await calculatePayRun({ orgId: org.orgId, documentId: run.documentId, actorId });
+      const baseline = ((await db.execute(sql`
+        select gross, net_pay from pay_stubs where pay_run_document_id = ${run.documentId}
+      `)) as unknown as { rows: { gross: string; net_pay: string }[] }).rows[0]!;
+      assert.equal(baseline.gross, "3000.0000"); // 78,000 / 26
+
+      // One-off bonus: taxed with the non-periodic method (TB), gross +500
+      const bonusComponent = ((await db.execute(sql`
+        select id from pay_components where org_id = ${org.orgId} and code = 'BONUS'
+      `)) as unknown as { rows: { id: string }[] }).rows[0]!;
+      await db.execute(sql`
+        insert into pay_run_adjustments (org_id, pay_run_document_id, employee_party_id,
+                                         adjustment_type, component_id, amount, note, created_by, updated_by)
+        values (${org.orgId}, ${run.documentId}, ${employeeId}, 'line', ${bonusComponent.id},
+                '500', 'Spot bonus', ${actorId}, ${actorId})`);
+      await calculatePayRun({ orgId: org.orgId, documentId: run.documentId, actorId });
+      const adjusted = ((await db.execute(sql`
+        select gross, factors from pay_stubs where pay_run_document_id = ${run.documentId}
+      `)) as unknown as { rows: { gross: string; factors: Record<string, string> }[] }).rows[0]!;
+      assert.equal(adjusted.gross, "3500.0000");
+      assert.ok(Number(adjusted.factors.TB) > 0, "bonus method tax applies");
+      const bonusLine = ((await db.execute(sql`
+        select l.description from pay_stub_lines l join pay_stubs s on s.id = l.stub_id
+         where s.pay_run_document_id = ${run.documentId} and l.component_id = ${bonusComponent.id}
+      `)) as unknown as { rows: { description: string }[] }).rows;
+      assert.deepEqual(bonusLine.map((l) => l.description), ["Spot bonus"]);
+
+      // Replace: override the salary-derived base pay line entirely
+      const baseComponent = ((await db.execute(sql`
+        select id from pay_components where org_id = ${org.orgId} and code = 'BASE'
+      `)) as unknown as { rows: { id: string }[] }).rows[0]!;
+      await db.execute(sql`
+        insert into pay_run_adjustments (org_id, pay_run_document_id, employee_party_id,
+                                         adjustment_type, component_id, amount, replace_component,
+                                         note, created_by, updated_by)
+        values (${org.orgId}, ${run.documentId}, ${employeeId}, 'line', ${baseComponent.id},
+                '2000', true, 'Unpaid leave proration', ${actorId}, ${actorId})`);
+      await calculatePayRun({ orgId: org.orgId, documentId: run.documentId, actorId });
+      const replaced = ((await db.execute(sql`
+        select gross from pay_stubs where pay_run_document_id = ${run.documentId}
+      `)) as unknown as { rows: { gross: string }[] }).rows[0]!;
+      assert.equal(replaced.gross, "2500.0000"); // 2,000 replaced base + 500 bonus
+
+      // Exclude: employee drops out of the run entirely
+      await db.execute(sql`
+        insert into pay_run_adjustments (org_id, pay_run_document_id, employee_party_id,
+                                         adjustment_type, created_by, updated_by)
+        values (${org.orgId}, ${run.documentId}, ${employeeId}, 'exclude', ${actorId}, ${actorId})`);
+      const result = await calculatePayRun({ orgId: org.orgId, documentId: run.documentId, actorId });
+      assert.equal(result.employees, 0);
+      const stubCount = ((await db.execute(sql`
+        select count(*)::int as n from pay_stubs where pay_run_document_id = ${run.documentId}
+      `)) as unknown as { rows: { n: number }[] }).rows[0]!;
+      assert.equal(stubCount.n, 0);
+    } finally {
+      await dropScratchOrgReporting(org.orgId);
+    }
+  },
+);

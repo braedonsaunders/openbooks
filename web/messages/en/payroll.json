@@ -127,6 +127,20 @@
       "nextTitle": "What's next",
       "nextRemit": "Remit the withheld amounts to their agencies with a vendor bill (CRA, union funds, benefit carriers).",
       "nextPay": "Pay employees from the net pay payable account — the payment relieves the liability this run just recorded."
+    },
+    "adjust": {
+      "title": "Adjustments",
+      "applied": "Adjustment applied — stubs recalculated.",
+      "excludedLabel": "Excluded from this run:",
+      "include": "Include",
+      "exclude": "Exclude from this run",
+      "component": "Component",
+      "amount": "Amount",
+      "note": "Reason / note (optional)",
+      "replaceHelp": "Replace this component’s calculated lines instead of adding to them",
+      "add": "Add adjustment",
+      "remove": "Remove",
+      "replaces": "replaces calculated"
     }
   },
   "links": {
