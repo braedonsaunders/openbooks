@@ -647,26 +647,25 @@ async function calculateStub(
   return { employeePartyId, province, gross, net, employerCost, errors: [] };
 }
 
-/**
- * Commit: materialize the balanced GL projection into document_lines and claim
- * the period's time entries. The document then posts through the standard
- * submit/post action (RULES.pay_run maps lines 1:1, signed, like a journal).
- */
-export async function commitPayRun(input: {
-  orgId: string; documentId: string; actorId: string;
-}): Promise<{ lines: number }> {
-  const { orgId, documentId, actorId } = input;
-  return await db.transaction(async (tx) => {
-    const runRows = (await tx.execute(sql`
-      select r.*, d.status as doc_status from pay_runs r
-      join documents d on d.id = r.document_id
-      where r.org_id = ${orgId} and r.document_id = ${documentId} for update
-    `)) as unknown as { rows: Record<string, string>[] };
-    const run = runRows.rows[0];
-    if (!run) throw new PayrollError("pay run not found");
-    if (run.run_status !== "calculated") throw new PayrollError("calculate the pay run before committing");
-    if (run.doc_status !== "draft") throw new PayrollError("pay run document is not editable");
+export interface PayRunGlLeg {
+  accountId: string;
+  amount: string;
+  partyId: string | null;
+  projectId: string | null;
+  departmentId: string | null;
+  description: string;
+}
 
+/**
+ * Build the balanced GL projection for a calculated run — shared by commit
+ * (which writes it into document_lines) and the wizard's pre-commit preview.
+ * Throws PayrollError on missing accounts or an unbalanced projection, so the
+ * preview surfaces setup problems before anything is written.
+ */
+async function payRunGlLegs(
+  tx: Pick<typeof db, "execute">, orgId: string, documentId: string,
+): Promise<{ legs: PayRunGlLeg[]; debitTotal: string }> {
+  {
     const settings = await payrollSettings(orgId);
     const costing = await laborCostingSettings(orgId);
     const control = (await tx.execute(sql`
@@ -772,12 +771,36 @@ export async function commitPayRun(input: {
 
     const total = sum([...legs.values()].map((l) => l.amount));
     if (cmp(total, "0") !== 0) throw new PayrollError(`pay run GL projection is unbalanced (${total})`);
+    const debitTotal = sum([...legs.values()].filter((l) => cmp(l.amount, "0") > 0).map((l) => l.amount));
+    return { legs: [...legs.values()], debitTotal };
+  }
+}
+
+/**
+ * Commit: materialize the balanced GL projection into document_lines and claim
+ * the period's time entries. The document then posts through the standard
+ * submit/post action (RULES.pay_run maps lines 1:1, signed, like a journal).
+ */
+export async function commitPayRun(input: {
+  orgId: string; documentId: string; actorId: string;
+}): Promise<{ lines: number }> {
+  const { orgId, documentId, actorId } = input;
+  return await db.transaction(async (tx) => {
+    const runRows = (await tx.execute(sql`
+      select r.*, d.status as doc_status from pay_runs r
+      join documents d on d.id = r.document_id
+      where r.org_id = ${orgId} and r.document_id = ${documentId} for update
+    `)) as unknown as { rows: Record<string, string>[] };
+    const run = runRows.rows[0];
+    if (!run) throw new PayrollError("pay run not found");
+    if (run.run_status !== "calculated") throw new PayrollError("calculate the pay run before committing");
+    if (run.doc_status !== "draft") throw new PayrollError("pay run document is not editable");
+
+    const { legs, debitTotal } = await payRunGlLegs(tx, orgId, documentId);
 
     await tx.execute(sql`delete from document_lines where org_id = ${orgId} and document_id = ${documentId}`);
     let lineNumber = 1;
-    let debitTotal = "0";
-    for (const leg of legs.values()) {
-      if (cmp(leg.amount, "0") > 0) debitTotal = add(debitTotal, leg.amount);
+    for (const leg of legs) {
       await tx.execute(sql`
         insert into document_lines (org_id, document_id, line_number, account_id, description,
                                     amount, party_id, project_id, department_id, created_by, updated_by)
@@ -805,6 +828,59 @@ export async function commitPayRun(input: {
              updated_by = ${actorId}, updated_at = now()
        where org_id = ${orgId} and id = ${documentId}
     `);
-    return { lines: legs.size };
+    return { lines: legs.length };
   });
+}
+
+/**
+ * Pre-commit GL preview: the exact legs commit would write, enriched with
+ * account/party/project names for the wizard's review step. Read-only —
+ * setup problems (missing accounts, imbalance) surface as PayrollError here
+ * before anything is written.
+ */
+export async function previewPayRunGl(
+  orgId: string, documentId: string,
+): Promise<{ legs: (PayRunGlLeg & {
+  accountLabel: string; partyName: string | null; projectName: string | null;
+})[]; debitTotal: string }> {
+  const runRows = (await db.execute(sql`
+    select r.run_status from pay_runs r
+     where r.org_id = ${orgId} and r.document_id = ${documentId}
+  `)) as unknown as { rows: { run_status: string }[] };
+  if (!runRows.rows[0]) throw new PayrollError("pay run not found");
+  if (runRows.rows[0].run_status === "draft") {
+    throw new PayrollError("calculate the pay run to preview its GL impact");
+  }
+  const { legs, debitTotal } = await payRunGlLegs(db, orgId, documentId);
+  const accountIds = [...new Set(legs.map((l) => l.accountId))];
+  const partyIds = [...new Set(legs.map((l) => l.partyId).filter(Boolean))] as string[];
+  const projectIds = [...new Set(legs.map((l) => l.projectId).filter(Boolean))] as string[];
+  const [accounts, parties, projects] = (await Promise.all([
+    db.execute(sql`select id, number, name from accounts
+                    where org_id = ${orgId} and id = any(${`{${accountIds.join(",")}}`}::uuid[])`),
+    partyIds.length
+      ? db.execute(sql`select id, display_name from parties
+                        where org_id = ${orgId} and id = any(${`{${partyIds.join(",")}}`}::uuid[])`)
+      : { rows: [] },
+    projectIds.length
+      ? db.execute(sql`select id, name from projects
+                        where org_id = ${orgId} and id = any(${`{${projectIds.join(",")}}`}::uuid[])`)
+      : { rows: [] },
+  ])) as unknown as [
+    { rows: { id: string; number: string | null; name: string }[] },
+    { rows: { id: string; display_name: string }[] },
+    { rows: { id: string; name: string }[] },
+  ];
+  const accountById = new Map(accounts.rows.map((a) => [a.id, a.number ? `${a.number} · ${a.name}` : a.name]));
+  const partyById = new Map(parties.rows.map((p) => [p.id, p.display_name]));
+  const projectById = new Map(projects.rows.map((p) => [p.id, p.name]));
+  return {
+    debitTotal,
+    legs: legs.map((leg) => ({
+      ...leg,
+      accountLabel: accountById.get(leg.accountId) ?? leg.accountId,
+      partyName: leg.partyId ? (partyById.get(leg.partyId) ?? null) : null,
+      projectName: leg.projectId ? (projectById.get(leg.projectId) ?? null) : null,
+    })),
+  };
 }
