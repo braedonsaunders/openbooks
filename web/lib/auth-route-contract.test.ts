@@ -18,6 +18,15 @@ test("the request proxy checks server-side session revocation", () => {
   assert.match(proxy, /requireSessionSecret/);
 });
 
+test("authentication secrets are required at runtime without blocking secret-free image builds", () => {
+  const auth = readFileSync("web/lib/auth.ts", "utf8");
+  const oidc = readFileSync("web/lib/auth-oidc.ts", "utf8");
+  for (const source of [auth, oidc]) {
+    assert.doesNotMatch(source, /const SESSION_SECRET = requireSessionSecret/);
+    assert.match(source, /function sessionSecret\(\): string \{[\s\S]{0,100}return requireSessionSecret\(env\)/);
+  }
+});
+
 test("only real credential failures advance the distributed attempt window", () => {
   const auth = readFileSync("web/lib/auth.ts", "utf8");
   assert.match(auth, /outcome in \('failure', 'mfa_failure'\)/);
