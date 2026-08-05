@@ -37,6 +37,100 @@ begin
 end $$;
 
 -- ---------------------------------------------------------------------------
+-- Authenticated connector historical replay.
+--
+-- A controller-authorized connector mirror may discover that an upstream
+-- transaction changed after OpenBooks closed the same historical period. The
+-- correction remains append-only (original -> reversal -> replacement) and
+-- does not reopen or mutate the lock. A transaction-local replay token is
+-- accepted only when it resolves to an active sync run, its owning connection
+-- and organization, and the connection's attributable automatic policy.
+-- ---------------------------------------------------------------------------
+create or replace function connector_historical_replay_authorized(
+  p_org uuid
+) returns boolean
+  language sql
+  stable
+  set search_path = public, pg_catalog
+as $$
+  select
+    coalesce(current_setting('openbooks.connector_replay', true), 'off') = 'on'
+    and nullif(current_setting('openbooks.connector_replay_request', true), '') is not null
+    and nullif(current_setting('openbooks.connector_replay_actor', true), '') is not null
+    and current_setting('app.current_org', true) = p_org::text
+    and exists (
+      select 1
+        from sync_runs run
+        join connections connection
+          on connection.id = run.connection_id
+         and connection.org_id = run.org_id
+        join users controller
+          on controller.id = connection.posted_change_authorized_by
+         and controller.org_id = connection.org_id
+         and controller.is_active
+       where run.id::text = current_setting('openbooks.connector_replay_request', true)
+         and run.org_id = p_org
+         and run.status = 'running'
+         and run.kind in ('incremental', 'full_migration')
+         and run.source = connection.source
+         and connection.status not in ('paused', 'unconfigured')
+         and connection.posted_change_policy = 'append_only_automatic'
+         and connection.posted_change_authorized_at is not null
+         and run.started_at >= connection.posted_change_authorized_at
+         and connection.posted_change_authorized_by::text =
+               current_setting('openbooks.connector_replay_actor', true)
+    )
+$$;
+
+comment on function connector_historical_replay_authorized(uuid) is
+  'Fail-closed proof for controller-authorized append-only connector replay into a preserved closed period.';
+
+create or replace function period_module_blocks_write(
+  p_org uuid,
+  p_period uuid,
+  p_book uuid,
+  p_subsidiary uuid,
+  p_module text,
+  p_allow_imported boolean
+) returns boolean
+  language sql
+  stable
+  set search_path = public, pg_catalog
+as $$
+  select case
+    when p_allow_imported
+      and connector_historical_replay_authorized(p_org)
+      then false
+    else coalesce(
+      (select case
+         when p_allow_imported and reason = 'close.importedPeriodLockReason' then false
+         when state = 'closed' then true
+         when state = 'open' and reopen_expires_at is not null and reopen_expires_at <= now() then true
+         else false
+       end
+         from period_locks
+        where org_id = p_org and period_id = p_period and book_id = p_book
+          and subsidiary_id = p_subsidiary and module = p_module),
+      (select case
+         when p_allow_imported and reason = 'close.importedPeriodLockReason' then false
+         when state = 'closed' then true
+         when state = 'open' and reopen_expires_at is not null and reopen_expires_at <= now() then true
+         else false
+       end
+         from period_locks
+        where org_id = p_org and period_id = p_period and book_id = p_book
+          and subsidiary_id is null and module = p_module),
+      false
+    )
+  end
+$$;
+
+comment on function period_module_blocks_write(
+  uuid, uuid, uuid, uuid, text, boolean
+) is
+  'Blocks closed-period writes except source-owned imported locks or a database-authenticated connector replay; never changes the lock itself.';
+
+-- ---------------------------------------------------------------------------
 -- Row-level security. Tenant isolation is enforced at the database, keyed on two
 -- GUCs the connection layer sets from AsyncLocalStorage (see engine/src/db.ts):
 --   app.current_org  — the tenant a request is scoped to
