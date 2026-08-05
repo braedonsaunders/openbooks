@@ -42,6 +42,8 @@ const STATUS_VARIANT: Record<string, 'default' | 'success' | 'secondary' | 'warn
   pending_approval: 'warning',
   partially_paid: 'warning',
   draft: 'secondary',
+  calculated: 'warning',
+  committed: 'default',
   voided: 'outline',
   reversed: 'outline',
   cancelled: 'outline',
@@ -50,6 +52,8 @@ const STATUS_VARIANT: Record<string, 'default' | 'success' | 'secondary' | 'warn
 
 const STATUS_KEYS: Record<string, string> = {
   draft: 'draft',
+  calculated: 'calculated',
+  committed: 'committed',
   pending_approval: 'pendingApproval',
   approved: 'approved',
   rejected: 'rejected',
@@ -320,7 +324,9 @@ export async function RecordListView({
         {source.multiKind ? (
           <FilterChips basePath={basePath} currentParams={sp} paramKey={kindParamKey} label={tCommon('labels.type')} options={kindOptions} />
         ) : null}
-        <FilterChips basePath={basePath} currentParams={sp} paramKey="status" label={tCommon('labels.status')} options={statusOptions} />
+        {source.hideStatusFilter ? null : (
+          <FilterChips basePath={basePath} currentParams={sp} paramKey="status" label={tCommon('labels.status')} options={statusOptions} />
+        )}
         {extraQuickFilters.map((filter) => filter.options.length ? (
           filter.searchSelect ? (
             <SearchSelectFilter key={filter.paramKey} paramKey={filter.paramKey} label={filter.label} options={filter.options} />

@@ -1,12 +1,19 @@
+import { getMoneyFormatter } from '@/lib/money-server'
+import Link from 'next/link'
 import { getTranslations } from 'next-intl/server'
-import { PageHeader } from '@openbooks/ui'
+import { AlertTriangle, ArrowRight, List } from 'lucide-react'
 import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/db.ts'
-import { payrollSettings } from '@openbooks/engine/src/payroll-run.ts'
+import { Badge, Button, PageHeader, cn } from '@openbooks/ui'
 import { ListPageLayout } from '../../../components/page-layout'
+import { HomeStatTile, HomePanel } from '../../../components/module-home/client'
+import { LiveDirectory, ModuleHomeTabs, type DirectoryItem } from '../../../components/module-home/ui'
 import { requirePermission, can } from '../../../lib/authz'
 import { requireFeatureEnabled } from '../../../lib/feature-gates'
-import { PayrollWorkspace, type ProfileRow, type RunRow, type ScheduleOption } from './PayrollWorkspace'
+import { payrollHome, type PayrollScheduleCard } from '../../../lib/module-home/payroll'
+import { EmployeesPanel, type ProfileRow } from './_ui/EmployeesPanel'
+import { StartRunButton } from './_ui/NewRunButton'
+import { RunStatusBadge } from './_ui/run-status'
 
 export const dynamic = 'force-dynamic'
 
@@ -15,93 +22,447 @@ export async function generateMetadata() {
   return { title: t('title') }
 }
 
-/** Control accounts the commit projection cannot post without. */
-const REQUIRED_SETTING_KEYS = [
-  'wageExpenseAccountId',
-  'netPayAccountId',
-  'cppPayableAccountId',
-  'eiPayableAccountId',
-  'taxPayableAccountId',
-  'vacationPayableAccountId',
-] as const
-
 /**
- * Payroll workspace — pay runs (create → calculate → commit → post), the
- * employee payroll-profile roster, and the setup checklist. Stub amounts are
- * wage data: the whole page sits behind payroll.read, and the profile editor
- * (TD1 facts) additionally behind payroll.manage.
+ * Payroll module home — the landing cockpit. The per-schedule current-period
+ * cards are the hero (period, pay date, and the one smart action: Start /
+ * Resume / Review), flanked by YTD vitals, the previous completed period, the
+ * exception queues (missing profiles / wages — surfaced BEFORE a run trips on
+ * them), and the live directory. The Employees tab keeps the payroll-profile
+ * roster and its editor drawer (payroll.manage).
  */
-export default async function PayrollPage() {
+export default async function PayrollHomePage({
+  searchParams,
+}: {
+  searchParams: Promise<Record<string, string | undefined>>
+}) {
   const authz = await requirePermission('payroll.read')
   const orgId = authz.user.orgId
   await requireFeatureEnabled(orgId, 'payroll')
   const canRun = can(authz, 'payroll.run')
   const canManage = can(authz, 'payroll.manage')
   const t = await getTranslations('payroll')
+  const { money, moneyCompact } = await getMoneyFormatter()
+  const sp = await searchParams
+  const tab = sp.tab === 'employees' && canManage ? 'employees' : 'overview'
 
-  const [runsRes, schedulesRes, settings, profilesRes, employeesRes] = await Promise.all([
-    db.execute(sql`
-      select r.document_id, d.document_number, d.status as document_status,
-             s.name as schedule_name,
-             r.period_start::text as period_start, r.period_end::text as period_end,
-             r.pay_date::text as pay_date, r.run_status,
-             r.gross_total, r.net_total, r.employee_count
-        from pay_runs r
-        join documents d on d.id = r.document_id
-        left join pay_schedules s on s.id = r.pay_schedule_id
-       where r.org_id = ${orgId}
-       order by r.pay_date desc, d.document_number desc
-       limit 200`),
-    db.execute(sql`
-      select id, name, frequency from pay_schedules
-       where org_id = ${orgId} and is_active order by name`),
-    payrollSettings(orgId),
-    canManage
-      ? db.execute(sql`
-          select prof.id, prof.employee_party_id, p.display_name as employee_name,
-                 prof.pay_schedule_id, s.name as schedule_name, prof.province, prof.pay_basis,
-                 prof.federal_claim_code, prof.federal_claim_amount,
-                 prof.provincial_claim_code, prof.provincial_claim_amount,
-                 prof.additional_tax_per_period, prof.cpp_exempt, prof.ei_exempt, prof.tax_exempt,
-                 prof.vacation_percent, prof.vacation_method, prof.is_active
-            from employee_payroll_profiles prof
-            join parties p on p.id = prof.employee_party_id and p.org_id = prof.org_id
-            left join pay_schedules s on s.id = prof.pay_schedule_id
-           where prof.org_id = ${orgId}
-           order by p.display_name`)
-      : Promise.resolve({ rows: [] }),
-    canManage
-      ? db.execute(sql`
-          select p.id, p.display_name as name from parties p
-           join employee_roles er on er.party_id = p.id and er.org_id = p.org_id and er.is_active
-           where p.org_id = ${orgId} and p.is_active
-           order by p.display_name`)
-      : Promise.resolve({ rows: [] }),
-  ])
+  const home = await payrollHome(orgId)
 
-  const profileCount = canManage
-    ? (profilesRes as unknown as { rows: unknown[] }).rows.length
-    : Number(
-        (
-          (await db.execute(sql`
-            select count(*)::int as n from employee_payroll_profiles
-             where org_id = ${orgId} and is_active`)) as unknown as { rows: { n: number }[] }
-        ).rows[0]?.n ?? 0,
-      )
-  const missingSettings = REQUIRED_SETTING_KEYS.filter((key) => !settings[key])
+  const tabs = canManage
+    ? [
+        { href: '/payroll', label: t('home.tabs.overview'), active: tab === 'overview' },
+        {
+          href: '/payroll?tab=employees',
+          label: t('tabs.employees', { count: home.activeEmployees }),
+          active: tab === 'employees',
+        },
+      ]
+    : []
+
+  const header = (
+    <PageHeader
+      title={t('title')}
+      description={t('description')}
+      actions={
+        <div className="flex items-center gap-3">
+          <Button variant="outline" asChild>
+            <Link href={'/payroll/runs' as never}>
+              <List size={14} />
+              {t('home.actions.viewRuns')}
+            </Link>
+          </Button>
+          <ModuleHomeTabs tabs={tabs} />
+        </div>
+      }
+    />
+  )
+
+  // ---- Employees tab: the profile roster + editor drawer (payroll.manage) ----
+  if (tab === 'employees') {
+    const [profilesRes, employeesRes] = (await Promise.all([
+      db.execute(sql`
+        select prof.id, prof.employee_party_id, p.display_name as employee_name,
+               prof.pay_schedule_id, s.name as schedule_name, prof.country, prof.province, prof.pay_basis,
+               prof.federal_claim_code, prof.federal_claim_amount,
+               prof.provincial_claim_code, prof.provincial_claim_amount,
+               prof.additional_tax_per_period, prof.cpp_exempt, prof.ei_exempt, prof.tax_exempt,
+               prof.filing_status, prof.multiple_jobs, prof.dependent_credits,
+               prof.other_income_annual, prof.deductions_annual, prof.w4_pre_2020,
+               prof.w4_allowances, prof.fica_exempt, prof.futa_exempt,
+               prof.vacation_percent, prof.vacation_method, prof.is_active
+          from employee_payroll_profiles prof
+          join parties p on p.id = prof.employee_party_id and p.org_id = prof.org_id
+          left join pay_schedules s on s.id = prof.pay_schedule_id
+         where prof.org_id = ${orgId}
+         order by p.display_name`),
+      db.execute(sql`
+        select p.id, p.display_name as name from parties p
+         join employee_roles er on er.party_id = p.id and er.org_id = p.org_id and er.is_active
+         where p.org_id = ${orgId} and p.is_active
+         order by p.display_name`),
+    ])) as unknown as [{ rows: ProfileRow[] }, { rows: { id: string; name: string }[] }]
+
+    return (
+      <ListPageLayout header={header}>
+        <EmployeesPanel
+          profiles={profilesRes.rows}
+          employees={employeesRes.rows}
+          schedules={home.schedules.map((s) => ({ id: s.id, name: s.name, frequency: s.frequency }))}
+        />
+      </ListPageLayout>
+    )
+  }
+
+  // ---- Overview ----
+  const directory: DirectoryItem[] = [
+    {
+      href: '/payroll/runs',
+      label: t('home.directory.runs'),
+      iconKey: 'list-checks',
+      badge: {
+        value: String(home.inProgressRuns),
+        hint: t('home.directory.runsHint', { total: home.totalRuns }),
+        tone: home.inProgressRuns > 0 ? 'warning' : 'neutral',
+      },
+    },
+    ...(canManage
+      ? [
+          {
+            href: '/payroll?tab=employees',
+            label: t('home.directory.employees'),
+            iconKey: 'users',
+            badge: { value: String(home.activeEmployees), hint: t('home.directory.employeesHint') },
+          },
+          {
+            href: '/admin/setup/payroll',
+            label: t('home.directory.setup'),
+            iconKey: 'settings',
+            badge:
+              home.missingSettings.length > 0
+                ? {
+                    value: String(home.missingSettings.length),
+                    hint: t('home.directory.setupHint'),
+                    tone: 'warning' as const,
+                  }
+                : undefined,
+          },
+        ]
+      : []),
+  ]
+
+  const exceptionCount =
+    home.exceptions.missingProfilesTotal + home.exceptions.missingWagesTotal
 
   return (
-    <ListPageLayout header={<PageHeader title={t('title')} description={t('description')} />}>
-      <PayrollWorkspace
-        runs={(runsRes as unknown as { rows: RunRow[] }).rows}
-        schedules={(schedulesRes as unknown as { rows: ScheduleOption[] }).rows}
-        profiles={(profilesRes as unknown as { rows: ProfileRow[] }).rows}
-        employees={(employeesRes as unknown as { rows: { id: string; name: string }[] }).rows}
-        profileCount={profileCount}
-        missingSettings={missingSettings}
-        canRun={canRun}
-        canManage={canManage}
-      />
+    <ListPageLayout header={header}>
+      <div className="flex flex-col gap-4">
+        {canManage && home.missingSettings.length > 0 && (
+          <div className="flex flex-wrap items-center gap-3 rounded-xl border border-amber-200/80 bg-amber-50 px-4 py-3 text-sm text-amber-800 dark:border-amber-800/60 dark:bg-amber-950/40 dark:text-amber-300">
+            <AlertTriangle size={16} aria-hidden />
+            <span className="flex-1">
+              {t('checklist.incomplete', { count: home.missingSettings.length })}{' '}
+              {home.missingSettings.map((key) => t(`settingsPage.fields.${key}`)).join(', ')}
+            </span>
+            <Button asChild size="sm" variant="outline">
+              <Link href={'/admin/setup/payroll?tab=accounts' as never}>{t('checklist.openSettings')}</Link>
+            </Button>
+          </div>
+        )}
+
+        {/* Vitals */}
+        <div className="grid shrink-0 grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
+          <HomeStatTile
+            icon="users"
+            accent="indigo"
+            label={t('home.vitals.employees')}
+            value={home.activeEmployees.toLocaleString()}
+            sub={t('home.vitals.employeesSub')}
+          />
+          <HomeStatTile
+            icon="check-circle"
+            accent="teal"
+            label={t('home.vitals.periodsRan', { year: home.taxYear })}
+            value={
+              home.defaultPeriodsPerYear
+                ? t('home.vitals.periodsOf', { ran: home.runsThisYear, total: home.defaultPeriodsPerYear })
+                : home.runsThisYear.toLocaleString()
+            }
+            sub={t('home.vitals.periodsRanSub')}
+          />
+          <HomeStatTile
+            icon="badge-dollar"
+            accent="violet"
+            label={t('home.vitals.ytdGross')}
+            value={moneyCompact(home.ytdGross)}
+            sub={t('home.vitals.ytdEmployerCost', { amount: moneyCompact(home.ytdEmployerCost) })}
+          />
+          <HomeStatTile
+            icon="wallet"
+            accent="emerald"
+            label={t('home.vitals.ytdNet')}
+            value={moneyCompact(home.ytdNet)}
+            sub={t('home.vitals.ytdNetSub')}
+          />
+          <HomeStatTile
+            icon="calendar-clock"
+            accent="amber"
+            label={t('home.vitals.nextPayDate')}
+            value={home.nextPayDate ? shortDate(home.nextPayDate) : '—'}
+            sub={home.nextPayDate ? undefined : t('home.vitals.noSchedule')}
+          />
+        </div>
+
+        {/* Current periods hero + supporting rail */}
+        <div className="grid min-h-0 flex-1 grid-cols-1 gap-5 lg:grid-cols-3">
+          <div className="flex min-h-0 flex-col gap-5 lg:col-span-2">
+            <HomePanel
+              title={t('home.current.title')}
+              icon="calendar-clock"
+              bodyClassName="p-0"
+              className="shrink-0"
+            >
+              {home.schedules.length === 0 ? (
+                <div className="flex flex-col items-center gap-2 px-4 py-8 text-center text-sm text-slate-400 dark:text-slate-500">
+                  <p>{t('home.current.noSchedules')}</p>
+                  {canManage && (
+                    <Link
+                      href={'/admin/setup/payroll?tab=schedules' as never}
+                      className="font-medium text-teal-700 hover:underline dark:text-teal-300"
+                    >
+                      {t('links.paySchedules')}
+                    </Link>
+                  )}
+                </div>
+              ) : (
+                <ul className="divide-y divide-slate-100 dark:divide-slate-800/60">
+                  {home.schedules.map((schedule) => (
+                    <li key={schedule.id}>
+                      <ScheduleCard schedule={schedule} canRun={canRun} t={t} money={money} />
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </HomePanel>
+
+            <HomePanel title={t('home.previous.title')} icon="check-circle" className="shrink-0">
+              {home.previousRun ? (
+                <div className="flex flex-wrap items-center justify-between gap-x-6 gap-y-3">
+                  <dl className="grid grid-cols-2 gap-x-8 gap-y-1.5 text-sm sm:grid-cols-4">
+                    <Fact label={t('columns.period')}>
+                      {shortDate(home.previousRun.periodStart)} – {shortDate(home.previousRun.periodEnd)}
+                    </Fact>
+                    <Fact label={t('columns.payDate')}>{shortDate(home.previousRun.payDate)}</Fact>
+                    <Fact label={t('columns.net')}>{money(home.previousRun.netTotal)}</Fact>
+                    <Fact label={t('columns.employees')}>{home.previousRun.employeeCount.toLocaleString()}</Fact>
+                  </dl>
+                  <div className="flex items-center gap-3">
+                    <Badge variant={home.previousRun.posted ? 'success' : 'default'}>
+                      {t(home.previousRun.posted ? 'status.posted' : 'status.committed')}
+                    </Badge>
+                    <Link
+                      href={`/payroll/runs/${home.previousRun.documentId}` as never}
+                      className="inline-flex items-center gap-1 text-sm font-medium text-teal-700 hover:underline dark:text-teal-300"
+                    >
+                      {home.previousRun.documentNumber}
+                      <ArrowRight size={13} aria-hidden />
+                    </Link>
+                  </div>
+                </div>
+              ) : (
+                <p className="py-2 text-center text-sm text-slate-400 dark:text-slate-500">
+                  {t('home.previous.none')}
+                </p>
+              )}
+            </HomePanel>
+          </div>
+
+          <div className="flex min-h-0 flex-col gap-5">
+            <HomePanel
+              title={t('home.exceptions.title')}
+              icon="triangle-alert"
+              bodyClassName="p-0"
+              className="shrink-0"
+              hint={exceptionCount > 0 ? String(exceptionCount) : undefined}
+            >
+              {exceptionCount === 0 ? (
+                <p className="px-4 py-6 text-center text-sm text-slate-400 dark:text-slate-500">
+                  {t('home.exceptions.allClear')}
+                </p>
+              ) : (
+                <ul className="divide-y divide-slate-50 dark:divide-slate-800/60">
+                  {home.exceptions.missingProfiles.map((e) => (
+                    <ExceptionRow
+                      key={`p-${e.id}`}
+                      href={canManage ? '/payroll?tab=employees' : '/payroll'}
+                      tone="negative"
+                      text={t('home.exceptions.missingProfile', { name: e.name })}
+                    />
+                  ))}
+                  {home.exceptions.missingProfilesTotal > home.exceptions.missingProfiles.length && (
+                    <ExceptionRow
+                      href={canManage ? '/payroll?tab=employees' : '/payroll'}
+                      tone="negative"
+                      text={t('home.exceptions.moreMissingProfiles', {
+                        count: home.exceptions.missingProfilesTotal - home.exceptions.missingProfiles.length,
+                      })}
+                    />
+                  )}
+                  {home.exceptions.missingWages.map((e) => (
+                    <ExceptionRow
+                      key={`w-${e.id}`}
+                      href="/admin/setup/labor-costing"
+                      tone="warning"
+                      text={t('home.exceptions.missingWage', { name: e.name })}
+                    />
+                  ))}
+                  {home.exceptions.missingWagesTotal > home.exceptions.missingWages.length && (
+                    <ExceptionRow
+                      href="/admin/setup/labor-costing"
+                      tone="warning"
+                      text={t('home.exceptions.moreMissingWages', {
+                        count: home.exceptions.missingWagesTotal - home.exceptions.missingWages.length,
+                      })}
+                    />
+                  )}
+                </ul>
+              )}
+            </HomePanel>
+
+            <div className="shrink-0">
+              <h3 className="mb-2 px-1 text-sm font-semibold text-slate-800 dark:text-slate-100">
+                {t('home.directory.title')}
+              </h3>
+              <LiveDirectory items={directory} />
+            </div>
+
+            {canManage && (
+              <div className="flex items-center gap-2 px-1 text-xs">
+                <Link
+                  href={'/admin/setup/payroll?tab=schedules' as never}
+                  className="font-medium text-teal-700 hover:underline dark:text-teal-300"
+                >
+                  {t('links.paySchedules')}
+                </Link>
+                <span className="text-slate-300 dark:text-slate-700">·</span>
+                <Link
+                  href={'/admin/setup/payroll?tab=components' as never}
+                  className="font-medium text-teal-700 hover:underline dark:text-teal-300"
+                >
+                  {t('links.payComponents')}
+                </Link>
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
     </ListPageLayout>
   )
+}
+
+/* ------------------------------------------------------------------------- */
+
+type T = Awaited<ReturnType<typeof getTranslations<'payroll'>>>
+
+/** One schedule's current-period row: period facts + the smart action. */
+function ScheduleCard({
+  schedule,
+  canRun,
+  t,
+  money,
+}: {
+  schedule: PayrollScheduleCard
+  canRun: boolean
+  t: T
+  money: (v: string | number) => string
+}) {
+  const run = schedule.run
+  const wizardHref = run
+    ? `/payroll/runs/${run.documentId}?step=${run.runStatus === 'draft' ? 'period' : run.runStatus === 'calculated' ? 'review' : 'finish'}`
+    : null
+  return (
+    <div className="flex flex-wrap items-center gap-x-6 gap-y-3 px-4 py-3.5">
+      <div className="min-w-0 flex-1">
+        <div className="flex items-center gap-2">
+          <span className="truncate text-sm font-semibold text-slate-900 dark:text-slate-100">
+            {schedule.name}
+          </span>
+          <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[11px] font-medium text-slate-500 dark:bg-slate-800 dark:text-slate-400">
+            {t(`home.frequency.${schedule.frequency}`)}
+          </span>
+          {run && <RunStatusBadge status={run.runStatus} />}
+        </div>
+        <dl className="mt-1.5 grid grid-cols-2 gap-x-8 gap-y-1 text-sm sm:grid-cols-4">
+          <Fact label={t('columns.period')}>
+            {shortDate(schedule.periodStart)} – {shortDate(schedule.periodEnd)}
+          </Fact>
+          <Fact label={t('columns.payDate')}>{shortDate(schedule.payDate)}</Fact>
+          <Fact label={t('columns.employees')}>{schedule.activeEmployees.toLocaleString()}</Fact>
+          {run && run.runStatus !== 'draft' ? (
+            <Fact label={t('columns.net')}>{money(run.netTotal)}</Fact>
+          ) : (
+            <span aria-hidden />
+          )}
+        </dl>
+      </div>
+      <div className="shrink-0">
+        {run && wizardHref ? (
+          <Button variant={run.runStatus === 'committed' ? 'outline' : 'default'} size="sm" asChild>
+            <Link href={wizardHref as never}>
+              {run.runStatus === 'committed' ? t('home.actions.reviewPost') : t('home.actions.resume')}
+              <ArrowRight size={14} aria-hidden />
+            </Link>
+          </Button>
+        ) : canRun ? (
+          <StartRunButton payScheduleId={schedule.id} />
+        ) : null}
+      </div>
+    </div>
+  )
+}
+
+function Fact({ label, children }: { label: string; children: React.ReactNode }) {
+  return (
+    <div>
+      <dt className="text-[11px] font-medium tracking-wide text-slate-400 uppercase dark:text-slate-500">
+        {label}
+      </dt>
+      <dd className="font-medium whitespace-nowrap text-slate-700 tabular-nums dark:text-slate-200">
+        {children}
+      </dd>
+    </div>
+  )
+}
+
+function ExceptionRow({
+  href,
+  tone,
+  text,
+}: {
+  href: string
+  tone: 'negative' | 'warning' | 'neutral'
+  text: string
+}) {
+  return (
+    <li>
+      <Link
+        href={href as never}
+        className="flex items-start gap-2.5 px-4 py-2.5 text-sm transition-colors hover:bg-slate-50 dark:hover:bg-slate-800/50"
+      >
+        <span
+          className={cn(
+            'mt-1.5 h-2 w-2 shrink-0 rounded-full',
+            tone === 'negative' ? 'bg-red-500' : tone === 'warning' ? 'bg-amber-500' : 'bg-teal-500',
+          )}
+        />
+        <span className="min-w-0 flex-1 text-slate-700 dark:text-slate-300">{text}</span>
+      </Link>
+    </li>
+  )
+}
+
+function shortDate(iso: string): string {
+  return new Date(iso + 'T00:00:00Z').toLocaleDateString('en-US', {
+    month: 'short',
+    day: 'numeric',
+    timeZone: 'UTC',
+  })
 }
