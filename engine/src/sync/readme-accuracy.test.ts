@@ -41,6 +41,11 @@ test("README connector, locale, and container claims match shipped files", () =>
   }
 
   const compose = readFileSync("compose.yaml", "utf8");
-  assert.match(compose, /ghcr\.io\/braedonsaunders\/openbooks:\$\{OPENBOOKS_IMAGE_TAG:-latest\}/);
-  assert.match(readme, /ghcr\.io\/braedonsaunders\/openbooks:latest/);
+  assert.match(
+    compose,
+    /image: \$\{OPENBOOKS_IMAGE:\?OPENBOOKS_IMAGE must be a post-clean, scanned image pinned by digest\}/,
+  );
+  assert.doesNotMatch(compose, /ghcr\.io\/braedonsaunders\/openbooks/);
+  assert.match(readme, /OPENBOOKS_IMAGE='[^']+@sha256:[^']+'/);
+  assert.doesNotMatch(readme, /ghcr\.io\/braedonsaunders\/openbooks/);
 });
