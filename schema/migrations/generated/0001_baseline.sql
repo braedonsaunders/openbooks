@@ -8084,7 +8084,20 @@ CREATE TABLE public.employee_payroll_profiles (
     updated_by uuid,
     union_agreement_id uuid,
     union_classification_id uuid,
+    country text DEFAULT 'CA'::text NOT NULL,
+    filing_status text,
+    multiple_jobs boolean DEFAULT false NOT NULL,
+    dependent_credits numeric(19,4),
+    other_income_annual numeric(19,4),
+    deductions_annual numeric(19,4),
+    w4_pre_2020 boolean DEFAULT false NOT NULL,
+    w4_allowances integer,
+    fica_exempt boolean DEFAULT false NOT NULL,
+    futa_exempt boolean DEFAULT false NOT NULL,
+    CONSTRAINT employee_payroll_profiles_allowances CHECK (((w4_allowances IS NULL) OR (w4_allowances >= 0))),
+    CONSTRAINT employee_payroll_profiles_country CHECK ((country = ANY (ARRAY['CA'::text, 'US'::text]))),
     CONSTRAINT employee_payroll_profiles_fed_code CHECK (((federal_claim_code IS NULL) OR ((federal_claim_code >= 0) AND (federal_claim_code <= 10)))),
+    CONSTRAINT employee_payroll_profiles_filing_status CHECK (((filing_status IS NULL) OR (filing_status = ANY (ARRAY['single'::text, 'married_joint'::text, 'head_household'::text])))),
     CONSTRAINT employee_payroll_profiles_pay_basis CHECK ((pay_basis = ANY (ARRAY['hourly'::text, 'salary'::text]))),
     CONSTRAINT employee_payroll_profiles_prov_code CHECK (((provincial_claim_code IS NULL) OR ((provincial_claim_code >= 0) AND (provincial_claim_code <= 10)))),
     CONSTRAINT employee_payroll_profiles_vacation CHECK (((vacation_percent IS NULL) OR (vacation_percent >= (0)::numeric))),
@@ -8125,7 +8138,17 @@ CREATE VIEW openbooks_query.employee_payroll_profiles WITH (security_barrier='tr
     updated_at,
     updated_by,
     union_agreement_id,
-    union_classification_id
+    union_classification_id,
+    country,
+    filing_status,
+    multiple_jobs,
+    dependent_credits,
+    other_income_annual,
+    deductions_annual,
+    w4_pre_2020,
+    w4_allowances,
+    fica_exempt,
+    futa_exempt
    FROM public.employee_payroll_profiles;
 
 
@@ -10753,7 +10776,7 @@ CREATE TABLE public.pay_components (
     updated_by uuid,
     CONSTRAINT pay_components_basis CHECK ((basis = ANY (ARRAY['fixed_amount'::text, 'per_hour'::text, 'percent_of_gross'::text]))),
     CONSTRAINT pay_components_kind CHECK ((kind = ANY (ARRAY['earning'::text, 'deduction'::text, 'employer_contribution'::text]))),
-    CONSTRAINT pay_components_system_key CHECK (((system_key IS NULL) OR (system_key = ANY (ARRAY['base_pay'::text, 'overtime'::text, 'bonus'::text, 'vacation_accrual'::text, 'vacation_payout'::text, 'cpp'::text, 'cpp2'::text, 'ei'::text, 'qpip'::text, 'income_tax'::text])))),
+    CONSTRAINT pay_components_system_key CHECK (((system_key IS NULL) OR (system_key = ANY (ARRAY['base_pay'::text, 'overtime'::text, 'bonus'::text, 'vacation_accrual'::text, 'vacation_payout'::text, 'cpp'::text, 'cpp2'::text, 'ei'::text, 'qpip'::text, 'income_tax'::text, 'fit'::text, 'ss'::text, 'medicare'::text, 'medicare_addl'::text, 'futa'::text, 'suta'::text])))),
     CONSTRAINT pay_components_tax_treatment CHECK ((tax_treatment = ANY (ARRAY['none'::text, 'pension_f'::text, 'union_dues'::text, 'alimony'::text])))
 );
 
@@ -10864,6 +10887,7 @@ CREATE TABLE public.pay_schedules (
     created_by uuid,
     updated_at timestamp with time zone DEFAULT now() NOT NULL,
     updated_by uuid,
+    subsidiary_id uuid,
     CONSTRAINT pay_schedules_frequency CHECK ((frequency = ANY (ARRAY['weekly'::text, 'biweekly'::text, 'semi_monthly'::text, 'monthly'::text]))),
     CONSTRAINT pay_schedules_offset CHECK (((pay_date_offset_days >= 0) AND (pay_date_offset_days <= 31))),
     CONSTRAINT pay_schedules_periods CHECK ((periods_per_year = ANY (ARRAY[12, 24, 26, 27, 52, 53])))
@@ -10889,7 +10913,8 @@ CREATE VIEW openbooks_query.pay_schedules WITH (security_barrier='true') AS
     created_at,
     created_by,
     updated_at,
-    updated_by
+    updated_by,
+    subsidiary_id
    FROM public.pay_schedules;
 
 
@@ -25059,6 +25084,13 @@ CREATE UNIQUE INDEX pay_schedules_org_name ON public.pay_schedules USING btree (
 
 
 --
+-- Name: pay_schedules_subsidiary; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX pay_schedules_subsidiary ON public.pay_schedules USING btree (org_id, subsidiary_id);
+
+
+--
 -- Name: pay_stub_lines_project; Type: INDEX; Schema: public; Owner: -
 --
 
@@ -32874,6 +32906,14 @@ ALTER TABLE ONLY public.pay_schedules
 
 ALTER TABLE ONLY public.pay_schedules
     ADD CONSTRAINT pay_schedules_org_id_fkey FOREIGN KEY (org_id) REFERENCES public.orgs(id) ON DELETE CASCADE DEFERRABLE;
+
+
+--
+-- Name: pay_schedules pay_schedules_subsidiary_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.pay_schedules
+    ADD CONSTRAINT pay_schedules_subsidiary_id_fkey FOREIGN KEY (subsidiary_id) REFERENCES public.subsidiaries(id) ON DELETE SET NULL DEFERRABLE;
 
 
 --
