@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/db.ts'
 import { payrollSettings, seedPayrollComponents } from '@openbooks/engine/src/payroll-run.ts'
+import { packSlotState, PAYROLL_COUNTRY_PACKS, setPackSlotAccount } from '@openbooks/engine/src/payroll/packs.ts'
 import { guardFeaturePermission } from '../../../../lib/feature-gates'
 import { isUuid } from '../../../../lib/list-params'
 
@@ -18,6 +19,10 @@ export const dynamic = 'force-dynamic'
  * records the pack under settings.payroll.countries.
  */
 
+// Generic (jurisdiction-free) account slots. Statutory liabilities are NOT
+// here: those are pack-declared slots written onto the seeded components
+// (see engine/src/payroll/packs.ts). The old statutory settings keys are
+// still accepted in PUT bodies for back-compat but no UI sends them.
 const ACCOUNT_KEYS = [
   'wageExpenseAccountId',
   'burdenExpenseAccountId',
@@ -75,11 +80,14 @@ async function pickerOptions(orgId: string) {
 export async function GET() {
   const gate = await guardFeaturePermission('payroll.manage', 'payroll')
   if (gate instanceof NextResponse) return gate
-  const [settings, options] = await Promise.all([
+  const [settings, blob, options] = await Promise.all([
     payrollSettings(gate.user.orgId),
+    currentPayrollBlob(gate.user.orgId),
     pickerOptions(gate.user.orgId),
   ])
-  return NextResponse.json({ settings, ...options })
+  const installed = Array.isArray(blob.countries) ? blob.countries.map(String) : []
+  const packs = await packSlotState(gate.user.orgId, installed, blob)
+  return NextResponse.json({ settings, packs, ...options })
 }
 
 export async function PUT(req: Request) {
@@ -114,6 +122,38 @@ export async function PUT(req: Request) {
       return NextResponse.json({ error: 'invalid countries' }, { status: 422 })
     }
     settings.countries = [...new Set(countries.map(String))]
+  }
+
+  // Pack-declared statutory slots: { [country]: { [slotKey]: accountId|null } }.
+  // Writes land on the mapped components' liability accounts, never in the blob.
+  if ('slotAccounts' in body) {
+    const slotAccounts = body.slotAccounts
+    if (typeof slotAccounts !== 'object' || slotAccounts === null || Array.isArray(slotAccounts)) {
+      return NextResponse.json({ error: 'invalid slotAccounts' }, { status: 422 })
+    }
+    for (const [country, slots] of Object.entries(slotAccounts as Record<string, unknown>)) {
+      const pack = PAYROLL_COUNTRY_PACKS[country]
+      if (!pack || typeof slots !== 'object' || slots === null) {
+        return NextResponse.json({ error: `invalid pack ${country}` }, { status: 422 })
+      }
+      for (const [slotKey, accountId] of Object.entries(slots as Record<string, unknown>)) {
+        if (!pack.statutorySlots.some((slot) => slot.key === slotKey)) {
+          return NextResponse.json({ error: `invalid slot ${country}/${slotKey}` }, { status: 422 })
+        }
+        if (accountId !== null && (typeof accountId !== 'string' || !isUuid(accountId))) {
+          return NextResponse.json({ error: `invalid account for ${country}/${slotKey}` }, { status: 422 })
+        }
+      }
+    }
+    for (const [country, slots] of Object.entries(slotAccounts as Record<string, Record<string, string | null>>)) {
+      for (const [slotKey, accountId] of Object.entries(slots)) {
+        await setPackSlotAccount(orgId, gate.user.id, country, slotKey, accountId)
+      }
+    }
+    await db.execute(sql`
+      insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
+      values (${orgId}, 'pay_components', ${orgId}, 'update',
+              ${JSON.stringify({ payrollSlotAccounts: body.slotAccounts })}, ${gate.user.id})`)
   }
 
   await writePayrollBlob(orgId, gate.user.id, settings)

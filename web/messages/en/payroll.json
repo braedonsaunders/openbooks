@@ -115,7 +115,7 @@
     "save": "Save",
     "accounts": {
       "title": "Control accounts",
-      "description": "Where committed pay runs post. The burden account falls back to wage expense when unset."
+      "description": "Where wages, employer burden, and net pay post. Statutory withholding accounts are configured per installed country pack below."
     },
     "posting": {
       "title": "Posting",
@@ -166,6 +166,21 @@
       "us": {
         "title": "United States",
         "description": "Federal and state withholding for US pay runs. Planned — not yet available."
+      }
+    },
+    "packAccounts": {
+      "none": "No payroll country pack is installed yet, so there are no statutory withholding accounts to configure.",
+      "installLink": "Install a country pack",
+      "CA": {
+        "title": "Canada — CRA statutory accounts",
+        "description": "Liability accounts for the amounts the CRA pack withholds and accrues. Each choice applies to every component the slot covers (employee and employer sides together).",
+        "slots": {
+          "income_tax": "Income tax payable",
+          "cpp": "CPP payable (includes CPP2)",
+          "ei": "EI payable",
+          "qpip": "QPIP payable (Quebec)",
+          "vacation": "Vacation payable"
+        }
       }
     }
   }

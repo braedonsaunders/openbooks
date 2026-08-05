@@ -681,13 +681,16 @@ export async function commitPayRun(input: {
     const wageExpense = requireAccount(settings.wageExpenseAccountId, "wage expense");
     const netPayable = requireAccount(settings.netPayAccountId, "net pay payable");
     const burdenExpense = settings.burdenExpenseAccountId ?? wageExpense;
-    const statutoryLiability: Record<string, string> = {
-      income_tax: requireAccount(settings.taxPayableAccountId, "income tax payable"),
-      cpp: requireAccount(settings.cppPayableAccountId, "CPP payable"),
-      cpp2: requireAccount(settings.cppPayableAccountId, "CPP payable"),
-      ei: requireAccount(settings.eiPayableAccountId, "EI payable"),
-      qpip: requireAccount(settings.eiPayableAccountId, "EI payable"),
-      vacation_accrual: requireAccount(settings.vacationPayableAccountId, "vacation payable"),
+    // Statutory liabilities are pack-declared: each seeded component carries
+    // its slot's account (Payroll setup → Accounts & posting). The legacy
+    // org-level settings keys remain a read fallback for pre-pack tenants.
+    const statutoryLiability: Record<string, string | null> = {
+      income_tax: settings.taxPayableAccountId,
+      cpp: settings.cppPayableAccountId,
+      cpp2: settings.cppPayableAccountId,
+      ei: settings.eiPayableAccountId,
+      qpip: settings.eiPayableAccountId,
+      vacation_accrual: settings.vacationPayableAccountId,
     };
     const wagesToClearing = settings.wagesTo === "labor_clearing" && costing.mode === "post";
     if (settings.wagesTo === "labor_clearing" && !laborClearing) {
@@ -742,12 +745,20 @@ export async function commitPayRun(input: {
       } else if (line.kind === "deduction") {
         const liability = line.liability_account_id
           ?? (line.system_key ? statutoryLiability[line.system_key] : null);
-        if (!liability) throw new PayrollError(`deduction "${line.description}" has no liability account`);
+        if (!liability) {
+          throw new PayrollError(
+            `deduction "${line.description}" has no liability account — set it in Payroll setup → Accounts & posting`,
+          );
+        }
         accumulate(liability, neg(amount), line.description ?? "Deduction");
       } else {
         const liability = line.liability_account_id
           ?? (line.system_key ? statutoryLiability[line.system_key] : null);
-        if (!liability) throw new PayrollError(`employer contribution "${line.description}" has no liability account`);
+        if (!liability) {
+          throw new PayrollError(
+            `employer contribution "${line.description}" has no liability account — set it in Payroll setup → Accounts & posting`,
+          );
+        }
         // Job-costed burdens (union fringes) carry the line's project split.
         accumulate(line.expense_account_id ?? burdenExpense, amount, line.description ?? "Employer burden", {
           projectId: line.project_id, departmentId: line.department_id,
