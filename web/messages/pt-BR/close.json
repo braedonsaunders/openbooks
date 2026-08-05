@@ -1,0 +1,588 @@
+{
+  "title": "Fechamento de Período",
+  "description": "Feche módulos por período com controles de lançamento impostos pelo banco de dados.",
+  "workspaceDescription": "Execute um fechamento controlado e baseado em evidências, da prontidão à publicação. Cada aprovação permanece vinculada ao estado do razão que aprovou.",
+  "importedPeriodLockReason": "Status de período importado do sistema de origem",
+  "searchPlaceholder": "Pesquisar períodos…",
+  "stageNavigation": "Etapas de fechamento",
+  "continuousValidation": "Validado continuamente contra o razão · última verificação {at}",
+  "runTitle": "Fechamento de {period}",
+  "runDescription": "{book} · {blueprint} v{version}",
+  "filters": {
+    "book": "Livro contábil",
+    "fiscalYear": "Ano fiscal",
+    "fyOption": "AF {year}",
+    "status": "Status"
+  },
+  "table": {
+    "period": "Período",
+    "range": "Intervalo",
+    "entries": "Lançamentos",
+    "debits": "Débitos",
+    "rangeValue": "{start} → {end}",
+    "status": "Status",
+    "readiness": "Prontidão",
+    "action": "Ação"
+  },
+  "modules": {
+    "ar": "CR",
+    "ap": "CP",
+    "banking": "Bancos",
+    "assets": "Ativos",
+    "tax": "Impostos",
+    "gl": "Razão"
+  },
+  "status": { "closed": "fechado", "open": "aberto" },
+  "runStatus": {
+    "not_started": "Não iniciado",
+    "draft": "Rascunho",
+    "in_progress": "Em andamento",
+    "review": "Em revisão",
+    "approved": "Aprovado",
+    "closed": "Fechado",
+    "published": "Publicado",
+    "cancelled": "Cancelado"
+  },
+  "stages": {
+    "scope": "Escopo",
+    "readiness": "Prontidão",
+    "execute": "Executar",
+    "review": "Revisar",
+    "lock": "Bloquear",
+    "publish": "Publicar"
+  },
+  "actions": {
+    "start": "Iniciar fechamento",
+    "starting": "Iniciando…",
+    "manageBooks": "Gerenciar livros",
+    "resume": "Retomar",
+    "backToPeriods": "Voltar aos períodos",
+    "revalidate": "Revalidar",
+    "runRevaluation": "Executar reavaliação cambial",
+    "runConsolidation": "Executar consolidação",
+    "startTask": "Iniciar",
+    "complete": "Concluir",
+    "submitReview": "Enviar para revisão",
+    "approve": "Aprovar",
+    "requestChanges": "Solicitar alterações",
+    "addEvidence": "Adicionar evidência",
+    "takeAction": "Tomar ação",
+    "requestApproval": "Solicitar aprovação",
+    "reviewApprovals": "Revisar aprovações",
+    "configureApprovalFlow": "Configurar fluxo de aprovação",
+    "documentation": "Documentação",
+    "lockPeriod": "Bloquear período",
+    "publish": "Publicar pacote",
+    "downloadBinder": "Baixar dossiê de auditoria imutável"
+  },
+  "errors": { "actionFailed": "Não foi possível concluir a ação de fechamento" },
+  "messages": {
+    "refresh": "Estado do fechamento atualizado",
+    "request_approval": "Fechamento enviado para aprovação",
+    "close": "Período bloqueado",
+    "publish": "Pacote de fechamento publicado",
+    "taskUpdated": "Tarefa atualizada",
+    "revaluationPosted": "Saldos em moeda estrangeira reavaliados",
+    "consolidationPosted": "Ajustes societários, taxas e eliminações contabilizados",
+    "evidenceAdded": "Evidência anexada",
+    "automationComplete": "Automação de fechamento concluída"
+  },
+  "metrics": {
+    "readiness": "Prontidão",
+    "liveLedger": "Controles ao vivo do razão",
+    "progress": "Progresso",
+    "tasksComplete": "{completed} de {total} tarefas",
+    "criticalPath": "Caminho crítico",
+    "clear": "Livre",
+    "historicalDays": "Historicamente concluído até o dia {days}",
+    "noPredictedBlocker": "Nenhum bloqueio histórico"
+  },
+  "scope": {
+    "title": "Escopo do fechamento",
+    "description": "O contexto imutável desta execução de fechamento.",
+    "period": "Período contábil",
+    "book": "Livro contábil",
+    "blueprint": "Blueprint",
+    "target": "Data-alvo de fechamento",
+    "entities": "Entidades",
+    "selectedEntities": "{count, plural, one {# entidade selecionada} other {# entidades selecionadas}}",
+    "allEntities": "Todas as entidades",
+    "package": "Pacote de relatórios",
+    "noPackage": "Nenhum pacote selecionado"
+  },
+  "rehearsal": {
+    "title": "Ensaio de fechamento",
+    "description": "Crie um sandbox com data de referência para ensaiar ajustes, consolidação e relatórios sem afetar os livros de produção.",
+    "action": "Ensaiar em sandbox"
+  },
+  "readiness": {
+    "title": "Prontidão do razão",
+    "description": "Diagnósticos ao vivo detectam bloqueios e invalidam aprovações desatualizadas quando os livros mudam.",
+    "score": "pronto",
+    "clear": "Nenhuma exceção bloqueante do razão permanece."
+  },
+  "diagnostics": {
+    "drafts-open": {
+      "title": "Restam atividades não lançadas",
+      "message": "{count, plural, one {# transação em rascunho ou pendente permanece no período.} other {# transações em rascunho ou pendentes permanecem no período.}}"
+    },
+    "bank-unreconciled": {
+      "title": "Contas de caixa precisam de conciliação",
+      "message": "{count, plural, one {# conta conciliável não está aprovada até o fim do período.} other {# contas conciliáveis não estão aprovadas até o fim do período.}}"
+    },
+    "depreciation-unposted": {
+      "title": "Depreciação permanece não lançada",
+      "message": "{count, plural, one {# linha de depreciação agendada permanece não lançada.} other {# linhas de depreciação agendadas permanecem não lançadas.}}"
+    },
+    "fx-missing": {
+      "title": "Faltam taxas de câmbio",
+      "message": "{count, plural, one {# moeda de transação não tem taxa spot de fim de período utilizável.} other {# moedas de transação não têm taxa spot de fim de período utilizável.}}"
+    },
+    "fx-unrevalued": {
+      "title": "Saldos em moeda estrangeira não estão reavaliados",
+      "message": "{count, plural, one {# saldo monetário em moeda estrangeira não foi reavaliado à taxa de fim de período.} other {# saldos monetários em moeda estrangeira não foram reavaliados à taxa de fim de período.}}"
+    },
+    "intercompany-residual": {
+      "title": "Atividade intercompany não elimina",
+      "message": "{count, plural, one {# conta de eliminação tem resíduo de grupo diferente de zero.} other {# contas de eliminação têm resíduo de grupo diferente de zero.}}"
+    },
+    "material-variances": {
+      "title": "Flutuações relevantes exigem explicação",
+      "message": "{count, plural, one {# conta excede os limites de materialidade configurados.} other {# contas excedem os limites de materialidade configurados.}}"
+    }
+  },
+  "severity": {
+    "info": "Informação",
+    "warning": "Aviso",
+    "error": "Erro",
+    "critical": "Crítico"
+  },
+  "workstreams": {
+    "readiness": "Prontidão",
+    "banking": "Bancos",
+    "ar": "Contas a receber",
+    "ap": "Contas a pagar",
+    "assets": "Ativos imobilizados",
+    "tax": "Impostos",
+    "payroll": "Folha de pagamento",
+    "intercompany": "Intercompany",
+    "gl": "Razão geral",
+    "review": "Revisão",
+    "publish": "Publicação"
+  },
+  "gates": { "none": "Sem gate", "soft": "Gate flexível", "hard": "Gate rígido" },
+  "taskStatus": {
+    "blocked": "Bloqueado",
+    "ready": "Pronto",
+    "in_progress": "Em andamento",
+    "submitted": "Aguardando revisão",
+    "changes_requested": "Alterações solicitadas",
+    "complete": "Concluído",
+    "waived": "Dispensado",
+    "invalidated": "Revalidação necessária"
+  },
+  "tasks": {
+    "dependencies": "Depende de: {dependencies}",
+    "notePlaceholder": "Adicione uma nota ou resumo de evidência…"
+  },
+  "lock": {
+    "title": "Bloqueio controlado de período",
+    "description": "Os subrazões operacionais são bloqueados antes do razão. O banco de dados rejeita lançamentos após a aplicação do bloqueio.",
+    "blockedTitle": "A aprovação está bloqueada",
+    "blockedDescription": "{count, plural, one {# tarefa com gate rígido permanece} other {# tarefas com gate rígido permanecem}}.",
+    "approvalTitle": "Aprovação independente e bloqueio",
+    "approvalDescription": "O iniciador da execução não pode fornecer a aprovação final. Qualquer alteração no razão após a aprovação reabre a revisão.",
+    "complete": "Período bloqueado por {name}"
+  },
+  "lockStates": {
+    "open": "Aberto",
+    "soft_closed": "Fechado parcialmente",
+    "closed": "Fechado"
+  },
+  "publish": {
+    "package": "Pacote de relatórios do fechamento",
+    "description": "Revise as saídas configuradas, depois congele o dossiê de evidências e publique o pacote.",
+    "complete": "Pacote publicado por {name}",
+    "lockFirst": "Aplique os bloqueios de período aprovados antes de publicar.",
+    "awaitingApproval": "Conclua a revisão e o fluxo de aprovação antes de publicar."
+  },
+  "timeline": {
+    "title": "Linha do tempo imutável do fechamento",
+    "description": "Tarefas, evidências, invalidações, aprovações, bloqueios e publicação em uma única trilha de auditoria.",
+    "system": "Sistema"
+  },
+  "events": {
+    "run": {
+      "started": "Execução de fechamento iniciada",
+      "data_changed": "Alteração no razão invalidou o trabalho anterior",
+      "approval_requested": "Aprovação do fechamento solicitada",
+      "approval_rejected": "Aprovação do fechamento rejeitada",
+      "approved": "Fechamento recebeu aprovação final",
+      "closed": "Bloqueios de período aplicados",
+      "published": "Pacote de fechamento publicado"
+    },
+    "task": {
+      "start": "Tarefa iniciada",
+      "submit": "Tarefa enviada",
+      "complete": "Tarefa concluída",
+      "approve": "Tarefa aprovada",
+      "request_changes": "Alterações solicitadas",
+      "waive": "Tarefa dispensada",
+      "evidence_added": "Evidência anexada"
+    },
+    "automation": {
+      "completed": "Automação concluída",
+      "failed": "Automação falhou"
+    }
+  },
+  "reports": {
+    "balance-sheet": "Balanço patrimonial",
+    "pnl": "Demonstração de resultados",
+    "cash-flow": "Demonstração de fluxo de caixa",
+    "trial-balance": "Balancete de verificação",
+    "general-ledger": "Razão geral"
+  },
+  "defaultData": {
+    "calendar": { "name": "Calendário fiscal padrão" },
+    "blueprint": {
+      "name": "Fechamento padrão",
+      "description": "Fechamento mensal, trimestral e anual nativo do razão"
+    },
+    "policies": {
+      "materialVariance": {
+        "name": "Revisão de variação relevante",
+        "description": "Sinaliza movimentações de conta que excedem tanto o limite absoluto quanto o percentual."
+      },
+      "independentApproval": {
+        "name": "Aprovação final independente",
+        "description": "O iniciador da execução não pode fornecer a aprovação final do controller."
+      },
+      "controlledReopen": {
+        "name": "Reabertura controlada",
+        "description": "Reaberturas exigem um motivo, aprovação independente e um prazo de expiração."
+      }
+    },
+    "package": {
+      "name": "Pacote de fechamento gerencial",
+      "description": "Demonstrações financeiras principais e dossiê de evidências do fechamento"
+    }
+  },
+  "defaultSteps": {
+    "drafts-cleared": {
+      "title": "Resolver transações não lançadas e pendentes",
+      "description": "Resolva lançamentos e transações em rascunho que pertencem a este período."
+    },
+    "bank-reconciled": {
+      "title": "Conciliar todas as contas de caixa",
+      "description": "Todas as contas conciliáveis devem ser aprovadas até o fim do período."
+    },
+    "ar-cutoff": {
+      "title": "Concluir corte de contas a receber",
+      "description": "Confirme a completude do faturamento, recebimentos não aplicados, créditos e exceções de aging."
+    },
+    "ap-cutoff": {
+      "title": "Concluir corte de contas a pagar",
+      "description": "Confirme a completude das faturas, passivos não faturados, créditos e corte de pagamentos."
+    },
+    "depreciation-posted": {
+      "title": "Lançar depreciação de ativos imobilizados",
+      "description": "Execute a depreciação agendada e resolva as exceções."
+    },
+    "fx-ready": {
+      "title": "Validar cobertura de câmbio",
+      "description": "Toda moeda de transação deve ter uma taxa de fim de período utilizável."
+    },
+    "fx-revalued": {
+      "title": "Reavaliar saldos em moeda estrangeira",
+      "description": "Reexprima os saldos abertos em moeda estrangeira de bancos, contas a receber e a pagar à taxa de fim de período."
+    },
+    "intercompany-balanced": {
+      "title": "Conciliar atividade intercompany",
+      "description": "As contas intercompany devem estar equilibradas antes das eliminações."
+    },
+    "consolidation": {
+      "title": "Derivar taxas e lançar eliminações",
+      "description": "Conclua os ajustes de consolidação para livros multientidade."
+    },
+    "variance-review": {
+      "title": "Explicar flutuações relevantes",
+      "description": "Revise as movimentações de conta em relação ao período anterior e mantenha as explicações."
+    },
+    "controller-approval": {
+      "title": "Aprovação do controller",
+      "description": "Revise de forma independente a prontidão, exceções, evidências e saídas de relatórios."
+    },
+    "lock-subledgers": {
+      "title": "Bloquear subrazões operacionais",
+      "description": "Bloqueie CR, CP, bancos, ativos e impostos antes do razão."
+    },
+    "lock-gl": {
+      "title": "Bloquear o razão geral",
+      "description": "Aplique o bloqueio do razão imposto pelo banco de dados após todos os pré-requisitos passarem."
+    },
+    "publish-package": {
+      "title": "Publicar o pacote de fechamento",
+      "description": "Congele o dossiê de fechamento e publique o pacote de relatórios configurado."
+    }
+  },
+  "setup": {
+    "title": "Períodos e Fechamento",
+    "description": "Projete calendários fiscais, gere períodos, gerencie bloqueios e reaberturas, versione blueprints de fechamento e configure controles, automação e pacotes de relatórios.",
+    "tabs": {
+      "calendars": "Calendários",
+      "periods": "Períodos",
+      "blueprints": "Blueprints",
+      "policies": "Políticas",
+      "automation": "Automação",
+      "packages": "Pacotes de relatórios"
+    },
+    "calendars": {
+      "title": "Calendários fiscais",
+      "description": "Defina como os anos fiscais se tornam períodos de lançamento.",
+      "startsMonth": "Inicia no mês {month}",
+      "editTitle": "Editar calendário fiscal",
+      "newTitle": "Novo calendário fiscal",
+      "formDescription": "Os fundamentos do calendário são protegidos assim que houver atividade no razão.",
+      "anchorHint": "Data de início do ano fiscal âncora configurado.",
+      "configurationHint": "Configure anchorFiscalYear e leapWeekYears, ou anos personalizados e intervalos de datas dos períodos."
+    },
+    "periods": {
+      "title": "Períodos contábeis e bloqueios",
+      "description": "Gere, pesquise, bloqueie, feche parcialmente e solicite reaberturas controladas por livro e módulo.",
+      "searchPlaceholder": "Pesquisar períodos contábeis…",
+      "generateTitle": "Gerar períodos contábeis",
+      "generateDescription": "Crie os períodos de lançamento para um calendário fiscal e ano.",
+      "moduleSummary": "{closed} de {total} módulos fechados",
+      "lockedOn": "Bloqueado em {date}",
+      "lockTitle": "Confirmar bloqueio de período",
+      "reopenTitle": "Solicitar reabertura controlada",
+      "lockDescription": "{module} · {period}. Um motivo é retido no histórico imutável de fechamento.",
+      "reopenRequests": "Solicitações de reabertura",
+      "requestedBy": "Solicitado por {name}"
+    },
+    "blueprints": {
+      "title": "Blueprints de fechamento",
+      "description": "Crie grafos de dependência reutilizáveis com responsáveis, evidências, automação e gates rígidos ou flexíveis.",
+      "stepCount": "{count, plural, one {# etapa} other {# etapas}}",
+      "newTitle": "Novo blueprint de fechamento",
+      "newVersionTitle": "Criar uma nova versão de blueprint",
+      "versionHint": "As execuções publicadas mantêm sua versão original; edições criam uma nova versão imutável.",
+      "steps": "Etapas do grafo de dependência"
+    },
+    "policies": {
+      "title": "Políticas de fechamento",
+      "description": "Configure controles de materialidade, bloqueio, revisão, segregação e exceção.",
+      "formTitle": "Configuração de política",
+      "rulesHint": "Defina limites de materialidade personalizados e controle onde cada política se aplica — sem necessidade de desenvolvedor."
+    },
+    "automation": {
+      "title": "Automação de fechamento",
+      "description": "Reaja a eventos de fechamento com notificações, atribuições, verificações, tarefas, relatórios ou flows.",
+      "formTitle": "Regra de automação"
+    },
+    "packages": {
+      "title": "Pacotes de relatórios",
+      "description": "Defina as demonstrações, destinatários e configuração de entrega publicados com um fechamento.",
+      "formTitle": "Pacote de relatórios",
+      "reportCount": "{count, plural, one {# relatório} other {# relatórios}}",
+      "recipientsHint": "Um destinatário por linha."
+    },
+    "actions": {
+      "newCalendar": "Novo calendário",
+      "newBlueprint": "Novo blueprint",
+      "newPolicy": "Nova política",
+      "newAutomation": "Nova automação",
+      "newPackage": "Novo pacote",
+      "save": "Salvar",
+      "saving": "Salvando…",
+      "saveVersion": "Salvar nova versão",
+      "generate": "Gerar períodos",
+      "addStep": "Adicionar etapa",
+      "remove": "Remover",
+      "close": "Fechar",
+      "softClose": "Fechar parcialmente",
+      "reopen": "Reabrir",
+      "requestReopen": "Solicitar reabertura",
+      "confirmClose": "Confirmar fechamento",
+      "approve": "Aprovar",
+      "reject": "Rejeitar",
+      "cancel": "Cancelar",
+      "manageBooks": "Gerenciar livros",
+      "managePeriod": "Gerenciar {period}"
+    },
+    "fields": {
+      "name": "Nome",
+      "description": "Descrição",
+      "cadence": "Cadência",
+      "yearStartMonth": "Mês de início do ano",
+      "weekStartsOn": "Semana começa em",
+      "anchorDate": "Data âncora",
+      "timeZone": "Fuso horário",
+      "adjustmentPeriod": "Gerar um período de ajuste",
+      "defaultCalendar": "Calendário fiscal padrão",
+      "calendar": "Calendário fiscal",
+      "book": "Livro contábil",
+      "fiscalYear": "Ano fiscal",
+      "reason": "Motivo",
+      "periodType": "Tipo de período",
+      "stepKey": "Chave estável da etapa",
+      "stepTitle": "Título da etapa",
+      "taskType": "Tipo de tarefa",
+      "dueOffset": "Deslocamento de prazo (dias úteis)",
+      "ownerRole": "Chave de papel do responsável padrão",
+      "reviewerRole": "Chave de papel do revisor padrão",
+      "applicability": "Regras de aplicabilidade",
+      "workstream": "Fluxo de trabalho",
+      "gate": "Gate",
+      "completion": "Conclusão",
+      "dependencies": "Chaves de dependência",
+      "evidenceRequired": "Evidência obrigatória",
+      "defaultBlueprint": "Blueprint de fechamento padrão",
+      "code": "Código estável",
+      "policyType": "Tipo de política",
+      "rules": "Regras",
+      "trigger": "Gatilho",
+      "action": "Ação",
+      "conditions": "Condições",
+      "configuration": "Configuração",
+      "reports": "Relatórios",
+      "recipients": "Destinatários",
+      "delivery": "Configuração de entrega",
+      "defaultPackage": "Pacote de relatórios padrão",
+      "active": "Ativo"
+    },
+    "labels": {
+      "default": "Padrão",
+      "active": "Ativo",
+      "inactive": "Inativo"
+    },
+    "cadences": {
+      "monthly": "Meses civis",
+      "four_four_five": "Semanas 4-4-5",
+      "four_five_four": "Semanas 4-5-4",
+      "five_four_four": "Semanas 5-4-4",
+      "thirteen_period": "13 períodos de quatro semanas",
+      "custom": "Períodos personalizados"
+    },
+    "weekdays": {
+      "0": "Domingo",
+      "1": "Segunda-feira",
+      "2": "Terça-feira",
+      "3": "Quarta-feira",
+      "4": "Quinta-feira",
+      "5": "Sexta-feira",
+      "6": "Sábado"
+    },
+    "states": {
+      "open": "Aberto",
+      "soft_closed": "Fechado parcialmente",
+      "partial": "Parcialmente fechado",
+      "closed": "Fechado"
+    },
+    "modules": {
+      "ar": "CR",
+      "ap": "CP",
+      "banking": "Bancos",
+      "assets": "Ativos",
+      "tax": "Impostos",
+      "gl": "Razão"
+    },
+    "reopenStates": {
+      "requested": "Solicitado",
+      "approved": "Aprovado",
+      "rejected": "Rejeitado",
+      "expired": "Expirado",
+      "reclosed": "Refechado"
+    },
+    "periodTypes": {
+      "any": "Qualquer fechamento",
+      "month": "Fim de mês",
+      "quarter": "Fim de trimestre",
+      "year": "Fim de ano",
+      "adjustment": "Ajuste"
+    },
+    "workstreams": {
+      "readiness": "Prontidão",
+      "banking": "Bancos",
+      "ar": "Contas a receber",
+      "ap": "Contas a pagar",
+      "assets": "Ativos imobilizados",
+      "tax": "Impostos",
+      "payroll": "Folha de pagamento",
+      "intercompany": "Intercompany",
+      "gl": "Razão geral",
+      "review": "Revisão",
+      "publish": "Publicação"
+    },
+    "gates": { "none": "Sem gate", "soft": "Gate flexível", "hard": "Gate rígido" },
+    "completionModes": {
+      "manual": "Manual",
+      "computed": "Calculado pelo razão",
+      "automatic": "Automático"
+    },
+    "taskTypes": {
+      "check": "Verificação",
+      "action": "Ação",
+      "reconciliation": "Conciliação",
+      "journal": "Lançamento",
+      "approval": "Aprovação",
+      "report": "Relatório",
+      "publish": "Publicação"
+    },
+    "policyTypes": {
+      "materiality": "Materialidade",
+      "lock": "Bloqueio",
+      "review": "Revisão",
+      "segregation": "Segregação de funções",
+      "exception": "Exceção"
+    },
+    "automationTriggers": {
+      "run_started": "Execução iniciada",
+      "task_ready": "Tarefa ficou pronta",
+      "exception_opened": "Exceção aberta",
+      "deadline_approaching": "Prazo se aproximando",
+      "run_closed": "Execução fechada"
+    },
+    "automationActions": {
+      "notify": "Notificar",
+      "assign": "Atribuir",
+      "run_check": "Executar verificação",
+      "complete_task": "Concluir tarefa",
+      "create_task": "Criar tarefa",
+      "generate_report": "Gerar relatório",
+      "start_flow": "Iniciar flow"
+    },
+    "reports": {
+      "balance-sheet": "Balanço patrimonial",
+      "pnl": "Demonstração de resultados",
+      "cash-flow": "Demonstração de fluxo de caixa",
+      "trial-balance": "Balancete de verificação",
+      "general-ledger": "Razão geral"
+    },
+    "table": { "period": "Período", "range": "Intervalo", "entries": "Lançamentos", "status": "Status" },
+    "empty": {
+      "calendars": "Nenhum calendário fiscal corresponde a esta pesquisa.",
+      "periods": "Nenhum período contábil corresponde a estes filtros.",
+      "blueprints": "Nenhum blueprint de fechamento corresponde a esta pesquisa.",
+      "policies": "Nenhuma política de fechamento corresponde a esta pesquisa.",
+      "automation": "Nenhuma regra de automação corresponde a esta pesquisa.",
+      "packages": "Nenhum pacote de relatórios corresponde a esta pesquisa."
+    },
+    "messages": {
+      "calendarSaved": "Calendário fiscal salvo",
+      "periodsGenerated": "Períodos contábeis gerados",
+      "lockSaved": "Bloqueio de período salvo",
+      "reopenRequested": "Solicitação de reabertura enviada",
+      "reopenApproved": "Janela de reabertura aprovada conforme a política configurada",
+      "reopenRejected": "Solicitação de reabertura rejeitada",
+      "blueprintSaved": "Versão do blueprint de fechamento salva",
+      "policySaved": "Política de fechamento salva",
+      "automationSaved": "Regra de automação salva",
+      "packageSaved": "Pacote de relatórios salvo"
+    },
+    "errors": {
+      "actionFailed": "Não foi possível salvar a alteração de configuração",
+      "invalidConfiguration": "A configuração deve ser válida e completa"
+    }
+  }
+}

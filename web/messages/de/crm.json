@@ -1,0 +1,273 @@
+{
+  "stages": { "lead": "Lead", "prospect": "Interessent", "customer": "Kunde" },
+  "fields": {
+    "accountName": "Kontoname",
+    "lifecycleStage": "Lebenszyklusphase",
+    "status": "Status",
+    "owner": "Verantwortlicher",
+    "territory": "Gebiet",
+    "leadSource": "Lead-Quelle",
+    "phone": "Telefon",
+    "website": "Website",
+    "industry": "Branche",
+    "category": "Kategorie",
+    "annualRevenue": "Jahresumsatz",
+    "employeeCount": "Mitarbeiter",
+    "qualificationScore": "Qualifizierungsbewertung",
+    "nextAction": "Nächste Aktion",
+    "lastActivity": "Letzte Aktivität",
+    "unassigned": "Nicht zugewiesen",
+    "activityType": "Aktivitätstyp",
+    "subject": "Betreff",
+    "priority": "Priorität",
+    "assignedTo": "Zugewiesen an",
+    "start": "Beginn",
+    "end": "Ende",
+    "due": "Fällig",
+    "date": "Datum",
+    "relatedType": "Verknüpfter Datensatztyp",
+    "relatedRecord": "Verknüpfter Datensatz",
+    "notes": "Anmerkungen",
+    "title": "Titel",
+    "account": "Konto",
+    "customer": "Kunde",
+    "primaryContact": "Hauptansprechpartner",
+    "salesTeam": "Vertriebsteam",
+    "probability": "Wahrscheinlichkeit",
+    "forecastCategory": "Prognosekategorie",
+    "expectedClose": "Voraussichtlicher Abschluss",
+    "currency": "Währung",
+    "nextStep": "Nächster Schritt",
+    "item": "Artikel oder Leistung",
+    "description": "Beschreibung",
+    "quantity": "Menge",
+    "unitPrice": "Stückpreis",
+    "winLossReason": "Gewinn-/Verlustgrund",
+    "number": "Nummer",
+    "projectedAmount": "Prognostizierter Betrag",
+    "periodStart": "Periodenbeginn",
+    "periodEnd": "Periodenende"
+  },
+  "accounts": {
+    "newFallback": "Neues Konto",
+    "search": "Suche nach Name, E-Mail oder Telefon",
+    "activities": "Letzte Aktivitäten",
+    "opportunities": "Verkaufschancen",
+    "noActivities": "Es wurden keine Aktivitäten erfasst.",
+    "noOpportunities": "Es sind keine Verkaufschancen verknüpft.",
+    "lead": {
+      "title": "Leads",
+      "description": "Neue Beziehungen erfassen, qualifizieren, zuweisen und weiterleiten.",
+      "new": "Neuer Lead",
+      "emptyTitle": "Keine Leads",
+      "emptyDescription": "Erstellen Sie einen Lead, um mit der Qualifizierung zu beginnen."
+    },
+    "prospect": {
+      "title": "Interessenten",
+      "description": "Qualifizierte Beziehungen zu Umsatz entwickeln.",
+      "new": "Neuer Interessent",
+      "emptyTitle": "Keine Interessenten",
+      "emptyDescription": "Qualifizierte Leads und Verkaufschancen-Konten erscheinen hier."
+    }
+  },
+  "activities": {
+    "title": "Aktivitäten",
+    "description": "Anrufe, Besuche, Termine, E-Mails, Notizen und Folgeaufgaben über alle Beziehungen hinweg.",
+    "new": "Neue Aktivität",
+    "newFallback": "Neue Aktivität",
+    "search": "Aktivitätsbetreffe und Anmerkungen durchsuchen",
+    "emptyTitle": "Keine Aktivitäten",
+    "emptyDescription": "Erfassen Sie einen Anruf, Besuch, eine Notiz, E-Mail, einen Termin oder eine Aufgabe."
+  },
+  "activityKinds": {
+    "task": "Aufgabe",
+    "call": "Anruf",
+    "event": "Besuch oder Termin",
+    "email": "E-Mail",
+    "note": "Notiz"
+  },
+  "activityStatuses": {
+    "planned": "Geplant",
+    "in_progress": "In Bearbeitung",
+    "completed": "Abgeschlossen",
+    "cancelled": "Abgebrochen"
+  },
+  "priorities": {
+    "low": "Niedrig",
+    "normal": "Normal",
+    "high": "Hoch",
+    "urgent": "Dringend"
+  },
+  "relatedTypes": { "account": "Konto", "opportunity": "Verkaufschance" },
+  "opportunities": {
+    "title": "Verkaufschancen",
+    "description": "Pipeline-Phasen, Umsatzspannen, Teams, Produkte und Vertriebsdokumente verwalten.",
+    "new": "Neue Verkaufschance",
+    "newFallback": "Neue Verkaufschance",
+    "search": "Verkaufschancen, Nummern und Konten durchsuchen",
+    "emptyTitle": "Keine Verkaufschancen",
+    "emptyDescription": "Erstellen Sie eine Verkaufschance, um mit dem Aufbau der Pipeline zu beginnen.",
+    "lines": "Produkte und Leistungen",
+    "addLine": "Position hinzufügen",
+    "selectItem": "Artikel auswählen",
+    "createEstimate": "Angebot erstellen",
+    "estimateCreated": "Angebot erstellt",
+    "estimateFailed": "Das Angebot konnte nicht erstellt werden."
+  },
+  "forecastCategories": {
+    "omitted": "Ausgelassen",
+    "worst_case": "Schlechtester Fall",
+    "most_likely": "Wahrscheinlichster Fall",
+    "upside": "Aufwärtspotenzial"
+  },
+  "forecasts": {
+    "title": "Prognosen und Quoten",
+    "description": "Vergleichen Sie Pipeline, wahrscheinlichkeitsgewichteten Umsatz, abgeschlossene Verkäufe und zugewiesene Quoten.",
+    "apply": "Anwenden",
+    "summary": "Prognoseübersicht",
+    "pipeline": "Pipeline",
+    "weighted": "Gewichtet",
+    "mostLikely": "Wahrscheinlichster Fall",
+    "closed": "Abgeschlossen",
+    "quotas": "Quoten",
+    "target": "Ziel",
+    "quota": "Quote",
+    "manageQuotas": "Quoten verwalten",
+    "history": "Momentaufnahmen-Verlauf",
+    "asOf": "Stand",
+    "snapshotType": "Typ",
+    "override": "Überschreibung",
+    "snapshotCount": "{count, plural, =0 {Keine Momentaufnahmen} one {# Momentaufnahme} other {# Momentaufnahmen}} für diese Periode.",
+    "snapshotKinds": {
+      "calculated": "Berechnet",
+      "rep_override": "Vertriebsüberschreibung",
+      "manager_override": "Managerüberschreibung"
+    },
+    "emptyForecastTitle": "Keine Prognose für diese Periode",
+    "emptyForecastDescription": "Offene Verkaufschancen und gebuchte Verkäufe im ausgewählten Zeitraum werden hier angezeigt.",
+    "emptyQuotaTitle": "Keine Quoten in dieser Periode",
+    "emptyQuotaDescription": "Weisen Sie einem Vertriebsmitarbeiter oder Team eine Quote zu, um die Leistung am Ziel zu messen.",
+    "emptyHistoryTitle": "Keine gespeicherten Momentaufnahmen",
+    "emptyHistoryDescription": "Speichern Sie eine Momentaufnahme, um die Prognose dieser Periode später zu vergleichen.",
+    "saveSnapshot": "Momentaufnahme speichern",
+    "savingSnapshot": "Wird gespeichert…",
+    "snapshotCreated": "Prognose-Momentaufnahme gespeichert",
+    "snapshotFailed": "Die Prognose-Momentaufnahme konnte nicht gespeichert werden."
+  },
+  "setup": {
+    "title": "CRM",
+    "description": "Konfigurieren Sie Lebenszyklus-Status, Verkaufschancen-Phasen, Lead-Quellen, Gebiete, Vertriebsteams und Quoten.",
+    "sequence": "Reihenfolge",
+    "priority": "Priorität",
+    "defaultOwner": "Standard-Verantwortlicher",
+    "manager": "Manager",
+    "empty": "Keine passenden Konfigurationsdatensätze.",
+    "openRecord": "{name} öffnen",
+    "percent": "{value} %",
+    "memberCount": "{count, plural, one {# Mitglied} other {# Mitglieder}}",
+    "created": "CRM-Konfigurationsdatensatz erstellt",
+    "updated": "CRM-Konfigurationsdatensatz aktualisiert",
+    "new": {
+      "accountStatuses": "Neuer Kontostatus",
+      "opportunityStatuses": "Neue Verkaufschancen-Phase",
+      "sources": "Neue Lead-Quelle",
+      "territories": "Neues Gebiet",
+      "teams": "Neues Vertriebsteam",
+      "quotas": "Neue Quote"
+    },
+    "search": {
+      "accountStatuses": "Kontostatus durchsuchen",
+      "opportunityStatuses": "Verkaufschancen-Phasen durchsuchen",
+      "sources": "Lead-Quellen durchsuchen",
+      "territories": "Gebiete durchsuchen",
+      "teams": "Vertriebsteams durchsuchen",
+      "quotas": "Quoten durchsuchen"
+    },
+    "drawer": {
+      "new": {
+        "accountStatuses": "Neuer Kontostatus",
+        "opportunityStatuses": "Neue Verkaufschancen-Phase",
+        "sources": "Neue Lead-Quelle",
+        "territories": "Neues Gebiet",
+        "teams": "Neues Vertriebsteam",
+        "quotas": "Neue Quote"
+      },
+      "edit": {
+        "accountStatuses": "Kontostatus bearbeiten",
+        "opportunityStatuses": "Verkaufschancen-Phase bearbeiten",
+        "sources": "Lead-Quelle bearbeiten",
+        "territories": "Gebiet bearbeiten",
+        "teams": "Vertriebsteam bearbeiten",
+        "quotas": "Quote bearbeiten"
+      },
+      "description": {
+        "accountStatuses": "Steuern Sie die Klassifizierung des Beziehungslebenszyklus und das Qualifizierungsverhalten.",
+        "opportunityStatuses": "Steuern Sie Pipeline-Wahrscheinlichkeit, Prognosebehandlung und Abschlussverhalten.",
+        "sources": "Pflegen Sie die normalisierten Akquisitionsquellen, die im gesamten CRM verwendet werden.",
+        "territories": "Konfigurieren Sie Zuständigkeiten und deterministische Weiterleitungsregeln.",
+        "teams": "Weisen Sie diesem Vertriebsteam einen Manager und die aktiven Mitglieder zu.",
+        "quotas": "Legen Sie ein Periodenziel für einen Vertriebsmitarbeiter oder ein Team fest."
+      }
+    },
+    "fields": {
+      "name": "Name",
+      "matchMode": "Regelabgleich",
+      "rules": "Weiterleitungsregeln",
+      "rulesHint": "Optional. Jede Regel gleicht ein Feld mit einem Wert ab, um Leads hierher weiterzuleiten. Felder: region, country, annualRevenue. Operatoren: equals, contains, in, gte, lte.",
+      "rulesPlaceholder": "[{ \"field\": \"region\", \"operator\": \"equals\", \"value\": \"West\" }]",
+      "members": "Teammitglieder",
+      "targetType": "Zieltyp",
+      "isQualified": "Qualifizierter Status",
+      "isClosed": "Abgeschlossener Status",
+      "isWon": "Gewonnener Status",
+      "isDefault": "Standard",
+      "isActive": "Aktiv"
+    },
+    "states": {
+      "active": "Aktiv",
+      "inactive": "Inaktiv",
+      "yes": "Ja",
+      "no": "Nein"
+    },
+    "matchModes": { "all": "Alle Regeln erfüllen", "any": "Beliebige Regel erfüllen" },
+    "targetTypes": { "user": "Vertriebsmitarbeiter", "team": "Vertriebsteam" },
+    "validation": {
+      "nameRequired": "Geben Sie einen Namen ein.",
+      "invalidRules": "Weiterleitungsregeln müssen ein gültiges JSON-Array sein."
+    },
+    "tabs": {
+      "accountStatuses": "Kontostatus",
+      "opportunityStatuses": "Verkaufschancen-Phasen",
+      "sources": "Lead-Quellen",
+      "territories": "Gebiete",
+      "teams": "Vertriebsteams",
+      "quotas": "Quoten"
+    },
+    "columns": {
+      "name": "Name",
+      "lifecycle_stage": "Lebenszyklusphase",
+      "sequence": "Reihenfolge",
+      "probability": "Wahrscheinlichkeit",
+      "default_forecast_category": "Prognosekategorie",
+      "description": "Beschreibung",
+      "priority": "Priorität",
+      "owner_name": "Verantwortlicher",
+      "manager_name": "Manager",
+      "period_start": "Periodenbeginn",
+      "period_end": "Periodenende",
+      "amount": "Betrag",
+      "is_qualified": "Qualifiziert",
+      "is_closed": "Abgeschlossen",
+      "is_active": "Status",
+      "member_count": "Mitglieder",
+      "target_name": "Ziel",
+      "currency": "Währung"
+    }
+  },
+  "validation": {
+    "nameRequired": "Geben Sie einen Kontonamen ein.",
+    "subjectRequired": "Geben Sie einen Aktivitätsbetreff ein.",
+    "titleRequired": "Geben Sie einen Titel für die Verkaufschance ein."
+  },
+  "feedback": { "createFailed": "Der Entwurf konnte nicht erstellt werden." }
+}

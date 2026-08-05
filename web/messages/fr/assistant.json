@@ -1,0 +1,69 @@
+{
+  "title": "Assistant IA",
+  "history": "Historique",
+  "newChat": "Nouvelle discussion",
+  "deleteChat": "Supprimer la conversation",
+  "rename": "Renommer",
+  "chatActions": "Actions de la conversation",
+  "openHistory": "Ouvrir la liste des conversations",
+  "deleteConfirm": "Supprimer cette conversation ? Cette action est irréversible.",
+  "noConversations": "Aucune conversation pour l'instant.",
+  "welcomeTitle": "Comment puis-je aider avec les livres ?",
+  "welcome": "Interrogez vos livres — soldes, états financiers, chronologie, factures ou écritures précises. L'assistant ne voit que ce que vos permissions autorisent.",
+  "placeholder": "Posez une question sur vos comptes, transactions ou rapports…",
+  "send": "Envoyer",
+  "stop": "Arrêter",
+  "writeHint": "L'assistant peut préparer des écritures de journal, mais rien n'est enregistré avant que vous cliquiez sur Appliquer — et les brouillons doivent encore être comptabilisés par vous.",
+  "suggestions": {
+    "s1": "Comment s'est passé le mois dernier ? Résume l'état des résultats.",
+    "s2": "À quels fournisseurs devons-nous le plus, et y a-t-il des soldes de plus de 90 jours ?",
+    "s3": "Quel est le solde actuel de nos comptes bancaires ?",
+    "s4": "Trouve les plus grosses écritures de dépenses comptabilisées ce mois-ci."
+  },
+  "errors": {
+    "notConfigured": "L'assistant n'est pas encore configuré. Un administrateur peut l'activer sous Administration → IA.",
+    "failed": "L'assistant n'a pas pu répondre. Veuillez réessayer.",
+    "deleteFailed": "La conversation n'a pas pu être supprimée.",
+    "renameFailed": "La conversation n'a pas pu être renommée."
+  },
+  "card": {
+    "input": "Entrée",
+    "result": "Résultat"
+  },
+  "tools": {
+    "whoami": "Vérification de vos accès",
+    "find_accounts": "Recherche dans le plan comptable",
+    "account_register": "Lecture d'un registre de compte",
+    "find_journal_entries": "Recherche d'écritures de journal",
+    "get_journal_entry": "Lecture d'une écriture de journal",
+    "find_documents": "Recherche de documents",
+    "get_document": "Lecture d'un document",
+    "find_parties": "Consultation des tiers",
+    "profit_and_loss": "État des résultats généré",
+    "balance_sheet": "Bilan généré",
+    "trial_balance": "Balance de vérification générée",
+    "aging": "Rapport de chronologie généré",
+    "cash_flow": "État des flux de trésorerie généré",
+    "draft_journal_entry": "Écriture de journal préparée"
+  },
+  "proposal": {
+    "title": "Écriture de journal préparée — vérifiez avant d'appliquer",
+    "account": "Compte",
+    "debit": "Débit",
+    "credit": "Crédit",
+    "apply": "Appliquer comme brouillon",
+    "applying": "Application…",
+    "discard": "Rejeter",
+    "discarded": "Brouillon rejeté.",
+    "created": "Brouillon {number} enregistré.",
+    "open": "Ouvrir",
+    "failed": "Le brouillon n'a pas pu être appliqué."
+  },
+  "launcher": {
+    "open": "Demander à l'assistant",
+    "label": "Demander à l'assistant",
+    "placeholder": "Posez une question sur vos livres…",
+    "submit": "Demander",
+    "hint": "Entrée pour demander · Échap pour fermer · ouvre l'assistant"
+  }
+}

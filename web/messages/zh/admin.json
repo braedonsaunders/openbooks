@@ -1,0 +1,2308 @@
+{
+  "hub": {
+    "metaTitle": "管理中心",
+    "title": "管理中心",
+    "subtitle": "配置此工作区的一切——公司设置、人员与系统。",
+    "groups": {
+      "company": "公司",
+      "people": "人员与访问",
+      "workspace": "工作区",
+      "activity": "活动与数据",
+      "data": "集成与数据"
+    },
+    "cards": {
+      "settings": {
+        "title": "公司与会计",
+        "description": "组织标识、基准币种、财年及控制科目"
+      },
+      "users": {
+        "title": "用户",
+        "description": "邀请人员，分配角色和权限覆盖"
+      },
+      "roles": {
+        "title": "角色",
+        "description": "定义角色以及每个角色具体授予的权限"
+      },
+      "navigation": {
+        "title": "导航",
+        "description": "组织工作区、菜单标签和移动端快捷方式"
+      },
+      "records": {
+        "title": "自定义记录",
+        "description": "设计你自己的记录类型——每种记录都会成为一个完整模块，拥有自己的列表和编辑器"
+      },
+      "customFields": {
+        "title": "自定义字段",
+        "description": "为全应用范围内的记录添加类型化字段"
+      },
+      "customization": {
+        "title": "表单与视图",
+        "description": "按组织和用户自定义交易表单和已保存的列表视图"
+      },
+      "pdfTemplates": {
+        "title": "PDF 模板",
+        "description": "为发票、日记账和每种交易设计可打印的 PDF 文档"
+      },
+      "scripts": {
+        "title": "脚本",
+        "description": "在总账事件上运行的沙箱化自动化"
+      },
+      "apps": {
+        "title": "应用",
+        "description": "构建并安装应用包——沙箱化前端加受治理的后端"
+      },
+      "sandboxes": {
+        "title": "环境",
+        "description": "创建、刷新并提升与生产隔离的沙箱副本"
+      },
+      "backup": {
+        "title": "备份",
+        "description": "下载、计划并保留组织备份"
+      },
+      "apiKeys": {
+        "title": "API 密钥",
+        "description": "为集成创建作用域受限的 API 密钥并查看使用日志"
+      },
+      "apiDocs": {
+        "title": "API 文档",
+        "description": "浏览每种记录和交易类型的 REST API 参考"
+      },
+      "audit": {
+        "title": "审计日志",
+        "description": "捕获每次写入，包含操作者和前后差异"
+      },
+      "sync": {
+        "title": "迁移与镜像",
+        "description": "从源会计系统迁移，并在验证期间镜像运行两个系统"
+      },
+      "ai": {
+        "title": "AI",
+        "description": "助手的服务商、模型和加密 API 密钥"
+      },
+      "setup": {
+        "title": "设置",
+        "description": "税务、维度、付款条款、编号及其他配置"
+      },
+      "email": {
+        "title": "邮件发送",
+        "description": "配置你的邮件服务商，以便发送定时报表"
+      }
+    }
+  },
+  "buildHub": {
+    "metaTitle": "构建",
+    "title": "构建",
+    "subtitle": "你在平台上编写的一切——数据模型、表单与文档、自动化以及 API。",
+    "groups": {
+      "model": "数据模型",
+      "experience": "表单与文档",
+      "automation": "自动化与应用",
+      "api": "API"
+    }
+  },
+  "audit": {
+    "title": "审计日志",
+    "description": "每次变更的完整、防篡改历史，包含完整的前后细节，以及已过账修改和删除的总账影响。",
+    "searchPlaceholder": "搜索记录类型、用户或引用……",
+    "actionFilter": "操作",
+    "empty": {
+      "title": "暂无审计条目",
+      "description": "对记录的变更将在发生时显示在此处。"
+    },
+    "table": {
+      "when": "时间",
+      "actor": "用户",
+      "action": "操作",
+      "tableName": "记录类型",
+      "row": "引用",
+      "changes": "变更"
+    },
+    "systemActor": "系统",
+    "actions": {
+      "insert": "插入",
+      "update": "更新",
+      "delete": "删除",
+      "post": "过账",
+      "void": "作废",
+      "approve": "审批",
+      "reject": "驳回"
+    },
+    "recordTypeFilter": "记录类型",
+    "userFilter": "用户",
+    "dateFrom": "起始",
+    "dateTo": "结束",
+    "clearDates": "清除日期"
+  },
+  "customFields": {
+    "title": "自定义字段",
+    "description": "扩展任何模块——文档抬头、交易明细行、往来方、项目、科目。字段会在记录出现的所有位置渲染：抽屉、明细行网格和报表。",
+    "searchPlaceholder": "搜索字段……",
+    "targetFilter": "目标",
+    "table": {
+      "field": "字段",
+      "key": "键",
+      "target": "目标",
+      "type": "类型",
+      "required": "必填",
+      "status": "状态"
+    },
+    "empty": "暂无自定义字段。",
+    "statusActive": "启用",
+    "statusArchived": "已归档",
+    "newField": "新建字段",
+    "targets": {
+      "documents": {
+        "label": "交易抬头",
+        "description": "每笔交易一个值（账单、发票、付款、费用报告、日记账）。"
+      },
+      "documentLines": {
+        "label": "交易明细行",
+        "description": "所选交易类型每一明细行上的一列。"
+      },
+      "parties": {
+        "label": "往来方",
+        "description": "供应商、客户和员工。"
+      },
+      "projects": {
+        "label": "项目",
+        "description": "作业 / 项目。"
+      },
+      "managedProperties": {
+        "label": "物业",
+        "description": "管理的房地产物业。"
+      },
+      "accounts": {
+        "label": "科目",
+        "description": "会计科目表。"
+      },
+      "items": {
+        "label": "物料与服务",
+        "description": "产品和服务。"
+      },
+      "crmAccounts": {
+        "label": "CRM 客户",
+        "description": "线索、潜在客户和客户资质档案。"
+      },
+      "crmActivities": {
+        "label": "CRM 活动",
+        "description": "通话、拜访、事件、邮件、备注和任务。"
+      },
+      "crmOpportunities": {
+        "label": "CRM 商机",
+        "description": "销售管道商机和预测详情。"
+      }
+    },
+    "kinds": {
+      "header": {
+        "vendorBill": "应付账单",
+        "customerInvoice": "客户发票",
+        "vendorPayment": "供应商付款",
+        "customerPayment": "客户收款",
+        "expenseReport": "费用报告",
+        "journal": "日记账分录",
+        "vendorCredit": "供应商贷项",
+        "customerCredit": "客户贷项通知单",
+        "cardCharge": "卡片扣款",
+        "cardRefund": "卡片退款",
+        "check": "支票"
+      },
+      "lines": {
+        "vendorBill": "应付账单明细行",
+        "customerInvoice": "客户发票明细行",
+        "expenseReport": "费用报告明细行",
+        "journal": "日记账分录明细行",
+        "vendorCredit": "供应商贷项明细行",
+        "customerCredit": "客户贷项通知单明细行",
+        "cardCharge": "卡片扣款明细行",
+        "cardRefund": "卡片退款明细行",
+        "check": "支票明细行"
+      }
+    },
+    "types": {
+      "text": {
+        "label": "文本",
+        "help": "单行文本。"
+      },
+      "longText": {
+        "label": "文本区域",
+        "help": "多行文本。"
+      },
+      "number": {
+        "label": "数字",
+        "help": "一个数值。"
+      },
+      "currency": {
+        "label": "货币",
+        "help": "金额（2 位小数）。"
+      },
+      "date": {
+        "label": "日期",
+        "help": "日历日期。"
+      },
+      "boolean": {
+        "label": "复选框",
+        "help": "是 / 否。"
+      },
+      "select": {
+        "label": "下拉（单选）",
+        "help": "从列表中选择一项。"
+      },
+      "multiSelect": {
+        "label": "下拉（多选）",
+        "help": "从列表中选择任意数量的项。"
+      },
+      "reference": {
+        "label": "列表 / 记录",
+        "help": "链接到另一条记录（往来方、项目、科目、物料）。"
+      }
+    },
+    "drawer": {
+      "newTitle": "新建自定义字段",
+      "editTitle": "编辑“{label}”",
+      "newDescription": "用你自己的字段扩展某种记录类型。",
+      "createField": "创建字段",
+      "saveChanges": "保存更改",
+      "created": "字段已创建",
+      "updated": "字段已更新",
+      "saveFailed": "无法保存字段",
+      "appliesTo": "适用于",
+      "recordType": "记录类型",
+      "whichTransactions": "哪些交易",
+      "allTypes": "所有类型",
+      "allTypesHint": "保持为“所有类型”即可将该字段应用于每一种类型。",
+      "allKindsSuffix": "所有种类",
+      "lockedAfterCreation": "· 创建后锁定（已有值引用它）",
+      "label": "标签",
+      "labelPlaceholder": "采购订单号",
+      "fieldKey": "字段键",
+      "permanent": "（永久）",
+      "keyPlaceholder": "po_number",
+      "keyHint": "根据标签自动填充；snake_case 格式。",
+      "type": "类型",
+      "options": "选项",
+      "noOptions": "暂无选项——至少添加一个。",
+      "addOptionPlaceholder": "添加一个选项……",
+      "removeOption": "移除 {option}",
+      "helpText": "帮助文本",
+      "optionalSuffix": "（可选）",
+      "helpTextPlaceholder": "显示在字段下方",
+      "placeholder": "占位提示",
+      "defaultValue": "默认值",
+      "min": "最小值",
+      "max": "最大值",
+      "showInList": "在列表视图中显示为一列",
+      "referenceTable": "被引用的记录类型",
+      "referenceTableHint": "该字段存储指向此类型某条记录的链接。",
+      "displayMode": "显示模式",
+      "displayNormal": "正常（可编辑）",
+      "displayHidden": "隐藏（不在表单上显示）",
+      "displayDisabled": "禁用（只读显示）",
+      "allowedRoles": "对哪些角色可见",
+      "allowedRolesHint": "不勾选则对所有角色可见。管理员始终可见所有字段。",
+      "roleAdmin": "管理员",
+      "roleController": "财务总监",
+      "roleAccountant": "会计",
+      "roleApprover": "审批人",
+      "roleViewer": "查看者"
+    }
+  },
+  "navigation": {
+    "title": "导航",
+    "description": "为组织自定义每一处菜单布局：组织工作区，重命名或隐藏目标项，添加链接，并选择最多四个移动端快捷方式。权限门控仍然适用。",
+    "groupLabelAria": "分组标签",
+    "moveGroupUp": "上移分组",
+    "moveGroupDown": "下移分组",
+    "itemLabelAria": "项目标签",
+    "showItem": "显示项目",
+    "hideItem": "隐藏项目",
+    "moveItemUp": "上移项目",
+    "moveItemDown": "下移项目",
+    "moveToGroup": "移至工作区",
+    "pinMobile": "固定到移动端导航",
+    "unpinMobile": "从移动端导航中移除",
+    "mobileLimit": "移动端导航最多支持四个固定的目标项",
+    "linkUrlPrompt": "链接 URL（内部路由或 https://……）：",
+    "linkLabelPrompt": "标签：",
+    "addLink": "添加链接",
+    "deleteLink": "删除链接",
+    "addApp": "添加应用快捷方式…",
+    "removeApp": "移除应用快捷方式",
+    "newGroupPrompt": "工作区名称：",
+    "addGroup": "添加工作区",
+    "deleteGroup": "删除工作区",
+    "save": "保存导航",
+    "saved": "导航已保存",
+    "saveFailed": "无法保存",
+    "resetDefaults": "重置为默认"
+  },
+  "roles": {
+    "metaTitle": "角色",
+    "title": "角色",
+    "description": "你分配给用户的权限集合。内置角色随应用提供；如需更细粒度的控制，可创建自定义角色。",
+    "manageUsers": "管理用户",
+    "searchPlaceholder": "搜索角色名称、键或描述……",
+    "typeFilter": "类型",
+    "builtIn": "内置",
+    "custom": "自定义",
+    "emptyTitle": "暂无角色",
+    "emptyDescription": "运行角色种子脚本（engine/src/seed-roles.ts）以创建内置角色，或创建一个自定义角色。",
+    "noMatchTitle": "无匹配的角色",
+    "noMatchDescription": "请调整搜索或类型筛选。",
+    "table": {
+      "key": "键",
+      "permissions": "权限",
+      "members": "成员"
+    },
+    "newRole": "新建角色",
+    "drawer": {
+      "newTitle": "新建角色",
+      "lockedDescription": "管理员角色始终拥有全部权限，且无法编辑。",
+      "builtInDescription": "内置角色：名称和键固定，但你可以调整其权限。",
+      "newDescription": "为角色命名，然后选择它授予的权限。",
+      "deleteRole": "删除角色",
+      "createRole": "创建角色",
+      "saveChanges": "保存更改",
+      "nameRequired": "角色名称为必填项",
+      "saveFailed": "保存角色失败",
+      "created": "角色已创建",
+      "updated": "角色已更新",
+      "deleteConfirm": "删除“{name}”角色？持有该角色的用户将立即失去其权限。",
+      "deleteFailed": "删除角色失败",
+      "deleted": "角色已删除",
+      "namePlaceholder": "应付会计",
+      "keyPlaceholder": "ap_clerk",
+      "descriptionPlaceholder": "此角色用于什么？",
+      "permissionsHeading": "权限",
+      "selectedCount": "已选 {count} 项",
+      "subsidiaryHeading": "子公司访问",
+      "subsidiaryModeAll": "所有子公司",
+      "subsidiaryModeSubtree": "某子公司及其下级",
+      "subsidiaryModeList": "特定子公司",
+      "subsidiaryPlaceholder": "选择一个子公司……",
+      "subsidiarySearchPlaceholder": "搜索子公司……",
+      "subsidiaryRequired": "请选择一个子公司",
+      "subsidiaryListRequired": "请至少选择一个子公司"
+    }
+  },
+  "scripts": {
+    "title": "脚本",
+    "description": "真正的 JavaScript，在文档触发点的沙箱中运行——校验、修改白名单字段，或用 ob.abort() 否决。每次运行都会被记录。",
+    "searchPlaceholder": "搜索脚本……",
+    "triggerFilter": "触发器",
+    "table": {
+      "script": "脚本",
+      "trigger": "触发器",
+      "kind": "种类",
+      "runs": "运行次数",
+      "lastRun": "上次运行",
+      "status": "状态"
+    },
+    "empty": "暂无脚本——自动化一个文档工作流吧。",
+    "allKinds": "全部",
+    "statusActive": "启用",
+    "statusDisabled": "已禁用",
+    "triggers": {
+      "beforeSubmit": "提交前",
+      "beforePost": "过账前",
+      "afterPost": "过账后",
+      "beforeVoid": "作废前",
+      "scheduled": "定时",
+      "endpoint": "端点",
+      "bulk": "批量",
+      "client": "客户端"
+    },
+    "kinds": {
+      "vendorBill": "应付账单",
+      "customerInvoice": "客户发票",
+      "vendorPayment": "供应商付款",
+      "customerPayment": "客户收款",
+      "expenseReport": "费用报告",
+      "journal": "日记账",
+      "vendorCredit": "供应商贷项",
+      "customerCredit": "客户贷项",
+      "cardCharge": "卡片扣款",
+      "cardRefund": "卡片退款",
+      "check": "支票",
+      "deposit": "存款",
+      "transfer": "转账",
+      "purchaseOrder": "采购订单",
+      "salesOrder": "销售订单",
+      "quote": "报价单"
+    },
+    "drawer": {
+      "newScript": "新建脚本",
+      "newTitle": "新建脚本",
+      "description": "沙箱化 JavaScript（QuickJS）——无文件系统或网络访问。ob.query 运行只读 SQL。",
+      "createScript": "创建脚本",
+      "saveScript": "保存脚本",
+      "created": "脚本已创建",
+      "saved": "脚本已保存",
+      "saveFailed": "无法保存脚本",
+      "namePlaceholder": "应付政策：大额账单需要备注",
+      "trigger": "触发器",
+      "documentKind": "文档种类",
+      "allKindsOption": "所有种类",
+      "cron": "Cron 计划",
+      "cronHint": "— 分 时 日 月 周（UTC）",
+      "source": "源代码",
+      "sourceHint": "— 必须定义 function main(ctx)",
+      "timeoutMs": "超时（毫秒）",
+      "runOrder": "运行顺序",
+      "recentRuns": "最近运行",
+      "runNow": "立即运行",
+      "runOk": "运行耗时 {ms} 毫秒",
+      "runFailed": "运行失败",
+      "delete": "删除",
+      "deleteConfirm": "删除此脚本？其运行历史将保留以供审计。",
+      "deleteFailed": "无法删除脚本",
+      "deleted": "脚本已删除",
+      "runStatus": {
+        "ok": "成功",
+        "aborted": "已中止",
+        "error": "错误",
+        "timeout": "超时"
+      },
+      "endpointSlug": "端点标识",
+      "endpointUrl": "可调用 URL",
+      "endpointUrlHint": "向此 URL 发送请求以运行脚本。",
+      "copyUrl": "复制",
+      "urlCopied": "端点 URL 已复制",
+      "customRecordsGroup": "自定义记录",
+      "builtInGroup": "交易",
+      "noRuns": "暂无运行——此脚本从未执行过。",
+      "selectRun": "在“最近运行”选项卡中选择一次运行以查看其日志。",
+      "logEmpty": "此次运行未产生日志输出。"
+    },
+    "tabs": {
+      "general": "常规",
+      "code": "代码",
+      "runs": "最近运行",
+      "log": "执行日志"
+    }
+  },
+  "apiKeys": {
+    "title": "API 密钥",
+    "description": "用于集成和自动化的作用域受限 API 密钥。每个密钥携带一部分权限——仅当密钥的作用域和所有者的有效权限都覆盖该请求时，请求才被允许。",
+    "searchPlaceholder": "搜索密钥、所有者……",
+    "empty": "暂无 API 密钥——创建一个即可开始构建集成。",
+    "table": {
+      "name": "名称",
+      "key": "密钥",
+      "owner": "所有者",
+      "scopes": "作用域",
+      "scopesCount": "{count, plural, one {# 项权限} other {# 项权限}}",
+      "fullScope": "完整作用域（继承所有者）",
+      "lastUsed": "上次使用",
+      "status": "状态"
+    },
+    "statusActive": "启用",
+    "statusRevoked": "已吊销",
+    "drawer": {
+      "newKey": "新建 API 密钥",
+      "newTitle": "新建 API 密钥",
+      "description": "为程序化访问 REST API 创建一个作用域受限的密钥。明文密钥只显示一次——请妥善保存。",
+      "nameRequired": "名称为必填项",
+      "namePlaceholder": "生产同步集成",
+      "descriptionPlaceholder": "此密钥用于什么？",
+      "saveFailed": "无法保存密钥",
+      "created": "密钥已创建",
+      "updated": "密钥已更新",
+      "revoke": "吊销",
+      "revokeConfirm": "吊销此密钥？使用它的所有集成将立即停止工作。此操作无法撤销。",
+      "revokeFailed": "无法吊销密钥",
+      "revoked": "密钥已吊销",
+      "revokedNotice": "此密钥已被吊销，无法再对请求进行身份验证。",
+      "keyCreated": "复制你的 API 密钥",
+      "keyCreatedHint": "这是完整密钥唯一一次显示。请妥善保存——你将无法再次看到它。",
+      "copy": "复制",
+      "copied": "已复制到剪贴板",
+      "createKey": "创建密钥",
+      "saveChanges": "保存更改",
+      "scopesHeading": "权限作用域",
+      "scopesHint": "选择此密钥授予的权限。留空则继承所有者的完整权限集。密钥授予的权限绝不会超过其所有者所拥有的。",
+      "fullScope": "完整作用域（继承所有者权限）",
+      "scopesCount": "{count, plural, one {已选 # 项权限} other {已选 # 项权限}}"
+    }
+  },
+  "settings": {
+    "metaTitle": "公司与会计",
+    "title": "公司与会计",
+    "description": "组织标识、基准币种、财务日历以及总账过账所经过的控制科目。",
+    "organization": {
+      "title": "组织",
+      "description": "此公司在全应用范围内的标识方式。",
+      "displayName": "显示名称",
+      "displayNamePlaceholder": "Acme Manufacturing",
+      "displayNameHint": "在 OpenBooks 各处显示的公司名称，不必与注册法定名称相同。",
+      "legalName": "法定名称",
+      "legalNamePlaceholder": "Acme Manufacturing Inc.",
+      "legalNameHint": "用于正式记录、报表和文件的公司注册名称。",
+      "country": "国家/地区",
+      "countryPlaceholder": "选择国家…",
+      "countryHint": "两位字母 ISO 代码（如 CA、US、GB）。",
+      "defaultLanguage": "默认语言",
+      "defaultLanguageHint": "对于尚未在账户菜单中自选语言的所有人，应用所呈现的语言。",
+      "baseCurrency": "基准币种",
+      "baseCurrencyHint": "总账用以平衡的报表币种。切换前请先添加更多币种。",
+      "reportPdfStyle": "财务报表 PDF 样式",
+      "reportPdfStyleModern": "现代（品牌化）",
+      "reportPdfStyleFormal": "正式（GAAP）",
+      "reportPdfStyleHint": "导出的财务报表外观：现代样式采用你的品牌强调色和无衬线字体；正式样式为经典衬线字体、灰度、审计就绪的报表。"
+    },
+    "fiscal": {
+      "title": "财年",
+      "description": "你的财务年度开始的月份。所有与财年相关的功能——报表、期末结账、预设——都读取此项。",
+      "startsIn": "财年开始于",
+      "runs": "财年区间",
+      "range": "{start} → {end}",
+      "warning": "更改开始月份会重新标注<strong>每一个会计期间</strong>——保存的那一刻，它们的财年、期间编号和名称会根据各期间的起始日期重新推导。日记账分录和日期不受影响，但报表和期末结账分组将按新日历发生变动。",
+      "taxFramework": "所得税准则",
+      "taxFrameworkHint": "决定所得税计提的确认用语（公司设置 → 财年）。",
+      "frameworkAsc740": "ASC 740（美国公认会计准则）",
+      "frameworkIas12": "IAS 12（国际财务报告准则）"
+    },
+    "months": {
+      "january": "一月",
+      "february": "二月",
+      "march": "三月",
+      "april": "四月",
+      "may": "五月",
+      "june": "六月",
+      "july": "七月",
+      "august": "八月",
+      "september": "九月",
+      "october": "十月",
+      "november": "十一月",
+      "december": "十二月"
+    },
+    "controlAccounts": {
+      "title": "控制科目",
+      "description": "各子分类账和税务过账所经过的总账科目。仅显示可过账（非汇总）科目。",
+      "selectPlaceholder": "选择一个科目……",
+      "searchPlaceholder": "搜索科目……",
+      "fields": {
+        "ar": {
+          "label": "应收账款",
+          "hint": "客户余额在此过账"
+        },
+        "ap": {
+          "label": "应付账款",
+          "hint": "供应商余额在此过账"
+        },
+        "bank": {
+          "label": "默认银行",
+          "hint": "供应商和客户付款的默认现金科目"
+        },
+        "taxCollected": {
+          "label": "已收税额",
+          "hint": "发票上应缴的销售税"
+        },
+        "taxPaid": {
+          "label": "已付税额",
+          "hint": "账单上可抵扣的税额"
+        },
+        "employeePayable": {
+          "label": "应付员工款",
+          "hint": "欠付员工的费用报销"
+        },
+        "fxUnrealizedGainLoss": {
+          "label": "未实现汇兑损益",
+          "hint": "外币余额期末重估的入账科目"
+        },
+        "fxRealizedGainLoss": {
+          "label": "已实现汇兑损益",
+          "hint": "用于记录外币付款核销时的结算汇率差额"
+        },
+        "laborWip": {
+          "label": "人工在制品 / 成本",
+          "hint": "已批准的人工成本在此借记（按项目）"
+        },
+        "laborClearing": {
+          "label": "人工清算",
+          "hint": "人工计入项目时贷记；由工资核算清算"
+        },
+        "unbilledReceivable": {
+          "label": "未开票应收（合同资产）",
+          "hint": "固定价格已赚取但未开票的收入；开票时冲销"
+        },
+        "projectRevenue": {
+          "label": "项目收入",
+          "hint": "按完工百分比确认收入时贷记"
+        },
+        "incomeTaxExpense": {
+          "label": "所得税费用",
+          "hint": "由所得税计提（ASC 740）借记"
+        },
+        "incomeTaxPayable": {
+          "label": "应交所得税",
+          "hint": "当期所得税贷记"
+        },
+        "deferredTaxAsset": {
+          "label": "递延所得税资产",
+          "hint": "可抵扣暂时性差异和亏损结转"
+        },
+        "deferredTaxLiability": {
+          "label": "递延所得税负债",
+          "hint": "应纳税暂时性差异"
+        },
+        "valuationAllowance": {
+          "label": "递延所得税资产减值准备",
+          "hint": "递延所得税资产备抵"
+        }
+      }
+    },
+    "revenue": {
+      "title": "收入确认",
+      "description": "ASC 606 / IFRS 15 收入分摊政策。",
+      "fairValueRangePolicy": {
+        "label": "公允价值区间检查",
+        "warn": "警告 — 将超出区间的分摊标记为待复核",
+        "off": "关闭 — 不进行区间检查",
+        "hint": "当发票行的分摊单价超出物料公允价值的下限/上限区间时，该履约义务将在其收入合同中标记为待复核。绝不会阻止过账。"
+      },
+      "learnMore": "了解更多。"
+    },
+    "documentKinds": {
+      "vendorBill": "应付账单",
+      "customerInvoice": "客户发票",
+      "vendorPayment": "供应商付款",
+      "customerPayment": "客户收款",
+      "expenseReport": "费用报告",
+      "journal": "日记账"
+    },
+    "numbering": {
+      "title": "文档编号",
+      "description": "生成文档编号的序列。每种种类均显示前缀和补位。",
+      "empty": "尚未配置任何序列。",
+      "table": {
+        "document": "文档",
+        "prefix": "前缀",
+        "next": "下一编号",
+        "padding": "补位",
+        "example": "示例"
+      }
+    },
+    "validation": {
+      "nameRequired": "显示名称为必填项",
+      "countryRequired": "国家/地区为必填项"
+    },
+    "saved": "设置已保存",
+    "savedPeriodsRederived": "设置已保存——会计期间已按新财年重新标注",
+    "saveSettings": "保存设置"
+  },
+  "users": {
+    "metaTitle": "用户",
+    "title": "用户",
+    "description": "谁可以登录，以及他们持有哪些角色。用户的访问权限是其所分配角色的并集；未分配任何角色的用户回退到其旧版角色。",
+    "manageRoles": "管理角色",
+    "searchPlaceholder": "搜索姓名或邮箱……",
+    "statusFilter": "状态",
+    "emptyTitle": "无匹配用户",
+    "emptySearchDescription": "没有用户匹配你的搜索。请尝试其他关键词或状态筛选。",
+    "emptyFilterDescription": "请尝试其他状态筛选。",
+    "table": {
+      "roles": "角色",
+      "lastSignIn": "上次登录"
+    },
+    "you": "你",
+    "statusActive": "启用",
+    "statusInactive": "停用",
+    "requestFailed": "请求失败",
+    "editRolesFor": "为 {name} 编辑角色",
+    "rolesFor": "角色——{name}",
+    "noRoles": "暂无角色——请在“管理角色”下创建一个。",
+    "builtInBadge": "内置",
+    "deactivateConfirm": "停用 {name}？他们将被登出，且在重新激活前无法登录。",
+    "deactivate": "停用",
+    "reactivate": "重新激活",
+    "deactivated": "{name} 已停用",
+    "reactivated": "{name} 已重新激活"
+  },
+  "permissions": {
+    "groups": {
+      "gl": "总账",
+      "close": "期间与结账",
+      "ap": "应付账款",
+      "ar": "应收账款",
+      "reports": "报表",
+      "budgets": "预算与预测",
+      "insights": "洞察",
+      "items": "物料与服务",
+      "projects": "项目与作业成本核算",
+      "time": "工时与工时单",
+      "records": "自定义记录",
+      "assistant": "AI 助手",
+      "sql": "查询工作台",
+      "sync": "迁移与镜像",
+      "scripts": "脚本",
+      "flows": "流程",
+      "apps": "应用",
+      "documents": "文件柜",
+      "admin": "管理",
+      "assets": "固定资产与折旧",
+      "data": "导入与导出",
+      "crm": "客户关系管理"
+    },
+    "gl_read": "查看日记账和余额",
+    "gl_manage": "管理会计科目表",
+    "gl_post": "过账日记账分录",
+    "periods_manage": "配置财务日历、期间和锁定",
+    "close_read": "查看结账运行和证据",
+    "close_run": "执行结账任务和校验",
+    "close_approve": "审阅、审批并锁定结账运行",
+    "close_reopen": "请求并审批受控的重新开启",
+    "ap_read": "查看账单",
+    "ap_create": "创建并提交账单",
+    "ap_approve": "审批或驳回账单",
+    "ap_post": "将账单过账至总账",
+    "ap_pay": "支付账单",
+    "ar_read": "查看发票",
+    "ar_create": "创建并提交发票",
+    "ar_approve": "审批或驳回发票",
+    "ar_post": "将发票过账至总账",
+    "ar_pay": "记录客户收款",
+    "reports_read": "查看报表",
+    "reports_create": "创建并保存报表",
+    "reports_schedule": "安排报表发送",
+    "budgets_read": "查看预算和预测",
+    "budgets_manage": "创建并编辑预算草稿",
+    "budgets_approve": "审批并归档正式预算",
+    "insights_read": "查看洞察和库",
+    "insights_create": "构建卡片和仪表板",
+    "insights_publish": "发布到共享库",
+    "items_read": "查看物料和服务",
+    "items_manage": "创建并编辑物料",
+    "projects_read": "查看项目和作业成本核算",
+    "projects_manage": "创建并编辑项目",
+    "time_read": "查看工时单",
+    "time_manage": "录入并编辑工时",
+    "time_approve": "审批工时单",
+    "records_read": "查看自定义记录",
+    "records_create": "创建并编辑自定义记录",
+    "records_manage_types": "设计自定义记录类型",
+    "assistant_use": "使用 AI 助手",
+    "assistant_write": "允许助手起草记录",
+    "sql_execute": "运行只读 SQL 查询",
+    "sync_run": "运行外部源同步",
+    "scripts_manage": "管理用户脚本",
+    "scripts_execute": "调用端点脚本",
+    "flows_manage": "编写并管理流程",
+    "flows_approve": "对流程审批门控执行操作",
+    "apps_use": "使用已安装的应用",
+    "apps_manage": "安装并管理应用",
+    "parties_read": "查看往来方",
+    "parties_manage": "管理往来方",
+    "banking_read": "查看银行业务",
+    "banking_reconcile": "对账银行账户",
+    "expenses_read": "查看费用报告",
+    "expenses_create": "录入费用报告",
+    "admin_custom_fields_manage": "管理自定义字段",
+    "admin_users_manage": "管理用户和角色分配",
+    "admin_roles_manage": "管理角色和权限",
+    "admin_nav_manage": "自定义导航",
+    "admin_customization_manage": "自定义交易表单和列表视图",
+    "admin_audit_read": "查看审计日志",
+    "admin_ai_manage": "管理 AI 设置",
+    "admin_sandboxes_manage": "创建并管理沙箱环境",
+    "admin_backups_manage": "管理组织备份",
+    "api_keys_manage": "管理 API 密钥",
+    "assets_read": "查看固定资产和折旧",
+    "assets_manage": "创建并编辑资产，运行折旧",
+    "documents_read": "浏览文件柜",
+    "documents_manage": "上传、移动、重命名和删除文件",
+    "admin_setup_manage": "管理设置与配置",
+    "data_export": "导出数据",
+    "data_import": "导入数据",
+    "crm_accounts_read": "查看 CRM 客户",
+    "crm_accounts_create": "创建线索和潜在客户",
+    "crm_accounts_manage": "管理 CRM 客户",
+    "crm_accounts_assign": "分配并路由 CRM 客户",
+    "crm_activities_read": "查看 CRM 活动",
+    "crm_activities_manage": "创建并管理 CRM 活动",
+    "crm_opportunities_read": "查看商机",
+    "crm_opportunities_manage": "创建并管理商机",
+    "crm_opportunities_close": "关闭赢单或丢单的商机",
+    "crm_forecasts_read": "查看销售预测",
+    "crm_forecasts_manage": "创建预测快照",
+    "crm_forecasts_override": "覆盖团队预测",
+    "crm_setup_manage": "管理 CRM 设置"
+  },
+  "ai": {
+    "metaTitle": "AI 设置",
+    "title": "AI 设置",
+    "description": "选择助手所使用的 AI 服务商。你的 API 密钥在静态时加密存储，保存后不再显示。",
+    "enabledLabel": "启用 AI 功能",
+    "providerLabel": "服务商",
+    "baseUrlLabel": "基础 URL",
+    "baseUrlRequired": "（必填）",
+    "baseUrlOptional": "（可选覆盖）",
+    "baseUrlDefault": "留空以使用默认值：{url}",
+    "baseUrlHint": "一个公开的、兼容 OpenAI 的 HTTPS 端点。",
+    "keyLabel": "API 密钥",
+    "keyPlaceholder": "粘贴你的服务商 API 密钥",
+    "keySavedPlaceholder": "•••••••••••• （已保存——键入以替换）",
+    "keySavedHint": "已有一个密钥在案，静态加密存储。键入新密钥以替换它。",
+    "keyHint": "静态加密存储；绝不离开服务器。",
+    "modelsLabel": "模型",
+    "fastModelLabel": "快速模型",
+    "fastModelHint": "快速查询",
+    "smartModelLabel": "智能模型",
+    "smartModelHint": "助手",
+    "save": "保存设置",
+    "saved": "AI 设置已保存。",
+    "saveFailed": "无法保存设置。",
+    "keyCleared": "API 密钥已移除。",
+    "removeKey": "移除 API 密钥",
+    "testConnection": "测试连接",
+    "testFailed": "测试请求失败。",
+    "agents": {
+      "title": "持续结账智能体",
+      "description": "持续监控结账就绪度，并浮现有证据支撑的会计与财务异常。",
+      "reviewWork": "查看发现",
+      "globallyDisabled": "AI 功能已关闭。无论下方控件如何设置，两个智能体及其定时运行均已停止。",
+      "enabled": "已启用",
+      "automaticRuns": "自动运行",
+      "cadence": "计划",
+      "materiality": "重要性阈值",
+      "materialityHint": "各控件所使用的默认金额下限，除非某检测器覆盖它。",
+      "materialitySummary": "重要性 {amount}",
+      "cadences": {
+        "daily": "每日",
+        "weekly": "每周"
+      },
+      "manualOnly": "手动运行",
+      "controlsEnabled": "{total} 个控件中有 {count} 个已开启",
+      "configure": "配置",
+      "drawerTitle": "配置 {agent}",
+      "drawerDescription": "控制调度、重要性，以及此智能体具体评估哪些会计检查。",
+      "operationTitle": "智能体运行",
+      "operationDescription": "此智能体的主可用性和自动执行。",
+      "detectorControlsTitle": "检测器控件",
+      "detectorControlsDescription": "每个控件都可独立禁用，并按你的运营阈值进行调优。",
+      "controlOn": "开",
+      "controlOff": "关",
+      "customMateriality": "为此控件覆盖智能体重要性",
+      "detectorMateriality": "控件重要性阈值",
+      "inheritedMateriality": "使用智能体阈值 {amount}。",
+      "disabledFindingBehavior": "关闭某个控件会停止该项检查。现有发现仍然可用，且不会被标记为已解决。",
+      "reasoningTitle": "智能体推理与叙述",
+      "reasoningDescription": "赋予此智能体与助手相同的受治理只读工具，使其能够调查证据、关联驱动因素并生成可复核的分析。它无法更改或过账记录。",
+      "reasoning": {
+        "rootCauseAnalysis": {
+          "title": "根因分析",
+          "description": "调查支持性交易，并解释每项发现背后的具体驱动因素。"
+        },
+        "recommendations": {
+          "title": "推荐操作",
+          "description": "基于所收集的证据，建议具体、可复核的后续步骤。"
+        },
+        "narrative": {
+          "title": "管理层叙述",
+          "description": "根据当前报表和趋势，生成结账就绪度简报或财务业绩摘要。"
+        }
+      },
+      "modelTier": "分析模型",
+      "modelTiers": {
+        "smart": "智能模型——更深入的分析",
+        "fast": "快速模型——成本更低"
+      },
+      "maxToolSteps": "最大工具步数",
+      "maxToolStepsHint": "限制单次运行可执行的报表和记录查询次数（4–30）。",
+      "resetRecommended": "重置为推荐默认值",
+      "cancel": "取消",
+      "saveConfiguration": "保存智能体",
+      "configurationSaved": "智能体配置已保存。",
+      "configurationSaveFailed": "无法保存智能体配置。",
+      "parameterLabel": "{label}（{unit}）",
+      "units": {
+        "days": "天",
+        "count": "项",
+        "percent": "%",
+        "multiple": "× 重要性",
+        "points": "百分点"
+      },
+      "parameters": {
+        "criticalAgeDays": "严重阈值天数",
+        "criticalItemCount": "严重项目数量",
+        "criticalMaterialityMultiple": "严重重要性倍数",
+        "staleAfterDays": "过期天数",
+        "minimumVariancePercent": "最小不利差异",
+        "criticalVariancePercent": "严重不利差异",
+        "minimumDeclinePercent": "最小收入下滑",
+        "criticalDeclinePercent": "严重收入下滑",
+        "minimumDropPoints": "最小毛利下降",
+        "criticalDropPoints": "严重毛利下降"
+      },
+      "detectors": {
+        "unmatched_bank_activity": {
+          "title": "未匹配的银行活动",
+          "description": "按银行账户查找未匹配的对账单明细行，衡量总敞口，并对账龄、数量或重要性集中度进行升级。"
+        },
+        "reconciliation_difference": {
+          "title": "对账差异",
+          "description": "将进行中的对账单余额与已对账的总账活动进行比较，并标记每一处非零差异。"
+        },
+        "stale_accounting_documents": {
+          "title": "过期的会计文档",
+          "description": "查找已超过配置账龄的草稿或待处理账单、发票、贷项、费用和日记账。"
+        },
+        "missing_approved_budget": {
+          "title": "缺少已批准预算",
+          "description": "在运行差异分析前，确认有一份已批准的预算覆盖当前运营期间。"
+        },
+        "unfavorable_budget_variance": {
+          "title": "不利的预算差异",
+          "description": "使用精确金额以及可配置的百分比严重度阈值，评估收入短缺和费用超支。"
+        },
+        "period_revenue_decline": {
+          "title": "期间收入下滑",
+          "description": "比较最近两个已完成期间，并标记重大的收入恶化。"
+        },
+        "gross_margin_decline": {
+          "title": "毛利下降",
+          "description": "比较已完成期间的毛利，并标记以百分点计的重大压缩。"
+        }
+      },
+      "accounting": {
+        "title": "会计智能体",
+        "description": "持续的记账和结账就绪度控件。",
+        "coverage": "检查未匹配的银行活动、对账差异，以及过期的草稿或待处理会计文档。"
+      },
+      "finance": {
+        "title": "财务智能体",
+        "description": "持续的差异和业绩控件。",
+        "coverage": "检查已批准预算的差异、收入下滑、毛利下降以及缺失的预算覆盖。"
+      },
+      "lastRun": "上次运行：{date} · {status}",
+      "nextRun": "下次定时运行：{date}",
+      "neverRun": "尚未运行",
+      "runNow": "立即运行",
+      "scanComplete": "扫描完成：检出 {detected} 项，解决 {resolved} 项。",
+      "scanFailed": "智能体扫描失败。",
+      "runStatus": {
+        "completed": "已完成",
+        "failed": "失败",
+        "skipped": "已跳过",
+        "running": "运行中"
+      }
+    },
+    "documentCapture": {
+      "title": "应付文档采集",
+      "description": "将供应商账单和贷项提取到一个有证据支撑的复核队列中。它使用相同的组织 AI 总开关，而其文档服务商凭据仍独立加密。",
+      "openQueue": "打开采集队列",
+      "enabled": "启用应付文档采集",
+      "globallyDisabled": "AI 功能已关闭。无论此控件如何设置，文档采集均已停止。",
+      "endpoint": "文档服务商端点",
+      "endpointHint": "你所在组织的公开 Azure AI Document Intelligence 端点。",
+      "key": "文档服务商 API 密钥",
+      "keyPlaceholder": "粘贴文档服务商密钥",
+      "removeKey": "移除文档服务商密钥",
+      "keyRemoved": "文档服务商密钥已移除。",
+      "model": "发票模型",
+      "confidence": "复核置信度阈值",
+      "confidenceHint": "低于此 0–1 阈值的值将被标记以供复核。",
+      "autoDraft": "仅为完全匹配的采购订单自动创建草稿",
+      "test": "测试文档服务商",
+      "testResult": {
+        "connected": "已连接到文档服务商。",
+        "failed": "文档服务商测试失败。",
+        "missing": "请先输入端点和 API 密钥。"
+      }
+    },
+    "models": {
+      "load": "加载模型",
+      "reload": "重新加载模型",
+      "loading": "加载中……",
+      "loaded": "{count, plural, one {# 个模型可用} other {# 个模型可用}}",
+      "loadError": "无法加载模型。",
+      "none": "无模型",
+      "pick": "选择一个模型……",
+      "loadFirst": "请先加载模型，或手动键入 id",
+      "pickFromList": "从列表中选择",
+      "typeManually": "手动键入",
+      "current": "{id}（当前）",
+      "hint": "用你的 API 密钥加载实时模型列表，或手动键入模型 id。",
+      "idPlaceholder": "模型 id"
+    }
+  },
+  "setup": {
+    "title": "设置",
+    "description": "配置税务、维度、条款，以及你的账目运行所依赖的参考数据。",
+    "laborCosting": {
+      "rates": {
+        "hint": "后备工资率依次按职位、工种、部门、子公司和组织默认值解析。员工个人历史记录保留在员工档案中。",
+        "scopeJobTitle": "职位",
+        "scopeDepartment": "部门",
+        "scopeSubsidiary": "子公司",
+        "currency": "币种",
+        "drawerNewDescription": "为某个人员范围添加带生效日期的工资率。",
+        "select": {
+          "job_title": "选择职位",
+          "trade": "选择工种",
+          "department": "选择部门",
+          "subsidiary": "选择子公司"
+        }
+      },
+      "reconciliation": {
+        "subsidiary": "子公司"
+      },
+      "billing": {
+        "title": "对外人工费率卡",
+        "hint": "按客户和项目设置带生效日期及币种的人工价格，包含各项目常规/加班/双倍费率、通用调整、协商条款和分配历史。",
+        "search": "搜索费率卡…",
+        "add": "新建费率卡",
+        "card": "费率卡",
+        "currency": "币种",
+        "period": "生效期间",
+        "items": "项目",
+        "assignments": "分配",
+        "status": "状态",
+        "empty": "没有符合筛选条件的费率卡。",
+        "newTitle": "新建对外人工费率卡",
+        "newDescription": "先创建共享费率表，再添加带生效日期的项目费率。",
+        "createInItemHint": "费率卡通过共享项目费率表工作区创建，使人工、服务和设备使用同一计价引擎。返回此处查看条款和分配。",
+        "openRateBooks": "打开费率表",
+        "effectiveFrom": "生效日期",
+        "effectiveTo": "失效日期",
+        "derivation": "缺失档位处理",
+        "scopes": "维度范围",
+        "allScopes": "无维度限制",
+        "itemRates": "项目和时间类型费率",
+        "item": "项目",
+        "regular": "常规",
+        "adjustments": "调整",
+        "appliesTo": "适用于",
+        "wholeCard": "整张费率卡",
+        "revise": "创建修订版",
+        "reviseHint": "修订版会保留当前版本，并按新生效日期创建副本。",
+        "historicalHint": "这是历史版本。请打开最新版本后创建修订版。",
+        "revisionTitle": "新费率卡修订版",
+        "revisionDescription": "基础项目费率、范围和条款会被复制；调整可适用于整张费率卡或指定项目。",
+        "revisionEffectiveFrom": "新版本生效日期",
+        "adjustmentNumber": "调整 {number}",
+        "removeAdjustment": "移除调整",
+        "adjustmentName": "名称",
+        "adjustmentCode": "代码",
+        "category": "类别",
+        "calculation": "计算方式",
+        "presentation": "发票显示方式",
+        "adjustmentValue": "数值",
+        "adjustmentUnit": "单位",
+        "referenceText": "说明或合同依据",
+        "addAdjustment": "添加调整",
+        "saveRevision": "保存修订版",
+        "revisionSaved": "费率卡修订版已保存",
+        "categories": {
+          "markup": "加价",
+          "travel": "差旅",
+          "allowance": "津贴",
+          "minimum": "最低额",
+          "surcharge": "附加费",
+          "other": "其他"
+        },
+        "calculations": {
+          "percent": "百分比",
+          "fixed": "固定金额",
+          "per_hour": "每小时",
+          "per_day": "每天",
+          "distance": "距离",
+          "time": "时间",
+          "text": "说明文字"
+        },
+        "presentations": {
+          "included": "包含在费率中",
+          "separate": "单独行",
+          "informational": "仅供参考"
+        },
+        "errors": {
+          "notFound": "未找到费率卡。",
+          "effectiveDate": "请选择生效日期。",
+          "adjustments": "调整数据无效。",
+          "item": "请选择有效的启用项目。",
+          "name": "每项调整都需要名称和代码。",
+          "duplicateCode": "同一项目的调整代码必须唯一。",
+          "category": "请选择有效类别。",
+          "calculation": "请选择有效计算方式。",
+          "presentation": "请选择有效显示方式。",
+          "value": "请输入非负数值。",
+          "latestOnly": "请打开最新版本。",
+          "afterLatest": "新日期必须晚于最新版本。",
+          "save": "无法保存费率卡修订版。"
+        },
+        "terms": "协商条款",
+        "none": "无",
+        "derivations": {
+          "explicit": "明确费率",
+          "time_type_multipliers": "时间类型倍数"
+        },
+        "scopeTypes": {
+          "department": "部门",
+          "subsidiary": "子公司",
+          "location": "地点",
+          "class": "类别",
+          "trade": "工种",
+          "job_title": "职位",
+          "other": "其他"
+        }
+      },
+      "tabs": {
+        "billing": "对外费率卡"
+      }
+    },
+    "taxLibrary": {
+      "title": "纳税申报库",
+      "open": "申报库",
+      "description": "导入加拿大、英国、澳大利亚、新西兰的受维护申报结构，以及一份美国州/地方工作底稿。",
+      "pack": "辖区包",
+      "status": "状态",
+      "installed": "已安装",
+      "available": "可安装",
+      "searchPlaceholder": "搜索辖区包…",
+      "selectVisible": "选择所有可见的可安装包",
+      "selectPack": "选择{name}",
+      "installSelected": "安装选中的{count}个包",
+      "selectionCount": "已选择{count}个包",
+      "resultCount": "{count}个包",
+      "pageOf": "第{page}页，共{pages}页",
+      "working": "处理中……",
+      "installSuccess": "已安装{count}个纳税申报包",
+      "resetSuccess": "纳税申报包已重置为库默认值",
+      "confirmReset": "将{name}重置为受维护的库默认值吗？这会替换其已配置的申报框。",
+      "usNotice": "美国没有联邦销售税申报。此工作底稿必须为每个州和地方申报辖区进行定制。"
+    },
+    "assetDepreciationSetup": {
+      "navTitle": "Book Depreciation",
+      "title": "Book Depreciation",
+      "description": "Configure reusable depreciation methods and the method, life and convention each accounting book applies to an asset category.",
+      "tabsAria": "Book depreciation setup sections",
+      "tabs": {
+        "methods": "Methods",
+        "books": "Book policies"
+      }
+    },
+    "taxDepreciationSetup": {
+      "navTitle": "Tax Depreciation",
+      "title": "Tax Depreciation",
+      "description": "Install country tax-depreciation packs and configure class assignments, regimes, classes, conventions and first-year rules. This is separate from sales-tax, VAT and nexus setup.",
+      "tabsAria": "Fixed asset setup sections",
+      "tabs": {
+        "overview": "Overview",
+        "categories": "Asset categories",
+        "regimes": "Tax regimes",
+        "classes": "Tax classes",
+        "firstYear": "First-year rules",
+        "methods": "Methods",
+        "books": "Book policies"
+      },
+      "packsTitle": "Country depreciation packs",
+      "packsDescription": "Installing a pack creates editable tenant configuration. Existing overrides are never replaced.",
+      "recommended": "Company country",
+      "installed": "Installed",
+      "install": "Install pack",
+      "installing": "Installing…",
+      "installFailed": "Could not install the depreciation pack",
+      "installedToast": "Installed {count} depreciation classes",
+      "assignmentFailed": "Could not save the tax class assignment",
+      "assignmentsTitle": "Asset-category class assignments",
+      "assignmentsDescription": "Choose the default tax class for each asset category.",
+      "assetCategory": "Asset category",
+      "notAssigned": "Not assigned",
+      "classCount": "{count, plural, one {# class} other {# classes}}",
+      "models": {
+        "pool": "Class pool",
+        "macrs": "Per-asset MACRS"
+      },
+      "customizeTitle": "Customize",
+      "customizeDescription": "Country packs are starting points; seeded values remain editable.",
+      "links": {
+        "regimes": {
+          "title": "Regimes",
+          "description": "Country, calculation model and asset class attribute."
+        },
+        "classes": {
+          "title": "Classes and methods",
+          "description": "Rates, recovery periods, methods and conventions."
+        },
+        "firstYear": {
+          "title": "First-year rules",
+          "description": "Effective-dated acceleration and eligibility."
+        },
+        "assignments": {
+          "title": "Asset-category assignments",
+          "description": "Assign categories to regime classes in Tax attributes."
+        }
+      }
+    },
+    "taxOfficial": {
+      "title": "官方申报表单",
+      "description": "仅当辖区接受或要求该表单时，才上传官方可填写 PDF。在“纳税申报框”下映射其字段。",
+      "upload": "上传官方 PDF",
+      "uploading": "上传中……",
+      "uploaded": "官方表单已上传",
+      "remove": "移除",
+      "removed": "官方表单已移除",
+      "none": "未上传官方 PDF"
+    },
+    "taxBoxes": {
+      "description": "{code} 的映射、计算和手动申报框。",
+      "calculatedNote": "每个申报框均属于此申报表；映射框用于选择其汇总活动的税码。",
+      "new": "新建纳税申报框",
+      "searchPlaceholder": "搜索申报框…",
+      "source": "来源",
+      "empty": "没有符合此申报表和搜索条件的申报框。",
+      "mapped": "已映射",
+      "calculated": "已计算",
+      "manual": "手动"
+    },
+    "taxRates": {
+      "description": "{code} 的按生效日期管理的税率。",
+      "new": "新建税率",
+      "searchPlaceholder": "搜索税率…",
+      "empty": "没有符合此税码和搜索条件的税率。"
+    },
+    "new": "新建",
+    "learnMore": "了解更多。",
+    "empty": "此处暂无内容。",
+    "statusActive": "启用",
+    "statusArchived": "已归档",
+    "yes": "是",
+    "selectPlaceholder": "选择……",
+    "searchPlaceholder": "搜索……",
+    "created": "已创建",
+    "updated": "已保存",
+    "deleted": "已删除",
+    "confirmDelete": "删除此记录？此操作无法撤销。",
+    "validation": {
+      "required": "{field} 为必填项"
+    },
+    "drawer": {
+      "newTitle": "新建 {name}",
+      "editTitle": "编辑 {name}",
+      "tabs": {
+        "ariaLabel": "配置分区",
+        "details": "详细信息"
+      }
+    },
+    "errors": {
+      "duplicate": "已存在使用该代码的记录。",
+      "inUse": "此记录正在使用中，无法删除。",
+      "primaryRequired": "在取消此账簿的主账簿状态前，请先选择另一个会计账簿作为主账簿。",
+      "primaryActiveRequired": "主会计账簿必须保持启用。",
+      "archiveOnly": "会计账簿为保留总账历史而留存，只能归档。",
+      "invalidUrl": "请输入有效的 http:// 或 https:// 政府申报 URL。",
+      "invalidDepreciationFormula": "请使用文档中的变量和运算符输入有效的折旧公式。"
+    },
+    "groups": {
+      "company": "公司",
+      "accounting": "会计",
+      "taxes": "税务",
+      "dimensions": "维度",
+      "billing": "计费与编号",
+      "workforce": "劳动力",
+      "assets": "资产",
+      "currency": "货币",
+      "revenue": "收入",
+      "inventory": "库存"
+    },
+    "fxProvider": {
+      "title": "汇率服务商",
+      "description": "将每日即期汇率导入你所在组织的币种，并自动保持其最新。",
+      "provider": "服务商",
+      "providers": {
+        "bank_of_canada": "加拿大银行",
+        "ecb": "欧洲中央银行",
+        "open_exchange_rates": "Open Exchange Rates"
+      },
+      "providerHelp": {
+        "bank_of_canada": "以 CAD 为源锚点的官方每日均值。无需 API 密钥。",
+        "ecb": "以 EUR 为源锚点的官方营业日参考汇率。无需 API 密钥。",
+        "open_exchange_rates": "使用你自己的 API 密钥获得广泛的商业覆盖。可能受套餐限制约束。"
+      },
+      "displayName": "配置名称",
+      "displayNamePlaceholder": "每日公司汇率",
+      "baseCurrency": "基准币种",
+      "selectCurrency": "选择一种币种……",
+      "schedule": "同步计划",
+      "schedules": {
+        "manual": "仅手动",
+        "daily": "每日",
+        "weekdays": "工作日",
+        "weekly": "每周"
+      },
+      "syncHourUtc": "同步时刻（UTC）",
+      "lookbackDays": "修订回溯（天）",
+      "currencies": "要导入的币种",
+      "addCurrency": "添加一种币种……",
+      "searchCurrencies": "搜索币种……",
+      "removeCurrency": "移除 {currency}",
+      "noCurrencies": "至少添加一种外币。",
+      "apiKey": "服务商 API 密钥",
+      "apiKeyPlaceholder": "输入你的 API 密钥",
+      "secretStored": "已存储一个密封密钥——输入一个值以替换它",
+      "clearSecret": "移除已存储的 API 密钥",
+      "enabled": "启用服务商同步",
+      "saved": "汇率服务商已保存。",
+      "test": "测试服务商",
+      "testPassed": "服务商返回了 {observations} 条观测值和 {rates} 条标准化汇率。",
+      "testFailed": "服务商测试失败。",
+      "syncNow": "立即同步",
+      "syncPassed": "已导入 {observations} 条观测值并处理了 {rates} 条标准化汇率。",
+      "syncFailed": "汇率同步失败。",
+      "health": "服务商健康状况",
+      "lastSuccess": "上次成功导入",
+      "lastObservation": "最新观测值",
+      "nextSync": "下次同步",
+      "latestRun": "最近运行",
+      "noRuns": "该服务商尚未运行过。",
+      "runStatus": {
+        "running": "运行中",
+        "ok": "成功",
+        "failed": "失败"
+      },
+      "runSummary": "{observations} 条观测值 · 插入 {inserted} 条 · 更新 {updated} 条 · 保留 {preserved} 处手动覆盖",
+      "overridePolicy": "在“设置”中编辑的汇率会成为受保护的手动覆盖。服务商导入绝不会替换它们。"
+    },
+    "paymentOperations": {
+      "title": "付款与银行业务",
+      "description": "配置付款通道、资金档案、计划、审批、交付和扣款授权。",
+      "tabs": {
+        "profiles": "银行档案",
+        "formats": "付款格式",
+        "schedules": "计划",
+        "mandates": "扣款授权"
+      },
+      "search": {
+        "profiles": "搜索档案……",
+        "formats": "搜索格式……",
+        "schedules": "搜索计划……",
+        "mandates": "搜索授权……"
+      },
+      "state": "状态",
+      "new": {
+        "profiles": "新建档案",
+        "formats": "新建自定义格式",
+        "schedules": "新建计划",
+        "mandates": "新建授权"
+      },
+      "columns": {
+        "name": "名称",
+        "bank": "资金账户",
+        "format": "格式",
+        "currency": "币种",
+        "delivery": "交付",
+        "approval": "运行审批",
+        "status": "状态",
+        "code": "代码",
+        "rail": "通道",
+        "direction": "方向",
+        "profile": "档案",
+        "cron": "计划",
+        "nextRun": "下次运行",
+        "action": "操作",
+        "reference": "引用",
+        "party": "对手方",
+        "scheme": "方案",
+        "signedOn": "签署",
+        "expiresOn": "到期"
+      },
+      "states": {
+        "active": "启用",
+        "archived": "已归档",
+        "pending": "待处理",
+        "suspended": "已暂停",
+        "revoked": "已吊销",
+        "expired": "已过期"
+      },
+      "rails": {
+        "cpa005_credit": "CPA-005 贷记",
+        "nacha_credit": "NACHA 贷记",
+        "sepa_credit": "SEPA 贷记",
+        "nacha_debit": "NACHA 借记",
+        "sepa_debit": "SEPA 借记",
+        "positive_pay": "Positive Pay",
+        "wire": "电汇",
+        "cheque": "支票",
+        "custom": "自定义"
+      },
+      "directions": {
+        "credit": "贷记",
+        "debit": "借记",
+        "both": "贷记和借记"
+      },
+      "actions": {
+        "create_draft": "创建草稿",
+        "submit_for_approval": "提交审批"
+      },
+      "schemes": {
+        "nacha": "NACHA",
+        "sepa_core": "SEPA Core",
+        "sepa_b2b": "SEPA B2B",
+        "custom": "自定义"
+      },
+      "fields": {
+        "name": "名称",
+        "currency": "币种",
+        "bankAccount": "资金账户",
+        "format": "付款格式",
+        "subsidiary": "子公司",
+        "country": "国家/地区",
+        "sftpServer": "现有 SFTP 服务器",
+        "sftpFolder": "出站文件夹",
+        "requireRunApproval": "要求付款运行审批",
+        "requireFileApproval": "要求生成文件审批",
+        "autoRemittance": "自动发送汇款通知",
+        "discountAccount": "提前付款折扣科目",
+        "positivePayAccountReference": "机构账户引用",
+        "active": "启用",
+        "code": "代码",
+        "direction": "方向",
+        "extension": "文件扩展名",
+        "contentType": "内容类型",
+        "formatterScript": "格式化 JavaScript",
+        "profile": "银行档案",
+        "cron": "计划",
+        "cronHint": "选择一个预设，或输入自定义计划（cron 语法）以完全控制。",
+        "timezone": "时区",
+        "action": "到期时",
+        "party": "对手方",
+        "partyBankAccount": "已批准的银行账户",
+        "scheme": "授权方案",
+        "reference": "授权引用",
+        "status": "状态",
+        "signedOn": "签署于",
+        "validFrom": "生效自",
+        "expiresOn": "到期于"
+      },
+      "secretFields": {
+        "originatorId": "发起方 ID",
+        "originatorShortName": "简称",
+        "originatorLongName": "全称",
+        "dataCentre": "数据中心",
+        "institution": "机构",
+        "transit": "转接号",
+        "account": "账号",
+        "transactionCode": "交易代码",
+        "odfiRouting": "ODFI 路由号",
+        "immediateDestination": "直接目的地",
+        "immediateOrigin": "直接来源",
+        "destinationName": "目的地名称",
+        "originName": "来源名称",
+        "companyName": "公司名称",
+        "companyId": "公司 ID",
+        "entryClassCode": "分录类别",
+        "entryDescription": "分录说明",
+        "originatorName": "发起方名称",
+        "originatorIban": "发起方 IBAN",
+        "originatorBic": "发起方 BIC",
+        "creditorId": "债权人 ID"
+      },
+      "originator": {
+        "title": "发起方凭据",
+        "newHint": "为你所在组织和此档案加密存储。",
+        "editHint": "凭据为只写。将每个字段留空即可保留已保存的值。"
+      },
+      "accounting": {
+        "title": "会计和银行引用",
+        "noDiscountAccount": "不记录折扣",
+        "hint": "折扣科目记录运行中捕获可用付款条款折扣时所赚取的节省。"
+      },
+      "delivery": {
+        "title": "交付",
+        "manual": "手动下载",
+        "existingSftpHint": "SFTP 服务器在现有 SFTP 设置中统一管理。此档案仅为交付选择其一。"
+      },
+      "criteria": {
+        "title": "筛选条件",
+        "dueThroughDays": "包含在此天数内到期的账单",
+        "minimumAmount": "最小账单金额",
+        "maximumRunAmount": "最大运行金额",
+        "captureDiscounts": "捕获可用的提前付款折扣",
+        "applyCredits": "应用可用的贷项"
+      },
+      "drawer": {
+        "new": {
+          "profiles": "新建银行档案",
+          "formats": "新建自定义付款格式",
+          "schedules": "新建付款计划",
+          "mandates": "新建扣款授权"
+        },
+        "edit": {
+          "profiles": "编辑银行档案",
+          "formats": "编辑付款格式",
+          "schedules": "编辑付款计划",
+          "mandates": "编辑扣款授权"
+        },
+        "description": {
+          "profiles": "将资金账户连接到付款通道和交付策略。",
+          "formats": "为自定义银行格式定义文件元数据和沙箱化 JavaScript。",
+          "schedules": "按可重复的计划选择符合条件的交易。",
+          "mandates": "记录从对手方收取资金所需的授权。"
+        }
+      },
+      "select": "选择……",
+      "allSubsidiaries": "所有子公司",
+      "schedulePresets": {
+        "daily": "每日",
+        "weekdays": "工作日",
+        "weekly": "每周（周一）",
+        "monthly": "每月（1 日）"
+      },
+      "empty": "无可显示的记录。",
+      "manualDelivery": "手动下载",
+      "runApproval": "必需",
+      "automatic": "自动",
+      "any": "任意",
+      "builtInFormatHint": "此内置格式化器由付款引擎维护。其可执行定义无法在此处编辑。",
+      "save": "保存",
+      "saving": "保存中……",
+      "saved": "已保存",
+      "cancel": "取消",
+      "saveFailed": "无法保存配置。"
+    },
+    "entities": {
+      "company": {
+        "title": "公司与会计",
+        "description": "组织标识、基准币种、财年和控制科目。"
+      },
+      "tax-codes": {
+        "title": "税码",
+        "singularTitle": "税码",
+        "description": "你收取和支付的税率，以及它们过账所至的科目。"
+      },
+      "tax-rates": {
+        "title": "税率",
+        "singularTitle": "税率",
+        "description": "每个税码的生效日期化税率历史。"
+      },
+      "tax-groups": {
+        "title": "税组",
+        "description": "捆绑多个税码以在一条明细行上共同应用。"
+      },
+      "tax-return-forms": {
+        "title": "纳税申报",
+        "description": "配置一份政府纳税申报：其各框、每框如何计算，以及如何申报。"
+      },
+      "tax-report-lines": {
+        "title": "纳税申报框",
+        "singularTitle": "纳税申报框",
+        "description": "将税码映射到纳税申报的各框上，或从其他框计算某个框。"
+      },
+      "classes": {
+        "title": "类别",
+        "description": "用于切分交易的报表维度。"
+      },
+      "segment-definitions": {
+        "title": "分段",
+        "description": "跨交易、科目和报表配置内置和自定义会计分段。"
+      },
+      "segment-values": {
+        "title": "分段值",
+        "description": "管理自定义分段的可选值和层级。"
+      },
+      "departments": {
+        "title": "部门",
+        "description": "用于切分交易的报表维度。"
+      },
+      "locations": {
+        "title": "地点",
+        "description": "用于切分交易的报表维度。"
+      },
+      "payment-terms": {
+        "title": "付款条款",
+        "description": "账单和发票的净额及提前付款折扣条款。"
+      },
+      "number-sequences": {
+        "title": "编号序列",
+        "description": "控制每种文档或自定义记录的前缀、下一个编号和位数。自定义记录首次生成编号时会自动创建对应序列。"
+      },
+      "time-types": {
+        "title": "工时类型",
+        "description": "工时单的成本乘数和可计费默认值。"
+      },
+      "worker-comp-groups": {
+        "title": "工伤保险组",
+        "description": "用于人工成本核算的工伤补偿费率组。"
+      },
+      "labor-burden-rates": {
+        "title": "人工负担费率",
+        "description": "应用于人工成本的生效日期化负担费率。"
+      },
+      "asset-categories": {
+        "title": "资产类别",
+        "description": "固定资产的默认折旧方法和科目。"
+      },
+      "depreciation-methods": {
+        "title": "折旧方法",
+        "description": "编写自定义折旧公式——公式构建器。"
+      },
+      "depreciation-book-policies": {
+        "title": "账簿折旧政策",
+        "description": "多账簿折旧的按账簿、按类别方法。"
+      },
+      "currencies": {
+        "title": "币种",
+        "description": "货币代码及其小数单位精度。"
+      },
+      "sftp": {
+        "title": "SFTP"
+      },
+      "payment-operations": {
+        "title": "付款与银行业务",
+        "description": "付款格式、资金档案、计划和扣款授权。"
+      },
+      "account-groups": {
+        "title": "科目组",
+        "description": "会计科目表的报表分类（如成本池）。科目组按规则自动分类科目，并支持逐科目覆盖。"
+      },
+      "subsidiaries": {
+        "title": "子公司",
+        "description": "你所在组织内部的法人实体——一棵带单一根节点的合并树。"
+      },
+      "intercompany-pairs": {
+        "title": "公司间配对",
+        "description": "跨两个子公司交易的应收/应付科目映射。"
+      },
+      "accounting-books": {
+        "title": "会计账簿",
+        "singular": "会计账簿",
+        "description": "管理拥有总账分录和结账控制的主账簿、税务账簿、法定账簿和报表账簿。"
+      },
+      "fx-rates": {
+        "title": "汇率",
+        "description": "你所在组织用于过账外币交易的每日汇率。"
+      },
+      "consolidated-fx-rates": {
+        "title": "合并汇率",
+        "description": "用于子公司合并的期间当前汇率、平均汇率和历史汇率。"
+      },
+      "item-rate-books": {
+        "title": "物料费率表",
+        "description": "用于设备及其他物料收费的客户、项目和组织费率表。"
+      },
+      "item-rate-book-assignments": {
+        "title": "费率表分配",
+        "description": "选择适用于客户或项目的生效日期费率表。"
+      },
+      "recognition-rules": {
+        "title": "确认规则",
+        "description": "收入如何随时间确认——方法、时点和科目（ASC 606）。"
+      },
+      "fair-value-prices": {
+        "title": "公允价值价格",
+        "description": "用于在各履约义务间分摊组合收入的单独售价。"
+      },
+      "stock-locations": {
+        "title": "库存地点",
+        "description": "地点维度下的实体货位、区域和仓库。"
+      },
+      "item-inventory-profiles": {
+        "title": "物料成本核算",
+        "description": "每种物料的成本核算方法、库存科目、跟踪和标准成本。"
+      },
+      "bom-components": {
+        "title": "物料清单",
+        "description": "构建每个装配物料所消耗的组件。"
+      },
+      "income-tax-rates": {
+        "title": "所得税税率",
+        "singularTitle": "所得税税率",
+        "description": "按辖区划分的法定所得税税率，带生效日期 — 用于 ASC 740 所得税计提。"
+      }
+    },
+    "fields": {
+      "classAttribute": "Asset class attribute",
+      "countryCode": "Country",
+      "calculationModel": "Calculation model",
+      "regime": "Regime",
+      "classCode": "Class code",
+      "rate": "汇率",
+      "method": "方法",
+      "firstYearFraction": "First-year fraction",
+      "allowRecapture": "Allow recapture",
+      "allowTerminalLoss": "Allow terminal loss",
+      "costCap": "Cost cap",
+      "depreciationSystem": "Depreciation system",
+      "macrsMethod": "MACRS method",
+      "recoveryPeriodYears": "Recovery period (years)",
+      "taxAttributes": "Tax attributes (JSON)",
+      "enhancedMultiplier": "Enhanced multiplier",
+      "acquiredFrom": "Acquired from",
+      "acquiredTo": "Acquired to",
+      "code": "代码",
+      "name": "名称",
+      "appliesTo": "适用于",
+      "recoverablePercent": "可抵扣 %",
+      "calculationType": "计算类型",
+      "withholdingAccountId": "预扣税科目",
+      "priceIncludesTax": "价格含税",
+      "compoundOnPrevious": "基于前序税项复合计算",
+      "roundingScale": "税额舍入小数位",
+      "isActive": "启用",
+      "isPrimary": "主账簿",
+      "country": "国家/地区",
+      "region": "地区",
+      "collectedAccountId": "已收税额科目",
+      "paidAccountId": "已付税额科目",
+      "taxCodeId": "税码",
+      "ratePercent": "税率 %",
+      "effectiveFrom": "生效自",
+      "effectiveTo": "生效至",
+      "members": "税码",
+      "reportCode": "报表代码",
+      "lineCode": "行代码",
+      "label": "标签",
+      "basis": "计税基础",
+      "sign": "符号",
+      "submissionChannel": "申报方式",
+      "governmentFormat": "政府格式",
+      "submissionUrl": "政府申报 URL",
+      "officialPdfFileId": "官方 PDF",
+      "watermark": "水印",
+      "sequence": "顺序",
+      "formula": "公式",
+      "pdfField": "PDF 字段",
+      "parentId": "父级",
+      "netDays": "净额天数",
+      "discountDays": "折扣天数",
+      "discountPercent": "折扣 %",
+      "documentKind": "文档",
+      "prefix": "前缀",
+      "nextNumber": "下一编号",
+      "padding": "补位",
+      "gapless": "无间隔",
+      "classification": "分类",
+      "costMultiplier": "成本乘数",
+      "isBillableDefault": "默认可计费",
+      "showOnFieldTicket": "在现场工单上显示",
+      "category": "类别",
+      "postsGl": "过账至总账",
+      "bookId": "账簿",
+      "categoryId": "资产类别",
+      "convention": "惯例",
+      "lifeMonths": "使用寿命（月）",
+      "departmentId": "部门",
+      "defaultMethod": "默认方法",
+      "defaultConvention": "折旧惯例",
+      "endOfLife": "使用寿命结束",
+      "defaultLifeMonths": "默认使用寿命（月）",
+      "assetAccountId": "库存资产科目",
+      "accumulatedDepreciationAccountId": "累计折旧科目",
+      "depreciationExpenseAccountId": "折旧费用科目",
+      "gainLossAccountId": "损益科目",
+      "minorUnits": "小数单位",
+      "key": "键",
+      "dimension": "维度",
+      "color": "颜色",
+      "sortOrder": "排序",
+      "legalName": "法定名称",
+      "baseCurrency": "基准币种",
+      "isElimination": "抵销",
+      "fromSubsidiaryId": "从子公司",
+      "toSubsidiaryId": "至子公司",
+      "dueFromAccountId": "应收科目",
+      "dueToAccountId": "应付科目",
+      "asOf": "截至",
+      "fromCurrency": "从币种",
+      "toCurrency": "至币种",
+      "rateType": "汇率类型",
+      "source": "来源",
+      "periodId": "会计期间",
+      "currentRate": "当前汇率",
+      "averageRate": "平均汇率",
+      "historicalRate": "历史汇率",
+      "subsidiaryId": "子公司",
+      "subsidiaryIncludeChildren": "包含下级子公司",
+      "pluralName": "复数名称",
+      "sourceKind": "来源",
+      "isHierarchical": "层级化",
+      "showOnHeader": "在交易抬头显示",
+      "showOnLines": "在交易明细行显示",
+      "showInReports": "在报表中显示",
+      "allowAccountRequirement": "允许作为科目要求",
+      "segmentId": "分段",
+      "description": "描述",
+      "recognitionPeriods": "确认期间数",
+      "startDateSource": "起始日期来源",
+      "endDateSource": "结束日期来源",
+      "periodOffset": "期间偏移",
+      "startOffsetDays": "起始偏移（天）",
+      "initialAmountPercent": "初始金额 %",
+      "deferredAccountId": "递延收入科目",
+      "recognizedAccountId": "已确认收入科目",
+      "isForecast": "预测规则",
+      "itemId": "物料",
+      "unitPrice": "单价",
+      "lowValue": "下限值",
+      "highValue": "上限值",
+      "currency": "币种",
+      "locationId": "地点",
+      "kind": "种类",
+      "costingMethod": "成本核算方法",
+      "tracking": "跟踪",
+      "cogsAccountId": "销售成本科目",
+      "adjustmentAccountId": "调整科目",
+      "varianceAccountId": "差异科目",
+      "standardCost": "标准成本",
+      "baseUnit": "基本单位",
+      "reorderPoint": "再订货点",
+      "preferredStockLevel": "首选库存水平",
+      "receivedNotBilledAccountId": "已收未开票科目",
+      "assemblyItemId": "装配物料",
+      "componentItemId": "组件物料",
+      "quantityPer": "单位用量",
+      "rateBookId": "费率表",
+      "customerId": "客户",
+      "projectId": "项目",
+      "isDefault": "默认"
+    },
+    "fieldHelp": {
+      "gapless": "无间隔表示序列中的每个编号都必须有记录，不能跳号。仅在法律或审计要求必须连续编号时启用。"
+    },
+    "options": {
+      "timeClassification": {
+        "regular": "正常工时",
+        "overtime": "加班",
+        "doubleTime": "双倍工时",
+        "other": "其他"
+      },
+      "taxDepreciationModel": {
+        "pool": "Class pool",
+        "macrs": "Per-asset MACRS"
+      },
+      "macrsSystem": {
+        "gds": "GDS",
+        "ads": "ADS"
+      },
+      "macrsMethod": {
+        "200db": "200% declining balance",
+        "150db": "150% declining balance",
+        "straightLine": "Straight line"
+      },
+      "taxDepreciationConvention": {
+        "halfYear": "Half-year",
+        "midQuarter": "Mid-quarter",
+        "midMonth": "Mid-month"
+      },
+      "poolMethod": {
+        "declining": "Declining balance",
+        "straightLine": "Straight line"
+      },
+      "appliesTo": {
+        "sales": "销售",
+        "purchases": "采购",
+        "both": "两者"
+      },
+      "taxCalculationType": {
+        "standard": "标准税",
+        "withholding": "预扣税",
+        "reverseCharge": "反向征税"
+      },
+      "rateDateBasis": {
+        "usageDate": "使用日期",
+        "projectStart": "项目开始日期"
+      },
+      "basis": {
+        "collected": "已收税额（销项）",
+        "paid": "已付税额 / 进项税额抵扣（进项）",
+        "net": "净额",
+        "tax": "税额"
+      },
+      "sign": {
+        "positive": "加（+）",
+        "negative": "减（−）"
+      },
+      "channel": {
+        "printPdf": "打印并邮寄（官方 PDF）",
+        "fileUpload": "电子文件上传",
+        "efileApi": "电子申报（API）",
+        "portalManual": "政府门户（手动录入）"
+      },
+      "governmentFormat": {
+        "portalEntry": "在线门户录入",
+        "certifiedFile": "认证政府文件",
+        "api": "兼容软件 / API",
+        "paper": "官方纸质表单"
+      },
+      "method": {
+        "straightLine": "直线法",
+        "decliningBalance": "余额递减法",
+        "doubleDeclining": "双倍余额递减法",
+        "unitsOfProduction": "工作量法",
+        "manual": "手动"
+      },
+      "convention": {
+        "fullMonth": "整月",
+        "midMonth": "月中",
+        "halfYear": "半年"
+      },
+      "endOfLife": {
+        "fullyDepreciate": "全额折旧",
+        "retainBalance": "保留余额"
+      },
+      "burdenMethod": {
+        "live": "实时",
+        "standard": "标准"
+      },
+      "fxRateType": {
+        "spot": "即期",
+        "average": "平均",
+        "historical": "历史"
+      },
+      "rateSource": {
+        "derived": "推导",
+        "manual": "手动"
+      },
+      "recognitionMethod": {
+        "pointInTime": "时点确认",
+        "straightLineEven": "直线法，各期均等",
+        "straightLineProrate": "直线法，首末期按比例",
+        "straightLineDaily": "直线法，精确天数",
+        "percentComplete": "完工百分比",
+        "milestone": "里程碑",
+        "usage": "使用量"
+      },
+      "startDateSource": {
+        "obligation": "履约义务起始",
+        "document": "文档日期",
+        "fulfillment": "履行",
+        "event": "事件",
+        "contract": "合同起始"
+      },
+      "endDateSource": {
+        "term": "期限长度",
+        "obligation": "履约义务结束",
+        "contract": "合同结束"
+      },
+      "costingMethod": {
+        "fifo": "先进先出",
+        "movingAverage": "移动平均",
+        "standard": "标准成本"
+      },
+      "tracking": {
+        "none": "无",
+        "lot": "批次",
+        "serial": "序列号"
+      },
+      "stockLocationKind": {
+        "warehouse": "仓库",
+        "zone": "区域",
+        "bin": "货位",
+        "staging": "暂存区",
+        "transit": "在途",
+        "quarantine": "隔离区"
+      }
+    },
+    "bankFeeds": {
+      "navTitle": "Bank Feeds"
+    },
+    "paymentProviders": {
+      "title": "支付服务商",
+      "description": "用于发票客户支付链接的托管收银服务商。结算与手续费对账仍在 银行 → PSP 结算 中处理。",
+      "saved": "已保存。",
+      "enableAcceptance": "启用支付链接",
+      "apiKey": "API 密钥 / 密文",
+      "webhookSecret": "Webhook 密钥",
+      "publishableKey": "公钥",
+      "merchantAccount": "商户号",
+      "secretConfigured": "已配置 — 输入以替换",
+      "receiptBankAccount": "收款银行账户",
+      "surchargeRule": "附加费规则",
+      "noSurcharge": "无附加费",
+      "save": "保存",
+      "surchargeRules": "附加费规则",
+      "surchargeHint": "可选的处理费，在结账时加到发票总额之上。收款时计入收入科目。",
+      "ruleName": "名称",
+      "ruleCalc": "计算方式",
+      "ruleProvider": "服务商",
+      "ruleEffective": "生效",
+      "deactivate": "停用",
+      "inactive": "已停用",
+      "percent": "百分比",
+      "fixed": "固定金额",
+      "cap": "上限（可选）",
+      "allProviders": "全部服务商",
+      "paymentMethod": "支付方式",
+      "methodAll": "全部",
+      "methodCard": "银行卡",
+      "methodBankDebit": "银行扣款",
+      "effectiveFrom": "生效日期",
+      "addRule": "添加规则",
+      "calcPercent": "按发票百分比",
+      "calcFixed": "固定金额",
+      "calcBoth": "百分比 + 固定",
+      "feeIncomeAccount": "手续费收入科目",
+      "webhookUrl": "Webhook 地址",
+      "webhookHint": "将此端点粘贴到服务商后台以接收支付事件。",
+      "copy": "复制",
+      "copied": "已复制",
+      "testConnection": "测试连接",
+      "testing": "测试中…"
+    }
+  },
+  "flows": {
+    "title": "流程",
+    "description": "针对你的记录的可视化自动化——触发器启动一次运行，条件进行分支，操作完成工作，审批门控为人员而暂停。",
+    "searchPlaceholder": "搜索流程……",
+    "subjectFilter": "记录类型",
+    "table": {
+      "flow": "流程",
+      "subject": "记录类型",
+      "nodes": "节点",
+      "lastRun": "上次运行",
+      "updated": "已更新",
+      "status": "状态"
+    },
+    "empty": {
+      "title": "暂无流程",
+      "description": "流程始于触发器，按条件分支，在审批门控处暂停，并以操作收尾——邮件、通知、字段更新和状态变更。",
+      "cta": "新建流程"
+    },
+    "statusEnabled": "已启用",
+    "statusDisabled": "已禁用",
+    "neverRan": "从未",
+    "new": {
+      "button": "新建流程",
+      "title": "新建流程",
+      "description": "选择此流程运行所针对的记录类型。你将在下一步设计各步骤。",
+      "name": "名称",
+      "namePlaceholder": "例如 超过 $10,000 的账单审批",
+      "subject": "记录类型",
+      "subjectPlaceholder": "选择一种记录类型……",
+      "create": "创建流程",
+      "failed": "无法创建流程"
+    },
+    "actions": {
+      "enable": "启用",
+      "disable": "禁用",
+      "delete": "删除",
+      "deleteConfirmTitle": "删除流程",
+      "deleteConfirm": "删除“{name}”？其运行历史也将被移除。",
+      "deleted": "流程已删除",
+      "deleteFailed": "无法删除流程",
+      "updateFailed": "无法更新流程"
+    },
+    "builder": {
+      "save": "保存",
+      "saved": "流程已保存",
+      "saveFailed": "无法保存流程",
+      "unsaved": "未保存的更改",
+      "enabledToggle": "已启用",
+      "namePlaceholder": "流程名称",
+      "errorsTitle": "修复以下问题才能保存流程",
+      "warningsTitle": "警告——流程可保存，但可能不会按预期运行",
+      "warningsBadge": "{count, plural, one {# 条警告} other {# 条警告}}",
+      "tabs": {
+        "canvas": "画布",
+        "runs": "运行"
+      },
+      "palette": {
+        "title": "添加",
+        "trigger": "触发器",
+        "condition": "条件",
+        "action": "操作",
+        "gate": "审批"
+      },
+      "canvasEmpty": {
+        "title": "从触发器开始",
+        "description": "触发器启动一次运行，条件对其分支，审批门控为人员暂停它，操作完成工作。先添加一个触发器，然后从其手柄拖动以连接下一步。"
+      },
+      "inspector": {
+        "empty": "选择一个节点以配置它",
+        "deleteNode": "删除节点",
+        "nodeId": "节点"
+      }
+    },
+    "node": {
+      "trigger": "触发器",
+      "condition": "条件",
+      "action": "操作",
+      "gate": "审批",
+      "conditionDefault": "如果……",
+      "gateDefault": "审批"
+    },
+    "edge": {
+      "then": "则",
+      "else": "否则",
+      "approve": "批准",
+      "reject": "驳回"
+    },
+    "trigger": {
+      "kind": "何时",
+      "kinds": {
+        "on_create": "记录被创建",
+        "on_update": "记录被更新",
+        "on_submit": "记录被提交审批",
+        "before_post": "记录过账前",
+        "after_post": "记录过账后",
+        "before_void": "记录被作废前",
+        "status_change": "状态发生变更",
+        "on_field_value": "字段匹配某条件",
+        "scheduled": "按计划",
+        "manual": "用户点击按钮"
+      },
+      "from": "从状态",
+      "to": "至状态",
+      "anyStatus": "任意状态",
+      "rule": "当记录匹配",
+      "cron": "Cron 计划",
+      "cronHint": "分 · 时 · 月中日 · 月 · 周中日",
+      "cronExample": "例如 0 8 * * 1 = 每周一 08:00",
+      "timezone": "时区（可选）",
+      "selectRecords": "为每条匹配的记录各运行一次",
+      "selectRecordsHint": "计划会搜索此记录类型，并为每个匹配项启动一次单独的运行。",
+      "selectRule": "记录筛选（可选）",
+      "selectRuleAdd": "添加记录筛选",
+      "selectRuleRemove": "移除记录筛选",
+      "selectLimit": "每次运行的最大记录数",
+      "buttonLabel": "按钮标签",
+      "confirmText": "确认消息（可选）",
+      "requirePermission": "所需权限（可选）",
+      "permissionPlaceholder": "选择一项权限……",
+      "showIf": "仅在以下情况显示按钮……",
+      "showIfAdd": "添加可见性条件",
+      "showIfRemove": "移除可见性条件",
+      "buttonPreview": "记录按钮预览",
+      "buttonHint": "当流程已启用且其权限和可见性条件通过时，此按钮会出现在记录抬头中。",
+      "defaultButtonLabel": "运行流程"
+    },
+    "condition": {
+      "rule": "分支条件",
+      "label": "标签（可选）",
+      "labelPlaceholder": "例如 超过 $10,000",
+      "hint": "规则通过时运行“则”分支；失败时运行“否则”分支。"
+    },
+    "action": {
+      "kind": "操作",
+      "kinds": {
+        "send_email": "发送邮件",
+        "notify": "发送应用内通知",
+        "set_field": "设置字段",
+        "change_status": "更改状态",
+        "post_document": "过账文档",
+        "lock_record": "锁定记录",
+        "unlock_record": "解锁记录"
+      },
+      "recipients": "收件人",
+      "subject": "主题",
+      "body": "正文",
+      "attachPdf": "附上记录 PDF",
+      "attachPdfHint": "使用你所在组织针对此记录类型的活动 PDF 模板。",
+      "interpolationHint": "使用 '{{'field'}}' 标记插入记录值",
+      "availableFields": "可用字段",
+      "title": "标题",
+      "notifyBody": "消息（可选）",
+      "href": "要打开的链接（可选）",
+      "field": "字段",
+      "value": "值",
+      "valueSource": "值来源",
+      "valueSources": {
+        "literal": "一个固定值",
+        "today": "今天的日期",
+        "now": "当前日期和时间",
+        "currentUser": "当前用户的姓名",
+        "expression": "现有公式表达式"
+      },
+      "expressionPreserved": "此现有公式表达式将被保留。公式编辑可通过表单表达式构建器进行。",
+      "status": "新状态",
+      "postDocumentHint": "通过正常的过账管道将文档过账至总账。无需配置任何内容。",
+      "lockReason": "锁定原因",
+      "lockReasonPlaceholder": "例如 已批准——付款最终确定",
+      "lockExemptRoles": "豁免角色",
+      "lockExemptHint": "管理员始终豁免；所选角色仍可编辑。",
+      "unlockHint": "移除流程锁定，使记录可再次编辑。"
+    },
+    "gate": {
+      "title": "标题",
+      "titlePlaceholder": "例如 财务总监审批",
+      "assignees": "审批人",
+      "mode": "法定人数",
+      "modeAny": "任意一人即可裁定",
+      "modeAll": "所有人都必须批准",
+      "signature": "要求键入签名",
+      "preventSelfApproval": "禁止自我审批",
+      "preventSelfApprovalHint": "提交人会从审批人列表中移除；如有必要，请求将路由至其上级。",
+      "reminderAfter": "多久后提醒（小时）",
+      "escalateAfter": "多久后升级（小时）",
+      "escalateTo": "升级至",
+      "noEscalation": "不升级",
+      "hint": "运行在此暂停，直至审批人达到法定人数并裁定，然后沿“批准”或“驳回”分支继续。"
+    },
+    "targets": {
+      "types": {
+        "user": "指定用户",
+        "role": "某角色中的所有人",
+        "submitter": "提交人",
+        "supervisor": "提交人的上级",
+        "field": "某记录字段（用户）",
+        "email": "邮箱地址"
+      },
+      "add": "添加收件人",
+      "addAssignee": "添加审批人",
+      "remove": "移除",
+      "pickUser": "选择一个用户……",
+      "pickRole": "选择一个角色……",
+      "pickField": "选择一个字段……",
+      "emailPlaceholder": "ops@example.com, cfo@example.com"
+    },
+    "logic": {
+      "groupAnd": "满足全部……",
+      "groupOr": "满足任一……",
+      "groupNot": "不满足……",
+      "ops": {
+        "eq": "等于",
+        "ne": "不等于",
+        "gt": "大于",
+        "gte": "至少为",
+        "lt": "小于",
+        "lte": "至多为",
+        "in": "是其中之一",
+        "notIn": "不是其中之一",
+        "isSet": "已设置",
+        "isNotSet": "为空"
+      },
+      "addRule": "添加条件",
+      "addGroup": "添加分组",
+      "remove": "移除",
+      "valuePlaceholder": "值",
+      "listPlaceholder": "以逗号分隔的值",
+      "true": "真",
+      "false": "假"
+    },
+    "runs": {
+      "title": "最近运行",
+      "empty": {
+        "title": "暂无运行",
+        "description": "启用流程并触发它——每次运行都会落在此处，附带其状态和任何错误。"
+      },
+      "status": {
+        "running": "运行中",
+        "waiting": "等待中",
+        "completed": "已完成",
+        "failed": "失败",
+        "cancelled": "已取消"
+      },
+      "table": {
+        "status": "状态",
+        "trigger": "触发器",
+        "subject": "记录",
+        "started": "开始",
+        "finished": "完成",
+        "error": "错误"
+      }
+    }
+  },
+  "features": {
+    "bankFeeds": {
+      "title": "Bank Feeds",
+      "description": "Automated bank connectivity — SFTP file drops and Plaid, GoCardless, and TrueLayer live feeds."
+    },
+    "subscriptionBilling": {
+      "title": "Subscription Billing",
+      "description": "Plans and subscriptions that auto-generate recurring invoices (SaaS / retainer)."
+    },
+    "onlinePayments": {
+      "title": "在线支付",
+      "description": "发票上的托管支付链接（Stripe / Adyen / GoCardless 银行扣款）、附加费规则以及自动核销收款的 Webhook。"
+    }
+  }
+}

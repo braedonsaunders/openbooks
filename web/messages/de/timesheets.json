@@ -1,0 +1,57 @@
+{
+  "list": {
+    "title": "Wöchentliche Stundenzettel",
+    "description": "Arbeitszeit der Mitarbeiter nach Woche — Stunden über alle Aufträge erfassen, einreichen und genehmigen.",
+    "newButton": "Neuer Stundenzettel",
+    "emptyTitle": "Noch keine Stundenzettel",
+    "emptyDescription": "Zeiterfassungen werden hier zu wöchentlichen Stundenzetteln zusammengefasst. Erstellen Sie einen, um Stunden auf einen Auftrag zu buchen.",
+    "week": "Woche",
+    "unnamed": "(unbenannt)"
+  },
+  "labels": {
+    "totalHours": "Gesamtstunden",
+    "billableHours": "Abrechenbare Stunden",
+    "serviceItem": "Leistungsartikel",
+    "timeType": "Zeitart",
+    "bill": "Abrechnen",
+    "billable": "Abrechenbar",
+    "dailyTotals": "Tagessummen"
+  },
+  "status": {
+    "submitted": "Eingereicht",
+    "empty": "Keine Stunden"
+  },
+  "days": {
+    "sun": "So",
+    "mon": "Mo",
+    "tue": "Di",
+    "wed": "Mi",
+    "thu": "Do",
+    "fri": "Fr",
+    "sat": "Sa"
+  },
+  "grid": {
+    "title": "Wöchentlicher Stundenzettel",
+    "selectEmployee": "Mitarbeiter auswählen…",
+    "submitForApproval": "Zur Genehmigung einreichen",
+    "prev": "Zurück",
+    "thisWeek": "Diese Woche",
+    "weekOf": "Woche vom {from} – {to}",
+    "approvedReadOnly": "Genehmigte Stundenzettel sind schreibgeschützt.",
+    "viewOnly": "Sie haben nur Lesezugriff.",
+    "noEmployee": "Kein Mitarbeiter ausgewählt. Wählen Sie oben einen Mitarbeiter aus, um Zeiten zu erfassen.",
+    "discardConfirm": "Nicht gespeicherte Änderungen verwerfen?",
+    "networkError": "Netzwerkfehler",
+    "saved": "Stundenzettel gespeichert",
+    "saveBeforeSubmit": "Speichern Sie Ihre Änderungen vor dem Einreichen",
+    "submittedToast": "Zur Genehmigung eingereicht",
+    "approvedToast": "Stundenzettel genehmigt",
+    "addLine": "Zeile hinzufügen",
+    "projectPlaceholder": "Projekt…",
+    "lineProjectAria": "Projekt in Zeile {line}",
+    "lineItemAria": "Artikel in Zeile {line}",
+    "lineBillableAria": "Abrechenbar in Zeile {line}",
+    "lineHoursAria": "Stunden für {day} in Zeile {line}",
+    "removeLineAria": "Zeile {line} entfernen"
+  }
+}

@@ -1,0 +1,174 @@
+{
+  "title": "Steuererklärungen",
+  "description": "Bereiten Sie behördliche Steuererklärungen aus dem Hauptbuch vor und bewahren Sie das Eingereichte auf.",
+  "setup": "Einrichtung der Steuererklärung",
+  "notice": "Hinweis",
+  "period": "{from} bis {to}",
+  "form": "Erklärung",
+  "from": "Von",
+  "to": "Bis",
+  "compute": "Berechnen",
+  "computing": "Wird berechnet…",
+  "empty": "Wählen Sie eine Erklärung und einen Zeitraum aus und berechnen Sie dann.",
+  "adjustmentAria": "Anpassung für {label}",
+  "adjustmentPlaceholder": "0,00",
+  "columns": {
+    "line": "Zeile",
+    "description": "Beschreibung",
+    "amount": "Betrag"
+  },
+  "noForms": {
+    "title": "Keine Steuererklärungen konfiguriert",
+    "description": "Importieren Sie ein Jurisdiktionspaket oder erstellen Sie eine Erklärung unter Setup → Steuern.",
+    "openSetup": "Einrichtung der Steuererklärung öffnen"
+  },
+  "export": {
+    "label": "Export der Arbeitskopie",
+    "pdf": "Arbeitskopie als PDF",
+    "csv": "Arbeitskopie als CSV",
+    "xlsx": "Arbeitskopie als Excel"
+  },
+  "official": {
+    "download": "Ausgefülltes amtliches Formular"
+  },
+  "submission": {
+    "title": "So reichen Sie diese Erklärung ein",
+    "description": "Verwenden Sie nach Prüfung der Erklärung den konfigurierten Einreichungskanal und die untenstehende Aktion.",
+    "channelLabel": "Einreichungskanal",
+    "actionLabel": "Erforderliche Aktion",
+    "openGovernment": "Einreichungsanweisungen öffnen",
+    "exportNotice": "Exporte der Arbeitskopie dienen der Prüfung und Aufbewahrung. Sie sind keine behördlichen Einreichungsdateien, es sei denn, die konfigurierte Einreichungsmethode gibt dies ausdrücklich an.",
+    "gst34Notice": "GST34 wird normalerweise im CRA-Konto oder per NETFILE eingegeben. Die hochladbare .tax-Datei der CRA kann nur von CRA-zertifizierter Software erstellt werden; PDF, CSV und Excel sind keine akzeptierten Einreichungsformate."
+  },
+  "channels": {
+    "print_pdf": "Drucken und versenden",
+    "file_upload": "Elektronischer Datei-Upload",
+    "efile_api": "Behördliche E-File-API",
+    "portal_manual": "Behördliches Online-Portal"
+  },
+  "governmentFormats": {
+    "portal_entry": "Erklärung online eingeben",
+    "certified_file": "Zertifizierte behördliche Datei",
+    "api": "Kompatible Software/API erforderlich",
+    "paper": "Amtliches Papierformular"
+  },
+  "history": {
+    "title": "Frühere Einreichungen",
+    "description": "Versionierte, unveränderliche Snapshots vorbereiteter und eingereichter Erklärungen.",
+    "search": "Einreichungsverlauf durchsuchen…",
+    "statusLabel": "Status",
+    "empty": "Keine gespeicherten Einreichungen entsprechen diesen Filtern.",
+    "save": "Im Verlauf speichern",
+    "saving": "Wird gespeichert…",
+    "saved": "Snapshot der Erklärung gespeichert",
+    "status": {
+      "prepared": "Vorbereitet",
+      "filed": "Eingereicht"
+    },
+    "columns": {
+      "form": "Erklärung",
+      "period": "Zeitraum",
+      "version": "Version",
+      "status": "Status",
+      "reference": "Referenz",
+      "saved": "Gespeichert"
+    },
+    "drawerDescription": "{from} bis {to} · Version {version}",
+    "formCode": "Erklärungscode",
+    "country": "Land",
+    "reference": "Behördliche Bestätigung/Referenz",
+    "referencePlaceholder": "Bestätigungsnummer oder Belegreferenz",
+    "filedAt": "Eingereicht am",
+    "markFiledHint": "Markieren Sie diesen Snapshot erst als eingereicht, nachdem die Behörde ihn akzeptiert hat. Diese Aktion kann nicht rückgängig gemacht werden.",
+    "markFiled": "Als eingereicht markieren",
+    "markingFiled": "Wird als eingereicht markiert…",
+    "filedSuccess": "Einreichung als eingereicht markiert",
+    "line": "Zeile",
+    "lineDescription": "Beschreibung",
+    "amount": "Betrag",
+    "hash": "Snapshot-SHA-256: {hash}",
+    "snapshotWatermark": "Gespeicherter unveränderlicher Snapshot · SHA-256 {hash}",
+    "export": {
+      "pdf": "PDF",
+      "xlsx": "Excel",
+      "csv": "CSV"
+    }
+  },
+  "provisions": {
+    "title": "Ertragsteuerabgrenzung",
+    "description": "ASC 740 / IAS 12 — laufende und latente Steuern, Wertberichtigung und Steuersatzüberleitung.",
+    "empty": "Noch keine Abgrenzungen. Berechnen Sie die erste Jahresabgrenzung.",
+    "columns": {
+      "fiscalYear": "Geschäftsjahr",
+      "version": "Version",
+      "status": "Status",
+      "totalExpense": "Aufwand gesamt",
+      "effectiveRate": "Effektivsatz",
+      "created": "Erstellt"
+    },
+    "status": {
+      "draft": "Entwurf",
+      "posted": "gebucht",
+      "superseded": "ersetzt"
+    },
+    "post": "Buchen",
+    "posting": "Buchen…",
+    "categories": {
+      "fixed_assets": "Anlagevermögen",
+      "revenue_recognition": "Erfolgserfassung",
+      "provisions": "Rückstellungen",
+      "loss_carryforward": "Verlustvortrag",
+      "other": "Sonstige"
+    },
+    "compute": {
+      "button": "Abgrenzung berechnen",
+      "title": "Jahresabgrenzung berechnen",
+      "fiscalYear": "Geschäftsjahr",
+      "permanent": "Permanente Differenzen",
+      "temporary": "Zusätzliche temporäre Differenzen",
+      "addLine": "Zeile hinzufügen",
+      "descriptionPlaceholder": "Beschreibung",
+      "lossUsed": "Genutzter Verlustvortrag",
+      "valuationAllowance": "Wertberichtigung",
+      "cancel": "Abbrechen",
+      "compute": "Berechnen",
+      "computing": "Berechne…",
+      "categories": {
+        "fixed_assets": "Anlagevermögen",
+        "revenue_recognition": "Erfolgserfassung",
+        "provisions": "Rückstellungen",
+        "loss_carryforward": "Verlustvortrag",
+        "other": "Sonstige"
+      },
+      "valuationAllowanceIas12": "Ansatzkorrektur aktive latente Steuern"
+    },
+    "detail": {
+      "title": "Abgrenzung {year} · v{version}",
+      "reconciliation": "Steuersatzüberleitung",
+      "amount": "Betrag",
+      "percent": "% des Ergebnisses",
+      "pretax": "Ergebnis vor Steuern",
+      "total": "Ertragsteueraufwand gesamt",
+      "taxableIncome": "Steuerpflichtiges Einkommen",
+      "currentTax": "Laufende Steuer",
+      "deferredExpense": "Latente Steuer (Veränderung)",
+      "balances": {
+        "dta": "Aktive latente Steuern (brutto)",
+        "dtl": "Passive latente Steuern",
+        "va": "Wertberichtigung",
+        "vaIas12": "Ansatzkorrektur aktive latente Steuern"
+      },
+      "differences": "Temporäre Differenzen",
+      "noDifferences": "Keine temporären Differenzen ermittelt.",
+      "columns": {
+        "item": "Position",
+        "bookBasis": "Buchwert",
+        "taxBasis": "Steuerwert",
+        "difference": "Differenz",
+        "effect": "Steuerwirkung"
+      },
+      "auto": "auto",
+      "manual": "manuell"
+    }
+  }
+}

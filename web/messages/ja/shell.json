@@ -1,0 +1,131 @@
+{
+  "accountMenu": {
+    "account": "アカウント",
+    "menuAriaLabel": "アカウントメニュー",
+    "theme": "テーマ",
+    "language": "言語",
+    "menuLayout": "メニューレイアウト",
+    "signOut": "サインアウト",
+    "signingOut": "サインアウト中…",
+    "roles": {
+      "admin": "管理者",
+      "controller": "経理責任者",
+      "accountant": "会計担当者",
+      "approver": "承認者",
+      "viewer": "閲覧者"
+    },
+    "organizations": "組織",
+    "superAdmin": "スーパー管理者",
+    "security": "サインインのセキュリティ"
+  },
+  "language": {
+    "label": "言語",
+    "orgDefault": "組織の既定",
+    "saveFailed": "言語設定を保存できませんでした"
+  },
+  "menuMode": {
+    "label": "メニューレイアウト",
+    "orgDefault": "組織の既定",
+    "saveFailed": "メニューレイアウト設定を保存できませんでした",
+    "options": {
+      "sidebar": "サイドバー",
+      "topbar": "トップメニューバー"
+    }
+  },
+  "topNav": {
+    "ariaLabel": "プライマリ",
+    "more": "その他"
+  },
+  "apps": {
+    "ariaLabel": "アプリを開く",
+    "title": "アプリ"
+  },
+  "globalCreate": {
+    "ariaLabel": "新規作成",
+    "title": "新規作成",
+    "description": "実際の下書きを開始して作業を続けましょう。",
+    "createFailed": "下書きを作成できませんでした",
+    "groups": {
+      "sales": "販売",
+      "purchases": "購買",
+      "accounting": "会計",
+      "peopleAndLists": "人物とリスト"
+    },
+    "items": {
+      "invoice": "請求書",
+      "creditMemo": "クレジットメモ",
+      "estimate": "見積",
+      "salesOrder": "受注",
+      "customerPayment": "得意先支払",
+      "bill": "仕入請求書",
+      "vendorCredit": "仕入先クレジット",
+      "purchaseOrder": "発注書",
+      "vendorPayment": "仕入先支払",
+      "journal": "仕訳",
+      "expense": "経費精算書",
+      "cardCharge": "カード請求",
+      "cardRefund": "カード返金",
+      "check": "小切手",
+      "deposit": "銀行預金",
+      "transfer": "銀行振替",
+      "asset": "固定資産",
+      "customer": "得意先",
+      "vendor": "仕入先",
+      "employee": "従業員",
+      "item": "品目またはサービス",
+      "project": "プロジェクト"
+    }
+  },
+  "relatedParty": {
+    "loadFailed": "このレコードを開けませんでした"
+  },
+  "globalSearch": {
+    "ariaLabel": "検索",
+    "placeholder": "すべてを検索…",
+    "clear": "検索をクリア",
+    "searching": "検索中…",
+    "noMatches": "「{query}」に一致するものはありません",
+    "navigate": "移動",
+    "open": "開く",
+    "close": "閉じる",
+    "resultCount": "{count, plural, one {# 件の結果} other {# 件の結果}}",
+    "groups": {
+      "contacts": "連絡先",
+      "transactions": "取引",
+      "accounts": "勘定",
+      "items": "品目",
+      "projects": "プロジェクト"
+    }
+  },
+  "meta": {
+    "description": "オープンなビジネススイート。オープンな帳簿で運用しましょう。"
+  },
+  "brand": {
+    "home": "ダッシュボードへ移動"
+  },
+  "sidebar": {
+    "expand": "サイドバーを展開",
+    "collapse": "サイドバーを折りたたむ"
+  },
+  "mobileNav": {
+    "openMenu": "メニューを開く",
+    "menu": "メニュー",
+    "primaryAriaLabel": "プライマリ"
+  },
+  "themeToggle": {
+    "label": "テーマ",
+    "options": {
+      "light": "ライト",
+      "system": "システム",
+      "dark": "ダーク"
+    },
+    "current": "テーマ: {theme}",
+    "currentHint": "テーマ: {theme}（クリックで変更）"
+  },
+  "notifications": {
+    "ariaLabel": "通知",
+    "title": "通知",
+    "empty": "未読はありません",
+    "markAllRead": "すべて既読にする"
+  }
+}

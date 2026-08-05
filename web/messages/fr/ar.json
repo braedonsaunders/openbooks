@@ -1,0 +1,165 @@
+{
+  "list": {
+    "title": "Factures clients",
+    "description": "Factures et notes de crédit clients — vos comptes clients : brouillon → approbation → comptabilisées par le noyau.",
+    "searchPlaceholder": "Rechercher factures, notes de crédit, clients, réf.…",
+    "emptyTitle": "Aucune facture client pour l’instant",
+    "emptyDescription": "Saisissez la première facture ou note de crédit client pour lancer le flux des comptes clients.",
+    "columns": {
+      "number": "Numéro",
+      "invoice": "Facture",
+      "ref": "Réf."
+    }
+  },
+  "kinds": {
+    "invoice": "Facture",
+    "credit": "Note de crédit"
+  },
+  "actions": {
+    "new": "Nouveau",
+    "newInvoice": "Nouvelle facture",
+    "newCredit": "Nouvelle note de crédit",
+    "submitForApproval": "Soumettre pour approbation"
+  },
+  "drawer": {
+    "editingHint": "Modification — Enregistrer pour appliquer",
+    "viewGlImpact": "Voir l’impact au GL",
+    "dateLabel": "Date de la facture",
+    "dueDate": "Date d’échéance",
+    "reference": "N° de réf. client",
+    "accountColumn": "Compte de produits",
+    "accountPlaceholder": "Compte…",
+    "noTax": "Sans taxe",
+    "taxAmountColumn": "Mt taxe",
+    "selectCustomerPlaceholder": "Sélectionner un client…",
+    "selectVendorPlaceholder": "Sélectionner un fournisseur…",
+    "subtotalAmount": "Sous-total {amount}",
+    "taxTotalAmount": "Taxe {amount}",
+    "totalAmount": "Total {amount}",
+    "balanceDueAmount": "Solde dû {amount}",
+    "saveState": {
+      "saved": "Toutes les modifications sont enregistrées",
+      "error": "Échec de l’enregistrement — corrigez et réessayez",
+      "dirty": "Modifications non enregistrées…"
+    },
+    "deleteTitle": "Supprimer ce document ?",
+    "deleteDraftBody": "Cela supprime définitivement le brouillon. Cette action est irréversible.",
+    "deletePostedBody": "Cela supprime définitivement le document et son impact au grand livre. Cette action est irréversible.",
+    "formLabel": "Formulaire",
+    "formSetPreferred": "Définir comme préféré",
+    "formSetPreferredDone": "Formulaire préféré enregistré",
+    "formPreferredCleared": "Formulaire préféré effacé",
+    "formPreferredFailed": "Impossible d’enregistrer le formulaire préféré"
+  },
+  "toasts": {
+    "actionFailed": "Échec de l’action",
+    "submitted": "Soumis pour approbation",
+    "posted": "Comptabilisé au grand livre",
+    "createDraftFailed": "Impossible de créer un brouillon",
+    "deleted": "Document supprimé",
+    "deleteFailed": "Échec de la suppression"
+  },
+  "cockpit": {
+    "title": "Comptes clients",
+    "description": "Votre centre de pilotage des créances — montants dus, retards et encaissements à effectuer cette semaine.",
+    "tabs": {
+      "overview": "Vue d’ensemble",
+      "invoices": "Factures"
+    },
+    "current": "courant",
+    "customer": "Client",
+    "overdueCol": "En retard",
+    "openCol": "Ouvert",
+    "noReceivables": "Aucune créance ouverte. Tout est encaissé.",
+    "customerSearch": "Rechercher des clients…",
+    "customerStatus": "Statut du client",
+    "customerOverdueOnly": "Avec un solde en retard",
+    "configure": "Fonctionnement",
+    "configTitle": "Modèle d’encaissement",
+    "configDescription": "Mode de tri de la liste de travail et de prévision des dates d’encaissement. Lecture seule — les encaissements n’ont pas de plafond ; le moteur prévoit le paiement des clients.",
+    "stats": {
+      "openReceivables": "Créances ouvertes",
+      "overdue": "En retard",
+      "overdueSub": "{count, plural, one {# facture} other {# factures}} · {pct}% des créances ouvertes",
+      "expectedThisWeek": "Prévu cette semaine",
+      "next30": "30 prochains jours",
+      "dso": "Délai moyen de paiement (DSO)",
+      "dsoSub": "Jours moyens avant encaissement",
+      "days": "{n} j"
+    },
+    "panels": {
+      "worklist": "Liste de travail des encaissements",
+      "aging": "Balance âgée clients",
+      "schedule": "Échéancier d’encaissement",
+      "scheduleHint": "Encaissements prévus sur {weeks} semaines — sélectionnez une semaine",
+      "byCustomer": "Créances par client"
+    },
+    "worklist": {
+      "overdueToChase": "Retards à relancer",
+      "expectedThisWeek": "Prévu cette semaine",
+      "customer": "Client",
+      "prediction": "Prévision",
+      "due": "Échéance",
+      "amount": "Montant",
+      "selected": "{count} sélectionnées · {amount}",
+      "build": "Créer une remise d’encaissement",
+      "empty": "Aucun encaissement prévu sur l’horizon.",
+      "search": "Rechercher des encaissements…",
+      "status": "Statut de l’encaissement",
+      "overdueOnly": "En retard",
+      "upcoming": "À venir",
+      "selectInvoice": "Sélectionner la facture de {customer}",
+      "daysOverdue": "{count} j de retard",
+      "methods": {
+        "statistical": "Statistique",
+        "dueDate": "Date d’échéance",
+        "overduePush": "Report de retard",
+        "globalAverage": "Moyenne globale"
+      }
+    },
+    "model": {
+      "title": "Comment les encaissements sont prévus",
+      "worklistOrder": {
+        "label": "Ordre de la liste",
+        "value": "Plus grand retard en premier",
+        "note": "La liste de relance est triée par jours de retard, puis par montant décroissant ; les factures en retard sont présélectionnées"
+      },
+      "prediction": {
+        "label": "Prévision de la date d’encaissement",
+        "value": "Statistique → Échéance → Moyenne globale",
+        "note": "Délai moyen par client (+½σ de marge), au plus tôt à la date d’échéance"
+      },
+      "overduePush": {
+        "label": "Report de retard",
+        "value": "+7 / +14 / +28 jours",
+        "note": "Les factures en retard sont décalées selon leur ancienneté (≤30 / ≤60 / >60 jours)"
+      },
+      "businessDay": {
+        "label": "Ajustement au jour ouvré",
+        "value": "Activé",
+        "note": "Les dates prévues le week-end passent au jour ouvré suivant"
+      },
+      "dso": {
+        "label": "Délai moyen d’encaissement (DSO)",
+        "value": "{dso} j",
+        "note": "Valeur de repli pour un client sans historique de paiement"
+      },
+      "recurring": "Les encaissements récurrents (subventions, loyers reçus, abonnements) rejoignent la prévision sous forme de catégories — configurez-les dans le <cashCockpit>cockpit de trésorerie</cashCockpit>.",
+      "documentation": "Lire le guide des comptes clients"
+    }
+  },
+  "paymentLinks": {
+    "title": "Liens de paiement en ligne",
+    "create": "Créer un lien",
+    "empty": "Aucun lien de paiement.",
+    "copyLink": "Copier le lien",
+    "copied": "Copié",
+    "void": "Annuler",
+    "status": {
+      "active": "actif",
+      "paid": "payé",
+      "void": "annulé",
+      "expired": "expiré"
+    }
+  }
+}

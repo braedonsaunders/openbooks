@@ -1,0 +1,81 @@
+import { NextResponse } from 'next/server'
+import { sql } from 'drizzle-orm'
+import { db } from '@openbooks/engine/src/db.ts'
+import type { ReportRuleGroup } from '@openbooks/reports'
+import { getTranslations } from 'next-intl/server'
+import { resolveDefinitionToExportData } from '../../../../../lib/report-run'
+import { exportDataToPdf, exportDataToXlsx, orgBranding, resolveLayout, type Translator } from '../../../../../lib/report-pdf'
+import { resolvePeriod } from '../../../../../lib/periods'
+import { parseReportQuery } from '../../../../../lib/report-filters'
+
+export const runtime = 'nodejs'
+
+/**
+ * Internal report render endpoint — the background worker calls this to turn a
+ * definition into a PDF (report rendering lives in web/lib; the worker can't
+ * import it). Not a user route: authenticated by a shared internal token and
+ * given orgId + definitionId explicitly.
+ *
+ *   GET /api/internal/reports/render?orgId=&definitionId=&<report params>
+ */
+export async function GET(req: Request) {
+  const expected = process.env.OPENBOOKS_INTERNAL_TOKEN || ''
+  const provided = req.headers.get('x-internal-token') || ''
+  if (!expected || provided !== expected) {
+    return NextResponse.json({ error: 'unauthorized' }, { status: 401 })
+  }
+
+  const url = new URL(req.url)
+  const p = url.searchParams
+  const orgId = p.get('orgId')
+  const definitionId = p.get('definitionId')
+  if (!orgId || !definitionId) {
+    return NextResponse.json({ error: 'orgId and definitionId are required' }, { status: 422 })
+  }
+
+  try {
+    const t = (await getTranslations('reports')) as unknown as Translator
+    const q = parseReportQuery(p)
+    const period = await resolvePeriod(q.period, {
+      customFrom: p.get('from') ?? undefined,
+      customTo: p.get('to') ?? undefined,
+      orgId,
+    })
+    const runId = p.get('runId')
+    let extraFilters: ReportRuleGroup | null = null
+    if (runId) {
+      const run = (await db.execute(sql`
+        select filters from report_runs
+         where id=${runId} and org_id=${orgId} and definition_id=${definitionId} and trigger='scheduled'
+      `)) as unknown as { rows: { filters: ReportRuleGroup | null }[] }
+      if (!run.rows[0]) return NextResponse.json({ error: 'scheduled report run not found' }, { status: 404 })
+      extraFilters = run.rows[0].filters
+    }
+    const data = await resolveDefinitionToExportData(
+      orgId,
+      definitionId,
+      p,
+      { orgId, t, period, query: q },
+      { extraFilters },
+    )
+    if (p.get('format') === 'xlsx') {
+      const xlsx = await exportDataToXlsx(data, { reportName: data.title, dateRangeLabel: data.dateRangeLabel })
+      return new NextResponse(new Uint8Array(xlsx), {
+        status: 200,
+        headers: {
+          'content-type': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+          'cache-control': 'no-store',
+        },
+      })
+    }
+    const branding = await orgBranding(orgId)
+    const { page, showSummary } = resolveLayout(null)
+    const pdf = await exportDataToPdf(data, branding, page, { showSummary })
+    return new NextResponse(new Uint8Array(pdf), {
+      status: 200,
+      headers: { 'content-type': 'application/pdf', 'cache-control': 'no-store' },
+    })
+  } catch (err) {
+    return NextResponse.json({ error: err instanceof Error ? err.message : 'render failed' }, { status: 422 })
+  }
+}

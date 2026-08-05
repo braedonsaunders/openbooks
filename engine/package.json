@@ -1,0 +1,38 @@
+{
+  "name": "@openbooks/engine",
+  "version": "0.0.1",
+  "private": true,
+  "type": "module",
+  "dependencies": {
+    "@aws-sdk/client-s3": "^3.1087.0",
+    "@jitl/quickjs-singlefile-browser-release-asyncify": "^0.31.0",
+    "@openbooks/emails": "*",
+    "@openbooks/forms-core": "*",
+    "@openbooks/jobs": "*",
+    "@openbooks/schema": "*",
+    "bullmq": "^5.80.2",
+    "cron-parser": "^5.6.2",
+    "drizzle-orm": "*",
+    "fast-xml-parser": "^5.10.1",
+    "ioredis": "^5.11.1",
+    "pdf-lib": "^1.17.1",
+    "pg": "^8",
+    "quickjs-emscripten": "^0.31"
+  },
+  "devDependencies": {
+    "@types/pg": "^8",
+    "tsx": "^4"
+  },
+  "scripts": {
+    "sync": "tsx src/sync/cli.ts",
+    "demo": "tsx src/demo-e2e.ts",
+    "conformance": "tsx src/conformance/cli.ts",
+    "harness": "tsx src/harness/cli.ts",
+    "harness:ledger-parity": "tsx src/harness/ledger-parity/cli.ts",
+    "harness:differential": "tsx src/harness/differential/cli.ts",
+    "harness:replay": "tsx src/harness/replay/cli.ts",
+    "sim": "tsx src/sim/cli.ts",
+    "samples": "tsx src/sample-companies/cli.ts",
+    "typecheck": "tsc --noEmit"
+  }
+}

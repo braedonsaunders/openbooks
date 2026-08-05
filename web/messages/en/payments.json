@@ -1,0 +1,270 @@
+{
+  "page": {
+    "title": "Payments",
+    "description": "Manage payment activity and bank runs from selection through settlement.",
+    "newPayment": "New payment",
+    "newRun": "New payment run",
+    "tabs": {
+      "payments": "Payments",
+      "runs": "Payment runs"
+    }
+  },
+  "list": {
+    "searchPlaceholder": "{side, select, ap {Search payments, vendors, refs…} other {Search payments, customers, refs…}}",
+    "newLabel": "{side, select, ap {New payment} other {New customer payment}}",
+    "columns": {
+      "document": "{side, select, ap {Payment} other {Customer payment}}",
+      "payment": "Payment",
+      "bankAccount": "Bank account",
+      "ref": "Ref"
+    },
+    "empty": {
+      "title": "{side, select, ap {No payments yet} other {No customer payments yet}}",
+      "description": "{side, select, ap {Record the first vendor payment to start settling open bills.} other {Record the first customer payment to start settling open invoices.}}"
+    }
+  },
+  "newButton": {
+    "createDraftFailed": "Could not create a draft"
+  },
+  "drawer": {
+    "draftHint": "Draft — changes save automatically.",
+    "viewGlImpact": "View GL impact",
+    "postAction": "{side, select, ap {Pay & post} other {Receive & post}}",
+    "bankAccount": "Bank account",
+    "selectPartyPlaceholder": "{side, select, ap {Select vendor…} other {Select customer…}}",
+    "selectBankAccountPlaceholder": "Select bank account…",
+    "referencePlaceholder": "Cheque / EFT ref…",
+    "openItems": "{side, select, ap {Open bills} other {Open invoices}}",
+    "amountReceived": "Amount received",
+    "autoApply": "Auto-apply",
+    "autoApplyFailed": "Could not suggest an application",
+    "autoApplyNone": "No open items match this amount",
+    "autoApplyDone": "Applied to {count, plural, one {# item} other {# items}} ({strategy})",
+    "autoApplyStrategy": {
+      "reference": "by reference",
+      "exact": "exact match",
+      "fifo": "oldest first",
+      "none": "none"
+    },
+    "selectPartyHint": "{side, select, ap {Select a vendor to list their open items.} other {Select a customer to list their open items.}}",
+    "loadingOpenItems": "Loading open items…",
+    "noOpenItems": "{side, select, ap {No open bills for this vendor.} other {No open invoices for this customer.}}",
+    "columns": {
+      "apply": "Apply",
+      "document": "Document",
+      "due": "Due",
+      "original": "Original",
+      "appliedToDate": "Applied to date",
+      "open": "Open",
+      "appliedOn": "Applied on",
+      "applied": "Applied",
+      "rateEvidence": "Rate evidence"
+    },
+    "targetAmount": "Apply ({currency})",
+    "sourceAmount": "Payment amount ({currency})",
+    "settlementRate": "Rate: {target} per {source}",
+    "rateReferencePlaceholder": "Bank advice or contract reference…",
+    "rateSource": { "manual": "Manual rate", "contractual": "Contractual rate", "provider": "Tenant FX rate" },
+    "applyAriaLabel": "Apply to {document}",
+    "invalidAllocation": "Amounts must be positive, within the open balance, and cross-foot exactly through the evidenced settlement rate.",
+    "appliedTo": "Applied to",
+    "voidedNote": "This payment was voided; its posting was reversed.",
+    "noLiveApplications": "No live applications.",
+    "kind": {
+      "vendorBill": "Bill",
+      "customerInvoice": "Invoice",
+      "expenseReport": "Expense report",
+      "journal": "Journal",
+      "entry": "Entry"
+    },
+    "saveState": {
+      "saved": "All changes saved",
+      "error": "Save failed — fix and retry",
+      "dirty": "Unsaved changes…"
+    },
+    "applyingSummary": "{count, plural, one {Applying # item} other {Applying # items}} · <total>Total {amount}</total>",
+    "totalAmount": "Total {amount}",
+    "toasts": {
+      "loadOpenItemsFailed": "Could not load open items",
+      "autosaveFailed": "Autosave failed",
+      "postFailed": "Posting failed",
+      "posted": "{side, select, ap {Payment posted and applied} other {Customer payment posted and applied}}"
+    }
+  },
+  "eft": {
+    "notConfiguredTitle": "EFT origination is not configured",
+    "notConfiguredListDescription": "Payment runs can still be assembled, but bank-file export is disabled until an administrator completes EFT origination setup. Missing fields: {missing}.",
+    "notConfiguredDrawerDescription": "Bank-file export is disabled until an administrator completes EFT origination setup. Missing fields: {missing}."
+  },
+  "configuration": {
+    "notConfiguredTitle": "Payment setup is incomplete",
+    "notConfiguredDescription": "Create a funding profile in <setup>Payments & Banking setup</setup> before assembling a payment run.",
+    "collectionsNotConfiguredTitle": "Direct-debit setup is incomplete",
+    "collectionsNotConfiguredDescription": "Create a debit bank profile and mandates in <setup>Payments & Banking setup</setup> before assembling a collection run.",
+    "runNotReadyTitle": "This payment run is not ready",
+    "runNotReadyDescription": "Complete the profile configuration before generating a file. Missing or invalid: {missing}."
+  },
+  "runBuilder": {
+    "title": "New payment run",
+    "description": "Choose the funding account and bills, then create a draft run for review.",
+    "collectionTitle": "New direct-debit run",
+    "collectionDescription": "Choose the collection profile and open invoices, then create a draft run for review.",
+    "noOpenBills": "No posted bills with an open balance match.",
+    "noOpenInvoices": "No posted invoices with an open balance match.",
+    "selectAllAriaLabel": "Select all bills on this page",
+    "selectAriaLabel": "Select {document}",
+    "columns": {
+      "bill": "Bill",
+      "invoice": "Invoice",
+      "due": "Due",
+      "ref": "Ref",
+      "bankDetails": "Bank details",
+      "mandate": "Debit mandate",
+      "openBalance": "Open balance"
+    },
+    "bankApproved": "on file",
+    "bankMissing": "missing",
+    "mandateActive": "active",
+    "mandateMissing": "missing",
+    "payFromBankAccount": "Payment bank profile",
+    "selectBankAccountPlaceholder": "Select a payment profile…",
+    "noBankAccounts": "No active payment profiles",
+    "fundsDate": "Funds date",
+    "captureDiscounts": "Capture available early-payment discounts",
+    "applyCredits": "Apply available vendor credits",
+    "selectedForPayment": "Selected for payment",
+    "selectedForCollection": "Selected for collection",
+    "selectionSummary": "{count, plural, one {# bill} other {# bills}} · <total>{amount}</total>",
+    "collectionSummary": "{count, plural, one {# invoice} other {# invoices}} · <total>{amount}</total>",
+    "createRun": "Create payment run",
+    "createCollectionRun": "Create collection run",
+    "toasts": {
+      "createFailed": "Could not create the payment run",
+      "created": "Payment run {number} created"
+    }
+  },
+  "runs": {
+    "collectionRunsHeading": "Direct-debit runs",
+    "collectionDescription": "Approve, generate, deliver, post, and settle customer collection files.",
+    "openInvoicesHeading": "Open invoices",
+    "openInvoicesDescription": "Review open invoices and debit-mandate readiness before selection.",
+    "invoicesSearchPlaceholder": "Search invoices or customers…",
+    "openBillsHeading": "Open bills to pay",
+    "openBillsDescription": "Select bills across vendors; each vendor becomes one payment instruction.",
+    "billsSearchPlaceholder": "Search bills, vendors, refs…",
+    "runsHeading": "Payment runs",
+    "description": "Review drafts, export bank files, and confirm posted payments.",
+    "searchPlaceholder": "Search runs or bank accounts…",
+    "noRunsYet": "No payment runs yet. Create the first run when bills are ready to pay.",
+    "noCollectionRunsYet": "No direct-debit runs yet. Create the first run when authorized invoices are ready to collect.",
+    "columns": {
+      "run": "Run",
+      "bankAccount": "Bank account",
+      "method": "Method",
+      "fundsDate": "Funds date",
+      "payments": "Payments"
+    },
+    "method": {
+      "eft": "EFT",
+      "ach": "ACH",
+      "sepa": "SEPA",
+      "wire": "Wire",
+      "cheque": "Cheque",
+      "direct_debit": "Direct debit",
+      "positive_pay": "Positive Pay",
+      "custom": "Custom"
+    },
+    "status": {
+      "confirmed": "Confirmed",
+      "generated": "File generated",
+      "delivered": "Delivered",
+      "settled": "Settled",
+      "returned": "Returned",
+      "partially_failed": "Partially failed",
+      "rejected": "Rejected",
+      "rolled_back": "Rolled back"
+    }
+  },
+  "runDrawer": {
+    "descriptionEft": "Payment run from {bank}",
+    "descriptionEftWithDate": "Payment run from {bank} · funds {date}",
+    "bankAccountFallback": "bank account",
+    "cancelRun": "Cancel run",
+    "downloadFile": "Download file",
+    "downloadBlockedTitle": "Resolve the profile and bank-detail issues first",
+    "submitRun": "Submit for approval",
+    "approve": "Approve run",
+    "reject": "Reject run",
+    "generateFile": "Generate file",
+    "approveFile": "Approve file",
+    "rejectFile": "Reject file",
+    "reprocess": "Reprocess",
+    "rollback": "Roll back",
+    "postPayments": "Post payments",
+    "paymentsSummary": "{count, plural, one {# payment} other {# payments}} · <total>Total {amount}</total>",
+    "payeesMissingBankDetails": "Counterparties with invalid bank details",
+    "filesTitle": "Payment files",
+    "sourcesTitle": "Source transactions",
+    "instructionsTitle": "Payment instructions",
+    "searchInstructions": "Search instructions…",
+    "activityTitle": "Recent activity",
+    "systemActor": "System",
+    "adjustments": "Discount {discount} · credit {credit}",
+    "reason": "Reason",
+    "reasonRequired": "Enter a reason. It is retained in the payment audit trail.",
+    "recordOutcome": "Record outcome",
+    "outcome": { "title": "Bank outcome", "description": "Record settlement or a return for {payee}.", "status": "Outcome", "settled": "Settled", "returned": "Returned", "rejected": "Rejected by bank", "effectiveOn": "Effective date", "bankReference": "Bank reference", "returnCode": "Return code", "returnReason": "Return reason", "reversalWarning": "A return or rejection reverses the posted payment and reopens the affected bills." },
+    "columns": {
+      "payee": "Payee",
+      "payment": "Payment",
+      "bankDetails": "Bank details"
+    },
+    "bankApproved": "on file",
+    "instructionStatus": {
+      "pending": "pending",
+      "approved": "approved",
+      "generated": "generated",
+      "sent": "sent",
+      "settled": "settled",
+      "returned": "returned",
+      "rejected": "rejected",
+      "failed": "failed",
+      "reversed": "reversed",
+      "cancelled": "cancelled"
+    },
+    "fileStatus": { "generated": "generated", "pending_approval": "pending approval", "approved": "approved", "rejected": "rejected", "delivered": "delivered", "superseded": "superseded", "voided": "voided" },
+    "events": {
+      "run_created": "Payment run created", "run_submitted": "Payment run submitted", "run_approved": "Payment run approved", "run_rejected": "Payment run rejected",
+      "file_generated": "Payment file generated", "file_reprocessed": "Payment file reprocessed", "file_approved": "Payment file approved", "file_rejected": "Payment file rejected",
+      "file_downloaded": "Payment file downloaded", "file_delivered_sftp": "Payment file delivered by SFTP", "run_rolled_back": "Payment run rolled back",
+      "file_delivery_failed": "Payment file delivery failed",
+      "instruction_settled": "Payment settled", "instruction_returned": "Payment returned", "instruction_rejected": "Payment rejected"
+    },
+    "confirmPost": "{count, plural, one {Post # payment} other {Post # payments}} totalling {total} to the ledger and apply them to the selected bills?",
+    "confirmCancel": "Cancel run {number}? Its draft payments are deleted; nothing has posted.",
+    "toasts": {
+      "postFailed": "Posting failed",
+      "postedWithFailures": "{count} posted; failed: {failures}",
+      "posted": "{count, plural, one {# payment posted and applied} other {# payments posted and applied}}",
+      "cancelFailed": "Could not cancel the run",
+      "cancelled": "Run cancelled",
+      "deliverFailed": "Could not deliver the file",
+      "delivered": "Delivered to {path}"
+      ,"actionFailed": "The payment action failed"
+      ,"submitted": "Payment run submitted"
+      ,"fileGenerated": "Payment file generated"
+      ,"runApproved": "Payment run approved"
+      ,"runRejected": "Payment run rejected"
+      ,"fileApproved": "Payment file approved"
+      ,"fileRejected": "Payment file rejected"
+      ,"fileReprocessed": "Payment file reprocessed"
+      ,"rolledBack": "Payment run rolled back"
+      ,"outcomeFailed": "Could not record the bank outcome"
+      ,"outcomeSaved": "Bank outcome recorded"
+    },
+    "deliverSftp": "Deliver to SFTP",
+    "deliverHint": "Deliver this run's payment file to a bank or partner's SFTP folder for them to fetch.",
+    "sftpServer": "SFTP login",
+    "noSftpServers": "No SFTP logins yet. Add one in Setup → SFTP."
+  }
+}

@@ -1,0 +1,57 @@
+{
+  "home": {
+    "title": "会計",
+    "description": "財務統制ワークスペース — 総勘定元帳の健全性、決算の進捗、スコアの根拠となる数値。",
+    "tabs": {
+      "overview": "概要",
+      "health": "財務健全性"
+    },
+    "score": {
+      "excellent": "非常に良好",
+      "good": "良好",
+      "average": "平均的",
+      "needsWork": "要改善"
+    },
+    "categories": {
+      "profitability": "収益性",
+      "efficiency": "効率性",
+      "operating": "運営"
+    },
+    "vitals": {
+      "healthScore": "健全性スコア",
+      "netIncome": "当期純利益",
+      "close": "決算進捗",
+      "closeSub": "{period}",
+      "noClose": "—",
+      "noCloseSub": "決算未開始",
+      "draftJournals": "下書き仕訳",
+      "draftJournalsSub": "今週 {posted} 件計上",
+      "openFindings": "未処理の検出事項",
+      "openFindingsSub": "重大 {critical} 件"
+    },
+    "hero": {
+      "title": "財務健全性",
+      "ratio": "指標",
+      "value": "値",
+      "benchmark": "ベンチマーク",
+      "grade": "評価",
+      "fullAnalysis": "詳細分析 — マージン・セグメント・シナリオ・ドライバー"
+    },
+    "directory": {
+      "title": "ワークスペース",
+      "journalHint": "件の下書き · 今週 {posted} 件計上",
+      "accountsHint": "有効な勘定科目",
+      "budgetsHint": "予算シナリオ",
+      "assetsHint": "固定資産",
+      "continuousCloseHint": "重大 {critical} 件"
+    },
+    "attention": {
+      "title": "要対応",
+      "allClear": "すべて順調 — 元帳は整っています。",
+      "criticalItems": "重大な検出事項が {count} 件未処理",
+      "warningItems": "継続的決算の警告が {count} 件",
+      "draftJournals": "{count} 件の仕訳が下書きのまま",
+      "weakRatio": "{ratio} がベンチマークを下回っています"
+    }
+  }
+}

@@ -1,0 +1,588 @@
+{
+  "title": "期末決算",
+  "description": "データベースで強制される記帳統制のもと、期間ごとにモジュールを締めます。",
+  "workspaceDescription": "準備状況から公表まで、統制された証跡付きの決算を実行します。すべての承認は、承認対象となった元帳状態と常に紐付いています。",
+  "importedPeriodLockReason": "取り込まれた元システムの期間ステータス",
+  "searchPlaceholder": "期間を検索…",
+  "stageNavigation": "決算ステージ",
+  "continuousValidation": "元帳に対して継続的に検証 · 最終確認 {at}",
+  "runTitle": "{period}の決算",
+  "runDescription": "{book} · {blueprint} v{version}",
+  "filters": {
+    "book": "会計帳簿",
+    "fiscalYear": "会計年度",
+    "fyOption": "{year}年度",
+    "status": "ステータス"
+  },
+  "table": {
+    "period": "期間",
+    "range": "範囲",
+    "entries": "仕訳",
+    "debits": "借方",
+    "rangeValue": "{start} → {end}",
+    "status": "ステータス",
+    "readiness": "準備状況",
+    "action": "アクション"
+  },
+  "modules": {
+    "ar": "売掛金",
+    "ap": "買掛金",
+    "banking": "銀行",
+    "assets": "資産",
+    "tax": "税",
+    "gl": "総勘定元帳"
+  },
+  "status": { "closed": "締め済み", "open": "オープン" },
+  "runStatus": {
+    "not_started": "未開始",
+    "draft": "下書き",
+    "in_progress": "進行中",
+    "review": "レビュー中",
+    "approved": "承認済み",
+    "closed": "締め済み",
+    "published": "公表済み",
+    "cancelled": "キャンセル"
+  },
+  "stages": {
+    "scope": "スコープ",
+    "readiness": "準備状況",
+    "execute": "実行",
+    "review": "レビュー",
+    "lock": "ロック",
+    "publish": "公表"
+  },
+  "actions": {
+    "start": "決算を開始",
+    "starting": "開始中…",
+    "manageBooks": "帳簿を管理",
+    "resume": "再開",
+    "backToPeriods": "期間一覧に戻る",
+    "revalidate": "再検証",
+    "runRevaluation": "為替評価替えを実行",
+    "runConsolidation": "連結処理を実行",
+    "startTask": "開始",
+    "complete": "完了",
+    "submitReview": "レビューに提出",
+    "approve": "承認",
+    "requestChanges": "変更を依頼",
+    "addEvidence": "証跡を追加",
+    "takeAction": "対応する",
+    "requestApproval": "承認を依頼",
+    "reviewApprovals": "承認を確認",
+    "configureApprovalFlow": "承認フローを設定",
+    "documentation": "ドキュメント",
+    "lockPeriod": "期間をロック",
+    "publish": "パッケージを公表",
+    "downloadBinder": "改ざん不可の監査バインダーをダウンロード"
+  },
+  "errors": { "actionFailed": "決算アクションを完了できませんでした" },
+  "messages": {
+    "refresh": "決算状態を更新しました",
+    "request_approval": "決算を承認申請しました",
+    "close": "期間をロックしました",
+    "publish": "決算パッケージを公表しました",
+    "taskUpdated": "タスクを更新しました",
+    "revaluationPosted": "外貨建残高を評価替えしました",
+    "consolidationPosted": "持分調整、為替レート、消去仕訳を転記しました",
+    "evidenceAdded": "証跡を添付しました",
+    "automationComplete": "決算の自動処理が完了しました"
+  },
+  "metrics": {
+    "readiness": "準備状況",
+    "liveLedger": "ライブ元帳統制",
+    "progress": "進捗",
+    "tasksComplete": "{total}件中{completed}件のタスク",
+    "criticalPath": "クリティカルパス",
+    "clear": "問題なし",
+    "historicalDays": "過去実績では{days}日目までに完了",
+    "noPredictedBlocker": "過去の障害要因なし"
+  },
+  "scope": {
+    "title": "決算スコープ",
+    "description": "この決算実行における変更不可のコンテキスト。",
+    "period": "会計期間",
+    "book": "会計帳簿",
+    "blueprint": "ブループリント",
+    "target": "目標決算日",
+    "entities": "エンティティ",
+    "selectedEntities": "{count, plural, one {# 件の選択済みエンティティ} other {# 件の選択済みエンティティ}}",
+    "allEntities": "すべてのエンティティ",
+    "package": "報告パッケージ",
+    "noPackage": "パッケージが選択されていません"
+  },
+  "rehearsal": {
+    "title": "決算リハーサル",
+    "description": "本番帳簿に触れずに、調整、連結、レポートをリハーサルするための基準日サンドボックスを作成します。",
+    "action": "サンドボックスでリハーサル"
+  },
+  "readiness": {
+    "title": "元帳の準備状況",
+    "description": "ライブ診断が障害要因を検出し、帳簿が変更された際には古い承認を無効化します。",
+    "score": "準備完了",
+    "clear": "決算を妨げる元帳の例外は残っていません。"
+  },
+  "diagnostics": {
+    "drafts-open": {
+      "title": "未記帳の活動が残っています",
+      "message": "{count, plural, one {期間内に # 件の下書きまたは承認待ちの取引が残っています。} other {期間内に # 件の下書きまたは承認待ちの取引が残っています。}}"
+    },
+    "bank-unreconciled": {
+      "title": "現金勘定の消込が必要です",
+      "message": "{count, plural, one {# 件の消込可能な勘定が期末まで承認されていません。} other {# 件の消込可能な勘定が期末まで承認されていません。}}"
+    },
+    "depreciation-unposted": {
+      "title": "減価償却が未記帳のままです",
+      "message": "{count, plural, one {# 件の予定済み減価償却明細が未記帳のままです。} other {# 件の予定済み減価償却明細が未記帳のままです。}}"
+    },
+    "fx-missing": {
+      "title": "為替レートが不足しています",
+      "message": "{count, plural, one {# 件の取引通貨に使用可能な期末スポットレートがありません。} other {# 件の取引通貨に使用可能な期末スポットレートがありません。}}"
+    },
+    "fx-unrevalued": {
+      "title": "外貨建残高が評価替えされていません",
+      "message": "{count, plural, one {# 件の外貨建貨幣性残高が期末レートで評価替えされていません。} other {# 件の外貨建貨幣性残高が期末レートで評価替えされていません。}}"
+    },
+    "intercompany-residual": {
+      "title": "会社間取引が消去されていません",
+      "message": "{count, plural, one {# 件の消去勘定にグループ残余がゼロでないものがあります。} other {# 件の消去勘定にグループ残余がゼロでないものがあります。}}"
+    },
+    "material-variances": {
+      "title": "重要な変動には説明が必要です",
+      "message": "{count, plural, one {# 件の勘定が設定された重要性の閾値を超えています。} other {# 件の勘定が設定された重要性の閾値を超えています。}}"
+    }
+  },
+  "severity": {
+    "info": "情報",
+    "warning": "警告",
+    "error": "エラー",
+    "critical": "重大"
+  },
+  "workstreams": {
+    "readiness": "準備状況",
+    "banking": "銀行",
+    "ar": "売掛金",
+    "ap": "買掛金",
+    "assets": "固定資産",
+    "tax": "税",
+    "payroll": "給与",
+    "intercompany": "会社間",
+    "gl": "総勘定元帳",
+    "review": "レビュー",
+    "publish": "公表"
+  },
+  "gates": { "none": "ゲートなし", "soft": "ソフトゲート", "hard": "ハードゲート" },
+  "taskStatus": {
+    "blocked": "ブロック中",
+    "ready": "準備完了",
+    "in_progress": "進行中",
+    "submitted": "レビュー待ち",
+    "changes_requested": "変更依頼あり",
+    "complete": "完了",
+    "waived": "免除",
+    "invalidated": "再検証が必要"
+  },
+  "tasks": {
+    "dependencies": "依存関係：{dependencies}",
+    "notePlaceholder": "メモまたは証跡の概要を追加…"
+  },
+  "lock": {
+    "title": "統制された期間ロック",
+    "description": "業務補助元帳は総勘定元帳より先にロックされます。ロック適用後、データベースは記帳を拒否します。",
+    "blockedTitle": "承認がブロックされています",
+    "blockedDescription": "{count, plural, one {# 件のハードゲート付きタスクが残っています} other {# 件のハードゲート付きタスクが残っています}}。",
+    "approvalTitle": "独立した承認とロック",
+    "approvalDescription": "決算実行の開始者は最終承認を付与できません。承認後の元帳変更はレビューを再開させます。",
+    "complete": "{name}が期間をロックしました"
+  },
+  "lockStates": {
+    "open": "オープン",
+    "soft_closed": "ソフトクローズ",
+    "closed": "締め済み"
+  },
+  "publish": {
+    "package": "決算報告パッケージ",
+    "description": "設定された成果物を確認し、証跡バインダーを凍結してパッケージを公表します。",
+    "complete": "{name}がパッケージを公表しました",
+    "lockFirst": "公表前に承認済みの期間ロックを適用してください。",
+    "awaitingApproval": "公表前に決算レビューと承認フローを完了してください。"
+  },
+  "timeline": {
+    "title": "改ざん不可の決算タイムライン",
+    "description": "タスク、証跡、無効化、承認、ロック、公表を1つの監査証跡に。",
+    "system": "システム"
+  },
+  "events": {
+    "run": {
+      "started": "決算実行を開始しました",
+      "data_changed": "元帳の変更により従前の作業が無効化されました",
+      "approval_requested": "決算承認を依頼しました",
+      "approval_rejected": "決算承認が却下されました",
+      "approved": "決算が最終承認を受けました",
+      "closed": "期間ロックが適用されました",
+      "published": "決算パッケージを公表しました"
+    },
+    "task": {
+      "start": "タスクを開始しました",
+      "submit": "タスクを提出しました",
+      "complete": "タスクを完了しました",
+      "approve": "タスクを承認しました",
+      "request_changes": "変更を依頼しました",
+      "waive": "タスクを免除しました",
+      "evidence_added": "証跡を添付しました"
+    },
+    "automation": {
+      "completed": "自動処理が完了しました",
+      "failed": "自動処理に失敗しました"
+    }
+  },
+  "reports": {
+    "balance-sheet": "貸借対照表",
+    "pnl": "損益計算書",
+    "cash-flow": "キャッシュフロー計算書",
+    "trial-balance": "試算表",
+    "general-ledger": "総勘定元帳"
+  },
+  "defaultData": {
+    "calendar": { "name": "標準会計カレンダー" },
+    "blueprint": {
+      "name": "標準決算",
+      "description": "元帳ネイティブの月次、四半期、年度末決算"
+    },
+    "policies": {
+      "materialVariance": {
+        "name": "重要な差異のレビュー",
+        "description": "絶対額と割合の両方の閾値を超える勘定の変動をフラグ付けします。"
+      },
+      "independentApproval": {
+        "name": "独立した最終承認",
+        "description": "決算実行の開始者は最終的なコントローラー承認を付与できません。"
+      },
+      "controlledReopen": {
+        "name": "統制された再オープン",
+        "description": "再オープンには理由、独立した承認、有効期限が必要です。"
+      }
+    },
+    "package": {
+      "name": "経営決算パッケージ",
+      "description": "主要財務諸表と決算証跡バインダー"
+    }
+  },
+  "defaultSteps": {
+    "drafts-cleared": {
+      "title": "未記帳および承認待ちの取引を解消する",
+      "description": "この期間に属する下書きの仕訳と取引を解消します。"
+    },
+    "bank-reconciled": {
+      "title": "すべての現金勘定を消込する",
+      "description": "すべての消込可能な勘定は期末まで承認されている必要があります。"
+    },
+    "ar-cutoff": {
+      "title": "売掛金の期間帰属を完了する",
+      "description": "請求の網羅性、未適用の入金、クレジット、年齢分析の例外を確認します。"
+    },
+    "ap-cutoff": {
+      "title": "買掛金の期間帰属を完了する",
+      "description": "仕入請求書の網羅性、未計上の負債、クレジット、支払の期間帰属を確認します。"
+    },
+    "depreciation-posted": {
+      "title": "固定資産の減価償却を記帳する",
+      "description": "予定済みの減価償却を実行し、例外を解消します。"
+    },
+    "fx-ready": {
+      "title": "為替カバレッジを検証する",
+      "description": "すべての取引通貨に使用可能な期末レートが必要です。"
+    },
+    "fx-revalued": {
+      "title": "外貨建残高を評価替えする",
+      "description": "未消込の外貨建の銀行、売掛金、買掛金の残高を期末レートに再換算します。"
+    },
+    "intercompany-balanced": {
+      "title": "会社間取引を消込する",
+      "description": "消去の前に会社間勘定が均衡している必要があります。"
+    },
+    "consolidation": {
+      "title": "レートを導出し消去を記帳する",
+      "description": "複数エンティティ帳簿の連結調整を完了します。"
+    },
+    "variance-review": {
+      "title": "重要な変動を説明する",
+      "description": "前期に対する勘定の変動をレビューし、説明を保持します。"
+    },
+    "controller-approval": {
+      "title": "コントローラーの承認",
+      "description": "準備状況、例外、証跡、報告成果物を独立してレビューします。"
+    },
+    "lock-subledgers": {
+      "title": "業務補助元帳をロックする",
+      "description": "総勘定元帳の前に、売掛金、買掛金、銀行、資産、税をロックします。"
+    },
+    "lock-gl": {
+      "title": "総勘定元帳をロックする",
+      "description": "すべての前提条件をパスした後、データベースで強制される総勘定元帳ロックを適用します。"
+    },
+    "publish-package": {
+      "title": "決算パッケージを公表する",
+      "description": "決算バインダーを凍結し、設定された報告パッケージを公表します。"
+    }
+  },
+  "setup": {
+    "title": "期間・決算",
+    "description": "会計カレンダーを設計し、期間を生成し、ロックと再オープンを統制し、決算ブループリントをバージョン管理し、統制、自動処理、報告パッケージを設定します。",
+    "tabs": {
+      "calendars": "カレンダー",
+      "periods": "期間",
+      "blueprints": "ブループリント",
+      "policies": "ポリシー",
+      "automation": "自動処理",
+      "packages": "報告パッケージ"
+    },
+    "calendars": {
+      "title": "会計カレンダー",
+      "description": "会計年度がどのように記帳期間になるかを定義します。",
+      "startsMonth": "{month}月に開始",
+      "editTitle": "会計カレンダーを編集",
+      "newTitle": "新規会計カレンダー",
+      "formDescription": "元帳活動が存在すると、カレンダーの基本設定は保護されます。",
+      "anchorHint": "設定されたアンカー会計年度の開始日。",
+      "configurationHint": "anchorFiscalYearとleapWeekYears、またはカスタムの年度と期間の日付範囲を設定します。"
+    },
+    "periods": {
+      "title": "会計期間とロック",
+      "description": "帳簿とモジュール別に、生成、検索、ロック、ソフトクローズ、統制された再オープンの依頼を行います。",
+      "searchPlaceholder": "会計期間を検索…",
+      "generateTitle": "会計期間を生成",
+      "generateDescription": "会計カレンダーと年度の記帳期間を作成します。",
+      "moduleSummary": "{total}件中{closed}件のモジュールが締め済み",
+      "lockedOn": "{date}にロック",
+      "lockTitle": "期間ロックの確認",
+      "reopenTitle": "統制された再オープンを依頼",
+      "lockDescription": "{module} · {period}。理由は改ざん不可の決算履歴に保持されます。",
+      "reopenRequests": "再オープン依頼",
+      "requestedBy": "{name}が依頼"
+    },
+    "blueprints": {
+      "title": "決算ブループリント",
+      "description": "担当者、証跡、自動処理、ハードまたはソフトのゲートを備えた再利用可能な依存関係グラフを構築します。",
+      "stepCount": "{count, plural, one {# ステップ} other {# ステップ}}",
+      "newTitle": "新規決算ブループリント",
+      "newVersionTitle": "新しいブループリントバージョンを作成",
+      "versionHint": "公表済みの実行は元のバージョンを保持します。編集すると新しい変更不可のバージョンが作成されます。",
+      "steps": "依存関係グラフのステップ"
+    },
+    "policies": {
+      "title": "決算ポリシー",
+      "description": "重要性、ロック、レビュー、職務分掌、例外の統制を設定します。",
+      "formTitle": "ポリシー設定",
+      "rulesHint": "カスタムの重要性閾値を設定し、各ポリシーの適用先を制御します — 開発者の関与は不要です。"
+    },
+    "automation": {
+      "title": "決算の自動処理",
+      "description": "決算イベントに対して、通知、割り当て、チェック、タスク、レポート、またはフローで対応します。",
+      "formTitle": "自動処理ルール"
+    },
+    "packages": {
+      "title": "報告パッケージ",
+      "description": "決算とともに公表する財務諸表、宛先、配信設定を定義します。",
+      "formTitle": "報告パッケージ",
+      "reportCount": "{count, plural, one {# レポート} other {# レポート}}",
+      "recipientsHint": "1行につき1宛先。"
+    },
+    "actions": {
+      "newCalendar": "新規カレンダー",
+      "newBlueprint": "新規ブループリント",
+      "newPolicy": "新規ポリシー",
+      "newAutomation": "新規自動処理",
+      "newPackage": "新規パッケージ",
+      "save": "保存",
+      "saving": "保存中…",
+      "saveVersion": "新しいバージョンを保存",
+      "generate": "期間を生成",
+      "addStep": "ステップを追加",
+      "remove": "削除",
+      "close": "締める",
+      "softClose": "ソフトクローズ",
+      "reopen": "再オープン",
+      "requestReopen": "再オープンを依頼",
+      "confirmClose": "締めを確定",
+      "approve": "承認",
+      "reject": "却下",
+      "cancel": "キャンセル",
+      "manageBooks": "帳簿を管理",
+      "managePeriod": "{period}を管理"
+    },
+    "fields": {
+      "name": "名称",
+      "description": "説明",
+      "cadence": "頻度",
+      "yearStartMonth": "年度開始月",
+      "weekStartsOn": "週の開始曜日",
+      "anchorDate": "アンカー日付",
+      "timeZone": "タイムゾーン",
+      "adjustmentPeriod": "調整期間を生成",
+      "defaultCalendar": "デフォルト会計カレンダー",
+      "calendar": "会計カレンダー",
+      "book": "会計帳簿",
+      "fiscalYear": "会計年度",
+      "reason": "理由",
+      "periodType": "期間タイプ",
+      "stepKey": "安定ステップキー",
+      "stepTitle": "ステップ名",
+      "taskType": "タスクタイプ",
+      "dueOffset": "期日オフセット（営業日）",
+      "ownerRole": "デフォルト担当者ロールキー",
+      "reviewerRole": "デフォルトレビュアーロールキー",
+      "applicability": "適用ルール",
+      "workstream": "ワークストリーム",
+      "gate": "ゲート",
+      "completion": "完了",
+      "dependencies": "依存関係キー",
+      "evidenceRequired": "証跡必須",
+      "defaultBlueprint": "デフォルト決算ブループリント",
+      "code": "安定コード",
+      "policyType": "ポリシータイプ",
+      "rules": "ルール",
+      "trigger": "トリガー",
+      "action": "アクション",
+      "conditions": "条件",
+      "configuration": "設定",
+      "reports": "レポート",
+      "recipients": "宛先",
+      "delivery": "配信設定",
+      "defaultPackage": "デフォルト報告パッケージ",
+      "active": "有効"
+    },
+    "labels": {
+      "default": "デフォルト",
+      "active": "有効",
+      "inactive": "無効"
+    },
+    "cadences": {
+      "monthly": "暦月",
+      "four_four_five": "4-4-5週",
+      "four_five_four": "4-5-4週",
+      "five_four_four": "5-4-4週",
+      "thirteen_period": "13期間（4週間ずつ）",
+      "custom": "カスタム期間"
+    },
+    "weekdays": {
+      "0": "日曜日",
+      "1": "月曜日",
+      "2": "火曜日",
+      "3": "水曜日",
+      "4": "木曜日",
+      "5": "金曜日",
+      "6": "土曜日"
+    },
+    "states": {
+      "open": "オープン",
+      "soft_closed": "ソフトクローズ",
+      "partial": "一部締め済み",
+      "closed": "締め済み"
+    },
+    "modules": {
+      "ar": "売掛金",
+      "ap": "買掛金",
+      "banking": "銀行",
+      "assets": "資産",
+      "tax": "税",
+      "gl": "総勘定元帳"
+    },
+    "reopenStates": {
+      "requested": "依頼済み",
+      "approved": "承認済み",
+      "rejected": "却下",
+      "expired": "期限切れ",
+      "reclosed": "再締め済み"
+    },
+    "periodTypes": {
+      "any": "任意の決算",
+      "month": "月次",
+      "quarter": "四半期末",
+      "year": "年度末",
+      "adjustment": "調整"
+    },
+    "workstreams": {
+      "readiness": "準備状況",
+      "banking": "銀行",
+      "ar": "売掛金",
+      "ap": "買掛金",
+      "assets": "固定資産",
+      "tax": "税",
+      "payroll": "給与",
+      "intercompany": "会社間",
+      "gl": "総勘定元帳",
+      "review": "レビュー",
+      "publish": "公表"
+    },
+    "gates": { "none": "ゲートなし", "soft": "ソフトゲート", "hard": "ハードゲート" },
+    "completionModes": {
+      "manual": "手動",
+      "computed": "元帳計算",
+      "automatic": "自動"
+    },
+    "taskTypes": {
+      "check": "チェック",
+      "action": "アクション",
+      "reconciliation": "消込",
+      "journal": "仕訳",
+      "approval": "承認",
+      "report": "レポート",
+      "publish": "公表"
+    },
+    "policyTypes": {
+      "materiality": "重要性",
+      "lock": "ロック",
+      "review": "レビュー",
+      "segregation": "職務分掌",
+      "exception": "例外"
+    },
+    "automationTriggers": {
+      "run_started": "実行開始",
+      "task_ready": "タスクが準備完了になった",
+      "exception_opened": "例外が発生した",
+      "deadline_approaching": "期限が近づいている",
+      "run_closed": "実行が締められた"
+    },
+    "automationActions": {
+      "notify": "通知",
+      "assign": "割り当て",
+      "run_check": "チェックを実行",
+      "complete_task": "タスクを完了",
+      "create_task": "タスクを作成",
+      "generate_report": "レポートを生成",
+      "start_flow": "フローを開始"
+    },
+    "reports": {
+      "balance-sheet": "貸借対照表",
+      "pnl": "損益計算書",
+      "cash-flow": "キャッシュフロー計算書",
+      "trial-balance": "試算表",
+      "general-ledger": "総勘定元帳"
+    },
+    "table": { "period": "期間", "range": "範囲", "entries": "仕訳", "status": "ステータス" },
+    "empty": {
+      "calendars": "この検索に一致する会計カレンダーはありません。",
+      "periods": "これらのフィルターに一致する会計期間はありません。",
+      "blueprints": "この検索に一致する決算ブループリントはありません。",
+      "policies": "この検索に一致する決算ポリシーはありません。",
+      "automation": "この検索に一致する自動処理ルールはありません。",
+      "packages": "この検索に一致する報告パッケージはありません。"
+    },
+    "messages": {
+      "calendarSaved": "会計カレンダーを保存しました",
+      "periodsGenerated": "会計期間を生成しました",
+      "lockSaved": "期間ロックを保存しました",
+      "reopenRequested": "再オープン依頼を提出しました",
+      "reopenApproved": "設定されたポリシーのもとで再オープン期間が承認されました",
+      "reopenRejected": "再オープン依頼が却下されました",
+      "blueprintSaved": "決算ブループリントバージョンを保存しました",
+      "policySaved": "決算ポリシーを保存しました",
+      "automationSaved": "自動処理ルールを保存しました",
+      "packageSaved": "報告パッケージを保存しました"
+    },
+    "errors": {
+      "actionFailed": "設定の変更を保存できませんでした",
+      "invalidConfiguration": "設定は有効かつ完全である必要があります"
+    }
+  }
+}

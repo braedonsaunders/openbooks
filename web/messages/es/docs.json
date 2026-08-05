@@ -1,0 +1,28 @@
+{
+  "title": "Documentación",
+  "searchPlaceholder": "Buscar en la documentación…",
+  "noResults": "No hay artículos que coincidan.",
+  "browseMenu": "Explorar la documentación",
+  "expandAll": "Expandir todo",
+  "collapseAll": "Contraer todo",
+  "expandSection": "Expandir {title}",
+  "collapseSection": "Contraer {title}",
+  "lastUpdated": "Última actualización el {date}",
+  "related": "Artículos relacionados",
+  "breadcrumb": "Ruta de navegación de la documentación",
+  "articleNavigation": "Navegación entre artículos",
+  "previous": "Anterior",
+  "next": "Siguiente",
+  "home": {
+    "title": "Documentación",
+    "subtitle": "Conozca el modelo contable, configure su organización, ejecute los flujos diarios y migre de forma segura desde otro sistema.",
+    "eyebrow": "Centro de ayuda de OpenBooks",
+    "startHere": "Empiece aquí",
+    "step": "Paso {number}",
+    "switchingTitle": "¿Viene de otro sistema?",
+    "switchingSubtitle": "Comience con una guía de familiarización que relaciona los conceptos y flujos que ya conoce.",
+    "browseTitle": "Explorar toda la documentación",
+    "browseSubtitle": "Explore la guía completa por tema o use la búsqueda de la barra lateral.",
+    "articleCount": "{count, plural, one {# artículo} other {# artículos}}"
+  }
+}

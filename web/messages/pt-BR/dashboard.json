@@ -1,0 +1,132 @@
+{
+  "title": "Painel",
+  "orgDescription": "{name} · {currency} · {book}",
+  "greeting": {
+    "morning": "Bom dia",
+    "afternoon": "Boa tarde",
+    "evening": "Boa noite"
+  },
+  "header": {
+    "customize": "Personalizar"
+  },
+  "widgets": {
+    "journalLines": "Linhas de lançamento",
+    "activeAccounts": "Contas ativas",
+    "entriesToday": "Lançamentos hoje",
+    "pendingApprovals": "Aprovações pendentes",
+    "ledgerBalance": "Saldo do razão",
+    "recentEntries": "Lançamentos contábeis recentes",
+    "pendingApprovalsList": "Aprovações pendentes",
+    "myApprovals": "Minhas aprovações",
+    "inProgress": "Em andamento",
+    "cashBalance": "Saldo de caixa",
+    "openReceivables": "Contas a receber em aberto",
+    "overdueReceivables": "Contas a receber vencidas",
+    "openPayables": "Contas a pagar em aberto",
+    "overduePayables": "Contas a pagar vencidas"
+  },
+  "metricContext": {
+    "today": "Lançado hoje",
+    "awaitingDecision": "Aguardando uma decisão",
+    "baseCurrency": "Moeda base · {currency}",
+    "outstanding": "Em aberto",
+    "pastDue": "Vencido"
+  },
+  "categories": {
+    "kpi": "Destaques",
+    "gl": "Razão geral",
+    "ap": "Contas a pagar",
+    "ar": "Contas a receber",
+    "personal": "Pessoal",
+    "admin": "Administração"
+  },
+  "catalog": {
+    "journalLines": "Total de linhas de lançamento lançadas.",
+    "activeAccounts": "Contas ativas no plano de contas.",
+    "entriesToday": "Lançamentos contábeis lançados hoje.",
+    "pendingApprovals": "Solicitações de aprovação aguardando uma decisão.",
+    "ledgerBalance": "Líquido de todas as linhas de lançamento; livros equilibrados devem ficar em zero.",
+    "recentEntries": "Os cinco lançamentos contábeis lançados mais recentemente.",
+    "pendingApprovalsList": "As solicitações de aprovação mais recentes aguardando uma decisão.",
+    "inProgress": "Suas contas a pagar, faturas e lançamentos contábeis em rascunho.",
+    "myApprovals": "Solicitações de aprovação atribuídas ao seu papel.",
+    "quickActions": "Atalhos para suas tarefas mais comuns.",
+    "cashBalance": "Saldo lançado das contas bancárias na moeda base.",
+    "openReceivables": "Faturas de clientes não pagas na moeda base.",
+    "overdueReceivables": "Faturas de clientes vencidas na moeda base.",
+    "openPayables": "Contas a pagar de fornecedores não pagas na moeda base.",
+    "overduePayables": "Contas a pagar de fornecedores vencidas na moeda base."
+  },
+  "grid": {
+    "customizing": "Personalizando seu painel",
+    "save": "Salvar",
+    "saved": "Layout salvo",
+    "saveFailed": "Falha ao salvar o layout",
+    "reset": "Redefinir",
+    "resetDone": "Layout redefinido para o padrão",
+    "resetFailed": "Falha ao redefinir o layout",
+    "resetConfirm": "Redefinir para o layout padrão do seu papel? Suas personalizações serão perdidas.",
+    "addWidget": "Adicionar widget",
+    "closePalette": "Fechar",
+    "remove": "Remover widget",
+    "cardMissing": "Cartão indisponível",
+    "unknownWidget": "Widget desconhecido: {id}"
+  },
+  "palette": {
+    "title": "Widgets",
+    "subtitle": "Clique para adicionar ao seu painel",
+    "close": "Fechar",
+    "added": "Adicionado",
+    "empty": "Nenhum widget disponível para adicionar.",
+    "libraryCards": "Cartões de insight"
+  },
+  "customize": {
+    "title": "Personalizar painel",
+    "back": "Voltar ao painel",
+    "roleLabel": "Layout padrão para: {role}"
+  },
+  "quickActions": {
+    "title": "Ações rápidas",
+    "customize": "Personalizar",
+    "empty": "Nenhuma ação rápida ainda",
+    "addFirst": "Adicione sua primeira ação",
+    "editor": {
+      "title": "Personalizar ações rápidas",
+      "description": "Adicione, reordene e remova blocos de atalho.",
+      "addAction": "Adicionar ação",
+      "edit": "Editar ação",
+      "cancel": "Cancelar",
+      "save": "Salvar",
+      "saved": "Ações rápidas salvas",
+      "saveFailed": "Falha ao salvar as ações rápidas",
+      "loadFailed": "Falha ao carregar as opções",
+      "back": "Voltar",
+      "common": "Comuns",
+      "customUrl": "URL personalizada",
+      "label": "Rótulo",
+      "labelPlaceholder": "Nova conta a pagar",
+      "link": "Link",
+      "linkHint": "Caminho interno (/ar) ou URL https",
+      "icon": "Ícone",
+      "color": "Cor",
+      "preview": "Prévia",
+      "unnamed": "Sem nome",
+      "searchPlaceholder": "Buscar ações…",
+      "loading": "Carregando…",
+      "noResults": "Nenhum resultado",
+      "maxReached": "Máximo de {count} ações",
+      "invalidUrl": "O link deve ser um caminho interno ou uma URL http(s)"
+    }
+  },
+  "home": {
+    "customize": "Personalizar",
+    "customizeHint": "Reorganize os cartões do seu quadro inicial",
+    "browseInsights": "Todos os insights",
+    "noBoard": "Nenhum painel inicial ainda",
+    "noBoardBody": "Crie cartões em Insights, organize-os em um painel e defina-o como o quadro inicial.",
+    "openInsights": "Abrir Insights",
+    "personalBadge": "Seu quadro",
+    "roleBadge": "Padrão do papel",
+    "systemBadge": "Padrão da empresa"
+  }
+}

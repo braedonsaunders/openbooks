@@ -1,0 +1,88 @@
+{
+  "title": "Query-Konsole",
+  "subtitle": "Echtes PostgreSQL, schreibgeschützt. Nur-SELECT-Rolle, 10 s Timeout. ⌘⏎ zum Ausführen.",
+  "description": "Echtes PostgreSQL — kein Abfragedialekt. Läuft schreibgeschützt unter einer Nur-SELECT-Rolle mit einem Timeout von 10 Sekunden. ⌘⏎ zum Ausführen.",
+  "readOnlyBadge": "Schreibgeschützt",
+  "run": "Ausführen",
+  "running": "Wird ausgeführt…",
+  "clear": "Leeren",
+  "rowLimit": "Limit",
+  "editorPlaceholder": "select … from journal_lines l join accounts a on a.id = l.account_id …",
+  "failed": "Fehlgeschlagen",
+  "queryError": "Abfragefehler",
+  "rowCount": "{count, plural, one {# Zeile} other {# Zeilen}}",
+  "truncated": "Gekürzt bei {max}",
+  "ranSelection": "Auswahl ausgeführt",
+  "resultsIdle": "Noch keine Ergebnisse",
+  "resultsIdleHint": "Ergebnisse werden hier angezeigt",
+  "filterResults": "Zeilen filtern…",
+  "copyCsv": "Kopieren",
+  "copiedCsv": "Ergebnisse als CSV kopiert",
+  "copyFailed": "Kopieren fehlgeschlagen",
+  "runToSeeResults": "Führen Sie eine Abfrage aus, um Ergebnisse zu sehen",
+  "runHint": "Schreiben Sie oben SQL und drücken Sie dann Ausführen oder ⌘⏎. Markieren Sie Text, um nur diesen auszuführen.",
+  "emptyResultSet": "Die Abfrage lieferte keine Spalten",
+  "noFilterMatch": "Keine Zeilen entsprechen Ihrem Filter",
+  "rail": {
+    "schema": "Schema",
+    "snippets": "Snippets",
+    "history": "Verlauf"
+  },
+  "schema": {
+    "searchPlaceholder": "Tabellen und Spalten durchsuchen…",
+    "noMatch": "Keine passenden Tabellen",
+    "insertTable": "Klicken, um Tabellennamen einzufügen",
+    "insertColumn": "Klicken, um Spaltennamen einzufügen",
+    "showSchema": "Schema anzeigen",
+    "browseRows": "Zeilen durchsuchen",
+    "insertTableName": "Tabellennamen einfügen",
+    "insertSelectTemplate": "SELECT-Vorlage einfügen"
+  },
+  "history": {
+    "count": "{count, plural, one {# Abfrage} other {# Abfragen}}",
+    "clear": "Leeren",
+    "rows": "{count, plural, one {# Zeile} other {# Zeilen}}",
+    "failed": "Fehlgeschlagen",
+    "empty": "Ausgeführte Abfragen werden hier angezeigt"
+  },
+  "snippetSaved": "„{name}“ gespeichert",
+  "snippets": {
+    "save": "Speichern",
+    "namePlaceholder": "Diese Abfrage benennen…",
+    "savedHeading": "Gespeichert",
+    "examplesHeading": "Beispiele",
+    "delete": "Snippet löschen",
+    "trialBalance": {
+      "label": "Rohbilanz",
+      "description": "Vorzeichenbehafteter Saldo pro Konto, nur ungleich null."
+    },
+    "topAccounts": {
+      "label": "Größte Salden",
+      "description": "Die 15 Konten mit dem größten absoluten Saldo."
+    },
+    "recentEntries": {
+      "label": "Aktuelle Buchungen",
+      "description": "Die 50 neuesten Buchungen mit Status und Herkunft."
+    },
+    "monthlyActivity": {
+      "label": "Monatliche Aktivität",
+      "description": "Gebuchte Buchungen und Soll-Summen nach Monat."
+    },
+    "unbalancedEntries": {
+      "label": "Nicht ausgeglichene Buchungen",
+      "description": "Buchungen, deren Zeilen sich nicht zu null saldieren."
+    },
+    "entriesByOrigin": {
+      "label": "Buchungen nach Herkunft",
+      "description": "Anzahl der Buchungen gruppiert nach ihrer Herkunft."
+    },
+    "tableSizes": {
+      "label": "Übersicht des Abfragekatalogs",
+      "description": "Kontrollierte Berichtsansichten mit der Anzahl verfügbarer Spalten."
+    },
+    "listColumns": {
+      "label": "Alle Spalten auflisten",
+      "description": "Jede verfügbare Spalte im kontrollierten Abfragekatalog mit ihrem Typ."
+    }
+  }
+}

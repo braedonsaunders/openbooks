@@ -1,0 +1,162 @@
+{
+  "list": {
+    "metaTitle": "ドキュメント",
+    "title": "ファイルキャビネット",
+    "description": "組織全体のドキュメントを閲覧、アップロード、管理します。",
+    "searchPlaceholder": "ファイルとフォルダーを検索…",
+    "allFiles": "すべてのファイル",
+    "rootFolder": "ファイルキャビネット",
+    "systemAttachments": "添付ファイル",
+    "empty": {
+      "title": "このフォルダーにはファイルがありません",
+      "description": "ファイルをアップロードするか、フォルダーを作成して始めましょう。",
+      "allTitle": "まだファイルがありません",
+      "allDescription": "最初のファイルをアップロードしてファイルキャビネットを埋めましょう。"
+    },
+    "folderRow": "フォルダー"
+  },
+  "systemFolders": { "apCapture": "AP取り込み" },
+  "columns": {
+    "name": "名前",
+    "size": "サイズ",
+    "modified": "更新日",
+    "createdBy": "作成者",
+    "type": "タイプ",
+    "location": "場所"
+  },
+  "folderTree": {
+    "expand": "展開",
+    "collapse": "折りたたむ"
+  },
+  "actions": {
+    "newFolder": "新規フォルダー",
+    "upload": "アップロード",
+    "download": "ダウンロード",
+    "rename": "名前を変更",
+    "move": "移動",
+    "replace": "置き換え",
+    "delete": "削除",
+    "attachExisting": "既存のファイルを添付",
+    "detach": "取り外し"
+  },
+  "folder": {
+    "create": {
+      "title": "新規フォルダー",
+      "description": "フォルダーを作成してファイルを整理します。",
+      "nameLabel": "フォルダー名",
+      "namePlaceholder": "フォルダー名",
+      "parentLabel": "親フォルダー",
+      "submit": "フォルダーを作成"
+    },
+    "edit": {
+      "title": "フォルダーを編集",
+      "nameLabel": "フォルダー名",
+      "parentLabel": "親フォルダー",
+      "private": "プライベートフォルダー",
+      "privateHint": "あなたと管理者のみがこのフォルダーを表示できます。",
+      "inactive": "無効",
+      "inactiveHint": "このフォルダーをリストから非表示にします。",
+      "save": "保存"
+    },
+    "delete": {
+      "title": "このフォルダーを削除しますか？",
+      "body": "このフォルダー内のすべてのファイルが完全に削除されます。この操作は取り消せません。"
+    },
+    "systemNoDelete": "システムフォルダーは削除や名前の変更ができません。",
+    "subfolderCount": "{count, plural, one {#個のフォルダー} other {#個のフォルダー}}",
+    "fileCount": "{count, plural, one {#個のファイル} other {#個のファイル}}",
+    "deleteBlocked": "このフォルダーにはレコードに添付されたファイルが含まれているため削除できません。"
+  },
+  "file": {
+    "drawer": {
+      "title": "ファイル詳細",
+      "name": "名前",
+      "folder": "フォルダー",
+      "type": "タイプ",
+      "size": "サイズ",
+      "created": "作成日",
+      "createdBy": "作成者",
+      "modified": "更新日",
+      "modifiedBy": "更新者",
+      "versions": "バージョン",
+      "version": "バージョン{number}",
+      "current": "現在",
+      "noVersions": "以前のバージョンはありません。",
+      "moveTo": "フォルダーに移動",
+      "replaceTitle": "ファイルを置き換え",
+      "replaceBody": "このファイルの新しいバージョンをアップロードします。以前のバージョンはバージョン履歴に保持されます。",
+      "attachedTo": "添付先のレコード",
+      "notAttached": "どのレコードにも添付されていません。",
+      "delete": {
+        "title": "このファイルを削除しますか？",
+        "body": "ファイルはファイルキャビネットから完全に削除され、すべてのレコードから取り外されます。この操作は取り消せません。"
+      }
+    },
+    "preview": {
+      "title": "プレビュー",
+      "loading": "ファイルを読み込み中…",
+      "loadFailed": "このファイルの内容を読み込めませんでした。",
+      "tooLarge": "このファイルは大きすぎてここでプレビューできません。",
+      "unsupported": "このファイルタイプはプレビューできません。ダウンロードして開いてください。"
+    }
+  },
+  "upload": {
+    "dropFiles": "ここにファイルをドロップするか、<browse>参照</browse>",
+    "acceptHint": "PDF、画像、CSV、XLSX、DOCX、TXT · 最大25 MB",
+    "tooLarge": "{name} は25 MBの上限を超えています",
+    "uploading": "{count, plural, one {#個のファイルをアップロード中…} other {#個のファイルをアップロード中…}}",
+    "selectFolder": "アップロード先のフォルダーを選択…"
+  },
+  "attach": {
+    "title": "ファイルを添付",
+    "description": "ファイルキャビネットからこのレコードにファイルを添付します。",
+    "searchPlaceholder": "ファイルを検索…",
+    "empty": "ファイルが見つかりません。",
+    "attachExisting": "既存のファイルを添付",
+    "uploadNew": "新しいファイルをアップロード"
+  },
+  "toasts": {
+    "folderCreated": "フォルダーを作成しました",
+    "folderCreateFailed": "フォルダーを作成できませんでした",
+    "folderRenamed": "フォルダー名を変更しました",
+    "folderRenameFailed": "フォルダー名を変更できませんでした",
+    "folderMoved": "フォルダーを移動しました",
+    "folderMoveFailed": "フォルダーを移動できませんでした",
+    "folderDeleted": "フォルダーを削除しました",
+    "folderDeleteFailed": "フォルダーを削除できませんでした",
+    "fileRenamed": "ファイル名を変更しました",
+    "fileRenameFailed": "ファイル名を変更できませんでした",
+    "fileMoved": "ファイルを移動しました",
+    "fileMoveFailed": "ファイルを移動できませんでした",
+    "fileDeleted": "ファイルを削除しました",
+    "fileDeleteFailed": "ファイルを削除できませんでした",
+    "fileReplaced": "新しいバージョンをアップロードしました",
+    "fileReplaceFailed": "新しいバージョンをアップロードできませんでした",
+    "uploaded": "{name} をアップロードしました",
+    "uploadFailed": "{name} をアップロードできませんでした",
+    "attached": "ファイルを添付しました",
+    "attachFailed": "ファイルを添付できませんでした",
+    "detached": "ファイルを取り外しました",
+    "detachFailed": "ファイルを取り外せませんでした",
+    "linkCopied": "リンクをコピーしました",
+    "linkCopyFailed": "リンクをコピーできませんでした"
+  },
+  "fileTypes": {
+    "pdf": "PDF",
+    "image": "画像",
+    "csv": "CSV",
+    "spreadsheet": "スプレッドシート",
+    "document": "ドキュメント",
+    "text": "テキスト",
+    "other": "ファイル"
+  },
+  "rowMenu": {
+    "open": "開く",
+    "openFolder": "フォルダーを開く",
+    "copyLink": "リンクをコピー"
+  },
+  "rename": {
+    "fileTitle": "ファイル名を変更",
+    "folderTitle": "フォルダー名を変更"
+  }
+}

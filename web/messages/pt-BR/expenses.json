@@ -1,0 +1,87 @@
+{
+  "list": {
+    "title": "Relatórios de Despesas",
+    "description": "Relatórios de despesas de funcionários — rascunho → aprovação → lançado contra o passivo do funcionário.",
+    "searchPlaceholder": "Buscar relatórios, funcionários, memorandos…",
+    "emptyTitle": "Nenhum relatório de despesas ainda",
+    "emptyDescription": "Registre o primeiro relatório de despesas para iniciar o fluxo de reembolso.",
+    "columns": {
+      "report": "Relatório"
+    }
+  },
+  "actions": {
+    "newReport": "Novo relatório de despesas",
+    "submitForApproval": "Enviar para aprovação"
+  },
+  "drawer": {
+    "autosaveHint": "Rascunho — as alterações são salvas automaticamente.",
+    "viewGlImpact": "Ver impacto no razão",
+    "reportDate": "Data do relatório",
+    "selectEmployeePlaceholder": "Selecionar funcionário…",
+    "accountPlaceholder": "Conta…",
+    "noTax": "Sem imposto",
+    "deleteTitle": "Excluir este relatório de despesas?",
+    "deleteDraftBody": "Isso exclui permanentemente o relatório de despesas rascunho. Isso não pode ser desfeito.",
+    "deletePostedBody": "Isso exclui permanentemente o relatório de despesas e remove seu impacto no razão. Isso não pode ser desfeito.",
+    "columns": {
+      "taxAmount": "Val. imposto"
+    },
+    "saveState": {
+      "saved": "Todas as alterações salvas",
+      "dirty": "Alterações não salvas…",
+      "error": "Falha ao salvar — corrija e tente novamente"
+    },
+    "totals": "Subtotal {subtotal} · Imposto {tax} · <strong>Total {total}</strong>"
+  },
+  "toasts": {
+    "submitted": "Enviado para aprovação",
+    "posted": "Lançado no razão",
+    "actionFailed": "Falha na ação",
+    "autosaveFailed": "Falha ao salvar automaticamente",
+    "deleted": "Relatório de despesas excluído",
+    "deleteFailed": "Falha ao excluir",
+    "draftFailed": "Não foi possível criar um relatório de despesas rascunho"
+  },
+  "dashboard": {
+    "title": "Despesas",
+    "description": "Central de controle de relatórios de despesas — fila de aprovação, gasto por funcionário e categoria, e a tendência das despesas.",
+    "vitals": {
+      "pending": "Aguardando aprovação",
+      "pendingSub": "{count} relatórios",
+      "awaiting": "Aguardando lançamento",
+      "awaitingSub": "{count} aprovados",
+      "month": "Lançado este mês",
+      "monthSub": "{count} relatórios",
+      "highSpenders": "Maiores gastadores",
+      "highSpendersSub": ">20% de aumento vs anterior",
+      "creep": "Aumentos por categoria",
+      "creepSub": "categorias com alta >10%"
+    },
+    "panels": {
+      "categories": "Distribuição por categoria",
+      "categoriesHint": "relatórios de despesas · 12 meses",
+      "trend": "Tendência mensal",
+      "trendHint": "relatórios de despesas vs contas de fornecedores",
+      "queue": "Fila de aprovação",
+      "queueHint": "mais antigos primeiro",
+      "queueEmpty": "Nada aguardando aprovação.",
+      "spenders": "Principais gastadores",
+      "spendersHint": "vs 12 meses anteriores",
+      "categoryTable": "Categorias",
+      "categoryTableHint": "atual vs 12 meses anteriores"
+    },
+    "table": {
+      "employee": "Funcionário",
+      "spend": "Gasto",
+      "reports": "Relatórios",
+      "change": "Variação",
+      "category": "Categoria",
+      "current": "Atual",
+      "prior": "Anterior"
+    },
+    "series": {
+      "bills": "Contas de fornecedores",
+      "expenses": "Relatórios de despesas"
+    }
+  }
+}

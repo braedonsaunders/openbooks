@@ -1,0 +1,142 @@
+{
+  "list": {
+    "title": "Contas a pagar",
+    "description": "Contas a pagar e memorandos de crédito de fornecedores — suas contas a pagar: rascunho → aprovação → lançado pelo kernel.",
+    "searchPlaceholder": "Buscar contas, créditos, fornecedores, refs…",
+    "columns": {
+      "number": "Número",
+      "bill": "Conta a pagar",
+      "ref": "Ref"
+    },
+    "empty": {
+      "title": "Nenhuma conta a pagar ainda",
+      "description": "Registre a primeira conta a pagar ou memorando de crédito de fornecedor para iniciar o fluxo de contas a pagar."
+    }
+  },
+  "kinds": {
+    "bill": "Conta a pagar",
+    "credit": "Crédito"
+  },
+  "actions": {
+    "new": "Novo",
+    "newBill": "Nova conta a pagar",
+    "newCredit": "Novo crédito de fornecedor",
+    "capture": "Capturar contas a pagar",
+    "submitForApproval": "Enviar para aprovação"
+  },
+  "drawer": {
+    "editingHint": "Editando — Salve para aplicar as alterações",
+    "viewGlImpact": "Ver impacto no razão",
+    "dateLabel": "Data da conta a pagar",
+    "dueDate": "Data de vencimento",
+    "reference": "Nº de ref. do fornecedor",
+    "accountColumn": "Conta",
+    "accountPlaceholder": "Conta…",
+    "noTax": "Sem imposto",
+    "taxAmountColumn": "Valor do imposto",
+    "selectVendorPlaceholder": "Selecionar fornecedor…",
+    "selectCustomerPlaceholder": "Selecionar cliente…",
+    "subtotalAmount": "Subtotal {amount}",
+    "taxTotalAmount": "Imposto {amount}",
+    "totalAmount": "Total {amount}",
+    "balanceDueAmount": "Saldo devedor {amount}",
+    "saveState": {
+      "saved": "Todas as alterações salvas",
+      "error": "Falha ao salvar — corrija e tente novamente",
+      "dirty": "Alterações não salvas…"
+    },
+    "deleteTitle": "Excluir este documento?",
+    "deleteDraftBody": "Isto exclui permanentemente o rascunho. Não é possível desfazer.",
+    "deletePostedBody": "Isto exclui permanentemente o documento e remove seu impacto no razão. Não é possível desfazer.",
+    "formLabel": "Formulário",
+    "formDefault": "Formulário padrão",
+    "formSetPreferred": "Definir como meu preferido",
+    "formSetPreferredDone": "Formulário preferido salvo",
+    "formPreferredCleared": "Formulário preferido removido",
+    "formPreferredFailed": "Não foi possível salvar o formulário preferido"
+  },
+  "capture": {
+    "title": "Captura de contas a pagar",
+    "description": "Envie faturas em lotes, revise as evidências extraídas ao lado da fonte e crie rascunhos controlados de contas a pagar.",
+    "backToBills": "Contas a pagar",
+    "upload": "Enviar documentos",
+    "uploading": "Enviando…",
+    "uploadComplete": "{count, plural, one {# documento na fila} other {# documentos na fila}}.",
+    "uploadFailed": "Não foi possível enviar os documentos.",
+    "notConfigured": "A captura de documentos não está operacional porque está desativada ou sem a configuração do provedor da organização.",
+    "configure": "Configure em Central de administração → IA.",
+    "search": "Buscar arquivos, fornecedores, números de fatura…",
+    "status": {
+      "queued": "Na fila", "extracting": "Extraindo", "needs_review": "Requer revisão", "ready": "Pronto",
+      "duplicate": "Possível duplicata", "failed": "Falhou", "materialized": "Rascunho criado", "rejected": "Rejeitado"
+    },
+    "emptyTitle": "Nenhum documento capturado",
+    "emptyDescription": "Envie documentos de fornecedor em PDF, JPEG, PNG ou TIFF para começar.",
+    "selected": "{count, plural, =0 {Nenhum selecionado} one {# selecionado} other {# selecionados}}",
+    "select": "Selecionar",
+    "selectDocument": "Selecionar {name}",
+    "reprocess": "Reprocessar",
+    "reject": "Rejeitar",
+    "createDraft": "Criar rascunho",
+    "createDrafts": "Criar rascunhos",
+    "bulkComplete": "Ação em massa concluída: {succeeded} com sucesso, {failed} com falha.",
+    "actionFailed": "A ação de captura falhou.",
+    "rejected": "Documento rejeitado.",
+    "reprocessQueued": "Documento na fila para reprocessamento.",
+    "draftCreated": "Rascunho de contas a pagar criado.",
+    "openDraft": "Abrir rascunho de contas a pagar",
+    "bill": "Conta a pagar de fornecedor",
+    "credit": "Crédito de fornecedor",
+    "columns": { "document": "Documento", "vendor": "Fornecedor", "invoice": "Nº da fatura", "date": "Data da fatura", "total": "Total", "status": "Status", "received": "Recebido" },
+    "saving": "Salvando correções…",
+    "unsaved": "Correções não salvas",
+    "saved": "Todas as correções salvas",
+    "saveFailed": "Não foi possível salvar as correções.",
+    "processing": "Extraindo evidências do documento…",
+    "processingFailed": "Falha na extração do documento. Verifique a configuração do provedor da organização e reprocesse o documento.",
+    "sourcePreview": "Visualização do documento de origem",
+    "sourcePreviewAlt": "Documento de origem {name}",
+    "confidencePercent": "{percent}%",
+    "highlightEvidence": "Destacar esta evidência no documento de origem",
+    "fields": {
+      "kind": "Tipo de documento", "vendor": "Fornecedor", "vendorPlaceholder": "Selecionar fornecedor…",
+      "invoiceNumber": "Número da fatura", "invoiceDate": "Data da fatura", "dueDate": "Data de vencimento", "currency": "Moeda",
+      "purchaseOrder": "Pedido de compra", "purchaseOrderPlaceholder": "Selecionar pedido de compra…", "memo": "Memorando",
+      "subtotal": "Subtotal", "taxTotal": "Imposto", "total": "Total"
+    },
+    "lines": {
+      "title": "Linhas extraídas", "add": "Adicionar linha", "description": "Descrição", "account": "Conta",
+      "accountPlaceholder": "Selecionar conta…", "quantity": "Qtd", "unitPrice": "Preço unitário", "amount": "Valor", "tax": "Imposto",
+      "remove": "Remover linha {line}"
+    },
+    "issues": {
+      "required_field": "Um campo obrigatório está faltando.",
+      "invalid_date": "Informe uma data ISO válida.",
+      "invalid_currency": "Informe um código de moeda válido de três letras.",
+      "amount_out_of_range": "O valor está fora da faixa contábil suportada.",
+      "missing_lines": "Adicione pelo menos uma linha de fatura.",
+      "missing_line_description": "A linha {line} não tem descrição ou código de produto.",
+      "line_math_mismatch": "A linha {line} não é igual a quantidade × preço unitário (esperado {expected}, encontrado {actual}).",
+      "low_confidence": "A linha {line} está abaixo do limite de confiança.",
+      "document_low_confidence": "O documento está abaixo do limite de confiança para revisão.",
+      "subtotal_mismatch": "O subtotal das linhas é {expected}, mas o documento indica {actual}.",
+      "line_tax_mismatch": "O imposto das linhas totaliza {expected}, mas o documento indica {actual}.",
+      "total_mismatch": "Subtotal mais imposto é {expected}, mas o documento indica {actual}.",
+      "vendor_unresolved": "Selecione o fornecedor.",
+      "purchase_order_unresolved": "Não foi possível resolver o pedido de compra de forma única.",
+      "account_unresolved": "Selecione uma conta para a linha {line}.",
+      "po_line_unmatched": "A linha {line} não pôde ser correspondida de forma única ao pedido de compra.",
+      "po_quantity_exceeded": "A linha {line} excede a quantidade não faturada do pedido de compra ({expected}).",
+      "receipt_quantity_shortfall": "A linha {line} excede a quantidade recebida e não faturada ({expected}); receba as mercadorias primeiro.",
+      "possible_duplicate": "Um documento de captura ou de contas a pagar já possui este arquivo ou número de fatura do fornecedor."
+    }
+  },
+  "toasts": {
+    "actionFailed": "Falha na ação",
+    "submitted": "Enviado para aprovação",
+    "posted": "Lançado no razão",
+    "createDraftFailed": "Não foi possível criar um rascunho",
+    "deleted": "Documento excluído",
+    "deleteFailed": "Falha ao excluir"
+  }
+}

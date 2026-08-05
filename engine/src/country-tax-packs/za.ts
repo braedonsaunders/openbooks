@@ -1,0 +1,93 @@
+import type { CountryTaxPackDefinition, TaxReturnPack } from "./types.ts";
+
+const ZA_VAT201_2026: TaxReturnPack = {
+  code: "ZA_VAT201",
+  name: "VAT201 — Value-Added Tax Return",
+  country: "ZA",
+  jurisdiction: { code: "ZA", name: "South Africa", country: "ZA", level: "country", taxType: "vat" },
+  defaultFrequency: "bimonthly",
+  submissionChannel: "portal_manual",
+  governmentFormat: "portal_entry",
+  submissionUrl: "https://www.sars.gov.za/types-of-tax/value-added-tax/",
+  watermark: "Working copy — filing category, customs codes, accommodation, imported services, adjustments, and diesel-refund fields require review before SARS eFiling",
+  boxes: [
+    { lineCode: "1", label: "Standard rate — excluding capital goods and/or services and accommodation", sign: 1, sequence: 10 },
+    { lineCode: "1A", label: "Standard rate — only capital goods and/or services", sign: 1, sequence: 20 },
+    { lineCode: "2", label: "Zero rate — excluding goods exported", sign: 1, sequence: 30 },
+    { lineCode: "2A", label: "Zero rate — only exported goods", sign: 1, sequence: 40 },
+    { lineCode: "3", label: "Exempt and non-supplies", sign: 1, sequence: 50 },
+    { lineCode: "4", label: "Output tax on Field 1", sign: -1, sequence: 60 },
+    { lineCode: "4A", label: "Output tax on Field 1A", sign: -1, sequence: 70 },
+    { lineCode: "5", label: "Supply of accommodation", sign: 1, sequence: 80 },
+    { lineCode: "6", label: "Sixty percent of Field 5", sign: 1, sequence: 90 },
+    { lineCode: "7", label: "Accommodation supplied for a period not exceeding 28 days — VAT-exclusive amount", sign: 1, sequence: 100 },
+    { lineCode: "8", label: "Total of Fields 6 and 7", sign: 1, sequence: 110, formula: "6 + 7" },
+    { lineCode: "9", label: "Output tax on Field 8", sign: -1, sequence: 120 },
+    { lineCode: "10", label: "Change in use and export of second-hand goods", sign: 1, sequence: 130 },
+    { lineCode: "11", label: "Output tax on Field 10", sign: -1, sequence: 140 },
+    { lineCode: "12", label: "Other and imported services", sign: -1, sequence: 150 },
+    { lineCode: "13", label: "Total Output Tax", sign: -1, sequence: 160, basis: "tax_collected", glMap: "sales" },
+    { lineCode: "14", label: "Capital goods and/or services supplied to you", sign: 1, sequence: 170 },
+    { lineCode: "14A", label: "Capital goods imported by you", sign: 1, sequence: 180 },
+    { lineCode: "15", label: "Other goods and/or services supplied to you — not capital goods", sign: 1, sequence: 190 },
+    { lineCode: "15A", label: "Other goods imported by you — not capital goods", sign: 1, sequence: 200 },
+    { lineCode: "16", label: "Change in use", sign: 1, sequence: 210 },
+    { lineCode: "17", label: "Bad debts", sign: 1, sequence: 220 },
+    { lineCode: "18", label: "Other input-tax adjustments", sign: 1, sequence: 230 },
+    { lineCode: "19", label: "Total Input Tax", sign: 1, sequence: 240, basis: "tax_paid", glMap: "purchases" },
+    { lineCode: "20", label: "VAT Payable / Refundable — Total A less Total B", sign: 1, sequence: 250, formula: "13 - 19" },
+  ],
+};
+
+/** South Africa VAT localization maintained from SARS rate history and VAT201 guidance. */
+export const SOUTH_AFRICA_TAX_PACK: CountryTaxPackDefinition = {
+  code: "ZA_INDIRECT_TAX",
+  version: "2026.08.01",
+  country: "ZA",
+  name: "South Africa",
+  countryTaxType: "vat",
+  parentReturnPackCode: "ZA_VAT201",
+  completeness: {
+    jurisdictions: "not_applicable",
+    standardRates: "complete",
+    returnDefinitions: "partial",
+    localRates: "not_applicable",
+    taxability: "partial",
+    sourcingRules: "partial",
+    nexusRules: "partial",
+  },
+  sources: [
+    {
+      id: "sars_vat_rate_history",
+      title: "SARS — Guide for Tax Rates/Duties/Levies, historical VAT rates",
+      url: "https://www.sars.gov.za/wp-content/uploads/Guides/Legal-Arc-Pub-Guide-GN02-15-Guide-for-Tax-Rates-Duties-Levies-issue-15-of-17-February-2022-archived-on-28-May-2026.pdf",
+      asOf: "2026-08-01",
+    },
+    {
+      id: "sars_vat_current",
+      title: "SARS — Value-Added Tax overview and current rate",
+      url: "https://www.sars.gov.za/types-of-tax/value-added-tax/",
+      asOf: "2026-08-01",
+    },
+    {
+      id: "sars_vat201_2025",
+      title: "SARS — Guide for completing the VAT201 Declaration, effective 12 May 2025",
+      url: "https://www.sars.gov.za/wp-content/uploads/Ops/Guides/GEN-ELEC-04-G01-Guide-for-completing-the-Value-Added-Tax-VAT201-Declaration-External-Guide.pdf",
+      asOf: "2026-08-01",
+    },
+  ],
+  jurisdictions: [],
+  returnPacks: [ZA_VAT201_2026],
+  returnPackTaxCodes: {
+    ZA_VAT201: {
+      code: "ZA-VAT-STD",
+      name: "South Africa standard VAT",
+      ratePercent: 15,
+      rates: [
+        { ratePercent: 10, effectiveFrom: "1991-09-30", effectiveTo: "1993-04-06", sourceId: "sars_vat_rate_history" },
+        { ratePercent: 14, effectiveFrom: "1993-04-07", effectiveTo: "2018-03-31", sourceId: "sars_vat_rate_history" },
+        { ratePercent: 15, effectiveFrom: "2018-04-01", sourceId: "sars_vat_current" },
+      ],
+    },
+  },
+};

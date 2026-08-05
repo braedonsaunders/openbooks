@@ -1,0 +1,42 @@
+{
+  "metaTitle": "Documentación API",
+  "title": "Documentación de la API",
+  "description": "La API REST auto-documentada. Los tipos de registro, campos y permisos se generan en vivo desde el esquema de la base de datos — incluidos sus registros y campos personalizados.",
+  "searchPlaceholder": "Buscar tipos de registro…",
+  "baseUrl": "/api/v1",
+  "auth": {
+    "title": "Autenticación",
+    "description": "Pase su clave API como token bearer. Las claves tienen permisos específicos — una solicitud se permite solo cuando los permisos de la clave y los del propietario la cubren."
+  },
+  "customBadge": "personalizado",
+  "requires": "lectura:",
+  "writesRequire": "escritura:",
+  "fields": {
+    "field": "Campo",
+    "type": "Tipo",
+    "required": "Obligatorio",
+    "description": "Descripción",
+    "yes": "sí"
+  },
+  "console": {
+    "referenceTab": "Referencia",
+    "consoleTab": "Consola",
+    "recordTypes": "Tipos de registro",
+    "tokenLabel": "Clave API",
+    "tokenPlaceholder": "ob_live_…",
+    "tokenNote": "Pegue una clave de Claves API. Permanece en esta pestaña del navegador y solo se envía a esta API.",
+    "needToken": "Introduzca una clave API arriba para enviar solicitudes.",
+    "method": "Método",
+    "requestBody": "Cuerpo de la solicitud",
+    "send": "Enviar",
+    "sending": "Enviando…",
+    "resetBody": "Restablecer cuerpo",
+    "response": "Respuesta",
+    "responseIdle": "Envíe una solicitud para ver la respuesta aquí.",
+    "readOnly": "Este tipo de registro es de solo lectura a través de la API.",
+    "status": "Estado",
+    "time": "Tiempo",
+    "idPlaceholder": "id del registro (uuid)",
+    "selectType": "Seleccione un tipo de registro para construir una solicitud."
+  }
+}

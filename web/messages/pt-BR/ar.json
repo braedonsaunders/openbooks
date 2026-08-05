@@ -1,0 +1,165 @@
+{
+  "list": {
+    "title": "Faturas",
+    "description": "Faturas de clientes e notas de crédito — seu contas a receber: rascunho → aprovação → lançado pelo kernel.",
+    "searchPlaceholder": "Buscar faturas, créditos, clientes, refs…",
+    "emptyTitle": "Nenhuma fatura ainda",
+    "emptyDescription": "Registre a primeira fatura de cliente ou nota de crédito para iniciar o fluxo de contas a receber.",
+    "columns": {
+      "number": "Número",
+      "invoice": "Fatura",
+      "ref": "Ref"
+    }
+  },
+  "kinds": {
+    "invoice": "Fatura",
+    "credit": "Crédito"
+  },
+  "actions": {
+    "new": "Novo",
+    "newInvoice": "Nova fatura",
+    "newCredit": "Novo crédito de cliente",
+    "submitForApproval": "Enviar para aprovação"
+  },
+  "drawer": {
+    "editingHint": "Editando — Salve para aplicar as alterações",
+    "viewGlImpact": "Ver impacto no razão",
+    "dateLabel": "Data da fatura",
+    "dueDate": "Data de vencimento",
+    "reference": "Nº de ref. do cliente",
+    "accountColumn": "Conta de receita",
+    "accountPlaceholder": "Conta…",
+    "noTax": "Sem imposto",
+    "taxAmountColumn": "Val. imposto",
+    "selectCustomerPlaceholder": "Selecionar cliente…",
+    "selectVendorPlaceholder": "Selecionar fornecedor…",
+    "subtotalAmount": "Subtotal {amount}",
+    "taxTotalAmount": "Imposto {amount}",
+    "totalAmount": "Total {amount}",
+    "balanceDueAmount": "Saldo devedor {amount}",
+    "saveState": {
+      "saved": "Todas as alterações salvas",
+      "error": "Falha ao salvar — corrija e tente novamente",
+      "dirty": "Alterações não salvas…"
+    },
+    "deleteTitle": "Excluir este documento?",
+    "deleteDraftBody": "Isso exclui permanentemente o rascunho. Isso não pode ser desfeito.",
+    "deletePostedBody": "Isso exclui permanentemente o documento e remove seu impacto no razão. Isso não pode ser desfeito.",
+    "formLabel": "Formulário",
+    "formSetPreferred": "Definir como meu preferido",
+    "formSetPreferredDone": "Formulário preferido salvo",
+    "formPreferredCleared": "Formulário preferido removido",
+    "formPreferredFailed": "Não foi possível salvar o formulário preferido"
+  },
+  "toasts": {
+    "actionFailed": "Falha na ação",
+    "submitted": "Enviado para aprovação",
+    "posted": "Lançado no razão",
+    "createDraftFailed": "Não foi possível criar um rascunho",
+    "deleted": "Documento excluído",
+    "deleteFailed": "Falha ao excluir"
+  },
+  "cockpit": {
+    "title": "Contas a receber",
+    "description": "Sua central de controle de recebíveis — quanto devem, o que está vencido e o que cobrar nesta semana.",
+    "tabs": {
+      "overview": "Visão geral",
+      "invoices": "Faturas"
+    },
+    "current": "a vencer",
+    "customer": "Cliente",
+    "overdueCol": "Vencido",
+    "openCol": "Em aberto",
+    "noReceivables": "Não há recebíveis em aberto. Tudo foi recebido.",
+    "customerSearch": "Buscar clientes…",
+    "customerStatus": "Status do cliente",
+    "customerOverdueOnly": "Com saldo vencido",
+    "configure": "Como funciona",
+    "configTitle": "Modelo de cobrança",
+    "configDescription": "Como a lista de trabalho é ordenada e as datas de recebimento são previstas. Somente leitura — cobranças não têm limite; o mecanismo prevê quando os clientes pagarão.",
+    "stats": {
+      "openReceivables": "Recebíveis em aberto",
+      "overdue": "Vencido",
+      "overdueSub": "{count, plural, one {# fatura} other {# faturas}} · {pct}% do saldo em aberto",
+      "expectedThisWeek": "Previsto nesta semana",
+      "next30": "Próximos 30 dias",
+      "dso": "Prazo médio de recebimento (DSO)",
+      "dsoSub": "Média de dias para receber",
+      "days": "{n} d"
+    },
+    "panels": {
+      "worklist": "Lista de trabalho de cobranças",
+      "aging": "Aging de recebíveis",
+      "schedule": "Programação de recebimentos",
+      "scheduleHint": "Recebimentos previstos em {weeks} semanas — selecione uma semana",
+      "byCustomer": "Recebíveis por cliente"
+    },
+    "worklist": {
+      "overdueToChase": "Vencido para cobrar",
+      "expectedThisWeek": "Previsto nesta semana",
+      "customer": "Cliente",
+      "prediction": "Previsão",
+      "due": "Vencimento",
+      "amount": "Valor",
+      "selected": "{count} selecionadas · {amount}",
+      "build": "Criar lote de cobrança",
+      "empty": "Não há recebimentos previstos no horizonte.",
+      "search": "Buscar cobranças…",
+      "status": "Status da cobrança",
+      "overdueOnly": "Vencido",
+      "upcoming": "Próximo",
+      "selectInvoice": "Selecionar a fatura de {customer}",
+      "daysOverdue": "{count} d em atraso",
+      "methods": {
+        "statistical": "Estatístico",
+        "dueDate": "Data de vencimento",
+        "overduePush": "Adiamento por atraso",
+        "globalAverage": "Média global"
+      }
+    },
+    "model": {
+      "title": "Como os recebimentos são previstos",
+      "worklistOrder": {
+        "label": "Ordem da lista",
+        "value": "Mais vencidas primeiro",
+        "note": "A lista é ordenada por dias em atraso e depois pelo maior valor; faturas vencidas vêm pré-selecionadas"
+      },
+      "prediction": {
+        "label": "Previsão da data de recebimento",
+        "value": "Estatístico → Vencimento → Média global",
+        "note": "Média de dias de recebimento por cliente (+½σ de margem), nunca antes do vencimento"
+      },
+      "overduePush": {
+        "label": "Adiamento por atraso",
+        "value": "+7 / +14 / +28 dias",
+        "note": "Faturas vencidas são deslocadas conforme o atraso (≤30 / ≤60 / >60 dias)"
+      },
+      "businessDay": {
+        "label": "Ajuste para dia útil",
+        "value": "Ativado",
+        "note": "Datas previstas no fim de semana passam para o próximo dia útil"
+      },
+      "dso": {
+        "label": "Média de dias para receber (DSO)",
+        "value": "{dso} d",
+        "note": "Valor alternativo quando o cliente não tem histórico de pagamentos"
+      },
+      "recurring": "Entradas recorrentes (subsídios, aluguéis recebidos e assinaturas) entram na previsão como categorias — configure-as no <cashCockpit>painel de caixa</cashCockpit>.",
+      "documentation": "Ler o guia de contas a receber"
+    }
+  },
+  "paymentLinks": {
+    "title": "Links de pagamento online",
+    "create": "Criar link",
+    "empty": "Nenhum link de pagamento.",
+    "copyLink": "Copiar link",
+    "copied": "Copiado",
+    "void": "Anular",
+    "status": {
+      "active": "ativo",
+      "paid": "pago",
+      "void": "anulado",
+      "expired": "expirado"
+    }
+  }
+}

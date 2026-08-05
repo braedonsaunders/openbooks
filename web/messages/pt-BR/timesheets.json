@@ -1,0 +1,57 @@
+{
+  "list": {
+    "title": "Quadros de horas semanais",
+    "description": "Horas dos funcionários por semana — registre, envie e aprove horas em todos os trabalhos.",
+    "newButton": "Novo quadro de horas",
+    "emptyTitle": "Nenhum quadro de horas ainda",
+    "emptyDescription": "Os registros de horas são consolidados em quadros semanais aqui. Crie um para registrar horas em um trabalho.",
+    "week": "Semana",
+    "unnamed": "(sem nome)"
+  },
+  "labels": {
+    "totalHours": "Total de horas",
+    "billableHours": "Horas faturáveis",
+    "serviceItem": "Item de serviço",
+    "timeType": "Tipo de hora",
+    "bill": "Faturar",
+    "billable": "Faturável",
+    "dailyTotals": "Totais diários"
+  },
+  "status": {
+    "submitted": "Enviado",
+    "empty": "Sem horas"
+  },
+  "days": {
+    "sun": "Dom",
+    "mon": "Seg",
+    "tue": "Ter",
+    "wed": "Qua",
+    "thu": "Qui",
+    "fri": "Sex",
+    "sat": "Sáb"
+  },
+  "grid": {
+    "title": "Quadro de horas semanal",
+    "selectEmployee": "Selecionar funcionário…",
+    "submitForApproval": "Enviar para aprovação",
+    "prev": "Ant.",
+    "thisWeek": "Esta semana",
+    "weekOf": "Semana de {from} – {to}",
+    "approvedReadOnly": "Quadros de horas aprovados são somente leitura.",
+    "viewOnly": "Você tem acesso somente para visualização.",
+    "noEmployee": "Nenhum funcionário selecionado. Escolha um funcionário acima para registrar horas.",
+    "discardConfirm": "Descartar alterações não salvas?",
+    "networkError": "Erro de rede",
+    "saved": "Quadro de horas salvo",
+    "saveBeforeSubmit": "Salve suas alterações antes de enviar",
+    "submittedToast": "Enviado para aprovação",
+    "approvedToast": "Quadro de horas aprovado",
+    "addLine": "Adicionar linha",
+    "projectPlaceholder": "Projeto…",
+    "lineProjectAria": "Projeto da linha {line}",
+    "lineItemAria": "Item da linha {line}",
+    "lineBillableAria": "Faturável da linha {line}",
+    "lineHoursAria": "Horas de {day} da linha {line}",
+    "removeLineAria": "Remover linha {line}"
+  }
+}

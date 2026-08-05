@@ -1,0 +1,9 @@
+{
+  "page": {
+    "title": "Recebimentos de Clientes",
+    "description": "Recebimentos de clientes recebidos e aplicados a faturas em aberto pelo kernel.",
+    "newReceipt": "Novo recebimento de cliente",
+    "newCollectionRun": "Nova execução de cobrança",
+    "tabs": { "receipts": "Recebimentos", "collections": "Execuções de débito automático" }
+  }
+}

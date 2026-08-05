@@ -1,0 +1,92 @@
+{
+  "list": {
+    "title": "Kontenplan",
+    "description": "Aktuelle Salden mit natürlichem Vorzeichen (Bilanz kumulativ, GuV im laufenden Geschäftsjahr), aggregiert über Sammelkonten.",
+    "searchPlaceholder": "Nummer oder Name durchsuchen…",
+    "views": {
+      "list": "Liste",
+      "hierarchy": "Hierarchie"
+    },
+    "badges": {
+      "inactive": "inaktiv",
+      "summary": "Sammelkonto"
+    }
+  },
+  "types": {
+    "assetBank": "Bank",
+    "assetReceivable": "Forderungen aus Lieferungen und Leistungen",
+    "assetCurrentOther": "Sonstiges Umlaufvermögen",
+    "assetFixed": "Anlagevermögen",
+    "assetOther": "Sonstige Vermögenswerte",
+    "liabilityPayable": "Verbindlichkeiten aus Lieferungen und Leistungen",
+    "liabilityCard": "Firmenkreditkarten",
+    "liabilityCurrentOther": "Sonstige kurzfristige Verbindlichkeiten",
+    "liabilityLongTerm": "Langfristige Verbindlichkeiten",
+    "equity": "Eigenkapital",
+    "income": "Erträge",
+    "incomeOther": "Sonstige Erträge",
+    "cogs": "Herstellungskosten des Umsatzes",
+    "expense": "Aufwendungen",
+    "expenseOther": "Sonstige Aufwendungen",
+    "expenseDeferred": "Abgegrenzte Aufwendungen"
+  },
+  "classes": {
+    "asset": "Vermögenswerte",
+    "liability": "Verbindlichkeiten",
+    "equity": "Eigenkapital",
+    "income": "Erträge",
+    "expense": "Aufwendungen"
+  },
+  "drawer": {
+    "saved": "Konto gespeichert",
+    "typeLocked": "Der Typ kann nicht mehr geändert werden, sobald das Konto Buchungsaktivität aufweist.",
+    "parent": "Übergeordnetes Konto",
+    "currencyRestriction": "Währungsbeschränkung",
+    "anyCurrency": "Beliebige Währung",
+    "allSubsidiaries": "Alle Tochtergesellschaften",
+    "summary": "Sammelkonto",
+    "reconcilable": "Abstimmbar",
+    "eliminate": "In Konsolidierung eliminieren",
+    "includeSubsidiaries": "Untergeordnete Tochtergesellschaften einbeziehen",
+    "requiredDimensions": "Erforderliche Buchungsdimensionen",
+    "dimensions": {
+      "department": "Abteilung",
+      "location": "Standort",
+      "class": "Klasse",
+      "project": "Projekt",
+      "party": "Partei"
+    },
+    "errors": {
+      "name_required": "Der Kontoname ist erforderlich.",
+      "invalid_type": "Wählen Sie einen gültigen Kontotyp aus.",
+      "type_has_transactions": "Der Kontotyp kann nach vorhandener Buchungsaktivität nicht mehr geändert werden.",
+      "invalid_parent": "Wählen Sie ein gültiges übergeordnetes Konto aus.",
+      "parent_must_be_summary": "Das übergeordnete Konto muss ein Sammelkonto sein.",
+      "parent_cycle": "Dieses übergeordnete Konto würde eine zirkuläre Kontenhierarchie erzeugen.",
+      "summary_reconcilable_conflict": "Ein Sammelkonto kann nicht abstimmbar sein.",
+      "summary_has_transactions": "Ein Konto mit Buchungsaktivität kann nicht zu einem Sammelkonto werden.",
+      "summary_has_children": "Ein Konto mit aktiven untergeordneten Konten muss ein Sammelkonto bleiben.",
+      "inactive_has_children": "Deaktivieren Sie zuerst die aktiven untergeordneten Konten dieses Kontos.",
+      "invalid_currency": "Wählen Sie eine gültige Währung aus.",
+      "invalid_subsidiary": "Wählen Sie eine gültige Tochtergesellschaft aus.",
+      "invalid_dimensions": "Wählen Sie gültige erforderliche Dimensionen aus.",
+      "invalid_custom_fields": "Überprüfen Sie die Werte der benutzerdefinierten Felder.",
+      "number_in_use": "Diese Kontonummer wird bereits verwendet.",
+      "save_failed": "Das Konto konnte nicht gespeichert werden."
+    },
+    "monetary": "Währungsumrechnung (monetärer Posten)",
+    "monetaryDefault": "Nach Kontotyp",
+    "monetaryAlways": "Immer umrechnen",
+    "monetaryNever": "Nie umrechnen"
+  },
+  "register": {
+    "notFound": "Konto nicht gefunden",
+    "subtitle": "Kontoblatt · {count, plural, one {# Zeile} other {# Zeilen}} · laufender Saldo {balance}",
+    "periodFilter": "Gefiltert auf {label}",
+    "columns": {
+      "entry": "Buchung",
+      "debit": "Soll",
+      "credit": "Haben"
+    }
+  }
+}

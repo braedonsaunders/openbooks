@@ -1,0 +1,151 @@
+{
+  "title": "Partes de obra",
+  "description": "Partes de horas firmados para trabajo T&M — horas, equipos y materiales capturados una vez, aprobados, firmados por su cliente y volcados a facturas.",
+  "period": {
+    "shift": "Turno",
+    "daily": "Diario",
+    "weekly": "Semanal"
+  },
+  "status": {
+    "draft": "Borrador",
+    "pending_approval": "Enviado",
+    "approved": "Aprobado",
+    "voided": "Anulado"
+  },
+  "list": {
+    "new": "Nuevo parte",
+    "create": "Crear",
+    "cancel": "Cancelar",
+    "empty": "Aún no hay partes de obra.",
+    "projectRequired": "Elija un proyecto",
+    "pickProject": "Elija un proyecto…",
+    "number": "Parte",
+    "project": "Proyecto",
+    "customer": "Cliente",
+    "periodLabel": "Período",
+    "period": "Período",
+    "foreman": "Capataz",
+    "hours": "Horas",
+    "itemsTotal": "Artículos",
+    "status": "Estado",
+    "signature": "Firma",
+    "allStatuses": "Todos los estados",
+    "allSignatures": "Todas las firmas",
+    "unsigned": "Sin enviar",
+    "waiting": "Esperando firma",
+    "signed": "Firmado",
+    "date": "Fecha",
+    "createFailed": "No se pudo crear el parte"
+  },
+  "editor": {
+    "tabs": { "time": "Tiempo", "items": "Artículos", "tasks": "Tareas", "related": "Relacionados" },
+    "periodLocked": "Elimine las horas ingresadas antes de cambiar el período.",
+    "back": "Partes de obra",
+    "submit": "Enviar",
+    "approve": "Aprobar",
+    "reject": "Rechazar",
+    "saveHours": "Guardar horas",
+    "cancel": "Cancelar",
+    "confirmReject": "Confirmar rechazo",
+    "rejectReason": "Motivo del rechazo",
+    "rejectionNote": "Rechazado: {reason}",
+    "submitted": "Parte enviado",
+    "approved": "Parte aprobado — horas costeadas y artículos cargados al proyecto",
+    "rejected": "Parte rechazado",
+    "project": "Proyecto",
+    "customer": "Cliente",
+    "po": "OC del cliente",
+    "foreman": "Capataz",
+    "workDescription": "Descripción del trabajo",
+    "details": {
+      "title": "Detalles del parte",
+      "hint": "Proyecto, cliente, fecha del parte y responsable en campo."
+    },
+    "work": {
+      "title": "Resumen del trabajo",
+      "hint": "Referencia del cliente y una descripción clara del trabajo realizado."
+    },
+    "related": {
+      "title": "Registros relacionados",
+      "hint": "Vínculos auditables entre este parte, cargos, solicitudes de facturación y facturas.",
+      "billingRequests": "Solicitudes de facturación",
+      "noBillingRequests": "Este parte no ha sido seleccionado para facturación.",
+      "selectedOn": "Seleccionado {date}",
+      "documents": "Transacciones vinculadas",
+      "noDocuments": "Aún no hay transacciones vinculadas.",
+      "linkType": {
+        "created_from": "Cargo creado",
+        "bills": "Facturado por"
+      }
+    },
+    "form": {
+      "label": "Formulario del registro",
+      "setPreferred": "Establecer como preferido",
+      "preferredSaved": "Formulario preferido guardado",
+      "preferredFailed": "No se pudo guardar el formulario preferido"
+    },
+    "crew": {
+      "title": "Horas de la cuadrilla",
+      "hint": "Una fila por persona (opcionalmente por clase). R / O / D = iniciales de los tipos de hora.",
+      "employee": "Empleado",
+      "laborItem": "Clase de trabajo",
+      "task": "Tarea del proyecto",
+      "addRow": "Agregar persona",
+      "removeRow": "Quitar fila",
+      "rowTotal": "Total",
+      "dayTotals": "Totales por día",
+      "total": "{hours} h en total"
+    },
+    "lines": {
+      "title": "Artículos y equipo",
+      "hint": "Seleccione artículos facturables o equipo vinculado. Los precios respetan los libros de tarifas y sus niveles.",
+      "item": "Artículo",
+      "pickItem": "Elija un artículo…",
+      "description": "Descripción",
+      "quantity": "Cant.",
+      "rateUnit": "Unidad de tarifa",
+      "rate": "Tarifa",
+      "amount": "Importe",
+      "equipment": "Unidad de equipo",
+      "pooledItem": "Sin unidad específica",
+      "rateSource": { "rate_book": "Resuelto desde el libro de tarifas", "item_default": "Tarifa predeterminada del artículo" },
+      "add": "Agregar línea",
+      "remove": "Quitar línea",
+      "empty": "Aún no hay líneas.",
+      "itemRequired": "Elija un artículo"
+    },
+    "tasks": { "title": "Tareas del proyecto", "hint": "Tareas WBS disponibles para imputar las horas.", "code": "Código", "task": "Tarea", "estimatedHours": "Horas estimadas" },
+    "totals": {
+      "title": "Totales del parte",
+      "labor": "Mano de obra",
+      "items": "Equipos y materiales",
+      "grand": "Total general",
+      "previewNote": "La mano de obra usa tarifas de vista previa hasta que la aprobación las fija.",
+      "snappedNote": "Las tarifas están fijadas — el historial de este parte nunca cambia."
+    },
+    "signatures": {
+      "title": "Firmas",
+      "hint": "Envíe el parte aprobado al cliente para revisión y firma.",
+      "customer": "Cliente",
+      "signedBy": "Firmado — {name}",
+      "signedAt": "Firmado {date}",
+      "waiting": "Esperando firma",
+      "notSent": "Sin enviar",
+      "ready": "Listo para enviar",
+      "notReady": "No está listo",
+      "draftHelp": "Envíe y apruebe este parte antes de solicitar la firma del cliente.",
+      "pendingHelp": "Este parte se puede enviar para firma una vez aprobado.",
+      "sentTo": "Enviado a",
+      "sentAt": "Enviado",
+      "expiresAt": "El enlace caduca",
+      "deliveryHelp": "El cliente recibe una copia PDF y un enlace seguro de firma válido durante 14 días."
+    },
+    "sendSignature": "Enviar para firma",
+    "resendSignature": "Reenviar solicitud de firma",
+    "sendTo": "Enviar a",
+    "sendMessage": "Mensaje (opcional)",
+    "send": "Enviar",
+    "signatureSent": "Enlace de firma enviado a {to}",
+    "pdf": "PDF"
+  }
+}

@@ -1,0 +1,62 @@
+{
+  "home": {
+    "title": "Compras",
+    "description": "Su espacio de compra a pago — compromisos, facturas, pagos y gasto de proveedores en un solo lugar.",
+    "subsidiary": "Filial",
+    "tabs": {
+      "overview": "Resumen"
+    },
+    "vitals": {
+      "openAp": "Cuentas por pagar",
+      "openApSub": "{count} facturas abiertas",
+      "overdue": "Vencido",
+      "dueNext7": "Vence en 7 días",
+      "openPos": "OC abiertas",
+      "openPosSub": "{count} órdenes",
+      "spend30d": "Gasto 30 días",
+      "spend30dSub": "Facturas de proveedor registradas",
+      "activeVendors": "Proveedores activos",
+      "paymentsWeek": "Pagos esta semana",
+      "paymentsWeekSub": "{count} registrados · últimos 7 días",
+      "unposted": "Gastos sin contabilizar",
+      "unpostedSub": "pendientes de contabilizar"
+    },
+    "hero": {
+      "title": "Compromisos con proveedores",
+      "hint": "Órdenes de compra abiertas junto a facturas abiertas, mayor exposición primero",
+      "empty": "Sin compromisos ni cuentas por pagar abiertas.",
+      "vendor": "Proveedor",
+      "openPos": "OC abiertas",
+      "openBills": "Facturas",
+      "oldestDue": "Más antigua",
+      "overdue": "Vencido",
+      "billedOpen": "Facturado abierto"
+    },
+    "trend": {
+      "title": "Tendencia de gasto",
+      "hint": "13 semanas de facturas registradas",
+      "series": "Facturado"
+    },
+    "directory": {
+      "title": "Espacio de trabajo",
+      "posHint": "{value} comprometido",
+      "billsHint": "{overdue} vencido",
+      "paymentsHint": "pagos esta semana",
+      "expensesHint": "pendiente de registrar",
+      "vendorsHint": "proveedores activos"
+    },
+    "attention": {
+      "title": "Requiere atención",
+      "allClear": "Todo en orden — nada vencido.",
+      "overdueVendor": "{vendor} tiene {amount} vencido",
+      "unpostedExpenses": "{count} informes de gastos por registrar"
+    },
+    "pulse": {
+      "title": "Pulso de pagos",
+      "open": "Abierto",
+      "overdue": "Vencido",
+      "due7": "Vence en 7 días",
+      "cta": "Abrir cuentas por pagar"
+    }
+  }
+}

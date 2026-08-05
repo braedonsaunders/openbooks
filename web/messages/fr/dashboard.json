@@ -1,0 +1,132 @@
+{
+  "title": "Tableau de bord",
+  "orgDescription": "{name} · {currency} · {book}",
+  "greeting": {
+    "morning": "Bonjour",
+    "afternoon": "Bon après-midi",
+    "evening": "Bonsoir"
+  },
+  "header": {
+    "customize": "Personnaliser"
+  },
+  "widgets": {
+    "journalLines": "Lignes de journal",
+    "activeAccounts": "Comptes actifs",
+    "entriesToday": "Écritures aujourd'hui",
+    "pendingApprovals": "Approbations en attente",
+    "ledgerBalance": "Solde du grand livre",
+    "recentEntries": "Écritures récentes",
+    "pendingApprovalsList": "Approbations en attente",
+    "myApprovals": "Mes approbations",
+    "inProgress": "En cours",
+    "cashBalance": "Solde de trésorerie",
+    "openReceivables": "Créances ouvertes",
+    "overdueReceivables": "Créances en retard",
+    "openPayables": "Dettes ouvertes",
+    "overduePayables": "Dettes en retard"
+  },
+  "metricContext": {
+    "today": "Comptabilisées aujourd’hui",
+    "awaitingDecision": "En attente d’une décision",
+    "baseCurrency": "Devise de base · {currency}",
+    "outstanding": "Solde impayé",
+    "pastDue": "Échu"
+  },
+  "categories": {
+    "kpi": "Indicateurs clés",
+    "gl": "Grand livre",
+    "ap": "Comptes fournisseurs",
+    "ar": "Comptes clients",
+    "personal": "Personnel",
+    "admin": "Administration"
+  },
+  "catalog": {
+    "journalLines": "Nombre total de lignes de journal comptabilisées.",
+    "activeAccounts": "Comptes actifs du plan comptable.",
+    "entriesToday": "Écritures de journal comptabilisées aujourd’hui.",
+    "pendingApprovals": "Demandes d’approbation en attente d’une décision.",
+    "ledgerBalance": "Solde net de toutes les lignes; des livres équilibrés doivent afficher zéro.",
+    "recentEntries": "Les cinq écritures de journal les plus récemment comptabilisées.",
+    "pendingApprovalsList": "Les plus récentes demandes en attente d’une décision.",
+    "inProgress": "Vos factures fournisseurs, factures clients et écritures à l’état de brouillon.",
+    "myApprovals": "Demandes d’approbation attribuées à votre rôle.",
+    "quickActions": "Raccourcis vers vos tâches les plus courantes.",
+    "cashBalance": "Solde comptabilisé des comptes bancaires en devise de base.",
+    "openReceivables": "Factures clients impayées en devise de base.",
+    "overdueReceivables": "Factures clients échues en devise de base.",
+    "openPayables": "Factures fournisseurs impayées en devise de base.",
+    "overduePayables": "Factures fournisseurs échues en devise de base."
+  },
+  "grid": {
+    "customizing": "Personnalisation du tableau de bord",
+    "save": "Enregistrer",
+    "saved": "Mise en page enregistrée",
+    "saveFailed": "Échec de l'enregistrement",
+    "reset": "Réinitialiser",
+    "resetDone": "Mise en page réinitialisée",
+    "resetFailed": "Échec de la réinitialisation",
+    "resetConfirm": "Réinitialiser la mise en page par défaut de votre rôle ? Vos personnalisations seront perdues.",
+    "addWidget": "Ajouter un widget",
+    "closePalette": "Fermer",
+    "remove": "Retirer le widget",
+    "cardMissing": "Carte indisponible",
+    "unknownWidget": "Widget inconnu : {id}"
+  },
+  "palette": {
+    "title": "Widgets",
+    "subtitle": "Cliquez pour ajouter à votre tableau de bord",
+    "close": "Fermer",
+    "added": "Ajouté",
+    "empty": "Aucun widget disponible à ajouter.",
+    "libraryCards": "Cartes d'analyses"
+  },
+  "customize": {
+    "title": "Personnaliser le tableau de bord",
+    "back": "Retour au tableau de bord",
+    "roleLabel": "Mise en page par défaut pour : {role}"
+  },
+  "quickActions": {
+    "title": "Actions rapides",
+    "customize": "Personnaliser",
+    "empty": "Aucune action rapide",
+    "addFirst": "Ajouter votre première action",
+    "editor": {
+      "title": "Personnaliser les actions rapides",
+      "description": "Ajouter, réorganiser et supprimer des raccourcis.",
+      "addAction": "Ajouter une action",
+      "edit": "Modifier l'action",
+      "cancel": "Annuler",
+      "save": "Enregistrer",
+      "saved": "Actions rapides enregistrées",
+      "saveFailed": "Échec de l'enregistrement",
+      "loadFailed": "Échec du chargement des options",
+      "back": "Retour",
+      "common": "Courantes",
+      "customUrl": "URL personnalisée",
+      "label": "Étiquette",
+      "labelPlaceholder": "Nouvelle facture",
+      "link": "Lien",
+      "linkHint": "Chemin interne (/ar) ou URL https",
+      "icon": "Icône",
+      "color": "Couleur",
+      "preview": "Aperçu",
+      "unnamed": "Sans nom",
+      "searchPlaceholder": "Rechercher…",
+      "loading": "Chargement…",
+      "noResults": "Aucun résultat",
+      "maxReached": "Maximum {count} actions",
+      "invalidUrl": "Le lien doit être un chemin interne ou une URL http(s)"
+    }
+  },
+  "home": {
+    "customize": "Personnaliser",
+    "customizeHint": "Réorganisez les cartes de votre tableau d'accueil",
+    "browseInsights": "Toutes les analyses",
+    "noBoard": "Aucun tableau d'accueil",
+    "noBoardBody": "Créez des cartes dans Analyses, disposez-les sur un tableau, puis définissez-le comme tableau d'accueil.",
+    "openInsights": "Ouvrir Analyses",
+    "personalBadge": "Votre tableau",
+    "roleBadge": "Par défaut du rôle",
+    "systemBadge": "Par défaut de l'entreprise"
+  }
+}

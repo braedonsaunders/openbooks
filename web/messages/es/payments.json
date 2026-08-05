@@ -1,0 +1,264 @@
+{
+  "page": {
+    "title": "Pagos",
+    "description": "Gestione la actividad de pagos y los lotes bancarios desde la selección hasta la liquidación.",
+    "newPayment": "Nuevo pago",
+    "newRun": "Nuevo lote de pagos",
+    "tabs": {
+      "payments": "Pagos",
+      "runs": "Lotes de pagos"
+    }
+  },
+  "list": {
+    "searchPlaceholder": "{side, select, ap {Buscar pagos, proveedores, refs…} other {Buscar pagos, clientes, refs…}}",
+    "newLabel": "{side, select, ap {Nuevo pago} other {Nuevo pago de cliente}}",
+    "columns": {
+      "document": "{side, select, ap {Pago} other {Pago de cliente}}",
+      "payment": "Pago",
+      "bankAccount": "Cuenta bancaria",
+      "ref": "Ref."
+    },
+    "empty": {
+      "title": "{side, select, ap {Aún no hay pagos} other {Aún no hay pagos de clientes}}",
+      "description": "{side, select, ap {Registre el primer pago a proveedor para empezar a liquidar las facturas de compra pendientes.} other {Registre el primer pago de cliente para empezar a liquidar las facturas pendientes.}}"
+    }
+  },
+  "newButton": {
+    "createDraftFailed": "No se pudo crear un borrador"
+  },
+  "drawer": {
+    "draftHint": "Borrador — los cambios se guardan automáticamente.",
+    "viewGlImpact": "Ver impacto contable",
+    "postAction": "{side, select, ap {Pagar y contabilizar} other {Cobrar y contabilizar}}",
+    "bankAccount": "Cuenta bancaria",
+    "selectPartyPlaceholder": "{side, select, ap {Seleccionar proveedor…} other {Seleccionar cliente…}}",
+    "selectBankAccountPlaceholder": "Seleccionar cuenta bancaria…",
+    "referencePlaceholder": "Ref. de cheque / EFT…",
+    "openItems": "{side, select, ap {Facturas de compra pendientes} other {Facturas pendientes}}",
+    "amountReceived": "Importe recibido",
+    "autoApply": "Aplicar auto",
+    "autoApplyFailed": "No se pudo sugerir una aplicación",
+    "autoApplyNone": "Ningún elemento pendiente coincide con este importe",
+    "autoApplyDone": "Aplicado a {count, plural, one {# elemento} other {# elementos}} ({strategy})",
+    "autoApplyStrategy": {
+      "reference": "por referencia",
+      "exact": "coincidencia exacta",
+      "fifo": "más antiguos primero",
+      "none": "ninguna"
+    },
+    "selectPartyHint": "{side, select, ap {Seleccione un proveedor para listar sus partidas pendientes.} other {Seleccione un cliente para listar sus partidas pendientes.}}",
+    "loadingOpenItems": "Cargando partidas pendientes…",
+    "noOpenItems": "{side, select, ap {No hay facturas de compra pendientes para este proveedor.} other {No hay facturas pendientes para este cliente.}}",
+    "columns": {
+      "apply": "Aplicar",
+      "document": "Documento",
+      "due": "Vencimiento",
+      "original": "Original",
+      "appliedToDate": "Aplicado a la fecha",
+      "open": "Pendiente",
+      "appliedOn": "Aplicado el",
+      "applied": "Aplicado",
+      "rateEvidence": "Evidencia del tipo"
+    },
+    "targetAmount": "Importe aplicado ({currency})",
+    "sourceAmount": "Importe del pago ({currency})",
+    "settlementRate": "Tipo: {target} por {source}",
+    "rateReferencePlaceholder": "Aviso bancario o referencia contractual…",
+    "rateSource": { "manual": "Tipo manual", "contractual": "Tipo contractual", "provider": "Tipo de cambio del inquilino" },
+    "applyAriaLabel": "Aplicar a {document}",
+    "invalidAllocation": "Los importes deben ser positivos, respetar el saldo pendiente y cuadrar exactamente con el tipo de liquidación documentado.",
+    "appliedTo": "Aplicado a",
+    "voidedNote": "Este pago fue anulado; su contabilización se revirtió.",
+    "noLiveApplications": "No hay aplicaciones vigentes.",
+    "kind": {
+      "vendorBill": "Factura de compra",
+      "customerInvoice": "Factura",
+      "expenseReport": "Informe de gastos",
+      "journal": "Diario",
+      "entry": "Asiento"
+    },
+    "saveState": {
+      "saved": "Todos los cambios guardados",
+      "error": "El guardado falló — corrija y reintente",
+      "dirty": "Cambios sin guardar…"
+    },
+    "applyingSummary": "{count, plural, one {Aplicando # partida} other {Aplicando # partidas}} · <total>Total {amount}</total>",
+    "totalAmount": "Total {amount}",
+    "toasts": {
+      "loadOpenItemsFailed": "No se pudieron cargar las partidas pendientes",
+      "autosaveFailed": "El guardado automático falló",
+      "postFailed": "La contabilización falló",
+      "posted": "{side, select, ap {Pago contabilizado y aplicado} other {Pago de cliente contabilizado y aplicado}}"
+    }
+  },
+  "eft": {
+    "notConfiguredTitle": "La emisión EFT no está configurada",
+    "notConfiguredListDescription": "Los lotes se pueden seguir preparando, pero la exportación del archivo bancario está desactivada hasta que un administrador complete la configuración de emisión EFT. Campos faltantes: {missing}.",
+    "notConfiguredDrawerDescription": "La exportación del archivo bancario está desactivada hasta que un administrador complete la configuración de emisión EFT. Campos faltantes: {missing}."
+  },
+  "configuration": {
+    "notConfiguredTitle": "La configuración de pagos está incompleta",
+    "notConfiguredDescription": "Cree un perfil de fondos en la <setup>configuración de Pagos y banca</setup> antes de preparar un lote de pagos.",
+    "collectionsNotConfiguredTitle": "La configuración del débito directo está incompleta",
+    "collectionsNotConfiguredDescription": "Cree un perfil bancario de débito y mandatos en la <setup>configuración de Pagos y banca</setup> antes de preparar un lote de cobros.",
+    "runNotReadyTitle": "Este lote de pagos no está listo",
+    "runNotReadyDescription": "Complete la configuración del perfil antes de generar un archivo. Datos faltantes o no válidos: {missing}."
+  },
+  "runBuilder": {
+    "title": "Nuevo lote de pagos",
+    "description": "Elija la cuenta de origen y las facturas, y luego cree un lote borrador para revisarlo.",
+    "collectionTitle": "Nuevo lote de débito directo",
+    "collectionDescription": "Elija el perfil de cobro y las facturas abiertas, y cree un lote borrador para revisar.",
+    "noOpenBills": "Ninguna factura de compra contabilizada con saldo pendiente coincide.",
+    "noOpenInvoices": "No hay facturas de cliente contabilizadas con saldo pendiente que coincidan.",
+    "selectAllAriaLabel": "Seleccionar todas las facturas de compra de esta página",
+    "selectAriaLabel": "Seleccionar {document}",
+    "columns": {
+      "bill": "Factura de compra",
+      "invoice": "Factura de cliente",
+      "due": "Vencimiento",
+      "ref": "Ref.",
+      "bankDetails": "Datos bancarios",
+      "mandate": "Mandato de débito",
+      "openBalance": "Saldo pendiente"
+    },
+    "bankApproved": "aprobados",
+    "bankMissing": "faltantes",
+    "mandateActive": "activo",
+    "mandateMissing": "faltante",
+    "payFromBankAccount": "Perfil bancario de pago",
+    "selectBankAccountPlaceholder": "Seleccionar un perfil de pago…",
+    "noBankAccounts": "No hay perfiles de pago activos",
+    "fundsDate": "Fecha de fondos",
+    "captureDiscounts": "Aprovechar los descuentos disponibles por pronto pago",
+    "applyCredits": "Aplicar los créditos de proveedor disponibles",
+    "selectedForPayment": "Seleccionado para pago",
+    "selectedForCollection": "Seleccionado para cobro",
+    "selectionSummary": "{count, plural, one {# factura de compra} other {# facturas de compra}} · <total>{amount}</total>",
+    "collectionSummary": "{count, plural, one {# factura de cliente} other {# facturas de cliente}} · <total>{amount}</total>",
+    "createRun": "Crear lote de pagos",
+    "createCollectionRun": "Crear lote de cobros",
+    "toasts": {
+      "createFailed": "No se pudo crear el lote de pagos",
+      "created": "Lote de pagos {number} creado"
+    }
+  },
+  "runs": {
+    "collectionRunsHeading": "Lotes de débito directo",
+    "collectionDescription": "Apruebe, genere, entregue, contabilice y liquide archivos de cobro de clientes.",
+    "openInvoicesHeading": "Facturas abiertas",
+    "openInvoicesDescription": "Revise las facturas abiertas y el estado de los mandatos de débito antes de seleccionarlas.",
+    "invoicesSearchPlaceholder": "Buscar facturas o clientes…",
+    "openBillsHeading": "Facturas de compra pendientes por pagar",
+    "openBillsDescription": "Seleccione facturas de varios proveedores; cada proveedor se convierte en una instrucción de pago.",
+    "billsSearchPlaceholder": "Buscar facturas de compra, proveedores, refs…",
+    "runsHeading": "Lotes de pagos",
+    "description": "Revise borradores, exporte archivos bancarios y confirme los pagos contabilizados.",
+    "searchPlaceholder": "Buscar lotes o cuentas bancarias…",
+    "noRunsYet": "Aún no hay lotes de pagos. Cree el primero cuando haya facturas listas para pagar.",
+    "noCollectionRunsYet": "Aún no hay lotes de débito directo. Cree el primero cuando haya facturas autorizadas listas para cobrar.",
+    "columns": {
+      "run": "Lote",
+      "bankAccount": "Cuenta bancaria",
+      "method": "Método",
+      "fundsDate": "Fecha de fondos",
+      "payments": "Pagos"
+    },
+    "method": {
+      "eft": "EFT",
+      "ach": "ACH",
+      "sepa": "SEPA",
+      "wire": "Transferencia",
+      "cheque": "Cheque",
+      "direct_debit": "Débito directo",
+      "positive_pay": "Positive Pay",
+      "custom": "Personalizado"
+    },
+    "status": {
+      "confirmed": "Confirmado",
+      "generated": "Archivo generado",
+      "delivered": "Entregado",
+      "settled": "Liquidado",
+      "returned": "Devuelto",
+      "partially_failed": "Fallo parcial",
+      "rejected": "Rechazado",
+      "rolled_back": "Revertido"
+    }
+  },
+  "runDrawer": {
+    "descriptionEft": "Lote de pagos desde {bank}",
+    "descriptionEftWithDate": "Lote de pagos desde {bank} · fondos {date}",
+    "bankAccountFallback": "cuenta bancaria",
+    "cancelRun": "Cancelar lote",
+    "downloadFile": "Descargar archivo",
+    "downloadBlockedTitle": "Resuelva primero los problemas del perfil y los datos bancarios",
+    "submitRun": "Enviar para aprobación",
+    "approve": "Aprobar lote",
+    "reject": "Rechazar lote",
+    "generateFile": "Generar archivo",
+    "approveFile": "Aprobar archivo",
+    "rejectFile": "Rechazar archivo",
+    "reprocess": "Reprocesar",
+    "rollback": "Revertir",
+    "postPayments": "Contabilizar pagos",
+    "paymentsSummary": "{count, plural, one {# pago} other {# pagos}} · <total>Total {amount}</total>",
+    "payeesMissingBankDetails": "Contrapartes con datos bancarios no válidos",
+    "filesTitle": "Archivos de pago",
+    "sourcesTitle": "Operaciones de origen",
+    "instructionsTitle": "Instrucciones de pago",
+    "searchInstructions": "Buscar instrucciones…",
+    "activityTitle": "Actividad reciente",
+    "systemActor": "Sistema",
+    "adjustments": "Descuento {discount} · crédito {credit}",
+    "reason": "Motivo",
+    "reasonRequired": "Ingrese un motivo. Se conservará en la pista de auditoría del pago.",
+    "recordOutcome": "Registrar resultado",
+    "outcome": { "title": "Resultado bancario", "description": "Registre la liquidación o una devolución para {payee}.", "status": "Resultado", "settled": "Liquidado", "returned": "Devuelto", "rejected": "Rechazado por el banco", "effectiveOn": "Fecha efectiva", "bankReference": "Referencia bancaria", "returnCode": "Código de devolución", "returnReason": "Motivo de devolución", "reversalWarning": "Una devolución o rechazo revierte el pago contabilizado y vuelve a abrir las facturas afectadas." },
+    "columns": {
+      "payee": "Beneficiario",
+      "payment": "Pago",
+      "bankDetails": "Datos bancarios"
+    },
+    "bankApproved": "aprobados",
+    "instructionStatus": {
+      "pending": "pendiente",
+      "approved": "aprobado",
+      "generated": "generado",
+      "sent": "enviado",
+      "settled": "liquidado",
+      "returned": "devuelto",
+      "rejected": "rechazado",
+      "failed": "fallido",
+      "reversed": "revertido",
+      "cancelled": "cancelado"
+    },
+    "fileStatus": { "generated": "generado", "pending_approval": "pendiente de aprobación", "approved": "aprobado", "rejected": "rechazado", "delivered": "entregado", "superseded": "sustituido", "voided": "anulado" },
+    "events": { "run_created": "Lote de pagos creado", "run_submitted": "Lote de pagos enviado", "run_approved": "Lote de pagos aprobado", "run_rejected": "Lote de pagos rechazado", "file_generated": "Archivo de pago generado", "file_reprocessed": "Archivo de pago reprocesado", "file_approved": "Archivo de pago aprobado", "file_rejected": "Archivo de pago rechazado", "file_downloaded": "Archivo de pago descargado", "file_delivered_sftp": "Archivo de pago entregado por SFTP", "file_delivery_failed": "Falló la entrega del archivo de pago", "run_rolled_back": "Lote de pagos revertido", "instruction_settled": "Pago liquidado", "instruction_returned": "Pago devuelto", "instruction_rejected": "Pago rechazado" },
+    "confirmPost": "¿{count, plural, one {Contabilizar # pago} other {Contabilizar # pagos}} por un total de {total} en el libro mayor y aplicarlos a las facturas de compra seleccionadas?",
+    "confirmCancel": "¿Cancelar el lote {number}? Sus pagos en borrador se eliminan; nada se ha contabilizado.",
+    "toasts": {
+      "postFailed": "La contabilización falló",
+      "postedWithFailures": "{count} contabilizados; fallaron: {failures}",
+      "posted": "{count, plural, one {# pago contabilizado y aplicado} other {# pagos contabilizados y aplicados}}",
+      "cancelFailed": "No se pudo cancelar el lote",
+      "cancelled": "Lote cancelado",
+      "deliverFailed": "No se pudo entregar el archivo",
+      "delivered": "Entregado a {path}",
+      "actionFailed": "La acción de pago falló",
+      "submitted": "Lote de pagos enviado",
+      "fileGenerated": "Archivo de pago generado",
+      "runApproved": "Lote de pagos aprobado",
+      "runRejected": "Lote de pagos rechazado",
+      "fileApproved": "Archivo de pago aprobado",
+      "fileRejected": "Archivo de pago rechazado",
+      "fileReprocessed": "Archivo de pago reprocesado",
+      "rolledBack": "Lote de pagos revertido",
+      "outcomeFailed": "No se pudo registrar el resultado bancario",
+      "outcomeSaved": "Resultado bancario registrado"
+    },
+    "deliverSftp": "Entregar por SFTP",
+    "deliverHint": "Escribe el archivo bancario de este lote en la carpeta de salida de un servidor SFTP para que el banco lo recoja.",
+    "sftpServer": "Servidor SFTP",
+    "noSftpServers": "No hay servidores SFTP configurados. Agrega uno en Configuración → Servidores SFTP."
+  }
+}

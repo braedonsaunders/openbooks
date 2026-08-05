@@ -1,0 +1,54 @@
+{
+  "title": "Modelos de PDF",
+  "description": "Crie belos documentos imprimíveis e atribua-os a faturas, lançamentos e todas as demais transações",
+  "newTemplate": "Novo modelo",
+  "list": {
+    "name": "Nome",
+    "paper": "Papel",
+    "default": "Padrão",
+    "builtInStarter": "Modelo inicial integrado",
+    "builtIn": "Integrado",
+    "starterHint": "Impresso quando não existe modelo personalizado — duplique-o para personalizar",
+    "duplicate": "Duplicar",
+    "isDefault": "Padrão"
+  },
+  "editor": {
+    "back": "Modelos de PDF",
+    "design": "Design",
+    "code": "HTML",
+    "preview": "Prévia",
+    "margins": "Margens",
+    "portrait": "Retrato",
+    "landscape": "Paisagem",
+    "headerPlaceholder": "Cabeçalho contínuo (opcional) — tokens de mesclagem permitidos",
+    "footerPlaceholder": "Rodapé contínuo — números de página suportados",
+    "saved": "Modelo salvo",
+    "saveFailed": "Falha ao salvar",
+    "makeDefault": "Padrão para este tipo de registro",
+    "active": "Ativo",
+    "previewHint": "Renderizado pelo mesmo mecanismo que imprime o documento real, mesclado com o seu registro mais recente.",
+    "refreshPreview": "Atualizar prévia",
+    "previewFailed": "Falha na prévia",
+    "deleteConfirm": "Excluir este modelo? Os registros voltarão ao design padrão.",
+    "blockContent": "Conteúdo",
+    "blockFields": "Campos do registro",
+    "blockTables": "Tabelas"
+  },
+  "pdfButton": {
+    "label": "PDF",
+    "defaultTemplate": "Design padrão",
+    "failed": "Não foi possível carregar os modelos de PDF"
+  },
+  "send": {
+    "label": "Enviar",
+    "to": "Destinatário",
+    "toPlaceholder": "cliente@exemplo.com",
+    "message": "Mensagem (opcional)",
+    "messagePlaceholder": "Adicione uma observação…",
+    "action": "Enviar e-mail",
+    "sending": "Enviando…",
+    "sent": "Enviado para {to}",
+    "noRecipient": "Informe um endereço de e-mail do destinatário",
+    "failed": "Não foi possível enviar o e-mail"
+  }
+}

@@ -1,0 +1,95 @@
+{
+  "pagination": {
+    "outOfRange": "第 {page} 页已超出这些结果的末尾。",
+    "showing": "显示 <strong>{from}</strong>–<strong>{to}</strong>，共 <strong>{total}</strong>",
+    "goToLastPageAria": "转到最后一页，第 {page} 页",
+    "goToPage": "转到第 {page} 页",
+    "previousPageAria": "上一页",
+    "nextPageAria": "下一页",
+    "prev": "上一页",
+    "pageOf": "第 {page} 页，共 {pages} 页"
+  },
+  "search": {
+    "placeholder": "搜索…",
+    "clearAria": "清除搜索"
+  },
+  "confirm": {
+    "defaultTitle": "确认"
+  },
+  "fieldHelp": {
+    "open": "解释此字段",
+    "generic": "设置此记录或操作的“{field}”值。"
+  },
+  "select": {
+    "placeholder": "选择…",
+    "searchPlaceholder": "搜索…",
+    "noMatches": "无匹配项",
+    "searching": "搜索中…"
+  },
+  "sparkline": {
+    "noTrend": "无趋势数据",
+    "trend": "趋势：{count} 个数据点，从 {first} 到 {last}"
+  },
+  "attachments": {
+    "tooLarge": "{name} 超出 25 MB 限制",
+    "attached": "已附加 {name}",
+    "attachFailed": "无法附加 {name}",
+    "removed": "已移除 {name}",
+    "removeFailed": "无法移除附件",
+    "loadFailed": "无法加载附件",
+    "empty": "尚未附加任何文件。",
+    "noMatches": "没有符合这些筛选条件的附件。",
+    "fileCount": "{count, plural, one {# 个文件} other {# 个文件}}",
+    "addFiles": "添加文件",
+    "searchPlaceholder": "搜索附件…",
+    "typeFilter": "类型",
+    "types": { "pdf": "PDF", "image": "图像", "other": "其他" },
+    "downloadAria": "下载 {name}",
+    "openAria": "在新标签页中打开 {name}",
+    "removeAria": "移除 {name}",
+    "expandPreviewAria": "展开预览以填满侧滑面板",
+    "restorePreviewAria": "恢复附件列表",
+    "previewTitle": "{name} 的预览",
+    "previewEmptyTitle": "选择附件",
+    "previewEmptyDescription": "无需离开交易即可在此打开 PDF 和图像。",
+    "previewUnavailable": "此文件类型可以下载，但无法在此预览。",
+    "uploading": "{count, plural, one {正在上传 # 个文件…} other {正在上传 # 个文件…}}",
+    "dropShort": "将文件拖放到此处或浏览",
+    "dropFiles": "将文件拖放到此处或<browse>浏览</browse>",
+    "acceptHint": "PDF、图像、CSV、XLSX、DOCX、TXT · 最大 25 MB"
+  },
+  "recordFields": {
+    "inactiveSelected": "（当前所选 — 未启用）",
+    "ratingAria": "评分（满分 {max}）",
+    "ratingValueAria": "{max} 中的 {value}",
+    "loadAccountsFailed": "无法加载科目 — 请重新加载以重试。",
+    "loadPartiesFailed": "无法加载往来单位 — 请重新加载以重试。",
+    "selectAccount": "选择科目…",
+    "selectParty": "选择往来单位…",
+    "noFields": "无可显示的字段 — 该记录类型没有可见字段。",
+    "lineItems": "行项目",
+    "rowCount": "{count, plural, one {# 行} other {# 行}}",
+    "noRows": "暂无行。",
+    "rowActions": "行操作",
+    "removeRow": "移除行",
+    "addRow": "添加行",
+    "maxRowsReached": "已达到最多 {count} 行。"
+  },
+  "lineGrid": {
+    "addLine": "添加行",
+    "keyboardHint": "Enter 添加/下移 · Alt+↑/↓ 重排 · ⌘D 复制 · ⌘⌫ 移除",
+    "lineActionsAria": "第 {number} 行操作",
+    "insertAbove": "在上方插入",
+    "insertBelow": "在下方插入",
+    "removeLine": "移除行",
+    "clearLine": "清空行",
+    "tax": {
+      "overriddenAria": "税额已覆盖",
+      "overriddenTitle": "税额已手动覆盖 — 与计算得出的税率不同",
+      "overriddenShortTitle": "税额已手动覆盖",
+      "computedOverriddenTitle": "计算值 {amount} · 已覆盖",
+      "resetAria": "将税额重置为计算值",
+      "resetTitle": "重置为计算值 {amount}"
+    }
+  }
+}

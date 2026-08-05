@@ -1,0 +1,174 @@
+{
+  "title": "税務申告",
+  "description": "元帳から政府向けの税務申告書を作成し、申告した内容を保存します。",
+  "setup": "税務申告のセットアップ",
+  "notice": "注意",
+  "period": "{from} から {to}",
+  "form": "申告書",
+  "from": "開始",
+  "to": "終了",
+  "compute": "計算",
+  "computing": "計算中…",
+  "empty": "申告書と期間を選択してから計算してください。",
+  "adjustmentAria": "{label} の調整",
+  "adjustmentPlaceholder": "0.00",
+  "columns": {
+    "line": "行",
+    "description": "説明",
+    "amount": "金額"
+  },
+  "noForms": {
+    "title": "税務申告書が構成されていません",
+    "description": "管轄区域パックをインポートするか、セットアップ → 税で申告書を作成してください。",
+    "openSetup": "税務申告のセットアップを開く"
+  },
+  "export": {
+    "label": "作業コピーのエクスポート",
+    "pdf": "作業コピー PDF",
+    "csv": "作業コピー CSV",
+    "xlsx": "作業コピー Excel"
+  },
+  "official": {
+    "download": "記入済みの正式フォーム"
+  },
+  "submission": {
+    "title": "この申告書の提出方法",
+    "description": "申告書を確認したうえで、下記の構成済み提出チャネルとアクションを使用してください。",
+    "channelLabel": "提出チャネル",
+    "actionLabel": "必要なアクション",
+    "openGovernment": "提出手順を開く",
+    "exportNotice": "作業コピーのエクスポートは確認と記録用です。構成された提出方法で明示的に指定されていない限り、政府への提出ファイルにはなりません。",
+    "gst34Notice": "GST34 は通常、CRA アカウントまたは NETFILE で入力します。CRA にアップロード可能な .tax ファイルは CRA 認定ソフトウェアでのみ作成でき、PDF、CSV、Excel は認められた提出形式ではありません。"
+  },
+  "channels": {
+    "print_pdf": "印刷して郵送",
+    "file_upload": "電子ファイルのアップロード",
+    "efile_api": "政府の電子申告 API",
+    "portal_manual": "政府のオンラインポータル"
+  },
+  "governmentFormats": {
+    "portal_entry": "申告書をオンラインで入力",
+    "certified_file": "認定された政府ファイル",
+    "api": "対応ソフトウェア/API が必要",
+    "paper": "正式な紙のフォーム"
+  },
+  "history": {
+    "title": "過去の申告",
+    "description": "作成および提出された申告書の、バージョン管理された変更不可のスナップショット。",
+    "search": "申告履歴を検索…",
+    "statusLabel": "ステータス",
+    "empty": "これらのフィルターに一致する保存済み申告はありません。",
+    "save": "履歴に保存",
+    "saving": "保存中…",
+    "saved": "申告書のスナップショットを保存しました",
+    "status": {
+      "prepared": "作成済み",
+      "filed": "提出済み"
+    },
+    "columns": {
+      "form": "申告書",
+      "period": "期間",
+      "version": "バージョン",
+      "status": "ステータス",
+      "reference": "参照番号",
+      "saved": "保存日"
+    },
+    "drawerDescription": "{from} から {to} · バージョン {version}",
+    "formCode": "申告書コード",
+    "country": "国",
+    "reference": "政府の確認番号/参照番号",
+    "referencePlaceholder": "確認番号または受領参照",
+    "filedAt": "提出日時",
+    "markFiledHint": "政府が受理した後にのみ、このスナップショットを提出済みとしてマークしてください。この操作は取り消せません。",
+    "markFiled": "提出済みとしてマーク",
+    "markingFiled": "提出済みとしてマーク中…",
+    "filedSuccess": "申告を提出済みとしてマークしました",
+    "line": "行",
+    "lineDescription": "説明",
+    "amount": "金額",
+    "hash": "スナップショット SHA-256: {hash}",
+    "snapshotWatermark": "保存された変更不可のスナップショット · SHA-256 {hash}",
+    "export": {
+      "pdf": "PDF",
+      "xlsx": "Excel",
+      "csv": "CSV"
+    }
+  },
+  "provisions": {
+    "title": "法人税等の税金計算",
+    "description": "ASC 740 / IAS 12 — 当期税額と繰延税金、評価性引当額、税率調整表。",
+    "empty": "税金計算はまだありません。最初の年度計算を実行してください。",
+    "columns": {
+      "fiscalYear": "会計年度",
+      "version": "版",
+      "status": "状態",
+      "totalExpense": "費用合計",
+      "effectiveRate": "実効税率",
+      "created": "作成日"
+    },
+    "status": {
+      "draft": "下書き",
+      "posted": "転記済",
+      "superseded": "置換済"
+    },
+    "post": "転記",
+    "posting": "転記中…",
+    "categories": {
+      "fixed_assets": "固定資産",
+      "revenue_recognition": "収益認識",
+      "provisions": "引当金",
+      "loss_carryforward": "繰越欠損金",
+      "other": "その他"
+    },
+    "compute": {
+      "button": "税金計算を実行",
+      "title": "年度の税金計算を実行",
+      "fiscalYear": "会計年度",
+      "permanent": "永久差異",
+      "temporary": "追加の一時差異",
+      "addLine": "行を追加",
+      "descriptionPlaceholder": "摘要",
+      "lossUsed": "使用する繰越欠損金",
+      "valuationAllowance": "評価性引当額",
+      "cancel": "キャンセル",
+      "compute": "計算",
+      "computing": "計算中…",
+      "categories": {
+        "fixed_assets": "固定資産",
+        "revenue_recognition": "収益認識",
+        "provisions": "引当金",
+        "loss_carryforward": "繰越欠損金",
+        "other": "その他"
+      },
+      "valuationAllowanceIas12": "繰延税金資産の認識調整額"
+    },
+    "detail": {
+      "title": "{year}年度 税金計算 · v{version}",
+      "reconciliation": "税率調整表",
+      "amount": "金額",
+      "percent": "税引前 %",
+      "pretax": "税引前当期利益",
+      "total": "法人税等費用合計",
+      "taxableIncome": "課税所得",
+      "currentTax": "当期税額",
+      "deferredExpense": "繰延税金（変動）",
+      "balances": {
+        "dta": "繰延税金資産（総額）",
+        "dtl": "繰延税金負債",
+        "va": "評価性引当額",
+        "vaIas12": "繰延税金資産の認識調整額"
+      },
+      "differences": "一時差異",
+      "noDifferences": "測定された一時差異はありません。",
+      "columns": {
+        "item": "項目",
+        "bookBasis": "簿価",
+        "taxBasis": "税務簿価",
+        "difference": "差異",
+        "effect": "税効果"
+      },
+      "auto": "自動",
+      "manual": "手動"
+    }
+  }
+}

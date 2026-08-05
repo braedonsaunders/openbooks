@@ -1,0 +1,270 @@
+{
+  "page": {
+    "title": "Zahlungen",
+    "description": "Verwalten Sie Zahlungsaktivitäten und Bankläufe von der Auswahl bis zur Abwicklung.",
+    "newPayment": "Neue Zahlung",
+    "newRun": "Neuer Zahlungslauf",
+    "tabs": {
+      "payments": "Zahlungen",
+      "runs": "Zahlungsläufe"
+    }
+  },
+  "list": {
+    "searchPlaceholder": "{side, select, ap {Zahlungen, Lieferanten, Referenzen suchen…} other {Zahlungen, Kunden, Referenzen suchen…}}",
+    "newLabel": "{side, select, ap {Neue Zahlung} other {Neue Kundenzahlung}}",
+    "columns": {
+      "document": "{side, select, ap {Zahlung} other {Kundenzahlung}}",
+      "payment": "Zahlung",
+      "bankAccount": "Bankkonto",
+      "ref": "Ref."
+    },
+    "empty": {
+      "title": "{side, select, ap {Noch keine Zahlungen} other {Noch keine Kundenzahlungen}}",
+      "description": "{side, select, ap {Erfassen Sie die erste Lieferantenzahlung, um offene Eingangsrechnungen auszugleichen.} other {Erfassen Sie die erste Kundenzahlung, um offene Ausgangsrechnungen auszugleichen.}}"
+    }
+  },
+  "newButton": {
+    "createDraftFailed": "Es konnte kein Entwurf erstellt werden"
+  },
+  "drawer": {
+    "draftHint": "Entwurf — Änderungen werden automatisch gespeichert.",
+    "viewGlImpact": "Hauptbuchauswirkung anzeigen",
+    "postAction": "{side, select, ap {Zahlen & buchen} other {Vereinnahmen & buchen}}",
+    "bankAccount": "Bankkonto",
+    "selectPartyPlaceholder": "{side, select, ap {Lieferant auswählen…} other {Kunde auswählen…}}",
+    "selectBankAccountPlaceholder": "Bankkonto auswählen…",
+    "referencePlaceholder": "Scheck-/EFT-Referenz…",
+    "openItems": "{side, select, ap {Offene Eingangsrechnungen} other {Offene Ausgangsrechnungen}}",
+    "amountReceived": "Erhaltener Betrag",
+    "autoApply": "Automatisch zuordnen",
+    "autoApplyFailed": "Es konnte keine Zuordnung vorgeschlagen werden",
+    "autoApplyNone": "Keine offenen Posten passen zu diesem Betrag",
+    "autoApplyDone": "Auf {count, plural, one {# Posten} other {# Posten}} angewendet ({strategy})",
+    "autoApplyStrategy": {
+      "reference": "nach Referenz",
+      "exact": "exakte Übereinstimmung",
+      "fifo": "älteste zuerst",
+      "none": "keine"
+    },
+    "selectPartyHint": "{side, select, ap {Wählen Sie einen Lieferanten, um dessen offene Posten anzuzeigen.} other {Wählen Sie einen Kunden, um dessen offene Posten anzuzeigen.}}",
+    "loadingOpenItems": "Offene Posten werden geladen…",
+    "noOpenItems": "{side, select, ap {Keine offenen Eingangsrechnungen für diesen Lieferanten.} other {Keine offenen Ausgangsrechnungen für diesen Kunden.}}",
+    "columns": {
+      "apply": "Zuordnen",
+      "document": "Dokument",
+      "due": "Fällig",
+      "original": "Original",
+      "appliedToDate": "Bisher zugeordnet",
+      "open": "Offen",
+      "appliedOn": "Zugeordnet am",
+      "applied": "Zugeordnet",
+      "rateEvidence": "Kursnachweis"
+    },
+    "targetAmount": "Zugeordneter Betrag ({currency})",
+    "sourceAmount": "Zahlungsbetrag ({currency})",
+    "settlementRate": "Kurs: {target} je {source}",
+    "rateReferencePlaceholder": "Bankbeleg oder Vertragsreferenz…",
+    "rateSource": { "manual": "Manueller Kurs", "contractual": "Vertragskurs", "provider": "Mandanten-Devisenkurs" },
+    "applyAriaLabel": "Auf {document} zuordnen",
+    "invalidAllocation": "Beträge müssen positiv sein, den offenen Saldo einhalten und mit dem belegten Abrechnungskurs exakt aufgehen.",
+    "appliedTo": "Zugeordnet auf",
+    "voidedNote": "Diese Zahlung wurde storniert; ihre Buchung wurde rückgängig gemacht.",
+    "noLiveApplications": "Keine aktiven Zuordnungen.",
+    "kind": {
+      "vendorBill": "Eingangsrechnung",
+      "customerInvoice": "Ausgangsrechnung",
+      "expenseReport": "Spesenabrechnung",
+      "journal": "Journal",
+      "entry": "Buchung"
+    },
+    "saveState": {
+      "saved": "Alle Änderungen gespeichert",
+      "error": "Speichern fehlgeschlagen — beheben und erneut versuchen",
+      "dirty": "Nicht gespeicherte Änderungen…"
+    },
+    "applyingSummary": "{count, plural, one {# Posten wird zugeordnet} other {# Posten werden zugeordnet}} · <total>Summe {amount}</total>",
+    "totalAmount": "Summe {amount}",
+    "toasts": {
+      "loadOpenItemsFailed": "Offene Posten konnten nicht geladen werden",
+      "autosaveFailed": "Automatisches Speichern fehlgeschlagen",
+      "postFailed": "Buchung fehlgeschlagen",
+      "posted": "{side, select, ap {Zahlung gebucht und zugeordnet} other {Kundenzahlung gebucht und zugeordnet}}"
+    }
+  },
+  "eft": {
+    "notConfiguredTitle": "EFT-Erstellung ist nicht konfiguriert",
+    "notConfiguredListDescription": "Zahlungsläufe können weiterhin zusammengestellt werden, aber der Bankdatei-Export ist deaktiviert, bis ein Administrator die Einrichtung der EFT-Erstellung abgeschlossen hat. Fehlende Felder: {missing}.",
+    "notConfiguredDrawerDescription": "Der Bankdatei-Export ist deaktiviert, bis ein Administrator die Einrichtung der EFT-Erstellung abgeschlossen hat. Fehlende Felder: {missing}."
+  },
+  "configuration": {
+    "notConfiguredTitle": "Die Zahlungseinrichtung ist unvollständig",
+    "notConfiguredDescription": "Erstellen Sie ein Finanzierungsprofil in der <setup>Einrichtung für Zahlungen & Banking</setup>, bevor Sie einen Zahlungslauf zusammenstellen.",
+    "collectionsNotConfiguredTitle": "Die Lastschrift-Einrichtung ist unvollständig",
+    "collectionsNotConfiguredDescription": "Erstellen Sie ein Lastschrift-Bankprofil und Mandate in der <setup>Einrichtung für Zahlungen & Banking</setup>, bevor Sie einen Einzugslauf zusammenstellen.",
+    "runNotReadyTitle": "Dieser Zahlungslauf ist nicht bereit",
+    "runNotReadyDescription": "Vervollständigen Sie die Profilkonfiguration, bevor Sie eine Datei erzeugen. Fehlend oder ungültig: {missing}."
+  },
+  "runBuilder": {
+    "title": "Neuer Zahlungslauf",
+    "description": "Wählen Sie das Finanzierungskonto und die Eingangsrechnungen und erstellen Sie dann einen Entwurfslauf zur Prüfung.",
+    "collectionTitle": "Neuer Lastschriftlauf",
+    "collectionDescription": "Wählen Sie das Einzugsprofil und die offenen Ausgangsrechnungen und erstellen Sie dann einen Entwurfslauf zur Prüfung.",
+    "noOpenBills": "Keine gebuchten Eingangsrechnungen mit passendem offenen Saldo.",
+    "noOpenInvoices": "Keine gebuchten Ausgangsrechnungen mit passendem offenen Saldo.",
+    "selectAllAriaLabel": "Alle Eingangsrechnungen auf dieser Seite auswählen",
+    "selectAriaLabel": "{document} auswählen",
+    "columns": {
+      "bill": "Eingangsrechnung",
+      "invoice": "Ausgangsrechnung",
+      "due": "Fällig",
+      "ref": "Ref.",
+      "bankDetails": "Bankverbindung",
+      "mandate": "Lastschriftmandat",
+      "openBalance": "Offener Saldo"
+    },
+    "bankApproved": "hinterlegt",
+    "bankMissing": "fehlt",
+    "mandateActive": "aktiv",
+    "mandateMissing": "fehlt",
+    "payFromBankAccount": "Zahlungsbankprofil",
+    "selectBankAccountPlaceholder": "Zahlungsprofil auswählen…",
+    "noBankAccounts": "Keine aktiven Zahlungsprofile",
+    "fundsDate": "Valutadatum",
+    "captureDiscounts": "Verfügbare Skonti für Frühzahlung nutzen",
+    "applyCredits": "Verfügbare Lieferantengutschriften anwenden",
+    "selectedForPayment": "Für Zahlung ausgewählt",
+    "selectedForCollection": "Für Einzug ausgewählt",
+    "selectionSummary": "{count, plural, one {# Eingangsrechnung} other {# Eingangsrechnungen}} · <total>{amount}</total>",
+    "collectionSummary": "{count, plural, one {# Ausgangsrechnung} other {# Ausgangsrechnungen}} · <total>{amount}</total>",
+    "createRun": "Zahlungslauf erstellen",
+    "createCollectionRun": "Einzugslauf erstellen",
+    "toasts": {
+      "createFailed": "Der Zahlungslauf konnte nicht erstellt werden",
+      "created": "Zahlungslauf {number} erstellt"
+    }
+  },
+  "runs": {
+    "collectionRunsHeading": "Lastschriftläufe",
+    "collectionDescription": "Genehmigen, erzeugen, übermitteln, buchen und wickeln Sie Kundeneinzugsdateien ab.",
+    "openInvoicesHeading": "Offene Ausgangsrechnungen",
+    "openInvoicesDescription": "Prüfen Sie offene Ausgangsrechnungen und die Bereitschaft der Lastschriftmandate vor der Auswahl.",
+    "invoicesSearchPlaceholder": "Ausgangsrechnungen oder Kunden suchen…",
+    "openBillsHeading": "Offene Eingangsrechnungen zur Zahlung",
+    "openBillsDescription": "Wählen Sie Eingangsrechnungen über Lieferanten hinweg aus; jeder Lieferant wird zu einer Zahlungsanweisung.",
+    "billsSearchPlaceholder": "Eingangsrechnungen, Lieferanten, Referenzen suchen…",
+    "runsHeading": "Zahlungsläufe",
+    "description": "Prüfen Sie Entwürfe, exportieren Sie Bankdateien und bestätigen Sie gebuchte Zahlungen.",
+    "searchPlaceholder": "Läufe oder Bankkonten suchen…",
+    "noRunsYet": "Noch keine Zahlungsläufe. Erstellen Sie den ersten Lauf, wenn Eingangsrechnungen zur Zahlung bereit sind.",
+    "noCollectionRunsYet": "Noch keine Lastschriftläufe. Erstellen Sie den ersten Lauf, wenn autorisierte Ausgangsrechnungen zum Einzug bereit sind.",
+    "columns": {
+      "run": "Lauf",
+      "bankAccount": "Bankkonto",
+      "method": "Methode",
+      "fundsDate": "Valutadatum",
+      "payments": "Zahlungen"
+    },
+    "method": {
+      "eft": "EFT",
+      "ach": "ACH",
+      "sepa": "SEPA",
+      "wire": "Überweisung",
+      "cheque": "Scheck",
+      "direct_debit": "Lastschrift",
+      "positive_pay": "Positive Pay",
+      "custom": "Benutzerdefiniert"
+    },
+    "status": {
+      "confirmed": "Bestätigt",
+      "generated": "Datei erzeugt",
+      "delivered": "Übermittelt",
+      "settled": "Abgewickelt",
+      "returned": "Zurückgegeben",
+      "partially_failed": "Teilweise fehlgeschlagen",
+      "rejected": "Abgelehnt",
+      "rolled_back": "Zurückgerollt"
+    }
+  },
+  "runDrawer": {
+    "descriptionEft": "Zahlungslauf von {bank}",
+    "descriptionEftWithDate": "Zahlungslauf von {bank} · Valuta {date}",
+    "bankAccountFallback": "Bankkonto",
+    "cancelRun": "Lauf abbrechen",
+    "downloadFile": "Datei herunterladen",
+    "downloadBlockedTitle": "Beheben Sie zuerst die Probleme mit Profil und Bankverbindung",
+    "submitRun": "Zur Genehmigung einreichen",
+    "approve": "Lauf genehmigen",
+    "reject": "Lauf ablehnen",
+    "generateFile": "Datei erzeugen",
+    "approveFile": "Datei genehmigen",
+    "rejectFile": "Datei ablehnen",
+    "reprocess": "Erneut verarbeiten",
+    "rollback": "Zurückrollen",
+    "postPayments": "Zahlungen buchen",
+    "paymentsSummary": "{count, plural, one {# Zahlung} other {# Zahlungen}} · <total>Summe {amount}</total>",
+    "payeesMissingBankDetails": "Gegenparteien mit ungültiger Bankverbindung",
+    "filesTitle": "Zahlungsdateien",
+    "sourcesTitle": "Quelltransaktionen",
+    "instructionsTitle": "Zahlungsanweisungen",
+    "searchInstructions": "Anweisungen suchen…",
+    "activityTitle": "Letzte Aktivität",
+    "systemActor": "System",
+    "adjustments": "Skonto {discount} · Gutschrift {credit}",
+    "reason": "Grund",
+    "reasonRequired": "Geben Sie einen Grund ein. Er wird im Prüfpfad der Zahlung aufbewahrt.",
+    "recordOutcome": "Ergebnis erfassen",
+    "outcome": { "title": "Bankergebnis", "description": "Erfassen Sie eine Abwicklung oder eine Rückgabe für {payee}.", "status": "Ergebnis", "settled": "Abgewickelt", "returned": "Zurückgegeben", "rejected": "Von der Bank abgelehnt", "effectiveOn": "Wirksamkeitsdatum", "bankReference": "Bankreferenz", "returnCode": "Rückgabecode", "returnReason": "Rückgabegrund", "reversalWarning": "Eine Rückgabe oder Ablehnung macht die gebuchte Zahlung rückgängig und öffnet die betroffenen Eingangsrechnungen erneut." },
+    "columns": {
+      "payee": "Zahlungsempfänger",
+      "payment": "Zahlung",
+      "bankDetails": "Bankverbindung"
+    },
+    "bankApproved": "hinterlegt",
+    "instructionStatus": {
+      "pending": "ausstehend",
+      "approved": "genehmigt",
+      "generated": "erzeugt",
+      "sent": "gesendet",
+      "settled": "abgewickelt",
+      "returned": "zurückgegeben",
+      "rejected": "abgelehnt",
+      "failed": "fehlgeschlagen",
+      "reversed": "rückgängig gemacht",
+      "cancelled": "abgebrochen"
+    },
+    "fileStatus": { "generated": "erzeugt", "pending_approval": "Genehmigung ausstehend", "approved": "genehmigt", "rejected": "abgelehnt", "delivered": "übermittelt", "superseded": "ersetzt", "voided": "storniert" },
+    "events": {
+      "run_created": "Zahlungslauf erstellt", "run_submitted": "Zahlungslauf eingereicht", "run_approved": "Zahlungslauf genehmigt", "run_rejected": "Zahlungslauf abgelehnt",
+      "file_generated": "Zahlungsdatei erzeugt", "file_reprocessed": "Zahlungsdatei erneut verarbeitet", "file_approved": "Zahlungsdatei genehmigt", "file_rejected": "Zahlungsdatei abgelehnt",
+      "file_downloaded": "Zahlungsdatei heruntergeladen", "file_delivered_sftp": "Zahlungsdatei per SFTP übermittelt", "run_rolled_back": "Zahlungslauf zurückgerollt",
+      "file_delivery_failed": "Übermittlung der Zahlungsdatei fehlgeschlagen",
+      "instruction_settled": "Zahlung abgewickelt", "instruction_returned": "Zahlung zurückgegeben", "instruction_rejected": "Zahlung abgelehnt"
+    },
+    "confirmPost": "{count, plural, one {# Zahlung} other {# Zahlungen}} über insgesamt {total} in das Hauptbuch buchen und den ausgewählten Eingangsrechnungen zuordnen?",
+    "confirmCancel": "Lauf {number} abbrechen? Seine Entwurfszahlungen werden gelöscht; es wurde nichts gebucht.",
+    "toasts": {
+      "postFailed": "Buchung fehlgeschlagen",
+      "postedWithFailures": "{count} gebucht; fehlgeschlagen: {failures}",
+      "posted": "{count, plural, one {# Zahlung gebucht und zugeordnet} other {# Zahlungen gebucht und zugeordnet}}",
+      "cancelFailed": "Der Lauf konnte nicht abgebrochen werden",
+      "cancelled": "Lauf abgebrochen",
+      "deliverFailed": "Die Datei konnte nicht übermittelt werden",
+      "delivered": "Übermittelt an {path}"
+      ,"actionFailed": "Die Zahlungsaktion ist fehlgeschlagen"
+      ,"submitted": "Zahlungslauf eingereicht"
+      ,"fileGenerated": "Zahlungsdatei erzeugt"
+      ,"runApproved": "Zahlungslauf genehmigt"
+      ,"runRejected": "Zahlungslauf abgelehnt"
+      ,"fileApproved": "Zahlungsdatei genehmigt"
+      ,"fileRejected": "Zahlungsdatei abgelehnt"
+      ,"fileReprocessed": "Zahlungsdatei erneut verarbeitet"
+      ,"rolledBack": "Zahlungslauf zurückgerollt"
+      ,"outcomeFailed": "Das Bankergebnis konnte nicht erfasst werden"
+      ,"outcomeSaved": "Bankergebnis erfasst"
+    },
+    "deliverSftp": "An SFTP übermitteln",
+    "deliverHint": "Übermitteln Sie die Zahlungsdatei dieses Laufs an den SFTP-Ordner einer Bank oder eines Partners zum Abholen.",
+    "sftpServer": "SFTP-Login",
+    "noSftpServers": "Noch keine SFTP-Logins. Fügen Sie einen unter Einrichtung → SFTP hinzu."
+  }
+}

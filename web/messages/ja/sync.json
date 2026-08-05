@@ -1,0 +1,193 @@
+{
+  "title": "移行とミラー",
+  "description": "外部の会計システムに接続し、ワンクリックで移行してから、毎日ミラーして両方を並行してA/B運用します。",
+  "connections": {
+    "heading": "接続",
+    "add": "接続を追加",
+    "loading": "読み込み中…",
+    "empty": {
+      "title": "接続はまだありません。",
+      "hint": "移行を開始するには、移行元の会計システムを追加してください。"
+    },
+    "status": {
+      "active": "有効",
+      "paused": "一時停止中",
+      "error": "エラー",
+      "unconfigured": "未設定"
+    },
+    "mirrorBadge": "ミラー: {schedule}",
+    "lastRun": "最終実行: {lastRun} · 同期完了: {cursor}"
+  },
+  "actions": {
+    "connect": "接続",
+    "reconnect": "再接続",
+    "test": "テスト",
+    "mirrorNow": "今すぐミラー",
+    "syncAttachments": "添付ファイルを同期",
+    "syncProjectFinancials": "プロジェクト財務を同期",
+    "preflight": "同期前に検証",
+    "runMigration": "移行を実行",
+    "pauseMirror": "ミラーを一時停止",
+    "enableMirror": "ミラーを有効化",
+    "edit": "編集",
+    "downloadQwc": "Web Connector をダウンロード"
+  },
+  "runs": {
+    "heading": "最近の実行",
+    "columns": {
+      "started": "開始",
+      "kind": "種別",
+      "status": "ステータス",
+      "trigger": "トリガー",
+      "result": "結果"
+    },
+    "kind": {
+      "full_migration": "完全移行",
+      "incremental": "差分",
+      "attachments": "添付ファイル",
+      "full_preflight": "完全事前検証",
+      "project_financials": "プロジェクト財務",
+      "targeted_repair": "対象指定修復",
+      "mirror": "ミラー"
+    },
+    "status": {
+      "ok": "成功",
+      "failed": "失敗",
+      "running": "実行中"
+    },
+    "progress": {
+      "attachments": "ソースの添付ファイルを確認してインポートしています"
+    },
+    "stats": {
+      "attachments": "ソースファイル {files} 件 · 取引リンク {links} 件 · 新規ファイル {created} 件",
+      "projectFinancials": "ソースプロジェクト {projects} 件（変更 {projectChanges} 件）· ソース時間エントリ {source} 件 · 完全一致 {exact} 件 · 請求状態調整 {changed} 件",
+      "docs": "+{new} 件のドキュメント · {amended} 件修正 · {unchanged} 件変更なし",
+      "applied": "{count} 件適用",
+      "tb": "試算表 {matches}/{accounts}",
+      "tbOff": "({count} 件不一致)",
+      "openItems": "未決済項目 {matches}/{checked}",
+      "periods": "会計期間 {matches}/{checked}",
+      "projectPeriods": "プロジェクト・勘定期間 {matches}/{checked}",
+      "preflightDocs": "ソース文書 {source} · 新規 {new} · 変更 {amended} · 一致 {unchanged}",
+      "sourceBook": "{kind} {ref}",
+      "preflightBlockers": "ブロッカー {count} 件"
+    }
+  },
+  "toast": {
+    "loadFailed": "接続の読み込みに失敗しました (HTTP {status})",
+    "authorized": "接続を承認しました",
+    "authDenied": "承認が拒否されました",
+    "authFailed": "承認に失敗しました ({status})",
+    "queuingMigration": "完全移行をキューに追加中…",
+    "queuingPreflight": "読み取り専用の全件検証をキューに追加中…",
+    "queuingMirror": "ミラーをキューに追加中…",
+    "queuingAttachments": "添付ファイル同期をキューに追加中…",
+    "queuingProjectFinancials": "プロジェクト財務同期をキューに追加中…",
+    "migrationQueued": "移行をキューに追加しました — バックグラウンドで実行します",
+    "preflightQueued": "検証をキューに追加しました — 会計データや文書は変更されません",
+    "mirrorQueued": "ミラーをキューに追加しました — バックグラウンドで実行中です",
+    "attachmentsQueued": "添付ファイル同期をキューに追加しました — バックグラウンドで実行中です",
+    "projectFinancialsQueued": "プロジェクト財務同期をキューに追加しました — 伝票、総勘定元帳、ファイル、PDF は変更されません",
+    "runFailed": "実行をキューに追加できませんでした (HTTP {status})",
+    "runErrors": {
+      "CONNECTION_NOT_FOUND": "接続は既に存在しません。",
+      "CONNECTION_UNCONFIGURED": "この接続を実行する前に認証情報を追加してください。",
+      "INVALID_MODE": "有効な移行操作を選択してください。",
+      "ATTACHMENTS_UNSUPPORTED": "この接続は添付ファイル移行に対応していません。",
+      "PROJECT_FINANCIALS_UNSUPPORTED": "この接続はプロジェクト財務入力の同期を提供していません。"
+    },
+    "testing": "接続をテスト中…",
+    "connected": "接続しました",
+    "connectedDetail": "接続しました — {detail}",
+    "testFailed": "接続に失敗しました: {error}",
+    "unknownError": "不明なエラー",
+    "removed": "接続を削除しました",
+    "created": "接続を作成しました",
+    "updated": "接続を更新しました",
+    "copied": "リダイレクトURIをコピーしました",
+    "copyFailed": "コピーできませんでした — テキストを手動で選択してコピーしてください"
+  },
+  "confirmDelete": "接続「{name}」を削除しますか？移行済みのデータは残り、リンクのみが削除されます。",
+  "drawer": {
+    "addTitle": "接続を追加",
+    "editTitle": "接続を編集",
+    "description": "外部の会計システムに接続します。認証情報は保存時に暗号化され、二度と表示されません。",
+    "cancel": "キャンセル",
+    "saving": "保存中…",
+    "saveChanges": "変更を保存",
+    "create": "接続を作成",
+    "system": "システム",
+    "selectSystem": "システムを選択…",
+    "name": "接続名",
+    "select": "選択…",
+    "credentials": "認証情報（保存時に暗号化され、二度と表示されません）",
+    "keepCurrent": "現在の値を維持するには空欄のままにしてください"
+  },
+  "oauth": {
+    "title": "<link>{portal}</link> での一度きりのアプリ設定",
+    "redirectLabel": "登録するリダイレクトURI:",
+    "copy": "コピー"
+  },
+  "netsuite": {
+    "setupTitle": "NetSuite 抽出ブリッジ",
+    "setupHint": "読み取り専用の RESTlet と Map/Reduce をインストールして接続をテストします。取引レコードにスクリプトは追加されません。",
+    "documentation": "ドキュメント"
+  },
+  "qbd": {
+    "setupTitle": "QuickBooks Desktop の設定",
+    "setupHint": "保存後、接続カードから Web Connector ファイルをダウンロードします。QuickBooks を実行している Windows コンピューターで取り込み、QuickBooks 管理者として読み取り専用アクセスを承認し、このパスワードを Web Connector に入力してください。",
+    "lastContact": "Web Connector の最終接続: {time}",
+    "notConnected": "Web Connector はまだ接続していません",
+    "capture": "キャプチャ {status}: {completed}/{total} リクエスト",
+    "captureStatus": { "queued": "待機中", "running": "実行中", "complete": "完了", "failed": "失敗", "cancelled": "キャンセル" },
+    "documentation": "ドキュメント",
+    "qwcDescription": "会計移行と照合のための読み取り専用コネクター"
+  },
+  "sources": {
+    "netsuite": {
+      "blurb": "読み取り専用の抽出ブリッジをインストールし、専用のトークンロールで接続します。取引、適用、会計統制、削除は検証を通過した場合のみ取り込まれます。",
+      "fields": {
+        "account": { "label": "アカウント ID", "help": "NetSuite アカウントのレルムです。" },
+        "host": { "label": "SuiteTalk ホスト" }, "baseCurrency": { "label": "基準通貨" },
+        "bridgeScriptId": { "label": "ブリッジスクリプト ID", "help": "空欄の場合は customscript_openbooks_bridge_rl を使用します。" },
+        "bridgeDeploymentId": { "label": "デプロイメント ID", "help": "空欄の場合は customdeploy_openbooks_bridge_rl を使用します。" },
+        "mappingJson": { "label": "アカウントフィールドのマッピング", "help": "カスタムフィールドとレコードを OpenBooks の概念に対応付ける任意の JSON です。" },
+        "consumerKey": { "label": "コンシューマーキー" }, "consumerSecret": { "label": "コンシューマーシークレット" },
+        "tokenKey": { "label": "トークン ID" }, "tokenSecret": { "label": "トークンシークレット" }
+      }
+    },
+    "odoo": {
+      "blurb": "Odoo の URL、データベース、ユーザー、および API キー（設定 → マイプロフィール → アカウントセキュリティ → API キー）で接続します。請求書、仕入請求書、支払、仕訳は、実際の記帳エンジンを通じてネイティブに移行およびミラーされます。"
+    },
+    "erpnext": {
+      "blurb": "ERPNext の URL と API キー + シークレット（ユーザー → 設定 → API アクセス）で接続します。請求書、仕入請求書、支払エントリ、仕訳は、実際の記帳エンジンを通じてネイティブに移行およびミラーされます。"
+    },
+    "qbd": {
+      "blurb": "Intuit Web Connector を介して QuickBooks Desktop に接続します。初回承認時とキャプチャ実行中は QuickBooks を開いておく必要があります。Windows ファイアウォールの受信規則は不要です。",
+      "options": { "US": "米国", "CA": "カナダ", "UK": "英国", "AU": "オーストラリア", "NZ": "ニュージーランド" },
+      "fields": {
+        "historyStartDate": { "label": "履歴の開始日", "help": "移行する最初の転記日です。ミラーのたびに全期間を再確認し、過去の変更や削除を検出します。" },
+        "region": { "label": "QuickBooks の地域" },
+        "baseCurrency": { "label": "基準通貨" },
+        "companyFile": { "label": "会社ファイルのパス（任意）", "help": "空欄の場合、Web Connector 実行時に開いている会社を使用します。" },
+        "webConnectorPassword": { "label": "Web Connector パスワード", "help": ".QWC ファイルを取り込んだ後、QuickBooks Web Connector に一度入力してください。" }
+      }
+    },
+    "qbo": {
+      "blurb": "Intuit アプリのクライアント ID + シークレット（developer.intuit.com → Keys & credentials）を入力し、保存してから、Connect をクリックして会社を承認してください。請求書、仕入請求書、支払、クレジット、仕訳、預金がネイティブに移行およびミラーされます。",
+      "steps": [
+        "com.intuit.quickbooks.accounting スコープを持つアプリ（QuickBooks Online and Payments）を作成します。",
+        "Keys & credentials で、以下に表示されるリダイレクトURIを追加します（サンドボックス会社には Development キー、本番会社には Production キーを使用してください）。",
+        "クライアント ID とクライアントシークレットをこのフォームにコピーし、保存してから、Connect をクリックします。"
+      ]
+    },
+    "xero": {
+      "blurb": "Xero アプリのクライアント ID + シークレット（developer.xero.com → My Apps）を入力し、保存してから、Connect をクリックして組織を承認してください。請求書、仕入請求書、クレジットノート、支払、仕訳、銀行取引がネイティブに移行およびミラーされます。",
+      "steps": [
+        "新しいアプリ（統合タイプ: Web app）を作成します。会社の URL はこのサイトのアドレスで構いません。",
+        "以下に表示されるリダイレクトURIを、アプリの OAuth 2.0 リダイレクト URI に追加します。",
+        "クライアント ID をコピーし、クライアントシークレットを生成して、両方をこのフォームに貼り付け、保存してから、Connect をクリックします。"
+      ]
+    }
+  }
+}

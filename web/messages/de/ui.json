@@ -1,0 +1,95 @@
+{
+  "pagination": {
+    "outOfRange": "Seite {page} liegt hinter dem Ende dieser Ergebnisse.",
+    "showing": "<strong>{from}</strong>–<strong>{to}</strong> von <strong>{total}</strong> werden angezeigt",
+    "goToLastPageAria": "Zur letzten Seite, Seite {page}",
+    "goToPage": "Zu Seite {page}",
+    "previousPageAria": "Vorherige Seite",
+    "nextPageAria": "Nächste Seite",
+    "prev": "Zurück",
+    "pageOf": "Seite {page} von {pages}"
+  },
+  "search": {
+    "placeholder": "Suchen…",
+    "clearAria": "Suche löschen"
+  },
+  "confirm": {
+    "defaultTitle": "Bestätigen"
+  },
+  "fieldHelp": {
+    "open": "Dieses Feld erklären",
+    "generic": "Legt den Wert für {field} in diesem Datensatz oder Vorgang fest."
+  },
+  "select": {
+    "placeholder": "Auswählen…",
+    "searchPlaceholder": "Suchen…",
+    "noMatches": "Keine Treffer",
+    "searching": "Wird gesucht…"
+  },
+  "sparkline": {
+    "noTrend": "Keine Trenddaten",
+    "trend": "Trend: {count} Punkte von {first} bis {last}"
+  },
+  "attachments": {
+    "tooLarge": "{name} überschreitet das Limit von 25 MB",
+    "attached": "{name} angehängt",
+    "attachFailed": "{name} konnte nicht angehängt werden",
+    "removed": "{name} entfernt",
+    "removeFailed": "Anhang konnte nicht entfernt werden",
+    "loadFailed": "Anhänge konnten nicht geladen werden",
+    "empty": "Noch keine Dateien angehängt.",
+    "noMatches": "Keine Anhänge entsprechen diesen Filtern.",
+    "fileCount": "{count, plural, one {# Datei} other {# Dateien}}",
+    "addFiles": "Dateien hinzufügen",
+    "searchPlaceholder": "Anhänge durchsuchen…",
+    "typeFilter": "Typ",
+    "types": { "pdf": "PDF", "image": "Bild", "other": "Andere" },
+    "downloadAria": "{name} herunterladen",
+    "openAria": "{name} in einem neuen Tab öffnen",
+    "removeAria": "{name} entfernen",
+    "expandPreviewAria": "Vorschau auf den gesamten Flyout vergrößern",
+    "restorePreviewAria": "Anhangsliste wiederherstellen",
+    "previewTitle": "Vorschau von {name}",
+    "previewEmptyTitle": "Anhang auswählen",
+    "previewEmptyDescription": "PDFs und Bilder werden hier geöffnet, ohne die Transaktion zu verlassen.",
+    "previewUnavailable": "Dieser Dateityp kann heruntergeladen, aber hier nicht angezeigt werden.",
+    "uploading": "{count, plural, one {# Datei wird hochgeladen…} other {# Dateien werden hochgeladen…}}",
+    "dropShort": "Dateien hier ablegen oder durchsuchen",
+    "dropFiles": "Dateien hier ablegen oder <browse>durchsuchen</browse>",
+    "acceptHint": "PDF, Bilder, CSV, XLSX, DOCX, TXT · bis zu 25 MB"
+  },
+  "recordFields": {
+    "inactiveSelected": "(aktuell ausgewählt — inaktiv)",
+    "ratingAria": "Bewertung von {max}",
+    "ratingValueAria": "{value} von {max}",
+    "loadAccountsFailed": "Konten konnten nicht geladen werden — neu laden, um es erneut zu versuchen.",
+    "loadPartiesFailed": "Parteien konnten nicht geladen werden — neu laden, um es erneut zu versuchen.",
+    "selectAccount": "Konto auswählen…",
+    "selectParty": "Partei auswählen…",
+    "noFields": "Keine Felder anzuzeigen — der Datensatztyp hat keine sichtbaren Felder.",
+    "lineItems": "Positionen",
+    "rowCount": "{count, plural, one {# Zeile} other {# Zeilen}}",
+    "noRows": "Noch keine Zeilen.",
+    "rowActions": "Zeilenaktionen",
+    "removeRow": "Zeile entfernen",
+    "addRow": "Zeile hinzufügen",
+    "maxRowsReached": "Maximum von {count} Zeilen erreicht."
+  },
+  "lineGrid": {
+    "addLine": "Zeile hinzufügen",
+    "keyboardHint": "Eingabe fügt hinzu/bewegt nach unten · Alt+↑/↓ ordnet um · ⌘D dupliziert · ⌘⌫ entfernt",
+    "lineActionsAria": "Aktionen für Zeile {number}",
+    "insertAbove": "Oberhalb einfügen",
+    "insertBelow": "Unterhalb einfügen",
+    "removeLine": "Zeile entfernen",
+    "clearLine": "Zeile leeren",
+    "tax": {
+      "overriddenAria": "Steuer überschrieben",
+      "overriddenTitle": "Steuer manuell überschrieben — weicht vom berechneten Satz ab",
+      "overriddenShortTitle": "Steuer manuell überschrieben",
+      "computedOverriddenTitle": "Berechnet {amount} · überschrieben",
+      "resetAria": "Steuer auf berechneten Wert zurücksetzen",
+      "resetTitle": "Auf berechnete {amount} zurücksetzen"
+    }
+  }
+}

@@ -1,0 +1,142 @@
+{
+  "list": {
+    "title": "应付账单",
+    "description": "应付账单与贷记通知单——即您的应付账款：草稿 → 审批 → 经内核过账。",
+    "searchPlaceholder": "搜索账单、贷记、供应商、参考…",
+    "columns": {
+      "number": "编号",
+      "bill": "账单",
+      "ref": "参考"
+    },
+    "empty": {
+      "title": "尚无账单",
+      "description": "录入第一张应付账单或贷记通知单，开始应付流程。"
+    }
+  },
+  "kinds": {
+    "bill": "账单",
+    "credit": "贷记"
+  },
+  "actions": {
+    "new": "新建",
+    "newBill": "新建账单",
+    "newCredit": "新建供应商贷记",
+    "capture": "采集账单",
+    "submitForApproval": "提交审批"
+  },
+  "drawer": {
+    "editingHint": "编辑中——保存以应用更改",
+    "viewGlImpact": "查看总账影响",
+    "dateLabel": "账单日期",
+    "dueDate": "到期日",
+    "reference": "供应商参考号",
+    "accountColumn": "科目",
+    "accountPlaceholder": "科目…",
+    "noTax": "无税",
+    "taxAmountColumn": "税额",
+    "selectVendorPlaceholder": "选择供应商…",
+    "selectCustomerPlaceholder": "选择客户…",
+    "subtotalAmount": "小计 {amount}",
+    "taxTotalAmount": "税 {amount}",
+    "totalAmount": "合计 {amount}",
+    "balanceDueAmount": "应付余额 {amount}",
+    "saveState": {
+      "saved": "已保存所有更改",
+      "error": "保存失败——请修正后重试",
+      "dirty": "有未保存的更改…"
+    },
+    "deleteTitle": "删除此单据？",
+    "deleteDraftBody": "此操作将永久删除该草稿，且无法撤销。",
+    "deletePostedBody": "此操作将永久删除该单据并撤销其账务影响，且无法撤销。",
+    "formLabel": "表单",
+    "formDefault": "默认表单",
+    "formSetPreferred": "设为我的首选",
+    "formSetPreferredDone": "首选表单已保存",
+    "formPreferredCleared": "已清除首选表单",
+    "formPreferredFailed": "无法保存首选表单"
+  },
+  "capture": {
+    "title": "账单采集",
+    "description": "批量上传发票，在源文件旁审阅提取的凭据，并创建受控的应付草稿。",
+    "backToBills": "账单",
+    "upload": "上传文档",
+    "uploading": "上传中…",
+    "uploadComplete": "{count, plural, one {已排队 # 份文档} other {已排队 # 份文档}}。",
+    "uploadFailed": "无法上传这些文档。",
+    "notConfigured": "文档采集未运行，因为它已被禁用或缺少组织提供方配置。",
+    "configure": "请在管理中心 → AI 中进行配置。",
+    "search": "搜索文件、供应商、发票号…",
+    "status": {
+      "queued": "已排队", "extracting": "提取中", "needs_review": "需审阅", "ready": "就绪",
+      "duplicate": "可能重复", "failed": "失败", "materialized": "已创建草稿", "rejected": "已拒绝"
+    },
+    "emptyTitle": "无已采集文档",
+    "emptyDescription": "上传 PDF、JPEG、PNG 或 TIFF 格式的供应商文档以开始。",
+    "selected": "{count, plural, =0 {未选择} one {已选 #} other {已选 #}}",
+    "select": "选择",
+    "selectDocument": "选择 {name}",
+    "reprocess": "重新处理",
+    "reject": "拒绝",
+    "createDraft": "创建草稿",
+    "createDrafts": "创建草稿",
+    "bulkComplete": "批量操作完成：{succeeded} 成功，{failed} 失败。",
+    "actionFailed": "采集操作失败。",
+    "rejected": "文档已拒绝。",
+    "reprocessQueued": "文档已排队等待重新处理。",
+    "draftCreated": "应付草稿已创建。",
+    "openDraft": "打开应付草稿",
+    "bill": "应付账单",
+    "credit": "供应商贷记",
+    "columns": { "document": "文档", "vendor": "供应商", "invoice": "发票号", "date": "发票日期", "total": "合计", "status": "状态", "received": "收到" },
+    "saving": "正在保存修正…",
+    "unsaved": "有未保存的修正",
+    "saved": "已保存所有修正",
+    "saveFailed": "无法保存修正。",
+    "processing": "正在提取文档凭据…",
+    "processingFailed": "文档提取失败。请检查组织提供方配置，然后重新处理该文档。",
+    "sourcePreview": "源文档预览",
+    "sourcePreviewAlt": "源文档 {name}",
+    "confidencePercent": "{percent}%",
+    "highlightEvidence": "在源文档中高亮此凭据",
+    "fields": {
+      "kind": "文档类型", "vendor": "供应商", "vendorPlaceholder": "选择供应商…",
+      "invoiceNumber": "发票号", "invoiceDate": "发票日期", "dueDate": "到期日", "currency": "币种",
+      "purchaseOrder": "采购订单", "purchaseOrderPlaceholder": "选择采购订单…", "memo": "备注",
+      "subtotal": "小计", "taxTotal": "税", "total": "合计"
+    },
+    "lines": {
+      "title": "提取的行", "add": "添加行", "description": "描述", "account": "科目",
+      "accountPlaceholder": "选择科目…", "quantity": "数量", "unitPrice": "单价", "amount": "金额", "tax": "税",
+      "remove": "移除第 {line} 行"
+    },
+    "issues": {
+      "required_field": "缺少必填字段。",
+      "invalid_date": "请输入有效的 ISO 日期。",
+      "invalid_currency": "请输入有效的三位字母币种代码。",
+      "amount_out_of_range": "金额超出支持的会计范围。",
+      "missing_lines": "请至少添加一行发票明细。",
+      "missing_line_description": "第 {line} 行没有描述或产品代码。",
+      "line_math_mismatch": "第 {line} 行不等于数量 × 单价（应为 {expected}，实为 {actual}）。",
+      "low_confidence": "第 {line} 行低于置信度阈值。",
+      "document_low_confidence": "该文档低于审阅置信度阈值。",
+      "subtotal_mismatch": "行小计为 {expected}，但文档显示为 {actual}。",
+      "line_tax_mismatch": "行税额合计为 {expected}，但文档显示为 {actual}。",
+      "total_mismatch": "小计加税为 {expected}，但文档显示为 {actual}。",
+      "vendor_unresolved": "请选择供应商。",
+      "purchase_order_unresolved": "无法唯一确定采购订单。",
+      "account_unresolved": "请为第 {line} 行选择科目。",
+      "po_line_unmatched": "第 {line} 行无法唯一匹配到采购订单。",
+      "po_quantity_exceeded": "第 {line} 行超出采购订单未开票数量（{expected}）。",
+      "receipt_quantity_shortfall": "第 {line} 行超出已收货、未开票数量（{expected}）；请先收货。",
+      "possible_duplicate": "已有采集或应付单据使用了此文件或供应商发票号。"
+    }
+  },
+  "toasts": {
+    "actionFailed": "操作失败",
+    "submitted": "已提交审批",
+    "posted": "已过账至总账",
+    "createDraftFailed": "无法创建草稿",
+    "deleted": "单据已删除",
+    "deleteFailed": "删除失败"
+  }
+}

@@ -1,0 +1,142 @@
+{
+  "list": {
+    "title": "Eingangsrechnungen",
+    "description": "Eingangsrechnungen und Gutschriften — Ihre Kreditorenbuchhaltung: Entwurf → Genehmigung → über den Kernel gebucht.",
+    "searchPlaceholder": "Rechnungen, Gutschriften, Lieferanten, Referenzen suchen…",
+    "columns": {
+      "number": "Nummer",
+      "bill": "Eingangsrechnung",
+      "ref": "Referenz"
+    },
+    "empty": {
+      "title": "Noch keine Eingangsrechnungen",
+      "description": "Erfassen Sie die erste Eingangsrechnung oder Gutschrift, um den Kreditoren-Workflow zu starten."
+    }
+  },
+  "kinds": {
+    "bill": "Eingangsrechnung",
+    "credit": "Gutschrift"
+  },
+  "actions": {
+    "new": "Neu",
+    "newBill": "Neue Eingangsrechnung",
+    "newCredit": "Neue Lieferantengutschrift",
+    "capture": "Rechnungen erfassen",
+    "submitForApproval": "Zur Genehmigung einreichen"
+  },
+  "drawer": {
+    "editingHint": "Bearbeitung — Zum Übernehmen der Änderungen speichern",
+    "viewGlImpact": "Hauptbuch-Auswirkung anzeigen",
+    "dateLabel": "Rechnungsdatum",
+    "dueDate": "Fälligkeitsdatum",
+    "reference": "Lieferanten-Ref.-Nr.",
+    "accountColumn": "Konto",
+    "accountPlaceholder": "Konto…",
+    "noTax": "Keine Steuer",
+    "taxAmountColumn": "Steuerbetrag",
+    "selectVendorPlaceholder": "Lieferant auswählen…",
+    "selectCustomerPlaceholder": "Kunde auswählen…",
+    "subtotalAmount": "Zwischensumme {amount}",
+    "taxTotalAmount": "Steuer {amount}",
+    "totalAmount": "Gesamt {amount}",
+    "balanceDueAmount": "Offener Betrag {amount}",
+    "saveState": {
+      "saved": "Alle Änderungen gespeichert",
+      "error": "Speichern fehlgeschlagen — korrigieren und erneut versuchen",
+      "dirty": "Nicht gespeicherte Änderungen…"
+    },
+    "deleteTitle": "Dieses Dokument löschen?",
+    "deleteDraftBody": "Dadurch wird der Entwurf endgültig gelöscht. Dies kann nicht rückgängig gemacht werden.",
+    "deletePostedBody": "Dadurch wird das Dokument endgültig gelöscht und seine Auswirkung auf das Hauptbuch entfernt. Dies kann nicht rückgängig gemacht werden.",
+    "formLabel": "Formular",
+    "formDefault": "Standardformular",
+    "formSetPreferred": "Als bevorzugt festlegen",
+    "formSetPreferredDone": "Bevorzugtes Formular gespeichert",
+    "formPreferredCleared": "Bevorzugtes Formular zurückgesetzt",
+    "formPreferredFailed": "Bevorzugtes Formular konnte nicht gespeichert werden"
+  },
+  "capture": {
+    "title": "Rechnungserfassung",
+    "description": "Laden Sie Rechnungen in Stapeln hoch, prüfen Sie die extrahierten Belege neben der Quelle und erstellen Sie kontrollierte Kreditoren-Entwürfe.",
+    "backToBills": "Eingangsrechnungen",
+    "upload": "Dokumente hochladen",
+    "uploading": "Wird hochgeladen…",
+    "uploadComplete": "{count, plural, one {# Dokument in Warteschlange} other {# Dokumente in Warteschlange}}.",
+    "uploadFailed": "Die Dokumente konnten nicht hochgeladen werden.",
+    "notConfigured": "Die Dokumentenerfassung ist nicht funktionsfähig, da sie deaktiviert ist oder die Anbieterkonfiguration der Organisation fehlt.",
+    "configure": "Konfigurieren Sie sie unter Admin-Center → KI.",
+    "search": "Dateien, Lieferanten, Rechnungsnummern suchen…",
+    "status": {
+      "queued": "In Warteschlange", "extracting": "Wird extrahiert", "needs_review": "Prüfung erforderlich", "ready": "Bereit",
+      "duplicate": "Mögliches Duplikat", "failed": "Fehlgeschlagen", "materialized": "Entwurf erstellt", "rejected": "Abgelehnt"
+    },
+    "emptyTitle": "Keine erfassten Dokumente",
+    "emptyDescription": "Laden Sie Lieferantendokumente als PDF, JPEG, PNG oder TIFF hoch, um zu beginnen.",
+    "selected": "{count, plural, =0 {Nichts ausgewählt} one {# ausgewählt} other {# ausgewählt}}",
+    "select": "Auswählen",
+    "selectDocument": "{name} auswählen",
+    "reprocess": "Erneut verarbeiten",
+    "reject": "Ablehnen",
+    "createDraft": "Entwurf erstellen",
+    "createDrafts": "Entwürfe erstellen",
+    "bulkComplete": "Massenaktion abgeschlossen: {succeeded} erfolgreich, {failed} fehlgeschlagen.",
+    "actionFailed": "Die Erfassungsaktion ist fehlgeschlagen.",
+    "rejected": "Dokument abgelehnt.",
+    "reprocessQueued": "Dokument zur erneuten Verarbeitung eingereiht.",
+    "draftCreated": "Kreditoren-Entwurf erstellt.",
+    "openDraft": "Kreditoren-Entwurf öffnen",
+    "bill": "Eingangsrechnung",
+    "credit": "Lieferantengutschrift",
+    "columns": { "document": "Dokument", "vendor": "Lieferant", "invoice": "Rechnungs-Nr.", "date": "Rechnungsdatum", "total": "Gesamt", "status": "Status", "received": "Erhalten" },
+    "saving": "Korrekturen werden gespeichert…",
+    "unsaved": "Nicht gespeicherte Korrekturen",
+    "saved": "Alle Korrekturen gespeichert",
+    "saveFailed": "Die Korrekturen konnten nicht gespeichert werden.",
+    "processing": "Dokumentenbelege werden extrahiert…",
+    "processingFailed": "Die Dokumentenextraktion ist fehlgeschlagen. Prüfen Sie die Anbieterkonfiguration der Organisation und verarbeiten Sie das Dokument erneut.",
+    "sourcePreview": "Vorschau des Quelldokuments",
+    "sourcePreviewAlt": "Quelldokument {name}",
+    "confidencePercent": "{percent} %",
+    "highlightEvidence": "Diesen Beleg im Quelldokument hervorheben",
+    "fields": {
+      "kind": "Dokumenttyp", "vendor": "Lieferant", "vendorPlaceholder": "Lieferant auswählen…",
+      "invoiceNumber": "Rechnungsnummer", "invoiceDate": "Rechnungsdatum", "dueDate": "Fälligkeitsdatum", "currency": "Währung",
+      "purchaseOrder": "Bestellung", "purchaseOrderPlaceholder": "Bestellung auswählen…", "memo": "Notiz",
+      "subtotal": "Zwischensumme", "taxTotal": "Steuer", "total": "Gesamt"
+    },
+    "lines": {
+      "title": "Extrahierte Zeilen", "add": "Zeile hinzufügen", "description": "Beschreibung", "account": "Konto",
+      "accountPlaceholder": "Konto auswählen…", "quantity": "Menge", "unitPrice": "Einzelpreis", "amount": "Betrag", "tax": "Steuer",
+      "remove": "Zeile {line} entfernen"
+    },
+    "issues": {
+      "required_field": "Ein Pflichtfeld fehlt.",
+      "invalid_date": "Geben Sie ein gültiges ISO-Datum ein.",
+      "invalid_currency": "Geben Sie einen gültigen dreistelligen Währungscode ein.",
+      "amount_out_of_range": "Der Betrag liegt außerhalb des unterstützten Buchhaltungsbereichs.",
+      "missing_lines": "Fügen Sie mindestens eine Rechnungszeile hinzu.",
+      "missing_line_description": "Zeile {line} hat keine Beschreibung oder Produktcode.",
+      "line_math_mismatch": "Zeile {line} entspricht nicht Menge × Einzelpreis (erwartet {expected}, gefunden {actual}).",
+      "low_confidence": "Zeile {line} liegt unter dem Konfidenzschwellenwert.",
+      "document_low_confidence": "Das Dokument liegt unter dem Konfidenzschwellenwert für die Prüfung.",
+      "subtotal_mismatch": "Die Zeilenzwischensumme beträgt {expected}, aber das Dokument gibt {actual} an.",
+      "line_tax_mismatch": "Die Zeilensteuer beträgt insgesamt {expected}, aber das Dokument gibt {actual} an.",
+      "total_mismatch": "Zwischensumme plus Steuer ergibt {expected}, aber das Dokument gibt {actual} an.",
+      "vendor_unresolved": "Wählen Sie den Lieferanten aus.",
+      "purchase_order_unresolved": "Die Bestellung konnte nicht eindeutig aufgelöst werden.",
+      "account_unresolved": "Wählen Sie ein Konto für Zeile {line} aus.",
+      "po_line_unmatched": "Zeile {line} konnte nicht eindeutig der Bestellung zugeordnet werden.",
+      "po_quantity_exceeded": "Zeile {line} überschreitet die nicht abgerechnete Bestellmenge ({expected}).",
+      "receipt_quantity_shortfall": "Zeile {line} überschreitet die erhaltene, nicht abgerechnete Menge ({expected}); erfassen Sie zuerst den Wareneingang.",
+      "possible_duplicate": "Ein Erfassungs- oder Kreditorendokument hat bereits diese Datei oder Lieferantenrechnungsnummer."
+    }
+  },
+  "toasts": {
+    "actionFailed": "Aktion fehlgeschlagen",
+    "submitted": "Zur Genehmigung eingereicht",
+    "posted": "Ins Hauptbuch gebucht",
+    "createDraftFailed": "Entwurf konnte nicht erstellt werden",
+    "deleted": "Dokument gelöscht",
+    "deleteFailed": "Löschen fehlgeschlagen"
+  }
+}

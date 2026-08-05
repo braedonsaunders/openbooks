@@ -1,0 +1,273 @@
+{
+  "stages": { "lead": "线索", "prospect": "潜在客户", "customer": "客户" },
+  "fields": {
+    "accountName": "客户名称",
+    "lifecycleStage": "生命周期阶段",
+    "status": "状态",
+    "owner": "负责人",
+    "territory": "区域",
+    "leadSource": "线索来源",
+    "phone": "电话",
+    "website": "网站",
+    "industry": "行业",
+    "category": "类别",
+    "annualRevenue": "年收入",
+    "employeeCount": "员工人数",
+    "qualificationScore": "资格评分",
+    "nextAction": "下一步行动",
+    "lastActivity": "最近活动",
+    "unassigned": "未分配",
+    "activityType": "活动类型",
+    "subject": "主题",
+    "priority": "优先级",
+    "assignedTo": "分配给",
+    "start": "开始",
+    "end": "结束",
+    "due": "截止",
+    "date": "日期",
+    "relatedType": "关联记录类型",
+    "relatedRecord": "关联记录",
+    "notes": "备注",
+    "title": "标题",
+    "account": "客户",
+    "customer": "客户",
+    "primaryContact": "主要联系人",
+    "salesTeam": "销售团队",
+    "probability": "赢单概率",
+    "forecastCategory": "预测类别",
+    "expectedClose": "预计成交日期",
+    "currency": "币种",
+    "nextStep": "下一步",
+    "item": "产品或服务",
+    "description": "说明",
+    "quantity": "数量",
+    "unitPrice": "单价",
+    "winLossReason": "赢单/丢单原因",
+    "number": "编号",
+    "projectedAmount": "预测金额",
+    "periodStart": "期间开始",
+    "periodEnd": "期间结束"
+  },
+  "accounts": {
+    "newFallback": "新建客户",
+    "search": "按名称、邮箱或电话搜索",
+    "activities": "最近活动",
+    "opportunities": "商机",
+    "noActivities": "尚未记录任何活动。",
+    "noOpportunities": "未关联任何商机。",
+    "lead": {
+      "title": "线索",
+      "description": "采集、鉴定、分配并分派新的客户关系。",
+      "new": "新建线索",
+      "emptyTitle": "无线索",
+      "emptyDescription": "创建线索以开始资格鉴定。"
+    },
+    "prospect": {
+      "title": "潜在客户",
+      "description": "将已鉴定的客户关系培育为收入。",
+      "new": "新建潜在客户",
+      "emptyTitle": "无潜在客户",
+      "emptyDescription": "已鉴定的线索和商机客户将显示在此处。"
+    }
+  },
+  "activities": {
+    "title": "活动",
+    "description": "涵盖所有客户关系的通话、拜访、事件、邮件、备注和跟进任务。",
+    "new": "新建活动",
+    "newFallback": "新建活动",
+    "search": "搜索活动主题和备注",
+    "emptyTitle": "无活动",
+    "emptyDescription": "记录一次通话、拜访、备注、邮件、事件或任务。"
+  },
+  "activityKinds": {
+    "task": "任务",
+    "call": "通话",
+    "event": "拜访或事件",
+    "email": "邮件",
+    "note": "备注"
+  },
+  "activityStatuses": {
+    "planned": "已计划",
+    "in_progress": "进行中",
+    "completed": "已完成",
+    "cancelled": "已取消"
+  },
+  "priorities": {
+    "low": "低",
+    "normal": "普通",
+    "high": "高",
+    "urgent": "紧急"
+  },
+  "relatedTypes": { "account": "客户", "opportunity": "商机" },
+  "opportunities": {
+    "title": "商机",
+    "description": "管理销售管道阶段、收入区间、团队、产品和销售单据。",
+    "new": "新建商机",
+    "newFallback": "新建商机",
+    "search": "搜索商机、编号和客户",
+    "emptyTitle": "无商机",
+    "emptyDescription": "创建商机以开始搭建销售管道。",
+    "lines": "产品和服务",
+    "addLine": "添加明细行",
+    "selectItem": "选择项目",
+    "createEstimate": "创建报价单",
+    "estimateCreated": "报价单已创建",
+    "estimateFailed": "无法创建报价单。"
+  },
+  "forecastCategories": {
+    "omitted": "已排除",
+    "worst_case": "最坏情况",
+    "most_likely": "最可能",
+    "upside": "乐观情况"
+  },
+  "forecasts": {
+    "title": "预测与配额",
+    "description": "对比销售管道、按概率加权的收入、已成交销售和分配的配额。",
+    "apply": "应用",
+    "summary": "预测摘要",
+    "pipeline": "销售管道",
+    "weighted": "加权",
+    "mostLikely": "最可能",
+    "closed": "已成交",
+    "quotas": "配额",
+    "target": "目标",
+    "quota": "配额",
+    "manageQuotas": "管理配额",
+    "history": "快照历史",
+    "asOf": "截至",
+    "snapshotType": "类型",
+    "override": "调整值",
+    "snapshotCount": "本期间{count, plural, =0 {无快照} one {有 # 个快照} other {有 # 个快照}}。",
+    "snapshotKinds": {
+      "calculated": "计算值",
+      "rep_override": "销售代表调整",
+      "manager_override": "经理调整"
+    },
+    "emptyForecastTitle": "此期间没有预测",
+    "emptyForecastDescription": "所选期间的未结商机和已过账销售将显示在此处。",
+    "emptyQuotaTitle": "此期间没有配额",
+    "emptyQuotaDescription": "为销售代表或团队分配配额，以跟踪相对于目标的业绩。",
+    "emptyHistoryTitle": "没有已保存的快照",
+    "emptyHistoryDescription": "保存快照，以保留此期间的预测供日后比较。",
+    "saveSnapshot": "保存快照",
+    "savingSnapshot": "保存中…",
+    "snapshotCreated": "预测快照已保存",
+    "snapshotFailed": "无法保存预测快照。"
+  },
+  "setup": {
+    "title": "CRM",
+    "description": "配置生命周期状态、商机阶段、线索来源、区域、销售团队和配额。",
+    "sequence": "序号",
+    "priority": "优先级",
+    "defaultOwner": "默认负责人",
+    "manager": "经理",
+    "empty": "无匹配的配置记录。",
+    "openRecord": "打开 {name}",
+    "percent": "{value}%",
+    "memberCount": "{count, plural, one {# 名成员} other {# 名成员}}",
+    "created": "CRM 配置记录已创建",
+    "updated": "CRM 配置记录已更新",
+    "new": {
+      "accountStatuses": "新建客户状态",
+      "opportunityStatuses": "新建商机阶段",
+      "sources": "新建线索来源",
+      "territories": "新建区域",
+      "teams": "新建销售团队",
+      "quotas": "新建配额"
+    },
+    "search": {
+      "accountStatuses": "搜索客户状态",
+      "opportunityStatuses": "搜索商机阶段",
+      "sources": "搜索线索来源",
+      "territories": "搜索区域",
+      "teams": "搜索销售团队",
+      "quotas": "搜索配额"
+    },
+    "drawer": {
+      "new": {
+        "accountStatuses": "新建客户状态",
+        "opportunityStatuses": "新建商机阶段",
+        "sources": "新建线索来源",
+        "territories": "新建区域",
+        "teams": "新建销售团队",
+        "quotas": "新建配额"
+      },
+      "edit": {
+        "accountStatuses": "编辑客户状态",
+        "opportunityStatuses": "编辑商机阶段",
+        "sources": "编辑线索来源",
+        "territories": "编辑区域",
+        "teams": "编辑销售团队",
+        "quotas": "编辑配额"
+      },
+      "description": {
+        "accountStatuses": "控制客户关系生命周期分类和资格鉴定行为。",
+        "opportunityStatuses": "控制销售管道概率、预测处理和成交行为。",
+        "sources": "维护 CRM 中通用的标准化获客来源。",
+        "territories": "配置归属和确定性分派规则。",
+        "teams": "为该销售团队指定经理和在职成员。",
+        "quotas": "为一名销售代表或团队设定期间目标。"
+      }
+    },
+    "fields": {
+      "name": "名称",
+      "matchMode": "规则匹配",
+      "rules": "分派规则",
+      "rulesHint": "可选。每条规则将某个字段与某个值进行匹配，以将线索分派至此。字段：region、country、annualRevenue。运算符：equals、contains、in、gte、lte。",
+      "rulesPlaceholder": "[{ \"field\": \"region\", \"operator\": \"equals\", \"value\": \"West\" }]",
+      "members": "团队成员",
+      "targetType": "目标类型",
+      "isQualified": "已鉴定状态",
+      "isClosed": "已成交状态",
+      "isWon": "赢单状态",
+      "isDefault": "默认",
+      "isActive": "启用"
+    },
+    "states": {
+      "active": "启用",
+      "inactive": "停用",
+      "yes": "是",
+      "no": "否"
+    },
+    "matchModes": { "all": "匹配所有规则", "any": "匹配任一规则" },
+    "targetTypes": { "user": "销售代表", "team": "销售团队" },
+    "validation": {
+      "nameRequired": "请输入名称。",
+      "invalidRules": "分派规则必须是有效的 JSON 数组。"
+    },
+    "tabs": {
+      "accountStatuses": "客户状态",
+      "opportunityStatuses": "商机阶段",
+      "sources": "线索来源",
+      "territories": "区域",
+      "teams": "销售团队",
+      "quotas": "配额"
+    },
+    "columns": {
+      "name": "名称",
+      "lifecycle_stage": "生命周期阶段",
+      "sequence": "序号",
+      "probability": "赢单概率",
+      "default_forecast_category": "预测类别",
+      "description": "说明",
+      "priority": "优先级",
+      "owner_name": "负责人",
+      "manager_name": "经理",
+      "period_start": "期间开始",
+      "period_end": "期间结束",
+      "amount": "金额",
+      "is_qualified": "已鉴定",
+      "is_closed": "已成交",
+      "is_active": "状态",
+      "member_count": "成员",
+      "target_name": "目标",
+      "currency": "币种"
+    }
+  },
+  "validation": {
+    "nameRequired": "请输入客户名称。",
+    "subjectRequired": "请输入活动主题。",
+    "titleRequired": "请输入商机标题。"
+  },
+  "feedback": { "createFailed": "无法创建草稿。" }
+}

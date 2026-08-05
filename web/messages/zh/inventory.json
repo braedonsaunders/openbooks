@@ -1,0 +1,78 @@
+{
+  "list": {
+    "title": "库存",
+    "description": "在库估值与库存变动 — 采用先进先出、移动平均或标准成本核算。",
+    "searchPlaceholder": "搜索物料或库位…",
+    "emptyTitle": "暂无库存",
+    "emptyDescription": "先在设置中配置物料的成本核算方案，再入库。",
+    "newButton": "新建变动",
+    "view": "查看"
+  },
+  "view": {
+    "onhand": "在库",
+    "movements": "变动"
+  },
+  "labels": {
+    "item": "物料",
+    "location": "库位",
+    "quantity": "数量",
+    "avgCost": "平均成本",
+    "value": "价值",
+    "date": "日期",
+    "kind": "类型",
+    "unitCost": "单位成本"
+  },
+  "kind": {
+    "receipt": "入库",
+    "issue": "出库",
+    "transfer_out": "调出",
+    "transfer_in": "调入",
+    "adjustment": "调整",
+    "count": "盘点",
+    "assembly_build": "组装生产",
+    "assembly_consume": "组装领用",
+    "return": "退回"
+  },
+  "drawer": {
+    "title": "库存变动",
+    "post": "过账",
+    "action": "操作",
+    "actions": {
+      "receive": "入库",
+      "issue": "出库",
+      "adjust": "调整",
+      "transfer": "调拨",
+      "build": "组装生产",
+      "landed": "到岸成本"
+    },
+    "hint": {
+      "receive": "按成本入库（借 库存 / 贷 对方科目）。",
+      "issue": "出库结转销售成本（借 销售成本 / 贷 库存）。",
+      "adjust": "针对调整科目修正在库数量。",
+      "transfer": "按结转成本在两个库位之间调拨库存。",
+      "build": "按物料清单领用组件，并按成本产出成品。",
+      "landed": "将运费/关税资本化计入物料的在库成本层。"
+    },
+    "selectItem": "选择物料",
+    "selectLocation": "选择库位",
+    "selectAccount": "选择科目",
+    "quantityDelta": "数量（+/-）",
+    "offsetAccount": "对方科目",
+    "offsetHint": "入库时贷记的科目（清算、已收货未开票或期初余额）。",
+    "memoPlaceholder": "可选备注",
+    "missingFields": "物料、库位和数量为必填项",
+    "failed": "变动失败",
+    "posted": "已过账变动（{value}）",
+    "fromLocation": "调出库位",
+    "toLocation": "调入库位",
+    "assemblyItem": "组装物料",
+    "amount": "金额",
+    "freightAccount": "运费 / 关税科目",
+    "freightHint": "运费当前所在的科目；它将结转至库存。",
+    "basis": "分摊依据",
+    "bases": {
+      "value": "按价值",
+      "quantity": "按数量"
+    }
+  }
+}

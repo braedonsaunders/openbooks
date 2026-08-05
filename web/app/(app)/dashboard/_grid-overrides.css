@@ -1,0 +1,50 @@
+/* Tweaks to the react-grid-layout defaults so it blends with our card system. */
+
+.react-grid-item {
+  transition:
+    transform 200ms cubic-bezier(0.22, 1, 0.36, 1),
+    width 200ms cubic-bezier(0.22, 1, 0.36, 1),
+    height 200ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.react-grid-item.react-grid-placeholder {
+  background: rgb(13 148 136 / 0.12);
+  border: 1.5px dashed rgb(13 148 136 / 0.55);
+  border-radius: 0.75rem;
+  opacity: 1;
+  transition-duration: 100ms;
+  z-index: 2;
+  user-select: none;
+}
+
+.react-grid-item > .react-resizable-handle {
+  bottom: 4px;
+  right: 4px;
+  width: 18px;
+  height: 18px;
+  padding: 0;
+  cursor: se-resize;
+}
+
+.react-grid-item > .react-resizable-handle::after {
+  border-right-color: rgb(148 163 184);
+  border-bottom-color: rgb(148 163 184);
+  border-right-width: 2px;
+  border-bottom-width: 2px;
+  right: 4px;
+  bottom: 4px;
+  width: 8px;
+  height: 8px;
+}
+
+.react-grid-item:hover > .react-resizable-handle::after {
+  border-right-color: rgb(20 184 166);
+  border-bottom-color: rgb(20 184 166);
+}
+
+/* react-grid-layout adds inline `transform: translate(x,y)` — ensure child
+   takes the full computed size so our flex-h-full cards stretch. */
+.react-grid-item > * {
+  height: 100%;
+  width: 100%;
+}

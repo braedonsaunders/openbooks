@@ -1,0 +1,142 @@
+{
+  "list": {
+    "title": "仕入請求書",
+    "description": "仕入請求書とクレジットメモ — 買掛金です: 下書き → 承認 → カーネルを通じて記帳されます。",
+    "searchPlaceholder": "仕入請求書、クレジット、仕入先、参照を検索…",
+    "columns": {
+      "number": "番号",
+      "bill": "仕入請求書",
+      "ref": "参照"
+    },
+    "empty": {
+      "title": "仕入請求書はまだありません",
+      "description": "最初の仕入請求書またはクレジットメモを入力して、APワークフローを開始してください。"
+    }
+  },
+  "kinds": {
+    "bill": "仕入請求書",
+    "credit": "クレジット"
+  },
+  "actions": {
+    "new": "新規",
+    "newBill": "新規仕入請求書",
+    "newCredit": "新規仕入先クレジット",
+    "capture": "仕入請求書を取込",
+    "submitForApproval": "承認申請"
+  },
+  "drawer": {
+    "editingHint": "編集中 — 保存して変更を適用します",
+    "viewGlImpact": "GL への影響を表示",
+    "dateLabel": "請求日",
+    "dueDate": "支払期日",
+    "reference": "仕入先参照番号",
+    "accountColumn": "勘定",
+    "accountPlaceholder": "勘定…",
+    "noTax": "税なし",
+    "taxAmountColumn": "税額",
+    "selectVendorPlaceholder": "仕入先を選択…",
+    "selectCustomerPlaceholder": "得意先を選択…",
+    "subtotalAmount": "小計 {amount}",
+    "taxTotalAmount": "税 {amount}",
+    "totalAmount": "合計 {amount}",
+    "balanceDueAmount": "支払残高 {amount}",
+    "saveState": {
+      "saved": "すべての変更が保存されました",
+      "error": "保存に失敗しました — 修正して再試行してください",
+      "dirty": "未保存の変更…"
+    },
+    "deleteTitle": "このドキュメントを削除しますか？",
+    "deleteDraftBody": "これにより下書きが完全に削除されます。この操作は元に戻せません。",
+    "deletePostedBody": "これによりドキュメントが完全に削除され、その元帳への影響も除去されます。この操作は元に戻せません。",
+    "formLabel": "フォーム",
+    "formDefault": "既定フォーム",
+    "formSetPreferred": "自分の優先に設定",
+    "formSetPreferredDone": "優先フォームを保存しました",
+    "formPreferredCleared": "優先フォームをクリアしました",
+    "formPreferredFailed": "優先フォームを保存できませんでした"
+  },
+  "capture": {
+    "title": "仕入請求書の取込",
+    "description": "請求書をバッチでアップロードし、抽出された証跡を元資料と並べて確認し、管理されたAP下書きを作成します。",
+    "backToBills": "仕入請求書",
+    "upload": "ドキュメントをアップロード",
+    "uploading": "アップロード中…",
+    "uploadComplete": "{count, plural, one {# 件のドキュメントをキューに追加しました} other {# 件のドキュメントをキューに追加しました}}。",
+    "uploadFailed": "ドキュメントをアップロードできませんでした。",
+    "notConfigured": "ドキュメント取込は、無効になっているか組織のプロバイダー設定が欠落しているため、動作していません。",
+    "configure": "管理センター → AI で設定してください。",
+    "search": "ファイル、仕入先、請求書番号を検索…",
+    "status": {
+      "queued": "キュー待ち", "extracting": "抽出中", "needs_review": "確認が必要", "ready": "準備完了",
+      "duplicate": "重複の可能性", "failed": "失敗", "materialized": "下書きを作成しました", "rejected": "却下済み"
+    },
+    "emptyTitle": "取込されたドキュメントはありません",
+    "emptyDescription": "PDF、JPEG、PNG、または TIFF の仕入先ドキュメントをアップロードして開始してください。",
+    "selected": "{count, plural, =0 {未選択} one {# 件選択} other {# 件選択}}",
+    "select": "選択",
+    "selectDocument": "{name} を選択",
+    "reprocess": "再処理",
+    "reject": "却下",
+    "createDraft": "下書きを作成",
+    "createDrafts": "下書きを作成",
+    "bulkComplete": "一括処理が完了しました: {succeeded} 件成功、{failed} 件失敗。",
+    "actionFailed": "取込アクションに失敗しました。",
+    "rejected": "ドキュメントを却下しました。",
+    "reprocessQueued": "ドキュメントを再処理のためキューに追加しました。",
+    "draftCreated": "AP下書きを作成しました。",
+    "openDraft": "AP下書きを開く",
+    "bill": "仕入請求書",
+    "credit": "仕入先クレジット",
+    "columns": { "document": "ドキュメント", "vendor": "仕入先", "invoice": "請求書番号", "date": "請求日", "total": "合計", "status": "ステータス", "received": "受領日" },
+    "saving": "修正を保存中…",
+    "unsaved": "未保存の修正",
+    "saved": "すべての修正が保存されました",
+    "saveFailed": "修正を保存できませんでした。",
+    "processing": "ドキュメントの証跡を抽出中…",
+    "processingFailed": "ドキュメントの抽出に失敗しました。組織のプロバイダー設定を確認してから、ドキュメントを再処理してください。",
+    "sourcePreview": "元ドキュメントのプレビュー",
+    "sourcePreviewAlt": "元ドキュメント {name}",
+    "confidencePercent": "{percent}%",
+    "highlightEvidence": "元ドキュメントでこの証跡をハイライト表示",
+    "fields": {
+      "kind": "ドキュメントタイプ", "vendor": "仕入先", "vendorPlaceholder": "仕入先を選択…",
+      "invoiceNumber": "請求書番号", "invoiceDate": "請求日", "dueDate": "支払期日", "currency": "通貨",
+      "purchaseOrder": "発注書", "purchaseOrderPlaceholder": "発注書を選択…", "memo": "メモ",
+      "subtotal": "小計", "taxTotal": "税", "total": "合計"
+    },
+    "lines": {
+      "title": "抽出された明細", "add": "明細を追加", "description": "摘要", "account": "勘定",
+      "accountPlaceholder": "勘定を選択…", "quantity": "数量", "unitPrice": "単価", "amount": "金額", "tax": "税",
+      "remove": "明細 {line} を削除"
+    },
+    "issues": {
+      "required_field": "必須フィールドが欠落しています。",
+      "invalid_date": "有効な ISO 日付を入力してください。",
+      "invalid_currency": "有効な3文字の通貨コードを入力してください。",
+      "amount_out_of_range": "金額がサポートされている会計範囲を超えています。",
+      "missing_lines": "少なくとも1つの請求明細を追加してください。",
+      "missing_line_description": "明細 {line} に摘要または製品コードがありません。",
+      "line_math_mismatch": "明細 {line} は数量 × 単価と一致しません（想定 {expected}、実際 {actual}）。",
+      "low_confidence": "明細 {line} は信頼度のしきい値を下回っています。",
+      "document_low_confidence": "ドキュメントは確認用の信頼度しきい値を下回っています。",
+      "subtotal_mismatch": "明細の小計は {expected} ですが、ドキュメントには {actual} と記載されています。",
+      "line_tax_mismatch": "明細税の合計は {expected} ですが、ドキュメントには {actual} と記載されています。",
+      "total_mismatch": "小計に税を加えると {expected} ですが、ドキュメントには {actual} と記載されています。",
+      "vendor_unresolved": "仕入先を選択してください。",
+      "purchase_order_unresolved": "発注書を一意に特定できませんでした。",
+      "account_unresolved": "明細 {line} の勘定を選択してください。",
+      "po_line_unmatched": "明細 {line} を発注書に一意に照合できませんでした。",
+      "po_quantity_exceeded": "明細 {line} は未請求の発注数量 ({expected}) を超えています。",
+      "receipt_quantity_shortfall": "明細 {line} は受領済みで未請求の数量 ({expected}) を超えています。先に商品を受領してください。",
+      "possible_duplicate": "取込またはAPドキュメントに、このファイルまたは仕入先請求書番号が既に存在します。"
+    }
+  },
+  "toasts": {
+    "actionFailed": "アクションに失敗しました",
+    "submitted": "承認申請しました",
+    "posted": "元帳に記帳しました",
+    "createDraftFailed": "下書きを作成できませんでした",
+    "deleted": "ドキュメントを削除しました",
+    "deleteFailed": "削除に失敗しました"
+  }
+}

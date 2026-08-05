@@ -1,0 +1,194 @@
+{
+  "title": "Migrations & miroir",
+  "description": "Connectez un système comptable externe, migrez en un clic, puis reflétez-le quotidiennement pour exploiter les deux en parallèle (A/B).",
+  "connections": {
+    "heading": "Connexions",
+    "add": "Ajouter une connexion",
+    "loading": "Chargement…",
+    "empty": {
+      "title": "Aucune connexion pour le moment.",
+      "hint": "Ajoutez un système comptable source pour démarrer une migration."
+    },
+    "status": {
+      "active": "active",
+      "paused": "en pause",
+      "error": "erreur",
+      "unconfigured": "non configurée"
+    },
+    "mirrorBadge": "miroir : {schedule}",
+    "lastRun": "Dernière exécution : {lastRun} · Synchronisé jusqu’au : {cursor}"
+  },
+  "actions": {
+    "connect": "Connecter",
+    "reconnect": "Reconnecter",
+    "test": "Tester",
+    "mirrorNow": "Miroir maintenant",
+    "syncAttachments": "Synchroniser les pièces jointes",
+    "syncProjectFinancials": "Synchroniser les données financières des projets",
+    "preflight": "Vérifier avant synchronisation",
+    "runMigration": "Lancer la migration",
+    "pauseMirror": "Suspendre le miroir",
+    "enableMirror": "Activer le miroir",
+    "edit": "Modifier",
+    "downloadQwc": "Télécharger Web Connector"
+  },
+  "runs": {
+    "heading": "Exécutions récentes",
+    "columns": {
+      "started": "Démarrée",
+      "kind": "Type",
+      "status": "Statut",
+      "trigger": "Déclencheur",
+      "result": "Résultat"
+    },
+    "kind": {
+      "full_migration": "migration complète",
+      "incremental": "incrémentale",
+      "attachments": "pièces jointes",
+      "full_preflight": "Vérification complète",
+      "project_financials": "Données financières des projets",
+      "targeted_repair": "Réparation ciblée",
+      "mirror": "miroir"
+    },
+    "status": {
+      "ok": "ok",
+      "failed": "échec",
+      "running": "en cours"
+    },
+    "progress": {
+      "attachments": "Inventaire et importation des pièces jointes sources"
+    },
+    "stats": {
+      "attachments": "{files} fichiers sources · {links} liens de transaction · {created} nouveaux fichiers",
+      "projectFinancials": "{projects} projets source ({projectChanges} modifiés) · {source} écritures de temps source · {exact} exactes · {changed} états de facturation rapprochés",
+      "docs": "+{new} docs · {amended} modifiés · {unchanged} inchangés",
+      "applied": "{count} lettrés",
+      "tb": "BV {matches}/{accounts}",
+      "tbOff": "({count} en écart)",
+      "openItems": "postes ouverts {matches}/{checked}",
+      "periods": "périodes {matches}/{checked}",
+      "projectPeriods": "périodes projet/compte {matches}/{checked}",
+      "preflightDocs": "{source} documents source · {new} nouveaux · {amended} modifiés · {unchanged} exacts",
+      "sourceBook": "{kind} {ref}",
+      "preflightBlockers": "{count} blocages"
+    }
+  },
+  "toast": {
+    "loadFailed": "Échec du chargement des connexions (HTTP {status})",
+    "authorized": "Connexion autorisée",
+    "authDenied": "L’autorisation a été refusée",
+    "authFailed": "Échec de l’autorisation ({status})",
+    "queuingMigration": "Mise en file de la migration complète…",
+    "queuingPreflight": "Mise en file de la vérification complète en lecture seule…",
+    "queuingMirror": "Mise en file du miroir…",
+    "queuingAttachments": "Mise en file de la synchronisation des pièces jointes…",
+    "queuingProjectFinancials": "Mise en file de la synchronisation financière des projets…",
+    "migrationQueued": "Migration en file d’attente — exécutée par le worker",
+    "preflightQueued": "Vérification en file — aucune écriture comptable ni aucun document ne sera modifié",
+    "mirrorQueued": "Miroir en file d’attente — exécuté par le worker",
+    "attachmentsQueued": "Synchronisation des pièces jointes en file d’attente — exécutée en arrière-plan",
+    "projectFinancialsQueued": "Synchronisation financière des projets mise en file — aucun document, grand livre, fichier ou PDF ne sera modifié",
+    "runFailed": "Impossible de mettre l’exécution en file d’attente (HTTP {status})",
+    "runErrors": {
+      "CONNECTION_NOT_FOUND": "La connexion n’existe plus.",
+      "CONNECTION_UNCONFIGURED": "Ajoutez les identifiants avant d’exécuter cette connexion.",
+      "INVALID_MODE": "Choisissez une action de migration valide.",
+      "ATTACHMENTS_UNSUPPORTED": "Cette connexion ne prend pas en charge la migration des pièces jointes.",
+      "PROJECT_FINANCIALS_UNSUPPORTED": "Cette connexion ne fournit pas la synchronisation des données financières des projets."
+    },
+    "testing": "Test de la connexion…",
+    "connected": "Connecté",
+    "connectedDetail": "Connecté — {detail}",
+    "testFailed": "Échec de la connexion : {error}",
+    "unknownError": "erreur inconnue",
+    "removed": "Connexion supprimée",
+    "created": "Connexion créée",
+    "updated": "Connexion mise à jour",
+    "copied": "URI de redirection copiée",
+    "copyFailed": "Copie impossible — sélectionnez et copiez le texte manuellement"
+  },
+  "confirmDelete": "Supprimer la connexion « {name} » ? Les données migrées sont conservées ; seul le lien est supprimé.",
+  "drawer": {
+    "addTitle": "Ajouter une connexion",
+    "editTitle": "Modifier la connexion",
+    "description": "Connectez un système comptable externe. Les identifiants sont chiffrés au repos et ne sont jamais réaffichés.",
+    "cancel": "Annuler",
+    "saving": "Enregistrement…",
+    "saveChanges": "Enregistrer les modifications",
+    "create": "Créer la connexion",
+    "system": "Système",
+    "selectSystem": "Sélectionnez un système…",
+    "name": "Nom de la connexion",
+    "select": "Sélectionner…",
+    "credentials": "Identifiants (chiffrés au repos, jamais réaffichés)",
+    "keepCurrent": "Laisser vide pour conserver la valeur actuelle"
+  },
+  "oauth": {
+    "title": "Configuration unique de l’application dans le <link>{portal}</link>",
+    "redirectLabel": "URI de redirection à enregistrer :",
+    "copy": "Copier"
+  },
+  "netsuite": {
+    "setupTitle": "Passerelle d’extraction NetSuite",
+    "setupHint": "Installez le lot RESTlet et Map/Reduce en lecture seule, puis testez la connexion. Aucun script n’est associé aux transactions.",
+    "documentation": "Documentation"
+  },
+  "qbd": {
+    "setupTitle": "Configuration de QuickBooks Desktop",
+    "setupHint": "Après l’enregistrement, téléchargez le fichier Web Connector depuis la fiche de connexion. Importez-le sur l’ordinateur Windows exécutant QuickBooks, approuvez l’accès en lecture seule en tant qu’administrateur QuickBooks et saisissez ce mot de passe dans Web Connector.",
+    "lastContact": "Dernier contact de Web Connector : {time}",
+    "notConnected": "Web Connector ne s’est pas encore connecté",
+    "capture": "Capture {status} : {completed}/{total} requêtes",
+    "captureStatus": { "queued": "en attente", "running": "en cours", "complete": "terminée", "failed": "échouée", "cancelled": "annulée" },
+    "documentation": "Documentation",
+    "qwcDescription": "Connecteur en lecture seule pour la migration et le rapprochement comptables"
+  },
+  "sources": {
+    "netsuite": {
+      "blurb": "Installez la passerelle en lecture seule, puis connectez un rôle dédié par jeton. Transactions, lettrages, contrôles comptables et suppressions sont importés avec validation.",
+      "fields": {
+        "account": { "label": "Identifiant du compte", "help": "Le domaine du compte NetSuite." },
+        "host": { "label": "Hôte SuiteTalk" },
+        "baseCurrency": { "label": "Devise de base" },
+        "bridgeScriptId": { "label": "Identifiant du script de passerelle", "help": "Laissez vide pour utiliser customscript_openbooks_bridge_rl." },
+        "bridgeDeploymentId": { "label": "Identifiant du déploiement", "help": "Laissez vide pour utiliser customdeploy_openbooks_bridge_rl." },
+        "mappingJson": { "label": "Mappages des champs du compte", "help": "JSON facultatif reliant les champs et enregistrements personnalisés aux concepts OpenBooks." },
+        "consumerKey": { "label": "Clé consommateur" }, "consumerSecret": { "label": "Secret consommateur" },
+        "tokenKey": { "label": "Identifiant du jeton" }, "tokenSecret": { "label": "Secret du jeton" }
+      }
+    },
+    "odoo": {
+      "blurb": "Connectez-vous avec votre URL Odoo, la base de données, l’utilisateur et une clé API (Paramètres → Mon profil → Sécurité du compte → Clés API). Les factures clients et fournisseurs, les paiements et les écritures migrent et se synchronisent en miroir nativement via le véritable moteur de comptabilisation."
+    },
+    "erpnext": {
+      "blurb": "Connectez-vous avec votre URL ERPNext et une clé + un secret API (Utilisateur → Paramètres → Accès API). Les factures clients et fournisseurs, les écritures de paiement et les journaux migrent et se synchronisent en miroir nativement via le véritable moteur de comptabilisation."
+    },
+    "qbd": {
+      "blurb": "Connectez QuickBooks Desktop via Web Connector d’Intuit. QuickBooks doit être ouvert pour l’autorisation initiale et pendant les captures ; aucune règle de pare-feu Windows entrante n’est requise.",
+      "options": { "US": "États-Unis", "CA": "Canada", "UK": "Royaume-Uni", "AU": "Australie", "NZ": "Nouvelle-Zélande" },
+      "fields": {
+        "historyStartDate": { "label": "Date de début de l’historique", "help": "Première date de comptabilisation à migrer. Chaque miroir revérifie toute cette plage pour détecter les modifications et suppressions historiques." },
+        "region": { "label": "Région QuickBooks" },
+        "baseCurrency": { "label": "Devise de base" },
+        "companyFile": { "label": "Chemin du fichier société (facultatif)", "help": "Laissez vide pour utiliser la société ouverte lors de l’exécution de Web Connector." },
+        "webConnectorPassword": { "label": "Mot de passe Web Connector", "help": "Saisissez ce mot de passe une fois dans QuickBooks Web Connector après l’importation du fichier .QWC." }
+      }
+    },
+    "qbo": {
+      "blurb": "Saisissez l’ID client et le secret de votre application Intuit (developer.intuit.com → Keys & credentials), enregistrez, puis cliquez sur Connecter pour autoriser une société. Les factures clients et fournisseurs, paiements, avoirs, écritures et dépôts migrent et se synchronisent en miroir nativement.",
+      "steps": [
+        "Créez une application (QuickBooks Online and Payments) avec la portée com.intuit.quickbooks.accounting.",
+        "Sous Keys & credentials, ajoutez l’URI de redirection indiquée ci-dessous (clés Development pour une société sandbox, clés Production pour une société réelle).",
+        "Copiez l’ID client et le secret client dans ce formulaire, enregistrez, puis cliquez sur Connecter."
+      ]
+    },
+    "xero": {
+      "blurb": "Saisissez l’ID client et le secret de votre application Xero (developer.xero.com → My Apps), enregistrez, puis cliquez sur Connecter pour autoriser une organisation. Les factures clients et fournisseurs, avoirs, paiements, écritures et transactions bancaires migrent et se synchronisent en miroir nativement.",
+      "steps": [
+        "Créez une nouvelle application (type d’intégration : Web app) ; l’URL de la société peut être l’adresse de ce site.",
+        "Ajoutez l’URI de redirection indiquée ci-dessous aux URI de redirection OAuth 2.0 de l’application.",
+        "Copiez l’ID client, générez un secret client, collez les deux dans ce formulaire, enregistrez, puis cliquez sur Connecter."
+      ]
+    }
+  }
+}

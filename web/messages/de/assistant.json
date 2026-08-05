@@ -1,0 +1,70 @@
+{
+  "title": "KI-Assistent",
+  "history": "Verlauf",
+  "newChat": "Neuer Chat",
+  "deleteChat": "Unterhaltung löschen",
+  "rename": "Umbenennen",
+  "chatActions": "Unterhaltungsaktionen",
+  "openHistory": "Unterhaltungsliste öffnen",
+  "deleteConfirm": "Diese Unterhaltung löschen? Dies kann nicht rückgängig gemacht werden.",
+  "noConversations": "Noch keine Unterhaltungen.",
+  "welcomeTitle": "Wie kann ich bei der Buchhaltung helfen?",
+  "welcome": "Fragen Sie zu Ihrer Buchhaltung — Salden, Abschlüsse, Fälligkeiten, bestimmte Rechnungen oder Buchungen. Der Assistent sieht nur, was Ihre Berechtigungen zulassen.",
+  "notConfiguredTitle": "Assistent noch nicht eingerichtet",
+  "placeholder": "Fragen Sie zu Ihren Konten, Transaktionen oder Berichten…",
+  "send": "Senden",
+  "stop": "Stopp",
+  "writeHint": "Der Assistent kann Buchungen entwerfen, aber nichts wird gespeichert, bis Sie auf Anwenden klicken — und Entwürfe müssen weiterhin von Ihnen gebucht werden.",
+  "suggestions": {
+    "s1": "Wie lief es letzten Monat? Fasse die GuV zusammen.",
+    "s2": "Welchen Lieferanten schulden wir am meisten, und ist etwas älter als 90 Tage?",
+    "s3": "Wie hoch ist der Saldo unserer Bankkonten gerade?",
+    "s4": "Finde die größten Aufwandsbuchungen dieses Monats."
+  },
+  "errors": {
+    "notConfigured": "Der Assistent ist noch nicht konfiguriert. Ein Administrator kann ihn unter Administration → KI aktivieren.",
+    "failed": "Der Assistent konnte nicht antworten. Bitte versuchen Sie es erneut.",
+    "deleteFailed": "Die Unterhaltung konnte nicht gelöscht werden.",
+    "renameFailed": "Die Unterhaltung konnte nicht umbenannt werden."
+  },
+  "card": {
+    "input": "Eingabe",
+    "result": "Ergebnis"
+  },
+  "tools": {
+    "whoami": "Ihren Zugriff geprüft",
+    "find_accounts": "Den Kontenplan durchsucht",
+    "account_register": "Ein Kontoblatt gelesen",
+    "find_journal_entries": "Buchungen durchsucht",
+    "get_journal_entry": "Eine Buchung gelesen",
+    "find_documents": "Dokumente durchsucht",
+    "get_document": "Ein Dokument gelesen",
+    "find_parties": "Parteien nachgeschlagen",
+    "profit_and_loss": "Eine GuV erstellt",
+    "balance_sheet": "Eine Bilanz erstellt",
+    "trial_balance": "Eine Rohbilanz erstellt",
+    "aging": "Eine Fälligkeitsanalyse erstellt",
+    "cash_flow": "Eine Kapitalflussrechnung erstellt",
+    "draft_journal_entry": "Eine Buchung entworfen"
+  },
+  "proposal": {
+    "title": "Entworfene Buchung — vor dem Anwenden prüfen",
+    "account": "Konto",
+    "debit": "Soll",
+    "credit": "Haben",
+    "apply": "Als Entwurf anwenden",
+    "applying": "Wird angewendet…",
+    "discard": "Verwerfen",
+    "discarded": "Entwurf verworfen.",
+    "created": "Entwurf {number} gespeichert.",
+    "open": "Öffnen",
+    "failed": "Der Entwurf konnte nicht angewendet werden."
+  },
+  "launcher": {
+    "open": "Assistent fragen",
+    "label": "Assistent fragen",
+    "placeholder": "Fragen Sie alles zu Ihrer Buchhaltung…",
+    "submit": "Fragen",
+    "hint": "Eingabe zum Fragen · Esc zum Schließen · öffnet den Assistenten"
+  }
+}

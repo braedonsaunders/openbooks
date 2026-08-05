@@ -1,0 +1,89 @@
+{
+  "title": "审批",
+  "description": "跨流程和策略等待您处理的所有事项，以及您自己提交事项的状态。",
+  "tabs": {
+    "mine": "我的审批",
+    "submitted": "我提交的",
+    "all": "全部审批"
+  },
+  "empty": {
+    "title": "没有待您处理的事项",
+    "description": "分配、路由或委派给您的审批将显示在此处。"
+  },
+  "emptySubmitted": {
+    "title": "没有待处理的提交",
+    "description": "您提交审批的单据在等待期间将显示在此处。"
+  },
+  "emptyAll": {
+    "title": "没有待处理事项",
+    "description": "此组织中没有待处理的审批。"
+  },
+  "table": {
+    "document": "单据",
+    "kind": "类型",
+    "step": "步骤",
+    "decision": "决定",
+    "approval": "审批",
+    "requested": "请求于",
+    "assignee": "受理人",
+    "pendingWith": "待处理人",
+    "waitingSince": "等待自"
+  },
+  "kinds": {
+    "vendor_bill": "应付账单",
+    "customer_invoice": "客户发票",
+    "expense_report": "费用报销单",
+    "journal": "日记账",
+    "purchase_order": "采购订单",
+    "sales_order": "销售订单",
+    "quote": "报价单",
+    "field_ticket": "现场工单",
+    "close_run": "期间结账"
+  },
+  "decide": {
+    "rejectionReason": "驳回原因：",
+    "decisionFailed": "决定失败"
+  },
+  "aging": {
+    "days": "{days}天"
+  },
+  "bulk": {
+    "selected": "已选择 {count} 项",
+    "selectAll": "全选",
+    "selectRow": "选择 {document}",
+    "approveSelected": "批准所选",
+    "rejectSelected": "驳回所选",
+    "rejectTitle": "驳回 {count} 项审批？",
+    "reasonLabel": "驳回原因（应用于每个所选项目）",
+    "approvedCount": "已批准 {count} 项",
+    "rejectedCount": "已驳回 {count} 项",
+    "failedCount": "失败 {count} 项（{error}）"
+  },
+  "ooo": {
+    "button": "外出",
+    "title": "外出",
+    "description": "在您离开期间将收到的审批路由给委派人。",
+    "delegateTo": "委派给",
+    "delegatePlaceholder": "选择委派人…",
+    "from": "从",
+    "until": "至",
+    "invalid": "请选择委派人和有效的日期范围",
+    "saved": "已安排委派",
+    "unavailable": "委派服务尚不可用",
+    "banner": "您的审批已委派给 {name}，直至 {date}",
+    "endNow": "立即结束",
+    "ended": "委派已结束"
+  },
+  "gates": {
+    "rejectTitle": "驳回此审批？",
+    "waitingOthers": "已记录 — 等待其他审批人",
+    "delegate": "委派",
+    "delegatePlaceholder": "委派给…",
+    "delegated": "审批已委派",
+    "badges": {
+      "quorumAll": "所有审批人",
+      "reminder": "提醒 {date}",
+      "escalates": "升级 {date}"
+    }
+  }
+}

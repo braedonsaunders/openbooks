@@ -1,0 +1,165 @@
+{
+  "list": {
+    "title": "发票",
+    "description": "客户发票与贷项通知单——您的应收账款：草稿 → 审批 → 通过内核过账。",
+    "searchPlaceholder": "搜索发票、贷项、客户、参考号……",
+    "emptyTitle": "暂无发票",
+    "emptyDescription": "录入第一张客户发票或贷项通知单，以启动应收账款流程。",
+    "columns": {
+      "number": "编号",
+      "invoice": "发票",
+      "ref": "参考号"
+    }
+  },
+  "kinds": {
+    "invoice": "发票",
+    "credit": "贷项"
+  },
+  "actions": {
+    "new": "新建",
+    "newInvoice": "新建发票",
+    "newCredit": "新建客户贷项",
+    "submitForApproval": "提交审批"
+  },
+  "drawer": {
+    "editingHint": "编辑中——保存以应用更改",
+    "viewGlImpact": "查看总账影响",
+    "dateLabel": "发票日期",
+    "dueDate": "到期日",
+    "reference": "客户参考编号",
+    "accountColumn": "收入科目",
+    "accountPlaceholder": "科目……",
+    "noTax": "无税",
+    "taxAmountColumn": "税额",
+    "selectCustomerPlaceholder": "选择客户……",
+    "selectVendorPlaceholder": "选择供应商……",
+    "subtotalAmount": "小计 {amount}",
+    "taxTotalAmount": "税 {amount}",
+    "totalAmount": "合计 {amount}",
+    "balanceDueAmount": "应付余额 {amount}",
+    "saveState": {
+      "saved": "所有更改已保存",
+      "error": "保存失败——修正后重试",
+      "dirty": "有未保存的更改……"
+    },
+    "deleteTitle": "删除此单据？",
+    "deleteDraftBody": "此操作将永久删除该草稿。此操作无法撤销。",
+    "deletePostedBody": "此操作将永久删除该单据并移除其总账影响。此操作无法撤销。",
+    "formLabel": "表单",
+    "formSetPreferred": "设为我的首选",
+    "formSetPreferredDone": "已保存首选表单",
+    "formPreferredCleared": "已清除首选表单",
+    "formPreferredFailed": "无法保存首选表单"
+  },
+  "toasts": {
+    "actionFailed": "操作失败",
+    "submitted": "已提交审批",
+    "posted": "已过账至总账",
+    "createDraftFailed": "无法创建草稿",
+    "deleted": "已删除单据",
+    "deleteFailed": "删除失败"
+  },
+  "cockpit": {
+    "title": "应收账款",
+    "description": "应收账款控制中心——查看未收款、逾期款项和本周应催收金额。",
+    "tabs": {
+      "overview": "概览",
+      "invoices": "发票"
+    },
+    "current": "未到期",
+    "customer": "客户",
+    "overdueCol": "逾期",
+    "openCol": "未结清",
+    "noReceivables": "没有未结清的应收账款，所有款项均已收回。",
+    "customerSearch": "搜索客户…",
+    "customerStatus": "客户状态",
+    "customerOverdueOnly": "有逾期余额",
+    "configure": "工作原理",
+    "configTitle": "收款预测模型",
+    "configDescription": "说明工作清单排序和收款日期预测方式。只读——收款没有容量上限；系统预测客户何时付款。",
+    "stats": {
+      "openReceivables": "未结清应收账款",
+      "overdue": "逾期",
+      "overdueSub": "{count} 张发票 · 占未结清金额的 {pct}%",
+      "expectedThisWeek": "本周预计收款",
+      "next30": "未来30天",
+      "dso": "应收账款周转天数（DSO）",
+      "dsoSub": "平均收款天数",
+      "days": "{n}天"
+    },
+    "panels": {
+      "worklist": "收款工作清单",
+      "aging": "应收账龄",
+      "schedule": "收款计划",
+      "scheduleHint": "未来 {weeks} 周的预计收款——选择一周查看",
+      "byCustomer": "按客户查看应收账款"
+    },
+    "worklist": {
+      "overdueToChase": "待催收逾期款",
+      "expectedThisWeek": "本周预计收款",
+      "customer": "客户",
+      "prediction": "预测方式",
+      "due": "到期日",
+      "amount": "金额",
+      "selected": "已选择 {count} 项 · {amount}",
+      "build": "创建收款批次",
+      "empty": "预测期内没有预计收款。",
+      "search": "搜索收款…",
+      "status": "收款状态",
+      "overdueOnly": "逾期",
+      "upcoming": "即将到期",
+      "selectInvoice": "选择 {customer} 的发票",
+      "daysOverdue": "逾期 {count} 天",
+      "methods": {
+        "statistical": "统计预测",
+        "dueDate": "到期日",
+        "overduePush": "逾期顺延",
+        "globalAverage": "全局平均"
+      }
+    },
+    "model": {
+      "title": "收款日期预测方式",
+      "worklistOrder": {
+        "label": "工作清单顺序",
+        "value": "逾期最久优先",
+        "note": "先按逾期天数、再按金额从大到小排序；逾期发票默认选中"
+      },
+      "prediction": {
+        "label": "收款日期预测",
+        "value": "统计预测 → 到期日 → 全局平均",
+        "note": "使用每位客户的平均收款天数（加 ½σ 缓冲），且不早于到期日"
+      },
+      "overduePush": {
+        "label": "逾期顺延",
+        "value": "+7 / +14 / +28 天",
+        "note": "根据逾期程度顺延预测日期（≤30 / ≤60 / >60 天）"
+      },
+      "businessDay": {
+        "label": "工作日调整",
+        "value": "开启",
+        "note": "周末的预测日期顺延至下一个工作日"
+      },
+      "dso": {
+        "label": "平均收款天数（DSO）",
+        "value": "{dso}天",
+        "note": "客户没有付款历史时使用的后备值"
+      },
+      "recurring": "补助、租金收入和订阅等经常性流入会作为类别加入预测——请在<cashCockpit>现金驾驶舱</cashCockpit>中配置。",
+      "documentation": "阅读应收账款指南"
+    }
+  },
+  "paymentLinks": {
+    "title": "在线支付链接",
+    "create": "创建链接",
+    "empty": "暂无支付链接。",
+    "copyLink": "复制链接",
+    "copied": "已复制",
+    "void": "作废",
+    "status": {
+      "active": "有效",
+      "paid": "已支付",
+      "void": "已作废",
+      "expired": "已过期"
+    }
+  }
+}

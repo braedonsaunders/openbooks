@@ -1,0 +1,78 @@
+{
+  "list": {
+    "title": "Lagerbestand",
+    "description": "Bewertung des vorhandenen Bestands und Lagerbewegungen — bewertet nach FIFO, gleitendem Durchschnitt oder Standard.",
+    "searchPlaceholder": "Artikel oder Standorte durchsuchen…",
+    "emptyTitle": "Noch kein Lagerbestand",
+    "emptyDescription": "Konfigurieren Sie das Bewertungsprofil eines Artikels im Setup und buchen Sie dann Wareneingänge.",
+    "newButton": "Neue Bewegung",
+    "view": "Ansicht"
+  },
+  "view": {
+    "onhand": "Bestand",
+    "movements": "Bewegungen"
+  },
+  "labels": {
+    "item": "Artikel",
+    "location": "Standort",
+    "quantity": "Menge",
+    "avgCost": "Durchschnittskosten",
+    "value": "Wert",
+    "date": "Datum",
+    "kind": "Typ",
+    "unitCost": "Stückkosten"
+  },
+  "kind": {
+    "receipt": "Wareneingang",
+    "issue": "Warenausgang",
+    "transfer_out": "Umlagerung aus",
+    "transfer_in": "Umlagerung ein",
+    "adjustment": "Anpassung",
+    "count": "Zählung",
+    "assembly_build": "Baugruppenfertigung",
+    "assembly_consume": "Baugruppenverbrauch",
+    "return": "Rückgabe"
+  },
+  "drawer": {
+    "title": "Lagerbewegung",
+    "post": "Buchen",
+    "action": "Aktion",
+    "actions": {
+      "receive": "Vereinnahmen",
+      "issue": "Ausgeben",
+      "adjust": "Anpassen",
+      "transfer": "Umlagern",
+      "build": "Baugruppe fertigen",
+      "landed": "Einstandskosten"
+    },
+    "hint": {
+      "receive": "Bestand zu Kosten zubuchen (Soll Lager / Haben Gegenkonto).",
+      "issue": "Bestand in die Herstellungskosten ausbuchen (Soll HK / Haben Lager).",
+      "adjust": "Vorhandene Menge gegen das Anpassungskonto korrigieren.",
+      "transfer": "Bestand zwischen zwei Standorten zum fortgeführten Wert umlagern.",
+      "build": "Komponenten gemäß Stückliste verbrauchen und das Fertigerzeugnis zu Kosten produzieren.",
+      "landed": "Fracht/Zoll auf die vorhandenen Bestandsschichten eines Artikels aktivieren."
+    },
+    "selectItem": "Artikel auswählen",
+    "selectLocation": "Standort auswählen",
+    "selectAccount": "Konto auswählen",
+    "quantityDelta": "Menge (+/-)",
+    "offsetAccount": "Gegenkonto",
+    "offsetHint": "Das für den Wareneingang im Haben gebuchte Konto (Verrechnung, Wareneingang-nicht-berechnet oder Eröffnungsbilanz).",
+    "memoPlaceholder": "Optionale Notiz",
+    "missingFields": "Artikel, Standort und Menge sind erforderlich",
+    "failed": "Bewegung fehlgeschlagen",
+    "posted": "Bewegung gebucht ({value})",
+    "fromLocation": "Von Standort",
+    "toLocation": "Zu Standort",
+    "assemblyItem": "Baugruppenartikel",
+    "amount": "Betrag",
+    "freightAccount": "Fracht-/Zollkonto",
+    "freightHint": "Das Konto, auf dem die Fracht derzeit liegt; sie wird in den Lagerbestand überführt.",
+    "basis": "Umlagebasis",
+    "bases": {
+      "value": "Nach Wert",
+      "quantity": "Nach Menge"
+    }
+  }
+}

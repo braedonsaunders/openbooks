@@ -1,0 +1,52 @@
+import { NextResponse } from 'next/server'
+import { sql } from 'drizzle-orm'
+import { db } from '@openbooks/engine/src/db.ts'
+import { guardPermission } from '../../../../../lib/authz'
+import { isUuid } from '../../../../../lib/list-params'
+
+export const runtime = 'nodejs'
+
+const PAGE_SIZE = 15
+
+/** Searchable, filtered activity sublist for a party flyout. */
+export async function GET(request: Request, { params }: { params: Promise<{ id: string }> }) {
+  const gate = await guardPermission('parties.read')
+  if (gate instanceof NextResponse) return gate
+  const { id } = await params
+  if (!isUuid(id)) return NextResponse.json({ error: 'not found' }, { status: 404 })
+
+  const url = new URL(request.url)
+  const q = url.searchParams.get('q')?.trim().slice(0, 100) ?? ''
+  const kind = url.searchParams.get('kind')?.trim().slice(0, 50) ?? ''
+  const status = url.searchParams.get('status')?.trim().slice(0, 50) ?? ''
+  const requestedPage = Number(url.searchParams.get('page') ?? '1')
+  const page = Number.isSafeInteger(requestedPage) && requestedPage > 0 ? requestedPage : 1
+
+  const where = sql`d.org_id = ${gate.user.orgId} and d.party_id = ${id}
+    ${q ? sql`and (d.document_number ilike ${`%${q}%`} or coalesce(d.reference_number, '') ilike ${`%${q}%`} or coalesce(d.memo, '') ilike ${`%${q}%`})` : sql``}
+    ${kind ? sql`and d.kind = ${kind}` : sql``}
+    ${status ? sql`and d.status = ${status}` : sql``}`
+
+  const [rows, total, filters] = (await Promise.all([
+    db.execute(sql`
+      select d.id, d.kind, d.document_number, d.reference_number, d.document_date,
+             d.due_date, d.status, d.currency, d.total, d.open_balance, d.memo
+        from documents d where ${where}
+       order by d.document_date desc, d.created_at desc
+       limit ${PAGE_SIZE} offset ${(page - 1) * PAGE_SIZE}`),
+    db.execute(sql`select count(*)::int as count from documents d where ${where}`),
+    db.execute(sql`
+      select array_remove(array_agg(distinct kind order by kind), null) as kinds,
+             array_remove(array_agg(distinct status order by status), null) as statuses
+        from documents where org_id = ${gate.user.orgId} and party_id = ${id}`),
+  ])) as unknown as { rows: Record<string, unknown>[] }[]
+
+  return NextResponse.json({
+    rows: rows.rows,
+    total: Number(total.rows[0]?.count ?? 0),
+    page,
+    perPage: PAGE_SIZE,
+    kinds: filters.rows[0]?.kinds ?? [],
+    statuses: filters.rows[0]?.statuses ?? [],
+  })
+}

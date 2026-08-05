@@ -1,0 +1,53 @@
+{
+  "list": {
+    "title": "Reconocimiento de ingresos",
+    "description": "Contratos, obligaciones de desempeño y calendarios de reconocimiento (ASC 606).",
+    "searchPlaceholder": "Buscar contratos…",
+    "emptyTitle": "Aún no hay contratos de ingresos",
+    "emptyDescription": "Contabiliza una factura con un artículo con regla de reconocimiento para crear obligaciones y calendarios.",
+    "runRecognition": "Ejecutar reconocimiento"
+  },
+  "labels": {
+    "contract": "Contrato",
+    "customer": "Cliente",
+    "total": "Total",
+    "recognized": "Reconocido",
+    "deferred": "Diferido"
+  },
+  "status": {
+    "draft": "Borrador",
+    "active": "Activo",
+    "complete": "Completado",
+    "cancelled": "Cancelado"
+  },
+  "obligationStatus": {
+    "open": "Abierta",
+    "satisfied": "Satisfecha",
+    "cancelled": "Cancelada"
+  },
+  "method": {
+    "point_in_time": "En un momento",
+    "straight_line_even": "Lineal, igual",
+    "straight_line_prorate_first_last": "Lineal, prorrateado",
+    "straight_line_daily": "Lineal, diario",
+    "percent_complete": "Porcentaje",
+    "milestone": "Hito",
+    "usage": "Uso"
+  },
+  "run": {
+    "failed": "Falló la ejecución de reconocimiento",
+    "posted": "Reconocido {count, plural, one {# asiento} other {# asientos}} por {amount}",
+    "someSkipped": "{count} omitido(s)",
+    "nothingDue": "Nada por reconocer"
+  },
+  "drawer": {
+    "obligations": "Obligaciones",
+    "noSchedule": "Aún no se generó calendario",
+    "period": "Período",
+    "planned": "Planeado",
+    "recognized": "Reconocido",
+    "postedStatus": "Contabilizado",
+    "plannedStatus": "Planeado",
+    "fairValueOutOfRange": "Fuera del rango de valor razonable ({low} – {high})"
+  }
+}

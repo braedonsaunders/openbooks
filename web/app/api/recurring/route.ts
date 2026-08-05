@@ -1,0 +1,77 @@
+import { NextResponse } from "next/server";
+import { sql } from "drizzle-orm";
+import { db } from "@openbooks/engine/src/db.ts";
+import { requirePermission } from "../../../lib/authz";
+
+export const runtime = "nodejs";
+
+const CADENCES = ["weekly", "biweekly", "monthly", "quarterly", "annually", "custom_cron"] as const;
+
+/**
+ * Recurring schedules — a template document + a cadence. The engine runner
+ * (engine/src/recurring.ts, driven by the scheduler) clones the template into a
+ * fresh document each time next_run_on comes due. Gated on documents.manage
+ * because a schedule mints (and optionally posts) real documents.
+ */
+export async function GET() {
+  const authz = await requirePermission("documents.manage");
+  const rows = (await db.execute(sql`
+    select rs.id, rs.cadence, rs.cron, rs.next_run_on as "nextRunOn", rs.ends_on as "endsOn",
+           rs.auto_post as "autoPost", rs.is_active as "isActive", rs.run_count as "runCount",
+           rs.last_run_at as "lastRunAt", rs.last_document_id as "lastDocumentId", rs.last_error as "lastError",
+           coalesce(rs.name, d.document_number) as "name", d.kind as "templateKind",
+           d.document_number as "templateNumber", p.display_name as "partyName"
+      from recurring_schedules rs
+      join documents d on d.id = rs.template_document_id and d.org_id = rs.org_id
+      left join parties p on p.id = d.party_id and p.org_id = rs.org_id
+     where rs.org_id = ${authz.user.orgId}
+     order by rs.is_active desc, rs.next_run_on
+  `)) as unknown as { rows: Record<string, unknown>[] };
+  return NextResponse.json({ schedules: rows.rows });
+}
+
+export async function POST(req: Request) {
+  const authz = await requirePermission("documents.manage");
+  const body = (await req.json().catch(() => ({}))) as {
+    templateDocumentId?: string;
+    templateDocumentNumber?: string;
+    cadence?: string;
+    cron?: string | null;
+    nextRunOn?: string;
+    endsOn?: string | null;
+    autoPost?: boolean;
+    name?: string | null;
+  };
+
+  if (!body.templateDocumentId && !body.templateDocumentNumber) {
+    return NextResponse.json({ error: "a template document is required" }, { status: 400 });
+  }
+  if (!body.cadence || !CADENCES.includes(body.cadence as (typeof CADENCES)[number])) {
+    return NextResponse.json({ error: "invalid cadence" }, { status: 400 });
+  }
+  if (body.cadence === "custom_cron" && !body.cron) {
+    return NextResponse.json({ error: "cron is required for custom_cron" }, { status: 400 });
+  }
+
+  // Resolve by id or by the human document number (the UI hands a number).
+  const tpl = (await db.execute(
+    body.templateDocumentId
+      ? sql`select id from documents where id = ${body.templateDocumentId} and org_id = ${authz.user.orgId}`
+      : sql`select id from documents where document_number = ${body.templateDocumentNumber} and org_id = ${authz.user.orgId} limit 1`,
+  )) as unknown as { rows: { id: string }[] };
+  if (!tpl.rows.length) {
+    return NextResponse.json({ error: "template document not found" }, { status: 404 });
+  }
+  const templateDocumentId = tpl.rows[0]!.id;
+
+  const nextRunOn = body.nextRunOn ?? new Date().toISOString().slice(0, 10);
+  const created = (await db.execute(sql`
+    insert into recurring_schedules (org_id, template_document_id, cadence, cron, next_run_on, ends_on,
+                                     auto_post, name, created_by, updated_by)
+    values (${authz.user.orgId}, ${templateDocumentId}, ${body.cadence}, ${body.cron ?? null},
+            ${nextRunOn}, ${body.endsOn ?? null}, ${body.autoPost ?? false}, ${body.name ?? null},
+            ${authz.user.id}, ${authz.user.id})
+    returning id
+  `)) as unknown as { rows: { id: string }[] };
+  return NextResponse.json({ id: created.rows[0]!.id }, { status: 201 });
+}

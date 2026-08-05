@@ -1,0 +1,154 @@
+{
+  "hub": {
+    "title": "アナリティクス",
+    "description": "ネイティブなインテリジェンスダッシュボード — 収益性、キャッシュ、得意先、仕入先、フォレンジックリスクを元帳からリアルタイムで算出します。",
+    "searchPlaceholder": "アナリティクスを検索…",
+    "noMatches": "検索に一致するダッシュボードはありません。",
+    "planned": "予定",
+    "groups": {
+      "profitability": "収益性とパフォーマンス",
+      "operations": "キャッシュとオペレーション",
+      "relationships": "得意先と仕入先",
+      "forensics": "リスクとフォレンジック"
+    },
+    "cards": {
+      "financialHealthTitle": "財務健全性",
+      "financialHealthDesc": "総合的な健全性スコアを備えた利益率・比率のスコアカード",
+      "trueCostTitle": "真のコスト",
+      "trueCostDesc": "間接費負担の吸収と販売レートビルダー",
+      "utilizationTitle": "稼働率",
+      "utilizationDesc": "請求可能時間、稼働率、サービス品目の利益",
+      "customerTitle": "得意先インテリジェンス",
+      "customerDesc": "セグメンテーション、生涯価値、得意先の収益性",
+      "vendorTitle": "仕入先パフォーマンス",
+      "vendorDesc": "支出の集中、支払行動、仕入先スコアカード",
+      "sentinelTitle": "Sentinel",
+      "sentinelDesc": "フォレンジックな取引の整合性と異常検知",
+      "spendVelocityTitle": "支出速度",
+      "spendVelocityDesc": "支出の加速、サブスクリプションの増殖、シャドーIT",
+      "cashflowTitle": "キャッシュフロー",
+      "cashflowDesc": "週次のキャッシュ予測、ランウェイ、AP/ARエイジング"
+    }
+  },
+  "financialHealth": {
+    "title": "財務健全性",
+    "description": "総合的な健全性スコアを備えた収益性、効率性、営業比率。",
+    "backToHub": "アナリティクス",
+    "tabs": {
+      "overview": "概要",
+      "margin": "利益率",
+      "items": "品目",
+      "segments": "セグメント",
+      "forecast": "予測",
+      "scenarios": "シナリオ",
+      "budget": "予算",
+      "drivers": "ドライバー",
+      "ratios": "比率",
+      "configuration": "設定"
+    },
+    "kpi": {
+      "revenue": "売上高",
+      "grossMargin": "売上総利益率",
+      "operatingIncome": "営業利益",
+      "breakeven": "損益分岐点"
+    },
+    "kpiSub": {
+      "growth": "前年比 {pct}",
+      "grossProfit": "売上総利益: {amount}",
+      "opex": "販管費: {amount}",
+      "perMonth": "月あたり"
+    },
+    "score": {
+      "title": "財務健全性スコア",
+      "overall": "総合",
+      "excellent": "優秀",
+      "good": "良好",
+      "average": "平均",
+      "needsWork": "要改善"
+    },
+    "categories": {
+      "profitability": "収益性",
+      "efficiency": "効率性",
+      "operating": "オペレーション"
+    },
+    "subKpi": {
+      "roic": "ROIC",
+      "ebitdaMargin": "EBITDAマージン",
+      "opLeverage": "営業レバレッジ",
+      "rule40": "Rule of 40"
+    },
+    "subKpiSub": {
+      "returnOnCapital": "投下資本利益率",
+      "earningsMargin": "利益率",
+      "sensitivity": "感応度",
+      "growthProfit": "成長＋利益"
+    },
+    "gridHint": "比率をクリックすると詳細が表示されます",
+    "pnl": {
+      "title": "損益計算書サマリー",
+      "lineItem": "項目",
+      "amount": "金額",
+      "pctRevenue": "対売上比",
+      "revenue": "売上高",
+      "cogs": "売上原価",
+      "grossProfit": "売上総利益",
+      "opex": "営業費用",
+      "operatingIncome": "営業利益",
+      "otherIncome": "営業外収益",
+      "otherExpense": "営業外費用",
+      "netIncome": "純利益"
+    },
+    "budget": {
+      "measuredAgainst": "<strong>{name}</strong>（FY{year}、{status}）を基準に測定 — 選択した範囲の予算ラインです。シナリオの管理は<link>予算</link>で行えます。",
+      "totalBudget": "予算合計",
+      "budgetedAccounts": "{count, plural, one {#件の予算計上勘定} other {#件の予算計上勘定}}",
+      "totalActual": "実績合計",
+      "normalizedIncome": "収益の符号を正規化",
+      "overBudget": "予算超過",
+      "onWatch": "{count}件が要注意",
+      "coverage": "カバレッジ",
+      "coverageSub": "予算ラインのある勘定",
+      "tableTitle": "予算対実績（{count}）",
+      "search": "勘定を検索…",
+      "csv": "CSV",
+      "all": "すべて",
+      "status": { "on-track": "順調", "watch": "要注意", "over": "超過", "no-budget": "予算なし" },
+      "columns": { "account": "勘定", "type": "タイプ", "budget": "予算", "actual": "実績", "progress": "進捗", "variance": "差異", "variancePct": "差異率", "status": "ステータス" },
+      "showing": "{total}件中 {from}〜{to} を表示",
+      "previous": "前へ",
+      "next": "次へ",
+      "noBudgetTitle": "この期間の正式な予算がありません",
+      "noBudgetDescription": "予算シナリオを作成して承認すると、実際の勘定単位の差異が表示されます。このダッシュボードは合成のベンチマーク目標で代用することはありません。",
+      "createBudget": "予算を作成"
+    }
+  },
+  "customer": {
+    "title": "得意先インテリジェンス",
+    "backToHub": "アナリティクス"
+  },
+  "vendor": {
+    "title": "仕入先パフォーマンス",
+    "backToHub": "アナリティクス"
+  },
+  "cashflow": {
+    "title": "キャッシュフロー",
+    "backToHub": "アナリティクス"
+  },
+  "trueCost": {
+    "title": "真のコスト",
+    "backToHub": "アナリティクス",
+    "configureInSetup": "設定で構成 →"
+  },
+  "utilization": {
+    "title": "稼働率",
+    "backToHub": "アナリティクス"
+  },
+  "spendVelocity": {
+    "title": "支出速度",
+    "backToHub": "アナリティクス"
+  },
+  "sentinel": {
+    "title": "Sentinel",
+    "backToHub": "アナリティクス"
+  }
+}

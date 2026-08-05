@@ -1,0 +1,19 @@
+{
+  "title": "Solicitudes de pago",
+  "description": "Facturación de proyectos mediante tablas de valores, solicitudes acumuladas, órdenes de cambio y retenciones.",
+  "project": "Proyecto",
+  "loading": "Cargando datos de facturación controlados…",
+  "errors": { "load": "No se pudieron cargar las solicitudes de pago", "action": "La acción falló" },
+  "empty": { "title": "No hay proyectos elegibles", "description": "Active un tipo de proyecto que use solicitudes de pago y asígnelo a un proyecto.", "manageProjectTypes": "Gestionar tipos de proyecto" },
+  "summary": { "contractSum": "Importe del contrato", "retainageHeld": "Retención mantenida", "committedCost": "Coste comprometido (OC abiertas)" },
+  "sov": {
+    "title": "Tabla de valores", "item": "Partida", "itemPlaceholder": "N.º de partida", "description": "Descripción", "scheduledValue": "Valor programado", "retainagePercent": "Retención %", "default": "predeterminada", "delete": "Eliminar", "deleteConfirm": "¿Eliminar la línea «{description}»?", "empty": "Aún no hay líneas en la tabla de valores.", "defaultIncomeAccount": "Cuenta de ingresos predeterminada", "addLine": "Añadir línea"
+  },
+  "changeOrders": {
+    "title": "Órdenes de cambio", "number": "N.º de orden", "description": "Descripción", "amount": "Importe", "applyTo": "Aplicar a", "newScheduleLine": "Nueva línea (cambio aditivo)", "deductiveHint": "Los cambios deductivos deben reducir una línea existente.", "additiveHint": "Elija una línea para revisarla o cree una nueva línea aditiva.", "adjusts": "Ajusta {description}", "approve": "Aprobar", "void": "Anular", "voidConfirm": "¿Anular la orden {number}? Se conservará su historial de auditoría.", "add": "Añadir orden de cambio", "empty": "No hay órdenes de cambio.", "status": { "draft": "Borrador", "approved": "Aprobada", "void": "Anulada" }
+  },
+  "payApplications": {
+    "title": "Solicitudes de pago", "applicationNumber": "Solicitud n.º {number}", "retainage": "Retención", "enterDraws": "Introducir avance", "hideDraws": "Ocultar avance", "approve": "Aprobar", "createInvoice": "Crear factura", "void": "Anular", "voidConfirm": "¿Anular la solicitud n.º {number}? Se conservarán el avance y el historial de auditoría.", "item": "Partida", "description": "Descripción", "workThisPeriod": "Trabajo del período", "materialsStored": "Materiales almacenados", "submit": "Enviar para aprobación", "submittedMessage": "Solicitud enviada para aprobación independiente", "billedMessage": "Facturada {number} — vencimiento actual {currentDue}, retención {retainage}", "empty": "No hay solicitudes.", "periodEnding": "Fin del período", "newApplication": "Nueva solicitud", "status": { "draft": "Borrador", "submitted": "Enviada", "approved": "Aprobada", "invoiced": "Facturada", "posted": "Facturada", "void": "Anulada" }
+  },
+  "retainage": { "notConfigured": "No hay una cuenta de retenciones por cobrar configurada; la facturación con retención se bloqueará hasta configurarla en las cuentas de control.", "title": "Liberar retención", "description": "Factura la retención mantenida como cuentas por cobrar. Mantenida: {held}", "amount": "Importe", "release": "Liberar", "createdMessage": "Factura de liberación {number} por {amount} creada" }
+}

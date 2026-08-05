@@ -1,0 +1,15 @@
+{
+  "tagline": "run on open books",
+  "password": "密码",
+  "invalidCredentials": "邮箱或密码无效",
+  "signIn": "登录",
+  "signingIn": "登录中…",
+  "mfaCode": "身份验证器或恢复代码",
+  "mfaPlaceholder": "123456",
+  "mfaHelp": "输入身份验证器中的六位代码，或一次性恢复代码。",
+  "invalidMfa": "身份验证代码无效或已过期",
+  "verify": "验证",
+  "or": "或",
+  "sso": "单点登录",
+  "ssoFailed": "无法完成单点登录"
+}

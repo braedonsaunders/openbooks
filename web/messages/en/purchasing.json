@@ -1,0 +1,62 @@
+{
+  "home": {
+    "title": "Purchasing",
+    "description": "Your buy-to-pay workspace — commitments, bills, payments, and vendor spend in one place.",
+    "subsidiary": "Subsidiary",
+    "tabs": {
+      "overview": "Overview"
+    },
+    "vitals": {
+      "openAp": "Open payables",
+      "openApSub": "{count} open bills",
+      "overdue": "Overdue",
+      "dueNext7": "Due next 7 days",
+      "openPos": "Open POs",
+      "openPosSub": "{count} orders",
+      "spend30d": "30-day spend",
+      "spend30dSub": "Posted vendor bills",
+      "activeVendors": "Active vendors",
+      "paymentsWeek": "Payments this week",
+      "paymentsWeekSub": "{count} posted · last 7 days",
+      "unposted": "Unposted expenses",
+      "unpostedSub": "awaiting posting"
+    },
+    "hero": {
+      "title": "Vendor commitments",
+      "hint": "Open purchase orders beside open bills, largest exposure first",
+      "empty": "No open commitments or payables.",
+      "vendor": "Vendor",
+      "openPos": "Open POs",
+      "openBills": "Bills",
+      "oldestDue": "Oldest due",
+      "overdue": "Overdue",
+      "billedOpen": "Billed open"
+    },
+    "trend": {
+      "title": "Spend trend",
+      "hint": "13 weeks of posted vendor bills",
+      "series": "Billed"
+    },
+    "directory": {
+      "title": "Workspace",
+      "posHint": "{value} committed",
+      "billsHint": "{overdue} overdue",
+      "paymentsHint": "payments this week",
+      "expensesHint": "awaiting posting",
+      "vendorsHint": "active vendors"
+    },
+    "attention": {
+      "title": "Needs attention",
+      "allClear": "All clear — nothing overdue.",
+      "overdueVendor": "{vendor} is {amount} overdue",
+      "unpostedExpenses": "{count} expense reports awaiting posting"
+    },
+    "pulse": {
+      "title": "Payables pulse",
+      "open": "Open",
+      "overdue": "Overdue",
+      "due7": "Due 7 days",
+      "cta": "Open Accounts Payable"
+    }
+  }
+}

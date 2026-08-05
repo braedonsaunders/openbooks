@@ -1,0 +1,28 @@
+{
+  "title": "Documentation",
+  "searchPlaceholder": "Search documentation…",
+  "noResults": "No matching articles.",
+  "browseMenu": "Browse documentation",
+  "expandAll": "Expand all",
+  "collapseAll": "Collapse all",
+  "expandSection": "Expand {title}",
+  "collapseSection": "Collapse {title}",
+  "lastUpdated": "Last updated {date}",
+  "related": "Related articles",
+  "breadcrumb": "Documentation breadcrumb",
+  "articleNavigation": "Article navigation",
+  "previous": "Previous",
+  "next": "Next",
+  "home": {
+    "title": "Documentation",
+    "subtitle": "Learn the accounting model, configure your organization, run daily workflows, and move safely from another system.",
+    "eyebrow": "OpenBooks help center",
+    "startHere": "Start here",
+    "step": "Step {number}",
+    "switchingTitle": "Moving from another system?",
+    "switchingSubtitle": "Start with a familiarization guide that maps the concepts and workflows you already know.",
+    "browseTitle": "Browse all documentation",
+    "browseSubtitle": "Explore the complete guide by topic or search from the sidebar.",
+    "articleCount": "{count, plural, one {# article} other {# articles}}"
+  }
+}

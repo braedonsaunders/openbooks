@@ -1,0 +1,12 @@
+{
+  "list": {
+    "title": "受注",
+    "description": "確定した得意先の注文 — 発行後、請求のたびに請求書へ変換します。",
+    "searchPlaceholder": "受注、得意先、メモを検索…",
+    "converted": "変換済み",
+    "emptyTitle": "受注はまだありません",
+    "emptyDescription": "受注を作成するか、見積から変換します。",
+    "newButton": "新規受注",
+    "createDraftFailed": "下書き受注を作成できませんでした"
+  }
+}

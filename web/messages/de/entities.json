@@ -1,0 +1,31 @@
+{
+  "roles": {
+    "customers": {
+      "title": "Kunden",
+      "description": "Unternehmen und Personen, denen Sie Rechnungen stellen.",
+      "newLabel": "Neuer Kunde",
+      "emptyTitle": "Noch keine Kunden",
+      "emptyDescription": "Fügen Sie den ersten Kunden hinzu, um das Verzeichnis anzulegen."
+    },
+    "vendors": {
+      "title": "Lieferanten",
+      "description": "Lieferanten, bei denen Sie einkaufen und die Sie bezahlen.",
+      "newLabel": "Neuer Lieferant",
+      "emptyTitle": "Noch keine Lieferanten",
+      "emptyDescription": "Fügen Sie den ersten Lieferanten hinzu, um das Verzeichnis anzulegen."
+    },
+    "employees": {
+      "title": "Mitarbeiter",
+      "description": "Personen in der Gehaltsabrechnung und in Spesenabrechnungen.",
+      "newLabel": "Neuer Mitarbeiter",
+      "emptyTitle": "Noch keine Mitarbeiter",
+      "emptyDescription": "Fügen Sie den ersten Mitarbeiter hinzu, um das Verzeichnis anzulegen."
+    }
+  },
+  "list": {
+    "searchPlaceholder": "Name, Code, E-Mail durchsuchen…",
+    "shortCode": "Kurzcode",
+    "phone": "Telefon",
+    "customerStatuses": { "existing": "Bestandskunden", "potential": "Potenzielle Kunden" }
+  }
+}

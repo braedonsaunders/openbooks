@@ -1,0 +1,2813 @@
+{
+  "hub": {
+    "metaTitle": "Centre d’administration",
+    "title": "Centre d’administration",
+    "subtitle": "Tout ce qui configure cet espace de travail — profil de l’entreprise, personnes et système.",
+    "groups": {
+      "company": "Entreprise",
+      "people": "Personnes et accès",
+      "workspace": "Espace de travail",
+      "activity": "Activité et données",
+      "data": "Intégrations et données"
+    },
+    "cards": {
+      "settings": {
+        "title": "Entreprise et comptabilité",
+        "description": "Identité de l’organisation, devise de base, exercice financier et comptes de contrôle"
+      },
+      "users": {
+        "title": "Utilisateurs",
+        "description": "Invitez des personnes, attribuez des rôles et des dérogations de permissions"
+      },
+      "roles": {
+        "title": "Rôles",
+        "description": "Définissez les rôles et exactement ce que chacun accorde"
+      },
+      "navigation": {
+        "title": "Navigation",
+        "description": "Organisez les espaces de travail, les libellés et les raccourcis mobiles"
+      },
+      "records": {
+        "title": "Enregistrements personnalisés",
+        "description": "Concevez vos propres types d’enregistrement — chacun devient un module complet avec sa liste et son éditeur"
+      },
+      "customFields": {
+        "title": "Champs personnalisés",
+        "description": "Ajoutez des champs typés aux enregistrements dans toute l’application"
+      },
+      "customization": {
+        "title": "Formulaires & vues",
+        "description": "Personnalisez les formulaires de transaction et les vues de liste par organisation et par utilisateur"
+      },
+      "pdfTemplates": {
+        "title": "Modèles PDF",
+        "description": "Concevez des documents PDF imprimables pour les factures, écritures et toutes les transactions"
+      },
+      "scripts": {
+        "title": "Scripts",
+        "description": "Automatisation en environnement isolé exécutée sur les événements du grand livre"
+      },
+      "apps": {
+        "title": "Applications",
+        "description": "Créez et installez des paquets d'application — un frontend isolé et un backend encadré"
+      },
+      "apiKeys": {
+        "title": "Clés API",
+        "description": "Créez des clés API à portée restreinte pour les intégrations et consultez les journaux d'utilisation"
+      },
+      "apiDocs": {
+        "title": "Documentation de l'API",
+        "description": "Parcourez la référence de l'API REST pour chaque type d'enregistrement et de transaction"
+      },
+      "backup": {
+        "title": "Sauvegardes",
+        "description": "Télécharger, planifier et conserver les sauvegardes"
+      },
+      "audit": {
+        "title": "Journal d’audit",
+        "description": "Chaque écriture capturée avec son auteur et les différences avant/après"
+      },
+      "sync": {
+        "title": "Migrations et miroir",
+        "description": "Migrez depuis un système comptable source, puis répliquez les deux systèmes pendant la validation"
+      },
+      "ai": {
+        "title": "IA",
+        "description": "Fournisseur, modèles et clé API chiffrée pour l'assistant"
+      },
+      "setup": {
+        "title": "Setup",
+        "description": "Tax, dimensions, payment terms, numbering & other configuration"
+      },
+      "email": {
+        "title": "Envoi des e-mails",
+        "description": "Configurez votre fournisseur d’e-mail pour l’envoi des rapports planifiés"
+      }
+    }
+  },
+  "buildHub": {
+    "metaTitle": "Développement",
+    "title": "Développement",
+    "subtitle": "Tout ce que vous créez sur la plateforme — modèle de données, formulaires et documents, automatisation et API.",
+    "groups": {
+      "model": "Modèle de données",
+      "experience": "Formulaires et documents",
+      "automation": "Automatisation et applications",
+      "api": "API"
+    }
+  },
+  "audit": {
+    "title": "Journal d’audit",
+    "description": "Historique métier immuable, incluant l’état complet avant/après du document et son impact au grand livre pour les modifications comptabilisées et les suppressions.",
+    "documentation": "Documentation",
+    "searchPlaceholder": "Rechercher une table, un auteur ou un id de ligne…",
+    "actionFilter": "Action",
+    "empty": {
+      "title": "Aucune entrée d’audit pour l’instant",
+      "description": "Les mutations de la couche métier apparaîtront ici à mesure que les modules enregistrent leurs modifications."
+    },
+    "table": {
+      "when": "Quand",
+      "actor": "Auteur",
+      "action": "Action",
+      "tableName": "Table",
+      "row": "Ligne",
+      "changes": "Détails"
+    },
+    "openEventAria": "Ouvrir l’événement {action} de {recordType} du {when}",
+    "summaries": {
+      "snapshot": "Instantané complet avant et après",
+      "metadata": "Métadonnées de l’enregistrement",
+      "changeCount": "{count, plural, =0 {Détails de l’événement} one {# champ modifié} other {# champs modifiés}}"
+    },
+    "drawer": {
+      "description": "Enregistré par {actor} · {when}",
+      "tabsAria": "Vues de l’événement d’audit",
+      "tabs": {
+        "changes": "Modifications",
+        "before": "Avant",
+        "after": "Après"
+      },
+      "when": "Enregistré",
+      "actor": "Utilisateur",
+      "recordType": "Type d’enregistrement",
+      "reference": "Référence de l’enregistrement",
+      "changedFields": "Champs modifiés",
+      "eventContext": "Contexte de l’événement",
+      "technicalDetails": "Détails techniques",
+      "beforeSnapshot": "Enregistrement avant cet événement",
+      "afterSnapshot": "Enregistrement après cet événement",
+      "recordRemoved": "Enregistrement supprimé",
+      "recordRemovedDescription": "Cet événement a supprimé l’enregistrement; il n’existe donc aucun instantané après.",
+      "field": "Champ",
+      "before": "Avant",
+      "after": "Après",
+      "notSet": "Non défini",
+      "yes": "Oui",
+      "no": "Non",
+      "emptyCollection": "Aucune valeur",
+      "item": "Élément",
+      "lineItem": "Ligne {line}",
+      "itemCount": "{count, plural, one {# élément} other {# éléments}}",
+      "propertyCount": "{count, plural, one {# propriété} other {# propriétés}}",
+      "itemPosition": "{current} sur {total}",
+      "changeCount": "{count, plural, one {# modification} other {# modifications}}",
+      "noDifferences": "Aucune différence de champ avant-après n’a été enregistrée pour cet événement."
+    },
+    "systemActor": "système",
+    "actions": {
+      "insert": "insertion",
+      "update": "mise à jour",
+      "delete": "suppression",
+      "post": "comptabilisation",
+      "void": "annulation",
+      "approve": "approbation",
+      "reject": "rejet"
+    },
+    "recordTypeFilter": "Type d’enregistrement",
+    "userFilter": "Utilisateur",
+    "dateFrom": "Du",
+    "dateTo": "Au",
+    "clearDates": "Effacer les dates"
+  },
+  "customFields": {
+    "title": "Champs personnalisés",
+    "description": "Étendez n’importe quel module — en-têtes de documents, lignes de transactions, tiers, projets, comptes. Les champs s’affichent partout où l’enregistrement apparaît : tiroirs, grilles de lignes et rapports.",
+    "searchPlaceholder": "Rechercher des champs…",
+    "targetFilter": "Cible",
+    "table": {
+      "field": "Champ",
+      "key": "Clé",
+      "target": "Cible",
+      "type": "Type",
+      "required": "Obligatoire",
+      "status": "Statut"
+    },
+    "empty": "Aucun champ personnalisé pour l’instant.",
+    "statusActive": "actif",
+    "statusArchived": "archivé",
+    "newField": "Nouveau champ",
+    "targets": {
+      "documents": {
+        "label": "En-tête de transaction",
+        "description": "Une valeur par transaction (facture fournisseur, facture, paiement, note de frais, écriture de journal)."
+      },
+      "documentLines": {
+        "label": "Lignes de transaction",
+        "description": "Une colonne sur chaque ligne du type de transaction choisi."
+      },
+      "parties": {
+        "label": "Tiers",
+        "description": "Fournisseurs, clients et employés."
+      },
+      "projects": {
+        "label": "Projets",
+        "description": "Travaux / projets."
+      },
+      "managedProperties": {
+        "label": "Propriétés",
+        "description": "Propriétés immobilières gérées."
+      },
+      "accounts": {
+        "label": "Comptes",
+        "description": "Plan comptable."
+      },
+      "items": {
+        "label": "Articles et services",
+        "description": "Produits et services."
+      },
+      "crmAccounts": {
+        "label": "Comptes CRM",
+        "description": "Profils de qualification des pistes, prospects et clients."
+      },
+      "crmActivities": {
+        "label": "Activités CRM",
+        "description": "Appels, visites, événements, courriels, notes et tâches."
+      },
+      "crmOpportunities": {
+        "label": "Occasions CRM",
+        "description": "Occasions du pipeline et détails des prévisions."
+      }
+    },
+    "kinds": {
+      "header": {
+        "vendorBill": "Factures fournisseurs",
+        "customerInvoice": "Factures clients",
+        "vendorPayment": "Paiements fournisseurs",
+        "customerPayment": "Paiements clients",
+        "expenseReport": "Notes de frais",
+        "journal": "Écritures de journal"
+      },
+      "lines": {
+        "vendorBill": "Lignes de facture fournisseur",
+        "customerInvoice": "Lignes de facture client",
+        "expenseReport": "Lignes de note de frais",
+        "journal": "Lignes d’écriture de journal"
+      }
+    },
+    "types": {
+      "text": {
+        "label": "Texte",
+        "help": "Une seule ligne de texte."
+      },
+      "longText": {
+        "label": "Zone de texte",
+        "help": "Plusieurs lignes de texte."
+      },
+      "number": {
+        "label": "Nombre",
+        "help": "Une valeur numérique."
+      },
+      "currency": {
+        "label": "Montant monétaire",
+        "help": "Un montant d’argent (2 décimales)."
+      },
+      "date": {
+        "label": "Date",
+        "help": "Une date civile."
+      },
+      "boolean": {
+        "label": "Case à cocher",
+        "help": "Oui / non."
+      },
+      "select": {
+        "label": "Liste déroulante (choix unique)",
+        "help": "Choisissez un élément dans une liste."
+      },
+      "multiSelect": {
+        "label": "Liste déroulante (choix multiples)",
+        "help": "Choisissez autant d’éléments que voulu dans une liste."
+      },
+      "reference": {
+        "label": "Liste / Enregistrement",
+        "help": "Lien vers un autre enregistrement (tiers, projet, compte, article)."
+      }
+    },
+    "drawer": {
+      "newTitle": "Nouveau champ personnalisé",
+      "editTitle": "Modifier « {label} »",
+      "newDescription": "Étendez un type d’enregistrement avec votre propre champ.",
+      "createField": "Créer le champ",
+      "saveChanges": "Enregistrer les modifications",
+      "created": "Champ créé",
+      "updated": "Champ mis à jour",
+      "saveFailed": "Impossible d’enregistrer le champ",
+      "appliesTo": "S’applique à",
+      "recordType": "Type d’enregistrement",
+      "whichTransactions": "Quelles transactions",
+      "allTypes": "Tous les types",
+      "allTypesHint": "Laissez « Tous les types » pour appliquer le champ à tous les genres.",
+      "allKindsSuffix": "tous les genres",
+      "lockedAfterCreation": "· verrouillé après la création (des valeurs y font déjà référence)",
+      "label": "Libellé",
+      "labelPlaceholder": "Numéro de bon de commande",
+      "fieldKey": "Clé du champ",
+      "permanent": "(permanente)",
+      "keyPlaceholder": "po_number",
+      "keyHint": "Remplie automatiquement à partir du libellé; snake_case.",
+      "type": "Type",
+      "options": "Options",
+      "noOptions": "Aucune option pour l’instant — ajoutez-en au moins une.",
+      "addOptionPlaceholder": "Ajouter une option…",
+      "removeOption": "Retirer {option}",
+      "helpText": "Texte d’aide",
+      "optionalSuffix": "(facultatif)",
+      "helpTextPlaceholder": "Affiché sous le champ",
+      "placeholder": "Texte indicatif",
+      "defaultValue": "Valeur par défaut",
+      "min": "Min",
+      "max": "Max",
+      "showInList": "Afficher comme colonne dans les vues de liste",
+      "referenceTable": "Type d'enregistrement référencé",
+      "referenceTableHint": "Le champ stocke un lien vers un enregistrement de ce type.",
+      "displayMode": "Mode d'affichage",
+      "displayNormal": "Normal (modifiable)",
+      "displayHidden": "Masqué (non affiché sur les formulaires)",
+      "displayDisabled": "Désactivé (affiché en lecture seule)",
+      "allowedRoles": "Visible pour les rôles",
+      "allowedRolesHint": "Laissez décoché pour tous les rôles. Les administrateurs voient tous les champs.",
+      "roleAdmin": "Administrateur",
+      "roleController": "Contrôleur",
+      "roleAccountant": "Comptable",
+      "roleApprover": "Approbateur",
+      "roleViewer": "Lecteur"
+    }
+  },
+  "navigation": {
+    "title": "Navigation",
+    "description": "Personnalisez toutes les dispositions de menu de l’organisation : organisez les espaces de travail, renommez ou masquez des destinations, ajoutez des liens et choisissez jusqu’à quatre raccourcis mobiles. Les restrictions de permissions s’appliquent toujours.",
+    "groupLabelAria": "Libellé du groupe",
+    "moveGroupUp": "Monter le groupe",
+    "moveGroupDown": "Descendre le groupe",
+    "itemLabelAria": "Libellé de l’élément",
+    "showItem": "Afficher l’élément",
+    "hideItem": "Masquer l’élément",
+    "moveItemUp": "Monter l’élément",
+    "moveItemDown": "Descendre l’élément",
+    "moveToGroup": "Déplacer vers l’espace de travail",
+    "pinMobile": "Épingler dans la navigation mobile",
+    "unpinMobile": "Retirer de la navigation mobile",
+    "mobileLimit": "La navigation mobile accepte jusqu’à quatre destinations épinglées",
+    "linkUrlPrompt": "URL du lien (route interne ou https://…) :",
+    "linkLabelPrompt": "Libellé :",
+    "addLink": "Ajouter un lien",
+    "deleteLink": "Supprimer le lien",
+    "addApp": "Ajouter un raccourci d’application…",
+    "removeApp": "Supprimer le raccourci d’application",
+    "newGroupPrompt": "Nom de l’espace de travail :",
+    "addGroup": "Ajouter un espace de travail",
+    "deleteGroup": "Supprimer l’espace de travail",
+    "save": "Enregistrer la navigation",
+    "saved": "Navigation enregistrée",
+    "saveFailed": "Impossible d’enregistrer",
+    "resetDefaults": "Rétablir les valeurs par défaut"
+  },
+  "roles": {
+    "metaTitle": "Rôles",
+    "title": "Rôles",
+    "description": "Des ensembles de permissions que vous attribuez aux utilisateurs. Les rôles intégrés sont fournis avec l’application; créez des rôles personnalisés pour un contrôle plus fin.",
+    "manageUsers": "Gérer les utilisateurs",
+    "searchPlaceholder": "Rechercher par nom, clé ou description de rôle…",
+    "typeFilter": "Type",
+    "builtIn": "Intégré",
+    "custom": "Personnalisé",
+    "emptyTitle": "Aucun rôle pour l’instant",
+    "emptyDescription": "Exécutez le script d’amorçage des rôles (engine/src/seed-roles.ts) pour créer les rôles intégrés, ou créez un rôle personnalisé.",
+    "noMatchTitle": "Aucun rôle correspondant",
+    "noMatchDescription": "Ajustez la recherche ou le filtre de type.",
+    "table": {
+      "key": "Clé",
+      "permissions": "Permissions",
+      "members": "Membres"
+    },
+    "newRole": "Nouveau rôle",
+    "drawer": {
+      "newTitle": "Nouveau rôle",
+      "lockedDescription": "Le rôle Administrateur détient toujours toutes les permissions et ne peut pas être modifié.",
+      "builtInDescription": "Rôle intégré : le nom et la clé sont fixes, mais vous pouvez ajuster ses permissions.",
+      "newDescription": "Nommez le rôle, puis choisissez les permissions qu’il accorde.",
+      "deleteRole": "Supprimer le rôle",
+      "createRole": "Créer le rôle",
+      "saveChanges": "Enregistrer les modifications",
+      "nameRequired": "Le nom du rôle est obligatoire",
+      "saveFailed": "L’enregistrement du rôle a échoué",
+      "created": "Rôle créé",
+      "updated": "Rôle mis à jour",
+      "deleteConfirm": "Supprimer le rôle « {name} »? Les utilisateurs qui le détiennent perdent immédiatement ses permissions.",
+      "deleteFailed": "La suppression du rôle a échoué",
+      "deleted": "Rôle supprimé",
+      "namePlaceholder": "Commis aux comptes fournisseurs",
+      "keyPlaceholder": "ap_clerk",
+      "descriptionPlaceholder": "À quoi sert ce rôle?",
+      "permissionsHeading": "Permissions",
+      "selectedCount": "{count} sélectionnées",
+      "subsidiaryHeading": "Accès aux filiales",
+      "subsidiaryModeAll": "Toutes les filiales",
+      "subsidiaryModeSubtree": "Une filiale et ses enfants",
+      "subsidiaryModeList": "Filiales spécifiques",
+      "subsidiaryPlaceholder": "Choisir une filiale…",
+      "subsidiarySearchPlaceholder": "Rechercher des filiales…",
+      "subsidiaryRequired": "Choisissez une filiale",
+      "subsidiaryListRequired": "Sélectionnez au moins une filiale"
+    }
+  },
+  "scripts": {
+    "title": "Scripts",
+    "description": "Du vrai JavaScript, exécuté dans un environnement isolé aux points de déclenchement des documents — validez, modifiez les champs autorisés ou opposez un veto avec ob.abort(). Chaque exécution est consignée.",
+    "searchPlaceholder": "Rechercher des scripts…",
+    "triggerFilter": "Déclencheur",
+    "table": {
+      "script": "Script",
+      "trigger": "Déclencheur",
+      "kind": "Genre",
+      "runs": "Exécutions",
+      "lastRun": "Dernière exécution",
+      "status": "Statut"
+    },
+    "empty": "Aucun script pour l’instant — automatisez un flux de travail documentaire.",
+    "allKinds": "tous",
+    "statusActive": "actif",
+    "statusDisabled": "désactivé",
+    "triggers": {
+      "beforeSubmit": "avant soumission",
+      "beforePost": "avant comptabilisation",
+      "afterPost": "après comptabilisation",
+      "beforeVoid": "avant annulation",
+      "scheduled": "planifié",
+      "endpoint": "point d’accès",
+      "bulk": "en masse",
+      "client": "client"
+    },
+    "kinds": {
+      "vendorBill": "facture fournisseur",
+      "customerInvoice": "facture client",
+      "vendorPayment": "paiement fournisseur",
+      "customerPayment": "paiement client",
+      "expenseReport": "note de frais",
+      "journal": "journal",
+      "vendorCredit": "avoir fournisseur",
+      "customerCredit": "avoir client",
+      "cardCharge": "débit carte",
+      "cardRefund": "remboursement carte",
+      "check": "chèque",
+      "deposit": "dépôt",
+      "transfer": "virement",
+      "purchaseOrder": "bon de commande",
+      "salesOrder": "commande client",
+      "quote": "devis"
+    },
+    "drawer": {
+      "newScript": "Nouveau script",
+      "newTitle": "Nouveau script",
+      "description": "JavaScript en environnement isolé (QuickJS) — aucun accès au système de fichiers ou au réseau. ob.query exécute du SQL en lecture seule.",
+      "createScript": "Créer le script",
+      "saveScript": "Enregistrer le script",
+      "created": "Script créé",
+      "saved": "Script enregistré",
+      "saveFailed": "Impossible d'enregistrer le script",
+      "namePlaceholder": "Politique comptes fournisseurs : les grosses factures exigent une note",
+      "trigger": "Déclencheur",
+      "documentKind": "Genre de document",
+      "allKindsOption": "Tous les genres",
+      "cron": "Planification cron",
+      "cronHint": "— min heure dom mois dow (UTC)",
+      "source": "Source",
+      "sourceHint": "— doit définir function main(ctx)",
+      "timeoutMs": "Délai d'expiration (ms)",
+      "runOrder": "Ordre d'exécution",
+      "recentRuns": "Exécutions récentes",
+      "runNow": "Exécuter",
+      "runOk": "Exécuté en {ms} ms",
+      "runFailed": "Échec de l'exécution",
+      "delete": "Supprimer",
+      "deleteConfirm": "Supprimer ce script ? L'historique des exécutions est conservé pour l'audit.",
+      "deleteFailed": "Impossible de supprimer le script",
+      "deleted": "Script supprimé",
+      "runStatus": {
+        "ok": "ok",
+        "aborted": "interrompue",
+        "error": "erreur",
+        "timeout": "délai dépassé"
+      },
+      "endpointSlug": "Slug du point d’accès",
+      "customRecordsGroup": "Enregistrements personnalisés",
+      "builtInGroup": "Transactions",
+      "noRuns": "Aucune exécution — ce script n'a jamais été lancé.",
+      "selectRun": "Sélectionnez une exécution dans l'onglet Exécutions récentes pour inspecter son journal.",
+      "logEmpty": "Cette exécution n'a produit aucune sortie."
+    },
+    "tabs": {
+      "general": "Général",
+      "code": "Code",
+      "runs": "Exécutions récentes",
+      "log": "Journal d'exécution"
+    }
+  },
+  "apiKeys": {
+    "title": "Clés API",
+    "description": "Clés API à portée restreinte pour les intégrations et l'automatisation. Chaque clé porte un sous-ensemble de permissions — une requête est autorisée uniquement lorsque les portées de la clé ET les permissions effectives du propriétaire la couvrent.",
+    "searchPlaceholder": "Rechercher des clés, des propriétaires…",
+    "empty": "Aucune clé API — créez-en une pour commencer à construire des intégrations.",
+    "table": {
+      "name": "Nom",
+      "key": "Clé",
+      "owner": "Propriétaire",
+      "scopes": "Portées",
+      "scopesCount": "{count, plural, one {# permission} other {# permissions}}",
+      "fullScope": "Portée complète (hérite du propriétaire)",
+      "lastUsed": "Dernière utilisation",
+      "status": "Statut"
+    },
+    "statusActive": "active",
+    "statusRevoked": "révoquée",
+    "drawer": {
+      "newKey": "Nouvelle clé API",
+      "newTitle": "Nouvelle clé API",
+      "description": "Créez une clé à portée restreinte pour l'accès programmatique à l'API REST. La clé en clair est affichée une seule fois — stockez-la en toute sécurité.",
+      "nameRequired": "Un nom est requis",
+      "namePlaceholder": "Intégration de synchronisation production",
+      "descriptionPlaceholder": "À quoi sert cette clé ?",
+      "saveFailed": "Impossible d'enregistrer la clé",
+      "created": "Clé créée",
+      "updated": "Clé mise à jour",
+      "revoke": "Révoquer",
+      "revokeConfirm": "Révoquer cette clé ? Toutes les intégrations qui l'utilisent cesseront de fonctionner immédiatement. Cette action est irréversible.",
+      "revokeFailed": "Impossible de révoquer la clé",
+      "revoked": "Clé révoquée",
+      "revokedNotice": "Cette clé a été révoquée et ne peut plus authentifier de requêtes.",
+      "keyCreated": "Copiez votre clé API",
+      "keyCreatedHint": "C'est la seule fois où la clé complète sera affichée. Stockez-la en toute sécurité — vous ne pourrez plus la voir.",
+      "copy": "Copier",
+      "copied": "Copié dans le presse-papiers",
+      "createKey": "Créer la clé",
+      "saveChanges": "Enregistrer",
+      "scopesHeading": "Portées des permissions",
+      "scopesHint": "Sélectionnez les permissions accordées par cette clé. Laissez vide pour hériter de l'ensemble complet des permissions du propriétaire. Une clé n'accorde jamais plus que ce que son propriétaire possède.",
+      "fullScope": "Portée complète (hérite des permissions du propriétaire)",
+      "scopesCount": "{count, plural, one {# permission sélectionnée} other {# permissions sélectionnées}}"
+    }
+  },
+  "settings": {
+    "metaTitle": "Entreprise et comptabilité",
+    "title": "Entreprise et comptabilité",
+    "description": "Identité de l’organisation, devise de base, calendrier fiscal et comptes de contrôle par lesquels le grand livre comptabilise.",
+    "organization": {
+      "title": "Organisation",
+      "description": "Comment cette entreprise est identifiée dans l’application.",
+      "displayName": "Nom d’affichage",
+      "displayNamePlaceholder": "Acme Manufacturing",
+      "displayNameHint": "Le nom de l’entreprise affiché dans OpenBooks. Il peut différer de la raison sociale enregistrée.",
+      "legalName": "Raison sociale",
+      "legalNamePlaceholder": "Acme Manufacturing Inc.",
+      "legalNameHint": "Le nom enregistré de l’entreprise utilisé dans les dossiers, rapports et documents officiels.",
+      "country": "Pays",
+      "countryPlaceholder": "Sélectionnez un pays…",
+      "countryHint": "Code ISO à deux lettres (p. ex. CA, US, GB).",
+      "defaultLanguage": "Langue par défaut",
+      "defaultLanguageHint": "La langue dans laquelle l’application s’affiche pour toute personne qui n’a pas choisi la sienne dans le menu du compte.",
+      "baseCurrency": "Devise de base",
+      "baseCurrencyHint": "La devise de présentation dans laquelle le grand livre s’équilibre. Ajoutez d’autres devises avant d’en changer.",
+      "reportPdfStyle": "Style PDF des rapports financiers",
+      "reportPdfStyleModern": "Moderne (avec marque)",
+      "reportPdfStyleFormal": "Formel (PCGR)",
+      "reportPdfStyleHint": "Apparence des états financiers exportés : Moderne utilise la couleur de votre marque et une police sans-serif ; Formel est un état classique en serif, en niveaux de gris, prêt pour l’audit."
+    },
+    "fiscal": {
+      "title": "Exercice financier",
+      "description": "Le mois où commence votre exercice financier. Tout ce qui dépend de l’exercice — rapports, clôture de période, préréglages — se fonde sur ce paramètre.",
+      "startsIn": "L’exercice financier commence en",
+      "runs": "L’exercice financier s’étend",
+      "range": "{start} → {end}",
+      "warning": "Changer le mois de début ré-étiquette <strong>chaque période comptable</strong> — leur exercice financier, leur numéro et leur nom de période sont recalculés à partir de la date de début de chaque période dès l’enregistrement. Les écritures de journal et les dates demeurent intactes, mais les rapports et les regroupements de clôture de période basculeront vers le nouveau calendrier.",
+      "taxFramework": "Référentiel d'impôt sur le résultat",
+      "taxFrameworkHint": "Détermine le libellé de la provision d'impôt (Paramètres → exercice).",
+      "frameworkAsc740": "ASC 740 (US GAAP)",
+      "frameworkIas12": "IAS 12 (IFRS)"
+    },
+    "months": {
+      "january": "Janvier",
+      "february": "Février",
+      "march": "Mars",
+      "april": "Avril",
+      "may": "Mai",
+      "june": "Juin",
+      "july": "Juillet",
+      "august": "Août",
+      "september": "Septembre",
+      "october": "Octobre",
+      "november": "Novembre",
+      "december": "Décembre"
+    },
+    "controlAccounts": {
+      "title": "Comptes de contrôle",
+      "description": "Les comptes du grand livre par lesquels les grands livres auxiliaires et les taxes sont comptabilisés. Seuls les comptes imputables (non sommaires) apparaissent.",
+      "selectPlaceholder": "Sélectionner un compte…",
+      "searchPlaceholder": "Rechercher des comptes…",
+      "fields": {
+        "ar": {
+          "label": "Comptes clients",
+          "hint": "Les soldes clients sont comptabilisés ici"
+        },
+        "ap": {
+          "label": "Comptes fournisseurs",
+          "hint": "Les soldes fournisseurs sont comptabilisés ici"
+        },
+        "bank": {
+          "label": "Banque par défaut",
+          "hint": "Compte de trésorerie par défaut pour les paiements fournisseurs et clients"
+        },
+        "taxCollected": {
+          "label": "Taxes perçues",
+          "hint": "Taxes de vente dues sur les factures"
+        },
+        "taxPaid": {
+          "label": "Taxes payées",
+          "hint": "Taxes récupérables sur les factures fournisseurs"
+        },
+        "employeePayable": {
+          "label": "Dû aux employés",
+          "hint": "Remboursements de dépenses dus au personnel"
+        },
+        "fxUnrealizedGainLoss": {
+          "label": "Gain/perte de change latent",
+          "hint": "Où est comptabilisée la réévaluation de fin de période des soldes en devises"
+        },
+        "fxRealizedGainLoss": {
+          "label": "Gain/perte de change réalisé",
+          "hint": "Compte des écarts de change lors du règlement des paiements en devise"
+        },
+        "laborWip": {
+          "label": "Main-d'œuvre en cours / coût",
+          "hint": "Le coût de la main-d'œuvre approuvée est débité ici (par projet)"
+        },
+        "laborClearing": {
+          "label": "Compensation de main-d'œuvre",
+          "hint": "Crédité lorsque la main-d'œuvre est imputée à un projet; soldé par la paie"
+        },
+        "unbilledReceivable": {
+          "label": "Créance non facturée (actif de contrat)",
+          "hint": "Produits à prix fixe acquis non facturés; libéré à la facturation"
+        },
+        "projectRevenue": {
+          "label": "Produits du projet",
+          "hint": "Crédité par la comptabilisation des produits selon l'avancement"
+        },
+        "incomeTaxExpense": {
+          "label": "Charge d'impôt sur le résultat",
+          "hint": "Débitée par la provision d'impôt (ASC 740)"
+        },
+        "incomeTaxPayable": {
+          "label": "Impôt à payer",
+          "hint": "Crédité pour l'impôt exigible"
+        },
+        "deferredTaxAsset": {
+          "label": "Impôt différé actif",
+          "hint": "Différences temporaires déductibles et reports déficitaires"
+        },
+        "deferredTaxLiability": {
+          "label": "Impôt différé passif",
+          "hint": "Différences temporaires imposables"
+        },
+        "valuationAllowance": {
+          "label": "Provision pour dépréciation",
+          "hint": "Contrepartie de l'impôt différé actif"
+        }
+      }
+    },
+    "revenue": {
+      "title": "Comptabilisation des produits",
+      "description": "Politiques d'allocation des produits ASC 606 / IFRS 15.",
+      "fairValueRangePolicy": {
+        "label": "Contrôle de la fourchette de juste valeur",
+        "warn": "Avertir — signaler pour revue les allocations hors fourchette",
+        "off": "Désactivé — aucun contrôle de fourchette",
+        "hint": "Lorsque le prix unitaire alloué d'une ligne de facture sort de la fourchette basse/haute de juste valeur de l'article, l'obligation de prestation est signalée pour revue sur son contrat de revenus. Ne bloque jamais la comptabilisation."
+      },
+      "learnMore": "En savoir plus."
+    },
+    "documentKinds": {
+      "vendorBill": "Facture fournisseur",
+      "customerInvoice": "Facture client",
+      "vendorPayment": "Paiement fournisseur",
+      "customerPayment": "Paiement client",
+      "expenseReport": "Note de frais",
+      "journal": "Journal"
+    },
+    "numbering": {
+      "title": "Numérotation des documents",
+      "description": "Séquences qui génèrent les numéros de documents. Préfixe et remplissage affichés pour chaque genre.",
+      "empty": "Aucune séquence configurée pour l’instant.",
+      "table": {
+        "document": "Document",
+        "prefix": "Préfixe",
+        "next": "Prochain n°",
+        "padding": "Remplissage",
+        "example": "Exemple"
+      }
+    },
+    "validation": {
+      "nameRequired": "Le nom d’affichage est obligatoire",
+      "countryRequired": "Le pays est obligatoire"
+    },
+    "saved": "Paramètres enregistrés",
+    "savedPeriodsRederived": "Paramètres enregistrés — périodes comptables ré-étiquetées selon le nouvel exercice financier",
+    "saveSettings": "Enregistrer les paramètres"
+  },
+  "users": {
+    "metaTitle": "Utilisateurs",
+    "title": "Utilisateurs",
+    "description": "Qui peut se connecter, et quels rôles chacun détient. L’accès d’un utilisateur est l’union de ses rôles attribués; les utilisateurs sans attribution retombent sur leur ancien rôle.",
+    "manageRoles": "Gérer les rôles",
+    "searchPlaceholder": "Rechercher un nom ou un courriel…",
+    "statusFilter": "Statut",
+    "emptyTitle": "Aucun utilisateur correspondant",
+    "emptySearchDescription": "Aucun utilisateur ne correspond à votre recherche. Essayez un autre terme ou un autre filtre de statut.",
+    "emptyFilterDescription": "Essayez un autre filtre de statut.",
+    "table": {
+      "roles": "Rôles",
+      "lastSignIn": "Dernière connexion"
+    },
+    "you": "vous",
+    "statusActive": "actif",
+    "statusInactive": "inactif",
+    "requestFailed": "La requête a échoué",
+    "editRolesFor": "Modifier les rôles de {name}",
+    "rolesFor": "Rôles — {name}",
+    "noRoles": "Aucun rôle pour l’instant — amorcez les rôles intégrés ou créez-en un sous Gérer les rôles.",
+    "builtInBadge": "intégré",
+    "deactivateConfirm": "Désactiver {name}? La personne sera déconnectée et ne pourra plus se connecter tant qu’elle ne sera pas réactivée.",
+    "deactivate": "Désactiver",
+    "reactivate": "Réactiver",
+    "deactivated": "{name} désactivé",
+    "reactivated": "{name} réactivé"
+  },
+  "permissions": {
+    "groups": {
+      "gl": "Grand livre",
+      "close": "Périodes et clôture",
+      "ap": "Comptes fournisseurs",
+      "ar": "Comptes clients",
+      "reports": "Rapports",
+      "budgets": "Budgets et prévisions",
+      "insights": "Analyses",
+      "items": "Articles et services",
+      "projects": "Projets et coût de revient",
+      "time": "Temps et feuilles de temps",
+      "records": "Enregistrements personnalisés",
+      "assistant": "Assistant IA",
+      "sql": "Console de requêtes",
+      "sync": "Migrations et miroir",
+      "scripts": "Scripts",
+      "flows": "Flux",
+      "apps": "Applications",
+      "documents": "Gestion de documents",
+      "admin": "Administration",
+      "assets": "Immobilisations et amortissement",
+      "data": "Importation et exportation",
+      "crm": "Gestion de la relation client",
+      "compliance": "Conformité"
+    },
+    "gl_read": "Consulter les journaux et les soldes",
+    "gl_manage": "Gérer le plan comptable",
+    "gl_post": "Comptabiliser des écritures de journal",
+    "periods_manage": "Configurer les calendriers, périodes et verrous",
+    "close_read": "Consulter les clôtures et leurs preuves",
+    "close_run": "Exécuter les tâches et validations de clôture",
+    "close_approve": "Réviser, approuver et verrouiller les clôtures",
+    "close_reopen": "Demander et approuver les réouvertures contrôlées",
+    "ap_read": "Consulter les factures fournisseurs",
+    "ap_create": "Créer et soumettre des factures fournisseurs",
+    "ap_approve": "Approuver ou rejeter des factures fournisseurs",
+    "ap_post": "Comptabiliser les factures fournisseurs au grand livre",
+    "ap_pay": "Payer les factures fournisseurs",
+    "ar_read": "Consulter les factures",
+    "ar_create": "Créer et soumettre des factures",
+    "ar_approve": "Approuver ou rejeter des factures",
+    "ar_post": "Comptabiliser les factures au grand livre",
+    "ar_pay": "Enregistrer les paiements clients",
+    "reports_read": "Consulter les rapports",
+    "reports_create": "Créer et enregistrer des rapports",
+    "reports_schedule": "Planifier l’envoi de rapports",
+    "budgets_read": "Consulter les budgets et les prévisions",
+    "budgets_manage": "Créer et modifier les brouillons budgétaires",
+    "budgets_approve": "Approuver et archiver les budgets officiels",
+    "insights_read": "Consulter les analyses et la bibliothèque",
+    "insights_create": "Créer des cartes et des tableaux de bord",
+    "insights_publish": "Publier dans la bibliothèque partagée",
+    "items_read": "Consulter les articles et services",
+    "items_manage": "Créer et modifier des articles",
+    "projects_read": "Consulter les projets et le coût de revient",
+    "projects_manage": "Créer et modifier des projets",
+    "time_read": "Consulter les feuilles de temps",
+    "time_manage": "Saisir et modifier le temps",
+    "time_approve": "Approuver les feuilles de temps",
+    "records_read": "Consulter les enregistrements personnalisés",
+    "records_create": "Créer et modifier des enregistrements personnalisés",
+    "records_manage_types": "Concevoir des types d’enregistrements personnalisés",
+    "assistant_use": "Utiliser l'assistant IA",
+    "assistant_write": "Autoriser l'assistant à préparer des brouillons",
+    "sql_execute": "Exécuter des requêtes SQL en lecture seule",
+    "sync_run": "Exécuter des synchronisations de sources externes",
+    "scripts_manage": "Gérer les scripts utilisateur",
+    "scripts_execute": "Appeler les scripts de point d'accès",
+    "flows_manage": "Créer et gérer les flux",
+    "flows_approve": "Agir sur les jalons d’approbation des flux",
+    "apps_use": "Utiliser les applications installées",
+    "apps_manage": "Installer et gérer les applications",
+    "parties_read": "Consulter les tiers",
+    "parties_manage": "Gérer les tiers",
+    "banking_read": "Consulter les opérations bancaires",
+    "banking_reconcile": "Rapprocher les comptes bancaires",
+    "expenses_read": "Consulter les notes de frais",
+    "expenses_create": "Saisir des notes de frais",
+    "admin_custom_fields_manage": "Gérer les champs personnalisés",
+    "admin_users_manage": "Gérer les utilisateurs et l’attribution des rôles",
+    "admin_roles_manage": "Gérer les rôles et les permissions",
+    "admin_nav_manage": "Personnaliser la navigation",
+    "admin_customization_manage": "Personnaliser les formulaires et les vues de liste",
+    "admin_audit_read": "Consulter le journal d’audit",
+    "admin_backups_manage": "Gérer les sauvegardes de l’organisation",
+    "admin_ai_manage": "Gérer les paramètres d'IA",
+    "api_keys_manage": "Gérer les clés API",
+    "assets_read": "Consulter les immobilisations et l’amortissement",
+    "assets_manage": "Créer et modifier des immobilisations, exécuter l’amortissement",
+    "documents_read": "Parcourir le gestionnaire de documents",
+    "documents_manage": "Téléverser, déplacer, renommer et supprimer des fichiers",
+    "admin_setup_manage": "Manage setup & configuration",
+    "data_export": "Exporter des données",
+    "data_import": "Importer des données",
+    "crm_accounts_read": "Voir les comptes CRM",
+    "crm_accounts_create": "Créer des pistes et des prospects",
+    "crm_accounts_manage": "Gérer les comptes CRM",
+    "crm_accounts_assign": "Attribuer et acheminer les comptes CRM",
+    "crm_activities_read": "Voir les activités CRM",
+    "crm_activities_manage": "Créer et gérer les activités CRM",
+    "crm_opportunities_read": "Voir les occasions",
+    "crm_opportunities_manage": "Créer et gérer les occasions",
+    "crm_opportunities_close": "Clore les occasions gagnées ou perdues",
+    "crm_forecasts_read": "Voir les prévisions de vente",
+    "crm_forecasts_manage": "Créer des instantanés de prévision",
+    "crm_forecasts_override": "Remplacer les prévisions d’équipe",
+    "crm_setup_manage": "Gérer la configuration CRM",
+    "compliance_read": "Consulter la conformité des sous-traitants",
+    "compliance_manage": "Enregistrer attestations, renonciations et déclarations",
+    "compliance_verify": "Vérifier les attestations",
+    "compliance_waive": "Accorder des dérogations de conformité",
+    "compliance_file": "Finaliser et déposer les déclarations de renseignements"
+  },
+  "ai": {
+    "metaTitle": "Paramètres d'IA",
+    "title": "Paramètres d'IA",
+    "description": "Choisissez le fournisseur d'IA utilisé par l'assistant. La clé API est stockée chiffrée — jamais dans un fichier ni une variable d'environnement.",
+    "enabledLabel": "Activer les fonctions d'IA",
+    "providerLabel": "Fournisseur",
+    "baseUrlLabel": "URL de base",
+    "baseUrlRequired": "(requise)",
+    "baseUrlOptional": "(remplacement facultatif)",
+    "baseUrlDefault": "Laissez vide pour utiliser la valeur par défaut : {url}",
+    "baseUrlHint": "Un point de terminaison public HTTPS compatible OpenAI.",
+    "keyLabel": "Clé API",
+    "keyPlaceholder": "Collez la clé API de votre fournisseur",
+    "keySavedPlaceholder": "•••••••••••• (enregistrée — saisissez pour remplacer)",
+    "keySavedHint": "Une clé est enregistrée, chiffrée au repos. Saisissez-en une nouvelle pour la remplacer.",
+    "keyHint": "Stockée chiffrée au repos ; elle ne quitte jamais le serveur.",
+    "modelsLabel": "Modèles",
+    "fastModelLabel": "Modèle rapide",
+    "fastModelHint": "recherches rapides",
+    "smartModelLabel": "Modèle avancé",
+    "smartModelHint": "l'assistant",
+    "save": "Enregistrer les paramètres",
+    "saved": "Paramètres d'IA enregistrés.",
+    "saveFailed": "Les paramètres n'ont pas pu être enregistrés.",
+    "keyCleared": "Clé API supprimée.",
+    "removeKey": "Supprimer la clé API",
+    "testConnection": "Tester la connexion",
+    "testFailed": "La requête de test a échoué.",
+    "agents": {
+      "title": "Agents de clôture continue",
+      "description": "Surveillez en continu la préparation à la clôture et présentez les exceptions comptables et financières étayées par des preuves.",
+      "reviewWork": "Examiner les constats",
+      "globallyDisabled": "Les fonctions d’IA sont désactivées. Les deux agents et leurs exécutions planifiées sont arrêtés, quels que soient les réglages ci-dessous.",
+      "enabled": "Activé",
+      "automaticRuns": "Exécuter automatiquement",
+      "cadence": "Fréquence",
+      "materiality": "Seuil d’importance relative",
+      "materialityHint": "Le seuil monétaire par défaut utilisé par les contrôles, sauf remplacement propre à un détecteur.",
+      "materialitySummary": "Importance relative {amount}",
+      "cadences": {
+        "daily": "Chaque jour",
+        "weekly": "Chaque semaine"
+      },
+      "manualOnly": "Exécutions manuelles",
+      "controlsEnabled": "{count} contrôles sur {total} activés",
+      "configure": "Configurer",
+      "drawerTitle": "Configurer {agent}",
+      "drawerDescription": "Contrôlez la planification, l’importance relative et les vérifications comptables évaluées par cet agent.",
+      "operationTitle": "Fonctionnement de l’agent",
+      "operationDescription": "Disponibilité générale et exécution automatique de cet agent.",
+      "detectorControlsTitle": "Contrôles des détecteurs",
+      "detectorControlsDescription": "Chaque contrôle peut être désactivé séparément et adapté à vos seuils opérationnels.",
+      "controlOn": "Activé",
+      "controlOff": "Désactivé",
+      "customMateriality": "Remplacer l’importance relative de l’agent pour ce contrôle",
+      "detectorMateriality": "Seuil d’importance relative du contrôle",
+      "inheritedMateriality": "Utilise le seuil de l’agent de {amount}.",
+      "disabledFindingBehavior": "La désactivation d’un contrôle arrête cette vérification. Les constats existants restent disponibles et ne sont pas marqués comme résolus.",
+      "reasoningTitle": "Raisonnement et récits de l’agent",
+      "reasoningDescription": "Donnez à cet agent les mêmes outils de lecture contrôlés que l’assistant afin qu’il puisse examiner les preuves, relier les facteurs et produire une analyse révisable. Il ne peut ni modifier ni comptabiliser d’enregistrements.",
+      "reasoning": {
+        "rootCauseAnalysis": {
+          "title": "Analyse des causes fondamentales",
+          "description": "Examine les opérations justificatives et explique les facteurs précis de chaque constat."
+        },
+        "recommendations": {
+          "title": "Mesures recommandées",
+          "description": "Propose des prochaines étapes concrètes et révisables à partir des preuves recueillies."
+        },
+        "narrative": {
+          "title": "Récit de gestion",
+          "description": "Crée une synthèse de préparation à la clôture ou de performance financière à partir des rapports et tendances actuels."
+        }
+      },
+      "modelTier": "Modèle d’analyse",
+      "modelTiers": {
+        "smart": "Modèle avancé — analyse approfondie",
+        "fast": "Modèle rapide — coût réduit"
+      },
+      "maxToolSteps": "Nombre maximal d’étapes d’outils",
+      "maxToolStepsHint": "Limite le nombre de consultations de rapports et d’enregistrements par exécution (4 à 30).",
+      "resetRecommended": "Rétablir les valeurs recommandées",
+      "cancel": "Annuler",
+      "saveConfiguration": "Enregistrer l’agent",
+      "configurationSaved": "Configuration de l’agent enregistrée.",
+      "configurationSaveFailed": "La configuration de l’agent n’a pas pu être enregistrée.",
+      "parameterLabel": "{label} ({unit})",
+      "units": {
+        "days": "jours",
+        "count": "éléments",
+        "percent": "%",
+        "multiple": "× importance relative",
+        "points": "points de pourcentage"
+      },
+      "parameters": {
+        "criticalAgeDays": "Critique après",
+        "criticalItemCount": "Nombre critique d’éléments",
+        "criticalMaterialityMultiple": "Multiple critique d’importance relative",
+        "staleAfterDays": "Périmé après",
+        "minimumVariancePercent": "Écart défavorable minimal",
+        "criticalVariancePercent": "Écart défavorable critique",
+        "minimumDeclinePercent": "Baisse minimale du chiffre d’affaires",
+        "criticalDeclinePercent": "Baisse critique du chiffre d’affaires",
+        "minimumDropPoints": "Baisse minimale de la marge",
+        "criticalDropPoints": "Baisse critique de la marge"
+      },
+      "detectors": {
+        "unmatched_bank_activity": {
+          "title": "Activité bancaire non appariée",
+          "description": "Repère les lignes de relevé non appariées par compte bancaire, mesure l’exposition totale et augmente la priorité selon l’âge, le volume ou l’importance relative."
+        },
+        "reconciliation_difference": {
+          "title": "Écarts de rapprochement",
+          "description": "Compare les soldes de relevé en cours avec l’activité rapprochée du grand livre et signale tout écart non nul."
+        },
+        "stale_accounting_documents": {
+          "title": "Documents comptables périmés",
+          "description": "Repère les factures, crédits, dépenses et écritures brouillons ou en attente qui dépassent l’âge configuré."
+        },
+        "missing_approved_budget": {
+          "title": "Budget approuvé manquant",
+          "description": "Confirme qu’un budget approuvé couvre la période d’exploitation actuelle avant l’analyse des écarts."
+        },
+        "unfavorable_budget_variance": {
+          "title": "Écart budgétaire défavorable",
+          "description": "Évalue les insuffisances de revenus et les dépassements de dépenses selon les montants exacts et des seuils de pourcentage configurables."
+        },
+        "period_revenue_decline": {
+          "title": "Baisse du chiffre d’affaires par période",
+          "description": "Compare les deux dernières périodes terminées et signale une détérioration importante du chiffre d’affaires."
+        },
+        "gross_margin_decline": {
+          "title": "Baisse de la marge brute",
+          "description": "Compare la marge brute des périodes terminées et signale une compression importante en points de pourcentage."
+        }
+      },
+      "accounting": {
+        "title": "Agent comptable",
+        "description": "Contrôles continus de tenue de livres et de préparation à la clôture.",
+        "coverage": "Vérifie l’activité bancaire non appariée, les écarts de rapprochement et les documents comptables brouillons ou en attente."
+      },
+      "finance": {
+        "title": "Agent financier",
+        "description": "Contrôles continus des écarts et du rendement.",
+        "coverage": "Vérifie les écarts au budget approuvé, les baisses du chiffre d’affaires et de la marge brute ainsi que l’absence de budget."
+      },
+      "lastRun": "Dernière exécution : {date} · {status}",
+      "nextRun": "Prochaine exécution planifiée : {date}",
+      "neverRun": "Jamais exécuté",
+      "runNow": "Exécuter",
+      "scanComplete": "Analyse terminée : {detected} détectés, {resolved} résolus.",
+      "scanFailed": "L’analyse de l’agent a échoué.",
+      "runStatus": {
+        "completed": "terminée",
+        "failed": "échouée",
+        "skipped": "ignorée",
+        "running": "en cours"
+      }
+    },
+    "documentCapture": {
+      "title": "Capture de documents fournisseurs",
+      "description": "Extrait les factures et avoirs fournisseurs dans une file de révision appuyée par des preuves. Le même arrêt général de l’IA de l’organisation s’applique, tandis que la clé du fournisseur documentaire reste chiffrée séparément.",
+      "openQueue": "Ouvrir la file de capture",
+      "enabled": "Activer la capture de documents fournisseurs",
+      "globallyDisabled": "Les fonctions d’IA sont désactivées. La capture de documents est arrêtée malgré ce réglage.",
+      "endpoint": "Point de terminaison du fournisseur documentaire",
+      "endpointHint": "Le point de terminaison public Azure AI Document Intelligence de votre organisation.",
+      "key": "Clé API du fournisseur documentaire",
+      "keyPlaceholder": "Collez la clé du fournisseur documentaire",
+      "removeKey": "Supprimer la clé du fournisseur documentaire",
+      "keyRemoved": "Clé du fournisseur documentaire supprimée.",
+      "model": "Modèle de facture",
+      "confidence": "Seuil de confiance pour la révision",
+      "confidenceHint": "Les valeurs sous ce seuil de 0 à 1 sont signalées pour révision.",
+      "autoDraft": "Créer automatiquement des brouillons uniquement pour les bons de commande entièrement appariés",
+      "test": "Tester le fournisseur documentaire",
+      "testResult": {
+        "connected": "Connexion au fournisseur documentaire établie.",
+        "failed": "Le test du fournisseur documentaire a échoué.",
+        "missing": "Saisissez d’abord un point de terminaison et une clé API."
+      }
+    },
+    "models": {
+      "load": "Charger les modèles",
+      "reload": "Recharger les modèles",
+      "loading": "Chargement…",
+      "loaded": "{count, plural, one {# modèle disponible} other {# modèles disponibles}}",
+      "loadError": "Impossible de charger les modèles.",
+      "none": "Aucun modèle",
+      "pick": "Choisir un modèle…",
+      "loadFirst": "Chargez d'abord les modèles, ou saisissez l'identifiant manuellement",
+      "pickFromList": "Choisir dans la liste",
+      "typeManually": "Saisir manuellement",
+      "current": "{id} (actuel)",
+      "hint": "Chargez la liste des modèles avec votre clé API, ou saisissez un identifiant de modèle manuellement.",
+      "idPlaceholder": "identifiant du modèle"
+    }
+  },
+  "setup": {
+    "title": "Setup",
+    "description": "Configure tax, dimensions, terms, and the reference data your books run on.",
+    "taxLibrary": {
+      "title": "Bibliothèque de déclarations fiscales",
+      "open": "Bibliothèque",
+      "description": "Importez les structures maintenues pour le Canada, le Royaume-Uni, l’Australie, la Nouvelle-Zélande et une feuille de travail américaine pour les taxes locales.",
+      "pack": "Module de juridiction",
+      "status": "État",
+      "installed": "Installé",
+      "available": "Disponible",
+      "searchPlaceholder": "Rechercher des modules de juridiction…",
+      "selectVisible": "Sélectionner tous les modules disponibles visibles",
+      "selectPack": "Sélectionner {name}",
+      "installSelected": "{count, plural, one {Installer # module sélectionné} other {Installer # modules sélectionnés}}",
+      "selectionCount": "{count, plural, =0 {Aucun module sélectionné} one {# module sélectionné} other {# modules sélectionnés}}",
+      "resultCount": "{count, plural, one {# module} other {# modules}}",
+      "pageOf": "Page {page} sur {pages}",
+      "working": "Traitement…",
+      "installSuccess": "{count, plural, one {# module de déclaration installé} other {# modules de déclaration installés}}",
+      "resetSuccess": "Module rétabli selon la bibliothèque",
+      "confirmReset": "Rétablir {name} selon les valeurs maintenues de la bibliothèque ? Cette action remplace ses cases de déclaration configurées.",
+      "usNotice": "Les États-Unis n’ont pas de déclaration fédérale de taxe de vente. Cette feuille doit être adaptée à chaque juridiction étatique et locale."
+    },
+    "assetDepreciationSetup": {
+      "navTitle": "Book Depreciation",
+      "title": "Book Depreciation",
+      "description": "Configure reusable depreciation methods and the method, life and convention each accounting book applies to an asset category.",
+      "tabsAria": "Book depreciation setup sections",
+      "tabs": {
+        "methods": "Methods",
+        "books": "Book policies"
+      }
+    },
+    "taxDepreciationSetup": {
+      "navTitle": "Tax Depreciation",
+      "title": "Tax Depreciation",
+      "description": "Install country tax-depreciation packs and configure class assignments, regimes, classes, conventions and first-year rules. This is separate from sales-tax, VAT and nexus setup.",
+      "tabsAria": "Fixed asset setup sections",
+      "tabs": {
+        "overview": "Overview",
+        "categories": "Asset categories",
+        "regimes": "Tax regimes",
+        "classes": "Tax classes",
+        "firstYear": "First-year rules",
+        "methods": "Methods",
+        "books": "Book policies"
+      },
+      "packsTitle": "Country depreciation packs",
+      "packsDescription": "Installing a pack creates editable tenant configuration. Existing overrides are never replaced.",
+      "recommended": "Company country",
+      "installed": "Installed",
+      "install": "Install pack",
+      "installing": "Installing…",
+      "installFailed": "Could not install the depreciation pack",
+      "installedToast": "Installed {count} depreciation classes",
+      "assignmentFailed": "Could not save the tax class assignment",
+      "assignmentsTitle": "Asset-category class assignments",
+      "assignmentsDescription": "Choose the default tax class for each asset category.",
+      "assetCategory": "Asset category",
+      "notAssigned": "Not assigned",
+      "classCount": "{count, plural, one {# class} other {# classes}}",
+      "models": {
+        "pool": "Class pool",
+        "macrs": "Per-asset MACRS"
+      },
+      "customizeTitle": "Customize",
+      "customizeDescription": "Country packs are starting points; seeded values remain editable.",
+      "links": {
+        "regimes": {
+          "title": "Regimes",
+          "description": "Country, calculation model and asset class attribute."
+        },
+        "classes": {
+          "title": "Classes and methods",
+          "description": "Rates, recovery periods, methods and conventions."
+        },
+        "firstYear": {
+          "title": "First-year rules",
+          "description": "Effective-dated acceleration and eligibility."
+        },
+        "assignments": {
+          "title": "Asset-category assignments",
+          "description": "Assign categories to regime classes in Tax attributes."
+        }
+      }
+    },
+    "taxOfficial": {
+      "title": "Formulaire officiel de dépôt",
+      "description": "Téléversez un PDF officiel à remplir seulement si la juridiction l’accepte ou l’exige. Associez ses champs dans Cases de déclaration.",
+      "upload": "Téléverser le PDF officiel",
+      "uploading": "Téléversement…",
+      "uploaded": "Formulaire officiel téléversé",
+      "remove": "Retirer",
+      "removed": "Formulaire officiel retiré",
+      "none": "Aucun PDF officiel téléversé"
+    },
+    "taxBoxes": {
+      "description": "Cases associées, calculées et manuelles pour {code}.",
+      "calculatedNote": "Chaque case appartient à cette déclaration; les cases associées sélectionnent le code de taxe dont elles récapitulent l’activité.",
+      "new": "Nouvelle case de déclaration",
+      "searchPlaceholder": "Rechercher des cases…",
+      "source": "Source",
+      "empty": "Aucune case ne correspond à cette déclaration et à cette recherche.",
+      "mapped": "Associée",
+      "calculated": "Calculée",
+      "manual": "Manuelle"
+    },
+    "taxRates": {
+      "description": "Taux avec dates d’effet pour {code}.",
+      "new": "Nouveau taux de taxe",
+      "searchPlaceholder": "Rechercher des taux de taxe…",
+      "empty": "Aucun taux ne correspond à ce code et à cette recherche."
+    },
+    "new": "New",
+    "learnMore": "En savoir plus.",
+    "empty": "Nothing here yet.",
+    "statusActive": "Active",
+    "statusArchived": "Archived",
+    "yes": "Yes",
+    "selectPlaceholder": "Select…",
+    "searchPlaceholder": "Search…",
+    "created": "Created",
+    "updated": "Saved",
+    "deleted": "Deleted",
+    "confirmDelete": "Delete this record? This cannot be undone.",
+    "validation": {
+      "required": "{field} is required"
+    },
+    "drawer": {
+      "newTitle": "Nouveau : {name}",
+      "editTitle": "Modifier : {name}",
+      "tabs": {
+        "ariaLabel": "Sections de configuration",
+        "details": "Détails"
+      }
+    },
+    "errors": {
+      "duplicate": "A record with that code already exists.",
+      "inUse": "This record is in use and can't be deleted.",
+      "primaryRequired": "Choisissez un autre livre comptable comme livre principal avant de retirer ce statut à celui-ci.",
+      "primaryActiveRequired": "Le livre comptable principal doit rester actif.",
+      "archiveOnly": "Les livres comptables sont conservés pour l’historique du grand livre et peuvent seulement être archivés.",
+      "invalidUrl": "Saisissez une URL gouvernementale valide commençant par http:// ou https://.",
+      "invalidDepreciationFormula": "Saisissez une formule d’amortissement valide avec les variables et opérateurs documentés."
+    },
+    "groups": {
+      "company": "Company",
+      "accounting": "Comptabilité",
+      "taxes": "Taxes",
+      "dimensions": "Dimensions",
+      "billing": "Billing & numbering",
+      "workforce": "Workforce",
+      "assets": "Assets",
+      "currency": "Currency",
+      "revenue": "Revenus",
+      "inventory": "Stocks",
+      "projects": "Projets",
+      "compliance": "Conformité"
+    },
+    "fxProvider": {
+      "title": "Fournisseur de taux de change",
+      "description": "Importez les taux au comptant quotidiens dans le registre des devises du locataire et maintenez-les à jour automatiquement.",
+      "provider": "Fournisseur",
+      "providers": {
+        "bank_of_canada": "Banque du Canada",
+        "ecb": "Banque centrale européenne",
+        "open_exchange_rates": "Open Exchange Rates"
+      },
+      "providerHelp": {
+        "bank_of_canada": "Moyennes quotidiennes officielles avec le CAD comme devise d'ancrage. Aucune clé API requise.",
+        "ecb": "Taux de référence officiels des jours ouvrables avec l'EUR comme devise d'ancrage. Aucune clé API requise.",
+        "open_exchange_rates": "Couverture commerciale étendue avec la clé API de votre locataire. Des limites de forfait peuvent s'appliquer."
+      },
+      "displayName": "Nom de la configuration",
+      "displayNamePlaceholder": "Taux d'entreprise quotidiens",
+      "baseCurrency": "Devise de base du locataire",
+      "selectCurrency": "Sélectionner une devise…",
+      "schedule": "Calendrier de synchronisation",
+      "schedules": {
+        "manual": "Manuelle uniquement",
+        "daily": "Quotidienne",
+        "weekdays": "Jours ouvrables",
+        "weekly": "Hebdomadaire"
+      },
+      "syncHourUtc": "Heure de synchronisation (UTC)",
+      "lookbackDays": "Période de révision (jours)",
+      "currencies": "Devises à importer",
+      "addCurrency": "Ajouter une devise…",
+      "searchCurrencies": "Rechercher des devises…",
+      "removeCurrency": "Retirer {currency}",
+      "noCurrencies": "Ajoutez au moins une devise étrangère.",
+      "apiKey": "Clé API du fournisseur",
+      "apiKeyPlaceholder": "Saisir la clé API du locataire",
+      "secretStored": "Une clé chiffrée est enregistrée — saisissez une valeur pour la remplacer",
+      "clearSecret": "Supprimer la clé API enregistrée",
+      "enabled": "Activer la synchronisation du fournisseur",
+      "saved": "Fournisseur de taux de change enregistré.",
+      "test": "Tester le fournisseur",
+      "testPassed": "Le fournisseur a retourné {observations} observations et {rates} taux normalisés.",
+      "testFailed": "Le test du fournisseur a échoué.",
+      "syncNow": "Synchroniser maintenant",
+      "syncPassed": "{observations} observations importées et {rates} taux normalisés traités.",
+      "syncFailed": "La synchronisation des taux de change a échoué.",
+      "health": "État du fournisseur",
+      "lastSuccess": "Dernière importation réussie",
+      "lastObservation": "Dernière observation",
+      "nextSync": "Prochaine synchronisation",
+      "latestRun": "Dernière exécution",
+      "noRuns": "Le fournisseur n'a pas encore été exécuté.",
+      "runStatus": {
+        "running": "En cours",
+        "ok": "Réussie",
+        "failed": "Échouée"
+      },
+      "runSummary": "{observations} observations · {inserted} insérés · {updated} mis à jour · {preserved} remplacements manuels conservés",
+      "overridePolicy": "Les taux modifiés dans Configuration deviennent des remplacements manuels protégés. Les importations ne les remplacent jamais."
+    },
+    "paymentOperations": {
+      "title": "Paiements et services bancaires",
+      "description": "Configurez les réseaux de paiement, les profils bancaires, les calendriers, les approbations, la livraison et les mandats de prélèvement.",
+      "tabs": {
+        "profiles": "Profils bancaires",
+        "formats": "Formats de paiement",
+        "schedules": "Calendriers",
+        "mandates": "Mandats de prélèvement"
+      },
+      "search": {
+        "profiles": "Rechercher des profils…",
+        "formats": "Rechercher des formats…",
+        "schedules": "Rechercher des calendriers…",
+        "mandates": "Rechercher des mandats…"
+      },
+      "state": "État",
+      "new": {
+        "profiles": "Nouveau profil",
+        "formats": "Nouveau format personnalisé",
+        "schedules": "Nouveau calendrier",
+        "mandates": "Nouveau mandat"
+      },
+      "columns": {
+        "name": "Nom",
+        "bank": "Compte de financement",
+        "format": "Format",
+        "currency": "Devise",
+        "delivery": "Livraison",
+        "approval": "Approbation du lot",
+        "status": "Statut",
+        "code": "Code",
+        "rail": "Réseau",
+        "direction": "Sens",
+        "profile": "Profil",
+        "cron": "Calendrier",
+        "nextRun": "Prochaine exécution",
+        "action": "Action",
+        "reference": "Référence",
+        "party": "Tiers",
+        "scheme": "Régime",
+        "signedOn": "Signé",
+        "expiresOn": "Expiration"
+      },
+      "states": {
+        "active": "Actif",
+        "archived": "Archivé",
+        "pending": "En attente",
+        "suspended": "Suspendu",
+        "revoked": "Révoqué",
+        "expired": "Expiré"
+      },
+      "rails": {
+        "cpa005_credit": "Crédit CPA-005",
+        "nacha_credit": "Crédit NACHA",
+        "sepa_credit": "Virement SEPA",
+        "nacha_debit": "Débit NACHA",
+        "sepa_debit": "Prélèvement SEPA",
+        "positive_pay": "Positive Pay",
+        "wire": "Virement bancaire",
+        "cheque": "Chèque",
+        "custom": "Personnalisé"
+      },
+      "directions": {
+        "credit": "Crédit",
+        "debit": "Débit",
+        "both": "Crédit et débit"
+      },
+      "actions": {
+        "create_draft": "Créer un brouillon",
+        "submit_for_approval": "Soumettre à l’approbation"
+      },
+      "schemes": {
+        "nacha": "NACHA",
+        "sepa_core": "SEPA Core",
+        "sepa_b2b": "SEPA B2B",
+        "custom": "Personnalisé"
+      },
+      "fields": {
+        "name": "Nom",
+        "currency": "Devise",
+        "bankAccount": "Compte de financement",
+        "format": "Format de paiement",
+        "subsidiary": "Filiale",
+        "country": "Pays",
+        "sftpServer": "Serveur SFTP existant",
+        "sftpFolder": "Dossier sortant",
+        "requireRunApproval": "Exiger l’approbation du lot de paiements",
+        "requireFileApproval": "Exiger l’approbation du fichier généré",
+        "autoRemittance": "Envoyer automatiquement l’avis de paiement",
+        "discountAccount": "Compte d’escompte de paiement anticipé",
+        "positivePayAccountReference": "Référence de compte de l’institution",
+        "active": "Actif",
+        "code": "Code",
+        "direction": "Sens",
+        "extension": "Extension de fichier",
+        "contentType": "Type de contenu",
+        "formatterScript": "JavaScript de formatage",
+        "profile": "Profil bancaire",
+        "cron": "Expression cron",
+        "timezone": "Fuseau horaire",
+        "action": "À l’échéance",
+        "party": "Tiers",
+        "partyBankAccount": "Compte bancaire approuvé",
+        "scheme": "Régime du mandat",
+        "reference": "Référence du mandat",
+        "status": "Statut",
+        "signedOn": "Signé le",
+        "validFrom": "Valide à partir du",
+        "expiresOn": "Expire le"
+      },
+      "secretFields": {
+        "originatorId": "Identifiant de l’émetteur",
+        "originatorShortName": "Nom court",
+        "originatorLongName": "Nom long",
+        "dataCentre": "Centre de données",
+        "institution": "Institution",
+        "transit": "Transit",
+        "account": "Numéro de compte",
+        "transactionCode": "Code de transaction",
+        "odfiRouting": "Routage ODFI",
+        "immediateDestination": "Destination immédiate",
+        "immediateOrigin": "Origine immédiate",
+        "destinationName": "Nom de la destination",
+        "originName": "Nom de l’origine",
+        "companyName": "Nom de l’entreprise",
+        "companyId": "Identifiant de l’entreprise",
+        "entryClassCode": "Classe d’entrée",
+        "entryDescription": "Description de l’entrée",
+        "originatorName": "Nom de l’émetteur",
+        "originatorIban": "IBAN de l’émetteur",
+        "originatorBic": "BIC de l’émetteur",
+        "creditorId": "Identifiant du créancier"
+      },
+      "originator": {
+        "title": "Identifiants de l’émetteur",
+        "newHint": "Stockés sous forme chiffrée pour ce locataire et ce profil.",
+        "editHint": "Les identifiants sont en écriture seule. Laissez tous les champs vides pour conserver les valeurs enregistrées."
+      },
+      "accounting": {
+        "title": "Comptabilité et références bancaires",
+        "noDiscountAccount": "Ne pas saisir les escomptes",
+        "hint": "Le compte d’escompte comptabilise les économies réalisées lorsqu’un lot utilise un escompte disponible selon les conditions de paiement."
+      },
+      "delivery": {
+        "title": "Livraison",
+        "manual": "Téléchargement manuel",
+        "existingSftpHint": "Les serveurs SFTP sont gérés une seule fois dans la configuration SFTP existante. Ce profil en sélectionne seulement un pour la livraison."
+      },
+      "criteria": {
+        "title": "Critères de sélection",
+        "dueThroughDays": "Inclure les factures exigibles dans (jours)",
+        "minimumAmount": "Montant minimal de la facture",
+        "maximumRunAmount": "Montant maximal du lot",
+        "captureDiscounts": "Saisir les escomptes pour paiement anticipé disponibles",
+        "applyCredits": "Appliquer les crédits disponibles"
+      },
+      "drawer": {
+        "new": {
+          "profiles": "Nouveau profil bancaire",
+          "formats": "Nouveau format de paiement personnalisé",
+          "schedules": "Nouveau calendrier de paiement",
+          "mandates": "Nouveau mandat de prélèvement"
+        },
+        "edit": {
+          "profiles": "Modifier le profil bancaire",
+          "formats": "Modifier le format de paiement",
+          "schedules": "Modifier le calendrier de paiement",
+          "mandates": "Modifier le mandat de prélèvement"
+        },
+        "description": {
+          "profiles": "Associez un compte de financement à un réseau de paiement et à une politique de livraison.",
+          "formats": "Définissez les métadonnées du fichier et le JavaScript isolé d’un format bancaire personnalisé.",
+          "schedules": "Sélectionnez les opérations admissibles selon un calendrier récurrent.",
+          "mandates": "Consignez l’autorisation requise pour prélever des fonds auprès d’un tiers."
+        }
+      },
+      "select": "Sélectionner…",
+      "allSubsidiaries": "Toutes les filiales",
+      "empty": "Aucun enregistrement correspondant.",
+      "manualDelivery": "Téléchargement manuel",
+      "runApproval": "Requise",
+      "automatic": "Automatique",
+      "any": "Toutes",
+      "builtInFormatHint": "Ce formateur intégré est maintenu par le moteur de paiement. Sa définition exécutable ne peut pas être modifiée ici.",
+      "save": "Enregistrer",
+      "saving": "Enregistrement…",
+      "saved": "Enregistré",
+      "cancel": "Annuler",
+      "saveFailed": "Impossible d’enregistrer la configuration."
+    },
+    "entities": {
+      "company": {
+        "title": "Company & Accounting",
+        "description": "Organization identity, base currency, fiscal year, and control accounts."
+      },
+      "tax-codes": {
+        "title": "Codes de taxe",
+        "singularTitle": "Code de taxe",
+        "description": "Les taux que vous facturez et payez, ainsi que les comptes auxquels ils sont imputés."
+      },
+      "tax-rates": {
+        "title": "Taux de taxe",
+        "singularTitle": "Taux de taxe",
+        "description": "Historique des taux avec dates d’effet pour chaque code de taxe."
+      },
+      "tax-groups": {
+        "title": "Tax Groups",
+        "description": "Bundle several tax codes to apply together on a line."
+      },
+      "tax-return-forms": {
+        "title": "Déclarations de taxes",
+        "description": "Configurez une déclaration de taxes gouvernementale : ses cases, leur calcul et son mode de dépôt."
+      },
+      "tax-report-lines": {
+        "title": "Cases de déclaration",
+        "singularTitle": "Case de déclaration",
+        "description": "Associez les codes de taxe aux cases d’une déclaration, ou calculez une case à partir d’autres cases."
+      },
+      "classes": {
+        "title": "Classes",
+        "description": "A reporting dimension for slicing transactions."
+      },
+      "segment-definitions": {
+        "title": "Segments",
+        "description": "Configurez les segments comptables intégrés et personnalisés dans les transactions, les comptes et les rapports."
+      },
+      "segment-values": {
+        "title": "Valeurs de segment",
+        "description": "Gérez les valeurs sélectionnables et les hiérarchies des segments personnalisés."
+      },
+      "departments": {
+        "title": "Departments",
+        "description": "A reporting dimension for slicing transactions."
+      },
+      "locations": {
+        "title": "Locations",
+        "description": "A reporting dimension for slicing transactions."
+      },
+      "payment-terms": {
+        "title": "Payment Terms",
+        "description": "Net and early-payment discount terms for bills and invoices."
+      },
+      "number-sequences": {
+        "title": "Number Sequences",
+        "description": "Contrôlez le préfixe, le prochain numéro et la longueur de chaque document ou enregistrement personnalisé. Les séquences personnalisées sont créées automatiquement lors de la première numérotation."
+      },
+      "time-types": {
+        "title": "Time Types",
+        "description": "Cost multipliers and billable defaults for timesheets."
+      },
+      "worker-comp-groups": {
+        "title": "Worker Comp Groups",
+        "description": "Workers' compensation rate groups for labor costing."
+      },
+      "asset-categories": {
+        "title": "Asset Categories",
+        "description": "Default depreciation method and accounts for fixed assets."
+      },
+      "depreciation-methods": {
+        "title": "Méthodes d’amortissement",
+        "description": "Créez des formules d’amortissement personnalisées — le générateur de formules."
+      },
+      "depreciation-book-policies": {
+        "title": "Politiques d’amortissement par livre",
+        "description": "Méthode par livre et par catégorie pour l’amortissement multi-livres."
+      },
+      "currencies": {
+        "title": "Currencies",
+        "description": "Currency codes and their minor-unit precision."
+      },
+      "sftp": {
+        "title": "Serveurs SFTP"
+      },
+      "payment-operations": {
+        "title": "Paiements et services bancaires",
+        "description": "Formats de paiement, profils bancaires, calendriers et mandats de prélèvement."
+      },
+      "subsidiaries": {
+        "title": "Subsidiaries",
+        "description": "The legal entities inside your organization — a consolidation tree with one root."
+      },
+      "intercompany-pairs": {
+        "title": "Paires intersociétés",
+        "description": "Correspondances des comptes à recevoir et à payer pour les transactions entre filiales."
+      },
+      "accounting-books": {
+        "title": "Livres comptables",
+        "singular": "livre comptable",
+        "description": "Gérez les livres principal, fiscal, statutaire et de reporting auxquels appartiennent les écritures et les contrôles de clôture."
+      },
+      "fx-rates": {
+        "title": "Taux de change",
+        "description": "Taux quotidiens propres au locataire utilisés pour comptabiliser les transactions en devises."
+      },
+      "consolidated-fx-rates": {
+        "title": "Taux de change consolidés",
+        "description": "Taux courants, moyens et historiques par période utilisés pour la consolidation des filiales."
+      },
+      "item-rate-books": {
+        "title": "Grilles tarifaires des articles",
+        "description": "Grilles par client, projet et organisation pour l’équipement et les autres frais d’article."
+      },
+      "item-rate-book-assignments": {
+        "title": "Affectations des grilles tarifaires",
+        "description": "Choisissez la grille datée applicable à un client ou à un projet."
+      },
+      "recognition-rules": {
+        "title": "Règles de comptabilisation",
+        "description": "Comment les produits sont comptabilisés dans le temps — méthode, calendrier et comptes (ASC 606)."
+      },
+      "fair-value-prices": {
+        "title": "Prix de juste valeur",
+        "description": "Prix de vente autonomes utilisés pour répartir les produits d'une offre groupée entre les obligations."
+      },
+      "stock-locations": {
+        "title": "Emplacements de stock",
+        "description": "Casiers, zones et entrepôts physiques sous la dimension emplacements."
+      },
+      "item-inventory-profiles": {
+        "title": "Coût des articles",
+        "description": "Méthode de coût, comptes de stock, suivi et coût standard par article."
+      },
+      "bom-components": {
+        "title": "Nomenclature",
+        "description": "Composants consommés pour assembler chaque article."
+      },
+      "overhead-rates": {
+        "title": "Taux de frais généraux",
+        "description": "Taux de frais généraux datés appliqués au coût de la main-d'œuvre.",
+        "singular": "Taux de frais généraux"
+      },
+      "overhead-model": {
+        "title": "Frais généraux",
+        "description": "Le moteur de taux derrière les frais généraux de projet — pools de coûts, bases de répartition, matrice de taux par département et profils. Les projets utilisant la méthode « moteur de taux » appliquent ces taux à leurs heures de main-d’œuvre.",
+        "docs": "Documentation",
+        "viewAnalytics": "Voir l’analytique",
+        "publish": "Publier les taux",
+        "wizard": "Assistant de configuration",
+        "publishTitle": "Publier sur la grille de taux",
+        "publishHint": "Fige les taux calculés du moteur dans des lignes datées de la grille de taux. Les projets utilisent ces taux publiés jusqu’à la prochaine publication — les périodes antérieures conservent leurs taux d’origine.",
+        "publishConfirm": "Publier",
+        "publishDone": "Taux publiés sur la grille",
+        "cancel": "Annuler",
+        "wizardTitle": "Configurer les frais généraux de projet",
+        "wizardDone": "Frais généraux configurés",
+        "wizardIntro": "Les frais généraux attribuent à chaque chantier sa part du coût de fonctionnement de l’entreprise — un indicateur de gestion sur le P&L du projet, jamais une écriture comptable. Les frais généraux sont toujours calculés à partir de taux publiés et datés : les périodes closes ne changent jamais. Choisissez la méthode :",
+        "recommended": "Recommandé",
+        "effectiveFrom": "En vigueur à partir du",
+        "liveNow": "Calculé des réels : ${rate}/h",
+        "flatPercent": "Frais généraux % du coût de main-d’œuvre",
+        "flatPerHour": "Frais généraux $ par heure de main-d’œuvre",
+        "applyHint": "Applique cette méthode aux types de projet sélectionnés. Leur P&L gagne une ligne Frais généraux incluse dans le coût total.",
+        "stepOf": "Étape {step} sur {total}",
+        "back": "Retour",
+        "next": "Suivant",
+        "finish": "Terminer",
+        "approach": {
+          "rate_card": {
+            "title": "Grille de taux par département",
+            "desc": "Taux $/heure datés par département, publiés depuis le moteur ou saisis manuellement. Les coûts des chantiers sont stables et auditables — les périodes passées conservent toujours leurs taux en vigueur."
+          },
+          "per_hour": {
+            "title": "$ fixe par heure",
+            "desc": "Un taux horaire unique pour toute l’entreprise. Simple, sans départements."
+          },
+          "percent": {
+            "title": "% du coût de main-d’œuvre",
+            "desc": "Frais généraux en majoration du coût de main-d’œuvre. Courant en services professionnels."
+          }
+        },
+        "current": "Configuration actuelle",
+        "ratesActive": "{count} taux publiés en vigueur depuis le {date}",
+        "noRates": "Aucun taux publié — lancez l’assistant ou publiez des taux.",
+        "methodNone": "Pas de frais généraux",
+        "methodCard": "Grille de taux par département",
+        "methodPct": "{rate}% du coût de main-d’œuvre",
+        "methodHr": "{rate} $/heure",
+        "methodGl": "GL comptabilisé (groupe de comptes)",
+        "working": "Enregistrement…",
+        "step1t": "Classer les frais généraux",
+        "step1d": "{count} catégories dans l’onglet Catégories ci-dessous ; {unassigned} comptes non assignés. Groupez chaque compte de charges indirectes pour ne rien omettre.",
+        "step2t": "Vérifier les taux calculés",
+        "step2d": "L’onglet Matrice montre le taux de chaque département d’après les réels — actuellement {rate} $/h composite. Un aperçu seulement ; il ne coûte jamais les chantiers directement.",
+        "step3t": "Publier et appliquer",
+        "application": {
+          "title": "Application au grand livre",
+          "hint": "Comment les frais généraux atteignent les livres. « Rapport seulement » les garde statistiques. La paire à somme nulle comptabilise la part de chaque projet dans le compte de frais généraux AVEC l'étiquette projet et contrepasse le même montant sans elle — les vues par projet portent les frais généraux, le compte et le résultat restent à zéro.",
+          "modes": {
+            "report_only": "Rapport seulement",
+            "net_zero_pair": "Paire à somme nulle",
+            "off": "Désactivé"
+          },
+          "account": "Compte de frais généraux appliqués",
+          "save": "Enregistrer",
+          "saved": "Application des frais généraux enregistrée",
+          "entry": "Écriture",
+          "date": "Date",
+          "projects": "Projets",
+          "total": "Appliqué",
+          "status": "Statut",
+          "autoHint": "Les frais généraux s'appliquent automatiquement : à l'approbation des heures, la part de chaque saisie (heures × le taux publié du département au jour travaillé) se comptabilise avec la même approbation — aucune étape de fin de mois, et sans attendre la paie.",
+          "backfillPrompt": "{entries} saisies approuvées (~{hours} h) sont antérieures à ce mode et ne portent pas encore de frais généraux.",
+          "backfill": "Appliquer aux heures passées",
+          "backfilled": "{entries} saisies passées portées : ${total} de frais généraux appliqués"
+        },
+        "lifecycle": {
+          "title": "Cycle de vie des taux",
+          "hint": "Qui maintient la carte de taux publiée lue par la méthode standard et la paire à somme nulle.",
+          "modes": {
+            "manual": "Manuel",
+            "scheduled": "Planifié",
+            "live": "En direct"
+          },
+          "modeHints": {
+            "manual": "Le moteur calcule et recommande ; une personne examine la dérive et clique sur Publier.",
+            "scheduled": "Le worker capture les taux composites en direct dans la carte au début de chaque période.",
+            "live": "Les types de projet lisent directement le moteur en direct ; la carte publiée est indicative."
+          },
+          "cadences": {
+            "monthly": "Mensuel",
+            "quarterly": "Trimestriel"
+          },
+          "save": "Enregistrer",
+          "saved": "Cycle de vie enregistré",
+          "department": "Département",
+          "published": "Publié $/h",
+          "live": "En direct $/h",
+          "drift": "Dérive"
+        },
+        "laborCostingLink": "Coût de la main-d'œuvre",
+        "tabs": {
+          "model": "Modèle",
+          "rates": "Taux",
+          "lifecycle": "Cycle de vie des taux",
+          "application": "Application au grand livre"
+        }
+      },
+      "compliance-classes": {
+        "title": "Catégories de contreparties",
+        "singular": "Catégorie de contrepartie",
+        "description": "Le type de contrepartie qu'est un fournisseur, et le contrôle de paiement qui en découle."
+      },
+      "compliance-requirements": {
+        "title": "Exigences de conformité",
+        "singular": "Exigence de conformité",
+        "description": "Une ligne par politique : ce qui doit être au dossier, les limites exigées et l'effet d'un manquement."
+      },
+      "information-return-box-rules": {
+        "title": "Cases des déclarations",
+        "singular": "Règle de case",
+        "description": "La case 1099/T4A à laquelle appartiennent les dépenses d'un compte. Le reste tombe dans la case par défaut du fournisseur."
+      },
+      "income-tax-rates": {
+        "title": "Taux d'impôt sur le résultat",
+        "singularTitle": "Taux d'impôt",
+        "description": "Taux d'impôt adoptés par juridiction, datés — ils pilotent la provision ASC 740."
+      }
+    },
+    "fields": {
+      "classAttribute": "Asset class attribute",
+      "countryCode": "Country",
+      "calculationModel": "Calculation model",
+      "regime": "Regime",
+      "classCode": "Class code",
+      "rate": "Taux",
+      "method": "Method",
+      "firstYearFraction": "First-year fraction",
+      "allowRecapture": "Allow recapture",
+      "allowTerminalLoss": "Allow terminal loss",
+      "costCap": "Cost cap",
+      "depreciationSystem": "Depreciation system",
+      "macrsMethod": "MACRS method",
+      "recoveryPeriodYears": "Recovery period (years)",
+      "taxAttributes": "Tax attributes (JSON)",
+      "enhancedMultiplier": "Enhanced multiplier",
+      "acquiredFrom": "Acquired from",
+      "acquiredTo": "Acquired to",
+      "code": "Code",
+      "name": "Name",
+      "appliesTo": "Applies to",
+      "recoverablePercent": "Recoverable %",
+      "calculationType": "Type de calcul",
+      "withholdingAccountId": "Compte de retenue",
+      "priceIncludesTax": "Prix toutes taxes comprises",
+      "compoundOnPrevious": "Composer sur les éléments précédents",
+      "roundingScale": "Décimales d’arrondi fiscal",
+      "isActive": "Active",
+      "isPrimary": "Livre principal",
+      "country": "Country",
+      "region": "Region",
+      "collectedAccountId": "Tax collected account",
+      "paidAccountId": "Tax paid account",
+      "taxCodeId": "Tax code",
+      "ratePercent": "Taux",
+      "effectiveFrom": "Effective from",
+      "effectiveTo": "Effective to",
+      "members": "Tax codes",
+      "reportCode": "Report code",
+      "lineCode": "Line code",
+      "label": "Label",
+      "basis": "Basis",
+      "sign": "Sign",
+      "submissionChannel": "Mode de dépôt",
+      "governmentFormat": "Format gouvernemental",
+      "submissionUrl": "URL de dépôt gouvernemental",
+      "officialPdfFileId": "PDF officiel",
+      "watermark": "Filigrane",
+      "sequence": "Ordre",
+      "formula": "Formule",
+      "pdfField": "Champ PDF",
+      "parentId": "Parent",
+      "netDays": "Net days",
+      "discountDays": "Discount days",
+      "discountPercent": "Discount %",
+      "documentKind": "Document",
+      "prefix": "Prefix",
+      "nextNumber": "Next number",
+      "padding": "Padding",
+      "gapless": "Gapless",
+      "classification": "Classification",
+      "costMultiplier": "Cost multiplier",
+      "isBillableDefault": "Billable by default",
+      "showOnFieldTicket": "Afficher sur les bons de régie",
+      "category": "Catégorie",
+      "postsGl": "Comptabilise au grand livre",
+      "bookId": "Livre",
+      "categoryId": "Catégorie d’immobilisation",
+      "convention": "Convention",
+      "lifeMonths": "Durée (mois)",
+      "departmentId": "Department",
+      "defaultMethod": "Default method",
+      "defaultConvention": "Convention d’amortissement",
+      "endOfLife": "Fin de vie",
+      "defaultLifeMonths": "Default life (months)",
+      "assetAccountId": "Compte de stock",
+      "accumulatedDepreciationAccountId": "Accumulated depreciation account",
+      "depreciationExpenseAccountId": "Depreciation expense account",
+      "gainLossAccountId": "Gain / loss account",
+      "minorUnits": "Minor units",
+      "legalName": "Legal name",
+      "baseCurrency": "Base currency",
+      "isElimination": "Elimination",
+      "fromSubsidiaryId": "From subsidiary",
+      "toSubsidiaryId": "To subsidiary",
+      "dueFromAccountId": "Due-from account",
+      "dueToAccountId": "Due-to account",
+      "asOf": "À la date du",
+      "fromCurrency": "Devise source",
+      "toCurrency": "Devise cible",
+      "rateType": "Type de taux",
+      "source": "Source",
+      "periodId": "Période comptable",
+      "currentRate": "Taux courant",
+      "averageRate": "Taux moyen",
+      "historicalRate": "Taux historique",
+      "subsidiaryId": "Filiale",
+      "subsidiaryIncludeChildren": "Inclure les filiales enfants",
+      "pluralName": "Nom au pluriel",
+      "sourceKind": "Source",
+      "isHierarchical": "Hiérarchique",
+      "showOnHeader": "Afficher dans l’en-tête de transaction",
+      "showOnLines": "Afficher sur les lignes de transaction",
+      "showInReports": "Afficher dans les rapports",
+      "allowAccountRequirement": "Autoriser comme exigence de compte",
+      "segmentId": "Segment",
+      "description": "Description",
+      "recognitionPeriods": "Périodes de comptabilisation",
+      "startDateSource": "Source de la date de début",
+      "endDateSource": "Source de la date de fin",
+      "periodOffset": "Décalage de périodes",
+      "startOffsetDays": "Décalage de début (jours)",
+      "initialAmountPercent": "Montant initial %",
+      "deferredAccountId": "Compte de produits différés",
+      "recognizedAccountId": "Compte de produits comptabilisés",
+      "isForecast": "Règle de prévision",
+      "itemId": "Article",
+      "unitPrice": "Prix unitaire",
+      "lowValue": "Valeur basse",
+      "highValue": "Valeur haute",
+      "currency": "Devise",
+      "locationId": "Emplacement",
+      "kind": "Type",
+      "costingMethod": "Méthode de coût",
+      "tracking": "Suivi",
+      "cogsAccountId": "Compte de CMV",
+      "adjustmentAccountId": "Compte d'ajustement",
+      "varianceAccountId": "Compte d'écart",
+      "standardCost": "Coût standard",
+      "baseUnit": "Unité de base",
+      "reorderPoint": "Point de commande",
+      "preferredStockLevel": "Niveau de stock préféré",
+      "receivedNotBilledAccountId": "Compte de réception non facturée",
+      "assemblyItemId": "Article assemblé",
+      "componentItemId": "Composant",
+      "quantityPer": "Quantité par",
+      "rateKind": "Type de taux",
+      "rateBookId": "Grille tarifaire",
+      "customerId": "Client",
+      "projectId": "Projet",
+      "isDefault": "Par défaut",
+      "billMultiplier": "Multiplicateur de facturation",
+      "lienWaiverEnforcement": "Contrôle des renonciations",
+      "defaultLienWaiverType": "Formulaire par défaut",
+      "defaultInformationReturn": "Déclaration par défaut",
+      "classId": "S'applique à la catégorie",
+      "enforcement": "En cas de manquement",
+      "requiresExpiry": "Doit porter une échéance",
+      "graceDays": "Jours de grâce",
+      "expiryWarningDays": "Alerter avant échéance (jours)",
+      "minCoverageAmount": "Limite minimale par sinistre",
+      "minAggregateAmount": "Limite globale minimale",
+      "coverageCurrency": "Devise de la limite",
+      "requiresAdditionalInsured": "Assuré additionnel exigé",
+      "requiresWaiverOfSubrogation": "Renonciation à la subrogation exigée",
+      "requiresPrimaryNoncontributory": "Primaire et non contributive exigée",
+      "requiresVerification": "Vérification par une seconde personne exigée",
+      "formType": "Formulaire",
+      "box": "Case"
+    },
+    "fieldHelp": {
+      "gapless": "Sans rupture signifie que chaque numéro de la séquence doit être justifié, sans aucun numéro sauté. Activez cette option uniquement si vos obligations légales ou d’audit imposent une numérotation ininterrompue.",
+      "lienWaiverEnforcement": "Bloquer signifie qu'une facture de cette catégorie ne peut être payée sans renonciation signée qui la couvre.",
+      "defaultLienWaiverType": "Présélectionné lors de la création d'une renonciation pour ces contreparties.",
+      "defaultInformationReturn": "Utilisé lorsqu'un fournisseur de cette catégorie n'indique pas lui-même de formulaire.",
+      "complianceRequirementClass": "Laissez vide pour l'appliquer à toutes les contreparties suivies.",
+      "complianceEnforcement": "Bloquer le paiement retient l'argent ; bloquer la facture empêche jusqu'à son enregistrement.",
+      "requiresExpiry": "Activé pour l'assurance ; désactivé pour un W-9, qui n'expire pas.",
+      "graceDaysHint": "0",
+      "expiryWarningDaysHint": "30",
+      "minCoverageAmount": "Les attestations sous cette limite sont refusées. Les limites ne sont jamais converties entre devises.",
+      "coverageCurrency": "Obligatoire dès qu'une limite minimale est fixée — une limite est un montant et doit être comparable.",
+      "requiresVerification": "Celui qui enregistre une attestation ne peut jamais être celui qui la vérifie.",
+      "informationReturnBox": "Les cases sont légales. Ce que vous configurez, c'est quel compte alimente quelle case."
+    },
+    "options": {
+      "timeClassification": {
+        "regular": "Heures normales",
+        "overtime": "Heures supplémentaires",
+        "doubleTime": "Heures doubles",
+        "other": "Autre"
+      },
+      "taxDepreciationModel": {
+        "pool": "Class pool",
+        "macrs": "Per-asset MACRS"
+      },
+      "macrsSystem": {
+        "gds": "GDS",
+        "ads": "ADS"
+      },
+      "macrsMethod": {
+        "200db": "200% declining balance",
+        "150db": "150% declining balance",
+        "straightLine": "Straight line"
+      },
+      "taxDepreciationConvention": {
+        "halfYear": "Half-year",
+        "midQuarter": "Mid-quarter",
+        "midMonth": "Mid-month"
+      },
+      "poolMethod": {
+        "declining": "Declining balance",
+        "straightLine": "Straight line"
+      },
+      "appliesTo": {
+        "sales": "Sales",
+        "purchases": "Purchases",
+        "both": "Both"
+      },
+      "taxCalculationType": {
+        "standard": "Taxe standard",
+        "withholding": "Retenue à la source",
+        "reverseCharge": "Autoliquidation"
+      },
+      "rateDateBasis": {
+        "usageDate": "Date d’utilisation",
+        "projectStart": "Date de début du projet"
+      },
+      "basis": {
+        "collected": "Taxe perçue (extrant)",
+        "paid": "Taxe payée / CTI (intrant)",
+        "net": "Net amount",
+        "tax": "Tax amount"
+      },
+      "sign": {
+        "positive": "Add (+)",
+        "negative": "Subtract (−)"
+      },
+      "channel": {
+        "printPdf": "Imprimer et poster (PDF officiel)",
+        "fileUpload": "Téléversement de fichier électronique",
+        "efileApi": "Télédéclaration (API)",
+        "portalManual": "Portail gouvernemental (saisie manuelle)"
+      },
+      "governmentFormat": {
+        "portalEntry": "Saisie dans le portail en ligne",
+        "certifiedFile": "Fichier gouvernemental certifié",
+        "api": "Logiciel ou API compatible",
+        "paper": "Formulaire papier officiel"
+      },
+      "method": {
+        "straightLine": "Linéaire",
+        "decliningBalance": "Dégressif",
+        "doubleDeclining": "Double dégressif",
+        "unitsOfProduction": "Unités de production",
+        "manual": "Manuel"
+      },
+      "convention": {
+        "fullMonth": "Mois complet",
+        "midMonth": "Demi-mois",
+        "halfYear": "Demi-année"
+      },
+      "endOfLife": {
+        "fullyDepreciate": "Amortir entièrement",
+        "retainBalance": "Conserver le solde"
+      },
+      "fxRateType": {
+        "spot": "Comptant",
+        "average": "Moyen",
+        "historical": "Historique"
+      },
+      "rateSource": {
+        "derived": "Calculé",
+        "manual": "Manuel"
+      },
+      "recognitionMethod": {
+        "pointInTime": "Ponctuel",
+        "straightLineEven": "Linéaire, périodes égales",
+        "straightLineProrate": "Linéaire, prorata premier et dernier",
+        "straightLineDaily": "Linéaire, jours exacts",
+        "percentComplete": "Pourcentage d'avancement",
+        "milestone": "Jalon",
+        "usage": "Utilisation"
+      },
+      "startDateSource": {
+        "obligation": "Début de l'obligation",
+        "document": "Date du document",
+        "fulfillment": "Exécution",
+        "event": "Événement",
+        "contract": "Début du contrat"
+      },
+      "endDateSource": {
+        "term": "Durée du terme",
+        "obligation": "Fin de l'obligation",
+        "contract": "Fin du contrat"
+      },
+      "costingMethod": {
+        "fifo": "PEPS",
+        "movingAverage": "Coût moyen pondéré",
+        "standard": "Coût standard"
+      },
+      "tracking": {
+        "none": "Aucun",
+        "lot": "Lot",
+        "serial": "Série"
+      },
+      "stockLocationKind": {
+        "warehouse": "Entrepôt",
+        "zone": "Zone",
+        "bin": "Casier",
+        "staging": "Préparation",
+        "transit": "Transit",
+        "quarantine": "Quarantaine"
+      },
+      "overheadMethod": {
+        "live": "Live",
+        "standard": "Standard"
+      },
+      "overheadRateKind": {
+        "per_hour": "$/heure",
+        "percent": "% de la main-d’œuvre"
+      },
+      "complianceCategory": {
+        "insurance": "Assurance",
+        "taxForm": "Formulaire fiscal",
+        "licence": "Licence",
+        "bond": "Cautionnement",
+        "safety": "Sécurité",
+        "other": "Autre"
+      },
+      "complianceEnforcement": {
+        "advisory": "Signaler seulement",
+        "warn": "Avertir au paiement",
+        "blockPayment": "Bloquer le paiement",
+        "blockBill": "Bloquer la facture"
+      },
+      "lienWaiverEnforcement": {
+        "none": "Non suivi",
+        "warn": "Avertir",
+        "block": "Bloquer le paiement"
+      },
+      "lienWaiverType": {
+        "conditionalProgress": "Conditionnelle — acompte",
+        "unconditionalProgress": "Inconditionnelle — acompte",
+        "conditionalFinal": "Conditionnelle — finale",
+        "unconditionalFinal": "Inconditionnelle — finale"
+      },
+      "informationReturnForm": {
+        "none": "Non déclarable",
+        "nec": "1099-NEC",
+        "misc": "1099-MISC",
+        "t4a": "T4A"
+      },
+      "informationReturnBox": {
+        "nec1": "NEC 1 — Rémunération de non-salariés",
+        "nec2": "NEC 2 — Ventes directes de 5 000 $ ou plus",
+        "nec4": "NEC 4 — Impôt fédéral retenu",
+        "misc1": "MISC 1 — Loyers",
+        "misc2": "MISC 2 — Redevances",
+        "misc3": "MISC 3 — Autres revenus",
+        "misc4": "MISC 4 — Impôt fédéral retenu",
+        "misc5": "MISC 5 — Produits de pêche",
+        "misc6": "MISC 6 — Paiements médicaux et de santé",
+        "misc8": "MISC 8 — Paiements de substitution",
+        "misc9": "MISC 9 — Indemnités d'assurance récolte",
+        "misc10": "MISC 10 — Produits bruts versés à un avocat",
+        "misc11": "MISC 11 — Poisson acheté pour revente",
+        "misc12": "MISC 12 — Reports au titre de l'article 409A",
+        "misc14": "MISC 14 — Parachutes dorés excédentaires",
+        "misc15": "MISC 15 — Rémunération différée non admissible",
+        "t4a020": "T4A 020 — Commissions de travail indépendant",
+        "t4a048": "T4A 048 — Honoraires de services",
+        "t4a022": "T4A 022 — Impôt sur le revenu retenu"
+      }
+    },
+    "laborCosting": {
+      "navTitle": "Coût de la main-d'œuvre",
+      "title": "Coût de la main-d'œuvre",
+      "description": "Ce que coûte une heure de travail : salaires à date d'effet, composantes d'estimation appliquées avant l'arrivée des données réelles de paie, et comptabilisation du coût standard sur les projets. Les frais généraux se configurent séparément dans le Modèle de frais généraux.",
+      "save": "Enregistrer les paramètres",
+      "saved": "Paramètres de coût enregistrés",
+      "rateRequired": "Saisissez un taux",
+      "scopeRequired": "Choisissez un employé ou un métier",
+      "rateSaved": "Taux enregistré",
+      "tradePrefix": "Métier :",
+      "orgDefault": "Valeur par défaut de l'organisation",
+      "rates": {
+        "title": "Taux de salaire",
+        "hint": "Les taux de repli se résolvent par intitulé de poste, métier, service, filiale, puis valeur par défaut. L’historique individuel reste sur la fiche de l’employé.",
+        "scope": "Portée",
+        "scopeTrade": "Métier",
+        "scopeJobTitle": "Intitulé de poste",
+        "scopeDepartment": "Service",
+        "scopeSubsidiary": "Filiale",
+        "scopeOrg": "Par défaut",
+        "who": "Qui",
+        "rate": "Taux",
+        "currency": "Devise",
+        "basis": "Base",
+        "perHour": "par heure",
+        "perYear": "par an",
+        "from": "Du",
+        "to": "Au",
+        "add": "Ajouter un taux",
+        "emptyFiltered": "Aucun taux de salaire ne correspond à ces filtres.",
+        "hr": "h",
+        "yr": "an",
+        "search": "Rechercher des taux…",
+        "status": "État",
+        "statusActive": "Actuels et planifiés",
+        "statusCurrent": "Actuel",
+        "statusScheduled": "Planifié",
+        "statusEnded": "Terminé",
+        "openRate": "Ouvrir le taux de salaire pour {scope}",
+        "selectTrade": "Sélectionner un métier",
+        "select": {
+          "job_title": "Sélectionner un intitulé de poste",
+          "trade": "Sélectionner un métier",
+          "department": "Sélectionner un service",
+          "subsidiary": "Sélectionner une filiale"
+        },
+        "annualHours": "Heures annuelles",
+        "annualHoursRequired": "Saisissez un nombre d’heures annuelles supérieur à zéro",
+        "hourlyEquivalent": "Équivalent horaire : {amount}",
+        "notes": "Notes",
+        "endDateHint": "Laissez vide pour conserver un taux sans date de fin.",
+        "invalidEndDate": "La date de fin ne peut pas précéder la date de début",
+        "drawerNewTitle": "Nouveau taux de salaire",
+        "drawerNewDescription": "Ajoutez un taux de salaire daté pour une portée de main-d’œuvre.",
+        "drawerEditTitle": "Modifier le taux de salaire",
+        "drawerEditDescription": "Modifiez le taux de salaire daté pour {scope}.",
+        "rateUpdated": "Taux de salaire mis à jour",
+        "rateDeleted": "Taux de salaire supprimé",
+        "confirmDelete": "Supprimer ce taux ? Le temps déjà chiffré conserve son instantané ; les approbations futures se résoudront sans lui.",
+        "employeeNote": "{covered} employés sur {total} résolvent à un salaire. Les salaires par employé vivent sur la fiche de chaque employé (Opérations → Employés)."
+      },
+      "components": {
+        "title": "Composantes d'estimation du coût",
+        "hint": "Ajoutées au salaire pour rendre le coût pré-paie réaliste (charges sociales, indemnités journalières). Remplacées par les coûts réels de paie — jamais une couche permanente.",
+        "name": "Nom",
+        "kind": "Type",
+        "value": "Valeur",
+        "percentOfWage": "% du salaire",
+        "perHour": "$ par heure",
+        "perDay": "$ par jour",
+        "scalesOt": "suit les heures supp.",
+        "remove": "Retirer la composante",
+        "newBurden": "Charges sociales (est.)",
+        "addBurden": "Ajouter charge %",
+        "newPerDiem": "Indemnité journalière",
+        "addPerDiem": "Ajouter indemnité",
+        "hoursPerDay": "Heures par jour",
+        "annualHours": "Heures annuelles (salaire)",
+        "example": "Exemple avec un salaire de {wage}/h :",
+        "exampleReg": "Normal",
+        "exampleOt": "Supp. ×1,5",
+        "exampleDt": "Double ×2",
+        "presetLead": "Démarrage rapide :",
+        "presetCa": "Canada ~13 %",
+        "presetCaName": "Charges statutaires — RPC, AE, WSIB, ISE, congés (est.)",
+        "presetUs": "É.-U. ~30 %",
+        "presetUsName": "Charges de paie — FICA, FUTA/SUTA, workers comp (est.)",
+        "workerComp": "Indemnisation (par groupe)",
+        "addWorkerComp": "Ajouter l'indemnisation",
+        "newWorkerComp": "Indemnisation (WSIB)",
+        "workerCompHint": "Le taux provient du groupe d'indemnisation assigné à chaque employé (Configuration → Personnel → Groupes d'indemnisation ; assigné sur la fiche employé). La valeur ici n'est que le % de repli quand un employé n'a pas de groupe."
+      },
+      "posting": {
+        "title": "Comptabilisation",
+        "hint": "Une fois activée, le temps approuvé génère DR travaux en cours (par projet) / CR compte d'attente main-d'œuvre au taux standard. La paie réelle solde ensuite le même compte ; le résidu est l'écart de paie.",
+        "modeOff": "Désactivé — capturer les taux seulement",
+        "modePost": "Comptabiliser le coût standard aux projets",
+        "laborWip": "Compte travaux en cours / coût projet",
+        "laborClearing": "Compte d'attente main-d'œuvre",
+        "overheadNote": "Les frais généraux ne font pas partie de ce taux — ils sont appliqués par le Modèle de frais généraux comme couche distincte.",
+        "payrollVariance": "Compte d'écart de paie"
+      },
+      "reconciliation": {
+        "title": "Rapprochement de paie",
+        "subsidiary": "Filiale",
+        "hint": "La main-d'œuvre standard crédite le compte d'attente à l'approbation ; l'écriture de paie (importée ou manuelle) débite le même compte. Le résidu est votre écart de paie — comptabilisez-le à la clôture de la période.",
+        "from": "Du",
+        "to": "Au",
+        "load": "Charger",
+        "standardPosted": "Main-d'œuvre standard comptabilisée",
+        "payrollPosted": "Paie réelle rapprochée",
+        "periodVariance": "Écart de la période",
+        "openBalance": "Solde du compte d'attente (total)",
+        "postVariance": "Comptabiliser l'écart",
+        "variancePosted": "Écart de paie de ${amount} comptabilisé",
+        "project": "Projet",
+        "standardCost": "Coût standard"
+      },
+      "billing": {
+        "title": "Fiches de tarifs facturés",
+        "hint": "Tarification du travail par client et projet, datée et multidevise, avec taux régulier/supplémentaire/double par article, ajustements généraux, conditions négociées et historique des affectations.",
+        "search": "Rechercher des fiches…",
+        "add": "Nouvelle fiche",
+        "card": "Fiche tarifaire",
+        "currency": "Devise",
+        "period": "Période d’effet",
+        "items": "Articles",
+        "assignments": "Affectations",
+        "status": "Statut",
+        "empty": "Aucune fiche ne correspond aux filtres.",
+        "newTitle": "Nouvelle fiche de tarifs facturés",
+        "newDescription": "Créez d’abord le registre partagé, puis ajoutez les tarifs datés.",
+        "createInItemHint": "La création utilise l’espace partagé des registres tarifaires afin de conserver un seul moteur pour le travail, les services et l’équipement. Revenez ici pour consulter les conditions et affectations.",
+        "openRateBooks": "Ouvrir les registres tarifaires",
+        "effectiveFrom": "En vigueur du",
+        "effectiveTo": "En vigueur au",
+        "derivation": "Tiers manquants",
+        "scopes": "Portées dimensionnelles",
+        "allScopes": "Aucune restriction dimensionnelle",
+        "itemRates": "Tarifs par article et type de temps",
+        "item": "Article",
+        "regular": "Régulier",
+        "adjustments": "Ajustements",
+        "appliesTo": "S’applique à",
+        "wholeCard": "Toute la fiche",
+        "revise": "Créer une révision",
+        "reviseHint": "Une révision conserve cette version et crée une nouvelle copie datée.",
+        "historicalHint": "Cette version est historique. Ouvrez la plus récente pour créer une révision.",
+        "revisionTitle": "Nouvelle révision de la fiche",
+        "revisionDescription": "Les tarifs de base, portées et conditions sont copiés. Chaque ajustement peut viser toute la fiche ou un article précis.",
+        "revisionEffectiveFrom": "Nouvelle version en vigueur du",
+        "adjustmentNumber": "Ajustement {number}",
+        "removeAdjustment": "Supprimer l’ajustement",
+        "adjustmentName": "Nom",
+        "adjustmentCode": "Code",
+        "category": "Catégorie",
+        "calculation": "Calcul",
+        "presentation": "Présentation sur facture",
+        "adjustmentValue": "Valeur",
+        "adjustmentUnit": "Unité",
+        "referenceText": "Description ou référence contractuelle",
+        "addAdjustment": "Ajouter un ajustement",
+        "saveRevision": "Enregistrer la révision",
+        "revisionSaved": "Révision enregistrée",
+        "categories": {
+          "markup": "Majoration",
+          "travel": "Déplacement",
+          "allowance": "Indemnité",
+          "minimum": "Minimum",
+          "surcharge": "Supplément",
+          "other": "Autre"
+        },
+        "calculations": {
+          "percent": "Pourcentage",
+          "fixed": "Montant fixe",
+          "per_hour": "Par heure",
+          "per_day": "Par jour",
+          "distance": "Distance",
+          "time": "Temps",
+          "text": "Texte informatif"
+        },
+        "presentations": {
+          "included": "Inclus dans le tarif",
+          "separate": "Ligne distincte",
+          "informational": "Informatif"
+        },
+        "errors": {
+          "notFound": "Fiche introuvable.",
+          "effectiveDate": "Choisissez une date d’effet.",
+          "adjustments": "Les ajustements sont invalides.",
+          "item": "Choisissez un article actif valide.",
+          "name": "Chaque ajustement requiert un nom et un code.",
+          "duplicateCode": "Les codes doivent être uniques par article.",
+          "category": "Choisissez une catégorie valide.",
+          "calculation": "Choisissez un calcul valide.",
+          "presentation": "Choisissez une présentation valide.",
+          "value": "Saisissez une valeur positive ou nulle.",
+          "latestOnly": "Ouvrez la version la plus récente.",
+          "afterLatest": "La date doit suivre la version la plus récente.",
+          "save": "Impossible d’enregistrer la révision."
+        },
+        "terms": "Conditions négociées",
+        "none": "Aucun",
+        "derivations": {
+          "explicit": "Tarifs explicites",
+          "time_type_multipliers": "Multiplicateurs de type de temps"
+        },
+        "scopeTypes": {
+          "department": "Service",
+          "subsidiary": "Filiale",
+          "location": "Emplacement",
+          "class": "Classe",
+          "trade": "Métier",
+          "job_title": "Poste",
+          "other": "Autre"
+        }
+      },
+      "docs": "Documentation",
+      "checklist": {
+        "wages": "Taux de salaire",
+        "burden": "Estimation des charges",
+        "posting": "Comptabilisation",
+        "trueup": "Rapprochement de paie",
+        "wagesDetail": "{covered} employés sur {total} résolvent à un taux",
+        "burdenDone": "{count} composante(s) configurée(s)",
+        "burdenNone": "Aucune composante — coût pré-paie = salaire brut",
+        "postingOn": "Le coût standard se comptabilise à l'approbation",
+        "postingAccounts": "L'activation requiert les comptes TEC et attente",
+        "postingOff": "Désactivé — capture des taux seulement",
+        "trueupReady": "Compte d'écart affecté — rapprochez ci-dessous",
+        "trueupNone": "Affectez un compte d'écart pour clore les périodes",
+        "launchWizard": "Guide de configuration"
+      },
+      "wizard": {
+        "title": "Configurer le coût de la main-d'œuvre",
+        "description": "Un guide pour les taux de repli, les charges de paie et la comptabilisation.",
+        "back": "Retour",
+        "next": "Suivant",
+        "apply": "Appliquer",
+        "applying": "Application…",
+        "done": "Coût de la main-d'œuvre configuré",
+        "q1": "Comment estimer les charges de paie ?",
+        "q1Hint": "Les coûts patronaux causés par les salaires — cotisations, assurances, congés. L'estimation garde le coût réaliste avant la paie ; la paie réelle la remplace.",
+        "burden": {
+          "canada": "Canada — statutaire ~13 %",
+          "canadaHint": "RPC/CPP, AE, WSIB, ISE, congés. Un point de départ raisonnable ; affinez quand vous voulez.",
+          "us": "États-Unis — construction ~30 %",
+          "usHint": "FICA, FUTA/SUTA, workers comp. Plage typique : 25–40 %.",
+          "custom": "Pourcentage personnalisé",
+          "customHint": "Vous connaissez votre chiffre — saisissez-le.",
+          "customPct": "% du salaire",
+          "skip": "Passer pour l'instant",
+          "skipHint": "Les coûts n'afficheront que les salaires bruts tant qu'aucune composante n'est ajoutée."
+        },
+        "customBurdenName": "Charges de paie (est.)",
+        "q2": "D'où viennent les salaires ?",
+        "q2Hint": "Chaque employé a son propre salaire. Cherchez et remplissez l'équipe — quiconque reste vide peut utiliser le taux de repli optionnel ci-dessous.",
+        "orgRate": "Salaire horaire par défaut (sans taux spécifique)",
+        "tradeRates": "Taux par métier (optionnel — prime sur le défaut)",
+        "perEmployeeLater": "Vous pourrez ajouter des taux par employé dans l'espace de travail — ils priment sur métier et défaut.",
+        "q3": "Comptabiliser le coût de main-d'œuvre sur les projets ?",
+        "q3Hint": "Une fois activée, l'approbation du temps inscrit le coût standard au grand livre par projet, en anticipant la paie.",
+        "posting": {
+          "off": "Pas encore — suivre les taux seulement",
+          "offHint": "Le temps est chiffré pour les rapports ; rien n'est comptabilisé.",
+          "post": "Oui — comptabiliser le coût standard à l'approbation",
+          "postHint": "DR travaux en cours (par projet) / CR compte d'attente. La paie réelle solde ensuite le même compte.",
+          "wip": "Compte travaux en cours / coût",
+          "clearing": "Compte d'attente main-d'œuvre",
+          "variance": "Compte d'écart de paie (optionnel — pour le rapprochement de fin de mois)",
+          "varianceLater": "Choisir plus tard"
+        },
+        "review": "Prêt à appliquer :",
+        "reviewBurden": "Estimation des charges : {name} à {pct} %",
+        "reviewNoBurden": "Aucune estimation de charges (salaires bruts seulement)",
+        "reviewOrgRate": "Salaire par défaut ${rate}/h.",
+        "reviewNoOrgRate": "Aucun salaire par défaut.",
+        "reviewTradeRates": "+ {count} taux par métier.",
+        "reviewPosting": "Le coût standard sera comptabilisé à l'approbation",
+        "reviewNoPosting": "La comptabilisation reste désactivée — activable plus tard",
+        "reviewExample": "Exemple avec un salaire de {wage}/h :",
+        "exReg": "Normal",
+        "exOt": "Supp. ×1,5",
+        "exDt": "Double ×2",
+        "reviewNote": "Tout reste modifiable ensuite dans l'espace de travail — le guide remplit simplement les mêmes paramètres.",
+        "nextSteps": "Ensuite : les frais généraux",
+        "nextOverhead": "Le coût de la main-d'œuvre couvre salaires et charges statutaires. Les FRAIS GÉNÉRAUX de votre entreprise (loyer, administration, flotte…) sont une couche distincte avec sa propre configuration guidée — classez les coûts, examinez les taux calculés et appliquez-les aux types de projet.",
+        "nextOverheadLink": "Ouvrir le Modèle de frais généraux",
+        "searchEmployees": "Rechercher des employés…",
+        "ratePlaceholder": "0,00",
+        "ratedCount": "{rated} employés sur {total} ont un salaire",
+        "fallbackRate": "Taux de repli optionnel pour les employés sans salaire",
+        "fallbackHint": "Garde le calcul des coûts fonctionnel pendant que les fiches se remplissent — la plupart le laissent vide.",
+        "reviewEmployeeRates": "Salaires pour {count} employé(s).",
+        "reviewFallback": "Repli de {rate}/h pour les non-tarifés.",
+        "wagesOnRecord": "Le salaire de chaque employé (et son historique) se définit sur sa fiche d'employé — là où vous gérez tout le reste. Rien à remplir ici.",
+        "openEmployees": "Ouvrir les employés",
+        "reviewWagesOnRecord": "Les salaires proviennent de la fiche de chaque employé."
+      },
+      "unsaved": "Modifications non enregistrées",
+      "discard": "Annuler",
+      "related": {
+        "overhead": "Modèle de frais généraux",
+        "overheadHint": "La couche des coûts d'entreprise — pools, taux par département et leur application aux projets.",
+        "rateBooks": "Barèmes d'articles",
+        "rateBooksHint": "Ce que vous facturez — taux par article et client, avec paliers normal/supp./double.",
+        "timeTypes": "Types d'heures",
+        "timeTypesHint": "Normal, supplémentaire, double — les multiplicateurs de coût et de facturation utilisés ici."
+      },
+      "tabs": {
+        "rates": "Taux de salaire",
+        "billing": "Tarifs facturés",
+        "components": "Estimation des charges",
+        "posting": "Comptabilisation",
+        "reconciliation": "Rapprochement de paie"
+      }
+    },
+    "features": {
+      "navTitle": "Fonctionnalités",
+      "title": "Fonctionnalités",
+      "description": "Activez ou désactivez des modules optionnels pour votre entreprise. Désactiver une fonctionnalité la masque partout — ses données ne sont jamais supprimées.",
+      "enabled": "{name} activée",
+      "disabled": "{name} désactivée",
+      "categories": {
+        "sales": "Ventes et clients",
+        "operations": "Opérations",
+        "accounting": "Comptabilité",
+        "platform": "Plateforme"
+      },
+      "impacts": {
+        "trackedVendors": "{count, plural, one {# sous-traitant suivi} other {# sous-traitants suivis}}",
+        "activeCertificates": "{count, plural, one {# attestation en cours} other {# attestations en cours}}",
+        "blockingCompliancePolicies": "{count, plural, one {# politique bloquant le paiement} other {# politiques bloquant le paiement}}",
+        "openLienWaivers": "{count, plural, one {# renonciation en attente de signature} other {# renonciations en attente de signature}}",
+        "draftInformationReturns": "{count, plural, one {# déclaration de renseignements en cours} other {# déclarations de renseignements en cours}}",
+        "unfiledInformationReturns": "{count, plural, one {# déclaration finalisée non déposée} other {# déclarations finalisées non déposées}}"
+      }
+    },
+    "bankFeeds": {
+      "navTitle": "Bank Feeds"
+    },
+    "paymentProviders": {
+      "title": "Fournisseurs de paiement",
+      "description": "Fournisseurs de paiement hébergé pour les liens de paiement client sur les factures. Le rapprochement des versements reste sous Banque → Règlements PSP.",
+      "saved": "Enregistré.",
+      "enableAcceptance": "Activer les liens de paiement",
+      "apiKey": "Clé API / secret",
+      "webhookSecret": "Secret webhook",
+      "publishableKey": "Clé publique",
+      "merchantAccount": "Compte marchand",
+      "secretConfigured": "Configuré — saisir pour remplacer",
+      "receiptBankAccount": "Compte bancaire d'encaissement",
+      "surchargeRule": "Règle de surcharge",
+      "noSurcharge": "Aucune surcharge",
+      "save": "Enregistrer",
+      "surchargeRules": "Règles de surcharge",
+      "surchargeHint": "Frais de traitement optionnels ajoutés au total de la facture au paiement. Ils sont comptabilisés en produit à l'encaissement.",
+      "ruleName": "Nom",
+      "ruleCalc": "Calcul",
+      "ruleProvider": "Fournisseur",
+      "ruleEffective": "En vigueur",
+      "deactivate": "Désactiver",
+      "inactive": "inactive",
+      "percent": "Pourcentage",
+      "fixed": "Montant fixe",
+      "cap": "Plafond (optionnel)",
+      "allProviders": "Tous les fournisseurs",
+      "paymentMethod": "Moyen de paiement",
+      "methodAll": "Tous",
+      "methodCard": "Carte",
+      "methodBankDebit": "Prélèvement bancaire",
+      "effectiveFrom": "À partir du",
+      "addRule": "Ajouter une règle",
+      "calcPercent": "Pourcentage de la facture",
+      "calcFixed": "Montant fixe",
+      "calcBoth": "Pourcentage + fixe",
+      "feeIncomeAccount": "Compte de produit des frais",
+      "webhookUrl": "URL du webhook",
+      "webhookHint": "Collez ce point de terminaison dans le tableau de bord du fournisseur pour recevoir les événements.",
+      "copy": "Copier",
+      "copied": "Copié",
+      "testConnection": "Tester la connexion",
+      "testing": "Test…"
+    }
+  },
+  "flows": {
+    "title": "Flux",
+    "description": "Automatisations visuelles de vos enregistrements — un déclencheur lance une exécution, les conditions bifurquent, les actions font le travail et les portes d'approbation attendent une décision humaine.",
+    "searchPlaceholder": "Rechercher des flux…",
+    "subjectFilter": "Type d'enregistrement",
+    "table": {
+      "flow": "Flux",
+      "subject": "Type d'enregistrement",
+      "nodes": "Nœuds",
+      "lastRun": "Dernière exécution",
+      "updated": "Mis à jour",
+      "status": "Statut"
+    },
+    "empty": {
+      "title": "Aucun flux",
+      "description": "Un flux démarre sur un déclencheur, bifurque selon des conditions, s'arrête aux portes d'approbation et se termine par des actions — courriels, notifications, mises à jour de champs et changements de statut.",
+      "cta": "Nouveau flux"
+    },
+    "statusEnabled": "activé",
+    "statusDisabled": "désactivé",
+    "neverRan": "jamais",
+    "new": {
+      "button": "Nouveau flux",
+      "title": "Nouveau flux",
+      "description": "Choisissez le type d'enregistrement concerné. Vous concevrez le graphe ensuite.",
+      "name": "Nom",
+      "namePlaceholder": "p. ex. Approbation des factures > 10 000 $",
+      "subject": "Type d'enregistrement",
+      "subjectPlaceholder": "Choisir un type d'enregistrement…",
+      "create": "Créer le flux",
+      "failed": "Impossible de créer le flux"
+    },
+    "actions": {
+      "enable": "Activer",
+      "disable": "Désactiver",
+      "delete": "Supprimer",
+      "deleteConfirmTitle": "Supprimer le flux",
+      "deleteConfirm": "Supprimer « {name} » ? Son historique d'exécution sera aussi supprimé.",
+      "deleted": "Flux supprimé",
+      "deleteFailed": "Impossible de supprimer le flux",
+      "updateFailed": "Impossible de mettre à jour le flux"
+    },
+    "builder": {
+      "save": "Enregistrer",
+      "saved": "Flux enregistré",
+      "saveFailed": "Impossible d'enregistrer le flux",
+      "unsaved": "Modifications non enregistrées",
+      "enabledToggle": "Activé",
+      "namePlaceholder": "Nom du flux",
+      "errorsTitle": "Corrigez ces points pour enregistrer le flux",
+      "warningsTitle": "Avertissements — le flux s'enregistre mais pourrait ne pas s'exécuter comme prévu",
+      "warningsBadge": "{count, plural, one {# avertissement} other {# avertissements}}",
+      "tabs": {
+        "canvas": "Canevas",
+        "runs": "Exécutions"
+      },
+      "palette": {
+        "title": "Ajouter",
+        "trigger": "Déclencheur",
+        "condition": "Condition",
+        "action": "Action",
+        "gate": "Approbation"
+      },
+      "canvasEmpty": {
+        "title": "Commencez par un déclencheur",
+        "description": "Les déclencheurs lancent une exécution, les conditions la bifurquent, les portes d'approbation l'interrompent pour une décision humaine et les actions terminent le travail. Ajoutez un déclencheur, puis reliez-le à l'étape suivante."
+      },
+      "inspector": {
+        "empty": "Sélectionnez un nœud pour le configurer",
+        "deleteNode": "Supprimer le nœud",
+        "nodeId": "Nœud"
+      }
+    },
+    "node": {
+      "trigger": "Déclencheur",
+      "condition": "Condition",
+      "action": "Action",
+      "gate": "Approbation",
+      "conditionDefault": "Si…",
+      "gateDefault": "Approbation"
+    },
+    "edge": {
+      "then": "alors",
+      "else": "sinon",
+      "approve": "approuver",
+      "reject": "rejeter"
+    },
+    "trigger": {
+      "kind": "Quand",
+      "kinds": {
+        "on_create": "Un enregistrement est créé",
+        "on_update": "Un enregistrement est mis à jour",
+        "on_submit": "Un enregistrement est soumis pour approbation",
+        "before_post": "Avant la comptabilisation",
+        "after_post": "Après la comptabilisation",
+        "before_void": "Avant l'annulation",
+        "status_change": "Le statut change",
+        "on_field_value": "Un champ correspond à une condition",
+        "scheduled": "Selon un calendrier",
+        "manual": "Un utilisateur clique sur un bouton"
+      },
+      "from": "Depuis le statut",
+      "to": "Vers le statut",
+      "anyStatus": "Tout statut",
+      "rule": "Quand l'enregistrement correspond",
+      "cron": "Expression cron",
+      "cronHint": "minute · heure · jour du mois · mois · jour de la semaine",
+      "cronExample": "p. ex. 0 8 * * 1 = lundi à 08 h",
+      "timezone": "Fuseau horaire (facultatif)",
+      "selectRecords": "Exécuter une fois pour chaque enregistrement correspondant",
+      "selectRecordsHint": "La planification recherche ce type d'enregistrement et lance une exécution distincte pour chaque résultat.",
+      "selectRule": "Filtre d'enregistrements (facultatif)",
+      "selectRuleAdd": "Ajouter un filtre",
+      "selectRuleRemove": "Retirer le filtre",
+      "selectLimit": "Nombre maximal d'enregistrements par exécution",
+      "buttonLabel": "Libellé du bouton",
+      "confirmText": "Message de confirmation (facultatif)",
+      "requirePermission": "Permission requise (facultatif)",
+      "permissionPlaceholder": "Choisir une permission…",
+      "showIf": "N'afficher le bouton que si…",
+      "showIfAdd": "Ajouter une condition de visibilité",
+      "showIfRemove": "Retirer la condition de visibilité",
+      "buttonPreview": "Aperçu du bouton de l'enregistrement",
+      "buttonHint": "Ce bouton apparaît dans l'en-tête de l'enregistrement lorsque le flux est activé et que ses conditions de permission et de visibilité sont satisfaites.",
+      "defaultButtonLabel": "Exécuter le flux"
+    },
+    "condition": {
+      "rule": "Bifurquer quand",
+      "label": "Libellé (facultatif)",
+      "labelPlaceholder": "p. ex. Plus de 10 000 $",
+      "hint": "La branche « alors » s'exécute quand la règle passe ; « sinon » quand elle échoue."
+    },
+    "action": {
+      "kind": "Action",
+      "kinds": {
+        "send_email": "Envoyer un courriel",
+        "notify": "Envoyer une notification interne",
+        "set_field": "Définir un champ",
+        "change_status": "Changer le statut",
+        "post_document": "Comptabiliser le document",
+        "lock_record": "Verrouiller l'enregistrement",
+        "unlock_record": "Déverrouiller l'enregistrement"
+      },
+      "recipients": "Destinataires",
+      "subject": "Objet",
+      "body": "Corps",
+      "attachPdf": "Joindre le PDF de l'enregistrement",
+      "attachPdfHint": "Utilise le modèle PDF actif du locataire pour ce type d'enregistrement.",
+      "interpolationHint": "Insérez des valeurs de l'enregistrement avec des jetons '{{'champ'}}'",
+      "availableFields": "Champs disponibles",
+      "title": "Titre",
+      "notifyBody": "Message (facultatif)",
+      "href": "Lien à ouvrir (facultatif)",
+      "field": "Champ",
+      "value": "Valeur",
+      "valueSource": "Source de la valeur",
+      "valueSources": {
+        "literal": "Une valeur fixe",
+        "today": "La date d'aujourd'hui",
+        "now": "La date et l'heure actuelles",
+        "currentUser": "Le nom de l'utilisateur actuel",
+        "expression": "Expression de formule existante"
+      },
+      "expressionPreserved": "Cette expression de formule existante est conservée. La modification des formules est disponible dans le générateur d'expressions de formulaire.",
+      "status": "Nouveau statut",
+      "postDocumentHint": "Comptabilise le document au grand livre via le pipeline normal. Rien à configurer.",
+      "lockReason": "Motif du verrouillage",
+      "lockReasonPlaceholder": "p. ex. Approuvé — le paiement est final",
+      "lockExemptRoles": "Rôles exemptés",
+      "lockExemptHint": "Les administrateurs sont toujours exemptés ; les rôles sélectionnés peuvent encore modifier.",
+      "unlockHint": "Supprime le verrou du flux pour permettre à nouveau la modification."
+    },
+    "gate": {
+      "title": "Titre",
+      "titlePlaceholder": "p. ex. Approbation du contrôleur",
+      "assignees": "Approbateurs",
+      "mode": "Quorum",
+      "modeAny": "Un seul peut décider",
+      "modeAll": "Tous doivent approuver",
+      "signature": "Exiger une signature saisie",
+      "preventSelfApproval": "Empêcher l'auto-approbation",
+      "preventSelfApprovalHint": "Le soumissionnaire est retiré de la liste des approbateurs; si nécessaire, la demande est acheminée à son superviseur.",
+      "reminderAfter": "Rappel après (heures)",
+      "escalateAfter": "Escalade après (heures)",
+      "escalateTo": "Escalader vers",
+      "noEscalation": "Pas d'escalade",
+      "hint": "L'exécution s'arrête ici jusqu'à la décision du quorum, puis continue sur la branche « approuver » ou « rejeter »."
+    },
+    "targets": {
+      "types": {
+        "user": "Un utilisateur précis",
+        "role": "Tous les détenteurs d'un rôle",
+        "submitter": "Le soumissionnaire",
+        "supervisor": "Le superviseur du soumissionnaire",
+        "field": "Un champ de l'enregistrement (utilisateur)",
+        "email": "Adresse(s) courriel"
+      },
+      "add": "Ajouter un destinataire",
+      "addAssignee": "Ajouter un approbateur",
+      "remove": "Retirer",
+      "pickUser": "Choisir un utilisateur…",
+      "pickRole": "Choisir un rôle…",
+      "pickField": "Choisir un champ…",
+      "emailPlaceholder": "ops@exemple.com, daf@exemple.com"
+    },
+    "logic": {
+      "groupAnd": "Toutes les conditions…",
+      "groupOr": "Au moins une…",
+      "groupNot": "Sauf si…",
+      "ops": {
+        "eq": "égale",
+        "ne": "diffère de",
+        "gt": "est supérieur à",
+        "gte": "est au moins",
+        "lt": "est inférieur à",
+        "lte": "est au plus",
+        "in": "est parmi",
+        "notIn": "n'est pas parmi",
+        "isSet": "est renseigné",
+        "isNotSet": "est vide"
+      },
+      "addRule": "Ajouter une condition",
+      "addGroup": "Ajouter un groupe",
+      "remove": "Retirer",
+      "valuePlaceholder": "Valeur",
+      "listPlaceholder": "Valeurs séparées par des virgules",
+      "true": "Vrai",
+      "false": "Faux"
+    },
+    "runs": {
+      "title": "Exécutions récentes",
+      "empty": {
+        "title": "Aucune exécution",
+        "description": "Activez le flux et déclenchez-le — chaque exécution apparaît ici avec son statut et toute erreur."
+      },
+      "status": {
+        "running": "en cours",
+        "waiting": "en attente",
+        "completed": "terminée",
+        "failed": "échouée",
+        "cancelled": "annulée"
+      },
+      "table": {
+        "status": "Statut",
+        "trigger": "Déclencheur",
+        "subject": "Enregistrement",
+        "started": "Démarrée",
+        "finished": "Terminée",
+        "error": "Erreur"
+      }
+    }
+  },
+  "features": {
+    "crm": {
+      "title": "CRM",
+      "description": "Prospects, opportunités, activités et prévisions de ventes."
+    },
+    "orders": {
+      "title": "Devis et commandes",
+      "description": "Devis, commandes client et bons de commande convertibles en factures."
+    },
+    "revenueRecognition": {
+      "title": "Reconnaissance des revenus",
+      "description": "Règles, échéanciers et revenus reportés des contrats."
+    },
+    "projects": {
+      "title": "Projets et coûts de revient",
+      "description": "Chantiers avec budgets, coûts, facturation et rentabilité."
+    },
+    "timeTracking": {
+      "title": "Suivi du temps",
+      "description": "Feuilles d'heures hebdomadaires personnelles avec soumission et approbation."
+    },
+    "fieldTickets": {
+      "title": "Bons de régie",
+      "description": "Feuilles d'équipe signées pour la régie : heures, équipement et matériaux signés par le client et facturés depuis les bons."
+    },
+    "inventory": {
+      "title": "Inventaire",
+      "description": "Stocks, emplacements, coût des articles et assemblages."
+    },
+    "equipment": {
+      "title": "Équipement et locations",
+      "description": "Unités d'équipement, barèmes et imputations d'utilisation aux chantiers."
+    },
+    "expenses": {
+      "title": "Notes de frais",
+      "description": "Saisie, approbation et remboursement des dépenses."
+    },
+    "banking": {
+      "title": "Banque",
+      "description": "Flux bancaires, rapprochement et règles."
+    },
+    "fixedAssets": {
+      "title": "Immobilisations",
+      "description": "Registres d'actifs, livres d'amortissement et amortissement fiscal."
+    },
+    "budgets": {
+      "title": "Budgets",
+      "description": "Budgets par compte et dimension avec comparaison dans les rapports."
+    },
+    "continuousClose": {
+      "title": "Clôture continue",
+      "description": "Contrôles de clôture permanents en plus de la clôture périodique."
+    },
+    "flows": {
+      "title": "Flux et approbations",
+      "description": "Automatisation : déclencheurs, conditions et validations."
+    },
+    "apps": {
+      "title": "Applications",
+      "description": "Extensions installables et la place de marché."
+    },
+    "bankFeeds": {
+      "title": "Bank Feeds",
+      "description": "Automated bank connectivity — SFTP file drops and Plaid, GoCardless, and TrueLayer live feeds."
+    },
+    "subscriptionBilling": {
+      "title": "Subscription Billing",
+      "description": "Plans and subscriptions that auto-generate recurring invoices (SaaS / retainer)."
+    },
+    "onlinePayments": {
+      "title": "Paiements en ligne",
+      "description": "Liens de paiement hébergés sur les factures (Stripe / Adyen / prélèvement GoCardless), règles de surcharge et webhooks qui imputent automatiquement les encaissements."
+    },
+    "subcontractorCompliance": {
+      "title": "Conformité des sous-traitants",
+      "description": "Attestations d'assurance, renonciations au privilège et déclarations 1099-NEC/MISC et T4A, avec blocage des paiements lorsque la couverture d'un sous-traitant expire."
+    }
+  }
+}

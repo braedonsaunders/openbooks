@@ -1,0 +1,9 @@
+{
+  "page": {
+    "title": "客户收款",
+    "description": "通过内核收到并核销至未清发票的客户收款。",
+    "newReceipt": "新建客户收款",
+    "newCollectionRun": "新建收款批次",
+    "tabs": { "receipts": "收款", "collections": "直接扣款批次" }
+  }
+}

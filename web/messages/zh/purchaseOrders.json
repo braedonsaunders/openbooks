@@ -1,0 +1,61 @@
+{
+  "list": {
+    "title": "采购订单",
+    "description": "不过账的供应商承诺——先开出，收货时转为应付账单。",
+    "searchPlaceholder": "搜索采购订单、供应商、摘要……",
+    "converted": "已转换",
+    "emptyTitle": "暂无采购订单",
+    "emptyDescription": "创建第一张采购订单，以启动采购到付款流程。",
+    "newButton": "新建采购订单",
+    "createDraftFailed": "无法创建采购订单草稿"
+  },
+  "shared": {
+    "kinds": {
+      "salesOrder": "销售订单",
+      "invoice": "发票",
+      "bill": "应付账单"
+    },
+    "docKind": "{kind, select, quote {报价单} sales_order {销售订单} purchase_order {采购订单} customer_invoice {发票} vendor_bill {应付账单} other {{kind}}}",
+    "partyLabel": "{kind, select, purchase_order {供应商} other {客户}}",
+    "selectPartyPlaceholder": "{kind, select, purchase_order {选择供应商……} other {选择客户……}}",
+    "dateLabel": "{kind, select, quote {报价日期} other {订单日期}}",
+    "expiryLabel": "{kind, select, quote {有效期} sales_order {发货／到期日} purchase_order {预计日期} other {日期}}",
+    "draftAutosave": "草稿——更改自动保存。",
+    "issue": "开出",
+    "convertTo": "转为{target}",
+    "convertCreated": "已创建 {target} {number}",
+    "convertFailed": "转换失败",
+    "actionFailed": "操作失败",
+    "autosaveFailed": "自动保存失败",
+    "toastIssued": "已开出",
+    "toastVoided": "已作废",
+    "voidConfirmTitle": "作废此单据？",
+    "voidConfirmMessage": "作废将取消该订单。此操作无法撤销。",
+    "deleteConfirmTitle": "删除此订单？",
+    "deleteConfirmMessage": "此操作将永久删除该订单及其明细行。此操作无法撤销。",
+    "toastDeleted": "已删除订单",
+    "issueHint": "添加一个客户或供应商以及至少一行明细，才能开出此订单。",
+    "convertedProgress": "已转换 {billed}/{ordered}",
+    "fullyConverted": "已全部转换",
+    "allChangesSaved": "所有更改已保存",
+    "saveFailedRetry": "保存失败——修正后重试",
+    "unsavedChanges": "有未保存的更改……",
+    "totals": {
+      "subtotal": "小计 {amount}",
+      "tax": "税 {amount}",
+      "total": "合计 {amount}"
+    },
+    "columns": {
+      "item": "项目",
+      "account": "{kind, select, purchase_order {科目} other {收入科目}}",
+      "accountPlaceholder": "科目……",
+      "qty": "数量",
+      "unitPrice": "单价",
+      "taxAmount": "税额",
+      "noTax": "无税"
+    },
+    "linksTitle": "来源／转换为",
+    "linkCreatedFrom": "创建自",
+    "linkConvertedInto": "转换为"
+  }
+}

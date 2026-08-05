@@ -1,0 +1,95 @@
+{
+  "pagination": {
+    "outOfRange": "La página {page} está fuera del rango de estos resultados.",
+    "showing": "Mostrando <strong>{from}</strong>–<strong>{to}</strong> de <strong>{total}</strong>",
+    "goToLastPageAria": "Ir a la última página, página {page}",
+    "goToPage": "Ir a la página {page}",
+    "previousPageAria": "Página anterior",
+    "nextPageAria": "Página siguiente",
+    "prev": "Ant.",
+    "pageOf": "Página {page} de {pages}"
+  },
+  "search": {
+    "placeholder": "Buscar…",
+    "clearAria": "Limpiar búsqueda"
+  },
+  "confirm": {
+    "defaultTitle": "Confirmar"
+  },
+  "fieldHelp": {
+    "open": "Explicar este campo",
+    "generic": "Establece el valor de {field} para este registro u operación."
+  },
+  "select": {
+    "placeholder": "Seleccionar…",
+    "searchPlaceholder": "Buscar…",
+    "noMatches": "Sin coincidencias",
+    "searching": "Buscando…"
+  },
+  "sparkline": {
+    "noTrend": "Sin datos de tendencia",
+    "trend": "Tendencia: {count} puntos desde {first} hasta {last}"
+  },
+  "attachments": {
+    "tooLarge": "{name} supera el límite de 25 MB",
+    "attached": "Se adjuntó {name}",
+    "attachFailed": "No se pudo adjuntar {name}",
+    "removed": "Se quitó {name}",
+    "removeFailed": "No se pudo quitar el adjunto",
+    "loadFailed": "No se pudieron cargar los adjuntos",
+    "empty": "Aún no hay archivos adjuntos.",
+    "noMatches": "Ningún adjunto coincide con estos filtros.",
+    "fileCount": "{count, plural, one {# archivo} other {# archivos}}",
+    "addFiles": "Agregar archivos",
+    "searchPlaceholder": "Buscar adjuntos…",
+    "typeFilter": "Tipo",
+    "types": { "pdf": "PDF", "image": "Imagen", "other": "Otro" },
+    "downloadAria": "Descargar {name}",
+    "openAria": "Abrir {name} en una pestaña nueva",
+    "removeAria": "Quitar {name}",
+    "expandPreviewAria": "Ampliar la vista previa para llenar el panel",
+    "restorePreviewAria": "Restaurar la lista de adjuntos",
+    "previewTitle": "Vista previa de {name}",
+    "previewEmptyTitle": "Seleccione un adjunto",
+    "previewEmptyDescription": "Los PDF y las imágenes se abren aquí sin salir de la transacción.",
+    "previewUnavailable": "Este tipo de archivo se puede descargar, pero no previsualizar aquí.",
+    "uploading": "{count, plural, one {Subiendo # archivo…} other {Subiendo # archivos…}}",
+    "dropShort": "Suelte archivos aquí o explore",
+    "dropFiles": "Suelte los archivos aquí o <browse>explore</browse>",
+    "acceptHint": "PDF, imágenes, CSV, XLSX, DOCX, TXT · hasta 25 MB"
+  },
+  "recordFields": {
+    "inactiveSelected": "(seleccionado actualmente — inactivo)",
+    "ratingAria": "Calificación sobre {max}",
+    "ratingValueAria": "{value} de {max}",
+    "loadAccountsFailed": "No se pudieron cargar las cuentas — recargue para reintentar.",
+    "loadPartiesFailed": "No se pudieron cargar los terceros — recargue para reintentar.",
+    "selectAccount": "Seleccionar cuenta…",
+    "selectParty": "Seleccionar tercero…",
+    "noFields": "No hay campos para mostrar — el tipo de registro no tiene campos visibles.",
+    "lineItems": "Partidas",
+    "rowCount": "{count, plural, one {# fila} other {# filas}}",
+    "noRows": "Aún no hay filas.",
+    "rowActions": "Acciones de fila",
+    "removeRow": "Quitar fila",
+    "addRow": "Agregar fila",
+    "maxRowsReached": "Se alcanzó el máximo de {count} filas."
+  },
+  "lineGrid": {
+    "addLine": "Agregar línea",
+    "keyboardHint": "Enter agrega/baja · Alt+↑/↓ reordena · ⌘D duplica · ⌘⌫ elimina",
+    "lineActionsAria": "Acciones de la línea {number}",
+    "insertAbove": "Insertar arriba",
+    "insertBelow": "Insertar abajo",
+    "removeLine": "Quitar línea",
+    "clearLine": "Limpiar línea",
+    "tax": {
+      "overriddenAria": "Impuesto modificado manualmente",
+      "overriddenTitle": "Impuesto modificado manualmente — difiere de la tasa calculada",
+      "overriddenShortTitle": "Impuesto modificado manualmente",
+      "computedOverriddenTitle": "Calculado {amount} · modificado manualmente",
+      "resetAria": "Restablecer el impuesto al valor calculado",
+      "resetTitle": "Restablecer al valor calculado {amount}"
+    }
+  }
+}

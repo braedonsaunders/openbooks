@@ -1,0 +1,9 @@
+apiVersion: kustomize.config.k8s.io/v1alpha1
+kind: Component
+
+# The only OpenBooks image coordinate an operator changes. Keep the zero digest
+# until a clean-history build has passed the required security/privacy scans.
+images:
+  - name: example.invalid/openbooks
+    newName: example.invalid/openbooks
+    digest: sha256:0000000000000000000000000000000000000000000000000000000000000000

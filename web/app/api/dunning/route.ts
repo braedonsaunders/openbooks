@@ -1,0 +1,99 @@
+import { NextResponse } from "next/server";
+import { sql } from "drizzle-orm";
+import { db } from "@openbooks/engine/src/db.ts";
+import { requirePermission } from "../../../lib/authz";
+
+export const runtime = "nodejs";
+
+/**
+ * Dunning policies — an ordered ladder of reminder stages fired against overdue
+ * invoices by engine/src/dunning.ts. A policy carries its stages inline; saving
+ * replaces the whole stage set so the ladder is edited as one unit.
+ */
+interface StageInput {
+  sequence: number;
+  name: string;
+  offsetDays: number;
+  subjectTemplate: string;
+  bodyTemplate: string;
+  escalate?: boolean;
+}
+
+function validStages(raw: unknown): StageInput[] | null {
+  if (!Array.isArray(raw)) return null;
+  const stages: StageInput[] = [];
+  for (const s of raw) {
+    if (typeof s !== "object" || s === null) return null;
+    const o = s as Record<string, unknown>;
+    if (typeof o.name !== "string" || !o.name.trim()) return null;
+    if (typeof o.subjectTemplate !== "string" || typeof o.bodyTemplate !== "string") return null;
+    stages.push({
+      sequence: Number(o.sequence),
+      name: o.name,
+      offsetDays: Number(o.offsetDays),
+      subjectTemplate: o.subjectTemplate,
+      bodyTemplate: o.bodyTemplate,
+      escalate: Boolean(o.escalate),
+    });
+  }
+  // Enforce unique, ascending sequences (the DB has a unique index too).
+  const seqs = new Set(stages.map((s) => s.sequence));
+  if (seqs.size !== stages.length) return null;
+  if (stages.some((s) => !Number.isInteger(s.sequence) || !Number.isInteger(s.offsetDays))) return null;
+  return stages;
+}
+
+export async function GET() {
+  const authz = await requirePermission("documents.manage");
+  const policies = (await db.execute(sql`
+    select id, name, applies_to_kind as "appliesToKind", grace_period_days as "gracePeriodDays",
+           min_balance as "minBalance", reply_to as "replyTo", is_active as "isActive"
+      from dunning_policies where org_id = ${authz.user.orgId} order by name
+  `)) as unknown as { rows: Record<string, unknown>[] };
+  const stages = (await db.execute(sql`
+    select id, policy_id as "policyId", sequence, name, offset_days as "offsetDays",
+           subject_template as "subjectTemplate", body_template as "bodyTemplate", escalate
+      from dunning_stages where org_id = ${authz.user.orgId} order by policy_id, sequence
+  `)) as unknown as { rows: Record<string, unknown>[] };
+  const byPolicy = new Map<string, Record<string, unknown>[]>();
+  for (const s of stages.rows) {
+    const key = s.policyId as string;
+    (byPolicy.get(key) ?? byPolicy.set(key, []).get(key)!).push(s);
+  }
+  return NextResponse.json({
+    policies: policies.rows.map((p) => ({ ...p, stages: byPolicy.get(p.id as string) ?? [] })),
+  });
+}
+
+export async function POST(req: Request) {
+  const authz = await requirePermission("documents.manage");
+  const body = (await req.json().catch(() => ({}))) as Record<string, unknown>;
+  if (typeof body.name !== "string" || !body.name.trim()) {
+    return NextResponse.json({ error: "name is required" }, { status: 400 });
+  }
+  const stages = validStages(body.stages ?? []);
+  if (stages === null) return NextResponse.json({ error: "invalid stages" }, { status: 400 });
+
+  const id = await db.transaction(async (tx) => {
+    const created = (await tx.execute(sql`
+      insert into dunning_policies (org_id, name, applies_to_kind, grace_period_days, min_balance,
+                                    reply_to, is_active, created_by, updated_by)
+      values (${authz.user.orgId}, ${body.name}, ${(body.appliesToKind as string) ?? "customer_invoice"},
+              ${Number(body.gracePeriodDays ?? 0)}, ${String(body.minBalance ?? "0")},
+              ${(body.replyTo as string | null) ?? null}, ${body.isActive !== false},
+              ${authz.user.id}, ${authz.user.id})
+      returning id
+    `)) as unknown as { rows: { id: string }[] };
+    const policyId = created.rows[0]!.id;
+    for (const s of stages) {
+      await tx.execute(sql`
+        insert into dunning_stages (org_id, policy_id, sequence, name, offset_days, subject_template,
+                                    body_template, escalate, created_by, updated_by)
+        values (${authz.user.orgId}, ${policyId}, ${s.sequence}, ${s.name}, ${s.offsetDays},
+                ${s.subjectTemplate}, ${s.bodyTemplate}, ${s.escalate ?? false}, ${authz.user.id}, ${authz.user.id})
+      `);
+    }
+    return policyId;
+  });
+  return NextResponse.json({ id }, { status: 201 });
+}

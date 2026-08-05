@@ -1,0 +1,85 @@
+import type { CountryTaxPackDefinition, TaxReturnPack } from "./types.ts";
+
+const IE_VAT3_2026: TaxReturnPack = {
+  code: "IE_VAT3",
+  name: "VAT3 Return",
+  country: "IE",
+  jurisdiction: { code: "IE", name: "Ireland", country: "IE", level: "country", taxType: "vat" },
+  defaultFrequency: "bimonthly",
+  submissionChannel: "portal_manual",
+  governmentFormat: "portal_entry",
+  submissionUrl: "https://www.revenue.ie/en/vat/accounting-for-vat/how-to-account-for-value-added-tax/completing-vat3-return.aspx",
+  watermark: "Working copy — review payable/repayable direction and cross-border boxes, then file through Revenue Online Service (ROS)",
+  boxes: [
+    { lineCode: "T1", label: "VAT on sales", sign: -1, sequence: 10, basis: "tax_collected", glMap: "sales" },
+    { lineCode: "T2", label: "VAT on purchases", sign: 1, sequence: 20, basis: "tax_paid", glMap: "purchases" },
+    { lineCode: "T3", label: "VAT payable where T1 is greater than T2", sign: 1, sequence: 30 },
+    { lineCode: "T4", label: "VAT repayable where T2 is greater than T1", sign: 1, sequence: 40 },
+    { lineCode: "E1", label: "Intra-EU supplies of goods", sign: 1, sequence: 50 },
+    { lineCode: "E2", label: "Intra-EU acquisitions of goods", sign: 1, sequence: 60 },
+    { lineCode: "ES1", label: "Intra-EU supplies of services", sign: 1, sequence: 70 },
+    { lineCode: "ES2", label: "Intra-EU acquisitions of services", sign: 1, sequence: 80 },
+    { lineCode: "PA1", label: "Customs value plus Customs Duty for goods imported under postponed accounting", sign: 1, sequence: 90 },
+  ],
+};
+
+/** Ireland VAT localization maintained from Revenue's current return guidance and complete official standard-rate history. */
+export const IRELAND_TAX_PACK: CountryTaxPackDefinition = {
+  code: "IE_INDIRECT_TAX",
+  version: "2026.08.01",
+  country: "IE",
+  name: "Ireland",
+  countryTaxType: "vat",
+  parentReturnPackCode: "IE_VAT3",
+  completeness: {
+    jurisdictions: "not_applicable",
+    standardRates: "complete",
+    returnDefinitions: "partial",
+    localRates: "not_applicable",
+    taxability: "partial",
+    sourcingRules: "partial",
+    nexusRules: "partial",
+  },
+  sources: [
+    {
+      id: "revenue_historical_vat_rates_2026",
+      title: "Revenue — historical VAT rates from introduction through 2026",
+      url: "https://www.revenue.ie/en/vat/vat-rates/historical-vat-rates/index.aspx",
+      asOf: "2026-08-01",
+    },
+    {
+      id: "revenue_vat3_2026",
+      title: "Revenue — how to complete a VAT3 return",
+      url: "https://www.revenue.ie/en/vat/accounting-for-vat/how-to-account-for-value-added-tax/completing-vat3-return.aspx",
+      asOf: "2026-08-01",
+    },
+  ],
+  jurisdictions: [],
+  returnPacks: [IE_VAT3_2026],
+  returnPackTaxCodes: {
+    IE_VAT3: {
+      code: "IE-VAT-STD",
+      name: "Ireland standard VAT",
+      ratePercent: 23,
+      rates: [
+        { ratePercent: 16.37, effectiveFrom: "1972-11-01", effectiveTo: "1973-09-02", sourceId: "revenue_historical_vat_rates_2026" },
+        { ratePercent: 19.5, effectiveFrom: "1973-09-03", effectiveTo: "1976-02-29", sourceId: "revenue_historical_vat_rates_2026" },
+        { ratePercent: 20, effectiveFrom: "1976-03-01", effectiveTo: "1980-04-30", sourceId: "revenue_historical_vat_rates_2026" },
+        { ratePercent: 25, effectiveFrom: "1980-05-01", effectiveTo: "1982-04-30", sourceId: "revenue_historical_vat_rates_2026" },
+        { ratePercent: 30, effectiveFrom: "1982-05-01", effectiveTo: "1983-02-28", sourceId: "revenue_historical_vat_rates_2026" },
+        { ratePercent: 35, effectiveFrom: "1983-03-01", effectiveTo: "1985-02-28", sourceId: "revenue_historical_vat_rates_2026" },
+        { ratePercent: 23, effectiveFrom: "1985-03-01", effectiveTo: "1986-02-28", sourceId: "revenue_historical_vat_rates_2026" },
+        { ratePercent: 25, effectiveFrom: "1986-03-01", effectiveTo: "1990-02-28", sourceId: "revenue_historical_vat_rates_2026" },
+        { ratePercent: 23, effectiveFrom: "1990-03-01", effectiveTo: "1991-02-28", sourceId: "revenue_historical_vat_rates_2026" },
+        { ratePercent: 21, effectiveFrom: "1991-03-01", effectiveTo: "2000-12-31", sourceId: "revenue_historical_vat_rates_2026" },
+        { ratePercent: 20, effectiveFrom: "2001-01-01", effectiveTo: "2002-02-28", sourceId: "revenue_historical_vat_rates_2026" },
+        { ratePercent: 21, effectiveFrom: "2002-03-01", effectiveTo: "2008-11-30", sourceId: "revenue_historical_vat_rates_2026" },
+        { ratePercent: 21.5, effectiveFrom: "2008-12-01", effectiveTo: "2009-12-31", sourceId: "revenue_historical_vat_rates_2026" },
+        { ratePercent: 21, effectiveFrom: "2010-01-01", effectiveTo: "2011-12-31", sourceId: "revenue_historical_vat_rates_2026" },
+        { ratePercent: 23, effectiveFrom: "2012-01-01", effectiveTo: "2020-08-31", sourceId: "revenue_historical_vat_rates_2026" },
+        { ratePercent: 21, effectiveFrom: "2020-09-01", effectiveTo: "2021-02-28", sourceId: "revenue_historical_vat_rates_2026" },
+        { ratePercent: 23, effectiveFrom: "2021-03-01", sourceId: "revenue_historical_vat_rates_2026" },
+      ],
+    },
+  },
+};

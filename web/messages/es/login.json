@@ -1,0 +1,15 @@
+{
+  "tagline": "opere con libros abiertos",
+  "password": "Contraseña",
+  "invalidCredentials": "Correo electrónico o contraseña no válidos",
+  "signIn": "Iniciar sesión",
+  "signingIn": "Iniciando sesión…",
+  "mfaCode": "Código de autenticación o recuperación",
+  "mfaPlaceholder": "123456",
+  "mfaHelp": "Introduzca el código de seis dígitos o un código de recuperación de un solo uso.",
+  "invalidMfa": "El código de autenticación no es válido o ha caducado",
+  "verify": "Verificar",
+  "or": "o",
+  "sso": "Inicio de sesión único",
+  "ssoFailed": "No se pudo completar el inicio de sesión único"
+}

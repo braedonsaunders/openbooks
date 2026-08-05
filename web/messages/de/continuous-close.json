@@ -1,0 +1,162 @@
+{
+  "metaTitle": "Kontinuierlicher Abschluss",
+  "title": "Kontinuierlicher Abschluss",
+  "description": "Überwacht kontinuierlich die Abschlussbereitschaft und deckt belegbasierte Buchhaltungs- und Finanzausnahmen zur Prüfung auf.",
+  "search": "Feststellungen durchsuchen…",
+  "tabs": { "ariaLabel": "Abschnitte des kontinuierlichen Abschlusses", "findings": "Feststellungen", "reports": "Berichte" },
+  "agents": {
+    "accounting": "Buchhaltung",
+    "finance": "Finanzen"
+  },
+  "metrics": {
+    "active": "Aktiv",
+    "critical": "Kritisch",
+    "accounting": "Buchhaltungsfeststellungen",
+    "finance": "Finanzfeststellungen"
+  },
+  "filters": {
+    "agent": "Agent",
+    "severity": "Schweregrad"
+  },
+  "severity": {
+    "info": "Information",
+    "warning": "Warnung",
+    "critical": "Kritisch"
+  },
+  "status": {
+    "open": "Offen",
+    "in_review": "In Prüfung",
+    "resolved": "Behoben",
+    "dismissed": "Verworfen"
+  },
+  "table": {
+    "finding": "Feststellung",
+    "agent": "Agent",
+    "severity": "Schweregrad",
+    "materiality": "Wesentlichkeit",
+    "detected": "Zuletzt erkannt"
+  },
+  "findings": {
+    "unmatched_bank_activity": {
+      "title": "Nicht zugeordnete Bankaktivität",
+      "description": "Aktivität auf dem Kontoauszug bleibt Hauptbuchtransaktionen nicht zugeordnet."
+    },
+    "reconciliation_difference": {
+      "title": "Abstimmungsdifferenz",
+      "description": "Eine laufende Bankabstimmung stimmt nicht mit ihrem Auszugssaldo überein."
+    },
+    "stale_accounting_documents": {
+      "title": "Veraltete Buchhaltungsdokumente",
+      "description": "Buchhaltungsdokumente im Entwurf oder in Bearbeitung sind über das konfigurierte Alter hinaus unerledigt geblieben."
+    },
+    "missing_approved_budget": {
+      "title": "Kein genehmigtes Budget",
+      "description": "Die Finanzüberwachung kann keine Ist-Werte vergleichen, da kein genehmigtes Budget verfügbar ist."
+    },
+    "unfavorable_budget_variance": {
+      "title": "Ungünstige Budgetabweichung",
+      "description": "Die tatsächliche Leistung ist wesentlich schlechter als das genehmigte Budget."
+    },
+    "period_revenue_decline": {
+      "title": "Umsatzrückgang",
+      "description": "Der Umsatz ist gegenüber der vorherigen abgeschlossenen Buchungsperiode wesentlich gesunken."
+    },
+    "gross_margin_decline": {
+      "title": "Rückgang der Bruttomarge",
+      "description": "Die Bruttomarge ist gegenüber der vorherigen abgeschlossenen Periode über den konfigurierten Schwellenwert hinaus gesunken."
+    }
+  },
+  "summary": {
+    "records": "{count, plural, one {# Datensatz} other {# Datensätze}}",
+    "review": "Die unterstützenden Belege prüfen"
+  },
+  "reports": {
+    "title": "Agentenberichte",
+    "description": "Öffnen Sie ein generiertes Briefing oder exportieren Sie es als PDF.",
+    "search": "Berichte durchsuchen…",
+    "empty": "Keine generierten Berichte entsprechen diesen Filtern."
+  },
+  "narrative": {
+    "title": "Neuestes Agentenbriefing",
+    "agent": "Generiert von {agent}",
+    "generated": "Generiert am {date}",
+    "generatedLabel": "Generiert",
+    "open": "Bericht öffnen",
+    "downloadPdf": "PDF",
+    "executiveSummary": "Zusammenfassung",
+    "highlights": "Leistungshighlights",
+    "risks": "Risiken und Anomalien",
+    "recommendations": "Empfohlene Maßnahmen",
+    "sources": "Unterstützende Quellen",
+    "sourceLabel": "Quelle",
+    "sourcePath": "Pfad im Produkt"
+  },
+  "analysis": {
+    "title": "Agentenanalyse",
+    "rootCauses": "Wahrscheinliche Ursachen",
+    "recommendations": "Empfohlene Maßnahmen",
+    "evidenceNotice": "Die modellgenerierte Analyse basiert auf den verknüpften Datensätzen und unterliegt weiterhin der Prüfung."
+  },
+  "empty": {
+    "title": "Noch keine Feststellungen",
+    "description": "Aktivieren Sie einen Agenten und führen Sie seinen ersten Scan aus. Behobene Bedingungen werden bei späteren Scans automatisch aufgelöst.",
+    "action": "Agenten konfigurieren"
+  },
+  "details": {
+    "materiality": "Wesentlichkeit",
+    "confidence": "Konfidenz",
+    "lastDetected": "Zuletzt erkannt",
+    "summary": "Zusammenfassung",
+    "evidence": "Unterstützende Belege",
+    "noEvidence": "Diese Feststellung beruht auf einer fehlenden Voraussetzung, daher gibt es keine Quelldatensätze zur Anzeige.",
+    "dismissalReason": "Grund für die Verwerfung"
+  },
+  "fields": {
+    "account": "Konto",
+    "count": "Datensätze",
+    "oldestDate": "Ältestes Datum",
+    "throughDate": "Abgestimmt bis",
+    "difference": "Differenz",
+    "budget": "Budget",
+    "budgetAmount": "Budgetbetrag",
+    "actual": "Ist",
+    "variance": "Abweichung",
+    "period": "Perioden",
+    "revenueChange": "Umsatzveränderung",
+    "marginChange": "Margenveränderung",
+    "points": "Punkte"
+  },
+  "evidence": {
+    "bank_transaction": "Banktransaktion",
+    "document": "Buchhaltungsdokument",
+    "reconciliation": "Abstimmung",
+    "budget_variance": "Budgetabweichung",
+    "period_comparison": "Periodenvergleich"
+  },
+  "actions": {
+    "settings": "Agenteneinstellungen",
+    "startReview": "Prüfung starten",
+    "resolve": "Beheben",
+    "dismiss": "Verwerfen",
+    "reopen": "Wieder öffnen",
+    "openSource": "Quelle öffnen",
+    "cancel": "Abbrechen",
+    "confirmDismiss": "Feststellung verwerfen"
+  },
+  "dismiss": {
+    "title": "Diese Feststellung verwerfen",
+    "description": "Erfassen Sie, warum dieses gültige Detektorergebnis nicht in der aktiven Warteschlange verbleiben sollte.",
+    "placeholder": "Grund für die Verwerfung"
+  },
+  "feedback": {
+    "review": "Feststellung zur Prüfung verschoben.",
+    "resolve": "Feststellung behoben.",
+    "dismiss": "Feststellung verworfen.",
+    "reopen": "Feststellung wieder geöffnet.",
+    "actionFailed": "Die Feststellung konnte nicht aktualisiert werden.",
+    "recorded": "Feedback erfasst.",
+    "wasHelpful": "War diese Feststellung nützlich?",
+    "helpful": "Hilfreich",
+    "notHelpful": "Nicht hilfreich"
+  }
+}

@@ -1,0 +1,54 @@
+{
+  "views": {
+    "new": "Nova visualização",
+    "list": {
+      "title": "Visualizações",
+      "description": "Consultas nomeadas e compartilháveis sobre o razão, documentos, partes e contas — linhas de detalhe ou resumos agrupados. Navegue, exporte e reutilize.",
+      "scopeLabel": "Escopo",
+      "searchPlaceholder": "Buscar visualizações…",
+      "scopeAll": "Todas",
+      "scopeShared": "Compartilhadas",
+      "scopePrivate": "Privadas",
+      "emptyTitle": "Nenhuma visualização ainda",
+      "emptyDescription": "Crie sua primeira visualização para consultar o razão e reutilizá-la quando quiser.",
+      "columns": {
+        "name": "Nome",
+        "source": "Origem",
+        "scope": "Escopo",
+        "updated": "Atualizada"
+      },
+      "scope": {
+        "shared": "Compartilhada",
+        "private": "Privada"
+      },
+      "runAction": "Executar",
+      "editAction": "Editar"
+    },
+    "studio": {
+      "untitled": "Visualização sem título",
+      "autosaveHint": "As alterações são salvas automaticamente.",
+      "scopeLabel": "Escopo",
+      "scope": {
+        "private": "Privada — apenas você",
+        "shared": "Compartilhada — todos"
+      },
+      "exportPdf": "PDF",
+      "exportXlsx": "Excel",
+      "exportCsv": "CSV",
+      "deleteConfirm": "Excluir esta visualização?",
+      "viewResults": "Ver resultados"
+    },
+    "run": {
+      "editSearch": "Editar visualização",
+      "backToList": "Visualizações",
+      "resultsTitle": "Resultados",
+      "rowsRange": "Exibindo {from}–{to} de {total} linhas",
+      "lastUpdated": "Atualizada {when}",
+      "refreshHint": "Os resultados são executados ao vivo com os dados atuais.",
+      "emptyTitle": "Nenhuma linha correspondeu",
+      "emptyDescription": "Ajuste os critérios de busca ou filtros e execute novamente.",
+      "notFoundTitle": "Visualização não encontrada",
+      "notFoundDescription": "Ela pode ter sido excluída, ou você não tem acesso a ela."
+    }
+  }
+}

@@ -1,0 +1,162 @@
+{
+  "list": {
+    "metaTitle": "Documentos",
+    "title": "Gestor de documentos",
+    "description": "Explora, sube y administra los documentos de tu organización.",
+    "searchPlaceholder": "Buscar archivos y carpetas…",
+    "allFiles": "Todos los archivos",
+    "rootFolder": "Gestor de documentos",
+    "systemAttachments": "Adjuntos",
+    "empty": {
+      "title": "No hay archivos en esta carpeta",
+      "description": "Sube archivos o crea una carpeta para comenzar.",
+      "allTitle": "Aún no hay archivos",
+      "allDescription": "Sube tu primer archivo para empezar a usar el gestor de documentos."
+    },
+    "folderRow": "Carpeta"
+  },
+  "systemFolders": { "apCapture": "Captura de compras" },
+  "columns": {
+    "name": "Nombre",
+    "size": "Tamaño",
+    "modified": "Modificado",
+    "createdBy": "Creado por",
+    "type": "Tipo",
+    "location": "Ubicación"
+  },
+  "folderTree": {
+    "expand": "Expandir",
+    "collapse": "Contraer"
+  },
+  "actions": {
+    "newFolder": "Nueva carpeta",
+    "upload": "Subir",
+    "download": "Descargar",
+    "rename": "Renombrar",
+    "move": "Mover",
+    "replace": "Reemplazar",
+    "delete": "Eliminar",
+    "attachExisting": "Adjuntar existente",
+    "detach": "Desvincular"
+  },
+  "folder": {
+    "create": {
+      "title": "Nueva carpeta",
+      "description": "Crea una carpeta para organizar tus archivos.",
+      "nameLabel": "Nombre de la carpeta",
+      "namePlaceholder": "Nombre de la carpeta",
+      "parentLabel": "Carpeta principal",
+      "submit": "Crear carpeta"
+    },
+    "edit": {
+      "title": "Editar carpeta",
+      "nameLabel": "Nombre de la carpeta",
+      "parentLabel": "Carpeta principal",
+      "private": "Carpeta privada",
+      "privateHint": "Solo tú y los administradores pueden ver esta carpeta.",
+      "inactive": "Inactiva",
+      "inactiveHint": "Ocultar esta carpeta de las listas.",
+      "save": "Guardar"
+    },
+    "delete": {
+      "title": "¿Eliminar esta carpeta?",
+      "body": "Todos los archivos de esta carpeta se eliminarán permanentemente. Esta acción no se puede deshacer."
+    },
+    "systemNoDelete": "Las carpetas del sistema no se pueden eliminar ni renombrar.",
+    "subfolderCount": "{count, plural, one {# carpeta} other {# carpetas}}",
+    "fileCount": "{count, plural, one {# archivo} other {# archivos}}",
+    "deleteBlocked": "Esta carpeta contiene archivos vinculados a registros y no se puede eliminar."
+  },
+  "file": {
+    "drawer": {
+      "title": "Detalles del archivo",
+      "name": "Nombre",
+      "folder": "Carpeta",
+      "type": "Tipo",
+      "size": "Tamaño",
+      "created": "Creado",
+      "createdBy": "Creado por",
+      "modified": "Modificado",
+      "modifiedBy": "Modificado por",
+      "versions": "Versiones",
+      "version": "Versión {number}",
+      "current": "actual",
+      "noVersions": "No hay versiones anteriores.",
+      "moveTo": "Mover a la carpeta",
+      "replaceTitle": "Reemplazar archivo",
+      "replaceBody": "Sube una nueva versión de este archivo. La versión anterior se conservará en el historial de versiones.",
+      "attachedTo": "Vinculado a registros",
+      "notAttached": "No vinculado a ningún registro.",
+      "delete": {
+        "title": "¿Eliminar este archivo?",
+        "body": "El archivo se eliminará permanentemente del gestor de documentos y se desvinculará de todos los registros. Esta acción no se puede deshacer."
+      }
+    },
+    "preview": {
+      "title": "Vista previa",
+      "loading": "Cargando archivo…",
+      "loadFailed": "No se pudo cargar el contenido de este archivo.",
+      "tooLarge": "Este archivo es demasiado grande para previsualizarlo aquí.",
+      "unsupported": "Este tipo de archivo no se puede previsualizar. Descárgalo para abrirlo."
+    }
+  },
+  "upload": {
+    "dropFiles": "Suelta archivos aquí o <browse>examina</browse>",
+    "acceptHint": "PDF, imágenes, CSV, XLSX, DOCX, TXT · hasta 25 MB",
+    "tooLarge": "{name} supera el límite de 25 MB",
+    "uploading": "{count, plural, one {Subiendo # archivo…} other {Subiendo # archivos…}}",
+    "selectFolder": "Selecciona una carpeta de destino…"
+  },
+  "attach": {
+    "title": "Adjuntar archivo",
+    "description": "Adjunta un archivo del gestor de documentos a este registro.",
+    "searchPlaceholder": "Buscar archivos…",
+    "empty": "No se encontraron archivos.",
+    "attachExisting": "Adjuntar archivo existente",
+    "uploadNew": "Subir archivo nuevo"
+  },
+  "toasts": {
+    "folderCreated": "Carpeta creada",
+    "folderCreateFailed": "No se pudo crear la carpeta",
+    "folderRenamed": "Carpeta renombrada",
+    "folderRenameFailed": "No se pudo renombrar la carpeta",
+    "folderMoved": "Carpeta movida",
+    "folderMoveFailed": "No se pudo mover la carpeta",
+    "folderDeleted": "Carpeta eliminada",
+    "folderDeleteFailed": "No se pudo eliminar la carpeta",
+    "fileRenamed": "Archivo renombrado",
+    "fileRenameFailed": "No se pudo renombrar el archivo",
+    "fileMoved": "Archivo movido",
+    "fileMoveFailed": "No se pudo mover el archivo",
+    "fileDeleted": "Archivo eliminado",
+    "fileDeleteFailed": "No se pudo eliminar el archivo",
+    "fileReplaced": "Nueva versión subida",
+    "fileReplaceFailed": "No se pudo subir la nueva versión",
+    "uploaded": "{name} subido",
+    "uploadFailed": "No se pudo subir {name}",
+    "attached": "Archivo adjuntado",
+    "attachFailed": "No se pudo adjuntar el archivo",
+    "detached": "Archivo desvinculado",
+    "detachFailed": "No se pudo desvincular el archivo",
+    "linkCopied": "Enlace copiado",
+    "linkCopyFailed": "No se pudo copiar el enlace"
+  },
+  "fileTypes": {
+    "pdf": "PDF",
+    "image": "Imagen",
+    "csv": "CSV",
+    "spreadsheet": "Hoja de cálculo",
+    "document": "Documento",
+    "text": "Texto",
+    "other": "Archivo"
+  },
+  "rowMenu": {
+    "open": "Abrir",
+    "openFolder": "Abrir carpeta",
+    "copyLink": "Copiar enlace"
+  },
+  "rename": {
+    "fileTitle": "Renombrar archivo",
+    "folderTitle": "Renombrar carpeta"
+  }
+}

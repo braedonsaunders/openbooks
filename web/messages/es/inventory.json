@@ -1,0 +1,78 @@
+{
+  "list": {
+    "title": "Inventario",
+    "description": "Valuación de existencias y movimientos — costeo PEPS, promedio o estándar.",
+    "searchPlaceholder": "Buscar artículos o ubicaciones…",
+    "emptyTitle": "Aún no hay inventario",
+    "emptyDescription": "Configura el perfil de costeo de un artículo en Configuración y luego recibe stock.",
+    "newButton": "Nuevo movimiento",
+    "view": "Vista"
+  },
+  "view": {
+    "onhand": "Existencias",
+    "movements": "Movimientos"
+  },
+  "labels": {
+    "item": "Artículo",
+    "location": "Ubicación",
+    "quantity": "Cantidad",
+    "avgCost": "Costo prom.",
+    "value": "Valor",
+    "date": "Fecha",
+    "kind": "Tipo",
+    "unitCost": "Costo unitario"
+  },
+  "kind": {
+    "receipt": "Recepción",
+    "issue": "Salida",
+    "transfer_out": "Traslado saliente",
+    "transfer_in": "Traslado entrante",
+    "adjustment": "Ajuste",
+    "count": "Conteo",
+    "assembly_build": "Ensamblaje",
+    "assembly_consume": "Consumo de ensamblaje",
+    "return": "Devolución"
+  },
+  "drawer": {
+    "title": "Movimiento de inventario",
+    "post": "Contabilizar",
+    "action": "Acción",
+    "actions": {
+      "receive": "Recibir",
+      "issue": "Salida",
+      "adjust": "Ajustar",
+      "transfer": "Trasladar",
+      "build": "Ensamblar",
+      "landed": "Costo de importación"
+    },
+    "hint": {
+      "receive": "Agregar stock al costo (DR inventario / CR contrapartida).",
+      "issue": "Retirar stock a costo de ventas (DR costo de ventas / CR inventario).",
+      "adjust": "Corregir la cantidad en existencia contra la cuenta de ajuste.",
+      "transfer": "Mover stock entre dos ubicaciones a su costo registrado.",
+      "build": "Consumir componentes según la lista de materiales y producir el artículo terminado al costo.",
+      "landed": "Capitalizar flete/aranceles sobre las capas en existencia de un artículo."
+    },
+    "selectItem": "Seleccionar un artículo",
+    "selectLocation": "Seleccionar una ubicación",
+    "selectAccount": "Seleccionar una cuenta",
+    "quantityDelta": "Cantidad (+/-)",
+    "offsetAccount": "Cuenta de contrapartida",
+    "offsetHint": "La cuenta acreditada por la recepción (tránsito / GRNI / saldo inicial).",
+    "memoPlaceholder": "Nota opcional",
+    "missingFields": "Artículo, ubicación y cantidad son obligatorios",
+    "failed": "Falló el movimiento",
+    "posted": "Movimiento contabilizado ({value})",
+    "fromLocation": "Ubicación origen",
+    "toLocation": "Ubicación destino",
+    "assemblyItem": "Artículo ensamblado",
+    "amount": "Importe",
+    "freightAccount": "Cuenta de flete / aranceles",
+    "freightHint": "La cuenta donde está el flete; se traslada al inventario.",
+    "basis": "Base de asignación",
+    "bases": {
+      "value": "Por valor",
+      "quantity": "Por cantidad"
+    }
+  }
+}

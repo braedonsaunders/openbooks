@@ -1,0 +1,103 @@
+{
+  "list": {
+    "title": "勘定科目表",
+    "description": "自然符号の現在残高(貸借対照表は累計、損益は当会計年度)を集計勘定を通じてロールアップします。",
+    "searchPlaceholder": "番号または名称を検索…",
+    "views": {
+      "list": "リスト",
+      "hierarchy": "階層"
+    },
+    "newAccount": "新規勘定",
+    "viewRegister": "元帳を表示",
+    "expand": "勘定を展開",
+    "collapse": "勘定を折りたたむ",
+    "badges": {
+      "inactive": "無効",
+      "summary": "集計"
+    }
+  },
+  "types": {
+    "assetBank": "銀行",
+    "assetReceivable": "売掛金",
+    "assetCurrentOther": "その他の流動資産",
+    "assetFixed": "固定資産",
+    "assetOther": "その他の資産",
+    "liabilityPayable": "買掛金",
+    "liabilityCard": "コーポレートカード",
+    "liabilityCurrentOther": "その他の流動負債",
+    "liabilityLongTerm": "固定負債",
+    "equity": "純資産",
+    "income": "収益",
+    "incomeOther": "その他の収益",
+    "cogs": "売上原価",
+    "expense": "費用",
+    "expenseOther": "その他の費用",
+    "expenseDeferred": "繰延費用"
+  },
+  "classes": {
+    "asset": "資産",
+    "liability": "負債",
+    "equity": "純資産",
+    "income": "収益",
+    "expense": "費用"
+  },
+  "drawer": {
+    "saved": "勘定を保存しました",
+    "created": "勘定を作成しました",
+    "newTitle": "新規勘定",
+    "newDescription": "転記勘定または集計勘定を作成します。期首残高は貸借一致した仕訳で入力してください。",
+    "create": "勘定を作成",
+    "typeLocked": "勘定に元帳の記録が発生した後は、種別を変更できません。",
+    "parent": "親勘定",
+    "currencyRestriction": "通貨制限",
+    "anyCurrency": "すべての通貨",
+    "allSubsidiaries": "すべての子会社",
+    "summary": "集計勘定",
+    "reconcilable": "消込対象",
+    "eliminate": "連結時に消去",
+    "includeSubsidiaries": "子会社を含める",
+    "requiredDimensions": "必須の計上ディメンション",
+    "dimensions": {
+      "department": "部門",
+      "location": "拠点",
+      "class": "クラス",
+      "project": "プロジェクト",
+      "party": "取引先"
+    },
+    "errors": {
+      "name_required": "勘定名は必須です。",
+      "invalid_type": "有効な勘定種別を選択してください。",
+      "type_has_transactions": "元帳の記録が存在した後は、勘定種別を変更できません。",
+      "invalid_parent": "有効な親勘定を選択してください。",
+      "parent_must_be_summary": "親勘定は集計勘定である必要があります。",
+      "parent_type_mismatch": "親勘定と子勘定は同じ勘定種別である必要があります。",
+      "parent_cycle": "その親勘定は循環する勘定階層を作成してしまいます。",
+      "summary_reconcilable_conflict": "集計勘定は消込対象にできません。",
+      "summary_has_transactions": "元帳の記録がある勘定は集計勘定にできません。",
+      "summary_has_children": "有効な子勘定を持つ勘定は集計勘定のままである必要があります。",
+      "inactive_has_children": "先にこの勘定の有効な子勘定を無効化してください。",
+      "invalid_currency": "有効な通貨を選択してください。",
+      "invalid_subsidiary": "有効な子会社を選択してください。",
+      "invalid_dimensions": "有効な必須ディメンションを選択してください。",
+      "invalid_custom_fields": "カスタムフィールドの値を確認してください。",
+      "number_in_use": "その勘定番号はすでに使用されています。",
+      "account_changed": "編集中に勘定が変更されました。開き直して再試行してください。",
+      "invalid_idempotency_key": "勘定の作成要求を安全に再試行できませんでした。",
+      "save_failed": "勘定を保存できませんでした。"
+    },
+    "monetary": "外貨再換算（貨幣性項目）",
+    "monetaryDefault": "勘定タイプに従う",
+    "monetaryAlways": "常に再換算",
+    "monetaryNever": "再換算しない"
+  },
+  "register": {
+    "notFound": "勘定が見つかりません",
+    "subtitle": "元帳 · {count, plural, one {# 行} other {# 行}} · 累計残高 {balance}",
+    "periodFilter": "{label} でフィルター中",
+    "columns": {
+      "entry": "仕訳",
+      "debit": "借方",
+      "credit": "貸方"
+    }
+  }
+}

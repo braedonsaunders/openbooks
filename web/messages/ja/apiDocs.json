@@ -1,0 +1,42 @@
+{
+  "metaTitle": "API ドキュメント",
+  "title": "API ドキュメント",
+  "description": "自己文書化された REST API。レコードタイプ、フィールド、権限は、カスタムレコードやフィールドを含めて、データベーススキーマからライブで生成されます。",
+  "searchPlaceholder": "レコードタイプを検索…",
+  "baseUrl": "/api/v1",
+  "auth": {
+    "title": "認証",
+    "description": "API キーをベアラートークンとして渡します。キーにはスコープがあり、キーのスコープと所有者の権限の両方が対象を含む場合にのみリクエストが許可されます。"
+  },
+  "customBadge": "カスタム",
+  "requires": "read:",
+  "writesRequire": "write:",
+  "fields": {
+    "field": "フィールド",
+    "type": "型",
+    "required": "必須",
+    "description": "説明",
+    "yes": "はい"
+  },
+  "console": {
+    "referenceTab": "リファレンス",
+    "consoleTab": "コンソール",
+    "recordTypes": "レコードタイプ",
+    "tokenLabel": "API キー",
+    "tokenPlaceholder": "ob_live_…",
+    "tokenNote": "API キーから取得したキーを貼り付けてください。このブラウザタブ内にとどまり、この API にのみ送信されます。",
+    "needToken": "リクエストを送信するには、上に API キーを入力してください。",
+    "method": "メソッド",
+    "requestBody": "リクエストボディ",
+    "send": "送信",
+    "sending": "送信中…",
+    "resetBody": "ボディをリセット",
+    "response": "レスポンス",
+    "responseIdle": "リクエストを送信すると、レスポンスがここに表示されます。",
+    "readOnly": "このレコードタイプは API 経由では読み取り専用です。",
+    "status": "ステータス",
+    "time": "時間",
+    "idPlaceholder": "レコード id(uuid)",
+    "selectType": "リクエストを作成するレコードタイプを選択してください。"
+  }
+}

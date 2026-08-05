@@ -1,0 +1,54 @@
+{
+  "title": "PDF 模板",
+  "description": "设计精美的可打印文档，并将其分配给发票、日记账及其他所有交易",
+  "newTemplate": "新建模板",
+  "list": {
+    "name": "名称",
+    "paper": "纸张",
+    "default": "默认",
+    "builtInStarter": "内置起始模板",
+    "builtIn": "内置",
+    "starterHint": "在没有自定义模板时打印使用——复制它即可自定义",
+    "duplicate": "复制",
+    "isDefault": "默认"
+  },
+  "editor": {
+    "back": "PDF 模板",
+    "design": "设计",
+    "code": "HTML",
+    "preview": "预览",
+    "margins": "页边距",
+    "portrait": "纵向",
+    "landscape": "横向",
+    "headerPlaceholder": "页眉（可选）——允许使用合并令牌",
+    "footerPlaceholder": "页脚——支持页码",
+    "saved": "模板已保存",
+    "saveFailed": "保存失败",
+    "makeDefault": "设为此记录类型的默认模板",
+    "active": "启用",
+    "previewHint": "由打印真实文档的同一引擎渲染，并与您最近的记录合并。",
+    "refreshPreview": "刷新预览",
+    "previewFailed": "预览失败",
+    "deleteConfirm": "删除此模板？记录将回退到默认设计。",
+    "blockContent": "内容",
+    "blockFields": "记录字段",
+    "blockTables": "表格"
+  },
+  "pdfButton": {
+    "label": "PDF",
+    "defaultTemplate": "标准设计",
+    "failed": "无法加载 PDF 模板"
+  },
+  "send": {
+    "label": "发送",
+    "to": "收件人",
+    "toPlaceholder": "customer@example.com",
+    "message": "留言（可选）",
+    "messagePlaceholder": "添加备注…",
+    "action": "发送邮件",
+    "sending": "发送中…",
+    "sent": "已发送至 {to}",
+    "noRecipient": "请输入收件人邮箱地址",
+    "failed": "无法发送邮件"
+  }
+}

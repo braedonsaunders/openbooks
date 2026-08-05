@@ -1,0 +1,54 @@
+{
+  "views": {
+    "new": "Nouvelle vue",
+    "list": {
+      "title": "Vues",
+      "description": "Requêtes nommées et partageables sur le grand livre, les documents, les tiers et les comptes — lignes détaillées ou résumés groupés. Parcourez-les, exportez-les et réutilisez-les.",
+      "scopeLabel": "Portée",
+      "searchPlaceholder": "Rechercher des vues…",
+      "scopeAll": "Toutes",
+      "scopeShared": "Partagées",
+      "scopePrivate": "Privées",
+      "emptyTitle": "Aucune vue",
+      "emptyDescription": "Créez votre première vue pour interroger le grand livre et la réutiliser à tout moment.",
+      "columns": {
+        "name": "Nom",
+        "source": "Source",
+        "scope": "Portée",
+        "updated": "Mise à jour"
+      },
+      "scope": {
+        "shared": "Partagée",
+        "private": "Privée"
+      },
+      "runAction": "Exécuter",
+      "editAction": "Modifier"
+    },
+    "studio": {
+      "untitled": "Vue sans titre",
+      "autosaveHint": "Les modifications sont enregistrées automatiquement.",
+      "scopeLabel": "Portée",
+      "scope": {
+        "private": "Privée — vous uniquement",
+        "shared": "Partagée — tout le monde"
+      },
+      "exportPdf": "PDF",
+      "exportXlsx": "Excel",
+      "exportCsv": "CSV",
+      "deleteConfirm": "Supprimer cette vue ?",
+      "viewResults": "Voir les résultats"
+    },
+    "run": {
+      "editSearch": "Modifier la vue",
+      "backToList": "Vues",
+      "resultsTitle": "Résultats",
+      "rowsRange": "Lignes {from}–{to} sur {total}",
+      "lastUpdated": "Mis à jour {when}",
+      "refreshHint": "Les résultats sont calculés en direct sur les données actuelles.",
+      "emptyTitle": "Aucune ligne trouvée",
+      "emptyDescription": "Ajustez les critères ou les filtres, puis relancez.",
+      "notFoundTitle": "Vue introuvable",
+      "notFoundDescription": "Elle a peut-être été supprimée, ou vous n'y avez pas accès."
+    }
+  }
+}

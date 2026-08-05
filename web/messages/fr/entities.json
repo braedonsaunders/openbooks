@@ -1,0 +1,31 @@
+{
+  "roles": {
+    "customers": {
+      "title": "Clients",
+      "description": "Les entreprises et les personnes que vous facturez.",
+      "newLabel": "Nouveau client",
+      "emptyTitle": "Aucun client pour l’instant",
+      "emptyDescription": "Ajoutez le premier client pour démarrer le répertoire."
+    },
+    "vendors": {
+      "title": "Fournisseurs",
+      "description": "Les fournisseurs auprès desquels vous achetez et que vous payez.",
+      "newLabel": "Nouveau fournisseur",
+      "emptyTitle": "Aucun fournisseur pour l’instant",
+      "emptyDescription": "Ajoutez le premier fournisseur pour démarrer le répertoire."
+    },
+    "employees": {
+      "title": "Employés",
+      "description": "Les personnes sur la liste de paie et les notes de frais.",
+      "newLabel": "Nouvel employé",
+      "emptyTitle": "Aucun employé pour l’instant",
+      "emptyDescription": "Ajoutez le premier employé pour démarrer le répertoire."
+    }
+  },
+  "list": {
+    "searchPlaceholder": "Rechercher nom, code, courriel…",
+    "shortCode": "Code court",
+    "phone": "Téléphone",
+    "customerStatuses": { "existing": "Clients existants", "potential": "Clients potentiels" }
+  }
+}

@@ -1,0 +1,9 @@
+{
+  "page": {
+    "title": "Pagos de clientes",
+    "description": "Pagos de clientes recibidos y aplicados a facturas pendientes a través del núcleo contable.",
+    "newReceipt": "Nuevo pago de cliente",
+    "newCollectionRun": "Nuevo lote de cobros",
+    "tabs": { "receipts": "Cobros", "collections": "Lotes de débito directo" }
+  }
+}

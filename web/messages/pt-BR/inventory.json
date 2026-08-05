@@ -1,0 +1,78 @@
+{
+  "list": {
+    "title": "Estoque",
+    "description": "Valorização do estoque disponível e movimentações — custeados por FIFO, custo médio ou custo padrão.",
+    "searchPlaceholder": "Buscar itens ou locais…",
+    "emptyTitle": "Nenhum estoque ainda",
+    "emptyDescription": "Configure o perfil de custeio de um item na Configuração e depois receba estoque.",
+    "newButton": "Nova movimentação",
+    "view": "Visualizar"
+  },
+  "view": {
+    "onhand": "Disponível",
+    "movements": "Movimentações"
+  },
+  "labels": {
+    "item": "Item",
+    "location": "Local",
+    "quantity": "Quantidade",
+    "avgCost": "Custo médio",
+    "value": "Valor",
+    "date": "Data",
+    "kind": "Tipo",
+    "unitCost": "Custo unitário"
+  },
+  "kind": {
+    "receipt": "Recebimento",
+    "issue": "Baixa",
+    "transfer_out": "Transferência de saída",
+    "transfer_in": "Transferência de entrada",
+    "adjustment": "Ajuste",
+    "count": "Contagem",
+    "assembly_build": "Montagem de conjunto",
+    "assembly_consume": "Consumo de conjunto",
+    "return": "Devolução"
+  },
+  "drawer": {
+    "title": "Movimentação de estoque",
+    "post": "Lançar",
+    "action": "Ação",
+    "actions": {
+      "receive": "Receber",
+      "issue": "Baixar",
+      "adjust": "Ajustar",
+      "transfer": "Transferir",
+      "build": "Montar conjunto",
+      "landed": "Custo de importação"
+    },
+    "hint": {
+      "receive": "Adiciona estoque ao custo (DB estoque / CR contrapartida).",
+      "issue": "Remove estoque para o CMV (DB CMV / CR estoque).",
+      "adjust": "Corrige a quantidade disponível contra a conta de ajuste.",
+      "transfer": "Move estoque entre dois locais pelo custo carregado.",
+      "build": "Consome os componentes conforme a BOM e produz o produto acabado ao custo.",
+      "landed": "Capitaliza frete/imposto sobre as camadas de estoque disponível de um item."
+    },
+    "selectItem": "Selecione um item",
+    "selectLocation": "Selecione um local",
+    "selectAccount": "Selecione uma conta",
+    "quantityDelta": "Quantidade (+/-)",
+    "offsetAccount": "Conta de contrapartida",
+    "offsetHint": "A conta creditada pelo recebimento (compensação, mercadorias recebidas não faturadas ou saldo de abertura).",
+    "memoPlaceholder": "Observação opcional",
+    "missingFields": "Item, local e quantidade são obrigatórios",
+    "failed": "Falha na movimentação",
+    "posted": "Movimentação lançada ({value})",
+    "fromLocation": "Local de origem",
+    "toLocation": "Local de destino",
+    "assemblyItem": "Item de montagem",
+    "amount": "Valor",
+    "freightAccount": "Conta de frete / imposto",
+    "freightHint": "A conta em que o frete está atualmente registrado; ele passa para o estoque.",
+    "basis": "Base de rateio",
+    "bases": {
+      "value": "Por valor",
+      "quantity": "Por quantidade"
+    }
+  }
+}

@@ -1,0 +1,28 @@
+{
+  "title": "文档",
+  "searchPlaceholder": "搜索文档…",
+  "noResults": "没有匹配的文章。",
+  "browseMenu": "浏览文档",
+  "expandAll": "全部展开",
+  "collapseAll": "全部折叠",
+  "expandSection": "展开{title}",
+  "collapseSection": "折叠{title}",
+  "lastUpdated": "最后更新于 {date}",
+  "related": "相关文章",
+  "breadcrumb": "文档导航路径",
+  "articleNavigation": "文章导航",
+  "previous": "上一篇",
+  "next": "下一篇",
+  "home": {
+    "title": "文档",
+    "subtitle": "了解会计模型，配置您的组织，执行日常工作流程，并从其他系统安全迁移。",
+    "eyebrow": "OpenBooks 帮助中心",
+    "startHere": "从这里开始",
+    "step": "第 {number} 步",
+    "switchingTitle": "正在从其他系统迁移？",
+    "switchingSubtitle": "请先阅读熟悉指南，将您已知的概念和工作流程对应到 OpenBooks。",
+    "browseTitle": "浏览全部文档",
+    "browseSubtitle": "按主题浏览完整指南，或从侧边栏搜索。",
+    "articleCount": "{count} 篇文章"
+  }
+}

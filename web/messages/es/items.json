@@ -1,0 +1,141 @@
+{
+  "list": {
+    "title": "Artículos y servicios",
+    "description": "El catálogo detrás de cada línea de documento — servicios, mano de obra, cargos y descuentos.",
+    "searchPlaceholder": "Buscar por nombre, código, categoría…",
+    "kindFilter": "Tipo",
+    "emptyTitle": "Aún no hay artículos",
+    "emptyDescription": "Agregue el primer servicio, mano de obra o cargo para iniciar el catálogo.",
+    "newButton": "Nuevo artículo",
+    "createDraftFailed": "No se pudo crear un borrador de artículo"
+  },
+  "labels": {
+    "code": "Código",
+    "kind": "Tipo",
+    "category": "Categoría",
+    "unit": "Unidad",
+    "defaultRate": "Precio",
+    "defaultCost": "Costo",
+    "recoveryAccount": "Cuenta de recuperación de costos",
+    "incomeAccount": "Cuenta de ingresos",
+    "expenseAccount": "Cuenta de gastos",
+    "taxCode": "Código de impuesto"
+  },
+  "kinds": {
+    "service": "Servicio",
+    "non_inventory": "Sin inventario",
+    "inventory": "Inventario",
+    "assembly": "Ensamblaje",
+    "kit": "Kit",
+    "other_charge": "Otro cargo",
+    "labor": "Mano de obra",
+    "absence": "Ausencia",
+    "discount": "Descuento",
+    "equipment_charge": "Cargo de equipo"
+  },
+  "drawer": {
+    "newItem": "Nuevo artículo",
+    "autosaveHint": "Los cambios se guardan automáticamente.",
+    "activate": "Activar",
+    "deactivate": "Desactivar",
+    "nameToActivate": "Asigne un nombre al artículo para activarlo",
+    "activated": "Artículo activado",
+    "deactivated": "Artículo desactivado",
+    "updateFailed": "Error al actualizar",
+    "autosaveFailed": "Falló el guardado automático",
+    "allSaved": "Todos los cambios guardados",
+    "saveFailedRetry": "Error al guardar — corrija y reintente",
+    "unsavedChanges": "Cambios sin guardar…",
+    "namePlaceholder": "Nombre del artículo o servicio…",
+    "codePlaceholder": "SVC-01",
+    "categoryPlaceholder": "Servicios",
+    "unitPlaceholder": "h",
+    "noIncomeAccount": "Sin cuenta de ingresos",
+    "noExpenseAccount": "Sin cuenta de gastos",
+    "noRecoveryAccount": "Sin cuenta de recuperación",
+    "selectAccount": "Seleccionar cuenta…",
+    "showOnTimesheet": "Mostrar en la hoja de horas"
+  },
+  "rates": {
+    "title": "Precios avanzados por tarifa",
+    "description": "Precios opcionales por fecha, alcance o paquete. Los artículos normales usan el Precio y Costo anteriores sin libro de tarifas.",
+    "documentation": "Documentación",
+    "configure": "Configurar precios por tarifa",
+    "newVersion": "Nueva versión de tarifas",
+    "notSet": "No definido",
+    "guide": {
+      "title": "Cómo funciona el precio de este artículo",
+      "simpleMode": "Precio y costo simples",
+      "advancedMode": "Tarifas avanzadas activas",
+      "simpleDescription": "Este artículo usa directamente su Precio y Costo. No necesita fechas ni asignación de libro de tarifas.",
+      "advancedDescription": "Los libros y niveles coincidentes sustituyen los valores simples; Precio y Costo siguen siendo el último respaldo.",
+      "price": "Precio al cliente",
+      "priceHelp": "Importe cobrado por unidad cuando no coincide una tarifa de facturación avanzada.",
+      "cost": "Costo interno",
+      "costHelp": "Costo de obra por unidad; no es el precio al cliente.",
+      "advanced": "Perfil de tarifas",
+      "configured": "Configurado · unidad base {unit}",
+      "notConfigured": "No configurado",
+      "advancedHelp": "Admite libros fechados, paquetes día/semana/mes, monedas y sustituciones por alcance.",
+      "simpleHelp": "Configúrelo solo cuando el artículo necesite más de un Precio y Costo simples.",
+      "resolutionTitle": "Orden de resolución",
+      "simpleResolution": "Precio del artículo → cargo al cliente. Costo del artículo → costo interno de obra.",
+      "advancedResolution": "Libro del proyecto → libro del cliente → sustitución de equipo → asignación de organización → libro predeterminado → Precio/Costo del artículo.",
+      "rateTypes": "La tarifa de costo es interna; la tarifa de facturación es el precio al cliente. Las tarifas por tipo de hora solo sustituyen primas laborales como horas extra. Los precios de valor razonable son solo para asignar ingresos."
+    },
+    "rateBook": "Libro de tarifas",
+    "standardBook": "Libro de tarifas estándar",
+    "effectiveFrom": "Vigente desde",
+    "effectiveTo": "Vigente hasta",
+    "baseUnit": "Unidad base",
+    "policy": "Política de precios",
+    "presentation": "Presentación en factura",
+    "defaults": {
+      "day": "Día",
+      "week": "Semana",
+      "month": "Mes"
+    },
+    "policies": {
+      "capped_ladder": "Escala con topes",
+      "lowest_cost": "Combinación de menor costo"
+    },
+    "presentations": {
+      "rate_components": "Mostrar componentes de tarifa",
+      "summary": "Una sola línea resumida"
+    },
+    "unitCode": "Código de unidad",
+    "unitName": "Nombre de unidad",
+    "baseQuantity": "Cantidad base",
+    "costRate": "Tarifa de costo",
+    "billRate": "Tarifa de facturación",
+    "addUnit": "Agregar unidad tarifaria",
+    "saveFailed": "No se pudieron guardar las tarifas",
+    "saved": "Versión de tarifas guardada",
+    "empty": "Aún no hay versiones de tarifas.",
+    "rates": "Tarifas",
+    "tierOverrides": "Tarifas por tipo de hora:",
+    "tierAuto": "auto"
+  },
+  "revrec": {
+    "title": "Reconocimiento de ingresos",
+    "hint": "Diferir y reconocer los ingresos de este artículo a lo largo del tiempo (ASC 606)",
+    "rule": "Regla de reconocimiento",
+    "noRule": "Reconocer de inmediato",
+    "selectRule": "Seleccionar una regla",
+    "deferredAccount": "Cuenta de ingresos diferidos",
+    "ruleDefault": "Usar valor de la regla",
+    "standaloneSellingPrice": "Precio de venta independiente",
+    "createPlansOn": "Crear plan en",
+    "createPlansOnOptions": {
+      "billing": "Facturación",
+      "fulfillment": "Cumplimiento",
+      "arrangement": "Creación del acuerdo"
+    },
+    "allocation": "Asignación de ingresos",
+    "allocationOptions": {
+      "normal": "Normal",
+      "exclude": "Excluir",
+      "software": "Software (residual)"
+    }
+  }
+}

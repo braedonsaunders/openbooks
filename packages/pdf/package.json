@@ -1,0 +1,23 @@
+{
+  "name": "@openbooks/pdf",
+  "version": "0.0.1",
+  "private": true,
+  "type": "module",
+  "main": "./src/index.ts",
+  "types": "./src/index.ts",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "isomorphic-dompurify": "^3.18.0",
+    "pdfkit": "^0.17.1",
+    "puppeteer-core": "^25.3.0"
+  },
+  "devDependencies": {
+    "@types/pdfkit": "^0.13.9",
+    "typescript": "^7.0.2"
+  }
+}

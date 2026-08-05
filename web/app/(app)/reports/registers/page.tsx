@@ -1,0 +1,145 @@
+import { getMoneyFormatter } from '@/lib/money-server'
+import Link from 'next/link'
+import { getTranslations } from 'next-intl/server'
+import { Badge, PageHeader, cn } from '@openbooks/ui'
+import { ListPageLayout } from '../../../../components/page-layout'
+import { DocTypeBadge } from '../../../../components/doc-type-badge'
+import { dimensionOptions, partyRegister, type AgingSide } from '../../../../lib/reports'
+import { orgInfo } from '../../../../lib/data'
+import { resolvePeriod } from '../../../../lib/periods'
+import { parseReportQuery, toSearchParams } from '../../../../lib/report-filters'
+import { ReportFilterBar } from '../ReportFilterBar'
+import { ExportMenu } from '../ExportMenu'
+import { TxnLink } from '../TxnLink'
+import { SaveViewButton } from '../SaveViewButton'
+import { ReportPaper } from '../ReportPaper'
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '../ReportTable'
+import { ReportDrillLink } from '../ReportDrillLink'
+import { decimalCmp, decimalIsZero } from '../../../../lib/statement-format'
+
+export const dynamic = 'force-dynamic'
+
+export default async function RegistersPage({
+  searchParams,
+}: {
+  searchParams: Promise<Record<string, string | undefined>>
+}) {
+  const { money } = await getMoneyFormatter()
+  const t = await getTranslations('reports')
+  const tc = await getTranslations('common')
+  const sp = await searchParams
+  const side: AgingSide = sp.side === 'ap' ? 'ap' : 'ar'
+  const q = parseReportQuery(sp)
+  const period = await resolvePeriod(q.period, { customFrom: q.from, customTo: q.to })
+  const dims = q.dims
+  const [reg, opts, org] = await Promise.all([
+    partyRegister(side, { from: period.from, to: period.to, dims }),
+    dimensionOptions(),
+    orgInfo(),
+  ])
+  const m = (v: string) => money(Number(v), { currency: org?.base_currency })
+  const keep = toSearchParams(q).toString()
+  const accountTypes = [side === 'ap' ? 'liability_payable' : 'asset_receivable']
+  const openingTo = new Date(`${period.from}T00:00:00Z`)
+  openingTo.setUTCDate(openingTo.getUTCDate() - 1)
+  const openingDate = openingTo.toISOString().slice(0, 10)
+
+  return (
+    <ListPageLayout
+      header={
+        <>
+          <PageHeader
+            title={side === 'ap' ? t('registers.apTitle') : t('registers.arTitle')}
+            back={{ href: '/reports', label: t('hub.title') }}
+          />
+          <ReportFilterBar
+            controls={{ period: true, dimensions: true }}
+            leading={
+              <>
+                <Link href={`/reports/registers?side=ar&${keep}`}>
+                  <Badge variant={side === 'ar' ? 'default' : 'outline'}>{t('registers.receivables')}</Badge>
+                </Link>
+                <Link href={`/reports/registers?side=ap&${keep}`}>
+                  <Badge variant={side === 'ap' ? 'default' : 'outline'}>{t('registers.payables')}</Badge>
+                </Link>
+                <span className="mx-1 h-4 w-px bg-slate-200 dark:bg-slate-700" />
+              </>
+            }
+            dimensions={opts}
+            actions={<><SaveViewButton /><ExportMenu kind="registers" params={sp} /></>}
+          />
+          {reg.truncated && <p className="text-xs text-amber-600 dark:text-amber-400">{t('registers.truncated')}</p>}
+        </>
+      }
+    >
+      <ReportPaper
+        company={org?.name ?? ''}
+        title={side === 'ap' ? t('registers.apTitle') : t('registers.arTitle')}
+        periodPhrase={t('pnl.dateRange', { from: period.from, to: period.to })}
+        wide
+      >
+        {reg.parties.length === 0 ? (
+          <p className="py-8 text-center text-slate-400 italic">{t('registers.empty')}</p>
+        ) : (
+          <div className="space-y-8">
+          {reg.parties.map((pt) => (
+            <div key={pt.partyId ?? 'none'}>
+              <h3 className="mb-1 flex items-baseline gap-3 text-sm font-semibold">
+                {pt.partyId ? (
+                  <Link href={`/reports/statements/${pt.partyId}?side=${side}`} className="hover:text-teal-700 dark:hover:text-teal-300">
+                    {pt.partyName ?? t('aging.noParty')}
+                  </Link>
+                ) : (
+                  <span className="text-slate-400 italic">{t('aging.noParty')}</span>
+                )}
+                <span className="text-xs font-normal text-slate-500 dark:text-slate-400">
+                  {t('registers.closing')}: <ReportDrillLink target={{ kind: 'ledger', label: pt.partyName ?? t('aging.noParty'), accountTypes, partyIds: pt.partyId ? [pt.partyId] : undefined, to: period.to, mode: 'balance', dims }} className="hover:text-teal-700 hover:underline dark:hover:text-teal-300">{m(pt.closing)}</ReportDrillLink>
+                </span>
+              </h3>
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead className="w-28">{t('generalLedger.columns.date')}</TableHead>
+                    <TableHead className="w-24">{t('generalLedger.columns.entry')}</TableHead>
+                    <TableHead>{tc('labels.memo')}</TableHead>
+                    <TableHead className="text-right">{t('trialBalance.columns.debits')}</TableHead>
+                    <TableHead className="text-right">{t('trialBalance.columns.credits')}</TableHead>
+                    <TableHead className="text-right">{tc('labels.balance')}</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  <TableRow>
+                    <TableCell colSpan={5} className="text-xs font-medium text-slate-500 dark:text-slate-400">
+                      {t('generalLedger.opening')}
+                    </TableCell>
+                    <TableCell className="text-right font-medium tabular-nums"><ReportDrillLink target={{ kind: 'ledger', label: `${pt.partyName ?? t('aging.noParty')} · ${t('generalLedger.opening')}`, accountTypes, partyIds: pt.partyId ? [pt.partyId] : undefined, to: openingDate, mode: 'balance', dims }} className="hover:text-teal-700 hover:underline dark:hover:text-teal-300">{m(pt.opening)}</ReportDrillLink></TableCell>
+                  </TableRow>
+                  {pt.lines.map((l, i) => (
+                    <TableRow key={`${l.entryId}-${i}`}>
+                      <TableCell className="tabular-nums">{l.date}</TableCell>
+                      <TableCell>
+                        <span className="flex items-center gap-1.5">
+                          <TxnLink entryId={l.entryId} docKind={l.docKind} docId={l.docId} className="font-mono text-xs hover:text-teal-700 dark:hover:text-teal-300">
+                            {l.entryNumber}
+                          </TxnLink>
+                          {l.docKind && <DocTypeBadge kind={l.docKind} icon={false} />}
+                        </span>
+                      </TableCell>
+                      <TableCell className="text-slate-600 dark:text-slate-300">{l.memo}</TableCell>
+                      <TableCell className="text-right tabular-nums"><TxnLink entryId={l.entryId} docKind={l.docKind} docId={l.docId} className="hover:text-teal-700 hover:underline dark:hover:text-teal-300">{!decimalIsZero(l.debit) ? m(l.debit) : ''}</TxnLink></TableCell>
+                      <TableCell className="text-right tabular-nums"><TxnLink entryId={l.entryId} docKind={l.docKind} docId={l.docId} className="hover:text-teal-700 hover:underline dark:hover:text-teal-300">{!decimalIsZero(l.credit) ? m(l.credit) : ''}</TxnLink></TableCell>
+                      <TableCell className={cn('text-right tabular-nums', decimalCmp(l.balance, '0') < 0 && 'text-red-600 dark:text-red-400')}>
+                        <TxnLink entryId={l.entryId} docKind={l.docKind} docId={l.docId} className="hover:text-teal-700 hover:underline dark:hover:text-teal-300">{m(l.balance)}</TxnLink>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </div>
+          ))}
+          </div>
+        )}
+      </ReportPaper>
+    </ListPageLayout>
+  )
+}

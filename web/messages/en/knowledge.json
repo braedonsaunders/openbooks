@@ -1,0 +1,54 @@
+{
+  "views": {
+    "new": "New view",
+    "list": {
+      "title": "Views",
+      "description": "Named, shareable queries over the ledger, documents, parties and accounts — detail rows or grouped summaries. Browse, export and reuse them.",
+      "scopeLabel": "Scope",
+      "searchPlaceholder": "Search views…",
+      "scopeAll": "All",
+      "scopeShared": "Shared",
+      "scopePrivate": "Private",
+      "emptyTitle": "No views yet",
+      "emptyDescription": "Create your first view to query the ledger and reuse it anytime.",
+      "columns": {
+        "name": "Name",
+        "source": "Source",
+        "scope": "Scope",
+        "updated": "Updated"
+      },
+      "scope": {
+        "shared": "Shared",
+        "private": "Private"
+      },
+      "runAction": "Run",
+      "editAction": "Edit"
+    },
+    "studio": {
+      "untitled": "Untitled view",
+      "autosaveHint": "Changes save automatically.",
+      "scopeLabel": "Scope",
+      "scope": {
+        "private": "Private — only you",
+        "shared": "Shared — everyone"
+      },
+      "exportPdf": "PDF",
+      "exportXlsx": "Excel",
+      "exportCsv": "CSV",
+      "deleteConfirm": "Delete this view?",
+      "viewResults": "View results"
+    },
+    "run": {
+      "editSearch": "Edit view",
+      "backToList": "Views",
+      "resultsTitle": "Results",
+      "rowsRange": "Showing {from}–{to} of {total} rows",
+      "lastUpdated": "Updated {when}",
+      "refreshHint": "Results run live against current data.",
+      "emptyTitle": "No rows matched",
+      "emptyDescription": "Adjust the search criteria or filters and run again.",
+      "notFoundTitle": "View not found",
+      "notFoundDescription": "It may have been deleted, or you don't have access to it."
+    }
+  }
+}

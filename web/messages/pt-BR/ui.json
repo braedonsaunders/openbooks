@@ -1,0 +1,95 @@
+{
+  "pagination": {
+    "outOfRange": "A página {page} está além do fim destes resultados.",
+    "showing": "Exibindo <strong>{from}</strong>–<strong>{to}</strong> de <strong>{total}</strong>",
+    "goToLastPageAria": "Ir para a última página, página {page}",
+    "goToPage": "Ir para a página {page}",
+    "previousPageAria": "Página anterior",
+    "nextPageAria": "Próxima página",
+    "prev": "Ant.",
+    "pageOf": "Página {page} de {pages}"
+  },
+  "search": {
+    "placeholder": "Buscar…",
+    "clearAria": "Limpar busca"
+  },
+  "confirm": {
+    "defaultTitle": "Confirmar"
+  },
+  "fieldHelp": {
+    "open": "Explicar este campo",
+    "generic": "Define o valor de {field} para este registro ou operação."
+  },
+  "select": {
+    "placeholder": "Selecionar…",
+    "searchPlaceholder": "Buscar…",
+    "noMatches": "Nenhuma correspondência",
+    "searching": "Buscando…"
+  },
+  "sparkline": {
+    "noTrend": "Sem dados de tendência",
+    "trend": "Tendência: {count} pontos de {first} a {last}"
+  },
+  "attachments": {
+    "tooLarge": "{name} excede o limite de 25 MB",
+    "attached": "{name} anexado",
+    "attachFailed": "Não foi possível anexar {name}",
+    "removed": "{name} removido",
+    "removeFailed": "Não foi possível remover o anexo",
+    "loadFailed": "Não foi possível carregar os anexos",
+    "empty": "Nenhum arquivo anexado ainda.",
+    "noMatches": "Nenhum anexo corresponde a estes filtros.",
+    "fileCount": "{count, plural, one {# arquivo} other {# arquivos}}",
+    "addFiles": "Adicionar arquivos",
+    "searchPlaceholder": "Pesquisar anexos…",
+    "typeFilter": "Tipo",
+    "types": { "pdf": "PDF", "image": "Imagem", "other": "Outro" },
+    "downloadAria": "Baixar {name}",
+    "openAria": "Abrir {name} em uma nova aba",
+    "removeAria": "Remover {name}",
+    "expandPreviewAria": "Expandir a visualização para preencher o painel",
+    "restorePreviewAria": "Restaurar a lista de anexos",
+    "previewTitle": "Visualização de {name}",
+    "previewEmptyTitle": "Selecione um anexo",
+    "previewEmptyDescription": "PDFs e imagens abrem aqui sem sair da transação.",
+    "previewUnavailable": "Este tipo de arquivo pode ser baixado, mas não visualizado aqui.",
+    "uploading": "{count, plural, one {Enviando # arquivo…} other {Enviando # arquivos…}}",
+    "dropShort": "Solte arquivos aqui ou procure",
+    "dropFiles": "Solte os arquivos aqui ou <browse>procure</browse>",
+    "acceptHint": "PDF, imagens, CSV, XLSX, DOCX, TXT · até 25 MB"
+  },
+  "recordFields": {
+    "inactiveSelected": "(selecionado atualmente — inativo)",
+    "ratingAria": "Avaliação de até {max}",
+    "ratingValueAria": "{value} de {max}",
+    "loadAccountsFailed": "Não foi possível carregar as contas — recarregue para tentar novamente.",
+    "loadPartiesFailed": "Não foi possível carregar as partes — recarregue para tentar novamente.",
+    "selectAccount": "Selecionar conta…",
+    "selectParty": "Selecionar parte…",
+    "noFields": "Nenhum campo para exibir — o tipo de registro não tem campos visíveis.",
+    "lineItems": "Itens de linha",
+    "rowCount": "{count, plural, one {# linha} other {# linhas}}",
+    "noRows": "Nenhuma linha ainda.",
+    "rowActions": "Ações da linha",
+    "removeRow": "Remover linha",
+    "addRow": "Adicionar linha",
+    "maxRowsReached": "Máximo de {count} linhas atingido."
+  },
+  "lineGrid": {
+    "addLine": "Adicionar linha",
+    "keyboardHint": "Enter adiciona/desce · Alt+↑/↓ reordena · ⌘D duplica · ⌘⌫ remove",
+    "lineActionsAria": "Ações da linha {number}",
+    "insertAbove": "Inserir acima",
+    "insertBelow": "Inserir abaixo",
+    "removeLine": "Remover linha",
+    "clearLine": "Limpar linha",
+    "tax": {
+      "overriddenAria": "Imposto substituído",
+      "overriddenTitle": "Imposto substituído manualmente — difere da taxa calculada",
+      "overriddenShortTitle": "Imposto substituído manualmente",
+      "computedOverriddenTitle": "Calculado {amount} · substituído",
+      "resetAria": "Redefinir imposto para o calculado",
+      "resetTitle": "Redefinir para o calculado {amount}"
+    }
+  }
+}

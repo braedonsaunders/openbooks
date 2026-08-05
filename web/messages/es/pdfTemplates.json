@@ -1,0 +1,53 @@
+{
+  "title": "Plantillas PDF",
+  "description": "Cree documentos imprimibles y asígnelos a facturas, asientos y todas las demás transacciones",
+  "newTemplate": "Nueva plantilla",
+  "list": {
+    "name": "Nombre",
+    "paper": "Papel",
+    "default": "Predeterminada",
+    "builtInStarter": "Diseño integrado",
+    "starterHint": "Se imprime cuando no existe una plantilla personalizada — duplíquelo para personalizarlo",
+    "duplicate": "Duplicar",
+    "isDefault": "Predeterminada"
+  },
+  "editor": {
+    "back": "Plantillas PDF",
+    "design": "Diseño",
+    "code": "HTML",
+    "preview": "Vista previa",
+    "margins": "Márgenes",
+    "portrait": "Vertical",
+    "landscape": "Horizontal",
+    "headerPlaceholder": "Encabezado (opcional) — se permiten tokens de combinación",
+    "footerPlaceholder": "Pie de página — admite números de página",
+    "saved": "Plantilla guardada",
+    "saveFailed": "Error al guardar",
+    "makeDefault": "Predeterminada para este tipo de registro",
+    "active": "Activa",
+    "previewHint": "Generada por el mismo motor que imprime el documento real, con su registro más reciente.",
+    "refreshPreview": "Actualizar vista previa",
+    "previewFailed": "Error en la vista previa",
+    "deleteConfirm": "¿Eliminar esta plantilla? Los registros usarán el diseño predeterminado.",
+    "blockContent": "Contenido",
+    "blockFields": "Campos del registro",
+    "blockTables": "Tablas"
+  },
+  "pdfButton": {
+    "label": "PDF",
+    "defaultTemplate": "Diseño estándar",
+    "failed": "No se pudieron cargar las plantillas PDF"
+  },
+  "send": {
+    "label": "Enviar",
+    "to": "Destinatario",
+    "toPlaceholder": "cliente@ejemplo.com",
+    "message": "Mensaje (opcional)",
+    "messagePlaceholder": "Añadir una nota…",
+    "action": "Enviar correo",
+    "sending": "Enviando…",
+    "sent": "Enviado a {to}",
+    "noRecipient": "Introduzca la dirección de correo del destinatario",
+    "failed": "No se pudo enviar el correo"
+  }
+}

@@ -1,0 +1,48 @@
+.env
+.env.*
+!.env.example
+!.env.compose.example
+.env.compose
+/extraction/
+node_modules/
+gl-dump/
+web/.env.local
+
+web/.next/
+.next/
+*.tsbuildinfo
+
+engine/*.log
+
+# local runtime artifacts
+dump.rdb
+.sftp-data/
+.backups/
+.local/
+
+# Python bytecode cache
+__pycache__/
+*.pyc
+
+# generated report/pdf output
+output/
+
+# scratch/test artifacts
+tmp/
+/tmp-*
+engine/harness-checkpoints/
+engine/sim-runs/
+.playwright-cli/
+playwright-report/
+test-results/
+objects-list.txt
+
+# local agent/editor instructions and launch state
+.claude/
+AGENTS.md
+
+# design-stage simulation notes and persona prompts; the maintained public
+# harness documentation lives at engine/src/sim/README.md
+engine/src/sim/PLAN.md
+engine/src/sim/OPERATOR.md
+engine/src/sim/personas/

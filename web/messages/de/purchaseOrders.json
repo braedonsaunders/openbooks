@@ -1,0 +1,61 @@
+{
+  "list": {
+    "title": "Bestellungen",
+    "description": "Nicht buchende Lieferantenverpflichtungen — ausstellen und dann bei Wareneingang in eine Eingangsrechnung umwandeln.",
+    "searchPlaceholder": "Bestellungen, Lieferanten, Notiz durchsuchen…",
+    "converted": "Umgewandelt",
+    "emptyTitle": "Noch keine Bestellungen",
+    "emptyDescription": "Erstellen Sie die erste Bestellung, um den Procure-to-Pay-Workflow zu starten.",
+    "newButton": "Neue Bestellung",
+    "createDraftFailed": "Bestellungsentwurf konnte nicht erstellt werden"
+  },
+  "shared": {
+    "kinds": {
+      "salesOrder": "Kundenauftrag",
+      "invoice": "Rechnung",
+      "bill": "Eingangsrechnung"
+    },
+    "docKind": "{kind, select, quote {Angebot} sales_order {Kundenauftrag} purchase_order {Bestellung} customer_invoice {Ausgangsrechnung} vendor_bill {Eingangsrechnung} other {{kind}}}",
+    "partyLabel": "{kind, select, purchase_order {Lieferant} other {Kunde}}",
+    "selectPartyPlaceholder": "{kind, select, purchase_order {Lieferant auswählen…} other {Kunde auswählen…}}",
+    "dateLabel": "{kind, select, quote {Angebotsdatum} other {Bestelldatum}}",
+    "expiryLabel": "{kind, select, quote {Ablaufdatum} sales_order {Versand-/Fälligkeitsdatum} purchase_order {Erwartetes Datum} other {Datum}}",
+    "draftAutosave": "Entwurf — Änderungen werden automatisch gespeichert.",
+    "issue": "Ausstellen",
+    "convertTo": "Umwandeln in {target}",
+    "convertCreated": "{target} {number} erstellt",
+    "convertFailed": "Umwandlung fehlgeschlagen",
+    "actionFailed": "Aktion fehlgeschlagen",
+    "autosaveFailed": "Automatisches Speichern fehlgeschlagen",
+    "toastIssued": "Ausgestellt",
+    "toastVoided": "Storniert",
+    "voidConfirmTitle": "Dieses Dokument stornieren?",
+    "voidConfirmMessage": "Durch das Stornieren wird die Bestellung annulliert. Dies kann nicht rückgängig gemacht werden.",
+    "deleteConfirmTitle": "Diese Bestellung löschen?",
+    "deleteConfirmMessage": "Dadurch werden die Bestellung und ihre Zeilen dauerhaft gelöscht. Dies kann nicht rückgängig gemacht werden.",
+    "toastDeleted": "Bestellung gelöscht",
+    "issueHint": "Fügen Sie einen Kunden oder Lieferanten und mindestens eine Zeile hinzu, um diese Bestellung auszustellen.",
+    "convertedProgress": "Umgewandelt {billed}/{ordered}",
+    "fullyConverted": "Vollständig umgewandelt",
+    "allChangesSaved": "Alle Änderungen gespeichert",
+    "saveFailedRetry": "Speichern fehlgeschlagen — korrigieren und erneut versuchen",
+    "unsavedChanges": "Nicht gespeicherte Änderungen…",
+    "totals": {
+      "subtotal": "Zwischensumme {amount}",
+      "tax": "Steuer {amount}",
+      "total": "Gesamt {amount}"
+    },
+    "columns": {
+      "item": "Artikel",
+      "account": "{kind, select, purchase_order {Konto} other {Ertragskonto}}",
+      "accountPlaceholder": "Konto…",
+      "qty": "Menge",
+      "unitPrice": "Stückpreis",
+      "taxAmount": "Steuerbetr.",
+      "noTax": "Keine Steuer"
+    },
+    "linksTitle": "Herkunft / Umgewandelt in",
+    "linkCreatedFrom": "Erstellt aus",
+    "linkConvertedInto": "Umgewandelt in"
+  }
+}

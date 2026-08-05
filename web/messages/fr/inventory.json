@@ -1,0 +1,78 @@
+{
+  "list": {
+    "title": "Stocks",
+    "description": "Valorisation des stocks et mouvements — coût PEPS, moyen pondéré ou standard.",
+    "searchPlaceholder": "Rechercher des articles ou emplacements…",
+    "emptyTitle": "Aucun stock",
+    "emptyDescription": "Configurez le profil de coût d'un article dans les paramètres, puis réceptionnez du stock.",
+    "newButton": "Nouveau mouvement",
+    "view": "Vue"
+  },
+  "view": {
+    "onhand": "En stock",
+    "movements": "Mouvements"
+  },
+  "labels": {
+    "item": "Article",
+    "location": "Emplacement",
+    "quantity": "Quantité",
+    "avgCost": "Coût moyen",
+    "value": "Valeur",
+    "date": "Date",
+    "kind": "Type",
+    "unitCost": "Coût unitaire"
+  },
+  "kind": {
+    "receipt": "Réception",
+    "issue": "Sortie",
+    "transfer_out": "Transfert sortant",
+    "transfer_in": "Transfert entrant",
+    "adjustment": "Ajustement",
+    "count": "Inventaire",
+    "assembly_build": "Assemblage",
+    "assembly_consume": "Consommation d'assemblage",
+    "return": "Retour"
+  },
+  "drawer": {
+    "title": "Mouvement de stock",
+    "post": "Comptabiliser",
+    "action": "Action",
+    "actions": {
+      "receive": "Réceptionner",
+      "issue": "Sortir",
+      "adjust": "Ajuster",
+      "transfer": "Transférer",
+      "build": "Assembler",
+      "landed": "Coût de revient"
+    },
+    "hint": {
+      "receive": "Ajouter du stock au coût (DR stock / CR contrepartie).",
+      "issue": "Sortir du stock vers le CMV (DR CMV / CR stock).",
+      "adjust": "Corriger la quantité en stock via le compte d'ajustement.",
+      "transfer": "Déplacer du stock entre deux emplacements à son coût porté.",
+      "build": "Consommer les composants selon la nomenclature et produire le produit fini au coût.",
+      "landed": "Capitaliser le fret/les droits sur les couches en stock d’un article."
+    },
+    "selectItem": "Sélectionner un article",
+    "selectLocation": "Sélectionner un emplacement",
+    "selectAccount": "Sélectionner un compte",
+    "quantityDelta": "Quantité (+/-)",
+    "offsetAccount": "Compte de contrepartie",
+    "offsetHint": "Le compte crédité pour la réception (attente / GRNI / solde d'ouverture).",
+    "memoPlaceholder": "Note facultative",
+    "missingFields": "Article, emplacement et quantité sont requis",
+    "failed": "Échec du mouvement",
+    "posted": "Mouvement comptabilisé ({value})",
+    "fromLocation": "Emplacement source",
+    "toLocation": "Emplacement destination",
+    "assemblyItem": "Article assemblé",
+    "amount": "Montant",
+    "freightAccount": "Compte de fret / droits",
+    "freightHint": "Le compte où se trouve le fret ; il est transféré au stock.",
+    "basis": "Base de répartition",
+    "bases": {
+      "value": "Par valeur",
+      "quantity": "Par quantité"
+    }
+  }
+}

@@ -1,0 +1,89 @@
+{
+  "title": "Genehmigungen",
+  "description": "Alles, was in Flows und Richtlinien auf Sie wartet, sowie der Status Ihrer eigenen Einreichungen.",
+  "tabs": {
+    "mine": "Meine Genehmigungen",
+    "submitted": "Von mir eingereicht",
+    "all": "Alle Genehmigungen"
+  },
+  "empty": {
+    "title": "Nichts wartet auf Sie",
+    "description": "Genehmigungen, die Ihnen zugewiesen, weitergeleitet oder delegiert wurden, werden hier angezeigt."
+  },
+  "emptySubmitted": {
+    "title": "Keine ausstehenden Einreichungen",
+    "description": "Dokumente, die Sie zur Genehmigung einreichen, werden hier angezeigt, während sie warten."
+  },
+  "emptyAll": {
+    "title": "Nichts ausstehend",
+    "description": "In dieser Organisation gibt es keine ausstehenden Genehmigungen."
+  },
+  "table": {
+    "document": "Dokument",
+    "kind": "Art",
+    "step": "Schritt",
+    "decision": "Entscheidung",
+    "approval": "Genehmigung",
+    "requested": "Angefordert",
+    "assignee": "Zugewiesen an",
+    "pendingWith": "Ausstehend bei",
+    "waitingSince": "Wartet seit"
+  },
+  "kinds": {
+    "vendor_bill": "Eingangsrechnung",
+    "customer_invoice": "Ausgangsrechnung",
+    "expense_report": "Spesenabrechnung",
+    "journal": "Buchung",
+    "purchase_order": "Bestellung",
+    "sales_order": "Kundenauftrag",
+    "quote": "Angebot",
+    "field_ticket": "Leistungsnachweis",
+    "close_run": "Periodenabschluss"
+  },
+  "decide": {
+    "rejectionReason": "Ablehnungsgrund:",
+    "decisionFailed": "Entscheidung fehlgeschlagen"
+  },
+  "aging": {
+    "days": "{days} T"
+  },
+  "bulk": {
+    "selected": "{count} ausgewählt",
+    "selectAll": "Alle auswählen",
+    "selectRow": "{document} auswählen",
+    "approveSelected": "Ausgewählte genehmigen",
+    "rejectSelected": "Ausgewählte ablehnen",
+    "rejectTitle": "{count} Genehmigungen ablehnen?",
+    "reasonLabel": "Ablehnungsgrund (wird auf jedes ausgewählte Element angewendet)",
+    "approvedCount": "{count} genehmigt",
+    "rejectedCount": "{count} abgelehnt",
+    "failedCount": "{count} fehlgeschlagen ({error})"
+  },
+  "ooo": {
+    "button": "Abwesend",
+    "title": "Abwesend",
+    "description": "Leiten Sie eingehende Genehmigungen an einen Vertreter weiter, während Sie abwesend sind.",
+    "delegateTo": "Delegieren an",
+    "delegatePlaceholder": "Vertreter auswählen…",
+    "from": "Von",
+    "until": "Bis",
+    "invalid": "Wählen Sie einen Vertreter und einen gültigen Zeitraum aus",
+    "saved": "Delegation geplant",
+    "unavailable": "Der Delegationsdienst ist noch nicht verfügbar",
+    "banner": "Ihre Genehmigungen sind bis {date} an {name} delegiert",
+    "endNow": "Jetzt beenden",
+    "ended": "Delegation beendet"
+  },
+  "gates": {
+    "rejectTitle": "Diese Genehmigung ablehnen?",
+    "waitingOthers": "Erfasst — warten auf die übrigen Genehmiger",
+    "delegate": "Delegieren",
+    "delegatePlaceholder": "Delegieren an…",
+    "delegated": "Genehmigung delegiert",
+    "badges": {
+      "quorumAll": "Alle Genehmiger",
+      "reminder": "Erinnerung {date}",
+      "escalates": "Eskaliert {date}"
+    }
+  }
+}

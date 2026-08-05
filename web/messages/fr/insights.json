@@ -1,0 +1,281 @@
+{
+  "title": "Analyses",
+  "tabs": {
+    "cards": "Cartes",
+    "dashboards": "Tableaux de bord"
+  },
+  "viz": {
+    "table": "Tableau",
+    "bar": "Barres",
+    "line": "Courbe",
+    "area": "Aires",
+    "pie": "Secteurs",
+    "empty": {
+      "noData": "Aucune donnée pour cette requête.",
+      "pickFields": "Choisissez une dimension et au moins une mesure pour tracer ce graphique."
+    },
+    "noRows": "Aucune ligne.",
+    "values": {
+      "yes": "Oui",
+      "no": "Non",
+      "active": "Actif",
+      "inactive": "Inactif"
+    }
+  },
+  "status": {
+    "published": "Publié"
+  },
+  "actions": {
+    "publish": "Publier",
+    "unpublish": "Dépublier"
+  },
+  "autosave": {
+    "saved": "Toutes les modifications sont enregistrées",
+    "unsaved": "Modifications non enregistrées…",
+    "failed": "Échec de l’enregistrement automatique"
+  },
+  "errors": {
+    "queryFailed": "Échec de la requête",
+    "updateFailed": "Échec de la mise à jour"
+  },
+  "empty": {
+    "dashboardNoCards": "Ce tableau de bord ne contient encore aucune carte."
+  },
+  "cards": {
+    "description": "Créez des cartes de graphique et de tableau à partir d’une requête sur le grand livre, puis disposez-les sur des tableaux de bord.",
+    "searchPlaceholder": "Rechercher des cartes…",
+    "emptyTitle": "Aucune carte pour l’instant",
+    "emptyDescription": "Créez votre première carte — choisissez une source, ce que vous voulez mesurer et regrouper, puis un type de graphique.",
+    "sourceColumn": "Source",
+    "chartColumn": "Graphique",
+    "newButton": "Nouvelle carte",
+    "createDraftFailed": "Impossible de créer une carte brouillon"
+  },
+  "dashboards": {
+    "description": "Disposez les cartes publiées sur des tableaux de bord partagés.",
+    "searchPlaceholder": "Rechercher des tableaux de bord…",
+    "emptyTitle": "Aucun tableau de bord pour l’instant",
+    "emptyDescription": "Créez un tableau de bord, puis déposez-y vos cartes publiées.",
+    "cardsColumn": "Cartes",
+    "newButton": "Nouveau tableau de bord",
+    "createDraftFailed": "Impossible de créer un tableau de bord brouillon"
+  },
+  "cardStudio": {
+    "untitled": "Carte sans titre",
+    "autosaveHint": "Les modifications s’enregistrent automatiquement. L’aperçu se met à jour en direct.",
+    "nameRequiredToPublish": "Nommez la carte pour la publier",
+    "saveFailedRetry": "Échec de l’enregistrement — corrigez et réessayez",
+    "namePlaceholder": "Dépenses mensuelles par service",
+    "sourceLabel": "Source",
+    "measuresTitle": "Mesures",
+    "measuresEmpty": "Ajoutez une mesure à agréger (ou laissez vide pour un tableau détaillé).",
+    "ofRows": "des lignes",
+    "selectFieldPlaceholder": "Sélectionner un champ…",
+    "removeMeasure": "Retirer la mesure",
+    "groupByTitle": "Regrouper par",
+    "groupByEmpty": "Regroupez les lignes par une dimension pour les résumer.",
+    "binExact": "Exact",
+    "bins": {
+      "day": "par jour",
+      "week": "par semaine",
+      "month": "par mois",
+      "quarter": "par trimestre",
+      "year": "par année"
+    },
+    "removeDimension": "Retirer la dimension",
+    "filtersTitle": "Filtres",
+    "filtersEmpty": "Aucun filtre — la carte couvre toutes les lignes.",
+    "removeFilter": "Retirer le filtre",
+    "filterPlaceholderList": "a, b, c",
+    "filterPlaceholderNumber": "30",
+    "filterPlaceholderDate": "AAAA-MM-JJ",
+    "filterPlaceholderValue": "Valeur",
+    "previewRequestFailed": "Échec de la demande d’aperçu",
+    "runningPreview": "Exécution de l’aperçu…",
+    "buildToPreview": "Construisez une requête pour afficher un aperçu.",
+    "rowCount": "{count, plural, one {# ligne} other {# lignes}}",
+    "capped": "(plafonné à 10 000)",
+    "duration": "{ms} ms",
+    "publishedToast": "Carte publiée",
+    "draftToast": "Carte remise en brouillon",
+    "deleteConfirm": "Supprimer cette carte? Elle sera retirée de tous les tableaux de bord.",
+    "deleteFailed": "Impossible de supprimer la carte",
+    "deletedToast": "Carte supprimée"
+  },
+  "vizSettings": {
+    "category": "Catégorie",
+    "auto": "Auto",
+    "value": "Valeur",
+    "allMeasures": "Toutes les mesures",
+    "stacked": "Empilé",
+    "horizontal": "Horizontal",
+    "smooth": "Lissé",
+    "showValues": "Valeurs",
+    "hideLegend": "Masquer la légende"
+  },
+  "cardTile": {
+    "loadFailed": "Impossible de charger cette carte"
+  },
+  "builder": {
+    "back": "Tableaux de bord",
+    "untitled": "Tableau de bord sans titre",
+    "pinToHome": "Épingler à l’accueil",
+    "unpin": "Désépingler",
+    "namePlaceholder": "Vue d’ensemble de la direction",
+    "addCard": "Ajouter une carte :",
+    "noPublishedCards": "Aucune carte publiée pour l’instant. <link>Créez et publiez une carte</link> pour la placer ici.",
+    "emptyEditor": "Ajoutez des cartes publiées ci-dessus pour construire ce tableau de bord.",
+    "widths": {
+      "third": "Tiers",
+      "half": "Moitié",
+      "twoThirds": "Deux tiers",
+      "full": "Pleine largeur"
+    },
+    "heights": {
+      "short": "Courte",
+      "medium": "Moyenne",
+      "tall": "Haute"
+    },
+    "cardWidth": "Largeur de la carte",
+    "cardHeight": "Hauteur de la carte",
+    "removeCard": "Retirer la carte",
+    "unavailableCard": "Cette carte n’est pas disponible (supprimée ou dépubliée).",
+    "pinnedToast": "Épinglé à votre accueil",
+    "unpinnedToast": "Désépinglé",
+    "pinFailed": "Impossible de mettre à jour l’épinglage",
+    "publishedToast": "Tableau de bord publié",
+    "draftToast": "Tableau de bord remis en brouillon",
+    "deleteConfirm": "Supprimer ce tableau de bord?",
+    "deletedToast": "Tableau de bord supprimé",
+    "deleteFailed": "Impossible de supprimer le tableau de bord"
+  },
+  "catalog": {
+    "sources": {
+      "ledger_lines": {
+        "label": "Lignes du grand livre",
+        "description": "Détail des lignes d’écriture joint à l’écriture, au compte, au tiers et aux dimensions — le grand livre brut. Une ligne par ligne d’écriture de journal."
+      },
+      "documents": {
+        "label": "Documents",
+        "description": "Documents d’affaires — factures fournisseurs, factures clients, paiements, commandes — avec les libellés de tiers et de dimensions."
+      },
+      "parties": {
+        "label": "Tiers",
+        "description": "Clients, fournisseurs et employés — une ligne par tiers avec ses indicateurs de rôle."
+      },
+      "accounts": {
+        "label": "Comptes",
+        "description": "Le plan comptable — numéro, nom, type et indicateurs de comptabilisation."
+      }
+    },
+    "fields": {
+      "ledger_lines": {
+        "posting_date": "Date de comptabilisation",
+        "entry_number": "N° d’écriture",
+        "entry_status": "Statut de l’écriture",
+        "entry_origin": "Origine",
+        "account_number": "N° de compte",
+        "account_name": "Compte",
+        "account_type": "Type de compte",
+        "party": "Tiers",
+        "department": "Département",
+        "project": "Projet",
+        "location": "Emplacement",
+        "class": "Classe",
+        "memo": "Note",
+        "amount": "Montant (base)",
+        "debit": "Débit",
+        "credit": "Crédit",
+        "quantity": "Quantité",
+        "currency": "Devise"
+      },
+      "documents": {
+        "kind": "Genre",
+        "document_number": "N° de document",
+        "party": "Tiers",
+        "status": "Statut",
+        "document_date": "Date du document",
+        "due_date": "Date d’échéance",
+        "department": "Département",
+        "project": "Projet",
+        "currency": "Devise",
+        "subtotal": "Sous-total",
+        "tax_total": "Taxe",
+        "total": "Total",
+        "document_count": "Document"
+      },
+      "parties": {
+        "display_name": "Nom",
+        "kind": "Genre",
+        "is_active": "Actif",
+        "is_customer": "Client",
+        "is_vendor": "Fournisseur",
+        "is_employee": "Employé",
+        "hired_on": "Embauché le",
+        "created_at": "Créé le"
+      },
+      "accounts": {
+        "number": "N° de compte",
+        "name": "Nom",
+        "type": "Type",
+        "is_summary": "Sommaire",
+        "is_active": "Actif",
+        "account_count": "Compte"
+      }
+    }
+  },
+  "aggs": {
+    "sum": "Somme",
+    "avg": "Moyenne",
+    "count": "Nombre",
+    "min": "Minimum",
+    "max": "Maximum"
+  },
+  "operators": {
+    "eq": "est égal à",
+    "neq": "est différent de",
+    "in": "est l’un de",
+    "not_in": "n’est aucun de",
+    "gt": "supérieur à",
+    "gte": "à partir du / ≥",
+    "lt": "inférieur à",
+    "lte": "jusqu’au / ≤",
+    "contains": "contient",
+    "is_null": "est vide",
+    "is_not_null": "est renseigné",
+    "last_n_days": "dans les N derniers jours",
+    "this_month": "est ce mois-ci",
+    "this_quarter": "est ce trimestre",
+    "this_year": "est cette année",
+    "ytd": "depuis le début de l’année"
+  },
+  "measureLabels": {
+    "count": "Nombre",
+    "sum": "Total {field}",
+    "avg": "Moy. {field}",
+    "min": "Min {field}",
+    "max": "Max {field}",
+    "binned": "{field} ({bin})",
+    "bins": {
+      "day": "jour",
+      "week": "semaine",
+      "month": "mois",
+      "quarter": "trimestre",
+      "year": "année"
+    }
+  },
+  "compileErrors": {
+    "unknown_source": "Source inconnue « {subject} »",
+    "unknown_field": "Champ inconnu « {subject} »",
+    "unknown_aggregation": "Agrégation inconnue « {subject} »",
+    "aggregation_needs_field": "L’agrégation « {subject} » requiert un champ",
+    "not_a_dimension": "« {subject} » ne peut pas servir à regrouper",
+    "not_a_measure": "« {subject} » n’est pas une mesure numérique",
+    "unknown_operator": "Opérateur de filtre inconnu « {subject} »",
+    "unknown_bin": "Intervalle de dates inconnu « {subject} »",
+    "contains_needs_text": "Le filtre « contient » requiert une valeur texte",
+    "last_n_days_needs_number": "Le filtre « dans les N derniers jours » requiert un nombre",
+    "no_columns": "La requête ne sélectionne aucune colonne",
+    "timeout": "La requête a pris trop de temps — réduisez la plage ou ajoutez des filtres."
+  }
+}

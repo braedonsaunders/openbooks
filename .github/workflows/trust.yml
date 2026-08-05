@@ -1,0 +1,226 @@
+name: trust
+
+# The public evidence pipeline. Two independent jobs produce the two halves of
+# the trust corpus, and a third publishes them:
+#
+#   conformance — accounting-standards corpus (ASC/IFRS) against a real kernel
+#   invariants  — seeded company driven through real activity, then the golden
+#                 harness asserts the ledger invariants and emits a checkpoint
+#   publish     — on main only: badges, matrix, and append-only history under
+#                 docs/trust/, which TRUST.md links to
+#
+# Both evidence jobs gate the build. A failing invariant or a failing
+# conformance case is a red build, not a footnote.
+
+on:
+  push:
+    branches: [main]
+    paths-ignore:
+      - "docs/trust/**"
+  pull_request:
+  workflow_dispatch:
+  schedule:
+    # Nightly, so the evidence has a time series even in a quiet week.
+    - cron: "17 6 * * *"
+
+concurrency:
+  group: trust-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  SESSION_SECRET: openbooks-ci-test-secret-not-production
+  OPENBOOKS_DATA_KEY: 000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f
+  ORG_COUNTRY: US
+  ORG_CURRENCY: USD
+
+jobs:
+  conformance:
+    name: standards conformance
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    services:
+      postgres:
+        image: postgres:16.9-alpine3.22@sha256:7c688148e5e156d0e86df7ba8ae5a05a2386aaec1e2ad8e6d11bdf10504b1fb7
+        env:
+          POSTGRES_USER: openbooks
+          POSTGRES_PASSWORD: openbooks
+          POSTGRES_DB: openbooks_conformance
+        ports:
+          - 5433:5432
+        options: >-
+          --health-cmd "pg_isready -U openbooks -d openbooks_conformance"
+          --health-interval 5s --health-timeout 5s --health-retries 12
+    env:
+      OPENBOOKS_DB_URL: postgres://openbooks:openbooks@localhost:5433/openbooks_conformance
+      OPENBOOKS_RUNTIME_DB_URL: postgres://openbooks_app:openbooks-runtime-ci-password@localhost:5433/openbooks_conformance
+      OPENBOOKS_DB_PASSWORD: openbooks-runtime-ci-password
+      OPENBOOKS_TRUSTED_TEST_BYPASS: "1"
+      PGPASSWORD: openbooks
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+
+      - name: Load schema
+        run: npx tsx scripts/bootstrap.ts
+
+      - name: Run the conformance corpus
+        # The ledger tier posts real documents through the accounting kernel.
+        # Without a database those cases report "not run" rather than passing,
+        # so the ledger-tier canary below fails the job if that happens here.
+        run: |
+          node --import tsx --import ./engine/src/test-database-bypass.ts \
+            engine/src/conformance/cli.ts report --out .local/conformance
+
+      - name: Ledger-tier canary
+        # A corpus that silently degraded to computation-only would still be
+        # green. Fail unless ledger-tier cases actually executed.
+        run: |
+          node -e '
+            const r = require("./.local/conformance/conformance.json");
+            const ledger = r.cases.filter(c => c.tier === "ledger" && c.support !== "not-implemented");
+            const notRun = ledger.filter(c => c.status === "skipped");
+            if (ledger.length === 0) { console.error("FATAL: no ledger-tier cases in the corpus"); process.exit(1); }
+            if (notRun.length > 0) {
+              console.error("FATAL: ledger-tier cases did not run — database wiring is broken:");
+              for (const c of notRun) console.error("  - " + c.id);
+              process.exit(1);
+            }
+            console.log("canary ok: " + ledger.length + " ledger-tier cases executed against the kernel");
+          '
+
+      - name: Summary
+        if: always()
+        run: |
+          {
+            echo "# Standards conformance"
+            echo ""
+            sed -n '1,40p' .local/conformance/conformance-matrix.md 2>/dev/null || echo "no matrix produced"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        if: always()
+        with:
+          name: conformance
+          path: .local/conformance/
+          if-no-files-found: error
+
+  invariants:
+    name: ledger invariants
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    services:
+      postgres:
+        image: postgres:16.9-alpine3.22@sha256:7c688148e5e156d0e86df7ba8ae5a05a2386aaec1e2ad8e6d11bdf10504b1fb7
+        env:
+          POSTGRES_USER: openbooks
+          POSTGRES_PASSWORD: openbooks
+          POSTGRES_DB: openbooks_sim
+        ports:
+          - 5433:5432
+        options: >-
+          --health-cmd "pg_isready -U openbooks -d openbooks_sim"
+          --health-interval 5s --health-timeout 5s --health-retries 12
+    env:
+      OPENBOOKS_SIM: "1"
+      OPENBOOKS_DB_URL: postgres://openbooks:openbooks@localhost:5433/openbooks_sim
+      OPENBOOKS_RUNTIME_DB_URL: postgres://openbooks_app:openbooks-runtime-ci-password@localhost:5433/openbooks_sim
+      OPENBOOKS_DB_PASSWORD: openbooks-runtime-ci-password
+      PGPASSWORD: openbooks
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+
+      - name: Load schema
+        run: npx tsx scripts/bootstrap.ts
+
+      - name: Generate a company and drive it through real activity
+        # The invariant oracle runs after every action and halts the run on the
+        # first failure, so this step failing IS the invariant report.
+        run: |
+          RUN=$(npm --prefix engine run --silent sim -- provision \
+            --profile general-contractor --seed 1 --start 2026-01-01 --end 2026-03-31 \
+            | node -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>console.log(JSON.parse(s).runDir))')
+          echo "SIM_RUN=$RUN" >> "$GITHUB_ENV"
+          npm --prefix engine run --silent sim -- run "$RUN"
+
+      - name: Assert the ledger invariants and emit a checkpoint
+        run: npm --prefix engine run --silent harness
+
+      - name: Summary
+        if: always()
+        run: |
+          {
+            echo "# Ledger invariants"
+            echo ""
+            echo '```json'
+            cat engine/harness-checkpoints/*.json 2>/dev/null \
+              | node -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>{const c=JSON.parse(s);console.log(JSON.stringify({pass:c.pass,cutoff:c.cutoff,counts:c.counts,trialBalance:c.trialBalance,checks:c.checks},null,2));})' \
+              || echo "no checkpoint produced"
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        if: always()
+        with:
+          name: checkpoint
+          path: engine/harness-checkpoints/
+          if-no-files-found: error
+
+      - name: Upload defect bundles (if the oracle halted)
+        if: failure()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: sim-defects
+          path: engine/sim-runs/**/defects/**
+          if-no-files-found: ignore
+
+  publish:
+    name: publish trust corpus
+    needs: [conformance, invariants]
+    if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: 24
+
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: conformance
+          path: .local/conformance
+
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: checkpoint
+          path: engine/harness-checkpoints
+
+      - name: Build badges, matrix, and history
+        run: |
+          node scripts/publish-trust.mjs \
+            --conformance .local/conformance \
+            --checkpoint engine/harness-checkpoints \
+            --out docs/trust \
+            --sha "${GITHUB_SHA}"
+
+      - name: Commit
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add docs/trust
+          if git diff --staged --quiet; then
+            echo "trust corpus unchanged"
+            exit 0
+          fi
+          git commit -m "chore: publish trust corpus [skip ci]"
+          git push

@@ -1,0 +1,87 @@
+{
+  "list": {
+    "title": "Spesenabrechnungen",
+    "description": "Spesenabrechnungen der Mitarbeiter — Entwurf → Genehmigung → gegen die Mitarbeiterverbindlichkeit gebucht.",
+    "searchPlaceholder": "Abrechnungen, Mitarbeiter, Notizen durchsuchen…",
+    "emptyTitle": "Noch keine Spesenabrechnungen",
+    "emptyDescription": "Erfassen Sie die erste Spesenabrechnung, um den Erstattungs-Workflow zu starten.",
+    "columns": {
+      "report": "Abrechnung"
+    }
+  },
+  "actions": {
+    "newReport": "Neue Spesenabrechnung",
+    "submitForApproval": "Zur Genehmigung einreichen"
+  },
+  "drawer": {
+    "autosaveHint": "Entwurf — Änderungen werden automatisch gespeichert.",
+    "viewGlImpact": "GL-Auswirkung anzeigen",
+    "reportDate": "Abrechnungsdatum",
+    "selectEmployeePlaceholder": "Mitarbeiter auswählen…",
+    "accountPlaceholder": "Konto…",
+    "noTax": "Keine Steuer",
+    "deleteTitle": "Diese Spesenabrechnung löschen?",
+    "deleteDraftBody": "Dadurch wird der Entwurf der Spesenabrechnung dauerhaft gelöscht. Dies kann nicht rückgängig gemacht werden.",
+    "deletePostedBody": "Dadurch wird die Spesenabrechnung dauerhaft gelöscht und ihre Auswirkung auf das Hauptbuch entfernt. Dies kann nicht rückgängig gemacht werden.",
+    "columns": {
+      "taxAmount": "Steuerbetr."
+    },
+    "saveState": {
+      "saved": "Alle Änderungen gespeichert",
+      "dirty": "Nicht gespeicherte Änderungen…",
+      "error": "Speichern fehlgeschlagen — korrigieren und erneut versuchen"
+    },
+    "totals": "Zwischensumme {subtotal} · Steuer {tax} · <strong>Gesamt {total}</strong>"
+  },
+  "toasts": {
+    "submitted": "Zur Genehmigung eingereicht",
+    "posted": "In das Hauptbuch gebucht",
+    "actionFailed": "Aktion fehlgeschlagen",
+    "autosaveFailed": "Automatisches Speichern fehlgeschlagen",
+    "deleted": "Spesenabrechnung gelöscht",
+    "deleteFailed": "Löschen fehlgeschlagen",
+    "draftFailed": "Entwurf der Spesenabrechnung konnte nicht erstellt werden"
+  },
+  "dashboard": {
+    "title": "Ausgaben",
+    "description": "Spesen-Kontrollzentrum — Freigabe-Pipeline, Ausgaben nach Mitarbeiter und Kategorie sowie der Ausgabentrend.",
+    "vitals": {
+      "pending": "Freigabe ausstehend",
+      "pendingSub": "{count} Berichte",
+      "awaiting": "Buchung ausstehend",
+      "awaitingSub": "{count} freigegeben",
+      "month": "Diesen Monat gebucht",
+      "monthSub": "{count} Berichte",
+      "highSpenders": "Vielausgeber",
+      "highSpendersSub": ">20 % Anstieg ggü. Vorperiode",
+      "creep": "Kategorie-Anstiege",
+      "creepSub": "Kategorien mit >10 % Anstieg"
+    },
+    "panels": {
+      "categories": "Kategorien-Aufschlüsselung",
+      "categoriesHint": "Spesenberichte · 12 Monate",
+      "trend": "Monatstrend",
+      "trendHint": "Spesenberichte vs. Lieferantenrechnungen",
+      "queue": "Freigabe-Warteschlange",
+      "queueHint": "älteste zuerst",
+      "queueEmpty": "Nichts wartet auf Freigabe.",
+      "spenders": "Top-Ausgeber",
+      "spendersHint": "ggü. 12 Vormonaten",
+      "categoryTable": "Kategorien",
+      "categoryTableHint": "aktuell vs. 12 Vormonate"
+    },
+    "table": {
+      "employee": "Mitarbeiter",
+      "spend": "Ausgaben",
+      "reports": "Berichte",
+      "change": "Änderung",
+      "category": "Kategorie",
+      "current": "Aktuell",
+      "prior": "Vorher"
+    },
+    "series": {
+      "bills": "Lieferantenrechnungen",
+      "expenses": "Spesenberichte"
+    }
+  }
+}

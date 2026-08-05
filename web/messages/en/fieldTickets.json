@@ -1,0 +1,151 @@
+{
+  "title": "Field Tickets",
+  "description": "Signed crew timesheets for T&M work — hours, equipment, and materials captured once, approved, signed by your customer, and swept into invoices.",
+  "period": {
+    "shift": "Shift",
+    "daily": "Daily",
+    "weekly": "Weekly"
+  },
+  "status": {
+    "draft": "Draft",
+    "pending_approval": "Submitted",
+    "approved": "Approved",
+    "voided": "Voided"
+  },
+  "list": {
+    "new": "New ticket",
+    "create": "Create",
+    "cancel": "Cancel",
+    "empty": "No field tickets yet.",
+    "projectRequired": "Pick a project",
+    "pickProject": "Pick a project…",
+    "number": "Ticket",
+    "project": "Project",
+    "customer": "Customer",
+    "periodLabel": "Period",
+    "period": "Period",
+    "foreman": "Foreman",
+    "hours": "Hours",
+    "itemsTotal": "Items",
+    "status": "Status",
+    "signature": "Signature",
+    "allStatuses": "All statuses",
+    "allSignatures": "All signatures",
+    "unsigned": "Not sent",
+    "waiting": "Awaiting signature",
+    "signed": "Signed",
+    "date": "Date",
+    "createFailed": "Could not create the ticket"
+  },
+  "editor": {
+    "tabs": { "time": "Time", "items": "Items", "tasks": "Tasks", "related": "Related" },
+    "periodLocked": "Remove entered hours before changing the ticket period.",
+    "back": "Field tickets",
+    "submit": "Submit",
+    "approve": "Approve",
+    "reject": "Reject",
+    "saveHours": "Save hours",
+    "cancel": "Cancel",
+    "confirmReject": "Confirm reject",
+    "rejectReason": "Rejection reason",
+    "rejectionNote": "Rejected: {reason}",
+    "submitted": "Ticket submitted",
+    "approved": "Ticket approved — hours costed and items charged to the job",
+    "rejected": "Ticket rejected",
+    "project": "Project",
+    "customer": "Customer",
+    "po": "Customer PO",
+    "foreman": "Foreman",
+    "workDescription": "Work description",
+    "details": {
+      "title": "Ticket details",
+      "hint": "Project, customer, ticket date, and field responsibility."
+    },
+    "work": {
+      "title": "Work summary",
+      "hint": "Customer reference and a clear description of the work performed."
+    },
+    "related": {
+      "title": "Related records",
+      "hint": "Auditable links from this ticket to charges, billing requests, and invoices.",
+      "billingRequests": "Billing requests",
+      "noBillingRequests": "This ticket has not been selected for billing.",
+      "selectedOn": "Selected {date}",
+      "documents": "Linked transactions",
+      "noDocuments": "No linked transactions yet.",
+      "linkType": {
+        "created_from": "Created charge",
+        "bills": "Billed by"
+      }
+    },
+    "form": {
+      "label": "Record form",
+      "setPreferred": "Set as my preferred",
+      "preferredSaved": "Preferred form saved",
+      "preferredFailed": "Could not save the preferred form"
+    },
+    "crew": {
+      "title": "Crew hours",
+      "hint": "One row per person (optionally per labor class). R / O / D = the time types' first letters.",
+      "employee": "Employee",
+      "laborItem": "Labor class",
+      "task": "Project task",
+      "addRow": "Add crew member",
+      "removeRow": "Remove row",
+      "rowTotal": "Total",
+      "dayTotals": "Day totals",
+      "total": "{hours} h total"
+    },
+    "lines": {
+      "title": "Items & equipment",
+      "hint": "Select billable items or linked equipment. Pricing follows the project's customer, equipment, and organization rate books, including package tiers.",
+      "item": "Item",
+      "pickItem": "Pick an item…",
+      "description": "Description",
+      "quantity": "Qty",
+      "rateUnit": "Rate unit",
+      "rate": "Rate",
+      "amount": "Amount",
+      "equipment": "Equipment unit",
+      "pooledItem": "No specific unit",
+      "rateSource": { "rate_book": "Resolved from rate book", "item_default": "Using item default rate" },
+      "add": "Add line",
+      "remove": "Remove line",
+      "empty": "No lines yet.",
+      "itemRequired": "Pick an item"
+    },
+    "tasks": { "title": "Project tasks", "hint": "WBS tasks available for coding crew hours on this project.", "code": "Code", "task": "Task", "estimatedHours": "Estimated hours" },
+    "totals": {
+      "title": "Ticket totals",
+      "labor": "Labor",
+      "items": "Equipment & materials",
+      "grand": "Grand total",
+      "previewNote": "Labor uses live preview rates until approval snapshots them for good.",
+      "snappedNote": "Rates are snapshotted — this ticket's history never restates."
+    },
+    "signatures": {
+      "title": "Signatures",
+      "hint": "Send the approved ticket to the customer for review and signature.",
+      "customer": "Customer",
+      "signedBy": "Signed — {name}",
+      "signedAt": "Signed {date}",
+      "waiting": "Awaiting signature",
+      "notSent": "Not sent yet",
+      "ready": "Ready to send",
+      "notReady": "Not ready",
+      "draftHelp": "Submit and approve this ticket before sending it to the customer for signature.",
+      "pendingHelp": "This ticket can be sent for signature after it is approved.",
+      "sentTo": "Sent to",
+      "sentAt": "Sent",
+      "expiresAt": "Link expires",
+      "deliveryHelp": "The customer receives a PDF copy and a secure signing link valid for 14 days."
+    },
+    "sendSignature": "Send for signature",
+    "resendSignature": "Resend signing request",
+    "sendTo": "Send to",
+    "sendMessage": "Message (optional)",
+    "send": "Send",
+    "signatureSent": "Signing link sent to {to}",
+    "pdf": "PDF"
+  }
+}

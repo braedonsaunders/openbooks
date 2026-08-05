@@ -1,0 +1,12 @@
+{
+  "list": {
+    "title": "Angebote",
+    "description": "Nicht buchende Kundenangebote — ausstellen und dann in einen Kundenauftrag oder eine Ausgangsrechnung umwandeln.",
+    "searchPlaceholder": "Angebote, Kunden, Notiz durchsuchen…",
+    "converted": "Umgewandelt",
+    "emptyTitle": "Noch keine Angebote",
+    "emptyDescription": "Erstellen Sie das erste Angebot, um den Order-to-Cash-Workflow zu starten.",
+    "newButton": "Neues Angebot",
+    "createDraftFailed": "Angebotsentwurf konnte nicht erstellt werden"
+  }
+}

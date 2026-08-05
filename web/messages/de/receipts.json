@@ -1,0 +1,9 @@
+{
+  "page": {
+    "title": "Kundenzahlungen",
+    "description": "Erhaltene Kundenzahlungen, die über den Kernel auf offene Ausgangsrechnungen angewendet werden.",
+    "newReceipt": "Neue Kundenzahlung",
+    "newCollectionRun": "Neuer Einzugslauf",
+    "tabs": { "receipts": "Zahlungseingänge", "collections": "Lastschriftläufe" }
+  }
+}

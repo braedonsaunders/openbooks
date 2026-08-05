@@ -1,0 +1,28 @@
+{
+  "title": "Dokumentation",
+  "searchPlaceholder": "Dokumentation durchsuchen…",
+  "noResults": "Keine passenden Artikel.",
+  "browseMenu": "Dokumentation durchsuchen",
+  "expandAll": "Alle erweitern",
+  "collapseAll": "Alle reduzieren",
+  "expandSection": "{title} erweitern",
+  "collapseSection": "{title} reduzieren",
+  "lastUpdated": "Zuletzt aktualisiert {date}",
+  "related": "Verwandte Artikel",
+  "breadcrumb": "Dokumentationspfad",
+  "articleNavigation": "Artikelnavigation",
+  "previous": "Zurück",
+  "next": "Weiter",
+  "home": {
+    "title": "Dokumentation",
+    "subtitle": "Lernen Sie das Buchhaltungsmodell kennen, konfigurieren Sie Ihre Organisation, führen Sie tägliche Abläufe aus und wechseln Sie sicher von einem anderen System.",
+    "eyebrow": "OpenBooks-Hilfecenter",
+    "startHere": "Hier starten",
+    "step": "Schritt {number}",
+    "switchingTitle": "Wechseln Sie von einem anderen System?",
+    "switchingSubtitle": "Beginnen Sie mit einem Einführungsleitfaden, der vertraute Konzepte und Abläufe zuordnet.",
+    "browseTitle": "Gesamte Dokumentation durchsuchen",
+    "browseSubtitle": "Entdecken Sie den vollständigen Leitfaden nach Thema oder suchen Sie über die Seitenleiste.",
+    "articleCount": "{count, plural, one {# Artikel} other {# Artikel}}"
+  }
+}

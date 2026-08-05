@@ -1,0 +1,281 @@
+{
+  "title": "インサイト",
+  "tabs": {
+    "cards": "カード",
+    "dashboards": "ダッシュボード"
+  },
+  "viz": {
+    "table": "テーブル",
+    "bar": "棒グラフ",
+    "line": "折れ線",
+    "area": "エリア",
+    "pie": "円グラフ",
+    "empty": {
+      "noData": "このクエリのデータはありません。",
+      "pickFields": "これをグラフ化するには、ディメンションと少なくとも1つのメジャーを選択してください。"
+    },
+    "noRows": "行がありません。",
+    "values": {
+      "yes": "はい",
+      "no": "いいえ",
+      "active": "有効",
+      "inactive": "無効"
+    }
+  },
+  "status": {
+    "published": "公開済み"
+  },
+  "actions": {
+    "publish": "公開",
+    "unpublish": "非公開にする"
+  },
+  "autosave": {
+    "saved": "すべての変更を保存しました",
+    "unsaved": "未保存の変更があります…",
+    "failed": "自動保存に失敗しました"
+  },
+  "errors": {
+    "queryFailed": "クエリに失敗しました",
+    "updateFailed": "更新に失敗しました"
+  },
+  "empty": {
+    "dashboardNoCards": "このダッシュボードにはまだカードがありません。"
+  },
+  "cards": {
+    "description": "総勘定元帳に対するクエリからグラフやテーブルのカードを作成し、ダッシュボードに配置します。",
+    "searchPlaceholder": "カードを検索…",
+    "emptyTitle": "カードがまだありません",
+    "emptyDescription": "最初のカードを作成しましょう。ソースを選び、測定・グループ化する項目を選択して、グラフを選びます。",
+    "sourceColumn": "ソース",
+    "chartColumn": "グラフ",
+    "newButton": "新規カード",
+    "createDraftFailed": "下書きカードを作成できませんでした"
+  },
+  "dashboards": {
+    "description": "公開済みのカードを共有ダッシュボードに配置します。",
+    "searchPlaceholder": "ダッシュボードを検索…",
+    "emptyTitle": "ダッシュボードがまだありません",
+    "emptyDescription": "ダッシュボードを作成し、公開済みのカードを配置しましょう。",
+    "cardsColumn": "カード",
+    "newButton": "新規ダッシュボード",
+    "createDraftFailed": "下書きダッシュボードを作成できませんでした"
+  },
+  "cardStudio": {
+    "untitled": "無題のカード",
+    "autosaveHint": "変更は自動的に保存されます。プレビューはリアルタイムで更新されます。",
+    "nameRequiredToPublish": "公開するにはカードに名前を付けてください",
+    "saveFailedRetry": "保存に失敗しました — 修正して再試行してください",
+    "namePlaceholder": "部門別の月次支出",
+    "sourceLabel": "ソース",
+    "measuresTitle": "メジャー",
+    "measuresEmpty": "集計するメジャーを追加してください（明細テーブルの場合は空のままにします）。",
+    "ofRows": "行数の",
+    "selectFieldPlaceholder": "フィールドを選択…",
+    "removeMeasure": "メジャーを削除",
+    "groupByTitle": "グループ化",
+    "groupByEmpty": "ディメンションで行をグループ化して集計します。",
+    "binExact": "正確な値",
+    "bins": {
+      "day": "日別",
+      "week": "週別",
+      "month": "月別",
+      "quarter": "四半期別",
+      "year": "年別"
+    },
+    "removeDimension": "ディメンションを削除",
+    "filtersTitle": "フィルター",
+    "filtersEmpty": "フィルターなし — カードはすべての行を対象とします。",
+    "removeFilter": "フィルターを削除",
+    "filterPlaceholderList": "a, b, c",
+    "filterPlaceholderNumber": "30",
+    "filterPlaceholderDate": "YYYY-MM-DD",
+    "filterPlaceholderValue": "値",
+    "previewRequestFailed": "プレビューのリクエストに失敗しました",
+    "runningPreview": "プレビューを実行中…",
+    "buildToPreview": "プレビューするクエリを作成してください。",
+    "rowCount": "{count, plural, one {# 行} other {# 行}}",
+    "capped": "（上限 10,000 件）",
+    "duration": "{ms} ms",
+    "publishedToast": "カードを公開しました",
+    "draftToast": "カードを下書きに戻しました",
+    "deleteConfirm": "このカードを削除しますか？すべてのダッシュボードから削除されます。",
+    "deleteFailed": "カードを削除できませんでした",
+    "deletedToast": "カードを削除しました"
+  },
+  "vizSettings": {
+    "category": "カテゴリ",
+    "auto": "自動",
+    "value": "値",
+    "allMeasures": "すべてのメジャー",
+    "stacked": "積み上げ",
+    "horizontal": "横向き",
+    "smooth": "スムーズ",
+    "showValues": "値",
+    "hideLegend": "凡例を非表示"
+  },
+  "cardTile": {
+    "loadFailed": "このカードを読み込めませんでした"
+  },
+  "builder": {
+    "back": "ダッシュボード",
+    "untitled": "無題のダッシュボード",
+    "pinToHome": "ホームにピン留め",
+    "unpin": "ピン留めを解除",
+    "namePlaceholder": "エグゼクティブ概要",
+    "addCard": "カードを追加：",
+    "noPublishedCards": "公開済みのカードはまだありません。<link>カードを作成して公開</link>すると、ここに配置できます。",
+    "emptyEditor": "上でカードを公開して追加すると、このダッシュボードを構築できます。",
+    "widths": {
+      "third": "1/3",
+      "half": "1/2",
+      "twoThirds": "2/3",
+      "full": "全幅"
+    },
+    "heights": {
+      "short": "低",
+      "medium": "中",
+      "tall": "高"
+    },
+    "cardWidth": "カードの幅",
+    "cardHeight": "カードの高さ",
+    "removeCard": "カードを削除",
+    "unavailableCard": "このカードは利用できません（削除済みまたは非公開）。",
+    "pinnedToast": "ホームにピン留めしました",
+    "unpinnedToast": "ピン留めを解除しました",
+    "pinFailed": "ピン留めを更新できませんでした",
+    "publishedToast": "ダッシュボードを公開しました",
+    "draftToast": "ダッシュボードを下書きに戻しました",
+    "deleteConfirm": "このダッシュボードを削除しますか？",
+    "deletedToast": "ダッシュボードを削除しました",
+    "deleteFailed": "ダッシュボードを削除できませんでした"
+  },
+  "catalog": {
+    "sources": {
+      "ledger_lines": {
+        "label": "総勘定元帳行",
+        "description": "仕訳、勘定、取引先、ディメンションを含むすべての仕訳行 — 総勘定元帳の完全な明細です。"
+      },
+      "documents": {
+        "label": "ドキュメント",
+        "description": "取引先とディメンションのラベル付きの業務ドキュメント（仕入請求書、請求書、支払、注文）です。"
+      },
+      "parties": {
+        "label": "取引先",
+        "description": "得意先、仕入先、従業員 — ロールフラグ付きで取引先ごとに1行です。"
+      },
+      "accounts": {
+        "label": "勘定",
+        "description": "会計科目表 — 番号、名称、タイプ、記帳フラグです。"
+      }
+    },
+    "fields": {
+      "ledger_lines": {
+        "posting_date": "記帳日",
+        "entry_number": "仕訳番号",
+        "entry_status": "仕訳ステータス",
+        "entry_origin": "起点",
+        "account_number": "勘定番号",
+        "account_name": "勘定",
+        "account_type": "勘定タイプ",
+        "party": "取引先",
+        "department": "部門",
+        "project": "プロジェクト",
+        "location": "拠点",
+        "class": "クラス",
+        "memo": "メモ",
+        "amount": "金額（基準）",
+        "debit": "借方",
+        "credit": "貸方",
+        "quantity": "数量",
+        "currency": "通貨"
+      },
+      "documents": {
+        "kind": "種類",
+        "document_number": "ドキュメント番号",
+        "party": "取引先",
+        "status": "ステータス",
+        "document_date": "ドキュメント日付",
+        "due_date": "支払期日",
+        "department": "部門",
+        "project": "プロジェクト",
+        "currency": "通貨",
+        "subtotal": "小計",
+        "tax_total": "税",
+        "total": "合計",
+        "document_count": "ドキュメント"
+      },
+      "parties": {
+        "display_name": "名称",
+        "kind": "種類",
+        "is_active": "有効",
+        "is_customer": "得意先",
+        "is_vendor": "仕入先",
+        "is_employee": "従業員",
+        "hired_on": "採用日",
+        "created_at": "作成日時"
+      },
+      "accounts": {
+        "number": "勘定番号",
+        "name": "名称",
+        "type": "タイプ",
+        "is_summary": "集計",
+        "is_active": "有効",
+        "account_count": "勘定"
+      }
+    }
+  },
+  "aggs": {
+    "sum": "合計",
+    "avg": "平均",
+    "count": "件数",
+    "min": "最小",
+    "max": "最大"
+  },
+  "operators": {
+    "eq": "等しい",
+    "neq": "等しくない",
+    "in": "いずれかである",
+    "not_in": "いずれでもない",
+    "gt": "より大きい",
+    "gte": "以降 / ≥",
+    "lt": "より小さい",
+    "lte": "以前 / ≤",
+    "contains": "含む",
+    "is_null": "空である",
+    "is_not_null": "設定されている",
+    "last_n_days": "過去 N 日以内",
+    "this_month": "今月である",
+    "this_quarter": "今四半期である",
+    "this_year": "今年である",
+    "ytd": "年初来"
+  },
+  "measureLabels": {
+    "count": "件数",
+    "sum": "{field} の合計",
+    "avg": "{field} の平均",
+    "min": "{field} の最小",
+    "max": "{field} の最大",
+    "binned": "{field}（{bin}）",
+    "bins": {
+      "day": "日",
+      "week": "週",
+      "month": "月",
+      "quarter": "四半期",
+      "year": "年"
+    }
+  },
+  "compileErrors": {
+    "unknown_source": "不明なソース「{subject}」",
+    "unknown_field": "不明なフィールド「{subject}」",
+    "unknown_aggregation": "不明な集計「{subject}」",
+    "aggregation_needs_field": "「{subject}」集計にはフィールドが必要です",
+    "not_a_dimension": "「{subject}」はグループ化に使用できません",
+    "not_a_measure": "「{subject}」は数値メジャーではありません",
+    "unknown_operator": "不明なフィルター演算子「{subject}」",
+    "unknown_bin": "不明な日付区分「{subject}」",
+    "contains_needs_text": "「含む」フィルターにはテキスト値が必要です",
+    "last_n_days_needs_number": "「過去 N 日以内」フィルターには数値が必要です",
+    "no_columns": "クエリで選択された列がありません",
+    "timeout": "クエリに時間がかかりすぎました — 範囲を絞り込むか、フィルターを追加してください。"
+  }
+}

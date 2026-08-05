@@ -1,0 +1,57 @@
+{
+  "home": {
+    "title": "Contabilidade",
+    "description": "Seu espaço de controle financeiro — saúde do razão, progresso do fechamento e os números por trás da pontuação.",
+    "tabs": {
+      "overview": "Visão geral",
+      "health": "Saúde financeira"
+    },
+    "score": {
+      "excellent": "Excelente",
+      "good": "Bom",
+      "average": "Médio",
+      "needsWork": "Precisa melhorar"
+    },
+    "categories": {
+      "profitability": "Rentabilidade",
+      "efficiency": "Eficiência",
+      "operating": "Operação"
+    },
+    "vitals": {
+      "healthScore": "Pontuação de saúde",
+      "netIncome": "Lucro líquido",
+      "close": "Progresso do fechamento",
+      "closeSub": "{period}",
+      "noClose": "—",
+      "noCloseSub": "Nenhum fechamento iniciado",
+      "draftJournals": "Lançamentos em rascunho",
+      "draftJournalsSub": "{posted} lançados esta semana",
+      "openFindings": "Apontamentos abertos",
+      "openFindingsSub": "{critical} críticos"
+    },
+    "hero": {
+      "title": "Saúde financeira",
+      "ratio": "Índice",
+      "value": "Valor",
+      "benchmark": "Referência",
+      "grade": "Nota",
+      "fullAnalysis": "Análise completa — margens, segmentos, cenários, direcionadores"
+    },
+    "directory": {
+      "title": "Espaço de trabalho",
+      "journalHint": "rascunhos · {posted} lançados esta semana",
+      "accountsHint": "contas ativas",
+      "budgetsHint": "cenários de orçamento",
+      "assetsHint": "ativos fixos",
+      "continuousCloseHint": "{critical} críticos"
+    },
+    "attention": {
+      "title": "Requer atenção",
+      "allClear": "Tudo certo — o razão está em ordem.",
+      "criticalItems": "{count} apontamentos críticos abertos",
+      "warningItems": "{count} alertas do fechamento contínuo",
+      "draftJournals": "{count} lançamentos ainda em rascunho",
+      "weakRatio": "{ratio} está abaixo da referência"
+    }
+  }
+}
