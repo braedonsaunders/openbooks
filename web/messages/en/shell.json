@@ -17,7 +17,8 @@
     "organizations": "Organizations",
     "sandbox": "sandbox",
     "sampleCompany": "sample company",
-    "superAdmin": "Super admin"
+    "superAdmin": "Super admin",
+    "security": "Sign-in security"
   },
   "language": {
     "label": "Language",

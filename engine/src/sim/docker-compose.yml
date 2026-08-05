@@ -3,7 +3,7 @@
 # the CLI's guard permits it, and `reset` wipes whole orgs.
 services:
   openbooks-sim-db:
-    image: postgres:16
+    image: postgres:16.9-alpine3.22@sha256:7c688148e5e156d0e86df7ba8ae5a05a2386aaec1e2ad8e6d11bdf10504b1fb7
     container_name: openbooks-sim-db
     environment:
       POSTGRES_USER: openbooks

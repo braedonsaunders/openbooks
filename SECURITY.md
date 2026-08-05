@@ -54,7 +54,13 @@ The repository implements defense-in-depth controls including:
   login, or a role it can assume, can defeat tenant isolation;
 - server-side RBAC and permission checks;
 - scoped, hashed API keys;
-- scrypt password hashing and signed session cookies;
+- scrypt password hashing and signed, server-side revocable session cookies;
+- PostgreSQL-backed login throttling, temporary lockout, and authentication
+  events that store keyed email/network hashes rather than raw identifiers;
+- TOTP MFA with encrypted secrets, anti-replay steps, and hashed one-time
+  recovery codes;
+- OIDC authorization-code SSO with state, nonce, PKCE, discovery issuer checks,
+  asymmetric JWKS verification, and verified-email existing-user linking;
 - encryption of stored connection secrets with `OPENBOOKS_DATA_KEY`;
 - database constraints for balanced postings and closed periods;
 - a SELECT-only database role for the SQL workbench;
@@ -85,6 +91,13 @@ Production operators must:
 The included Compose stack is designed for evaluation and a single-host
 deployment. High-availability, regulated, or internet-exposed installations
 need an operator-designed production architecture.
+
+When enabling `OPENBOOKS_TRUST_PROXY`, the proxy must remove client-supplied
+`X-Forwarded-For`, `X-Real-IP`, and `CF-Connecting-IP` headers before setting
+trusted values. Otherwise leave it disabled; identity lockout remains active.
+OIDC deployments must use HTTPS, protect the optional client secret, register
+only the documented callback URI, and configure the provider to return a
+verified email claim. OIDC does not create or reactivate users.
 
 ## Disclosure
 

@@ -26,7 +26,7 @@ jobs:
     timeout-minutes: 35
     services:
       postgres:
-        image: postgres:16
+        image: postgres:16.9-alpine3.22@sha256:7c688148e5e156d0e86df7ba8ae5a05a2386aaec1e2ad8e6d11bdf10504b1fb7
         env:
           POSTGRES_USER: openbooks_owner
           POSTGRES_PASSWORD: openbooks-owner-release-test-password
@@ -39,7 +39,7 @@ jobs:
           --health-timeout 5s
           --health-retries 20
       redis:
-        image: redis:7-alpine
+        image: redis:7.4.5-alpine3.21@sha256:bb186d083732f669da90be8b0f975a37812b15e913465bb14d845db72a4e3e08
         ports:
           - 6379:6379
         options: >-
@@ -57,8 +57,8 @@ jobs:
       ORG_CURRENCY: USD
       PGPASSWORD: openbooks-owner-release-test-password
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
           node-version: 24
           cache: npm
@@ -78,52 +78,116 @@ jobs:
       - name: Verify types, accounting tests, and production build
         run: npm run verify:release
 
-  publish:
+  container-security:
     needs: verify
     runs-on: ubuntu-latest
     timeout-minutes: 60
     outputs:
       digest: ${{ steps.build.outputs.digest }}
     steps:
-      - uses: actions/checkout@v4
-      - uses: docker/setup-qemu-action@v3
-      - uses: docker/setup-buildx-action@v3
-      - uses: docker/login-action@v3
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: docker/setup-qemu-action@c7c53464625b32c7a7e944ae62b3e17d2b600130 # v3
+      - uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3
+      - uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Generate immutable-image labels
+        id: scan-meta
+        uses: docker/metadata-action@c299e40c65443455700f0fdfc63efafe5b349051 # v5
+        with:
+          images: ${{ env.IMAGE_NAME }}
+          labels: |
+            org.opencontainers.image.title=OpenBooks
+            org.opencontainers.image.description=Open-source accounting-first ERP
+            org.opencontainers.image.source=https://github.com/${{ github.repository }}
+            org.opencontainers.image.licenses=AGPL-3.0-or-later
+      - name: Build and push the exact multi-platform candidate
+        id: build
+        uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6
+        with:
+          context: .
+          platforms: linux/amd64,linux/arm64
+          push: true
+          tags: ${{ env.IMAGE_NAME }}:scan-${{ github.run_id }}-${{ github.run_attempt }}
+          labels: ${{ steps.scan-meta.outputs.labels }}
+          build-args: |
+            OPENBOOKS_VERSION=${{ startsWith(github.ref, 'refs/tags/v') && github.ref_name || inputs.version }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max,ignore-error=true
+      - name: Scan the exact amd64 manifest
+        uses: aquasecurity/trivy-action@a9c7b0f06e461e9d4b4d1711f154ee024b8d7ab8 # v0.36.0
+        env:
+          TRIVY_PLATFORM: linux/amd64
+        with:
+          image-ref: ${{ env.IMAGE_NAME }}@${{ steps.build.outputs.digest }}
+          version: v0.70.0
+          vuln-type: os,library
+          scanners: vuln,secret
+          severity: HIGH,CRITICAL
+          ignore-unfixed: false
+          exit-code: "1"
+      - name: Scan the exact arm64 manifest
+        uses: aquasecurity/trivy-action@a9c7b0f06e461e9d4b4d1711f154ee024b8d7ab8 # v0.36.0
+        env:
+          TRIVY_PLATFORM: linux/arm64
+        with:
+          image-ref: ${{ env.IMAGE_NAME }}@${{ steps.build.outputs.digest }}
+          version: v0.70.0
+          skip-setup-trivy: true
+          vuln-type: os,library
+          scanners: vuln,secret
+          severity: HIGH,CRITICAL
+          ignore-unfixed: false
+          exit-code: "1"
+
+  publish:
+    needs: [verify, container-security]
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    outputs:
+      digest: ${{ needs.container-security.outputs.digest }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3
+      - uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
       - name: Generate image metadata
         id: meta
-        uses: docker/metadata-action@v5
+        uses: docker/metadata-action@c299e40c65443455700f0fdfc63efafe5b349051 # v5
         with:
           images: ${{ env.IMAGE_NAME }}
           tags: |
             type=semver,pattern={{version}}
             type=semver,pattern={{major}}.{{minor}}
-            type=raw,value=latest,enable=${{ startsWith(github.ref, 'refs/tags/v') }}
             type=raw,value=${{ inputs.version }},enable=${{ github.event_name == 'workflow_dispatch' }}
           labels: |
             org.opencontainers.image.title=OpenBooks
             org.opencontainers.image.description=Open-source accounting-first ERP
             org.opencontainers.image.source=https://github.com/${{ github.repository }}
             org.opencontainers.image.licenses=AGPL-3.0-or-later
-      - name: Build and publish multi-platform image
-        id: build
-        uses: docker/build-push-action@v6
-        with:
-          context: .
-          platforms: linux/amd64,linux/arm64
-          push: true
-          tags: ${{ steps.meta.outputs.tags }}
-          labels: ${{ steps.meta.outputs.labels }}
-          build-args: |
-            OPENBOOKS_VERSION=${{ startsWith(github.ref, 'refs/tags/v') && github.ref_name || inputs.version }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max,ignore-error=true
+      - name: Publish tags for the exact scanned digest
+        env:
+          OPENBOOKS_RELEASE_TAGS: ${{ steps.meta.outputs.tags }}
+          OPENBOOKS_SCANNED_IMAGE: ${{ env.IMAGE_NAME }}@${{ needs.container-security.outputs.digest }}
+        run: |
+          mapfile -t release_tags < <(printf '%s\n' "$OPENBOOKS_RELEASE_TAGS" | sed '/^$/d')
+          if [ "${#release_tags[@]}" -eq 0 ]; then
+            echo "No release tags were generated" >&2
+            exit 1
+          fi
+          tag_args=()
+          for release_tag in "${release_tags[@]}"; do
+            tag_args+=(--tag "$release_tag")
+          done
+          docker buildx imagetools create "${tag_args[@]}" "$OPENBOOKS_SCANNED_IMAGE"
       - name: Attest published image
-        uses: actions/attest-build-provenance@v3
+        uses: actions/attest-build-provenance@43d14bc2b83dec42d39ecae14e916627a18bb661 # v3
         with:
           subject-name: ${{ env.IMAGE_NAME }}
-          subject-digest: ${{ steps.build.outputs.digest }}
+          subject-digest: ${{ needs.container-security.outputs.digest }}
           push-to-registry: true

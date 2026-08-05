@@ -58,6 +58,10 @@ export const FEATURES: FeatureDef[] = [
   // Schedule-of-values billing remains a project-type procedure, not a gate.
   { key: 'projects', defaultEnabled: true, category: 'operations', navModules: ['projects', 'field-tickets', 'lien-waivers'] },
   { key: 'timeTracking', defaultEnabled: true, category: 'operations', navModules: ['timesheets'], parentKey: 'projects' },
+  // Payroll — Canadian (T4127) statutory engine, pay runs, stubs, remittance
+  // liabilities. Off by default: enabling payroll is a deliberate adoption
+  // decision (TD1 profiles, control accounts, schedules must be configured).
+  { key: 'payroll', defaultEnabled: false, category: 'operations', navModules: ['payroll'], recommends: ['timeTracking'] },
   { key: 'fieldTickets', defaultEnabled: false, category: 'operations', navModules: ['field-tickets'], parentKey: 'projects' },
   // Project scheduling: critical-path Gantt, work-breakdown outline, working
   // calendars, baselines and resource levelling. Off by default — a schedule is
@@ -237,6 +241,18 @@ async function countRows(query: SQL): Promise<number> {
  * Keep each probe cheap (COUNTs) — they run on every Features page load.
  */
 const FEATURE_DISABLE_CHECKS: Record<string, (orgId: string) => Promise<FeatureDisableStatus>> = {
+  payroll: async (orgId) => {
+    // Posted pay runs are ledger history; the module cannot be turned off
+    // once payroll has hit the GL (accounting-integrity hard stop).
+    const n = await countRows(sql`
+      select count(*)::int as n
+        from documents d
+       where d.org_id = ${orgId} and d.kind = 'pay_run' and d.status = 'posted'`)
+    return {
+      blocked: n > 0,
+      impacts: n ? [{ labelKey: 'postedPayRuns', count: n }] : [],
+    }
+  },
   orders: async (orgId) => {
     const n = await countRows(sql`
       select count(*)::int as n

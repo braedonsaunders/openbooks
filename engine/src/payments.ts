@@ -755,7 +755,30 @@ export async function postPaymentWithApplications(
     }
 
     const deps = await paymentControlDeps(doc.orgId);
-    const controlAccountId = custom.controlAccountId ?? (side === "ap" ? deps.control.ap : deps.control.ar);
+    let controlAccountId = custom.controlAccountId ?? (side === "ap" ? deps.control.ap : deps.control.ar);
+    if (!custom.controlAccountId) {
+      // Derive the control account from the allocation targets when they all
+      // sit on ONE account that differs from the side default — e.g. employee
+      // reimbursements settling expense reports on the configured
+      // employee-payable control. The application writer already requires the
+      // source and every target to share a control account, so deriving the
+      // targets' account is the only way such a payment can post at all;
+      // mixed-account allocations keep the default and fail loudly below.
+      const targetAccounts = (await db.execute(sql`
+        select distinct account_id from journal_lines where id in ${allocs.map((a) => a.openLineId)}
+      `)) as unknown as { rows: { account_id: string }[] };
+      const derived = targetAccounts.rows.length === 1 ? targetAccounts.rows[0]!.account_id : null;
+      if (derived && derived !== controlAccountId) {
+        controlAccountId = derived;
+        // Persist the derived control so the posting rule (controlOverride)
+        // and any later GL regeneration reproduce the same projection.
+        await db.execute(sql`
+          update documents
+             set custom = jsonb_set(coalesce(custom, '{}'::jsonb), '{controlAccountId}', to_jsonb(${derived}::text), true)
+           where id = ${doc.id} and org_id = ${doc.orgId}`);
+        doc.custom = { ...(doc.custom as Record<string, unknown> ?? {}), controlAccountId: derived };
+      }
+    }
     const entryId = await postDocument(doc.id, deps, { deferEffects: true });
     const sourceResult = (await db.execute(sql`
       select jl.id, jl.amount, jl.currency, jl.txn_amount, jl.account_id, jl.party_id,

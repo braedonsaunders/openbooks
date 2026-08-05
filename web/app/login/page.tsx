@@ -1,6 +1,6 @@
 'use client'
 
-import { Suspense, useState } from 'react'
+import { Suspense, useEffect, useState } from 'react'
 import type { CSSProperties } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { useTranslations } from 'next-intl'
@@ -75,12 +75,27 @@ function HeroBook({ className }: { className?: string }) {
 function LoginForm() {
   const t = useTranslations('login')
   const tCommon = useTranslations('common')
-  const [email, setEmail] = useState('')
-  const [password, setPassword] = useState('')
-  const [error, setError] = useState<string | null>(null)
-  const [busy, setBusy] = useState(false)
   const router = useRouter()
   const params = useSearchParams()
+  const [email, setEmail] = useState('')
+  const [password, setPassword] = useState('')
+  const [mfaCode, setMfaCode] = useState('')
+  const [mfaRequired, setMfaRequired] = useState(params.get('mfa') === '1')
+  const [oidc, setOidc] = useState<{ enabled: boolean; label: string }>({ enabled: false, label: '' })
+  const [error, setError] = useState<string | null>(null)
+  const [busy, setBusy] = useState(false)
+
+  useEffect(() => {
+    let active = true
+    fetch('/api/auth/methods', { cache: 'no-store' })
+      .then((response) => response.ok ? response.json() : null)
+      .then((methods) => {
+        if (active && methods?.oidc) setOidc({ enabled: true, label: methods.oidcLabel || t('sso') })
+      })
+      .catch(() => undefined)
+    if (params.get('error') === 'sso') setError(t('ssoFailed'))
+    return () => { active = false }
+  }, [params, t])
 
   async function submit(e: React.FormEvent) {
     e.preventDefault()
@@ -89,13 +104,17 @@ function LoginForm() {
     const res = await fetch('/api/login', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ email, password }),
+      body: JSON.stringify(mfaRequired ? { mfaCode } : { email, password }),
     })
-    if (res.ok) {
+    if (res.status === 202) {
+      setMfaRequired(true)
+      setPassword('')
+      setBusy(false)
+    } else if (res.ok) {
       router.push(params.get('next') ?? '/')
       router.refresh()
     } else {
-      setError(t('invalidCredentials'))
+      setError(mfaRequired ? t('invalidMfa') : t('invalidCredentials'))
       setBusy(false)
     }
   }
@@ -117,39 +136,73 @@ function LoginForm() {
           </div>
 
           <form onSubmit={submit} className="space-y-4">
-            <div className="space-y-1.5">
-              <Label htmlFor="email">{tCommon('labels.email')}</Label>
-              <Input
-                id="email"
-                type="email"
-                autoComplete="email"
-                autoFocus
-                required
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                className="h-11"
-              />
-            </div>
-            <div className="space-y-1.5">
-              <Label htmlFor="password">{t('password')}</Label>
-              <Input
-                id="password"
-                type="password"
-                autoComplete="current-password"
-                required
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                className="h-11"
-              />
-            </div>
+            {mfaRequired ? (
+              <div className="space-y-2">
+                <Label htmlFor="mfa-code">{t('mfaCode')}</Label>
+                <Input
+                  id="mfa-code"
+                  autoComplete="one-time-code"
+                  autoFocus
+                  required
+                  value={mfaCode}
+                  onChange={(e) => setMfaCode(e.target.value)}
+                  placeholder={t('mfaPlaceholder')}
+                  className="h-11 font-mono tracking-wider"
+                />
+                <p className="text-xs text-slate-500 dark:text-slate-400">{t('mfaHelp')}</p>
+              </div>
+            ) : (
+              <>
+                <div className="space-y-1.5">
+                  <Label htmlFor="email">{tCommon('labels.email')}</Label>
+                  <Input
+                    id="email"
+                    type="email"
+                    autoComplete="email"
+                    autoFocus
+                    required
+                    value={email}
+                    onChange={(e) => setEmail(e.target.value)}
+                    className="h-11"
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <Label htmlFor="password">{t('password')}</Label>
+                  <Input
+                    id="password"
+                    type="password"
+                    autoComplete="current-password"
+                    required
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    className="h-11"
+                  />
+                </div>
+              </>
+            )}
             {error ? (
               <p className="text-sm text-red-600 dark:text-red-400" role="alert">
                 {error}
               </p>
             ) : null}
             <Button type="submit" disabled={busy} className="h-11 w-full text-base font-semibold">
-              {busy ? t('signingIn') : t('signIn')}
+              {busy ? t('signingIn') : mfaRequired ? t('verify') : t('signIn')}
             </Button>
+            {!mfaRequired && oidc.enabled ? (
+              <>
+                <div className="flex items-center gap-3 text-xs uppercase tracking-wider text-slate-400">
+                  <span className="h-px flex-1 bg-slate-200 dark:bg-slate-700" />
+                  {t('or')}
+                  <span className="h-px flex-1 bg-slate-200 dark:bg-slate-700" />
+                </div>
+                <a
+                  href={`/api/auth/oidc/start?next=${encodeURIComponent(params.get('next') ?? '/')}`}
+                  className="flex h-11 w-full items-center justify-center rounded-md border border-slate-300 bg-white px-4 text-sm font-semibold text-slate-900 hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-900 dark:text-white dark:hover:bg-slate-800"
+                >
+                  {oidc.label}
+                </a>
+              </>
+            ) : null}
           </form>
         </CardContent>
       </Card>

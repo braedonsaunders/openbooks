@@ -24,6 +24,7 @@ interface PatchBody {
   subsidiaryId?: string | null
   subsidiaryIncludeChildren?: boolean
   reconcilable?: boolean
+  monetary?: boolean | null
   requiredDimensions?: string[]
   custom?: Record<string, unknown>
 }
@@ -178,6 +179,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
           subsidiary_id = ${subsidiaryId !== undefined ? subsidiaryId : sql`subsidiary_id`},
           subsidiary_include_children = ${body.subsidiaryIncludeChildren !== undefined ? body.subsidiaryIncludeChildren : sql`subsidiary_include_children`},
           reconcilable = ${body.reconcilable !== undefined ? body.reconcilable : sql`reconcilable`},
+          monetary = ${body.monetary !== undefined ? body.monetary : sql`monetary`},
           required_dimensions = ${requiredDimensions !== undefined ? JSON.stringify(requiredDimensions) : sql`required_dimensions`}::jsonb,
           custom = ${custom !== undefined ? JSON.stringify(custom) : sql`custom`}::jsonb,
           updated_at = now(), updated_by = ${gate.user.id}

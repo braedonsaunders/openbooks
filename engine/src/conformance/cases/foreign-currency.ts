@@ -4,8 +4,9 @@
  * only by omission — this file cites IAS 21 as the operative source).
  */
 
-import { computeRevaluation } from "../../fx-revaluation.ts";
-import { runRevaluation } from "../../fx-revaluation.ts";
+import { sql } from "drizzle-orm";
+import { db } from "../../db.ts";
+import { computeRevaluation, runRevaluation } from "../../fx-revaluation.ts";
 import { capture, periodFor, postNewDocument, setSpotRate } from "../ledger-helpers.ts";
 import type { ConformanceCase } from "../types.ts";
 
@@ -89,10 +90,8 @@ export const FOREIGN_CURRENCY_CASES: readonly ConformanceCase[] = [
           "Non-monetary items measured at historical cost are translated using the exchange rate at the date of the transaction and are not retranslated.",
       },
     ],
-    support: "partial",
+    support: "supported",
     tier: "ledger",
-    limitation:
-      "The monetary-item population is narrower than IAS 21.16 requires. Period-end retranslation covers accounts typed as bank, receivable and payable only. Foreign-currency loans and other long-term debt, accrued liabilities, and other monetary balances carried outside those three account types are NOT retranslated and must be adjusted by manual journal.",
     assertion:
       "A foreign-currency receivable is restated to the closing rate at the reporting date, the movement is recognised immediately in profit or loss, and the revenue already recognised at the transaction-date rate is left untouched.",
     facts: [
@@ -131,6 +130,85 @@ export const FOREIGN_CURRENCY_CASES: readonly ConformanceCase[] = [
 
       // Measured AS AT the reporting date: the process also books the mirror
       // reversal into the next period, which a 31 July balance sheet excludes.
+      const revaluation = await capture(
+        ctx,
+        "period-end retranslation at 2026-07-31",
+        async () => {
+          const result = await runRevaluation(ledger.orgId, periodId, ledger.actorId);
+          if (result.problems.length > 0) {
+            throw new Error(`revaluation reported problems: ${result.problems.join("; ")}`);
+          }
+        },
+        { asOf: "2026-07-31" },
+      );
+      return { entries: [revaluation] };
+    },
+  },
+
+  {
+    id: "fx-long-term-debt-retranslated",
+    title: "A foreign-currency loan is a monetary item and is retranslated at the closing rate",
+    citations: [
+      {
+        standard: "IAS 21",
+        reference: "IAS 21.16",
+        kind: "requirement",
+        requirement:
+          "Monetary items are units of currency held and assets and liabilities to be received or paid in a fixed or determinable number of units of currency — including debt, not only trade balances.",
+      },
+      {
+        standard: "IAS 21",
+        reference: "IAS 21.23(a)",
+        kind: "requirement",
+        requirement:
+          "At the end of each reporting period foreign currency monetary items are translated using the closing rate.",
+      },
+    ],
+    support: "supported",
+    tier: "ledger",
+    assertion:
+      "A foreign-currency borrowing carried as long-term debt — outside the bank/receivable/payable account types — is retranslated at the closing rate once the account is designated a monetary item, so debt-heavy balance sheets are not silently left at historical rates.",
+    facts: [
+      "The reporting currency is CAD.",
+      "A loan of USD 10,000.00 is drawn on 2026-07-15 at 1.3500: cash CAD 13,500.00, loan CAD 13,500.00.",
+      "The loan account is a long-term liability designated as a monetary item.",
+      "The closing rate on 2026-07-31 is 1.4000.",
+      "Both the USD cash (a default monetary item) and the USD loan restate by CAD 500.00 in opposite directions; the exchange loss on the loan offsets the gain on the cash.",
+    ],
+    expected: {
+      entries: [
+        {
+          step: "period-end retranslation at 2026-07-31",
+          lines: [
+            { role: "bank", amount: "500.0000" },
+            { role: "loanPayable", amount: "-500.0000" },
+          ],
+        },
+      ],
+    },
+    run: async (ctx) => {
+      const ledger = ctx.ledger!;
+      // Designate the loan account a monetary item (the account-level setting
+      // an administrator edits on the chart of accounts).
+      await db.execute(sql`
+        update accounts set monetary = true
+         where id = ${ctx.roles.loanPayable} and org_id = ${ledger.orgId}`);
+
+      await setSpotRate(ledger, "USD", "CAD", "2026-07-15", "1.35");
+      await postNewDocument(ctx, {
+        kind: "journal",
+        number: "CONF-FX-3",
+        currency: "USD",
+        fxRate: "1.35",
+        date: "2026-07-15",
+        lines: [
+          { accountId: ctx.roles.bank, quantity: "1", unitPrice: "10000", amount: "10000" },
+          { accountId: ctx.roles.loanPayable, quantity: "1", unitPrice: "-10000", amount: "-10000" },
+        ],
+      });
+
+      await setSpotRate(ledger, "USD", "CAD", "2026-07-31", "1.40");
+      const periodId = await periodFor(ledger, "2026-07-31");
       const revaluation = await capture(
         ctx,
         "period-end retranslation at 2026-07-31",

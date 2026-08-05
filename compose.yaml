@@ -11,6 +11,13 @@ x-openbooks-runtime-environment: &openbooks-runtime-environment
   OPENBOOKS_INTERNAL_TOKEN: ${OPENBOOKS_INTERNAL_TOKEN:?OPENBOOKS_INTERNAL_TOKEN is required}
   OPENBOOKS_APP_URL: ${OPENBOOKS_APP_URL:-http://localhost:4780}
   APP_BASE_URL: ${OPENBOOKS_APP_URL:-http://localhost:4780}
+  # Keep proxy-derived client addresses disabled unless every inbound request
+  # crosses a trusted proxy that overwrites forwarding headers.
+  OPENBOOKS_TRUST_PROXY: ${OPENBOOKS_TRUST_PROXY:-0}
+  OPENBOOKS_OIDC_ISSUER: ${OPENBOOKS_OIDC_ISSUER:-}
+  OPENBOOKS_OIDC_CLIENT_ID: ${OPENBOOKS_OIDC_CLIENT_ID:-}
+  OPENBOOKS_OIDC_CLIENT_SECRET: ${OPENBOOKS_OIDC_CLIENT_SECRET:-}
+  OPENBOOKS_OIDC_LABEL: ${OPENBOOKS_OIDC_LABEL:-}
   S3_ENDPOINT: http://minio:9000
   S3_REGION: us-east-1
   S3_ACCESS_KEY_ID: ${MINIO_ROOT_USER:?MINIO_ROOT_USER is required}
@@ -19,7 +26,8 @@ x-openbooks-runtime-environment: &openbooks-runtime-environment
 
 services:
   postgres:
-    image: postgres:16-alpine
+    # Exact release tags make upgrades operator-controlled and reproducible.
+    image: postgres:16.9-alpine3.22@sha256:7c688148e5e156d0e86df7ba8ae5a05a2386aaec1e2ad8e6d11bdf10504b1fb7
     environment:
       POSTGRES_DB: openbooks
       POSTGRES_USER: openbooks_owner
@@ -34,7 +42,7 @@ services:
     restart: unless-stopped
 
   redis:
-    image: redis:7-alpine
+    image: redis:7.4.5-alpine3.21@sha256:bb186d083732f669da90be8b0f975a37812b15e913465bb14d845db72a4e3e08
     command:
       - redis-server
       - --appendonly
@@ -53,7 +61,7 @@ services:
     restart: unless-stopped
 
   minio:
-    image: minio/minio:latest
+    image: minio/minio:RELEASE.2025-04-22T22-12-26Z@sha256:a1ea29fa28355559ef137d71fc570e508a214ec84ff8083e39bc5428980b015e
     command: server /data --console-address ":9001"
     environment:
       MINIO_ROOT_USER: ${MINIO_ROOT_USER}
@@ -68,7 +76,7 @@ services:
     restart: unless-stopped
 
   minio-init:
-    image: minio/mc:latest
+    image: minio/mc:RELEASE.2025-04-16T18-13-26Z@sha256:aead63c77f9db9107f1696fb08ecb0faeda23729cde94b0f663edf4fe09728e3
     depends_on:
       minio:
         condition: service_healthy
@@ -84,7 +92,7 @@ services:
     restart: "no"
 
   bootstrap:
-    image: ghcr.io/braedonsaunders/openbooks:${OPENBOOKS_IMAGE_TAG:-latest}
+    image: ${OPENBOOKS_IMAGE:?OPENBOOKS_IMAGE must be a post-clean, scanned image pinned by digest}
     pull_policy: missing
     command: ["node", "scripts/bootstrap.mjs"]
     environment:
@@ -107,7 +115,7 @@ services:
     restart: "no"
 
   web:
-    image: ghcr.io/braedonsaunders/openbooks:${OPENBOOKS_IMAGE_TAG:-latest}
+    image: ${OPENBOOKS_IMAGE:?OPENBOOKS_IMAGE must be a post-clean, scanned image pinned by digest}
     pull_policy: missing
     command: ["node", "web/server.js"]
     environment:
@@ -134,7 +142,7 @@ services:
     restart: unless-stopped
 
   worker:
-    image: ghcr.io/braedonsaunders/openbooks:${OPENBOOKS_IMAGE_TAG:-latest}
+    image: ${OPENBOOKS_IMAGE:?OPENBOOKS_IMAGE must be a post-clean, scanned image pinned by digest}
     pull_policy: missing
     command: ["node", "scripts/worker.mjs"]
     environment:

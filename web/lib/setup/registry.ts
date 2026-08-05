@@ -297,6 +297,37 @@ const CONSOLIDATED_RATE_SOURCES = [
   { value: 'manual', labelKey: 'options.rateSource.manual' },
 ]
 
+// --- Payroll ----------------------------------------------------------------
+
+// Values match pay_schedules.frequency (schema/src/payroll.ts). Periods per
+// year stays an explicit field so 53/27-period years can be configured.
+const PAY_FREQUENCIES = [
+  { value: 'weekly', labelKey: 'options.payFrequency.weekly' },
+  { value: 'biweekly', labelKey: 'options.payFrequency.biweekly' },
+  { value: 'semi_monthly', labelKey: 'options.payFrequency.semiMonthly' },
+  { value: 'monthly', labelKey: 'options.payFrequency.monthly' },
+]
+
+const PAY_COMPONENT_KINDS = [
+  { value: 'earning', labelKey: 'options.payComponentKind.earning' },
+  { value: 'deduction', labelKey: 'options.payComponentKind.deduction' },
+  { value: 'employer_contribution', labelKey: 'options.payComponentKind.employerContribution' },
+]
+
+const PAY_COMPONENT_BASES = [
+  { value: 'fixed_amount', labelKey: 'options.payComponentBasis.fixedAmount' },
+  { value: 'per_hour', labelKey: 'options.payComponentBasis.perHour' },
+  { value: 'percent_of_gross', labelKey: 'options.payComponentBasis.percentOfGross' },
+]
+
+// Pre-tax treatment per the T4127 factors (F, U1, F2); 'none' = after-tax.
+const PAY_TAX_TREATMENTS = [
+  { value: 'none', labelKey: 'options.payTaxTreatment.none' },
+  { value: 'pension_f', labelKey: 'options.payTaxTreatment.pensionF' },
+  { value: 'union_dues', labelKey: 'options.payTaxTreatment.unionDues' },
+  { value: 'alimony', labelKey: 'options.payTaxTreatment.alimony' },
+]
+
 // --- Subcontractor compliance ----------------------------------------------
 
 const COMPLIANCE_CATEGORIES = [
@@ -1292,6 +1323,99 @@ export const SETUP_ENTITIES: SetupEntity[] = [
       { key: 'billMultiplier', kind: 'decimal', keepDefault: true },
       { key: 'isBillableDefault', kind: 'boolean' },
       { key: 'showOnFieldTicket', kind: 'boolean' },
+      { key: 'isActive', kind: 'boolean' },
+    ],
+  },
+  {
+    key: 'pay-schedules',
+    table: 'pay_schedules',
+    groupKey: 'workforce',
+    featureKey: 'payroll',
+    iconKey: 'calendar',
+    orgScoped: true,
+    actorCols: true,
+    naturalKey: 'name',
+    hasActive: true,
+    columns: [
+      { key: 'name', kind: 'text' },
+      { key: 'frequency', kind: 'badge', options: PAY_FREQUENCIES },
+      { key: 'periodsPerYear', kind: 'number' },
+      { key: 'anchorPeriodEnd', kind: 'date' },
+      { key: 'payDateOffsetDays', kind: 'number' },
+      { key: 'isActive', kind: 'badge-active' },
+    ],
+    fields: [
+      { key: 'name', kind: 'text', required: true },
+      { key: 'frequency', kind: 'select', required: true, options: PAY_FREQUENCIES },
+      { key: 'periodsPerYear', kind: 'integer', required: true },
+      { key: 'anchorPeriodEnd', kind: 'date', required: true },
+      { key: 'payDateOffsetDays', kind: 'integer', keepDefault: true },
+      { key: 'isDefault', kind: 'boolean' },
+      { key: 'isActive', kind: 'boolean' },
+    ],
+  },
+  {
+    key: 'pay-components',
+    table: 'pay_components',
+    groupKey: 'workforce',
+    featureKey: 'payroll',
+    iconKey: 'coins',
+    orgScoped: true,
+    actorCols: true,
+    naturalKey: 'code',
+    orderBy: 'sequence, code',
+    hasActive: true,
+    columns: [
+      { key: 'code', kind: 'code' },
+      { key: 'name', kind: 'text' },
+      { key: 'kind', kind: 'badge', options: PAY_COMPONENT_KINDS },
+      { key: 'basis', kind: 'badge', options: PAY_COMPONENT_BASES },
+      { key: 'sequence', kind: 'number' },
+      { key: 'isActive', kind: 'badge-active' },
+    ],
+    fields: [
+      { key: 'code', kind: 'text', required: true, lockedOnEdit: true },
+      { key: 'name', kind: 'text', required: true },
+      { key: 'kind', kind: 'select', required: true, options: PAY_COMPONENT_KINDS },
+      { key: 'basis', kind: 'select', keepDefault: true, defaultValue: 'fixed_amount', options: PAY_COMPONENT_BASES },
+      { key: 'value', kind: 'decimal' },
+      { key: 'taxable', kind: 'boolean', defaultValue: true },
+      { key: 'pensionable', kind: 'boolean', defaultValue: true },
+      { key: 'insurable', kind: 'boolean', defaultValue: true },
+      { key: 'vacationable', kind: 'boolean', defaultValue: true },
+      { key: 'nonPeriodic', kind: 'boolean' },
+      { key: 'taxTreatment', kind: 'select', keepDefault: true, defaultValue: 'none', options: PAY_TAX_TREATMENTS },
+      { key: 'expenseAccountId', kind: 'ref', ref: 'accounts' },
+      { key: 'liabilityAccountId', kind: 'ref', ref: 'accounts' },
+      { key: 'remittancePartyId', kind: 'ref', ref: 'vendors' },
+      { key: 'sequence', kind: 'integer', keepDefault: true },
+      { key: 'isActive', kind: 'boolean' },
+    ],
+  },
+  {
+    // Collective agreements (union/local + remittance vendor). Classifications
+    // and fringes are agreement-scoped children that need a parent detail
+    // surface to edit — they stay off the registry until that surface exists.
+    key: 'union-agreements',
+    table: 'union_agreements',
+    groupKey: 'workforce',
+    featureKey: 'payroll',
+    iconKey: 'users',
+    orgScoped: true,
+    actorCols: true,
+    naturalKey: 'name',
+    hasActive: true,
+    columns: [
+      { key: 'name', kind: 'text' },
+      { key: 'unionName', kind: 'text' },
+      { key: 'localNumber', kind: 'text' },
+      { key: 'isActive', kind: 'badge-active' },
+    ],
+    fields: [
+      { key: 'name', kind: 'text', required: true },
+      { key: 'unionName', kind: 'text' },
+      { key: 'localNumber', kind: 'text' },
+      { key: 'remittancePartyId', kind: 'ref', ref: 'vendors' },
       { key: 'isActive', kind: 'boolean' },
     ],
   },

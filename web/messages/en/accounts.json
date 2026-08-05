@@ -3,7 +3,10 @@
     "title": "Chart of Accounts",
     "description": "Natural-sign current balances (balance-sheet cumulative, P&L this fiscal year), rolled up through summary accounts.",
     "searchPlaceholder": "Search number or name…",
-    "views": { "list": "List", "hierarchy": "Hierarchy" },
+    "views": {
+      "list": "List",
+      "hierarchy": "Hierarchy"
+    },
     "newAccount": "New account",
     "viewRegister": "View register",
     "expand": "Expand account",
@@ -81,7 +84,11 @@
       "account_changed": "This account changed while you were editing it. Reopen it and try again.",
       "invalid_idempotency_key": "The account request could not be safely retried.",
       "save_failed": "The account could not be saved."
-    }
+    },
+    "monetary": "FX retranslation (monetary item)",
+    "monetaryDefault": "By account type",
+    "monetaryAlways": "Always retranslate",
+    "monetaryNever": "Never retranslate"
   },
   "register": {
     "notFound": "Account not found",

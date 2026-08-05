@@ -81,6 +81,7 @@ export function AccountDrawer({
     subsidiaryId: account.subsidiary_id ?? '',
     subsidiaryIncludeChildren: account.subsidiary_include_children !== false,
     reconcilable: account.reconcilable === true,
+    monetary: typeof account.monetary === 'boolean' ? String(account.monetary) : '',
     requiredDimensions: Array.isArray(account.required_dimensions) ? account.required_dimensions as string[] : [],
     custom: (account.custom ?? {}) as Record<string, unknown>,
   }), [account, createMode])
@@ -122,6 +123,7 @@ export function AccountDrawer({
         parentId: form.parentId || null,
         currencyRestriction: form.currencyRestriction || null,
         subsidiaryId: form.subsidiaryId || null,
+        monetary: form.monetary === '' ? null : form.monetary === 'true',
       }),
     })
     const data = await response.json().catch(() => ({}))
@@ -230,6 +232,22 @@ export function AccountDrawer({
             {editable ? (
               <SearchSelect value={form.currencyRestriction} onChange={(v) => set('currencyRestriction', v)} options={currencies} clearable emptyLabel={t('drawer.anyCurrency')} ariaLabel={t('drawer.currencyRestriction')} />
             ) : value(form.currencyRestriction || t('drawer.anyCurrency'))}
+          </div>
+          <div className={fieldClass}>
+            <Label>{t('drawer.monetary')}</Label>
+            {editable ? (
+              <SearchSelect
+                value={form.monetary}
+                onChange={(v) => set('monetary', v)}
+                options={[
+                  { value: 'true', label: t('drawer.monetaryAlways') },
+                  { value: 'false', label: t('drawer.monetaryNever') },
+                ]}
+                clearable
+                emptyLabel={t('drawer.monetaryDefault')}
+                ariaLabel={t('drawer.monetary')}
+              />
+            ) : value(form.monetary === 'true' ? t('drawer.monetaryAlways') : form.monetary === 'false' ? t('drawer.monetaryNever') : t('drawer.monetaryDefault'))}
           </div>
           {subsidiaries.length > 0 ? <div className={fieldClass}>
             <Label>{tc('labels.subsidiary')}</Label>

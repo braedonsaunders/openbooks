@@ -6,7 +6,7 @@
 #         database role.
 
 # --- deps: workspace-aware install ------------------------------------------
-FROM node:24-bookworm-slim AS deps
+FROM node:24-bookworm-slim@sha256:cd84903a12dbd26b46f1f3b8144a2568c41c5d37ddd0c7a80a34c7a19786b35f AS deps
 WORKDIR /app
 COPY package.json package-lock.json ./
 COPY schema/package.json schema/
@@ -44,7 +44,7 @@ RUN npx esbuild engine/src/worker/index.ts \
       --outfile=/out/worker.mjs
 
 # --- runtime ------------------------------------------------------------------
-FROM node:24-bookworm-slim AS runtime
+FROM node:24-bookworm-slim@sha256:cd84903a12dbd26b46f1f3b8144a2568c41c5d37ddd0c7a80a34c7a19786b35f AS runtime
 WORKDIR /app
 ARG OPENBOOKS_VERSION=development
 # HTML-authored reports and forms are printed by the shared Chromium renderer.
@@ -52,11 +52,11 @@ ARG OPENBOOKS_VERSION=development
 # image so PDF availability and typography never depend on the host machine.
 RUN apt-get update \
     && apt-get install -y --no-install-recommends \
-      chromium \
-      fonts-liberation \
-      fonts-noto-core \
-      fonts-noto-cjk \
-      fonts-noto-color-emoji \
+      chromium=151.0.7922.71-1~deb12u1 \
+      fonts-liberation=1:1.07.4-11 \
+      fonts-noto-core=20201225-1 \
+      fonts-noto-cjk=1:20220127+repack1-1 \
+      fonts-noto-color-emoji=2.042-0+deb12u1 \
     && rm -rf /var/lib/apt/lists/*
 ENV NODE_ENV=production \
     OPENBOOKS_VERSION=${OPENBOOKS_VERSION} \

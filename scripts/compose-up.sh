@@ -4,6 +4,26 @@ set -eu
 repo_dir=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
 env_file="$repo_dir/.env.compose"
 
+configured_openbooks_image=${OPENBOOKS_IMAGE:-}
+if [ -z "$configured_openbooks_image" ] && [ -f "$env_file" ]; then
+  configured_openbooks_image=$(sed -n 's/^OPENBOOKS_IMAGE=//p' "$env_file" | tail -1)
+fi
+if [ -z "$configured_openbooks_image" ]; then
+  echo "OPENBOOKS_IMAGE is required. Use only a post-clean, scanned image pinned by digest." >&2
+  echo "Example: OPENBOOKS_IMAGE=registry.example/openbooks@sha256:<64 hex> ./scripts/compose-up.sh" >&2
+  exit 1
+fi
+if ! printf '%s\n' "$configured_openbooks_image" | grep -Eq '^.+@sha256:[0-9a-f]{64}$'; then
+  echo "OPENBOOKS_IMAGE must be an immutable sha256 digest reference, not a tag." >&2
+  exit 1
+fi
+case "$configured_openbooks_image" in
+  example.invalid/*)
+    echo "The example.invalid OpenBooks image is intentionally non-runnable; replace it with the approved post-clean digest." >&2
+    exit 1
+    ;;
+esac
+
 random_hex() {
   byte_count=$1
   if command -v openssl >/dev/null 2>&1; then
@@ -50,7 +70,7 @@ if [ ! -f "$env_file" ]; then
 
   {
     printf '%s\n' \
-      'OPENBOOKS_IMAGE_TAG=latest' \
+      "OPENBOOKS_IMAGE=$configured_openbooks_image" \
       'OPENBOOKS_PORT=4780' \
       'OPENBOOKS_APP_URL=http://localhost:4780' \
       "POSTGRES_OWNER_PASSWORD=$postgres_owner_password" \
@@ -61,7 +81,7 @@ if [ ! -f "$env_file" ]; then
       "SESSION_SECRET=$session_secret" \
       "OPENBOOKS_DATA_KEY=$data_key" \
       "OPENBOOKS_INTERNAL_TOKEN=$internal_token" \
-      'ORG_NAME=the \
+      'ORG_NAME=OpenBooks' \
       "ORG_CURRENCY=$org_currency" \
       "ORG_COUNTRY=$org_country" \
       'ADMIN_EMAIL=admin@openbooks.local' \

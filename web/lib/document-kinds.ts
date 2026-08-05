@@ -102,6 +102,14 @@ export const DOC_KINDS: Record<string, DocKindConfig> = {
     partyRole: null, accountTypes: null, hasTax: false, hasDueDate: false, hasReference: true,
     fundingSource: null, isOpenItem: false, showsBalance: false, directPost: true,
   },
+  // Pay run: committed payroll GL projection (signed lines, like a journal).
+  // Lines are machine-built by engine/src/payroll-run.ts commitPayRun — the
+  // drawer never edits them; the payroll workspace is the editing surface.
+  pay_run: {
+    kind: 'pay_run', family: 'gl', numberPrefix: 'PAY-', permNamespace: 'gl', i18n: 'banking',
+    partyRole: null, accountTypes: null, hasTax: false, hasDueDate: false, hasReference: false,
+    fundingSource: null, isOpenItem: false, showsBalance: false, directPost: true,
+  },
 }
 
 export const AP_KINDS = ['vendor_bill', 'vendor_credit'] as const

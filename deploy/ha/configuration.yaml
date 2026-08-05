@@ -1,0 +1,16 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: openbooks
+  labels:
+    app.kubernetes.io/name: openbooks
+data:
+  NODE_ENV: production
+  HOSTNAME: "0.0.0.0"
+  PORT: "3000"
+  XDG_CACHE_HOME: "/tmp/.cache"
+  XDG_CONFIG_HOME: "/tmp/.config"
+  OPENBOOKS_APP_URL: "https://books.example.com"
+  APP_BASE_URL: "https://books.example.com"
+  S3_REGION: "us-east-1"
+  S3_BUCKET: "openbooks"

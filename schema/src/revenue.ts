@@ -3,6 +3,7 @@ import {
   date,
   index,
   integer,
+  jsonb,
   pgTable,
   text,
   timestamp,
@@ -118,6 +119,14 @@ export const revenueContracts = pgTable(
     startsOn: date("starts_on"),
     endsOn: date("ends_on"),
     totalTransactionPrice: money("total_transaction_price").notNull().default("0"),
+    /**
+     * ASC 606 step-3 pricing evidence: fixed consideration, the variable-
+     * consideration estimate and its constraint (606-10-32-11 / IFRS 15.56),
+     * and any significant-financing-component split (606-10-32-15 /
+     * IFRS 15.60). Written by the engine's contract-pricing service; the
+     * resolved price lands in `total_transaction_price`.
+     */
+    pricing: jsonb("pricing").notNull().default({}),
     currency: text("currency"),
     memo: text("memo"),
     ...auditColumns,

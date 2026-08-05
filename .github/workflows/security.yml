@@ -1,0 +1,138 @@
+name: security
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  schedule:
+    - cron: "17 6 * * 1"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: security-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  dependency-audit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: 24
+          cache: npm
+      - name: Reject moderate-or-higher production dependency advisories
+        run: npm audit --omit=dev --audit-level=moderate
+
+  repository-scan:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - name: Scan dependencies and deployment configuration
+        uses: aquasecurity/trivy-action@a9c7b0f06e461e9d4b4d1711f154ee024b8d7ab8 # v0.36.0
+        with:
+          scan-type: fs
+          scan-ref: .
+          scanners: vuln,misconfig
+          severity: HIGH,CRITICAL
+          ignore-unfixed: true
+          exit-code: "1"
+
+  history-hygiene:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          fetch-depth: 0
+      - name: Reject private-data provenance in reachable history
+        run: npm run check:history-hygiene
+      - name: Scan the pushed commit range for secrets
+        uses: gitleaks/gitleaks-action@e0c47f4f8be36e29cdc102c57e68cb5cbf0e8d1e # v3.0.0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  dynamic-baseline:
+    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    services:
+      postgres:
+        image: postgres:16.9-alpine3.22@sha256:7c688148e5e156d0e86df7ba8ae5a05a2386aaec1e2ad8e6d11bdf10504b1fb7
+        env:
+          POSTGRES_USER: openbooks_owner
+          POSTGRES_PASSWORD: openbooks-owner-security-test-password
+          POSTGRES_DB: openbooks_security
+        ports:
+          - 5433:5432
+        options: >-
+          --health-cmd "pg_isready -U openbooks_owner -d openbooks_security"
+          --health-interval 5s --health-timeout 5s --health-retries 20
+      redis:
+        image: redis:7.4.5-alpine3.21@sha256:bb186d083732f669da90be8b0f975a37812b15e913465bb14d845db72a4e3e08
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s --health-timeout 5s --health-retries 20
+    env:
+      OPENBOOKS_DB_URL: postgres://openbooks_owner:openbooks-owner-security-test-password@localhost:5433/openbooks_security
+      OPENBOOKS_RUNTIME_DB_URL: postgres://openbooks_app:openbooks-runtime-security-test-password@localhost:5433/openbooks_security
+      OPENBOOKS_DB_PASSWORD: openbooks-runtime-security-test-password
+      OPENBOOKS_REDIS_URL: redis://localhost:6379
+      SESSION_SECRET: openbooks-security-test-secret-not-production
+      OPENBOOKS_DATA_KEY: 000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f
+      OPENBOOKS_INTERNAL_TOKEN: openbooks-security-test-internal-token
+      ORG_COUNTRY: US
+      ORG_CURRENCY: USD
+      ADMIN_EMAIL: security@openbooks.test
+      ADMIN_NAME: Security Test Admin
+      ADMIN_PASSWORD: security-test-password-123
+      PGPASSWORD: openbooks-owner-security-test-password
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - name: Bootstrap an isolated security-test database
+        run: npx tsx scripts/bootstrap.ts
+      - name: Build the production application
+        run: npm -w web run build
+      - name: Start the production application
+        run: |
+          npm -w web run start > openbooks-security-web.log 2>&1 &
+          for _ in $(seq 1 60); do
+            if curl --fail --silent http://127.0.0.1:4780/api/v1/health >/dev/null; then
+              exit 0
+            fi
+            sleep 2
+          done
+          cat openbooks-security-web.log
+          exit 1
+      - name: Bounded health-endpoint load probe
+        run: >-
+          npm run test:load -- --base-url http://127.0.0.1:4780
+          --duration-ms 10000 --concurrency 8 --max-error-rate 0
+          --max-p95-ms 1500
+      - name: OWASP ZAP unauthenticated baseline
+        uses: zaproxy/action-baseline@6c5a007541891231cd9e0ddec25d4f25c59c9874 # v0.15.0
+        with:
+          target: http://127.0.0.1:4780
+          docker_name: ghcr.io/zaproxy/zaproxy@sha256:8d387b1a63e3425beef4846e39719f5af2a787753af2d8b6558c6257d7a577a2
+          fail_action: true
+          allow_issue_writing: false
+          artifact_name: zap-baseline
+      - name: Upload application log
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: security-web-log
+          path: openbooks-security-web.log
+          if-no-files-found: ignore

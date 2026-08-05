@@ -3,7 +3,10 @@
     "title": "Plano de Contas",
     "description": "Saldos atuais em sinal natural (balanço patrimonial acumulado, DRE no ano fiscal corrente), consolidados através das contas de resumo.",
     "searchPlaceholder": "Buscar número ou nome…",
-    "views": { "list": "Lista", "hierarchy": "Hierarquia" },
+    "views": {
+      "list": "Lista",
+      "hierarchy": "Hierarquia"
+    },
     "badges": {
       "inactive": "inativa",
       "summary": "resumo"
@@ -70,7 +73,11 @@
       "invalid_custom_fields": "Revise os valores dos campos personalizados.",
       "number_in_use": "Esse número de conta já está em uso.",
       "save_failed": "Não foi possível salvar a conta."
-    }
+    },
+    "monetary": "Reconversão cambial (item monetário)",
+    "monetaryDefault": "Pelo tipo de conta",
+    "monetaryAlways": "Sempre reconverter",
+    "monetaryNever": "Nunca reconverter"
   },
   "register": {
     "notFound": "Conta não encontrada",

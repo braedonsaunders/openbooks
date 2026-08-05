@@ -82,6 +82,7 @@ export function SetupNav({
   crmEnabled = true,
   bankFeedsEnabled = false,
   onlinePaymentsEnabled = false,
+  payrollEnabled = false,
 }: {
   canExport: boolean
   canImport: boolean
@@ -93,6 +94,7 @@ export function SetupNav({
   crmEnabled?: boolean
   bankFeedsEnabled?: boolean
   onlinePaymentsEnabled?: boolean
+  payrollEnabled?: boolean
 }) {
   const t = useTranslations('admin.setup')
   const tClose = useTranslations('close.setup')
@@ -201,6 +203,17 @@ export function SetupNav({
                     label: t(`entities.${e.key}.title`),
                     iconKey: e.iconKey,
                   })),
+                ]
+              : group.key === 'workforce'
+              ? [
+                  ...(byGroup.get(group.key) ?? []).map((e) => ({
+                    href: `/admin/setup/${e.key}`,
+                    label: t(`entities.${e.key}.title`),
+                    iconKey: e.iconKey,
+                  })),
+                  ...(payrollEnabled
+                    ? [{ href: '/admin/setup/payroll', label: t('payroll.navTitle'), iconKey: 'payments' }]
+                    : []),
                 ]
               : group.key === 'assets'
               ? fixedAssetsEnabled

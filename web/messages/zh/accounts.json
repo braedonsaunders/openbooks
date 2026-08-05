@@ -3,7 +3,10 @@
     "title": "会计科目表",
     "description": "本位符号的当前余额（资产负债表为累计，损益表为本财年），通过汇总科目向上汇总。",
     "searchPlaceholder": "搜索编号或名称…",
-    "views": { "list": "列表", "hierarchy": "层级" },
+    "views": {
+      "list": "列表",
+      "hierarchy": "层级"
+    },
     "newAccount": "新建科目",
     "viewRegister": "查看明细账",
     "expand": "展开科目",
@@ -81,7 +84,11 @@
       "account_changed": "您编辑期间该科目已发生变化。请重新打开后再试。",
       "invalid_idempotency_key": "无法安全地重试该科目请求。",
       "save_failed": "无法保存该科目。"
-    }
+    },
+    "monetary": "外币重估（货币性项目）",
+    "monetaryDefault": "按账户类型",
+    "monetaryAlways": "始终重估",
+    "monetaryNever": "从不重估"
   },
   "register": {
     "notFound": "未找到科目",

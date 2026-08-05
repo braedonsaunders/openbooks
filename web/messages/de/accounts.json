@@ -3,7 +3,10 @@
     "title": "Kontenplan",
     "description": "Aktuelle Salden mit natürlichem Vorzeichen (Bilanz kumulativ, GuV im laufenden Geschäftsjahr), aggregiert über Sammelkonten.",
     "searchPlaceholder": "Nummer oder Name durchsuchen…",
-    "views": { "list": "Liste", "hierarchy": "Hierarchie" },
+    "views": {
+      "list": "Liste",
+      "hierarchy": "Hierarchie"
+    },
     "badges": {
       "inactive": "inaktiv",
       "summary": "Sammelkonto"
@@ -70,7 +73,11 @@
       "invalid_custom_fields": "Überprüfen Sie die Werte der benutzerdefinierten Felder.",
       "number_in_use": "Diese Kontonummer wird bereits verwendet.",
       "save_failed": "Das Konto konnte nicht gespeichert werden."
-    }
+    },
+    "monetary": "Währungsumrechnung (monetärer Posten)",
+    "monetaryDefault": "Nach Kontotyp",
+    "monetaryAlways": "Immer umrechnen",
+    "monetaryNever": "Nie umrechnen"
   },
   "register": {
     "notFound": "Konto nicht gefunden",

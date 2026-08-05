@@ -979,7 +979,14 @@ async function setDocumentTotalsFromEntry(docId: string): Promise<void> {
   // total); summing all positives double-counts it and overstates the invoice by
   // the holdback. Fall back to the positive-side sum for docs with no open item
   // (cash sales etc.). subtotal = total − tax.
-  await db.execute(sql`
+  //
+  // Runs under the governed amend flag: the target is a POSTED document, whose
+  // header financials are otherwise immutable at the database layer
+  // (documents_posted_financial_guard). This write is the engine deriving the
+  // header FROM the posted entry — the one direction that cannot drift.
+  await db.transaction(async (tx) => {
+    await tx.execute(sql`set local openbooks.amend = on`);
+    await tx.execute(sql`
     update documents d set
       total = coalesce(nullif(abs(j.oi), 0), j.pos, 0),
       tax_total = coalesce(abs(lt.tax), 0),
@@ -993,6 +1000,7 @@ async function setDocumentTotalsFromEntry(docId: string): Promise<void> {
       select sum(l.tax_amount) as tax from document_lines l where l.document_id = d2.id) lt on true
     where d.id = d2.id and d2.id = ${docId}
   `);
+  });
 }
 
 type SyncTx = Parameters<Parameters<typeof db.transaction>[0]>[0];

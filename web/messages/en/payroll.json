@@ -1,0 +1,150 @@
+{
+  "title": "Payroll",
+  "description": "Pay runs, employee payroll profiles, and CRA statutory withholdings.",
+  "tabs": {
+    "runs": "Pay runs",
+    "employees": "Employees ({count})"
+  },
+  "links": {
+    "paySchedules": "Pay schedules",
+    "payComponents": "Pay components"
+  },
+  "checklist": {
+    "incomplete": "{count, plural, one {# payroll control account is} other {# payroll control accounts are}} not configured:",
+    "openSettings": "Open payroll setup"
+  },
+  "newRun": {
+    "schedule": "Pay schedule",
+    "noSchedules": "No active pay schedules",
+    "create": "New pay run"
+  },
+  "columns": {
+    "number": "Number",
+    "schedule": "Schedule",
+    "period": "Period",
+    "payDate": "Pay date",
+    "status": "Status",
+    "gross": "Gross",
+    "net": "Net",
+    "employees": "Employees"
+  },
+  "status": {
+    "draft": "Draft",
+    "calculated": "Calculated",
+    "committed": "Committed",
+    "posted": "Posted",
+    "void": "Void"
+  },
+  "empty": {
+    "runs": "No pay runs yet. Create one from a pay schedule to get started.",
+    "profiles": "No employee payroll profiles yet. Add one to include an employee in pay runs."
+  },
+  "run": {
+    "title": "Pay run",
+    "employerCost": "Employer cost",
+    "calculate": "Calculate",
+    "commit": "Commit",
+    "post": "Post",
+    "calculateDone": "Pay run calculated.",
+    "commitDone": "Pay run committed.",
+    "postDone": "Pay run posted.",
+    "empty": "No stubs yet — calculate the run to build them.",
+    "lineKind": {
+      "earning": "Earning",
+      "deduction": "Deduction",
+      "employer_contribution": "Employer"
+    },
+    "stub": {
+      "employee": "Employee",
+      "province": "Province",
+      "cpp": "CPP",
+      "ei": "EI",
+      "tax": "Tax",
+      "lines": "Pay lines",
+      "trace": "T4127 trace"
+    }
+  },
+  "profiles": {
+    "addEmployee": "Employee without a profile",
+    "new": "Add profile",
+    "saved": "Profile saved.",
+    "editorDescription": "TD1 facts, schedule, exemptions, and vacation policy for this employee.",
+    "save": "Save",
+    "cancel": "Cancel",
+    "active": "Active",
+    "inactive": "Inactive",
+    "columns": {
+      "employee": "Employee",
+      "schedule": "Schedule",
+      "province": "Province",
+      "basis": "Pay basis",
+      "claims": "Claims (fed / prov)",
+      "vacation": "Vacation",
+      "status": "Status"
+    },
+    "basis": {
+      "hourly": "Hourly",
+      "salary": "Salary"
+    },
+    "vacation": {
+      "accrue": "Accrue",
+      "pay_each_period": "Pay each period"
+    },
+    "fields": {
+      "schedule": "Pay schedule",
+      "province": "Province of employment",
+      "payBasis": "Pay basis",
+      "additionalTax": "Additional tax per period",
+      "federalClaimCode": "Federal claim code",
+      "federalClaimAmount": "Federal claim amount",
+      "provincialClaimCode": "Provincial claim code",
+      "provincialClaimAmount": "Provincial claim amount",
+      "claimAmountHint": "Overrides the claim code",
+      "vacationPercent": "Vacation percent",
+      "vacationMethod": "Vacation method",
+      "cppExempt": "CPP exempt",
+      "eiExempt": "EI exempt",
+      "taxExempt": "Income tax exempt",
+      "isActive": "Active"
+    }
+  },
+  "settingsPage": {
+    "title": "Payroll",
+    "description": "Control accounts for the pay-run posting, the wages destination, and the CRA remittance vendor.",
+    "schedulesLink": "Pay schedules",
+    "componentsLink": "Pay components",
+    "saved": "Saved.",
+    "save": "Save",
+    "seeded": "Standard components installed.",
+    "accounts": {
+      "title": "Control accounts",
+      "description": "Where committed pay runs post. The burden account falls back to wage expense when unset."
+    },
+    "posting": {
+      "title": "Posting",
+      "description": "How time-driven wages hit the ledger, and who statutory withholdings are remitted to."
+    },
+    "wagesTo": {
+      "expense": "Wage expense (with project splits)",
+      "laborClearing": "Labor clearing (wash standard cost)",
+      "help": "Labor clearing washes the standard cost posted at time approval; it needs the labor clearing control account from Labor Costing."
+    },
+    "seed": {
+      "title": "Standard components",
+      "description": "Install the statutory component set (base pay, overtime, bonus, vacation, CPP, EI, QPIP, income tax). Existing components are left untouched.",
+      "count": "{count} installed",
+      "action": "Seed standard components"
+    },
+    "fields": {
+      "wageExpenseAccountId": "Wage expense",
+      "burdenExpenseAccountId": "Employer burden expense",
+      "netPayAccountId": "Net pay payable",
+      "cppPayableAccountId": "CPP payable",
+      "eiPayableAccountId": "EI payable",
+      "taxPayableAccountId": "Income tax payable",
+      "vacationPayableAccountId": "Vacation payable",
+      "wagesTo": "Wages post to",
+      "craRemittancePartyId": "CRA remittance vendor"
+    }
+  }
+}

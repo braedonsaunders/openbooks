@@ -17,8 +17,8 @@ jobs:
       contents: write
       pull-requests: write
     steps:
-      - uses: actions/checkout@v4
-      - uses: braedonsaunders/codeflow/card@v1
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: braedonsaunders/codeflow/card@af3b0073f2b41c9f54938c6520509fd97d133803 # v1
         with:
           accent: teal # match the openbooks brand
           show-grade: false # informational card — no health letter grade

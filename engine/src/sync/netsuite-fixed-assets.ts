@@ -355,7 +355,6 @@ export async function syncNetSuiteFixedAssets(
           sourceCost: state.cost,
           sourceBookValue: state.bookValue,
           sourceAccumulatedDepreciation: state.accumulated,
-          originalPurchasePrice: money(asset.custrecord_example_original_price),
           asset,
           assetValue: state.value,
           depreciationHistory: state.histories,

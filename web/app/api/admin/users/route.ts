@@ -132,10 +132,23 @@ export async function POST(req: Request) {
         }
       }
       const updated = (await db.execute(sql`
-        update users set is_active = ${body.isActive}, updated_at = now(), updated_by = ${actor.id}
-         where id = ${body.userId} and org_id = ${actor.orgId} and is_active <> ${body.isActive}
-        returning id`)) as any;
+        with changed_identity as (
+          update users set is_active = ${body.isActive}, updated_at = now(), updated_by = ${actor.id}
+           where id = ${body.userId} and org_id = ${actor.orgId} and is_active <> ${body.isActive}
+          returning id
+        ), revoked_sessions as (
+          update auth_sessions
+             set revoked_at = now(), revocation_reason = 'account_deactivated'
+           where ${!body.isActive}
+             and user_id in (select id from changed_identity)
+             and revoked_at is null
+          returning id
+        )
+        select id from changed_identity
+      `)) as any;
       if (updated.rows[0]) {
+        // Session revocation is in the same SQL statement as deactivation, so
+        // a later reactivation cannot revive pre-disable browser sessions.
         await audit({
           orgId: actor.orgId,
           tableName: "users",

@@ -1,15 +1,76 @@
 import { NextResponse } from "next/server";
+import { HeadBucketCommand } from "@aws-sdk/client-s3";
 import { getWorkerHeartbeat } from "@openbooks/jobs";
+import { getS3Client, s3Bucket, s3Enabled } from "@openbooks/engine/src/file-storage.ts";
+import { pool } from "@openbooks/engine/src/db.ts";
 
 export const runtime = "nodejs";
 
 const version = process.env.OPENBOOKS_VERSION || "development";
 
-/** Liveness probe — no authentication required. Add include=worker for stack readiness. */
+async function within<T>(operation: Promise<T>, milliseconds = 4_000): Promise<T> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  try {
+    return await Promise.race([
+      operation,
+      new Promise<never>((_, reject) => {
+        timer = setTimeout(() => reject(new Error("health check timed out")), milliseconds);
+      }),
+    ]);
+  } finally {
+    if (timer) clearTimeout(timer);
+  }
+}
+
+async function dependencyReadiness(): Promise<Record<"database" | "redis" | "objectStorage", "ok" | "unavailable" | "disabled">> {
+  const requireS3 = process.env.OPENBOOKS_REQUIRE_S3_HEALTH === "1";
+  const controller = new AbortController();
+  const abort = setTimeout(() => controller.abort(), 4_000);
+  const checks = await Promise.allSettled([
+    within(pool.query("select 1")),
+    // A GET proves a bounded producer connection can reach Redis. Worker
+    // freshness is reported separately and must not remove every web pod from
+    // service during a worker-only incident.
+    within(getWorkerHeartbeat()),
+    s3Enabled
+      ? getS3Client().send(new HeadBucketCommand({ Bucket: s3Bucket() }), { abortSignal: controller.signal })
+      : requireS3
+        ? Promise.reject(new Error("required object storage is not configured"))
+        : Promise.resolve("disabled"),
+  ]);
+  clearTimeout(abort);
+  return {
+    database: checks[0].status === "fulfilled" ? "ok" : "unavailable",
+    redis: checks[1].status === "fulfilled" ? "ok" : "unavailable",
+    objectStorage:
+      !s3Enabled && !requireS3
+        ? "disabled"
+        : checks[2].status === "fulfilled"
+          ? "ok"
+          : "unavailable",
+  };
+}
+
+/**
+ * Unauthenticated health surface. The default is deliberately process-only
+ * liveness; include=dependencies is routing readiness, while include=worker is
+ * deployment-level worker telemetry for monitoring.
+ */
 export async function GET(req: Request) {
-  const includeWorker = new URL(req.url).searchParams.get("include") === "worker";
-  if (!includeWorker) {
+  const include = new URL(req.url).searchParams.get("include");
+  if (!include) {
     return NextResponse.json({ status: "ok", service: "openbooks-api", version });
+  }
+  if (include === "dependencies" || include === "readiness") {
+    const dependencies = await dependencyReadiness();
+    const ready = Object.values(dependencies).every((status) => status === "ok" || status === "disabled");
+    return NextResponse.json(
+      { status: ready ? "ok" : "degraded", service: "openbooks-api", version, dependencies },
+      { status: ready ? 200 : 503 },
+    );
+  }
+  if (include !== "worker") {
+    return NextResponse.json({ status: "error", error: "unsupported health detail" }, { status: 400 });
   }
   try {
     const heartbeat = await getWorkerHeartbeat();

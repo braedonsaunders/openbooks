@@ -3,5 +3,13 @@
   "password": "Senha",
   "invalidCredentials": "E-mail ou senha inválidos",
   "signIn": "Entrar",
-  "signingIn": "Entrando…"
+  "signingIn": "Entrando…",
+  "mfaCode": "Código autenticador ou de recuperação",
+  "mfaPlaceholder": "123456",
+  "mfaHelp": "Digite o código de seis dígitos ou um código de recuperação de uso único.",
+  "invalidMfa": "O código de autenticação é inválido ou expirou",
+  "verify": "Verificar",
+  "or": "ou",
+  "sso": "Login único",
+  "ssoFailed": "Não foi possível concluir o login único"
 }
