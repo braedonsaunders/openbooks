@@ -89,7 +89,7 @@ export function AccountMenu({
     ? 'text-teal-600 dark:text-teal-400'
     : inSandbox
       ? 'text-amber-600 dark:text-amber-400'
-      : 'text-slate-400 dark:text-slate-500'
+      : 'text-slate-600 dark:text-slate-400'
   const showTenants =
     environments.tenants.length > 1 ||
     environments.tenants.some((tn) => tn.sandboxes.length > 0) ||

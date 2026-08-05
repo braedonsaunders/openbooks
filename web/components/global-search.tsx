@@ -186,7 +186,7 @@ export function GlobalSearch({ className }: { className?: string }) {
               <X size={14} />
             </button>
           ) : (
-            <kbd className="hidden rounded border border-slate-200 bg-white px-1.5 py-0.5 font-sans text-[10px] font-medium text-slate-400 sm:inline dark:border-slate-700 dark:bg-slate-900 dark:text-slate-500">
+            <kbd className="hidden rounded border border-slate-200 bg-white px-1.5 py-0.5 font-sans text-[10px] font-medium text-slate-600 sm:inline dark:border-slate-700 dark:bg-slate-900 dark:text-slate-400">
               ⌘K
             </kbd>
           )}

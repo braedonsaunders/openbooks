@@ -347,10 +347,11 @@ export function SetupWizard(props: {
   return (
     <AnimatePresence>
       <motion.div
-        initial={{ opacity: 0 }}
+        initial={reduceMotion ? false : { opacity: 0 }}
         animate={{ opacity: 1 }}
-        exit={{ opacity: 0 }}
+        exit={reduceMotion ? undefined : { opacity: 0 }}
         transition={{ duration: 0.2 }}
+        data-testid="setup-wizard"
         className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-950/80 backdrop-blur-sm"
       >
         {/* Close/skip button */}
@@ -532,7 +533,7 @@ export function SetupWizard(props: {
                   type="button"
                   onClick={apply}
                   disabled={busy || transitioning}
-                  className="flex items-center gap-2 rounded-lg bg-teal-600 px-5 py-2.5 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-teal-700 disabled:opacity-50"
+                  className="flex items-center gap-2 rounded-lg bg-teal-700 px-5 py-2.5 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-teal-800 disabled:opacity-50"
                 >
                   <Sparkles size={16} /> {t('apply')}
                 </button>
@@ -541,7 +542,7 @@ export function SetupWizard(props: {
                   type="button"
                   onClick={next}
                   disabled={!canNext || busy || transitioning}
-                  className="flex items-center gap-1.5 rounded-lg bg-teal-600 px-5 py-2.5 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-teal-700 disabled:cursor-not-allowed disabled:opacity-50"
+                  className="flex items-center gap-1.5 rounded-lg bg-teal-700 px-5 py-2.5 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-teal-800 disabled:cursor-not-allowed disabled:opacity-50"
                 >
                   {t('next')} <ArrowRight size={16} />
                 </button>
