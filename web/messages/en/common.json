@@ -174,7 +174,9 @@
     "inactive": "Inactive",
     "error": "Error",
     "ok": "OK",
-    "pending_approval": "Submitted"
+    "pending_approval": "Submitted",
+    "calculated": "Calculated",
+    "committed": "Committed"
   },
   "filters": {
     "showInactive": "Show inactive"

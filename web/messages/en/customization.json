@@ -27,6 +27,7 @@
     "item": "Item",
     "account": "Account",
     "bank_transaction": "Bank transaction",
+    "pay_run": "Pay run",
     "inventory_onhand": "Inventory on hand",
     "inventory_movement": "Inventory movement",
     "budget_scenario": "Budget",
