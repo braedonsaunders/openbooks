@@ -45,7 +45,6 @@ export default async function PayrollRemittancesPage({
         <PageHeader
           title={t('title')}
           description={t('description')}
-          back={{ href: '/payroll', label: t('back') }}
           actions={<ModuleHomeTabs tabs={moduleTabs} />}
         />
       }

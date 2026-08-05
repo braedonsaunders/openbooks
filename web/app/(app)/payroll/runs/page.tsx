@@ -55,7 +55,6 @@ export default async function PayRunsPage({
         <PageHeader
           title={t('list.title')}
           description={t('list.description')}
-          back={{ href: '/payroll', label: t('title') }}
           actions={
             <div className="flex items-center gap-3">
               {newButton}
@@ -72,7 +71,6 @@ export default async function PayRunsPage({
         userId={authz.user.id}
         canManage={can(authz, 'admin.customization.manage')}
         sp={sp}
-        emptyAction={newButton}
         renderRowActions={(row) => (
           <Link
             href={`/payroll/runs/${row.id}` as never}
