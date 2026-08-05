@@ -1,19 +1,19 @@
 {
-  "orgId": "3355a333-5aed-4ec0-8391-80859a2cdb55",
+  "orgId": "82d164d5-4eb8-4be4-9a3a-00863cd0ed27",
   "orgName": "SIM · Summit Ridge Construction",
-  "at": "2026-08-05T14:59:28.640Z",
-  "gitSha": "1bd5153",
+  "at": "2026-08-05T15:08:35.948Z",
+  "gitSha": "6bc4e03",
   "cutoff": "2026-02-28",
   "cutoffSource": "last-closed-gl-period",
   "counts": {
-    "documents": 932,
-    "postedDocuments": 424,
-    "postedEntries": 427,
-    "postedLines": 1324
+    "documents": 923,
+    "postedDocuments": 421,
+    "postedEntries": 424,
+    "postedLines": 1309
   },
   "trialBalance": {
-    "debits": "8465044.2188",
-    "credits": "8465044.2188",
+    "debits": "8474062.3544",
+    "credits": "8474062.3544",
     "accounts": 41
   },
   "controlTieOut": [
@@ -21,8 +21,8 @@
       "account": "Contracts Receivable",
       "number": "1200",
       "kind": "asset_receivable",
-      "gl": "1118876.1188",
-      "subledger": "471376.1188",
+      "gl": "1118875.8044",
+      "subledger": "471375.8044",
       "direct": "647500.0000",
       "diff": "0.0000"
     },
@@ -30,17 +30,17 @@
       "account": "Retainage Receivable",
       "number": "1210",
       "kind": "asset_receivable",
-      "gl": "20153.0000",
+      "gl": "21867.0000",
       "subledger": "0",
-      "direct": "20153.0000",
+      "direct": "21867.0000",
       "diff": "0.0000"
     },
     {
       "account": "Accounts Payable — Trade",
       "number": "2010",
       "kind": "liability_payable",
-      "gl": "-455760.1400",
-      "subledger": "-112760.1400",
+      "gl": "-456459.5700",
+      "subledger": "-113459.5700",
       "direct": "-343000.0000",
       "diff": "0.0000"
     }
@@ -85,7 +85,7 @@
   "timings": [
     {
       "report": "trial_balance",
-      "ms": 2,
+      "ms": 3,
       "rows": 39
     },
     {
@@ -95,12 +95,12 @@
     },
     {
       "report": "profit_and_loss",
-      "ms": 2,
+      "ms": 3,
       "rows": 16
     },
     {
       "report": "ar_aging",
-      "ms": 3,
+      "ms": 4,
       "rows": 5
     }
   ],
