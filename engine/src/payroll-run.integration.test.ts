@@ -6,7 +6,7 @@ import { db } from "./db.ts";
 import { add, cmp, neg, sum, toUnits } from "./money.ts";
 import { calculateT4127 } from "./payroll/canada/t4127.ts";
 import { calculatePub15T } from "./payroll/us/pub15t.ts";
-import { setPackSlotAccount } from "./payroll/packs.ts";
+import { setPackSlotAccount, uninstallPayrollPack } from "./payroll/packs.ts";
 import { encryptAccountNumber } from "./payments.ts";
 import { buildPayRunBankFile } from "./payroll-bank-file.ts";
 import { sealJson } from "./secrets.ts";
@@ -523,6 +523,34 @@ test(
       `)) as unknown as { rows: { factors: Record<string, string> }[] };
       assert.equal(stub2.rows[0]!.factors.FUTA, "18.0000"); // min(4,000, 7,000 − 4,000) × 0.6%
       assert.equal(stub2.rows[0]!.factors.SS, "248.0000"); // far from the wage base
+
+      // Uninstall guards: an active US profile AND committed stubs both block.
+      await assert.rejects(
+        uninstallPayrollPack(org.orgId, actorId, "US"),
+        /active employee payroll profile.*pay stub/s,
+      );
+
+      // Clearing the profiles alone is not enough — stubs still block.
+      await db.execute(sql`
+        update employee_payroll_profiles set is_active = false
+         where org_id = ${org.orgId} and country = 'US'`);
+      await assert.rejects(
+        uninstallPayrollPack(org.orgId, actorId, "US"),
+        /pay stub\(s\) reference this pack/,
+      );
+
+      // A pack with no dependents uninstalls cleanly: CA was never used here.
+      await seedPayrollComponents(org.orgId, actorId, "CA");
+      const removed = await uninstallPayrollPack(org.orgId, actorId, "CA");
+      assert.equal(removed.componentsRemoved, 9);
+      const caLeft = (await db.execute(sql`
+        select count(*)::int as n from pay_components
+         where org_id = ${org.orgId} and country = 'CA'`)) as unknown as { rows: { n: number }[] };
+      assert.equal(caLeft.rows[0]!.n, 0);
+      const markers = (await db.execute(sql`
+        select settings#>'{payroll,countries}' as countries from orgs where id = ${org.orgId}
+      `)) as unknown as { rows: { countries: unknown }[] };
+      assert.ok(!(markers.rows[0]!.countries as string[] | null ?? []).includes("CA"));
     } finally {
       await dropScratchOrgReporting(org.orgId);
     }

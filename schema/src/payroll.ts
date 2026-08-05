@@ -80,6 +80,10 @@ export const payComponents = pgTable(
     kind: text("kind", {
       enum: ["earning", "deduction", "employer_contribution"],
     }).notNull(),
+    /** Country pack the component belongs to; null = shared across packs.
+     * Statutory rows get it from their seeder; user components may scope
+     * themselves so they only apply to that country's employees. */
+    country: text("country", { enum: ["CA", "US"] }),
     /**
      * Engine-computed statutory components; null for user components.
      * cpp/cpp2/ei/qpip (CA) and ss/medicare (US) pairs exist for both

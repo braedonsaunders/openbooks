@@ -313,7 +313,11 @@
         "coverage": "Federal plus the nine no-withholding states (AK, FL, NV, NH, SD, TN, TX, WA, WY). State income tax withholding ships in a later wave.",
         "components": "Statutory pay components: federal income tax, Social Security, Medicare (incl. Additional Medicare), FUTA, and SUI.",
         "config": "SUI rates and wage bases are experience-rated per employer — enter yours under Accounts & posting."
-      }
+      },
+      "uninstall": "Uninstall",
+      "uninstallTitle": "Uninstall country pack",
+      "uninstallConfirm": "Remove this pack’s statutory components and switch off its withholding engine? Uninstalling is blocked while employees or payroll records still depend on the pack.",
+      "uninstallSuccess": "Country pack uninstalled."
     },
     "packAccounts": {
       "none": "No payroll country pack is installed yet, so there are no statutory withholding accounts to configure.",

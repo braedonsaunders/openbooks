@@ -93,6 +93,74 @@ export async function packSlotState(
   }));
 }
 
+export class PayrollPackError extends Error {}
+
+/**
+ * Uninstall a country pack: remove its seeded statutory components and the
+ * settings marker. Guarded — refuses while anything still depends on the
+ * pack, with every blocker named:
+ *   - active employee payroll profiles set to the country (their next
+ *     calculation would need the pack's engine and components);
+ *   - pay stubs whose lines reference the pack's components (payroll
+ *     records must keep their component references forever).
+ * User-authored components scoped to the country are left alone — they are
+ * org configuration, not the pack's.
+ */
+export async function uninstallPayrollPack(
+  orgId: string, actorId: string, country: string,
+): Promise<{ componentsRemoved: number }> {
+  const pack = PAYROLL_COUNTRY_PACKS[country];
+  if (!pack) throw new PayrollPackError(`unknown payroll country pack ${country}`);
+
+  const [profiles, stubRefs] = (await Promise.all([
+    db.execute(sql`
+      select count(*)::int as n from employee_payroll_profiles
+       where org_id = ${orgId} and country = ${country} and is_active`),
+    db.execute(sql`
+      select count(distinct l.stub_id)::int as n
+        from pay_stub_lines l
+        join pay_components c on c.id = l.component_id
+       where l.org_id = ${orgId} and c.country = ${country} and c.system_key is not null`),
+  ])) as unknown as { rows: { n: number }[] }[];
+
+  const blockers: string[] = [];
+  const profileCount = Number(profiles.rows[0]?.n ?? 0);
+  const stubCount = Number(stubRefs.rows[0]?.n ?? 0);
+  if (profileCount > 0) {
+    blockers.push(`${profileCount} active employee payroll profile(s) are set to ${country} — move or deactivate them first`);
+  }
+  if (stubCount > 0) {
+    blockers.push(`${stubCount} pay stub(s) reference this pack's statutory components — payroll records keep the pack installed`);
+  }
+  if (blockers.length > 0) {
+    throw new PayrollPackError(`cannot uninstall the ${country} pack: ${blockers.join("; ")}`);
+  }
+
+  return await db.transaction(async (tx) => {
+    // Draft (uncommitted) stubs could still reference the components between
+    // the check above and this delete; the FK makes that a loud failure, not
+    // a silent orphan.
+    const removed = (await tx.execute(sql`
+      delete from pay_components
+       where org_id = ${orgId} and country = ${country} and system_key is not null
+       returning id`)) as unknown as { rows: { id: string }[] };
+    await tx.execute(sql`
+      update orgs
+         set settings = jsonb_set(
+           coalesce(settings, '{}'::jsonb), '{payroll,countries}',
+           coalesce((
+             select jsonb_agg(value) from jsonb_array_elements_text(settings#>'{payroll,countries}')
+              where value <> ${country}
+           ), '[]'::jsonb))
+       where id = ${orgId}`);
+    await tx.execute(sql`
+      insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
+      values (${orgId}, 'pay_components', ${orgId}, 'delete',
+              ${JSON.stringify({ uninstalledPayrollPack: country })}, ${actorId})`);
+    return { componentsRemoved: removed.rows.length };
+  });
+}
+
 /** Write one slot's account onto every component the slot covers. */
 export async function setPackSlotAccount(
   orgId: string,

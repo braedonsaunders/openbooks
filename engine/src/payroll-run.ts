@@ -94,6 +94,8 @@ interface SeedComponent {
   code: string; name: string; kind: string; systemKey: string | null;
   basis?: string; taxable?: boolean; pensionable?: boolean; insurable?: boolean;
   vacationable?: boolean; nonPeriodic?: boolean; sequence: number;
+  /** Country pack the row belongs to; omitted = shared across packs. */
+  country?: "CA" | "US";
 }
 
 /** Jurisdiction-free earning baseline shared by every country pack. */
@@ -105,28 +107,28 @@ const BASELINE_COMPONENTS: SeedComponent[] = [
 ];
 
 const CA_COMPONENTS: SeedComponent[] = [
-  { code: "TAX", name: "Income tax", kind: "deduction", systemKey: "income_tax", sequence: 110 },
-  { code: "CPP", name: "CPP", kind: "deduction", systemKey: "cpp", sequence: 120 },
-  { code: "CPP2", name: "CPP (second additional)", kind: "deduction", systemKey: "cpp2", sequence: 130 },
-  { code: "EI", name: "EI", kind: "deduction", systemKey: "ei", sequence: 140 },
-  { code: "QPIP", name: "QPIP", kind: "deduction", systemKey: "qpip", sequence: 150 },
-  { code: "CPP-ER", name: "CPP (employer)", kind: "employer_contribution", systemKey: "cpp", sequence: 210 },
-  { code: "EI-ER", name: "EI (employer)", kind: "employer_contribution", systemKey: "ei", sequence: 220 },
-  { code: "QPIP-ER", name: "QPIP (employer)", kind: "employer_contribution", systemKey: "qpip", sequence: 230 },
-  { code: "VAC", name: "Vacation accrual", kind: "employer_contribution", systemKey: "vacation_accrual", sequence: 240 },
+  { code: "TAX", name: "Income tax", kind: "deduction", systemKey: "income_tax", sequence: 110, country: "CA" },
+  { code: "CPP", name: "CPP", kind: "deduction", systemKey: "cpp", sequence: 120, country: "CA" },
+  { code: "CPP2", name: "CPP (second additional)", kind: "deduction", systemKey: "cpp2", sequence: 130, country: "CA" },
+  { code: "EI", name: "EI", kind: "deduction", systemKey: "ei", sequence: 140, country: "CA" },
+  { code: "QPIP", name: "QPIP", kind: "deduction", systemKey: "qpip", sequence: 150, country: "CA" },
+  { code: "CPP-ER", name: "CPP (employer)", kind: "employer_contribution", systemKey: "cpp", sequence: 210, country: "CA" },
+  { code: "EI-ER", name: "EI (employer)", kind: "employer_contribution", systemKey: "ei", sequence: 220, country: "CA" },
+  { code: "QPIP-ER", name: "QPIP (employer)", kind: "employer_contribution", systemKey: "qpip", sequence: 230, country: "CA" },
+  { code: "VAC", name: "Vacation accrual", kind: "employer_contribution", systemKey: "vacation_accrual", sequence: 240, country: "CA" },
 ];
 
 // US statutory set. `pensionable` generalizes to FICA-taxable and `insurable`
 // to FUTA/SUI-taxable for US employees (see calculateStub).
 const US_COMPONENTS: SeedComponent[] = [
-  { code: "FIT", name: "Federal income tax", kind: "deduction", systemKey: "fit", sequence: 110 },
-  { code: "SS", name: "Social Security", kind: "deduction", systemKey: "ss", sequence: 120 },
-  { code: "MED", name: "Medicare", kind: "deduction", systemKey: "medicare", sequence: 130 },
-  { code: "MED2", name: "Additional Medicare", kind: "deduction", systemKey: "medicare_addl", sequence: 135 },
-  { code: "SS-ER", name: "Social Security (employer)", kind: "employer_contribution", systemKey: "ss", sequence: 210 },
-  { code: "MED-ER", name: "Medicare (employer)", kind: "employer_contribution", systemKey: "medicare", sequence: 220 },
-  { code: "FUTA", name: "Federal unemployment (FUTA)", kind: "employer_contribution", systemKey: "futa", sequence: 230 },
-  { code: "SUTA", name: "State unemployment (SUI)", kind: "employer_contribution", systemKey: "suta", sequence: 250 },
+  { code: "FIT", name: "Federal income tax", kind: "deduction", systemKey: "fit", sequence: 110, country: "US" },
+  { code: "SS", name: "Social Security", kind: "deduction", systemKey: "ss", sequence: 120, country: "US" },
+  { code: "MED", name: "Medicare", kind: "deduction", systemKey: "medicare", sequence: 130, country: "US" },
+  { code: "MED2", name: "Additional Medicare", kind: "deduction", systemKey: "medicare_addl", sequence: 135, country: "US" },
+  { code: "SS-ER", name: "Social Security (employer)", kind: "employer_contribution", systemKey: "ss", sequence: 210, country: "US" },
+  { code: "MED-ER", name: "Medicare (employer)", kind: "employer_contribution", systemKey: "medicare", sequence: 220, country: "US" },
+  { code: "FUTA", name: "Federal unemployment (FUTA)", kind: "employer_contribution", systemKey: "futa", sequence: 230, country: "US" },
+  { code: "SUTA", name: "State unemployment (SUI)", kind: "employer_contribution", systemKey: "suta", sequence: 250, country: "US" },
 ];
 
 /** Statutory + baseline components for a country pack; idempotent. */
@@ -136,9 +138,11 @@ export async function seedPayrollComponents(
   const rows = [...BASELINE_COMPONENTS, ...(country === "US" ? US_COMPONENTS : CA_COMPONENTS)];
   for (const c of rows) {
     await db.execute(sql`
-      insert into pay_components (org_id, code, name, kind, system_key, basis, taxable, pensionable,
-                                  insurable, vacationable, non_periodic, sequence, created_by, updated_by)
-      values (${orgId}, ${c.code}, ${c.name}, ${c.kind}, ${c.systemKey}, ${c.basis ?? "fixed_amount"},
+      insert into pay_components (org_id, code, name, kind, system_key, country, basis, taxable,
+                                  pensionable, insurable, vacationable, non_periodic, sequence,
+                                  created_by, updated_by)
+      values (${orgId}, ${c.code}, ${c.name}, ${c.kind}, ${c.systemKey}, ${c.country ?? null},
+              ${c.basis ?? "fixed_amount"},
               ${c.taxable ?? true}, ${c.pensionable ?? true}, ${c.insurable ?? true},
               ${c.vacationable ?? true}, ${c.nonPeriodic ?? false}, ${c.sequence}, ${actorId}, ${actorId})
       on conflict (org_id, code) do nothing
@@ -551,13 +555,17 @@ async function calculateStub(
     }
   }
 
-  // Recurring assigned components (allowances, RRSP match, dues, garnishees…)
+  // Recurring assigned components (allowances, RRSP match, dues, garnishees…).
+  // Country-scoped components only apply to that country's employees; rows
+  // with no country are shared across packs.
+  const country = emp.country === "US" ? "US" : "CA";
   const assigned = (await tx.execute(sql`
     select a.value as override, c.*
       from employee_pay_components a
       join pay_components c on c.id = a.component_id
      where a.org_id = ${orgId} and a.employee_party_id = ${employeePartyId}
        and a.is_active and c.is_active and c.system_key is null
+       and (c.country is null or c.country = ${country})
        and a.effective_from <= ${run.period_end}
        and (a.effective_to is null or a.effective_to >= ${run.period_end})
      order by c.sequence
@@ -675,7 +683,6 @@ async function calculateStub(
 
   const bool = (value: string | null | undefined) =>
     value === "true" || (value as unknown) === true;
-  const country = emp.country === "US" ? "US" : "CA";
   const province = (emp.province ?? (country === "US" ? "" : "ON"));
   let factors: Record<string, string>;
 

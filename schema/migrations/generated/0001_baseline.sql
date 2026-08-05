@@ -10774,7 +10774,9 @@ CREATE TABLE public.pay_components (
     created_by uuid,
     updated_at timestamp with time zone DEFAULT now() NOT NULL,
     updated_by uuid,
+    country text,
     CONSTRAINT pay_components_basis CHECK ((basis = ANY (ARRAY['fixed_amount'::text, 'per_hour'::text, 'percent_of_gross'::text]))),
+    CONSTRAINT pay_components_country CHECK (((country IS NULL) OR (country = ANY (ARRAY['CA'::text, 'US'::text])))),
     CONSTRAINT pay_components_kind CHECK ((kind = ANY (ARRAY['earning'::text, 'deduction'::text, 'employer_contribution'::text]))),
     CONSTRAINT pay_components_system_key CHECK (((system_key IS NULL) OR (system_key = ANY (ARRAY['base_pay'::text, 'overtime'::text, 'bonus'::text, 'vacation_accrual'::text, 'vacation_payout'::text, 'cpp'::text, 'cpp2'::text, 'ei'::text, 'qpip'::text, 'income_tax'::text, 'fit'::text, 'ss'::text, 'medicare'::text, 'medicare_addl'::text, 'futa'::text, 'suta'::text])))),
     CONSTRAINT pay_components_tax_treatment CHECK ((tax_treatment = ANY (ARRAY['none'::text, 'pension_f'::text, 'union_dues'::text, 'alimony'::text])))
@@ -10810,7 +10812,8 @@ CREATE VIEW openbooks_query.pay_components WITH (security_barrier='true') AS
     created_at,
     created_by,
     updated_at,
-    updated_by
+    updated_by,
+    country
    FROM public.pay_components;
 
 

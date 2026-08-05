@@ -79,6 +79,15 @@ export interface SetupColumn {
   options?: { value: string; labelKey: string }[]
 }
 
+/** Enum list filter rendered above the table, bound to the `f_<key>` param. */
+export interface SetupFilter {
+  /** Column key (also the translation key under `admin.setup.fields`). */
+  key: string
+  options: { value: string; labelKey: string }[]
+  /** Rows with a NULL value match every choice (shared/global records). */
+  nullMatchesAll?: boolean
+}
+
 export interface SetupEntity {
   /** URL slug, e.g. 'tax-codes'. */
   key: string
@@ -120,6 +129,8 @@ export interface SetupEntity {
   featureKey?: string
   columns: SetupColumn[]
   fields: SetupField[]
+  /** Enum dropdown filters rendered beside search. */
+  filters?: SetupFilter[]
 }
 
 /**
@@ -312,6 +323,11 @@ const PAY_COMPONENT_KINDS = [
   { value: 'earning', labelKey: 'options.payComponentKind.earning' },
   { value: 'deduction', labelKey: 'options.payComponentKind.deduction' },
   { value: 'employer_contribution', labelKey: 'options.payComponentKind.employerContribution' },
+]
+
+const PAY_COMPONENT_COUNTRIES = [
+  { value: 'CA', labelKey: 'options.payComponentCountry.CA' },
+  { value: 'US', labelKey: 'options.payComponentCountry.US' },
 ]
 
 const PAY_COMPONENT_BASES = [
@@ -1374,14 +1390,22 @@ export const SETUP_ENTITIES: SetupEntity[] = [
       { key: 'code', kind: 'code' },
       { key: 'name', kind: 'text' },
       { key: 'kind', kind: 'badge', options: PAY_COMPONENT_KINDS },
+      { key: 'country', kind: 'badge', options: PAY_COMPONENT_COUNTRIES },
       { key: 'basis', kind: 'badge', options: PAY_COMPONENT_BASES },
       { key: 'sequence', kind: 'number' },
       { key: 'isActive', kind: 'badge-active' },
+    ],
+    // Country pack filter: a chosen country also shows shared (country-less)
+    // components, since those apply to every pack's employees.
+    filters: [
+      { key: 'country', options: PAY_COMPONENT_COUNTRIES, nullMatchesAll: true },
+      { key: 'kind', options: PAY_COMPONENT_KINDS },
     ],
     fields: [
       { key: 'code', kind: 'text', required: true, lockedOnEdit: true },
       { key: 'name', kind: 'text', required: true },
       { key: 'kind', kind: 'select', required: true, options: PAY_COMPONENT_KINDS },
+      { key: 'country', kind: 'select', options: PAY_COMPONENT_COUNTRIES },
       { key: 'basis', kind: 'select', keepDefault: true, defaultValue: 'fixed_amount', options: PAY_COMPONENT_BASES },
       { key: 'value', kind: 'decimal' },
       { key: 'taxable', kind: 'boolean', defaultValue: true },
