@@ -231,4 +231,13 @@ jobs:
             exit 0
           fi
           git commit -m "chore: publish trust corpus [skip ci]"
-          git push
+          for attempt in 1 2 3; do
+            git fetch origin main
+            git rebase origin/main
+            if git push origin HEAD:main; then
+              exit 0
+            fi
+            echo "main advanced during trust publication; retrying ($attempt/3)" >&2
+          done
+          echo "unable to publish trust corpus after 3 attempts" >&2
+          exit 1
