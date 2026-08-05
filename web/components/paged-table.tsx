@@ -37,6 +37,8 @@ export function PagedTable<T>({
   rowKey,
   rowClassName,
   toolbarAfter,
+  onRowClick,
+  footer,
 }: {
   rows: T[]
   columns: PagedColumn<T>[]
@@ -47,6 +49,11 @@ export function PagedTable<T>({
   rowClassName?: (row: T) => string | undefined
   /** Controls rendered immediately after the search box on the same toolbar row. */
   toolbarAfter?: ReactNode
+  /** Makes rows interactive (cursor + click), e.g. to open a detail drawer. */
+  onRowClick?: (row: T) => void
+  /** Extra TableRow(s) rendered after the page's rows (e.g. a totals row).
+   *  Computed from ALL rows by the caller, so it holds across pages/search. */
+  footer?: ReactNode
 }) {
   const t = useTranslations('common')
   const tp = useTranslations('ui.pagination')
@@ -111,7 +118,11 @@ export function PagedTable<T>({
         </TableHeader>
         <TableBody>
           {view.map((row, i) => (
-            <TableRow key={rowKey(row, start + i)} className={rowClassName?.(row)}>
+            <TableRow
+              key={rowKey(row, start + i)}
+              className={onRowClick ? `cursor-pointer ${rowClassName?.(row) ?? ''}` : rowClassName?.(row)}
+              onClick={onRowClick ? () => onRowClick(row) : undefined}
+            >
               {columns.map((c) => (
                 <TableCell key={c.key} className={c.align === 'right' ? 'text-right tabular-nums' : undefined}>
                   {c.cell(row)}
@@ -119,6 +130,7 @@ export function PagedTable<T>({
               ))}
             </TableRow>
           ))}
+          {footer}
         </TableBody>
       </Table>
       {filtered.length > pageSize ? (
