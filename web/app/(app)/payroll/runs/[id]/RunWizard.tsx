@@ -335,6 +335,29 @@ export function RunWizard(props: {
     }
   }
 
+  async function emailStubs() {
+    setBusy(true)
+    try {
+      const res = await fetch(`/api/payroll/runs/${run.document_id}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'email-stubs' }),
+      })
+      const j = await res.json()
+      if (!res.ok) throw new Error(j.error ?? 'failed')
+      const skipped = [...(j.noEmail ?? []), ...(j.failed ?? []).map((f: { name: string }) => f.name)]
+      if (skipped.length > 0) {
+        toast.warning(t('wizard.finish.stubsEmailedPartial', { sent: j.sent, skipped: skipped.join(', ') }))
+      } else {
+        toast.success(t('wizard.finish.stubsEmailed', { sent: j.sent }))
+      }
+    } catch (e) {
+      toast.error((e as Error).message)
+    } finally {
+      setBusy(false)
+    }
+  }
+
   async function recordPayment(bankAccountId: string) {
     setBusy(true)
     try {
@@ -493,6 +516,7 @@ export function RunWizard(props: {
           canPost={canPost}
           busy={busy}
           onPost={post}
+          onEmailStubs={emailStubs}
           onRecordPayment={recordPayment}
           bankAccounts={props.bankAccounts}
           canRun={props.canRun}
@@ -1182,6 +1206,7 @@ function FinishStep({
   canPost,
   busy,
   onPost,
+  onEmailStubs,
   onRecordPayment,
   bankAccounts,
   canRun,
@@ -1194,6 +1219,7 @@ function FinishStep({
   canPost: boolean
   busy: boolean
   onPost: () => void
+  onEmailStubs: () => void
   onRecordPayment: (bankAccountId: string) => void
   bankAccounts: { id: string; label: string }[]
   canRun: boolean
@@ -1260,6 +1286,27 @@ function FinishStep({
               busy={busy}
               onRecord={onRecordPayment}
             />
+          )}
+          {committed && (
+            <>
+              <Button asChild size="sm" variant="outline">
+                <a href={`/api/payroll/runs/${run.document_id}/stubs-pdf`} target="_blank" rel="noreferrer">
+                  <FileDown size={14} aria-hidden />
+                  {t('wizard.finish.printStubs')}
+                </a>
+              </Button>
+              <Button asChild size="sm" variant="outline">
+                <Link href={`/payroll/runs/${run.document_id}/register` as never}>
+                  {t('wizard.finish.register')}
+                </Link>
+              </Button>
+              {canRun && (
+                <Button size="sm" variant="outline" disabled={busy} onClick={onEmailStubs}>
+                  <Send size={14} aria-hidden />
+                  {t('wizard.finish.emailStubs')}
+                </Button>
+              )}
+            </>
           )}
           {!posted && canPost && (
             <Button onClick={onPost} disabled={busy}>

@@ -225,7 +225,7 @@ async function loadJournalValues(orgId: string, id: string): Promise<PdfRecordVa
 async function loadPayStubValues(orgId: string, id: string): Promise<PdfRecordValues | null> {
   const r = (await db.execute(sql`
     select s.*, r.period_start, r.period_end, d.document_number,
-           p.display_name as employee_name
+           p.display_name as employee_name, p.email as employee_email
       from pay_stubs s
       join pay_runs r on r.document_id = s.pay_run_document_id
       join documents d on d.id = r.document_id
@@ -269,6 +269,9 @@ async function loadPayStubValues(orgId: string, id: string): Promise<PdfRecordVa
 
   const values: Record<string, unknown> = {
     employee_name: stub.employee_name ?? '',
+    // party_* aliases power the shared record-email path (sendRecordPdfEmail).
+    party_name: stub.employee_name ?? '',
+    party_email: stub.employee_email ?? '',
     document_number: stub.document_number ?? '',
     period_start: fmtDate(stub.period_start, locale),
     period_end: fmtDate(stub.period_end, locale),
