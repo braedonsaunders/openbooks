@@ -12,8 +12,8 @@ on:
         default: false
 
 concurrency:
-  group: deploy-dev
-  cancel-in-progress: false
+  group: deploy-dev-prelaunch-adoption-final
+  cancel-in-progress: true
 
 permissions:
   contents: read
@@ -273,9 +273,10 @@ jobs:
               ADMIN_EMAIL='reference@example.test' ADMIN_PASSWORD='Reference-only-2026!' \
               npx tsx scripts/bootstrap.ts
 
-            OPENBOOKS_DB_URL="$migration_url" npx tsx -e '
+            PGOPTIONS='-c app.bypass_rls=on' OPENBOOKS_DB_URL="$migration_url" npx tsx -e '
               import { execFileSync } from "node:child_process";
               import pg from "pg";
+              void (async () => {
               const client = new pg.Client({ connectionString: process.env.OPENBOOKS_DB_URL });
               await client.connect();
               try {
@@ -300,10 +301,12 @@ jobs:
                   }
                 }
               } finally { await client.end(); }
+              })().catch((error) => { console.error(error); process.exitCode = 1; });
             '
 
-            gate_ids="$(OPENBOOKS_DB_URL="$migration_url" npx tsx -e '
+            gate_ids="$(PGOPTIONS='-c app.bypass_rls=on' OPENBOOKS_DB_URL="$migration_url" npx tsx -e '
               import pg from "pg";
+              void (async () => {
               const client = new pg.Client({ connectionString: process.env.OPENBOOKS_DB_URL });
               await client.connect();
               const result = await client.query(`
@@ -321,23 +324,24 @@ jobs:
               await client.end();
               if (result.rows.length !== 1) throw new Error("no production root organization with an active operator");
               process.stdout.write(`${result.rows[0].org_id} ${result.rows[0].actor_id}`);
+              })().catch((error) => { console.error(error); process.exitCode = 1; });
             ')"
             read -r adoption_org adoption_actor <<<"$gate_ids"
             evidence_stamp="${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
-            OPENBOOKS_DB_URL="$migration_url" OPENBOOKS_BASELINE_DB_URL="$reference_url" \
+            PGOPTIONS='-c app.bypass_rls=on' OPENBOOKS_DB_URL="$migration_url" OPENBOOKS_BASELINE_DB_URL="$reference_url" \
               npx tsx .local/tenant-migrations/openbooks-rassaun/adopt-canonical-baseline.ts \
               --org="$adoption_org"
-            OPENBOOKS_DB_URL="$migration_url" OPENBOOKS_BASELINE_DB_URL="$reference_url" \
+            PGOPTIONS='-c app.bypass_rls=on' OPENBOOKS_DB_URL="$migration_url" OPENBOOKS_BASELINE_DB_URL="$reference_url" \
               npx tsx .local/tenant-migrations/openbooks-rassaun/adopt-canonical-baseline.ts \
               --phase=canonicalize --apply --production \
               --org="$adoption_org" --actor="$adoption_actor" \
               --reason='Adopt the reviewed alpha 3 canonical prerelease catalog.' \
               --confirm=CANONICALIZE_PRERELEASE_CATALOG \
               --evidence=".local/tenant-migrations/openbooks-rassaun/evidence/${evidence_stamp}-canonicalize.json"
-            OPENBOOKS_DB_URL="$migration_url" OPENBOOKS_BASELINE_DB_URL="$reference_url" \
+            PGOPTIONS='-c app.bypass_rls=on' OPENBOOKS_DB_URL="$migration_url" OPENBOOKS_BASELINE_DB_URL="$reference_url" \
               npx tsx .local/tenant-migrations/openbooks-rassaun/adopt-canonical-baseline.ts \
               --phase=adopt --org="$adoption_org"
-            OPENBOOKS_DB_URL="$migration_url" OPENBOOKS_BASELINE_DB_URL="$reference_url" \
+            PGOPTIONS='-c app.bypass_rls=on' OPENBOOKS_DB_URL="$migration_url" OPENBOOKS_BASELINE_DB_URL="$reference_url" \
               npx tsx .local/tenant-migrations/openbooks-rassaun/adopt-canonical-baseline.ts \
               --phase=adopt --apply --production \
               --org="$adoption_org" --actor="$adoption_actor" \
