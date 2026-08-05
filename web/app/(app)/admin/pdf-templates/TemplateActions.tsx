@@ -11,16 +11,19 @@ import { promptDialog } from '../../../../lib/prompt'
 export function NewTemplateButton({
   recordType,
   asDuplicateOfStarter = false,
+  defaultName,
 }: {
   recordType: string
   asDuplicateOfStarter?: boolean
+  /** Pre-filled template name (e.g. "Customer invoice starter"). */
+  defaultName?: string
 }) {
   const t = useTranslations('pdfTemplates')
   const router = useRouter()
   const [busy, setBusy] = useState(false)
 
   async function create() {
-    const name = await promptDialog({ title: t('newTemplate') })
+    const name = await promptDialog({ title: t('newTemplate'), initialValue: defaultName })
     if (!name?.trim()) return
     setBusy(true)
     try {
