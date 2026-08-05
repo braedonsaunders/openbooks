@@ -1,4 +1,4 @@
-import { S3Client, PutObjectCommand, GetObjectCommand, DeleteObjectsCommand } from "@aws-sdk/client-s3";
+import { S3Client, PutObjectCommand, GetObjectCommand, DeleteObjectsCommand, HeadBucketCommand } from "@aws-sdk/client-s3";
 import { env } from "./db.ts";
 
 /** Shared file-cabinet blob driver used by both web requests and workers. */
@@ -39,6 +39,11 @@ export function getS3Client(): S3Client {
 
 export function s3Bucket(): string {
   return env.S3_BUCKET!;
+}
+
+/** Bounded callers may pass an AbortSignal for readiness probes. */
+export async function assertS3Ready(abortSignal?: AbortSignal): Promise<void> {
+  await s3().send(new HeadBucketCommand({ Bucket: s3Bucket() }), { abortSignal });
 }
 
 export async function putS3Blob(versionId: string, bytes: Buffer, contentType: string): Promise<void> {

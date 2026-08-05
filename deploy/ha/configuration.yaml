@@ -12,5 +12,10 @@ data:
   XDG_CONFIG_HOME: "/tmp/.config"
   OPENBOOKS_APP_URL: "https://books.example.com"
   APP_BASE_URL: "https://books.example.com"
+  # Safe only when the Service is not publicly reachable and the ingress
+  # overwrites client forwarding headers. Required for network-aware login
+  # throttling behind that trusted proxy.
+  OPENBOOKS_TRUST_PROXY: "1"
+  OPENBOOKS_REQUIRE_S3_HEALTH: "1"
   S3_REGION: "us-east-1"
   S3_BUCKET: "openbooks"

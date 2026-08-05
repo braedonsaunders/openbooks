@@ -791,6 +791,7 @@
       "items": "Items & services",
       "projects": "Projects & job costing",
       "time": "Time & timesheets",
+      "payroll": "Payroll",
       "records": "Custom records",
       "assistant": "AI assistant",
       "sql": "Query workbench",
@@ -839,6 +840,9 @@
     "time_read": "View timesheets",
     "time_manage": "Enter and edit time",
     "time_approve": "Approve timesheets",
+    "payroll_read": "View pay runs and stubs",
+    "payroll_manage": "Configure payroll and employee profiles",
+    "payroll_run": "Create, calculate, and commit pay runs",
     "records_read": "View custom records",
     "records_create": "Create and edit custom records",
     "records_manage_types": "Design custom record types",
@@ -1637,6 +1641,18 @@
         "title": "Time Types",
         "description": "Cost multipliers and billable defaults for timesheets."
       },
+      "pay-schedules": {
+        "title": "Pay Schedules",
+        "description": "Pay frequency calendars: periods per year, the anchor period end, and the pay-date offset."
+      },
+      "pay-components": {
+        "title": "Pay Components",
+        "description": "Earnings, deductions, and employer contributions with their tax treatment, GL accounts, and remittance vendors."
+      },
+      "union-agreements": {
+        "title": "Union Agreements",
+        "description": "Collective agreements: the union, local, and the vendor union remittances are paid to."
+      },
       "worker-comp-groups": {
         "title": "Worker Comp Groups",
         "description": "Workers' compensation rate groups for labor costing."
@@ -1925,6 +1941,22 @@
       "costMultiplier": "Cost multiplier",
       "isBillableDefault": "Billable by default",
       "showOnFieldTicket": "Show on field tickets",
+      "frequency": "Frequency",
+      "periodsPerYear": "Periods per year",
+      "anchorPeriodEnd": "Anchor period end",
+      "payDateOffsetDays": "Pay date offset (days)",
+      "value": "Value",
+      "taxable": "Taxable",
+      "pensionable": "Pensionable",
+      "insurable": "Insurable",
+      "vacationable": "Counts toward vacation pay",
+      "nonPeriodic": "Non-periodic (bonus method)",
+      "taxTreatment": "Tax treatment",
+      "expenseAccountId": "Expense account",
+      "liabilityAccountId": "Liability account",
+      "remittancePartyId": "Remittance vendor",
+      "unionName": "Union",
+      "localNumber": "Local number",
       "category": "Category",
       "postsGl": "Posts to GL",
       "bookId": "Book",
@@ -2057,6 +2089,28 @@
       "informationReturnBox": "Boxes are statutory. What you configure is which of your accounts feeds which box."
     },
     "options": {
+      "payFrequency": {
+        "weekly": "Weekly",
+        "biweekly": "Biweekly",
+        "semiMonthly": "Semi-monthly",
+        "monthly": "Monthly"
+      },
+      "payComponentKind": {
+        "earning": "Earning",
+        "deduction": "Deduction",
+        "employerContribution": "Employer contribution"
+      },
+      "payComponentBasis": {
+        "fixedAmount": "Fixed amount",
+        "perHour": "Per hour",
+        "percentOfGross": "Percent of gross"
+      },
+      "payTaxTreatment": {
+        "none": "After-tax",
+        "pensionF": "Pension (RPP/RRSP, factor F)",
+        "unionDues": "Union dues (U1)",
+        "alimony": "Alimony (F2)"
+      },
       "timeClassification": {
         "regular": "Regular",
         "overtime": "Overtime",
