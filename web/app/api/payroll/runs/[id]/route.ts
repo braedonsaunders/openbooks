@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server'
 import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/db.ts'
-import { calculatePayRun, commitPayRun, PayrollError } from '@openbooks/engine/src/payroll-run.ts'
+import { calculatePayRun, commitPayRun, PayrollError, previewPayRunGl } from '@openbooks/engine/src/payroll-run.ts'
 import { guardFeaturePermission } from '../../../../../lib/feature-gates'
 import { isUuid } from '../../../../../lib/list-params'
 
@@ -80,6 +80,13 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
   try {
     if (body.action === 'calculate') {
       const result = await calculatePayRun({ orgId: gate.user.orgId, documentId: id, actorId: gate.user.id })
+      return NextResponse.json({ ok: true, ...result })
+    }
+    if (body.action === 'preview-gl') {
+      // Read-only: the exact legs commit would write, for the wizard's review
+      // step. payroll.read suffices conceptually, but the wizard drives it and
+      // the route is already gated payroll.run.
+      const result = await previewPayRunGl(gate.user.orgId, id)
       return NextResponse.json({ ok: true, ...result })
     }
     if (body.action === 'commit') {
