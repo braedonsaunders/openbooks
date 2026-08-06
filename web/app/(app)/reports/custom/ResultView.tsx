@@ -44,6 +44,7 @@ export function ResultView({
           columns: group.columns,
           rows: group.rows,
           money: group.money,
+          align: group.align,
           totalRows: group.totalRows,
           drills: group.kind === 'summary' && group.rowKeys && drillTarget.kind === 'custom'
             ? group.rows.map((row, ri) => {

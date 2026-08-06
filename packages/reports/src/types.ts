@@ -188,6 +188,9 @@ export type ReportGroup = {
   rows: (string | number | null | undefined)[][]
   /** Per-column: format as currency in viewers (money-kind columns/measures). */
   money?: boolean[]
+  /** Per-column alignment (text left, numeric/money right). Viewers fall back
+   *  to first-column-left/rest-right when absent. */
+  align?: ('left' | 'right' | 'center')[]
   /** For 'section' groups: the raw groupBy field + bucket value, so viewers
    *  can scope drill-downs to exactly this section's rows. */
   groupKey?: { field: string; value: string }
@@ -208,7 +211,7 @@ export type ReportRowScopeRule =
   | { field: string; from: string; to: string }
   | { field: string; empty: true }
 
-export type ReportSummaryItem = { label: string; value: string | number }
+export type ReportSummaryItem = { label: string; value: string | number; money?: boolean }
 
 export type ReportRunResult = {
   groups: ReportGroup[]
