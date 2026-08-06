@@ -132,4 +132,51 @@ export const BUILT_IN_REPORT_DEFINITIONS: BuiltInReportDefinition[] = [
       limit: 10000,
     },
   },
+  {
+    slug: 'payroll-register',
+    name: 'Payroll register',
+    description:
+      'Every pay stub this year, one row per employee per run: gross, statutory withholdings, net, and employer cost, sectioned by pay run. Requires the payroll permission.',
+    query: {
+      entity: 'pay_stubs',
+      mode: 'rows',
+      columns: [
+        'employee', 'province', 'gross', 'cpp_fica', 'ei', 'income_tax',
+        'net_pay', 'employer_cost', 'pay_date',
+      ],
+      groupBy: 'run_number',
+      filters: {
+        combinator: 'and',
+        rules: [{ field: 'pay_date', op: 'this_year' }],
+      },
+      sorts: [{ column: 'pay_date', direction: 'desc' }],
+      limit: 5000,
+    },
+  },
+  {
+    slug: 'payroll-cost-by-month',
+    name: 'Payroll cost by month',
+    description:
+      'Monthly payroll totals this year: gross, net, income tax withheld, and employer cost, with stub counts. Requires the payroll permission.',
+    query: {
+      entity: 'pay_stubs',
+      mode: 'summarize',
+      columns: [],
+      breakouts: [{ column: 'pay_date', bin: 'month' }, { column: 'schedule' }],
+      measures: [
+        { fn: 'sum', column: 'gross', label: 'Gross pay' },
+        { fn: 'sum', column: 'income_tax', label: 'Income tax withheld' },
+        { fn: 'sum', column: 'net_pay', label: 'Net pay' },
+        { fn: 'sum', column: 'employer_cost', label: 'Employer cost' },
+        { fn: 'count', label: 'Stubs' },
+      ],
+      filters: {
+        combinator: 'and',
+        rules: [{ field: 'pay_date', op: 'this_year' }],
+      },
+      groupBy: null,
+      limit: 1000,
+    },
+  },
+
 ]

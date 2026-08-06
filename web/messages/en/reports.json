@@ -501,6 +501,10 @@
       "tax_codes": {
         "label": "Tax codes",
         "description": "Tax codes — jurisdiction, scope and recoverability."
+      },
+      "pay_stubs": {
+        "label": "Pay stubs",
+        "description": "One row per employee per pay run — gross, statutory withholdings, net, and employer cost. Requires the payroll permission."
       }
     },
     "columns": {
@@ -690,6 +694,27 @@
         "recoverable_percent": "Recoverable %",
         "is_active": "Active",
         "id": "Tax code (id)"
+      },
+      "pay_stubs": {
+        "employee": "Employee",
+        "run_number": "Pay run #",
+        "schedule": "Schedule",
+        "pay_date": "Pay date",
+        "period_start": "Period start",
+        "period_end": "Period end",
+        "tax_year": "Tax year",
+        "province": "Province / state",
+        "run_status": "Run status",
+        "paid": "Paid",
+        "gross": "Gross pay",
+        "cpp_fica": "CPP / FICA (employee)",
+        "ei": "EI (employee)",
+        "income_tax": "Income tax",
+        "net_pay": "Net pay",
+        "employer_cost": "Employer cost",
+        "vacation_accrued": "Vacation accrued",
+        "pensionable": "Pensionable earnings",
+        "insurable": "Insurable earnings"
       }
     },
     "enumValues": {

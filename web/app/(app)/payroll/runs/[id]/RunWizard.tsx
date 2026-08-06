@@ -214,6 +214,8 @@ export function RunWizard(props: {
   /** Credit legs by account from the committed document lines (negative). */
   remittance: RemittanceRow[]
   bankAccounts: { id: string; label: string }[]
+  /** The seeded 'payroll-register' report definition (full report engine). */
+  registerReportId: string | null
   canRun: boolean
   initialStep: WizardStep
 }) {
@@ -518,6 +520,7 @@ export function RunWizard(props: {
           onPost={post}
           onEmailStubs={emailStubs}
           onRecordPayment={recordPayment}
+          registerReportId={props.registerReportId}
           bankAccounts={props.bankAccounts}
           canRun={props.canRun}
           fmt={fmt}
@@ -1208,6 +1211,7 @@ function FinishStep({
   onPost,
   onEmailStubs,
   onRecordPayment,
+  registerReportId,
   bankAccounts,
   canRun,
   fmt,
@@ -1221,6 +1225,7 @@ function FinishStep({
   onPost: () => void
   onEmailStubs: () => void
   onRecordPayment: (bankAccountId: string) => void
+  registerReportId: string | null
   bankAccounts: { id: string; label: string }[]
   canRun: boolean
   fmt: (v: string | number | null | undefined) => string
@@ -1295,11 +1300,13 @@ function FinishStep({
                   {t('wizard.finish.printStubs')}
                 </a>
               </Button>
-              <Button asChild size="sm" variant="outline">
-                <Link href={`/payroll/runs/${run.document_id}/register` as never}>
-                  {t('wizard.finish.register')}
-                </Link>
-              </Button>
+              {registerReportId && (
+                <Button asChild size="sm" variant="outline">
+                  <Link href={`/reports/custom/run/${registerReportId}` as never}>
+                    {t('wizard.finish.register')}
+                  </Link>
+                </Button>
+              )}
               {canRun && (
                 <Button size="sm" variant="outline" disabled={busy} onClick={onEmailStubs}>
                   <Send size={14} aria-hidden />
