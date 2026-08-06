@@ -28,6 +28,7 @@ type Tab = 'data' | 'filter' | 'format'
 export function ReportBuilder({
   definition,
   company,
+  hiddenEntityKeys = [],
 }: {
   definition: {
     id: string
@@ -38,6 +39,8 @@ export function ReportBuilder({
     layout?: Record<string, unknown> | null
   }
   company: string
+  /** Entities the user lacks permission for (e.g. payroll wages) — hidden from the picker. */
+  hiddenEntityKeys?: string[]
 }) {
   const t = useTranslations('reports.custom.builder')
   const tk = useTranslations('reports.custom')
@@ -272,7 +275,7 @@ export function ReportBuilder({
               <div className={field}>
                 <Label>{t('source')}</Label>
                 <Select value={query.entity} onChange={(e) => changeEntity(e.target.value)}>
-                  {REPORT_ENTITIES.map((e) => (
+                  {REPORT_ENTITIES.filter((e) => !hiddenEntityKeys.includes(e.key)).map((e) => (
                     <option key={e.key} value={e.key}>
                       {tReports(`catalog.entities.${e.key}.label`)}
                     </option>

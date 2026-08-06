@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { validateCustomQuery } from '@openbooks/reports'
-import { guardPermission } from '../../../../lib/authz'
+import { REPORT_ENTITY_MAP } from '@openbooks/reports'
+import { can, guardPermission } from '../../../../lib/authz'
 import {
   REPORT_MAX_ROWS,
   REPORT_PREVIEW_ROWS,
@@ -27,6 +28,16 @@ export async function POST(req: Request) {
   if (gate instanceof NextResponse) return gate
   const { user } = gate
 
+  // Sensitive entities (payroll wages) carry their own permission on top of
+  // reports.read — enforced here for both saved definitions and ad-hoc plans.
+  const entityGate = (entityKey: unknown): NextResponse | null => {
+    const entity = typeof entityKey === 'string' ? REPORT_ENTITY_MAP[entityKey] : undefined
+    if (entity?.requiredPermission && !can(gate, entity.requiredPermission)) {
+      return NextResponse.json({ error: 'you do not have access to this data' }, { status: 403 })
+    }
+    return null
+  }
+
   const body = (await req.json()) as {
     query?: unknown
     definitionId?: string
@@ -42,6 +53,8 @@ export async function POST(req: Request) {
     if (def.report_type === 'statement' || !def.query) {
       return NextResponse.json({ error: 'not a query report' }, { status: 422 })
     }
+    const denied = entityGate((def.query as { entity?: string }).entity)
+    if (denied) return denied
     const run = await recordReportRun({
       orgId: user.orgId,
       userId: user.id,
@@ -64,6 +77,8 @@ export async function POST(req: Request) {
       { status: 422 },
     )
   }
+  const deniedAdhoc = entityGate(query.entity)
+  if (deniedAdhoc) return deniedAdhoc
   const maxRows = body.preview === false ? REPORT_MAX_ROWS : REPORT_PREVIEW_ROWS
   try {
     const result = await executeReport(user.orgId, query, maxRows)

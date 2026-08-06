@@ -1,4 +1,5 @@
 import { sql } from 'drizzle-orm'
+import { REPORT_ENTITY_MAP } from '@openbooks/reports'
 import { getTranslations } from 'next-intl/server'
 import { db } from '@openbooks/engine/src/db.ts'
 import { PageContainer } from '../../../components/page-layout'
@@ -18,14 +19,21 @@ export default async function Reports() {
       rows: { id: string; name: string; path: string; params: Record<string, string> }[]
     }>,
     db.execute(
-      sql`select id, name, kind from report_definitions where coalesce(report_type, 'query') = 'query' order by updated_at desc limit 12`,
+      sql`select id, name, kind, query->>'entity' as entity from report_definitions where coalesce(report_type, 'query') = 'query' order by updated_at desc limit 12`,
     ) as Promise<{
-      rows: { id: string; name: string; kind: string }[]
+      rows: { id: string; name: string; kind: string; entity: string | null }[]
     }>,
     authz ? isFeatureEnabled(authz.user.orgId, 'projects') : Promise.resolve(false),
   ])
 
-  const card = (key: string, href: string, icon: string) => ({
+    // Hide definitions over permission-gated entities (payroll wages) from
+  // users who could not run them anyway.
+  const visibleDefinitions = custom.rows.filter((row) => {
+    const entity = row.entity ? REPORT_ENTITY_MAP[row.entity] : undefined
+    return !entity?.requiredPermission || (authz ? can(authz, entity.requiredPermission) : false)
+  })
+
+const card = (key: string, href: string, icon: string) => ({
     href,
     title: t(`hub.cards.${key}Title`),
     desc: t(`hub.cards.${key}Description`),
@@ -97,7 +105,7 @@ export default async function Reports() {
       accent: 'slate',
       cards: [
         { href: '/reports/custom', title: t('hub.customStudio.title'), desc: t('hub.customStudio.description'), icon: 'Sparkles' },
-        ...custom.rows.filter((c) => projectsEnabled || c.kind !== 'project-profitability').map((c) => ({
+        ...visibleDefinitions.filter((c) => projectsEnabled || c.kind !== 'project-profitability').map((c) => ({
           href: `/reports/custom/run/${c.id}`,
           title: c.name,
           desc: c.kind === 'built_in' ? t('custom.kind.builtIn') : t('custom.kind.custom'),

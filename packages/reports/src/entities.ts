@@ -78,6 +78,10 @@ export type ReportEntity = {
   /** Implicit predicate ALWAYS AND-ed into every query against this entity.
    *  Server-generated only, never from user input. */
   baseFilter?: ReportRuleGroup
+  /** Permission (beyond reports.read) required to see/run this entity —
+   *  sensitive data like payroll wages. Enforced at run time and filtered
+   *  from the builder catalog. */
+  requiredPermission?: string
 }
 
 export const REPORT_ENTITIES: ReportEntity[] = [
@@ -456,6 +460,58 @@ export const REPORT_ENTITIES: ReportEntity[] = [
     ],
     defaultSort: { column: 'number', direction: 'asc' },
   },
+  {
+    key: 'pay_stubs',
+    label: 'Pay stubs',
+    category: 'payroll',
+    description:
+      'One row per employee per pay run — gross, statutory withholdings, net, and employer cost, with run/schedule context. Wage data: requires the payroll permission.',
+    from: `pay_stubs s
+      JOIN pay_runs r ON r.document_id = s.pay_run_document_id
+      JOIN documents d ON d.id = r.document_id
+      JOIN parties p ON p.id = s.employee_party_id AND p.org_id = s.org_id
+      LEFT JOIN pay_schedules ps ON ps.id = r.pay_schedule_id`,
+    orgColumn: 's.org_id',
+    requiredPermission: 'payroll.read',
+    columns: [
+      { key: 'employee', label: 'Employee', kind: 'text', expr: 'p.display_name' },
+      { key: 'run_number', label: 'Pay run #', kind: 'text', expr: 'd.document_number' },
+      { key: 'schedule', label: 'Schedule', kind: 'text', expr: 'ps.name' },
+      { key: 'pay_date', label: 'Pay date', kind: 'date', expr: 's.pay_date' },
+      { key: 'period_start', label: 'Period start', kind: 'date', expr: 'r.period_start' },
+      { key: 'period_end', label: 'Period end', kind: 'date', expr: 'r.period_end' },
+      { key: 'tax_year', label: 'Tax year', kind: 'number', expr: 's.tax_year' },
+      { key: 'province', label: 'Province / state', kind: 'text', expr: 's.province' },
+      {
+        key: 'run_status', label: 'Run status', kind: 'enum', expr: 'r.run_status',
+        options: ['draft', 'calculated', 'committed'],
+      },
+      {
+        key: 'paid', label: 'Paid', kind: 'enum',
+        expr: "case when r.paid_at is not null then 'paid' else 'unpaid' end",
+        options: ['paid', 'unpaid'],
+      },
+      { key: 'gross', label: 'Gross pay', kind: 'number', expr: 's.gross' },
+      {
+        key: 'cpp_fica', label: 'CPP / FICA (employee)', kind: 'number',
+        expr: `(coalesce((s.factors->>'C')::numeric, 0) + coalesce((s.factors->>'C2')::numeric, 0)
+          + coalesce((s.factors->>'SS')::numeric, 0) + coalesce((s.factors->>'MED')::numeric, 0)
+          + coalesce((s.factors->>'MED2')::numeric, 0))`,
+      },
+      { key: 'ei', label: 'EI (employee)', kind: 'number', expr: `coalesce((s.factors->>'EI')::numeric, 0)` },
+      {
+        key: 'income_tax', label: 'Income tax', kind: 'number',
+        expr: `(coalesce((s.factors->>'T')::numeric, 0) + coalesce((s.factors->>'TB')::numeric, 0)
+          + coalesce((s.factors->>'FIT')::numeric, 0))`,
+      },
+      { key: 'net_pay', label: 'Net pay', kind: 'number', expr: 's.net_pay' },
+      { key: 'employer_cost', label: 'Employer cost', kind: 'number', expr: 's.employer_cost' },
+      { key: 'vacation_accrued', label: 'Vacation accrued', kind: 'number', expr: 's.vacation_accrued' },
+      { key: 'pensionable', label: 'Pensionable earnings', kind: 'number', expr: 's.pensionable_earnings' },
+      { key: 'insurable', label: 'Insurable earnings', kind: 'number', expr: 's.insurable_earnings' },
+    ],
+    defaultSort: { column: 'pay_date', direction: 'desc' },
+  },
 ]
 
 export const REPORT_ENTITY_MAP: Record<string, ReportEntity> = Object.fromEntries(
@@ -538,6 +594,7 @@ export const REPORT_OPERATORS: ReportOperatorMeta[] = [
     needsValue: 'one',
     applicableKinds: ['date', 'timestamp'],
   },
+
 ]
 
 export function operatorsForKind(kind: ReportColumnKind): ReportOperatorMeta[] {
