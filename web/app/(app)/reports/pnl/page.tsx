@@ -12,12 +12,15 @@ import { ReportPaper } from '../ReportPaper'
 import { ExportMenu } from '../ExportMenu'
 import { ReportFilterBar } from '../ReportFilterBar'
 import { SaveViewButton } from '../SaveViewButton'
+import { ScheduleReportButton } from '../ScheduleReportButton'
+import { reportScheduleAnchor, scheduleParamsFrom } from '../../../../lib/report-schedule-anchor'
 
 export const dynamic = 'force-dynamic'
 
 export default async function PnL({ searchParams }: { searchParams: Promise<Record<string, string | undefined>> }) {
   const t = await getTranslations('reports')
   const sp = await searchParams
+  const scheduleDefId = await reportScheduleAnchor('pnl')
   const q = parseReportQuery(sp)
   const period = await resolvePeriod(q.period, { customFrom: q.from, customTo: q.to })
 
@@ -70,7 +73,7 @@ export default async function PnL({ searchParams }: { searchParams: Promise<Reco
             subsidiaries={subView.picker}
             actions={
               <>
-                <SaveViewButton />
+                {scheduleDefId ? <ScheduleReportButton definitionId={scheduleDefId} statementParams={scheduleParamsFrom(sp)} /> : null}<SaveViewButton />
                 <ExportMenu kind="pnl" params={sp} />
               </>
             }

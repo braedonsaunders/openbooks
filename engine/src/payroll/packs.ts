@@ -42,6 +42,8 @@ export const PAYROLL_COUNTRY_PACKS: Record<string, PayrollCountryPack> = {
       { key: "ei", componentCodes: ["EI", "EI-ER"], legacySettingsKey: "eiPayableAccountId" },
       { key: "qpip", componentCodes: ["QPIP", "QPIP-ER"], legacySettingsKey: "eiPayableAccountId" },
       { key: "vacation", componentCodes: ["VAC"], legacySettingsKey: "vacationPayableAccountId" },
+      { key: "wcb", componentCodes: ["WCB"] },
+      { key: "eht", componentCodes: ["EHT"] },
     ],
   },
   US: {

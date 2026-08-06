@@ -11,6 +11,7 @@ import {
   ClipboardList,
   Coins,
   FileText,
+  HandCoins,
   Landmark,
   NotebookPen,
   Receipt,
@@ -39,6 +40,7 @@ const ICONS: Record<string, typeof FileText> = {
   Sparkles,
   Coins,
   Bookmark,
+  HandCoins,
 }
 
 // Full literal accent class sets so Tailwind's scanner keeps them.
@@ -52,6 +54,11 @@ const ACCENTS: Record<string, { chip: string; border: string; link: string }> = 
     chip: 'bg-sky-50 text-sky-700 ring-sky-100 dark:bg-sky-950/50 dark:text-sky-300',
     border: 'hover:border-sky-300 dark:hover:border-sky-700',
     link: 'group-hover:text-sky-600 dark:group-hover:text-sky-300',
+  },
+  emerald: {
+    chip: 'bg-emerald-50 text-emerald-700 ring-emerald-100 dark:bg-emerald-950/50 dark:text-emerald-300',
+    border: 'hover:border-emerald-300 dark:hover:border-emerald-700',
+    link: 'group-hover:text-emerald-600 dark:group-hover:text-emerald-300',
   },
   violet: {
     chip: 'bg-violet-50 text-violet-700 ring-violet-100 dark:bg-violet-950/50 dark:text-violet-300',

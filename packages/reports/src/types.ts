@@ -58,7 +58,10 @@ export type ReportRuleGroup = {
 // --- Summarize mode ----------------------------------------------------------
 
 /** Aggregate functions a Summarize-mode measure can use. */
-export const REPORT_AGG_FNS = ['count', 'count_distinct', 'sum', 'avg', 'min', 'max'] as const
+// 'latest' = the value on the chronologically last underlying row (entity must
+// declare latestOrderExpr) — running totals like payroll YTD end exactly, where
+// max() would overstate after a net-negative period.
+export const REPORT_AGG_FNS = ['count', 'count_distinct', 'sum', 'avg', 'min', 'max', 'latest'] as const
 export type ReportAggFn = (typeof REPORT_AGG_FNS)[number]
 
 /** Temporal buckets for a Summarize-mode breakout on a date/timestamp column.
@@ -113,6 +116,10 @@ export type ReportCustomQuery = {
   columnLabels?: Record<string, string> | null
   /** Hard cap on rows (engine clamps to 10 000). */
   limit?: number | null
+  /** Sectioned-summarize totals: per-section subtotal rows at the first
+   *  non-section breakout level, and/or a final Grand totals group across all
+   *  sections. Sum-style measures total; latest/avg/min/max stay blank. */
+  totals?: { sections?: boolean; grand?: boolean } | null
 }
 
 // --- Layout (page setup for a printed/exported document) ---------------------
@@ -179,9 +186,27 @@ export type ReportGroup = {
   columns: string[]
   /** Rows aligned to `columns`. Cell values are coerced to string. */
   rows: (string | number | null | undefined)[][]
+  /** Per-column: format as currency in viewers (money-kind columns/measures). */
+  money?: boolean[]
+  /** For 'section' groups: the raw groupBy field + bucket value, so viewers
+   *  can scope drill-downs to exactly this section's rows. */
+  groupKey?: { field: string; value: string }
+  /** Row indices styled as total/subtotal rows by viewers. */
+  totalRows?: number[]
+  /** Summarize mode: per-row scope of the aggregate — one entry per breakout
+   *  (eq value, date range for binned buckets, or null-bucket marker). Rows
+   *  whose bucket cannot be scoped exactly carry null (viewers omit the
+   *  drill rather than show unrelated records). */
+  rowKeys?: (ReportRowScopeRule[] | null)[]
   /** If true, render an "empty" placeholder row instead of the table. */
   isEmpty?: boolean
 }
+
+/** One exact-scope predicate for drilling into an aggregate bucket. */
+export type ReportRowScopeRule =
+  | { field: string; value: string }
+  | { field: string; from: string; to: string }
+  | { field: string; empty: true }
 
 export type ReportSummaryItem = { label: string; value: string | number }
 

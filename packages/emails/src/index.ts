@@ -173,6 +173,40 @@ export function scheduledReportEmail(args: {
   return { subject, html, text }
 }
 
+/**
+ * Self-service password reset. The link carries a one-use token that expires
+ * quickly; the email states both so stale links explain themselves. Never
+ * includes the account's org or any other identifying detail beyond the email
+ * it was sent to.
+ */
+export function passwordResetEmail(args: {
+  recipientName?: string | null
+  resetUrl: string
+  expiresMinutes: number
+}): EmailOut {
+  const subject = 'Reset your OpenBooks password'
+  const greeting = args.recipientName ? `Hi ${args.recipientName},` : 'Hi,'
+  const text =
+    `${greeting}\n\n` +
+    `A password reset was requested for your OpenBooks account. Open this link to choose a new password:\n\n` +
+    `${args.resetUrl}\n\n` +
+    `The link works once and expires in ${args.expiresMinutes} minutes. ` +
+    `If you didn't request this, you can ignore this email — your password is unchanged.`
+  const html = shell({
+    heading: 'Reset your password',
+    bodyHtml: `
+      <p>${esc(greeting)}</p>
+      <p>A password reset was requested for your OpenBooks account.</p>
+      <p style="margin:20px 0">
+        <a href="${esc(args.resetUrl)}" style="display:inline-block;padding:10px 20px;background:#0d9488;color:#fff;text-decoration:none;border-radius:6px;font-weight:600">Choose a new password</a>
+      </p>
+      <p style="color:#666">The link works once and expires in ${esc(args.expiresMinutes)} minutes.
+      If you didn't request this, you can ignore this email — your password is unchanged.</p>`,
+    footer: 'Sent by OpenBooks in response to a password reset request.',
+  })
+  return { subject, html, text }
+}
+
 /** Cover email for a transaction (invoice, quote, PO, …) sent to its party; the
  *  rendered document rides as a PDF attachment. An optional free-text `message`
  *  from the sender is shown above the standard line. */

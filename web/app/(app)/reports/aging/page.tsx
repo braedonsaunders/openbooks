@@ -10,6 +10,8 @@ import { parseReportQuery } from '../../../../lib/report-filters'
 import { ReportFilterBar } from '../ReportFilterBar'
 import { ExportMenu } from '../ExportMenu'
 import { SaveViewButton } from '../SaveViewButton'
+import { ScheduleReportButton } from '../ScheduleReportButton'
+import { reportScheduleAnchor, scheduleParamsFrom } from '../../../../lib/report-schedule-anchor'
 import { ReportPaper } from '../ReportPaper'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow, reportTotalRowClass } from '../ReportTable'
 import { ReportDrillLink } from '../ReportDrillLink'
@@ -30,6 +32,7 @@ export default async function Aging({
   const tr = await getTranslations('reports')
   const tc = await getTranslations('common')
   const sp = await searchParams
+  const scheduleDefId = await reportScheduleAnchor('aging', { side: sp.side === 'ap' ? 'ap' : 'ar' })
   const side: AgingSide = sp.side === 'ap' ? 'ap' : 'ar'
   const detail = sp.view === 'detail'
   const q = parseReportQuery(sp)
@@ -64,7 +67,7 @@ export default async function Aging({
             controls={{ period: true, asOf: true, dimensions: true }}
             dimensions={opts}
             defaultPeriod="today"
-            actions={<><SaveViewButton /><ExportMenu kind="aging" params={sp} /></>}
+            actions={<>{scheduleDefId ? <ScheduleReportButton definitionId={scheduleDefId} statementParams={scheduleParamsFrom(sp)} /> : null}<SaveViewButton /><ExportMenu kind="aging" params={sp} /></>}
           />
         </>
       }

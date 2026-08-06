@@ -45,8 +45,13 @@ export type PaperGroup = {
   links?: (string | null | undefined)[][]
   /** Per-cell report drill target (parallel to `rows`). */
   drills?: (ReportDrillTarget | null | undefined)[][]
+  /** Group-level drill fallback for numeric cells (e.g. scoped to this
+   *  section's rows); wins over the paper-wide defaultDrillTarget. */
+  drillTarget?: ReportDrillTarget
   /** Explicit total row. Ordinary custom result sets must not style their last data row as a total. */
   totalRowIndex?: number
+  /** Multiple subtotal/total rows (sectioned-summarize level totals). */
+  totalRows?: number[]
   isEmpty?: boolean
 }
 
@@ -137,7 +142,7 @@ export function PaperView({
                   </TableHeader>
                   <TableBody>
                     {group.rows.map((row, ri) => {
-                      const total = group.totalRowIndex === ri
+                      const total = group.totalRowIndex === ri || group.totalRows?.includes(ri) === true
                       return (
                         <TableRow
                           key={ri}
@@ -149,7 +154,7 @@ export function PaperView({
                             const negative = typeof cell === 'number' && cell < 0
                             const href = group.links?.[ri]?.[ci]
                             const drill = group.drills?.[ri]?.[ci]
-                              ?? (isNumericCell(cell) ? data.defaultDrillTarget : undefined)
+                              ?? (isNumericCell(cell) ? group.drillTarget ?? data.defaultDrillTarget : undefined)
                             const text = fmt(cell, isMoney)
                             return (
                               <TableCell

@@ -96,6 +96,7 @@ export const payComponents = pgTable(
         "base_pay", "overtime", "bonus", "vacation_accrual", "vacation_payout",
         "cpp", "cpp2", "ei", "qpip", "income_tax",
         "fit", "ss", "medicare", "medicare_addl", "futa", "suta",
+        "wcb", "eht",
       ],
     }),
     /** How a user component's amount is produced (statutory rows ignore this). */
@@ -163,6 +164,11 @@ export const employeePayrollProfiles = pgTable(
     authorizedProvincialCredits: money("authorized_provincial_credits"),
     cppExempt: boolean("cpp_exempt").notNull().default(false),
     eiExempt: boolean("ei_exempt").notNull().default(false),
+    /** Sealed SIN/SSN (envelope encryption, like vendor TINs) for T4/W-2
+     * filing; last 3 digits shown for identify-without-reveal. The workbench
+     * view excludes the ciphertext. */
+    sinEncrypted: text("sin_encrypted"),
+    sinLast3: text("sin_last3"),
     /** Claim code E / CRA letter / W-4 "Exempt": no income tax withholding
      * (statutory contributions still deducted). */
     taxExempt: boolean("tax_exempt").notNull().default(false),
@@ -249,6 +255,9 @@ export const payRuns = pgTable(
     employerCostTotal: money("employer_cost_total").notNull().default("0"),
     employeeCount: integer("employee_count").notNull().default(0),
     calculatedAt: timestamp("calculated_at", { withTimezone: true }),
+    /** Set by recordPayRunPayment: the DR-payable/CR-bank settlement entry. */
+    paidAt: timestamp("paid_at", { withTimezone: true }),
+    paidEntryId: uuid("paid_entry_id"),
     ...auditColumns,
   },
   (t) => [

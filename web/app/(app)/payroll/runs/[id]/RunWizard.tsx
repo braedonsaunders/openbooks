@@ -41,6 +41,8 @@ export interface RunHeader {
   document_status: string
   currency: string
   posted_entry_id: string | null
+  paid_at: string | null
+  paid_entry_id: string | null
   schedule_name: string | null
   period_start: string
   period_end: string
@@ -148,6 +150,10 @@ const FACTOR_LABELS: Record<string, string> = {
   EI_ER: 'EI premium (employer)',
   QPIP: 'QPIP premium',
   QPIP_ER: 'QPIP premium (employer)',
+  WCB: "Workers' compensation premium (employer)",
+  WCB_EARN: "Workers' compensation assessable earnings",
+  EHT: 'Employer Health Tax',
+  EHT_EARN: 'EHT remuneration (Ontario)',
   F5: 'Enhanced-CPP tax deduction',
   F5A: 'Enhanced-CPP deduction on periodic pay',
   F5B: 'Enhanced-CPP deduction on the bonus',
@@ -211,6 +217,9 @@ export function RunWizard(props: {
   previousNet: Record<string, string>
   /** Credit legs by account from the committed document lines (negative). */
   remittance: RemittanceRow[]
+  bankAccounts: { id: string; label: string }[]
+  /** The seeded 'payroll-register' report definition (full report engine). */
+  registerReportId: string | null
   canRun: boolean
   initialStep: WizardStep
 }) {
@@ -324,6 +333,48 @@ export function RunWizard(props: {
       setCalcErrors(Array.isArray(rj.errors) ? rj.errors : [])
       setGl({ state: 'idle', legs: [], debitTotal: '0', error: '' })
       toast.success(t('wizard.adjust.applied'))
+      router.refresh()
+    } catch (e) {
+      toast.error((e as Error).message)
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  async function emailStubs() {
+    setBusy(true)
+    try {
+      const res = await fetch(`/api/payroll/runs/${run.document_id}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'email-stubs' }),
+      })
+      const j = await res.json()
+      if (!res.ok) throw new Error(j.error ?? 'failed')
+      const skipped = [...(j.noEmail ?? []), ...(j.failed ?? []).map((f: { name: string }) => f.name)]
+      if (skipped.length > 0) {
+        toast.warning(t('wizard.finish.stubsEmailedPartial', { sent: j.sent, skipped: skipped.join(', ') }))
+      } else {
+        toast.success(t('wizard.finish.stubsEmailed', { sent: j.sent }))
+      }
+    } catch (e) {
+      toast.error((e as Error).message)
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  async function recordPayment(bankAccountId: string) {
+    setBusy(true)
+    try {
+      const res = await fetch(`/api/payroll/runs/${run.document_id}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'record-payment', bankAccountId }),
+      })
+      const j = await res.json()
+      if (!res.ok) throw new Error(j.error ?? 'failed')
+      toast.success(t('wizard.finish.paymentRecorded'))
       router.refresh()
     } catch (e) {
       toast.error((e as Error).message)
@@ -471,6 +522,11 @@ export function RunWizard(props: {
           canPost={canPost}
           busy={busy}
           onPost={post}
+          onEmailStubs={emailStubs}
+          onRecordPayment={recordPayment}
+          registerReportId={props.registerReportId}
+          bankAccounts={props.bankAccounts}
+          canRun={props.canRun}
           fmt={fmt}
         />
       )}
@@ -1157,6 +1213,11 @@ function FinishStep({
   canPost,
   busy,
   onPost,
+  onEmailStubs,
+  onRecordPayment,
+  registerReportId,
+  bankAccounts,
+  canRun,
   fmt,
 }: {
   run: RunHeader
@@ -1166,6 +1227,11 @@ function FinishStep({
   canPost: boolean
   busy: boolean
   onPost: () => void
+  onEmailStubs: () => void
+  onRecordPayment: (bankAccountId: string) => void
+  registerReportId: string | null
+  bankAccounts: { id: string; label: string }[]
+  canRun: boolean
   fmt: (v: string | number | null | undefined) => string
 }) {
   const t = useTranslations('payroll')
@@ -1212,6 +1278,46 @@ function FinishStep({
                 {t('wizard.finish.viewJournal')}
               </Link>
             </Button>
+          )}
+          {posted && run.paid_at && (
+            <Badge variant="success">{t('wizard.finish.paid')}</Badge>
+          )}
+          {posted && run.paid_entry_id && (
+            <Button asChild size="sm" variant="ghost">
+              <Link href={`/journal?entry=${run.paid_entry_id}` as never}>
+                {t('wizard.finish.viewPayment')}
+              </Link>
+            </Button>
+          )}
+          {posted && !run.paid_at && canRun && (
+            <RecordPaymentControl
+              bankAccounts={bankAccounts}
+              busy={busy}
+              onRecord={onRecordPayment}
+            />
+          )}
+          {committed && (
+            <>
+              <Button asChild size="sm" variant="outline">
+                <a href={`/api/payroll/runs/${run.document_id}/stubs-pdf`} target="_blank" rel="noreferrer">
+                  <FileDown size={14} aria-hidden />
+                  {t('wizard.finish.printStubs')}
+                </a>
+              </Button>
+              {registerReportId && (
+                <Button asChild size="sm" variant="outline">
+                  <Link href={`/reports/custom/run/${registerReportId}` as never}>
+                    {t('wizard.finish.register')}
+                  </Link>
+                </Button>
+              )}
+              {canRun && (
+                <Button size="sm" variant="outline" disabled={busy} onClick={onEmailStubs}>
+                  <Send size={14} aria-hidden />
+                  {t('wizard.finish.emailStubs')}
+                </Button>
+              )}
+            </>
           )}
           {!posted && canPost && (
             <Button onClick={onPost} disabled={busy}>
@@ -1289,5 +1395,36 @@ function HeaderFact({ label, children }: { label: string; children: React.ReactN
         {children}
       </dd>
     </div>
+  )
+}
+
+/** Bank pick + one-click settlement of the run's net-pay open items. */
+function RecordPaymentControl({
+  bankAccounts,
+  busy,
+  onRecord,
+}: {
+  bankAccounts: { id: string; label: string }[]
+  busy: boolean
+  onRecord: (bankAccountId: string) => void
+}) {
+  const t = useTranslations('payroll')
+  const [bankAccountId, setBankAccountId] = useState(bankAccounts[0]?.id ?? '')
+  return (
+    <span className="flex items-center gap-2">
+      <select
+        aria-label={t('wizard.finish.bankAccount')}
+        value={bankAccountId}
+        onChange={(e) => setBankAccountId(e.target.value)}
+        className="rounded-md border border-slate-300 bg-white px-2 py-1.5 text-sm dark:border-slate-700 dark:bg-slate-900"
+      >
+        {bankAccounts.map((account) => (
+          <option key={account.id} value={account.id}>{account.label}</option>
+        ))}
+      </select>
+      <Button size="sm" disabled={busy || !bankAccountId} onClick={() => onRecord(bankAccountId)}>
+        {t('wizard.finish.recordPayment')}
+      </Button>
+    </span>
   )
 }

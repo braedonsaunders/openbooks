@@ -12,6 +12,8 @@ import { ReportFilterBar } from '../ReportFilterBar'
 import { ExportMenu } from '../ExportMenu'
 import { TxnLink } from '../TxnLink'
 import { SaveViewButton } from '../SaveViewButton'
+import { ScheduleReportButton } from '../ScheduleReportButton'
+import { reportScheduleAnchor, scheduleParamsFrom } from '../../../../lib/report-schedule-anchor'
 import { ReportPaper } from '../ReportPaper'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '../ReportTable'
 import { ReportDrillLink } from '../ReportDrillLink'
@@ -28,6 +30,7 @@ export default async function RegistersPage({
   const t = await getTranslations('reports')
   const tc = await getTranslations('common')
   const sp = await searchParams
+  const scheduleDefId = await reportScheduleAnchor('registers', { side: sp.side === 'ap' ? 'ap' : 'ar' })
   const side: AgingSide = sp.side === 'ap' ? 'ap' : 'ar'
   const q = parseReportQuery(sp)
   const period = await resolvePeriod(q.period, { customFrom: q.from, customTo: q.to })
@@ -66,7 +69,7 @@ export default async function RegistersPage({
               </>
             }
             dimensions={opts}
-            actions={<><SaveViewButton /><ExportMenu kind="registers" params={sp} /></>}
+            actions={<>{scheduleDefId ? <ScheduleReportButton definitionId={scheduleDefId} statementParams={scheduleParamsFrom(sp)} /> : null}<SaveViewButton /><ExportMenu kind="registers" params={sp} /></>}
           />
           {reg.truncated && <p className="text-xs text-amber-600 dark:text-amber-400">{t('registers.truncated')}</p>}
         </>

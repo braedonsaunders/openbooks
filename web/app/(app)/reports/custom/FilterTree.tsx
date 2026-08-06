@@ -226,7 +226,7 @@ function RuleRow({
           className="h-8 w-40"
           value={typeof rule.value === 'string' || typeof rule.value === 'number' ? String(rule.value) : ''}
           placeholder={column?.kind === 'date' ? 'YYYY-MM-DD' : t('valuePlaceholder')}
-          type={column?.kind === 'date' ? 'date' : column?.kind === 'number' ? 'number' : 'text'}
+          type={column?.kind === 'date' ? 'date' : column?.kind === 'number' || column?.kind === 'money' ? 'number' : 'text'}
           onChange={(e) => onChange({ ...rule, value: e.target.value })}
         />
       ) : needsValue === 'list' && options?.length ? (

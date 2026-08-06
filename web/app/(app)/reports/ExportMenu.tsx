@@ -11,13 +11,20 @@ import { Button, Popover } from '@openbooks/ui'
  * so the report toolbar stays a single tidy row instead of four buttons. Print
  * fetches the PDF and opens the native print dialog on it (paper output).
  */
-export function ExportMenu({ kind, params }: { kind: string; params: Record<string, string | undefined> }) {
+export function ExportMenu({ kind, params, baseHref }: {
+  kind?: string
+  params?: Record<string, string | undefined>
+  /** Override endpoint (e.g. a saved definition's export route); `format` is appended. */
+  baseHref?: string
+}) {
   const t = useTranslations('reports.export')
   const [open, setOpen] = useState(false)
 
   const qs = new URLSearchParams()
-  for (const [k, v] of Object.entries(params)) if (v) qs.set(k, v)
-  const url = (format: string) => `/api/reports/statement/${kind}/export?${new URLSearchParams({ format, ...Object.fromEntries(qs) })}`
+  for (const [k, v] of Object.entries(params ?? {})) if (v) qs.set(k, v)
+  const url = (format: string) => baseHref
+    ? `${baseHref}${baseHref.includes('?') ? '&' : '?'}format=${format}`
+    : `/api/reports/statement/${kind}/export?${new URLSearchParams({ format, ...Object.fromEntries(qs) })}`
   const pdf = url('pdf')
 
   async function print() {

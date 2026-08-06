@@ -63,6 +63,9 @@ export type ReportDrillTarget =
       label: string
       source: 'definition' | 'view'
       id: string
+      /** Exact scope of the clicked aggregate: eq value, inclusive date
+       *  range, or null-bucket marker per breakout. */
+      filter?: { field: string; value?: string; from?: string; to?: string; empty?: true }[]
     }
 
 export type ReportDrillCell = string | number | null
@@ -246,7 +249,27 @@ export function parseReportDrillTarget(raw: string | null): ReportDrillTarget | 
   if (input.kind === 'custom') {
     const id = uuidValue(input.id)
     if (!id || (input.source !== 'definition' && input.source !== 'view')) return null
-    return { kind: 'custom', label, source: input.source, id }
+    // Optional aggregate scope: per-breakout predicates. Fields are validated
+    // against the entity catalog at load time; here each entry just has to
+    // look like a column key with exactly one predicate shape.
+    let filter: { field: string; value?: string; from?: string; to?: string; empty?: true }[] | undefined
+    const rawFilter = (input as { filter?: unknown }).filter
+    if (Array.isArray(rawFilter) && rawFilter.length <= 8) {
+      const clean: NonNullable<typeof filter> = []
+      const dateish = (v: unknown) => typeof v === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(v)
+      for (const entry of rawFilter) {
+        if (!entry || typeof entry !== 'object') return null
+        const { field, value, from, to, empty } = entry as Record<string, unknown>
+        if (typeof field !== 'string' || !/^[a-z][a-z0-9_]{0,62}$/.test(field)) return null
+        if (empty === true) clean.push({ field, empty: true })
+        else if (dateish(from) && dateish(to)) clean.push({ field, from: from as string, to: to as string })
+        else if ((typeof value === 'string' || typeof value === 'number') && String(value).length <= 256) {
+          clean.push({ field, value: String(value) })
+        } else return null
+      }
+      filter = clean
+    }
+    return { kind: 'custom', label, source: input.source, id, filter }
   }
 
   return null
