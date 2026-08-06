@@ -82,6 +82,10 @@ export type ReportEntity = {
    *  sensitive data like payroll wages. Enforced at run time and filtered
    *  from the builder catalog. */
   requiredPermission?: string
+  /** Chronological ordering (SQL ORDER BY body, server-defined constant) that
+   *  makes the 'latest' aggregate exact for this entity. Without it, 'latest'
+   *  measures are rejected at compile time. */
+  latestOrderExpr?: string
 }
 
 export const REPORT_ENTITIES: ReportEntity[] = [
@@ -529,6 +533,7 @@ export const REPORT_ENTITIES: ReportEntity[] = [
       LEFT JOIN departments dep ON dep.id = l.department_id`,
     orgColumn: 'l.org_id',
     requiredPermission: 'payroll.read',
+    latestOrderExpr: 's.pay_date DESC, s.id DESC, l.id DESC',
     columns: [
       { key: 'employee', label: 'Employee', kind: 'text', expr: 'p.display_name' },
       { key: 'run_number', label: 'Pay run #', kind: 'text', expr: 'd.document_number' },

@@ -160,21 +160,21 @@ export const BUILT_IN_REPORT_DEFINITIONS: BuiltInReportDefinition[] = [
       'The full pay-period audit record, one section per employee: every earning, deduction, and employer contribution with hours, rate, this-period amount, and year-to-date. Pick a single pay period from the period menu to match a run. Requires the payroll permission.',
     query: {
       entity: 'pay_stub_lines',
-      mode: 'rows',
-      columns: [
-        'component', 'line_kind', 'hours', 'rate', 'amount', 'ytd_amount',
-        'run_number', 'pay_date',
+      mode: 'summarize',
+      columns: [],
+      // One line per component per employee — period totals plus the exact
+      // end-of-window YTD (the 'latest' running figure, not a max).
+      breakouts: [{ column: 'employee' }, { column: 'line_kind' }, { column: 'component' }],
+      measures: [
+        { fn: 'sum', column: 'hours', label: 'Hours' },
+        { fn: 'sum', column: 'amount', label: 'Amount' },
+        { fn: 'latest', column: 'ytd_amount', label: 'YTD amount' },
       ],
       groupBy: 'employee',
       filters: {
         combinator: 'and',
         rules: [{ field: 'pay_date', op: 'this_year' }],
       },
-      sorts: [
-        { column: 'line_kind', direction: 'asc' },
-        { column: 'component', direction: 'asc' },
-        { column: 'pay_date', direction: 'asc' },
-      ],
       limit: 10000,
     },
   },
@@ -185,8 +185,13 @@ export const BUILT_IN_REPORT_DEFINITIONS: BuiltInReportDefinition[] = [
       'Every withholding and employer contribution, sectioned by component: who paid what this period and year-to-date. The backing detail for remittances and benefit carriers. Requires the payroll permission.',
     query: {
       entity: 'pay_stub_lines',
-      mode: 'rows',
-      columns: ['employee', 'line_kind', 'amount', 'ytd_amount', 'run_number', 'pay_date'],
+      mode: 'summarize',
+      columns: [],
+      breakouts: [{ column: 'component' }, { column: 'employee' }, { column: 'line_kind' }],
+      measures: [
+        { fn: 'sum', column: 'amount', label: 'Amount' },
+        { fn: 'latest', column: 'ytd_amount', label: 'YTD amount' },
+      ],
       groupBy: 'component',
       filters: {
         combinator: 'and',
@@ -195,10 +200,6 @@ export const BUILT_IN_REPORT_DEFINITIONS: BuiltInReportDefinition[] = [
           { field: 'line_kind', op: 'in', value: ['deduction', 'employer_contribution'] },
         ],
       },
-      sorts: [
-        { column: 'employee', direction: 'asc' },
-        { column: 'pay_date', direction: 'asc' },
-      ],
       limit: 10000,
     },
   },
