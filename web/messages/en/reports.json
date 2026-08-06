@@ -857,7 +857,9 @@
       "fiscal_quarter": "fiscal quarter",
       "fiscal_year": "fiscal year"
     },
-    "csvSection": "Section"
+    "csvSection": "Section",
+    "subtotal": "{level} — total",
+    "grandTotals": "Grand totals"
   },
   "export": {
     "pdf": "PDF",

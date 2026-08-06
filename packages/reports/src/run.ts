@@ -64,6 +64,10 @@ export type ReportRunLabels = {
   summaryTotal?: (measureHeading: string) => string
   /** Bucket title for rows whose groupBy value is null. */
   none?: () => string
+  /** Subtotal-row label over a level value ("Earnings — total"). */
+  subtotal?: (level: string) => string
+  /** Title of the sectioned-summarize Grand totals group. */
+  grandTotalsTitle?: () => string
   /** Boolean enum cell text (fallback: 'yes'/'no'). */
   bool?: (v: boolean) => string
   /** Enum cell text (e.g. 'vendor_bill' → 'Bill'). Return null/undefined to
@@ -101,7 +105,10 @@ export async function runCustomQuery(
 
   const labels = opts.labels ?? {}
   if (compiled.mode === 'summarize') {
-    return shapeSummarizeResult(entity, compiled.breakouts, compiled.measures, rows, labels, compiled.groupBy)
+    return shapeSummarizeResult(
+      entity, compiled.breakouts, compiled.measures, rows, labels,
+      compiled.groupBy, compiled.totals ?? null,
+    )
   }
   return shapeRowsResult(entity, compiled.columns, compiled.groupBy, rows, labels, q.columnLabels ?? undefined)
 }
@@ -185,6 +192,7 @@ function shapeSummarizeResult(
   dataRows: Record<string, unknown>[],
   labels: ReportRunLabels,
   groupBy: string | null = null,
+  totals: { sections?: boolean; grand?: boolean } | null = null,
 ): ReportRunResult {
   const measureHeading = (m: (typeof measures)[number]) =>
     labels.measure?.(entity, m) ?? measureLabel(entity, m)
@@ -241,25 +249,127 @@ function shapeSummarizeResult(
       ?? breakoutLabel(entity, breakouts[sectionIndex]!)
     const sectionColumns = drop(columns) as string[]
     const sectionMoney = drop(moneyFlags) as boolean[]
-    const buckets = new Map<string, { rows: (string | number | null)[][]; keys: (ReportRowScopeRule[] | null)[] }>()
+    // Which measure columns can honestly total: additive aggregates only.
+    const summable = measures.map((m) => m.fn === 'sum' || m.fn === 'count' || m.fn === 'count_distinct')
+    const totalLabel = (label: string) => labels.subtotal?.(label) ?? `${label} — total`
+    // Subtotal level: the first breakout that ISN'T the section column.
+    const levelIndex = breakouts.findIndex((_, i) => i !== sectionIndex)
+    type Bucket = {
+      rows: (string | number | null)[][]
+      keys: (ReportRowScopeRule[] | null)[]
+      raw: Record<string, unknown>[]
+      totalRows: number[]
+      dataCount: number
+    }
+    const buckets = new Map<string, Bucket>()
     dataRows.forEach((row, ri) => {
       const key = row[`d${sectionIndex}`] == null
         ? (labels.none?.() ?? '(none)')
         : String(rows[ri]![sectionIndex] ?? row[`d${sectionIndex}`])
-      const bucket = buckets.get(key) ?? { rows: [], keys: [] }
+      const bucket = buckets.get(key) ?? { rows: [], keys: [], raw: [], totalRows: [], dataCount: 0 }
       bucket.rows.push(drop(rows[ri]!) as (string | number | null)[])
       bucket.keys.push(rowKeys[ri] ?? null)
+      bucket.raw.push(row)
+      bucket.dataCount += 1
       buckets.set(key, bucket)
     })
+
+    // Per-section subtotal rows on the level breakout (e.g. per component
+    // KIND inside one employee's journal block) — exact decimal sums over the
+    // raw aggregates, never over display strings.
+    if (totals?.sections && levelIndex >= 0 && breakouts.length >= 2) {
+      for (const bucket of buckets.values()) {
+        const out: Bucket = { rows: [], keys: [], raw: [], totalRows: [], dataCount: bucket.dataCount }
+        const levelPos = drop(breakouts.map((_, i) => i)).indexOf(levelIndex)
+        let levelRaw: Record<string, unknown>[] = []
+        let levelValue: string | null = null
+        let levelDisplay: string | null = null
+        const emit = () => {
+          if (levelValue === null || levelRaw.length === 0) return
+          const totalsRow = sectionColumns.map(() => null as string | number | null)
+          totalsRow[levelPos] = totalLabel(levelDisplay ?? levelValue)
+          measures.forEach((m, mi) => {
+            if (!summable[mi]) return
+            const inputs = levelRaw.map((raw) => raw[`m${mi}`])
+            if (inputs.every((v) => v === null || v === undefined)) return
+            const total = sumExactDecimals(inputs)
+            totalsRow[breakouts.length - 1 + mi] = m.fn === 'sum'
+              ? (formatExactNumber(total) ?? total)
+              : Number(total)
+          })
+          out.totalRows.push(out.rows.length)
+          out.rows.push(totalsRow)
+          out.keys.push(null)
+        }
+        bucket.rows.forEach((row, i) => {
+          const value = String(bucket.raw[i]![`d${levelIndex}`] ?? (labels.none?.() ?? '(none)'))
+          if (levelValue !== null && value !== levelValue) emit(), (levelRaw = [])
+          levelValue = value
+          // The DISPLAY value (humanized enum, formatted date) titles the row.
+          levelDisplay = row[levelPos] == null ? null : String(row[levelPos])
+          levelRaw.push(bucket.raw[i]!)
+          out.rows.push(row)
+          out.keys.push(bucket.keys[i] ?? null)
+        })
+        emit()
+        bucket.rows = out.rows
+        bucket.keys = out.keys
+        bucket.totalRows = out.totalRows
+      }
+    }
+
     groups = [...buckets.entries()].map(([key, bucket]) => ({
       kind: 'summary' as const,
       title: labels.sectionTitle?.(sectionLabel, formatLabel(key)) ?? `${sectionLabel}: ${formatLabel(key)}`,
-      subtitle: labels.rowCount?.(bucket.rows.length) ?? `${bucket.rows.length} row(s)`,
+      subtitle: labels.rowCount?.(bucket.dataCount) ?? `${bucket.dataCount} row(s)`,
       columns: sectionColumns,
       rows: bucket.rows,
       money: sectionMoney.some(Boolean) ? sectionMoney : undefined,
       rowKeys: bucket.keys,
+      ...(bucket.totalRows.length ? { totalRows: bucket.totalRows } : {}),
     }))
+
+    // Grand totals across every section: one row per remaining-breakout combo,
+    // additive measures summed exactly; latest/avg stay blank (a company-wide
+    // "latest" is NOT the last row's value — omission over a wrong number).
+    if (totals?.grand) {
+      const grand = new Map<string, { label: (string | number | null)[]; raw: Record<string, unknown>[]; scope: ReportRowScopeRule[] | null }>()
+      dataRows.forEach((row, ri) => {
+        const comboKey = breakouts.map((_, i) => (i === sectionIndex ? '' : String(row[`d${i}`] ?? ''))).join('\u0000')
+        const entry = grand.get(comboKey) ?? {
+          label: drop(rows[ri]!) as (string | number | null)[],
+          raw: [],
+          scope: (rowKeys[ri] ?? null)?.filter((s) => s.field !== breakouts[sectionIndex]!.column) ?? null,
+        }
+        entry.raw.push(row)
+        grand.set(comboKey, entry)
+      })
+      const grandRows: (string | number | null)[][] = []
+      const grandKeys: (ReportRowScopeRule[] | null)[] = []
+      for (const entry of [...grand.entries()].sort(([a], [b]) => (a < b ? -1 : 1)).map(([, v]) => v)) {
+        const row = entry.label.slice(0, breakouts.length - 1) as (string | number | null)[]
+        measures.forEach((m, mi) => {
+          const inputs = entry.raw.map((raw) => raw[`m${mi}`])
+          if (!summable[mi] || inputs.every((v) => v === null || v === undefined)) {
+            row[breakouts.length - 1 + mi] = null
+            return
+          }
+          const total = sumExactDecimals(inputs)
+          row[breakouts.length - 1 + mi] = m.fn === 'sum' ? (formatExactNumber(total) ?? total) : Number(total)
+        })
+        grandRows.push(row)
+        grandKeys.push(entry.scope)
+      }
+      groups.push({
+        kind: 'summary',
+        title: labels.grandTotalsTitle?.() ?? 'Grand totals',
+        subtitle: labels.groupCount?.(buckets.size) ?? `${buckets.size} group${buckets.size === 1 ? '' : 's'}`,
+        columns: sectionColumns,
+        rows: grandRows,
+        money: sectionMoney.some(Boolean) ? sectionMoney : undefined,
+        rowKeys: grandKeys,
+      })
+    }
   } else {
     groups = [
       {
