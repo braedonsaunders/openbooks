@@ -154,6 +154,98 @@ export const BUILT_IN_REPORT_DEFINITIONS: BuiltInReportDefinition[] = [
     },
   },
   {
+    slug: 'payroll-journal',
+    name: 'Payroll journal',
+    description:
+      'The full pay-period audit record, one section per employee: every earning, deduction, and employer contribution with hours, rate, this-period amount, and year-to-date. Pick a single pay period from the period menu to match a run. Requires the payroll permission.',
+    query: {
+      entity: 'pay_stub_lines',
+      mode: 'rows',
+      columns: [
+        'component', 'line_kind', 'hours', 'rate', 'amount', 'ytd_amount',
+        'run_number', 'pay_date',
+      ],
+      groupBy: 'employee',
+      filters: {
+        combinator: 'and',
+        rules: [{ field: 'pay_date', op: 'this_year' }],
+      },
+      sorts: [
+        { column: 'line_kind', direction: 'asc' },
+        { column: 'component', direction: 'asc' },
+      ],
+      limit: 10000,
+    },
+  },
+  {
+    slug: 'payroll-deductions-register',
+    name: 'Deductions & contributions register',
+    description:
+      'Every withholding and employer contribution, sectioned by component: who paid what this period and year-to-date. The backing detail for remittances and benefit carriers. Requires the payroll permission.',
+    query: {
+      entity: 'pay_stub_lines',
+      mode: 'rows',
+      columns: ['employee', 'line_kind', 'amount', 'ytd_amount', 'run_number', 'pay_date'],
+      groupBy: 'component',
+      filters: {
+        combinator: 'and',
+        rules: [
+          { field: 'pay_date', op: 'this_year' },
+          { field: 'line_kind', op: 'in', value: ['deduction', 'employer_contribution'] },
+        ],
+      },
+      sorts: [{ column: 'pay_date', direction: 'desc' }],
+      limit: 10000,
+    },
+  },
+  {
+    slug: 'payroll-cost-by-department',
+    name: 'Payroll cost by department',
+    description:
+      'Labor distribution: payroll amounts by department and component kind (earnings, deductions withheld, employer burden). Requires the payroll permission.',
+    query: {
+      entity: 'pay_stub_lines',
+      mode: 'summarize',
+      columns: [],
+      breakouts: [{ column: 'department' }, { column: 'line_kind' }],
+      measures: [
+        { fn: 'sum', column: 'amount', label: 'Amount' },
+        { fn: 'count', label: 'Lines' },
+      ],
+      filters: {
+        combinator: 'and',
+        rules: [{ field: 'pay_date', op: 'this_year' }],
+      },
+      groupBy: null,
+      limit: 1000,
+    },
+  },
+  {
+    slug: 'payroll-employee-totals',
+    name: 'Employee totals (YTD)',
+    description:
+      'One line per employee: gross, income tax withheld, net pay, and employer cost totals with stub counts for the selected period. Requires the payroll permission.',
+    query: {
+      entity: 'pay_stubs',
+      mode: 'summarize',
+      columns: [],
+      breakouts: [{ column: 'employee' }],
+      measures: [
+        { fn: 'sum', column: 'gross', label: 'Gross pay' },
+        { fn: 'sum', column: 'income_tax', label: 'Income tax withheld' },
+        { fn: 'sum', column: 'net_pay', label: 'Net pay' },
+        { fn: 'sum', column: 'employer_cost', label: 'Employer cost' },
+        { fn: 'count', label: 'Stubs' },
+      ],
+      filters: {
+        combinator: 'and',
+        rules: [{ field: 'pay_date', op: 'this_year' }],
+      },
+      groupBy: null,
+      limit: 1000,
+    },
+  },
+  {
     slug: 'payroll-cost-by-month',
     name: 'Payroll cost by month',
     description:

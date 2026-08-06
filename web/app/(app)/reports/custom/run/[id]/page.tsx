@@ -1,5 +1,7 @@
 import Link from 'next/link'
 import { notFound, redirect } from 'next/navigation'
+import { sql } from 'drizzle-orm'
+import { db } from '@openbooks/engine/src/db.ts'
 import { getTranslations } from 'next-intl/server'
 import { Button, PageHeader } from '@openbooks/ui'
 import { REPORT_ENTITY_MAP, type ReportRunResult } from '@openbooks/reports'
@@ -13,7 +15,7 @@ import { statementPageHref } from '../../../../../../lib/report-run'
 import { orgBranding } from '../../../../../../lib/report-pdf'
 import { parseReportQuery } from '../../../../../../lib/report-filters'
 import { resolvePeriod } from '../../../../../../lib/periods'
-import { ReportFilterBar } from '../../../ReportFilterBar'
+import { ReportFilterBar, type ExtraPeriodOption } from '../../../ReportFilterBar'
 import { ScheduleReportButton } from '../../../ScheduleReportButton'
 import { ExportMenu } from '../../../ExportMenu'
 import { SaveViewButton } from '../../../SaveViewButton'
@@ -80,6 +82,29 @@ export default async function ReportRunPage({
     periodLabel = period.label
   }
 
+  // Payroll reports offer their real pay periods atop the fiscal presets —
+  // "one pay period at a time" is THE payroll reporting window.
+  let extraPeriods: ExtraPeriodOption[] | undefined
+  if (entity?.category === 'payroll') {
+    const runs = (await db.execute(sql`
+      select d.document_number, r.period_start, r.period_end, r.pay_date, ps.name as schedule
+        from pay_runs r
+        join documents d on d.id = r.document_id
+        left join pay_schedules ps on ps.id = r.pay_schedule_id
+       where r.org_id = ${authz.user.orgId}
+       order by r.period_end desc
+       limit 27
+    `)) as unknown as { rows: { document_number: string; period_start: string; period_end: string; pay_date: string; schedule: string | null }[] }
+    // The label names the worked period; the WINDOW is the run's pay date —
+    // payroll plans filter on pay_date, which lands after the period ends.
+    extraPeriods = runs.rows.map((run) => ({
+      id: run.document_number,
+      label: `${run.document_number} · ${String(run.period_start).slice(0, 10)} → ${String(run.period_end).slice(0, 10)}${run.schedule ? ` (${run.schedule})` : ''}`,
+      from: String(run.pay_date).slice(0, 10),
+      to: String(run.pay_date).slice(0, 10),
+    }))
+  }
+
   // Exports mirror the screen: hand the resolved period to the export route.
   const exportParams = new URLSearchParams()
   if (periodField) {
@@ -111,6 +136,7 @@ export default async function ReportRunPage({
           />
           <ReportFilterBar
             controls={{ period: Boolean(periodField) }}
+            extraPeriods={extraPeriods}
             actions={
               <>
                 {canCreate ? (

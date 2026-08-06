@@ -114,7 +114,8 @@
     "expandAll": "Expand all",
     "collapseAll": "Collapse all",
     "expandSection": "Expand {section}",
-    "collapseSection": "Collapse {section}"
+    "collapseSection": "Collapse {section}",
+    "payPeriods": "Pay periods"
   },
   "balanceSheet": {
     "title": "Balance Sheet",
@@ -861,6 +862,22 @@
     "expense-detail-by-department-fy": {
       "name": "Expense detail by department (this FY)",
       "description": "Posted expense and COGS lines this year, sectioned by department — date, entry, account, party, memo and amount."
+    },
+    "payroll-journal": {
+      "name": "Payroll journal",
+      "description": "The full pay-period audit record, one section per employee: every earning, deduction, and employer contribution with hours, rate, this-period amount, and year-to-date. Pick a single pay period from the period menu to match a run. Requires the payroll permission."
+    },
+    "payroll-deductions-register": {
+      "name": "Deductions & contributions register",
+      "description": "Every withholding and employer contribution, sectioned by component: who paid what this period and year-to-date. The backing detail for remittances and benefit carriers. Requires the payroll permission."
+    },
+    "payroll-cost-by-department": {
+      "name": "Payroll cost by department",
+      "description": "Labor distribution: payroll amounts by department and component kind (earnings, deductions withheld, employer burden). Requires the payroll permission."
+    },
+    "payroll-employee-totals": {
+      "name": "Employee totals (YTD)",
+      "description": "One line per employee: gross, income tax withheld, net pay, and employer cost totals with stub counts for the selected period. Requires the payroll permission."
     }
   },
   "generalLedger": {
