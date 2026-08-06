@@ -8,6 +8,10 @@ const EXACT_PUBLIC_PATHS = new Set([
   "/api/v1/health",
   "/api/v1/openapi",
   "/api/v1/schema",
+  // Sessionless BY DESIGN: the MCP endpoint authenticates every request with
+  // an API key inside the route (resolveApiKeyAuth, fail-closed) — the same
+  // model as /api/v1/records. The session gate would 302 agents to /login.
+  "/mcp",
   "/favicon.ico",
   "/icon.svg",
 ]);
