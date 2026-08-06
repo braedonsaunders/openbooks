@@ -118,6 +118,27 @@ export type ReportDefinitionRow = {
   updated_at: string
 }
 
+/**
+ * The org's seeded statement definition for a report kind (+ discriminating
+ * params like aging's side) — the anchor every statement page's schedule
+ * affordance hangs off. Null when the org has no matching definition.
+ */
+export async function statementDefinitionId(
+  orgId: string,
+  kind: string,
+  match: Record<string, string> = {},
+): Promise<string | null> {
+  const r = (await db.execute(sql`
+    select id from report_definitions
+     where org_id = ${orgId} and report_type = 'statement'
+       and statement->>'kind' = ${kind}
+       and coalesce(statement->'params', '{}'::jsonb) @> ${JSON.stringify(match)}::jsonb
+     order by (kind = 'built_in') desc, created_at
+     limit 1
+  `)) as unknown as { rows: { id: string }[] }
+  return r.rows[0]?.id ?? null
+}
+
 /** Load one definition scoped to the caller's org, or null. */
 export async function loadReportDefinition(
   orgId: string,

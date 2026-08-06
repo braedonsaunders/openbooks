@@ -456,7 +456,9 @@
         "fri": "Friday",
         "sat": "Saturday"
       }
-    }
+    },
+    "drawerDescription": "Email this report on a cadence. Schedules run with the filters saved when the schedule was created.",
+    "loading": "Loading schedules…"
   },
   "catalog": {
     "entities": {

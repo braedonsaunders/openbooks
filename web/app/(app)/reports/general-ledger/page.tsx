@@ -11,6 +11,8 @@ import { ReportFilterBar } from '../ReportFilterBar'
 import { ExportMenu } from '../ExportMenu'
 import { TxnLink } from '../TxnLink'
 import { SaveViewButton } from '../SaveViewButton'
+import { ScheduleReportButton } from '../ScheduleReportButton'
+import { reportScheduleAnchor, scheduleParamsFrom } from '../../../../lib/report-schedule-anchor'
 import { ReportPaper } from '../ReportPaper'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow, reportTotalRowClass } from '../ReportTable'
 import { ReportDrillLink } from '../ReportDrillLink'
@@ -28,6 +30,7 @@ export default async function GeneralLedgerPage({
   const t = await getTranslations('reports')
   const tc = await getTranslations('common')
   const sp = await searchParams
+  const scheduleDefId = await reportScheduleAnchor('general-ledger')
   const q = parseReportQuery(sp)
   const period = await resolvePeriod(q.period, { customFrom: q.from, customTo: q.to })
   const dims = q.dims
@@ -52,7 +55,7 @@ export default async function GeneralLedgerPage({
           <ReportFilterBar
             controls={{ period: true, dimensions: true }}
             dimensions={opts}
-            actions={<><SaveViewButton /><ExportMenu kind="general-ledger" params={sp} /></>}
+            actions={<>{scheduleDefId ? <ScheduleReportButton definitionId={scheduleDefId} statementParams={scheduleParamsFrom(sp)} /> : null}<SaveViewButton /><ExportMenu kind="general-ledger" params={sp} /></>}
           />
           {gl.truncated && <p className="text-xs text-amber-600 dark:text-amber-400">{t('generalLedger.truncated')}</p>}
         </>

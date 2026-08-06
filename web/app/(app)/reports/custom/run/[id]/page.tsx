@@ -1,6 +1,5 @@
 import Link from 'next/link'
 import { notFound, redirect } from 'next/navigation'
-import { CalendarClock } from 'lucide-react'
 import { getTranslations } from 'next-intl/server'
 import { Button, PageHeader } from '@openbooks/ui'
 import { REPORT_ENTITY_MAP, type ReportRunResult } from '@openbooks/reports'
@@ -15,6 +14,7 @@ import { orgBranding } from '../../../../../../lib/report-pdf'
 import { parseReportQuery } from '../../../../../../lib/report-filters'
 import { resolvePeriod } from '../../../../../../lib/periods'
 import { ReportFilterBar } from '../../../ReportFilterBar'
+import { ScheduleReportButton } from '../../../ScheduleReportButton'
 import { ExportMenu } from '../../../ExportMenu'
 import { SaveViewButton } from '../../../SaveViewButton'
 import { ReportPaper } from '../../../ReportPaper'
@@ -37,7 +37,6 @@ export default async function ReportRunPage({
 }) {
   const authz = await requirePermission('reports.read')
   const canCreate = authz.permissions.has('reports.create') || authz.permissions.has('*')
-  const canSchedule = authz.permissions.has('reports.schedule') || authz.permissions.has('*')
   const { id } = await params
   if (!isUuid(id)) notFound()
 
@@ -119,13 +118,10 @@ export default async function ReportRunPage({
                     <Link href={`/reports/custom/builder/${definition.id}`}>{tc('actions.edit')}</Link>
                   </Button>
                 ) : null}
-                {canSchedule ? (
-                  <Button variant="outline" size="sm" asChild>
-                    <Link href={`/reports/custom/run/${definition.id}/delivery`}>
-                      <CalendarClock size={14} /> {tk('runner.scheduledDelivery')}
-                    </Link>
-                  </Button>
-                ) : null}
+                <ScheduleReportButton
+                  definitionId={definition.id}
+                  historyHref={`/reports/custom/run/${definition.id}/delivery`}
+                />
                 <SaveViewButton />
                 <ExportMenu baseHref={`/api/reports/definitions/${definition.id}/export${exportQs}`} />
               </>

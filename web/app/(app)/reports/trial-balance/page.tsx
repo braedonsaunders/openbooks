@@ -11,6 +11,8 @@ import { decimalAdd, decimalNeg, decimalSum } from '../../../../lib/statement-fo
 import { ReportFilterBar } from '../ReportFilterBar'
 import { ExportMenu } from '../ExportMenu'
 import { SaveViewButton } from '../SaveViewButton'
+import { ScheduleReportButton } from '../ScheduleReportButton'
+import { reportScheduleAnchor, scheduleParamsFrom } from '../../../../lib/report-schedule-anchor'
 import { PaperView, type PaperCell } from '../PaperView'
 import type { ReportDrillTarget } from '../../../../lib/report-drill'
 import { mergeHref } from '../../../../lib/list-params'
@@ -24,6 +26,7 @@ export default async function TrialBalance({
 }) {
   const t = await getTranslations('reports')
   const sp = await searchParams
+  const scheduleDefId = await reportScheduleAnchor('trial-balance')
   const q = parseReportQuery(sp)
   const period = await resolvePeriod(q.period, { customFrom: q.from, customTo: q.to })
   const date = period.to
@@ -71,7 +74,7 @@ export default async function TrialBalance({
             controls={{ period: true, asOf: true, dimensions: true, subsidiary: true }}
             subsidiaries={subView.picker}
             dimensions={opts}
-            actions={<><SaveViewButton /><ExportMenu kind="trial-balance" params={sp} /></>}
+            actions={<>{scheduleDefId ? <ScheduleReportButton definitionId={scheduleDefId} statementParams={scheduleParamsFrom(sp)} /> : null}<SaveViewButton /><ExportMenu kind="trial-balance" params={sp} /></>}
           />
         </>
       }

@@ -6,7 +6,7 @@ import { Play } from 'lucide-react'
 import { toast } from 'sonner'
 import { useTranslations } from 'next-intl'
 import { Badge, Button } from '@openbooks/ui'
-import { ScheduleEditor, type ScheduleRow } from '../ScheduleEditor'
+import { ScheduleEditor, type ScheduleRow } from '../../../../ScheduleEditor'
 
 type RunRow = {
   id: string

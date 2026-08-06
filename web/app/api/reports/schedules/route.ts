@@ -6,7 +6,7 @@ import {
   normalizeReportRecipientEmails,
   validateCadenceInput,
 } from '@openbooks/reports'
-import { guardPermission } from '../../../../lib/authz'
+import { can, guardPermission } from '../../../../lib/authz'
 import { loadReportDefinition } from '../../../../lib/custom-reports'
 
 export const runtime = 'nodejs'
@@ -26,7 +26,10 @@ export async function GET(req: Request) {
        ${definitionId ? sql`and definition_id = ${definitionId}` : sql``}
      order by next_run_at
   `)) as unknown as { rows: unknown[] }
-  return NextResponse.json({ schedules: rows.rows })
+  return NextResponse.json({
+    schedules: rows.rows,
+    canSchedule: can(gate, 'reports.schedule') || can(gate, '*'),
+  })
 }
 
 /**
@@ -49,6 +52,7 @@ export async function POST(req: Request) {
     timezone?: unknown
     recipientEmails?: unknown
     active?: boolean
+    statementParams?: unknown
   }
 
   if (!body.definitionId) {
@@ -73,14 +77,40 @@ export async function POST(req: Request) {
   if (body.active !== false && recipients.length === 0) {
     return NextResponse.json({ error: 'At least one recipient is required for an active schedule' }, { status: 422 })
   }
+
+  // Statement pages snapshot their current filter params onto the schedule
+  // (stored under filters.statementParams; the render pipeline applies them).
+  // Only meaningful for statement definitions; short string values only.
+  let filters: Record<string, unknown> | null = null
+  if (body.statementParams !== undefined) {
+    if (def.report_type !== 'statement') {
+      return NextResponse.json({ error: 'statementParams only apply to statement reports' }, { status: 422 })
+    }
+    const raw = body.statementParams
+    if (typeof raw !== 'object' || raw === null || Array.isArray(raw)) {
+      return NextResponse.json({ error: 'invalid statementParams' }, { status: 422 })
+    }
+    const clean: Record<string, string> = {}
+    for (const [key, value] of Object.entries(raw as Record<string, unknown>)) {
+      if (!/^[a-zA-Z][a-zA-Z0-9_.:-]{0,63}$/.test(key)) {
+        return NextResponse.json({ error: `invalid statement param ${key}` }, { status: 422 })
+      }
+      if (typeof value !== 'string' || value.length > 256) {
+        return NextResponse.json({ error: `invalid value for statement param ${key}` }, { status: 422 })
+      }
+      if (value) clean[key] = value
+    }
+    if (Object.keys(clean).length > 0) filters = { statementParams: clean }
+  }
   const nextRunAt = computeNextRunAt(cadence)
 
   const inserted = (await db.execute(sql`
     insert into report_schedules (org_id, definition_id, cadence, day_of_week, day_of_month,
-                                  hour, minute, timezone, recipient_emails, next_run_at, active,
+                                  hour, minute, timezone, recipient_emails, filters, next_run_at, active,
                                   created_by, updated_by)
     values (${user.orgId}, ${def.id}, ${cadence.cadence}, ${cadence.dayOfWeek}, ${cadence.dayOfMonth},
             ${cadence.hour}, ${cadence.minute}, ${cadence.timezone}, ${JSON.stringify(recipients)}::jsonb,
+            ${filters ? JSON.stringify(filters) : null}::jsonb,
             ${nextRunAt.toISOString()}, ${body.active !== false}, ${user.id}, ${user.id})
     returning id, definition_id, cadence, day_of_week, day_of_month, hour, minute,
               timezone, recipient_emails, next_run_at, active
