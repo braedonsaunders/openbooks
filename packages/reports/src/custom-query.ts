@@ -160,15 +160,26 @@ function compileSummarize(
   const filters = compileCustomFilters(entity, q, params)
   if (filters) whereParts.push(`(${filters})`)
 
-  // Order: sectioned summaries read as an alphabetical ledger; a temporal
+  // Order: sectioned summaries read as a ledger — enum dims follow their
+  // CATALOG option order (a payroll journal lists earnings before deductions
+  // before employer contributions), other dims alphabetically; a temporal
   // trend reads chronologically; otherwise rank by the first measure (top-N).
   const firstMeasureOrdinal = breakouts.length + 1
   const sectioned = !!q.groupBy && breakouts.some((b) => b.column === q.groupBy && !b.bin)
+  const sectionedDimOrder = (b: ReportBreakout, i: number): string => {
+    const column = entityColumn(entity, b.column)
+    if (!b.bin && column?.kind === 'enum' && column.options?.length) {
+      // Options are server-authored catalog constants, single-quoted safely.
+      const list = column.options.map((option) => `'${option.replace(/'/g, "''")}'`).join(', ')
+      return `array_position(ARRAY[${list}]::text[], ${columnRef(entity, b.column)}) ASC NULLS LAST`
+    }
+    return `${i + 1} ASC`
+  }
   const orderSql =
     breakouts.length === 0
       ? ''
       : sectioned
-        ? `ORDER BY ${breakouts.map((_, i) => `${i + 1} ASC`).join(', ')}`
+        ? `ORDER BY ${breakouts.map((b, i) => sectionedDimOrder(b, i)).join(', ')}`
         : breakouts[0]?.bin
           ? 'ORDER BY 1 ASC'
           : `ORDER BY ${firstMeasureOrdinal} DESC NULLS LAST`
