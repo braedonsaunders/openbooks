@@ -14,7 +14,7 @@ export default async function Reports() {
   const authz = await getAuthz()
   const canCreate = !!authz && (can(authz, 'reports.create') || can(authz, '*'))
 
-  const [saved, custom, projectsEnabled] = await Promise.all([
+  const [saved, custom, projectsEnabled, payrollEnabled] = await Promise.all([
     db.execute(sql`select id, name, path, params from saved_reports order by created_at desc limit 12`) as Promise<{
       rows: { id: string; name: string; path: string; params: Record<string, string> }[]
     }>,
@@ -24,6 +24,7 @@ export default async function Reports() {
       rows: { id: string; name: string; kind: string; entity: string | null }[]
     }>,
     authz ? isFeatureEnabled(authz.user.orgId, 'projects') : Promise.resolve(false),
+    authz ? isFeatureEnabled(authz.user.orgId, 'payroll') : Promise.resolve(false),
   ])
 
     // Hide definitions over permission-gated entities (payroll wages) from
@@ -32,6 +33,17 @@ export default async function Reports() {
     const entity = row.entity ? REPORT_ENTITY_MAP[row.entity] : undefined
     return !entity?.requiredPermission || (authz ? can(authz, entity.requiredPermission) : false)
   })
+
+  // Built-in reports over module entities are FIRST-CLASS: they get their own
+  // hub group beside the standard statements. Custom keeps the rest.
+  const entityCategory = (row: { entity: string | null }) =>
+    row.entity ? REPORT_ENTITY_MAP[row.entity]?.category : undefined
+  const payrollDefinitions = payrollEnabled
+    ? visibleDefinitions.filter((row) => row.kind === 'built_in' && entityCategory(row) === 'payroll')
+    : []
+  const otherDefinitions = visibleDefinitions.filter(
+    (row) => !payrollDefinitions.some((p) => p.id === row.id),
+  )
 
 const card = (key: string, href: string, icon: string) => ({
     href,
@@ -99,13 +111,24 @@ const card = (key: string, href: string, icon: string) => ({
       accent: 'sky',
       cards: [card('projectProfitability', '/reports/project-profitability', 'Coins')],
     } satisfies HubGroup] : []),
+    ...(payrollDefinitions.length > 0 ? [{
+      key: 'payroll',
+      label: t('hub.groups.payroll'),
+      accent: 'emerald',
+      cards: payrollDefinitions.map((c) => ({
+        href: `/reports/custom/run/${c.id}`,
+        title: c.name,
+        desc: t('hub.cards.payrollDescription'),
+        icon: 'HandCoins',
+      })),
+    } satisfies HubGroup] : []),
     {
       key: 'custom',
       label: t('hub.groups.custom'),
       accent: 'slate',
       cards: [
         { href: '/reports/custom', title: t('hub.customStudio.title'), desc: t('hub.customStudio.description'), icon: 'Sparkles' },
-        ...visibleDefinitions.filter((c) => projectsEnabled || c.kind !== 'project-profitability').map((c) => ({
+        ...otherDefinitions.filter((c) => projectsEnabled || c.kind !== 'project-profitability').map((c) => ({
           href: `/reports/custom/run/${c.id}`,
           title: c.name,
           desc: c.kind === 'built_in' ? t('custom.kind.builtIn') : t('custom.kind.custom'),

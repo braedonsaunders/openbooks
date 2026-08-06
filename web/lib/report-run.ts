@@ -35,7 +35,7 @@ import {
   type ExportData,
   type Translator,
 } from './report-pdf'
-import { executeReport, mergeReportFilters } from './custom-reports'
+import { applyPeriodOverride, executeReport, mergeReportFilters, reportPeriodField } from './custom-reports'
 import type { ReportQuery } from './report-filters'
 import { isFeatureEnabled } from './features'
 
@@ -334,9 +334,19 @@ export async function resolveDefinitionToExportData(
     return resolved.data
   }
 
-  // query-type definition → entity engine → ExportData
+  // query-type definition → entity engine → ExportData. An explicit period in
+  // the request replaces the plan's stored date window (same as the report
+  // screen's picker); absent params — e.g. scheduled runs — keep the plan.
   if (!row.query) throw new Error('report has no query')
-  const query = mergeReportFilters(validateCustomQuery(row.query), options.extraFilters)
+  let query = mergeReportFilters(validateCustomQuery(row.query), options.extraFilters)
+  const periodTouched = p.has('period') || p.has('from') || p.has('to')
+  const periodField = periodTouched ? reportPeriodField(query) : null
+  if (periodField) {
+    query = applyPeriodOverride(query, periodField, { from: ctx.period.from, to: ctx.period.to })
+  }
   const result = await executeReport(orgId, query)
-  return runResultToExportData(result, { title: row.name, dateRangeLabel: ctx.period.label ?? '' })
+  return runResultToExportData(result, {
+    title: row.name,
+    dateRangeLabel: periodField ? ctx.period.label ?? '' : '',
+  })
 }
