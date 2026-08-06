@@ -173,6 +173,7 @@ export const BUILT_IN_REPORT_DEFINITIONS: BuiltInReportDefinition[] = [
       sorts: [
         { column: 'line_kind', direction: 'asc' },
         { column: 'component', direction: 'asc' },
+        { column: 'pay_date', direction: 'asc' },
       ],
       limit: 10000,
     },
@@ -194,7 +195,10 @@ export const BUILT_IN_REPORT_DEFINITIONS: BuiltInReportDefinition[] = [
           { field: 'line_kind', op: 'in', value: ['deduction', 'employer_contribution'] },
         ],
       },
-      sorts: [{ column: 'pay_date', direction: 'desc' }],
+      sorts: [
+        { column: 'employee', direction: 'asc' },
+        { column: 'pay_date', direction: 'asc' },
+      ],
       limit: 10000,
     },
   },

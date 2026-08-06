@@ -510,6 +510,10 @@
       "pay_stubs": {
         "label": "Pay stubs",
         "description": "One row per employee per pay run — gross, statutory withholdings, net, and employer cost. Requires the payroll permission."
+      },
+      "pay_stub_lines": {
+        "label": "Pay stub lines",
+        "description": "Component-level payroll detail — one row per earning, deduction, or employer contribution on a stub, with hours, rate, amount, and running year-to-date. Requires the payroll permission."
       }
     },
     "columns": {
@@ -720,6 +724,29 @@
         "vacation_accrued": "Vacation accrued",
         "pensionable": "Pensionable earnings",
         "insurable": "Insurable earnings"
+      },
+      "pay_stub_lines": {
+        "employee": "Employee",
+        "run_number": "Pay run #",
+        "schedule": "Schedule",
+        "pay_date": "Pay date",
+        "period_start": "Period start",
+        "period_end": "Period end",
+        "run_status": "Run status",
+        "component": "Component",
+        "component_code": "Component code",
+        "line_description": "Line description",
+        "line_kind": "Kind",
+        "hours": "Hours",
+        "rate": "Rate",
+        "amount": "Amount",
+        "ytd_amount": "YTD amount",
+        "project": "Project",
+        "department": "Department",
+        "tax_year": "Tax year",
+        "province": "Province / state",
+        "stub_id": "Stub (id)",
+        "component_id": "Component (id)"
       }
     },
     "enumValues": {
@@ -770,7 +797,10 @@
       "written_off": "Written off",
       "sales": "Sales",
       "purchases": "Purchases",
-      "both": "Both"
+      "both": "Both",
+      "earning": "Earning",
+      "deduction": "Deduction",
+      "employer_contribution": "Employer contribution"
     }
   },
   "operators": {
