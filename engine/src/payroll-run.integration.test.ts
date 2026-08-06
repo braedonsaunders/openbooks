@@ -509,7 +509,7 @@ test(
       // A pack with no dependents uninstalls cleanly: CA was never used here.
       await seedPayrollComponents(org.orgId, actorId, "CA");
       const removed = await uninstallPayrollPack(org.orgId, actorId, "CA");
-      assert.equal(removed.componentsRemoved, 9);
+      assert.equal(removed.componentsRemoved, 11);
       const caLeft = (await db.execute(sql`
         select count(*)::int as n from pay_components
          where org_id = ${org.orgId} and country = 'CA'`)) as unknown as { rows: { n: number }[] };

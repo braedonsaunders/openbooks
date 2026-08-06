@@ -1,6 +1,6 @@
 import { sql } from "drizzle-orm";
 import { db } from "./db.ts";
-import { add, cmp, mulDecimal, mulPercent, neg, roundMoney, sum } from "./money.ts";
+import { add, cmp, mulDecimal, mulPercent, mulRatio, neg, roundMoney, sum, toUnits } from "./money.ts";
 import { calculateT4127, type T4127Input } from "./payroll/canada/t4127.ts";
 import type { Province } from "./payroll/canada/rates.ts";
 import { calculatePub15T } from "./payroll/us/pub15t.ts";
@@ -70,6 +70,29 @@ export async function usPayrollConfig(orgId: string): Promise<UsPayrollConfig> {
   return { futaRate: u.futaRate != null ? String(u.futaRate) : null, sui };
 }
 
+/**
+ * CA pack org configuration (orgs.settings.payroll.ca). EHT is an org-level
+ * payroll tax on Ontario remuneration past the annual exemption; WCB rates
+ * live on worker_comp_groups (per class), so only the toggle lives here.
+ */
+export interface CaPayrollConfig {
+  eht: { enabled: boolean; rate: string | null; annualExemption: string | null };
+}
+
+export async function caPayrollConfig(orgId: string): Promise<CaPayrollConfig> {
+  const r = (await db.execute(
+    sql`select settings#>'{payroll,ca}' as c from orgs where id = ${orgId}`,
+  )) as unknown as { rows: { c: Record<string, unknown> | null }[] };
+  const c = (r.rows[0]?.c ?? {}) as { eht?: { enabled?: unknown; rate?: unknown; annualExemption?: unknown } };
+  return {
+    eht: {
+      enabled: c.eht?.enabled === true,
+      rate: c.eht?.rate != null ? String(c.eht.rate) : null,
+      annualExemption: c.eht?.annualExemption != null ? String(c.eht.annualExemption) : null,
+    },
+  };
+}
+
 export async function payrollSettings(orgId: string): Promise<PayrollSettings> {
   const r = (await db.execute(
     sql`select settings->'payroll' as p, settings->'controlAccounts' as c from orgs where id = ${orgId}`,
@@ -116,6 +139,8 @@ const CA_COMPONENTS: SeedComponent[] = [
   { code: "EI-ER", name: "EI (employer)", kind: "employer_contribution", systemKey: "ei", sequence: 220, country: "CA" },
   { code: "QPIP-ER", name: "QPIP (employer)", kind: "employer_contribution", systemKey: "qpip", sequence: 230, country: "CA" },
   { code: "VAC", name: "Vacation accrual", kind: "employer_contribution", systemKey: "vacation_accrual", sequence: 240, country: "CA" },
+  { code: "WCB", name: "Workers' compensation (WCB/WSIB)", kind: "employer_contribution", systemKey: "wcb", sequence: 260, country: "CA" },
+  { code: "EHT", name: "Employer Health Tax", kind: "employer_contribution", systemKey: "eht", sequence: 270, country: "CA" },
 ];
 
 // US statutory set. `pensionable` generalizes to FICA-taxable and `insurable`
@@ -446,6 +471,7 @@ export async function calculatePayRun(input: {
     const excluded = new Set(excludedRows.rows.map((r) => r.employee_party_id));
 
     const usConfig = await usPayrollConfig(orgId);
+    const caConfig = await caPayrollConfig(orgId);
     const errors: { employee: string; message: string }[] = [];
     let grossTotal = "0"; let netTotal = "0"; let employerTotal = "0"; let count = 0;
     const P = Number(run.periods_per_year ?? 0) || undefined;
@@ -456,7 +482,7 @@ export async function calculatePayRun(input: {
       try {
         const result = await calculateStub(tx, {
           orgId, actorId, documentId, run, emp,
-          periodsPerYear: P, need, components: components.rows, usConfig,
+          periodsPerYear: P, need, components: components.rows, usConfig, caConfig,
         });
         grossTotal = add(grossTotal, result.gross);
         netTotal = add(netTotal, result.net);
@@ -487,6 +513,7 @@ async function calculateStub(
     need: (systemKey: string, kind: string) => Record<string, unknown>;
     components: Record<string, unknown>[];
     usConfig: UsPayrollConfig;
+    caConfig: CaPayrollConfig;
   },
 ): Promise<StubComputation> {
   const { orgId, actorId, documentId, run, emp } = ctx;
@@ -699,6 +726,103 @@ async function calculateStub(
     }
   }
 
+  // ---- Employer taxes: WCB/WSIB and Ontario EHT (CA pack) ------------------
+  // Both are employer-only accruals. WCB assesses gross earnings (capped at
+  // the class's annual assessable max) at the worker-comp group's rate and is
+  // job-costed by project like the earnings it assesses. EHT is org-level:
+  // Ontario remuneration past the annual exemption at the configured rate,
+  // consuming the exemption across all employees in pay-date order.
+  let wcbAmount = "0";
+  let wcbAssessable = "0";
+  let ehtAmount = "0";
+  let ehtEarnings = "0";
+  if (country === "CA") {
+    const grossEarnings = () =>
+      sum(lines.filter((l) => l.kind === "earning" && !l.accrualOnly).map((l) => l.amount));
+    const wcbGroup = (await tx.execute(sql`
+      select g.rate_percent, g.max_assessable
+        from employee_roles er
+        join worker_comp_groups g on g.id = er.worker_comp_group_id and g.is_active
+       where er.org_id = ${orgId} and er.party_id = ${employeePartyId} and er.is_active
+       limit 1
+    `)) as unknown as { rows: { rate_percent: string | null; max_assessable: string | null }[] };
+    const wcb = wcbGroup.rows[0];
+    if (wcb?.rate_percent && cmp(wcb.rate_percent, "0") > 0) {
+      const priorAssessable = ((await tx.execute(sql`
+        select coalesce(sum((s.factors->>'WCB_EARN')::numeric), 0) as prior
+          from pay_stubs s
+          join pay_runs r on r.document_id = s.pay_run_document_id
+         where s.org_id = ${orgId} and s.employee_party_id = ${employeePartyId}
+           and s.tax_year = ${taxYear}
+           and (r.run_status = 'committed' or s.pay_run_document_id = ${documentId})
+      `)) as unknown as { rows: { prior: string }[] }).rows[0]!.prior;
+      const gross = grossEarnings();
+      const room = wcb.max_assessable
+        ? (cmp(wcb.max_assessable, priorAssessable) > 0 ? add(wcb.max_assessable, neg(priorAssessable)) : "0")
+        : gross;
+      wcbAssessable = cmp(gross, room) <= 0 ? gross : room;
+      if (cmp(wcbAssessable, "0") > 0) {
+        wcbAmount = mulPercent(wcbAssessable, wcb.rate_percent, 2);
+        const c = ctx.need("wcb", "employer_contribution");
+        // Split by project proportional to earning amounts (WCB is a real
+        // job-cost burden, like union fringes). Exact bigint ratios; when the
+        // whole gross is job-tagged, the last job absorbs the rounding
+        // remainder so the premium never leaks a penny.
+        const splits = lines.filter((l) => l.kind === "earning" && !l.accrualOnly && l.projectId);
+        const grossUnits = toUnits(gross);
+        let allocated = "0";
+        for (const [index, split] of splits.entries()) {
+          const allTagged = cmp(sum(splits.map((s) => s.amount)), gross) === 0;
+          const share = index === splits.length - 1 && allTagged
+            ? add(wcbAmount, neg(allocated))
+            : roundMoney(mulRatio(wcbAmount, toUnits(split.amount), grossUnits), 2);
+          if (cmp(share, "0") === 0) continue;
+          allocated = add(allocated, share);
+          lines.push({
+            componentId: c.id as string, kind: "employer_contribution",
+            description: "WCB/WSIB", amount: share, sequence: 260,
+            projectId: split.projectId, departmentId: split.departmentId,
+          });
+        }
+        const remainder = add(wcbAmount, neg(allocated));
+        if (cmp(remainder, "0") > 0) {
+          lines.push({
+            componentId: c.id as string, kind: "employer_contribution",
+            description: "WCB/WSIB", amount: remainder, sequence: 260,
+          });
+        }
+      }
+    }
+
+    const eht = ctx.caConfig.eht;
+    const province = emp.province ?? "";
+    if (eht.enabled && eht.rate && province === "ON" && (emp.country ?? "CA") !== "US") {
+      ehtEarnings = grossEarnings();
+      if (cmp(ehtEarnings, "0") > 0) {
+        const priorOn = ((await tx.execute(sql`
+          select coalesce(sum((s.factors->>'EHT_EARN')::numeric), 0) as prior
+            from pay_stubs s
+            join pay_runs r on r.document_id = s.pay_run_document_id
+           where s.org_id = ${orgId} and s.tax_year = ${taxYear} and s.province = 'ON'
+             and (r.run_status = 'committed' or s.pay_run_document_id = ${documentId})
+        `)) as unknown as { rows: { prior: string }[] }).rows[0]!.prior;
+        const exemption = eht.annualExemption ?? "0";
+        const exemptionLeft = cmp(exemption, priorOn) > 0 ? add(exemption, neg(priorOn)) : "0";
+        const taxableRemuneration = cmp(ehtEarnings, exemptionLeft) > 0
+          ? add(ehtEarnings, neg(exemptionLeft))
+          : "0";
+        if (cmp(taxableRemuneration, "0") > 0) {
+          ehtAmount = mulPercent(taxableRemuneration, eht.rate, 2);
+          const c = ctx.need("eht", "employer_contribution");
+          lines.push({
+            componentId: c.id as string, kind: "employer_contribution",
+            description: "Employer Health Tax", amount: ehtAmount, sequence: 270,
+          });
+        }
+      }
+    }
+  }
+
   // Statutory inputs from the line set. For US employees the flags
   // generalize: taxable → FIT wages, pensionable → FICA (Social Security /
   // Medicare) wages, insurable → FUTA and SUI wages.
@@ -821,6 +945,8 @@ async function calculateStub(
       ...statutory.factors,
       B: nonPeriodic, I: income, PI: pensionable, IE: insurable,
       QPIP: statutory.qpip, EI_ER: statutory.eiEmployer, QPIP_ER: statutory.qpipEmployer,
+      ...(cmp(wcbAssessable, "0") > 0 ? { WCB: wcbAmount, WCB_EARN: wcbAssessable } : {}),
+      ...(cmp(ehtEarnings, "0") > 0 ? { EHT: ehtAmount, EHT_EARN: ehtEarnings } : {}),
     };
   }
 
