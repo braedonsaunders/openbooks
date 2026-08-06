@@ -260,8 +260,13 @@ function shapeSummarizeResult(
     const sectionColumns = drop(columns) as string[]
     const sectionMoney = drop(moneyFlags) as boolean[]
     const sectionAlign = drop(alignFlags) as ('left' | 'right')[]
-    // Which measure columns can honestly total: additive aggregates only.
-    const summable = measures.map((m) => m.fn === 'sum' || m.fn === 'count' || m.fn === 'count_distinct')
+    // Which measure columns can honestly total. Additive aggregates sum, and
+    // so do 'latest' running figures: each row carries the END value of a
+    // disjoint per-bucket series (one employee's component YTD), so the sum
+    // of endings IS the combined ending. avg/min/max stay blank.
+    const summable = measures.map(
+      (m) => m.fn === 'sum' || m.fn === 'count' || m.fn === 'count_distinct' || m.fn === 'latest',
+    )
     const totalLabel = (label: string) => labels.subtotal?.(label) ?? `${label} — total`
     // Subtotal level: the first breakout that ISN'T the section column.
     const levelIndex = breakouts.findIndex((_, i) => i !== sectionIndex)
@@ -304,7 +309,7 @@ function shapeSummarizeResult(
             const inputs = levelRaw.map((raw) => raw[`m${mi}`])
             if (inputs.every((v) => v === null || v === undefined)) return
             const total = sumExactDecimals(inputs)
-            totalsRow[breakouts.length - 1 + mi] = m.fn === 'sum'
+            totalsRow[breakouts.length - 1 + mi] = m.fn === 'sum' || m.fn === 'latest'
               ? (formatExactNumber(total) ?? total)
               : Number(total)
           })
@@ -341,9 +346,9 @@ function shapeSummarizeResult(
       ...(bucket.totalRows.length ? { totalRows: bucket.totalRows } : {}),
     }))
 
-    // Grand totals across every section: one row per remaining-breakout combo,
-    // additive measures summed exactly; latest/avg stay blank (a company-wide
-    // "latest" is NOT the last row's value — omission over a wrong number).
+    // Grand totals across every section: one row per remaining-breakout combo.
+    // Additive measures and 'latest' running figures sum exactly (disjoint
+    // bucket endings add); avg/min/max stay blank — omission over a wrong number.
     if (totals?.grand) {
       const grand = new Map<string, { label: (string | number | null)[]; raw: Record<string, unknown>[]; scope: ReportRowScopeRule[] | null }>()
       dataRows.forEach((row, ri) => {
@@ -367,7 +372,9 @@ function shapeSummarizeResult(
             return
           }
           const total = sumExactDecimals(inputs)
-          row[breakouts.length - 1 + mi] = m.fn === 'sum' ? (formatExactNumber(total) ?? total) : Number(total)
+          row[breakouts.length - 1 + mi] = m.fn === 'sum' || m.fn === 'latest'
+            ? (formatExactNumber(total) ?? total)
+            : Number(total)
         })
         grandRows.push(row)
         grandKeys.push(entry.scope)
