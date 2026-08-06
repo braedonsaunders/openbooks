@@ -29,6 +29,11 @@ export const GL_MUTATION_SOURCE_FILES = [
   // postInventoryEntry, which is already registered.)
   "leases.ts",
   "payments.ts",
+  // Pay-run net-pay settlement: posts the bank-vs-net-payable entry and its
+  // open-item applications. (payroll-run.ts is NOT here: the pay-run commit
+  // materializes document lines that post through posting.ts's registered
+  // machinery.)
+  "payroll-payment.ts",
   "posting.ts",
   "project-recognition.ts",
   "property-management.ts",
@@ -169,6 +174,13 @@ export const GL_OPERATION_REGISTRY: readonly GlOperation[] = [
     erpnextEquivalent: "Payment Entry references",
     status: "verified",
     evidencePrefixes: ["customer-payment-", "vendor-payment-"],
+  },
+  {
+    openbooksOperation: "payrollPayment.recordPayRunPayment",
+    erpnextEquivalent: "Payment Entry (payroll disbursement)",
+    status: "partial",
+    evidencePrefixes: ["payroll-payment-"],
+    remaining: "Ledger-parity fixture for the net-pay settlement entry",
   },
   {
     openbooksOperation:
