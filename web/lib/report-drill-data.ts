@@ -238,7 +238,11 @@ async function customData(target: Extract<ReportDrillTarget, { kind: 'custom' }>
   const entity = REPORT_ENTITY_MAP[stored.entity]
   if (!entity) throw new Error('report_entity_not_found')
   const support = customSupportColumns(entity.key)
-  const visible = defaultColumnsFor(entity, 8)
+  // Supporting rows show the REPORT'S OWN columns (they carry the drilled
+  // amounts); catalog defaults only when the plan has none (summarize mode).
+  const planColumns = (stored.mode === 'rows' ? stored.columns ?? [] : [])
+    .filter((key) => entity.columns.some((column) => column.key === key))
+  const visible = planColumns.length > 0 ? planColumns : defaultColumnsFor(entity, 8)
   const columns = [...visible, ...support.filter((key) => !visible.includes(key))]
   // A section drill scopes the supporting rows to the clicked groupBy bucket
   // (e.g. one pay run in the payroll register), not the whole report.
@@ -260,6 +264,7 @@ async function customData(target: Extract<ReportDrillTarget, { kind: 'custom' }>
     groupBy: null,
     limit: 10_000,
   } satisfies ReportCustomQuery)
+  const { money } = await getMoneyFormatter(authz.user.orgId)
   const result = await executeReport(authz.user.orgId, detailQuery, 10_000)
   const allRows = result.groups.flatMap((group) => group.rows)
   const visibleIndexes = visible.map((key) => columns.indexOf(key))
@@ -282,7 +287,13 @@ async function customData(target: Extract<ReportDrillTarget, { kind: 'custom' }>
     title: target.label,
     description: tr('drillDrawer.supporting'),
     summary: [{ label: tr('custom.runner.columns.rows'), value: allRows.length.toLocaleString() }],
-    columns: visible.map((key) => ({ label: entity.columns.find((column) => column.key === key)?.label ?? key })),
+    columns: visible.map((key) => {
+      const column = entity.columns.find((c) => c.key === key)
+      return {
+        label: column?.label ?? key,
+        align: column?.kind === 'money' || column?.kind === 'number' ? ('right' as const) : undefined,
+      }
+    }),
     rows: pageRows.map((row, index) => {
       let transaction: ReportDrillResponse['rows'][number]['transaction']
       if (entity.key === 'documents' || entity.key === 'transaction_lines') {
@@ -296,7 +307,16 @@ async function customData(target: Extract<ReportDrillTarget, { kind: 'custom' }>
         const doc = entryDocs.get(entryId)
         if (entryId) transaction = { entryId, docKind: doc?.kind, docId: doc?.id }
       }
-      return { key: `${page}:${index}`, cells: visibleIndexes.map((i) => row[i] ?? null), transaction }
+      const cells = visibleIndexes.map((i, vi) => {
+        const value = row[i] ?? null
+        const kind = entity.columns.find((c) => c.key === visible[vi])?.kind
+        // Money columns render currency-formatted, like every native drill.
+        if (kind === 'money' && value != null && value !== '' && !Number.isNaN(Number(value))) {
+          return money(Number(value))
+        }
+        return value
+      })
+      return { key: `${page}:${index}`, cells, transaction }
     }),
     linkColumn: pageRows.some(() => ['ledger_lines', 'journal_entries', 'documents', 'transaction_lines'].includes(entity.key)) ? 0 : undefined,
     page,
