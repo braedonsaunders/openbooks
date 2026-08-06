@@ -363,7 +363,8 @@ function shapeSummarizeResult(
       })
       const grandRows: (string | number | null)[][] = []
       const grandKeys: (ReportRowScopeRule[] | null)[] = []
-      for (const entry of [...grand.entries()].sort(([a], [b]) => (a < b ? -1 : 1)).map(([, v]) => v)) {
+      // Insertion order = the query's ledger order (enum dims by catalog).
+      for (const entry of grand.values()) {
         const row = entry.label.slice(0, breakouts.length - 1) as (string | number | null)[]
         measures.forEach((m, mi) => {
           const inputs = entry.raw.map((raw) => raw[`m${mi}`])
