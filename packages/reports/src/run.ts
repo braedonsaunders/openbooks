@@ -101,7 +101,7 @@ export async function runCustomQuery(
 
   const labels = opts.labels ?? {}
   if (compiled.mode === 'summarize') {
-    return shapeSummarizeResult(entity, compiled.breakouts, compiled.measures, rows, labels)
+    return shapeSummarizeResult(entity, compiled.breakouts, compiled.measures, rows, labels, compiled.groupBy)
   }
   return shapeRowsResult(entity, compiled.columns, compiled.groupBy, rows, labels, q.columnLabels ?? undefined)
 }
@@ -184,6 +184,7 @@ function shapeSummarizeResult(
   measures: NonNullable<ReportCustomQuery['measures']>,
   dataRows: Record<string, unknown>[],
   labels: ReportRunLabels,
+  groupBy: string | null = null,
 ): ReportRunResult {
   const measureHeading = (m: (typeof measures)[number]) =>
     labels.measure?.(entity, m) ?? measureLabel(entity, m)
@@ -228,22 +229,55 @@ function shapeSummarizeResult(
     && !!m.column
     && entity.columns.find((col) => col.key === m.column)?.kind === 'money'
   const moneyFlags = [...breakouts.map(() => false), ...measures.map(measureIsMoney)]
-  const groups: ReportGroup[] = [
-    {
-      kind: 'summary',
-      title: labels.summaryTitle?.() ?? 'Summary',
-      subtitle:
-        breakouts.length > 0
-          ? (labels.groupCount?.(dataRows.length) ??
-            `${dataRows.length} group${dataRows.length === 1 ? '' : 's'}`)
-          : undefined,
-      columns,
-      rows,
-      isEmpty: dataRows.length === 0,
-      money: moneyFlags.some(Boolean) ? moneyFlags : undefined,
-      rowKeys,
-    },
-  ]
+
+  // Sectioned summarize: one titled group per bucket of the groupBy breakout
+  // (the payroll journal's per-employee blocks), that column lifted out of the
+  // table. Row scope keys stay COMPLETE so drills still hit the exact bucket.
+  const sectionIndex = groupBy ? breakouts.findIndex((b) => b.column === groupBy && !b.bin) : -1
+  let groups: ReportGroup[]
+  if (sectionIndex >= 0 && dataRows.length > 0) {
+    const drop = (list: unknown[]) => list.filter((_, i) => i !== sectionIndex)
+    const sectionLabel = labels.breakout?.(entity, breakouts[sectionIndex]!)
+      ?? breakoutLabel(entity, breakouts[sectionIndex]!)
+    const sectionColumns = drop(columns) as string[]
+    const sectionMoney = drop(moneyFlags) as boolean[]
+    const buckets = new Map<string, { rows: (string | number | null)[][]; keys: (ReportRowScopeRule[] | null)[] }>()
+    dataRows.forEach((row, ri) => {
+      const key = row[`d${sectionIndex}`] == null
+        ? (labels.none?.() ?? '(none)')
+        : String(rows[ri]![sectionIndex] ?? row[`d${sectionIndex}`])
+      const bucket = buckets.get(key) ?? { rows: [], keys: [] }
+      bucket.rows.push(drop(rows[ri]!) as (string | number | null)[])
+      bucket.keys.push(rowKeys[ri] ?? null)
+      buckets.set(key, bucket)
+    })
+    groups = [...buckets.entries()].map(([key, bucket]) => ({
+      kind: 'summary' as const,
+      title: labels.sectionTitle?.(sectionLabel, formatLabel(key)) ?? `${sectionLabel}: ${formatLabel(key)}`,
+      subtitle: labels.rowCount?.(bucket.rows.length) ?? `${bucket.rows.length} row(s)`,
+      columns: sectionColumns,
+      rows: bucket.rows,
+      money: sectionMoney.some(Boolean) ? sectionMoney : undefined,
+      rowKeys: bucket.keys,
+    }))
+  } else {
+    groups = [
+      {
+        kind: 'summary',
+        title: labels.summaryTitle?.() ?? 'Summary',
+        subtitle:
+          breakouts.length > 0
+            ? (labels.groupCount?.(dataRows.length) ??
+              `${dataRows.length} group${dataRows.length === 1 ? '' : 's'}`)
+            : undefined,
+        columns,
+        rows,
+        isEmpty: dataRows.length === 0,
+        money: moneyFlags.some(Boolean) ? moneyFlags : undefined,
+        rowKeys,
+      },
+    ]
+  }
 
   // Grand totals for count/sum measures make useful summary cards.
   const summary: ReportRunResult['summary'] = [

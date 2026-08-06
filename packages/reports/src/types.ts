@@ -58,7 +58,10 @@ export type ReportRuleGroup = {
 // --- Summarize mode ----------------------------------------------------------
 
 /** Aggregate functions a Summarize-mode measure can use. */
-export const REPORT_AGG_FNS = ['count', 'count_distinct', 'sum', 'avg', 'min', 'max'] as const
+// 'latest' = the value on the chronologically last underlying row (entity must
+// declare latestOrderExpr) — running totals like payroll YTD end exactly, where
+// max() would overstate after a net-negative period.
+export const REPORT_AGG_FNS = ['count', 'count_distinct', 'sum', 'avg', 'min', 'max', 'latest'] as const
 export type ReportAggFn = (typeof REPORT_AGG_FNS)[number]
 
 /** Temporal buckets for a Summarize-mode breakout on a date/timestamp column.

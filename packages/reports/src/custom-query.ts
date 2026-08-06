@@ -158,15 +158,18 @@ function compileSummarize(
   const filters = compileCustomFilters(entity, q, params)
   if (filters) whereParts.push(`(${filters})`)
 
-  // Order: a temporal trend reads best chronologically; otherwise rank by the
-  // first measure (top-N). The first measure's ordinal is dims + 1.
+  // Order: sectioned summaries read as an alphabetical ledger; a temporal
+  // trend reads chronologically; otherwise rank by the first measure (top-N).
   const firstMeasureOrdinal = breakouts.length + 1
+  const sectioned = !!q.groupBy && breakouts.some((b) => b.column === q.groupBy && !b.bin)
   const orderSql =
     breakouts.length === 0
       ? ''
-      : breakouts[0]?.bin
-        ? 'ORDER BY 1 ASC'
-        : `ORDER BY ${firstMeasureOrdinal} DESC NULLS LAST`
+      : sectioned
+        ? `ORDER BY ${breakouts.map((_, i) => `${i + 1} ASC`).join(', ')}`
+        : breakouts[0]?.bin
+          ? 'ORDER BY 1 ASC'
+          : `ORDER BY ${firstMeasureOrdinal} DESC NULLS LAST`
 
   const limit = resolveLimit(q.limit, opts.maxRows)
 
@@ -188,7 +191,8 @@ function compileSummarize(
     columns: [],
     breakouts,
     measures,
-    groupBy: null,
+    // Display-level sectioning by one (un-binned) breakout; the shaper splits.
+    groupBy: sectioned ? q.groupBy ?? null : null,
     limit,
   }
 }
@@ -219,6 +223,14 @@ function measureExpr(entity: ReportEntity, m: ReportMeasure): string {
   switch (m.fn) {
     case 'count_distinct':
       return `COUNT(DISTINCT ${ref})::int`
+    case 'latest': {
+      // Exact end-of-window value of a running figure: the value carried by
+      // the chronologically last row in the group.
+      if (!entity.latestOrderExpr) {
+        throw new Error(`entity ${entity.key} does not support the 'latest' aggregate`)
+      }
+      return `(ARRAY_AGG(${ref} ORDER BY ${entity.latestOrderExpr}))[1]`
+    }
     case 'sum':
       return `SUM(${ref})`
     case 'avg':
@@ -241,6 +253,7 @@ const AGG_FN_LABEL: Record<ReportAggFn, string> = {
   avg: 'Average',
   min: 'Min',
   max: 'Max',
+  latest: 'Latest',
 }
 
 export function labelFor(entity: ReportEntity, key: string): string {
