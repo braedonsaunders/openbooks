@@ -17,6 +17,7 @@ test("public authentication and hosted-payment routes match complete segments", 
     "/api/pay/opaque-token",
     "/api/payments/webhooks/stripe",
     "/api/flows/email-action",
+    "/mcp",
     "/_next/static/chunk.js",
   ]) assert.equal(isPublicPath(pathname), true, pathname);
 });
@@ -31,6 +32,8 @@ test("near-prefix private routes never bypass the session gate", () => {
     "/api/v10/health",
     "/api/v1/future-unreviewed",
     "/api/auth/oidc-malicious",
+    "/mcp-admin",
+    "/mcp/extra",
     "/_nextish/private",
   ]) assert.equal(isPublicPath(pathname), false, pathname);
 });
