@@ -8095,6 +8095,8 @@ CREATE TABLE public.employee_payroll_profiles (
     w4_allowances integer,
     fica_exempt boolean DEFAULT false NOT NULL,
     futa_exempt boolean DEFAULT false NOT NULL,
+    sin_encrypted text,
+    sin_last3 text,
     CONSTRAINT employee_payroll_profiles_allowances CHECK (((w4_allowances IS NULL) OR (w4_allowances >= 0))),
     CONSTRAINT employee_payroll_profiles_country CHECK ((country = ANY (ARRAY['CA'::text, 'US'::text]))),
     CONSTRAINT employee_payroll_profiles_fed_code CHECK (((federal_claim_code IS NULL) OR ((federal_claim_code >= 0) AND (federal_claim_code <= 10)))),
@@ -8149,7 +8151,8 @@ CREATE VIEW openbooks_query.employee_payroll_profiles WITH (security_barrier='tr
     w4_pre_2020,
     w4_allowances,
     fica_exempt,
-    futa_exempt
+    futa_exempt,
+    sin_last3
    FROM public.employee_payroll_profiles;
 
 
@@ -10779,7 +10782,7 @@ CREATE TABLE public.pay_components (
     CONSTRAINT pay_components_basis CHECK ((basis = ANY (ARRAY['fixed_amount'::text, 'per_hour'::text, 'percent_of_gross'::text]))),
     CONSTRAINT pay_components_country CHECK (((country IS NULL) OR (country = ANY (ARRAY['CA'::text, 'US'::text])))),
     CONSTRAINT pay_components_kind CHECK ((kind = ANY (ARRAY['earning'::text, 'deduction'::text, 'employer_contribution'::text]))),
-    CONSTRAINT pay_components_system_key CHECK (((system_key IS NULL) OR (system_key = ANY (ARRAY['base_pay'::text, 'overtime'::text, 'bonus'::text, 'vacation_accrual'::text, 'vacation_payout'::text, 'cpp'::text, 'cpp2'::text, 'ei'::text, 'qpip'::text, 'income_tax'::text, 'fit'::text, 'ss'::text, 'medicare'::text, 'medicare_addl'::text, 'futa'::text, 'suta'::text])))),
+    CONSTRAINT pay_components_system_key CHECK (((system_key IS NULL) OR (system_key = ANY (ARRAY['base_pay'::text, 'overtime'::text, 'bonus'::text, 'vacation_accrual'::text, 'vacation_payout'::text, 'cpp'::text, 'cpp2'::text, 'ei'::text, 'qpip'::text, 'income_tax'::text, 'fit'::text, 'ss'::text, 'medicare'::text, 'medicare_addl'::text, 'futa'::text, 'suta'::text, 'wcb'::text, 'eht'::text])))),
     CONSTRAINT pay_components_tax_treatment CHECK ((tax_treatment = ANY (ARRAY['none'::text, 'pension_f'::text, 'union_dues'::text, 'alimony'::text])))
 );
 
@@ -10884,6 +10887,8 @@ CREATE TABLE public.pay_runs (
     employer_cost_total numeric(19,4) DEFAULT 0 NOT NULL,
     employee_count integer DEFAULT 0 NOT NULL,
     calculated_at timestamp with time zone,
+    paid_at timestamp with time zone,
+    paid_entry_id uuid,
     created_at timestamp with time zone DEFAULT now() NOT NULL,
     created_by uuid,
     updated_at timestamp with time zone DEFAULT now() NOT NULL,
@@ -10914,6 +10919,8 @@ CREATE VIEW openbooks_query.pay_runs WITH (security_barrier='true') AS
     employer_cost_total,
     employee_count,
     calculated_at,
+    paid_at,
+    paid_entry_id,
     created_at,
     created_by,
     updated_at,
@@ -15870,7 +15877,8 @@ CREATE TABLE public.worker_comp_groups (
     code text NOT NULL,
     name text NOT NULL,
     rate_percent numeric(19,4),
-    is_active boolean DEFAULT true NOT NULL
+    is_active boolean DEFAULT true NOT NULL,
+    max_assessable numeric(19,4)
 );
 
 ALTER TABLE ONLY public.worker_comp_groups FORCE ROW LEVEL SECURITY;
@@ -15886,7 +15894,8 @@ CREATE VIEW openbooks_query.worker_comp_groups WITH (security_barrier='true') AS
     code,
     name,
     rate_percent,
-    is_active
+    is_active,
+    max_assessable
    FROM public.worker_comp_groups
   WHERE (org_id = public.openbooks_query_org_id());
 
@@ -16584,6 +16593,22 @@ CREATE TABLE public.auth_rate_limit_buckets (
     attempt_count integer DEFAULT 0 NOT NULL,
     updated_at timestamp with time zone DEFAULT now() NOT NULL,
     CONSTRAINT auth_rate_limit_buckets_attempt_count_check CHECK ((attempt_count >= 0))
+);
+
+
+--
+-- Name: auth_password_resets; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.auth_password_resets (
+    id uuid DEFAULT public.uuid_generate_v7() NOT NULL,
+    user_id uuid NOT NULL,
+    token_hash text NOT NULL,
+    network_hash text,
+    user_agent_hash text,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    expires_at timestamp with time zone NOT NULL,
+    used_at timestamp with time zone
 );
 
 
@@ -19370,6 +19395,14 @@ ALTER TABLE ONLY public.auth_oidc_identities
 
 ALTER TABLE ONLY public.auth_rate_limit_buckets
     ADD CONSTRAINT auth_rate_limit_buckets_pkey PRIMARY KEY (bucket_key);
+
+
+--
+-- Name: auth_password_resets auth_password_resets_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.auth_password_resets
+    ADD CONSTRAINT auth_password_resets_pkey PRIMARY KEY (id);
 
 
 --
@@ -22579,6 +22612,27 @@ CREATE INDEX auth_rate_limit_buckets_updated ON public.auth_rate_limit_buckets U
 --
 
 CREATE INDEX auth_sessions_expiry ON public.auth_sessions USING btree (expires_at);
+
+
+--
+-- Name: auth_password_resets_expiry; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX auth_password_resets_expiry ON public.auth_password_resets USING btree (expires_at);
+
+
+--
+-- Name: auth_password_resets_token_hash; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE UNIQUE INDEX auth_password_resets_token_hash ON public.auth_password_resets USING btree (token_hash);
+
+
+--
+-- Name: auth_password_resets_user; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX auth_password_resets_user ON public.auth_password_resets USING btree (user_id, expires_at);
 
 
 --
@@ -32972,6 +33026,14 @@ ALTER TABLE ONLY public.pay_run_adjustments
 
 ALTER TABLE ONLY public.pay_run_adjustments
     ADD CONSTRAINT pay_run_adjustments_updated_by_fkey FOREIGN KEY (updated_by) REFERENCES public.users(id) ON DELETE SET NULL DEFERRABLE;
+
+
+--
+-- Name: pay_runs pay_runs_paid_entry_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.pay_runs
+    ADD CONSTRAINT pay_runs_paid_entry_id_fkey FOREIGN KEY (paid_entry_id) REFERENCES public.journal_entries(id) ON DELETE SET NULL DEFERRABLE;
 
 
 --
