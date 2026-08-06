@@ -39,6 +39,11 @@ export function ResultView({
           subtitle: group.subtitle,
           columns: group.columns,
           rows: group.rows,
+          money: group.money,
+          // Section groups drill to exactly their own bucket's rows.
+          drillTarget: group.groupKey && drillTarget.kind === 'custom'
+            ? { ...drillTarget, label: group.title, filter: group.groupKey }
+            : undefined,
           isEmpty: group.isEmpty,
         })),
       }}

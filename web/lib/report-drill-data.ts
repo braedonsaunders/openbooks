@@ -240,8 +240,19 @@ async function customData(target: Extract<ReportDrillTarget, { kind: 'custom' }>
   const support = customSupportColumns(entity.key)
   const visible = defaultColumnsFor(entity, 8)
   const columns = [...visible, ...support.filter((key) => !visible.includes(key))]
+  // A section drill scopes the supporting rows to the clicked groupBy bucket
+  // (e.g. one pay run in the payroll register), not the whole report.
+  const sectionFilter = target.filter && entity.columns.some((column) => column.key === target.filter!.field)
+    ? {
+        combinator: 'and' as const,
+        rules: [{ field: target.filter.field, op: 'eq' as const, value: target.filter.value }],
+      }
+    : null
   const detailQuery = validateCustomQuery({
     ...stored,
+    filters: sectionFilter
+      ? { combinator: 'and', rules: [...(stored.filters ? [stored.filters] : []), sectionFilter] }
+      : stored.filters,
     mode: 'rows',
     columns,
     breakouts: [],

@@ -122,6 +122,10 @@ function shapeRowsResult(
   const resultsTitle = labels.resultsTitle?.() ?? 'Results'
   const rowCount = (n: number) => labels.rowCount?.(n) ?? `${n} row(s)`
   const cell = (column: string, v: unknown) => formatCellValue(entity, column, v, labels)
+  const moneyFlags = requestedColumns.map(
+    (c) => entity.columns.find((col) => col.key === c)?.kind === 'money',
+  )
+  const money = moneyFlags.some(Boolean) ? moneyFlags : undefined
 
   if (groupBy) {
     const byKey = new Map<string, Record<string, unknown>[]>()
@@ -132,7 +136,7 @@ function shapeRowsResult(
       byKey.set(k, list)
     }
     if (byKey.size === 0) {
-      groups.push({ kind: 'results', title: resultsTitle, columns: columnLabels, rows: [], isEmpty: true })
+      groups.push({ kind: 'results', title: resultsTitle, columns: columnLabels, rows: [], isEmpty: true, money })
     } else {
       for (const [k, list] of [...byKey.entries()].sort()) {
         groups.push({
@@ -143,6 +147,8 @@ function shapeRowsResult(
           subtitle: rowCount(list.length),
           columns: columnLabels,
           rows: list.map((row) => requestedColumns.map((c) => cell(c, row[c]))),
+          money,
+          groupKey: { field: groupBy, value: k },
         })
       }
     }
@@ -154,6 +160,7 @@ function shapeRowsResult(
       columns: columnLabels,
       rows: dataRows.map((row) => requestedColumns.map((c) => cell(c, row[c]))),
       isEmpty: dataRows.length === 0,
+      money,
     })
   }
 
@@ -191,6 +198,11 @@ function shapeSummarizeResult(
     ...measures.map((_, i) => formatCustomValue(row[`m${i}`])),
   ])
 
+  const measureIsMoney = (m: (typeof measures)[number]) =>
+    m.fn !== 'count'
+    && !!m.column
+    && entity.columns.find((col) => col.key === m.column)?.kind === 'money'
+  const moneyFlags = [...breakouts.map(() => false), ...measures.map(measureIsMoney)]
   const groups: ReportGroup[] = [
     {
       kind: 'summary',
@@ -203,6 +215,7 @@ function shapeSummarizeResult(
       columns,
       rows,
       isEmpty: dataRows.length === 0,
+      money: moneyFlags.some(Boolean) ? moneyFlags : undefined,
     },
   ]
 
@@ -279,7 +292,7 @@ function formatCellValue(
   }
   // Numeric columns: normalize trailing zeros ("2938.0000" → "2938.00") while
   // preserving genuine precision (rates like 0.0625 pass through untouched).
-  if (kind === 'number' && v != null) {
+  if ((kind === 'number' || kind === 'money') && v != null) {
     const formatted = formatExactNumber(v)
     if (formatted !== null) return formatted
   }
@@ -310,6 +323,9 @@ function formatExactNumber(value: unknown): string | null {
   const part = decimalParts(value)
   if (!part) return null
   const raw = String(value).replace(/^\+/, '')
+  // True integers (years, counts) stay integers — only values that carry a
+  // decimal point normalize to ledger-style two places.
+  if (!raw.includes('.')) return raw
   const [whole, fraction = ''] = raw.split('.')
   if (fraction.length <= 2 || /^\d{0,2}0*$/.test(fraction)) {
     return `${whole}.${fraction.slice(0, 2).padEnd(2, '0')}`

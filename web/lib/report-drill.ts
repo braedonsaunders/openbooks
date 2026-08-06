@@ -63,6 +63,8 @@ export type ReportDrillTarget =
       label: string
       source: 'definition' | 'view'
       id: string
+      /** Scope the supporting rows to one groupBy bucket (the clicked section). */
+      filter?: { field: string; value: string }
     }
 
 export type ReportDrillCell = string | number | null
@@ -246,7 +248,22 @@ export function parseReportDrillTarget(raw: string | null): ReportDrillTarget | 
   if (input.kind === 'custom') {
     const id = uuidValue(input.id)
     if (!id || (input.source !== 'definition' && input.source !== 'view')) return null
-    return { kind: 'custom', label, source: input.source, id }
+    // Optional section scope: a catalog column key + the bucket value. The
+    // field is validated against the entity catalog at load time; here it just
+    // has to look like a column key.
+    let filter: { field: string; value: string } | undefined
+    const rawFilter = (input as { filter?: unknown }).filter
+    if (rawFilter && typeof rawFilter === 'object') {
+      const field = (rawFilter as { field?: unknown }).field
+      const value = (rawFilter as { value?: unknown }).value
+      if (
+        typeof field === 'string' && /^[a-z][a-z0-9_]{0,62}$/.test(field)
+        && (typeof value === 'string' || typeof value === 'number') && String(value).length <= 256
+      ) {
+        filter = { field, value: String(value) }
+      }
+    }
+    return { kind: 'custom', label, source: input.source, id, filter }
   }
 
   return null
