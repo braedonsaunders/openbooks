@@ -41,7 +41,7 @@ test('every in-app report result uses the shared paper surface', () => {
   assert.match(source('app/(app)/reports/PaperView.tsx'), /from '.\/ReportTable'/)
   assert.match(source('app/(app)/reports/custom/ResultView.tsx'), /<PaperView\b/)
   assert.match(source('app/(app)/reports/custom/builder/[id]/ReportBuilder.tsx'), /<PaperView\b/)
-  assert.match(source('app/(app)/reports/custom/run/[id]/ReportRunner.tsx'), /<(?:ResultView|ReportPaper)\b/)
+  assert.match(source('app/(app)/reports/custom/run/[id]/page.tsx'), /<(?:ResultView|ReportPaper)\b/)
   assert.match(source('app/(app)/knowledge/views/[id]/page.tsx'), /<ResultView\b/)
   assert.match(source('app/(app)/knowledge/views/ViewStudio.tsx'), /<ResultView\b/)
   assert.match(source('components/app-shell.tsx'), /<GlobalReportDrawerHost\b/)
@@ -79,7 +79,7 @@ test('every report result uses the P&L filter bar as one non-wrapping row', () =
   assert.match(filterBar, /overflow-x-auto/)
   assert.doesNotMatch(filterBar, /flex-wrap/)
   assert.match(filterBar, /controls\.search[\s\S]*<SearchInput\b/)
-  assert.match(source('app/(app)/reports/custom/run/[id]/ReportRunner.tsx'), /<ReportFilterBar\b/)
+  assert.match(source('app/(app)/reports/custom/run/[id]/page.tsx'), /<ReportFilterBar\b/)
   assert.match(source('app/(app)/reports/custom/page.tsx'), /if \(!query\) return/)
 })
 

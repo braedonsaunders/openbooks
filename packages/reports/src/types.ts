@@ -179,6 +179,11 @@ export type ReportGroup = {
   columns: string[]
   /** Rows aligned to `columns`. Cell values are coerced to string. */
   rows: (string | number | null | undefined)[][]
+  /** Per-column: format as currency in viewers (money-kind columns/measures). */
+  money?: boolean[]
+  /** For 'section' groups: the raw groupBy field + bucket value, so viewers
+   *  can scope drill-downs to exactly this section's rows. */
+  groupKey?: { field: string; value: string }
   /** If true, render an "empty" placeholder row instead of the table. */
   isEmpty?: boolean
 }
