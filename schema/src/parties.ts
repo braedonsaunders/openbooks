@@ -183,6 +183,9 @@ export const workerCompGroups = pgTable("worker_comp_groups", {
   code: text("code").notNull(), // "WSIB 704"
   name: text("name").notNull(), // "Electrical"
   ratePercent: money("rate_percent"),
+  /** Annual assessable-earnings maximum per worker (class/province data);
+   *  null = no cap. Payroll's WCB accrual stops here. */
+  maxAssessable: money("max_assessable"),
   isActive: boolean("is_active").notNull().default(true),
 });
 

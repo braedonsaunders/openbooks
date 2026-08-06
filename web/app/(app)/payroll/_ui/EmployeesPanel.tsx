@@ -102,6 +102,7 @@ export function ProfileEditor(props: {
   const [vacationPercent, setVacationPercent] = useState(p.vacation_percent ?? '')
   const [vacationMethod, setVacationMethod] = useState<'accrue' | 'pay_each_period'>(p.vacation_method)
   const [isActive, setIsActive] = useState(p.is_active)
+  const [sin, setSin] = useState('')
 
   async function save() {
     setBusy(true)
@@ -111,6 +112,7 @@ export function ProfileEditor(props: {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           employeePartyId: p.employee_party_id,
+          ...(sin.trim() ? { sin: sin.trim() } : {}),
           payScheduleId,
           country,
           province,
@@ -165,6 +167,19 @@ export function ProfileEditor(props: {
   const body = (
       <div className="space-y-4">
         <div className="grid gap-3 sm:grid-cols-2">
+          <div>
+            <Label htmlFor="pp-sin">{t('fields.sin')}</Label>
+            <Input
+              id="pp-sin"
+              value={sin}
+              onChange={(e) => setSin(e.target.value)}
+              placeholder={(p as { sin_last3?: string | null }).sin_last3
+                ? `••• ••• ${(p as { sin_last3?: string | null }).sin_last3}`
+                : t('fields.sinPlaceholder')}
+              inputMode="numeric"
+              autoComplete="off"
+            />
+          </div>
           <div>
             <Label htmlFor="pp-schedule">{t('fields.schedule')}</Label>
             <Select id="pp-schedule" value={payScheduleId} onChange={(e) => setPayScheduleId(e.target.value)}>

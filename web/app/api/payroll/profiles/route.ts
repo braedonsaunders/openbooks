@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/db.ts'
+import { sealSecret } from '@openbooks/engine/src/secrets.ts'
 import { US_STATES } from '@openbooks/engine/src/payroll/us/rates.ts'
 import { guardFeaturePermission } from '../../../../lib/feature-gates'
 import { canonicalDecimal, compareDecimal } from '../../../../lib/exact-decimal'
@@ -58,7 +59,7 @@ export async function GET(req: Request) {
                prof.filing_status, prof.multiple_jobs, prof.dependent_credits,
                prof.other_income_annual, prof.deductions_annual,
                prof.w4_pre_2020, prof.w4_allowances, prof.fica_exempt, prof.futa_exempt,
-               prof.vacation_percent, prof.vacation_method, prof.is_active
+               prof.vacation_percent, prof.vacation_method, prof.is_active, prof.sin_last3
           from employee_payroll_profiles prof
           join parties p on p.id = prof.employee_party_id and p.org_id = prof.org_id
           left join pay_schedules s on s.id = prof.pay_schedule_id
@@ -168,6 +169,23 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: 'employee or pay schedule is not available' }, { status: 422 })
   }
 
+  // Sealed SIN/SSN: write-only from the client (send `sin` to set/replace;
+  // omit to keep). Never echoed back — GET exposes sin_last3 only.
+  let sinEncrypted: string | null | undefined
+  let sinLast3: string | null | undefined
+  if ('sin' in body) {
+    const sin = String(body.sin ?? '').replace(/\D/g, '')
+    if (sin === '') {
+      sinEncrypted = null
+      sinLast3 = null
+    } else if (!/^\d{9}$/.test(sin)) {
+      return NextResponse.json({ error: 'SIN/SSN must be 9 digits' }, { status: 422 })
+    } else {
+      sinEncrypted = sealSecret(sin)
+      sinLast3 = sin.slice(-3)
+    }
+  }
+
   await db.execute(sql`
     insert into employee_payroll_profiles
       (org_id, employee_party_id, pay_schedule_id, country, province, pay_basis,
@@ -177,6 +195,7 @@ export async function POST(req: Request) {
        filing_status, multiple_jobs, dependent_credits, other_income_annual, deductions_annual,
        w4_pre_2020, w4_allowances, fica_exempt, futa_exempt,
        cpp_exempt, ei_exempt, tax_exempt, vacation_percent, vacation_method, is_active,
+       sin_encrypted, sin_last3,
        created_by, updated_by)
     values (${orgId}, ${body.employeePartyId}, ${body.payScheduleId}, ${country}, ${province}, ${payBasis},
             ${federalClaimCode}, ${money.federalClaimAmount}, ${provincialClaimCode}, ${money.provincialClaimAmount},
@@ -188,6 +207,7 @@ export async function POST(req: Request) {
             ${body.ficaExempt === true}, ${body.futaExempt === true},
             ${body.cppExempt === true}, ${body.eiExempt === true}, ${body.taxExempt === true},
             ${vacationPercent}, ${vacationMethod}, ${body.isActive !== false},
+            ${sinEncrypted ?? null}, ${sinLast3 ?? null},
             ${userId}, ${userId})
     on conflict (org_id, employee_party_id)
     do update set pay_schedule_id = excluded.pay_schedule_id, country = excluded.country,
@@ -211,6 +231,10 @@ export async function POST(req: Request) {
                   cpp_exempt = excluded.cpp_exempt, ei_exempt = excluded.ei_exempt,
                   tax_exempt = excluded.tax_exempt, vacation_percent = excluded.vacation_percent,
                   vacation_method = excluded.vacation_method, is_active = excluded.is_active,
+                  sin_encrypted = case when ${sinEncrypted !== undefined} then excluded.sin_encrypted
+                                       else employee_payroll_profiles.sin_encrypted end,
+                  sin_last3 = case when ${sinLast3 !== undefined} then excluded.sin_last3
+                                   else employee_payroll_profiles.sin_last3 end,
                   updated_at = now(), updated_by = ${userId}`)
   return NextResponse.json({ ok: true })
 }

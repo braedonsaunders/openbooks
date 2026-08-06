@@ -2,6 +2,7 @@
 
 import { Suspense, useEffect, useState } from 'react'
 import type { CSSProperties } from 'react'
+import Link from 'next/link'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { useTranslations } from 'next-intl'
 import { Button, Card, CardContent, Input, Label, cn } from '@openbooks/ui'
@@ -114,7 +115,14 @@ function LoginForm() {
       router.push(params.get('next') ?? '/')
       router.refresh()
     } else {
-      setError(mfaRequired ? t('invalidMfa') : t('invalidCredentials'))
+      // 429 is the ingress limiter, not a credential verdict — say so instead
+      // of blaming the password.
+      if (res.status === 429) {
+        const retryAfter = Number(res.headers.get('Retry-After') ?? 0)
+        setError(retryAfter > 0 ? t('tooManyAttempts', { seconds: retryAfter }) : t('busyTryAgain'))
+      } else {
+        setError(mfaRequired ? t('invalidMfa') : t('invalidCredentials'))
+      }
       setBusy(false)
     }
   }
@@ -167,7 +175,15 @@ function LoginForm() {
                   />
                 </div>
                 <div className="space-y-1.5">
-                  <Label htmlFor="password">{t('password')}</Label>
+                  <div className="flex items-baseline justify-between">
+                    <Label htmlFor="password">{t('password')}</Label>
+                    <Link
+                      href="/login/reset"
+                      className="text-xs text-slate-500 hover:text-teal-700 dark:text-slate-400 dark:hover:text-teal-300"
+                    >
+                      {t('forgotPassword')}
+                    </Link>
+                  </div>
                   <Input
                     id="password"
                     type="password"

@@ -4,6 +4,8 @@ import { isUuid } from '../../../../../../lib/list-params'
 import { loadReportDefinition } from '../../../../../../lib/custom-reports'
 import { orgBranding } from '../../../../../../lib/report-pdf'
 import { statementPageHref } from '../../../../../../lib/report-run'
+import { REPORT_ENTITIES } from '@openbooks/reports'
+import { can } from '../../../../../../lib/authz'
 import { ReportBuilder } from './ReportBuilder'
 
 export const dynamic = 'force-dynamic'
@@ -25,6 +27,9 @@ export default async function ReportBuilderPage({
 
   return (
     <ReportBuilder
+      hiddenEntityKeys={REPORT_ENTITIES
+        .filter((e) => e.requiredPermission && !can(authz, e.requiredPermission))
+        .map((e) => e.key)}
       company={branding.orgName}
       definition={{
         id: definition.id,

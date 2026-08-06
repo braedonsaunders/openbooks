@@ -8,6 +8,8 @@ import { parseReportQuery, REPORT_PARAM_KEYS, toSearchParams } from '../../../..
 import { orgBranding } from '../../../../lib/report-pdf'
 import { ReportFilterBar } from '../ReportFilterBar'
 import { SaveViewButton } from '../SaveViewButton'
+import { ScheduleReportButton } from '../ScheduleReportButton'
+import { reportScheduleAnchor, scheduleParamsFrom } from '../../../../lib/report-schedule-anchor'
 import { ExportMenu } from '../ExportMenu'
 import { requirePermission } from '../../../../lib/authz'
 import type { ReportDrillTarget } from '../../../../lib/report-drill'
@@ -24,6 +26,7 @@ export default async function ProjectProfitabilityPage({
   const authz = await requirePermission('reports.read')
   await requireProjectsFeature(authz.user.orgId)
   const sp = await searchParams
+  const scheduleDefId = await reportScheduleAnchor('project-profitability')
   const search = sp.q?.trim() || undefined
   const q = parseReportQuery(sp)
   const period = await resolvePeriod(q.period, { customFrom: q.from, customTo: q.to, orgId: authz.user.orgId })
@@ -129,7 +132,7 @@ export default async function ProjectProfitabilityPage({
             }}
             customers={customers}
             dimensions={opts}
-            actions={<><SaveViewButton /><ExportMenu kind="project-profitability" params={sp} /></>}
+            actions={<>{scheduleDefId ? <ScheduleReportButton definitionId={scheduleDefId} statementParams={scheduleParamsFrom(sp)} /> : null}<SaveViewButton /><ExportMenu kind="project-profitability" params={sp} /></>}
           />
         </>
       }

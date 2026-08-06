@@ -34,6 +34,8 @@ export async function reportRunLabels(): Promise<ReportRunLabels> {
     summarySource: () => t("run.summarySource"),
     summaryTotal: (measureHeading) => t("run.summaryTotal", { measure: measureHeading }),
     none: () => t("run.none"),
+    subtotal: (level: string) => t("run.subtotal", { level }),
+    grandTotalsTitle: () => t("run.grandTotals"),
     bool: (v) => t(v ? "run.yes" : "run.no"),
     enumValue: (v) => (t.has(`catalog.enumValues.${v}`) ? t(`catalog.enumValues.${v}`) : null),
     entityLabel: (entity) => t(`catalog.entities.${entity.key}.label`),

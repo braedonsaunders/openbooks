@@ -9,6 +9,8 @@ import { partnerBalances } from '../../../../lib/reports'
 import { orgInfo } from '../../../../lib/data'
 import { ExportMenu } from '../ExportMenu'
 import { SaveViewButton } from '../SaveViewButton'
+import { ScheduleReportButton } from '../ScheduleReportButton'
+import { reportScheduleAnchor, scheduleParamsFrom } from '../../../../lib/report-schedule-anchor'
 import { ReportPaper } from '../ReportPaper'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '../ReportTable'
 import { ReportDrillLink } from '../ReportDrillLink'
@@ -28,6 +30,7 @@ export default async function Partners({
   const tr = await getTranslations('reports')
   const tc = await getTranslations('common')
   const sp = await searchParams
+  const scheduleDefId = await reportScheduleAnchor('partners', { kind: sp.kind === 'payable' ? 'payable' : 'receivable' })
   const k = sp.kind === 'receivable' ? 'receivable' : 'payable'
   const params = parseListParams(sp, { sort: 'balance', allowedSorts: ['balance'] as const, perPage: PER_PAGE })
   const [all, org] = await Promise.all([partnerBalances(k), orgInfo()])
@@ -61,7 +64,7 @@ export default async function Partners({
                 </Link>
               </>
             }
-            actions={<><SaveViewButton /><ExportMenu kind="partners" params={{ ...sp, side: k }} /></>}
+            actions={<>{scheduleDefId ? <ScheduleReportButton definitionId={scheduleDefId} statementParams={scheduleParamsFrom(sp)} /> : null}<SaveViewButton /><ExportMenu kind="partners" params={{ ...sp, side: k }} /></>}
           />
           <p className="text-xs text-slate-500 dark:text-slate-400">
             {t('totalOutstanding')}: <span className="font-semibold tabular-nums text-slate-700 dark:text-slate-200"><ReportDrillLink target={{ kind: 'ledger', label: t('totalOutstanding'), accountTypes, to: asOf, mode: 'balance' }} className="hover:text-teal-700 hover:underline dark:hover:text-teal-300">{m(total)}</ReportDrillLink></span>

@@ -11,6 +11,8 @@ import { TxnLink } from '../TxnLink'
 import { ReportFilterBar } from '../ReportFilterBar'
 import { ExportMenu } from '../ExportMenu'
 import { SaveViewButton } from '../SaveViewButton'
+import { ScheduleReportButton } from '../ScheduleReportButton'
+import { reportScheduleAnchor, scheduleParamsFrom } from '../../../../lib/report-schedule-anchor'
 import { ReportPaper } from '../ReportPaper'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '../ReportTable'
 import { decimalIsZero } from '../../../../lib/statement-format'
@@ -26,6 +28,7 @@ export default async function JournalPage({
   const t = await getTranslations('reports')
   const tc = await getTranslations('common')
   const sp = await searchParams
+  const scheduleDefId = await reportScheduleAnchor('journal')
   const q = parseReportQuery(sp)
   const period = await resolvePeriod(q.period, { customFrom: q.from, customTo: q.to })
   const dims = q.dims
@@ -47,7 +50,7 @@ export default async function JournalPage({
           <ReportFilterBar
             controls={{ period: true, dimensions: true }}
             dimensions={opts}
-            actions={<><SaveViewButton /><ExportMenu kind="journal" params={sp} /></>}
+            actions={<>{scheduleDefId ? <ScheduleReportButton definitionId={scheduleDefId} statementParams={scheduleParamsFrom(sp)} /> : null}<SaveViewButton /><ExportMenu kind="journal" params={sp} /></>}
           />
           {journal.truncated && <p className="text-xs text-amber-600 dark:text-amber-400">{t('journal.truncated')}</p>}
         </>

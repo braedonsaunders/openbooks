@@ -4,6 +4,8 @@ import test from "node:test";
 import { sql } from "drizzle-orm";
 import { db } from "./db.ts";
 import { add, cmp, sum } from "./money.ts";
+import { postDocument } from "./posting.ts";
+import { recordPayRunPayment } from "./payroll-payment.ts";
 import { createRemittanceBill, payrollRemittanceSummary } from "./payroll-remittance.ts";
 import { calculatePayRun, commitPayRun, createPayRun, seedPayrollComponents } from "./payroll-run.ts";
 import { t4Slips, t4Summary } from "./payroll-yearend.ts";
@@ -118,6 +120,36 @@ test(
       const after = await payrollRemittanceSummary(org.orgId, { from: "2026-07-01", to: "2026-07-31" });
       assert.equal(after[0]!.existingBills.length, 1);
       assert.equal(after[0]!.existingBills[0]!.documentNumber, bill.documentNumber);
+
+      // Post the run, then record payment: DR net payable per employee
+      // (applied to the run's open items) / CR bank; run stamped paid.
+      await db.execute(sql`update documents set status = 'approved' where id = ${run.documentId}`);
+      await postDocument(run.documentId, {
+        control: { ar: org.accounts.ar, ap: org.accounts.ap, bank: org.accounts.bank },
+      });
+      const payment = await recordPayRunPayment({
+        orgId: org.orgId, actorId, documentId: run.documentId, bankAccountId: org.accounts.bank,
+      });
+      const stubNet = ((await db.execute(sql`
+        select net_pay from pay_stubs where pay_run_document_id = ${run.documentId}
+      `)) as unknown as { rows: { net_pay: string }[] }).rows[0]!;
+      assert.equal(cmp(payment.total, stubNet.net_pay), 0);
+      const paidRun = ((await db.execute(sql`
+        select paid_at, paid_entry_id from pay_runs where document_id = ${run.documentId}
+      `)) as unknown as { rows: { paid_at: string | null; paid_entry_id: string | null }[] }).rows[0]!;
+      assert.ok(paidRun.paid_at && paidRun.paid_entry_id);
+      const settlement = ((await db.execute(sql`
+        select count(*)::int as n from applications a
+          join journal_lines jl on jl.id = a.from_line_id
+         where jl.entry_id = ${paidRun.paid_entry_id}
+      `)) as unknown as { rows: { n: number }[] }).rows[0]!;
+      assert.equal(settlement.n, 1); // one employee, one applied open item
+      await assert.rejects(
+        recordPayRunPayment({
+          orgId: org.orgId, actorId, documentId: run.documentId, bankAccountId: org.accounts.bank,
+        }),
+        /already recorded as paid/,
+      );
 
       // T4: boxes reconcile to the stub.
       const slips = await t4Slips(org.orgId, 2026);

@@ -12,7 +12,7 @@
 
 import type { ReportFilterOperator, ReportRuleGroup } from './types'
 
-export type ReportColumnKind = 'text' | 'date' | 'timestamp' | 'enum' | 'uuid' | 'number'
+export type ReportColumnKind = 'text' | 'date' | 'timestamp' | 'enum' | 'uuid' | 'number' | 'money'
 
 /** Every transaction kind the documents table holds — the source platform
  *  "Transaction Type" filter set. One source of truth for both the
@@ -78,6 +78,14 @@ export type ReportEntity = {
   /** Implicit predicate ALWAYS AND-ed into every query against this entity.
    *  Server-generated only, never from user input. */
   baseFilter?: ReportRuleGroup
+  /** Permission (beyond reports.read) required to see/run this entity —
+   *  sensitive data like payroll wages. Enforced at run time and filtered
+   *  from the builder catalog. */
+  requiredPermission?: string
+  /** Chronological ordering (SQL ORDER BY body, server-defined constant) that
+   *  makes the 'latest' aggregate exact for this entity. Without it, 'latest'
+   *  measures are rejected at compile time. */
+  latestOrderExpr?: string
 }
 
 export const REPORT_ENTITIES: ReportEntity[] = [
@@ -112,9 +120,9 @@ export const REPORT_ENTITIES: ReportEntity[] = [
       { key: 'location', label: 'Location', kind: 'text', expr: 'loc.name' },
       { key: 'class', label: 'Class', kind: 'text', expr: 'cls.name' },
       { key: 'memo', label: 'Memo', kind: 'text', expr: 'coalesce(jl.memo, je.memo)' },
-      { key: 'amount', label: 'Amount (base)', kind: 'number', expr: 'jl.amount' },
+      { key: 'amount', label: 'Amount (base)', kind: 'money', expr: 'jl.amount' },
       { key: 'currency', label: 'Currency', kind: 'text', expr: 'jl.currency' },
-      { key: 'txn_amount', label: 'Amount (txn)', kind: 'number', expr: 'jl.txn_amount' },
+      { key: 'txn_amount', label: 'Amount (txn)', kind: 'money', expr: 'jl.txn_amount' },
       { key: 'quantity', label: 'Quantity', kind: 'number', expr: 'jl.quantity' },
       { key: 'unit', label: 'Unit', kind: 'text', expr: 'jl.unit' },
       { key: 'due_date', label: 'Due date', kind: 'date', expr: 'jl.due_date' },
@@ -148,9 +156,9 @@ export const REPORT_ENTITIES: ReportEntity[] = [
       { key: 'due_date', label: 'Due date', kind: 'date', expr: 'd.due_date' },
       { key: 'status', label: 'Status', kind: 'enum', expr: 'd.status', options: TRANSACTION_STATUSES },
       { key: 'currency', label: 'Currency', kind: 'text', expr: 'd.currency' },
-      { key: 'subtotal', label: 'Subtotal', kind: 'number', expr: 'd.subtotal' },
-      { key: 'tax_total', label: 'Tax', kind: 'number', expr: 'd.tax_total' },
-      { key: 'total', label: 'Total', kind: 'number', expr: 'd.total' },
+      { key: 'subtotal', label: 'Subtotal', kind: 'money', expr: 'd.subtotal' },
+      { key: 'tax_total', label: 'Tax', kind: 'money', expr: 'd.tax_total' },
+      { key: 'total', label: 'Total', kind: 'money', expr: 'd.total' },
       { key: 'reference_number', label: 'Reference #', kind: 'text', expr: 'd.reference_number' },
       { key: 'billing_method', label: 'Billing method', kind: 'enum', expr: 'd.billing_method', options: ['time_and_materials', 'fixed_price'] },
       { key: 'is_final_invoice', label: 'Final invoice', kind: 'enum', expr: 'd.is_final_invoice' },
@@ -198,9 +206,9 @@ export const REPORT_ENTITIES: ReportEntity[] = [
       { key: 'description', label: 'Description', kind: 'text', expr: 'dl.description' },
       { key: 'quantity', label: 'Quantity', kind: 'number', expr: 'dl.quantity' },
       { key: 'unit', label: 'Unit', kind: 'text', expr: 'dl.unit' },
-      { key: 'unit_price', label: 'Unit price', kind: 'number', expr: 'dl.unit_price' },
-      { key: 'amount', label: 'Amount', kind: 'number', expr: 'dl.amount' },
-      { key: 'tax_amount', label: 'Tax amount', kind: 'number', expr: 'dl.tax_amount' },
+      { key: 'unit_price', label: 'Unit price', kind: 'money', expr: 'dl.unit_price' },
+      { key: 'amount', label: 'Amount', kind: 'money', expr: 'dl.amount' },
+      { key: 'tax_amount', label: 'Tax amount', kind: 'money', expr: 'dl.tax_amount' },
       { key: 'is_billable', label: 'Billable', kind: 'enum', expr: 'dl.is_billable' },
       { key: 'quantity_fulfilled', label: 'Qty fulfilled', kind: 'number', expr: 'dl.quantity_fulfilled' },
       { key: 'quantity_billed', label: 'Qty billed', kind: 'number', expr: 'dl.quantity_billed' },
@@ -208,10 +216,10 @@ export const REPORT_ENTITIES: ReportEntity[] = [
       { key: 'department', label: 'Department', kind: 'text', expr: 'dep.name' },
       { key: 'project', label: 'Project', kind: 'text', expr: 'prj.name' },
       { key: 'equipment', label: 'Equipment', kind: 'text', expr: 'eu.name' },
-      { key: 'cost_rate', label: 'Cost rate', kind: 'number', expr: 'dl.cost_rate' },
-      { key: 'bill_rate', label: 'Bill rate', kind: 'number', expr: 'dl.bill_rate' },
-      { key: 'cost_amount', label: 'Cost amount', kind: 'number', expr: 'dl.cost_amount' },
-      { key: 'bill_amount', label: 'Bill amount', kind: 'number', expr: 'dl.bill_amount' },
+      { key: 'cost_rate', label: 'Cost rate', kind: 'money', expr: 'dl.cost_rate' },
+      { key: 'bill_rate', label: 'Bill rate', kind: 'money', expr: 'dl.bill_rate' },
+      { key: 'cost_amount', label: 'Cost amount', kind: 'money', expr: 'dl.cost_amount' },
+      { key: 'bill_amount', label: 'Bill amount', kind: 'money', expr: 'dl.bill_amount' },
       { key: 'location', label: 'Location', kind: 'text', expr: 'loc.name' },
       { key: 'class', label: 'Class', kind: 'text', expr: 'cls.name' },
       { key: 'created_at', label: 'Created at', kind: 'timestamp', expr: 'dl.created_at' },
@@ -255,8 +263,8 @@ export const REPORT_ENTITIES: ReportEntity[] = [
       { key: 'description', label: 'Description', kind: 'text', expr: 'it.description' },
       { key: 'kind', label: 'Type', kind: 'enum', expr: 'it.kind', options: ['service', 'non_inventory', 'inventory', 'assembly', 'kit', 'other_charge', 'equipment_charge', 'labor', 'absence', 'discount'] },
       { key: 'category', label: 'Category', kind: 'text', expr: 'it.category' },
-      { key: 'default_rate', label: 'Default rate', kind: 'number', expr: 'it.default_rate' },
-      { key: 'default_cost', label: 'Default cost', kind: 'number', expr: 'it.default_cost' },
+      { key: 'default_rate', label: 'Default rate', kind: 'money', expr: 'it.default_rate' },
+      { key: 'default_cost', label: 'Default cost', kind: 'money', expr: 'it.default_cost' },
       { key: 'unit', label: 'Unit', kind: 'text', expr: 'it.unit' },
       { key: 'income_account', label: 'Income account', kind: 'text', expr: 'inc.name' },
       { key: 'expense_account', label: 'Expense account', kind: 'text', expr: 'exp.name' },
@@ -338,8 +346,8 @@ export const REPORT_ENTITIES: ReportEntity[] = [
       { key: 'category', label: 'Category', kind: 'text', expr: 'ac.name' },
       { key: 'acquired_on', label: 'Acquired on', kind: 'date', expr: 'fa.acquired_on' },
       { key: 'in_service_on', label: 'In service on', kind: 'date', expr: 'fa.in_service_on' },
-      { key: 'acquisition_cost', label: 'Acquisition cost', kind: 'number', expr: 'fa.acquisition_cost' },
-      { key: 'salvage_value', label: 'Salvage value', kind: 'number', expr: 'fa.salvage_value' },
+      { key: 'acquisition_cost', label: 'Acquisition cost', kind: 'money', expr: 'fa.acquisition_cost' },
+      { key: 'salvage_value', label: 'Salvage value', kind: 'money', expr: 'fa.salvage_value' },
       { key: 'serial_number', label: 'Serial #', kind: 'text', expr: 'fa.serial_number' },
       { key: 'custodian_name', label: 'Custodian', kind: 'text', expr: 'cust.display_name' },
       { key: 'project', label: 'Project', kind: 'text', expr: 'prj.name' },
@@ -369,17 +377,17 @@ export const REPORT_ENTITIES: ReportEntity[] = [
       { key: 'charge_item', label: 'Charge item', kind: 'text', expr: 'it.name' },
       { key: 'fixed_asset_number', label: 'Fixed asset #', kind: 'text', expr: 'fa.asset_number' },
       { key: 'rate_book', label: 'Rate book', kind: 'text', expr: 'rb.name' },
-      { key: 'purchase_price', label: 'Purchase price', kind: 'number', expr: 'eu.purchase_price' },
+      { key: 'purchase_price', label: 'Purchase price', kind: 'money', expr: 'eu.purchase_price' },
       { key: 'acquired_on', label: 'Acquired on', kind: 'date', expr: 'eu.acquired_on' },
       { key: 'in_service_on', label: 'In service on', kind: 'date', expr: 'eu.in_service_on' },
       { key: 'serial_number', label: 'Serial #', kind: 'text', expr: 'eu.serial_number' },
       { key: 'capacity_quantity', label: 'Capacity', kind: 'number', expr: 'eu.capacity_quantity' },
       { key: 'capacity_unit', label: 'Capacity unit', kind: 'text', expr: 'eu.capacity_unit' },
       { key: 'usage', label: 'Charged usage', kind: 'number', expr: `(select coalesce(sum(dl.base_quantity),0) from document_lines dl join documents d on d.id=dl.document_id where dl.equipment_unit_id=eu.id and d.kind='project_charge' and d.status in ('approved','posted'))` },
-      { key: 'cost_recovery', label: 'Cost recovery', kind: 'number', expr: `(select coalesce(sum(dl.cost_amount),0) from document_lines dl join documents d on d.id=dl.document_id where dl.equipment_unit_id=eu.id and d.kind='project_charge' and d.status in ('approved','posted'))` },
-      { key: 'billable_value', label: 'Billable value', kind: 'number', expr: `(select coalesce(sum(dl.bill_amount),0) from document_lines dl join documents d on d.id=dl.document_id where dl.equipment_unit_id=eu.id and d.kind='project_charge' and d.status in ('approved','posted'))` },
-      { key: 'billed_revenue', label: 'Billed revenue', kind: 'number', expr: `(select coalesce(sum(dl.amount),0) from document_lines dl join documents d on d.id=dl.document_id where dl.equipment_unit_id=eu.id and d.kind='customer_invoice' and d.status='posted')` },
-      { key: 'depreciation', label: 'Posted depreciation', kind: 'number', expr: `(select coalesce(sum(dsl.posted_amount),0) from depreciation_schedules ds join depreciation_schedule_lines dsl on dsl.schedule_id=ds.id where ds.asset_id=eu.fixed_asset_id and dsl.posted_amount is not null)` },
+      { key: 'cost_recovery', label: 'Cost recovery', kind: 'money', expr: `(select coalesce(sum(dl.cost_amount),0) from document_lines dl join documents d on d.id=dl.document_id where dl.equipment_unit_id=eu.id and d.kind='project_charge' and d.status in ('approved','posted'))` },
+      { key: 'billable_value', label: 'Billable value', kind: 'money', expr: `(select coalesce(sum(dl.bill_amount),0) from document_lines dl join documents d on d.id=dl.document_id where dl.equipment_unit_id=eu.id and d.kind='project_charge' and d.status in ('approved','posted'))` },
+      { key: 'billed_revenue', label: 'Billed revenue', kind: 'money', expr: `(select coalesce(sum(dl.amount),0) from document_lines dl join documents d on d.id=dl.document_id where dl.equipment_unit_id=eu.id and d.kind='customer_invoice' and d.status='posted')` },
+      { key: 'depreciation', label: 'Posted depreciation', kind: 'money', expr: `(select coalesce(sum(dsl.posted_amount),0) from depreciation_schedules ds join depreciation_schedule_lines dsl on dsl.schedule_id=ds.id where ds.asset_id=eu.fixed_asset_id and dsl.posted_amount is not null)` },
       { key: 'created_at', label: 'Created at', kind: 'timestamp', expr: 'eu.created_at' },
       { key: 'id', label: 'Equipment (id)', kind: 'uuid', expr: 'eu.id' },
     ],
@@ -456,6 +464,119 @@ export const REPORT_ENTITIES: ReportEntity[] = [
     ],
     defaultSort: { column: 'number', direction: 'asc' },
   },
+  {
+    key: 'pay_stubs',
+    label: 'Pay stubs',
+    category: 'payroll',
+    description:
+      'One row per employee per pay run — gross, statutory withholdings, net, and employer cost, with run/schedule context. Wage data: requires the payroll permission.',
+    from: `pay_stubs s
+      JOIN pay_runs r ON r.document_id = s.pay_run_document_id
+      JOIN documents d ON d.id = r.document_id
+      JOIN parties p ON p.id = s.employee_party_id AND p.org_id = s.org_id
+      LEFT JOIN pay_schedules ps ON ps.id = r.pay_schedule_id`,
+    orgColumn: 's.org_id',
+    requiredPermission: 'payroll.read',
+    columns: [
+      { key: 'employee', label: 'Employee', kind: 'text', expr: 'p.display_name' },
+      { key: 'run_number', label: 'Pay run #', kind: 'text', expr: 'd.document_number' },
+      { key: 'schedule', label: 'Schedule', kind: 'text', expr: 'ps.name' },
+      { key: 'pay_date', label: 'Pay date', kind: 'date', expr: 's.pay_date' },
+      { key: 'period_start', label: 'Period start', kind: 'date', expr: 'r.period_start' },
+      { key: 'period_end', label: 'Period end', kind: 'date', expr: 'r.period_end' },
+      { key: 'tax_year', label: 'Tax year', kind: 'number', expr: 's.tax_year' },
+      { key: 'province', label: 'Province / state', kind: 'text', expr: 's.province' },
+      {
+        key: 'run_status', label: 'Run status', kind: 'enum', expr: 'r.run_status',
+        options: ['draft', 'calculated', 'committed'],
+      },
+      {
+        key: 'paid', label: 'Paid', kind: 'enum',
+        expr: "case when r.paid_at is not null then 'paid' else 'unpaid' end",
+        options: ['paid', 'unpaid'],
+      },
+      { key: 'gross', label: 'Gross pay', kind: 'money', expr: 's.gross' },
+      {
+        key: 'cpp_fica', label: 'CPP / FICA (employee)', kind: 'money',
+        expr: `(coalesce((s.factors->>'C')::numeric, 0) + coalesce((s.factors->>'C2')::numeric, 0)
+          + coalesce((s.factors->>'SS')::numeric, 0) + coalesce((s.factors->>'MED')::numeric, 0)
+          + coalesce((s.factors->>'MED2')::numeric, 0))`,
+      },
+      { key: 'ei', label: 'EI (employee)', kind: 'money', expr: `coalesce((s.factors->>'EI')::numeric, 0)` },
+      {
+        key: 'income_tax', label: 'Income tax', kind: 'money',
+        expr: `(coalesce((s.factors->>'T')::numeric, 0) + coalesce((s.factors->>'TB')::numeric, 0)
+          + coalesce((s.factors->>'FIT')::numeric, 0))`,
+      },
+      { key: 'net_pay', label: 'Net pay', kind: 'money', expr: 's.net_pay' },
+      { key: 'employer_cost', label: 'Employer cost', kind: 'money', expr: 's.employer_cost' },
+      { key: 'vacation_accrued', label: 'Vacation accrued', kind: 'money', expr: 's.vacation_accrued' },
+      { key: 'pensionable', label: 'Pensionable earnings', kind: 'money', expr: 's.pensionable_earnings' },
+      { key: 'insurable', label: 'Insurable earnings', kind: 'money', expr: 's.insurable_earnings' },
+    ],
+    defaultSort: { column: 'pay_date', direction: 'desc' },
+  },
+  {
+    key: 'pay_stub_lines',
+    label: 'Pay stub lines',
+    category: 'payroll',
+    description:
+      'Component-level payroll detail — one row per earning, deduction, or employer contribution on a stub, with hours, rate, amount, and running year-to-date. The payroll journal source. Wage data: requires the payroll permission.',
+    from: `pay_stub_lines l
+      JOIN pay_stubs s ON s.id = l.stub_id
+      JOIN pay_runs r ON r.document_id = s.pay_run_document_id
+      JOIN documents d ON d.id = r.document_id
+      JOIN parties p ON p.id = s.employee_party_id AND p.org_id = s.org_id
+      LEFT JOIN pay_components c ON c.id = l.component_id
+      LEFT JOIN pay_schedules ps ON ps.id = r.pay_schedule_id
+      LEFT JOIN projects prj ON prj.id = l.project_id
+      LEFT JOIN departments dep ON dep.id = l.department_id`,
+    orgColumn: 'l.org_id',
+    requiredPermission: 'payroll.read',
+    latestOrderExpr: 's.pay_date DESC, s.id DESC, l.id DESC',
+    columns: [
+      { key: 'employee', label: 'Employee', kind: 'text', expr: 'p.display_name' },
+      { key: 'run_number', label: 'Pay run #', kind: 'text', expr: 'd.document_number' },
+      { key: 'schedule', label: 'Schedule', kind: 'text', expr: 'ps.name' },
+      { key: 'pay_date', label: 'Pay date', kind: 'date', expr: 's.pay_date' },
+      { key: 'period_start', label: 'Period start', kind: 'date', expr: 'r.period_start' },
+      { key: 'period_end', label: 'Period end', kind: 'date', expr: 'r.period_end' },
+      {
+        key: 'run_status', label: 'Run status', kind: 'enum', expr: 'r.run_status',
+        options: ['draft', 'calculated', 'committed'],
+      },
+      { key: 'component', label: 'Component', kind: 'text', expr: 'coalesce(c.name, l.description)' },
+      { key: 'component_code', label: 'Component code', kind: 'text', expr: 'c.code' },
+      { key: 'line_description', label: 'Line description', kind: 'text', expr: 'l.description' },
+      {
+        key: 'line_kind', label: 'Kind', kind: 'enum', expr: 'l.kind',
+        options: ['earning', 'deduction', 'employer_contribution'],
+      },
+      { key: 'hours', label: 'Hours', kind: 'number', expr: 'l.hours' },
+      { key: 'rate', label: 'Rate', kind: 'number', expr: 'l.rate' },
+      { key: 'amount', label: 'Amount', kind: 'money', expr: 'l.amount' },
+      {
+        key: 'ytd_amount', label: 'YTD amount', kind: 'money',
+        expr: `(select coalesce(sum(l2.amount), 0)
+        from pay_stub_lines l2
+        join pay_stubs s2 on s2.id = l2.stub_id
+        join pay_runs r2 on r2.document_id = s2.pay_run_document_id
+       where l2.org_id = l.org_id
+         and s2.employee_party_id = s.employee_party_id
+         and coalesce(l2.component_id::text, l2.description) = coalesce(l.component_id::text, l.description)
+         and s2.tax_year = s.tax_year
+         and (s2.pay_date < s.pay_date or (s2.pay_date = s.pay_date and s2.id <= s.id))
+         and (r2.run_status = 'committed' or s2.pay_run_document_id = s.pay_run_document_id))`,
+      },
+      { key: 'project', label: 'Project', kind: 'text', expr: 'prj.name' },
+      { key: 'department', label: 'Department', kind: 'text', expr: 'dep.name' },
+      { key: 'tax_year', label: 'Tax year', kind: 'number', expr: 's.tax_year' },
+      { key: 'province', label: 'Province / state', kind: 'text', expr: 's.province' },
+      { key: 'stub_id', label: 'Stub (id)', kind: 'uuid', expr: 's.id' },
+      { key: 'component_id', label: 'Component (id)', kind: 'uuid', expr: 'l.component_id' },
+    ],
+    defaultSort: { column: 'pay_date', direction: 'desc' },
+  },
 ]
 
 export const REPORT_ENTITY_MAP: Record<string, ReportEntity> = Object.fromEntries(
@@ -495,13 +616,13 @@ export const REPORT_OPERATORS: ReportOperatorMeta[] = [
     key: 'gte',
     label: 'on or after / ≥',
     needsValue: 'one',
-    applicableKinds: ['date', 'timestamp', 'number'],
+    applicableKinds: ['date', 'timestamp', 'number', 'money'],
   },
   {
     key: 'lte',
     label: 'on or before / ≤',
     needsValue: 'one',
-    applicableKinds: ['date', 'timestamp', 'number'],
+    applicableKinds: ['date', 'timestamp', 'number', 'money'],
   },
   { key: 'is_null', label: 'is empty', needsValue: 'none' },
   { key: 'is_not_null', label: 'is set', needsValue: 'none' },
@@ -538,6 +659,7 @@ export const REPORT_OPERATORS: ReportOperatorMeta[] = [
     needsValue: 'one',
     applicableKinds: ['date', 'timestamp'],
   },
+
 ]
 
 export function operatorsForKind(kind: ReportColumnKind): ReportOperatorMeta[] {

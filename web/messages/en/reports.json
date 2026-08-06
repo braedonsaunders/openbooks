@@ -31,7 +31,8 @@
       "ordersTitle": "Order pipeline",
       "ordersDescription": "Open quotes, sales orders and purchase orders — count, value and conversion",
       "cashFlowIndirectTitle": "Cash Flow (Indirect)",
-      "cashFlowIndirectDescription": "GAAP indirect method — net income reconciled to operating cash with working-capital detail"
+      "cashFlowIndirectDescription": "GAAP indirect method — net income reconciled to operating cash with working-capital detail",
+      "payrollDescription": "Built-in payroll report over pay stubs — wage data needs the payroll permission."
     },
     "groups": {
       "financial": "Financial Statements",
@@ -40,7 +41,8 @@
       "budgeting": "Budgeting",
       "custom": "Custom & Saved",
       "projects": "Projects",
-      "orders": "Sales & orders"
+      "orders": "Sales & orders",
+      "payroll": "Payroll"
     },
     "customStudio": {
       "title": "Custom report builder",
@@ -112,7 +114,8 @@
     "expandAll": "Expand all",
     "collapseAll": "Collapse all",
     "expandSection": "Expand {section}",
-    "collapseSection": "Collapse {section}"
+    "collapseSection": "Collapse {section}",
+    "payPeriods": "Pay periods"
   },
   "balanceSheet": {
     "title": "Balance Sheet",
@@ -454,7 +457,9 @@
         "fri": "Friday",
         "sat": "Saturday"
       }
-    }
+    },
+    "drawerDescription": "Email this report on a cadence. Schedules run with the filters saved when the schedule was created.",
+    "loading": "Loading schedules…"
   },
   "catalog": {
     "entities": {
@@ -501,6 +506,14 @@
       "tax_codes": {
         "label": "Tax codes",
         "description": "Tax codes — jurisdiction, scope and recoverability."
+      },
+      "pay_stubs": {
+        "label": "Pay stubs",
+        "description": "One row per employee per pay run — gross, statutory withholdings, net, and employer cost. Requires the payroll permission."
+      },
+      "pay_stub_lines": {
+        "label": "Pay stub lines",
+        "description": "Component-level payroll detail — one row per earning, deduction, or employer contribution on a stub, with hours, rate, amount, and running year-to-date. Requires the payroll permission."
       }
     },
     "columns": {
@@ -690,6 +703,50 @@
         "recoverable_percent": "Recoverable %",
         "is_active": "Active",
         "id": "Tax code (id)"
+      },
+      "pay_stubs": {
+        "employee": "Employee",
+        "run_number": "Pay run #",
+        "schedule": "Schedule",
+        "pay_date": "Pay date",
+        "period_start": "Period start",
+        "period_end": "Period end",
+        "tax_year": "Tax year",
+        "province": "Province / state",
+        "run_status": "Run status",
+        "paid": "Paid",
+        "gross": "Gross pay",
+        "cpp_fica": "CPP / FICA (employee)",
+        "ei": "EI (employee)",
+        "income_tax": "Income tax",
+        "net_pay": "Net pay",
+        "employer_cost": "Employer cost",
+        "vacation_accrued": "Vacation accrued",
+        "pensionable": "Pensionable earnings",
+        "insurable": "Insurable earnings"
+      },
+      "pay_stub_lines": {
+        "employee": "Employee",
+        "run_number": "Pay run #",
+        "schedule": "Schedule",
+        "pay_date": "Pay date",
+        "period_start": "Period start",
+        "period_end": "Period end",
+        "run_status": "Run status",
+        "component": "Component",
+        "component_code": "Component code",
+        "line_description": "Line description",
+        "line_kind": "Kind",
+        "hours": "Hours",
+        "rate": "Rate",
+        "amount": "Amount",
+        "ytd_amount": "YTD amount",
+        "project": "Project",
+        "department": "Department",
+        "tax_year": "Tax year",
+        "province": "Province / state",
+        "stub_id": "Stub (id)",
+        "component_id": "Component (id)"
       }
     },
     "enumValues": {
@@ -740,7 +797,10 @@
       "written_off": "Written off",
       "sales": "Sales",
       "purchases": "Purchases",
-      "both": "Both"
+      "both": "Both",
+      "earning": "Earning",
+      "deduction": "Deduction",
+      "employer_contribution": "Employer contribution"
     }
   },
   "operators": {
@@ -797,7 +857,9 @@
       "fiscal_quarter": "fiscal quarter",
       "fiscal_year": "fiscal year"
     },
-    "csvSection": "Section"
+    "csvSection": "Section",
+    "subtotal": "{level} — total",
+    "grandTotals": "Grand totals"
   },
   "export": {
     "pdf": "PDF",
@@ -832,6 +894,22 @@
     "expense-detail-by-department-fy": {
       "name": "Expense detail by department (this FY)",
       "description": "Posted expense and COGS lines this year, sectioned by department — date, entry, account, party, memo and amount."
+    },
+    "payroll-journal": {
+      "name": "Payroll journal",
+      "description": "The full pay-period audit record, one section per employee: every earning, deduction, and employer contribution with hours, rate, this-period amount, and year-to-date. Pick a single pay period from the period menu to match a run. Requires the payroll permission."
+    },
+    "payroll-deductions-register": {
+      "name": "Deductions & contributions register",
+      "description": "Every withholding and employer contribution, sectioned by component: who paid what this period and year-to-date. The backing detail for remittances and benefit carriers. Requires the payroll permission."
+    },
+    "payroll-cost-by-department": {
+      "name": "Payroll cost by department",
+      "description": "Labor distribution: payroll amounts by department and component kind (earnings, deductions withheld, employer burden). Requires the payroll permission."
+    },
+    "payroll-employee-totals": {
+      "name": "Employee totals (YTD)",
+      "description": "One line per employee: gross, income tax withheld, net pay, and employer cost totals with stub counts for the selected period. Requires the payroll permission."
     }
   },
   "generalLedger": {

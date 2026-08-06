@@ -1,19 +1,44 @@
+import Link from 'next/link'
 import { notFound, redirect } from 'next/navigation'
 import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/db.ts'
-import { requirePermission } from '../../../../../../lib/authz'
+import { getTranslations } from 'next-intl/server'
+import { Button, PageHeader } from '@openbooks/ui'
+import { REPORT_ENTITY_MAP, type ReportRunResult } from '@openbooks/reports'
+import { ListPageLayout } from '../../../../../../components/page-layout'
+import { can, requirePermission } from '../../../../../../lib/authz'
 import { isUuid } from '../../../../../../lib/list-params'
-import { loadReportDefinition } from '../../../../../../lib/custom-reports'
+import {
+  applyPeriodOverride, executeReport, loadReportDefinition, reportPeriodField,
+} from '../../../../../../lib/custom-reports'
 import { statementPageHref } from '../../../../../../lib/report-run'
-import { ReportRunner } from './ReportRunner'
 import { orgBranding } from '../../../../../../lib/report-pdf'
+import { parseReportQuery } from '../../../../../../lib/report-filters'
+import { resolvePeriod } from '../../../../../../lib/periods'
+import { ReportFilterBar, type ExtraPeriodOption } from '../../../ReportFilterBar'
+import { ScheduleReportButton } from '../../../ScheduleReportButton'
+import { ExportMenu } from '../../../ExportMenu'
+import { SaveViewButton } from '../../../SaveViewButton'
+import { ReportPaper } from '../../../ReportPaper'
+import { ResultView } from '../../ResultView'
 
 export const dynamic = 'force-dynamic'
 
-export default async function ReportRunPage({ params }: { params: Promise<{ id: string }> }) {
+/**
+ * A saved query report IS a regular report: this screen is the exact native
+ * report chrome — header back to the hub, filter-bar row with Export, and the
+ * paper, already run. Definition management (builder, delivery schedules, run
+ * history) lives on its own screens, never here.
+ */
+export default async function ReportRunPage({
+  params,
+  searchParams,
+}: {
+  params: Promise<{ id: string }>
+  searchParams: Promise<Record<string, string | undefined>>
+}) {
   const authz = await requirePermission('reports.read')
   const canCreate = authz.permissions.has('reports.create') || authz.permissions.has('*')
-  const canSchedule = authz.permissions.has('reports.schedule') || authz.permissions.has('*')
   const { id } = await params
   if (!isUuid(id)) notFound()
 
@@ -24,45 +49,126 @@ export default async function ReportRunPage({ params }: { params: Promise<{ id: 
   if (definition.report_type === 'statement') redirect(statementPageHref(definition.statement))
   if (!definition.query) notFound()
 
-  const [schedules, recentRuns, branding] = await Promise.all([
-    db.execute(sql`
-      select id, definition_id, cadence, day_of_week, day_of_month, hour, minute,
-             timezone, recipient_emails, next_run_at, active
-        from report_schedules
-       where org_id = ${authz.user.orgId} and definition_id = ${id}
-       order by next_run_at
-    `) as unknown as Promise<{ rows: any[] }>,
-    db.execute(sql`
-      select r.id, r.trigger, r.status, r.error, r.row_count, r.started_at, r.finished_at,
-             exists(select 1 from report_run_artifacts a where a.run_id=r.id) as artifact_available,
-             count(d.id)::int as delivery_total,
-             count(d.id) filter (where d.status='sent')::int as delivery_sent,
-             count(d.id) filter (where d.status='failed')::int as delivery_failed,
-             count(d.id) filter (where d.status='suppressed')::int as delivery_suppressed
-        from report_runs r
-        left join report_delivery_outbox d on d.run_id=r.id
-       where r.org_id = ${authz.user.orgId} and r.definition_id = ${id}
-       group by r.id
-       order by r.created_at desc limit 10
-    `) as unknown as Promise<{ rows: any[] }>,
-    orgBranding(authz.user.orgId),
-  ])
+  // Sensitive entities (payroll wages) carry their own permission on top of
+  // reports.read — same gate as /api/reports/run.
+  const entity = REPORT_ENTITY_MAP[(definition.query as { entity?: string }).entity ?? '']
+  if (entity?.requiredPermission && !can(authz, entity.requiredPermission)) notFound()
+
+  const t = await getTranslations('reports')
+  const tk = await getTranslations('reports.custom')
+  const tc = await getTranslations('common')
+
+  // Built-in definitions localize by slug; custom slugs fall back to stored text.
+  const displayName = definition.kind === 'built_in' && t.has(`builtIns.${definition.slug}.name`)
+    ? t(`builtIns.${definition.slug}.name`)
+    : definition.name
+  const displayDescription = definition.kind === 'built_in' && t.has(`builtIns.${definition.slug}.description`)
+    ? t(`builtIns.${definition.slug}.description`)
+    : definition.description
+
+  // The native period picker governs the report's date field exactly like the
+  // statement pages: the URL period (default preset when untouched) replaces
+  // the plan's stored window, so the bar always tells the truth.
+  const sp = await searchParams
+  const periodField = reportPeriodField(definition.query)
+  let query = definition.query
+  let periodPhrase: string | undefined
+  let periodLabel: string | undefined
+  if (periodField) {
+    const q = parseReportQuery(sp)
+    const period = await resolvePeriod(q.period, { customFrom: q.from, customTo: q.to })
+    query = applyPeriodOverride(query, periodField, { from: period.from, to: period.to })
+    periodPhrase = t('pnl.dateRange', { from: period.from, to: period.to })
+    periodLabel = period.label
+  }
+
+  // Payroll reports offer their real pay periods atop the fiscal presets —
+  // "one pay period at a time" is THE payroll reporting window.
+  let extraPeriods: ExtraPeriodOption[] | undefined
+  if (entity?.category === 'payroll') {
+    const runs = (await db.execute(sql`
+      select d.document_number, r.period_start, r.period_end, r.pay_date, ps.name as schedule
+        from pay_runs r
+        join documents d on d.id = r.document_id
+        left join pay_schedules ps on ps.id = r.pay_schedule_id
+       where r.org_id = ${authz.user.orgId}
+       order by r.period_end desc
+       limit 27
+    `)) as unknown as { rows: { document_number: string; period_start: string; period_end: string; pay_date: string; schedule: string | null }[] }
+    // The label names the worked period; the WINDOW is the run's pay date —
+    // payroll plans filter on pay_date, which lands after the period ends.
+    extraPeriods = runs.rows.map((run) => ({
+      id: run.document_number,
+      label: `${run.document_number} · ${String(run.period_start).slice(0, 10)} → ${String(run.period_end).slice(0, 10)}${run.schedule ? ` (${run.schedule})` : ''}`,
+      from: String(run.pay_date).slice(0, 10),
+      to: String(run.pay_date).slice(0, 10),
+    }))
+  }
+
+  // Exports mirror the screen: hand the resolved period to the export route.
+  const exportParams = new URLSearchParams()
+  if (periodField) {
+    exportParams.set('period', parseReportQuery(sp).period)
+    if (sp.from) exportParams.set('from', sp.from)
+    if (sp.to) exportParams.set('to', sp.to)
+  }
+  const exportQs = exportParams.size ? `?${exportParams}` : ''
+
+  // Native reports land showing data: execute the plan read-only on the
+  // server (no report_runs row — scheduled/recorded runs persist their own).
+  let result: ReportRunResult | null = null
+  let error: string | null = null
+  const branding = await orgBranding(authz.user.orgId)
+  try {
+    result = await executeReport(authz.user.orgId, query)
+  } catch (err) {
+    error = err instanceof Error ? err.message : 'report failed'
+  }
 
   return (
-    <ReportRunner
-      definition={{
-        id: definition.id,
-        kind: definition.kind,
-        slug: definition.slug,
-        name: definition.name,
-        description: definition.description,
-        query: definition.query,
-      }}
-      schedules={schedules.rows}
-      recentRuns={recentRuns.rows}
-      company={branding.orgName}
-      canCreate={canCreate}
-      canSchedule={canSchedule}
-    />
+    <ListPageLayout
+      header={
+        <>
+          <PageHeader
+            title={displayName}
+            description={periodLabel}
+            back={{ href: '/reports', label: t('hub.title') }}
+          />
+          <ReportFilterBar
+            controls={{ period: Boolean(periodField) }}
+            extraPeriods={extraPeriods}
+            actions={
+              <>
+                {canCreate ? (
+                  <Button variant="outline" size="sm" asChild>
+                    <Link href={`/reports/custom/builder/${definition.id}`}>{tc('actions.edit')}</Link>
+                  </Button>
+                ) : null}
+                <ScheduleReportButton
+                  definitionId={definition.id}
+                  historyHref={`/reports/custom/run/${definition.id}/delivery`}
+                />
+                <SaveViewButton />
+                <ExportMenu baseHref={`/api/reports/definitions/${definition.id}/export${exportQs}`} />
+              </>
+            }
+          />
+        </>
+      }
+    >
+      {result ? (
+        <ResultView
+          company={branding.orgName}
+          title={displayName}
+          description={periodPhrase ?? displayDescription}
+          result={result}
+          drillTarget={{ kind: 'custom', source: 'definition', id: definition.id, label: displayName }}
+        />
+      ) : (
+        <ReportPaper company={branding.orgName} title={displayName} periodPhrase={periodPhrase ?? displayDescription ?? undefined}>
+          <p className="py-12 text-center text-sm text-slate-500 dark:text-slate-400">{error}</p>
+        </ReportPaper>
+      )}
+    </ListPageLayout>
   )
 }

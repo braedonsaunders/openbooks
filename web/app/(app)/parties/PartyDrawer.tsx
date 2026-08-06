@@ -1319,7 +1319,12 @@ export function PartyDrawer({
 
         {tab === 'wages' && role === 'employee' && canManageWages ? <EmployeeWageRates partyId={String(p.id)} /> : null}
         {tab === 'payroll' && role === 'employee' && canManagePayroll ? (
-          <PayrollProfileTab partyId={String(p.id)} partyName={String(p.display_name ?? '')} />
+          <div className="space-y-6">
+            <PayrollProfileTab partyId={String(p.id)} partyName={String(p.display_name ?? '')} />
+            {/* Direct deposit: the same approval-gated bank accounts the AP
+                side uses — the pay-run bank file only pays approved accounts. */}
+            <BankAccountsPanel partyId={String(p.id)} initialAccounts={payload.bankAccounts} canManage={canManage} />
+          </div>
         ) : null}
       </div>
 

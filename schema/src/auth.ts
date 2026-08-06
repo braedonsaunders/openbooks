@@ -131,6 +131,30 @@ export const authRateLimitBuckets = pgTable(
   (t) => [index("auth_rate_limit_buckets_updated").on(t.updatedAt)],
 );
 
+/**
+ * Short-lived, one-use password-reset tokens. Only the SHA-256 of the raw
+ * token is stored; requesting a new token invalidates the previous ones, and
+ * a successful reset revokes every session for the user.
+ */
+export const authPasswordResets = pgTable(
+  "auth_password_resets",
+  {
+    id: id(),
+    userId: uuid("user_id").notNull(),
+    tokenHash: text("token_hash").notNull(),
+    networkHash: text("network_hash"),
+    userAgentHash: text("user_agent_hash"),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
+    usedAt: timestamp("used_at", { withTimezone: true }),
+  },
+  (t) => [
+    uniqueIndex("auth_password_resets_token_hash").on(t.tokenHash),
+    index("auth_password_resets_user").on(t.userId, t.expiresAt),
+    index("auth_password_resets_expiry").on(t.expiresAt),
+  ],
+);
+
 /** Short-lived, one-use bridge between primary authentication and local MFA. */
 export const authLoginChallenges = pgTable(
   "auth_login_challenges",

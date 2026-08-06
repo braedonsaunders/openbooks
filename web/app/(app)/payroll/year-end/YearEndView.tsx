@@ -67,6 +67,12 @@ export function YearEndView({
           ))}
         </Select>
         <Button variant="outline" onClick={() => window.print()}>{t('print')}</Button>
+        <Button variant="outline" asChild>
+          <a href={`/api/payroll/year-end/t4-xml?year=${year}`} target="_blank" rel="noreferrer">
+            {t('t4Xml.download')}
+          </a>
+        </Button>
+        <span className="text-xs text-slate-400 dark:text-slate-500">{t('t4Xml.note')}</span>
       </div>
 
       <section>

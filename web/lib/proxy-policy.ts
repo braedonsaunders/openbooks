@@ -1,6 +1,8 @@
 const EXACT_PUBLIC_PATHS = new Set([
   "/login",
+  "/login/reset",
   "/api/login",
+  "/api/password-reset",
   "/api/auth/methods",
   "/api/flows/email-action",
   "/api/v1/health",
@@ -16,6 +18,9 @@ const PUBLIC_SEGMENT_ROOTS = [
   "/pay",
   "/api/pay",
   "/api/payments/webhooks",
+  // Worker-to-web seam: every /api/internal route authenticates itself with
+  // the shared OPENBOOKS_INTERNAL_TOKEN header and fails closed without it.
+  "/api/internal",
 ] as const;
 
 /** Match either the exact route or a child segment, never a near prefix. */

@@ -38,6 +38,10 @@ export type ReportControls = {
 
 type ReportFilterOption = { value: string; label: string }
 
+/** A concrete named window (e.g. one pay period) offered atop the presets;
+ *  selecting one compiles to period=custom with its exact bounds. */
+export type ExtraPeriodOption = { id: string; label: string; from: string; to: string }
+
 const PRESET_GROUP_ORDER: PeriodPresetGroup[] = [
   'fiscal_year',
   'fiscal_quarter',
@@ -78,6 +82,8 @@ export function ReportFilterBar({
   subsidiaries,
   actions,
   defaultPeriod = 'this_fiscal_year',
+  extraPeriods,
+  extraPeriodsLabel,
 }: {
   controls: ReportControls
   dimensions?: { departments: DimOption[]; projects: DimOption[]; locations: DimOption[]; classes: DimOption[]; segments?: SegmentOption[]; builtinSegments?: BuiltinSegmentOption[] }
@@ -94,6 +100,9 @@ export function ReportFilterBar({
   actions?: ReactNode
   /** Preset shown when no `period` param is set (aging defaults to `today`). */
   defaultPeriod?: string
+  /** Domain-specific windows (pay periods…) listed before the fiscal presets. */
+  extraPeriods?: ExtraPeriodOption[]
+  extraPeriodsLabel?: string
 }) {
   const t = useTranslations('reports.filterBar')
   const router = useRouter()
@@ -113,13 +122,19 @@ export function ReportFilterBar({
     [params, pathname, router],
   )
 
-  const period = params.get('period') ?? defaultPeriod
+  const rawPeriod = params.get('period') ?? defaultPeriod
+  // An extra window is stored as period=custom + its exact bounds; keep the
+  // select showing the named entry rather than the anonymous Custom row.
+  const activeExtra = rawPeriod === 'custom'
+    ? extraPeriods?.find((x) => x.from === params.get('from') && x.to === params.get('to'))
+    : undefined
+  const period = activeExtra ? `x:${activeExtra.id}` : rawPeriod
   const breakout = params.get('breakout') ?? 'none'
   const compare = params.get('compare') ?? 'none'
   const basis = params.get('basis') ?? 'accrual'
   const scale = params.get('scale') ?? 'actual'
   const showZero = params.get('zero') === '1'
-  const isCustom = period === 'custom'
+  const isCustom = rawPeriod === 'custom' && !activeExtra
   const breakoutOpts = controls.breakoutOptions ?? ['department', 'project', 'location', 'class', 'month', 'quarter']
   const builtinByKey = new Map((dimensions?.builtinSegments ?? []).map((segment) => [segment.key, segment]))
 
@@ -163,10 +178,25 @@ export function ReportFilterBar({
         <Field label={controls.asOf ? t('asOf') : t('period')}>
           <Select
             value={period}
-            onChange={(e) => setParams({ period: e.target.value, ...(e.target.value === 'custom' ? {} : { from: null, to: null }) })}
+            onChange={(e) => {
+              const extra = e.target.value.startsWith('x:')
+                ? extraPeriods?.find((x) => `x:${x.id}` === e.target.value)
+                : undefined
+              if (extra) setParams({ period: 'custom', from: extra.from, to: extra.to })
+              else setParams({ period: e.target.value, ...(e.target.value === 'custom' ? {} : { from: null, to: null }) })
+            }}
             className={cn(SELECT, 'font-semibold')}
             aria-label={t('period')}
           >
+            {extraPeriods && extraPeriods.length > 0 ? (
+              <optgroup label={extraPeriodsLabel ?? t('payPeriods')}>
+                {extraPeriods.map((x) => (
+                  <option key={x.id} value={`x:${x.id}`}>
+                    {x.label}
+                  </option>
+                ))}
+              </optgroup>
+            ) : null}
             {PRESET_GROUP_ORDER.map((group) => (
               <optgroup key={group} label={PERIOD_PRESET_GROUP_LABELS[group]}>
                 {PERIOD_PRESETS.filter((p) => p.group === group).map((p) => (
