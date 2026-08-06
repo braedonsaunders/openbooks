@@ -50,6 +50,8 @@ export type PaperGroup = {
   drillTarget?: ReportDrillTarget
   /** Explicit total row. Ordinary custom result sets must not style their last data row as a total. */
   totalRowIndex?: number
+  /** Multiple subtotal/total rows (sectioned-summarize level totals). */
+  totalRows?: number[]
   isEmpty?: boolean
 }
 
@@ -140,7 +142,7 @@ export function PaperView({
                   </TableHeader>
                   <TableBody>
                     {group.rows.map((row, ri) => {
-                      const total = group.totalRowIndex === ri
+                      const total = group.totalRowIndex === ri || group.totalRows?.includes(ri) === true
                       return (
                         <TableRow
                           key={ri}

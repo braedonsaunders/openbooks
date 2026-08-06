@@ -91,6 +91,15 @@ export function validateCustomQuery(
     measures = [{ fn: 'count' }]
   }
 
+  // Totals only mean something for sectioned summaries; whitelist the shape.
+  const rawTotals = (q as { totals?: unknown }).totals
+  const totals = mode === 'summarize' && rawTotals && typeof rawTotals === 'object' && !Array.isArray(rawTotals)
+    ? {
+        ...((rawTotals as { sections?: unknown }).sections === true ? { sections: true } : {}),
+        ...((rawTotals as { grand?: unknown }).grand === true ? { grand: true } : {}),
+      }
+    : null
+
   // Canonical nested filter tree.
   let ruleCount = 0
   function sanitizeGroup(g: unknown, depth: number): ReportRuleGroup {
@@ -165,6 +174,7 @@ export function validateCustomQuery(
     measures,
     filters: filtersFinal,
     groupBy,
+    ...(totals && Object.keys(totals).length ? { totals } : {}),
     ...(sorts.length ? { sorts } : {}),
     ...(Object.keys(columnLabels).length ? { columnLabels } : {}),
     limit,

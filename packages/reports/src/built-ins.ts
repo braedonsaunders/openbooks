@@ -171,6 +171,7 @@ export const BUILT_IN_REPORT_DEFINITIONS: BuiltInReportDefinition[] = [
         { fn: 'latest', column: 'ytd_amount', label: 'YTD amount' },
       ],
       groupBy: 'employee',
+      totals: { sections: true, grand: true },
       filters: {
         combinator: 'and',
         rules: [{ field: 'pay_date', op: 'this_year' }],

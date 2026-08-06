@@ -116,6 +116,10 @@ export type ReportCustomQuery = {
   columnLabels?: Record<string, string> | null
   /** Hard cap on rows (engine clamps to 10 000). */
   limit?: number | null
+  /** Sectioned-summarize totals: per-section subtotal rows at the first
+   *  non-section breakout level, and/or a final Grand totals group across all
+   *  sections. Sum-style measures total; latest/avg/min/max stay blank. */
+  totals?: { sections?: boolean; grand?: boolean } | null
 }
 
 // --- Layout (page setup for a printed/exported document) ---------------------
@@ -187,6 +191,8 @@ export type ReportGroup = {
   /** For 'section' groups: the raw groupBy field + bucket value, so viewers
    *  can scope drill-downs to exactly this section's rows. */
   groupKey?: { field: string; value: string }
+  /** Row indices styled as total/subtotal rows by viewers. */
+  totalRows?: number[]
   /** Summarize mode: per-row scope of the aggregate — one entry per breakout
    *  (eq value, date range for binned buckets, or null-bucket marker). Rows
    *  whose bucket cannot be scoped exactly carry null (viewers omit the

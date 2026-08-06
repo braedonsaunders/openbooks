@@ -36,6 +36,8 @@ export type CompiledReportQuery = {
   measures: ReportMeasure[]
   /** Rows mode: validated section-grouping column, if any. */
   groupBy: string | null
+  /** Sectioned summarize: totals flags echoed for the shaper. */
+  totals?: { sections?: boolean; grand?: boolean } | null
   limit: number
 }
 
@@ -193,6 +195,7 @@ function compileSummarize(
     measures,
     // Display-level sectioning by one (un-binned) breakout; the shaper splits.
     groupBy: sectioned ? q.groupBy ?? null : null,
+    totals: sectioned ? q.totals ?? null : null,
     limit,
   }
 }
