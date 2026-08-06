@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server'
 import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/db.ts'
-import { payrollSettings, seedPayrollComponents, usPayrollConfig } from '@openbooks/engine/src/payroll-run.ts'
+import { caPayrollConfig, payrollSettings, seedPayrollComponents, usPayrollConfig } from '@openbooks/engine/src/payroll-run.ts'
 import {
   packSlotState, PAYROLL_COUNTRY_PACKS, PayrollPackError, setPackSlotAccount, uninstallPayrollPack,
 } from '@openbooks/engine/src/payroll/packs.ts'
@@ -90,11 +90,12 @@ export async function GET() {
     pickerOptions(gate.user.orgId),
   ])
   const installed = Array.isArray(blob.countries) ? blob.countries.map(String) : []
-  const [packs, us] = await Promise.all([
+  const [packs, us, ca] = await Promise.all([
     packSlotState(gate.user.orgId, installed, blob),
     usPayrollConfig(gate.user.orgId),
+    caPayrollConfig(gate.user.orgId),
   ])
-  return NextResponse.json({ settings, packs, us, ...options })
+  return NextResponse.json({ settings, packs, us, ca, ...options })
 }
 
 export async function PUT(req: Request) {
@@ -177,6 +178,40 @@ export async function PUT(req: Request) {
       clean.sui[state] = { rate, wageBase }
     }
     settings.us = clean
+  }
+
+  // CA pack configuration: Ontario EHT. The rate is org-specific (it scales
+  // with total Ontario payroll) and the exemption is shared across associated
+  // employers, so both are always org-entered. WCB rates live on worker-comp
+  // groups (per rate class), not here.
+  if ('ca' in body) {
+    const ca = body.ca
+    if (typeof ca !== 'object' || ca === null || Array.isArray(ca)) {
+      return NextResponse.json({ error: 'invalid ca config' }, { status: 422 })
+    }
+    const eht = (ca as Record<string, unknown>).eht ?? {}
+    if (typeof eht !== 'object' || eht === null || Array.isArray(eht)) {
+      return NextResponse.json({ error: 'invalid ca.eht' }, { status: 422 })
+    }
+    const raw = eht as Record<string, unknown>
+    const clean: { eht: { enabled: boolean; rate?: string; annualExemption?: string } } = {
+      eht: { enabled: raw.enabled === true },
+    }
+    if (raw.rate !== null && raw.rate !== undefined && raw.rate !== '') {
+      const rate = canonicalDecimal(raw.rate, 4)
+      if (rate === null || compareDecimal(rate, '0') < 0 || compareDecimal(rate, '10') > 0) {
+        return NextResponse.json({ error: 'invalid ca.eht.rate' }, { status: 422 })
+      }
+      clean.eht.rate = rate
+    }
+    if (raw.annualExemption !== null && raw.annualExemption !== undefined && raw.annualExemption !== '') {
+      const exemption = canonicalDecimal(raw.annualExemption, 2)
+      if (exemption === null || compareDecimal(exemption, '0') < 0) {
+        return NextResponse.json({ error: 'invalid ca.eht.annualExemption' }, { status: 422 })
+      }
+      clean.eht.annualExemption = exemption
+    }
+    settings.ca = clean
   }
 
   // Pack-declared statutory slots: { [country]: { [slotKey]: accountId|null } }.

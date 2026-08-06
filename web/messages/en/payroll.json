@@ -366,7 +366,9 @@
           "cpp": "CPP payable (includes CPP2)",
           "ei": "EI payable",
           "qpip": "QPIP payable (Quebec)",
-          "vacation": "Vacation payable"
+          "vacation": "Vacation payable",
+          "wcb": "Workers' compensation payable (WCB/WSIB)",
+          "eht": "Employer Health Tax payable"
         }
       },
       "US": {
@@ -392,6 +394,16 @@
       "suiWageBase": "Wage base",
       "addState": "Add state",
       "removeState": "Remove"
+    },
+    "caConfig": {
+      "title": "Employer payroll taxes",
+      "description": "Employer-paid taxes the CA pack accrues each run: workers' compensation premiums and the Ontario Employer Health Tax.",
+      "ehtEnabled": "Accrue Ontario Employer Health Tax (EHT)",
+      "ehtRate": "EHT rate (%)",
+      "ehtRateHelp": "As a percent: 1.95 is the top Ontario rate. Your rate depends on total Ontario payroll.",
+      "ehtExemption": "Annual exemption",
+      "ehtExemptionHelp": "Ontario remuneration exempt each year ($1,000,000 for most eligible private employers; associated employers share one exemption).",
+      "wcbNote": "Workers' compensation (WCB/WSIB) rates and the annual assessable maximum are set per rate class on worker-comp groups, under People setup."
     }
   },
   "remittances": {

@@ -6,7 +6,7 @@ import { useRouter } from 'next/navigation'
 import { useTranslations } from 'next-intl'
 import { toast } from 'sonner'
 import { Button, Input, Label, Select } from '@openbooks/ui'
-import type { PayrollSettings, UsPayrollConfig } from '@openbooks/engine/src/payroll-run.ts'
+import type { CaPayrollConfig, PayrollSettings, UsPayrollConfig } from '@openbooks/engine/src/payroll-run.ts'
 import { US_STATES } from '@openbooks/engine/src/payroll/us/rates.ts'
 
 // Generic, jurisdiction-free slots only. Statutory liabilities (CPP/EI/income
@@ -32,6 +32,7 @@ export function PayrollSetupWorkspace(props: {
   settings: PayrollSettings
   packs: PackSlots[]
   us: UsPayrollConfig
+  ca: CaPayrollConfig
   accounts: { id: string; label: string }[]
   vendors: { id: string; label: string }[]
 }) {
@@ -50,6 +51,10 @@ export function PayrollSetupWorkspace(props: {
   const [wagesTo, setWagesTo] = useState<'expense' | 'labor_clearing'>(props.settings.wagesTo)
   const [craRemittancePartyId, setCraRemittancePartyId] = useState(props.settings.craRemittancePartyId ?? '')
   const usInstalled = props.packs.some((pack) => pack.country === 'US')
+  const caInstalled = props.packs.some((pack) => pack.country === 'CA')
+  const [ehtEnabled, setEhtEnabled] = useState(props.ca.eht.enabled)
+  const [ehtRate, setEhtRate] = useState(props.ca.eht.rate ?? '')
+  const [ehtExemption, setEhtExemption] = useState(props.ca.eht.annualExemption ?? '')
   const [futaRate, setFutaRate] = useState(props.us.futaRate ?? '')
   const [suiRows, setSuiRows] = useState<SuiRow[]>(() =>
     Object.entries(props.us.sui).map(([state, entry]) => ({
@@ -71,6 +76,17 @@ export function PayrollSetupWorkspace(props: {
             country,
             Object.fromEntries(Object.entries(slots).map(([key, value]) => [key, value || null])),
           ])),
+          ...(caInstalled
+            ? {
+                ca: {
+                  eht: {
+                    enabled: ehtEnabled,
+                    rate: ehtRate || null,
+                    annualExemption: ehtExemption || null,
+                  },
+                },
+              }
+            : {}),
           ...(usInstalled
             ? {
                 us: {
@@ -175,6 +191,50 @@ export function PayrollSetupWorkspace(props: {
                 </div>
               ) : null}
             </div>
+            {pack.country === 'CA' ? (
+              <div className="space-y-3 border-t border-slate-100 pt-3 dark:border-slate-800">
+                <div>
+                  <h4 className="text-sm font-medium text-slate-900 dark:text-slate-100">{t('caConfig.title')}</h4>
+                  <p className="text-sm text-slate-500 dark:text-slate-400">{t('caConfig.description')}</p>
+                </div>
+                <label className="flex items-center gap-2 text-sm text-slate-700 dark:text-slate-300">
+                  <input
+                    type="checkbox"
+                    checked={ehtEnabled}
+                    onChange={(e) => setEhtEnabled(e.target.checked)}
+                    className="h-4 w-4 rounded border-slate-300 text-teal-600 focus:ring-teal-500 dark:border-slate-600"
+                  />
+                  {t('caConfig.ehtEnabled')}
+                </label>
+                {ehtEnabled ? (
+                  <div className="grid gap-3 sm:grid-cols-2">
+                    <div>
+                      <Label htmlFor="ps-eht-rate">{t('caConfig.ehtRate')}</Label>
+                      <Input
+                        id="ps-eht-rate"
+                        inputMode="decimal"
+                        value={ehtRate}
+                        onChange={(e) => setEhtRate(e.target.value)}
+                        placeholder="1.95"
+                      />
+                      <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">{t('caConfig.ehtRateHelp')}</p>
+                    </div>
+                    <div>
+                      <Label htmlFor="ps-eht-exemption">{t('caConfig.ehtExemption')}</Label>
+                      <Input
+                        id="ps-eht-exemption"
+                        inputMode="decimal"
+                        value={ehtExemption}
+                        onChange={(e) => setEhtExemption(e.target.value)}
+                        placeholder="1000000"
+                      />
+                      <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">{t('caConfig.ehtExemptionHelp')}</p>
+                    </div>
+                  </div>
+                ) : null}
+                <p className="text-xs text-slate-500 dark:text-slate-400">{t('caConfig.wcbNote')}</p>
+              </div>
+            ) : null}
             {pack.country === 'US' ? (
               <div className="space-y-3 border-t border-slate-100 pt-3 dark:border-slate-800">
                 <div>

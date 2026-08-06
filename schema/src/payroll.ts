@@ -96,6 +96,7 @@ export const payComponents = pgTable(
         "base_pay", "overtime", "bonus", "vacation_accrual", "vacation_payout",
         "cpp", "cpp2", "ei", "qpip", "income_tax",
         "fit", "ss", "medicare", "medicare_addl", "futa", "suta",
+        "wcb", "eht",
       ],
     }),
     /** How a user component's amount is produced (statutory rows ignore this). */

@@ -2071,7 +2071,8 @@
       "requiresPrimaryNoncontributory": "Requires primary and non-contributory",
       "requiresVerification": "Requires second-person verification",
       "formType": "Form",
-      "box": "Box"
+      "box": "Box",
+      "maxAssessable": "Annual assessable maximum"
     },
     "fieldHelp": {
       "gapless": "Gapless means every number in the sequence must be accounted for, with no skipped numbers. Enable it only when your legal or audit requirements require uninterrupted numbering.",
@@ -2086,7 +2087,8 @@
       "minCoverageAmount": "Certificates below this limit are refused. Limits are never converted between currencies.",
       "coverageCurrency": "Required once a minimum limit is set — a limit is a money amount and must be comparable.",
       "requiresVerification": "Whoever records a certificate can never be the one who verifies it.",
-      "informationReturnBox": "Boxes are statutory. What you configure is which of your accounts feeds which box."
+      "informationReturnBox": "Boxes are statutory. What you configure is which of your accounts feeds which box.",
+      "maxAssessable": "Workers' compensation stops assessing an employee's earnings past this yearly amount (the board's per-worker insurable maximum). Leave blank for no cap."
     },
     "options": {
       "payFrequency": {
