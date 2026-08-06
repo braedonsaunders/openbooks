@@ -3,7 +3,7 @@ import 'server-only'
 import { sql } from 'drizzle-orm'
 import { getTranslations } from 'next-intl/server'
 import { db } from '@openbooks/engine/src/db.ts'
-import { REPORT_ENTITY_MAP, defaultColumnsFor, validateCustomQuery, type ReportCustomQuery } from '@openbooks/reports'
+import { REPORT_ENTITY_MAP, defaultColumnsFor, validateCustomQuery, type ReportCustomQuery, type ReportRuleGroup } from '@openbooks/reports'
 import type { Authz } from './authz'
 import { executeReport, loadReportDefinition } from './custom-reports'
 import { loadView } from './views'
@@ -244,14 +244,22 @@ async function customData(target: Extract<ReportDrillTarget, { kind: 'custom' }>
     .filter((key) => entity.columns.some((column) => column.key === key))
   const visible = planColumns.length > 0 ? planColumns : defaultColumnsFor(entity, 8)
   const columns = [...visible, ...support.filter((key) => !visible.includes(key))]
-  // A section drill scopes the supporting rows to the clicked groupBy bucket
-  // (e.g. one pay run in the payroll register), not the whole report.
-  const sectionFilter = target.filter && entity.columns.some((column) => column.key === target.filter!.field)
-    ? {
-        combinator: 'and' as const,
-        rules: [{ field: target.filter.field, op: 'eq' as const, value: target.filter.value }],
-      }
-    : null
+  // An aggregate drill scopes the supporting rows to exactly the clicked
+  // bucket (all breakout predicates), never the whole report. Unknown fields
+  // fail the whole scope closed — better no rows than the wrong rows.
+  let sectionFilter: ReportRuleGroup | null = null
+  if (target.filter?.length) {
+    const rules: ReportRuleGroup['rules'] = []
+    for (const scope of target.filter) {
+      if (!entity.columns.some((column) => column.key === scope.field)) throw new Error('report_drill_scope_invalid')
+      if (scope.empty) rules.push({ field: scope.field, op: 'is_null' })
+      else if (scope.from && scope.to) {
+        rules.push({ field: scope.field, op: 'gte', value: scope.from })
+        rules.push({ field: scope.field, op: 'lte', value: scope.to })
+      } else rules.push({ field: scope.field, op: 'eq', value: scope.value ?? '' })
+    }
+    sectionFilter = { combinator: 'and', rules }
+  }
   const detailQuery = validateCustomQuery({
     ...stored,
     filters: sectionFilter
