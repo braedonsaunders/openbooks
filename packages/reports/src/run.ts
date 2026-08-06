@@ -198,7 +198,7 @@ function shapeSummarizeResult(
   dataRows: Record<string, unknown>[],
   labels: ReportRunLabels,
   groupBy: string | null = null,
-  totals: { sections?: boolean; grand?: boolean } | null = null,
+  totals: ReportCustomQuery['totals'] = null,
 ): ReportRunResult {
   const measureHeading = (m: (typeof measures)[number]) =>
     labels.measure?.(entity, m) ?? measureLabel(entity, m)
@@ -247,6 +247,38 @@ function shapeSummarizeResult(
     ...breakouts.map(() => 'left' as const),
     ...measures.map(() => 'right' as const),
   ]
+
+  // A derived footer row (e.g. Net pay = earnings − deductions) over a set of
+  // raw aggregate rows: per summable measure, plus-bucket sum minus
+  // minus-bucket sum, exact decimals. Returns null when the spec's field is
+  // not a breakout of this query (fail closed: no row beats a wrong row).
+  const buildDerivedRow = (
+    spec: NonNullable<NonNullable<ReportCustomQuery['totals']>['derived']>[number],
+    raws: Record<string, unknown>[],
+    width: number,
+    labelPos: number,
+    summableFlags: boolean[],
+    measureOffset: number,
+  ): (string | number | null)[] | null => {
+    const fieldIndex = breakouts.findIndex((b) => b.column === spec.plus.field && !b.bin)
+    const minusIndex = spec.minus ? breakouts.findIndex((b) => b.column === spec.minus!.field && !b.bin) : fieldIndex
+    if (fieldIndex < 0 || minusIndex < 0) return null
+    const row = Array.from({ length: width }, () => null as string | number | null)
+    row[labelPos] = spec.label
+    measures.forEach((m, mi) => {
+      if (!summableFlags[mi]) return
+      const plusInputs = raws.filter((r) => String(r[`d${fieldIndex}`] ?? '') === spec.plus.value).map((r) => r[`m${mi}`])
+      const minusInputs = spec.minus
+        ? raws.filter((r) => String(r[`d${minusIndex}`] ?? '') === spec.minus!.value).map((r) => r[`m${mi}`])
+        : []
+      if (plusInputs.every((v) => v == null) && minusInputs.every((v) => v == null)) return
+      const total = subtractExactDecimals(sumExactDecimals(plusInputs), sumExactDecimals(minusInputs))
+      row[measureOffset + mi] = m.fn === 'sum' || m.fn === 'latest'
+        ? (formatExactNumber(total) ?? total)
+        : Number(total)
+    })
+    return row
+  }
 
   // Sectioned summarize: one titled group per bucket of the groupBy breakout
   // (the payroll journal's per-employee blocks), that column lifted out of the
@@ -334,6 +366,22 @@ function shapeSummarizeResult(
       }
     }
 
+    if (totals?.derived?.length) {
+      const levelPos = Math.max(
+        drop(breakouts.map((_, i) => i)).indexOf(breakouts.findIndex((_, i) => i !== sectionIndex)),
+        0,
+      )
+      for (const bucket of buckets.values()) {
+        for (const spec of totals.derived) {
+          const row = buildDerivedRow(spec, bucket.raw, sectionColumns.length, levelPos, summable, breakouts.length - 1)
+          if (!row) continue
+          bucket.totalRows.push(bucket.rows.length)
+          bucket.rows.push(row)
+          bucket.keys.push(null)
+        }
+      }
+    }
+
     groups = [...buckets.entries()].map(([key, bucket]) => ({
       kind: 'summary' as const,
       title: labels.sectionTitle?.(sectionLabel, formatLabel(key)) ?? `${sectionLabel}: ${formatLabel(key)}`,
@@ -380,6 +428,20 @@ function shapeSummarizeResult(
         grandRows.push(row)
         grandKeys.push(entry.scope)
       }
+      const grandTotalRows: number[] = []
+      if (totals.derived?.length) {
+        const levelPos = Math.max(
+          drop(breakouts.map((_, i) => i)).indexOf(breakouts.findIndex((_, i) => i !== sectionIndex)),
+          0,
+        )
+        for (const spec of totals.derived) {
+          const row = buildDerivedRow(spec, dataRows, sectionColumns.length, levelPos, summable, breakouts.length - 1)
+          if (!row) continue
+          grandTotalRows.push(grandRows.length)
+          grandRows.push(row)
+          grandKeys.push(null)
+        }
+      }
       groups.push({
         kind: 'summary',
         title: labels.grandTotalsTitle?.() ?? 'Grand totals',
@@ -389,6 +451,7 @@ function shapeSummarizeResult(
         money: sectionMoney.some(Boolean) ? sectionMoney : undefined,
         align: sectionAlign,
         rowKeys: grandKeys,
+        ...(grandTotalRows.length ? { totalRows: grandTotalRows } : {}),
       })
     }
   } else {
@@ -543,6 +606,12 @@ function decimalParts(value: unknown): { units: bigint; scale: number } | null {
   const fraction = match[3] ?? ''
   const magnitude = BigInt(match[2]! + fraction)
   return { units: match[1] === '-' ? -magnitude : magnitude, scale: fraction.length }
+}
+
+/** a − b at combined scale, exact bigint decimals (reuses the sum machinery). */
+function subtractExactDecimals(a: string, b: string): string {
+  const negated = b.startsWith('-') ? b.slice(1) : `-${b}`
+  return sumExactDecimals([a, negated])
 }
 
 function sumExactDecimals(values: unknown[]): string {
