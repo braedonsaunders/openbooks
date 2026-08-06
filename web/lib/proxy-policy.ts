@@ -1,6 +1,8 @@
 const EXACT_PUBLIC_PATHS = new Set([
   "/login",
+  "/login/reset",
   "/api/login",
+  "/api/password-reset",
   "/api/auth/methods",
   "/api/flows/email-action",
   "/api/v1/health",

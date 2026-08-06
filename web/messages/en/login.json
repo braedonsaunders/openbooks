@@ -11,5 +11,26 @@
   "verify": "Verify",
   "or": "or",
   "sso": "Single sign-on",
-  "ssoFailed": "Single sign-on could not be completed"
+  "ssoFailed": "Single sign-on could not be completed",
+  "forgotPassword": "Forgot password?",
+  "tooManyAttempts": "Too many attempts — try again in {seconds} seconds",
+  "busyTryAgain": "The sign-in service is busy — try again in a moment",
+  "reset": {
+    "requestTitle": "Reset your password",
+    "chooseTitle": "Choose a new password",
+    "requestHelp": "Enter your account email and we'll send a reset link if it matches an account.",
+    "sendLink": "Send reset link",
+    "sending": "Sending…",
+    "sent": "If that email matches an account, a reset link is on its way. The link works once and expires in 30 minutes.",
+    "newPassword": "New password",
+    "confirmPassword": "Confirm new password",
+    "passwordHelp": "At least 10 characters.",
+    "mismatch": "Those passwords don't match",
+    "weakPassword": "Password must be at least 10 characters",
+    "invalidToken": "This reset link is invalid or has expired — request a new one",
+    "setPassword": "Set new password",
+    "saving": "Saving…",
+    "changed": "Your password has been changed. Sign in with it now — all other sessions were signed out.",
+    "backToSignIn": "Back to sign in"
+  }
 }
