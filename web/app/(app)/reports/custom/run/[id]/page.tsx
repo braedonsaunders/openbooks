@@ -7,11 +7,16 @@ import { REPORT_ENTITY_MAP, type ReportRunResult } from '@openbooks/reports'
 import { ListPageLayout } from '../../../../../../components/page-layout'
 import { can, requirePermission } from '../../../../../../lib/authz'
 import { isUuid } from '../../../../../../lib/list-params'
-import { executeReport, loadReportDefinition } from '../../../../../../lib/custom-reports'
+import {
+  applyPeriodOverride, executeReport, loadReportDefinition, reportPeriodField,
+} from '../../../../../../lib/custom-reports'
 import { statementPageHref } from '../../../../../../lib/report-run'
 import { orgBranding } from '../../../../../../lib/report-pdf'
+import { parseReportQuery } from '../../../../../../lib/report-filters'
+import { resolvePeriod } from '../../../../../../lib/periods'
 import { ReportFilterBar } from '../../../ReportFilterBar'
 import { ExportMenu } from '../../../ExportMenu'
+import { SaveViewButton } from '../../../SaveViewButton'
 import { ReportPaper } from '../../../ReportPaper'
 import { ResultView } from '../../ResultView'
 
@@ -23,7 +28,13 @@ export const dynamic = 'force-dynamic'
  * paper, already run. Definition management (builder, delivery schedules, run
  * history) lives on its own screens, never here.
  */
-export default async function ReportRunPage({ params }: { params: Promise<{ id: string }> }) {
+export default async function ReportRunPage({
+  params,
+  searchParams,
+}: {
+  params: Promise<{ id: string }>
+  searchParams: Promise<Record<string, string | undefined>>
+}) {
   const authz = await requirePermission('reports.read')
   const canCreate = authz.permissions.has('reports.create') || authz.permissions.has('*')
   const canSchedule = authz.permissions.has('reports.schedule') || authz.permissions.has('*')
@@ -54,13 +65,38 @@ export default async function ReportRunPage({ params }: { params: Promise<{ id: 
     ? t(`builtIns.${definition.slug}.description`)
     : definition.description
 
+  // The native period picker governs the report's date field exactly like the
+  // statement pages: the URL period (default preset when untouched) replaces
+  // the plan's stored window, so the bar always tells the truth.
+  const sp = await searchParams
+  const periodField = reportPeriodField(definition.query)
+  let query = definition.query
+  let periodPhrase: string | undefined
+  let periodLabel: string | undefined
+  if (periodField) {
+    const q = parseReportQuery(sp)
+    const period = await resolvePeriod(q.period, { customFrom: q.from, customTo: q.to })
+    query = applyPeriodOverride(query, periodField, { from: period.from, to: period.to })
+    periodPhrase = t('pnl.dateRange', { from: period.from, to: period.to })
+    periodLabel = period.label
+  }
+
+  // Exports mirror the screen: hand the resolved period to the export route.
+  const exportParams = new URLSearchParams()
+  if (periodField) {
+    exportParams.set('period', parseReportQuery(sp).period)
+    if (sp.from) exportParams.set('from', sp.from)
+    if (sp.to) exportParams.set('to', sp.to)
+  }
+  const exportQs = exportParams.size ? `?${exportParams}` : ''
+
   // Native reports land showing data: execute the plan read-only on the
   // server (no report_runs row — scheduled/recorded runs persist their own).
   let result: ReportRunResult | null = null
   let error: string | null = null
   const branding = await orgBranding(authz.user.orgId)
   try {
-    result = await executeReport(authz.user.orgId, definition.query)
+    result = await executeReport(authz.user.orgId, query)
   } catch (err) {
     error = err instanceof Error ? err.message : 'report failed'
   }
@@ -71,10 +107,11 @@ export default async function ReportRunPage({ params }: { params: Promise<{ id: 
         <>
           <PageHeader
             title={displayName}
+            description={periodLabel}
             back={{ href: '/reports', label: t('hub.title') }}
           />
           <ReportFilterBar
-            controls={{ period: false }}
+            controls={{ period: Boolean(periodField) }}
             actions={
               <>
                 {canCreate ? (
@@ -89,7 +126,8 @@ export default async function ReportRunPage({ params }: { params: Promise<{ id: 
                     </Link>
                   </Button>
                 ) : null}
-                <ExportMenu baseHref={`/api/reports/definitions/${definition.id}/export`} />
+                <SaveViewButton />
+                <ExportMenu baseHref={`/api/reports/definitions/${definition.id}/export${exportQs}`} />
               </>
             }
           />
@@ -100,12 +138,12 @@ export default async function ReportRunPage({ params }: { params: Promise<{ id: 
         <ResultView
           company={branding.orgName}
           title={displayName}
-          description={displayDescription}
+          description={periodPhrase ?? displayDescription}
           result={result}
           drillTarget={{ kind: 'custom', source: 'definition', id: definition.id, label: displayName }}
         />
       ) : (
-        <ReportPaper company={branding.orgName} title={displayName} periodPhrase={displayDescription || undefined}>
+        <ReportPaper company={branding.orgName} title={displayName} periodPhrase={periodPhrase ?? displayDescription ?? undefined}>
           <p className="py-12 text-center text-sm text-slate-500 dark:text-slate-400">{error}</p>
         </ReportPaper>
       )}

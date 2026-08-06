@@ -26,6 +26,76 @@ import { fiscalStartMonth } from './fiscal'
 
 /** Hard ceiling on rows any report may materialise, matching the engine cap. */
 export const REPORT_MAX_ROWS = 10_000
+
+/** Ops whose meaning is "a time window on this field" — replaced wholesale
+ *  when the viewer picks a period in the report screen's filter bar. */
+const TEMPORAL_OPS = new Set([
+  'since_today', 'this_week', 'this_month', 'this_year', 'before_now',
+  'period_preset', 'gte', 'lte', 'between',
+])
+
+/**
+ * The date field a report's period filter governs: the first filter leaf with
+ * a temporal op on a date-kind column, else the entity's first date column.
+ * Lets the native period picker drive ANY saved query report.
+ */
+export function reportPeriodField(query: ReportCustomQuery): string | null {
+  const entity = REPORT_ENTITY_MAP[query.entity]
+  if (!entity) return null
+  const dateColumns = new Set(
+    entity.columns.filter((c) => c.kind === 'date').map((c) => c.key),
+  )
+  let found: string | null = null
+  const walk = (node: ReportRuleGroup | undefined) => {
+    for (const r of node?.rules ?? []) {
+      if (found) return
+      if (r && typeof r === 'object' && Array.isArray((r as ReportRuleGroup).rules)) {
+        walk(r as ReportRuleGroup)
+      } else {
+        const leaf = r as ReportRule
+        if (dateColumns.has(leaf.field) && TEMPORAL_OPS.has(leaf.op)) found = leaf.field
+      }
+    }
+  }
+  walk(query.filters ?? undefined)
+  if (found) return found
+  return entity.columns.find((c) => c.kind === 'date')?.key ?? null
+}
+
+/**
+ * Replace the plan's time window on `field` with explicit [from, to] bounds —
+ * the viewer-picked period wins over the stored preset, nothing else changes.
+ */
+export function applyPeriodOverride(
+  query: ReportCustomQuery,
+  field: string,
+  bounds: { from: string; to: string },
+): ReportCustomQuery {
+  const strip = (node: ReportRuleGroup): ReportRuleGroup => ({
+    ...node,
+    rules: (node.rules ?? [])
+      .map((r) => {
+        if (r && typeof r === 'object' && Array.isArray((r as ReportRuleGroup).rules)) {
+          return strip(r as ReportRuleGroup)
+        }
+        const leaf = r as ReportRule
+        return leaf.field === field && TEMPORAL_OPS.has(leaf.op) ? null : leaf
+      })
+      .filter((r): r is ReportRule | ReportRuleGroup => r !== null),
+  })
+  const base = query.filters ? strip(query.filters) : { combinator: 'and' as const, rules: [] }
+  return {
+    ...query,
+    filters: {
+      combinator: 'and',
+      rules: [
+        ...(base.rules.length ? [base] : []),
+        { field, op: 'gte', value: bounds.from },
+        { field, op: 'lte', value: bounds.to },
+      ],
+    },
+  }
+}
 /** Rows a studio live-preview fetches — small so the builder stays snappy. */
 export const REPORT_PREVIEW_ROWS = 200
 
