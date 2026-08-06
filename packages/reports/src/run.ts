@@ -135,6 +135,10 @@ function shapeRowsResult(
     (c) => entity.columns.find((col) => col.key === c)?.kind === 'money',
   )
   const money = moneyFlags.some(Boolean) ? moneyFlags : undefined
+  const align = requestedColumns.map((c) => {
+    const kind = entity.columns.find((col) => col.key === c)?.kind
+    return kind === 'money' || kind === 'number' ? ('right' as const) : ('left' as const)
+  })
 
   if (groupBy) {
     const byKey = new Map<string, Record<string, unknown>[]>()
@@ -145,7 +149,7 @@ function shapeRowsResult(
       byKey.set(k, list)
     }
     if (byKey.size === 0) {
-      groups.push({ kind: 'results', title: resultsTitle, columns: columnLabels, rows: [], isEmpty: true, money })
+      groups.push({ kind: 'results', title: resultsTitle, columns: columnLabels, rows: [], isEmpty: true, money, align })
     } else {
       for (const [k, list] of [...byKey.entries()].sort()) {
         groups.push({
@@ -157,6 +161,7 @@ function shapeRowsResult(
           columns: columnLabels,
           rows: list.map((row) => requestedColumns.map((c) => cell(c, row[c]))),
           money,
+          align,
           groupKey: { field: groupBy, value: k },
         })
       }
@@ -170,6 +175,7 @@ function shapeRowsResult(
       rows: dataRows.map((row) => requestedColumns.map((c) => cell(c, row[c]))),
       isEmpty: dataRows.length === 0,
       money,
+      align,
     })
   }
 
@@ -237,6 +243,10 @@ function shapeSummarizeResult(
     && !!m.column
     && entity.columns.find((col) => col.key === m.column)?.kind === 'money'
   const moneyFlags = [...breakouts.map(() => false), ...measures.map(measureIsMoney)]
+  const alignFlags = [
+    ...breakouts.map(() => 'left' as const),
+    ...measures.map(() => 'right' as const),
+  ]
 
   // Sectioned summarize: one titled group per bucket of the groupBy breakout
   // (the payroll journal's per-employee blocks), that column lifted out of the
@@ -249,6 +259,7 @@ function shapeSummarizeResult(
       ?? breakoutLabel(entity, breakouts[sectionIndex]!)
     const sectionColumns = drop(columns) as string[]
     const sectionMoney = drop(moneyFlags) as boolean[]
+    const sectionAlign = drop(alignFlags) as ('left' | 'right')[]
     // Which measure columns can honestly total: additive aggregates only.
     const summable = measures.map((m) => m.fn === 'sum' || m.fn === 'count' || m.fn === 'count_distinct')
     const totalLabel = (label: string) => labels.subtotal?.(label) ?? `${label} — total`
@@ -325,6 +336,7 @@ function shapeSummarizeResult(
       columns: sectionColumns,
       rows: bucket.rows,
       money: sectionMoney.some(Boolean) ? sectionMoney : undefined,
+      align: sectionAlign,
       rowKeys: bucket.keys,
       ...(bucket.totalRows.length ? { totalRows: bucket.totalRows } : {}),
     }))
@@ -367,6 +379,7 @@ function shapeSummarizeResult(
         columns: sectionColumns,
         rows: grandRows,
         money: sectionMoney.some(Boolean) ? sectionMoney : undefined,
+        align: sectionAlign,
         rowKeys: grandKeys,
       })
     }
@@ -407,6 +420,7 @@ function shapeSummarizeResult(
           labels.summaryTotal?.(measureHeading(m)) ??
           `Total ${measureLabel(entity, m).toLowerCase()}`,
         value: formatExactNumber(total) ?? '0.00',
+        money: measureIsMoney(m),
       })
     }
   })
