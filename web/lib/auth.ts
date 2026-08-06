@@ -108,6 +108,14 @@ function contextHashes(context: AuthRequestContext) {
   };
 }
 
+/** Privacy-preserving request hashes for sibling auth flows (password reset). */
+export function authContextHashes(context: AuthRequestContext): {
+  networkHash: string | null;
+  userAgentHash: string | null;
+} {
+  return contextHashes(context);
+}
+
 function dateValue(value: unknown): Date | null {
   if (value instanceof Date) return Number.isNaN(value.getTime()) ? null : value;
   if (typeof value !== "string" && typeof value !== "number") return null;
