@@ -13,6 +13,7 @@ import {
   profitAndLoss,
   trialBalance,
 } from "../reports";
+import { openItems } from "../cash/open-items";
 import { truncateText, type AssistantToolDef, type ToolResult } from "./types";
 import { readableContinuousCloseAgents } from "../continuous-close";
 import { budgetScenarioOptions, budgetVsActualView } from "../budget-report";
@@ -1002,6 +1003,51 @@ const getContinuousCloseFinding: AssistantToolDef = {
   },
 };
 
+// ---------------------------------------------------------------------------
+// Open items — the allocation resolver for payments
+// ---------------------------------------------------------------------------
+
+const listOpenItems: AssistantToolDef = {
+  name: "list_open_items",
+  description:
+    "Open (unpaid/unapplied) AR or AP items as of a date, optionally for one party. Each item carries the openLineId that payment allocations require, its source document, due date, and remaining amount — resolve allocations from here, never by guessing ids. Read-only.",
+  category: "read",
+  gate: { mode: "anyOf", perms: ["ar.read", "ap.read"] },
+  inputSchema: z.object({
+    side: z.enum(["ar", "ap"]),
+    asOf: dateInput.optional(),
+    partyId: uuidInput.optional(),
+    limit: z.number().int().min(1).max(200).optional(),
+  }),
+  execute: async (raw, authz): Promise<ToolResult> => {
+    const a = raw as { side: "ar" | "ap"; asOf?: string; partyId?: string; limit?: number };
+    if (!can(authz, a.side === "ar" ? "ar.read" : "ap.read")) {
+      return { ok: false, error: "forbidden" };
+    }
+    const asOf = a.asOf ?? today();
+    const all = await openItems(authz.user.orgId, a.side, asOf);
+    const scoped = a.partyId ? all.filter((item) => item.partyId === a.partyId) : all;
+    scoped.sort((x, y) =>
+      (x.dueDate ?? x.tranDate).getTime() - (y.dueDate ?? y.tranDate).getTime());
+    const items = scoped.slice(0, a.limit ?? 100).map((item) => ({
+      openLineId: item.id,
+      documentId: item.docId,
+      documentKind: item.docKind,
+      documentNumber: item.docNumber,
+      partyId: item.partyId,
+      party: item.partyName,
+      tranDate: item.tranDate.toISOString().slice(0, 10),
+      dueDate: item.dueDate ? item.dueDate.toISOString().slice(0, 10) : null,
+      remaining: num(item.remaining),
+    }));
+    return {
+      ok: true,
+      data: { side: a.side, asOf, totalCount: scoped.length, items },
+      note: `${scoped.length} open ${a.side.toUpperCase()} item${scoped.length === 1 ? "" : "s"} as of ${asOf}${items.length < scoped.length ? ` (showing ${items.length})` : ""}`,
+    };
+  },
+};
+
 export const READ_TOOLS: AssistantToolDef[] = [
   whoami,
   findAccounts,
@@ -1015,6 +1061,7 @@ export const READ_TOOLS: AssistantToolDef[] = [
   balanceSheetTool,
   trialBalanceTool,
   agingTool,
+  listOpenItems,
   cashFlowTool,
   financialPeriods,
   financialTrends,
