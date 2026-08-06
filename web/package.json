@@ -14,6 +14,7 @@
     "@ai-sdk/google": "3.0.93",
     "@ai-sdk/openai": "3.0.85",
     "@ai-sdk/openai-compatible": "2.0.60",
+    "@appkit/mcp": "file:../vendor/appkit/appkit-mcp-0.1.0-6a26684.tgz",
     "@appkit/scheduling": "file:../vendor/appkit/appkit-scheduling-0.1.0-258012e.tgz",
     "@appkit/tokens": "file:../vendor/appkit/appkit-tokens-0.1.1.tgz",
     "@appkit/ui": "file:../vendor/appkit/appkit-ui-0.1.1-258012e.tgz",

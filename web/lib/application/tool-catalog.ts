@@ -25,6 +25,7 @@ import {
   listRecordTypes,
   updateApplicationRecord,
 } from "./records";
+import { orgVitals } from "./vitals";
 
 export type ApplicationToolConfirmation = "never" | "always";
 
@@ -157,6 +158,13 @@ function definition<T extends ZodTypeAny>(args: Omit<ApplicationToolDefinition, 
  * services, never transport-specific database code.
  */
 export const APPLICATION_TOOLS: readonly ApplicationToolDefinition[] = [
+  definition({
+    name: "get_vitals", title: "Get Vitals",
+    description: "One consistent org snapshot from the same resolvers the screens use: bank cash and runway, AR/AP outstanding and aging totals, pending approvals, and the latest close run. Sections the actor may not read are returned as available:false with the reason — an absent value is never a zero.",
+    inputSchema: z.object({}), readOnly: true, destructive: false, openWorld: false,
+    assistantConfirmation: "never", visibleTo: visible,
+    execute: async (context) => ({ ok: true, ...await orgVitals(context) }),
+  }),
   definition({
     name: "list_record_types", title: "List Record Types",
     description: "List record types and live fields this actor may read, including tenant-defined custom records.",
