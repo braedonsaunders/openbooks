@@ -171,7 +171,16 @@ export const BUILT_IN_REPORT_DEFINITIONS: BuiltInReportDefinition[] = [
         { fn: 'latest', column: 'ytd_amount', label: 'YTD amount' },
       ],
       groupBy: 'employee',
-      totals: { sections: true, grand: true },
+      totals: {
+        sections: true,
+        grand: true,
+        // The Paymate-style footer line: what actually hits the bank account.
+        derived: [{
+          label: 'Net pay',
+          plus: { field: 'line_kind', value: 'earning' },
+          minus: { field: 'line_kind', value: 'deduction' },
+        }],
+      },
       filters: {
         combinator: 'and',
         rules: [{ field: 'pay_date', op: 'this_year' }],

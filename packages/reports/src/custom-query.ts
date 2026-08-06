@@ -37,7 +37,7 @@ export type CompiledReportQuery = {
   /** Rows mode: validated section-grouping column, if any. */
   groupBy: string | null
   /** Sectioned summarize: totals flags echoed for the shaper. */
-  totals?: { sections?: boolean; grand?: boolean } | null
+  totals?: ReportCustomQuery['totals']
   limit: number
 }
 

@@ -93,10 +93,35 @@ export function validateCustomQuery(
 
   // Totals only mean something for sectioned summaries; whitelist the shape.
   const rawTotals = (q as { totals?: unknown }).totals
+  const sanitizeDerived = (raw: unknown) => {
+    if (!Array.isArray(raw)) return []
+    const clean: { label: string; plus: { field: string; value: string }; minus?: { field: string; value: string } }[] = []
+    const leg = (v: unknown): { field: string; value: string } | null => {
+      if (!v || typeof v !== 'object') return null
+      const { field, value } = v as Record<string, unknown>
+      if (!validColumn(field) || typeof value !== 'string' || value.length > 128) return null
+      return { field: field as string, value }
+    }
+    for (const entry of raw.slice(0, 4)) {
+      if (!entry || typeof entry !== 'object') continue
+      const { label } = entry as Record<string, unknown>
+      const plus = leg((entry as Record<string, unknown>).plus)
+      const minus = (entry as Record<string, unknown>).minus === undefined
+        ? undefined
+        : leg((entry as Record<string, unknown>).minus) ?? undefined
+      if (typeof label !== 'string' || !label.trim() || label.length > 64 || !plus) continue
+      clean.push({ label: label.trim(), plus, ...(minus ? { minus } : {}) })
+    }
+    return clean
+  }
   const totals = mode === 'summarize' && rawTotals && typeof rawTotals === 'object' && !Array.isArray(rawTotals)
     ? {
         ...((rawTotals as { sections?: unknown }).sections === true ? { sections: true } : {}),
         ...((rawTotals as { grand?: unknown }).grand === true ? { grand: true } : {}),
+        ...(() => {
+          const derived = sanitizeDerived((rawTotals as { derived?: unknown }).derived)
+          return derived.length ? { derived } : {}
+        })(),
       }
     : null
 

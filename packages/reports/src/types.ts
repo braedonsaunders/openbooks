@@ -118,8 +118,18 @@ export type ReportCustomQuery = {
   limit?: number | null
   /** Sectioned-summarize totals: per-section subtotal rows at the first
    *  non-section breakout level, and/or a final Grand totals group across all
-   *  sections. Sum-style measures total; latest/avg/min/max stay blank. */
-  totals?: { sections?: boolean; grand?: boolean } | null
+   *  sections. Sum-style measures total; latest/avg/min/max stay blank.
+   *  `derived` rows combine level buckets arithmetically (e.g. Net pay =
+   *  earnings − deductions), appended per section and to the grand group. */
+  totals?: {
+    sections?: boolean
+    grand?: boolean
+    derived?: {
+      label: string
+      plus: { field: string; value: string }
+      minus?: { field: string; value: string }
+    }[]
+  } | null
 }
 
 // --- Layout (page setup for a printed/exported document) ---------------------
