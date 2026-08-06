@@ -9,6 +9,8 @@ import { parseReportQuery } from '../../../../lib/report-filters'
 import { ReportFilterBar } from '../ReportFilterBar'
 import { ExportMenu } from '../ExportMenu'
 import { SaveViewButton } from '../SaveViewButton'
+import { ScheduleReportButton } from '../ScheduleReportButton'
+import { reportScheduleAnchor, scheduleParamsFrom } from '../../../../lib/report-schedule-anchor'
 import { ReportPaper } from '../ReportPaper'
 import { Table, TableBody, TableCell, TableRow, reportSubtotalRowClass, reportTotalRowClass } from '../ReportTable'
 import { ReportDrillLink } from '../ReportDrillLink'
@@ -28,6 +30,7 @@ export default async function CashFlow({
   const t = await getTranslations('reports.cashFlow')
   const tr = await getTranslations('reports')
   const sp = await searchParams
+  const scheduleDefId = await reportScheduleAnchor('cash-flow')
   const q = parseReportQuery(sp)
   const period = await resolvePeriod(q.period, { customFrom: q.from, customTo: q.to })
   const from = period.from
@@ -58,7 +61,7 @@ export default async function CashFlow({
           <ReportFilterBar
             controls={{ period: true, dimensions: true }}
             dimensions={opts}
-            actions={<><SaveViewButton /><ExportMenu kind="cash-flow" params={sp} /></>}
+            actions={<>{scheduleDefId ? <ScheduleReportButton definitionId={scheduleDefId} statementParams={scheduleParamsFrom(sp)} /> : null}<SaveViewButton /><ExportMenu kind="cash-flow" params={sp} /></>}
           />
           <div className="flex items-center gap-2 text-xs text-slate-500 dark:text-slate-400">
             <span>{t('reconciliation')}</span>

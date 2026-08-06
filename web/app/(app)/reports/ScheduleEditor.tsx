@@ -40,10 +40,16 @@ export function ScheduleEditor({
   definitionId,
   schedules,
   canSchedule,
+  statementParams,
+  onChanged,
 }: {
   definitionId: string
   schedules: ScheduleRow[]
   canSchedule: boolean
+  /** Statement pages snapshot their current filters onto new schedules. */
+  statementParams?: Record<string, string>
+  /** Fires after any mutation (self-fetching hosts refetch on this). */
+  onChanged?: () => void
 }) {
   const t = useTranslations('reports.schedule')
   const tc = useTranslations('common')
@@ -72,6 +78,7 @@ export function ScheduleEditor({
     })
     if (!res.ok) toast.error((await res.json()).error ?? t('updateFailed'))
     else toast.success(s.active ? t('paused') : t('resumed'))
+    onChanged?.()
     router.refresh()
   }
 
@@ -81,6 +88,7 @@ export function ScheduleEditor({
     const res = await fetch(`/api/reports/schedules/${s.id}`, { method: 'DELETE' })
     if (!res.ok) toast.error((await res.json()).error ?? tc('feedback.deleteFailed'))
     else toast.success(t('deleted'))
+    onChanged?.()
     router.refresh()
   }
 
@@ -131,8 +139,10 @@ export function ScheduleEditor({
         adding ? (
           <ScheduleForm
             definitionId={definitionId}
+            statementParams={statementParams}
             onDone={() => {
               setAdding(false)
+              onChanged?.()
               router.refresh()
             }}
             onCancel={() => setAdding(false)}
@@ -151,10 +161,12 @@ const GUESSED_TZ = typeof Intl !== 'undefined' ? Intl.DateTimeFormat().resolvedO
 
 function ScheduleForm({
   definitionId,
+  statementParams,
   onDone,
   onCancel,
 }: {
   definitionId: string
+  statementParams?: Record<string, string>
   onDone: () => void
   onCancel: () => void
 }) {
@@ -176,6 +188,7 @@ function ScheduleForm({
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         definitionId,
+        ...(statementParams && Object.keys(statementParams).length ? { statementParams } : {}),
         cadence,
         dayOfWeek,
         dayOfMonth,

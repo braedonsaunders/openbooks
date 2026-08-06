@@ -14,6 +14,8 @@ import { ReportPaper } from '../ReportPaper'
 import { ExportMenu } from '../ExportMenu'
 import { ReportFilterBar } from '../ReportFilterBar'
 import { SaveViewButton } from '../SaveViewButton'
+import { ScheduleReportButton } from '../ScheduleReportButton'
+import { reportScheduleAnchor, scheduleParamsFrom } from '../../../../lib/report-schedule-anchor'
 
 export const dynamic = 'force-dynamic'
 
@@ -25,6 +27,7 @@ export default async function BalanceSheet({
   const { money } = await getMoneyFormatter()
   const t = await getTranslations('reports')
   const sp = await searchParams
+  const scheduleDefId = await reportScheduleAnchor('balance-sheet')
   const q = parseReportQuery(sp)
   const period = await resolvePeriod(q.period, { customFrom: q.from, customTo: q.to })
 
@@ -90,7 +93,7 @@ export default async function BalanceSheet({
             subsidiaries={subView.picker}
             actions={
               <>
-                <SaveViewButton />
+                {scheduleDefId ? <ScheduleReportButton definitionId={scheduleDefId} statementParams={scheduleParamsFrom(sp)} /> : null}<SaveViewButton />
                 <ExportMenu kind="balance-sheet" params={sp} />
               </>
             }
