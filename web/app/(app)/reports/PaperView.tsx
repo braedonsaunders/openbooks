@@ -59,7 +59,7 @@ export type PaperData = {
   title: string
   periodPhrase?: string
   note?: string
-  summary?: { label: string; value: PaperCell }[]
+  summary?: { label: string; value: PaperCell; money?: boolean }[]
   groups: PaperGroup[]
   /** Custom reports use one source-row drill target for every numeric result. */
   defaultDrillTarget?: ReportDrillTarget
@@ -101,9 +101,9 @@ export function PaperView({
               <div className="truncate font-semibold tabular-nums">
                 {data.defaultDrillTarget && isNumericCell(item.value) ? (
                   <ReportDrillLink target={data.defaultDrillTarget} className="hover:text-teal-700 hover:underline dark:hover:text-teal-300">
-                    {fmt(item.value, false)}
+                    {fmt(item.value, item.money === true)}
                   </ReportDrillLink>
-                ) : fmt(item.value, false)}
+                ) : fmt(item.value, item.money === true)}
               </div>
             </div>
           ))}
