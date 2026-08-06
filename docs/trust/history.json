@@ -261,5 +261,88 @@
         }
       ]
     }
+  },
+  {
+    "at": "2026-08-06T15:01:22.308Z",
+    "gitSha": "3cb7a1b392769b2d43157b976bcc41c5c03da8d9",
+    "conformance": {
+      "totals": {
+        "pass": 40,
+        "fail": 0,
+        "gap": 0,
+        "skipped": 0
+      },
+      "pass": true,
+      "gaps": [],
+      "failures": []
+    },
+    "invariants": {
+      "pass": true,
+      "orgName": "SIM · Summit Ridge Construction",
+      "cutoff": "2026-02-28",
+      "counts": {
+        "documents": 928,
+        "postedDocuments": 425,
+        "postedEntries": 428,
+        "postedLines": 1320
+      },
+      "trialBalance": {
+        "debits": "8488390.4116",
+        "credits": "8488390.4116",
+        "accounts": 41
+      },
+      "checks": [
+        {
+          "name": "global-balance",
+          "ok": true
+        },
+        {
+          "name": "per-entry-balance",
+          "ok": true
+        },
+        {
+          "name": "open-balance-fresh",
+          "ok": true
+        },
+        {
+          "name": "overhead-pair-zero",
+          "ok": true
+        },
+        {
+          "name": "overhead-burdens-jobs",
+          "ok": true
+        },
+        {
+          "name": "labor-clearing",
+          "ok": true
+        },
+        {
+          "name": "subledger-gl-tieout",
+          "ok": true
+        }
+      ],
+      "timings": [
+        {
+          "report": "trial_balance",
+          "ms": 3,
+          "rows": 39
+        },
+        {
+          "report": "balance_sheet",
+          "ms": 3,
+          "rows": 13
+        },
+        {
+          "report": "profit_and_loss",
+          "ms": 3,
+          "rows": 16
+        },
+        {
+          "report": "ar_aging",
+          "ms": 3,
+          "rows": 5
+        }
+      ]
+    }
   }
 ]
