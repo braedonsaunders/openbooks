@@ -17,11 +17,13 @@ import {
 } from './custom-query'
 import {
   formatLabel,
+  isoDate,
   type ReportBreakout,
   type ReportCustomQuery,
   type ReportGroup,
   type ReportMeasure,
   type ReportRunResult,
+  type ReportRowScopeRule,
   type ReportTemporalBin,
 } from './types'
 
@@ -198,6 +200,29 @@ function shapeSummarizeResult(
     ...measures.map((_, i) => formatCustomValue(row[`m${i}`])),
   ])
 
+  // Exact per-row scope of each aggregate bucket: eq for plain breakouts,
+  // a date range for binned buckets, is-empty for null buckets. A row whose
+  // bucket cannot be scoped precisely gets null — viewers then offer NO drill
+  // rather than showing records that don't add up to the clicked number.
+  const rowKeys = dataRows.map((row): ReportRowScopeRule[] | null => {
+    const scope: ReportRowScopeRule[] = []
+    for (const [i, b] of breakouts.entries()) {
+      const raw = row[`d${i}`]
+      if (raw === null || typeof raw === 'undefined') {
+        scope.push({ field: b.column, empty: true })
+        continue
+      }
+      if (b.bin) {
+        const range = binRange(raw, b.bin)
+        if (!range) return null
+        scope.push({ field: b.column, ...range })
+      } else {
+        scope.push({ field: b.column, value: String(raw) })
+      }
+    }
+    return scope
+  })
+
   const measureIsMoney = (m: (typeof measures)[number]) =>
     m.fn !== 'count'
     && !!m.column
@@ -216,6 +241,7 @@ function shapeSummarizeResult(
       rows,
       isEmpty: dataRows.length === 0,
       money: moneyFlags.some(Boolean) ? moneyFlags : undefined,
+      rowKeys,
     },
   ]
 
@@ -245,6 +271,51 @@ function shapeSummarizeResult(
 }
 
 // --- value formatting ----------------------------------------------------------
+
+/**
+ * Inclusive [from, to] date bounds of one temporal bucket. The raw value is
+ * the bucket START (date_trunc output, fiscal-shifted where applicable) — pg
+ * hands date columns back as Date at LOCAL midnight, so local parts are the
+ * truth (toISOString would shift a day east of UTC).
+ */
+function binRange(v: unknown, bin: ReportTemporalBin): { from: string; to: string } | null {
+  let y: number, m: number, d: number
+  if (v instanceof Date) {
+    if (Number.isNaN(v.getTime())) return null
+    y = v.getFullYear(); m = v.getMonth(); d = v.getDate()
+  } else {
+    const match = /^(\d{4})-(\d{2})-(\d{2})/.exec(String(v))
+    if (!match) return null
+    y = Number(match[1]); m = Number(match[2]) - 1; d = Number(match[3])
+  }
+  const start = new Date(Date.UTC(y, m, d))
+  const end = new Date(start)
+  switch (bin) {
+    case 'day':
+      break
+    case 'week':
+      end.setUTCDate(end.getUTCDate() + 6)
+      break
+    case 'month':
+    case 'fiscal_period':
+      end.setUTCMonth(end.getUTCMonth() + 1)
+      end.setUTCDate(end.getUTCDate() - 1)
+      break
+    case 'quarter':
+    case 'fiscal_quarter':
+      end.setUTCMonth(end.getUTCMonth() + 3)
+      end.setUTCDate(end.getUTCDate() - 1)
+      break
+    case 'year':
+    case 'fiscal_year':
+      end.setUTCMonth(end.getUTCMonth() + 12)
+      end.setUTCDate(end.getUTCDate() - 1)
+      break
+    default:
+      return null
+  }
+  return { from: isoDate(start), to: isoDate(end) }
+}
 
 /** Format a temporal-bucketed dimension value for display. */
 function formatBreakoutValue(v: unknown, bin?: ReportTemporalBin): string | number | null {

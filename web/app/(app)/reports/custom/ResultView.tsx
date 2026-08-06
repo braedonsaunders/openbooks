@@ -11,6 +11,8 @@ import type { ReportDrillTarget } from '../../../../lib/report-drill'
  * several; summarize/plain rows yield one). Shared by the studio live preview
  * and the run/view page.
  */
+const NUMERIC_CELL = /^-?[\d,]+(\.\d+)?$/
+
 export function ResultView({
   company,
   title,
@@ -32,17 +34,26 @@ export function ResultView({
       data={{
         title,
         periodPhrase: description || undefined,
-        defaultDrillTarget: drillTarget,
         summary: result.summary,
+        // Drills exist ONLY where a number decomposes into records: summarize
+        // aggregates, scoped to their exact bucket. Rows-mode cells ARE the
+        // record — nothing behind them, so no drill.
         groups: result.groups.map((group) => ({
           title: group.title,
           subtitle: group.subtitle,
           columns: group.columns,
           rows: group.rows,
           money: group.money,
-          // Section groups drill to exactly their own bucket's rows.
-          drillTarget: group.groupKey && drillTarget.kind === 'custom'
-            ? { ...drillTarget, label: group.title, filter: group.groupKey }
+          drills: group.kind === 'summary' && group.rowKeys && drillTarget.kind === 'custom'
+            ? group.rows.map((row, ri) => {
+                const scope = group.rowKeys?.[ri]
+                if (!scope) return row.map(() => undefined)
+                return row.map((cell) =>
+                  (typeof cell === 'number' || (typeof cell === 'string' && NUMERIC_CELL.test(cell.trim())))
+                    ? { ...drillTarget, filter: scope }
+                    : undefined,
+                )
+              })
             : undefined,
           isEmpty: group.isEmpty,
         })),

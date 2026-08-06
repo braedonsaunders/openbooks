@@ -184,9 +184,20 @@ export type ReportGroup = {
   /** For 'section' groups: the raw groupBy field + bucket value, so viewers
    *  can scope drill-downs to exactly this section's rows. */
   groupKey?: { field: string; value: string }
+  /** Summarize mode: per-row scope of the aggregate — one entry per breakout
+   *  (eq value, date range for binned buckets, or null-bucket marker). Rows
+   *  whose bucket cannot be scoped exactly carry null (viewers omit the
+   *  drill rather than show unrelated records). */
+  rowKeys?: (ReportRowScopeRule[] | null)[]
   /** If true, render an "empty" placeholder row instead of the table. */
   isEmpty?: boolean
 }
+
+/** One exact-scope predicate for drilling into an aggregate bucket. */
+export type ReportRowScopeRule =
+  | { field: string; value: string }
+  | { field: string; from: string; to: string }
+  | { field: string; empty: true }
 
 export type ReportSummaryItem = { label: string; value: string | number }
 
