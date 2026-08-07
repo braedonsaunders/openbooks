@@ -35,7 +35,7 @@
     },
     "current": {
       "title": "Current pay period",
-      "noSchedules": "No active pay schedules yet — create one to start running payroll."
+      "noSchedules": "No active pay schedules. Create a schedule to begin processing payroll."
     },
     "frequency": {
       "weekly": "Weekly",
@@ -49,7 +49,7 @@
     },
     "exceptions": {
       "title": "Needs attention",
-      "allClear": "All clear — every employee is ready for payroll.",
+      "allClear": "All employees are ready for payroll.",
       "missingProfile": "{name} has no payroll profile",
       "moreMissingProfiles": "{count, plural, one {# more employee} other {# more employees}} without a payroll profile",
       "missingWage": "{name} has no wage rate effective today",
@@ -67,7 +67,7 @@
   },
   "list": {
     "title": "Pay runs",
-    "description": "Every pay run — search, filter by stage and schedule, and open the processing wizard.",
+    "description": "All pay runs. Search and filter by stage or schedule, then open a run to process it.",
     "open": "Open run",
     "stageFilter": "Stage"
   },
@@ -79,7 +79,7 @@
       "gl": "GL preview & commit",
       "finish": "Post & finish"
     },
-    "voided": "This pay run was voided — it is read-only.",
+    "voided": "This pay run is voided and read-only.",
     "period": {
       "taxYear": "Tax year",
       "employeesTitle": "Included employees ({count})",
@@ -89,15 +89,34 @@
       "recalculate": "Recalculate",
       "empty": "No employees have an active payroll profile on this schedule yet.",
       "wageMissing": "No wage rate",
-      "zeroHours": "No approved hours",
-      "ready": "Ready"
+      "zeroHours": "No hours",
+      "ready": "Ready",
+      "scopeSaved": "Run scope saved: {count, plural, one {# employee} other {# employees}}.",
+      "filterDepartment": "Department",
+      "allDepartments": "All departments",
+      "allBases": "All pay bases",
+      "onlyWithHours": "With hours only",
+      "hideIneligible": "Hide ineligible",
+      "department": "Department",
+      "selectAll": "Select all shown employees",
+      "selectEmployee": "Select {name}",
+      "selectedCount": "{selected} of {total} employees selected",
+      "selectedHours": "{hours} hours",
+      "selectedBlocked": "{count, plural, one {# selected employee has no wage rate} other {# selected employees have no wage rate}}",
+      "applyScope": "Apply selection",
+      "noneMatch": "No employees match these filters.",
+      "noWage": "No wage rate",
+      "paidInPeriod": "Already paid",
+      "terminated": "Terminated",
+      "excluded": "Excluded",
+      "included": "Included"
     },
     "review": {
       "exceptionsTitle": "{count, plural, one {# calculation exception} other {# calculation exceptions}}",
-      "varianceFlag": "{count, plural, one {# stub} other {# stubs}} moved more than ±{percent}% in net pay vs the employee's previous stub — worth a look.",
+      "varianceFlag": "{count, plural, one {# stub} other {# stubs}} changed more than ±{percent}% in net pay versus the previous stub. Review before committing.",
       "varianceColumn": "Δ net",
       "newEmployee": "first stub",
-      "needsCalculation": "Calculate the run to build stubs — nothing is locked in until you commit.",
+      "needsCalculation": "Calculate the run to generate stubs. Amounts remain editable until the run is committed.",
       "drawerDescription": "Pay lines and the statutory calculation trace for this stub.",
       "drawerVariance": "Net pay moved {percent}% vs this employee's previous stub.",
       "downloadPdf": "Download PDF",
@@ -109,13 +128,13 @@
       "openSetup": "Open Accounts & posting",
       "retry": "Try again",
       "loading": "Building the GL preview…",
-      "hint": "The exact journal commit will write — debits first, then credits. Nothing posts yet.",
+      "hint": "The journal entry commit will write. Debits first, then credits. Nothing is posted at this stage.",
       "account": "Account",
       "description": "Description",
       "debits": "Debit",
       "credits": "Credit",
       "balanced": "Balanced",
-      "commitHint": "Commit freezes the stubs and writes these lines to the pay-run document. You can still review everything before posting."
+      "commitHint": "Commit freezes the stubs and writes these lines to the pay-run document. The run remains reviewable until it is posted."
     },
     "finish": {
       "notCommitted": "Commit the run in the GL step before posting.",
@@ -125,17 +144,17 @@
       "postedHint": "{number} is on the ledger.",
       "viewJournal": "View journal entry",
       "remittanceTitle": "Remittance summary",
-      "remittanceHint": "Credits by account — what this run now owes.",
+      "remittanceHint": "Credits by account: the liabilities this run recorded.",
       "netPay": "Net pay to employees",
       "nextTitle": "What's next",
       "nextRemit": "Remit the withheld amounts to their agencies with a vendor bill (CRA, union funds, benefit carriers).",
-      "nextPay": "Pay employees from the net pay payable account — the payment relieves the liability this run just recorded.",
+      "nextPay": "Pay employees from the net pay payable account. The payment relieves the liability this run recorded.",
       "amount": "Amount",
       "paid": "Paid",
       "viewPayment": "View payment entry",
       "bankAccount": "Bank account",
       "recordPayment": "Record payment",
-      "paymentRecorded": "Payment recorded — net pay settled.",
+      "paymentRecorded": "Payment recorded. Net pay is settled.",
       "printStubs": "Print all stubs",
       "register": "Payroll register",
       "emailStubs": "Email stubs",
@@ -144,7 +163,7 @@
     },
     "adjust": {
       "title": "Adjustments",
-      "applied": "Adjustment applied — stubs recalculated.",
+      "applied": "Adjustment applied. Stubs recalculated.",
       "excludedLabel": "Excluded from this run:",
       "include": "Include",
       "exclude": "Exclude from this run",
@@ -170,7 +189,13 @@
   "newRun": {
     "schedule": "Pay schedule",
     "noSchedules": "No active pay schedules",
-    "create": "New pay run"
+    "create": "New pay run",
+    "description": "Confirm the period this run covers. The schedule’s next period is prefilled; change the dates for an off-cycle or catch-up run.",
+    "periodStart": "Period start",
+    "periodEnd": "Period end",
+    "payDateHint": "The date employees are paid. Statutory rates are resolved from this date.",
+    "invalidWindow": "Period end must fall on or after the start, and the pay date on or after the period end.",
+    "notBegun": "This period starts {date} and has not begun. Choose a period that is under way or complete."
   },
   "columns": {
     "number": "Number",
@@ -202,7 +227,7 @@
     "calculateDone": "Pay run calculated.",
     "commitDone": "Pay run committed.",
     "postDone": "Pay run posted.",
-    "empty": "No stubs yet — calculate the run to build them.",
+    "empty": "No stubs. Calculate the run to generate them.",
     "lineKind": {
       "earning": "Earning",
       "deduction": "Deduction",
@@ -273,7 +298,7 @@
       "futaExempt": "FUTA/SUI exempt",
       "fitExempt": "Federal income tax exempt (W-4 \"Exempt\")",
       "sin": "SIN / SSN",
-      "sinPlaceholder": "9 digits — stored sealed, never shown again"
+      "sinPlaceholder": "9 digits. Stored sealed and never displayed again."
     },
     "country": {
       "CA": "Canada",
@@ -348,7 +373,7 @@
         "engine": "IRS Pub 15-T percentage-method engine (2026) with W-4 Steps 2–4 and pre-2020 allowances.",
         "coverage": "Federal plus the nine no-withholding states (AK, FL, NV, NH, SD, TN, TX, WA, WY). State income tax withholding ships in a later wave.",
         "components": "Statutory pay components: federal income tax, Social Security, Medicare (incl. Additional Medicare), FUTA, and SUI.",
-        "config": "SUI rates and wage bases are experience-rated per employer — enter yours under Accounts & posting."
+        "config": "SUI rates and wage bases are experience-rated per employer. Enter yours under Accounts & posting."
       },
       "uninstall": "Uninstall",
       "uninstallTitle": "Uninstall country pack",
@@ -423,7 +448,7 @@
     "total": "Total to remit",
     "createBill": "Create remittance bill",
     "createAnother": "Create another bill",
-    "billCreated": "Draft bill {number} created — review and post it in AP.",
+    "billCreated": "Draft bill {number} created. Review and post it in AP.",
     "apNote": "Remittance bills are ordinary vendor bills:",
     "apLink": "open AP bills"
   },
