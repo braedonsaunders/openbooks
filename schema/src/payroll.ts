@@ -250,6 +250,15 @@ export const payRuns = pgTable(
     runStatus: text("run_status", {
       enum: ["draft", "calculated", "committed"],
     }).notNull().default("draft"),
+    /**
+     * What kind of payday this is. 'regular' follows the schedule; 'bonus' is
+     * an off-cycle non-periodic run (bonus/commission taxed on the bonus
+     * method); 'termination' is a final pay that also drives ROE/final-pay
+     * readiness checks.
+     */
+    runType: text("run_type", {
+      enum: ["regular", "bonus", "termination"],
+    }).notNull().default("regular"),
     grossTotal: money("gross_total").notNull().default("0"),
     netTotal: money("net_total").notNull().default("0"),
     employerCostTotal: money("employer_cost_total").notNull().default("0"),
@@ -262,7 +271,11 @@ export const payRuns = pgTable(
   },
   (t) => [
     index("pay_runs_org_period").on(t.orgId, t.periodStart, t.periodEnd),
-    uniqueIndex("pay_runs_schedule_period").on(t.orgId, t.payScheduleId, t.periodEnd),
+    // One REGULAR run per schedule period; off-cycle bonus and termination
+    // runs deliberately land inside a period already paid by a regular run.
+    uniqueIndex("pay_runs_schedule_period")
+      .on(t.orgId, t.payScheduleId, t.periodEnd)
+      .where(sql`run_type = 'regular'`),
     check("pay_runs_period_order", sql`${t.periodEnd} >= ${t.periodStart}`),
     check("pay_runs_pay_date", sql`${t.payDate} >= ${t.periodEnd}`),
   ],

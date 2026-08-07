@@ -90,6 +90,7 @@ export function NewRunButton({ schedules }: { schedules: RunSchedule[] }) {
   const [open, setOpen] = useState(false)
   const [busy, setBusy] = useState(false)
   const [scheduleId, setScheduleId] = useState(schedules[0]?.id ?? '')
+  const [runType, setRunType] = useState<'regular' | 'bonus' | 'termination'>('regular')
   const schedule = schedules.find((s) => s.id === scheduleId) ?? schedules[0]
   const derived = schedule ? nextPeriod(schedule) : { start: '', end: '', payDate: '' }
   const [period, setPeriod] = useState(derived)
@@ -119,6 +120,7 @@ export function NewRunButton({ schedules }: { schedules: RunSchedule[] }) {
         periodStart: shown.start,
         periodEnd: shown.end,
         payDate: shown.payDate,
+        runType,
       })
       setOpen(false)
       router.push(`/payroll/runs/${documentId}`)
@@ -158,6 +160,19 @@ export function NewRunButton({ schedules }: { schedules: RunSchedule[] }) {
         }
       >
         <div className="space-y-4">
+          <div className="space-y-1.5">
+            <Label htmlFor="run-type">{t('newRun.runType')}</Label>
+            <Select
+              id="run-type"
+              value={runType}
+              onChange={(e) => setRunType(e.target.value as typeof runType)}
+            >
+              <option value="regular">{t('runType.regular')}</option>
+              <option value="bonus">{t('runType.bonus')}</option>
+              <option value="termination">{t('runType.termination')}</option>
+            </Select>
+            <p className="text-xs text-slate-500 dark:text-slate-400">{t(`newRun.runTypeHint.${runType}`)}</p>
+          </div>
           {schedules.length > 1 && (
             <div className="space-y-1.5">
               <Label htmlFor="run-schedule">{t('columns.schedule')}</Label>

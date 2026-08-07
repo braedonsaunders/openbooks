@@ -99,9 +99,37 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
   if (!isUuid(id)) return NextResponse.json({ error: 'not found' }, { status: 404 })
   const body = await req.json().catch(() => ({}))
   try {
-    if (body.action === 'calculate') {
-      const result = await calculatePayRun({ orgId: gate.user.orgId, documentId: id, actorId: gate.user.id })
+    if (body.action === 'calculate' || body.action === 'dry-run') {
+      const result = await calculatePayRun({
+        orgId: gate.user.orgId, documentId: id, actorId: gate.user.id,
+        dryRun: body.action === 'dry-run',
+      })
       return NextResponse.json({ ok: true, ...result })
+    }
+    // Apply one component amount across many employees in one pass — the
+    // review step's bulk edit. Each employee still gets its own audited
+    // adjustment row through the same helper as a single edit.
+    if (body.action === 'bulk-adjustment') {
+      const { componentId, amount, note, replaceComponent } = body
+      const employees = Array.isArray(body.employeePartyIds) ? body.employeePartyIds : []
+      if (
+        !isUuid(componentId) || employees.length === 0 || employees.length > 2000 ||
+        !employees.every((v: unknown) => typeof v === 'string' && isUuid(v)) ||
+        typeof amount !== 'string' || !/^-?\d+(\.\d{1,2})?$/.test(amount) ||
+        (note != null && (typeof note !== 'string' || note.length > 500)) ||
+        (replaceComponent != null && typeof replaceComponent !== 'boolean')
+      ) {
+        return NextResponse.json({ error: 'invalid adjustment' }, { status: 422 })
+      }
+      for (const employeePartyId of employees as string[]) {
+        await mutatePayRunAdjustment({
+          orgId: gate.user.orgId,
+          documentId: id,
+          actorId: gate.user.id,
+          mutation: { action: 'add', employeePartyId, componentId, amount, replaceComponent, note },
+        })
+      }
+      return NextResponse.json({ ok: true, applied: employees.length })
     }
     if (body.action === 'preview-gl') {
       // Read-only: the exact legs commit would write, for the wizard's review

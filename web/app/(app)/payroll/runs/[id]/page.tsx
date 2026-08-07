@@ -9,15 +9,21 @@ import { ModuleHomeTabs } from '../../../../../components/module-home/ui'
 import { requirePermission, can } from '../../../../../lib/authz'
 import { requireFeatureEnabled } from '../../../../../lib/feature-gates'
 import { isUuid } from '../../../../../lib/list-params'
+import {
+  payRunChanges,
+  payRunFunding,
+  payRunReadiness,
+  payRunStaleness,
+} from '@openbooks/engine/src/payroll-readiness.ts'
 import { RunWizard, type RemittanceRow, type RosterRow, type RunHeader, type StubRow, type WizardStep } from './RunWizard'
 
 export const dynamic = 'force-dynamic'
 
-const STEPS: readonly WizardStep[] = ['period', 'review', 'gl', 'finish']
+const STEPS: readonly WizardStep[] = ['period', 'readiness', 'review', 'gl', 'finish']
 
 /**
- * One pay run — the processing wizard. Four freely-navigable steps (period &
- * employees → review stubs → GL preview & commit → post & finish); completion
+ * One pay run — the processing wizard. Five freely-navigable steps (scope →
+ * readiness → review stubs → GL preview & commit → post & finish); completion
  * derives from run_status + the document's posted state, never from a forced
  * linear march. Wage data — the whole page sits behind payroll.read.
  */
@@ -40,7 +46,7 @@ export default async function PayRunPage({
     select r.document_id, d.document_number, d.status as document_status, d.currency,
            d.posted_entry_id, s.name as schedule_name,
            r.period_start::text as period_start, r.period_end::text as period_end,
-           r.pay_date::text as pay_date, r.tax_year, r.run_status, r.pay_schedule_id,
+           r.pay_date::text as pay_date, r.tax_year, r.run_status, r.run_type, r.pay_schedule_id,
            r.gross_total, r.net_total, r.employer_cost_total, r.employee_count
       from pay_runs r
       join documents d on d.id = r.document_id
@@ -178,6 +184,15 @@ export default async function PayRunPage({
      where org_id = ${orgId} and type = 'asset_bank' and is_active and not is_summary
      order by number nulls last, name`)) as unknown as { rows: { id: string; label: string }[] }).rows
 
+  // Readiness, staleness, funding and the per-employee diff are engine-owned
+  // (one source of truth for what blocks a run, what it costs, and what moved).
+  const [readiness, staleness, funding, changes] = await Promise.all([
+    payRunReadiness(orgId, id),
+    payRunStaleness(orgId, id),
+    payRunFunding(orgId, id),
+    payRunChanges(orgId, id),
+  ])
+
   const moduleTabs = await groupTabs('payroll', '/payroll/runs')
 
   return (
@@ -200,6 +215,10 @@ export default async function PayRunPage({
         adjustableComponents={adjustableRes.rows}
         remittance={run.run_status === 'committed' ? remitRes.rows : []}
         bankAccounts={bankAccounts}
+        readiness={readiness}
+        staleness={staleness}
+        funding={funding}
+        changes={changes}
         registerReportId={registerReport?.id ?? null}
         canRun={can(authz, 'payroll.run')}
         initialStep={initialStep}
