@@ -26,6 +26,13 @@ const FILING_STATUSES = new Set(['single', 'married_joint', 'head_household'])
 /** employee_payroll_profiles.stub_delivery. */
 const STUB_DELIVERIES = new Set(['email', 'print', 'both'])
 
+/**
+ * employee_payroll_profiles.payment_method — the payroll-owned override of the
+ * rail. Empty/absent means "inherit the party preference"; the resolver
+ * (engine/src/payroll-payment-method.ts) decides from there.
+ */
+const PAYMENT_METHODS = new Set(['eft', 'cheque'])
+
 const MONEY_KEYS = [
   'federalClaimAmount',
   'provincialClaimAmount',
@@ -65,7 +72,7 @@ export async function GET(req: Request) {
                prof.w4_pre_2020, prof.w4_allowances, prof.fica_exempt, prof.futa_exempt,
                prof.vacation_percent, prof.vacation_method, prof.is_active, prof.sin_last3,
                prof.filing_account_id, fa.account_number as filing_account_number,
-               prof.stub_delivery
+               prof.stub_delivery, prof.payment_method
           from employee_payroll_profiles prof
           join parties p on p.id = prof.employee_party_id and p.org_id = prof.org_id
           left join pay_schedules s on s.id = prof.pay_schedule_id
@@ -92,7 +99,7 @@ export async function GET(req: Request) {
            prof.w4_pre_2020, prof.w4_allowances, prof.fica_exempt, prof.futa_exempt,
            prof.vacation_percent, prof.vacation_method, prof.is_active,
            prof.filing_account_id, fa.account_number as filing_account_number,
-           prof.stub_delivery
+           prof.stub_delivery, prof.payment_method
       from employee_payroll_profiles prof
       join parties p on p.id = prof.employee_party_id and p.org_id = prof.org_id
       left join pay_schedules s on s.id = prof.pay_schedule_id
@@ -150,6 +157,11 @@ export async function POST(req: Request) {
     : null
   if (stubDelivery === null) {
     return NextResponse.json({ error: 'invalid stubDelivery' }, { status: 422 })
+  }
+  const paymentMethod = body.paymentMethod == null || body.paymentMethod === ''
+    ? null : String(body.paymentMethod)
+  if (paymentMethod !== null && !PAYMENT_METHODS.has(paymentMethod)) {
+    return NextResponse.json({ error: 'invalid paymentMethod' }, { status: 422 })
   }
 
   const federalClaimCode = claimCode(body.federalClaimCode)
@@ -236,7 +248,7 @@ export async function POST(req: Request) {
        filing_status, multiple_jobs, dependent_credits, other_income_annual, deductions_annual,
        w4_pre_2020, w4_allowances, fica_exempt, futa_exempt,
        cpp_exempt, ei_exempt, tax_exempt, vacation_percent, vacation_method, is_active,
-       sin_encrypted, sin_last3, filing_account_id, stub_delivery,
+       sin_encrypted, sin_last3, filing_account_id, stub_delivery, payment_method,
        created_by, updated_by)
     values (${orgId}, ${body.employeePartyId}, ${body.payScheduleId}, ${country}, ${province}, ${payBasis},
             ${federalClaimCode}, ${money.federalClaimAmount}, ${provincialClaimCode}, ${money.provincialClaimAmount},
@@ -249,6 +261,7 @@ export async function POST(req: Request) {
             ${body.cppExempt === true}, ${body.eiExempt === true}, ${body.taxExempt === true},
             ${vacationPercent}, ${vacationMethod}, ${body.isActive !== false},
             ${sinEncrypted ?? null}, ${sinLast3 ?? null}, ${filingAccountId}, ${stubDelivery},
+            ${paymentMethod},
             ${userId}, ${userId})
     on conflict (org_id, employee_party_id)
     do update set pay_schedule_id = excluded.pay_schedule_id, country = excluded.country,
@@ -274,6 +287,7 @@ export async function POST(req: Request) {
                   vacation_method = excluded.vacation_method, is_active = excluded.is_active,
                   filing_account_id = excluded.filing_account_id,
                   stub_delivery = excluded.stub_delivery,
+                  payment_method = excluded.payment_method,
                   sin_encrypted = case when ${sinEncrypted !== undefined} then excluded.sin_encrypted
                                        else employee_payroll_profiles.sin_encrypted end,
                   sin_last3 = case when ${sinLast3 !== undefined} then excluded.sin_last3

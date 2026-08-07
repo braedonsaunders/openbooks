@@ -16,6 +16,13 @@ type FilterOption = { value: string; label: string; count?: number }
  * several filters + the search box fit on one toolbar row. Selecting an option
  * navigates (the param lives in the URL, same as before) — capability is
  * identical to the old chip row, just far denser.
+ *
+ * Two modes, one chip. Pass `basePath` + `currentParams` for the URL-backed
+ * list-page behaviour; pass `value` + `onChange` instead when the filtered set
+ * is already in the client (a wizard step holding unsaved selection state,
+ * where a navigation would throw that state away). Everything visible — the
+ * pill, the popover, the checkmark, the counts, the disabled state — is the
+ * same component either way, which is the point.
  */
 export function FilterChips({
   basePath,
@@ -27,9 +34,12 @@ export function FilterChips({
   defaultValue,
   pageParamKey = 'page',
   hideAll = false,
+  value,
+  onChange,
+  disabled = false,
 }: {
-  basePath: string
-  currentParams: Record<string, string | string[] | undefined>
+  basePath?: string
+  currentParams?: Record<string, string | string[] | undefined>
   paramKey: string
   label: string
   options: FilterOption[]
@@ -45,22 +55,38 @@ export function FilterChips({
   pageParamKey?: string
   /** Hide the generic All option for controls such as sort selectors. */
   hideAll?: boolean
+  /** Controlled mode: the current selection ('' = all). */
+  value?: string
+  /** Controlled mode: called with the new selection ('' = all). */
+  onChange?: (value: string) => void
+  /**
+   * Rendered but inert. A filter with no values to offer is still an AXIS the
+   * operator should be able to see — hiding it makes the toolbar silently
+   * change shape between one pay schedule and the next.
+   */
+  disabled?: boolean
 }) {
   const tLabels = useTranslations('common.labels')
   const [open, setOpen] = useState(false)
-  const raw =
-    typeof currentParams[paramKey] === 'string' ? (currentParams[paramKey] as string) : undefined
-  const current = raw ?? defaultValue
+  const controlled = onChange !== undefined
+  const params = currentParams ?? {}
+  const raw = controlled
+    ? (value || undefined)
+    : typeof params[paramKey] === 'string' ? (params[paramKey] as string) : undefined
+  const current = raw ?? (controlled ? undefined : defaultValue)
   const active = options.find((o) => o.value === current)
-  const allHref = mergeHref(basePath, currentParams, {
-    [paramKey]: defaultValue ? 'all' : undefined,
-    [pageParamKey]: 1,
-  })
-  const allActive = defaultValue ? current === 'all' : !current
+  const href = (next: string | undefined) =>
+    controlled ? '' : mergeHref(basePath ?? '', params, { [paramKey]: next, [pageParamKey]: 1 })
+  const allHref = href(defaultValue ? 'all' : undefined)
+  const allActive = controlled ? !current : defaultValue ? current === 'all' : !current
+  const select = (next: string) => {
+    setOpen(false)
+    onChange?.(next)
+  }
 
   return (
     <Popover
-      open={open}
+      open={open && !disabled}
       onOpenChange={setOpen}
       align="start"
       className="min-w-[13rem] p-1"
@@ -69,9 +95,11 @@ export function FilterChips({
           type="button"
           aria-haspopup="listbox"
           aria-expanded={open}
+          disabled={disabled}
           onClick={() => setOpen((v) => !v)}
           className={cn(
             'inline-flex h-8 max-w-[16rem] items-center gap-1.5 rounded-md border px-3 text-sm transition-colors',
+            disabled && 'cursor-not-allowed opacity-50',
             active
               ? 'border-teal-300 bg-teal-50 text-teal-800 dark:bg-teal-950/50 dark:text-teal-300'
               : 'border-slate-200 bg-white text-slate-700 hover:border-slate-300 hover:bg-slate-50 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-200 dark:hover:border-slate-600 dark:hover:bg-slate-800/60',
@@ -99,20 +127,23 @@ export function FilterChips({
     >
       <div className="max-h-72 overflow-auto" role="listbox">
         {!hideAll ? (
-          <FilterItem href={allHref} active={allActive} onSelect={() => setOpen(false)}>
+          <FilterItem
+            href={allHref}
+            active={allActive}
+            controlled={controlled}
+            onSelect={() => select('')}
+          >
             {allLabel ?? tLabels('all')}
           </FilterItem>
         ) : null}
         {options.map((opt) => (
           <FilterItem
             key={opt.value}
-            href={mergeHref(basePath, currentParams, {
-              [paramKey]: opt.value,
-              [pageParamKey]: 1,
-            })}
+            href={href(opt.value)}
             active={current === opt.value}
             count={opt.count}
-            onSelect={() => setOpen(false)}
+            controlled={controlled}
+            onSelect={() => select(opt.value)}
           >
             {opt.label}
           </FilterItem>
@@ -190,27 +221,25 @@ function FilterItem({
   active,
   count,
   onSelect,
+  controlled = false,
   children,
 }: {
   href: string
   active: boolean
   count?: number
   onSelect: () => void
+  /** Controlled mode renders a button — there is no URL to navigate to. */
+  controlled?: boolean
   children: React.ReactNode
 }) {
-  return (
-    <Link
-      href={href as any}
-      onClick={onSelect}
-      role="option"
-      aria-selected={active}
-      className={cn(
-        'flex items-center gap-2 rounded px-2 py-1.5 text-sm transition-colors',
-        active
-          ? 'bg-teal-50 font-medium text-teal-800 dark:bg-teal-950/50 dark:text-teal-300'
-          : 'text-slate-700 hover:bg-slate-50 dark:text-slate-200 dark:hover:bg-slate-800/60',
-      )}
-    >
+  const className = cn(
+    'flex w-full items-center gap-2 rounded px-2 py-1.5 text-left text-sm transition-colors',
+    active
+      ? 'bg-teal-50 font-medium text-teal-800 dark:bg-teal-950/50 dark:text-teal-300'
+      : 'text-slate-700 hover:bg-slate-50 dark:text-slate-200 dark:hover:bg-slate-800/60',
+  )
+  const body = (
+    <>
       <Check size={14} className={cn('shrink-0', active ? 'text-teal-600' : 'text-transparent')} />
       <span className="flex-1 truncate">{children}</span>
       {typeof count === 'number' ? (
@@ -223,6 +252,18 @@ function FilterItem({
           {count}
         </span>
       ) : null}
+    </>
+  )
+  if (controlled) {
+    return (
+      <button type="button" onClick={onSelect} role="option" aria-selected={active} className={className}>
+        {body}
+      </button>
+    )
+  }
+  return (
+    <Link href={href as any} onClick={onSelect} role="option" aria-selected={active} className={className}>
+      {body}
     </Link>
   )
 }

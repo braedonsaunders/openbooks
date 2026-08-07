@@ -4,6 +4,7 @@ import { sql } from 'drizzle-orm'
 import { cn } from '@openbooks/ui'
 import { db } from '@openbooks/engine/src/db.ts'
 import { caPayrollConfig, payrollSettings, usPayrollConfig } from '@openbooks/engine/src/payroll-run.ts'
+import { payrollPaymentMethodSettings } from '@openbooks/engine/src/payroll-payment-method.ts'
 import { packSlotState } from '@openbooks/engine/src/payroll/packs.ts'
 import { RATES_2026_JAN, RATES_2026_JUL } from '@openbooks/engine/src/payroll/canada/rates.ts'
 import { pdfEncryptionAvailable } from '@openbooks/pdf'
@@ -183,12 +184,13 @@ async function AccountsTab({ orgId }: { orgId: string }) {
   ]
   const blob = blobRes.rows[0]?.p ?? {}
   const installed = Array.isArray(blob.countries) ? blob.countries.map(String) : []
-  const [packs, us, ca, stubPassword, encryptionAvailable] = await Promise.all([
+  const [packs, us, ca, stubPassword, encryptionAvailable, paymentMethods] = await Promise.all([
     packSlotState(orgId, installed, blob),
     usPayrollConfig(orgId),
     caPayrollConfig(orgId),
     stubPasswordPolicy(orgId),
     pdfEncryptionAvailable(),
+    payrollPaymentMethodSettings(orgId),
   ])
 
   return (
@@ -198,6 +200,7 @@ async function AccountsTab({ orgId }: { orgId: string }) {
       us={us}
       ca={ca}
       stubPassword={stubPassword}
+      paymentMethods={paymentMethods}
       encryptionAvailable={encryptionAvailable}
       accounts={accountsRes.rows.map((account) => ({
         id: account.id,

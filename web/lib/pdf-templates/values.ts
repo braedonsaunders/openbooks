@@ -1,6 +1,7 @@
 import 'server-only'
 import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/db.ts'
+import { amountInWords } from '@openbooks/engine/src/payroll-cheques.ts'
 import { createMoneyFormatter, type MoneyFormatter } from '../money-format'
 import { resolveLocale } from '../locale'
 import { PDF_RECORD_TYPE_BY_KEY, type PdfMergeField, type PdfRecordTypeMeta } from './catalog'
@@ -294,6 +295,92 @@ async function loadPayStubValues(orgId: string, id: string): Promise<PdfRecordVa
   return { values, reference: `${stub.document_number ?? 'Pay stub'} ${stub.employee_name ?? ''}`.trim() }
 }
 
+/**
+ * The printed cheque for one stub. Keyed on the STUB id (like the pay stub),
+ * so a cheque and its voucher share one record and one template.
+ *
+ * A stub with no allocated cheque number renders NOTHING: an unnumbered cheque
+ * is not a negotiable instrument, and printing one would put paper in the world
+ * that the ledger cannot match. `issuePayRunCheques` allocates first.
+ */
+async function loadPayrollChequeValues(orgId: string, id: string): Promise<PdfRecordValues | null> {
+  const r = (await db.execute(sql`
+    select s.*, r.period_start, r.period_end, d.document_number,
+           p.display_name as employee_name,
+           a.line1, a.line2, a.city, a.region, a.postal_code, a.country
+      from pay_stubs s
+      join pay_runs r on r.document_id = s.pay_run_document_id
+      join documents d on d.id = r.document_id
+      join parties p on p.id = s.employee_party_id and p.org_id = s.org_id
+      left join lateral (
+        select * from addresses where party_id = s.employee_party_id
+         order by is_default_billing desc, created_at limit 1
+      ) a on true
+     where s.id = ${id} and s.org_id = ${orgId} and s.payment_method = 'cheque'
+       and s.cheque_number is not null
+  `)) as unknown as { rows: Record<string, any>[] }
+  const stub = r.rows[0]
+  if (!stub) return null
+
+  const [org, locale] = await Promise.all([orgRow(orgId), resolveLocale()])
+  const { money } = createMoneyFormatter(locale, stub.currency_code ?? org.base_currency)
+
+  const lines = (await db.execute(sql`
+    select l.kind, l.description, l.hours, l.rate, l.amount
+      from pay_stub_lines l
+     where l.stub_id = ${id} and l.org_id = ${orgId}
+     order by l.sequence
+  `)) as unknown as { rows: Record<string, any>[] }
+  const byKind = (kind: string) => lines.rows
+    .filter((l) => l.kind === kind)
+    .map((l) => ({
+      description: l.description ?? '',
+      hours: l.hours != null ? Number(l.hours).toFixed(2) : '',
+      rate: l.rate != null ? money(Number(l.rate)) : '',
+      amount: money(Number(l.amount ?? 0)),
+    }))
+  const deductionsTotal = lines.rows
+    .filter((l) => l.kind === 'deduction')
+    .reduce((total, l) => total + Number(l.amount ?? 0), 0)
+
+  const address = [
+    stub.line1,
+    stub.line2,
+    [stub.city, stub.region, stub.postal_code].filter(Boolean).join(', '),
+    stub.country,
+  ].filter(Boolean).join(', ')
+
+  const net = String(stub.net_pay ?? '0')
+  const values: Record<string, unknown> = {
+    cheque_number: stub.cheque_number ?? '',
+    employee_name: stub.employee_name ?? '',
+    party_name: stub.employee_name ?? '',
+    employee_address: address,
+    party_address: address,
+    pay_date: fmtDate(stub.pay_date, locale),
+    amount: money(Number(net)),
+    // The legal amount comes from the engine, off the exact decimal — never
+    // from the formatted courtesy amount above.
+    amount_in_words: amountInWords(net),
+    currency: stub.currency_code ?? '',
+    memo: `Pay period ${fmtDate(stub.period_start, locale)} – ${fmtDate(stub.period_end, locale)}`,
+    document_number: stub.document_number ?? '',
+    period_start: fmtDate(stub.period_start, locale),
+    period_end: fmtDate(stub.period_end, locale),
+    gross: money(Number(stub.gross ?? 0)),
+    total_deductions: money(deductionsTotal),
+    net_pay: money(Number(net)),
+    org_name: org.name,
+    printed_date: new Date().toLocaleDateString(locale, { year: 'numeric', month: 'short', day: 'numeric' }),
+    earnings: byKind('earning'),
+    deductions: byKind('deduction'),
+  }
+  return {
+    values,
+    reference: `${stub.cheque_number ?? 'Cheque'} ${stub.employee_name ?? ''}`.trim(),
+  }
+}
+
 export async function loadPdfRecordValues(
   recordType: string,
   orgId: string,
@@ -303,6 +390,7 @@ export async function loadPdfRecordValues(
   if (!meta) return null
   if (meta.key === 'journal_entry') return loadJournalValues(orgId, id)
   if (meta.key === 'pay_stub') return loadPayStubValues(orgId, id)
+  if (meta.key === 'payroll_cheque') return loadPayrollChequeValues(orgId, id)
   if (meta.key === 'field_ticket') return loadFieldTicketValues(orgId, id)
   return loadDocumentValues(meta, orgId, id)
 }
@@ -467,6 +555,13 @@ export async function findSamplePdfRecordId(recordType: string, orgId: string): 
   if (meta.key === 'pay_stub') {
     const r = (await db.execute(sql`
       select id from pay_stubs where org_id = ${orgId} order by created_at desc limit 1
+    `)) as unknown as { rows: { id: string }[] }
+    return r.rows[0]?.id ?? null
+  }
+  if (meta.key === 'payroll_cheque') {
+    const r = (await db.execute(sql`
+      select id from pay_stubs where org_id = ${orgId} and cheque_number is not null
+       order by created_at desc limit 1
     `)) as unknown as { rows: { id: string }[] }
     return r.rows[0]?.id ?? null
   }

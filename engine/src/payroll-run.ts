@@ -27,6 +27,10 @@ import {
   type EntitlementWarning,
 } from "./payroll-entitlements.ts";
 import {
+  payrollPaymentMethodSettings,
+  resolvePayrollPaymentMethod,
+} from "./payroll-payment-method.ts";
+import {
   applyBasisCaps,
   applyDeductionProtection,
   assertEarningsAssessedStable,
@@ -802,7 +806,16 @@ async function calculateInTransaction(input: CalculatePayRunInput): Promise<PayR
     const employees = (await tx.execute(sql`
       select * from (
         select distinct on (p.id)
-               p.id as party_id, p.display_name, er.terminated_on, prof.*
+               p.id as party_id, p.display_name, er.terminated_on,
+               -- Payment rail inputs. prof.* already carries the payroll
+               -- override; these are the party preference and the bank-details
+               -- fact the resolver needs (engine/src/payroll-payment-method.ts).
+               p.payment_method as party_payment_method,
+               exists (
+                 select 1 from party_bank_accounts b
+                  where b.org_id = prof.org_id and b.party_id = p.id
+                    and b.is_active and b.approval_status = 'approved') as has_approved_bank,
+               prof.*
           from employee_payroll_profiles prof
           join parties p on p.id = prof.employee_party_id and p.org_id = prof.org_id
           left join employee_roles er on er.party_id = p.id and er.org_id = p.org_id
@@ -837,6 +850,7 @@ async function calculateInTransaction(input: CalculatePayRunInput): Promise<PayR
 
     const usConfig = await usPayrollConfig(orgId);
     const caConfig = await caPayrollConfig(orgId);
+    const { eftFallbackToCheque } = await payrollPaymentMethodSettings(orgId);
     const errors: { employee: string; message: string }[] = [];
     let grossTotal = "0"; let netTotal = "0"; let employerTotal = "0"; let count = 0;
     const P = Number(run.periods_per_year ?? 0) || undefined;
@@ -862,6 +876,7 @@ async function calculateInTransaction(input: CalculatePayRunInput): Promise<PayR
         const result = await calculateStub(tx, {
           orgId, actorId, documentId, run, emp,
           periodsPerYear: P, need, components: components.rows, usConfig, caConfig,
+          eftFallbackToCheque,
         });
         grossTotal = add(grossTotal, result.gross);
         netTotal = add(netTotal, result.net);
@@ -912,6 +927,8 @@ async function calculateStub(
     components: Record<string, unknown>[];
     usConfig: UsPayrollConfig;
     caConfig: CaPayrollConfig;
+    /** orgs.settings.payroll.eftFallbackToCheque, read once for the run. */
+    eftFallbackToCheque: boolean;
   },
 ): Promise<StubComputation> {
   const { orgId, actorId, documentId, run, emp } = ctx;
@@ -1952,15 +1969,27 @@ async function calculateStub(
     lines.filter((l) => l.kind === "employer_contribution").map((l) => l.amount),
   );
 
+  // The rail is snapshotted, like the province and the claim amounts: a later
+  // edit to the party or the profile must not change how a pay that has
+  // already gone out is reported to have gone out.
+  const paymentMethod = resolvePayrollPaymentMethod({
+    profileMethod: emp.payment_method,
+    partyMethod: emp.party_payment_method,
+    hasApprovedBankDetails: bool(emp.has_approved_bank),
+    fallbackToCheque: ctx.eftFallbackToCheque,
+  }).method;
+
   const stub = (await tx.execute(sql`
     insert into pay_stubs (org_id, pay_run_document_id, employee_party_id, province,
                            periods_per_year, pay_date, tax_year, federal_claim, provincial_claim,
                            currency_code, gross, pensionable_earnings, insurable_earnings,
-                           net_pay, employer_cost, vacation_accrued, factors, created_by, updated_by)
+                           net_pay, employer_cost, vacation_accrued, factors, payment_method,
+                           created_by, updated_by)
     values (${orgId}, ${documentId}, ${employeePartyId}, ${province}, ${P},
             ${run.pay_date}, ${taxYear}, ${factors.TC ?? "0"}, ${factors.TCP ?? "0"},
             ${run.doc_currency}, ${gross}, ${pensionable}, ${insurable},
             ${net}, ${employerCost}, ${vacationAccrued}, ${JSON.stringify(factors)}::jsonb,
+            ${paymentMethod},
             ${actorId}, ${actorId})
     returning id
   `)) as unknown as { rows: { id: string }[] };

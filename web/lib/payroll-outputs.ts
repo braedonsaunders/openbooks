@@ -7,6 +7,7 @@ import {
   type PasswordTokenCatalog,
 } from '@openbooks/pdf'
 import { db } from '@openbooks/engine/src/db.ts'
+import { issuePayRunCheques } from '@openbooks/engine/src/payroll-cheques.ts'
 import { mergeAndPrintPdf } from './pdf-templates/render'
 import { resolvePdfTemplate } from './pdf-templates/store'
 import { loadPdfRecordValues } from './pdf-templates/values'
@@ -149,6 +150,39 @@ export async function mergedRunStubsPdf(
     for (const page of pages) merged.addPage(page)
   }
   return { pdf: await merged.save(), count: stubs.length }
+}
+
+/**
+ * The run's cheque batch as one printable PDF, in the order the numbers were
+ * allocated — the stack a clerk feeds the printer.
+ *
+ * This is `mergedRunStubsPdf` with a different record type: same template
+ * resolution, same value loader, same pdf-lib merge. Cheque numbers are
+ * allocated by the engine first (idempotent), so reprinting a batch reprints
+ * the same numbers instead of consuming stock.
+ */
+export async function mergedRunChequesPdf(
+  orgId: string,
+  documentId: string,
+  actorId: string,
+): Promise<{ pdf: Uint8Array; count: number; issued: number } | null> {
+  const batch = await issuePayRunCheques({ orgId, documentId, actorId })
+  if (batch.cheques.length === 0) return null
+  const template = await resolvePdfTemplate(orgId, 'payroll_cheque', null)
+  if (!template) return null
+
+  const merged = await PDFDocument.create()
+  let count = 0
+  for (const cheque of batch.cheques) {
+    const record = await loadPdfRecordValues('payroll_cheque', orgId, cheque.stubId)
+    if (!record) continue
+    const pdf = await mergeAndPrintPdf(template, record.values)
+    const doc = await PDFDocument.load(pdf)
+    const pages = await merged.copyPages(doc, doc.getPageIndices())
+    for (const page of pages) merged.addPage(page)
+    count += 1
+  }
+  return { pdf: await merged.save(), count, issued: batch.issued }
 }
 
 export interface EmailStubsResult {
