@@ -1,6 +1,14 @@
 import { sql } from "drizzle-orm";
 import { db } from "./db.ts";
 import { add, cmp, neg, sum } from "./money.ts";
+import {
+  PAYROLL_PAYMENT_METHODS,
+  payrollPaymentMethodSettings,
+  resolvePayrollPaymentMethod,
+  stubPaymentMethods,
+  type PayrollPaymentMethod,
+  type ResolvedPaymentMethod,
+} from "./payroll-payment-method.ts";
 import { hasUsablePayRateSql } from "./payroll-rate.ts";
 import { payrollSettings } from "./payroll-run.ts";
 import { packSlotState } from "./payroll/packs.ts";
@@ -50,6 +58,8 @@ interface ScopeRow {
   paid_in_period: boolean;
   has_bank: boolean;
   has_sin: boolean;
+  profile_payment_method: string | null;
+  party_payment_method: string | null;
 }
 
 interface RunRow {
@@ -88,6 +98,8 @@ async function scope(orgId: string, documentId: string, run: RunRow): Promise<Sc
            coalesce(te.hours, 0)::text as approved_hours,
            er.terminated_on::text as terminated_on,
            prof.sin_encrypted is not null as has_sin,
+           prof.payment_method as profile_payment_method,
+           p.payment_method as party_payment_method,
            exists (
              select 1 from party_bank_accounts b
               where b.org_id = prof.org_id and b.party_id = p.id
@@ -223,8 +235,35 @@ export async function payRunReadiness(orgId: string, documentId: string): Promis
     flag("warning", "employee.terminated", terminated);
   }
 
-  const noBank = people.filter((p) => !p.has_bank);
-  if (noBank.length) flag("warning", "employee.noBankDetails", noBank, { href: employeesHref });
+  // --- Payment rail ---------------------------------------------------------
+  // Missing bank details is NOT an exception to wave through: an employee with
+  // none is paid by cheque, which is a normal payroll, not a warning. Only two
+  // things are worth saying here — somebody the employer means to pay by EFT
+  // whose money is going out as paper instead (advisory), and somebody who has
+  // no route at all because the employer turned that safety net off (blocker).
+  const fallbackToCheque = (await payrollPaymentMethodSettings(orgId)).eftFallbackToCheque;
+  const rail = new Map<string, ResolvedPaymentMethod>(
+    people.map((p) => [
+      p.employee_party_id,
+      resolvePayrollPaymentMethod({
+        profileMethod: p.profile_payment_method,
+        partyMethod: p.party_payment_method,
+        hasApprovedBankDetails: p.has_bank,
+        fallbackToCheque,
+      }),
+    ]),
+  );
+  const unpayable = people.filter((p) => rail.get(p.employee_party_id)?.unpayable);
+  if (unpayable.length) {
+    flag("blocker", "employee.eftNoBankDetails", unpayable, { href: employeesHref });
+  }
+  const eftOnPaper = people.filter((p) => {
+    const resolved = rail.get(p.employee_party_id);
+    return resolved?.missingBankDetails && !resolved.unpayable;
+  });
+  if (eftOnPaper.length) {
+    flag("warning", "employee.noBankDetails", eftOnPaper, { href: employeesHref });
+  }
 
   const noSin = people.filter((p) => !p.has_sin);
   if (noSin.length) flag("warning", "employee.noSin", noSin, { href: employeesHref });
@@ -403,9 +442,23 @@ export async function payRunStaleness(
   };
 }
 
+/** Net pay owed on one rail, and how many people are on it. */
+export interface FundingRail {
+  method: PayrollPaymentMethod;
+  netPay: string;
+  employees: number;
+}
+
 export interface PayRunFunding {
   /** Net pay owed to employees — the money that must leave the bank. */
   netPay: string;
+  /**
+   * The same net pay split by how it leaves: a controller funds a direct-
+   * deposit file and a cheque run differently — the file is drawn on the
+   * payday, the cheques clear whenever they are presented — so a single
+   * "cash required" number is not the question actually being asked.
+   */
+  rails: FundingRail[];
   /** Statutory + benefit liabilities the run records (remitted later). */
   liabilities: string;
   /** Total employer cost of the payday. */
@@ -448,6 +501,14 @@ export async function payRunFunding(orgId: string, documentId: string): Promise<
   // withholdings (gross − net) plus the employer-side accruals.
   const liabilities = add(add(t.gross, neg(t.net)), t.employer);
 
+  // Both rails are always reported, including at zero: the operator has to be
+  // able to see that nobody is on cheques, not infer it from an absent row.
+  const stubs = await stubPaymentMethods(orgId, documentId);
+  const rails: FundingRail[] = PAYROLL_PAYMENT_METHODS.map((method) => {
+    const mine = stubs.filter((s) => s.method === method);
+    return { method, netPay: sum(mine.map((s) => s.netPay)), employees: mine.length };
+  });
+
   const accounts = (await db.execute(sql`
     select a.id, coalesce(a.number || ' · ', '') || a.name as label,
            coalesce(bal.amount, 0)::text as balance
@@ -463,6 +524,7 @@ export async function payRunFunding(orgId: string, documentId: string): Promise<
 
   return {
     netPay: t.net,
+    rails,
     liabilities,
     totalCost: add(t.net, liabilities),
     payDate,

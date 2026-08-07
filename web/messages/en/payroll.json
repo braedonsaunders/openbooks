@@ -124,8 +124,9 @@
           "zeroHours": "{count, plural, one {# hourly employee has} other {# hourly employees have}} no approved time in this period.",
           "paidInPeriod": "{count, plural, one {# employee was} other {# employees were}} already paid for an overlapping period.",
           "terminated": "{count, plural, one {# employee was} other {# employees were}} terminated on or before the period end.",
-          "noBankDetails": "{count, plural, one {# employee has} other {# employees have}} no approved bank details for direct deposit.",
-          "noSin": "{count, plural, one {# employee has} other {# employees have}} no SIN/SSN on file for year-end filing."
+          "noBankDetails": "{count, plural, one {# employee is} other {# employees are}} set to be paid by direct deposit but has no approved bank details, so they will be paid by cheque on this run.",
+          "noSin": "{count, plural, one {# employee has} other {# employees have}} no SIN/SSN on file for year-end filing.",
+          "eftNoBankDetails": "{count, plural, one {# employee is} other {# employees are}} set to be paid by direct deposit with no approved bank details, and the cheque fallback is turned off, so there is no way to pay them."
         }
       }
     },
@@ -137,7 +138,11 @@
       "accounts": "Bank accounts",
       "leadTime": "{days, plural, =0 {Pay date is today} one {# business day to pay date} other {# business days to pay date}} · {date}",
       "payDatePast": "Pay date {date} has passed",
-      "short": "No single bank account covers the {amount} required."
+      "short": "No single bank account covers the {amount} required.",
+      "rail": {
+        "eft": "Direct deposit ({count, plural, one {# employee} other {# employees}})",
+        "cheque": "Cheques ({count, plural, one {# employee} other {# employees}})"
+      }
     },
     "period": {
       "taxYear": "Tax year",
@@ -151,8 +156,6 @@
       "zeroHours": "No hours",
       "ready": "Ready",
       "scopeSaved": "Run scope saved: {count, plural, one {# employee} other {# employees}}.",
-      "filterDepartment": "Department",
-      "allDepartments": "All departments",
       "allBases": "All pay bases",
       "onlyWithHours": "With hours only",
       "hideIneligible": "Hide ineligible",
@@ -170,7 +173,15 @@
       "excluded": "Excluded",
       "included": "Included",
       "runType": "Run type",
-      "continue": "Continue to readiness"
+      "continue": "Continue to readiness",
+      "dimension": {
+        "all": "All",
+        "department": "Department",
+        "trade": "Trade",
+        "job_title": "Job title",
+        "subsidiary": "Entity",
+        "payment_method": "Paid by"
+      }
     },
     "review": {
       "exceptionsTitle": "{count, plural, one {# calculation exception} other {# calculation exceptions}}",
@@ -239,7 +250,8 @@
       "register": "Payroll register",
       "emailStubs": "Email stubs",
       "stubsEmailed": "{sent, plural, one {# stub} other {# stubs}} emailed.",
-      "stubsEmailedPartial": "{sent} emailed; skipped (no email or failed): {skipped}"
+      "stubsEmailedPartial": "{sent} emailed; skipped (no email or failed): {skipped}",
+      "printCheques": "Print {count, plural, one {# cheque} other {# cheques}}"
     },
     "adjust": {
       "title": "Adjustments",
@@ -400,7 +412,8 @@
       "sin": "SIN / SSN",
       "sinPlaceholder": "9 digits. Stored sealed and never displayed again.",
       "filingAccount": "Filing account",
-      "stubDelivery": "Pay stub delivery"
+      "stubDelivery": "Pay stub delivery",
+      "paymentMethod": "Paid by"
     },
     "country": {
       "CA": "Canada",
@@ -575,6 +588,13 @@
       "grossEstimated": "This rule pays a percentage of gross. The preview estimates gross from approved time and the effective wage; the pay run's own calculation is authoritative.",
       "excludedTitle": "Excluded by job title",
       "excludedDescription": "These employees are kept out by the rule's exclusion list — the deletion nobody has to remember any more."
+    },
+    "paymentMethods": {
+      "title": "How wages are paid",
+      "description": "An employee with no approved bank details is paid by cheque. This decides what happens when someone set to direct deposit has none.",
+      "fallback": "Pay by cheque when direct-deposit details are missing",
+      "fallbackOn": "The run continues and the employee is included in the cheque batch, with a warning on the readiness step.",
+      "fallbackOff": "The run is blocked until the employee has approved bank details or is switched to cheque."
     }
   },
   "remittances": {
@@ -726,5 +746,11 @@
       "repayment": "Repayment",
       "adjustment": "Adjustment"
     }
+  },
+  "paymentMethod": {
+    "eft": "Direct deposit",
+    "cheque": "Cheque",
+    "inherit": "Use the employee default",
+    "help": "Leave as the default to follow the employee record: direct deposit when approved bank details exist, otherwise a printed cheque."
   }
 }

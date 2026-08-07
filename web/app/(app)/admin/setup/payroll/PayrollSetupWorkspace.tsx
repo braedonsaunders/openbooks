@@ -40,6 +40,8 @@ export function PayrollSetupWorkspace(props: {
   us: UsPayrollConfig
   ca: CaPayrollConfig
   stubPassword: StubPasswordPolicy
+  /** orgs.settings.payroll.eftFallbackToCheque — the cheque safety net. */
+  paymentMethods: { eftFallbackToCheque: boolean }
   /** False when the server has no qpdf binary — encryption cannot be enabled. */
   encryptionAvailable: boolean
   accounts: { id: string; label: string }[]
@@ -65,6 +67,7 @@ export function PayrollSetupWorkspace(props: {
   const [ehtRate, setEhtRate] = useState(props.ca.eht.rate ?? '')
   const [ehtExemption, setEhtExemption] = useState(props.ca.eht.annualExemption ?? '')
   const [futaRate, setFutaRate] = useState(props.us.futaRate ?? '')
+  const [eftFallbackToCheque, setEftFallbackToCheque] = useState(props.paymentMethods.eftFallbackToCheque)
   const [stubPasswordEnabled, setStubPasswordEnabled] = useState(props.stubPassword.enabled)
   const [stubPasswordExpression, setStubPasswordExpression] = useState(props.stubPassword.expression)
   const [suiRows, setSuiRows] = useState<SuiRow[]>(() =>
@@ -83,6 +86,7 @@ export function PayrollSetupWorkspace(props: {
           ...Object.fromEntries(ACCOUNT_KEYS.map((key) => [key, accounts[key] || null])),
           wagesTo,
           craRemittancePartyId: craRemittancePartyId || null,
+          eftFallbackToCheque,
           stubPassword: { enabled: stubPasswordEnabled, expression: stubPasswordExpression },
           slotAccounts: Object.fromEntries(Object.entries(slotAccounts).map(([country, slots]) => [
             country,
@@ -150,6 +154,33 @@ export function PayrollSetupWorkspace(props: {
             </div>
           ))}
         </div>
+      </section>
+
+      {/* How wages leave the bank. An employee with no approved bank details
+          is paid by cheque, not treated as an error; this is the one switch
+          that decides what happens when somebody the employer MEANT to pay by
+          EFT has none. */}
+      <section className="space-y-3 rounded-xl border border-slate-200 bg-white p-4 dark:border-slate-800 dark:bg-slate-900">
+        <div>
+          <h3 className="text-sm font-semibold text-slate-900 dark:text-slate-100">{t('paymentMethods.title')}</h3>
+          <p className="text-sm text-slate-500 dark:text-slate-400">{t('paymentMethods.description')}</p>
+        </div>
+        <label className="flex items-start gap-2 text-sm text-slate-700 dark:text-slate-300">
+          <input
+            type="checkbox"
+            checked={eftFallbackToCheque}
+            onChange={(e) => setEftFallbackToCheque(e.target.checked)}
+            className="mt-0.5 h-4 w-4 rounded border-slate-300 text-teal-600 focus:ring-teal-500 dark:border-slate-600"
+          />
+          <span>
+            {t('paymentMethods.fallback')}
+            <span className="block text-xs text-slate-500 dark:text-slate-400">
+              {eftFallbackToCheque
+                ? t('paymentMethods.fallbackOn')
+                : t('paymentMethods.fallbackOff')}
+            </span>
+          </span>
+        </label>
       </section>
 
       {/* Emailed stubs carry wage data. The password rule is the employer's

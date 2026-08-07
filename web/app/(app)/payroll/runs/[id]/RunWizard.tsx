@@ -32,6 +32,7 @@ import {
   cn,
 } from '@openbooks/ui'
 import { useMoney } from '../../../../../components/money-provider'
+import { FilterChips } from '../../../../../components/filter-bar'
 import { PagedTable, type PagedColumn } from '../../../../../components/paged-table'
 import { RunStatusBadge, runDisplayStatus } from '../../_ui/run-status'
 
@@ -60,6 +61,8 @@ export interface Staleness {
 
 export interface Funding {
   netPay: string
+  /** Net pay split by how it leaves the bank — a controller funds each rail differently. */
+  rails: { method: 'eft' | 'cheque'; netPay: string; employees: number }[]
   liabilities: string
   totalCost: string
   payDate: string
@@ -137,6 +140,11 @@ export interface RosterRow {
   approved_hours: string
   has_wage: boolean
   department: string | null
+  trade: string | null
+  job_title: string | null
+  subsidiary: string | null
+  /** Resolved by the engine's one ladder — how this pay will leave the bank. */
+  payment_method: 'eft' | 'cheque'
   terminated_on: string | null
   hired_on: string | null
   /** Another committed run's period already covers this one — double-pay risk. */
@@ -178,6 +186,31 @@ export interface ComponentOption {
   code: string
   name: string
   kind: string
+}
+
+/**
+ * The dimensions the Scope step filters on. These are the axes the roster
+ * genuinely carries — department was never "dimensions", and a schedule where
+ * nobody has one is not a schedule with no way to slice its people.
+ */
+const ROSTER_DIMENSIONS = ['department', 'trade', 'job_title', 'subsidiary', 'payment_method'] as const
+type RosterDimension = (typeof ROSTER_DIMENSIONS)[number]
+
+/** Distinct values of one axis, with how many people carry each. */
+function dimensionOptions(
+  roster: RosterRow[],
+  axis: RosterDimension,
+  label: (value: string) => string,
+): { value: string; label: string; count: number }[] {
+  const counts = new Map<string, number>()
+  for (const row of roster) {
+    const value = row[axis]
+    if (!value) continue
+    counts.set(value, (counts.get(value) ?? 0) + 1)
+  }
+  return [...counts.entries()]
+    .sort(([a], [b]) => a.localeCompare(b))
+    .map(([value, count]) => ({ value, label: label(value), count }))
 }
 
 /** Net-pay variance beyond this (either direction) flags a stub for review. */
@@ -758,7 +791,14 @@ function PeriodStep({
   const [selected, setSelected] = useState<Set<string>>(
     () => new Set(roster.filter((r) => !excluded.has(r.employee_party_id)).map((r) => r.employee_party_id)),
   )
-  const [department, setDepartment] = useState('')
+  // One filter state per axis the roster actually carries. Every axis is
+  // ALWAYS rendered — an axis with no values shows disabled rather than
+  // disappearing, so the toolbar does not silently change shape between one
+  // pay schedule and the next (a schedule where nobody has a department used
+  // to lose its filter row entirely).
+  const [dimension, setDimension] = useState<Record<RosterDimension, string>>({
+    department: '', trade: '', job_title: '', subsidiary: '', payment_method: '',
+  })
   const [basis, setBasis] = useState('')
   const [onlyWithHours, setOnlyWithHours] = useState(false)
   const [hideIneligible, setHideIneligible] = useState(false)
@@ -776,10 +816,11 @@ function PeriodStep({
     }
   }
 
-  const departments = [...new Set(roster.map((r) => r.department).filter(Boolean))].sort() as string[]
   const visible = roster.filter((row) => {
     const f = flagsOf(row)
-    if (department && row.department !== department) return false
+    for (const axis of ROSTER_DIMENSIONS) {
+      if (dimension[axis] && (row[axis] ?? '') !== dimension[axis]) return false
+    }
     if (basis && row.pay_basis !== basis) return false
     if (onlyWithHours && hoursOf(row) <= 0) return false
     if (hideIneligible && (f.noWage || f.terminated || f.paidInPeriod)) return false
@@ -841,29 +882,34 @@ function PeriodStep({
             {t('wizard.period.employeesTitle', { count: roster.length })}
           </h3>
           <div className="flex flex-wrap items-center gap-2">
-            {departments.length > 0 && (
-              <select
-                value={department}
-                onChange={(e) => setDepartment(e.target.value)}
-                className={CONTROL}
-                aria-label={t('wizard.period.filterDepartment')}
-              >
-                <option value="">{t('wizard.period.allDepartments')}</option>
-                {departments.map((name) => (
-                  <option key={name} value={name}>{name}</option>
-                ))}
-              </select>
-            )}
-            <select
+            {ROSTER_DIMENSIONS.map((axis) => {
+              const options = dimensionOptions(roster, axis, (value) =>
+                axis === 'payment_method' ? t(`paymentMethod.${value}`) : value)
+              return (
+                <FilterChips
+                  key={axis}
+                  paramKey={axis}
+                  label={t(`wizard.period.dimension.${axis}`)}
+                  allLabel={t('wizard.period.dimension.all')}
+                  options={options}
+                  value={dimension[axis]}
+                  onChange={(value) => setDimension((current) => ({ ...current, [axis]: value }))}
+                  disabled={options.length === 0}
+                />
+              )
+            })}
+            <FilterChips
+              paramKey="basis"
+              label={t('profiles.columns.basis')}
+              allLabel={t('wizard.period.allBases')}
+              options={(['hourly', 'salary'] as const).map((value) => ({
+                value,
+                label: t(`profiles.basis.${value}`),
+                count: roster.filter((row) => row.pay_basis === value).length,
+              }))}
               value={basis}
-              onChange={(e) => setBasis(e.target.value)}
-              className={CONTROL}
-              aria-label={t('profiles.columns.basis')}
-            >
-              <option value="">{t('wizard.period.allBases')}</option>
-              <option value="hourly">{t('profiles.basis.hourly')}</option>
-              <option value="salary">{t('profiles.basis.salary')}</option>
-            </select>
+              onChange={setBasis}
+            />
             <label className="flex items-center gap-1.5 text-xs text-slate-600 dark:text-slate-300">
               <input
                 type="checkbox"
@@ -964,6 +1010,17 @@ function PeriodStep({
               {
                 key: 'basis', header: t('profiles.columns.basis'),
                 cell: (row: RosterRow) => t(`profiles.basis.${row.pay_basis}`),
+              },
+              {
+                // How this person's money leaves. Cheque is a normal answer,
+                // not a defect — so it is stated plainly, not badged as a risk.
+                key: 'payment_method', header: t('wizard.period.dimension.payment_method'),
+                search: (row: RosterRow) => row.payment_method,
+                cell: (row: RosterRow) => (
+                  <span className="text-slate-600 dark:text-slate-300">
+                    {t(`paymentMethod.${row.payment_method}`)}
+                  </span>
+                ),
               },
               {
                 key: 'hours', header: t('wizard.period.approvedHours'), align: 'right' as const,
@@ -2035,6 +2092,19 @@ function FundingPanel({
         <HeaderFact label={t('wizard.funding.liabilities')}>{fmt(funding.liabilities)}</HeaderFact>
         <HeaderFact label={t('wizard.funding.totalCost')}>{fmt(funding.totalCost)}</HeaderFact>
       </div>
+      {/* The same net pay, split by how it leaves. A direct-deposit file is
+          drawn on the payday; cheques clear when they are presented — so a
+          single cash-required number is not the question being asked. */}
+      <div className="grid gap-4 border-t border-slate-100 px-4 py-3 sm:grid-cols-2 dark:border-slate-800">
+        {funding.rails.map((railTotal) => (
+          <HeaderFact
+            key={railTotal.method}
+            label={t(`wizard.funding.rail.${railTotal.method}`, { count: railTotal.employees })}
+          >
+            {fmt(railTotal.netPay)}
+          </HeaderFact>
+        ))}
+      </div>
       {funding.accounts.length > 0 && (
         <div className="border-t border-slate-100 px-4 py-3 dark:border-slate-800">
           <p className="mb-2 text-xs font-medium tracking-wide text-slate-400 uppercase dark:text-slate-500">
@@ -2072,6 +2142,43 @@ function FundingPanel({
 /* Step 5 — Post & finish                                              */
 /* ------------------------------------------------------------------ */
 
+/**
+ * Print the run's cheque batch.
+ *
+ * POST, not a link: the first print ALLOCATES cheque numbers off the org's
+ * number sequence, and stock must not be consumed by a browser prefetch. The
+ * response is a PDF, so the blob is opened in a new tab exactly as the stub
+ * link does — reprinting is safe and returns the same numbers.
+ */
+function PrintChequesButton({ documentId, count }: { documentId: string; count: number }) {
+  const t = useTranslations('payroll')
+  const [busy, setBusy] = useState(false)
+  async function print() {
+    setBusy(true)
+    try {
+      const res = await fetch(`/api/payroll/runs/${documentId}/cheques-pdf`, { method: 'POST' })
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}))
+        throw new Error(body.error ?? 'failed')
+      }
+      const url = URL.createObjectURL(await res.blob())
+      window.open(url, '_blank', 'noopener')
+      // Revoked late so the new tab has finished reading the blob.
+      setTimeout(() => URL.revokeObjectURL(url), 60_000)
+    } catch (e) {
+      toast.error((e as Error).message)
+    } finally {
+      setBusy(false)
+    }
+  }
+  return (
+    <Button size="sm" variant="outline" disabled={busy} onClick={() => void print()}>
+      {busy ? <Loader2 size={14} className="animate-spin" aria-hidden /> : <FileDown size={14} aria-hidden />}
+      {t('wizard.finish.printCheques', { count })}
+    </Button>
+  )
+}
+
 function FinishStep({
   run,
   remittance,
@@ -2104,6 +2211,7 @@ function FinishStep({
   fmt: (v: string | number | null | undefined) => string
 }) {
   const t = useTranslations('payroll')
+  const chequeCount = funding.rails.find((rail) => rail.method === 'cheque')?.employees ?? 0
   if (!committed && !posted) {
     return (
       <div className="rounded-xl border border-slate-200 bg-white px-4 py-10 text-center text-sm text-slate-500 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-400">
@@ -2173,6 +2281,9 @@ function FinishStep({
                   {t('wizard.finish.printStubs')}
                 </a>
               </Button>
+              {canRun && chequeCount > 0 && (
+                <PrintChequesButton documentId={run.document_id} count={chequeCount} />
+              )}
               {registerReportId && (
                 <Button asChild size="sm" variant="outline">
                   <Link href={`/reports/custom/run/${registerReportId}` as never}>

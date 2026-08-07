@@ -273,6 +273,57 @@ const PAY_STUB: PdfRecordTypeMeta = {
   ],
 }
 
+/**
+ * The printed pay cheque. Keyed on the STUB, like the pay stub itself — one
+ * employee's pay on this run — so an employer who wants a cheque-and-voucher
+ * on one page can put the earnings/deductions collections on the same sheet.
+ */
+const PAYROLL_CHEQUE: PdfRecordTypeMeta = {
+  key: 'payroll_cheque',
+  label: 'Pay cheque',
+  docKind: null,
+  docTitle: 'Pay Cheque',
+  partyHeading: 'Pay to the order of',
+  readPermission: 'payroll.read',
+  fields: [
+    { key: 'cheque_number', label: 'Cheque number', sample: 'CHQ-00042' },
+    { key: 'employee_name', label: 'Payee', sample: 'Jordan Sparks' },
+    { key: 'employee_address', label: 'Payee address', sample: '18 Maple Ave, Toronto, ON M4E 2T1' },
+    { key: 'pay_date', label: 'Date', sample: 'Jul 21, 2026' },
+    { key: 'amount', label: 'Amount', sample: '$1,894.69' },
+    { key: 'amount_in_words', label: 'Amount in words', sample: 'One thousand eight hundred ninety-four and 69/100' },
+    { key: 'currency', label: 'Currency', sample: 'CAD' },
+    { key: 'memo', label: 'Memo', sample: 'Pay period Jul 5 – Jul 18, 2026' },
+    { key: 'document_number', label: 'Pay run number', sample: 'PAY-000012' },
+    { key: 'period_start', label: 'Period start', sample: 'Jul 5, 2026' },
+    { key: 'period_end', label: 'Period end', sample: 'Jul 18, 2026' },
+    { key: 'gross', label: 'Gross pay', sample: '$2,400.00' },
+    { key: 'total_deductions', label: 'Total deductions', sample: '$505.31' },
+    { key: 'net_pay', label: 'Net pay', sample: '$1,894.69' },
+    ...ORG_FIELDS,
+  ],
+  collections: [
+    {
+      key: 'earnings',
+      label: 'Earnings (voucher)',
+      fields: [
+        { key: 'description', label: 'Earning', sample: 'Regular' },
+        { key: 'hours', label: 'Hours', sample: '80.00' },
+        { key: 'rate', label: 'Rate', sample: '$30.00' },
+        { key: 'amount', label: 'Amount', sample: '$2,400.00' },
+      ],
+    },
+    {
+      key: 'deductions',
+      label: 'Deductions (voucher)',
+      fields: [
+        { key: 'description', label: 'Deduction', sample: 'CPP' },
+        { key: 'amount', label: 'Amount', sample: '$110.99' },
+      ],
+    },
+  ],
+}
+
 /** Every record type a PDF template can target, in nav order. */
 export const PDF_RECORD_TYPES: PdfRecordTypeMeta[] = [
   docType({ key: 'customer_invoice', label: 'Customer invoice', docTitle: 'Invoice', partyHeading: 'Bill to', readPermission: 'ar.read', hasParty: true, hasDue: true, hasReference: true }),
@@ -292,6 +343,7 @@ export const PDF_RECORD_TYPES: PdfRecordTypeMeta[] = [
   FIELD_TICKET,
   JOURNAL_ENTRY,
   PAY_STUB,
+  PAYROLL_CHEQUE,
 ]
 
 export const PDF_RECORD_TYPE_BY_KEY: Record<string, PdfRecordTypeMeta> = Object.fromEntries(
