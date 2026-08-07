@@ -50,7 +50,26 @@ export default async function PayRunsPage({
       }).rows)
     : []
 
-  const newButton = canRun ? <NewRunButton schedules={schedules} /> : undefined
+  // A final pay run must NAME the employees it pays (it clears every accrued
+  // bank), and the engine will only calculate one for people whose employment
+  // has ended — so the picker offers exactly those.
+  const finalPayCandidates = canRun
+    ? (((await db.execute(sql`
+        select distinct on (prof.employee_party_id)
+               prof.employee_party_id as id, p.display_name as name,
+               prof.pay_schedule_id, er.terminated_on::text as terminated_on
+          from employee_payroll_profiles prof
+          join parties p on p.id = prof.employee_party_id and p.org_id = prof.org_id
+          join employee_roles er on er.party_id = p.id and er.org_id = p.org_id
+         where prof.org_id = ${orgId} and prof.is_active and er.terminated_on is not null
+         order by prof.employee_party_id, er.terminated_on desc`)) as unknown as {
+        rows: { id: string; name: string; pay_schedule_id: string; terminated_on: string }[]
+      }).rows)
+    : []
+
+  const newButton = canRun
+    ? <NewRunButton schedules={schedules} finalPayCandidates={finalPayCandidates} />
+    : undefined
 
   const moduleTabs = await groupTabs('payroll', '/payroll/runs')
 

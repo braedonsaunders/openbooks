@@ -1,6 +1,7 @@
 import { sql } from "drizzle-orm";
 import { db } from "./db.ts";
 import { add, cmp, neg, sum } from "./money.ts";
+import { hasUsablePayRateSql } from "./payroll-rate.ts";
 import { payrollSettings } from "./payroll-run.ts";
 import { packSlotState } from "./payroll/packs.ts";
 
@@ -72,7 +73,15 @@ async function runContext(orgId: string, documentId: string): Promise<RunRow | n
   return runs.rows[0] ?? null;
 }
 
-/** Everyone the run will pay, with the facts each check needs. */
+/**
+ * Everyone the run will pay, with the facts each check needs.
+ *
+ * The population predicates are the RUN's, not readiness's own: a
+ * subsidiary-scoped pay schedule pays only that entity's employees, and an
+ * employee terminated before the period started is not paid at all
+ * (calculatePayRun applies both). Describing a different population from the
+ * one that will be paid makes every per-employee count on this screen wrong.
+ */
 async function scope(orgId: string, documentId: string, run: RunRow): Promise<ScopeRow[]> {
   const rows = (await db.execute(sql`
     select p.id as employee_party_id, p.display_name as name, prof.pay_basis, prof.country,
@@ -83,11 +92,12 @@ async function scope(orgId: string, documentId: string, run: RunRow): Promise<Sc
              select 1 from party_bank_accounts b
               where b.org_id = prof.org_id and b.party_id = p.id
                 and b.is_active and b.approval_status = 'approved') as has_bank,
-           exists (
-             select 1 from labor_cost_rates w
-              where w.org_id = prof.org_id and w.employee_party_id = prof.employee_party_id
-                and w.is_active and w.effective_from <= ${run.period_end}
-                and (w.effective_to is null or w.effective_to >= ${run.period_start})) as has_wage,
+           coalesce(${hasUsablePayRateSql({
+             org: sql`prof.org_id`,
+             employee: sql`prof.employee_party_id`,
+             onDate: run.period_end,
+             payBasis: sql`prof.pay_basis`,
+           })}, false) as has_wage,
            exists (
              select 1 from pay_stubs s2
                join pay_runs r2 on r2.document_id = s2.pay_run_document_id
@@ -105,6 +115,9 @@ async function scope(orgId: string, documentId: string, run: RunRow): Promise<Sc
            and t.status = 'approved'
            and t.worked_on between ${run.period_start} and ${run.period_end}) te on true
      where prof.org_id = ${orgId} and prof.pay_schedule_id = ${run.pay_schedule_id} and prof.is_active
+       -- calculatePayRun's own two population predicates, verbatim.
+       and (er.terminated_on is null or er.terminated_on >= ${run.period_start})
+       and (${run.subsidiary_id}::uuid is null or p.subsidiary_id = ${run.subsidiary_id}::uuid)
        and not exists (
          select 1 from pay_run_adjustments a
           where a.org_id = ${orgId} and a.pay_run_document_id = ${documentId}
@@ -222,16 +235,44 @@ export async function payRunReadiness(orgId: string, documentId: string): Promis
 export interface PayRunStaleness {
   /** True when an input changed after the run was last calculated. */
   stale: boolean;
-  /** Stable codes for what changed: adjustments, time, wages, roster. */
+  /** Stable codes for what changed — see STALENESS_INPUT_CLASSES. */
   reasons: string[];
   calculatedAt: string | null;
 }
+
+/**
+ * Every class of input a calculated stub is a function of. The wizard blocks
+ * the commit while any of them changed after `calculated_at`, so anything
+ * MISSING from this list is a silent commit of figures the operator edited
+ * past — which is the one failure this control exists to prevent.
+ *
+ * `missing` is the run row itself: a run that cannot be read is not a fresh
+ * run, and reporting it fresh green-lights a commit against nothing.
+ */
+export const STALENESS_INPUT_CLASSES = [
+  "missing",
+  "adjustments",
+  "time",
+  "wages",
+  "roster",
+  "components",
+  "componentDefinitions",
+  "derivedRules",
+  "entitlements",
+  "settings",
+  "ytd",
+] as const;
 
 /**
  * Whether the calculated stubs still reflect the run's inputs. Payroll's worst
  * failure mode is committing figures the operator edited past — so the wizard
  * reads this on every render and blocks the commit while it is stale, rather
  * than trusting anyone to remember to recalculate.
+ *
+ * KNOWN GAP: `worker_comp_groups` carries no audit columns, so a change to a
+ * WCB/WSIB class RATE cannot be detected here (a change of an employee's
+ * ASSIGNED class is caught through `employee_roles`). See
+ * .local/handoff-controls.md — the table needs `...auditColumns`.
  */
 export async function payRunStaleness(
   orgId: string,
@@ -252,28 +293,106 @@ export async function payRunStaleness(
            exists (
              select 1 from labor_cost_rates w
               where w.org_id = r.org_id and w.updated_at > r.calculated_at) as wages_changed,
+           -- Roster: the payroll profile (TD1/W-4, exemptions, schedule) and
+           -- the employment record the run reads for termination, job title,
+           -- trade and WCB class.
            exists (
              select 1 from employee_payroll_profiles prof
               where prof.org_id = r.org_id and prof.pay_schedule_id = r.pay_schedule_id
-                and prof.updated_at > r.calculated_at) as roster_changed
+                and prof.updated_at > r.calculated_at) as roster_changed,
+           exists (
+             select 1 from employee_roles er
+              join employee_payroll_profiles prof
+                on prof.org_id = er.org_id and prof.employee_party_id = er.party_id
+              where er.org_id = r.org_id and prof.pay_schedule_id = r.pay_schedule_id
+                and er.updated_at > r.calculated_at) as employment_changed,
+           -- Per-employee assigned components: garnishments, benefits, RRSP,
+           -- union dues overrides. Editing one of these changes net pay.
+           exists (
+             select 1 from employee_pay_components epc
+              join employee_payroll_profiles prof
+                on prof.org_id = epc.org_id and prof.employee_party_id = epc.employee_party_id
+              where epc.org_id = r.org_id and prof.pay_schedule_id = r.pay_schedule_id
+                and epc.updated_at > r.calculated_at) as components_changed,
+           -- The component DEFINITIONS themselves (rate, taxability,
+           -- pensionable/insurable flags, liability account).
+           exists (
+             select 1 from pay_components c
+              where c.org_id = r.org_id and c.updated_at > r.calculated_at)
+             as component_definitions_changed,
+           exists (
+             select 1 from pay_derived_rules dr
+              where dr.org_id = r.org_id and dr.updated_at > r.calculated_at)
+             as derived_rules_changed,
+           -- Entitlement plans, their limits and their service tiers: all
+           -- three move accrual and payout amounts on the stub.
+           (exists (select 1 from entitlement_plans ep
+                     where ep.org_id = r.org_id and ep.updated_at > r.calculated_at)
+            or exists (select 1 from entitlement_plan_limits el
+                        where el.org_id = r.org_id and el.updated_at > r.calculated_at)
+            or exists (select 1 from entitlement_service_tiers et
+                        where et.org_id = r.org_id and et.updated_at > r.calculated_at))
+             as entitlements_changed,
+           -- Org payroll settings: EHT/SUI rates, exemptions, posting accounts,
+           -- and the filing accounts a remittance is grouped under.
+           --
+           -- orgs.updated_at is watched but is NOT sufficient on its own: the
+           -- settings writers update orgs.settings without stamping
+           -- updated_at, and there is no trigger. The audit_log row
+           -- those writers DO insert ('orgs' / the org id) is the reliable
+           -- signal today. See .local/handoff-controls.md for the touch
+           -- trigger that would make the column authoritative.
+           (exists (select 1 from orgs o
+                     where o.id = r.org_id and o.updated_at > r.calculated_at)
+            or exists (select 1 from audit_log al
+                        where al.org_id = r.org_id and al.table_name = 'orgs'
+                          and al.at > r.calculated_at)
+            or exists (select 1 from payroll_filing_accounts fa
+                        where fa.org_id = r.org_id and fa.updated_at > r.calculated_at))
+             as settings_changed,
+           -- Another run consumed this employee's statutory room. A run
+           -- calculated before an off-cycle run commits carries the YTD the
+           -- off-cycle run has already used, and over-deducts the employee past
+           -- the CPP/EI maximum (or under-deducts if that run was voided).
+           exists (
+             select 1 from pay_runs other
+              where other.org_id = r.org_id and other.document_id <> r.document_id
+                and other.tax_year = r.tax_year
+                and other.run_status in ('committed', 'voided')
+                and other.updated_at > r.calculated_at
+                and exists (
+                  select 1 from pay_stubs os
+                    join pay_stubs mine
+                      on mine.employee_party_id = os.employee_party_id
+                     and mine.pay_run_document_id = r.document_id
+                   where os.pay_run_document_id = other.document_id)) as ytd_changed
       from pay_runs r
      where r.org_id = ${orgId} and r.document_id = ${documentId}
   `)) as unknown as {
     rows: {
       calculated_at: Date | string | null; never_calculated: boolean;
       adjustments_changed: boolean; time_changed: boolean;
-      wages_changed: boolean; roster_changed: boolean;
+      wages_changed: boolean; roster_changed: boolean; employment_changed: boolean;
+      components_changed: boolean; component_definitions_changed: boolean;
+      derived_rules_changed: boolean; entitlements_changed: boolean;
+      settings_changed: boolean; ytd_changed: boolean;
     }[];
   };
   const row = rows.rows[0];
-  if (!row || row.never_calculated) {
-    return { stale: false, reasons: [], calculatedAt: null };
-  }
+  // A missing run is not a fresh run. Fail closed and say why.
+  if (!row) return { stale: true, reasons: ["missing"], calculatedAt: null };
+  if (row.never_calculated) return { stale: false, reasons: [], calculatedAt: null };
   const reasons = [
     row.adjustments_changed ? "adjustments" : null,
     row.time_changed ? "time" : null,
     row.wages_changed ? "wages" : null,
-    row.roster_changed ? "roster" : null,
+    row.roster_changed || row.employment_changed ? "roster" : null,
+    row.components_changed ? "components" : null,
+    row.component_definitions_changed ? "componentDefinitions" : null,
+    row.derived_rules_changed ? "derivedRules" : null,
+    row.entitlements_changed ? "entitlements" : null,
+    row.settings_changed ? "settings" : null,
+    row.ytd_changed ? "ytd" : null,
   ].filter((r): r is string => r !== null);
   return {
     stale: reasons.length > 0,

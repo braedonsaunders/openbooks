@@ -160,6 +160,10 @@ export const employeeRoles = pgTable("employee_roles", {
   workerCompGroupId: uuid("worker_comp_group_id"),
   hiredOn: date("hired_on"),
   terminatedOn: date("terminated_on"),
+  /** PII, used by payroll only: ROE demographics and the configurable
+   *  stub-password policy ("surname + date of birth"). Deliberately outside
+   *  the governed query views. */
+  birthDate: date("birth_date"),
   hasBenefits: boolean("has_benefits").notNull().default(false),
   vacationDaysPerYear: integer("vacation_days_per_year"),
   billableUtilizationTarget: integer("billable_utilization_target"), // percent

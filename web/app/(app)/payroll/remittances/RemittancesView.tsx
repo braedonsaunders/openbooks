@@ -11,10 +11,16 @@ import { useMoney } from '../../../../components/money-provider'
 
 /**
  * Remittance cockpit: one card per destination (CRA vendor, union funds,
- * unassigned components) with the period's accrued amounts per component and
- * a one-click draft vendor bill. Already-raised bills for the same period
- * show inline so a double remittance is an explicit, visible choice.
+ * unassigned components) and payroll filing account, with the period's accrued
+ * amounts per component and a one-click draft vendor bill. Already-raised
+ * bills for the same period show inline so a double remittance is an explicit,
+ * visible choice.
  */
+
+/** Card identity — mirrors the engine's (destination, filing account) group. */
+const groupKey = (partyId: string | null, filingAccountId: string | null) =>
+  `${partyId ?? 'unassigned'}::${filingAccountId ?? ''}`
+
 export function RemittancesView({
   groups,
   from,
@@ -32,13 +38,13 @@ export function RemittancesView({
   const [busyParty, setBusyParty] = useState<string | null>(null)
   const [range, setRange] = useState({ from, to })
 
-  async function createBill(partyId: string) {
-    setBusyParty(partyId)
+  async function createBill(partyId: string, filingAccountId: string | null) {
+    setBusyParty(groupKey(partyId, filingAccountId))
     try {
       const res = await fetch('/api/payroll/remittances', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action: 'create-bill', partyId, from, to }),
+        body: JSON.stringify({ action: 'create-bill', partyId, filingAccountId, from, to }),
       })
       const j = await res.json()
       if (!res.ok) throw new Error(j.error ?? 'failed')
@@ -76,13 +82,21 @@ export function RemittancesView({
       ) : (
         groups.map((group) => (
           <section
-            key={group.partyId ?? 'unassigned'}
+            key={groupKey(group.partyId, group.filingAccount.id)}
             className="rounded-xl border border-slate-200 bg-white p-4 dark:border-slate-800 dark:bg-slate-900"
           >
             <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
               <div>
-                <h3 className="text-sm font-semibold text-slate-900 dark:text-slate-100">
+                <h3 className="flex flex-wrap items-center gap-2 text-sm font-semibold text-slate-900 dark:text-slate-100">
                   {group.partyName ?? t('unassigned')}
+                  {/* A PD7A is filed per payroll program account, so each
+                      account remits on its own bill. */}
+                  {group.filingAccount.accountNumber && (
+                    <Badge variant="outline">
+                      {group.filingAccount.accountNumber}
+                      {group.filingAccount.name ? ` · ${group.filingAccount.name}` : ''}
+                    </Badge>
+                  )}
                 </h3>
                 <p className="text-xs text-slate-500 dark:text-slate-400">
                   {t('context', { gross: money(group.grossPayroll), employees: group.employeeCount })}
@@ -103,7 +117,7 @@ export function RemittancesView({
                     <Button
                       size="sm"
                       disabled={busyParty !== null}
-                      onClick={() => void createBill(group.partyId!)}
+                      onClick={() => void createBill(group.partyId!, group.filingAccount.id)}
                     >
                       {group.existingBills.length > 0 ? t('createAnother') : t('createBill')}
                     </Button>

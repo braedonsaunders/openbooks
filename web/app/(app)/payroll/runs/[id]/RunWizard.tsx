@@ -194,6 +194,7 @@ const FACTOR_LABELS: Record<string, string> = {
   B: 'Bonus / non-periodic pay this period',
   PI: 'Pensionable earnings this period',
   IE: 'Insurable earnings this period',
+  PROT_SHORT: 'Protected-earnings shortfall (unpaid this period)',
   // CRA T4127
   A: 'Annual taxable income',
   A_step2: 'Annual taxable income excluding this bonus',
@@ -1236,6 +1237,11 @@ function ReviewStep({
 
   const flagged = stubs.filter((stub) => variance(stub)?.flagged)
   const excludedRows = adjustments.filter((a) => a.adjustment_type === 'exclude')
+  // An unpaid garnishment balance is a real obligation the creditor still
+  // expects, so it can never be a silent difference between two stubs.
+  const protectionShortfalls = stubs
+    .map((stub) => ({ stub, amount: stub.factors?.PROT_SHORT ?? '0' }))
+    .filter((entry) => Number(entry.amount) > 0)
   const allSelected = stubs.length > 0 && stubs.every((s) => selected.has(s.employee_party_id))
   const toggle = (id: string) =>
     setSelected((current) => {
@@ -1275,6 +1281,22 @@ function ReviewStep({
             {calcErrors.map((item, index) => (
               <li key={index}>
                 <span className="font-medium">{item.employee}</span>: {item.message}
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+      {protectionShortfalls.length > 0 && (
+        <div className="rounded-xl border border-amber-200/80 bg-amber-50 px-4 py-3 text-sm text-amber-800 dark:border-amber-800/60 dark:bg-amber-950/40 dark:text-amber-300">
+          <p className="mb-1 flex items-center gap-2 font-semibold">
+            <AlertTriangle size={15} aria-hidden />
+            {t('wizard.review.protectionShortfallTitle', { count: protectionShortfalls.length })}
+          </p>
+          <p className="mb-1">{t('wizard.review.protectionShortfallHint')}</p>
+          <ul className="ml-6 list-disc space-y-0.5">
+            {protectionShortfalls.map(({ stub, amount }) => (
+              <li key={stub.id}>
+                <span className="font-medium">{stub.employee_name}</span>: {fmt(amount)}
               </li>
             ))}
           </ul>

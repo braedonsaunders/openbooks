@@ -577,6 +577,153 @@ export const REPORT_ENTITIES: ReportEntity[] = [
     ],
     defaultSort: { column: 'pay_date', direction: 'desc' },
   },
+  {
+    key: 'entitlement_balances',
+    label: 'Entitlement balances',
+    category: 'payroll',
+    description:
+      'One row per employee per pay bank — banked time, vacation, benefit recoup — with the resolved limit for that person and over/near-limit flags. The balance is SUM(entitlement_ledger); nothing else is ever the balance. Wage data: requires the payroll permission.',
+    // The balance is the ledger sum. The limit is resolved per employee with
+    // the SAME most-specific-wins precedence the wage resolver uses
+    // (employee > job title > trade > department > subsidiary > plan default,
+    // latest effective_from within a scope) — see engine/src/payroll-entitlements.ts.
+    from: `(select l.org_id, l.plan_id, l.employee_party_id,
+                   sum(l.amount) as balance,
+                   max(l.movement_date) as last_movement_date,
+                   count(*) as movement_count
+              from entitlement_ledger l
+             group by l.org_id, l.plan_id, l.employee_party_id) bal
+      JOIN entitlement_plans pln ON pln.id = bal.plan_id AND pln.org_id = bal.org_id
+      JOIN parties p ON p.id = bal.employee_party_id AND p.org_id = bal.org_id
+      LEFT JOIN employee_roles er ON er.party_id = p.id AND er.org_id = p.org_id
+      LEFT JOIN trades trd ON trd.id = er.trade_id
+      LEFT JOIN departments dep ON dep.id = er.department_id
+      LEFT JOIN accounts acc ON acc.id = pln.liability_account_id
+      LEFT JOIN LATERAL (
+        SELECT lim.max_balance, lim.notify_balance,
+               CASE WHEN lim.employee_party_id IS NOT NULL THEN 'employee'
+                    WHEN lim.job_title IS NOT NULL THEN 'job title'
+                    WHEN lim.trade_id IS NOT NULL THEN 'trade'
+                    WHEN lim.department_id IS NOT NULL THEN 'department'
+                    WHEN lim.subsidiary_id IS NOT NULL THEN 'subsidiary'
+                    ELSE 'plan default' END AS scope
+          FROM entitlement_plan_limits lim
+         WHERE lim.org_id = bal.org_id AND lim.plan_id = bal.plan_id AND lim.is_active
+           AND lim.effective_from <= CURRENT_DATE
+           AND (lim.effective_to IS NULL OR lim.effective_to >= CURRENT_DATE)
+           AND (lim.employee_party_id = bal.employee_party_id
+                OR (lim.job_title IS NOT NULL AND lower(lim.job_title) = lower(er.job_title))
+                OR (lim.trade_id IS NOT NULL AND lim.trade_id = er.trade_id)
+                OR (lim.department_id IS NOT NULL AND lim.department_id = er.department_id)
+                OR (lim.subsidiary_id IS NOT NULL AND lim.subsidiary_id = p.subsidiary_id)
+                OR num_nonnulls(lim.employee_party_id, lim.job_title, lim.trade_id,
+                                lim.department_id, lim.subsidiary_id) = 0)
+         ORDER BY CASE WHEN lim.employee_party_id IS NOT NULL THEN 0
+                       WHEN lim.job_title IS NOT NULL THEN 1
+                       WHEN lim.trade_id IS NOT NULL THEN 2
+                       WHEN lim.department_id IS NOT NULL THEN 3
+                       WHEN lim.subsidiary_id IS NOT NULL THEN 4 ELSE 5 END,
+                  lim.effective_from DESC
+         LIMIT 1
+      ) lim ON TRUE`,
+    orgColumn: 'bal.org_id',
+    requiredPermission: 'payroll.read',
+    columns: [
+      { key: 'employee', label: 'Employee', kind: 'text', expr: 'p.display_name' },
+      { key: 'plan', label: 'Plan', kind: 'text', expr: 'pln.name' },
+      { key: 'plan_code', label: 'Plan code', kind: 'text', expr: 'pln.code' },
+      {
+        key: 'unit', label: 'Unit', kind: 'enum', expr: 'pln.unit',
+        options: ['money', 'hours'],
+      },
+      {
+        key: 'direction', label: 'Direction', kind: 'enum', expr: 'pln.direction',
+        options: ['accrue', 'owe'],
+      },
+      { key: 'balance', label: 'Balance', kind: 'money', expr: 'bal.balance' },
+      { key: 'job_title', label: 'Job title', kind: 'text', expr: 'er.job_title' },
+      { key: 'trade', label: 'Trade', kind: 'text', expr: 'trd.name' },
+      { key: 'department', label: 'Department', kind: 'text', expr: 'dep.name' },
+      { key: 'max_balance', label: 'Limit', kind: 'money', expr: 'lim.max_balance' },
+      { key: 'notify_balance', label: 'Notify at', kind: 'money', expr: 'lim.notify_balance' },
+      { key: 'limit_scope', label: 'Limit set by', kind: 'text', expr: 'lim.scope' },
+      {
+        key: 'headroom', label: 'Headroom', kind: 'money',
+        expr: 'CASE WHEN lim.max_balance IS NULL THEN NULL ELSE lim.max_balance - bal.balance END',
+      },
+      {
+        key: 'limit_state', label: 'Limit state', kind: 'enum',
+        expr: `CASE WHEN lim.max_balance IS NOT NULL AND bal.balance > lim.max_balance THEN 'over'
+                    WHEN lim.notify_balance IS NOT NULL AND bal.balance >= lim.notify_balance THEN 'near'
+                    WHEN lim.max_balance IS NULL AND lim.notify_balance IS NULL THEN 'unlimited'
+                    ELSE 'ok' END`,
+        options: ['over', 'near', 'ok', 'unlimited'],
+      },
+      {
+        key: 'owed_to_employer', label: 'Owed to employer', kind: 'money',
+        expr: 'CASE WHEN bal.balance < 0 THEN -bal.balance ELSE 0 END',
+      },
+      { key: 'liability_account', label: 'Liability account', kind: 'text', expr: 'acc.name' },
+      { key: 'last_movement_date', label: 'Last movement', kind: 'date', expr: 'bal.last_movement_date' },
+      { key: 'movement_count', label: 'Movements', kind: 'number', expr: 'bal.movement_count' },
+      { key: 'plan_id', label: 'Plan (id)', kind: 'uuid', expr: 'bal.plan_id' },
+      { key: 'employee_id', label: 'Employee (id)', kind: 'uuid', expr: 'bal.employee_party_id' },
+    ],
+    defaultSort: { column: 'plan', direction: 'asc' },
+  },
+  {
+    key: 'entitlement_service_milestones',
+    label: 'Service milestones',
+    category: 'payroll',
+    description:
+      'Every service anniversary an entitlement tier acts on — benefits at 3 months, RRSP at a year, the vacation ladder at 5/10/15 years — with the date each employee reaches it. The source for the milestone letters. Requires the payroll permission.',
+    // The anniversary is computed in PostgreSQL so the report and
+    // milestonesReachedInPeriod can never disagree about a month-end hire.
+    from: `entitlement_service_tiers t
+      JOIN employee_roles er ON er.org_id = t.org_id AND er.hired_on IS NOT NULL AND er.is_active
+      JOIN parties p ON p.id = er.party_id AND p.org_id = er.org_id
+      LEFT JOIN entitlement_plans pln ON pln.id = t.plan_id
+      LEFT JOIN pay_components c ON c.id = t.component_id
+      LEFT JOIN departments dep ON dep.id = er.department_id`,
+    orgColumn: 't.org_id',
+    requiredPermission: 'payroll.read',
+    baseFilter: {
+      combinator: 'and',
+      rules: [{ field: 'tier_active', op: 'is_true' }],
+    },
+    columns: [
+      { key: 'employee', label: 'Employee', kind: 'text', expr: 'p.display_name' },
+      {
+        key: 'milestone_date', label: 'Milestone date', kind: 'date',
+        expr: '(er.hired_on + make_interval(months => t.after_months))::date',
+      },
+      { key: 'hired_on', label: 'Hired on', kind: 'date', expr: 'er.hired_on' },
+      { key: 'after_months', label: 'Service (months)', kind: 'number', expr: 't.after_months' },
+      {
+        key: 'after_years', label: 'Service (years)', kind: 'number',
+        expr: 'round(t.after_months / 12.0, 1)',
+      },
+      {
+        key: 'milestone', label: 'Milestone', kind: 'text',
+        expr: `coalesce(pln.name, c.name)`,
+      },
+      {
+        key: 'milestone_kind', label: 'Grants', kind: 'enum',
+        expr: `CASE WHEN t.plan_id IS NOT NULL THEN 'accrual rate' ELSE 'eligibility' END`,
+        options: ['accrual rate', 'eligibility'],
+      },
+      { key: 'accrual_value', label: 'New accrual value', kind: 'number', expr: 't.accrual_value' },
+      { key: 'eligible', label: 'Eligible', kind: 'enum', expr: 't.eligible' },
+      { key: 'job_title', label: 'Job title', kind: 'text', expr: 'er.job_title' },
+      { key: 'department', label: 'Department', kind: 'text', expr: 'dep.name' },
+      { key: 'terminated_on', label: 'Terminated on', kind: 'date', expr: 'er.terminated_on' },
+      { key: 'tier_active', label: 'Tier active', kind: 'enum', expr: 't.is_active' },
+      { key: 'employee_id', label: 'Employee (id)', kind: 'uuid', expr: 'er.party_id' },
+      { key: 'plan_id', label: 'Plan (id)', kind: 'uuid', expr: 't.plan_id' },
+      { key: 'component_id', label: 'Component (id)', kind: 'uuid', expr: 't.component_id' },
+    ],
+    defaultSort: { column: 'milestone_date', direction: 'asc' },
+  },
 ]
 
 export const REPORT_ENTITY_MAP: Record<string, ReportEntity> = Object.fromEntries(

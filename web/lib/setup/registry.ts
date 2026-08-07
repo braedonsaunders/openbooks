@@ -15,6 +15,8 @@
  * what makes the generic API safe — see api/admin/setup/[entity]/route.ts.
  */
 
+import { PAY_DERIVED_RULE_ENTITIES } from './payroll-derived-rules'
+
 export type SetupFieldKind =
   | 'text'
   | 'country'
@@ -69,6 +71,22 @@ export interface SetupField {
   hidden?: boolean
   /** Optional explanatory copy rendered directly beneath the control. */
   helpTextKey?: string
+  /** Heading the drawer groups this field under (message key). Consecutive
+   *  fields sharing a section render beneath one subheading. */
+  sectionKey?: string
+  /** Render only while another field in the same drawer holds one of these
+   *  values — a setting that cannot apply to the record being edited (payroll
+   *  protection on an earning) is noise, not a disabled control. The domain
+   *  rule is still enforced by the table's CHECK constraints; this only keeps
+   *  the form honest. */
+  showWhen?: { field: string; in: string[] }
+}
+
+/** Whether a conditional field applies to the values currently in the form. */
+export function setupFieldVisible(field: SetupField, values: Record<string, unknown>): boolean {
+  if (field.hidden) return false
+  if (!field.showWhen) return true
+  return field.showWhen.in.includes(String(values[field.showWhen.field] ?? ''))
 }
 
 export interface SetupColumn {
@@ -342,6 +360,61 @@ const PAY_TAX_TREATMENTS = [
   { value: 'pension_f', labelKey: 'options.payTaxTreatment.pensionF' },
   { value: 'union_dues', labelKey: 'options.payTaxTreatment.unionDues' },
   { value: 'alimony', labelKey: 'options.payTaxTreatment.alimony' },
+]
+
+// Protected-earnings base a garnishment/support order is measured against
+// (Ontario Wages Act net wages, US CCPA disposable earnings, or plain gross).
+const PAY_PROTECTION_BASES = [
+  { value: 'none', labelKey: 'options.payProtectionBase.none' },
+  { value: 'net_pay', labelKey: 'options.payProtectionBase.netPay' },
+  { value: 'disposable_earnings', labelKey: 'options.payProtectionBase.disposableEarnings' },
+  { value: 'gross', labelKey: 'options.payProtectionBase.gross' },
+]
+
+// The values of `protectionBase` that actually protect something — the
+// percentage and priority only mean anything once a base is chosen.
+const PAY_PROTECTED_BASES = ['net_pay', 'disposable_earnings', 'gross']
+
+// Payroll filing identities: a CRA payroll program account (RP), a US federal
+// EIN, or a state unemployment account (one per state, under an EIN).
+const PAYROLL_PROGRAM_TYPES = [
+  { value: 'ca_rp', labelKey: 'options.payrollProgramType.caRp' },
+  { value: 'us_ein', labelKey: 'options.payrollProgramType.usEin' },
+  { value: 'us_state_sui', labelKey: 'options.payrollProgramType.usStateSui' },
+]
+
+// CRA remittance frequency the account is registered under.
+const PAYROLL_REMITTER_TYPES = [
+  { value: 'regular', labelKey: 'options.payrollRemitterType.regular' },
+  { value: 'quarterly', labelKey: 'options.payrollRemitterType.quarterly' },
+  { value: 'accelerated_1', labelKey: 'options.payrollRemitterType.accelerated1' },
+  { value: 'accelerated_2', labelKey: 'options.payrollRemitterType.accelerated2' },
+]
+
+// Entitlement plans (pay banks). Balances are MONEY by default and displayed
+// in hours at the effective wage — an hours-denominated bank silently revalues
+// as wages rise. Values match schema/src/payroll-entitlements.ts.
+const ENTITLEMENT_UNITS = [
+  { value: 'money', labelKey: 'options.entitlementUnit.money' },
+  { value: 'hours', labelKey: 'options.entitlementUnit.hours' },
+]
+
+const ENTITLEMENT_DIRECTIONS = [
+  { value: 'accrue', labelKey: 'options.entitlementDirection.accrue' },
+  { value: 'owe', labelKey: 'options.entitlementDirection.owe' },
+]
+
+const ENTITLEMENT_ACCRUAL_METHODS = [
+  { value: 'percent_of_earnings', labelKey: 'options.entitlementAccrualMethod.percentOfEarnings' },
+  { value: 'per_hour_worked', labelKey: 'options.entitlementAccrualMethod.perHourWorked' },
+  { value: 'fixed_per_period', labelKey: 'options.entitlementAccrualMethod.fixedPerPeriod' },
+  { value: 'manual', labelKey: 'options.entitlementAccrualMethod.manual' },
+]
+
+const ENTITLEMENT_CAP_BEHAVIORS = [
+  { value: 'warn', labelKey: 'options.entitlementCapBehavior.warn' },
+  { value: 'block', labelKey: 'options.entitlementCapBehavior.block' },
+  { value: 'auto_payout', labelKey: 'options.entitlementCapBehavior.autoPayout' },
 ]
 
 // --- Subcontractor compliance ----------------------------------------------
@@ -1318,6 +1391,7 @@ export const SETUP_ENTITIES: SetupEntity[] = [
       { key: 'billMultiplier', kind: 'number' },
       { key: 'isBillableDefault', kind: 'boolean' },
       { key: 'showOnFieldTicket', kind: 'boolean' },
+      { key: 'excludeFromWages', kind: 'boolean' },
       { key: 'isActive', kind: 'badge-active' },
     ],
     fields: [
@@ -1339,6 +1413,46 @@ export const SETUP_ENTITIES: SetupEntity[] = [
       { key: 'billMultiplier', kind: 'decimal', keepDefault: true },
       { key: 'isBillableDefault', kind: 'boolean' },
       { key: 'showOnFieldTicket', kind: 'boolean' },
+      { key: 'excludeFromWages', kind: 'boolean', helpTextKey: 'fieldHelp.excludeFromWages' },
+      { key: 'isActive', kind: 'boolean' },
+    ],
+  },
+  {
+    // Payroll program / EIN / state-SUI accounts the employer files and remits
+    // under. Employees are assigned one on their payroll profile; remittance
+    // runs, PD7A worksheets, and the T4/W-2 returns all group by it.
+    key: 'payroll-filing-accounts',
+    table: 'payroll_filing_accounts',
+    groupKey: 'workforce',
+    featureKey: 'payroll',
+    rehomed: true, // subtab of the Payroll setup workspace
+    iconKey: 'landmark',
+    orgScoped: true,
+    actorCols: true,
+    naturalKey: 'account_number',
+    hasActive: true,
+    columns: [
+      { key: 'accountNumber', kind: 'code' },
+      { key: 'name', kind: 'text' },
+      { key: 'country', kind: 'badge', options: PAY_COMPONENT_COUNTRIES },
+      { key: 'programType', kind: 'badge', options: PAYROLL_PROGRAM_TYPES },
+      { key: 'remitterType', kind: 'badge', options: PAYROLL_REMITTER_TYPES },
+      { key: 'stateCode', kind: 'text' },
+      { key: 'subsidiaryId', kind: 'ref', ref: 'subsidiaries' },
+      { key: 'isDefault', kind: 'boolean' },
+      { key: 'isActive', kind: 'badge-active' },
+    ],
+    filters: [{ key: 'country', options: PAY_COMPONENT_COUNTRIES }],
+    fields: [
+      { key: 'accountNumber', kind: 'text', required: true, lockedOnEdit: true },
+      { key: 'name', kind: 'text', required: true },
+      { key: 'country', kind: 'select', required: true, options: PAY_COMPONENT_COUNTRIES },
+      { key: 'programType', kind: 'select', required: true, options: PAYROLL_PROGRAM_TYPES },
+      { key: 'remitterType', kind: 'select', keepDefault: true, defaultValue: 'regular', options: PAYROLL_REMITTER_TYPES },
+      // Required for, and only for, us_state_sui (a DB check enforces it).
+      { key: 'stateCode', kind: 'text', helpTextKey: 'fieldHelp.stateCode' },
+      { key: 'subsidiaryId', kind: 'ref', ref: 'subsidiaries' },
+      { key: 'isDefault', kind: 'boolean', helpTextKey: 'fieldHelp.filingAccountDefault' },
       { key: 'isActive', kind: 'boolean' },
     ],
   },
@@ -1414,6 +1528,50 @@ export const SETUP_ENTITIES: SetupEntity[] = [
       { key: 'vacationable', kind: 'boolean', defaultValue: true },
       { key: 'nonPeriodic', kind: 'boolean' },
       { key: 'taxTreatment', kind: 'select', keepDefault: true, defaultValue: 'none', options: PAY_TAX_TREATMENTS },
+      // Deduction protection. Only money leaving the employee can be protected,
+      // so the group hides on an earning or an employer contribution (the
+      // pay_components CHECK constraint enforces the same rule).
+      {
+        key: 'protectionBase', kind: 'select', keepDefault: true, defaultValue: 'none',
+        options: PAY_PROTECTION_BASES, sectionKey: 'sections.deductionProtection',
+        showWhen: { field: 'kind', in: ['deduction'] },
+        helpTextKey: 'fieldHelp.protectionBase',
+      },
+      {
+        key: 'protectionMaxPercent', kind: 'percent', sectionKey: 'sections.deductionProtection',
+        showWhen: { field: 'protectionBase', in: PAY_PROTECTED_BASES },
+        helpTextKey: 'fieldHelp.protectionMaxPercent',
+      },
+      {
+        key: 'protectionPriority', kind: 'integer', keepDefault: true, defaultValue: 100,
+        sectionKey: 'sections.deductionProtection',
+        showWhen: { field: 'protectionBase', in: PAY_PROTECTED_BASES },
+        helpTextKey: 'fieldHelp.protectionPriority',
+      },
+      // Pool membership is a property of earnings AND deductions: it is what
+      // keeps an allowance or a benefit outside the base an order is measured
+      // against, without a line of code knowing what a coverall is.
+      {
+        key: 'includeInDisposableEarnings', kind: 'boolean', defaultValue: true,
+        sectionKey: 'sections.deductionProtection',
+        showWhen: { field: 'kind', in: ['earning', 'deduction'] },
+        helpTextKey: 'fieldHelp.includeInDisposableEarnings',
+      },
+      // Basis caps: the hours cap only means something once the amount is
+      // driven by hours; the money caps apply to every basis.
+      {
+        key: 'basisCapHoursPerPeriod', kind: 'decimal', sectionKey: 'sections.basisCaps',
+        showWhen: { field: 'basis', in: ['per_hour', 'percent_of_gross'] },
+        helpTextKey: 'fieldHelp.basisCapHoursPerPeriod',
+      },
+      {
+        key: 'basisCapAmountPerPeriod', kind: 'decimal', sectionKey: 'sections.basisCaps',
+        helpTextKey: 'fieldHelp.basisCapAmountPerPeriod',
+      },
+      {
+        key: 'basisCapAmountPerYear', kind: 'decimal', sectionKey: 'sections.basisCaps',
+        helpTextKey: 'fieldHelp.basisCapAmountPerYear',
+      },
       { key: 'expenseAccountId', kind: 'ref', ref: 'accounts' },
       { key: 'liabilityAccountId', kind: 'ref', ref: 'accounts' },
       { key: 'remittancePartyId', kind: 'ref', ref: 'vendors' },
@@ -1449,6 +1607,146 @@ export const SETUP_ENTITIES: SetupEntity[] = [
       { key: 'isActive', kind: 'boolean' },
     ],
   },
+  {
+    // Pay banks: banked overtime, vacation, sick banks, and benefit recoup
+    // while an employee is on leave (direction 'owe' — a NEGATIVE balance
+    // repaid over time). The balance is SUM(entitlement_ledger); there is no
+    // balance column anywhere and this surface never writes one.
+    key: 'entitlement-plans',
+    table: 'entitlement_plans',
+    singularTitleKey: 'entities.entitlement-plans.singular',
+    groupKey: 'workforce',
+    featureKey: 'payroll',
+    rehomed: true, // subtab of the Payroll setup workspace
+    iconKey: 'coins',
+    orgScoped: true,
+    actorCols: true,
+    naturalKey: 'code',
+    hasActive: true,
+    columns: [
+      { key: 'code', kind: 'code' },
+      { key: 'name', kind: 'text' },
+      { key: 'direction', kind: 'badge', options: ENTITLEMENT_DIRECTIONS },
+      { key: 'unit', kind: 'badge', options: ENTITLEMENT_UNITS },
+      { key: 'accrualMethod', kind: 'badge', options: ENTITLEMENT_ACCRUAL_METHODS },
+      { key: 'accrualValue', kind: 'number' },
+      { key: 'capBehavior', kind: 'badge', options: ENTITLEMENT_CAP_BEHAVIORS },
+      { key: 'liabilityAccountId', kind: 'ref', ref: 'accounts' },
+      { key: 'isActive', kind: 'badge-active' },
+    ],
+    filters: [
+      { key: 'direction', options: ENTITLEMENT_DIRECTIONS },
+      { key: 'unit', options: ENTITLEMENT_UNITS },
+    ],
+    fields: [
+      { key: 'code', kind: 'text', required: true, lockedOnEdit: true },
+      { key: 'name', kind: 'text', required: true },
+      {
+        key: 'unit', kind: 'select', required: true, keepDefault: true,
+        defaultValue: 'money', options: ENTITLEMENT_UNITS,
+        helpTextKey: 'fieldHelp.entitlementUnit',
+      },
+      {
+        key: 'direction', kind: 'select', required: true, keepDefault: true,
+        defaultValue: 'accrue', options: ENTITLEMENT_DIRECTIONS,
+        helpTextKey: 'fieldHelp.entitlementDirection',
+      },
+      {
+        key: 'accrualMethod', kind: 'select', required: true, keepDefault: true,
+        defaultValue: 'manual', options: ENTITLEMENT_ACCRUAL_METHODS,
+      },
+      { key: 'accrualValue', kind: 'decimal', helpTextKey: 'fieldHelp.entitlementAccrualValue' },
+      { key: 'accrualComponentId', kind: 'ref', ref: 'pay-components' },
+      { key: 'payoutComponentId', kind: 'ref', ref: 'pay-components', helpTextKey: 'fieldHelp.entitlementPayoutComponent' },
+      { key: 'liabilityAccountId', kind: 'ref', ref: 'accounts', helpTextKey: 'fieldHelp.entitlementLiabilityAccount' },
+      {
+        key: 'capBehavior', kind: 'select', keepDefault: true,
+        defaultValue: 'warn', options: ENTITLEMENT_CAP_BEHAVIORS,
+        helpTextKey: 'fieldHelp.entitlementCapBehavior',
+      },
+      { key: 'isActive', kind: 'boolean' },
+    ],
+  },
+  {
+    // The scoped ceilings. "Trades $4,000 / Foremen $5,000 / Supers $6,000" is
+    // three rows here, resolved most-specific-wins exactly like a wage on
+    // labor_cost_rates (employee > job title > trade > department >
+    // subsidiary > plan default, latest effective_from within a scope).
+    key: 'entitlement-plan-limits',
+    table: 'entitlement_plan_limits',
+    singularTitleKey: 'entities.entitlement-plan-limits.singular',
+    groupKey: 'workforce',
+    featureKey: 'payroll',
+    rehomed: true, // subtab of the Payroll setup workspace
+    iconKey: 'gauge',
+    orgScoped: true,
+    actorCols: true,
+    orderBy: 'effective_from desc',
+    hasActive: true,
+    columns: [
+      { key: 'planId', kind: 'ref', ref: 'entitlement-plans' },
+      { key: 'employeePartyId', kind: 'ref', ref: 'employees' },
+      { key: 'jobTitle', kind: 'text' },
+      { key: 'tradeId', kind: 'ref', ref: 'trades' },
+      { key: 'departmentId', kind: 'ref', ref: 'departments' },
+      { key: 'maxBalance', kind: 'number' },
+      { key: 'notifyBalance', kind: 'number' },
+      { key: 'effectiveFrom', kind: 'date' },
+      { key: 'effectiveTo', kind: 'date' },
+      { key: 'isActive', kind: 'badge-active' },
+    ],
+    fields: [
+      { key: 'planId', kind: 'ref', ref: 'entitlement-plans', required: true },
+      // Exactly one scope key, or none for the plan-wide default (enforced by
+      // the entitlement_plan_limits_one_scope check constraint).
+      { key: 'employeePartyId', kind: 'ref', ref: 'employees', helpTextKey: 'fieldHelp.entitlementScope' },
+      { key: 'jobTitle', kind: 'text' },
+      { key: 'tradeId', kind: 'ref', ref: 'trades' },
+      { key: 'departmentId', kind: 'ref', ref: 'departments' },
+      { key: 'subsidiaryId', kind: 'ref', ref: 'subsidiaries' },
+      { key: 'maxBalance', kind: 'decimal', helpTextKey: 'fieldHelp.entitlementMaxBalance' },
+      { key: 'notifyBalance', kind: 'decimal', helpTextKey: 'fieldHelp.entitlementNotifyBalance' },
+      { key: 'effectiveFrom', kind: 'date', required: true },
+      { key: 'effectiveTo', kind: 'date' },
+      { key: 'isActive', kind: 'boolean' },
+    ],
+  },
+  {
+    // Service-based schedules: benefits at 3 months, RRSP at a year, the
+    // vacation ladder at 5/10/15/20/25/30 years. A tier targets EXACTLY one of
+    // a plan (raising its accrual value) or a pay component (eligibility on).
+    key: 'entitlement-service-tiers',
+    table: 'entitlement_service_tiers',
+    singularTitleKey: 'entities.entitlement-service-tiers.singular',
+    groupKey: 'workforce',
+    featureKey: 'payroll',
+    rehomed: true, // subtab of the Payroll setup workspace
+    iconKey: 'calendar',
+    orgScoped: true,
+    actorCols: true,
+    orderBy: 'after_months',
+    hasActive: true,
+    columns: [
+      { key: 'afterMonths', kind: 'number' },
+      { key: 'planId', kind: 'ref', ref: 'entitlement-plans' },
+      { key: 'componentId', kind: 'ref', ref: 'pay-components' },
+      { key: 'accrualValue', kind: 'number' },
+      { key: 'eligible', kind: 'boolean' },
+      { key: 'isActive', kind: 'badge-active' },
+    ],
+    fields: [
+      { key: 'afterMonths', kind: 'integer', required: true, helpTextKey: 'fieldHelp.entitlementAfterMonths' },
+      { key: 'planId', kind: 'ref', ref: 'entitlement-plans', helpTextKey: 'fieldHelp.entitlementTierTarget' },
+      { key: 'componentId', kind: 'ref', ref: 'pay-components' },
+      { key: 'accrualValue', kind: 'decimal' },
+      { key: 'eligible', kind: 'boolean' },
+      { key: 'isActive', kind: 'boolean' },
+    ],
+  },
+  // Derived earnings rules (+ the trades list their employee filter picks
+  // from). Declared in ./payroll-derived-rules.ts so the money-rule editor
+  // could be reviewed as one change; ordinary registry entities otherwise.
+  ...PAY_DERIVED_RULE_ENTITIES,
   {
     key: 'worker-comp-groups',
     table: 'worker_comp_groups',

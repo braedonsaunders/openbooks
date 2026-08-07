@@ -9,11 +9,11 @@ export const dynamic = 'force-dynamic'
 const DATE = /^\d{4}-\d{2}-\d{2}$/
 
 /**
- * Payroll remittances — accrued withholding by destination for a period
- * (GET), and one-click materialization of a destination's vendor bill (POST
- * { action: 'create-bill', partyId, from, to }). The bill is a normal draft
- * vendor_bill debiting the liability accounts; AP review/post/pay finishes
- * the job.
+ * Payroll remittances — accrued withholding by destination AND payroll filing
+ * account for a period (GET), and one-click materialization of a group's
+ * vendor bill (POST { action: 'create-bill', partyId, filingAccountId, from,
+ * to }). The bill is a normal draft vendor_bill debiting the liability
+ * accounts; AP review/post/pay finishes the job.
  */
 export async function GET(req: Request) {
   const gate = await guardFeaturePermission('payroll.read', 'payroll')
@@ -34,11 +34,17 @@ export async function POST(req: Request) {
   const body = await req.json().catch(() => ({}))
   if (body.action !== 'create-bill') return NextResponse.json({ error: 'unknown action' }, { status: 400 })
   const { partyId, from, to } = body
-  if (!isUuid(partyId) || !DATE.test(String(from)) || !DATE.test(String(to))) {
+  const filingAccountId = body.filingAccountId ?? null
+  if (
+    !isUuid(partyId) || !DATE.test(String(from)) || !DATE.test(String(to))
+    || (filingAccountId !== null && !isUuid(filingAccountId))
+  ) {
     return NextResponse.json({ error: 'invalid request' }, { status: 422 })
   }
   try {
-    const bill = await createRemittanceBill(gate.user.orgId, gate.user.id, { partyId, from, to })
+    const bill = await createRemittanceBill(gate.user.orgId, gate.user.id, {
+      partyId, from, to, filingAccountId,
+    })
     return NextResponse.json({ ok: true, ...bill })
   } catch (e) {
     if (e instanceof PayrollError) return NextResponse.json({ error: e.message }, { status: 422 })

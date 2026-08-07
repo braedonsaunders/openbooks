@@ -1,11 +1,46 @@
 import { sql } from "drizzle-orm";
 import { db } from "./db.ts";
-import { add, cmp, mulDecimal, mulPercent, mulRatio, neg, roundMoney, sum, toUnits } from "./money.ts";
+import {
+  add, cmp, fromUnits, mulDecimal, mulPercent, mulRatio, neg, roundDiv, roundMoney, sum, toUnits,
+} from "./money.ts";
 import { calculateT4127, type T4127Input } from "./payroll/canada/t4127.ts";
 import type { Province } from "./payroll/canada/rates.ts";
 import { calculatePub15T } from "./payroll/us/pub15t.ts";
 import { NO_WITHHOLDING_STATES, US_STATES } from "./payroll/us/rates.ts";
+import {
+  packStatutoryComponents,
+  statutoryAssessment,
+  type PayrollAssessedOn,
+} from "./payroll/packs.ts";
 import { laborCostingSettings } from "./labor-costing.ts";
+import {
+  loadActiveDerivedRules,
+  resolveDerivedEarnings,
+} from "./payroll-derived-earnings.ts";
+import {
+  entitlementBalances,
+  entitlementPlans,
+  planMovementsForStub,
+  recordEntitlementMovements,
+  vacationPlanOf,
+  type EntitlementPlan,
+  type EntitlementWarning,
+} from "./payroll-entitlements.ts";
+import {
+  applyBasisCaps,
+  applyDeductionProtection,
+  assertEarningsAssessedStable,
+  dropIncomeAssessedLines,
+  protectedBase,
+  protectionConverged,
+  protectionNeedsIteration,
+  PROTECTION_MAX_PASSES,
+  settleProtectionOscillation,
+  totalShortfall,
+  type DeductionShortfall,
+  type EarningsAssessedLine,
+  type ProtectionBase,
+} from "./payroll-limits.ts";
 
 /**
  * Pay run pipeline: create → calculate → commit → (standard document post).
@@ -113,6 +148,63 @@ export async function payrollSettings(orgId: string): Promise<PayrollSettings> {
 
 export class PayrollError extends Error {}
 
+/**
+ * Exact `amount ÷ divisor`, rounded ONCE to `decimalPlaces`.
+ *
+ * Payroll divides money constantly — a salary by its periods, an annual rate
+ * by its annual hours — and a reciprocal taken in binary floating point does
+ * not survive the trip: `(1 / 1800).toFixed(10)` produces a factor whose
+ * product with 125,000 is 69.4445 where the exact quotient is 69.4444, and
+ * because that number IS the stored four-decimal hourly wage the error is
+ * multiplied by every hour on every stub, always in the same direction. This
+ * stays in BigInt from end to end (money.ts `roundDiv`) and rounds exactly
+ * once, so no intermediate rounding can carry a half-cent across a boundary
+ * either.
+ */
+export function divideMoney(amount: string, divisor: string, decimalPlaces = 4): string {
+  if (!Number.isInteger(decimalPlaces) || decimalPlaces < 0 || decimalPlaces > 4) {
+    throw new PayrollError("decimalPlaces must be an integer from 0 through 4");
+  }
+  const divisorUnits = toUnits(divisor);
+  if (divisorUnits <= 0n) throw new PayrollError(`cannot divide pay by ${divisor}`);
+  const quantum = 10n ** BigInt(4 - decimalPlaces);
+  return fromUnits(roundDiv(toUnits(amount) * 10_000n, divisorUnits * quantum) * quantum);
+}
+
+/**
+ * Split `amount` across weighted buckets so that the parts sum EXACTLY to it —
+ * the last bucket absorbs the rounding remainder.
+ *
+ * Returns an empty array when the weights cannot carry an allocation (no
+ * buckets, nothing to weight by, or a negative weight), which the callers read
+ * as "emit one unsplit line". Allocating each part independently instead makes
+ * a job-costed employer line disagree with the identically-computed employee
+ * line by a cent purely because of how the hours happened to fall across jobs.
+ */
+function allocateProportionally<T>(
+  amount: string,
+  buckets: readonly { weight: string; target: T }[],
+): { amount: string; target: T }[] {
+  if (buckets.length === 0) return [];
+  let totalUnits = 0n;
+  for (const bucket of buckets) {
+    const units = toUnits(bucket.weight);
+    if (units < 0n) return [];
+    totalUnits += units;
+  }
+  if (totalUnits <= 0n) return [];
+  const allocations: { amount: string; target: T }[] = [];
+  let allocated = "0";
+  for (const [index, bucket] of buckets.entries()) {
+    const share = index === buckets.length - 1
+      ? add(amount, neg(allocated))
+      : roundMoney(mulRatio(amount, toUnits(bucket.weight), totalUnits), 2);
+    allocated = add(allocated, share);
+    allocations.push({ amount: share, target: bucket.target });
+  }
+  return allocations;
+}
+
 interface SeedComponent {
   code: string; name: string; kind: string; systemKey: string | null;
   basis?: string; taxable?: boolean; pensionable?: boolean; insurable?: boolean;
@@ -129,38 +221,27 @@ const BASELINE_COMPONENTS: SeedComponent[] = [
   { code: "VACPAY", name: "Vacation pay", kind: "earning", systemKey: "vacation_payout", vacationable: false, sequence: 40 },
 ];
 
-const CA_COMPONENTS: SeedComponent[] = [
-  { code: "TAX", name: "Income tax", kind: "deduction", systemKey: "income_tax", sequence: 110, country: "CA" },
-  { code: "CPP", name: "CPP", kind: "deduction", systemKey: "cpp", sequence: 120, country: "CA" },
-  { code: "CPP2", name: "CPP (second additional)", kind: "deduction", systemKey: "cpp2", sequence: 130, country: "CA" },
-  { code: "EI", name: "EI", kind: "deduction", systemKey: "ei", sequence: 140, country: "CA" },
-  { code: "QPIP", name: "QPIP", kind: "deduction", systemKey: "qpip", sequence: 150, country: "CA" },
-  { code: "CPP-ER", name: "CPP (employer)", kind: "employer_contribution", systemKey: "cpp", sequence: 210, country: "CA" },
-  { code: "EI-ER", name: "EI (employer)", kind: "employer_contribution", systemKey: "ei", sequence: 220, country: "CA" },
-  { code: "QPIP-ER", name: "QPIP (employer)", kind: "employer_contribution", systemKey: "qpip", sequence: 230, country: "CA" },
-  { code: "VAC", name: "Vacation accrual", kind: "employer_contribution", systemKey: "vacation_accrual", sequence: 240, country: "CA" },
-  { code: "WCB", name: "Workers' compensation (WCB/WSIB)", kind: "employer_contribution", systemKey: "wcb", sequence: 260, country: "CA" },
-  { code: "EHT", name: "Employer Health Tax", kind: "employer_contribution", systemKey: "eht", sequence: 270, country: "CA" },
-];
-
-// US statutory set. `pensionable` generalizes to FICA-taxable and `insurable`
-// to FUTA/SUI-taxable for US employees (see calculateStub).
-const US_COMPONENTS: SeedComponent[] = [
-  { code: "FIT", name: "Federal income tax", kind: "deduction", systemKey: "fit", sequence: 110, country: "US" },
-  { code: "SS", name: "Social Security", kind: "deduction", systemKey: "ss", sequence: 120, country: "US" },
-  { code: "MED", name: "Medicare", kind: "deduction", systemKey: "medicare", sequence: 130, country: "US" },
-  { code: "MED2", name: "Additional Medicare", kind: "deduction", systemKey: "medicare_addl", sequence: 135, country: "US" },
-  { code: "SS-ER", name: "Social Security (employer)", kind: "employer_contribution", systemKey: "ss", sequence: 210, country: "US" },
-  { code: "MED-ER", name: "Medicare (employer)", kind: "employer_contribution", systemKey: "medicare", sequence: 220, country: "US" },
-  { code: "FUTA", name: "Federal unemployment (FUTA)", kind: "employer_contribution", systemKey: "futa", sequence: 230, country: "US" },
-  { code: "SUTA", name: "State unemployment (SUI)", kind: "employer_contribution", systemKey: "suta", sequence: 250, country: "US" },
-];
+/**
+ * The statutory rows ARE the country pack's declaration
+ * (engine/src/payroll/packs.ts): one place declares a jurisdiction's statutory
+ * component set, its system keys, and what each one is assessed on, and this
+ * provisions exactly that. Adding a levy to a pack therefore seeds it and
+ * classifies it in the same edit — it cannot be seeded unclassified.
+ *
+ * For US employees the earning flags generalize: `pensionable` is
+ * FICA-taxable and `insurable` is FUTA/SUI-taxable (see calculateStub).
+ */
+const statutoryComponents = (country: "CA" | "US"): SeedComponent[] =>
+  packStatutoryComponents(country).map((component) => ({
+    code: component.code, name: component.name, kind: component.kind,
+    systemKey: component.systemKey, sequence: component.sequence, country,
+  }));
 
 /** Statutory + baseline components for a country pack; idempotent. */
 export async function seedPayrollComponents(
   orgId: string, actorId: string | null, country: "CA" | "US" = "CA",
 ): Promise<void> {
-  const rows = [...BASELINE_COMPONENTS, ...(country === "US" ? US_COMPONENTS : CA_COMPONENTS)];
+  const rows = [...BASELINE_COMPONENTS, ...statutoryComponents(country)];
   for (const c of rows) {
     await db.execute(sql`
       insert into pay_components (org_id, code, name, kind, system_key, country, basis, taxable,
@@ -173,6 +254,106 @@ export async function seedPayrollComponents(
       on conflict (org_id, code) do nothing
     `);
   }
+  await seedVacationEntitlementPlan(orgId, actorId, country);
+}
+
+/**
+ * The Vacation entitlement plan, provisioned beside the components it drives.
+ *
+ * Vacation accrual is an ENTITLEMENT PLAN, not a component: the plan engine
+ * owns the accrual, the bank, the caps and the payout
+ * (engine/src/payroll-entitlements.ts). The pack seeds the vacation_accrual /
+ * vacation_payout components, so without this the components existed and the
+ * plan did not, and a fresh org silently accrued nothing at all until somebody
+ * ran scripts/migrate-vacation-to-entitlements.ts. Provisioning belongs beside
+ * the components, not in a one-off script.
+ *
+ * Seeded only where the country pack actually declares a vacation accrual —
+ * the US pack has no such levy, so a US-only org gets no plan and, if one of
+ * its employees is nonetheless configured to accrue, the pay run says so out
+ * loud (see `assertVacationPlanResolved`).
+ *
+ * Idempotent, and safe on a tenant that already migrated: an existing plan
+ * carrying the binding is left completely alone, and a legacy "VAC" plan is
+ * adopted by having the binding stamped onto it rather than being duplicated.
+ */
+async function seedVacationEntitlementPlan(
+  orgId: string, actorId: string | null, country: "CA" | "US",
+): Promise<void> {
+  const declaresVacation = packStatutoryComponents(country)
+    .some((component) => component.systemKey === "vacation_accrual");
+  if (!declaresVacation) return;
+
+  // The plan's BASE rate. Per-employee rates keep their one home on the
+  // payroll profile (employee_payroll_profiles.vacation_percent) and service
+  // tiers raise them; this is only what an employee with neither falls back
+  // to. Same derivation the migration script uses, so a migrated tenant and a
+  // freshly seeded one land on the same number.
+  const modal = (await db.execute(sql`
+    select vacation_percent::text as percent
+      from employee_payroll_profiles
+     where org_id = ${orgId} and vacation_percent is not null and vacation_percent > 0
+     group by vacation_percent
+     order by count(*) desc, vacation_percent asc
+     limit 1
+  `)) as unknown as { rows: { percent: string }[] };
+  const accrualValue = roundMoney(modal.rows[0]?.percent ?? "4", 4);
+
+  await db.execute(sql`
+    insert into entitlement_plans (org_id, code, system_key, name, unit, direction, accrual_method,
+                                   accrual_value, accrual_component_id, payout_component_id,
+                                   liability_account_id, cap_behavior, is_active,
+                                   created_by, updated_by)
+    select ${orgId}, 'VAC', 'vacation', 'Vacation', 'money', 'accrue', 'percent_of_earnings',
+           ${accrualValue},
+           (select id from pay_components
+             where org_id = ${orgId} and system_key = 'vacation_accrual' limit 1),
+           (select id from pay_components
+             where org_id = ${orgId} and system_key = 'vacation_payout' limit 1),
+           (select (settings#>>'{payroll,vacationPayableAccountId}')::uuid
+              from orgs where id = ${orgId}),
+           'warn', true, ${actorId}, ${actorId}
+     where not exists (
+       select 1 from entitlement_plans where org_id = ${orgId} and system_key = 'vacation'
+     )
+    on conflict (org_id, code) do update
+       set system_key = 'vacation',
+           accrual_component_id = coalesce(entitlement_plans.accrual_component_id,
+                                           excluded.accrual_component_id),
+           payout_component_id = coalesce(entitlement_plans.payout_component_id,
+                                          excluded.payout_component_id),
+           liability_account_id = coalesce(entitlement_plans.liability_account_id,
+                                           excluded.liability_account_id),
+           updated_by = ${actorId}, updated_at = now()
+  `);
+}
+
+/**
+ * An employee configured to BANK vacation must have a bank to put it in.
+ *
+ * The failure this exists to make impossible: a tenant whose Vacation plan is
+ * missing (never migrated) or renamed accrued nothing at all, silently — 4% of
+ * every employee's gross, every period, with the liability understated and no
+ * error anywhere in the run, the readiness check, or the stub. A missing
+ * accrual is money the employee is owed; it is never a no-op.
+ *
+ * Only the accrue case throws: `pay_each_period` and a final pay settle the
+ * vacation in cash and need no plan at all.
+ */
+function assertVacationPlanResolved(
+  emp: Record<string, string | null>,
+  vacationPlan: EntitlementPlan | null,
+  terminationRun: boolean,
+): void {
+  if (vacationPlan) return;
+  const percent = emp.vacation_percent;
+  if (!percent || cmp(percent, "0") <= 0) return;
+  if (terminationRun || emp.vacation_method === "pay_each_period") return;
+  throw new PayrollError(
+    `${emp.display_name ?? emp.party_id} accrues ${percent}% vacation, but this organization `
+    + "has no vacation entitlement plan to accrue it into — create one in Payroll setup → "
+    + "Entitlement plans (or set the employee's vacation method to pay each period)",
+  );
 }
 
 interface ScheduleRow {
@@ -244,11 +425,23 @@ const RUN_TYPE_MEMO: Record<PayRunType, string> = {
   termination: "Final pay run",
 };
 
+/**
+ * The roster a run pays, as the caller names it.
+ *
+ * REQUIRED on a termination run. A final pay run pays out and ZEROES every
+ * accrued bank, so an unscoped one does that to the whole schedule: one person
+ * quits, the operator opens a final-pay run, and every other employee receives
+ * a second full period of salary and has their vacation bank drained. The
+ * scope is persisted as `pay_run_adjustments` exclusion rows for everyone
+ * else, which is the scope machinery the run already has.
+ */
 export async function createPayRun(input: {
   orgId: string; actorId: string; payScheduleId: string;
   periodStart?: string; periodEnd?: string; payDate?: string;
   /** Regular follows the schedule; bonus/termination are off-cycle. */
   runType?: PayRunType;
+  /** Employees this run pays; required for `termination`, ignored otherwise. */
+  employeePartyIds?: readonly string[];
 }): Promise<{ documentId: string; documentNumber: string }> {
   const { orgId, actorId } = input;
   return await db.transaction(async (tx) => {
@@ -286,7 +479,10 @@ export async function createPayRun(input: {
          where r.org_id = ${orgId} and r.pay_schedule_id = ${schedule.id}
            and r.run_type = 'regular'
            and r.period_start <= ${periodEnd} and r.period_end >= ${periodStart}
-           and d.status <> 'void'
+           -- 'voided', not 'void' — the documents status enum
+           -- (schema/src/documents.ts). Matching the wrong spelling made a
+           -- VOIDED regular run go on blocking its own replacement.
+           and d.status <> 'voided'
          limit 1
       `)) as unknown as { rows: { document_number: string }[] };
       if (overlap.rows[0]) {
@@ -325,6 +521,33 @@ export async function createPayRun(input: {
         : "no active root subsidiary");
     }
 
+    // Guard 3 — a final pay run must NAME the employees it pays. Resolved
+    // before anything is written so an unscoped one cannot exist at all.
+    const scopedEmployeeIds = [...new Set(input.employeePartyIds ?? [])];
+    if (runType === "termination") {
+      if (scopedEmployeeIds.length === 0) {
+        throw new PayrollError(
+          "a final pay run must name the employees it pays — it pays out and clears "
+          + "every accrued bank, so it may never run against the whole schedule",
+        );
+      }
+      const onSchedule = (await tx.execute(sql`
+        select prof.employee_party_id
+          from employee_payroll_profiles prof
+          join parties p on p.id = prof.employee_party_id and p.org_id = prof.org_id
+         where prof.org_id = ${orgId} and prof.pay_schedule_id = ${schedule.id} and prof.is_active
+           and (${schedule.subsidiary_id}::uuid is null
+                or p.subsidiary_id = ${schedule.subsidiary_id}::uuid)
+      `)) as unknown as { rows: { employee_party_id: string }[] };
+      const roster = new Set(onSchedule.rows.map((row) => row.employee_party_id));
+      const strangers = scopedEmployeeIds.filter((id) => !roster.has(id));
+      if (strangers.length > 0) {
+        throw new PayrollError(
+          `${strangers.length} named employee(s) are not on this pay schedule`,
+        );
+      }
+    }
+
     const seq = (await tx.execute(sql`
       insert into number_sequences (org_id, document_kind, subsidiary_id, prefix)
       values (${orgId}, 'pay_run', null, 'PAY-')
@@ -349,6 +572,24 @@ export async function createPayRun(input: {
       values (${documentId}, ${orgId}, ${schedule.id}, ${periodStart}, ${periodEnd},
               ${payDate}, ${taxYear}, ${runType}, ${actorId}, ${actorId})
     `);
+
+    // The scope, written as exclusions for everyone the run does NOT pay —
+    // the mechanism `calculatePayRun` already honours, and one the operator
+    // can see and adjust in the wizard like any other run adjustment.
+    if (runType === "termination") {
+      await tx.execute(sql`
+        insert into pay_run_adjustments (org_id, pay_run_document_id, employee_party_id,
+                                         adjustment_type, note, created_by, updated_by)
+        select ${orgId}, ${documentId}, prof.employee_party_id, 'exclude',
+               'Not in the final pay run''s scope', ${actorId}, ${actorId}
+          from employee_payroll_profiles prof
+          join parties p on p.id = prof.employee_party_id and p.org_id = prof.org_id
+         where prof.org_id = ${orgId} and prof.pay_schedule_id = ${schedule.id} and prof.is_active
+           and (${schedule.subsidiary_id}::uuid is null
+                or p.subsidiary_id = ${schedule.subsidiary_id}::uuid)
+           and prof.employee_party_id <> all(${`{${scopedEmployeeIds.join(",")}}`}::uuid[])
+      `);
+    }
     return { documentId, documentNumber: number };
   });
 }
@@ -360,6 +601,8 @@ interface StubComputation {
   net: string;
   employerCost: string;
   errors: string[];
+  /** Non-fatal entitlement notices (a bank at or over its scoped limit). */
+  warnings: EntitlementWarning[];
 }
 
 interface YtdRow {
@@ -438,9 +681,26 @@ async function usEmployeeYtd(
   return r.rows[0]!;
 }
 
-/** Employee-scope pay rate straight from labor_cost_rates (one-table doctrine). */
+/**
+ * Employee-scope pay rate straight from labor_cost_rates (one-table doctrine),
+ * CONVERTED to the currency the run pays in.
+ *
+ * labor_cost_rates carries its own `currency`; the pay run is denominated in
+ * its subsidiary's functional currency. Returning the raw rate and ignoring
+ * the difference is not a rounding problem, it is a wrong cheque: a CAD 60.00
+ * wage row paid by a USD entity paid USD 60.00 an hour — 37% over — and
+ * nothing detected it, because both GL legs used the same inflated number and
+ * the projection balanced perfectly.
+ *
+ * A missing spot rate THROWS, exactly as `recomputeCostRates` does for the
+ * costing side of the same wage. Paying an unconverted wage silently is the
+ * failure mode; refusing to calculate until somebody enters the rate is the
+ * correct one.
+ */
 async function resolvePayRate(
   tx: Pick<typeof db, "execute">, orgId: string, employeePartyId: string, onDate: string,
+  /** Functional currency of the run (the run document's currency). */
+  payCurrency: string | null,
 ): Promise<{ basis: "hour" | "year"; rate: string; annualHours: string; currency: string } | null> {
   const r = (await tx.execute(sql`
     select basis, rate, annual_hours, currency from labor_cost_rates
@@ -453,7 +713,20 @@ async function resolvePayRate(
   };
   const row = r.rows[0];
   if (!row) return null;
-  return { basis: row.basis, rate: row.rate, annualHours: row.annual_hours, currency: row.currency };
+  const resolved = {
+    basis: row.basis, rate: row.rate, annualHours: row.annual_hours, currency: row.currency,
+  };
+  if (!payCurrency || !row.currency || row.currency === payCurrency) return resolved;
+
+  const { convertLaborWage, laborFxRate } = await import("./labor-costing.ts");
+  const fxRate = await laborFxRate(orgId, row.currency, payCurrency, onDate);
+  if (!fxRate) {
+    throw new PayrollError(
+      `no spot rate for the wage ${row.currency}→${payCurrency} on or before ${onDate}`
+      + " — enter one before this employee can be paid",
+    );
+  }
+  return { ...resolved, rate: convertLaborWage(row.rate, fxRate), currency: payCurrency };
 }
 
 export interface PayRunCalculation {
@@ -520,19 +793,38 @@ async function calculateInTransaction(input: CalculatePayRunInput): Promise<PayR
       select subsidiary_id from pay_schedules where org_id = ${orgId} and id = ${run.pay_schedule_id}
     `)) as unknown as { rows: { subsidiary_id: string | null }[] };
     const scopedSubsidiaryId = scheduleScope.rows[0]?.subsidiary_id ?? null;
+    const runType = (run.run_type as string) ?? "regular";
+    // `distinct on (p.id)` is load-bearing, not tidiness: employee_roles is
+    // joined per party and a second role row would run calculateStub twice for
+    // one person — a duplicate stub, doubled pay, and (because the EHT and WCB
+    // accumulators below read this run's own stubs) a doubly-consumed
+    // exemption. One employee, one pass, stated in the query.
     const employees = (await tx.execute(sql`
-      select p.id as party_id, p.display_name, prof.*
-        from employee_payroll_profiles prof
-        join parties p on p.id = prof.employee_party_id and p.org_id = prof.org_id
-        left join employee_roles er on er.party_id = p.id and er.org_id = p.org_id
-       where prof.org_id = ${orgId} and prof.pay_schedule_id = ${run.pay_schedule_id}
-         and prof.is_active
-         and (er.terminated_on is null or er.terminated_on >= ${run.period_start})
-         and (${scopedSubsidiaryId}::uuid is null or p.subsidiary_id = ${scopedSubsidiaryId}::uuid)
-       order by p.display_name
+      select * from (
+        select distinct on (p.id)
+               p.id as party_id, p.display_name, er.terminated_on, prof.*
+          from employee_payroll_profiles prof
+          join parties p on p.id = prof.employee_party_id and p.org_id = prof.org_id
+          left join employee_roles er on er.party_id = p.id and er.org_id = p.org_id
+         where prof.org_id = ${orgId} and prof.pay_schedule_id = ${run.pay_schedule_id}
+           and prof.is_active
+           and (er.terminated_on is null or er.terminated_on >= ${run.period_start})
+           and (${scopedSubsidiaryId}::uuid is null or p.subsidiary_id = ${scopedSubsidiaryId}::uuid)
+         order by p.id, er.terminated_on nulls last
+      ) roster
+      order by roster.display_name
     `)) as unknown as { rows: Record<string, string | null>[] };
 
     await tx.execute(sql`delete from pay_stubs where org_id = ${orgId} and pay_run_document_id = ${documentId}`);
+    // Movements are deleted with the stubs that produced them, on the same
+    // key, so an employee who has dropped OFF the run (excluded, terminated,
+    // moved schedule) leaves no orphaned bank movement behind. Per-employee
+    // replacement inside calculateStub cannot see someone who is no longer
+    // being calculated. See .local/payroll-pipeline-contract.md, "Ledger
+    // writes".
+    await tx.execute(sql`
+      delete from entitlement_ledger
+       where org_id = ${orgId} and pay_run_document_id = ${documentId}`);
 
     // Run-level input adjustments: exclusions drop the employee entirely;
     // 'line' rows are merged into the stub's inputs inside calculateStub.
@@ -552,6 +844,20 @@ async function calculateInTransaction(input: CalculatePayRunInput): Promise<PayR
     for (const emp of employees.rows) {
       if (excluded.has(emp.party_id!)) continue;
       const name = emp.display_name ?? emp.party_id!;
+      // Second half of the final-pay scope guard. createPayRun writes the
+      // exclusions, but the roster can GROW between creation and calculation
+      // (a new hire joins the schedule), and an unexcluded stranger on a
+      // termination run would be paid a full period and have every bank
+      // drained. Employment that has not ended cannot be paid a final cheque:
+      // refuse, by name, rather than pay.
+      if (runType === "termination" && !emp.terminated_on) {
+        errors.push({
+          employee: name,
+          message: "a final pay run pays only employees whose employment has ended — "
+            + "this employee has no termination date, so they are not in its scope",
+        });
+        continue;
+      }
       try {
         const result = await calculateStub(tx, {
           orgId, actorId, documentId, run, emp,
@@ -561,6 +867,17 @@ async function calculateInTransaction(input: CalculatePayRunInput): Promise<PayR
         netTotal = add(netTotal, result.net);
         employerTotal = add(employerTotal, result.employerCost);
         count += 1;
+        // A bank at or over its limit is not a calculation failure — the stub
+        // is correct and the operator decides. It rides the same per-employee
+        // channel the wizard already renders.
+        for (const warning of result.warnings) {
+          errors.push({
+            employee: name,
+            message: warning.kind === "over_limit"
+              ? `${warning.planCode} balance ${warning.balance} exceeds its ${warning.threshold} limit`
+              : `${warning.planCode} balance ${warning.balance} has reached its ${warning.threshold} notify threshold`,
+          });
+        }
       } catch (error) {
         errors.push({ employee: name, message: error instanceof Error ? error.message : String(error) });
       }
@@ -613,10 +930,31 @@ async function calculateStub(
     taxable?: boolean; pensionable?: boolean; insurable?: boolean;
     vacationable?: boolean; nonPeriodic?: boolean; taxTreatment?: string;
     accrualOnly?: boolean;
+    /**
+     * Set on every pack-emitted statutory line: what the country pack declares
+     * the amount is assessed on. `taxable_income` lines are dropped and
+     * re-derived on each protection pass; `earnings` lines are computed once
+     * and asserted unchanged (see the statutory pass below).
+     */
+    assessedOn?: PayrollAssessedOn;
+    /** Time-type classification behind an hours line: the hours cap exempts
+     *  overtime/double time charged to a job. */
+    classification?: string;
+    /** pay_components protection columns, carried so phase 10 needs no re-read. */
+    protectionBase?: string;
+    protectionMaxPercent?: string | null;
+    protectionPriority?: number;
+    includeInDisposableEarnings?: boolean;
   }
   const lines: Line[] = [];
+  // Entitlement movements are written to the ledger only after the stub rows
+  // exist, so they can carry the stub_line_id that produced them.
+  const entitlementMovements: Awaited<ReturnType<typeof planMovementsForStub>>["movements"] = [];
+  const entitlementWarnings: EntitlementWarning[] = [];
 
-  const payRate = await resolvePayRate(tx, orgId, employeePartyId, run.period_end);
+  const payRate = await resolvePayRate(
+    tx, orgId, employeePartyId, run.period_end, run.doc_currency ?? null,
+  );
   const baseComponent = ctx.need("base_pay", "earning");
 
   // An off-cycle bonus run pays only its one-off lines: no salary, no time,
@@ -631,16 +969,20 @@ async function calculateStub(
     if (!payRate || payRate.basis !== "year") {
       throw new PayrollError("salaried employee has no annual labor cost rate (employee scope)");
     }
-    const periodSalary = roundMoney(mulDecimal(payRate.rate, (1 / P).toFixed(10)), 2);
+    // Exact annual ÷ periods, rounded once (see divideMoney).
+    const periodSalary = divideMoney(payRate.rate, String(P), 2);
     lines.push({
       componentId: baseComponent.id as string, kind: "earning", description: "Salary",
       amount: periodSalary, sequence: 10,
     });
   } else {
     if (!payRate) throw new PayrollError("no labor cost rate covers this employee for the period");
+    // Exact annual ÷ annual hours. This quotient IS the stored four-decimal
+    // hourly wage, so a float reciprocal's error does not wash out — it is
+    // multiplied by every hour on every stub, always the same direction.
     const hourlyWage = payRate.basis === "hour"
       ? payRate.rate
-      : roundMoney(mulDecimal(payRate.rate, (1 / Number(payRate.annualHours)).toFixed(10)), 4);
+      : divideMoney(payRate.rate, String(payRate.annualHours), 4);
     const time = (await tx.execute(sql`
       select te.id, te.hours, te.project_id, te.department_id, te.time_type_id,
              coalesce(tt.classification, 'regular') as classification,
@@ -651,6 +993,7 @@ async function calculateStub(
          and te.status = 'approved'
          and te.worked_on between ${run.period_start} and ${run.period_end}
          and (te.payroll_batch_ref is null or te.payroll_batch_ref = ${documentId})
+         and coalesce(tt.exclude_from_wages, false) = false
     `)) as unknown as {
       rows: {
         id: string; hours: string; project_id: string | null; department_id: string | null;
@@ -677,6 +1020,7 @@ async function calculateStub(
         amount: roundMoney(mulDecimal(group.rate, group.hours), 2),
         projectId: group.row.project_id, departmentId: group.row.department_id,
         timeTypeId: group.row.time_type_id, sequence: sequence++,
+        classification: group.row.classification,
       });
     }
   }
@@ -702,12 +1046,167 @@ async function calculateStub(
   const totalHours = () =>
     sum(lines.filter((l) => l.hours).map((l) => l.hours!));
 
+  /**
+   * The current earnings collapsed to one bucket per project/department — the
+   * weights any job-costed employer burden allocates against. The untagged
+   * bucket is deliberately included so an overhead share stays overhead
+   * instead of being pushed onto whichever jobs happen to be on the stub.
+   */
+  const earningJobBuckets = (): {
+    projectId: string | null; departmentId: string | null; weight: string;
+  }[] => {
+    const byDimension = new Map<string, {
+      projectId: string | null; departmentId: string | null; weight: string;
+    }>();
+    for (const line of lines) {
+      if (line.kind !== "earning" || line.accrualOnly) continue;
+      const key = `${line.projectId ?? ""}|${line.departmentId ?? ""}`;
+      const existing = byDimension.get(key);
+      if (existing) existing.weight = add(existing.weight, line.amount);
+      else {
+        byDimension.set(key, {
+          projectId: line.projectId ?? null,
+          departmentId: line.departmentId ?? null,
+          weight: line.amount,
+        });
+      }
+    }
+    return [...byDimension.values()];
+  };
+
+  // Phase 2 — derived earnings. Per diem for nights stayed, on-call days,
+  // travel pay costed to the first job of the day, site and equipment
+  // incentives: money produced by operational facts rather than typed in and
+  // hand-corrected. Rules emit INPUTS, exactly like time and adjustments, so
+  // the statutory pass still owns every computed output.
+  //
+  // Off-cycle bonus runs are skipped: they pay only their one-off lines, and a
+  // month_end rule landing inside an already-paid period would settle twice.
+  if (!bonusRun) {
+    const derivedRules = await loadActiveDerivedRules(tx, orgId, run.period_end);
+    if (derivedRules.length > 0) {
+      // Salaried supervisors earn derived amounts too, and the hourly branch's
+      // time query is scoped to wages, so read the period's facts explicitly.
+      const facts = (await tx.execute(sql`
+        select te.id, te.worked_on, te.hours, te.time_type_id, te.project_id,
+               te.department_id, te.is_billable, te.created_at
+          from time_entries te
+         where te.org_id = ${orgId} and te.employee_party_id = ${employeePartyId}
+           and te.status = 'approved'
+           and te.worked_on between ${run.period_start} and ${run.period_end}
+           and (te.payroll_batch_ref is null or te.payroll_batch_ref = ${documentId})
+      `)) as unknown as {
+        rows: {
+          id: string; worked_on: string; hours: string; time_type_id: string | null;
+          project_id: string | null; department_id: string | null;
+          is_billable: boolean; created_at: string | Date;
+        }[];
+      };
+      const derived = await resolveDerivedEarnings(tx, {
+        orgId,
+        employeePartyId,
+        periodStart: run.period_start,
+        periodEnd: run.period_end,
+        rules: derivedRules,
+        timeEntries: facts.rows.map((fact) => ({
+          id: fact.id,
+          workedOn: String(fact.worked_on).slice(0, 10),
+          hours: fact.hours,
+          timeTypeId: fact.time_type_id,
+          projectId: fact.project_id,
+          departmentId: fact.department_id,
+          isBillable: fact.is_billable === true,
+          createdAt: fact.created_at instanceof Date
+            ? fact.created_at.toISOString()
+            : String(fact.created_at),
+        })),
+        gross: earningsBase(),
+      });
+      for (const line of derived) {
+        lines.push({
+          componentId: line.componentId,
+          kind: "earning",
+          description: line.description,
+          // Deliberately no `hours`: nights and on-call days are not worked
+          // hours, and hour-shaped derived quantities are already on the wage
+          // lines, so carrying them here would pay per-hour components twice.
+          rate: line.rate ?? undefined,
+          amount: line.amount,
+          projectId: line.projectId,
+          departmentId: line.departmentId,
+          timeTypeId: line.timeTypeId,
+          sequence: line.sequence,
+          taxable: line.taxable,
+          pensionable: line.pensionable,
+          insurable: line.insurable,
+          vacationable: line.vacationable,
+          nonPeriodic: line.nonPeriodic,
+        });
+      }
+    }
+  }
+
+  /** Same component's committed amount earlier in the tax year (openings
+   *  included via the opening-balance sweep the year-end module owns). Mid-year
+   *  adoption must not hand an employee a fresh 402(g)/money-purchase room. */
+  const componentYearToDate = async (componentId: string): Promise<string> => {
+    const r = (await tx.execute(sql`
+      select coalesce(sum(l.amount), 0)::text as ytd
+        from pay_stub_lines l
+        join pay_stubs s on s.id = l.stub_id
+        join pay_runs r on r.document_id = s.pay_run_document_id and r.run_status = 'committed'
+       where l.org_id = ${orgId} and s.employee_party_id = ${employeePartyId}
+         and s.tax_year = ${taxYear} and l.component_id = ${componentId}
+         and s.pay_run_document_id <> ${documentId}
+    `)) as unknown as { rows: { ytd: string }[] };
+    return r.rows[0]!.ytd;
+  };
+
+  // Hours behind a capped basis. "Overtime or double time charged to a job is
+  // exempt from the 40-hour cap" is a property of the hour, not of the
+  // component, so the predicate lives here and the engine stays pure.
+  const cappableHourLines = () =>
+    lines
+      .filter((l) => l.kind === "earning" && l.hours && !l.accrualOnly)
+      .map((l) => ({
+        hours: l.hours!,
+        amount: l.amount,
+        exemptFromHoursCap:
+          (l.classification === "overtime" || l.classification === "double_time")
+          && l.projectId != null,
+      }));
+
   for (const c of bonusRun ? [] : assigned.rows) {
     const value = String(c.override ?? c.value ?? "0");
+    const capped = {
+      basis: c.basis as "fixed_amount" | "per_hour" | "percent_of_gross",
+      value,
+      basisCapHoursPerPeriod: c.basis_cap_hours_per_period as string | null,
+      basisCapAmountPerPeriod: c.basis_cap_amount_per_period as string | null,
+      basisCapAmountPerYear: c.basis_cap_amount_per_year as string | null,
+    };
+    const hasCap = capped.basisCapHoursPerPeriod != null
+      || capped.basisCapAmountPerPeriod != null
+      || capped.basisCapAmountPerYear != null;
+    // The cap changes the basis a percent-of-X component computes on, so it
+    // must run HERE: the resulting pre-tax deduction is what the statutory
+    // pass consumes as T4127 factor F / U1.
+    const context = hasCap
+      ? {
+          lines: cappableHourLines(),
+          yearToDate: capped.basisCapAmountPerYear != null
+            ? await componentYearToDate(c.id as string)
+            : "0",
+        }
+      : {};
     let amount: string;
-    if (c.basis === "per_hour") amount = roundMoney(mulDecimal(value, totalHours()), 2);
-    else if (c.basis === "percent_of_gross") amount = mulPercent(earningsBase(), value, 2);
-    else amount = roundMoney(value, 2);
+    if (c.basis === "per_hour") {
+      amount = roundMoney(mulDecimal(value, applyBasisCaps(capped, totalHours(), context)), 2);
+    } else if (c.basis === "percent_of_gross") {
+      amount = mulPercent(applyBasisCaps(capped, earningsBase(), context), value, 2);
+    } else {
+      amount = roundMoney(applyBasisCaps(capped, value, context), 2);
+    }
     if (cmp(amount, "0") === 0) continue;
     lines.push({
       componentId: c.id as string, kind: c.kind as Line["kind"],
@@ -715,6 +1214,10 @@ async function calculateStub(
       taxable: c.taxable as boolean, pensionable: c.pensionable as boolean,
       insurable: c.insurable as boolean, vacationable: c.vacationable as boolean,
       nonPeriodic: c.non_periodic as boolean, taxTreatment: c.tax_treatment as string,
+      protectionBase: c.protection_base as string,
+      protectionMaxPercent: c.protection_max_percent as string | null,
+      protectionPriority: Number(c.protection_priority ?? 100),
+      includeInDisposableEarnings: c.include_in_disposable_earnings as boolean,
     });
   }
 
@@ -750,6 +1253,12 @@ async function calculateStub(
       // would over-withhold badly.
       nonPeriodic: bonusRun ? adj.kind === "earning" : (adj.non_periodic as boolean),
       taxTreatment: adj.tax_treatment as string,
+      // A one-off garnishment entered for a single run is still a protected
+      // deduction, and still belongs to (or outside) the protected base.
+      protectionBase: adj.protection_base as string,
+      protectionMaxPercent: adj.protection_max_percent as string | null,
+      protectionPriority: Number(adj.protection_priority ?? 100),
+      includeInDisposableEarnings: adj.include_in_disposable_earnings as boolean,
     });
   }
 
@@ -765,90 +1274,267 @@ async function calculateStub(
       }
       const kind: Line["kind"] = fringe.paid_by === "employer" ? "employer_contribution" : "deduction";
       const taxTreatment = fringe.paid_by === "employee" ? "union_dues" : undefined;
+      // `job_costed` is a property of the FRINGE, not of how it is calculated:
+      // in construction that flag exists so the fund lands on the job. Both
+      // calculation shapes therefore honour it — the percent-of-gross branch
+      // used to ignore it entirely and post one untagged line.
+      const jobCosted = fringe.job_costed && kind === "employer_contribution";
       if (fringe.calc === "per_hour_worked") {
-        // Job-costed per-hour fringes split by project exactly like the hours.
+        // The TOTAL is computed once and then allocated, never summed from
+        // independently rounded per-job amounts: $2.375/h × 10.5h is 24.94
+        // whole and 24.93 as three job lines, which made an employer fringe
+        // and the identically-rated employee line disagree by a cent purely
+        // because of how the hours fell across jobs.
+        const hours = totalHours();
+        const amount = roundMoney(mulDecimal(fringe.value, hours), 2);
+        if (cmp(amount, "0") === 0) continue;
         const hourLines = lines.filter((l) => l.kind === "earning" && l.hours);
-        const splits = fringe.job_costed && kind === "employer_contribution"
-          ? hourLines
-          : [{ hours: totalHours(), projectId: null, departmentId: null } as Line];
-        for (const split of splits) {
-          if (!split.hours || cmp(split.hours, "0") === 0) continue;
-          const amount = roundMoney(mulDecimal(fringe.value, split.hours), 2);
-          if (cmp(amount, "0") === 0) continue;
+        const splits = jobCosted
+          ? allocateProportionally(amount, hourLines.map((l) => ({ weight: l.hours!, target: l })))
+          : [];
+        if (splits.length > 0) {
+          for (const split of splits) {
+            if (cmp(split.amount, "0") === 0) continue;
+            lines.push({
+              componentId: fringe.component_id, kind, description: fringe.name,
+              hours: split.target.hours, rate: fringe.value, amount: split.amount,
+              projectId: split.target.projectId ?? null,
+              departmentId: split.target.departmentId ?? null,
+              sequence: 300 + fringe.sequence, taxTreatment,
+            });
+          }
+        } else {
           lines.push({
             componentId: fringe.component_id, kind, description: fringe.name,
-            hours: split.hours, rate: fringe.value, amount,
-            projectId: split.projectId ?? null, departmentId: split.departmentId ?? null,
+            hours, rate: fringe.value, amount,
             sequence: 300 + fringe.sequence, taxTreatment,
           });
         }
       } else {
         const amount = mulPercent(earningsBase(), fringe.value, 2);
         if (cmp(amount, "0") === 0) continue;
-        lines.push({
-          componentId: fringe.component_id, kind, description: fringe.name,
-          amount, sequence: 300 + fringe.sequence, taxTreatment,
-        });
+        // Percent-of-gross splits proportional to the earnings it is a percent
+        // OF — including the untagged share, which stays untagged rather than
+        // being pushed onto the jobs.
+        const buckets = jobCosted ? earningJobBuckets() : [];
+        const splits = buckets.some((b) => b.projectId)
+          ? allocateProportionally(amount, buckets.map((b) => ({ weight: b.weight, target: b })))
+          : [];
+        if (splits.length > 0) {
+          for (const split of splits) {
+            if (cmp(split.amount, "0") === 0) continue;
+            lines.push({
+              componentId: fringe.component_id, kind, description: fringe.name,
+              amount: split.amount, sequence: 300 + fringe.sequence, taxTreatment,
+              projectId: split.target.projectId, departmentId: split.target.departmentId,
+            });
+          }
+        } else {
+          lines.push({
+            componentId: fringe.component_id, kind, description: fringe.name,
+            amount, sequence: 300 + fringe.sequence, taxTreatment,
+          });
+        }
       }
     }
   }
 
-  // Vacation pay
+  // Phases 6 and 7 — vacation pay plus every other entitlement plan (banked
+  // time, sick banks, benefit recoup) through ONE engine; see
+  // engine/src/payroll-entitlements.ts.
+  //
+  // The employee's vacation_percent stays on the payroll profile, its one
+  // home; it is handed to the Vacation plan as that employee's rate. A reached
+  // service tier (5 years → 6%) overrides it. `pay_each_period` and a final pay
+  // still settle in cash rather than banking, so the accrue-vs-pay decision is
+  // unchanged from the operator's point of view.
   const vacationPercent = emp.vacation_percent;
   let vacationAccrued = "0";
-  // A final pay must clear the accrued vacation liability: the carried
-  // balance is paid out with this period's accrual, never left on the books
-  // for an employee who has left.
   const terminationRun = runType === "termination";
-  if (terminationRun) {
-    const carried = ((await tx.execute(sql`
-      select (
-        coalesce((select vacation_balance from payroll_opening_balances
-                   where org_id = ${orgId} and employee_party_id = ${employeePartyId}
-                     and tax_year = ${taxYear}), 0)
-        + coalesce((select sum(s.vacation_accrued) from pay_stubs s
-                      join pay_runs r on r.document_id = s.pay_run_document_id
-                     where s.org_id = ${orgId} and s.employee_party_id = ${employeePartyId}
-                       and r.run_status = 'committed'), 0)
-        - coalesce((select sum(l.amount) from pay_stub_lines l
-                      join pay_stubs s on s.id = l.stub_id
-                      join pay_runs r on r.document_id = s.pay_run_document_id
-                      join pay_components c on c.id = l.component_id
-                     where s.org_id = ${orgId} and s.employee_party_id = ${employeePartyId}
-                       and r.run_status = 'committed' and c.system_key = 'vacation_payout'), 0)
-      )::text as balance
-    `)) as unknown as { rows: { balance: string }[] }).rows[0]!.balance;
-    if (cmp(carried, "0") > 0) {
-      const c = ctx.need("vacation_payout", "earning");
+  const plans = await entitlementPlans(orgId, tx);
+  // Resolved on the plan's ENGINE BINDING, never on its operator-typed code.
+  const vacationPlan = vacationPlanOf(plans);
+  assertVacationPlanResolved(emp, vacationPlan, terminationRun);
+
+  // A final pay must clear every accrued bank: the carried balance is paid out
+  // with this period's accrual, never left on the books for someone who left.
+  //
+  // The balances are read INSIDE this transaction and NET OF THIS RUN'S OWN
+  // movements. Both matter: without the exclusion the second Calculate saw the
+  // first Calculate's `−balance` payout row, netted to zero, and silently
+  // dropped the departing employee's entire accrued balance from their final
+  // cheque — leaving the liability on the books with nobody to pay it to.
+  if (terminationRun && plans.length > 0) {
+    const balances = await entitlementBalances(orgId, employeePartyId, run.pay_date, {
+      executor: tx, excludeRunDocumentId: documentId, plans,
+    });
+    for (const balance of balances) {
+      if (cmp(balance.balance, "0") <= 0) continue;
+      if (!balance.plan.payoutComponentId) {
+        throw new PayrollError(
+          `entitlement plan ${balance.plan.code} has no payout component — set it in Payroll setup → Entitlement plans`,
+        );
+      }
       lines.push({
-        componentId: c.id as string, kind: "earning",
-        description: "Vacation payout (accrued balance)",
-        amount: roundMoney(carried, 2), sequence: 44, vacationable: false,
+        componentId: balance.plan.payoutComponentId, kind: "earning",
+        description: `${balance.plan.name} payout (accrued balance)`,
+        amount: roundMoney(balance.balance, 2), sequence: 44, vacationable: false,
+      });
+      entitlementMovements.push({
+        planId: balance.plan.id, employeePartyId, movementDate: run.pay_date,
+        amount: neg(roundMoney(balance.balance, 2)), hours: null,
+        kind: "payout", componentId: balance.plan.payoutComponentId,
+        note: "Final pay — bank cleared",
       });
     }
   }
-  if (vacationPercent && cmp(vacationPercent, "0") > 0) {
+
+  // Cash-out vacation policies bypass the bank entirely: the money is paid,
+  // not accrued, so no ledger movement is produced.
+  const payVacationInCash = emp.vacation_method === "pay_each_period" || terminationRun;
+  if (payVacationInCash && vacationPercent && cmp(vacationPercent, "0") > 0) {
     const base = sum(lines
       .filter((l) => l.kind === "earning" && (l.vacationable ?? true) && !l.accrualOnly)
       .map((l) => l.amount));
     const vacation = mulPercent(base, vacationPercent, 2);
     if (cmp(vacation, "0") > 0) {
-      if (emp.vacation_method === "pay_each_period" || terminationRun) {
-        const c = ctx.need("vacation_payout", "earning");
-        lines.push({
-          componentId: c.id as string, kind: "earning", description: "Vacation pay",
-          amount: vacation, sequence: 45, vacationable: false,
-        });
-      } else {
-        const c = ctx.need("vacation_accrual", "employer_contribution");
-        lines.push({
-          componentId: c.id as string, kind: "employer_contribution",
-          description: "Vacation accrual", amount: vacation, sequence: 240, accrualOnly: true,
-        });
-        vacationAccrued = vacation;
-      }
+      const c = ctx.need("vacation_payout", "earning");
+      lines.push({
+        componentId: c.id as string, kind: "earning", description: "Vacation pay",
+        amount: vacation, sequence: 45, vacationable: false,
+      });
     }
   }
+
+  // Everything that banks: one call, honouring scoped caps and service tiers.
+  if (plans.length > 0) {
+    const bankablePlans = payVacationInCash && vacationPlan
+      ? plans.filter((p) => p.id !== vacationPlan.id)
+      : plans;
+    const { movements, warnings } = await planMovementsForStub(tx, {
+      orgId, employeePartyId, movementDate: run.pay_date,
+      payRunDocumentId: documentId,
+      earnings: lines
+        .filter((l) => l.kind === "earning" && !l.accrualOnly)
+        .map((l) => ({
+          componentId: l.componentId, amount: l.amount,
+          hours: l.hours ?? null, bankable: l.vacationable ?? true,
+        })),
+      plans: bankablePlans,
+      // The Vacation plan's rate has ONE home: the employee's payroll profile.
+      // Its absence is an answer, not a gap — an employee with no
+      // vacation_percent accrues nothing, and must not silently inherit the
+      // plan's org-wide default the way a tenant-defined bank does. (A reached
+      // service rung still overrides: a ladder is deliberate org policy.)
+      employeeAccrualValues: vacationPlan
+        ? new Map([[vacationPlan.id, String(vacationPercent ?? "0")]])
+        : undefined,
+    });
+    entitlementWarnings.push(...warnings);
+    for (const movement of movements) {
+      if (!movement.componentId) continue;
+      const plan = plans.find((p) => p.id === movement.planId)!;
+      if (movement.kind === "accrual") {
+        // Employer-side accrual: DR burden / CR the plan's liability account,
+        // exactly as the old vacation_accrual line did.
+        lines.push({
+          componentId: movement.componentId, kind: "employer_contribution",
+          description: plan.name, amount: movement.amount,
+          sequence: 240, accrualOnly: true,
+        });
+        if (plan.systemKey === "vacation") vacationAccrued = movement.amount;
+      } else if (movement.kind === "payout") {
+        lines.push({
+          componentId: movement.componentId, kind: "earning",
+          description: `${plan.name} payout`, amount: neg(movement.amount),
+          sequence: 46, vacationable: false,
+        });
+      } else if (movement.kind === "repayment") {
+        // 'owe' plans recoup through a deduction — the employee repays what
+        // the employer carried during their leave.
+        lines.push({
+          componentId: movement.componentId, kind: "deduction",
+          description: plan.name, amount: movement.amount, sequence: 180,
+        });
+      }
+      entitlementMovements.push(movement);
+    }
+  }
+
+  // ---- Statutory lines: one helper, one declared recomputation class -------
+  //
+  // Every statutory amount the packs emit goes through `pushStatutory`, which
+  // asks the country pack what the amount is ASSESSED ON (packs.ts) and records
+  // the answer on the line. That declaration — not which pack emitted the line,
+  // and not which helper pushed it — is what decides whether the
+  // deduction-protection fixpoint has to re-derive the amount:
+  //
+  //   earnings       — computed from gross / pensionable / insurable earnings
+  //                    or hours. Protection only ever changes DEDUCTIONS, so
+  //                    the amount cannot move: it is pushed ONCE and every
+  //                    later pass is a no-op (which is what keeps WCB's
+  //                    project split, whose last job absorbs the rounding
+  //                    remainder, from being allocated a second time).
+  //   taxable_income — computed from income after pre-tax deductions, so a
+  //                    pre-tax protected order moves it. Dropped before each
+  //                    pass and re-derived from the deductions that pass takes.
+  //
+  // See .local/payroll-pipeline-contract.md.
+  interface StatutoryAllocation {
+    amount: string;
+    projectId?: string | null;
+    departmentId?: string | null;
+  }
+  /** Earnings-assessed slots already emitted on this stub, `systemKey:kind`. */
+  const emittedEarningsAssessed = new Set<string>();
+
+  const pushStatutory = (
+    systemKey: string, kind: "deduction" | "employer_contribution",
+    description: string, amount: string, sequence: number,
+    options: {
+      /**
+       * Job-costed levies (WCB) emit their whole allocation in ONE call, so
+       * the idempotency guard covers the split as a unit and a re-run can
+       * never re-allocate the remainder.
+       */
+      allocations?: readonly StatutoryAllocation[];
+    } = {},
+  ) => {
+    if (cmp(amount, "0") === 0) return;
+    const assessedOn = statutoryAssessment(country, systemKey, kind);
+    const slot = `${systemKey}:${kind}`;
+    // Recomputing the value on a later pass is harmless (the statutory engines
+    // return CPP/EI/tax from one call); re-PUSHING it is not.
+    if (assessedOn === "earnings" && emittedEarningsAssessed.has(slot)) return;
+    const c = ctx.need(systemKey, kind);
+    let pushed = false;
+    for (const allocation of options.allocations ?? [{ amount }]) {
+      if (cmp(allocation.amount, "0") === 0) continue;
+      lines.push({
+        componentId: c.id as string, kind, description,
+        amount: allocation.amount, sequence,
+        projectId: allocation.projectId ?? null,
+        departmentId: allocation.departmentId ?? null,
+        assessedOn,
+      });
+      pushed = true;
+    }
+    // Only a line that actually landed marks the slot emitted: a slot that was
+    // zero on the first pass and non-zero on a later one is a violation the
+    // assertion below must SEE, not something this guard should hide.
+    if (assessedOn === "earnings" && pushed) emittedEarningsAssessed.add(slot);
+  };
+
+  /** Every earnings-assessed line as the invariant check compares them. */
+  const earningsAssessedSnapshot = (): EarningsAssessedLine[] =>
+    lines
+      .filter((l) => l.assessedOn === "earnings")
+      .map((l) => ({
+        component: l.description,
+        amount: l.amount,
+        projectId: l.projectId ?? null,
+        departmentId: l.departmentId ?? null,
+      }));
 
   // ---- Employer taxes: WCB/WSIB and Ontario EHT (CA pack) ------------------
   // Both are employer-only accruals. WCB assesses gross earnings (capped at
@@ -856,6 +1542,23 @@ async function calculateStub(
   // job-costed by project like the earnings it assesses. EHT is org-level:
   // Ontario remuneration past the annual exemption at the configured rate,
   // consuming the exemption across all employees in pay-date order.
+  //
+  // BOTH accumulators consume against CALCULATED-OR-COMMITTED stubs, not
+  // committed ones alone. A finite annual allowance — the WCB assessable
+  // ceiling, the Ontario EHT exemption — that is only consumed on commit is
+  // claimed IN FULL by every schedule calculated before the first of them
+  // commits, so two schedules calculated the same afternoon each spend the
+  // whole exemption and the employer under-remits.
+  //
+  // Two dependencies this makes explicit rather than assuming:
+  //   1. the stubs of THIS run are visible to these reads because they are
+  //      inserted by the same transaction, one employee at a time, in
+  //      calculateStub — which is why the run's own document id is still
+  //      OR-ed in (run_status is not flipped to 'calculated' until the end);
+  //   2. exactly ONE stub per employee per run exists, which the roster query
+  //      in calculateInTransaction guarantees with `distinct on (p.id)` and
+  //      the `delete from pay_stubs` that precedes the loop. A second pass
+  //      over one employee would consume the exemption twice.
   let wcbAmount = "0";
   let wcbAssessable = "0";
   let ehtAmount = "0";
@@ -878,7 +1581,8 @@ async function calculateStub(
           join pay_runs r on r.document_id = s.pay_run_document_id
          where s.org_id = ${orgId} and s.employee_party_id = ${employeePartyId}
            and s.tax_year = ${taxYear}
-           and (r.run_status = 'committed' or s.pay_run_document_id = ${documentId})
+           and (r.run_status in ('calculated', 'committed')
+                or s.pay_run_document_id = ${documentId})
       `)) as unknown as { rows: { prior: string }[] }).rows[0]!.prior;
       const gross = grossEarnings();
       const room = wcb.max_assessable
@@ -887,34 +1591,52 @@ async function calculateStub(
       wcbAssessable = cmp(gross, room) <= 0 ? gross : room;
       if (cmp(wcbAssessable, "0") > 0) {
         wcbAmount = mulPercent(wcbAssessable, wcb.rate_percent, 2);
-        const c = ctx.need("wcb", "employer_contribution");
         // Split by project proportional to earning amounts (WCB is a real
-        // job-cost burden, like union fringes). Exact bigint ratios; when the
-        // whole gross is job-tagged, the last job absorbs the rounding
-        // remainder so the premium never leaks a penny.
+        // job-cost burden, like union fringes). Exact bigint ratios; the last
+        // job absorbs the rounding remainder so the premium never leaks a
+        // penny. The whole allocation is handed to pushStatutory in one call,
+        // so a second protection pass cannot allocate that remainder again.
+        //
+        // The remainder is signed and is absorbed WHATEVER its sign. Rounding
+        // each share independently can over-allocate as easily as under: gross
+        // 1,000.00 split 333.33 / 333.33 / 333.33 with 0.01 untagged, at 5%,
+        // allocates 50.01 against a 50.00 premium. Dropping the negative
+        // remainder silently — as a `> 0` guard does — leaves the stub lines
+        // and factors.WCB permanently disagreeing, and the remittance summary
+        // (which sums pay_stub_lines) permanently at odds with the annual-cap
+        // tracker (which reads factors.WCB_EARN).
         const splits = lines.filter((l) => l.kind === "earning" && !l.accrualOnly && l.projectId);
         const grossUnits = toUnits(gross);
+        const allocations: StatutoryAllocation[] = [];
         let allocated = "0";
+        const allTagged = cmp(sum(splits.map((s) => s.amount)), gross) === 0;
         for (const [index, split] of splits.entries()) {
-          const allTagged = cmp(sum(splits.map((s) => s.amount)), gross) === 0;
           const share = index === splits.length - 1 && allTagged
             ? add(wcbAmount, neg(allocated))
             : roundMoney(mulRatio(wcbAmount, toUnits(split.amount), grossUnits), 2);
           if (cmp(share, "0") === 0) continue;
           allocated = add(allocated, share);
-          lines.push({
-            componentId: c.id as string, kind: "employer_contribution",
-            description: "WCB/WSIB", amount: share, sequence: 260,
-            projectId: split.projectId, departmentId: split.departmentId,
+          allocations.push({
+            amount: share, projectId: split.projectId, departmentId: split.departmentId,
           });
         }
         const remainder = add(wcbAmount, neg(allocated));
-        if (cmp(remainder, "0") > 0) {
-          lines.push({
-            componentId: c.id as string, kind: "employer_contribution",
-            description: "WCB/WSIB", amount: remainder, sequence: 260,
-          });
+        if (cmp(remainder, "0") !== 0) {
+          // A negative remainder belongs to the job that was rounded up, not
+          // to the untagged pool, so it lands on the last allocated line;
+          // a positive one is genuinely unallocated overhead.
+          const last = allocations[allocations.length - 1];
+          if (cmp(remainder, "0") < 0 && last) last.amount = add(last.amount, remainder);
+          else allocations.push({ amount: remainder });
         }
+        const allocatedTotal = sum(allocations.map((a) => a.amount));
+        if (cmp(allocatedTotal, wcbAmount) !== 0) {
+          throw new PayrollError(
+            `WCB allocation ${allocatedTotal} does not equal the ${wcbAmount} premium `
+            + `for ${emp.display_name ?? employeePartyId}`,
+          );
+        }
+        pushStatutory("wcb", "employer_contribution", "WCB/WSIB", wcbAmount, 260, { allocations });
       }
     }
 
@@ -928,7 +1650,8 @@ async function calculateStub(
             from pay_stubs s
             join pay_runs r on r.document_id = s.pay_run_document_id
            where s.org_id = ${orgId} and s.tax_year = ${taxYear} and s.province = 'ON'
-             and (r.run_status = 'committed' or s.pay_run_document_id = ${documentId})
+             and (r.run_status in ('calculated', 'committed')
+                  or s.pay_run_document_id = ${documentId})
         `)) as unknown as { rows: { prior: string }[] }).rows[0]!.prior;
         const exemption = eht.annualExemption ?? "0";
         const exemptionLeft = cmp(exemption, priorOn) > 0 ? add(exemption, neg(priorOn)) : "0";
@@ -937,11 +1660,7 @@ async function calculateStub(
           : "0";
         if (cmp(taxableRemuneration, "0") > 0) {
           ehtAmount = mulPercent(taxableRemuneration, eht.rate, 2);
-          const c = ctx.need("eht", "employer_contribution");
-          lines.push({
-            componentId: c.id as string, kind: "employer_contribution",
-            description: "Employer Health Tax", amount: ehtAmount, sequence: 270,
-          });
+          pushStatutory("eht", "employer_contribution", "Employer Health Tax", ehtAmount, 270);
         }
       }
     }
@@ -961,21 +1680,37 @@ async function calculateStub(
   const pensionable = earning((l) => l.pensionable ?? true);
   const insurable = earning((l) => l.insurable ?? true);
 
-  const pushStatutory = (
-    systemKey: string, kind: "deduction" | "employer_contribution",
-    description: string, amount: string, sequence: number, accrualOnly = false,
-  ) => {
-    if (cmp(amount, "0") === 0) return;
-    const c = ctx.need(systemKey, kind);
-    lines.push({ componentId: c.id as string, kind, description, amount, sequence, accrualOnly });
-  };
+  /**
+   * Drop the previous pass's INCOME-assessed withholdings so the pass can be
+   * re-derived from a changed pre-tax deduction. Earnings-assessed lines are
+   * left standing — no deduction moves them, and re-pushing one would double a
+   * levy and re-run its project split.
+   */
+  const clearIncomeAssessedLines = () => dropIncomeAssessedLines(lines);
 
   const bool = (value: string | null | undefined) =>
     value === "true" || (value as unknown) === true;
   const province = (emp.province ?? (country === "US" ? "" : "ON"));
-  let factors: Record<string, string>;
+  let factors: Record<string, string> = {};
+  let firstEarningsAssessed: EarningsAssessedLine[] | null = null;
 
-  if (country === "US") {
+  /**
+   * One statutory pass over the CURRENT line set. `income`, `nonPeriodic`,
+   * `pensionable` and `insurable` are earnings-only and therefore stable
+   * across passes; what changes between passes is `deduction("pension_f")` /
+   * `deduction("alimony")` / `deduction("union_dues")`, which is exactly why a
+   * pre-tax protected order has to be settled by iteration.
+   *
+   * The pass re-COMPUTES everything each time — the CRA and IRS engines return
+   * CPP/EI/QPIP/FICA and tax from a single call, and splitting them would fork
+   * a conformance-tested engine for no gain — but `pushStatutory` re-emits only
+   * the income-assessed lines. Earnings-assessed ones stand from the first
+   * pass, and `assertEarningsAssessedStable` proves afterwards that standing
+   * still was the right answer.
+   */
+  const runStatutoryPass = async (): Promise<void> => {
+    clearIncomeAssessedLines();
+    if (country === "US") {
     if (!(US_STATES as readonly string[]).includes(province)) {
       throw new PayrollError(`unknown US state "${province}" on the payroll profile`);
     }
@@ -1073,6 +1808,142 @@ async function calculateStub(
       ...(cmp(ehtEarnings, "0") > 0 ? { EHT: ehtAmount, EHT_EARN: ehtEarnings } : {}),
     };
   }
+  // What the earnings-assessed lines looked like the first time the pass ran,
+  // so the loop can be held to leaving them alone.
+  firstEarningsAssessed ??= earningsAssessedSnapshot();
+  };
+
+  // ---- Deduction protection (protected earnings) --------------------------
+  // A garnishment or support order may take only a configured share of the pay
+  // it is measured against — so it is measured AFTER the statutory pass, whose
+  // withholdings the base is net of.
+  //
+  // Two paths, and the difference is whether a protected order is pre-tax:
+  //
+  //   fast path  — every protected order is after-tax (an ordinary
+  //                garnishment). The statutory pass is already final when
+  //                protection runs, so one pass of each is exact.
+  //   fixpoint   — a protected order is ALSO pre-tax (a court-ordered support
+  //                payment is T4127 factor F2 AND the canonical 50%-of-net
+  //                case). Capping it raises taxable income, which lowers net,
+  //                which lowers the cap, so statutory and protection are run
+  //                alternately until the pass's input equals its output.
+  //
+  // See .local/payroll-pipeline-contract.md.
+  const protectedLines = lines.filter(
+    (l) => l.kind === "deduction" && l.protectionBase && l.protectionBase !== "none",
+  );
+  // What each order asked for, captured before any pass caps it.
+  const protectionRequested = protectedLines.map((l) => l.amount);
+
+  /** Protection over the CURRENT line set — the statutory lines included. */
+  const protectionPass = () => {
+    const baseLines = lines.map((l) => ({
+      kind: l.kind,
+      amount: l.amount,
+      includeInDisposableEarnings: l.includeInDisposableEarnings ?? true,
+      accrualOnly: l.accrualOnly,
+      protectedDeduction: protectedLines.includes(l),
+    }));
+    const unprotected = sum(lines
+      .filter((l) => l.kind === "deduction" && !protectedLines.includes(l))
+      .map((l) => l.amount));
+    const available = add(gross, neg(unprotected));
+    return applyDeductionProtection(
+      protectedLines.map((l, index) => ({
+        key: String(index),
+        // Each pass re-caps the ORIGINAL request, never the previous pass's
+        // capped amount — otherwise the order would ratchet down for free.
+        requested: protectionRequested[index]!,
+        maxPercent: l.protectionMaxPercent ?? "0",
+        priority: l.protectionPriority ?? 100,
+        base: protectedBase(l.protectionBase as ProtectionBase, baseLines),
+      })),
+      protectedBase("net_pay", baseLines),
+      { available: cmp(available, "0") > 0 ? available : "0" },
+    );
+  };
+
+  const applyPass = (entries: readonly { key: string; amount: string }[]) => {
+    // Reducing the line IS the protection: the stub shows what was actually
+    // taken, and the unpaid balance is reported, never silently dropped.
+    for (const entry of entries) protectedLines[Number(entry.key)]!.amount = entry.amount;
+  };
+
+  let lastProtection: ReturnType<typeof protectionPass> | null = null;
+  if (protectedLines.length === 0) {
+    await runStatutoryPass();
+  } else if (!protectionNeedsIteration(protectedLines.map((l) => ({ taxTreatment: l.taxTreatment })))) {
+    await runStatutoryPass();
+    lastProtection = protectionPass();
+    applyPass(lastProtection.applied);
+  } else {
+    let previous = protectedLines.map((l, index) => ({ key: String(index), amount: l.amount }));
+    for (let pass = 1; pass <= PROTECTION_MAX_PASSES; pass++) {
+      // Withholdings computed from what the previous pass settled on, then
+      // re-capped against the net pay those withholdings leave.
+      applyPass(previous);
+      await runStatutoryPass();
+      const result = protectionPass();
+      const current = result.applied.map(({ key, amount }) => ({ key, amount }));
+      if (protectionConverged(previous, current)) {
+        applyPass(current);
+        lastProtection = result;
+        break;
+      }
+      if (pass === PROTECTION_MAX_PASSES) {
+        // Out of passes. A gap of at most a cent is the statutory engine's
+        // rounding, and settles on the LOWER amount (payroll-limits.ts explains
+        // the bias); anything wider is a genuine failure and must not be paid.
+        const settled = settleProtectionOscillation(previous, current);
+        if (!settled) {
+          throw new PayrollError(
+            `deduction protection did not converge for ${emp.display_name ?? employeePartyId}`
+            + ` on ${protectedLines.map((l) => l.description).join(", ")}`
+            + ` after ${PROTECTION_MAX_PASSES} passes`,
+          );
+        }
+        applyPass(settled);
+        // The stub's withholdings must come from what is actually deducted.
+        await runStatutoryPass();
+        lastProtection = protectionPass();
+        break;
+      }
+      previous = current;
+    }
+  }
+
+  // The loop has settled: hold the pack's `earnings` declarations to their
+  // word before any of it reaches the stub. A levy that moved was recomputed
+  // from something a deduction changed, which is exactly the failure the
+  // declaration exists to make impossible.
+  assertEarningsAssessedStable(
+    emp.display_name ?? employeePartyId,
+    firstEarningsAssessed ?? [],
+    earningsAssessedSnapshot(),
+  );
+
+  // Shortfalls are derived from what the stub FINALLY deducts, so the settle
+  // branch reports the settled amount's balance rather than the last pass's.
+  const shortfalls: DeductionShortfall[] = [];
+  const shortfallReason = new Map(
+    (lastProtection?.shortfalls ?? []).map((entry) => [entry.key, entry.reason]),
+  );
+  for (const [index, line] of protectedLines.entries()) {
+    const owed = add(protectionRequested[index]!, neg(line.amount));
+    if (cmp(owed, "0") <= 0) continue;
+    shortfalls.push({
+      key: line.description,
+      requested: protectionRequested[index]!,
+      applied: line.amount,
+      shortfall: owed,
+      reason: shortfallReason.get(String(index)) ?? "protected_base",
+    });
+  }
+  if (shortfalls.length > 0) {
+    factors.PROT_SHORT = totalShortfall(shortfalls);
+    for (const entry of shortfalls) factors[`PROT_SHORT:${entry.key}`] = entry.shortfall;
+  }
 
   const deductions = sum(lines.filter((l) => l.kind === "deduction").map((l) => l.amount));
   const net = add(gross, neg(deductions));
@@ -1106,7 +1977,22 @@ async function calculateStub(
     `);
   }
 
-  return { employeePartyId, province, gross, net, employerCost, errors: [] };
+  // Ledger movements land only once the stub rows exist. The call replaces
+  // THIS EMPLOYEE'S prior movements on this run and nobody else's — it is made
+  // once per employee, so a run-scoped replacement here would erase every
+  // previously calculated employee's bank. It runs unconditionally: an
+  // employee whose recompute produced no movements must still have their stale
+  // rows cleared.
+  await recordEntitlementMovements(tx, {
+    orgId, actorId, payRunDocumentId: documentId,
+    employeePartyIds: [employeePartyId],
+    movements: entitlementMovements,
+  });
+
+  return {
+    employeePartyId, province, gross, net, employerCost,
+    errors: [], warnings: entitlementWarnings,
+  };
 }
 
 export interface PayRunGlLeg {
@@ -1256,7 +2142,16 @@ export async function commitPayRun(input: {
     const run = runRows.rows[0];
     if (!run) throw new PayrollError("pay run not found");
     if (run.run_status !== "calculated") throw new PayrollError("calculate the pay run before committing");
-    if (run.doc_status !== "draft") throw new PayrollError("pay run document is not editable");
+    // Approval moves the document from draft to approved, so both are
+    // committable; anything else (posted, voided) is not.
+    if (run.doc_status !== "draft" && run.doc_status !== "approved") {
+      throw new PayrollError("pay run document is not editable");
+    }
+    // Money must not move before the run is approved. Dynamic import keeps the
+    // module cycle out of the engine's load order (same idiom as
+    // flows/documents-adapter.ts → document-void.ts).
+    const { assertPayRunApprovalReleased } = await import("./payroll-approval.ts");
+    await assertPayRunApprovalReleased(orgId, documentId);
 
     const { legs, debitTotal } = await payRunGlLegs(tx, orgId, documentId);
 
@@ -1272,13 +2167,37 @@ export async function commitPayRun(input: {
       `);
     }
 
+    // Claim ONLY the time whose hours were actually priced onto this run's
+    // stubs. Claiming "every approved entry in the period for anyone with a
+    // stub" claimed hours the run never paid: a `bonus` run prices no time at
+    // all, yet committing one before the regular run marked the whole period's
+    // hours as paid — so every hourly employee then calculated at $0 while
+    // readiness still reported the hours as present.
+    //
+    // The match is the calculation's own grouping key (time type × project ×
+    // department, per employee), which is why a wage line for that group
+    // existing is exactly the statement "this run paid these hours". It
+    // therefore also excludes, correctly and without a special case: salaried
+    // employees (whose time is costed, never priced), time types flagged
+    // exclude_from_wages, and any group a `replace_component` adjustment
+    // overrode.
     await tx.execute(sql`
-      update time_entries set payroll_batch_ref = ${documentId}
-       where org_id = ${orgId} and status = 'approved'
-         and worked_on between ${run.period_start} and ${run.period_end}
-         and payroll_batch_ref is null
-         and employee_party_id in (
-           select employee_party_id from pay_stubs where pay_run_document_id = ${documentId}
+      update time_entries te set payroll_batch_ref = ${documentId}
+       where te.org_id = ${orgId} and te.status = 'approved'
+         and te.worked_on between ${run.period_start} and ${run.period_end}
+         and te.payroll_batch_ref is null
+         and exists (
+           select 1
+             from pay_stub_lines l
+             join pay_stubs s on s.id = l.stub_id
+             join pay_components c on c.id = l.component_id
+            where s.org_id = ${orgId} and s.pay_run_document_id = ${documentId}
+              and s.employee_party_id = te.employee_party_id
+              and c.system_key in ('base_pay', 'overtime')
+              and l.hours is not null
+              and l.time_type_id is not distinct from te.time_type_id
+              and l.project_id is not distinct from te.project_id
+              and l.department_id is not distinct from te.department_id
          )
     `);
     await tx.execute(sql`

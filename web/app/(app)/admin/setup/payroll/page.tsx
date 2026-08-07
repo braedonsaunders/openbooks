@@ -6,11 +6,15 @@ import { db } from '@openbooks/engine/src/db.ts'
 import { caPayrollConfig, payrollSettings, usPayrollConfig } from '@openbooks/engine/src/payroll-run.ts'
 import { packSlotState } from '@openbooks/engine/src/payroll/packs.ts'
 import { RATES_2026_JAN, RATES_2026_JUL } from '@openbooks/engine/src/payroll/canada/rates.ts'
+import { pdfEncryptionAvailable } from '@openbooks/pdf'
+import { stubPasswordPolicy } from '../../../../../lib/payroll-outputs'
 import { can, requirePermission } from '../../../../../lib/authz'
 import { requireFeatureEnabled } from '../../../../../lib/feature-gates'
 import { pickString } from '../../../../../lib/list-params'
-import { SETUP_ENTITY_BY_KEY } from '../../../../../lib/setup/registry'
+import { SETUP_ENTITY_BY_KEY, type SetupEntity } from '../../../../../lib/setup/registry'
+import { PAY_DERIVED_RULES_ENTITY } from '../../../../../lib/setup/payroll-derived-rules'
 import { SetupEntitySection } from '../[entity]/SetupEntitySection'
+import { DerivedRulePreviewSection } from './DerivedRulePreviewSection'
 import { PayrollCountryPacks } from './PayrollCountryPacks'
 import { PayrollSetupWorkspace } from './PayrollSetupWorkspace'
 
@@ -25,13 +29,35 @@ export const dynamic = 'force-dynamic'
  */
 
 const ENTITY_BY_TAB = {
+  filing: 'payroll-filing-accounts',
   schedules: 'pay-schedules',
   components: 'pay-components',
   union: 'union-agreements',
+  // Entitlement plans (pay banks) and their two configuration surfaces: the
+  // scoped caps, and the service-based schedules that raise a plan's accrual
+  // rate or flip a pay component's eligibility on.
+  entitlements: 'entitlement-plans',
+  limits: 'entitlement-plan-limits',
+  service: 'entitlement-service-tiers',
 } as const
 
-const TABS = ['packs', 'accounts', 'schedules', 'components', 'union'] as const
+const TABS = [
+  'packs', 'accounts', 'filing', 'schedules', 'components', 'union',
+  'entitlements', 'limits', 'service', 'derived', 'derivedPreview',
+] as const
 type Tab = (typeof TABS)[number]
+type EntityTab = keyof typeof ENTITY_BY_TAB
+
+const isEntityTab = (tab: Tab): tab is EntityTab => tab in ENTITY_BY_TAB
+
+/**
+ * Derived earnings rules are an ordinary registry entity that has not been
+ * spread into SETUP_ENTITIES yet (see .local/handoff-derived-earnings.md).
+ * Prefer the registered descriptor the moment it exists so there is never a
+ * second copy of the entity's shape in play.
+ */
+const derivedRulesEntity = (): SetupEntity =>
+  SETUP_ENTITY_BY_KEY.get(PAY_DERIVED_RULES_ENTITY.key) ?? PAY_DERIVED_RULES_ENTITY
 
 export default async function PayrollSetupPage({
   searchParams,
@@ -42,12 +68,24 @@ export default async function PayrollSetupPage({
   const orgId = authz.user.orgId
   await requireFeatureEnabled(orgId, 'payroll')
   const sp = await searchParams
+  // A subtab backed by a registry entity only exists while that entity is
+  // registered, so the workspace never links at a 404.
+  const available = TABS.filter((key) => !isEntityTab(key) || SETUP_ENTITY_BY_KEY.has(ENTITY_BY_TAB[key]))
   const requested = pickString(sp.tab)
-  const tab: Tab = requested && (TABS as readonly string[]).includes(requested) ? (requested as Tab) : 'packs'
+  const tab: Tab = requested && (available as readonly string[]).includes(requested) ? (requested as Tab) : 'packs'
   const t = await getTranslations('payroll.settingsPage')
   const canManageEntities = can(authz, 'admin.setup.manage')
 
-  const tabs: { key: Tab; label: string }[] = TABS.map((key) => ({ key, label: t(`tabs.${key}`) }))
+  const tabLabel = (key: Tab, fallback: string) =>
+    t.has(`tabs.${key}` as never) ? t(`tabs.${key}` as never) : fallback
+  const tabs: { key: Tab; label: string }[] = available.map((key) => ({
+    key,
+    label: key === 'derived'
+      ? tabLabel(key, 'Derived Earnings')
+      : key === 'derivedPreview'
+        ? tabLabel(key, 'Rule Preview')
+        : t(`tabs.${key}`),
+  }))
 
   return (
     <div className="space-y-5">
@@ -74,7 +112,7 @@ export default async function PayrollSetupPage({
       </nav>
       {tab === 'packs' ? <PacksTab orgId={orgId} /> : null}
       {tab === 'accounts' ? <AccountsTab orgId={orgId} /> : null}
-      {tab === 'schedules' || tab === 'components' || tab === 'union' ? (
+      {isEntityTab(tab) ? (
         <SetupEntitySection
           entity={SETUP_ENTITY_BY_KEY.get(ENTITY_BY_TAB[tab])!}
           orgId={orgId}
@@ -82,6 +120,18 @@ export default async function PayrollSetupPage({
           basePath="/admin/setup/payroll"
           canManage={canManageEntities}
         />
+      ) : null}
+      {tab === 'derived' ? (
+        <SetupEntitySection
+          entity={derivedRulesEntity()}
+          orgId={orgId}
+          searchParams={sp}
+          basePath="/admin/setup/payroll"
+          canManage={canManageEntities}
+        />
+      ) : null}
+      {tab === 'derivedPreview' ? (
+        <DerivedRulePreviewSection orgId={orgId} searchParams={sp} />
       ) : null}
     </div>
   )
@@ -133,10 +183,12 @@ async function AccountsTab({ orgId }: { orgId: string }) {
   ]
   const blob = blobRes.rows[0]?.p ?? {}
   const installed = Array.isArray(blob.countries) ? blob.countries.map(String) : []
-  const [packs, us, ca] = await Promise.all([
+  const [packs, us, ca, stubPassword, encryptionAvailable] = await Promise.all([
     packSlotState(orgId, installed, blob),
     usPayrollConfig(orgId),
     caPayrollConfig(orgId),
+    stubPasswordPolicy(orgId),
+    pdfEncryptionAvailable(),
   ])
 
   return (
@@ -145,6 +197,8 @@ async function AccountsTab({ orgId }: { orgId: string }) {
       packs={packs}
       us={us}
       ca={ca}
+      stubPassword={stubPassword}
+      encryptionAvailable={encryptionAvailable}
       accounts={accountsRes.rows.map((account) => ({
         id: account.id,
         label: account.number ? `${account.number} · ${account.name}` : account.name,

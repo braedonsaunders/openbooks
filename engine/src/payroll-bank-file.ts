@@ -14,6 +14,12 @@ export const PAYROLL_BANK_FILE_EXPORT_DISABLED_MESSAGE =
 
 export type PayRunBankFileFormat = "cpa005" | "nacha";
 
+/**
+ * The approval half of the control above now exists
+ * (engine/src/payroll-approval.ts): whoever re-enables this export must call
+ * `assertPayRunApprovalReleased(orgId, documentId)` before a single byte is
+ * produced, so money-movement instructions can never leave an unapproved run.
+ */
 export async function buildPayRunBankFile(_opts: {
   orgId: string;
   documentId: string;

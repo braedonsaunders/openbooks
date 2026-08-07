@@ -50,6 +50,20 @@ export async function POST(req: Request) {
   if (!['regular', 'bonus', 'termination'].includes(runType)) {
     return NextResponse.json({ error: 'invalid runType' }, { status: 422 })
   }
+  // A final pay run pays out and clears every accrued bank, so it must name
+  // the employees it pays; the engine refuses an unscoped one outright.
+  const employeePartyIds: string[] = Array.isArray(body.employeePartyIds)
+    ? body.employeePartyIds.map((id: unknown) => String(id))
+    : []
+  if (employeePartyIds.some((id) => !isUuid(id))) {
+    return NextResponse.json({ error: 'invalid employeePartyIds' }, { status: 422 })
+  }
+  if (runType === 'termination' && employeePartyIds.length === 0) {
+    return NextResponse.json(
+      { error: 'a final pay run must name the employees it pays' },
+      { status: 422 },
+    )
+  }
   try {
     const result = await createPayRun({
       orgId: gate.user.orgId,
@@ -59,6 +73,7 @@ export async function POST(req: Request) {
       periodEnd: body.periodEnd ?? undefined,
       payDate: body.payDate ?? undefined,
       runType,
+      employeePartyIds,
     })
     return NextResponse.json({ ok: true, ...result })
   } catch (e) {
