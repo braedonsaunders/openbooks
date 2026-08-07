@@ -88,6 +88,11 @@ export interface RosterRow {
   pay_basis: 'hourly' | 'salary'
   approved_hours: string
   has_wage: boolean
+  department: string | null
+  terminated_on: string | null
+  hired_on: string | null
+  /** Another committed run's period already covers this one — double-pay risk. */
+  paid_in_period: boolean
 }
 
 export interface RemittanceRow {
@@ -313,6 +318,37 @@ export function RunWizard(props: {
   }
 
   /** Apply an input adjustment, then recalculate so the stubs stay truthful. */
+  /** Persist the run's employee scope, then recalculate if stubs exist. */
+  async function setScope(includedPartyIds: string[], rosterPartyIds: string[]) {
+    setBusy(true)
+    try {
+      const res = await fetch(`/api/payroll/runs/${run.document_id}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'set-scope', employeePartyIds: includedPartyIds, rosterPartyIds }),
+      })
+      const j = await res.json()
+      if (!res.ok) throw new Error(j.error ?? 'failed')
+      if (calculated) {
+        const recalc = await fetch(`/api/payroll/runs/${run.document_id}`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ action: 'calculate' }),
+        })
+        const rj = await recalc.json()
+        if (!recalc.ok) throw new Error(rj.error ?? 'failed')
+        setCalcErrors(Array.isArray(rj.errors) ? rj.errors : [])
+        setGl({ state: 'idle', legs: [], debitTotal: '0', error: '' })
+      }
+      toast.success(t('wizard.period.scopeSaved', { count: includedPartyIds.length }))
+      router.refresh()
+    } catch (error) {
+      toast.error((error as Error).message)
+    } finally {
+      setBusy(false)
+    }
+  }
+
   async function adjust(body: Record<string, unknown>) {
     setBusy(true)
     try {
@@ -481,10 +517,12 @@ export function RunWizard(props: {
           run={run}
           roster={props.roster}
           stubs={props.stubs}
+          adjustments={props.adjustments}
           canCalculate={canCalculate}
           calculated={calculated}
           busy={busy}
           onCalculate={() => act('calculate')}
+          onSetScope={setScope}
           fmt={fmt}
         />
       )}
@@ -542,15 +580,19 @@ function PeriodStep({
   run,
   roster,
   stubs,
+  adjustments,
   canCalculate,
   calculated,
   busy,
   onCalculate,
+  onSetScope,
   fmt,
 }: {
   run: RunHeader
   roster: RosterRow[]
   stubs: StubRow[]
+  adjustments: AdjustmentRow[]
+  onSetScope: (includedPartyIds: string[], rosterPartyIds: string[]) => Promise<void>
   canCalculate: boolean
   calculated: boolean
   busy: boolean
@@ -558,6 +600,7 @@ function PeriodStep({
   fmt: (v: string | number | null | undefined) => string
 }) {
   const t = useTranslations('payroll')
+  const tCommon = useTranslations('common')
 
   // Once calculated, hours come from the stubs themselves; before that, the
   // cheap approved-time summary previews what Calculate will pick up.
@@ -570,6 +613,70 @@ function PeriodStep({
       stub.lines.reduce((sum, line) => (line.kind === 'earning' && line.hours ? sum + Number(line.hours) : sum), 0),
     )
   }
+
+  // The run's scope IS its exclusion rows — no parallel selection state.
+  const excluded = new Set(
+    adjustments.filter((a) => a.adjustment_type === 'exclude').map((a) => a.employee_party_id),
+  )
+  const [selected, setSelected] = useState<Set<string>>(
+    () => new Set(roster.filter((r) => !excluded.has(r.employee_party_id)).map((r) => r.employee_party_id)),
+  )
+  const [department, setDepartment] = useState('')
+  const [basis, setBasis] = useState('')
+  const [onlyWithHours, setOnlyWithHours] = useState(false)
+  const [hideIneligible, setHideIneligible] = useState(false)
+
+  const hoursOf = (row: RosterRow) =>
+    calculated ? (stubHours.get(row.employee_party_id) ?? 0) : Number(row.approved_hours)
+  /** Blocking (no wage) vs advisory (zero hours, terminated, already paid). */
+  const flagsOf = (row: RosterRow) => {
+    const hours = hoursOf(row)
+    return {
+      noWage: !row.has_wage,
+      zeroHours: row.pay_basis === 'hourly' && hours === 0,
+      terminated: !!row.terminated_on && row.terminated_on <= run.period_end,
+      paidInPeriod: row.paid_in_period,
+    }
+  }
+
+  const departments = [...new Set(roster.map((r) => r.department).filter(Boolean))].sort() as string[]
+  const visible = roster.filter((row) => {
+    const f = flagsOf(row)
+    if (department && row.department !== department) return false
+    if (basis && row.pay_basis !== basis) return false
+    if (onlyWithHours && hoursOf(row) <= 0) return false
+    if (hideIneligible && (f.noWage || f.terminated || f.paidInPeriod)) return false
+    return true
+  })
+  const visibleIds = visible.map((r) => r.employee_party_id)
+  const allVisibleSelected = visibleIds.length > 0 && visibleIds.every((id) => selected.has(id))
+
+  const toggle = (id: string) =>
+    setSelected((current) => {
+      const next = new Set(current)
+      if (next.has(id)) next.delete(id)
+      else next.add(id)
+      return next
+    })
+  const toggleAllVisible = () =>
+    setSelected((current) => {
+      const next = new Set(current)
+      if (allVisibleSelected) for (const id of visibleIds) next.delete(id)
+      else for (const id of visibleIds) next.add(id)
+      return next
+    })
+
+  const storedIncluded = roster
+    .filter((r) => !excluded.has(r.employee_party_id))
+    .map((r) => r.employee_party_id)
+  const dirty =
+    storedIncluded.length !== selected.size || storedIncluded.some((id) => !selected.has(id))
+  const selectedRows = roster.filter((r) => selected.has(r.employee_party_id))
+  const estimatedHours = selectedRows.reduce((sum, r) => sum + hoursOf(r), 0)
+  const blocked = selectedRows.filter((r) => flagsOf(r).noWage).length
+
+  const CONTROL =
+    'h-8 rounded-md border border-slate-200 bg-white px-2 text-sm dark:border-slate-700 dark:bg-slate-950'
 
   return (
     <div className="space-y-4">
@@ -584,7 +691,7 @@ function PeriodStep({
             <HeaderFact label={t('wizard.period.taxYear')}>{String(run.tax_year)}</HeaderFact>
           </dl>
           {canCalculate && (
-            <Button onClick={onCalculate} disabled={busy}>
+            <Button onClick={onCalculate} disabled={busy || dirty}>
               {busy ? <Loader2 size={14} className="animate-spin" aria-hidden /> : <Calculator size={14} aria-hidden />}
               {calculated ? t('wizard.period.recalculate') : t('run.calculate')}
             </Button>
@@ -592,65 +699,167 @@ function PeriodStep({
         </div>
       </div>
 
-      <div className="overflow-x-auto rounded-xl border border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900">
-        <div className="flex items-center justify-between border-b border-slate-100 px-4 py-3 dark:border-slate-800">
+      <div className="rounded-xl border border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900">
+        <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-100 px-4 py-3 dark:border-slate-800">
           <h3 className="text-sm font-semibold text-slate-800 dark:text-slate-100">
             {t('wizard.period.employeesTitle', { count: roster.length })}
           </h3>
-          <span className="text-xs text-slate-400 dark:text-slate-500">
-            {calculated ? t('wizard.period.calculatedNote') : t('wizard.period.hint')}
-          </span>
+          <div className="flex flex-wrap items-center gap-2">
+            {departments.length > 0 && (
+              <select
+                value={department}
+                onChange={(e) => setDepartment(e.target.value)}
+                className={CONTROL}
+                aria-label={t('wizard.period.filterDepartment')}
+              >
+                <option value="">{t('wizard.period.allDepartments')}</option>
+                {departments.map((name) => (
+                  <option key={name} value={name}>{name}</option>
+                ))}
+              </select>
+            )}
+            <select
+              value={basis}
+              onChange={(e) => setBasis(e.target.value)}
+              className={CONTROL}
+              aria-label={t('profiles.columns.basis')}
+            >
+              <option value="">{t('wizard.period.allBases')}</option>
+              <option value="hourly">{t('profiles.basis.hourly')}</option>
+              <option value="salary">{t('profiles.basis.salary')}</option>
+            </select>
+            <label className="flex items-center gap-1.5 text-xs text-slate-600 dark:text-slate-300">
+              <input
+                type="checkbox"
+                className="h-4 w-4 accent-teal-600"
+                checked={onlyWithHours}
+                onChange={(e) => setOnlyWithHours(e.target.checked)}
+              />
+              {t('wizard.period.onlyWithHours')}
+            </label>
+            <label className="flex items-center gap-1.5 text-xs text-slate-600 dark:text-slate-300">
+              <input
+                type="checkbox"
+                className="h-4 w-4 accent-teal-600"
+                checked={hideIneligible}
+                onChange={(e) => setHideIneligible(e.target.checked)}
+              />
+              {t('wizard.period.hideIneligible')}
+            </label>
+          </div>
         </div>
-<div className="p-3">
+
+        {canCalculate && (
+          <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-100 bg-slate-50/60 px-4 py-2.5 text-sm dark:border-slate-800 dark:bg-slate-900/40">
+            <div className="flex flex-wrap items-center gap-x-4 gap-y-1">
+              <span className="font-medium text-slate-800 dark:text-slate-100">
+                {t('wizard.period.selectedCount', { selected: selected.size, total: roster.length })}
+              </span>
+              <span className="text-slate-500 dark:text-slate-400">
+                {t('wizard.period.selectedHours', { hours: estimatedHours.toFixed(2) })}
+              </span>
+              {blocked > 0 && (
+                <span className="text-amber-600 dark:text-amber-400">
+                  {t('wizard.period.selectedBlocked', { count: blocked })}
+                </span>
+              )}
+            </div>
+            <div className="flex items-center gap-2">
+              {dirty && (
+                <button
+                  type="button"
+                  className="text-xs text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-slate-200"
+                  onClick={() => setSelected(new Set(storedIncluded))}
+                >
+                  {tCommon('actions.cancel')}
+                </button>
+              )}
+              <Button
+                size="sm"
+                variant={dirty ? 'default' : 'outline'}
+                disabled={busy || !dirty}
+                onClick={() => void onSetScope([...selected], roster.map((r) => r.employee_party_id))}
+              >
+                {t('wizard.period.applyScope')}
+              </Button>
+            </div>
+          </div>
+        )}
+
+        <div className="p-3">
           <PagedTable
-            rows={roster}
+            rows={visible}
             columns={([
+              ...(canCalculate ? [{
+                key: 'select',
+                header: (
+                  <input
+                    type="checkbox"
+                    className="h-4 w-4 accent-teal-600"
+                    checked={allVisibleSelected}
+                    onChange={toggleAllVisible}
+                    aria-label={t('wizard.period.selectAll')}
+                  />
+                ) as unknown as string,
+                cell: (row: RosterRow) => (
+                  <input
+                    type="checkbox"
+                    className="h-4 w-4 accent-teal-600"
+                    checked={selected.has(row.employee_party_id)}
+                    onChange={() => toggle(row.employee_party_id)}
+                    aria-label={t('wizard.period.selectEmployee', { name: row.name })}
+                  />
+                ),
+              }] : []),
               {
                 key: 'employee', header: t('run.stub.employee'),
-                search: (row) => row.name,
-                cell: (row) => <span className="font-medium">{row.name}</span>,
+                search: (row: RosterRow) => row.name,
+                cell: (row: RosterRow) => (
+                  <span className={cn('font-medium', !selected.has(row.employee_party_id) && 'text-slate-400 dark:text-slate-500')}>
+                    {row.name}
+                  </span>
+                ),
+              },
+              {
+                key: 'department', header: t('wizard.period.department'),
+                search: (row: RosterRow) => row.department ?? '',
+                cell: (row: RosterRow) => row.department ?? '—',
               },
               {
                 key: 'basis', header: t('profiles.columns.basis'),
-                cell: (row) => t(`profiles.basis.${row.pay_basis}`),
+                cell: (row: RosterRow) => t(`profiles.basis.${row.pay_basis}`),
               },
               {
-                key: 'hours', header: t('wizard.period.approvedHours'), align: 'right',
-                cell: (row) => {
-                  const hours = calculated
-                    ? (stubHours.get(row.employee_party_id) ?? 0)
-                    : Number(row.approved_hours)
+                key: 'hours', header: t('wizard.period.approvedHours'), align: 'right' as const,
+                cell: (row: RosterRow) => {
+                  const hours = hoursOf(row)
                   return row.pay_basis === 'hourly' || hours > 0 ? hours.toFixed(2) : '—'
                 },
               },
               {
-                key: 'gross', header: calculated ? t('columns.gross') : '', align: 'right',
-                cell: (row) => {
+                key: 'gross', header: calculated ? t('columns.gross') : '', align: 'right' as const,
+                cell: (row: RosterRow) => {
                   const stub = stubByEmployee.get(row.employee_party_id)
                   return calculated && stub ? fmt(stub.gross) : ''
                 },
               },
               {
                 key: 'status', header: t('columns.status'),
-                cell: (row) => {
-                  const hours = calculated
-                    ? (stubHours.get(row.employee_party_id) ?? 0)
-                    : Number(row.approved_hours)
-                  const zeroHours = row.pay_basis === 'hourly' && hours === 0
-                  return !row.has_wage ? (
-                    <Badge variant="destructive">{t('wizard.period.wageMissing')}</Badge>
-                  ) : zeroHours ? (
-                    <Badge variant="warning">{t('wizard.period.zeroHours')}</Badge>
-                  ) : (
-                    <Badge variant="success">{t('wizard.period.ready')}</Badge>
-                  )
+                cell: (row: RosterRow) => {
+                  const f = flagsOf(row)
+                  if (f.noWage) return <Badge variant="outline">{t('wizard.period.noWage')}</Badge>
+                  if (f.paidInPeriod) return <Badge variant="warning">{t('wizard.period.paidInPeriod')}</Badge>
+                  if (f.terminated) return <Badge variant="warning">{t('wizard.period.terminated')}</Badge>
+                  if (f.zeroHours) return <Badge variant="secondary">{t('wizard.period.zeroHours')}</Badge>
+                  if (!selected.has(row.employee_party_id)) return <Badge variant="secondary">{t('wizard.period.excluded')}</Badge>
+                  return <Badge variant="success">{t('wizard.period.included')}</Badge>
                 },
               },
             ] as PagedColumn<RosterRow>[])}
-            pageSize={15}
+            pageSize={25}
             searchable
-            empty={<p className="p-2 text-sm text-slate-500 dark:text-slate-400">{t('wizard.period.empty')}</p>}
-            rowKey={(row) => row.employee_party_id}
+            rowKey={(row: RosterRow) => row.employee_party_id}
+            empty={t('wizard.period.noneMatch')}
           />
         </div>
       </div>

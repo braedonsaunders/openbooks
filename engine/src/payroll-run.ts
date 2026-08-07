@@ -264,6 +264,33 @@ export async function createPayRun(input: {
       iso(new Date(at(periodEnd).getTime() + schedule.pay_date_offset_days * DAY));
     const taxYear = Number(payDate.slice(0, 4));
 
+    // Guard 1 — no run may overlap an existing run on the same schedule.
+    // Two runs covering one period would pay (and remit) the period twice.
+    const overlap = (await tx.execute(sql`
+      select d.document_number from pay_runs r
+        join documents d on d.id = r.document_id
+       where r.org_id = ${orgId} and r.pay_schedule_id = ${schedule.id}
+         and r.period_start <= ${periodEnd} and r.period_end >= ${periodStart}
+         and d.status <> 'void'
+       limit 1
+    `)) as unknown as { rows: { document_number: string }[] };
+    if (overlap.rows[0]) {
+      throw new PayrollError(
+        `pay run ${overlap.rows[0].document_number} already covers ${periodStart} to ${periodEnd}`,
+      );
+    }
+
+    // Guard 2 — a run cannot be opened for a period that has not begun.
+    // Processing a few days before period END is normal payroll practice;
+    // opening a period that starts in the future is not, and it would compute
+    // statutory amounts from time that cannot exist yet.
+    const today = iso(new Date());
+    if (periodStart > today) {
+      throw new PayrollError(
+        `pay period starts ${periodStart}, which has not begun yet`,
+      );
+    }
+
     // Scoped schedules pin the run to their legal entity (and its currency);
     // org-wide schedules keep the historical root-subsidiary behaviour.
     const sub = (await tx.execute(schedule.subsidiary_id
