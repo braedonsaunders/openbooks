@@ -2519,7 +2519,7 @@ declare
     'depreciation_book_policies', 'depreciation_inputs', 'depreciation_methods',
     'depreciation_schedule_lines', 'depreciation_schedules',
     'document_line_tax_components', 'document_lines', 'document_links', 'documents',
-    'dunning_log', 'employee_roles', 'entitlement_ledger',
+    'dunning_log', 'entitlement_ledger',
     'entitlement_plan_limits', 'entitlement_plans', 'entitlement_service_tiers',
     'equipment_units', 'fair_value_prices',
     'field_ticket_labor_lines', 'field_ticket_labor_snapshots',
@@ -2563,7 +2563,7 @@ declare
     'transfer_order_lines', 'transfer_orders', 'vendor_pay_application_lines',
     'vendor_pay_applications', 'vendor_retainage_releases', 'wip_holds',
     'wip_prebill_events', 'wip_prebill_lines', 'wip_prebills', 'worker_comp_groups',
-    'employee_pay_components', 'employee_payroll_profiles',
+    'employee_pay_components',
     'pay_components', 'pay_derived_rules', 'pay_run_adjustments', 'pay_runs',
     'pay_schedules', 'pay_stub_lines', 'pay_stubs',
     'payroll_filing_accounts', 'payroll_opening_balances',
@@ -2585,9 +2585,14 @@ begin
     if to_regclass(format('public.%I', relation_name)) is null then
       raise exception 'governed query relation is missing: %', relation_name;
     end if;
-    -- SELECT * is expanded and frozen when the view is created. A later secret
-    -- column therefore cannot become queryable until this reviewed allowlist is
-    -- deliberately refreshed by a migration.
+    -- SELECT * is expanded and frozen when the view is created, so a column
+    -- added later is not queryable until this function runs again.
+    --
+    -- That is a WEAK guarantee and must not be mistaken for review: this
+    -- function is a single call with no approval step, and the baseline itself
+    -- ends by calling it. A relation that can ever hold a secret therefore does
+    -- NOT belong in this array — give it an explicit curated column list below,
+    -- where adding a sensitive column is a visible, reviewable diff.
     select exists (
       select 1 from information_schema.columns
        where table_schema = 'public' and table_name = relation_name and column_name = 'org_id'
@@ -2647,6 +2652,37 @@ begin
            is_elimination, is_active, created_at, created_by, updated_at, updated_by
       from public.subsidiaries
      where org_id = public.openbooks_query_org_id();
+  -- Payroll profiles are reportable, but the sealed national identifier is not:
+  -- sin_encrypted is envelope-encrypted SIN/SSN ciphertext and never leaves the
+  -- payroll engine. sin_last3 is the identify-without-reveal substitute.
+  create view openbooks_query.employee_payroll_profiles with (security_barrier=true) as
+    select id, org_id, employee_party_id, pay_schedule_id, province,
+           pay_basis, federal_claim_code, federal_claim_amount,
+           provincial_claim_code, provincial_claim_amount,
+           additional_tax_per_period, prescribed_zone_deduction,
+           authorized_annual_deductions, authorized_federal_credits,
+           authorized_provincial_credits, cpp_exempt, ei_exempt,
+           tax_exempt, vacation_percent, vacation_method, is_active,
+           created_at, created_by, updated_at, updated_by,
+           union_agreement_id, union_classification_id, country,
+           filing_status, multiple_jobs, dependent_credits,
+           other_income_annual, deductions_annual, w4_pre_2020,
+           w4_allowances, fica_exempt, futa_exempt, sin_last3,
+           filing_account_id, stub_delivery, payment_method
+      from public.employee_payroll_profiles
+     where org_id = public.openbooks_query_org_id();
+  -- Employment records are reportable; date of birth is not. It exists for ROE
+  -- demographics and the stub-password policy, and the schema comment on
+  -- employee_roles.birth_date already states it stays out of these views.
+  create view openbooks_query.employee_roles with (security_barrier=true) as
+    select id, org_id, party_id, employee_number, department_id,
+           supervisor_id, trade_id, worker_comp_group_id, hired_on,
+           terminated_on, has_benefits, vacation_days_per_year,
+           billable_utilization_target, expense_account_id,
+           external_payroll_id, is_active, custom, created_at, created_by,
+           updated_at, updated_by, job_title
+      from public.employee_roles
+     where org_id = public.openbooks_query_org_id();
   -- Membership rows inherit tenancy through their owning tax group. They
   -- deliberately cannot use the generic catalog path because the base table
   -- has no org_id of its own.
@@ -2658,7 +2694,8 @@ begin
 
   foreach relation_name in array array[
     'parties', 'customer_roles', 'vendor_roles', 'party_bank_accounts',
-    'subsidiaries', 'tax_group_members'
+    'subsidiaries', 'employee_payroll_profiles', 'employee_roles',
+    'tax_group_members'
   ] loop
     execute format('grant select on openbooks_query.%I to openbooks_read', relation_name);
   end loop;
@@ -4258,7 +4295,8 @@ CREATE VIEW openbooks_query.accounts WITH (security_barrier='true') AS
     updated_at,
     updated_by,
     subsidiary_id,
-    subsidiary_include_children
+    subsidiary_include_children,
+    monetary
    FROM public.accounts
   WHERE (org_id = public.openbooks_query_org_id());
 
@@ -8446,7 +8484,8 @@ CREATE VIEW openbooks_query.entitlement_plans WITH (security_barrier='true') AS
     created_at,
     created_by,
     updated_at,
-    updated_by
+    updated_by,
+    system_key
    FROM public.entitlement_plans
   WHERE (org_id = public.openbooks_query_org_id());
 
@@ -12995,7 +13034,8 @@ CREATE VIEW openbooks_query.revenue_contracts WITH (security_barrier='true') AS
     updated_at,
     updated_by,
     currency,
-    project_id
+    project_id,
+    pricing
    FROM public.revenue_contracts
   WHERE (org_id = public.openbooks_query_org_id());
 
