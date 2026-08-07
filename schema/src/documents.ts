@@ -358,6 +358,14 @@ export const timeTypes = pgTable("time_types", {
   /** Opt-in for the compact crew grid. Time types remain available to normal
    * timesheets and costing when this is false. */
   showOnFieldTicket: boolean("show_on_field_ticket").notNull().default(false),
+  /**
+   * The entry records a field EVENT, not worked time: an on-call day, a
+   * claimed per-diem night. Derived earnings rules (pay_derived_rules) read
+   * these entries; the wage calculation skips them, so a supervisor asserting
+   * "he was on call Tuesday" never produces a zero-dollar wage line or phantom
+   * hours that per-hour components and union fringes would then price.
+   */
+  excludeFromWages: boolean("exclude_from_wages").notNull().default(false),
   isActive: boolean("is_active").notNull().default(true),
   custom: jsonb("custom").notNull().default({}), // keeps source platform nsId for the time-record import bridge
 });

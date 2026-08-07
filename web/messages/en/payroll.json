@@ -197,7 +197,9 @@
         "added": "New",
         "removed": "Removed",
         "changed": "Changed"
-      }
+      },
+      "protectionShortfallTitle": "{count, plural, one {# stub could not take a protected deduction in full} other {# stubs could not take a protected deduction in full}}",
+      "protectionShortfallHint": "Protected earnings capped these deductions. The unpaid balance stays owing — tell the creditor or carry it to the next run."
     },
     "gl": {
       "needsCalculation": "Calculate the run to preview its GL impact.",
@@ -276,6 +278,9 @@
       "bonus": "Off-cycle pay for bonuses and commissions. No salary, time or recurring deductions; earnings are taxed on the bonus method.",
       "termination": "Final pay for departing employees. Includes the accrued vacation balance as a payout."
     },
+    "employees": "Employees paid",
+    "employeesHint": "A final pay run pays out and clears every accrued bank, so it runs only for the employees named here.",
+    "noTerminated": "No employee on this schedule has a termination date on file. Record it on the employee first — a final cheque cannot be calculated without one.",
     "schedule": "Pay schedule",
     "noSchedules": "No active pay schedules",
     "create": "New pay run",
@@ -330,7 +335,13 @@
       "tax": "Tax",
       "lines": "Pay lines",
       "trace": "T4127 trace"
-    }
+    },
+    "submitApproval": "Submit for approval",
+    "approvalSubmitted": "Sent for approval with the evidence package",
+    "approvalNotRequired": "No approval policy applies to pay runs",
+    "approvalPending": "Awaiting approval ({count} outstanding) — commit and posting are blocked",
+    "printSet": "Print set (print delivery only)",
+    "stubsPrintOnly": "{count} employees are print-only and were not emailed"
   },
   "profiles": {
     "addEmployee": "Employee without a profile",
@@ -387,7 +398,9 @@
       "futaExempt": "FUTA/SUI exempt",
       "fitExempt": "Federal income tax exempt (W-4 \"Exempt\")",
       "sin": "SIN / SSN",
-      "sinPlaceholder": "9 digits. Stored sealed and never displayed again."
+      "sinPlaceholder": "9 digits. Stored sealed and never displayed again.",
+      "filingAccount": "Filing account",
+      "stubDelivery": "Pay stub delivery"
     },
     "country": {
       "CA": "Canada",
@@ -401,7 +414,13 @@
     "loading": "Loading payroll profile…",
     "loadFailed": "Could not load the payroll profile.",
     "noSchedules": "Create a pay schedule before setting up payroll profiles.",
-    "openSchedules": "Open pay schedules"
+    "openSchedules": "Open pay schedules",
+    "filingAccountDefault": "Default account",
+    "stubDelivery": {
+      "email": "Email",
+      "print": "Print",
+      "both": "Email and print"
+    }
   },
   "settingsPage": {
     "title": "Payroll",
@@ -438,7 +457,13 @@
       "accounts": "Accounts & posting",
       "schedules": "Pay schedules",
       "components": "Components",
-      "union": "Union"
+      "union": "Union",
+      "filing": "Filing accounts",
+      "entitlements": "Entitlement plans",
+      "limits": "Bank limits",
+      "service": "Service schedules",
+      "derived": "Derived earnings",
+      "derivedPreview": "Rule preview"
     },
     "packs": {
       "installed": "Installed",
@@ -518,6 +543,38 @@
       "ehtExemption": "Annual exemption",
       "ehtExemptionHelp": "Ontario remuneration exempt each year ($1,000,000 for most eligible private employers; associated employers share one exemption).",
       "wcbNote": "Workers' compensation (WCB/WSIB) rates and the annual assessable maximum are set per rate class on worker-comp groups, under People setup."
+    },
+    "stubPassword": {
+      "title": "Emailed pay-stub password",
+      "description": "Encrypt emailed pay stubs and derive each employee's password from a rule you publish to your staff.",
+      "enabled": "Encrypt emailed pay stubs",
+      "unavailable": "PDF encryption is unavailable on this server — the qpdf tool is not installed.",
+      "expression": "Password rule",
+      "expressionHelp": "Tokens: {surname}, {givenName}, {employeeNumber} (add :3 for the first three characters) and {dob} with a format (MMDDYYYY, DDMMYYYY, YYYYMMDD, MMDDYY, DDMMYY, YYMMDD, MMDD, YYYY). Add |upper or |lower to change case. Example: {surname:3|upper}{dob:MMDDYYYY}."
+    },
+    "derivedPreview": {
+      "title": "Preview a derived earnings rule",
+      "description": "See which employees and days a rule would hit, and what it would pay, before you enable it.",
+      "rule": "Rule",
+      "selectRule": "Select a rule…",
+      "from": "Period start",
+      "to": "Period end",
+      "noRules": "No derived earnings rules are configured yet.",
+      "pickRule": "Choose a rule to preview the period.",
+      "enabled": "Enabled",
+      "disabled": "Not enabled yet",
+      "employeesPaid": "Employees paid",
+      "employee": "Employee",
+      "jobTitle": "Job title",
+      "day": "Day",
+      "project": "Job",
+      "quantity": "Units",
+      "amount": "Amount",
+      "total": "Total",
+      "empty": "This rule pays nothing over the selected period.",
+      "grossEstimated": "This rule pays a percentage of gross. The preview estimates gross from approved time and the effective wage; the pay run's own calculation is authoritative.",
+      "excludedTitle": "Excluded by job title",
+      "excludedDescription": "These employees are kept out by the rule's exclusion list — the deletion nobody has to remember any more."
     }
   },
   "remittances": {
@@ -591,6 +648,41 @@
     "t4Xml": {
       "download": "Download T4 XML",
       "note": "Validate against the CRA schema for the filing year before transmitting."
+    },
+    "w2": {
+      "employee": "Employee",
+      "state": "State",
+      "box1": "Box 1 wages",
+      "box2": "Box 2 FIT",
+      "box3": "Box 3 SS wages",
+      "box4": "Box 4 SS tax",
+      "box5": "Box 5 Medicare wages",
+      "box6": "Box 6 Medicare tax"
+    },
+    "roe": {
+      "title": "Records of Employment",
+      "description": "Employees whose earnings were interrupted this year. Choose a reason for issue to include an employee in the ROE Web file.",
+      "employee": "Employee",
+      "lastDay": "Last day paid",
+      "reason": "Reason for issue",
+      "comment": "Comment",
+      "download": "Download ROE XML",
+      "note": "Validate against the ROE Web schema before transmitting.",
+      "reasons": {
+        "A": "Shortage of work / end of contract or season",
+        "B": "Strike or lockout",
+        "D": "Illness or injury",
+        "E": "Quit",
+        "F": "Maternity",
+        "G": "Retirement",
+        "H": "Work sharing",
+        "J": "Apprenticeship training",
+        "K": "Other (comment required)",
+        "M": "Dismissal or suspension",
+        "N": "Leave of absence",
+        "P": "Parental",
+        "Z": "Compassionate care / family caregiver"
+      }
     }
   },
   "register": {
@@ -599,5 +691,40 @@
     "cppFica": "CPP / FICA",
     "otherDeductions": "Other deductions",
     "totals": "Totals ({count, plural, one {# employee} other {# employees}})"
+  },
+  "entitlements": {
+    "title": "Pay banks",
+    "hint": "Banked time, vacation, and any balance this employee owes back. Balances are the entitlement ledger — they move through payroll, never by editing a number.",
+    "managePlans": "Manage plans",
+    "noPlans": "No entitlement plans are configured for this organization yet.",
+    "noMovements": "No movements yet.",
+    "overLimit": "Over limit",
+    "nearLimit": "Near limit",
+    "hoursSuffix": "h",
+    "hoursAtWage": "{hours} hours at the current wage of {wage}/h",
+    "worthToday": "Worth {amount} at today's wage",
+    "owedBack": "Owed back to the employer — recouped from future pay.",
+    "limitLine": "Limit {limit} (set by {scope})",
+    "plan": "Plan",
+    "amount": "Amount",
+    "source": "Source",
+    "movementDate": "Date",
+    "movementKind": "Type",
+    "scope": {
+      "employee": "this employee",
+      "job_title": "job title",
+      "trade": "trade",
+      "department": "department",
+      "subsidiary": "legal entity",
+      "plan": "the plan default"
+    },
+    "kind": {
+      "opening": "Opening",
+      "accrual": "Accrual",
+      "bank_in": "Banked",
+      "payout": "Payout",
+      "repayment": "Repayment",
+      "adjustment": "Adjustment"
+    }
   }
 }

@@ -1,7 +1,14 @@
 import { sql } from "drizzle-orm";
 import { db } from "./db.ts";
-import { add } from "./money.ts";
+import { add, cmp } from "./money.ts";
+import {
+  effectiveFilingAccountSql,
+  filingAccountRef,
+  filingAccountsById,
+  type FilingAccountRef,
+} from "./payroll-filing.ts";
 import { RATES_2026_JAN } from "./payroll/canada/rates.ts";
+import { PayrollError } from "./payroll-run.ts";
 
 /**
  * Year-end payroll artifacts, built from committed stubs (the payroll
@@ -15,14 +22,32 @@ import { RATES_2026_JAN } from "./payroll/canada/rates.ts";
  * always reconcile to stub factors, so every box is explainable line by
  * line. Filing-record integration (CRA XML / SSA EFW2 transmission) layers
  * on later without changing the math here.
+ *
+ * A T4 return is filed per payroll program account and a W-2 set per EIN, so
+ * every slip carries its filing account and `t4Returns` assembles one
+ * slips+summary return per account. Orgs with no filing accounts configured
+ * produce exactly one unassigned return — the previous behaviour.
  */
 
 const num = (value: unknown): string => (value == null ? "0" : String(value));
 
-/** Statutory caps per tax year (extend each January alongside the engines). */
-function caYearCaps(taxYear: number): { mie: string; yampe: string } | null {
+/**
+ * Statutory caps per tax year (extend each January alongside the engines).
+ *
+ * REFUSES an unknown year rather than returning null. Boxes 24 and 26 are
+ * capped at the year's MIE and YAMPE; with no caps the cap became a no-op and
+ * the slips went out UNCAPPED and silently — a 2025 restatement, or anything
+ * filed once the calendar turned to 2027, would misstate insurable and
+ * pensionable earnings on every slip. The country pack's own
+ * `ratesForPayDate` throws for an unknown pay date; this local copy of the same
+ * constants must fail the same way, not the opposite way.
+ */
+function caYearCaps(taxYear: number): { mie: string; yampe: string } {
   if (taxYear === 2026) return { mie: RATES_2026_JAN.ei.mie, yampe: RATES_2026_JAN.cpp.yampe };
-  return null;
+  throw new PayrollError(
+    `no CRA maximums for tax year ${taxYear} — T4 boxes 24 and 26 cannot be capped. `
+    + "Add the year to engine/src/payroll/canada/rates.ts",
+  );
 }
 
 export interface T4Slip {
@@ -30,6 +55,8 @@ export interface T4Slip {
   employeeName: string;
   province: string;
   isQuebec: boolean;
+  /** Payroll program account the slip is filed under; null = unassigned. */
+  filingAccountId: string | null;
   /** T4 boxes (QPP amounts land in the QPP boxes for Quebec on the render). */
   box14EmploymentIncome: string;
   box16Cpp: string;
@@ -60,14 +87,15 @@ export async function t4Slips(orgId: string, taxYear: number): Promise<T4Slip[]>
   const caps = caYearCaps(taxYear);
   const rows = (await db.execute(sql`
     with committed as (
-      select s.* from pay_stubs s
+      select s.*, ${effectiveFilingAccountSql("prof")} as filing_account_id
+        from pay_stubs s
       join pay_runs r on r.document_id = s.pay_run_document_id and r.run_status = 'committed'
       join employee_payroll_profiles prof
         on prof.org_id = s.org_id and prof.employee_party_id = s.employee_party_id
      where s.org_id = ${orgId} and s.tax_year = ${taxYear}
        and coalesce(prof.country, 'CA') = 'CA'
     )
-    select c.employee_party_id, p.display_name,
+    select c.employee_party_id, p.display_name, c.filing_account_id,
            max(c.province) as province,
            count(*)::int as stub_count,
            sum(c.pensionable_earnings) as pensionable,
@@ -90,27 +118,27 @@ export async function t4Slips(orgId: string, taxYear: number): Promise<T4Slip[]>
                   and pc.tax_treatment = 'union_dues')) as union_dues
       from committed c
       join parties p on p.id = c.employee_party_id and p.org_id = ${orgId}
-     group by c.employee_party_id, p.display_name
+     group by c.employee_party_id, p.display_name, c.filing_account_id
      order by p.display_name
   `)) as unknown as { rows: Record<string, unknown>[] };
 
   return rows.rows.map((row) => {
     const insurable = num(row.insurable);
     const pensionable = num(row.pensionable);
-    const capMoney = (value: string, cap: string | undefined) =>
-      cap !== undefined && Number(value) > Number(cap) ? cap : value;
+    const capMoney = (value: string, cap: string) => (cmp(value, cap) > 0 ? cap : value);
     return {
       employeePartyId: String(row.employee_party_id),
       employeeName: String(row.display_name),
       province: String(row.province ?? ""),
       isQuebec: row.province === "QC",
+      filingAccountId: (row.filing_account_id as string | null) ?? null,
       box14EmploymentIncome: num(row.taxable_income),
       box16Cpp: num(row.cpp),
       box16aCpp2: num(row.cpp2),
       box18Ei: num(row.ei),
       box22IncomeTax: num(row.income_tax),
-      box24EiInsurable: capMoney(insurable, caps?.mie),
-      box26CppPensionable: capMoney(pensionable, caps?.yampe),
+      box24EiInsurable: capMoney(insurable, caps.mie),
+      box26CppPensionable: capMoney(pensionable, caps.yampe),
       box44UnionDues: num(row.union_dues),
       box55Qpip: num(row.qpip),
       stubCount: Number(row.stub_count ?? 0),
@@ -118,8 +146,27 @@ export async function t4Slips(orgId: string, taxYear: number): Promise<T4Slip[]>
   });
 }
 
-export async function t4Summary(orgId: string, taxYear: number): Promise<T4SummaryTotals> {
-  const slips = await t4Slips(orgId, taxYear);
+/**
+ * T4 Summary totals. `filingAccountId` restricts the return to one payroll
+ * program account (undefined = every account, the org-wide view); pass null
+ * for the unassigned bucket.
+ */
+export async function t4Summary(
+  orgId: string,
+  taxYear: number,
+  filingAccountId?: string | null,
+): Promise<T4SummaryTotals> {
+  const scoped = filingAccountId !== undefined;
+  const account = filingAccountId ?? null;
+  const allSlips = await t4Slips(orgId, taxYear);
+  const slips = scoped ? allSlips.filter((slip) => slip.filingAccountId === account) : allSlips;
+  // Empty fragments keep the org-wide summary's SQL identical to before.
+  const employerAccountFilter = scoped
+    ? sql`and ${effectiveFilingAccountSql("prof")} is not distinct from ${account}`
+    : sql``;
+  const billAccountFilter = scoped
+    ? sql`and (custom->'payrollRemittance'->>'filingAccountId') is not distinct from ${account}`
+    : sql``;
   const employer = (await db.execute(sql`
     select
       sum(case when pc.system_key in ('cpp', 'cpp2') then l.amount else 0 end) as employer_cpp,
@@ -128,14 +175,18 @@ export async function t4Summary(orgId: string, taxYear: number): Promise<T4Summa
       join pay_stubs s on s.id = l.stub_id
       join pay_runs r on r.document_id = s.pay_run_document_id and r.run_status = 'committed'
       join pay_components pc on pc.id = l.component_id
+      left join employee_payroll_profiles prof
+        on prof.org_id = s.org_id and prof.employee_party_id = s.employee_party_id
      where l.org_id = ${orgId} and s.tax_year = ${taxYear}
        and l.kind = 'employer_contribution' and coalesce(pc.country, 'CA') = 'CA'
+       ${employerAccountFilter}
   `)) as unknown as { rows: { employer_cpp: string | null; employer_ei: string | null }[] };
   const remitted = (await db.execute(sql`
     select coalesce(sum(total), 0) as amount from documents
      where org_id = ${orgId} and kind = 'vendor_bill' and status = 'posted'
        and custom ? 'payrollRemittance'
        and custom->'payrollRemittance'->>'to' like ${`${taxYear}-%`}
+       ${billAccountFilter}
   `)) as unknown as { rows: { amount: string }[] };
   const total = (pick: (slip: T4Slip) => string) =>
     slips.reduce((acc, slip) => add(acc, pick(slip)), "0");
@@ -150,6 +201,35 @@ export async function t4Summary(orgId: string, taxYear: number): Promise<T4Summa
     incomeTax: total((s) => s.box22IncomeTax),
     remitted: num(remitted.rows[0]?.amount),
   };
+}
+
+/** One filed T4 return: the slips of one payroll program account + its summary. */
+export interface T4Return {
+  filingAccount: FilingAccountRef;
+  slips: T4Slip[];
+  summary: T4SummaryTotals;
+}
+
+/**
+ * The year's T4 returns, one per payroll program account the year's employees
+ * were filed under (accounts with no slips are not returned, and an org with
+ * no filing accounts yields exactly one unassigned return).
+ */
+export async function t4Returns(orgId: string, taxYear: number): Promise<T4Return[]> {
+  const slips = await t4Slips(orgId, taxYear);
+  if (slips.length === 0) return [];
+  const accounts = await filingAccountsById(orgId);
+  const accountIds = [...new Set(slips.map((slip) => slip.filingAccountId))];
+  const returns: T4Return[] = [];
+  for (const accountId of accountIds) {
+    returns.push({
+      filingAccount: filingAccountRef(accountId, accounts),
+      slips: slips.filter((slip) => slip.filingAccountId === accountId),
+      summary: await t4Summary(orgId, taxYear, accountId),
+    });
+  }
+  return returns.sort((a, b) =>
+    (a.filingAccount.accountNumber ?? "").localeCompare(b.filingAccount.accountNumber ?? ""));
 }
 
 export interface RoePeriod {
@@ -187,6 +267,203 @@ export async function roeWorksheet(
     totalInsurableEarnings: periods.reduce((acc, p) => add(acc, p.insurableEarnings), "0"),
     totalInsurableHours: periods.reduce((acc, p) => add(acc, p.insurableHours), "0"),
   };
+}
+
+/**
+ * Block 15C consecutive-pay-period count by pay-period type, per the Service
+ * Canada ROE instructions. Block 15A's insurable hours are reported over the
+ * same window.
+ */
+const ROE_PERIODS_BY_FREQUENCY: Record<string, number> = {
+  weekly: 53,
+  biweekly: 27,
+  semi_monthly: 25,
+  monthly: 13,
+};
+
+/** ROE Block 6 pay-period type codes. */
+const ROE_PERIOD_TYPE: Record<string, string> = {
+  weekly: "W",
+  biweekly: "B",
+  semi_monthly: "S",
+  monthly: "M",
+};
+
+/**
+ * ROE Block 16 reason-for-issue codes (Service Canada). The reason is the
+ * employer's declaration about WHY earnings stopped, so it is always an input:
+ * nothing in the payroll data can infer it, and guessing it would be a false
+ * statutory statement.
+ */
+export const ROE_REASON_CODES = [
+  "A", // shortage of work / end of contract or season
+  "B", // strike or lockout
+  "D", // illness or injury
+  "E", // quit
+  "F", // maternity
+  "G", // retirement
+  "H", // work sharing
+  "J", // apprenticeship training
+  "K", // other (comment required)
+  "M", // dismissal or suspension
+  "N", // leave of absence
+  "P", // parental
+  "Z", // compassionate care / family caregiver
+] as const;
+
+export type RoeReasonCode = (typeof ROE_REASON_CODES)[number];
+
+/** One employee's complete ROE, block by block. */
+export interface RoeRecord {
+  employeePartyId: string;
+  employeeName: string;
+  /**
+   * The employee's payroll country. Required, and carried all the way to the
+   * XML builder, so the "only a Canadian employee gets an ROE" rule is enforced
+   * where the file is written and not only where the list is queried.
+   */
+  country: string;
+  /** Block 4 — the employer's own payroll reference for the employee. */
+  payrollReference: string | null;
+  /** Block 5 — the payroll program account the employee is filed under. */
+  filingAccount: FilingAccountRef;
+  /** Block 6 — W | B | S | M. */
+  payPeriodType: string;
+  /** Block 8 — present only on the XML build (sealed until then). */
+  sinLast3: string | null;
+  /** Block 10 / 11 / 12. */
+  firstDayWorked: string | null;
+  lastDayPaid: string | null;
+  finalPayPeriodEnd: string | null;
+  /** Block 13. */
+  occupation: string | null;
+  /** Block 15A / 15B / 15C — newest period first (P1 = final pay period). */
+  totalInsurableHours: string;
+  totalInsurableEarnings: string;
+  periods: RoePeriod[];
+  /** Block 17A — vacation pay in the final pay period. */
+  vacationPayOnSeparation: string;
+  /** Block 17C — other monies (bonus/retiring allowance) in the final period. */
+  otherMoniesOnSeparation: string;
+}
+
+/**
+ * Assemble one employee's ROE from committed stubs and the employee record.
+ * Every block that the payroll data cannot supply (reason for issue, comments,
+ * expected recall) stays an input on the caller — this builder never invents a
+ * statutory declaration.
+ *
+ * CANADA ONLY, like `t4Slips` above. A Record of Employment is a Service Canada
+ * return filed under a CRA payroll program account against a SIN; a US employee
+ * of a CA/US org has neither. Without this predicate a terminated US employee
+ * appeared in the year-end "ROE due" list and could be filed — a false
+ * statutory return that also discloses their SSN. Returns null for a non-CA
+ * employee so every caller (including the XML builder) fails closed.
+ */
+export async function roeRecord(orgId: string, employeePartyId: string): Promise<RoeRecord | null> {
+  const header = (await db.execute(sql`
+    select p.display_name, er.employee_number, er.job_title,
+           er.hired_on::text as hired_on, er.terminated_on::text as terminated_on,
+           prof.sin_last3, sched.frequency, coalesce(prof.country, 'CA') as country,
+           ${effectiveFilingAccountSql("prof")} as filing_account_id
+      from parties p
+      left join employee_roles er on er.party_id = p.id and er.org_id = p.org_id
+      left join employee_payroll_profiles prof
+        on prof.org_id = p.org_id and prof.employee_party_id = p.id
+      left join pay_schedules sched on sched.id = prof.pay_schedule_id
+     where p.org_id = ${orgId} and p.id = ${employeePartyId}
+       and coalesce(prof.country, 'CA') = 'CA'
+  `)) as unknown as {
+    rows: {
+      display_name: string; employee_number: string | null; job_title: string | null;
+      hired_on: string | null; terminated_on: string | null; sin_last3: string | null;
+      frequency: string | null; country: string; filing_account_id: string | null;
+    }[];
+  };
+  const row = header.rows[0];
+  if (!row) return null;
+
+  const frequency = row.frequency ?? "biweekly";
+  const worksheet = await roeWorksheet(
+    orgId, employeePartyId, ROE_PERIODS_BY_FREQUENCY[frequency] ?? 27,
+  );
+  const finalPeriod = worksheet.periods[0] ?? null;
+
+  // Block 17: monies paid because employment ended, taken from the final
+  // committed stub's own lines (vacation payout vs. other non-periodic pay).
+  const separation = (await db.execute(sql`
+    select
+      coalesce(sum(case when pc.system_key = 'vacation_payout' then l.amount else 0 end), 0) as vacation,
+      coalesce(sum(case when pc.system_key = 'bonus' then l.amount else 0 end), 0) as other
+      from pay_stub_lines l
+      join pay_stubs s on s.id = l.stub_id
+      join pay_runs r on r.document_id = s.pay_run_document_id and r.run_status = 'committed'
+      left join pay_components pc on pc.id = l.component_id
+     where s.org_id = ${orgId} and s.employee_party_id = ${employeePartyId}
+       and l.kind = 'earning'
+       and (${finalPeriod?.payDate ?? null}::date is null or s.pay_date = ${finalPeriod?.payDate ?? null})
+  `)) as unknown as { rows: { vacation: string; other: string }[] };
+
+  const accounts = await filingAccountsById(orgId);
+  return {
+    employeePartyId,
+    employeeName: row.display_name,
+    country: row.country ?? "CA",
+    payrollReference: row.employee_number,
+    filingAccount: filingAccountRef(row.filing_account_id, accounts),
+    payPeriodType: ROE_PERIOD_TYPE[frequency] ?? "B",
+    sinLast3: row.sin_last3,
+    firstDayWorked: row.hired_on,
+    // The last day for which paid: the employee's termination date when the
+    // record carries one, else the final committed period end.
+    lastDayPaid: row.terminated_on ?? finalPeriod?.periodEnd ?? null,
+    finalPayPeriodEnd: finalPeriod?.periodEnd ?? null,
+    occupation: row.job_title,
+    totalInsurableHours: worksheet.totalInsurableHours,
+    totalInsurableEarnings: worksheet.totalInsurableEarnings,
+    periods: worksheet.periods,
+    vacationPayOnSeparation: num(separation.rows[0]?.vacation),
+    otherMoniesOnSeparation: num(separation.rows[0]?.other),
+  };
+}
+
+/**
+ * Employees an ROE is due for in the tax year: anyone with a termination date
+ * in the year, plus anyone paid by a termination run. Drives the year-end
+ * page's ROE list — issuing the ROE itself is still an explicit act.
+ *
+ * Canadian employees only — the same predicate `t4Slips` and `roeRecord` use.
+ * A US employee has no Record of Employment and must never be offered as one.
+ */
+export async function roeCandidates(orgId: string, taxYear: number): Promise<{
+  employeePartyId: string;
+  employeeName: string;
+  terminatedOn: string | null;
+  lastPayDate: string | null;
+}[]> {
+  const rows = (await db.execute(sql`
+    select p.id, p.display_name, er.terminated_on::text as terminated_on,
+           max(s.pay_date)::text as last_pay_date
+      from parties p
+      join pay_stubs s on s.employee_party_id = p.id and s.org_id = p.org_id
+      join pay_runs r on r.document_id = s.pay_run_document_id and r.run_status = 'committed'
+      join employee_payroll_profiles prof
+        on prof.org_id = p.org_id and prof.employee_party_id = p.id
+      left join employee_roles er on er.party_id = p.id and er.org_id = p.org_id
+     where p.org_id = ${orgId} and s.tax_year = ${taxYear}
+       and coalesce(prof.country, 'CA') = 'CA'
+       and (extract(year from er.terminated_on)::int = ${taxYear} or r.run_type = 'termination')
+     group by p.id, p.display_name, er.terminated_on
+     order by p.display_name
+  `)) as unknown as {
+    rows: { id: string; display_name: string; terminated_on: string | null; last_pay_date: string | null }[];
+  };
+  return rows.rows.map((row) => ({
+    employeePartyId: row.id,
+    employeeName: row.display_name,
+    terminatedOn: row.terminated_on,
+    lastPayDate: row.last_pay_date,
+  }));
 }
 
 export interface Form941Quarter {
@@ -238,6 +515,8 @@ export interface W2Slip {
   employeePartyId: string;
   employeeName: string;
   state: string;
+  /** EIN account the W-2 is filed under; null = unassigned. */
+  filingAccountId: string | null;
   box1Wages: string;
   box2FederalIncomeTax: string;
   box3SsWages: string;
@@ -249,6 +528,7 @@ export interface W2Slip {
 export async function w2Slips(orgId: string, taxYear: number): Promise<W2Slip[]> {
   const rows = (await db.execute(sql`
     select s.employee_party_id, p.display_name, max(s.province) as state,
+           ${effectiveFilingAccountSql("prof")} as filing_account_id,
            sum((select coalesce(sum(l.amount), 0) from pay_stub_lines l
                  join pay_components pc on pc.id = l.component_id
                 where l.stub_id = s.id and l.kind = 'earning' and coalesce(pc.taxable, true))) as wages,
@@ -270,13 +550,14 @@ export async function w2Slips(orgId: string, taxYear: number): Promise<W2Slip[]>
         on prof.org_id = s.org_id and prof.employee_party_id = s.employee_party_id and prof.country = 'US'
       join parties p on p.id = s.employee_party_id and p.org_id = ${orgId}
      where s.org_id = ${orgId} and s.tax_year = ${taxYear}
-     group by s.employee_party_id, p.display_name
+     group by s.employee_party_id, p.display_name, ${effectiveFilingAccountSql("prof")}
      order by p.display_name
   `)) as unknown as { rows: Record<string, unknown>[] };
   return rows.rows.map((row) => ({
     employeePartyId: String(row.employee_party_id),
     employeeName: String(row.display_name),
     state: String(row.state ?? ""),
+    filingAccountId: (row.filing_account_id as string | null) ?? null,
     box1Wages: num(row.wages),
     box2FederalIncomeTax: num(row.fit),
     box3SsWages: num(row.ss_wages),

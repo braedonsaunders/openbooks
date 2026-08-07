@@ -1,6 +1,6 @@
 'use client'
 
-import { useMemo, useState, type ReactNode } from 'react'
+import { Fragment, useMemo, useState, type ReactNode } from 'react'
 import { usePathname, useRouter, useSearchParams } from 'next/navigation'
 import { useLocale, useTranslations } from 'next-intl'
 import { toast } from 'sonner'
@@ -17,7 +17,7 @@ import {
   cn,
   type SelectOption,
 } from '@openbooks/ui'
-import { toSnake, type SetupEntity, type SetupField } from '../../../../../lib/setup/registry'
+import { setupFieldVisible, toSnake, type SetupEntity, type SetupField } from '../../../../../lib/setup/registry'
 import { countryOptions } from '../../../../../lib/countries'
 
 type RefOption = { value: string; label: string }
@@ -130,8 +130,13 @@ export function SetupDrawer({
     router.replace(query ? `${pathname}?${query}` : pathname, { scroll: false })
   }
 
+  // Conditional fields are evaluated against the live form, so switching a
+  // component from a deduction to an earning drops its protection settings
+  // from view (and from the required-field check) as the choice is made.
+  const visibleFields = entity.fields.filter((field) => setupFieldVisible(field, form))
+
   function validate(): string | null {
-    for (const f of entity.fields) {
+    for (const f of visibleFields) {
       if (!f.required || f.kind === 'boolean' || f.kind === 'multiref') continue
       if (!creating && f.lockedOnEdit) continue
       const v = form[f.key]
@@ -150,6 +155,14 @@ export function SetupDrawer({
     }
     setBusy(true)
     const body: Record<string, any> = { ...form, ...fixedValues }
+    // A field the form stopped showing must not persist behind the UI: a pay
+    // component switched from a deduction to an earning gives its protection
+    // settings back to their defaults, exactly as the CHECK constraint expects.
+    for (const field of entity.fields) {
+      if (field.showWhen && !setupFieldVisible(field, form)) {
+        body[field.key] = field.defaultValue ?? ''
+      }
+    }
     if (!creating) body.id = row![idColumn]
     const res = await fetch(`/api/admin/setup/${entity.key}`, {
       method: creating ? 'POST' : 'PATCH',
@@ -252,17 +265,23 @@ export function SetupDrawer({
       }
     >
       {nestedTabActive ? nestedTab?.content : <div className="grid gap-4 p-1 sm:grid-cols-2">
-        {entity.fields.filter((field) => !field.hidden).map((field) => (
-          <FieldControl
-            key={field.key}
-            field={field}
-            value={form[field.key]}
-            onChange={(v) => set(field.key, v)}
-            creating={creating}
-            forceLocked={Object.hasOwn(fixedValues ?? {}, field.key)}
-            refOptions={field.ref ? (refOptions[field.ref] ?? []) : []}
-            t={t}
-          />
+        {visibleFields.map((field, index) => (
+          <Fragment key={field.key}>
+            {field.sectionKey && field.sectionKey !== visibleFields[index - 1]?.sectionKey ? (
+              <h3 className="border-t border-slate-200 pt-4 text-sm font-semibold text-slate-800 sm:col-span-2 dark:border-slate-800 dark:text-slate-100">
+                {t(field.sectionKey)}
+              </h3>
+            ) : null}
+            <FieldControl
+              field={field}
+              value={form[field.key]}
+              onChange={(v) => set(field.key, v)}
+              creating={creating}
+              forceLocked={Object.hasOwn(fixedValues ?? {}, field.key)}
+              refOptions={field.ref ? (refOptions[field.ref] ?? []) : []}
+              t={t}
+            />
+          </Fragment>
         ))}
         {!creating && entity.key === 'tax-return-forms' ? (
           <div className="space-y-2 border-t border-slate-200 pt-4 sm:col-span-2 dark:border-slate-800">
@@ -472,6 +491,7 @@ function FieldControl({
             </option>
           ))}
         </Select>
+        {field.helpTextKey ? <p className="text-xs text-slate-500 dark:text-slate-400">{t(field.helpTextKey)}</p> : null}
       </div>
     )
   }

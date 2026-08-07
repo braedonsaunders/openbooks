@@ -7,6 +7,13 @@ import { toast } from 'sonner'
 import { Play, Plus } from 'lucide-react'
 import { Button, Drawer, Label, Select } from '@openbooks/ui'
 
+export interface FinalPayCandidate {
+  id: string
+  name: string
+  pay_schedule_id: string
+  terminated_on: string
+}
+
 export interface RunSchedule {
   id: string
   name: string
@@ -83,7 +90,14 @@ export function StartRunButton({ payScheduleId, size = 'sm' }: { payScheduleId: 
  * change the dates here. The server independently validates the window
  * (no overlap with an existing run, no far-future period).
  */
-export function NewRunButton({ schedules }: { schedules: RunSchedule[] }) {
+export function NewRunButton({
+  schedules,
+  finalPayCandidates = [],
+}: {
+  schedules: RunSchedule[]
+  /** Employees whose employment has ended — the only final-pay scope. */
+  finalPayCandidates?: FinalPayCandidate[]
+}) {
   const t = useTranslations('payroll')
   const tCommon = useTranslations('common')
   const router = useRouter()
@@ -91,6 +105,7 @@ export function NewRunButton({ schedules }: { schedules: RunSchedule[] }) {
   const [busy, setBusy] = useState(false)
   const [scheduleId, setScheduleId] = useState(schedules[0]?.id ?? '')
   const [runType, setRunType] = useState<'regular' | 'bonus' | 'termination'>('regular')
+  const [paidEmployees, setPaidEmployees] = useState<string[]>([])
   const schedule = schedules.find((s) => s.id === scheduleId) ?? schedules[0]
   const derived = schedule ? nextPeriod(schedule) : { start: '', end: '', payDate: '' }
   const [period, setPeriod] = useState(derived)
@@ -102,6 +117,8 @@ export function NewRunButton({ schedules }: { schedules: RunSchedule[] }) {
   function selectSchedule(id: string) {
     setScheduleId(id)
     setTouched(false)
+    // The scope belongs to the schedule that was chosen with it.
+    setPaidEmployees([])
     const next = schedules.find((s) => s.id === id)
     if (next) setPeriod(nextPeriod(next))
   }
@@ -110,6 +127,8 @@ export function NewRunButton({ schedules }: { schedules: RunSchedule[] }) {
     setTouched(true)
     setPeriod({ ...shown, [key]: value })
   }
+
+  const scopeCandidates = finalPayCandidates.filter((e) => e.pay_schedule_id === scheduleId)
 
   async function create() {
     if (!scheduleId) return
@@ -121,6 +140,7 @@ export function NewRunButton({ schedules }: { schedules: RunSchedule[] }) {
         periodEnd: shown.end,
         payDate: shown.payDate,
         runType,
+        employeePartyIds: runType === 'termination' ? paidEmployees : [],
       })
       setOpen(false)
       router.push(`/payroll/runs/${documentId}`)
@@ -136,7 +156,10 @@ export function NewRunButton({ schedules }: { schedules: RunSchedule[] }) {
   const badWindow = !shown.start || !shown.end || !shown.payDate
     || shown.end < shown.start || shown.payDate < shown.end
   const notBegun = !!shown.start && shown.start > today
-  const invalid = !scheduleId || badWindow || notBegun
+  // A final pay run without a named scope would pay and drain the whole
+  // schedule; the engine refuses one, so the dialog never proposes one either.
+  const unscopedFinalPay = runType === 'termination' && paidEmployees.length === 0
+  const invalid = !scheduleId || badWindow || notBegun || unscopedFinalPay
 
   if (schedules.length === 0) return null
   return (
@@ -181,6 +204,37 @@ export function NewRunButton({ schedules }: { schedules: RunSchedule[] }) {
                   <option key={s.id} value={s.id}>{s.name}</option>
                 ))}
               </Select>
+            </div>
+          )}
+          {runType === 'termination' && (
+            <div className="space-y-1.5">
+              <Label>{t('newRun.employees')}</Label>
+              {scopeCandidates.length === 0 ? (
+                <p className="text-xs text-slate-500 dark:text-slate-400">{t('newRun.noTerminated')}</p>
+              ) : (
+                <>
+                  <div className="max-h-48 space-y-1 overflow-y-auto rounded-md border border-slate-200 p-2 dark:border-slate-700">
+                    {scopeCandidates.map((employee) => (
+                      <label key={employee.id} className="flex items-center gap-2 text-sm">
+                        <input
+                          type="checkbox"
+                          checked={paidEmployees.includes(employee.id)}
+                          onChange={(e) => setPaidEmployees((current) => (
+                            e.target.checked
+                              ? [...current, employee.id]
+                              : current.filter((id) => id !== employee.id)
+                          ))}
+                        />
+                        <span>{employee.name}</span>
+                        <span className="text-xs text-slate-500 dark:text-slate-400">
+                          {employee.terminated_on}
+                        </span>
+                      </label>
+                    ))}
+                  </div>
+                  <p className="text-xs text-slate-500 dark:text-slate-400">{t('newRun.employeesHint')}</p>
+                </>
+              )}
             </div>
           )}
           <div className="grid gap-3 sm:grid-cols-2">

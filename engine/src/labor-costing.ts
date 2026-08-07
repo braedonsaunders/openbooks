@@ -207,7 +207,13 @@ export function convertFixedLaborComponents(
   );
 }
 
-async function laborFxRate(
+/**
+ * Latest spot rate on or before a date, direct or inverted. Exported because
+ * the PAY RUN needs exactly this rate: a wage row denominated in one currency
+ * paid by an entity that reports in another must be converted before it is
+ * paid, and it must be converted by the same rule that costs the hour.
+ */
+export async function laborFxRate(
   orgId: string,
   from: string,
   to: string,

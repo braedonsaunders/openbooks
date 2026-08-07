@@ -406,6 +406,9 @@ export async function completeRequestedDocumentVoid(
       if (String(doc.kind) === "customer_invoice") {
         await releaseBillingProvenance(tx, orgId, documentId);
       }
+      if (String(doc.kind) === "pay_run") {
+        await releaseVoidedPayRun(tx, orgId, documentId);
+      }
       await tx.execute(sql`
         update documents
            set status = 'voided',
@@ -446,6 +449,74 @@ export async function completeRequestedDocumentVoid(
     );
     return result.reversalEntryId;
   });
+}
+
+/**
+ * Un-count a voided pay run.
+ *
+ * Reversing the GL is not enough for payroll: the payroll subledger is
+ * `pay_runs` + `pay_stubs`, and EVERY consumer of it selects on
+ * `pay_runs.run_status = 'committed'` with no predicate on the document's
+ * status. Leaving a voided run committed therefore keeps it counted in
+ * statutory year-to-date (CPP/CPP2/EI room, US wage bases), WCB annual room,
+ * the EHT exemption, T4/T4 Summary/W-2/941 and the remittance summary — so the
+ * next run under-deducts against consumed room and the CRA is billed for
+ * withholdings that no longer exist. One status write retires the run from all
+ * of them at once.
+ *
+ * The two other claims a commit made must also be released:
+ *
+ * - `time_entries.payroll_batch_ref` — commit stamps the period's approved
+ *   hours with the run id so they are never paid twice. If the void left the
+ *   stamp, those hours could never be paid at all.
+ * - `entitlement_ledger` movements keyed to the run (vacation/banked-hours
+ *   accruals and payouts). Balances are SUM(ledger) with no run-status
+ *   predicate, so a voided accrual would stay in the employee's bank. These are
+ *   REVERSED, not deleted, dated on the same reversal date as the GL entry so
+ *   the entitlement liability and its GL account move together.
+ *
+ * A run that has been PAID needs no special handling here: the payment applies
+ * to the run's open net-pay items, so the generic "live payments or credits
+ * applied" guard above already refuses the void.
+ */
+async function releaseVoidedPayRun(
+  tx: Pick<typeof db, "execute">,
+  orgId: string,
+  documentId: string,
+): Promise<void> {
+  const run = (await tx.execute(sql`
+    update pay_runs
+       set run_status = 'voided', updated_at = now()
+     where org_id = ${orgId} and document_id = ${documentId}
+       and run_status <> 'voided'
+     returning document_id
+  `)) as unknown as { rows: { document_id: string }[] };
+  if (run.rows.length === 0) return; // already released (idempotent replay)
+
+  await tx.execute(sql`
+    update time_entries
+       set payroll_batch_ref = null, updated_at = now()
+     where org_id = ${orgId} and payroll_batch_ref = ${documentId}
+  `);
+
+  await tx.execute(sql`
+    insert into entitlement_ledger
+      (org_id, plan_id, employee_party_id, movement_date, amount, hours, kind,
+       pay_run_document_id, note, created_by, updated_by)
+    select l.org_id, l.plan_id, l.employee_party_id,
+           (select void_reversal_date from documents
+             where id = ${documentId} and org_id = ${orgId}),
+           -sum(l.amount), -sum(l.hours), 'adjustment', ${documentId},
+           'Reversal: voided pay run',
+           (select void_requested_by from documents where id = ${documentId} and org_id = ${orgId}),
+           (select void_requested_by from documents where id = ${documentId} and org_id = ${orgId})
+      from entitlement_ledger l
+     where l.org_id = ${orgId} and l.pay_run_document_id = ${documentId}
+       and l.kind <> 'adjustment'
+     group by l.org_id, l.plan_id, l.employee_party_id
+    having sum(l.amount) <> 0
+    on conflict do nothing
+  `);
 }
 
 export async function rejectRequestedDocumentVoid(

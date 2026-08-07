@@ -41,6 +41,7 @@ import { DocTypeBadge, docTypeMeta } from '../../../components/doc-type-badge'
 import type { LineGridColumn } from '../../../components/line-grid'
 import { TransactionDrawer } from '../../../components/transaction-drawer'
 import { EmployeeWageRates } from './EmployeeWageRates'
+import { EmployeeEntitlementBalances } from './EmployeeEntitlementBalances'
 import { PayrollProfileTab } from '../payroll/_ui/PayrollProfileTab'
 import { RateBookAssignmentSection } from './RateBookAssignmentSection'
 import { ApprovalActions } from '../../../components/approval-actions'
@@ -1321,6 +1322,9 @@ export function PartyDrawer({
         {tab === 'payroll' && role === 'employee' && canManagePayroll ? (
           <div className="space-y-6">
             <PayrollProfileTab partyId={String(p.id)} partyName={String(p.display_name ?? '')} />
+            {/* Pay banks (banked time, vacation, benefit recoup) belong beside
+                the payroll profile — one home for this person's compensation. */}
+            <EmployeeEntitlementBalances partyId={String(p.id)} />
             {/* Direct deposit: the same approval-gated bank accounts the AP
                 side uses — the pay-run bank file only pays approved accounts. */}
             <BankAccountsPanel partyId={String(p.id)} initialAccounts={payload.bankAccounts} canManage={canManage} />
