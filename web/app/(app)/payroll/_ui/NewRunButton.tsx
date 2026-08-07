@@ -4,22 +4,56 @@ import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { useTranslations } from 'next-intl'
 import { toast } from 'sonner'
-import { ChevronDown, Play, Plus } from 'lucide-react'
-import { Button, Popover } from '@openbooks/ui'
+import { Play, Plus } from 'lucide-react'
+import { Button, Drawer, Label, Select } from '@openbooks/ui'
 
-/** POST /api/payroll/runs and land in the wizard. */
-async function createRun(payScheduleId: string, router: ReturnType<typeof useRouter>) {
+export interface RunSchedule {
+  id: string
+  name: string
+  frequency: string
+  pay_date_offset_days: number
+  /** Last period end on this schedule (or its anchor when nothing has run). */
+  last_end: string | null
+}
+
+const DAY = 86_400_000
+const iso = (d: Date) => d.toISOString().slice(0, 10)
+const at = (value: string) => new Date(`${value}T00:00:00Z`)
+
+/** Period length in days for the schedule's cadence (month-ends handled below). */
+function addPeriod(from: Date, frequency: string): Date {
+  const next = new Date(from)
+  switch (frequency) {
+    case 'weekly': next.setUTCDate(next.getUTCDate() + 7); break
+    case 'biweekly': next.setUTCDate(next.getUTCDate() + 14); break
+    case 'semimonthly': next.setUTCDate(next.getUTCDate() + 15); break
+    case 'monthly': next.setUTCMonth(next.getUTCMonth() + 1); break
+    default: next.setUTCDate(next.getUTCDate() + 14)
+  }
+  return next
+}
+
+/** The schedule's next period: the day after its last period end, one cadence long. */
+function nextPeriod(schedule: RunSchedule): { start: string; end: string; payDate: string } {
+  const lastEnd = schedule.last_end ? at(schedule.last_end) : new Date()
+  const start = new Date(lastEnd.getTime() + DAY)
+  const end = new Date(addPeriod(start, schedule.frequency).getTime() - DAY)
+  const payDate = new Date(end.getTime() + (schedule.pay_date_offset_days ?? 0) * DAY)
+  return { start: iso(start), end: iso(end), payDate: iso(payDate) }
+}
+
+async function postRun(body: Record<string, unknown>): Promise<string> {
   const res = await fetch('/api/payroll/runs', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ payScheduleId }),
+    body: JSON.stringify(body),
   })
   const j = await res.json()
   if (!res.ok) throw new Error(j.error ?? 'failed')
-  router.push(`/payroll/runs/${j.documentId}`)
+  return j.documentId as string
 }
 
-/** One-click "Run payroll" for a known schedule (the current-period cards). */
+/** One-click run for a known schedule, using its derived next period. */
 export function StartRunButton({ payScheduleId, size = 'sm' }: { payScheduleId: string; size?: 'sm' | 'md' }) {
   const t = useTranslations('payroll')
   const router = useRouter()
@@ -31,7 +65,7 @@ export function StartRunButton({ payScheduleId, size = 'sm' }: { payScheduleId: 
       onClick={async () => {
         setBusy(true)
         try {
-          await createRun(payScheduleId, router)
+          router.push(`/payroll/runs/${await postRun({ payScheduleId })}`)
         } catch (e) {
           toast.error((e as Error).message)
           setBusy(false)
@@ -43,58 +77,133 @@ export function StartRunButton({ payScheduleId, size = 'sm' }: { payScheduleId: 
   )
 }
 
-/** "New pay run" — house dropdown pattern: one schedule = plain button,
- *  several = a Popover menu of schedules (mirrors NewDocumentButton). */
-export function NewRunButton({ schedules }: { schedules: { id: string; name: string }[] }) {
+/**
+ * New pay run: choose the schedule and confirm the period the run covers.
+ * The schedule's next period prefills every field; off-cycle and catch-up runs
+ * change the dates here. The server independently validates the window
+ * (no overlap with an existing run, no far-future period).
+ */
+export function NewRunButton({ schedules }: { schedules: RunSchedule[] }) {
   const t = useTranslations('payroll')
+  const tCommon = useTranslations('common')
   const router = useRouter()
   const [open, setOpen] = useState(false)
   const [busy, setBusy] = useState(false)
+  const [scheduleId, setScheduleId] = useState(schedules[0]?.id ?? '')
+  const schedule = schedules.find((s) => s.id === scheduleId) ?? schedules[0]
+  const derived = schedule ? nextPeriod(schedule) : { start: '', end: '', payDate: '' }
+  const [period, setPeriod] = useState(derived)
+  const [touched, setTouched] = useState(false)
 
-  async function start(scheduleId: string) {
-    setOpen(false)
+  // Switching schedules re-prefills until the operator edits a date.
+  const shown = touched ? period : derived
+
+  function selectSchedule(id: string) {
+    setScheduleId(id)
+    setTouched(false)
+    const next = schedules.find((s) => s.id === id)
+    if (next) setPeriod(nextPeriod(next))
+  }
+
+  function setField(key: 'start' | 'end' | 'payDate', value: string) {
+    setTouched(true)
+    setPeriod({ ...shown, [key]: value })
+  }
+
+  async function create() {
+    if (!scheduleId) return
     setBusy(true)
     try {
-      await createRun(scheduleId, router)
+      const documentId = await postRun({
+        payScheduleId: scheduleId,
+        periodStart: shown.start,
+        periodEnd: shown.end,
+        payDate: shown.payDate,
+      })
+      setOpen(false)
+      router.push(`/payroll/runs/${documentId}`)
     } catch (e) {
       toast.error((e as Error).message)
+    } finally {
       setBusy(false)
     }
   }
 
+  const today = iso(new Date())
+  // Mirrors the server guards so the dialog never proposes a rejected window.
+  const badWindow = !shown.start || !shown.end || !shown.payDate
+    || shown.end < shown.start || shown.payDate < shown.end
+  const notBegun = !!shown.start && shown.start > today
+  const invalid = !scheduleId || badWindow || notBegun
+
   if (schedules.length === 0) return null
-  if (schedules.length === 1) {
-    return (
-      <Button onClick={() => void start(schedules[0]!.id)} disabled={busy}>
+  return (
+    <>
+      <Button onClick={() => setOpen(true)}>
         <Plus size={14} aria-hidden /> {t('newRun.create')}
       </Button>
-    )
-  }
-  return (
-    <Popover
-      open={open}
-      onOpenChange={setOpen}
-      align="end"
-      trigger={
-        <Button onClick={() => setOpen((v) => !v)} disabled={busy}>
-          <Plus size={14} aria-hidden /> {t('newRun.create')}
-          <ChevronDown size={14} className="opacity-60" />
-        </Button>
-      }
-    >
-      <div className="p-1">
-        {schedules.map((schedule) => (
-          <button
-            key={schedule.id}
-            type="button"
-            disabled={busy}
-            onClick={() => void start(schedule.id)}
-            className="flex w-full items-center rounded px-2.5 py-1.5 text-left text-sm text-slate-700 hover:bg-slate-100 disabled:opacity-50 dark:text-slate-200 dark:hover:bg-slate-800"
-          >
-            {schedule.name}
-          </button>
-        ))}
-      </div>
-    </Popover>
+      <Drawer
+        open={open}
+        onClose={() => setOpen(false)}
+        title={t('newRun.create')}
+        description={t('newRun.description')}
+        size="sm"
+        footer={
+          <div className="flex items-center justify-end gap-2">
+            <Button variant="ghost" onClick={() => setOpen(false)}>{tCommon('actions.cancel')}</Button>
+            <Button onClick={create} disabled={busy || invalid}>
+              {busy ? tCommon('actions.saving') : t('newRun.create')}
+            </Button>
+          </div>
+        }
+      >
+        <div className="space-y-4">
+          {schedules.length > 1 && (
+            <div className="space-y-1.5">
+              <Label htmlFor="run-schedule">{t('columns.schedule')}</Label>
+              <Select id="run-schedule" value={scheduleId} onChange={(e) => selectSchedule(e.target.value)}>
+                {schedules.map((s) => (
+                  <option key={s.id} value={s.id}>{s.name}</option>
+                ))}
+              </Select>
+            </div>
+          )}
+          <div className="grid gap-3 sm:grid-cols-2">
+            <div className="space-y-1.5">
+              <Label htmlFor="run-start">{t('newRun.periodStart')}</Label>
+              <input
+                id="run-start" type="date" value={shown.start}
+                onChange={(e) => setField('start', e.target.value)}
+                className="h-9 w-full rounded-md border border-slate-200 bg-white px-2 text-sm dark:border-slate-700 dark:bg-slate-950"
+              />
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="run-end">{t('newRun.periodEnd')}</Label>
+              <input
+                id="run-end" type="date" value={shown.end}
+                onChange={(e) => setField('end', e.target.value)}
+                className="h-9 w-full rounded-md border border-slate-200 bg-white px-2 text-sm dark:border-slate-700 dark:bg-slate-950"
+              />
+            </div>
+          </div>
+          <div className="space-y-1.5">
+            <Label htmlFor="run-paydate">{t('columns.payDate')}</Label>
+            <input
+              id="run-paydate" type="date" value={shown.payDate}
+              onChange={(e) => setField('payDate', e.target.value)}
+              className="h-9 w-full rounded-md border border-slate-200 bg-white px-2 text-sm dark:border-slate-700 dark:bg-slate-950"
+            />
+            <p className="text-xs text-slate-500 dark:text-slate-400">{t('newRun.payDateHint')}</p>
+          </div>
+          {badWindow && (shown.start || shown.end) ? (
+            <p className="text-sm text-red-600 dark:text-red-400">{t('newRun.invalidWindow')}</p>
+          ) : notBegun ? (
+            <p className="text-sm text-amber-600 dark:text-amber-400">
+              {t('newRun.notBegun', { date: shown.start })}
+            </p>
+          ) : null}
+        </div>
+      </Drawer>
+    </>
   )
 }

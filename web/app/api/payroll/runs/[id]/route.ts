@@ -139,6 +139,32 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
       })
       return NextResponse.json({ ok: true })
     }
+    // Bulk scope: set the run's included employees in one call. Everyone on
+    // the roster who is NOT in `employeePartyIds` gets an exclusion row; those
+    // in it have theirs removed. One mutation per employee through the same
+    // audited helper — no second write path.
+    if (body.action === 'set-scope') {
+      const included = Array.isArray(body.employeePartyIds) ? body.employeePartyIds : null
+      const roster = Array.isArray(body.rosterPartyIds) ? body.rosterPartyIds : null
+      const uuidish = (v: unknown) => typeof v === 'string' && isUuid(v)
+      if (!included || !roster || roster.length > 2000
+        || !included.every(uuidish) || !roster.every(uuidish)) {
+        return NextResponse.json({ error: 'invalid scope' }, { status: 422 })
+      }
+      const keep = new Set(included as string[])
+      for (const employeePartyId of roster as string[]) {
+        await mutatePayRunAdjustment({
+          orgId: gate.user.orgId,
+          documentId: id,
+          actorId: gate.user.id,
+          mutation: {
+            action: keep.has(employeePartyId) ? 'include' : 'exclude',
+            employeePartyId,
+          },
+        })
+      }
+      return NextResponse.json({ ok: true, included: keep.size, excluded: roster.length - keep.size })
+    }
     if (body.action === 'exclude-employee' || body.action === 'include-employee') {
       if (!isUuid(body.employeePartyId)) return NextResponse.json({ error: 'invalid employee' }, { status: 422 })
       await mutatePayRunAdjustment({

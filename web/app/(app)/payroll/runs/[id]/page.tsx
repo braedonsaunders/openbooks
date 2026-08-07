@@ -74,13 +74,27 @@ export default async function PayRunPage({
     db.execute(sql`
       select p.id as employee_party_id, p.display_name as name, prof.pay_basis,
              coalesce(te.hours, 0)::text as approved_hours,
+             dep.name as department, er.terminated_on::text as terminated_on,
+             er.hired_on::text as hired_on,
              exists (
                select 1 from labor_cost_rates w
                 where w.org_id = prof.org_id and w.employee_party_id = prof.employee_party_id
                   and w.is_active and w.effective_from <= ${run.pay_date}
-                  and (w.effective_to is null or w.effective_to >= ${run.pay_date})) as has_wage
+                  and (w.effective_to is null or w.effective_to >= ${run.pay_date})) as has_wage,
+             -- Already covered by another run whose period overlaps this one:
+             -- the double-pay guard the scope picker warns on.
+             exists (
+               select 1 from pay_stubs s2
+                 join pay_runs r2 on r2.document_id = s2.pay_run_document_id
+                where s2.org_id = prof.org_id and s2.employee_party_id = prof.employee_party_id
+                  and s2.pay_run_document_id <> ${id}
+                  and r2.run_status = 'committed'
+                  and r2.period_start <= ${run.period_end}
+                  and r2.period_end >= ${run.period_start}) as paid_in_period
         from employee_payroll_profiles prof
         join parties p on p.id = prof.employee_party_id and p.org_id = prof.org_id
+        left join employee_roles er on er.party_id = p.id and er.org_id = prof.org_id and er.is_active
+        left join departments dep on dep.id = er.department_id
         left join lateral (
           select sum(te.hours) as hours from time_entries te
            where te.org_id = prof.org_id and te.employee_party_id = prof.employee_party_id
