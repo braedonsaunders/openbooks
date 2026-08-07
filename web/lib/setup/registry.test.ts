@@ -1,7 +1,12 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import { INFORMATION_RETURN_FORMS } from '@openbooks/engine/src/information-returns.ts'
-import { SETUP_ENTITY_BY_KEY, setupEntitiesByGroup, setupEntityForFeatureState } from './registry.ts'
+import {
+  SETUP_ENTITY_BY_KEY,
+  setupEntitiesByGroup,
+  setupEntityForFeatureState,
+  setupFieldVisible,
+} from './registry.ts'
 
 test('tax rates and return boxes are nested under their owning records', () => {
   const taxRates = SETUP_ENTITY_BY_KEY.get('tax-rates')
@@ -110,5 +115,38 @@ test('every information-return box option is a real statutory box', () => {
   }
   for (const box of statutory) {
     assert.ok(offered.has(box), `${box} exists on a form but cannot be mapped in setup`)
+  }
+})
+
+test('deduction protection is offered only where it can legally apply', () => {
+  const components = SETUP_ENTITY_BY_KEY.get('pay-components')
+  assert.ok(components)
+  const field = (key: string) => {
+    const found = components.fields.find((entry) => entry.key === key)
+    assert.ok(found, `${key} must be editable on a pay component`)
+    return found
+  }
+
+  // Protection settings on a deduction only — the pay_components CHECK
+  // constraint enforces the same rule at the boundary.
+  const earning = { kind: 'earning', basis: 'percent_of_gross', protectionBase: 'net_pay' }
+  const deduction = { kind: 'deduction', basis: 'fixed_amount', protectionBase: 'net_pay' }
+  assert.equal(setupFieldVisible(field('protectionBase'), earning), false)
+  assert.equal(setupFieldVisible(field('protectionBase'), deduction), true)
+  assert.equal(setupFieldVisible(field('protectionMaxPercent'), deduction), true)
+  assert.equal(
+    setupFieldVisible(field('protectionMaxPercent'), { ...deduction, protectionBase: 'none' }),
+    false,
+  )
+  // Pool membership is what keeps an allowance or a benefit outside the base,
+  // so it belongs on both sides of the stub.
+  assert.equal(setupFieldVisible(field('includeInDisposableEarnings'), earning), true)
+  assert.equal(setupFieldVisible(field('includeInDisposableEarnings'), deduction), true)
+
+  // The hours cap only means something once the amount is driven by hours.
+  assert.equal(setupFieldVisible(field('basisCapHoursPerPeriod'), deduction), false)
+  assert.equal(setupFieldVisible(field('basisCapHoursPerPeriod'), earning), true)
+  for (const key of ['basisCapAmountPerPeriod', 'basisCapAmountPerYear']) {
+    assert.equal(setupFieldVisible(field(key), deduction), true)
   }
 })

@@ -26,6 +26,14 @@ export interface ScheduleOption {
   frequency: string
 }
 
+/** A payroll program/EIN account the employee can be filed and remitted under. */
+export interface FilingAccountOption {
+  id: string
+  accountNumber: string
+  name: string
+  country: 'CA' | 'US'
+}
+
 export interface ProfileRow {
   id: string
   employee_party_id: string
@@ -54,8 +62,12 @@ export interface ProfileRow {
   futa_exempt: boolean
   vacation_percent: string | null
   vacation_method: 'accrue' | 'pay_each_period'
+  filing_account_id: string | null
+  stub_delivery: 'email' | 'print' | 'both'
   is_active: boolean
 }
+
+const STUB_DELIVERIES = ['email', 'print', 'both'] as const
 
 const PROVINCES = ['AB', 'BC', 'MB', 'NB', 'NL', 'NS', 'NT', 'NU', 'ON', 'PE', 'QC', 'SK', 'YT', 'ZZ'] as const
 const US_STATES = [
@@ -70,6 +82,8 @@ const FILING_STATUSES = ['single', 'married_joint', 'head_household'] as const
 export function ProfileEditor(props: {
   profile: ProfileRow
   schedules: ScheduleOption[]
+  /** Empty for single-account employers: the country pack's default is used. */
+  filingAccounts?: FilingAccountOption[]
   onClose: () => void
   onSaved: () => void
   /** Render as a plain section (inside another drawer/tab) instead of a Drawer. */
@@ -103,6 +117,10 @@ export function ProfileEditor(props: {
   const [vacationMethod, setVacationMethod] = useState<'accrue' | 'pay_each_period'>(p.vacation_method)
   const [isActive, setIsActive] = useState(p.is_active)
   const [sin, setSin] = useState('')
+  const [filingAccountId, setFilingAccountId] = useState(p.filing_account_id ?? '')
+  const [stubDelivery, setStubDelivery] = useState<ProfileRow['stub_delivery']>(p.stub_delivery ?? 'email')
+  // Accounts file under one country pack, so only the employee's own apply.
+  const filingAccounts = (props.filingAccounts ?? []).filter((account) => account.country === country)
 
   async function save() {
     setBusy(true)
@@ -136,6 +154,8 @@ export function ProfileEditor(props: {
           futaExempt,
           vacationPercent: vacationPercent || null,
           vacationMethod,
+          filingAccountId: filingAccountId || null,
+          stubDelivery,
           isActive,
         }),
       })
@@ -200,6 +220,8 @@ export function ProfileEditor(props: {
                 const next = e.target.value === 'US' ? 'US' : 'CA'
                 setCountry(next)
                 setProvince(next === 'US' ? 'TX' : 'ON')
+                // Filing accounts belong to one country pack.
+                setFilingAccountId('')
               }}
             >
               <option value="CA">{t('country.CA')}</option>
@@ -234,6 +256,39 @@ export function ProfileEditor(props: {
               onChange={(e) => setAdditionalTax(e.target.value)}
               placeholder="0.00"
             />
+          </div>
+          {/* Only offered once the employer keeps more than the default
+              account; a single-account employer needs no choice. */}
+          {filingAccounts.length > 0 && (
+            <div>
+              <Label htmlFor="pp-filing-account">{t('fields.filingAccount')}</Label>
+              <Select
+                id="pp-filing-account"
+                value={filingAccountId}
+                onChange={(e) => setFilingAccountId(e.target.value)}
+              >
+                <option value="">{t('filingAccountDefault')}</option>
+                {filingAccounts.map((account) => (
+                  <option key={account.id} value={account.id}>
+                    {account.accountNumber} · {account.name}
+                  </option>
+                ))}
+              </Select>
+            </div>
+          )}
+          <div>
+            <Label htmlFor="pp-stub-delivery">{t('fields.stubDelivery')}</Label>
+            <Select
+              id="pp-stub-delivery"
+              value={stubDelivery}
+              onChange={(e) => setStubDelivery(e.target.value as ProfileRow['stub_delivery'])}
+            >
+              {STUB_DELIVERIES.map((option) => (
+                <option key={option} value={option}>
+                  {t(`stubDelivery.${option}`)}
+                </option>
+              ))}
+            </Select>
           </div>
         </div>
 

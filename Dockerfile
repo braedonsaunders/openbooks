@@ -50,9 +50,14 @@ ARG OPENBOOKS_VERSION=development
 # HTML-authored reports and forms are printed by the shared Chromium renderer.
 # Ship the renderer and deterministic multilingual fonts in the production
 # image so PDF availability and typography never depend on the host machine.
+# qpdf encrypts confidential record PDFs (pay stubs): neither renderer can
+# write an encrypted file, so encryption is a post-processing pass. It is the
+# one package here without a version pin — pin it to the distribution's
+# current qpdf once that version is verified against this base image.
 RUN apt-get update \
     && apt-get install -y --no-install-recommends \
       chromium=151.0.7922.71-1~deb13u1 \
+      qpdf \
       fonts-liberation=1:2.1.5-3 \
       fonts-noto-core=20201225-2 \
       fonts-noto-cjk=1:20240730+repack1-1 \

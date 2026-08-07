@@ -2,13 +2,19 @@ import { sql } from "drizzle-orm";
 import { db } from "./db.ts";
 import { unsealSecret } from "./secrets.ts";
 import { PayrollError } from "./payroll-run.ts";
-import { t4Slips, t4Summary } from "./payroll-yearend.ts";
+import type { FilingAccountRef } from "./payroll-filing.ts";
+import { t4Returns, type T4Slip, type T4SummaryTotals } from "./payroll-yearend.ts";
 
 /**
  * CRA T4 Internet File Transfer XML — the T619 electronic transmittal
- * wrapping the T4 return (slips + summary), built from the same committed-
+ * wrapping the T4 returns (slips + summary), built from the same committed-
  * stub data as the year-end worksheets so the file always reconciles to the
  * on-screen boxes.
+ *
+ * A T4 return is filed per payroll program account, so the transmittal carries
+ * ONE <T4> return per filing account, each stamped with that account's number
+ * and its own <T4Summary>. Employees on no account fall back to the
+ * transmitter's business number — the single-account behaviour.
  *
  * Fails closed with every problem named: missing SINs, missing employer BN,
  * missing transmitter configuration. IMPORTANT: validate the generated file
@@ -53,8 +59,9 @@ export async function buildT4Xml(orgId: string, taxYear: number): Promise<{
   }
   const transmitter = cfg as TransmitterConfig;
 
-  const [slips, summary] = await Promise.all([t4Slips(orgId, taxYear), t4Summary(orgId, taxYear)]);
-  if (slips.length === 0) throw new PayrollError(`no committed Canadian stubs for ${taxYear}`);
+  const returns = await t4Returns(orgId, taxYear);
+  if (returns.length === 0) throw new PayrollError(`no committed Canadian stubs for ${taxYear}`);
+  const slipCount = returns.reduce((count, ret) => count + ret.slips.length, 0);
 
   const sins = (await db.execute(sql`
     select prof.employee_party_id, prof.sin_encrypted
@@ -64,32 +71,19 @@ export async function buildT4Xml(orgId: string, taxYear: number): Promise<{
   const sinByEmployee = new Map(sins.rows.map((row) => [row.employee_party_id, row.sin_encrypted]));
 
   const missingSins: string[] = [];
-  const slipXml: string[] = [];
-  for (const slip of slips) {
-    const sealed = sinByEmployee.get(slip.employeePartyId);
-    const sin = sealed ? unsealSecret(sealed) : null;
-    if (!sin || !/^\d{9}$/.test(sin)) {
-      missingSins.push(slip.employeeName);
-      continue;
+  const withSins: T4ReturnWithSins[] = [];
+  for (const ret of returns) {
+    const slips: (T4Slip & { sin: string })[] = [];
+    for (const slip of ret.slips) {
+      const sealed = sinByEmployee.get(slip.employeePartyId);
+      const sin = sealed ? unsealSecret(sealed) : null;
+      if (!sin || !/^\d{9}$/.test(sin)) {
+        missingSins.push(slip.employeeName);
+        continue;
+      }
+      slips.push({ ...slip, sin });
     }
-    const [surname, ...given] = splitName(slip.employeeName);
-    slipXml.push(
-      `  <T4Slip>\n` +
-      `   <EMPE_NM><snm>${esc(surname)}</snm><gvn_nm>${esc(given.join(" ") || surname)}</gvn_nm></EMPE_NM>\n` +
-      `   <SIN>${sin}</SIN>\n` +
-      `   <BN>${esc(transmitter.bn)}</BN>\n` +
-      `   <EMPT_PROV_CD>${esc(slip.province)}</EMPT_PROV_CD>\n` +
-      `   <RPT_TCD>O</RPT_TCD>\n` +
-      `   <EMPT_INC_AMT>${amt(slip.box14EmploymentIncome)}</EMPT_INC_AMT>\n` +
-      `   <CPP_CNTRB_AMT>${amt(slip.box16Cpp)}</CPP_CNTRB_AMT>\n` +
-      `   <EMPE_CPP2_AMT>${amt(slip.box16aCpp2)}</EMPE_CPP2_AMT>\n` +
-      `   <EIP_AMT>${amt(slip.box18Ei)}</EIP_AMT>\n` +
-      `   <ITX_DDCT_AMT>${amt(slip.box22IncomeTax)}</ITX_DDCT_AMT>\n` +
-      `   <EI_INSU_ERN_AMT>${amt(slip.box24EiInsurable)}</EI_INSU_ERN_AMT>\n` +
-      `   <CPP_QPP_ERN_AMT>${amt(slip.box26CppPensionable)}</CPP_QPP_ERN_AMT>\n` +
-      `   <UNN_DUES_AMT>${amt(slip.box44UnionDues)}</UNN_DUES_AMT>\n` +
-      `  </T4Slip>`,
-    );
+    withSins.push({ ...ret, slips });
   }
   if (missingSins.length > 0) {
     throw new PayrollError(
@@ -97,6 +91,78 @@ export async function buildT4Xml(orgId: string, taxYear: number): Promise<{
     );
   }
 
+  return {
+    filename: `T4-${taxYear}.xml`,
+    xml: renderT4Xml({ orgId, taxYear, transmitter, returns: withSins }),
+    slipCount,
+  };
+}
+
+/** A T4 return whose slips carry the unsealed SIN the file has to print. */
+export interface T4ReturnWithSins {
+  filingAccount: FilingAccountRef;
+  slips: (T4Slip & { sin: string })[];
+  summary: T4SummaryTotals;
+}
+
+/**
+ * The transmittal document itself — pure, so the file's shape is verifiable
+ * without a database: one <T4> return per filing account, each stamped with
+ * that account's business number and its own <T4Summary>.
+ */
+export function renderT4Xml(input: {
+  orgId: string;
+  taxYear: number;
+  transmitter: TransmitterConfig;
+  returns: T4ReturnWithSins[];
+}): string {
+  const { orgId, taxYear, transmitter, returns } = input;
+  const returnXml: string[] = [];
+  for (const ret of returns) {
+    // The account's own number is the employer BN on its slips and summary;
+    // unassigned employees file under the transmitter's business number.
+    const bn = ret.filingAccount.accountNumber ?? transmitter.bn;
+    const slipXml: string[] = [];
+    for (const slip of ret.slips) {
+      const sin = slip.sin;
+      const [surname, ...given] = splitName(slip.employeeName);
+      slipXml.push(
+        `  <T4Slip>\n` +
+        `   <EMPE_NM><snm>${esc(surname)}</snm><gvn_nm>${esc(given.join(" ") || surname)}</gvn_nm></EMPE_NM>\n` +
+        `   <SIN>${sin}</SIN>\n` +
+        `   <BN>${esc(bn)}</BN>\n` +
+        `   <EMPT_PROV_CD>${esc(slip.province)}</EMPT_PROV_CD>\n` +
+        `   <RPT_TCD>O</RPT_TCD>\n` +
+        `   <EMPT_INC_AMT>${amt(slip.box14EmploymentIncome)}</EMPT_INC_AMT>\n` +
+        `   <CPP_CNTRB_AMT>${amt(slip.box16Cpp)}</CPP_CNTRB_AMT>\n` +
+        `   <EMPE_CPP2_AMT>${amt(slip.box16aCpp2)}</EMPE_CPP2_AMT>\n` +
+        `   <EIP_AMT>${amt(slip.box18Ei)}</EIP_AMT>\n` +
+        `   <ITX_DDCT_AMT>${amt(slip.box22IncomeTax)}</ITX_DDCT_AMT>\n` +
+        `   <EI_INSU_ERN_AMT>${amt(slip.box24EiInsurable)}</EI_INSU_ERN_AMT>\n` +
+        `   <CPP_QPP_ERN_AMT>${amt(slip.box26CppPensionable)}</CPP_QPP_ERN_AMT>\n` +
+        `   <UNN_DUES_AMT>${amt(slip.box44UnionDues)}</UNN_DUES_AMT>\n` +
+        `  </T4Slip>`,
+      );
+    }
+    returnXml.push(
+      ` <T4>\n` +
+      slipXml.join("\n") + "\n" +
+      `  <T4Summary>\n` +
+      `   <bn>${esc(bn)}</bn>\n` +
+      `   <tx_yr>${taxYear}</tx_yr>\n` +
+      `   <slp_cnt>${ret.slips.length}</slp_cnt>\n` +
+      `   <RPT_TCD>O</RPT_TCD>\n` +
+      `   <TOT_EMPT_INC_AMT>${amt(ret.summary.employmentIncome)}</TOT_EMPT_INC_AMT>\n` +
+      `   <TOT_EMPE_CPP_AMT>${amt(ret.summary.employeeCpp)}</TOT_EMPE_CPP_AMT>\n` +
+      `   <TOT_EMPE_CPP2_AMT>${amt(ret.summary.employeeCpp2)}</TOT_EMPE_CPP2_AMT>\n` +
+      `   <TOT_EMPR_CPP_AMT>${amt(ret.summary.employerCpp)}</TOT_EMPR_CPP_AMT>\n` +
+      `   <TOT_EMPE_EIP_AMT>${amt(ret.summary.employeeEi)}</TOT_EMPE_EIP_AMT>\n` +
+      `   <TOT_EMPR_EIP_AMT>${amt(ret.summary.employerEi)}</TOT_EMPR_EIP_AMT>\n` +
+      `   <TOT_ITX_DDCT_AMT>${amt(ret.summary.incomeTax)}</TOT_ITX_DDCT_AMT>\n` +
+      `  </T4Summary>\n` +
+      ` </T4>`,
+    );
+  }
   const xml =
     `<?xml version="1.0" encoding="UTF-8"?>\n` +
     `<Submission xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">\n` +
@@ -105,7 +171,7 @@ export async function buildT4Xml(orgId: string, taxYear: number): Promise<{
     `  <rpt_tcd>O</rpt_tcd>\n` +
     `  <trnmtr_nbr>${esc(transmitter.transmitterNumber)}</trnmtr_nbr>\n` +
     `  <trnmtr_tcd>1</trnmtr_tcd>\n` +
-    `  <summ_cnt>1</summ_cnt>\n` +
+    `  <summ_cnt>${returns.length}</summ_cnt>\n` +
     `  <lang_cd>E</lang_cd>\n` +
     `  <TRNMTR_NM><l1_nm>${esc(transmitter.name)}</l1_nm></TRNMTR_NM>\n` +
     `  <CNTC><cntc_nm>${esc(transmitter.contactName)}</cntc_nm>` +
@@ -113,26 +179,11 @@ export async function buildT4Xml(orgId: string, taxYear: number): Promise<{
     `<cntc_email_area>${esc(transmitter.contactEmail)}</cntc_email_area></CNTC>\n` +
     ` </T619>\n` +
     ` <Return>\n` +
-    ` <T4>\n` +
-    slipXml.join("\n") + "\n" +
-    `  <T4Summary>\n` +
-    `   <bn>${esc(transmitter.bn)}</bn>\n` +
-    `   <tx_yr>${taxYear}</tx_yr>\n` +
-    `   <slp_cnt>${slips.length}</slp_cnt>\n` +
-    `   <RPT_TCD>O</RPT_TCD>\n` +
-    `   <TOT_EMPT_INC_AMT>${amt(summary.employmentIncome)}</TOT_EMPT_INC_AMT>\n` +
-    `   <TOT_EMPE_CPP_AMT>${amt(summary.employeeCpp)}</TOT_EMPE_CPP_AMT>\n` +
-    `   <TOT_EMPE_CPP2_AMT>${amt(summary.employeeCpp2)}</TOT_EMPE_CPP2_AMT>\n` +
-    `   <TOT_EMPR_CPP_AMT>${amt(summary.employerCpp)}</TOT_EMPR_CPP_AMT>\n` +
-    `   <TOT_EMPE_EIP_AMT>${amt(summary.employeeEi)}</TOT_EMPE_EIP_AMT>\n` +
-    `   <TOT_EMPR_EIP_AMT>${amt(summary.employerEi)}</TOT_EMPR_EIP_AMT>\n` +
-    `   <TOT_ITX_DDCT_AMT>${amt(summary.incomeTax)}</TOT_ITX_DDCT_AMT>\n` +
-    `  </T4Summary>\n` +
-    ` </T4>\n` +
+    returnXml.join("\n") + "\n" +
     ` </Return>\n` +
     `</Submission>\n`;
 
-  return { filename: `T4-${taxYear}.xml`, xml, slipCount: slips.length };
+  return xml;
 }
 
 /** "First Last" → [surname, ...given]; single token = both. Drops any

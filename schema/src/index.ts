@@ -63,4 +63,7 @@ export * from "./tax-rate-providers";
 export * from "./income-tax";
 export * from "./auth";
 export * from "./payroll";
+export * from "./payroll-entitlements";
+export * from "./payroll-filing";
+export * from "./payroll-rules";
 export * from "./leases";

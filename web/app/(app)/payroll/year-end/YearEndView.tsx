@@ -1,13 +1,28 @@
 'use client'
 
+import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { useTranslations } from 'next-intl'
-import { Button, Select } from '@openbooks/ui'
+import { Button, Input, Select } from '@openbooks/ui'
 import type {
-  Form941Quarter, T4Slip, T4SummaryTotals, W2Slip,
+  Form941Quarter, RoeReasonCode, T4Slip, T4SummaryTotals, W2Slip,
 } from '@openbooks/engine/src/payroll-yearend.ts'
 import { PagedTable, type PagedColumn } from '../../../../components/paged-table'
 import { useMoney } from '../../../../components/money-provider'
+
+/** ROE Block 16 codes — mirrors ROE_REASON_CODES in payroll-yearend.ts
+ *  (values only; the engine module itself is server-side). */
+const ROE_REASON_CODES: RoeReasonCode[] = [
+  'A', 'B', 'D', 'E', 'F', 'G', 'H', 'J', 'K', 'M', 'N', 'P', 'Z',
+]
+
+/** Employees an ROE may be due for (roeCandidates). */
+export interface RoeCandidate {
+  employeePartyId: string
+  employeeName: string
+  terminatedOn: string | null
+  lastPayDate: string | null
+}
 
 export function YearEndView({
   year,
@@ -15,17 +30,31 @@ export function YearEndView({
   summary,
   form941,
   w2,
+  roe,
 }: {
   year: number
   t4: T4Slip[]
   summary: T4SummaryTotals
   form941: Form941Quarter[]
   w2: W2Slip[]
+  roe: RoeCandidate[]
 }) {
   const t = useTranslations('payroll.yearEnd')
   const router = useRouter()
   const { money } = useMoney()
   const years = Array.from({ length: 6 }, (_, i) => new Date().getUTCFullYear() - i)
+  // Reason for issue is the employer's declaration: nothing is preselected,
+  // and an employee without one is simply not in the file.
+  const [reasons, setReasons] = useState<Record<string, RoeReasonCode | ''>>({})
+  const [comments, setComments] = useState<Record<string, string>>({})
+  const roeSelection = roe
+    .filter((candidate) => reasons[candidate.employeePartyId])
+    .map((candidate) => [
+      candidate.employeePartyId,
+      reasons[candidate.employeePartyId],
+      encodeURIComponent(comments[candidate.employeePartyId] ?? ''),
+    ].join(':'))
+    .join(',')
 
   const t4Columns: PagedColumn<T4Slip>[] = [
     { key: 'employee', header: t('t4.employee'), search: (s) => s.employeeName, cell: (s) => s.employeeName },
@@ -125,6 +154,74 @@ export function YearEndView({
           </>
         )}
       </section>
+
+      {roe.length > 0 && (
+        <section>
+          <h2 className="mb-1 text-base font-semibold text-slate-900 dark:text-slate-100">{t('roe.title')}</h2>
+          <p className="mb-3 text-sm text-slate-500 dark:text-slate-400">{t('roe.description')}</p>
+          <table className="w-full max-w-4xl text-sm">
+            <thead>
+              <tr className="text-left text-xs text-slate-500 uppercase dark:text-slate-400">
+                <th className="py-1.5">{t('roe.employee')}</th>
+                <th className="py-1.5">{t('roe.lastDay')}</th>
+                <th className="py-1.5">{t('roe.reason')}</th>
+                <th className="py-1.5">{t('roe.comment')}</th>
+              </tr>
+            </thead>
+            <tbody>
+              {roe.map((candidate) => (
+                <tr key={candidate.employeePartyId} className="border-t border-slate-100 dark:border-slate-800">
+                  <td className="py-1.5">{candidate.employeeName}</td>
+                  <td className="py-1.5 tabular-nums">{candidate.terminatedOn ?? candidate.lastPayDate ?? '—'}</td>
+                  <td className="py-1.5">
+                    <Select
+                      aria-label={t('roe.reason')}
+                      value={reasons[candidate.employeePartyId] ?? ''}
+                      onChange={(e) => setReasons((prev) => ({
+                        ...prev,
+                        [candidate.employeePartyId]: e.target.value as RoeReasonCode | '',
+                      }))}
+                      className="w-56"
+                    >
+                      <option value="">—</option>
+                      {ROE_REASON_CODES.map((code) => (
+                        <option key={code} value={code}>{code} · {t(`roe.reasons.${code}`)}</option>
+                      ))}
+                    </Select>
+                  </td>
+                  <td className="py-1.5">
+                    <Input
+                      aria-label={t('roe.comment')}
+                      value={comments[candidate.employeePartyId] ?? ''}
+                      onChange={(e) => setComments((prev) => ({
+                        ...prev,
+                        [candidate.employeePartyId]: e.target.value,
+                      }))}
+                      maxLength={500}
+                    />
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+          <div className="mt-3 flex flex-wrap items-center gap-2 print:hidden">
+            <Button variant="outline" asChild={roeSelection.length > 0} disabled={roeSelection.length === 0}>
+              {roeSelection.length > 0 ? (
+                <a
+                  href={`/api/payroll/year-end/roe-xml?employees=${roeSelection}`}
+                  target="_blank"
+                  rel="noreferrer"
+                >
+                  {t('roe.download')}
+                </a>
+              ) : (
+                <span>{t('roe.download')}</span>
+              )}
+            </Button>
+            <span className="text-xs text-slate-400 dark:text-slate-500">{t('roe.note')}</span>
+          </div>
+        </section>
+      )}
 
       {(form941.length > 0 || w2.length > 0) && (
         <section>

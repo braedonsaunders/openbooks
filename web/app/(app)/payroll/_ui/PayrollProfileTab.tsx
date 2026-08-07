@@ -4,7 +4,12 @@ import Link from 'next/link'
 import { useEffect, useState } from 'react'
 import { useTranslations } from 'next-intl'
 import { toast } from 'sonner'
-import { ProfileEditor, type ProfileRow, type ScheduleOption } from './EmployeesPanel'
+import {
+  ProfileEditor,
+  type FilingAccountOption,
+  type ProfileRow,
+  type ScheduleOption,
+} from './EmployeesPanel'
 
 /**
  * The employee drawer's Payroll tab — the ONE place a payroll profile is
@@ -18,7 +23,8 @@ export function PayrollProfileTab({ partyId, partyName }: { partyId: string; par
     status: 'loading' | 'ready' | 'error'
     profile: ProfileRow | null
     schedules: ScheduleOption[]
-  }>({ status: 'loading', profile: null, schedules: [] })
+    filingAccounts: FilingAccountOption[]
+  }>({ status: 'loading', profile: null, schedules: [], filingAccounts: [] })
   const [version, setVersion] = useState(0)
 
   useEffect(() => {
@@ -28,7 +34,14 @@ export function PayrollProfileTab({ partyId, partyName }: { partyId: string; par
         const res = await fetch(`/api/payroll/profiles?employee=${partyId}`)
         const j = await res.json()
         if (!res.ok) throw new Error(j.error ?? 'failed')
-        if (!cancelled) setState({ status: 'ready', profile: j.profile, schedules: j.schedules ?? [] })
+        if (!cancelled) {
+          setState({
+            status: 'ready',
+            profile: j.profile,
+            schedules: j.schedules ?? [],
+            filingAccounts: j.filingAccounts ?? [],
+          })
+        }
       } catch (e) {
         if (!cancelled) {
           toast.error((e as Error).message)
@@ -86,6 +99,8 @@ export function PayrollProfileTab({ partyId, partyName }: { partyId: string; par
     futa_exempt: false,
     vacation_percent: null,
     vacation_method: 'accrue',
+    filing_account_id: null,
+    stub_delivery: 'email',
     is_active: true,
   }
 
@@ -94,6 +109,7 @@ export function PayrollProfileTab({ partyId, partyName }: { partyId: string; par
       inline
       profile={profile}
       schedules={state.schedules}
+      filingAccounts={state.filingAccounts}
       onClose={() => {}}
       onSaved={() => setVersion((v) => v + 1)}
     />

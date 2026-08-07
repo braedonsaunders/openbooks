@@ -1868,6 +1868,33 @@
         "title": "Income Tax Rates",
         "singularTitle": "Income Tax Rate",
         "description": "Enacted income tax rates by jurisdiction, effective-dated — they drive the ASC 740 provision."
+      },
+      "payroll-filing-accounts": {
+        "title": "Filing Accounts",
+        "description": "Payroll program, EIN, and state unemployment accounts the employer remits and files under. Employees are assigned one on their payroll profile."
+      },
+      "entitlement-plans": {
+        "title": "Entitlement Plans",
+        "singular": "Entitlement Plan",
+        "description": "Pay banks — banked overtime, vacation, sick banks, and benefit recoup during leave. Balances are stored in money and shown in hours at the current wage."
+      },
+      "entitlement-plan-limits": {
+        "title": "Bank Limits",
+        "singular": "Bank Limit",
+        "description": "How much each role may bank. Limits resolve most-specific-wins: employee, then job title, trade, department, legal entity, then the plan default."
+      },
+      "entitlement-service-tiers": {
+        "title": "Service Schedules",
+        "singular": "Service Schedule",
+        "description": "What length of service earns: benefits at three months, RRSP at a year, a higher vacation percentage at five, ten and fifteen."
+      },
+      "pay-derived-rules": {
+        "title": "Derived Earnings",
+        "description": "Rules that turn operational facts into pay — per diem for nights stayed, on-call days, travel to the first job of the day, site and equipment incentives. Preview a rule before you enable it."
+      },
+      "trades": {
+        "title": "Trades",
+        "description": "Electrician, millwright, welder — the trade an employee works, used by wage scope, burden, and derived earnings rules."
       }
     },
     "fields": {
@@ -2072,7 +2099,44 @@
       "requiresVerification": "Requires second-person verification",
       "formType": "Form",
       "box": "Box",
-      "maxAssessable": "Annual assessable maximum"
+      "maxAssessable": "Annual assessable maximum",
+      "protectionBase": "Protected earnings base",
+      "protectionMaxPercent": "Maximum share of the base",
+      "protectionPriority": "Protection priority",
+      "includeInDisposableEarnings": "Counts toward the protected base",
+      "basisCapHoursPerPeriod": "Basis cap — hours per period",
+      "basisCapAmountPerPeriod": "Basis cap — amount per period",
+      "basisCapAmountPerYear": "Basis cap — amount per year",
+      "accountNumber": "Account number",
+      "programType": "Account type",
+      "remitterType": "Remitter type",
+      "stateCode": "State",
+      "unit": "Unit",
+      "direction": "Direction",
+      "accrualMethod": "Accrual method",
+      "accrualValue": "Accrual value",
+      "accrualComponentId": "Accrual component",
+      "payoutComponentId": "Payout component",
+      "capBehavior": "When the limit is reached",
+      "planId": "Plan",
+      "employeePartyId": "Employee",
+      "jobTitle": "Job title",
+      "tradeId": "Trade",
+      "maxBalance": "Limit",
+      "notifyBalance": "Notify at",
+      "componentId": "Pay component",
+      "afterMonths": "After (months of service)",
+      "eligible": "Eligible",
+      "trigger": "Triggered by",
+      "timeTypeId": "Time type",
+      "billableOnly": "Billable time only",
+      "includedJobTitles": "Only these job titles",
+      "excludedJobTitles": "Excluded job titles",
+      "quantityMode": "Quantity",
+      "rateMode": "Rate",
+      "rateValue": "Rate value",
+      "costingMode": "Job costing",
+      "excludeFromWages": "Event only (not worked time)"
     },
     "fieldHelp": {
       "gapless": "Gapless means every number in the sequence must be accounted for, with no skipped numbers. Enable it only when your legal or audit requirements require uninterrupted numbering.",
@@ -2088,7 +2152,30 @@
       "coverageCurrency": "Required once a minimum limit is set — a limit is a money amount and must be comparable.",
       "requiresVerification": "Whoever records a certificate can never be the one who verifies it.",
       "informationReturnBox": "Boxes are statutory. What you configure is which of your accounts feeds which box.",
-      "maxAssessable": "Workers' compensation stops assessing an employee's earnings past this yearly amount (the board's per-worker insurable maximum). Leave blank for no cap."
+      "maxAssessable": "Workers' compensation stops assessing an employee's earnings past this yearly amount (the board's per-worker insurable maximum). Leave blank for no cap.",
+      "protectionBase": "What the deduction's ceiling is measured against. Net pay is pay after every other deduction. Disposable earnings counts only the earnings and deductions flagged into the base below, which is how an allowance or a benefit sits outside the share.",
+      "protectionMaxPercent": "The most this deduction may take of that base — 20% for an ordinary Ontario garnishment, 50% for family support, 25% under the US CCPA. Anything that does not fit is reported as a shortfall on the pay run.",
+      "protectionPriority": "Which order wins when several protected deductions compete for the same pay. Lowest first; support orders normally outrank ordinary creditors.",
+      "includeInDisposableEarnings": "Whether this component belongs to the protected base. Earnings in the base add to it, deductions in the base reduce it. Turn it off for an allowance or a benefit that should sit outside a garnishment's share.",
+      "basisCapHoursPerPeriod": "Compute this component on at most this many hours a period — for example RRSP on 40 hours a week. Overtime and double time charged to a job are exempt and are never capped.",
+      "basisCapAmountPerPeriod": "Stop this component once it has taken this much in one pay period.",
+      "basisCapAmountPerYear": "Stop this component once it has taken this much in the tax year — the CRA money-purchase limit or the US 402(g) elective-deferral limit. Amounts already committed this year, opening balances included, count toward it.",
+      "stateCode": "Required for state unemployment (SUI) accounts only.",
+      "filingAccountDefault": "Employees whose profile names no account are filed and remitted under the default account for their country.",
+      "entitlementUnit": "Money is strongly recommended. An hours-denominated bank revalues every time wages rise, which quietly costs the employer the difference.",
+      "entitlementDirection": "Accrue: the employer owes the employee. Owe: the employee owes the employer — the balance runs negative and is repaid from future pay until it reaches exactly zero.",
+      "entitlementAccrualValue": "A percentage for percent-of-earnings plans (4 = 4%), otherwise an amount per hour or per pay period.",
+      "entitlementPayoutComponent": "The earning that pays the bank out. For an 'owe' plan this is the deduction that recoups it.",
+      "entitlementLiabilityAccount": "Where the bank sits on the balance sheet. Leave empty to keep the plan report-only.",
+      "entitlementCapBehavior": "Warn records the accrual and flags it. Block stops the pay run for that employee. Auto payout caps the bank and pays the excess.",
+      "entitlementScope": "Set at most one scope. Leave every scope empty for the plan-wide default.",
+      "entitlementMaxBalance": "The hard ceiling, in the plan's unit.",
+      "entitlementNotifyBalance": "The soft threshold that flags an employee as approaching the limit.",
+      "entitlementAfterMonths": "Months of continuous service from the hire date. 36 = three years.",
+      "entitlementTierTarget": "Set either a plan (to raise its accrual value) or a pay component (to make it eligible) — not both.",
+      "includedJobTitles": "A JSON list of the only job titles this rule pays, for example [\"Supervisor\", \"Quality Coordinator\"]. Leave it empty to pay everyone. Matching ignores case and spacing.",
+      "excludedJobTitles": "A JSON list of job titles this rule never pays, for example [\"Project Manager\", \"General Manager\"]. Exclusions win over inclusions. Matching ignores case and spacing.",
+      "excludeFromWages": "The entry records a field event — an on-call day, a per-diem night — not worked time. Derived earnings rules read it; the wage calculation skips it."
     },
     "options": {
       "payFrequency": {
@@ -2342,6 +2429,64 @@
       "payComponentCountry": {
         "CA": "Canada",
         "US": "United States"
+      },
+      "payProtectionBase": {
+        "none": "Not protected",
+        "netPay": "Net pay",
+        "disposableEarnings": "Disposable earnings",
+        "gross": "Gross pay"
+      },
+      "payrollProgramType": {
+        "caRp": "CRA payroll program (RP)",
+        "usEin": "US employer identification number (EIN)",
+        "usStateSui": "State unemployment (SUI)"
+      },
+      "payrollRemitterType": {
+        "regular": "Regular (monthly)",
+        "quarterly": "Quarterly",
+        "accelerated1": "Accelerated — threshold 1",
+        "accelerated2": "Accelerated — threshold 2"
+      },
+      "entitlementUnit": {
+        "money": "Money",
+        "hours": "Hours"
+      },
+      "entitlementDirection": {
+        "accrue": "Employer owes employee",
+        "owe": "Employee owes employer"
+      },
+      "entitlementAccrualMethod": {
+        "percentOfEarnings": "Percent of earnings",
+        "perHourWorked": "Per hour worked",
+        "fixedPerPeriod": "Fixed per pay period",
+        "manual": "Manual only"
+      },
+      "entitlementCapBehavior": {
+        "warn": "Warn",
+        "block": "Block the run",
+        "autoPayout": "Pay out the excess"
+      },
+      "derivedTrigger": {
+        "timeEntry": "Each time entry",
+        "distinctDay": "Each day worked",
+        "distinctProjectDay": "Each job, each day",
+        "nightStayed": "Each night stayed",
+        "monthEnd": "Monthly, after month end"
+      },
+      "derivedQuantity": {
+        "count": "Number of units",
+        "sumHours": "Total hours",
+        "countNights": "Number of nights"
+      },
+      "derivedRate": {
+        "fixedPerUnit": "Fixed amount per unit",
+        "percentOfGross": "Percent of gross",
+        "rateCard": "From the pay component"
+      },
+      "derivedCosting": {
+        "source": "The job the fact came from",
+        "firstProjectOfDay": "The first job of the day",
+        "none": "Not job costed"
       }
     },
     "payroll": {
@@ -3082,7 +3227,11 @@
         "installError": "Payroll was enabled, but the country pack could not be installed. You can install it from Payroll setup → Country packs."
       }
     },
-    "filterAll": "All"
+    "filterAll": "All",
+    "sections": {
+      "deductionProtection": "Deduction protection",
+      "basisCaps": "Basis caps"
+    }
   },
   "flows": {
     "title": "Flows",

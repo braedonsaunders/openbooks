@@ -382,11 +382,23 @@ test(
       await setPackSlotAccount(org.orgId, actorId, "US", "futa", futaPayable);
       await setPackSlotAccount(org.orgId, actorId, "US", "suta", sutaPayable);
 
+      // The US employees are paid BY a US entity. The pay run is denominated in
+      // its subsidiary's functional currency and the wage rows are USD, so
+      // paying them from the CAD root would (correctly) demand a USD→CAD spot
+      // rate — resolvePayRate converts the wage rather than paying the raw
+      // number in the wrong currency.
+      const usSubId = randomUUID();
+      await db.execute(sql`
+        insert into subsidiaries (id, org_id, parent_id, name, base_currency, country, tax_ids,
+                                  is_elimination, is_active, custom)
+        values (${usSubId}, ${org.orgId}, ${org.subsidiaryId}, 'US Entity', 'USD', 'US',
+                '{}'::jsonb, false, true, '{}'::jsonb)`);
+
       // Salaried Texas employee, married filing jointly: $104,000/yr biweekly.
       const employeeId = randomUUID();
       await db.execute(sql`
-        insert into parties (id, org_id, kind, display_name, is_active, custom)
-        values (${employeeId}, ${org.orgId}, 'person', 'Tex Worker', true, '{}'::jsonb)`);
+        insert into parties (id, org_id, kind, display_name, subsidiary_id, is_active, custom)
+        values (${employeeId}, ${org.orgId}, 'person', 'Tex Worker', ${usSubId}, true, '{}'::jsonb)`);
       await db.execute(sql`
         insert into labor_cost_rates (org_id, employee_party_id, currency, rate, basis, annual_hours,
                                       effective_from, is_active, created_by, updated_by)
@@ -395,9 +407,10 @@ test(
       const scheduleId = randomUUID();
       await db.execute(sql`
         insert into pay_schedules (id, org_id, name, frequency, periods_per_year, anchor_period_end,
-                                   pay_date_offset_days, is_active, created_by, updated_by)
-        values (${scheduleId}, ${org.orgId}, 'Biweekly US', 'biweekly', 26, '2026-07-18', 3, true,
-                ${actorId}, ${actorId})`);
+                                   pay_date_offset_days, subsidiary_id, is_active,
+                                   created_by, updated_by)
+        values (${scheduleId}, ${org.orgId}, 'Biweekly US', 'biweekly', 26, '2026-07-18', 3,
+                ${usSubId}, true, ${actorId}, ${actorId})`);
       await db.execute(sql`
         insert into employee_payroll_profiles (org_id, employee_party_id, pay_schedule_id, country,
                                                province, pay_basis, filing_status, is_active,
@@ -408,8 +421,9 @@ test(
       // A second employee in a taxing state must error per-employee, not crash the run.
       const caStateEmployee = randomUUID();
       await db.execute(sql`
-        insert into parties (id, org_id, kind, display_name, is_active, custom)
-        values (${caStateEmployee}, ${org.orgId}, 'person', 'Cali Worker', true, '{}'::jsonb)`);
+        insert into parties (id, org_id, kind, display_name, subsidiary_id, is_active, custom)
+        values (${caStateEmployee}, ${org.orgId}, 'person', 'Cali Worker', ${usSubId}, true,
+                '{}'::jsonb)`);
       await db.execute(sql`
         insert into labor_cost_rates (org_id, employee_party_id, currency, rate, basis, effective_from,
                                       is_active, created_by, updated_by)

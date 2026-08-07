@@ -281,7 +281,10 @@ export async function withOrg<T>(orgId: string | null, fn: () => Promise<T>): Pr
       [bypass ? "" : orgId, bypass ? "on" : "off"],
     );
     const txDb = drizzle({ client });
-    const result = await orgContext.run({ orgId, bypass, txDb }, fn);
+    // runInOrgContext, not orgContext.run: the scope must outlive the
+    // callback's lazy work, or it lands on a pooled connection with the
+    // deny-by-default GUCs and this transaction commits having read nothing.
+    const result = await runInOrgContext({ orgId, bypass, txDb }, fn);
     await client.query("commit");
     return result;
   } catch (err) {
@@ -326,10 +329,7 @@ export async function withOrgTransaction<T>(
       [orgId],
     );
     const txDb = drizzle({ client });
-    const result = await orgContext.run(
-      { orgId, bypass: false, txDb },
-      fn,
-    );
+    const result = await runInOrgContext({ orgId, bypass: false, txDb }, fn);
     await client.query("commit");
     return result;
   } catch (error) {
@@ -358,7 +358,7 @@ export function withBypass<T>(fn: () => Promise<T>): Promise<T> {
  * Use withBypass when the work needs one atomic transaction.
  */
 export function withBypassContext<T>(fn: () => Promise<T>): Promise<T> {
-  return orgContext.run({ orgId: null, bypass: true }, fn);
+  return runInOrgContext({ orgId: null, bypass: true }, fn);
 }
 
 /**
@@ -367,7 +367,36 @@ export function withBypassContext<T>(fn: () => Promise<T>): Promise<T> {
  * whose individual reads must be scoped but must not pin an idle transaction.
  */
 export function withOrgContext<T>(orgId: string, fn: () => Promise<T>): Promise<T> {
-  return orgContext.run({ orgId, bypass: false }, fn);
+  return runInOrgContext({ orgId, bypass: false }, fn);
+}
+
+/**
+ * Enter an AsyncLocalStorage tenant scope and hold it until the callback's work
+ * has actually COMPLETED — not merely until the callback has returned.
+ *
+ * The distinction is not academic; getting it wrong is why context-only scopes
+ * silently read an empty database. A drizzle query builder (`db.execute(...)`,
+ * and the query helpers built on it) is a LAZY THENABLE: constructing it
+ * touches nothing, and the pool is only reached when something awaits it, in
+ * the microtask that calls its `.then`. With the natural call shape
+ *
+ *     withBypassContext(() => db.execute(sql`select ... from orgs`))
+ *
+ * `orgContext.run` would return that un-started thenable, and the CALLER's
+ * `await` would then schedule `.then` outside the scope. The pooled-query
+ * wrapper reads `activeOrgCtx()` at execution time, sees no store, and applies
+ * the deny-by-default GUCs — so the caller gets ZERO ROWS AND NO ERROR while
+ * believing it holds bypass. Every tenant-spanning verification written that
+ * way passes vacuously.
+ *
+ * Awaiting inside the scope schedules that microtask from within it, so the
+ * GUCs are applied from the context the caller actually asked for. Callbacks
+ * that are plain `async` functions were never affected (their bodies start
+ * synchronously); this makes the two shapes behave identically, which is the
+ * only defensible contract.
+ */
+async function runInOrgContext<T>(ctx: OrgCtx, fn: () => Promise<T>): Promise<T> {
+  return await orgContext.run(ctx, async () => await fn());
 }
 
 /**

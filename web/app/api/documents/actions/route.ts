@@ -16,6 +16,25 @@ export const runtime = 'nodejs'
  * does, the engine records that no tenant approval policy applies and releases
  * the document to approved. Posting remains a separately permissioned action.
  */
+
+/**
+ * A pay run reaches its approvers with the working papers attached — the
+ * payroll journal, the payroll register, and the run's GL preview. Only when
+ * the org actually has a pay-run approval policy: without one there is no
+ * approver to read them, and rendering three reports would be dead work.
+ */
+async function attachPayRunEvidence(
+  kind: string,
+  documentId: string,
+  orgId: string,
+  userId: string,
+): Promise<void> {
+  if (kind !== 'pay_run') return
+  const { payRunApprovalState } = await import('@openbooks/engine/src/payroll-approval.ts')
+  if (!(await payRunApprovalState(orgId, documentId)).policyExists) return
+  const { assemblePayRunEvidence } = await import('../../../../lib/payroll-evidence')
+  await assemblePayRunEvidence(orgId, userId, documentId)
+}
 export async function POST(req: Request) {
   // Auth first: existence/kind/status of documents is never disclosed to
   // unauthenticated or cross-org callers.
@@ -47,6 +66,7 @@ export async function POST(req: Request) {
       if (doc.status !== 'draft') {
         return NextResponse.json({ error: `document is ${doc.status}, not draft` }, { status: 422 })
       }
+      await attachPayRunEvidence(doc.kind, doc.id, user.orgId, user.id)
       const { gated, runId, flowError, autoApproved } =
         await submitAndReleaseIfUngated(doc.kind, doc.id, user.id)
       if (gated) {
@@ -60,6 +80,12 @@ export async function POST(req: Request) {
         )
       }
       return NextResponse.json({ ok: true, requestId: null, autoApproved })
+    }
+    // Posting a draft submits it first, so the same evidence rule applies —
+    // assembled BEFORE the transaction opens (rendering three reports inside a
+    // financial transaction would hold a connection far too long).
+    if (doc.status === 'draft') {
+      await attachPayRunEvidence(doc.kind, doc.id, user.orgId, user.id)
     }
     // Submit/release/post is one financial command. A posting rejection must
     // not strand a draft in approved status or persist partial financial work.
