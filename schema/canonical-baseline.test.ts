@@ -97,6 +97,14 @@ test("the governed query catalog exposes views, never access-control tables", ()
   const safeRelations = baseline.match(
     /safe_relations constant text\[\] := array\[([\s\S]*?)\n  \];/,
   )?.[1] ?? "";
+  // Payroll is reportable — but "reportable" means present in the catalog, by
+  // EITHER route. A relation that holds a secret earns a curated column list
+  // instead of the generic `select *`, so asserting allowlist membership would
+  // pin the unsafe mechanism in place. employee_payroll_profiles is exactly
+  // that case: it carries sealed SIN ciphertext.
+  const inCatalog = (relation: string) =>
+    new RegExp(`'${relation}'`).test(safeRelations)
+    || new RegExp(`create view openbooks_query\\.${relation} `).test(baseline);
   for (const relation of [
     "pay_schedules",
     "pay_components",
@@ -111,7 +119,7 @@ test("the governed query catalog exposes views, never access-control tables", ()
     "union_classifications",
     "union_fringes",
   ]) {
-    assert.match(safeRelations, new RegExp(`'${relation}'`));
+    assert.ok(inCatalog(relation), `${relation} is not in the governed query catalog`);
   }
   assert.doesNotMatch(safeRelations, /user_org_access|auth_[a-z0-9_]+/);
   assert.match(
