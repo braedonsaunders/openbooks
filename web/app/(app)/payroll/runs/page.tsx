@@ -39,9 +39,14 @@ export default async function PayRunsPage({
 
   const schedules = canRun
     ? (((await db.execute(sql`
-        select id, name from pay_schedules
-         where org_id = ${orgId} and is_active order by name`)) as unknown as {
-        rows: { id: string; name: string }[]
+        select s.id, s.name, s.frequency, s.pay_date_offset_days,
+               coalesce(max(r.period_end), s.anchor_period_end)::text as last_end
+          from pay_schedules s
+          left join pay_runs r on r.pay_schedule_id = s.id and r.org_id = s.org_id
+         where s.org_id = ${orgId} and s.is_active
+         group by s.id, s.name, s.frequency, s.pay_date_offset_days, s.anchor_period_end
+         order by s.name`)) as unknown as {
+        rows: { id: string; name: string; frequency: string; pay_date_offset_days: number; last_end: string | null }[]
       }).rows)
     : []
 
