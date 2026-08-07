@@ -27,12 +27,21 @@ interface SuiRow {
   wageBase: string
 }
 
+/** orgs.settings.payroll.stubPassword — the emailed-stub encryption policy. */
+export interface StubPasswordPolicy {
+  enabled: boolean
+  expression: string
+}
+
 /** Accounts & posting tab — generic accounts + pack-declared statutory slots. */
 export function PayrollSetupWorkspace(props: {
   settings: PayrollSettings
   packs: PackSlots[]
   us: UsPayrollConfig
   ca: CaPayrollConfig
+  stubPassword: StubPasswordPolicy
+  /** False when the server has no qpdf binary — encryption cannot be enabled. */
+  encryptionAvailable: boolean
   accounts: { id: string; label: string }[]
   vendors: { id: string; label: string }[]
 }) {
@@ -56,6 +65,8 @@ export function PayrollSetupWorkspace(props: {
   const [ehtRate, setEhtRate] = useState(props.ca.eht.rate ?? '')
   const [ehtExemption, setEhtExemption] = useState(props.ca.eht.annualExemption ?? '')
   const [futaRate, setFutaRate] = useState(props.us.futaRate ?? '')
+  const [stubPasswordEnabled, setStubPasswordEnabled] = useState(props.stubPassword.enabled)
+  const [stubPasswordExpression, setStubPasswordExpression] = useState(props.stubPassword.expression)
   const [suiRows, setSuiRows] = useState<SuiRow[]>(() =>
     Object.entries(props.us.sui).map(([state, entry]) => ({
       state, rate: entry.rate, wageBase: entry.wageBase,
@@ -72,6 +83,7 @@ export function PayrollSetupWorkspace(props: {
           ...Object.fromEntries(ACCOUNT_KEYS.map((key) => [key, accounts[key] || null])),
           wagesTo,
           craRemittancePartyId: craRemittancePartyId || null,
+          stubPassword: { enabled: stubPasswordEnabled, expression: stubPasswordExpression },
           slotAccounts: Object.fromEntries(Object.entries(slotAccounts).map(([country, slots]) => [
             country,
             Object.fromEntries(Object.entries(slots).map(([key, value]) => [key, value || null])),
@@ -138,6 +150,41 @@ export function PayrollSetupWorkspace(props: {
             </div>
           ))}
         </div>
+      </section>
+
+      {/* Emailed stubs carry wage data. The password rule is the employer's
+          own — it is published to staff out of band, never by us. */}
+      <section className="space-y-3 rounded-xl border border-slate-200 bg-white p-4 dark:border-slate-800 dark:bg-slate-900">
+        <div>
+          <h3 className="text-sm font-semibold text-slate-900 dark:text-slate-100">{t('stubPassword.title')}</h3>
+          <p className="text-sm text-slate-500 dark:text-slate-400">{t('stubPassword.description')}</p>
+        </div>
+        <label className="flex items-center gap-2 text-sm text-slate-700 dark:text-slate-300">
+          <input
+            type="checkbox"
+            checked={stubPasswordEnabled}
+            disabled={!props.encryptionAvailable}
+            onChange={(e) => setStubPasswordEnabled(e.target.checked)}
+            className="h-4 w-4 rounded border-slate-300 text-teal-600 focus:ring-teal-500 dark:border-slate-600"
+          />
+          {t('stubPassword.enabled')}
+        </label>
+        {props.encryptionAvailable ? null : (
+          <p className="text-xs text-amber-700 dark:text-amber-400">{t('stubPassword.unavailable')}</p>
+        )}
+        {stubPasswordEnabled ? (
+          <div>
+            <Label htmlFor="ps-stub-password">{t('stubPassword.expression')}</Label>
+            <Input
+              id="ps-stub-password"
+              value={stubPasswordExpression}
+              onChange={(e) => setStubPasswordExpression(e.target.value)}
+              placeholder="{surname:3|upper}{dob:MMDDYYYY}"
+              autoComplete="off"
+            />
+            <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">{t('stubPassword.expressionHelp')}</p>
+          </div>
+        ) : null}
       </section>
 
       {props.packs.length === 0 ? (

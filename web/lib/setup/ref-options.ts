@@ -48,6 +48,22 @@ export async function loadEntityOptions(source: string, orgId: string): Promise<
        where p.org_id = ${orgId} and p.is_active order by p.display_name`)) as any
     return customers.rows as RefOption[]
   }
+  if (source === 'employees') {
+    // Role-scoped view of the native parties model — never a parallel roster.
+    const employees = (await db.execute(sql`
+      select p.id as value, p.display_name as label from parties p
+       join employee_roles e on e.party_id = p.id and e.org_id = p.org_id and e.is_active
+       where p.org_id = ${orgId} and p.is_active order by p.display_name`)) as any
+    return employees.rows as RefOption[]
+  }
+  if (source === 'trades') {
+    // `trades` is a bare reference list with no setup-registry entry of its
+    // own, but it is a legitimate scope key (labor_cost_rates uses it too).
+    const trades = (await db.execute(sql`
+      select id as value, name as label from trades
+       where org_id = ${orgId} and is_active order by name`)) as any
+    return trades.rows as RefOption[]
+  }
   if (source === 'projects') {
     const projects = (await db.execute(sql`
       select id as value, case when coalesce(code,'') <> '' then code || ' · ' || name else name end as label

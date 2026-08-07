@@ -285,5 +285,47 @@ export const BUILT_IN_REPORT_DEFINITIONS: BuiltInReportDefinition[] = [
       limit: 1000,
     },
   },
+  {
+    slug: 'entitlement-balances',
+    name: 'Entitlement balances',
+    description:
+      'Every employee pay bank — banked time, vacation, benefit recoup — sectioned by plan, with the limit resolved for that person and an over/near-limit state. Balances are the entitlement ledger sum; a negative balance is money the employee owes back. Requires the payroll permission.',
+    query: {
+      entity: 'entitlement_balances',
+      mode: 'rows',
+      columns: [
+        'employee', 'job_title', 'balance', 'max_balance', 'headroom',
+        'limit_state', 'limit_scope', 'last_movement_date',
+      ],
+      breakouts: [],
+      measures: [],
+      groupBy: 'plan',
+      sorts: [{ column: 'balance', direction: 'desc' }],
+      limit: 5000,
+    },
+  },
+  {
+    slug: 'entitlement-service-milestones',
+    name: 'Service milestones reached',
+    description:
+      'Service anniversaries an entitlement tier acts on this year — benefits eligibility, RRSP eligibility, and each rung of the vacation ladder — with the date every employee reaches it. The list the milestone letters go out from. Requires the payroll permission.',
+    query: {
+      entity: 'entitlement_service_milestones',
+      mode: 'rows',
+      columns: [
+        'employee', 'milestone_date', 'milestone', 'milestone_kind',
+        'after_years', 'accrual_value', 'hired_on', 'department',
+      ],
+      breakouts: [],
+      measures: [],
+      groupBy: 'milestone_kind',
+      filters: {
+        combinator: 'and',
+        rules: [{ field: 'milestone_date', op: 'this_year' }],
+      },
+      sorts: [{ column: 'milestone_date', direction: 'asc' }],
+      limit: 5000,
+    },
+  },
 
 ]

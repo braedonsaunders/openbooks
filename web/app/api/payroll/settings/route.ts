@@ -6,6 +6,8 @@ import {
   packSlotState, PAYROLL_COUNTRY_PACKS, PayrollPackError, setPackSlotAccount, uninstallPayrollPack,
 } from '@openbooks/engine/src/payroll/packs.ts'
 import { US_STATES } from '@openbooks/engine/src/payroll/us/rates.ts'
+import { assertValidPasswordExpression, pdfEncryptionAvailable } from '@openbooks/pdf'
+import { STUB_PASSWORD_TOKENS, stubPasswordPolicy } from '../../../../lib/payroll-outputs'
 import { guardFeaturePermission } from '../../../../lib/feature-gates'
 import { canonicalDecimal, compareDecimal } from '../../../../lib/exact-decimal'
 import { isUuid } from '../../../../lib/list-params'
@@ -90,12 +92,14 @@ export async function GET() {
     pickerOptions(gate.user.orgId),
   ])
   const installed = Array.isArray(blob.countries) ? blob.countries.map(String) : []
-  const [packs, us, ca] = await Promise.all([
+  const [packs, us, ca, stubPassword, encryptionAvailable] = await Promise.all([
     packSlotState(gate.user.orgId, installed, blob),
     usPayrollConfig(gate.user.orgId),
     caPayrollConfig(gate.user.orgId),
+    stubPasswordPolicy(gate.user.orgId),
+    pdfEncryptionAvailable(),
   ])
-  return NextResponse.json({ settings, packs, us, ca, ...options })
+  return NextResponse.json({ settings, packs, us, ca, stubPassword, encryptionAvailable, ...options })
 }
 
 export async function PUT(req: Request) {
@@ -134,6 +138,32 @@ export async function PUT(req: Request) {
       if (typeof v === 'string' && v.trim()) clean[key] = v.trim()
     }
     settings.t4Transmitter = clean
+  }
+  // Emailed pay stubs carry wage data, so the org may require the PDF to be
+  // encrypted. The password RULE is configuration (employers publish their own
+  // to staff); it is validated here so a bad expression is refused at save
+  // time rather than at stub-email time. No password is ever stored.
+  if ('stubPassword' in body) {
+    const policy = body.stubPassword
+    if (typeof policy !== 'object' || policy === null || Array.isArray(policy)) {
+      return NextResponse.json({ error: 'invalid stubPassword' }, { status: 422 })
+    }
+    const expression = typeof policy.expression === 'string' ? policy.expression.trim() : ''
+    const enabled = policy.enabled === true
+    if (enabled) {
+      try {
+        assertValidPasswordExpression(expression, STUB_PASSWORD_TOKENS)
+      } catch (e) {
+        return NextResponse.json({ error: (e as Error).message }, { status: 422 })
+      }
+      if (!(await pdfEncryptionAvailable())) {
+        return NextResponse.json(
+          { error: 'PDF encryption is unavailable on this server (qpdf is not installed)' },
+          { status: 422 },
+        )
+      }
+    }
+    settings.stubPassword = { enabled, expression }
   }
   if ('countries' in body) {
     const countries = body.countries

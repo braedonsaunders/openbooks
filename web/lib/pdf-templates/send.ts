@@ -51,6 +51,14 @@ export async function sendRecordPdfEmail(args: {
   to?: string
   message?: string
   templateId?: string | null
+  /**
+   * Post-processing pass applied to the rendered bytes before they are
+   * attached — how a confidential record (a pay stub) is emailed encrypted.
+   * It throws rather than returning the plaintext when it cannot protect the
+   * document, and the send fails with it: nothing confidential is ever
+   * downgraded to an unprotected attachment.
+   */
+  encrypt?: (pdf: Buffer) => Promise<Buffer>
 }): Promise<{ to: string; subject: string }> {
   const meta = PDF_RECORD_TYPE_BY_KEY[args.recordType]
   if (!meta) throw new Error('unknown record type')
@@ -71,7 +79,8 @@ export async function sendRecordPdfEmail(args: {
   const orgName = (typeof v.org_name === 'string' && v.org_name) || 'OpenBooks'
   const partyName = typeof v.party_name === 'string' && v.party_name ? v.party_name : undefined
   const attachmentName = `${meta.docTitle}-${record.reference}.pdf`.replace(/\s+/g, '-')
-  const pdf = await mergeAndPrintPdf(tpl, record.values)
+  const rendered = await mergeAndPrintPdf(tpl, record.values)
+  const pdf = args.encrypt ? await args.encrypt(rendered) : rendered
   // When the invoice has an active hosted payment link, include it as a
   // pay-online call-to-action. Creating the link is the opt-in; nothing is
   // attached for invoices without one.

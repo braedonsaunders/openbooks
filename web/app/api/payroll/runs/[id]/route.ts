@@ -3,7 +3,12 @@ import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/db.ts'
 import { calculatePayRun, commitPayRun, PayrollError, previewPayRunGl } from '@openbooks/engine/src/payroll-run.ts'
 import { recordPayRunPayment } from '@openbooks/engine/src/payroll-payment.ts'
+import {
+  assertPayRunApprovalReleased, payRunApprovalState,
+} from '@openbooks/engine/src/payroll-approval.ts'
+import { submitForApproval } from '@openbooks/engine/src/flows/index.ts'
 import { emailRunStubs } from '../../../../../lib/payroll-outputs'
+import { assemblePayRunEvidence } from '../../../../../lib/payroll-evidence'
 import { mutatePayRunAdjustment } from '@openbooks/engine/src/payroll-run-adjustments.ts'
 import { guardFeaturePermission } from '../../../../../lib/feature-gates'
 import { isUuid } from '../../../../../lib/list-params'
@@ -15,8 +20,10 @@ export const dynamic = 'force-dynamic'
  *
  *  GET  → run header + every stub (employee, statutory splits, T4127 factors)
  *         and its component lines. Wage data — never served below payroll.read.
- *  POST → { action: 'calculate' | 'commit' } drives the engine pipeline;
- *         posting rides the standard /api/documents/actions route.
+ *  POST → { action: 'calculate' | 'submit-approval' | 'commit' } drives the
+ *         engine pipeline; posting rides the standard /api/documents/actions
+ *         route. Commit and the bank file fail closed while a Flows approval
+ *         is outstanding; posting is already gated by the document lifecycle.
  */
 
 export async function GET(_req: Request, { params }: { params: Promise<{ id: string }> }) {
@@ -99,9 +106,37 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
   if (!isUuid(id)) return NextResponse.json({ error: 'not found' }, { status: 404 })
   const body = await req.json().catch(() => ({}))
   try {
-    if (body.action === 'calculate') {
-      const result = await calculatePayRun({ orgId: gate.user.orgId, documentId: id, actorId: gate.user.id })
+    if (body.action === 'calculate' || body.action === 'dry-run') {
+      const result = await calculatePayRun({
+        orgId: gate.user.orgId, documentId: id, actorId: gate.user.id,
+        dryRun: body.action === 'dry-run',
+      })
       return NextResponse.json({ ok: true, ...result })
+    }
+    // Apply one component amount across many employees in one pass — the
+    // review step's bulk edit. Each employee still gets its own audited
+    // adjustment row through the same helper as a single edit.
+    if (body.action === 'bulk-adjustment') {
+      const { componentId, amount, note, replaceComponent } = body
+      const employees = Array.isArray(body.employeePartyIds) ? body.employeePartyIds : []
+      if (
+        !isUuid(componentId) || employees.length === 0 || employees.length > 2000 ||
+        !employees.every((v: unknown) => typeof v === 'string' && isUuid(v)) ||
+        typeof amount !== 'string' || !/^-?\d+(\.\d{1,2})?$/.test(amount) ||
+        (note != null && (typeof note !== 'string' || note.length > 500)) ||
+        (replaceComponent != null && typeof replaceComponent !== 'boolean')
+      ) {
+        return NextResponse.json({ error: 'invalid adjustment' }, { status: 422 })
+      }
+      for (const employeePartyId of employees as string[]) {
+        await mutatePayRunAdjustment({
+          orgId: gate.user.orgId,
+          documentId: id,
+          actorId: gate.user.id,
+          mutation: { action: 'add', employeePartyId, componentId, amount, replaceComponent, note },
+        })
+      }
+      return NextResponse.json({ ok: true, applied: employees.length })
     }
     if (body.action === 'preview-gl') {
       // Read-only: the exact legs commit would write, for the wizard's review
@@ -190,7 +225,24 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
       })
       return NextResponse.json({ ok: true, ...result })
     }
+    // Submit for approval: assemble the evidence package (payroll journal +
+    // register + GL preview) onto the run, then route it through Flows. A
+    // tenant with no pay_run flow gets `gated: false` and nothing is parked.
+    if (body.action === 'submit-approval') {
+      const evidence = await assemblePayRunEvidence(gate.user.orgId, gate.user.id, id)
+      const submission = await submitForApproval('pay_run', id, gate.user.id)
+      if (submission.flowError) {
+        return NextResponse.json({ error: submission.flowError }, { status: 422 })
+      }
+      return NextResponse.json({ ok: true, evidence, gated: submission.gated })
+    }
+    if (body.action === 'approval-state') {
+      return NextResponse.json({ ok: true, ...(await payRunApprovalState(gate.user.orgId, id)) })
+    }
     if (body.action === 'commit') {
+      // Money must not move before approval: commit materializes the GL
+      // projection and claims the period's time entries.
+      await assertPayRunApprovalReleased(gate.user.orgId, id)
       const result = await commitPayRun({ orgId: gate.user.orgId, documentId: id, actorId: gate.user.id })
       return NextResponse.json({ ok: true, ...result })
     }

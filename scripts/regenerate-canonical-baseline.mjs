@@ -43,6 +43,7 @@ $extension$;
 const PAYROLL_QUERY_RELATIONS = Object.freeze([
   "pay_schedules",
   "pay_components",
+  "pay_derived_rules",
   "pay_run_adjustments",
   "employee_payroll_profiles",
   "employee_pay_components",
@@ -89,7 +90,7 @@ function addReviewedPayrollRelations(source) {
     functionSql = replaceExactly(
       functionSql,
       /\n  \];/g,
-      `,\n    'employee_pay_components', 'employee_payroll_profiles',\n    'pay_components', 'pay_run_adjustments', 'pay_runs', 'pay_schedules',\n    'pay_stub_lines', 'pay_stubs', 'payroll_opening_balances',\n    'union_agreements', 'union_classifications', 'union_fringes'\n  ];`,
+      `,\n    'employee_pay_components', 'employee_payroll_profiles',\n    'pay_components', 'pay_derived_rules', 'pay_run_adjustments',\n    'pay_runs', 'pay_schedules',\n    'pay_stub_lines', 'pay_stubs', 'payroll_opening_balances',\n    'union_agreements', 'union_classifications', 'union_fringes'\n  ];`,
       "query-catalog allowlist terminator",
     );
   }

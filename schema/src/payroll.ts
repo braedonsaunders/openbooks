@@ -120,6 +120,39 @@ export const payComponents = pgTable(
     taxTreatment: text("tax_treatment", {
       enum: ["none", "pension_f", "union_dues", "alimony"],
     }).notNull().default("none"),
+    /**
+     * Deduction protection ("protected earnings"): a deduction may not take
+     * more than a share of what the employee actually earns. Ontario's Wages
+     * Act caps ordinary garnishments at 20% of net wages and family support at
+     * 50%; the US CCPA caps at 25% of disposable earnings (50/55/60% for
+     * support). The BASE is a setting because real orders measure against
+     * different pools — a creditor agreement that says "50% of net, but the
+     * coverall allowance and the benefit deduction sit outside the 50%" is
+     * configuration here, never a code branch.
+     */
+    protectionBase: text("protection_base", {
+      enum: ["none", "net_pay", "disposable_earnings", "gross"],
+    }).notNull().default("none"),
+    protectionMaxPercent: numeric("protection_max_percent", { precision: 7, scale: 4 }),
+    /** Which order wins when several protected deductions compete for one
+     * pool: lowest first (support outranks an ordinary creditor), and whatever
+     * does not fit is reported as a shortfall, never silently dropped. */
+    protectionPriority: integer("protection_priority").notNull().default(100),
+    /** Membership of the protected pool: earnings add to it, deductions
+     * subtract from it. This flag — not a hardcode — is what excludes an
+     * allowance or a benefit from the base a garnishment is measured against. */
+    includeInDisposableEarnings: boolean("include_in_disposable_earnings").notNull().default(true),
+    /**
+     * Basis caps — the basis a percent-of-X / per-hour component computes on
+     * is limited BEFORE the amount is produced, so nobody hand-computes it.
+     * Hours: "RRSP on at most 40 hours a week"; job-charged overtime is exempt,
+     * which is a property of the hour (the time type), not of the component.
+     * Amounts: the CRA money-purchase limit and the US 402(g) elective-deferral
+     * limit, per period and per tax year.
+     */
+    basisCapHoursPerPeriod: numeric("basis_cap_hours_per_period", { precision: 12, scale: 2 }),
+    basisCapAmountPerPeriod: money("basis_cap_amount_per_period"),
+    basisCapAmountPerYear: money("basis_cap_amount_per_year"),
     /** DR for earnings/employer contributions (default wage expense if null). */
     expenseAccountId: uuid("expense_account_id"),
     /** CR for deductions/employer contributions/accruals. */
@@ -134,6 +167,26 @@ export const payComponents = pgTable(
     uniqueIndex("pay_components_org_code").on(t.orgId, t.code),
     uniqueIndex("pay_components_org_system").on(t.orgId, t.systemKey, t.kind),
     index("pay_components_org_kind").on(t.orgId, t.kind),
+    // Protection is a property of money leaving the employee: an earning or an
+    // employer contribution has nothing to protect, and a protected component
+    // without a percentage would silently take everything.
+    check("pay_components_protection_deduction_only",
+      sql`${t.protectionBase} = 'none' or ${t.kind} = 'deduction'`),
+    check("pay_components_protection_percent",
+      sql`${t.protectionMaxPercent} is null
+          or (${t.protectionMaxPercent} >= 0 and ${t.protectionMaxPercent} <= 100)`),
+    check("pay_components_protection_shape",
+      sql`${t.protectionBase} = 'none' or ${t.protectionMaxPercent} is not null`),
+    check("pay_components_protection_priority", sql`${t.protectionPriority} >= 0`),
+    check("pay_components_basis_caps_nonnegative",
+      sql`(${t.basisCapHoursPerPeriod} is null or ${t.basisCapHoursPerPeriod} >= 0)
+          and (${t.basisCapAmountPerPeriod} is null or ${t.basisCapAmountPerPeriod} >= 0)
+          and (${t.basisCapAmountPerYear} is null or ${t.basisCapAmountPerYear} >= 0)`),
+    // A per-period cap above the annual one can never bind — that is a typo,
+    // not a policy.
+    check("pay_components_basis_cap_order",
+      sql`${t.basisCapAmountPerPeriod} is null or ${t.basisCapAmountPerYear} is null
+          or ${t.basisCapAmountPerPeriod} <= ${t.basisCapAmountPerYear}`),
   ],
 );
 
@@ -196,6 +249,14 @@ export const employeePayrollProfiles = pgTable(
     /** Union membership: drives dues, fringes, and remittance reporting. */
     unionAgreementId: uuid("union_agreement_id"),
     unionClassificationId: uuid("union_classification_id"),
+    /** Payroll program/EIN account this employee is remitted and filed under
+     * (payroll_filing_accounts). Null = the country pack's default account. */
+    filingAccountId: uuid("filing_account_id"),
+    /** How this employee receives a pay stub: emailed, printed in the run's
+     * print set, or both. */
+    stubDelivery: text("stub_delivery", {
+      enum: ["email", "print", "both"],
+    }).notNull().default("email"),
     isActive: boolean("is_active").notNull().default(true),
     ...auditColumns,
   },
@@ -248,8 +309,17 @@ export const payRuns = pgTable(
     taxYear: integer("tax_year").notNull(),
     /** Calculation lifecycle; posting state lives on the document. */
     runStatus: text("run_status", {
-      enum: ["draft", "calculated", "committed"],
+      enum: ["draft", "calculated", "committed", "voided"],
     }).notNull().default("draft"),
+    /**
+     * What kind of payday this is. 'regular' follows the schedule; 'bonus' is
+     * an off-cycle non-periodic run (bonus/commission taxed on the bonus
+     * method); 'termination' is a final pay that also drives ROE/final-pay
+     * readiness checks.
+     */
+    runType: text("run_type", {
+      enum: ["regular", "bonus", "termination"],
+    }).notNull().default("regular"),
     grossTotal: money("gross_total").notNull().default("0"),
     netTotal: money("net_total").notNull().default("0"),
     employerCostTotal: money("employer_cost_total").notNull().default("0"),
@@ -262,7 +332,11 @@ export const payRuns = pgTable(
   },
   (t) => [
     index("pay_runs_org_period").on(t.orgId, t.periodStart, t.periodEnd),
-    uniqueIndex("pay_runs_schedule_period").on(t.orgId, t.payScheduleId, t.periodEnd),
+    // One REGULAR run per schedule period; off-cycle bonus and termination
+    // runs deliberately land inside a period already paid by a regular run.
+    uniqueIndex("pay_runs_schedule_period")
+      .on(t.orgId, t.payScheduleId, t.periodEnd)
+      .where(sql`run_type = 'regular'`),
     check("pay_runs_period_order", sql`${t.periodEnd} >= ${t.periodStart}`),
     check("pay_runs_pay_date", sql`${t.payDate} >= ${t.periodEnd}`),
   ],
