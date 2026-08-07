@@ -15,6 +15,10 @@ import {
   payRunReadiness,
   payRunStaleness,
 } from '@openbooks/engine/src/payroll-readiness.ts'
+import {
+  payrollPaymentMethodSettings,
+  resolvedPaymentMethodSql,
+} from '@openbooks/engine/src/payroll-payment-method.ts'
 import { RunWizard, type RemittanceRow, type RosterRow, type RunHeader, type StubRow, type WizardStep } from './RunWizard'
 
 export const dynamic = 'force-dynamic'
@@ -55,6 +59,11 @@ export default async function PayRunPage({
   const run = runs.rows[0]
   if (!run) notFound()
 
+  // The roster resolves each employee's pay rail with the same ladder the
+  // engine uses, so the Scope step's "paid by" column can never disagree with
+  // what the run will actually do.
+  const { eftFallbackToCheque } = await payrollPaymentMethodSettings(orgId)
+
   const [stubsRes, linesRes, rosterRes, prevRes, remitRes] = (await Promise.all([
     db.execute(sql`
       select st.id, st.employee_party_id, p.display_name as employee_name, st.province,
@@ -80,7 +89,20 @@ export default async function PayRunPage({
     db.execute(sql`
       select p.id as employee_party_id, p.display_name as name, prof.pay_basis,
              coalesce(te.hours, 0)::text as approved_hours,
-             dep.name as department, er.terminated_on::text as terminated_on,
+             -- Every dimension the roster carries, so the scope filters are a
+             -- real filter set rather than "department, when there is one".
+             dep.name as department, tr.name as trade, er.job_title,
+             sub.name as subsidiary,
+             ${resolvedPaymentMethodSql({
+               profileMethod: sql`prof.payment_method`,
+               partyMethod: sql`p.payment_method`,
+               hasBank: sql`exists (
+                 select 1 from party_bank_accounts b
+                  where b.org_id = prof.org_id and b.party_id = p.id
+                    and b.is_active and b.approval_status = 'approved')`,
+               fallbackToCheque: eftFallbackToCheque,
+             })} as payment_method,
+             er.terminated_on::text as terminated_on,
              er.hired_on::text as hired_on,
              exists (
                select 1 from labor_cost_rates w
@@ -101,6 +123,8 @@ export default async function PayRunPage({
         join parties p on p.id = prof.employee_party_id and p.org_id = prof.org_id
         left join employee_roles er on er.party_id = p.id and er.org_id = prof.org_id and er.is_active
         left join departments dep on dep.id = er.department_id
+        left join trades tr on tr.id = er.trade_id
+        left join subsidiaries sub on sub.id = p.subsidiary_id
         left join lateral (
           select sum(te.hours) as hours from time_entries te
            where te.org_id = prof.org_id and te.employee_party_id = prof.employee_party_id

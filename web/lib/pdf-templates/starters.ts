@@ -188,6 +188,67 @@ function payStubStarter(meta: PdfRecordTypeMeta, accent: string): StarterTemplat
   }
 }
 
+/**
+ * The classic cheque-on-top, voucher-below sheet: cheque body in the upper
+ * third (payee, courtesy amount, legal amount, signature rule), the pay detail
+ * beneath it as the employee's stub. Every employer re-lays this out for their
+ * own stock — that is what the template designer is for — but the default has
+ * to be a printable cheque, not a placeholder.
+ */
+function chequeStarter(meta: PdfRecordTypeMeta, accent: string): StarterTemplate {
+  const sourceHtml =
+    `<div style="${FONT}color:${INK};">` +
+    // ---- cheque body -----------------------------------------------------
+    `<table style="width:100%;border-collapse:collapse;margin:0 0 4px;"><tbody><tr>` +
+    `<td style="vertical-align:top;"><div style="font-size:17px;font-weight:800;color:${accent};">{{org_name}}</div></td>` +
+    `<td style="vertical-align:top;text-align:right;">` +
+    `<div style="font-size:15px;font-weight:800;color:${INK};">{{cheque_number}}</div>` +
+    `<div style="font-size:11px;color:${MUTED};padding-top:2px;">{{pay_date}}</div>` +
+    `</td>` +
+    `</tr></tbody></table>` +
+    `<table style="width:100%;border-collapse:collapse;margin:14px 0 6px;"><tbody><tr>` +
+    `<td style="vertical-align:bottom;">` +
+    `<div style="font-size:9px;letter-spacing:.1em;text-transform:uppercase;color:${FAINT};padding-bottom:3px;">${meta.partyHeading ?? 'Pay to the order of'}</div>` +
+    `<div style="font-size:14px;font-weight:700;color:${INK};border-bottom:1px solid ${INK};padding-bottom:4px;">{{employee_name}}</div>` +
+    `</td>` +
+    `<td style="vertical-align:bottom;text-align:right;width:180px;padding-left:24px;">` +
+    `<div style="font-size:18px;font-weight:800;color:${INK};border:1px solid ${INK};padding:6px 10px;">{{amount}}</div>` +
+    `</td>` +
+    `</tr></tbody></table>` +
+    `<div style="font-size:12px;color:${INK};border-bottom:1px solid ${INK};padding:6px 0 4px;">{{amount_in_words}} <span style="color:${FAINT};">{{currency}}</span></div>` +
+    `<table style="width:100%;border-collapse:collapse;margin:14px 0 0;"><tbody><tr>` +
+    `<td style="vertical-align:bottom;font-size:10px;color:${MUTED};">{{employee_address}}<div style="padding-top:6px;">Memo: {{memo}}</div></td>` +
+    `<td style="vertical-align:bottom;width:240px;padding-left:24px;">` +
+    `<div style="border-top:1px solid ${INK};margin-top:26px;padding-top:4px;font-size:9.5px;color:${MUTED};text-align:center;">Authorized signature</div>` +
+    `</td>` +
+    `</tr></tbody></table>` +
+    `<div style="height:3px;background:${accent};margin:26px 0 4px;"></div>` +
+    // ---- voucher ---------------------------------------------------------
+    `<div style="font-size:9px;letter-spacing:.1em;text-transform:uppercase;color:${FAINT};padding:0 0 12px;">` +
+    `Statement of earnings · {{document_number}} · {{period_start}} – {{period_end}}</div>` +
+    `<table style="width:100%;border-collapse:collapse;margin:0 0 14px;"><tbody>` +
+    `<tr>${th('Earnings')}${th('Hours', 'right', '70px')}${th('Rate', 'right', '80px')}${th('Amount', 'right', '92px')}</tr>` +
+    `<tr data-each="earnings">${td('description')}${td('hours', 'right')}${td('rate', 'right')}${td('amount', 'right')}</tr>` +
+    `</tbody></table>` +
+    `<table style="width:100%;border-collapse:collapse;margin:0 0 14px;"><tbody>` +
+    `<tr>${th('Deductions')}${th('Amount', 'right', '92px')}</tr>` +
+    `<tr data-each="deductions">${td('description')}${td('amount', 'right')}</tr>` +
+    `</tbody></table>` +
+    `<table style="border-collapse:collapse;margin-left:auto;"><tbody>` +
+    totalsRow('Gross pay', 'gross') +
+    totalsRow('Total deductions', 'total_deductions') +
+    totalsRow('Net pay', 'net_pay', { strong: true, accent }) +
+    `</tbody></table>` +
+    `<div style="border-top:1px solid ${RULE};margin-top:18px;padding-top:10px;font-size:9.5px;color:${FAINT};">Printed {{printed_date}} · {{org_name}} · Confidential</div>` +
+    `</div>`
+
+  return {
+    sourceHtml,
+    headerHtml: '',
+    footerHtml: `{{org_name}} · ${meta.docTitle} {{cheque_number}} · Page {{page}} of {{pages}}`,
+  }
+}
+
 function journalStarter(meta: PdfRecordTypeMeta, accent: string): StarterTemplate {
   const sourceHtml =
     `<div style="${FONT}color:${INK};">` +
@@ -314,6 +375,7 @@ export function starterTemplate(meta: PdfRecordTypeMeta, accent?: string | null)
   const color = accent && /^#[0-9a-fA-F]{3,8}$/.test(accent) ? accent : '#0f766e'
   if (meta.key === 'journal_entry') return journalStarter(meta, color)
   if (meta.key === 'pay_stub') return payStubStarter(meta, color)
+  if (meta.key === 'payroll_cheque') return chequeStarter(meta, color)
   if (meta.key === 'field_ticket') return fieldTicketStarter(meta, color)
   return documentStarter(meta, color)
 }
