@@ -12,6 +12,7 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
+    "dompurify": "3.4.13",
     "isomorphic-dompurify": "^3.18.0",
     "pdfkit": "^0.17.1",
     "puppeteer-core": "^25.3.0"
