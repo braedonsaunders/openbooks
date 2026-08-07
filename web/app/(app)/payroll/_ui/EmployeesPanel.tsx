@@ -64,10 +64,13 @@ export interface ProfileRow {
   vacation_method: 'accrue' | 'pay_each_period'
   filing_account_id: string | null
   stub_delivery: 'email' | 'print' | 'both'
+  /** Payroll override of the pay rail; null inherits the party preference. */
+  payment_method: 'eft' | 'cheque' | null
   is_active: boolean
 }
 
 const STUB_DELIVERIES = ['email', 'print', 'both'] as const
+const PAYMENT_METHODS = ['eft', 'cheque'] as const
 
 const PROVINCES = ['AB', 'BC', 'MB', 'NB', 'NL', 'NS', 'NT', 'NU', 'ON', 'PE', 'QC', 'SK', 'YT', 'ZZ'] as const
 const US_STATES = [
@@ -119,6 +122,7 @@ export function ProfileEditor(props: {
   const [sin, setSin] = useState('')
   const [filingAccountId, setFilingAccountId] = useState(p.filing_account_id ?? '')
   const [stubDelivery, setStubDelivery] = useState<ProfileRow['stub_delivery']>(p.stub_delivery ?? 'email')
+  const [paymentMethod, setPaymentMethod] = useState<string>(p.payment_method ?? '')
   // Accounts file under one country pack, so only the employee's own apply.
   const filingAccounts = (props.filingAccounts ?? []).filter((account) => account.country === country)
 
@@ -156,6 +160,7 @@ export function ProfileEditor(props: {
           vacationMethod,
           filingAccountId: filingAccountId || null,
           stubDelivery,
+          paymentMethod: paymentMethod || null,
           isActive,
         }),
       })
@@ -289,6 +294,27 @@ export function ProfileEditor(props: {
                 </option>
               ))}
             </Select>
+          </div>
+          {/* The rail. Blank inherits the party's standing preference, which
+              itself falls back to "EFT if there are approved bank details,
+              otherwise cheque" — so this is only set to override that. */}
+          <div>
+            <Label htmlFor="pp-payment-method">{t('fields.paymentMethod')}</Label>
+            <Select
+              id="pp-payment-method"
+              value={paymentMethod}
+              onChange={(e) => setPaymentMethod(e.target.value)}
+            >
+              <option value="">{t('paymentMethod.inherit')}</option>
+              {PAYMENT_METHODS.map((option) => (
+                <option key={option} value={option}>
+                  {t(`paymentMethod.${option}`)}
+                </option>
+              ))}
+            </Select>
+            <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
+              {t('paymentMethod.help')}
+            </p>
           </div>
         </div>
 

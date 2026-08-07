@@ -101,6 +101,7 @@ export function PayrollProfileTab({ partyId, partyName }: { partyId: string; par
     vacation_method: 'accrue',
     filing_account_id: null,
     stub_delivery: 'email',
+    payment_method: null,
     is_active: true,
   }
 

@@ -257,6 +257,16 @@ export const employeePayrollProfiles = pgTable(
     stubDelivery: text("stub_delivery", {
       enum: ["email", "print", "both"],
     }).notNull().default("email"),
+    /**
+     * Payroll-owned override of how this employee's net pay leaves the bank.
+     * NULL = inherit `parties.payment_method` (see
+     * engine/src/payroll-payment-method.ts for the full resolution ladder).
+     * Payroll keeps its own column because the party-level enum is shared with
+     * AP/party maintenance and carries values that are not payroll rails
+     * (card/cash/other), and because moving wages onto a different rail is a
+     * payroll decision — `payroll.manage`, not `parties.write`.
+     */
+    paymentMethod: text("payment_method", { enum: ["eft", "cheque"] }),
     isActive: boolean("is_active").notNull().default(true),
     ...auditColumns,
   },
@@ -366,12 +376,28 @@ export const payStubs = pgTable(
     vacationAccrued: money("vacation_accrued").notNull().default("0"),
     /** Every T4127 factor (A, K1…K4, T1…T4, V1, V2, S, TB…) for the trace UI. */
     factors: jsonb("factors").notNull().default(sql`'{}'::jsonb`),
+    /**
+     * Snapshot: the rail this pay actually went out on, resolved at calculate
+     * time. Re-resolving from the live party/profile would let a later edit
+     * reinterpret a paid run — the stub is the historical record.
+     */
+    paymentMethod: text("payment_method", { enum: ["eft", "cheque"] }),
+    /** Allocated from the `payroll_cheque` number sequence when the cheque is
+     *  issued; unique per org so a number is never printed twice. */
+    chequeNumber: text("cheque_number"),
     ...auditColumns,
   },
   (t) => [
     uniqueIndex("pay_stubs_run_employee").on(t.payRunDocumentId, t.employeePartyId),
     index("pay_stubs_employee_year").on(t.orgId, t.employeePartyId, t.taxYear, t.payDate),
+    uniqueIndex("pay_stubs_cheque_number").on(t.orgId, t.chequeNumber)
+      .where(sql`${t.chequeNumber} is not null`),
     check("pay_stubs_net_nonnegative", sql`${t.netPay} >= 0`),
+    check("pay_stubs_payment_method",
+      sql`${t.paymentMethod} is null or ${t.paymentMethod} in ('eft', 'cheque')`),
+    // A cheque number can only exist on a cheque.
+    check("pay_stubs_cheque_number_method",
+      sql`${t.chequeNumber} is null or ${t.paymentMethod} = 'cheque'`),
   ],
 );
 

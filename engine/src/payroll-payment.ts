@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { sql } from "drizzle-orm";
 import { db } from "./db.ts";
-import { cmp, neg, sum } from "./money.ts";
+import { add, cmp, neg, sum } from "./money.ts";
 import { PayrollError, payrollSettings } from "./payroll-run.ts";
 
 /**
@@ -17,6 +17,15 @@ import { PayrollError, payrollSettings } from "./payroll-run.ts";
  * The bank FILE (CPA-005/NACHA) is evidence for the bank; THIS is the books'
  * truth. They are deliberately independent: cheque shops record payment with
  * no file, EFT shops generate both.
+ *
+ * A MIXED population settles here exactly like a uniform one. The rail decides
+ * how the money is instructed to leave, not what the books record: every
+ * employee's net pay is relieved off the same payable against the same bank
+ * account, because that is the account both the direct-deposit debit and the
+ * cheques are drawn on. The split is reported (`eft` / `cheque` below, and on
+ * the funding panel) so a controller can see what each rail costs, and each
+ * cheque's number rides its own settlement line's memo so the bank
+ * reconciliation can match paper to ledger.
  */
 export async function recordPayRunPayment(input: {
   orgId: string;
@@ -25,7 +34,7 @@ export async function recordPayRunPayment(input: {
   bankAccountId: string;
   /** Settlement date; defaults to the run's pay date. */
   paidOn?: string;
-}): Promise<{ entryId: string; total: string }> {
+}): Promise<{ entryId: string; total: string; eft: string; cheque: string }> {
   const { orgId, actorId, documentId } = input;
   const settings = await payrollSettings(orgId);
   const netPayable = settings.netPayAccountId;
@@ -72,6 +81,18 @@ export async function recordPayRunPayment(input: {
       throw new PayrollError("the posted run has no open net-pay items (already settled?)");
     }
 
+    // How each employee is actually paid, so the settlement line can carry the
+    // cheque number and the caller can report the rail split. An open item with
+    // no stub (a hand-built run) simply carries no rail annotation.
+    const railRows = (await tx.execute(sql`
+      select s.employee_party_id, s.payment_method, s.cheque_number
+        from pay_stubs s
+       where s.org_id = ${orgId} and s.pay_run_document_id = ${documentId}
+    `)) as unknown as {
+      rows: { employee_party_id: string; payment_method: string | null; cheque_number: string | null }[];
+    };
+    const rail = new Map(railRows.rows.map((row) => [row.employee_party_id, row]));
+
     const paidOn = input.paidOn ?? run.pay_date!;
     const period = (await tx.execute(sql`
       select id from accounting_periods
@@ -97,14 +118,22 @@ export async function recordPayRunPayment(input: {
     const total = sum(openItems.rows.map((item) => neg(item.amount)));
     if (cmp(total, "0") <= 0) throw new PayrollError("nothing to pay");
     const settlements: { fromLineId: string; toLineId: string; amount: string; currency: string }[] = [];
+    let eft = "0";
+    let cheque = "0";
     for (const item of openItems.rows) {
       const debit = neg(item.amount); // positive
+      const paid = rail.get(item.party_id);
+      if (paid?.payment_method === "cheque") cheque = add(cheque, debit);
+      else if (paid?.payment_method === "eft") eft = add(eft, debit);
+      const memo = paid?.cheque_number
+        ? `Net pay ${run.document_number} · cheque ${paid.cheque_number}`
+        : `Net pay ${run.document_number}`;
       const line = (await tx.execute(sql`
         insert into journal_lines (org_id, entry_id, line_number, account_id, subsidiary_id,
                                    amount, currency, txn_amount, fx_rate, party_id, is_open_item, memo)
         values (${orgId}, ${entryId}, ${lineNumber++}, ${netPayable}, ${item.subsidiary_id},
                 ${debit}, ${item.currency}, ${debit}, 1, ${item.party_id}, true,
-                ${`Net pay ${run.document_number}`})
+                ${memo})
         returning id
       `)) as unknown as { rows: { id: string }[] };
       settlements.push({ fromLineId: line.rows[0]!.id, toLineId: item.id, amount: debit, currency: item.currency });
@@ -142,6 +171,6 @@ export async function recordPayRunPayment(input: {
              updated_by = ${actorId}, updated_at = now()
        where org_id = ${orgId} and document_id = ${documentId}
     `);
-    return { entryId, total };
+    return { entryId, total, eft, cheque };
   });
 }

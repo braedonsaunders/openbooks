@@ -7,6 +7,7 @@ import {
 } from '@openbooks/engine/src/payroll/packs.ts'
 import { US_STATES } from '@openbooks/engine/src/payroll/us/rates.ts'
 import { assertValidPasswordExpression, pdfEncryptionAvailable } from '@openbooks/pdf'
+import { payrollPaymentMethodSettings } from '@openbooks/engine/src/payroll-payment-method.ts'
 import { STUB_PASSWORD_TOKENS, stubPasswordPolicy } from '../../../../lib/payroll-outputs'
 import { guardFeaturePermission } from '../../../../lib/feature-gates'
 import { canonicalDecimal, compareDecimal } from '../../../../lib/exact-decimal'
@@ -99,7 +100,10 @@ export async function GET() {
     stubPasswordPolicy(gate.user.orgId),
     pdfEncryptionAvailable(),
   ])
-  return NextResponse.json({ settings, packs, us, ca, stubPassword, encryptionAvailable, ...options })
+  const paymentMethods = await payrollPaymentMethodSettings(gate.user.orgId)
+  return NextResponse.json({
+    settings, packs, us, ca, stubPassword, encryptionAvailable, paymentMethods, ...options,
+  })
 }
 
 export async function PUT(req: Request) {
@@ -121,6 +125,17 @@ export async function PUT(req: Request) {
       return NextResponse.json({ error: 'invalid craRemittancePartyId' }, { status: 422 })
     }
     settings.craRemittancePartyId = party
+  }
+  // The cheque safety net. On by default: a payroll that refuses to run
+  // because one employee's void cheque has not been keyed yet fails everybody
+  // else on the run. Turning it OFF is the deliberate strict posture — an
+  // employee configured for EFT with no bank details blocks the run instead of
+  // being paid on paper.
+  if ('eftFallbackToCheque' in body) {
+    if (typeof body.eftFallbackToCheque !== 'boolean') {
+      return NextResponse.json({ error: 'invalid eftFallbackToCheque' }, { status: 422 })
+    }
+    settings.eftFallbackToCheque = body.eftFallbackToCheque
   }
   if ('wagesTo' in body) {
     settings.wagesTo = body.wagesTo === 'labor_clearing' ? 'labor_clearing' : 'expense'

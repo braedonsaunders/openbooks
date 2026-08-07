@@ -8129,11 +8129,13 @@ CREATE TABLE public.employee_payroll_profiles (
     sin_last3 text,
     filing_account_id uuid,
     stub_delivery text DEFAULT 'email'::text NOT NULL,
+    payment_method text,
     CONSTRAINT employee_payroll_profiles_allowances CHECK (((w4_allowances IS NULL) OR (w4_allowances >= 0))),
     CONSTRAINT employee_payroll_profiles_country CHECK ((country = ANY (ARRAY['CA'::text, 'US'::text]))),
     CONSTRAINT employee_payroll_profiles_fed_code CHECK (((federal_claim_code IS NULL) OR ((federal_claim_code >= 0) AND (federal_claim_code <= 10)))),
     CONSTRAINT employee_payroll_profiles_filing_status CHECK (((filing_status IS NULL) OR (filing_status = ANY (ARRAY['single'::text, 'married_joint'::text, 'head_household'::text])))),
     CONSTRAINT employee_payroll_profiles_pay_basis CHECK ((pay_basis = ANY (ARRAY['hourly'::text, 'salary'::text]))),
+    CONSTRAINT employee_payroll_profiles_payment_method CHECK (((payment_method IS NULL) OR (payment_method = ANY (ARRAY['eft'::text, 'cheque'::text])))),
     CONSTRAINT employee_payroll_profiles_prov_code CHECK (((provincial_claim_code IS NULL) OR ((provincial_claim_code >= 0) AND (provincial_claim_code <= 10)))),
     CONSTRAINT employee_payroll_profiles_stub_delivery CHECK ((stub_delivery = ANY (ARRAY['email'::text, 'print'::text, 'both'::text]))),
     CONSTRAINT employee_payroll_profiles_vacation CHECK (((vacation_percent IS NULL) OR (vacation_percent >= (0)::numeric))),
@@ -8187,7 +8189,8 @@ CREATE VIEW openbooks_query.employee_payroll_profiles WITH (security_barrier='tr
     futa_exempt,
     sin_last3,
     filing_account_id,
-    stub_delivery
+    stub_delivery,
+    payment_method
    FROM public.employee_payroll_profiles;
 
 
@@ -10802,7 +10805,9 @@ CREATE TABLE public.parties (
     updated_by uuid,
     subsidiary_id uuid,
     invoicing_preference jsonb,
-    invoicing_profile jsonb
+    invoicing_profile jsonb,
+    payment_method text,
+    CONSTRAINT parties_payment_method CHECK (((payment_method IS NULL) OR (payment_method = ANY (ARRAY['eft'::text, 'cheque'::text, 'card'::text, 'cash'::text, 'other'::text]))))
 );
 
 ALTER TABLE ONLY public.parties FORCE ROW LEVEL SECURITY;
@@ -11451,7 +11456,11 @@ CREATE TABLE public.pay_stubs (
     created_by uuid,
     updated_at timestamp with time zone DEFAULT now() NOT NULL,
     updated_by uuid,
-    CONSTRAINT pay_stubs_net_nonnegative CHECK ((net_pay >= (0)::numeric))
+    payment_method text,
+    cheque_number text,
+    CONSTRAINT pay_stubs_cheque_number_method CHECK (((cheque_number IS NULL) OR (payment_method = 'cheque'::text))),
+    CONSTRAINT pay_stubs_net_nonnegative CHECK ((net_pay >= (0)::numeric)),
+    CONSTRAINT pay_stubs_payment_method CHECK (((payment_method IS NULL) OR (payment_method = ANY (ARRAY['eft'::text, 'cheque'::text]))))
 );
 
 ALTER TABLE ONLY public.pay_stubs FORCE ROW LEVEL SECURITY;
@@ -11483,7 +11492,9 @@ CREATE VIEW openbooks_query.pay_stubs WITH (security_barrier='true') AS
     created_at,
     created_by,
     updated_at,
-    updated_by
+    updated_by,
+    payment_method,
+    cheque_number
    FROM public.pay_stubs;
 
 
@@ -25892,6 +25903,13 @@ CREATE INDEX pay_stub_lines_project ON public.pay_stub_lines USING btree (org_id
 --
 
 CREATE INDEX pay_stub_lines_stub ON public.pay_stub_lines USING btree (stub_id, sequence);
+
+
+--
+-- Name: pay_stubs_cheque_number; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE UNIQUE INDEX pay_stubs_cheque_number ON public.pay_stubs USING btree (org_id, cheque_number) WHERE (cheque_number IS NOT NULL);
 
 
 --
