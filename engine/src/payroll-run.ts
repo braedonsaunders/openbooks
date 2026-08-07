@@ -236,9 +236,19 @@ export function nextPeriodAfter(
   throw new PayrollError("could not derive the next monthly period");
 }
 
+export type PayRunType = "regular" | "bonus" | "termination";
+
+const RUN_TYPE_MEMO: Record<PayRunType, string> = {
+  regular: "Pay run",
+  bonus: "Off-cycle bonus run",
+  termination: "Final pay run",
+};
+
 export async function createPayRun(input: {
   orgId: string; actorId: string; payScheduleId: string;
   periodStart?: string; periodEnd?: string; payDate?: string;
+  /** Regular follows the schedule; bonus/termination are off-cycle. */
+  runType?: PayRunType;
 }): Promise<{ documentId: string; documentNumber: string }> {
   const { orgId, actorId } = input;
   return await db.transaction(async (tx) => {
@@ -264,20 +274,26 @@ export async function createPayRun(input: {
       iso(new Date(at(periodEnd).getTime() + schedule.pay_date_offset_days * DAY));
     const taxYear = Number(payDate.slice(0, 4));
 
-    // Guard 1 — no run may overlap an existing run on the same schedule.
-    // Two runs covering one period would pay (and remit) the period twice.
-    const overlap = (await tx.execute(sql`
-      select d.document_number from pay_runs r
-        join documents d on d.id = r.document_id
-       where r.org_id = ${orgId} and r.pay_schedule_id = ${schedule.id}
-         and r.period_start <= ${periodEnd} and r.period_end >= ${periodStart}
-         and d.status <> 'void'
-       limit 1
-    `)) as unknown as { rows: { document_number: string }[] };
-    if (overlap.rows[0]) {
-      throw new PayrollError(
-        `pay run ${overlap.rows[0].document_number} already covers ${periodStart} to ${periodEnd}`,
-      );
+    // Guard 1 — no REGULAR run may overlap another regular run on the same
+    // schedule: two of them covering one period would pay (and remit) the
+    // period twice. Off-cycle bonus and termination runs are exempt — landing
+    // inside an already-paid period is exactly what they are for.
+    const runType: PayRunType = input.runType ?? "regular";
+    if (runType === "regular") {
+      const overlap = (await tx.execute(sql`
+        select d.document_number from pay_runs r
+          join documents d on d.id = r.document_id
+         where r.org_id = ${orgId} and r.pay_schedule_id = ${schedule.id}
+           and r.run_type = 'regular'
+           and r.period_start <= ${periodEnd} and r.period_end >= ${periodStart}
+           and d.status <> 'void'
+         limit 1
+      `)) as unknown as { rows: { document_number: string }[] };
+      if (overlap.rows[0]) {
+        throw new PayrollError(
+          `pay run ${overlap.rows[0].document_number} already covers ${periodStart} to ${periodEnd}`,
+        );
+      }
     }
 
     // Guard 2 — a run cannot be opened for a period that has not begun.
@@ -323,15 +339,15 @@ export async function createPayRun(input: {
                              currency, status, memo, created_by, updated_by)
       values (${orgId}, 'pay_run', ${number}, ${subsidiary.id}, ${payDate},
               ${subsidiary.currency_code}, 'draft',
-              ${`Pay run ${periodStart} – ${periodEnd}`}, ${actorId}, ${actorId})
+              ${`${RUN_TYPE_MEMO[runType]} ${periodStart} – ${periodEnd}`}, ${actorId}, ${actorId})
       returning id
     `)) as unknown as { rows: { id: string }[] };
     const documentId = doc.rows[0]!.id;
     await tx.execute(sql`
       insert into pay_runs (document_id, org_id, pay_schedule_id, period_start, period_end,
-                            pay_date, tax_year, created_by, updated_by)
+                            pay_date, tax_year, run_type, created_by, updated_by)
       values (${documentId}, ${orgId}, ${schedule.id}, ${periodStart}, ${periodEnd},
-              ${payDate}, ${taxYear}, ${actorId}, ${actorId})
+              ${payDate}, ${taxYear}, ${runType}, ${actorId}, ${actorId})
     `);
     return { documentId, documentNumber: number };
   });
@@ -440,9 +456,39 @@ async function resolvePayRate(
   return { basis: row.basis, rate: row.rate, annualHours: row.annual_hours, currency: row.currency };
 }
 
-export async function calculatePayRun(input: {
+export interface PayRunCalculation {
+  employees: number;
+  errors: { employee: string; message: string }[];
+  gross: string;
+  net: string;
+  employerCost: string;
+}
+
+/** Rolls the calculation transaction back while carrying its result out. */
+class DryRunRollback extends Error {
+  constructor(readonly result: PayRunCalculation) {
+    super("dry run");
+  }
+}
+
+export interface CalculatePayRunInput {
   orgId: string; documentId: string; actorId: string;
-}): Promise<{ employees: number; errors: { employee: string; message: string }[] }> {
+  /**
+   * Compute and total the run without persisting anything — the operator sees
+   * exactly what a real calculation would produce (including per-employee
+   * errors) and the run stays in whatever state it was in.
+   */
+  dryRun?: boolean;
+}
+
+export async function calculatePayRun(input: CalculatePayRunInput): Promise<PayRunCalculation> {
+  return await calculateInTransaction(input).catch((error) => {
+    if (error instanceof DryRunRollback) return error.result;
+    throw error;
+  });
+}
+
+async function calculateInTransaction(input: CalculatePayRunInput): Promise<PayRunCalculation> {
   const { orgId, documentId, actorId } = input;
   return await db.transaction(async (tx) => {
     const runRows = (await tx.execute(sql`
@@ -520,6 +566,14 @@ export async function calculatePayRun(input: {
       }
     }
 
+    const result: PayRunCalculation = {
+      employees: count, errors,
+      gross: grossTotal, net: netTotal, employerCost: employerTotal,
+    };
+    // A dry run has done all the real work; throwing here discards the stubs
+    // it wrote so the operator's preview costs the run nothing.
+    if (input.dryRun) throw new DryRunRollback(result);
+
     await tx.execute(sql`
       update pay_runs set run_status = 'calculated', calculated_at = now(),
              gross_total = ${grossTotal}, net_total = ${netTotal},
@@ -527,7 +581,7 @@ export async function calculatePayRun(input: {
              updated_by = ${actorId}, updated_at = now()
        where org_id = ${orgId} and document_id = ${documentId}
     `);
-    return { employees: count, errors };
+    return result;
   });
 }
 
@@ -565,7 +619,15 @@ async function calculateStub(
   const payRate = await resolvePayRate(tx, orgId, employeePartyId, run.period_end);
   const baseComponent = ctx.need("base_pay", "earning");
 
-  if (emp.pay_basis === "salary") {
+  // An off-cycle bonus run pays only its one-off lines: no salary, no time,
+  // and no recurring components (a bonus cheque does not re-take the period's
+  // benefit deductions). Its earnings are taxed on the T4127 bonus method.
+  const runType = (run.run_type as string) ?? "regular";
+  const bonusRun = runType === "bonus";
+
+  if (bonusRun) {
+    // no periodic earnings — adjustments below carry the bonus
+  } else if (emp.pay_basis === "salary") {
     if (!payRate || payRate.basis !== "year") {
       throw new PayrollError("salaried employee has no annual labor cost rate (employee scope)");
     }
@@ -640,7 +702,7 @@ async function calculateStub(
   const totalHours = () =>
     sum(lines.filter((l) => l.hours).map((l) => l.hours!));
 
-  for (const c of assigned.rows) {
+  for (const c of bonusRun ? [] : assigned.rows) {
     const value = String(c.override ?? c.value ?? "0");
     let amount: string;
     if (c.basis === "per_hour") amount = roundMoney(mulDecimal(value, totalHours()), 2);
@@ -683,7 +745,11 @@ async function calculateStub(
       amount, sequence: Number(adj.sequence),
       taxable: adj.taxable as boolean, pensionable: adj.pensionable as boolean,
       insurable: adj.insurable as boolean, vacationable: adj.vacationable as boolean,
-      nonPeriodic: adj.non_periodic as boolean, taxTreatment: adj.tax_treatment as string,
+      // On a bonus run every earning is non-periodic by definition: the
+      // employee is not receiving this amount every period, so annualizing it
+      // would over-withhold badly.
+      nonPeriodic: bonusRun ? adj.kind === "earning" : (adj.non_periodic as boolean),
+      taxTreatment: adj.tax_treatment as string,
     });
   }
 
@@ -730,13 +796,44 @@ async function calculateStub(
   // Vacation pay
   const vacationPercent = emp.vacation_percent;
   let vacationAccrued = "0";
+  // A final pay must clear the accrued vacation liability: the carried
+  // balance is paid out with this period's accrual, never left on the books
+  // for an employee who has left.
+  const terminationRun = runType === "termination";
+  if (terminationRun) {
+    const carried = ((await tx.execute(sql`
+      select (
+        coalesce((select vacation_balance from payroll_opening_balances
+                   where org_id = ${orgId} and employee_party_id = ${employeePartyId}
+                     and tax_year = ${taxYear}), 0)
+        + coalesce((select sum(s.vacation_accrued) from pay_stubs s
+                      join pay_runs r on r.document_id = s.pay_run_document_id
+                     where s.org_id = ${orgId} and s.employee_party_id = ${employeePartyId}
+                       and r.run_status = 'committed'), 0)
+        - coalesce((select sum(l.amount) from pay_stub_lines l
+                      join pay_stubs s on s.id = l.stub_id
+                      join pay_runs r on r.document_id = s.pay_run_document_id
+                      join pay_components c on c.id = l.component_id
+                     where s.org_id = ${orgId} and s.employee_party_id = ${employeePartyId}
+                       and r.run_status = 'committed' and c.system_key = 'vacation_payout'), 0)
+      )::text as balance
+    `)) as unknown as { rows: { balance: string }[] }).rows[0]!.balance;
+    if (cmp(carried, "0") > 0) {
+      const c = ctx.need("vacation_payout", "earning");
+      lines.push({
+        componentId: c.id as string, kind: "earning",
+        description: "Vacation payout (accrued balance)",
+        amount: roundMoney(carried, 2), sequence: 44, vacationable: false,
+      });
+    }
+  }
   if (vacationPercent && cmp(vacationPercent, "0") > 0) {
     const base = sum(lines
       .filter((l) => l.kind === "earning" && (l.vacationable ?? true) && !l.accrualOnly)
       .map((l) => l.amount));
     const vacation = mulPercent(base, vacationPercent, 2);
     if (cmp(vacation, "0") > 0) {
-      if (emp.vacation_method === "pay_each_period") {
+      if (emp.vacation_method === "pay_each_period" || terminationRun) {
         const c = ctx.need("vacation_payout", "earning");
         lines.push({
           componentId: c.id as string, kind: "earning", description: "Vacation pay",

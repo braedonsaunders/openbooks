@@ -46,6 +46,10 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: `invalid ${key} (YYYY-MM-DD)` }, { status: 422 })
     }
   }
+  const runType = body.runType ?? 'regular'
+  if (!['regular', 'bonus', 'termination'].includes(runType)) {
+    return NextResponse.json({ error: 'invalid runType' }, { status: 422 })
+  }
   try {
     const result = await createPayRun({
       orgId: gate.user.orgId,
@@ -54,6 +58,7 @@ export async function POST(req: Request) {
       periodStart: body.periodStart ?? undefined,
       periodEnd: body.periodEnd ?? undefined,
       payDate: body.payDate ?? undefined,
+      runType,
     })
     return NextResponse.json({ ok: true, ...result })
   } catch (e) {

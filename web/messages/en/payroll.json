@@ -74,12 +74,71 @@
   "wizard": {
     "stepsAria": "Pay run steps",
     "steps": {
-      "period": "Period & employees",
+      "period": "Scope",
+      "readiness": "Readiness",
       "review": "Review stubs",
       "gl": "GL preview & commit",
       "finish": "Post & finish"
     },
     "voided": "This pay run is voided and read-only.",
+    "stale": {
+      "title": "Inputs changed since this run was calculated ({reasons}). Recalculate before committing.",
+      "reason": {
+        "adjustments": "adjustments",
+        "time": "approved time",
+        "wages": "wage rates",
+        "roster": "employee profiles"
+      }
+    },
+    "readiness": {
+      "blockedTitle": "{count, plural, one {# item blocks this run} other {# items block this run}}",
+      "blockedHint": "Resolve each item before calculating. Every one links to where it is fixed.",
+      "readyTitle": "Ready to calculate · {count, plural, one {# employee} other {# employees}}",
+      "readyHint": "Configuration, period control and employee records are complete.",
+      "warningsHint": "{count, plural, one {# item needs} other {# items need}} review. Acknowledge to continue.",
+      "blockersTitle": "Blockers",
+      "warningsTitle": "Review before continuing",
+      "acknowledge": "I have reviewed these items and want to continue",
+      "allClear": "No blockers or warnings. This run is ready to calculate.",
+      "fix": "Resolve",
+      "andMore": "+{count} more",
+      "dryRun": "Test calculation",
+      "dryRunTitle": "Test calculation results",
+      "dryRunHint": "Nothing was saved. Run Calculate to build the stubs for real.",
+      "codes": {
+        "setup": {
+          "wageExpense": "No wage expense account is configured.",
+          "netPay": "No net pay payable account is configured.",
+          "laborClearing": "Wages post to labor clearing, but no clearing account is configured.",
+          "slot": "Statutory account not mapped: {detail}"
+        },
+        "period": {
+          "missing": "No accounting period covers the pay date {detail}.",
+          "closed": "The accounting period {detail} is closed to GL postings."
+        },
+        "scope": {
+          "empty": "No employees are included in this run."
+        },
+        "employee": {
+          "noWage": "{count, plural, one {# employee has} other {# employees have}} no wage rate effective for this period.",
+          "zeroHours": "{count, plural, one {# hourly employee has} other {# hourly employees have}} no approved time in this period.",
+          "paidInPeriod": "{count, plural, one {# employee was} other {# employees were}} already paid for an overlapping period.",
+          "terminated": "{count, plural, one {# employee was} other {# employees were}} terminated on or before the period end.",
+          "noBankDetails": "{count, plural, one {# employee has} other {# employees have}} no approved bank details for direct deposit.",
+          "noSin": "{count, plural, one {# employee has} other {# employees have}} no SIN/SSN on file for year-end filing."
+        }
+      }
+    },
+    "funding": {
+      "title": "Funding",
+      "netPay": "Cash required to fund",
+      "liabilities": "Liabilities recorded",
+      "totalCost": "Total employer cost",
+      "accounts": "Bank accounts",
+      "leadTime": "{days, plural, =0 {Pay date is today} one {# business day to pay date} other {# business days to pay date}} · {date}",
+      "payDatePast": "Pay date {date} has passed",
+      "short": "No single bank account covers the {amount} required."
+    },
     "period": {
       "taxYear": "Tax year",
       "employeesTitle": "Included employees ({count})",
@@ -109,7 +168,9 @@
       "paidInPeriod": "Already paid",
       "terminated": "Terminated",
       "excluded": "Excluded",
-      "included": "Included"
+      "included": "Included",
+      "runType": "Run type",
+      "continue": "Continue to readiness"
     },
     "review": {
       "exceptionsTitle": "{count, plural, one {# calculation exception} other {# calculation exceptions}}",
@@ -120,7 +181,23 @@
       "drawerDescription": "Pay lines and the statutory calculation trace for this stub.",
       "drawerVariance": "Net pay moved {percent}% vs this employee's previous stub.",
       "downloadPdf": "Download PDF",
-      "close": "Close"
+      "close": "Close",
+      "registerTitle": "Register preview",
+      "selectAll": "Select all stubs",
+      "selectedCount": "{count, plural, one {# selected} other {# selected}}",
+      "bulkEdit": "Edit selected",
+      "bulkDescription": "Apply one component amount to {count, plural, one {# employee} other {# employees}} in this run.",
+      "bulkApply": "Apply to {count, plural, one {# employee} other {# employees}}",
+      "changedColumn": "Changed",
+      "noChange": "no change",
+      "changedTitle": "Changes since {date}",
+      "noChangeDetail": "Nothing changed against the previous stub.",
+      "changedTotals": "Net {net} · hours {hours} versus the previous stub.",
+      "changeKind": {
+        "added": "New",
+        "removed": "Removed",
+        "changed": "Changed"
+      }
     },
     "gl": {
       "needsCalculation": "Calculate the run to preview its GL impact.",
@@ -134,6 +211,7 @@
       "debits": "Debit",
       "credits": "Credit",
       "balanced": "Balanced",
+      "staleBlocked": "Recalculate the run before committing.",
       "commitHint": "Commit freezes the stubs and writes these lines to the pay-run document. The run remains reviewable until it is posted."
     },
     "finish": {
@@ -186,7 +264,18 @@
     "incomplete": "{count, plural, one {# payroll control account is} other {# payroll control accounts are}} not configured:",
     "openSettings": "Open payroll setup"
   },
+  "runType": {
+    "regular": "Regular",
+    "bonus": "Off-cycle bonus",
+    "termination": "Final pay"
+  },
   "newRun": {
+    "runType": "Run type",
+    "runTypeHint": {
+      "regular": "The schedule's normal payroll: salary, approved time, recurring components and deductions.",
+      "bonus": "Off-cycle pay for bonuses and commissions. No salary, time or recurring deductions; earnings are taxed on the bonus method.",
+      "termination": "Final pay for departing employees. Includes the accrued vacation balance as a payout."
+    },
     "schedule": "Pay schedule",
     "noSchedules": "No active pay schedules",
     "create": "New pay run",

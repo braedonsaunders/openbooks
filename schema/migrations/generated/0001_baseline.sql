@@ -10882,6 +10882,7 @@ CREATE TABLE public.pay_runs (
     pay_date date NOT NULL,
     tax_year integer NOT NULL,
     run_status text DEFAULT 'draft'::text NOT NULL,
+    run_type text DEFAULT 'regular'::text NOT NULL,
     gross_total numeric(19,4) DEFAULT 0 NOT NULL,
     net_total numeric(19,4) DEFAULT 0 NOT NULL,
     employer_cost_total numeric(19,4) DEFAULT 0 NOT NULL,
@@ -10895,7 +10896,8 @@ CREATE TABLE public.pay_runs (
     updated_by uuid,
     CONSTRAINT pay_runs_pay_date CHECK ((pay_date >= period_end)),
     CONSTRAINT pay_runs_period_order CHECK ((period_end >= period_start)),
-    CONSTRAINT pay_runs_run_status CHECK ((run_status = ANY (ARRAY['draft'::text, 'calculated'::text, 'committed'::text])))
+    CONSTRAINT pay_runs_run_status CHECK ((run_status = ANY (ARRAY['draft'::text, 'calculated'::text, 'committed'::text]))),
+    CONSTRAINT pay_runs_run_type CHECK ((run_type = ANY (ARRAY['regular'::text, 'bonus'::text, 'termination'::text])))
 );
 
 ALTER TABLE ONLY public.pay_runs FORCE ROW LEVEL SECURITY;
@@ -10914,6 +10916,7 @@ CREATE VIEW openbooks_query.pay_runs WITH (security_barrier='true') AS
     pay_date,
     tax_year,
     run_status,
+    run_type,
     gross_total,
     net_total,
     employer_cost_total,
@@ -25201,7 +25204,7 @@ CREATE INDEX pay_runs_org_period ON public.pay_runs USING btree (org_id, period_
 -- Name: pay_runs_schedule_period; Type: INDEX; Schema: public; Owner: -
 --
 
-CREATE UNIQUE INDEX pay_runs_schedule_period ON public.pay_runs USING btree (org_id, pay_schedule_id, period_end);
+CREATE UNIQUE INDEX pay_runs_schedule_period ON public.pay_runs USING btree (org_id, pay_schedule_id, period_end) WHERE (run_type = 'regular'::text);
 
 
 --
