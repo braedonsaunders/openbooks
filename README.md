@@ -690,6 +690,10 @@ setup and go-live experience, industry sample companies, governed query tools,
 16 maintained country tax packs, canonical source identities, and a hardened
 one-command container installation backed by a clean PostgreSQL baseline.
 
+The first public tree is that same `0.1.0-alpha.3` tag (5 August 2026). Public
+git age is not build age. OpenBooks was a private system of record before it
+was opened. We do not claim years of multi-tenant production.
+
 Good uses today:
 
 - evaluation and accounting workflow review;
@@ -736,12 +740,6 @@ users of that service under the same license.
 Copyright © 2026 OpenBooks contributors.
 
 ---
-
-<p align="center">
-  <a href="https://star-history.com/#braedonsaunders/openbooks&Date">
-    <img alt="OpenBooks star history" src="https://api.star-history.com/svg?repos=braedonsaunders/openbooks&type=Date" width="600" />
-  </a>
-</p>
 
 <p align="center">
   <em>The open business suite. Run on open books.</em><br />
