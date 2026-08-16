@@ -53,9 +53,14 @@ approvals, and audit history operate as one connected business system.
 
 OpenBooks is alpha. Do not cut over production books. Do this instead:
 
-1. `./scripts/compose-up.sh` and open http://localhost:4780
+1. `./scripts/compose-up.sh` and open http://localhost:4780 (needs Git and
+   Docker with Docker Compose)
 2. Walk the screenshots below
-3. Re-run the published trust corpus: [TRUST.md](TRUST.md) and `npm -w engine run conformance -- report`
+3. Re-run the published trust corpus: read [TRUST.md](TRUST.md), then—with
+   Node.js 24 installed—run `npm ci` once and
+   `npm -w engine run conformance -- report`. Ledger-tier cases post through a
+   real database; without `OPENBOOKS_DB_URL` they report as “not run” rather
+   than passing.
 
 > [!NOTE]
 > Public since 5 August 2026 at `0.1.0-alpha.3`. Public git age is not build
