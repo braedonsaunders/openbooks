@@ -4,83 +4,63 @@ import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { useTranslations } from 'next-intl'
 import { Button, Input, Select } from '@openbooks/ui'
-import type {
-  Form941Quarter, RoeReasonCode, T4Slip, T4SummaryTotals, W2Slip,
-} from '@openbooks/engine/src/payroll-yearend.ts'
+import type { YearEndFilingSection } from '@openbooks/engine/src/payroll-yearend.ts'
 import { PagedTable, type PagedColumn } from '../../../../components/paged-table'
 import { useMoney } from '../../../../components/money-provider'
 
-/** ROE Block 16 codes — mirrors ROE_REASON_CODES in payroll-yearend.ts
- *  (values only; the engine module itself is server-side). */
-const ROE_REASON_CODES: RoeReasonCode[] = [
-  'A', 'B', 'D', 'E', 'F', 'G', 'H', 'J', 'K', 'M', 'N', 'P', 'Z',
-]
+type FilingRow = Record<string, string | number | null>
 
-/** Employees an ROE may be due for (roeCandidates). */
-export interface RoeCandidate {
-  employeePartyId: string
-  employeeName: string
-  terminatedOn: string | null
-  lastPayDate: string | null
-}
-
+/**
+ * Generic year-end renderer: one section per pack-declared filing, driven
+ * entirely by the declaration — columns, totals, the download button, and
+ * the per-employee issue workflow (reason for issue + comment) when the
+ * filing declares one. Column and reason labels are the statutory forms' own
+ * field names, declared by the pack and rendered as-is.
+ */
 export function YearEndView({
   year,
-  t4,
-  summary,
-  form941,
-  w2,
-  roe,
+  sections,
 }: {
   year: number
-  t4: T4Slip[]
-  summary: T4SummaryTotals
-  form941: Form941Quarter[]
-  w2: W2Slip[]
-  roe: RoeCandidate[]
+  sections: YearEndFilingSection[]
 }) {
   const t = useTranslations('payroll.yearEnd')
   const router = useRouter()
   const { money } = useMoney()
   const years = Array.from({ length: 6 }, (_, i) => new Date().getUTCFullYear() - i)
-  // Reason for issue is the employer's declaration: nothing is preselected,
-  // and an employee without one is simply not in the file.
-  const [reasons, setReasons] = useState<Record<string, RoeReasonCode | ''>>({})
+  // Issue declarations (the ROE's reason for issue) are the employer's own
+  // statement: nothing is preselected, and a row without one stays out of
+  // the file. Keyed by `country:filing:rowId` so two issue filings never
+  // share state.
+  const [reasons, setReasons] = useState<Record<string, string>>({})
   const [comments, setComments] = useState<Record<string, string>>({})
-  const roeSelection = roe
-    .filter((candidate) => reasons[candidate.employeePartyId])
-    .map((candidate) => [
-      candidate.employeePartyId,
-      reasons[candidate.employeePartyId],
-      encodeURIComponent(comments[candidate.employeePartyId] ?? ''),
-    ].join(':'))
-    .join(',')
 
-  const t4Columns: PagedColumn<T4Slip>[] = [
-    { key: 'employee', header: t('t4.employee'), search: (s) => s.employeeName, cell: (s) => s.employeeName },
-    { key: 'province', header: t('t4.province'), cell: (s) => s.province },
-    { key: 'box14', header: t('t4.box14'), align: 'right', cell: (s) => money(s.box14EmploymentIncome) },
-    {
-      key: 'box16', header: t('t4.box16'), align: 'right',
-      cell: (s) => money(Number(s.box16Cpp) + Number(s.box16aCpp2)),
-    },
-    { key: 'box18', header: t('t4.box18'), align: 'right', cell: (s) => money(s.box18Ei) },
-    { key: 'box22', header: t('t4.box22'), align: 'right', cell: (s) => money(s.box22IncomeTax) },
-    { key: 'box24', header: t('t4.box24'), align: 'right', cell: (s) => money(s.box24EiInsurable) },
-    { key: 'box26', header: t('t4.box26'), align: 'right', cell: (s) => money(s.box26CppPensionable) },
-    { key: 'box44', header: t('t4.box44'), align: 'right', cell: (s) => money(s.box44UnionDues) },
-  ]
+  const issueKey = (section: YearEndFilingSection, row: FilingRow) =>
+    `${section.country}:${section.key}:${String(row[section.data.rowKey] ?? '')}`
 
-  const w2Columns: PagedColumn<W2Slip>[] = [
-    { key: 'employee', header: t('w2.employee'), search: (s) => s.employeeName, cell: (s) => s.employeeName },
-    { key: 'state', header: t('w2.state'), cell: (s) => s.state },
-    { key: 'box1', header: t('w2.box1'), align: 'right', cell: (s) => money(s.box1Wages) },
-    { key: 'box2', header: t('w2.box2'), align: 'right', cell: (s) => money(s.box2FederalIncomeTax) },
-    { key: 'box3', header: t('w2.box3'), align: 'right', cell: (s) => money(s.box3SsWages) },
-    { key: 'box4', header: t('w2.box4'), align: 'right', cell: (s) => money(s.box4SsTax) },
-    { key: 'box5', header: t('w2.box5'), align: 'right', cell: (s) => money(s.box5MedicareWages) },
-    { key: 'box6', header: t('w2.box6'), align: 'right', cell: (s) => money(s.box6MedicareTax) },
-  ]
+  const fileHref = (section: YearEndFilingSection, extra?: string) =>
+    `/api/payroll/year-end/file?country=${encodeURIComponent(section.country)}`
+    + `&filing=${encodeURIComponent(section.key)}&year=${year}${extra ?? ''}`
+
+  const issueSelection = (section: YearEndFilingSection): string => {
+    if (!section.issue) return ''
+    const idColumn = section.issue.idColumn
+    return section.data.rows
+      .filter((row) => reasons[issueKey(section, row)])
+      .map((row) => [
+        String(row[idColumn] ?? ''),
+        reasons[issueKey(section, row)],
+        encodeURIComponent(comments[issueKey(section, row)] ?? ''),
+      ].join(':'))
+      .join(',')
+  }
+
+  const cell = (section: YearEndFilingSection, row: FilingRow, key: string): string => {
+    const column = section.data.columns.find((c) => c.key === key)
+    const value = row[key]
+    if (value == null || value === '') return '—'
+    return column?.money ? money(String(value)) : String(value)
+  }
 
   return (
     <div className="space-y-6">
@@ -96,175 +76,137 @@ export function YearEndView({
           ))}
         </Select>
         <Button variant="outline" onClick={() => window.print()}>{t('print')}</Button>
-        <Button variant="outline" asChild>
-          <a href={`/api/payroll/year-end/t4-xml?year=${year}`} target="_blank" rel="noreferrer">
-            {t('t4Xml.download')}
-          </a>
-        </Button>
-        <span className="text-xs text-slate-400 dark:text-slate-500">{t('t4Xml.note')}</span>
       </div>
 
-      <section>
-        <h2 className="mb-1 text-base font-semibold text-slate-900 dark:text-slate-100">{t('t4.title')}</h2>
-        <p className="mb-3 text-sm text-slate-500 dark:text-slate-400">{t('t4.description')}</p>
-        {t4.length === 0 ? (
-          <p className="text-sm text-slate-400">{t('t4.empty')}</p>
-        ) : (
-          <>
-            <PagedTable
-              rows={t4}
-              columns={t4Columns}
-              pageSize={25}
-              searchable
-              empty={t('t4.empty')}
-              rowKey={(s) => s.employeePartyId}
-            />
-            <div className="mt-3 grid gap-2 rounded-xl border border-slate-200 bg-slate-50 p-4 text-sm sm:grid-cols-4 dark:border-slate-800 dark:bg-slate-900">
-              <div>
-                <div className="text-xs text-slate-500 dark:text-slate-400">{t('summary.slips')}</div>
-                <div className="font-semibold tabular-nums">{summary.slips}</div>
-              </div>
-              <div>
-                <div className="text-xs text-slate-500 dark:text-slate-400">{t('summary.income')}</div>
-                <div className="font-semibold tabular-nums">{money(summary.employmentIncome)}</div>
-              </div>
-              <div>
-                <div className="text-xs text-slate-500 dark:text-slate-400">{t('summary.cpp')}</div>
-                <div className="font-semibold tabular-nums">
-                  {money(
-                    Number(summary.employeeCpp) + Number(summary.employeeCpp2) + Number(summary.employerCpp),
-                  )}
-                </div>
-              </div>
-              <div>
-                <div className="text-xs text-slate-500 dark:text-slate-400">{t('summary.ei')}</div>
-                <div className="font-semibold tabular-nums">
-                  {money(Number(summary.employeeEi) + Number(summary.employerEi))}
-                </div>
-              </div>
-              <div>
-                <div className="text-xs text-slate-500 dark:text-slate-400">{t('summary.tax')}</div>
-                <div className="font-semibold tabular-nums">{money(summary.incomeTax)}</div>
-              </div>
-              <div>
-                <div className="text-xs text-slate-500 dark:text-slate-400">{t('summary.remitted')}</div>
-                <div className="font-semibold tabular-nums">{money(summary.remitted)}</div>
-              </div>
-            </div>
-          </>
-        )}
-      </section>
+      {sections.map((section) => {
+        const sectionKey = `${section.country}:${section.key}`
+        const selection = issueSelection(section)
+        const columns: PagedColumn<FilingRow>[] = section.data.columns.map((column) => ({
+          key: column.key,
+          header: column.label,
+          align: column.align === 'right' ? 'right' : undefined,
+          search: column.key === section.data.columns[0]?.key
+            ? (row: FilingRow) => String(row[column.key] ?? '')
+            : undefined,
+          cell: (row: FilingRow) => cell(section, row, column.key),
+        }))
+        return (
+          <section key={sectionKey}>
+            <h2 className="mb-1 text-base font-semibold text-slate-900 dark:text-slate-100">
+              {section.label}
+            </h2>
+            {section.description && (
+              <p className="mb-3 text-sm text-slate-500 dark:text-slate-400">{section.description}</p>
+            )}
 
-      {roe.length > 0 && (
-        <section>
-          <h2 className="mb-1 text-base font-semibold text-slate-900 dark:text-slate-100">{t('roe.title')}</h2>
-          <p className="mb-3 text-sm text-slate-500 dark:text-slate-400">{t('roe.description')}</p>
-          <table className="w-full max-w-4xl text-sm">
-            <thead>
-              <tr className="text-left text-xs text-slate-500 uppercase dark:text-slate-400">
-                <th className="py-1.5">{t('roe.employee')}</th>
-                <th className="py-1.5">{t('roe.lastDay')}</th>
-                <th className="py-1.5">{t('roe.reason')}</th>
-                <th className="py-1.5">{t('roe.comment')}</th>
-              </tr>
-            </thead>
-            <tbody>
-              {roe.map((candidate) => (
-                <tr key={candidate.employeePartyId} className="border-t border-slate-100 dark:border-slate-800">
-                  <td className="py-1.5">{candidate.employeeName}</td>
-                  <td className="py-1.5 tabular-nums">{candidate.terminatedOn ?? candidate.lastPayDate ?? '—'}</td>
-                  <td className="py-1.5">
-                    <Select
-                      aria-label={t('roe.reason')}
-                      value={reasons[candidate.employeePartyId] ?? ''}
-                      onChange={(e) => setReasons((prev) => ({
-                        ...prev,
-                        [candidate.employeePartyId]: e.target.value as RoeReasonCode | '',
-                      }))}
-                      className="w-56"
-                    >
-                      <option value="">—</option>
-                      {ROE_REASON_CODES.map((code) => (
-                        <option key={code} value={code}>{code} · {t(`roe.reasons.${code}`)}</option>
-                      ))}
-                    </Select>
-                  </td>
-                  <td className="py-1.5">
-                    <Input
-                      aria-label={t('roe.comment')}
-                      value={comments[candidate.employeePartyId] ?? ''}
-                      onChange={(e) => setComments((prev) => ({
-                        ...prev,
-                        [candidate.employeePartyId]: e.target.value,
-                      }))}
-                      maxLength={500}
-                    />
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-          <div className="mt-3 flex flex-wrap items-center gap-2 print:hidden">
-            <Button variant="outline" asChild={roeSelection.length > 0} disabled={roeSelection.length === 0}>
-              {roeSelection.length > 0 ? (
-                <a
-                  href={`/api/payroll/year-end/roe-xml?employees=${roeSelection}`}
-                  target="_blank"
-                  rel="noreferrer"
-                >
-                  {t('roe.download')}
-                </a>
-              ) : (
-                <span>{t('roe.download')}</span>
-              )}
-            </Button>
-            <span className="text-xs text-slate-400 dark:text-slate-500">{t('roe.note')}</span>
-          </div>
-        </section>
-      )}
-
-      {(form941.length > 0 || w2.length > 0) && (
-        <section>
-          <h2 className="mb-1 text-base font-semibold text-slate-900 dark:text-slate-100">{t('us.title')}</h2>
-          <p className="mb-3 text-sm text-slate-500 dark:text-slate-400">{t('us.description')}</p>
-          {form941.length > 0 && (
-            <table className="mb-4 w-full max-w-3xl text-sm">
-              <thead>
-                <tr className="text-left text-xs text-slate-500 uppercase dark:text-slate-400">
-                  <th className="py-1.5">{t('us.quarter')}</th>
-                  <th className="py-1.5 text-right">{t('us.wages')}</th>
-                  <th className="py-1.5 text-right">{t('us.fit')}</th>
-                  <th className="py-1.5 text-right">{t('us.ssWages')}</th>
-                  <th className="py-1.5 text-right">{t('us.ssTax')}</th>
-                  <th className="py-1.5 text-right">{t('us.medicareTax')}</th>
-                </tr>
-              </thead>
-              <tbody>
-                {form941.map((q) => (
-                  <tr key={q.quarter} className="border-t border-slate-100 dark:border-slate-800">
-                    <td className="py-1.5">Q{q.quarter}</td>
-                    <td className="py-1.5 text-right tabular-nums">{money(q.wages)}</td>
-                    <td className="py-1.5 text-right tabular-nums">{money(q.federalIncomeTax)}</td>
-                    <td className="py-1.5 text-right tabular-nums">{money(q.ssWages)}</td>
-                    <td className="py-1.5 text-right tabular-nums">{money(q.ssTax)}</td>
-                    <td className="py-1.5 text-right tabular-nums">{money(q.medicareTax)}</td>
+            {section.data.rows.length === 0 ? (
+              section.emptyText && <p className="text-sm text-slate-400">{section.emptyText}</p>
+            ) : section.issue ? (
+              /* Filings issued per employee with an employer declaration:
+                 the declared columns plus a reason picker and comment. */
+              <table className="w-full max-w-4xl text-sm">
+                <thead>
+                  <tr className="text-left text-xs text-slate-500 uppercase dark:text-slate-400">
+                    {section.data.columns.map((column) => (
+                      <th key={column.key} className="py-1.5">{column.label}</th>
+                    ))}
+                    <th className="py-1.5">{t('roe.reason')}</th>
+                    <th className="py-1.5">{t('roe.comment')}</th>
                   </tr>
+                </thead>
+                <tbody>
+                  {section.data.rows.map((row) => {
+                    const key = issueKey(section, row)
+                    return (
+                      <tr key={key} className="border-t border-slate-100 dark:border-slate-800">
+                        {section.data.columns.map((column) => (
+                          <td key={column.key} className="py-1.5 tabular-nums">
+                            {cell(section, row, column.key)}
+                          </td>
+                        ))}
+                        <td className="py-1.5">
+                          <Select
+                            aria-label={t('roe.reason')}
+                            value={reasons[key] ?? ''}
+                            onChange={(e) => setReasons((prev) => ({ ...prev, [key]: e.target.value }))}
+                            className="w-56"
+                          >
+                            <option value="">—</option>
+                            {section.issue!.reasonCodes.map((reason) => (
+                              <option key={reason.code} value={reason.code}>
+                                {reason.code} · {reason.label}
+                              </option>
+                            ))}
+                          </Select>
+                        </td>
+                        <td className="py-1.5">
+                          <Input
+                            aria-label={t('roe.comment')}
+                            value={comments[key] ?? ''}
+                            onChange={(e) => setComments((prev) => ({ ...prev, [key]: e.target.value }))}
+                            maxLength={section.issue!.commentMaxLength}
+                          />
+                        </td>
+                      </tr>
+                    )
+                  })}
+                </tbody>
+              </table>
+            ) : (
+              <PagedTable
+                rows={section.data.rows}
+                columns={columns}
+                pageSize={25}
+                searchable
+                empty={section.emptyText ?? ''}
+                rowKey={(row) => String(row[section.data.rowKey] ?? '')}
+              />
+            )}
+
+            {section.data.totals && section.data.rows.length > 0 && (
+              <div className="mt-3 grid gap-2 rounded-xl border border-slate-200 bg-slate-50 p-4 text-sm sm:grid-cols-4 dark:border-slate-800 dark:bg-slate-900">
+                {section.data.totals.map((total) => (
+                  <div key={total.label}>
+                    <div className="text-xs text-slate-500 dark:text-slate-400">{total.label}</div>
+                    <div className="font-semibold tabular-nums">
+                      {total.money ? money(total.value) : total.value}
+                    </div>
+                  </div>
                 ))}
-              </tbody>
-            </table>
-          )}
-          {w2.length > 0 && (
-            <PagedTable
-              rows={w2}
-              columns={w2Columns}
-              pageSize={25}
-              searchable
-              empty={t('us.empty')}
-              rowKey={(s) => s.employeePartyId}
-            />
-          )}
-        </section>
-      )}
+              </div>
+            )}
+
+            {section.download && section.data.rows.length > 0 && (
+              <div className="mt-3 flex flex-wrap items-center gap-2 print:hidden">
+                {section.issue ? (
+                  <Button variant="outline" asChild={selection.length > 0} disabled={selection.length === 0}>
+                    {selection.length > 0 ? (
+                      <a
+                        href={fileHref(section, `&${section.issue.param}=${selection}`)}
+                        target="_blank"
+                        rel="noreferrer"
+                      >
+                        {section.download.label}
+                      </a>
+                    ) : (
+                      <span>{section.download.label}</span>
+                    )}
+                  </Button>
+                ) : (
+                  <Button variant="outline" asChild>
+                    <a href={fileHref(section)} target="_blank" rel="noreferrer">
+                      {section.download.label}
+                    </a>
+                  </Button>
+                )}
+                {section.download.note && (
+                  <span className="text-xs text-slate-400 dark:text-slate-500">{section.download.note}</span>
+                )}
+              </div>
+            )}
+          </section>
+        )
+      })}
     </div>
   )
 }

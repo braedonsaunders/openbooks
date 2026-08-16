@@ -14,6 +14,13 @@ import { pathToFileURL } from "node:url";
  *
  * PostgreSQL 16.9 predates psql's restrict-key metacommands. The transformer
  * rejects every psql metacommand, so its output remains node-postgres-safe.
+ *
+ * The baseline also carries hand-written prose that pg_dump cannot know about:
+ * design-rationale blocks sitting under a `-- Name: ...` object header. Those
+ * are lifted from the previous baseline and re-anchored onto the same headers,
+ * so regenerating in place is a fixed point instead of a silent doc deletion.
+ * `--output` doubles as the default annotation source; `--no-annotations`
+ * regenerates without them.
  */
 
 const HEADER = `-- OpenBooks canonical PostgreSQL baseline.
@@ -40,21 +47,65 @@ $extension$;
 
 `;
 
+/**
+ * Payroll relations that take the catalog's generic `select *` path. Every one
+ * of them must be reviewed as a whole: a dump carrying only some of them means
+ * the allowlist was edited without a review pass.
+ *
+ * `employee_payroll_profiles` is deliberately absent — it holds `sin_encrypted`
+ * and is rebuilt from an explicit column list instead. See
+ * CURATED_QUERY_RELATIONS.
+ */
 const PAYROLL_QUERY_RELATIONS = Object.freeze([
   "pay_schedules",
   "pay_components",
   "pay_derived_rules",
   "pay_run_adjustments",
-  "employee_payroll_profiles",
   "employee_pay_components",
   "pay_runs",
   "pay_stubs",
   "pay_stub_lines",
+  "payroll_filing_accounts",
+  "payroll_holidays",
   "payroll_opening_balances",
   "union_agreements",
   "union_classifications",
   "union_fringes",
 ]);
+
+/**
+ * Relations that can hold a secret and therefore may NEVER take the generic
+ * `select *` path: the catalog rebuilds each from an explicit column list, so
+ * adding a sensitive column is a visible diff rather than a silent widening.
+ * schema/governed-query-catalog.test.ts asserts the same rule against the
+ * committed baseline; this guard stops a regenerated one from ever reaching it.
+ */
+const CURATED_QUERY_RELATIONS = Object.freeze([
+  "parties",
+  "party_bank_accounts",
+  "vendor_roles",
+  "employee_payroll_profiles",
+  "employee_roles",
+]);
+
+/** Columns that must never be readable through the governed catalog. */
+const NEVER_QUERYABLE = Object.freeze([
+  "sin_encrypted",
+  "tin_encrypted",
+  "account_number_encrypted",
+  "password_encrypted",
+  "password_hash",
+  "secret_encrypted",
+  "originator_secrets_encrypted",
+  "reseal_secret",
+  "birth_date",
+]);
+
+/** Matches a pg_dump object header plus the prose a human added beneath it. */
+const ANNOTATED_OBJECT = /^--\n-- Name: (.+?)\n--\n((?:--.*\n)+)\n/gm;
+
+/** Matches a bare pg_dump object header, ready to receive that prose back. */
+const BARE_OBJECT = /^(--\n-- Name: (.+?)\n--\n)\n/gm;
 
 function replaceExactly(source, pattern, replacement, label) {
   const matches = source.match(pattern);
@@ -64,6 +115,58 @@ function replaceExactly(source, pattern, replacement, label) {
   return source.replace(pattern, replacement);
 }
 
+function readAllowlist(functionSql) {
+  const safeRelations = functionSql.match(
+    /safe_relations constant text\[\] := array\[([\s\S]*?)\n  \];/,
+  );
+  if (!safeRelations) throw new Error("reviewed query relation allowlist is missing");
+  return new Set(
+    [...safeRelations[1].matchAll(/'([a-z0-9_]+)'/g)].map((match) => match[1]),
+  );
+}
+
+function assertNoUnreviewedExposure(allowlist) {
+  if ([...allowlist].some((relation) => relation.startsWith("auth_"))) {
+    throw new Error("authentication tables must not enter the governed query catalog");
+  }
+  for (const relation of CURATED_QUERY_RELATIONS) {
+    if (allowlist.has(relation)) {
+      throw new Error(
+        `curated query relation must not take the generic select * path: ${relation}`,
+      );
+    }
+  }
+}
+
+/**
+ * A curated relation is only curated if the function actually builds it from a
+ * named column list. `create view ... as select *` under a curated name is the
+ * exact regression that shipped sin_encrypted to every fresh install.
+ */
+function assertCuratedQueryViews(functionSql) {
+  for (const relation of CURATED_QUERY_RELATIONS) {
+    const view = functionSql.match(
+      new RegExp(
+        `create view openbooks_query\\.${relation} with \\(security_barrier=true\\) as\\s*\\n`
+          + `\\s*select\\s+([\\s\\S]*?)\\n\\s*from public\\.${relation}\\b`,
+      ),
+    );
+    if (!view) {
+      throw new Error(`curated query relation has no explicit view: ${relation}`);
+    }
+    const columns = view[1].split(",").map((column) => column.trim());
+    if (columns.some((column) => column.startsWith("*"))) {
+      throw new Error(`curated query relation is rebuilt with select *: ${relation}`);
+    }
+    const exposed = columns.filter((column) => NEVER_QUERYABLE.includes(column));
+    if (exposed.length > 0) {
+      throw new Error(
+        `curated query view exposes a secret column: ${relation}.${exposed.join(", ")}`,
+      );
+    }
+  }
+}
+
 function addReviewedPayrollRelations(source) {
   const functionMatch = source.match(
     /CREATE FUNCTION public\.openbooks_refresh_query_catalog\(\)[\s\S]*?\n\$_\$;/,
@@ -71,46 +174,71 @@ function addReviewedPayrollRelations(source) {
   if (!functionMatch) throw new Error("query-catalog refresh function is missing");
 
   let functionSql = functionMatch[0];
-  const safeRelations = functionSql.match(
-    /safe_relations constant text\[\] := array\[([\s\S]*?)\n  \];/,
-  );
-  if (!safeRelations) throw new Error("reviewed query relation allowlist is missing");
+  const present = readAllowlist(functionSql);
+  assertNoUnreviewedExposure(present);
+  assertCuratedQueryViews(functionSql);
 
-  const present = new Set(
-    [...safeRelations[1].matchAll(/'([a-z0-9_]+)'/g)].map((match) => match[1]),
-  );
-  if ([...present].some((relation) => relation.startsWith("auth_"))) {
-    throw new Error("authentication tables must not enter the governed query catalog");
-  }
   const missing = PAYROLL_QUERY_RELATIONS.filter((relation) => !present.has(relation));
   if (missing.length !== 0 && missing.length !== PAYROLL_QUERY_RELATIONS.length) {
-    throw new Error("payroll query relations are only partially reviewed");
+    throw new Error(
+      `payroll query relations are only partially reviewed: missing ${missing.join(", ")}`,
+    );
   }
   if (missing.length > 0) {
     functionSql = replaceExactly(
       functionSql,
       /\n  \];/g,
-      `,\n    'employee_pay_components', 'employee_payroll_profiles',\n    'pay_components', 'pay_derived_rules', 'pay_run_adjustments',\n    'pay_runs', 'pay_schedules',\n    'pay_stub_lines', 'pay_stubs', 'payroll_opening_balances',\n    'union_agreements', 'union_classifications', 'union_fringes'\n  ];`,
+      `,\n    'employee_pay_components',\n    'pay_components', 'pay_derived_rules', 'pay_run_adjustments', 'pay_runs',\n    'pay_schedules', 'pay_stub_lines', 'pay_stubs',\n    'payroll_filing_accounts', 'payroll_holidays', 'payroll_opening_balances',\n    'union_agreements', 'union_classifications',\n    'union_fringes'\n  ];`,
       "query-catalog allowlist terminator",
     );
   }
 
-  const refreshedAllowlist = functionSql.match(
-    /safe_relations constant text\[\] := array\[([\s\S]*?)\n  \];/,
-  )?.[1] ?? "";
+  const refreshed = readAllowlist(functionSql);
   for (const relation of PAYROLL_QUERY_RELATIONS) {
-    if (!new RegExp(`'${relation}'`).test(refreshedAllowlist)) {
+    if (!refreshed.has(relation)) {
       throw new Error(`reviewed query relation is missing: ${relation}`);
     }
   }
-  if (/'auth_[a-z0-9_]+'/.test(refreshedAllowlist)) {
-    throw new Error("authentication tables must not enter the governed query catalog");
-  }
+  assertNoUnreviewedExposure(refreshed);
 
   return source.replace(functionMatch[0], functionSql);
 }
 
-export function canonicalizePgDump(rawDump) {
+/**
+ * Collect the hand-written prose blocks a previous baseline carries, keyed by
+ * the pg_dump object header they sit under.
+ */
+export function extractHandwrittenAnnotations(previousBaseline) {
+  const annotations = new Map();
+  for (const match of previousBaseline.replace(/\r\n?/g, "\n").matchAll(ANNOTATED_OBJECT)) {
+    if (annotations.has(match[1])) {
+      throw new Error(`hand-written annotation anchor is ambiguous: ${match[1]}`);
+    }
+    annotations.set(match[1], match[2]);
+  }
+  return annotations;
+}
+
+function restoreHandwrittenAnnotations(source, annotations) {
+  if (annotations.size === 0) return source;
+  const restored = new Set();
+  const annotated = source.replace(BARE_OBJECT, (whole, header, name) => {
+    const annotation = annotations.get(name);
+    if (annotation === undefined) return whole;
+    restored.add(name);
+    return `${header}${annotation}\n`;
+  });
+  const orphaned = [...annotations.keys()].filter((name) => !restored.has(name));
+  if (orphaned.length > 0) {
+    throw new Error(
+      "hand-written annotation has no object in this dump; move or delete it in the "
+        + `previous baseline first: ${orphaned.join("; ")}`,
+    );
+  }
+  return annotated;
+}
+
+export function canonicalizePgDump(rawDump, { annotations = new Map() } = {}) {
   let source = rawDump.replace(/\r\n?/g, "\n");
   if (!/Dumped from database version 16\.9(?:\D|$)/.test(source)
       || !/Dumped by pg_dump version 16\.9(?:\D|$)/.test(source)) {
@@ -164,30 +292,67 @@ export function canonicalizePgDump(rawDump) {
     if (!source.includes(required)) throw new Error(`canonical baseline is missing: ${required}`);
   }
 
+  // Last, so hand-written prose can never satisfy a content guard above.
+  source = restoreHandwrittenAnnotations(source, annotations);
+
   return `${HEADER}${source}\n\n\n-- Rebuild the reviewed query catalog after every canonical table exists. This\n-- also revokes any public-table grants emitted earlier in the baseline.\nSELECT public.openbooks_refresh_query_catalog();\n\n\n-- End of canonical baseline.\n`;
 }
 
+const USAGE = "usage: regenerate-canonical-baseline --dump <pg_dump.sql> --output <0001_baseline.sql>"
+  + " [--annotations <previous_baseline.sql> | --no-annotations]";
+
 function parseArguments(argv) {
+  const known = new Set(["--dump", "--output", "--annotations", "--no-annotations"]);
   const values = new Map();
-  for (let index = 0; index < argv.length; index += 2) {
+  for (let index = 0; index < argv.length; index += 1) {
     const flag = argv[index];
-    const value = argv[index + 1];
-    if (!flag?.startsWith("--") || value === undefined) {
-      throw new Error("usage: regenerate-canonical-baseline --dump <pg_dump.sql> --output <0001_baseline.sql>");
+    if (!known.has(flag)) throw new Error(USAGE);
+    if (values.has(flag)) throw new Error(USAGE);
+    if (flag === "--no-annotations") {
+      values.set(flag, true);
+      continue;
     }
+    const value = argv[index + 1];
+    if (value === undefined || value.startsWith("--")) throw new Error(USAGE);
     values.set(flag, value);
+    index += 1;
   }
+
   const dump = values.get("--dump");
   const output = values.get("--output");
-  if (!dump || !output || values.size !== 2) {
-    throw new Error("usage: regenerate-canonical-baseline --dump <pg_dump.sql> --output <0001_baseline.sql>");
+  const explicitAnnotations = values.get("--annotations");
+  if (!dump || !output) throw new Error(USAGE);
+  if (values.has("--no-annotations") && explicitAnnotations !== undefined) {
+    throw new Error(USAGE);
   }
-  return { dump, output };
+
+  return {
+    dump,
+    output,
+    // Regenerating in place is the normal call, so the file being replaced is
+    // the default source of the prose that has to survive.
+    annotations: values.has("--no-annotations") ? null : explicitAnnotations ?? output,
+    annotationsRequired: explicitAnnotations !== undefined,
+  };
+}
+
+async function readAnnotations(path, required) {
+  if (path === null) return new Map();
+  let previous;
+  try {
+    previous = await readFile(path, "utf8");
+  } catch (err) {
+    if (!required && err.code === "ENOENT") return new Map();
+    throw err;
+  }
+  return extractHandwrittenAnnotations(previous);
 }
 
 async function main() {
-  const { dump, output } = parseArguments(process.argv.slice(2));
-  const canonical = canonicalizePgDump(await readFile(dump, "utf8"));
+  const { dump, output, annotations, annotationsRequired } = parseArguments(process.argv.slice(2));
+  const canonical = canonicalizePgDump(await readFile(dump, "utf8"), {
+    annotations: await readAnnotations(annotations, annotationsRequired),
+  });
   await writeFile(output, canonical, { encoding: "utf8", mode: 0o644 });
 }
 

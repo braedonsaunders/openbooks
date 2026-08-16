@@ -46,16 +46,13 @@ export async function buildT4Xml(orgId: string, taxYear: number): Promise<{
   xml: string;
   slipCount: number;
   /**
-   * Returns this org still owes that THIS PRODUCT DOES NOT PRODUCE, named
-   * rather than omitted.
+   * Returns this org still owes BEYOND this file, named rather than omitted.
    *
-   * A Quebec employee's year-end is a T4 *and* an RL-1 (Revenu Québec), and
-   * the RL-1 is not implemented — see the CA pack's Quebec refusal in
-   * engine/src/payroll/packs.ts. The T4 in this file is correct and complete
-   * for them; handing it over as "the filing" without saying so would let an
-   * employer believe they had filed everything they owe. New QC payroll is
-   * refused at calculate time, so this can only be reached from imported
-   * history — which is exactly when nobody is watching for it.
+   * A Quebec employee's year-end is a T4 *and* an RL-1 (Revenu Québec). The
+   * RL-1 exists as its own filing on the year-end page
+   * (engine/src/payroll/canada/quebec/rl1-filing.ts) and is not part of this
+   * T4 transmission, so the notice points the employer at it instead of
+   * letting this file pass as "the filing" for a QC employee.
    */
   unsupportedFilings: string[];
 }> {
@@ -116,8 +113,9 @@ export async function buildT4Xml(orgId: string, taxYear: number): Promise<{
     unsupportedFilings: quebec.length > 0
       ? [
         `${quebec.join(", ")} ${quebec.length === 1 ? "is" : "are"} employed in Quebec and also `
-        + "requires an RL-1 from Revenu Québec, which this product does not produce — "
-        + "the T4 in this file is complete, the RL-1 must be filed separately",
+        + "requires an RL-1 from Revenu Québec — the T4 in this file is complete; the RL-1 "
+        + "is its own filing on the payroll year-end page and is transmitted to Revenu "
+        + "Québec separately, never inside this CRA file",
       ]
       : [],
   };

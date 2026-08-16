@@ -7,6 +7,12 @@ import {
   filingAccountsById,
   type FilingAccountRef,
 } from "./payroll-filing.ts";
+import {
+  declaredPayrollFilings,
+  separationPaymentKeys,
+  type PayrollFilingData,
+  type PayrollFilingIssue,
+} from "./payroll-filing-registry.ts";
 import { RATES_2026_JAN } from "./payroll/canada/rates.ts";
 import { PayrollError } from "./payroll-run.ts";
 
@@ -455,18 +461,40 @@ export async function roeRecord(orgId: string, employeePartyId: string): Promise
   const row = header.rows[0];
   if (!row) return null;
 
-  const frequency = row.frequency ?? "biweekly";
-  const worksheet = await roeWorksheet(
-    orgId, employeePartyId, ROE_PERIODS_BY_FREQUENCY[frequency] ?? 27,
-  );
+  // Block 6 and the Block 15 window are STATUTORY declarations derived from
+  // the employee's pay-period type. An employee with no pay schedule used to
+  // get `?? "biweekly"` / `?? 27` / `?? "B"` — an invented filing. Refuse by
+  // name instead: nothing in the payroll data can stand in for a pay-period
+  // type that was never configured.
+  const frequency = row.frequency;
+  if (!frequency) {
+    throw new PayrollError(
+      `${row.display_name} has no pay schedule on their payroll profile — Block 6 `
+      + "(pay-period type) and the Block 15 reporting window cannot be declared without one; "
+      + "assign a pay schedule before issuing the ROE",
+    );
+  }
+  const periodCount = ROE_PERIODS_BY_FREQUENCY[frequency];
+  const periodType = ROE_PERIOD_TYPE[frequency];
+  if (!periodCount || !periodType) {
+    throw new PayrollError(
+      `${row.display_name}'s pay schedule frequency "${frequency}" has no ROE pay-period `
+      + "type — Service Canada accepts weekly, biweekly, semi-monthly and monthly ROEs",
+    );
+  }
+  const worksheet = await roeWorksheet(orgId, employeePartyId, periodCount);
   const finalPeriod = worksheet.periods[0] ?? null;
 
   // Block 17: monies paid because employment ended, taken from the final
-  // committed stub's own lines (vacation payout vs. other non-periodic pay).
+  // committed stub's own lines. WHICH component system_keys count as
+  // vacation pay vs other monies is the pack's declaration
+  // (engine/src/payroll/canada/filings.ts), not a literal in this query — a
+  // pack with different keys must refuse or declare, never silently file 0.00.
+  const separation17 = separationPaymentKeys("CA");
   const separation = (await db.execute(sql`
     select
-      coalesce(sum(case when pc.system_key = 'vacation_payout' then l.amount else 0 end), 0) as vacation,
-      coalesce(sum(case when pc.system_key = 'bonus' then l.amount else 0 end), 0) as other
+      coalesce(sum(case when pc.system_key = any(${`{${separation17.vacationPay.join(",")}}`}::text[]) then l.amount else 0 end), 0) as vacation,
+      coalesce(sum(case when pc.system_key = any(${`{${separation17.otherMonies.join(",")}}`}::text[]) then l.amount else 0 end), 0) as other
       from pay_stub_lines l
       join pay_stubs s on s.id = l.stub_id
       join pay_runs r on r.document_id = s.pay_run_document_id and r.run_status = 'committed'
@@ -483,7 +511,7 @@ export async function roeRecord(orgId: string, employeePartyId: string): Promise
     country: row.country ?? "CA",
     payrollReference: row.employee_number,
     filingAccount: filingAccountRef(row.filing_account_id, accounts),
-    payPeriodType: ROE_PERIOD_TYPE[frequency] ?? "B",
+    payPeriodType: periodType,
     sinLast3: row.sin_last3,
     firstDayWorked: row.hired_on,
     // The last day for which paid: the employee's termination date when the
@@ -691,4 +719,67 @@ export async function w2Slips(orgId: string, taxYear: number): Promise<W2Slip[]>
     box6MedicareTax: num(row.medicare_tax),
     };
   });
+}
+
+// ---------------------------------------------------------------------------
+// The year-end enumeration — the generic surface's ONLY entry point
+// ---------------------------------------------------------------------------
+
+/** One declared filing, populated for the org-year, ready to render. */
+export interface YearEndFilingSection {
+  country: string;
+  key: string;
+  label: string;
+  description: string | null;
+  emptyText: string | null;
+  /** The filing's pack is on the org's installed payroll countries. */
+  installed: boolean;
+  data: PayrollFilingData;
+  /** Present when the pack declares an electronic file for this filing. */
+  download: { label: string; note: string | null } | null;
+  /** Why there is no file, when the pack says so explicitly. */
+  downloadRefusal: string | null;
+  issue: PayrollFilingIssue | null;
+}
+
+/**
+ * Every declared pack's year-end filings, populated for the org and year.
+ *
+ * This is the whole de-Canadianization: the page and the JSON route iterate
+ * THIS, and a pack that registers a new filing (a P60, an RL-1, an STP
+ * report) appears here with no change to any generic file. Which sections a
+ * surface shows is its choice — the convention is `installed || rows > 0`,
+ * so an org sees the filings of its installed packs plus anything its
+ * imported history actually populates.
+ */
+export async function orgYearEndFilings(
+  orgId: string,
+  taxYear: number,
+): Promise<YearEndFilingSection[]> {
+  const installedRow = (await db.execute(sql`
+    select settings#>'{payroll,countries}' as countries from orgs where id = ${orgId}
+  `)) as unknown as { rows: { countries: unknown }[] };
+  const raw = installedRow.rows[0]?.countries;
+  const installed = new Set(Array.isArray(raw) ? raw.map(String) : []);
+
+  const sections: YearEndFilingSection[] = [];
+  for (const pack of declaredPayrollFilings()) {
+    for (const filing of pack.yearEnd) {
+      sections.push({
+        country: pack.country,
+        key: filing.key,
+        label: filing.label,
+        description: filing.description ?? null,
+        emptyText: filing.emptyText ?? null,
+        installed: installed.has(pack.country),
+        data: await filing.population(orgId, taxYear),
+        download: filing.download
+          ? { label: filing.download.label, note: filing.download.note ?? null }
+          : null,
+        downloadRefusal: filing.downloadRefusal ?? null,
+        issue: filing.issue ?? null,
+      });
+    }
+  }
+  return sections;
 }

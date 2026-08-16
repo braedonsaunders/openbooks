@@ -24,7 +24,8 @@ export function PayrollProfileTab({ partyId, partyName }: { partyId: string; par
     profile: ProfileRow | null
     schedules: ScheduleOption[]
     filingAccounts: FilingAccountOption[]
-  }>({ status: 'loading', profile: null, schedules: [], filingAccounts: [] })
+    defaultCountry: ProfileRow['country']
+  }>({ status: 'loading', profile: null, schedules: [], filingAccounts: [], defaultCountry: '' })
   const [version, setVersion] = useState(0)
 
   useEffect(() => {
@@ -40,6 +41,10 @@ export function PayrollProfileTab({ partyId, partyName }: { partyId: string; par
             profile: j.profile,
             schedules: j.schedules ?? [],
             filingAccounts: j.filingAccounts ?? [],
+            // The API derives this from the employee's own legal entity (or
+            // the root subsidiary, or the org's sole installed pack) —
+            // '' when nothing answers, and then the operator chooses.
+            defaultCountry: j.defaultCountry === 'CA' || j.defaultCountry === 'US' ? j.defaultCountry : '',
           })
         }
       } catch (e) {
@@ -77,8 +82,11 @@ export function PayrollProfileTab({ partyId, partyName }: { partyId: string; par
     employee_name: partyName,
     pay_schedule_id: state.schedules[0]?.id ?? '',
     schedule_name: null,
-    country: 'CA',
-    province: 'ON',
+    // Derived from the employee's subsidiary by the API — never a hardcoded
+    // country, and no default jurisdiction inside it: 'CA'/'ON' as literals
+    // here meant a new profile silently became an Ontario employee.
+    country: state.defaultCountry,
+    province: '',
     pay_basis: 'hourly',
     federal_claim_code: 1,
     federal_claim_amount: null,

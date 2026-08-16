@@ -107,6 +107,37 @@ function sha256(s: string): string {
   return createHash("sha256").update(s).digest("hex");
 }
 
+/**
+ * A published migration is immutable, but a baseline can be REBASELINED:
+ * regenerated from a schema-only dump of the database it builds, so its bytes
+ * change while the schema it produces does not. An install that already ran
+ * the old bytes needs its recorded digest restamped, or bootstrap would refuse
+ * to start forever.
+ *
+ * This is deliberately a fixed table of digest pairs rather than a bypass
+ * flag. Adding a transition is a reviewable diff that names both digests, and
+ * a rebaseline only earns an entry once both files have been applied to the
+ * pinned PostgreSQL image and their dumps compared byte for byte. Any other
+ * mismatch still fails closed.
+ */
+const REBASELINED: ReadonlyArray<{
+  filename: string;
+  from: string;
+  to: string;
+  reason: string;
+}> = [
+  {
+    filename: "generated/0001_baseline.sql",
+    from: "74a3b21e956f2f02334f5245f54b37fe235af732a8eb3345d86a9ea9611df007",
+    to: "780dfaf134f8d98a40c5e9d143291c161194fec196151aca30d1d4f6f4fbade6",
+    reason:
+      "regenerated from a dump of the database it builds: twelve payroll views "
+      + "gained the tenant filter the refresh function already applied, "
+      + "entitlement_plans regained base-table column order, and hand-appended "
+      + "objects returned to pg_dump order. Verified: dumps identical.",
+  },
+];
+
 async function applyTracked(
   label: string,
   filename: string,
@@ -117,10 +148,30 @@ async function applyTracked(
     select sha256 from public._applied_migrations where filename = ${filename}
   `)) as unknown as { rows: { sha256: string }[] };
   if (seen.rows.length > 0) {
-    if (seen.rows[0].sha256 !== digest) {
-      throw new Error(
-        `[bootstrap] ${filename} changed after it was applied; published migrations are immutable`,
+    const recorded = seen.rows[0].sha256;
+    if (recorded !== digest) {
+      const rebaseline = REBASELINED.find(
+        (entry) =>
+          entry.filename === filename
+          && entry.from === recorded
+          && entry.to === digest,
       );
+      if (!rebaseline) {
+        throw new Error(
+          `[bootstrap] ${filename} changed after it was applied; published migrations are immutable`,
+        );
+      }
+      console.log(
+        `[bootstrap] ${filename} was rebaselined (${recorded.slice(0, 12)} -> `
+        + `${digest.slice(0, 12)}); the schema it builds is unchanged, restamping`,
+      );
+      console.log(`[bootstrap]   ${rebaseline.reason}`);
+      await db.execute(sql`
+        update public._applied_migrations
+           set sha256 = ${digest}
+         where filename = ${filename} and sha256 = ${recorded}
+      `);
+      return;
     }
     return;
   }

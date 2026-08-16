@@ -26,7 +26,7 @@ function row(overrides: Partial<RemittanceRow>): RemittanceRow {
   return {
     component_id: "c1", code: "TAX", name: "Income tax", kind: "deduction",
     system_key: "income_tax", remittance_party_id: "cra", liability_account_id: "gl-tax",
-    filing_account_id: RP1.id, amount: "100.00",
+    filing_account_id: RP1.id, province: "ON", amount: "100.00",
     ...overrides,
   };
 }
@@ -160,4 +160,35 @@ test("T4 XML falls back to the transmitter BN for unassigned employees", () => {
   assert.equal(xml.match(/<T4>/g)?.length, 1);
   assert.match(xml, /<BN>999999999RP0001<\/BN>/);
   assert.match(xml, /<summ_cnt>1<\/summ_cnt>/);
+});
+
+test("a region-scoped remittance vendor splits the group; same-vendor provinces fold into one line", () => {
+  // The CA pack declares QPP/QPIP remitted to Revenu Québec for QC stubs
+  // (regionalRemittanceVendorSettingsKeys) while every other province's CPP
+  // goes to the CRA vendor. The summary therefore resolves the destination
+  // per (component, province): QC rows land in their own group, and the
+  // provinces that share a destination fold BACK into one component line so
+  // a remittance bill never carries two lines for one component.
+  const groups = groupRemittanceRows({
+    rows: [
+      row({ component_id: "cpp", code: "CPP", name: "CPP", system_key: "cpp", province: "ON", amount: "40.00" }),
+      row({ component_id: "cpp", code: "CPP", name: "CPP", system_key: "cpp", province: "AB", amount: "10.00" }),
+      row({ component_id: "cpp", code: "CPP", name: "CPP", system_key: "cpp", province: "QC", amount: "25.00" }),
+    ],
+    contextByAccount: CONTEXT,
+    filingAccounts: ACCOUNTS,
+    resolveParty: (r) => (r.province === "QC" ? "rq-vendor" : "cra"),
+    resolveAccount: (r) => r.liability_account_id,
+  });
+
+  assert.equal(groups.size, 2, "one CRA group, one Revenu Québec group");
+  const byParty = new Map([...groups.values()].map((g) => [g.partyId, g]));
+  const cra = byParty.get("cra")!;
+  const rq = byParty.get("rq-vendor")!;
+  assert.equal(cra.components.length, 1, "ON and AB fold into one CPP line");
+  assert.equal(cra.components[0]!.amount, "50.0000");
+  assert.equal(cra.total, "50.0000");
+  assert.equal(rq.components.length, 1);
+  assert.equal(rq.components[0]!.amount, "25.00");
+  assert.equal(rq.total, "25.0000");
 });

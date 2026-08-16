@@ -4,7 +4,7 @@ import test from "node:test";
 import { sql } from "drizzle-orm";
 import { db } from "./db.ts";
 import { add, cmp, toUnits } from "./money.ts";
-import { buildCpa005File, encryptAccountNumber } from "./payments.ts";
+import { encryptAccountNumber } from "./payments.ts";
 import {
   NACHA_PAYROLL_ENTRY_CLASS,
   NACHA_PAYROLL_ENTRY_DESCRIPTION,
@@ -23,6 +23,7 @@ import {
   payRunBankFileEntitlement,
   releasePayRunBankFile,
 } from "./payroll-bank-file-artifact.ts";
+import { packStatutoryComponents } from "./payroll/packs.ts";
 import {
   calculatePayRun, commitPayRun, createPayRun, seedPayrollComponents,
 } from "./payroll-run.ts";
@@ -51,94 +52,227 @@ const DB = !!process.env.OPENBOOKS_DB_URL;
 test("the export is live, and each format states its own enablement", () => {
   assert.equal(PAYROLL_BANK_FILE_EXPORT_ENABLED, true);
   assert.equal(PAYROLL_BANK_FILE_FORMATS.nacha.enabled, true);
-  // CPA-005 is deliberately off; see the module header and the canary below.
-  assert.equal(PAYROLL_BANK_FILE_FORMATS.cpa005.enabled, false);
-  assert.match(PAYROLL_BANK_FILE_FORMATS.cpa005.disabledReason ?? "", /Item Trace Number/);
+  // CPA-005 is on: the item trace number is composed per Standard 005
+  // (Appendix 1 pp.6-7) and both data centres are tenant configuration. The
+  // golden below is the byte-level proof; the old zero-fill canary is gone
+  // because the defect it pinned is gone.
+  assert.equal(PAYROLL_BANK_FILE_FORMATS.cpa005.enabled, true);
+  assert.equal(PAYROLL_BANK_FILE_FORMATS.cpa005.disabledReason, undefined);
 });
 
-/**
- * ANTI-FALSE-GREEN CANARY.
- *
- * CPA-005 is off for exactly one reason: Payments Canada Standard 005 mandates
- * the internal structure of the Item Trace Number (segment positions 41–62 —
- * destination data centre, originating direct clearer's data centre, file
- * creation number, item sequence, the last three non-zero) and
- * `buildCpa005File` writes twenty-two zeros there, which the standard makes
- * cause for rejecting the item.
- *
- * This test pins that fact together with every offset that IS correct. The day
- * somebody composes the field properly this test fails and forces them to also
- * turn the format on; the day somebody turns the format on without fixing the
- * writer, this test still spells out exactly what was shipped.
- */
-test("CPA-005 canary: the item trace number is still zero-filled, so the format stays off", () => {
-  const content = buildCpa005File({
-    settings: {
-      originatorId: "0123456789",
-      originatorShortName: "SUMMIT RIDGE",
-      originatorLongName: "SUMMIT RIDGE BUILDERS LTD",
-      dataCentre: "00510",
-      institution: "003",
-      transit: "00212",
-      account: "1234567",
-      transactionCode: "200", // Payments Canada Standard 007: 200 = Payroll Deposit
-    },
-    fileCreationNumber: 1,
-    fileCreationDate: new Date(2026, 7, 14),
-    payments: [
-      {
-        amountCents: 250_000n,
-        fundsDate: new Date(2026, 7, 21),
-        institution: "004",
-        transit: "12345",
-        accountNumber: "000123456789",
-        payeeName: "ADA WIRED",
-        crossReference: "PAY EMP-0001",
-      },
+/* ------------------------------------------------------------------ */
+/* CPA-005 — the golden file                                           */
+/* ------------------------------------------------------------------ */
+
+const CPA005_ORIGINATOR: PayrollOriginatorConfig = {
+  paymentBankProfileId: "22222222-2222-4222-8222-222222222222",
+  profileName: "Payroll direct deposit (CPA-005)",
+  format: "cpa005",
+  currency: "CAD",
+  lineEnding: "crlf",
+  cpa005: {
+    originatorId: "0123456789",
+    originatorShortName: "SUMMIT RIDGE",
+    originatorLongName: "SUMMIT RIDGE BUILDERS LTD",
+    // Destination data centre (A record 31-35; its first 4 digits open every
+    // item trace number) and the originating direct clearer's own data centre
+    // (trace positions 5-9). Distinct on purpose: proves neither is derived
+    // from the other.
+    dataCentre: "00510",
+    originatingDataCentre: "00610",
+    institution: "003",
+    transit: "00212",
+    account: "1234567",
+    transactionCode: "200", // Payments Canada Standard 007: 200 = Payroll Deposit
+  },
+};
+
+const cpa005Inputs = (): PayRunBankFileInputs => ({
+  format: "cpa005",
+  population: {
+    entries: [],
+    total: "4321.5000",
+    excludedCheque: [
+      { employeePartyId: "p3", employeeName: "CY OVERRIDE", amount: "900.0000", reason: "profile" },
     ],
+    excludedTotal: "900.0000",
+  },
+  credits: [
+    {
+      stubId: "s1", employeePartyId: "p1", employeeName: "ADA WIRED", amount: "2500.0000",
+      employeeNumber: "EMP-0001", routing: { institution: "004", transit: "12345" },
+      accountNumber: "000123456789",
+    },
+    {
+      stubId: "s2", employeePartyId: "p2", employeeName: "BO SAVER", amount: "1821.5000",
+      employeeNumber: "EMP-0002", routing: { institution: "001", transit: "00022" },
+      accountNumber: "987654321",
+    },
+  ],
+});
+
+const renderCpa005 = (inputs = cpa005Inputs(), originator = CPA005_ORIGINATOR) =>
+  renderPayRunBankFile(inputs, {
+    orgId: "org",
+    documentId: "doc",
+    format: "cpa005",
+    originator,
+    // 7, not 1: proves the artifact's number_sequences allocation lands in the
+    // A record AND in every trace number, rather than a hardcoded first file.
+    fileCreationNumber: 7,
+    fundsDate: "2026-08-21",
+    createdAt: new Date(2026, 7, 14),
   });
-  const records = content.split("\r\n").filter((line) => line.length > 0);
+
+/**
+ * The golden file, character for character, built from the Standard 005 layout
+ * tables (Section D pp.4-5 and the Z record table; Appendix 1 pp.6-7 for the
+ * item trace number) independently of the writer.
+ *
+ * Trace numbers: destination data centre "00510" with the trailing digit
+ * dropped (0051) + originating direct clearer's data centre (00610) + file
+ * creation number (0007) + per-item sequence (000000001, 000000002).
+ */
+const CPA005_SEGMENTS = [
+  "200" + "0000250000" + "026233" + "000412345" + "000123456789" +
+    "0051" + "00610" + "0007" + "000000001" + "000" +
+    "SUMMIT RIDGE".padEnd(15) + "ADA WIRED".padEnd(30) +
+    "SUMMIT RIDGE BUILDERS LTD".padEnd(30) + "0123456789" +
+    "PAY EMP-0001".padEnd(19) + "000300212" + "1234567".padEnd(12) +
+    " ".repeat(15) + " ".repeat(22) + "  " + "0".repeat(11),
+  "200" + "0000182150" + "026233" + "000100022" + "987654321".padEnd(12) +
+    "0051" + "00610" + "0007" + "000000002" + "000" +
+    "SUMMIT RIDGE".padEnd(15) + "BO SAVER".padEnd(30) +
+    "SUMMIT RIDGE BUILDERS LTD".padEnd(30) + "0123456789" +
+    "PAY EMP-0002".padEnd(19) + "000300212" + "1234567".padEnd(12) +
+    " ".repeat(15) + " ".repeat(22) + "  " + "0".repeat(11),
+];
+
+const CPA005_GOLDEN = [
+  // A: sequence literal 000000001, originator id, FCN, 0yyddd creation date
+  // (2026-08-14 = day 226), destination data centre, reserved, "CAD".
+  ("A" + "000000001" + "0123456789" + "0007" + "026226" + "00510" +
+    " ".repeat(20) + "CAD").padEnd(1464),
+  ("C" + "000000002" + "0123456789" + "0007" + CPA005_SEGMENTS.join("")).padEnd(1464),
+  // Z: no debits, credit value 432150 cents in 14, credit count 2 in 8, no
+  // error corrections.
+  ("Z" + "000000003" + "0123456789" + "0007" + "0".repeat(14) + "0".repeat(8) +
+    "00000000432150" + "00000002" + "0".repeat(14) + "0".repeat(8) +
+    "0".repeat(14) + "0".repeat(8)).padEnd(1464),
+].join("\r\n") + "\r\n";
+
+test("CPA-005 golden file — byte for byte, trace numbers included", () => {
+  const result = renderCpa005();
+  assert.equal(result.content, CPA005_GOLDEN);
+  assert.equal(result.contentType, "text/plain; charset=us-ascii");
+  assert.equal(result.extension, "txt");
+  assert.equal(result.currency, "CAD");
+  // us-ascii: byte length must equal character length, or every fixed-width
+  // field after a multi-byte character has shifted.
+  assert.equal(Buffer.from(result.content, "utf8").length, result.content.length);
+});
+
+test("CPA-005 record layout — every element at its Standard 005 offset", () => {
+  const records = renderCpa005().content.split("\r\n").filter((line) => line.length > 0);
   assert.equal(records.length, 3, "A + one C + Z");
   for (const record of records) assert.equal(record.length, 1464);
 
-  // A record — every offset confirmed against Standard 005 Section D.
+  // A record — Section D p.4 layout table.
   assert.equal(records[0]![0], "A");
   assert.equal(records[0]!.slice(1, 10), "000000001", "record sequence starts at literal one");
   assert.equal(records[0]!.slice(10, 20), "0123456789", "originator id, positions 11-20");
-  assert.equal(records[0]!.slice(20, 24), "0001", "file creation number, positions 21-24");
-  // 0yyddd: 2026-08-14 is day 226 of a non-leap year.
-  assert.equal(records[0]!.slice(24, 30), "026226", "creation date, positions 25-30");
+  assert.equal(records[0]!.slice(20, 24), "0007", "allocated file creation number, positions 21-24");
+  assert.equal(records[0]!.slice(24, 30), "026226", "creation date 0yyddd, positions 25-30");
   assert.equal(records[0]!.slice(30, 35), "00510", "destination data centre, positions 31-35");
   assert.equal(records[0]!.slice(35, 55), " ".repeat(20), "reserved communication area");
-  assert.equal(records[0]!.slice(55, 58), "CAD", "currency, positions 56-58");
+  assert.equal(records[0]!.slice(55, 58), "CAD", "currency code identifier, positions 56-58");
 
-  // C record — one 240-character credit segment at positions 25-264.
+  // C record — Section D p.5: two 240-character segments from position 25.
   assert.equal(records[1]![0], "C");
   assert.equal(records[1]!.slice(1, 10), "000000002", "sequence increments by one");
-  const segment = records[1]!.slice(24, 264);
-  assert.equal(segment.length, 240);
-  assert.equal(segment.slice(0, 3), "200", "transaction type = payroll deposit");
-  assert.equal(segment.slice(3, 13), "0000250000", "amount, unsigned implied cents");
-  assert.equal(segment.slice(13, 19), "026233", "date funds available (2026-08-21 = day 233)");
-  assert.equal(segment.slice(19, 28), "000412345", "payee institutional id = 0 + institution + transit");
-  assert.equal(segment.slice(28, 40), "000123456789", "payee account number");
-  assert.equal(segment.slice(65, 80), "SUMMIT RIDGE   ", "originator short name");
-  assert.equal(segment.slice(80, 110), "ADA WIRED".padEnd(30), "payee name");
-  assert.equal(segment.slice(229, 240), "0".repeat(11), "invalid data element id must be zeros");
+  const segments = [records[1]!.slice(24, 264), records[1]!.slice(264, 504)];
+  for (const segment of segments) assert.equal(segment.length, 240);
+  assert.equal(records[1]!.slice(504, 1464).trim(), "", "unused segments are space-filled");
 
-  // THE DEFECT that keeps the format disabled.
-  assert.equal(
-    segment.slice(40, 62),
-    "0".repeat(22),
-    "item trace number is zero-filled — CPA-005 stays disabled until it is composed",
-  );
+  const [first, second] = segments as [string, string];
+  assert.equal(first.slice(0, 3), "200", "transaction type = payroll deposit (Standard 007)");
+  assert.equal(first.slice(3, 13), "0000250000", "amount, unsigned implied cents");
+  assert.equal(first.slice(13, 19), "026233", "date funds available (2026-08-21 = day 233)");
+  assert.equal(first.slice(19, 28), "000412345", "payee institutional id = 0 + institution + transit");
+  assert.equal(first.slice(28, 40), "000123456789", "payee account number");
+  // DE 12, the item trace number (segment positions 41-62): the reason this
+  // format used to be off. Standard 005 Appendix 1 pp.6-7: destination data
+  // centre with trailing digit dropped + originating direct clearer's data
+  // centre + file creation number + item sequence, the last three non-zero.
+  assert.equal(first.slice(40, 62), "0051" + "00610" + "0007" + "000000001");
+  assert.equal(second.slice(40, 62), "0051" + "00610" + "0007" + "000000002");
+  assert.notEqual(first.slice(40, 62), second.slice(40, 62), "no two credits share a trace");
+  assert.equal(first.slice(62, 65), "000", "stored transaction type");
+  assert.equal(first.slice(65, 80), "SUMMIT RIDGE   ", "originator short name");
+  assert.equal(first.slice(80, 110), "ADA WIRED".padEnd(30), "payee name");
+  assert.equal(first.slice(110, 140), "SUMMIT RIDGE BUILDERS LTD".padEnd(30), "originator long name");
+  assert.equal(first.slice(140, 150), "0123456789", "originating direct clearer's user id");
+  assert.equal(first.slice(150, 169), "PAY EMP-0001".padEnd(19), "cross-reference carries the employee number");
+  assert.equal(first.slice(169, 178), "000300212", "institutional id for returns");
+  assert.equal(first.slice(178, 190), "1234567".padEnd(12), "account for returns");
+  assert.equal(first.slice(190, 205), " ".repeat(15), "originator sundry information");
+  assert.equal(first.slice(205, 227), " ".repeat(22), "filler");
+  assert.equal(first.slice(227, 229), "  ", "settlement code");
+  assert.equal(first.slice(229, 240), "0".repeat(11), "invalid data element id must be zeros");
+  assert.equal(second.slice(0, 3), "200");
+  assert.equal(second.slice(3, 13), "0000182150");
+  assert.equal(second.slice(19, 28), "000100022");
 
-  // Z record.
+  // Z record — Section D layout table.
   assert.equal(records[2]![0], "Z");
+  assert.equal(records[2]!.slice(1, 10), "000000003");
   assert.equal(records[2]!.slice(24, 38), "0".repeat(14), "no debit value");
   assert.equal(records[2]!.slice(38, 46), "0".repeat(8), "no debit count");
-  assert.equal(records[2]!.slice(46, 60), "00000000250000", "credit value, positions 47-60");
-  assert.equal(records[2]!.slice(60, 68), "00000001", "credit count, positions 61-68");
+  assert.equal(records[2]!.slice(46, 60), "00000000432150", "credit value, positions 47-60");
+  assert.equal(records[2]!.slice(60, 68), "00000002", "credit count, positions 61-68");
+  assert.equal(records[2]!.slice(68, 112), "0".repeat(44), "no error corrections");
+});
+
+test("the CPA-005 trailer is parsed back out of the characters and ties to the run", () => {
+  const result = renderCpa005();
+  // The render's own parse-back — the same discipline as the NACHA path.
+  assert.equal(result.trailer.totalCents, 432_150n);
+  assert.equal(result.trailer.count, 2);
+  assert.equal(result.total, "4321.5000");
+  assert.equal(result.trailer.totalCents, toUnits(result.total) / 100n);
+  // Independently: the trailer fields, sliced straight out of the produced
+  // characters at the Standard 005 offsets.
+  const trailer = result.content.split("\r\n").find((line) => line[0] === "Z")!;
+  assert.equal(BigInt(trailer.slice(46, 60)), toUnits(result.total) / 100n);
+  assert.equal(Number(trailer.slice(60, 68)), result.entries.length);
+  assert.deepEqual(readTrailerTotals("cpa005", result.content), {
+    totalCents: 432_150n,
+    count: 2,
+  });
+});
+
+test("a trace-number component that cannot be proven refuses the whole file", () => {
+  // A zero originating data centre is a rejected transaction under Standard
+  // 005; the writer must refuse to emit it rather than let a bank bounce it.
+  assert.throws(
+    () =>
+      renderCpa005(cpa005Inputs(), {
+        ...CPA005_ORIGINATOR,
+        cpa005: { ...CPA005_ORIGINATOR.cpa005!, originatingDataCentre: "00000" },
+      }),
+    /originating direct clearer's data centre/,
+  );
+  // The file creation number comes from the artifact's allocation — a render
+  // without one must never invent it.
+  assert.throws(
+    () =>
+      renderPayRunBankFile(cpa005Inputs(), {
+        orgId: "org", documentId: "doc", format: "cpa005",
+        originator: CPA005_ORIGINATOR, fundsDate: "2026-08-21",
+        createdAt: new Date(2026, 7, 14),
+      }),
+    /allocated file creation number/,
+  );
 });
 
 /* ------------------------------------------------------------------ */
@@ -324,18 +458,20 @@ test("the record terminator is tenant configuration, and never part of a record"
   assert.deepEqual(readTrailerTotals("nacha", crlf.content), { totalCents: 432_150n, count: 2 });
 });
 
-test("a disabled format cannot be rendered even with a valid configuration", () => {
+test("a profile that originates one format cannot render the other", () => {
+  // The originator config names its own format; asking the render for a
+  // different one is a mixed-up profile, not a request to improvise.
   assert.throws(
     () =>
       renderPayRunBankFile(
         { format: "cpa005", population: nachaInputs().population, credits: [] },
         {
           orgId: "org", documentId: "doc", format: "cpa005",
-          originator: { ...NACHA_ORIGINATOR, format: "cpa005" },
+          originator: NACHA_ORIGINATOR,
           fileCreationNumber: 1, fundsDate: "2026-08-21", createdAt: new Date(2026, 7, 14),
         },
       ),
-    /Item Trace Number/,
+    /originates nacha, not cpa005/,
   );
 });
 
@@ -392,8 +528,116 @@ const account = async (orgId: string, number: string, name: string, type: string
   return id;
 };
 
-/** A payroll org whose NACHA originator profile is configured the payroll way. */
-async function payrollOrg(overrides: Record<string, unknown> = {}): Promise<Fixture> {
+/**
+ * Seed the payroll components, tolerating a dev database whose
+ * `pay_components_system_key` CHECK predates the in-flight statutory-holiday
+ * components (the payroll-core work stream owns those components AND folding
+ * the widened constraint into 0001_baseline.sql — this file must not alter a
+ * shared constraint). Postgres evaluates CHECK constraints before ON CONFLICT
+ * resolution, so on such a database `seedPayrollComponents` cannot complete at
+ * all; the catch seeds the same set by hand, minus the two statutory-holiday
+ * rows, plus the Vacation entitlement plan the runs accrue under. These tests
+ * never enable statutory holiday pay, so the missing pair is never resolved by
+ * a run; once the widened constraint lands, the catch never fires and the one
+ * real seeder is the only path.
+ */
+async function seedComponentsTolerantly(orgId: string, actorId: string): Promise<void> {
+  const causedBy = (error: unknown, pattern: RegExp): boolean => {
+    let current: unknown = error;
+    while (current) {
+      if (pattern.test(String((current as Error).message ?? ""))) return true;
+      current = (current as { cause?: unknown }).cause;
+    }
+    return false;
+  };
+  try {
+    await seedPayrollComponents(orgId, actorId, "CA");
+  } catch (error) {
+    if (!causedBy(error, /pay_components_system_key/)) throw error;
+    const rows = [
+      { code: "BASE", name: "Base pay", kind: "earning", systemKey: "base_pay", basis: "per_hour", sequence: 10 },
+      { code: "OT", name: "Overtime", kind: "earning", systemKey: "overtime", basis: "per_hour", sequence: 20 },
+      { code: "BONUS", name: "Bonus", kind: "earning", systemKey: "bonus", nonPeriodic: true, vacationable: false, sequence: 30 },
+      { code: "VACPAY", name: "Vacation pay", kind: "earning", systemKey: "vacation_payout", vacationable: false, sequence: 40 },
+      ...packStatutoryComponents("CA").map((c) => ({
+        code: c.code, name: c.name, kind: c.kind as string, systemKey: c.systemKey,
+        sequence: c.sequence, country: "CA",
+      })),
+    ] as {
+      code: string; name: string; kind: string; systemKey: string; sequence: number;
+      basis?: string; nonPeriodic?: boolean; vacationable?: boolean; country?: string;
+    }[];
+    for (const c of rows) {
+      await db.execute(sql`
+        insert into pay_components (org_id, code, name, kind, system_key, country, basis, taxable,
+                                    pensionable, insurable, vacationable, non_periodic, sequence,
+                                    created_by, updated_by)
+        values (${orgId}, ${c.code}, ${c.name}, ${c.kind}, ${c.systemKey}, ${c.country ?? null},
+                ${c.basis ?? "fixed_amount"}, true, true, true, ${c.vacationable ?? true},
+                ${c.nonPeriodic ?? false}, ${c.sequence}, ${actorId}, ${actorId})
+        on conflict (org_id, code) do nothing`);
+    }
+    // The Vacation plan the seeder would have provisioned beside the
+    // components — without it an accruing employee is a named calc error.
+    await db.execute(sql`
+      insert into entitlement_plans (org_id, code, system_key, name, unit, direction, accrual_method,
+                                     accrual_value, accrual_component_id, payout_component_id,
+                                     liability_account_id, cap_behavior, is_active,
+                                     created_by, updated_by)
+      select ${orgId}, 'VAC', 'vacation', 'Vacation', 'money', 'accrue', 'percent_of_earnings', '4',
+             (select id from pay_components
+               where org_id = ${orgId} and system_key = 'vacation_accrual' limit 1),
+             (select id from pay_components
+               where org_id = ${orgId} and system_key = 'vacation_payout' limit 1),
+             (select (settings#>>'{payroll,vacationPayableAccountId}')::uuid
+                from orgs where id = ${orgId}),
+             'warn', true, ${actorId}, ${actorId}
+       where not exists (
+         select 1 from entitlement_plans where org_id = ${orgId} and system_key = 'vacation'
+       )`);
+  }
+}
+
+/** The tenant originator secrets each rail's profile carries, for fixtures. */
+const ORIGINATOR_SECRETS = {
+  nacha: {
+    odfiRouting: "021000021",
+    immediateDestination: "021000021",
+    immediateOrigin: "1234567890",
+    destinationName: "JPMORGAN CHASE",
+    originName: "SUMMIT RIDGE BUILDERS",
+    companyName: "SUMMIT RIDGE",
+    companyId: "1123456789",
+  },
+  cpa005: {
+    originatorId: "0123456789",
+    originatorShortName: "SUMMIT RIDGE",
+    originatorLongName: "SUMMIT RIDGE BUILDERS LTD",
+    dataCentre: "00510",
+    originatingDataCentre: "00610",
+    institution: "003",
+    transit: "00212",
+    account: "1234567",
+    transactionCode: "200",
+  },
+} as const;
+
+const RAIL_FORMAT = {
+  nacha: {
+    code: "NACHA-CREDIT", name: "NACHA ACH credit", rail: "nacha_credit",
+    country: "US", currency: "USD", extension: "ach",
+  },
+  cpa005: {
+    code: "CPA005-CREDIT", name: "CPA-005 EFT credit", rail: "cpa005_credit",
+    country: "CA", currency: "CAD", extension: "txt",
+  },
+} as const;
+
+/** A payroll org whose originator profile is configured the payroll way. */
+async function payrollOrg(
+  overrides: Record<string, unknown> = {},
+  rail: "nacha" | "cpa005" = "nacha",
+): Promise<Fixture> {
   const org = await createScratchOrg();
   const actorId = (await seedFlowActors(org.orgId)).adminId;
   const accounts = {
@@ -417,7 +661,7 @@ async function payrollOrg(overrides: Record<string, unknown> = {}): Promise<Fixt
         wagesTo: "expense",
       },
     })}::jsonb where id = ${org.orgId}`);
-  await seedPayrollComponents(org.orgId, actorId);
+  await seedComponentsTolerantly(org.orgId, actorId);
 
   const scheduleId = randomUUID();
   await db.execute(sql`
@@ -428,28 +672,23 @@ async function payrollOrg(overrides: Record<string, unknown> = {}): Promise<Fixt
 
   // The tenant's originator configuration — the ONLY place institution-assigned
   // values come from. Anything absent is a named refusal, never a default.
+  const spec = RAIL_FORMAT[rail];
   const formatId = randomUUID();
   await db.execute(sql`
     insert into payment_formats (id, org_id, code, name, rail, direction, country, currency,
                                  file_extension, content_type, settings, is_active, created_by, updated_by)
-    values (${formatId}, ${org.orgId}, 'NACHA-CREDIT', 'NACHA ACH credit', 'nacha_credit', 'credit',
-            'US', 'USD', 'ach', 'text/plain; charset=us-ascii', '{}'::jsonb, true, ${actorId}, ${actorId})`);
+    values (${formatId}, ${org.orgId}, ${spec.code}, ${spec.name}, ${spec.rail}, 'credit',
+            ${spec.country}, ${spec.currency}, ${spec.extension},
+            'text/plain; charset=us-ascii', '{}'::jsonb, true, ${actorId}, ${actorId})`);
   const profileId = randomUUID();
   await db.execute(sql`
     insert into payment_bank_profiles (id, org_id, name, bank_account_id, payment_format_id, currency,
                                        country, originator_secrets_encrypted, settings, is_active,
                                        created_by, updated_by)
-    values (${profileId}, ${org.orgId}, 'Payroll direct deposit', ${accounts.bank}, ${formatId}, 'USD',
-            'US', ${sealJson({
-              odfiRouting: "021000021",
-              immediateDestination: "021000021",
-              immediateOrigin: "1234567890",
-              destinationName: "JPMORGAN CHASE",
-              originName: "SUMMIT RIDGE BUILDERS",
-              companyName: "SUMMIT RIDGE",
-              companyId: "1123456789",
-              ...overrides,
-            })}, '{}'::jsonb, true, ${actorId}, ${actorId})`);
+    values (${profileId}, ${org.orgId}, 'Payroll direct deposit', ${accounts.bank}, ${formatId},
+            ${spec.currency}, ${spec.country},
+            ${sealJson({ ...ORIGINATOR_SECRETS[rail], ...overrides })},
+            '{}'::jsonb, true, ${actorId}, ${actorId})`);
 
   return { orgId: org.orgId, subsidiaryId: org.subsidiaryId, actorId, scheduleId, profileId };
 }
@@ -457,7 +696,8 @@ async function payrollOrg(overrides: Record<string, unknown> = {}): Promise<Fixt
 async function employee(fx: Fixture, name: string, opts: {
   partyMethod?: string | null;
   profileMethod?: string | null;
-  bank?: { aba: string; accountType?: string } | null;
+  /** NACHA: { aba }. CPA-005: { institution, transit }. */
+  bank?: Record<string, string> | null;
   employeeNumber?: string;
 } = {}): Promise<string> {
   const id = randomUUID();
@@ -480,11 +720,13 @@ async function employee(fx: Fixture, name: string, opts: {
     values (${fx.orgId}, ${id}, ${fx.scheduleId}, 'ON', 'hourly', 1, 1, '4', 'accrue',
             ${opts.profileMethod ?? null}, true, ${fx.actorId}, ${fx.actorId})`);
   if (opts.bank) {
+    const canadian = "institution" in opts.bank;
     await db.execute(sql`
       insert into party_bank_accounts (org_id, party_id, bank_name, country, currency, routing,
                                        account_number_encrypted, account_last_four, approval_status,
                                        is_active, created_by, updated_by)
-      values (${fx.orgId}, ${id}, 'Test Bank', 'US', 'USD', ${JSON.stringify(opts.bank)}::jsonb,
+      values (${fx.orgId}, ${id}, 'Test Bank', ${canadian ? "CA" : "US"},
+              ${canadian ? "CAD" : "USD"}, ${JSON.stringify(opts.bank)}::jsonb,
               ${encryptAccountNumber("000123456789")}, '6789', 'approved', true,
               ${fx.actorId}, ${fx.actorId})`);
   }
@@ -533,6 +775,114 @@ async function mixedRun(fx: Fixture) {
   await db.execute(sql`update documents set currency = 'USD' where id = ${run.documentId}`);
   return { documentId: run.documentId, wired, paper, overridden };
 }
+
+/** The CAD twin of `mixedRun`: CA routing, and the run stays in CAD. */
+async function cpaMixedRun(fx: Fixture) {
+  const wired = await employee(fx, "Ada Wired", {
+    partyMethod: "eft", bank: { institution: "004", transit: "12345" }, employeeNumber: "EMP-0001",
+  });
+  const paper = await employee(fx, "Bo Paper", { employeeNumber: "EMP-0002" });
+  for (const id of [wired, paper]) {
+    for (const day of ["2026-07-06", "2026-07-08", "2026-07-10", "2026-07-14"]) {
+      await hours(fx, id, day, "20");
+    }
+  }
+  const run = await createPayRun({
+    orgId: fx.orgId, actorId: fx.actorId, payScheduleId: fx.scheduleId,
+    periodStart: "2026-07-05", periodEnd: "2026-07-18",
+  });
+  const calc = await calculatePayRun({
+    orgId: fx.orgId, documentId: run.documentId, actorId: fx.actorId,
+  });
+  assert.deepEqual(calc.errors, []);
+  return { documentId: run.documentId, wired, paper };
+}
+
+test(
+  "CPA-005 end to end: the artifact's allocated file creation number is inside the trace numbers of the stored bytes",
+  { skip: !DB },
+  async () => {
+    const fx = await payrollOrg({}, "cpa005");
+    const { documentId } = await cpaMixedRun(fx);
+    await commitPayRun({ orgId: fx.orgId, documentId, actorId: fx.actorId });
+
+    const artifact = await generatePayRunBankFile({
+      orgId: fx.orgId, documentId, actorId: fx.actorId, paymentBankProfileId: fx.profileId,
+    });
+    // CPA-005 numbering: a 1-9999 file creation number off the artifact's own
+    // number_sequences allocation; the NACHA modifier stays empty.
+    assert.equal(artifact.format, "cpa005");
+    assert.equal(artifact.fileCreationNumber, 1);
+    assert.equal(artifact.fileIdModifier, null);
+    assert.match(artifact.filename, /^PBF-\d+-CPA005-.*\.txt$/);
+    assert.equal(artifact.entryCount, 1);
+
+    // Everything below is read out of the STORED bytes, not the render result.
+    const released = await releasePayRunBankFile(fx.orgId, artifact.id, fx.actorId);
+    const text = released.bytes.toString("utf8");
+    const records = text.split("\r\n").filter((line) => line.length > 0);
+    assert.equal(records.length, 3, "A + one C + Z, CRLF-terminated");
+    for (const record of records) assert.equal(record.length, 1464);
+
+    // The A record carries the allocated file creation number...
+    assert.equal(records[0]!.slice(20, 24), "0001");
+    assert.equal(records[0]!.slice(30, 35), "00510", "destination data centre from the profile");
+
+    // ...and DE 12 embeds it between the two configured data centres and the
+    // item sequence, exactly as Standard 005 Appendix 1 pp.6-7 mandates.
+    const segment = records[1]!.slice(24, 264);
+    assert.equal(segment.slice(40, 62), "0051" + "00610" + "0001" + "000000001");
+    assert.equal(segment.slice(0, 3), "200", "payroll deposit, not the AP default 460");
+
+    // Trailer control totals, parsed from the stored characters, tie to the
+    // run's EFT net pay.
+    const trailer = readTrailerTotals("cpa005", text);
+    assert.equal(trailer.count, artifact.entryCount);
+    assert.equal(trailer.totalCents, toUnits(artifact.controlTotal) / 100n);
+    const netTotal = ((await db.execute(sql`
+      select net_total::text as net from pay_runs
+       where org_id = ${fx.orgId} and document_id = ${documentId}`)) as unknown as
+      { rows: { net: string }[] }).rows[0]!.net;
+    assert.equal(
+      cmp(add(artifact.controlTotal, artifact.excludedTotal), netTotal), 0,
+      "file money + paper money = the run's net pay",
+    );
+    // The cheque employee is nowhere in the characters.
+    assert.equal(text.includes("EMP-0002"), false);
+
+    // A replacement file gets the NEXT allocation, in its A record and in
+    // every trace — the bank must never see two files under one number.
+    const second = await generatePayRunBankFile({
+      orgId: fx.orgId, documentId, actorId: fx.actorId, paymentBankProfileId: fx.profileId,
+      supersedeReason: "bank rejected the first transmission",
+    });
+    assert.equal(second.fileCreationNumber, 2);
+    const secondText = (await releasePayRunBankFile(fx.orgId, second.id, fx.actorId))
+      .bytes.toString("utf8");
+    const secondRecords = secondText.split("\r\n").filter((line) => line.length > 0);
+    assert.equal(secondRecords[0]!.slice(20, 24), "0002");
+    assert.equal(
+      secondRecords[1]!.slice(24, 264).slice(40, 62),
+      "0051" + "00610" + "0002" + "000000001",
+    );
+  },
+);
+
+test(
+  "a CPA-005 profile missing the originating data centre is a named refusal",
+  { skip: !DB },
+  async () => {
+    const fx = await payrollOrg({ originatingDataCentre: "" }, "cpa005");
+    const { documentId } = await cpaMixedRun(fx);
+    await commitPayRun({ orgId: fx.orgId, documentId, actorId: fx.actorId });
+    await assert.rejects(
+      generatePayRunBankFile({
+        orgId: fx.orgId, documentId, actorId: fx.actorId, paymentBankProfileId: fx.profileId,
+      }),
+      /originatingDataCentre/,
+    );
+  },
+);
 
 test("a run that is not committed cannot have a bank file, and says why", { skip: !DB }, async () => {
   const fx = await payrollOrg();

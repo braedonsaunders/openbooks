@@ -4,11 +4,17 @@ import {
   add, cmp, fromUnits, mulDecimal, mulPercent, mulRatio, neg, roundDiv, roundMoney, sum, toUnits,
 } from "./money.ts";
 import { calculateT4127, type T4127Input } from "./payroll/canada/t4127.ts";
+import { calculateTp1015 } from "./payroll/canada/quebec/tp1015.ts";
 import type { Province } from "./payroll/canada/rates.ts";
 import { calculatePub15T } from "./payroll/us/pub15t.ts";
 import {
+  assertContributoryBasesDeclared,
   assertPayrollRegionSupported,
+  jurisdictionKey,
+  legacyStatutoryLiabilityAccount,
   packStatutoryComponents,
+  payrollJurisdictionDeclared,
+  payrollPack,
   resolveEmployeePayrollContext,
   resolvePayrollRunContext,
   statutoryAssessment,
@@ -16,6 +22,10 @@ import {
   type PayrollAssessedOn,
   type PayrollRunContext,
 } from "./payroll/packs.ts";
+import {
+  resolveStatutoryHolidayPay,
+  undeclaredJurisdictionHolidayConflict,
+} from "./payroll-holidays.ts";
 import { effectivePayRateSql, payRateIsUsable } from "./payroll-rate.ts";
 import { effectiveFilingAccountSql } from "./payroll-filing.ts";
 import { laborCostingSettings } from "./labor-costing.ts";
@@ -87,6 +97,12 @@ export interface PayrollSettings {
   wagesTo: "expense" | "labor_clearing";
   /** Vendor party used when raising CRA remittance bills. */
   craRemittancePartyId: string | null;
+  /**
+   * Vendor party for Revenu Québec remittances (TPZ-1015.R): a QC stub's
+   * QPP/QPP2/QPIP route here per the CA pack's regional remittance
+   * declaration (engine/src/payroll/packs.ts), never to the CRA vendor.
+   */
+  rqRemittancePartyId: string | null;
 }
 
 /**
@@ -153,6 +169,7 @@ export async function payrollSettings(orgId: string): Promise<PayrollSettings> {
     vacationPayableAccountId: p.vacationPayableAccountId ?? null,
     wagesTo: p.wagesTo === "labor_clearing" ? "labor_clearing" : "expense",
     craRemittancePartyId: p.craRemittancePartyId ?? null,
+    rqRemittancePartyId: p.rqRemittancePartyId ?? null,
   };
 }
 
@@ -220,13 +237,29 @@ interface SeedComponent {
   basis?: string; taxable?: boolean; pensionable?: boolean; insurable?: boolean;
   vacationable?: boolean; nonPeriodic?: boolean; sequence: number;
   /** Country pack the row belongs to; omitted = shared across packs. */
-  country?: "CA" | "US";
+  country?: string;
 }
+
+/**
+ * Statutory holiday pay and its worked-the-day premium: ordinary EARNINGS with
+ * ordinary treatment — taxable, pensionable, insurable and vacationable in
+ * every jurisdiction that has them, because statutory holiday pay is wages.
+ * The premium line carries only the UPLIFT over the regular wage (the hours
+ * themselves are already paid at 1.0× by the timesheet).
+ *
+ * Declared separately so `ensureStatutoryHolidayComponents` can provision
+ * exactly this pair for orgs that predate it.
+ */
+const STAT_HOLIDAY_COMPONENTS: SeedComponent[] = [
+  { code: "STAT", name: "Statutory holiday pay", kind: "earning", systemKey: "stat_holiday", sequence: 25 },
+  { code: "STATPREM", name: "Statutory holiday premium", kind: "earning", systemKey: "stat_holiday_premium", sequence: 26 },
+];
 
 /** Jurisdiction-free earning baseline shared by every country pack. */
 const BASELINE_COMPONENTS: SeedComponent[] = [
   { code: "BASE", name: "Base pay", kind: "earning", systemKey: "base_pay", basis: "per_hour", sequence: 10 },
   { code: "OT", name: "Overtime", kind: "earning", systemKey: "overtime", basis: "per_hour", sequence: 20 },
+  ...STAT_HOLIDAY_COMPONENTS,
   { code: "BONUS", name: "Bonus", kind: "earning", systemKey: "bonus", nonPeriodic: true, vacationable: false, sequence: 30 },
   { code: "VACPAY", name: "Vacation pay", kind: "earning", systemKey: "vacation_payout", vacationable: false, sequence: 40 },
 ];
@@ -238,22 +271,24 @@ const BASELINE_COMPONENTS: SeedComponent[] = [
  * provisions exactly that. Adding a levy to a pack therefore seeds it and
  * classifies it in the same edit — it cannot be seeded unclassified.
  *
- * For US employees the earning flags generalize: `pensionable` is
- * FICA-taxable and `insurable` is FUTA/SUI-taxable (see calculateStub).
+ * The earning flags accumulate whatever contributory bases the pack DECLARES
+ * (`contributoryBases` in packs.ts): CPP/EI for the CRA, FICA/FUTA wages for
+ * the IRS. Seeding asserts the declaration exists, so a pack cannot inherit
+ * another jurisdiction's meaning for `pensionable` by silence.
  */
-const statutoryComponents = (country: "CA" | "US"): SeedComponent[] =>
+const statutoryComponents = (country: string): SeedComponent[] =>
   packStatutoryComponents(country).map((component) => ({
     code: component.code, name: component.name, kind: component.kind,
     systemKey: component.systemKey, sequence: component.sequence, country,
   }));
 
-/** Statutory + baseline components for a country pack; idempotent. */
-export async function seedPayrollComponents(
-  orgId: string, actorId: string | null, country: "CA" | "US" = "CA",
+/** One idempotent component insert — the single seeding path. */
+async function ensureComponents(
+  executor: Pick<typeof db, "execute">,
+  orgId: string, actorId: string | null, rows: readonly SeedComponent[],
 ): Promise<void> {
-  const rows = [...BASELINE_COMPONENTS, ...statutoryComponents(country)];
   for (const c of rows) {
-    await db.execute(sql`
+    await executor.execute(sql`
       insert into pay_components (org_id, code, name, kind, system_key, country, basis, taxable,
                                   pensionable, insurable, vacationable, non_periodic, sequence,
                                   created_by, updated_by)
@@ -264,7 +299,56 @@ export async function seedPayrollComponents(
       on conflict (org_id, code) do nothing
     `);
   }
+}
+
+/**
+ * Statutory + baseline components for a country pack; idempotent.
+ *
+ * `country` has NO default. The old `= "CA"` default was Canada as the
+ * module's identity: a caller that forgot the argument provisioned CPP and EI
+ * for an org that may never employ a Canadian, and a third pack reached
+ * through the settings route's cast would have seeded the CANADIAN set. The
+ * pack registry is the only validator — an unknown country throws out of
+ * `packStatutoryComponents` before anything is written.
+ */
+export async function seedPayrollComponents(
+  orgId: string, actorId: string | null, country: string,
+): Promise<void> {
+  // A pack whose contributory-bases declaration is missing (authored through
+  // a cast) must fail before its flags accumulate an unnamed base.
+  assertContributoryBasesDeclared(country);
+  await ensureComponents(db, orgId, actorId, [...BASELINE_COMPONENTS, ...statutoryComponents(country)]);
   await seedVacationEntitlementPlan(orgId, actorId, country);
+}
+
+/**
+ * The statutory-holiday earning pair, ensured idempotently for orgs
+ * provisioned before the components existed. Called by the pay run whenever
+ * the feature is ON, so `ctx.need("stat_holiday", …)` is never the discovery
+ * mechanism for a missing component on a long-lived tenant.
+ */
+export async function ensureStatutoryHolidayComponents(
+  executor: Pick<typeof db, "execute">, orgId: string, actorId: string | null,
+): Promise<void> {
+  await ensureComponents(executor, orgId, actorId, STAT_HOLIDAY_COMPONENTS);
+}
+
+/**
+ * Whether statutory holiday pay is calculated at all
+ * (orgs.settings.payroll.statutoryHolidayPay).
+ *
+ * Default OFF: the phase changes gross pay, so a tenant that has been running
+ * payroll without it must opt in deliberately rather than find every stub
+ * changed by an upgrade. The pack-install path turns it on for a NEW install
+ * only (web/app/api/payroll/settings/route.ts).
+ */
+export async function statutoryHolidayPayEnabled(
+  orgId: string, executor: Pick<typeof db, "execute"> = db,
+): Promise<boolean> {
+  const r = (await executor.execute(sql`
+    select settings#>>'{payroll,statutoryHolidayPay}' as enabled from orgs where id = ${orgId}
+  `)) as unknown as { rows: { enabled: string | null }[] };
+  return r.rows[0]?.enabled === "true";
 }
 
 /**
@@ -288,7 +372,7 @@ export async function seedPayrollComponents(
  * adopted by having the binding stamped onto it rather than being duplicated.
  */
 async function seedVacationEntitlementPlan(
-  orgId: string, actorId: string | null, country: "CA" | "US",
+  orgId: string, actorId: string | null, country: string,
 ): Promise<void> {
   const declaresVacation = packStatutoryComponents(country)
     .some((component) => component.systemKey === "vacation_accrual");
@@ -633,7 +717,7 @@ interface StubComputation {
 
 interface YtdRow {
   pensionable: string; insurable: string; cpp: string; cpp2: string; ei: string;
-  qpip: string; non_periodic: string; f5b: string;
+  qpip: string; non_periodic: string; f5b: string; qc_csb: string;
 }
 
 async function employeeYtd(
@@ -663,7 +747,8 @@ async function employeeYtd(
       coalesce((select non_periodic_ytd from payroll_opening_balances
                  where org_id = ${orgId} and employee_party_id = ${employeePartyId} and tax_year = ${taxYear}), 0)
       + coalesce(sum((s.factors->>'B')::numeric), 0) as non_periodic,
-      coalesce(sum((s.factors->>'F5B')::numeric), 0) as f5b
+      coalesce(sum((s.factors->>'F5B')::numeric), 0) as f5b,
+      coalesce(sum((s.factors->>'QC_CSB')::numeric), 0) as qc_csb
     from pay_stubs s
     join pay_runs r on r.document_id = s.pay_run_document_id and r.run_status = 'committed'
     where s.org_id = ${orgId} and s.employee_party_id = ${employeePartyId}
@@ -849,6 +934,12 @@ async function calculateInTransaction(input: CalculatePayRunInput): Promise<PayR
       );
     }
 
+    // Statutory holiday pay: read the gate once for the run, and provision the
+    // STAT/STATPREM pair for orgs that predate them BEFORE the component map
+    // is loaded — ctx.need is an assertion, never a discovery mechanism.
+    const statHolidayPay = await statutoryHolidayPayEnabled(orgId, tx);
+    if (statHolidayPay) await ensureStatutoryHolidayComponents(tx, orgId, actorId);
+
     const components = (await tx.execute(sql`
       select * from pay_components where org_id = ${orgId} and is_active order by sequence
     `)) as unknown as { rows: Record<string, unknown>[] };
@@ -983,7 +1074,7 @@ async function calculateInTransaction(input: CalculatePayRunInput): Promise<PayR
         const result = await calculateStub(tx, {
           orgId, actorId, documentId, run, emp, runContext, jurisdiction,
           periodsPerYear: P, need, components: components.rows, usConfig, caConfig,
-          eftFallbackToCheque,
+          eftFallbackToCheque, statHolidayPay,
         });
         grossTotal = add(grossTotal, result.gross);
         netTotal = add(netTotal, result.net);
@@ -1040,6 +1131,8 @@ async function calculateStub(
     caConfig: CaPayrollConfig;
     /** orgs.settings.payroll.eftFallbackToCheque, read once for the run. */
     eftFallbackToCheque: boolean;
+    /** orgs.settings.payroll.statutoryHolidayPay, read once for the run. */
+    statHolidayPay: boolean;
   },
 ): Promise<StubComputation> {
   const { orgId, actorId, documentId, run, emp, jurisdiction } = ctx;
@@ -1287,6 +1380,71 @@ async function calculateStub(
     }
   }
 
+  // Phase 2 — statutory holiday pay. A day's pay derived from a LOOKBACK over
+  // prior earnings, plus the premium for hours actually worked on the day,
+  // where — and only where — the jurisdiction declares one. The formula is a
+  // statutory fact declared per jurisdiction in the country pack
+  // (engine/src/payroll/packs.ts), never hardcoded here: Ontario divides four
+  // weeks of regular wages plus vacation pay by 20, British Columbia divides
+  // thirty days of wages by the days actually worked, Saskatchewan takes five
+  // per cent. Landing here, before phase 3, is what puts the day's pay in
+  // gross for percent-of-gross components, vacation, union fringes, WCB and
+  // the statutory pass (.local/payroll-pipeline-contract.md).
+  //
+  // Gated on orgs.settings.payroll.statutoryHolidayPay (OFF for existing
+  // tenants: the phase changes gross, so it is opted into, never inherited by
+  // upgrade). Skipped on an off-cycle bonus run, which pays only its one-off
+  // lines.
+  //
+  // A jurisdiction NO pack has transcribed (CA-MB, US-MA) is neither guessed
+  // at nor blindly refused: with no statutory holiday in the period it
+  // calculates exactly as it always has, and when one lands in the period —
+  // probed against the country's declared employment calendars — the run stops
+  // with the same message readiness raises, naming the jurisdiction and the
+  // holiday. A silent zero on a paid holiday is indistinguishable from a
+  // correct calculation, which is why the refusal exists.
+  if (!bonusRun && ctx.statHolidayPay) {
+    const employeeJurisdiction = jurisdictionKey(country, province);
+    if (!payrollJurisdictionDeclared(employeeJurisdiction)) {
+      const conflict = undeclaredJurisdictionHolidayConflict({
+        country, jurisdiction: employeeJurisdiction,
+        from: run.period_start, to: run.period_end,
+      });
+      if (conflict) throw new PayrollError(conflict.message);
+    } else {
+      const holidayRate = payRate
+        ? (payRate.basis === "hour"
+            ? payRate.rate
+            : divideMoney(payRate.rate, payRate.annualHours, 4))
+        : "0";
+      const holidayLines = await resolveStatutoryHolidayPay(tx, {
+        orgId,
+        employeePartyId,
+        employeeName: emp.display_name ?? employeePartyId,
+        jurisdiction: employeeJurisdiction,
+        periodStart: run.period_start,
+        periodEnd: run.period_end,
+        holidayComponentId: ctx.need("stat_holiday", "earning").id as string,
+        premiumComponentId: ctx.need("stat_holiday_premium", "earning").id as string,
+        excludeDocumentId: documentId,
+        hourlyRate: holidayRate,
+      });
+      for (const line of holidayLines) {
+        lines.push({
+          componentId: line.componentId,
+          kind: "earning",
+          // Deliberately no `hours`: a paid day off is not worked hours, and
+          // carrying them would pay per-hour components and union fringes
+          // twice. The component's own flags (taxable, pensionable, insurable,
+          // vacationable — all true) classify the amount: holiday pay is wages.
+          description: line.description,
+          amount: line.amount,
+          sequence: line.sequence,
+        });
+      }
+    }
+  }
+
   /** Same component's committed amount earlier in the tax year (openings
    *  included via the opening-balance sweep the year-end module owns). Mid-year
    *  adoption must not hand an employee a fresh 402(g)/money-purchase room. */
@@ -1414,7 +1572,14 @@ async function calculateStub(
         throw new PayrollError(`union fringe ${fringe.code} has no linked pay component`);
       }
       const kind: Line["kind"] = fringe.paid_by === "employer" ? "employer_contribution" : "deduction";
-      const taxTreatment = fringe.paid_by === "employee" ? "union_dues" : undefined;
+      // The tax treatment of employee-paid dues is the PACK's declaration, not
+      // a constant: 'union_dues' is a T4127 factor-U1 key, and stamping it on
+      // every employee-paid fringe in every country made a CRA deduction the
+      // world's default. A pack that declares null (the US — dues are post-tax
+      // under the TCJA) gets dues lines with no treatment at all.
+      const taxTreatment = fringe.paid_by === "employee"
+        ? (payrollPack(country).employeeUnionDuesTaxTreatment ?? undefined)
+        : undefined;
       // `job_costed` is a property of the FRINGE, not of how it is calculated:
       // in construction that flag exists so the fund lands on the job. Both
       // calculation shapes therefore honour it — the percent-of-gross branch
@@ -1901,10 +2066,10 @@ async function calculateStub(
     };
   } else {
     // The CA arm, asked the same question the US arm has always been asked.
-    // Quebec is the answer that changed: T4127 covers only the FEDERAL side of
-    // Quebec employment, so a QC employee was quietly withheld no provincial
-    // income tax at all and issued no RL-1. The pack refuses them by name
-    // rather than paying a number that is wrong by an entire tax.
+    // Every province is supported now that the QC engine exists: T4127
+    // computes the federal side (abatement, QPP, QPIP) for Quebec and
+    // engine/src/payroll/canada/quebec computes TP-1015 provincial income
+    // tax below. The assertion still refuses an unknown province by name.
     assertPayrollRegionSupported(country, province);
 
     const ytd = await employeeYtd(tx, orgId, employeePartyId, taxYear, documentId);
@@ -1947,8 +2112,35 @@ async function calculateStub(
     pushStatutory("ei", "employer_contribution", "EI (employer)", statutory.eiEmployer, 220);
     pushStatutory("qpip", "employer_contribution", "QPIP (employer)", statutory.qpipEmployer, 230);
 
+    // Québec provincial income tax — TP-1015.F-V, computed by the QC engine
+    // from the same inputs plus the T4127 arm's own QPP outputs (C, C2, S3).
+    // Its line carries assessedOn 'taxable_income', so the protection
+    // fixpoint re-derives it exactly as it re-derives federal income_tax.
+    let qcFactors: Record<string, string> = {};
+    if (province === "QC") {
+      const qc = calculateTp1015({
+        payDate: run.pay_date, periodsPerYear: P,
+        income, nonPeriodic,
+        pensionDeductions: deduction("pension_f"),
+        qpp: statutory.cpp, qpp2: statutory.cpp2,
+        pensionable,
+        // TP-1015.3-V carries an AMOUNT (line 10), never a claim code —
+        // provincial_claim_amount is E; an unset amount uses the guide's
+        // basic-personal-amount default inside the engine.
+        personalCredits: emp.provincial_claim_amount ?? undefined,
+        // TP-1016-V authorized annual credits (variable K1) — the provincial
+        // analogue field, dead for QC under T4127 (no provincial T2 exists).
+        authorizedAnnualCredits: emp.authorized_provincial_credits ?? undefined,
+        taxExempt: emp.tax_exempt === "true" || emp.tax_exempt === true as unknown as string,
+        ytd: { nonPeriodic: ytd.non_periodic, csb: ytd.qc_csb },
+      });
+      pushStatutory("qc_income_tax", "deduction", "Québec income tax", qc.totalTax, 115);
+      qcFactors = qc.factors;
+    }
+
     factors = {
       ...statutory.factors,
+      ...qcFactors,
       B: nonPeriodic, I: income, PI: pensionable, IE: insurable,
       QPIP: statutory.qpip, EI_ER: statutory.eiEmployer, QPIP_ER: statutory.qpipEmployer,
       ...(cmp(wcbAssessable, "0") > 0 ? { WCB: wcbAmount, WCB_EARN: wcbAssessable } : {}),
@@ -2176,9 +2368,12 @@ async function payRunGlLegs(
     const settings = await payrollSettings(orgId);
     const costing = await laborCostingSettings(orgId);
     const control = (await tx.execute(sql`
-      select settings->'controlAccounts' as c from orgs where id = ${orgId}
-    `)) as unknown as { rows: { c: Record<string, string | null> | null }[] };
+      select settings->'controlAccounts' as c, settings->'payroll' as p from orgs where id = ${orgId}
+    `)) as unknown as {
+      rows: { c: Record<string, string | null> | null; p: Record<string, unknown> | null }[];
+    };
     const laborClearing = control.rows[0]?.c?.laborClearing ?? null;
+    const rawPayrollSettings = control.rows[0]?.p ?? {};
 
     const requireAccount = (value: string | null, label: string): string => {
       if (!value) throw new PayrollError(`payroll setup incomplete: ${label} account is not configured`);
@@ -2188,16 +2383,15 @@ async function payRunGlLegs(
     const netPayable = requireAccount(settings.netPayAccountId, "net pay payable");
     const burdenExpense = settings.burdenExpenseAccountId ?? wageExpense;
     // Statutory liabilities are pack-declared: each seeded component carries
-    // its slot's account (Payroll setup → Accounts & posting). The legacy
-    // org-level settings keys remain a read fallback for pre-pack tenants.
-    const statutoryLiability: Record<string, string | null> = {
-      income_tax: settings.taxPayableAccountId,
-      cpp: settings.cppPayableAccountId,
-      cpp2: settings.cppPayableAccountId,
-      ei: settings.eiPayableAccountId,
-      qpip: settings.eiPayableAccountId,
-      vacation_accrual: settings.vacationPayableAccountId,
-    };
+    // its slot's account (Payroll setup → Accounts & posting). For pre-pack
+    // tenants, the SLOT's own legacySettingsKey names the old org-level
+    // settings key to fall back to — the pack declares which liabilities
+    // share an account (CPP2 rides the CPP payable, QPIP the EI payable);
+    // this projection no longer knows any jurisdiction's mapping itself, and
+    // a third pack's slot with no legacy key simply resolves to the
+    // component account or a named refusal.
+    const statutoryLiability = (systemKey: string | null): string | null =>
+      systemKey ? legacyStatutoryLiabilityAccount(systemKey, rawPayrollSettings) : null;
     const wagesToClearing = settings.wagesTo === "labor_clearing" && costing.mode === "post";
     if (settings.wagesTo === "labor_clearing" && !laborClearing) {
       throw new PayrollError("payroll setup incomplete: labor clearing account is not configured");
@@ -2249,8 +2443,7 @@ async function payRunGlLegs(
           });
         }
       } else if (line.kind === "deduction") {
-        const liability = line.liability_account_id
-          ?? (line.system_key ? statutoryLiability[line.system_key] : null);
+        const liability = line.liability_account_id ?? statutoryLiability(line.system_key);
         if (!liability) {
           throw new PayrollError(
             `deduction "${line.description}" has no liability account — set it in Payroll setup → Accounts & posting`,
@@ -2258,8 +2451,7 @@ async function payRunGlLegs(
         }
         accumulate(liability, neg(amount), line.description ?? "Deduction");
       } else {
-        const liability = line.liability_account_id
-          ?? (line.system_key ? statutoryLiability[line.system_key] : null);
+        const liability = line.liability_account_id ?? statutoryLiability(line.system_key);
         if (!liability) {
           throw new PayrollError(
             `employer contribution "${line.description}" has no liability account — set it in Payroll setup → Accounts & posting`,

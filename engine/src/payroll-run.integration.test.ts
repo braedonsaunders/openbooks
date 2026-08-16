@@ -52,7 +52,7 @@ test(
           },
         })}::jsonb where id = ${org.orgId}`);
 
-      await seedPayrollComponents(org.orgId, actorId);
+      await seedPayrollComponents(org.orgId, actorId, "CA");
 
       // Employee: person party + hourly wage + biweekly schedule + TD1 profile
       const employeeId = randomUUID();
@@ -215,7 +215,7 @@ test(
             vacationPayableAccountId: craPayable, wagesTo: "expense",
           },
         })}::jsonb where id = ${org.orgId}`);
-      await seedPayrollComponents(org.orgId, actorId);
+      await seedPayrollComponents(org.orgId, actorId, "CA");
 
       const agreementId = randomUUID();
       await db.execute(sql`
@@ -523,9 +523,11 @@ test(
       );
 
       // A pack with no dependents uninstalls cleanly: CA was never used here.
+      // 12 statutory components: TAX, QCTAX, CPP, CPP2, CPP-ER, EI, EI-ER,
+      // QPIP, QPIP-ER, VAC, WCB, EHT.
       await seedPayrollComponents(org.orgId, actorId, "CA");
       const removed = await uninstallPayrollPack(org.orgId, actorId, "CA");
-      assert.equal(removed.componentsRemoved, 11);
+      assert.equal(removed.componentsRemoved, 12);
       const caLeft = (await db.execute(sql`
         select count(*)::int as n from pay_components
          where org_id = ${org.orgId} and country = 'CA'`)) as unknown as { rows: { n: number }[] };
@@ -562,7 +564,7 @@ test(
     const org = await createScratchOrg();
     const actorId = (await seedFlowActors(org.orgId)).adminId;
     try {
-      await seedPayrollComponents(org.orgId, actorId);
+      await seedPayrollComponents(org.orgId, actorId, "CA");
       // Both packs: the US entity's employee needs the US pack's components.
       await seedPayrollComponents(org.orgId, actorId, "US");
       const usSubId = randomUUID();
@@ -672,7 +674,7 @@ test(
     const org = await createScratchOrg();
     const actorId = (await seedFlowActors(org.orgId)).adminId;
     try {
-      await seedPayrollComponents(org.orgId, actorId);
+      await seedPayrollComponents(org.orgId, actorId, "CA");
       const employeeId = randomUUID();
       await db.execute(sql`
         insert into parties (id, org_id, kind, display_name, is_active, custom)

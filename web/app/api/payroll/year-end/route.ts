@@ -1,16 +1,14 @@
 import { NextResponse } from 'next/server'
-import {
-  form941Worksheet, roeWorksheet, t4Slips, t4Summary, w2Slips,
-} from '@openbooks/engine/src/payroll-yearend.ts'
+import { orgYearEndFilings } from '@openbooks/engine/src/payroll-yearend.ts'
 import { guardFeaturePermission } from '../../../../lib/feature-gates'
-import { isUuid } from '../../../../lib/list-params'
 
 export const dynamic = 'force-dynamic'
 
 /**
- * Year-end payroll artifacts: T4 slips + Summary and the US 941/W-2
- * worksheets for a tax year (?year=), or one employee's ROE worksheet
- * (?year=&roe=<employeePartyId>). Wage data — payroll.read only.
+ * Year-end payroll artifacts for a tax year (?year=): every pack-declared
+ * filing, populated from the committed-stub subledger — the same enumeration
+ * the year-end page renders, so API consumers and the screen can never
+ * disagree about what filings exist. Wage data — payroll.read only.
  */
 export async function GET(req: Request) {
   const gate = await guardFeaturePermission('payroll.read', 'payroll')
@@ -20,17 +18,15 @@ export async function GET(req: Request) {
   if (!Number.isInteger(year) || year < 2020 || year > 2100) {
     return NextResponse.json({ error: 'invalid year' }, { status: 422 })
   }
-  const roeEmployee = url.searchParams.get('roe')
-  if (roeEmployee) {
-    if (!isUuid(roeEmployee)) return NextResponse.json({ error: 'invalid employee' }, { status: 422 })
-    const worksheet = await roeWorksheet(gate.user.orgId, roeEmployee)
-    return NextResponse.json({ roe: worksheet })
-  }
-  const [slips, summary, form941, w2] = await Promise.all([
-    t4Slips(gate.user.orgId, year),
-    t4Summary(gate.user.orgId, year),
-    form941Worksheet(gate.user.orgId, year),
-    w2Slips(gate.user.orgId, year),
-  ])
-  return NextResponse.json({ t4: slips, t4Summary: summary, form941, w2 })
+  const filings = await orgYearEndFilings(gate.user.orgId, year)
+  return NextResponse.json({
+    filings: filings.map((filing) => ({
+      country: filing.country,
+      key: filing.key,
+      label: filing.label,
+      installed: filing.installed,
+      data: filing.data,
+      downloadRefusal: filing.downloadRefusal,
+    })),
+  })
 }

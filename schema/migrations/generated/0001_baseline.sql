@@ -8225,7 +8225,8 @@ CREATE VIEW openbooks_query.employee_pay_components WITH (security_barrier='true
     created_by,
     updated_at,
     updated_by
-   FROM public.employee_pay_components;
+   FROM public.employee_pay_components
+  WHERE (org_id = public.openbooks_query_org_id());
 
 
 --
@@ -8336,7 +8337,8 @@ CREATE VIEW openbooks_query.employee_payroll_profiles WITH (security_barrier='tr
     filing_account_id,
     stub_delivery,
     payment_method
-   FROM public.employee_payroll_profiles;
+   FROM public.employee_payroll_profiles
+  WHERE (org_id = public.openbooks_query_org_id());
 
 
 --
@@ -8406,12 +8408,6 @@ CREATE VIEW openbooks_query.employee_roles WITH (security_barrier='true') AS
 --
 -- Name: entitlement_ledger; Type: TABLE; Schema: public; Owner: -
 --
--- The append-only movement ledger behind every entitlement plan. Balance =
--- SUM(amount); there is deliberately no balance column to drift, and the
--- append-only trigger makes a balance uncorrectable except by another
--- movement. `amount` is signed and denominated in the plan's unit; `hours` is
--- derivation context, never the balance.
---
 
 CREATE TABLE public.entitlement_ledger (
     id uuid DEFAULT public.uuid_generate_v7() NOT NULL,
@@ -8463,11 +8459,6 @@ CREATE VIEW openbooks_query.entitlement_ledger WITH (security_barrier='true') AS
 
 --
 -- Name: entitlement_plan_limits; Type: TABLE; Schema: public; Owner: -
---
--- Scoped, effective-dated ceilings. "Trades $4,000 / Foremen $5,000 /
--- Superintendents $6,000" is three rows, not three constants in code. Limits
--- resolve most-specific-wins exactly like labor_cost_rates (employee > job
--- title > trade > department > subsidiary > plan default).
 --
 
 CREATE TABLE public.entitlement_plan_limits (
@@ -8528,16 +8519,6 @@ CREATE VIEW openbooks_query.entitlement_plan_limits WITH (security_barrier='true
 --
 -- Name: entitlement_plans; Type: TABLE; Schema: public; Owner: -
 --
--- Entitlement plans (pay banks) — one engine for every employee bank a
--- construction payroll actually runs: banked overtime with a per-role dollar
--- ceiling, vacation, sick banks, and benefit recoup while someone is on unpaid
--- leave (direction 'owe' — a NEGATIVE balance repaid over time).
---
--- Balances are MONEY by default and DISPLAYED in hours at the current wage. An
--- hours-denominated bank is an unfunded liability the moment wages rise;
--- `unit` stays configurable only because true time-off-in-lieu entitlements
--- exist.
---
 
 CREATE TABLE public.entitlement_plans (
     id uuid DEFAULT public.uuid_generate_v7() NOT NULL,
@@ -8579,6 +8560,7 @@ CREATE VIEW openbooks_query.entitlement_plans WITH (security_barrier='true') AS
     org_id,
     code,
     name,
+    system_key,
     unit,
     direction,
     accrual_method,
@@ -8591,19 +8573,13 @@ CREATE VIEW openbooks_query.entitlement_plans WITH (security_barrier='true') AS
     created_at,
     created_by,
     updated_at,
-    updated_by,
-    system_key
+    updated_by
    FROM public.entitlement_plans
   WHERE (org_id = public.openbooks_query_org_id());
 
 
 --
 -- Name: entitlement_service_tiers; Type: TABLE; Schema: public; Owner: -
---
--- Service-based schedules: benefits at three months, RRSP at a year, the
--- vacation ladder at 5/10/15/20/25/30 years. A tier targets EXACTLY one of a
--- plan (raising its accrual value at the milestone) or a pay component
--- (flipping eligibility on). Months of service run from employee_roles.hired_on.
 --
 
 CREATE TABLE public.entitlement_service_tiers (
@@ -11228,7 +11204,7 @@ CREATE TABLE public.pay_components (
     CONSTRAINT pay_components_protection_percent CHECK (((protection_max_percent IS NULL) OR ((protection_max_percent >= (0)::numeric) AND (protection_max_percent <= (100)::numeric)))),
     CONSTRAINT pay_components_protection_priority CHECK ((protection_priority >= 0)),
     CONSTRAINT pay_components_protection_shape CHECK (((protection_base = 'none'::text) OR (protection_max_percent IS NOT NULL))),
-    CONSTRAINT pay_components_system_key CHECK (((system_key IS NULL) OR (system_key = ANY (ARRAY['base_pay'::text, 'overtime'::text, 'bonus'::text, 'vacation_accrual'::text, 'vacation_payout'::text, 'cpp'::text, 'cpp2'::text, 'ei'::text, 'qpip'::text, 'income_tax'::text, 'fit'::text, 'ss'::text, 'medicare'::text, 'medicare_addl'::text, 'futa'::text, 'suta'::text, 'wcb'::text, 'eht'::text])))),
+    CONSTRAINT pay_components_system_key CHECK (((system_key IS NULL) OR (system_key = ANY (ARRAY['base_pay'::text, 'overtime'::text, 'bonus'::text, 'stat_holiday'::text, 'stat_holiday_premium'::text, 'vacation_accrual'::text, 'vacation_payout'::text, 'cpp'::text, 'cpp2'::text, 'ei'::text, 'qpip'::text, 'income_tax'::text, 'qc_income_tax'::text, 'fit'::text, 'ss'::text, 'medicare'::text, 'medicare_addl'::text, 'futa'::text, 'suta'::text, 'wcb'::text, 'eht'::text])))),
     CONSTRAINT pay_components_tax_treatment CHECK ((tax_treatment = ANY (ARRAY['none'::text, 'pension_f'::text, 'union_dues'::text, 'alimony'::text])))
 );
 
@@ -11271,21 +11247,12 @@ CREATE VIEW openbooks_query.pay_components WITH (security_barrier='true') AS
     basis_cap_hours_per_period,
     basis_cap_amount_per_period,
     basis_cap_amount_per_year
-   FROM public.pay_components;
+   FROM public.pay_components
+  WHERE (org_id = public.openbooks_query_org_id());
 
 
 --
 -- Name: pay_derived_rules; Type: TABLE; Schema: public; Owner: -
---
--- Derived earnings rules.
---
--- Construction payrolls pay real money that is DERIVED from operational facts:
--- per diem for nights stayed on a jobsite, on-call days, travel pay costed to
--- the first job of the day, site incentives on field time, monthly equipment
--- incentives. A rule is configuration: diffable, exportable, previewable before
--- it is enabled. Rules emit INPUTS (pay component earning lines) that feed the
--- statutory engine exactly like time and pay_run_adjustments do; nothing here
--- can edit a computed output, so CPP/EI/tax remain the engine's numbers.
 --
 
 CREATE TABLE public.pay_derived_rules (
@@ -11419,7 +11386,8 @@ CREATE VIEW openbooks_query.pay_run_adjustments WITH (security_barrier='true') A
     created_by,
     updated_at,
     updated_by
-   FROM public.pay_run_adjustments;
+   FROM public.pay_run_adjustments
+  WHERE (org_id = public.openbooks_query_org_id());
 
 
 --
@@ -11481,7 +11449,8 @@ CREATE VIEW openbooks_query.pay_runs WITH (security_barrier='true') AS
     created_by,
     updated_at,
     updated_by
-   FROM public.pay_runs;
+   FROM public.pay_runs
+  WHERE (org_id = public.openbooks_query_org_id());
 
 
 --
@@ -11530,7 +11499,8 @@ CREATE VIEW openbooks_query.pay_schedules WITH (security_barrier='true') AS
     updated_at,
     updated_by,
     subsidiary_id
-   FROM public.pay_schedules;
+   FROM public.pay_schedules
+  WHERE (org_id = public.openbooks_query_org_id());
 
 
 --
@@ -11583,7 +11553,8 @@ CREATE VIEW openbooks_query.pay_stub_lines WITH (security_barrier='true') AS
     created_by,
     updated_at,
     updated_by
-   FROM public.pay_stub_lines;
+   FROM public.pay_stub_lines
+  WHERE (org_id = public.openbooks_query_org_id());
 
 
 --
@@ -11652,7 +11623,8 @@ CREATE VIEW openbooks_query.pay_stubs WITH (security_barrier='true') AS
     updated_by,
     payment_method,
     cheque_number
-   FROM public.pay_stubs;
+   FROM public.pay_stubs
+  WHERE (org_id = public.openbooks_query_org_id());
 
 
 --
@@ -12082,13 +12054,6 @@ CREATE VIEW openbooks_query.payment_terms WITH (security_barrier='true') AS
 --
 -- Name: payroll_filing_accounts; Type: TABLE; Schema: public; Owner: -
 --
--- Payroll filing accounts.
---
--- An employer files under several payroll program accounts (CRA ...RP0001 /
--- ...RP0002) or several EINs and per-state SUI accounts. Remittance runs, PD7A
--- worksheets and the T4/W-2 returns group by the account, so the account is
--- modelled as a first-class filing identity that employees are assigned to.
---
 
 CREATE TABLE public.payroll_filing_accounts (
     id uuid DEFAULT public.uuid_generate_v7() NOT NULL,
@@ -12106,11 +12071,7 @@ CREATE TABLE public.payroll_filing_accounts (
     created_by uuid,
     updated_at timestamp with time zone DEFAULT now() NOT NULL,
     updated_by uuid,
-    CONSTRAINT payroll_filing_accounts_country CHECK ((country = ANY (ARRAY['CA'::text, 'US'::text]))),
-    CONSTRAINT payroll_filing_accounts_program CHECK ((program_type = ANY (ARRAY['ca_rp'::text, 'us_ein'::text, 'us_state_sui'::text]))),
-    CONSTRAINT payroll_filing_accounts_program_country CHECK ((((country = 'CA'::text) AND (program_type = 'ca_rp'::text)) OR ((country = 'US'::text) AND (program_type = ANY (ARRAY['us_ein'::text, 'us_state_sui'::text]))))),
-    CONSTRAINT payroll_filing_accounts_remitter CHECK ((remitter_type = ANY (ARRAY['regular'::text, 'quarterly'::text, 'accelerated_1'::text, 'accelerated_2'::text]))),
-    CONSTRAINT payroll_filing_accounts_state CHECK (((program_type = 'us_state_sui'::text) = (state_code IS NOT NULL)))
+    CONSTRAINT payroll_filing_accounts_remitter CHECK ((remitter_type = ANY (ARRAY['regular'::text, 'quarterly'::text, 'accelerated_1'::text, 'accelerated_2'::text])))
 );
 
 ALTER TABLE ONLY public.payroll_filing_accounts FORCE ROW LEVEL SECURITY;
@@ -12264,7 +12225,8 @@ CREATE VIEW openbooks_query.payroll_opening_balances WITH (security_barrier='tru
     created_by,
     updated_at,
     updated_by
-   FROM public.payroll_opening_balances;
+   FROM public.payroll_opening_balances
+  WHERE (org_id = public.openbooks_query_org_id());
 
 
 --
@@ -15980,7 +15942,8 @@ CREATE VIEW openbooks_query.union_agreements WITH (security_barrier='true') AS
     created_by,
     updated_at,
     updated_by
-   FROM public.union_agreements;
+   FROM public.union_agreements
+  WHERE (org_id = public.openbooks_query_org_id());
 
 
 --
@@ -16018,7 +15981,8 @@ CREATE VIEW openbooks_query.union_classifications WITH (security_barrier='true')
     created_by,
     updated_at,
     updated_by
-   FROM public.union_classifications;
+   FROM public.union_classifications
+  WHERE (org_id = public.openbooks_query_org_id());
 
 
 --
@@ -16073,7 +16037,8 @@ CREATE VIEW openbooks_query.union_fringes WITH (security_barrier='true') AS
     created_by,
     updated_at,
     updated_by
-   FROM public.union_fringes;
+   FROM public.union_fringes
+  WHERE (org_id = public.openbooks_query_org_id());
 
 
 --
@@ -17299,19 +17264,6 @@ CREATE TABLE public.auth_oidc_identities (
 
 
 --
--- Name: auth_rate_limit_buckets; Type: TABLE; Schema: public; Owner: -
---
-
-CREATE TABLE public.auth_rate_limit_buckets (
-    bucket_key text NOT NULL,
-    window_started_at timestamp with time zone DEFAULT now() NOT NULL,
-    attempt_count integer DEFAULT 0 NOT NULL,
-    updated_at timestamp with time zone DEFAULT now() NOT NULL,
-    CONSTRAINT auth_rate_limit_buckets_attempt_count_check CHECK ((attempt_count >= 0))
-);
-
-
---
 -- Name: auth_password_resets; Type: TABLE; Schema: public; Owner: -
 --
 
@@ -17324,6 +17276,19 @@ CREATE TABLE public.auth_password_resets (
     created_at timestamp with time zone DEFAULT now() NOT NULL,
     expires_at timestamp with time zone NOT NULL,
     used_at timestamp with time zone
+);
+
+
+--
+-- Name: auth_rate_limit_buckets; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.auth_rate_limit_buckets (
+    bucket_key text NOT NULL,
+    window_started_at timestamp with time zone DEFAULT now() NOT NULL,
+    attempt_count integer DEFAULT 0 NOT NULL,
+    updated_at timestamp with time zone DEFAULT now() NOT NULL,
+    CONSTRAINT auth_rate_limit_buckets_attempt_count_check CHECK ((attempt_count >= 0))
 );
 
 
@@ -20157,19 +20122,19 @@ ALTER TABLE ONLY public.auth_oidc_identities
 
 
 --
--- Name: auth_rate_limit_buckets auth_rate_limit_buckets_pkey; Type: CONSTRAINT; Schema: public; Owner: -
---
-
-ALTER TABLE ONLY public.auth_rate_limit_buckets
-    ADD CONSTRAINT auth_rate_limit_buckets_pkey PRIMARY KEY (bucket_key);
-
-
---
 -- Name: auth_password_resets auth_password_resets_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY public.auth_password_resets
     ADD CONSTRAINT auth_password_resets_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: auth_rate_limit_buckets auth_rate_limit_buckets_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.auth_rate_limit_buckets
+    ADD CONSTRAINT auth_rate_limit_buckets_pkey PRIMARY KEY (bucket_key);
 
 
 --
@@ -23432,20 +23397,6 @@ CREATE UNIQUE INDEX auth_oidc_identities_user_issuer ON public.auth_oidc_identit
 
 
 --
--- Name: auth_rate_limit_buckets_updated; Type: INDEX; Schema: public; Owner: -
---
-
-CREATE INDEX auth_rate_limit_buckets_updated ON public.auth_rate_limit_buckets USING btree (updated_at);
-
-
---
--- Name: auth_sessions_expiry; Type: INDEX; Schema: public; Owner: -
---
-
-CREATE INDEX auth_sessions_expiry ON public.auth_sessions USING btree (expires_at);
-
-
---
 -- Name: auth_password_resets_expiry; Type: INDEX; Schema: public; Owner: -
 --
 
@@ -23464,6 +23415,20 @@ CREATE UNIQUE INDEX auth_password_resets_token_hash ON public.auth_password_rese
 --
 
 CREATE INDEX auth_password_resets_user ON public.auth_password_resets USING btree (user_id, expires_at);
+
+
+--
+-- Name: auth_rate_limit_buckets_updated; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX auth_rate_limit_buckets_updated ON public.auth_rate_limit_buckets USING btree (updated_at);
+
+
+--
+-- Name: auth_sessions_expiry; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX auth_sessions_expiry ON public.auth_sessions USING btree (expires_at);
 
 
 --
@@ -24589,8 +24554,6 @@ CREATE INDEX employee_payroll_profiles_schedule ON public.employee_payroll_profi
 --
 -- Name: entitlement_ledger_opening; Type: INDEX; Schema: public; Owner: -
 --
--- One carry-in per employee per plan: the vacation migration and the
--- mid-year adoption screen can both be re-run without inflating a balance.
 
 CREATE UNIQUE INDEX entitlement_ledger_opening ON public.entitlement_ledger USING btree (org_id, plan_id, employee_party_id) WHERE (kind = 'opening'::text);
 
@@ -24612,9 +24575,6 @@ CREATE INDEX entitlement_ledger_run ON public.entitlement_ledger USING btree (or
 --
 -- Name: entitlement_ledger_run_movement; Type: INDEX; Schema: public; Owner: -
 --
--- A pay run contributes at most one movement of each kind per plan per
--- employee, so recalculating a run replaces its movements idempotently
--- instead of stacking a second accrual on top of the first.
 
 CREATE UNIQUE INDEX entitlement_ledger_run_movement ON public.entitlement_ledger USING btree (pay_run_document_id, plan_id, employee_party_id, kind) WHERE (pay_run_document_id IS NOT NULL);
 
@@ -24650,9 +24610,6 @@ CREATE INDEX entitlement_plan_limits_plan ON public.entitlement_plan_limits USIN
 --
 -- Name: entitlement_plan_limits_scope_from; Type: INDEX; Schema: public; Owner: -
 --
--- One row per plan per scope per start date. Coalesced scope keys, exactly
--- like labor_cost_rates_scope_from, so "no key" (the plan default) is one
--- unambiguous slot rather than an unconstrained family of NULL rows.
 
 CREATE UNIQUE INDEX entitlement_plan_limits_scope_from ON public.entitlement_plan_limits USING btree (plan_id, COALESCE(employee_party_id, '00000000-0000-0000-0000-000000000000'::uuid), COALESCE(lower(job_title), ''::text), COALESCE(trade_id, '00000000-0000-0000-0000-000000000000'::uuid), COALESCE(department_id, '00000000-0000-0000-0000-000000000000'::uuid), COALESCE(subsidiary_id, '00000000-0000-0000-0000-000000000000'::uuid), effective_from);
 
@@ -24709,8 +24666,6 @@ CREATE INDEX entitlement_service_tiers_plan ON public.entitlement_service_tiers 
 --
 -- Name: entitlement_service_tiers_target_months; Type: INDEX; Schema: public; Owner: -
 --
--- One rung per target per milestone: two conflicting 60-month rules on one
--- plan would make the resolved rate order-dependent.
 
 CREATE UNIQUE INDEX entitlement_service_tiers_target_months ON public.entitlement_service_tiers USING btree (org_id, COALESCE(plan_id, '00000000-0000-0000-0000-000000000000'::uuid), COALESCE(component_id, '00000000-0000-0000-0000-000000000000'::uuid), after_months);
 
@@ -26165,6 +26120,13 @@ CREATE UNIQUE INDEX pay_derived_rules_org_code ON public.pay_derived_rules USING
 
 
 --
+-- Name: pay_instructions_run; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX pay_instructions_run ON public.payment_instructions USING btree (payment_run_id);
+
+
+--
 -- Name: pay_run_adjustments_exclude_once; Type: INDEX; Schema: public; Owner: -
 --
 
@@ -26176,13 +26138,6 @@ CREATE UNIQUE INDEX pay_run_adjustments_exclude_once ON public.pay_run_adjustmen
 --
 
 CREATE INDEX pay_run_adjustments_run ON public.pay_run_adjustments USING btree (org_id, pay_run_document_id, employee_party_id);
-
-
---
--- Name: pay_instructions_run; Type: INDEX; Schema: public; Owner: -
---
-
-CREATE INDEX pay_instructions_run ON public.payment_instructions USING btree (payment_run_id);
 
 
 --
@@ -26454,8 +26409,6 @@ CREATE INDEX payroll_filing_accounts_org_country ON public.payroll_filing_accoun
 --
 -- Name: payroll_filing_accounts_org_default; Type: INDEX; Schema: public; Owner: -
 --
--- One default per country pack: the fallback assignment for employees whose
--- profile names no account is never ambiguous.
 
 CREATE UNIQUE INDEX payroll_filing_accounts_org_default ON public.payroll_filing_accounts USING btree (org_id, country) WHERE is_default;
 
@@ -32044,6 +31997,14 @@ ALTER TABLE ONLY public.employee_payroll_profiles
 
 
 --
+-- Name: employee_payroll_profiles employee_payroll_profiles_filing_account_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.employee_payroll_profiles
+    ADD CONSTRAINT employee_payroll_profiles_filing_account_id_fkey FOREIGN KEY (filing_account_id) REFERENCES public.payroll_filing_accounts(id) ON DELETE SET NULL DEFERRABLE;
+
+
+--
 -- Name: employee_payroll_profiles employee_payroll_profiles_org_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -32081,14 +32042,6 @@ ALTER TABLE ONLY public.employee_payroll_profiles
 
 ALTER TABLE ONLY public.employee_payroll_profiles
     ADD CONSTRAINT employee_payroll_profiles_updated_by_fkey FOREIGN KEY (updated_by) REFERENCES public.users(id) ON DELETE SET NULL DEFERRABLE;
-
-
---
--- Name: employee_payroll_profiles employee_payroll_profiles_filing_account_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
---
-
-ALTER TABLE ONLY public.employee_payroll_profiles
-    ADD CONSTRAINT employee_payroll_profiles_filing_account_id_fkey FOREIGN KEY (filing_account_id) REFERENCES public.payroll_filing_accounts(id) ON DELETE SET NULL DEFERRABLE;
 
 
 --
@@ -32174,8 +32127,6 @@ ALTER TABLE ONLY public.entitlement_ledger
 --
 -- Name: entitlement_ledger entitlement_ledger_plan_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
--- RESTRICT, not CASCADE: a plan whose ledger carries balances is archived
--- (is_active = false), never deleted out from under its history.
 
 ALTER TABLE ONLY public.entitlement_ledger
     ADD CONSTRAINT entitlement_ledger_plan_id_fkey FOREIGN KEY (plan_id) REFERENCES public.entitlement_plans(id) ON DELETE RESTRICT DEFERRABLE;
@@ -34296,7 +34247,6 @@ ALTER TABLE ONLY public.pay_components
 --
 -- Name: pay_derived_rules pay_derived_rules_component_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
--- RESTRICT, not SET NULL: a rule with no component cannot say what it pays.
 
 ALTER TABLE ONLY public.pay_derived_rules
     ADD CONSTRAINT pay_derived_rules_component_id_fkey FOREIGN KEY (component_id) REFERENCES public.pay_components(id) ON DELETE RESTRICT DEFERRABLE;
@@ -34423,14 +34373,6 @@ ALTER TABLE ONLY public.pay_run_adjustments
 
 
 --
--- Name: pay_runs pay_runs_paid_entry_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
---
-
-ALTER TABLE ONLY public.pay_runs
-    ADD CONSTRAINT pay_runs_paid_entry_id_fkey FOREIGN KEY (paid_entry_id) REFERENCES public.journal_entries(id) ON DELETE SET NULL DEFERRABLE;
-
-
---
 -- Name: pay_run_bank_files pay_run_bank_files_file_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -34500,6 +34442,14 @@ ALTER TABLE ONLY public.pay_runs
 
 ALTER TABLE ONLY public.pay_runs
     ADD CONSTRAINT pay_runs_org_id_fkey FOREIGN KEY (org_id) REFERENCES public.orgs(id) ON DELETE CASCADE DEFERRABLE;
+
+
+--
+-- Name: pay_runs pay_runs_paid_entry_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.pay_runs
+    ADD CONSTRAINT pay_runs_paid_entry_id_fkey FOREIGN KEY (paid_entry_id) REFERENCES public.journal_entries(id) ON DELETE SET NULL DEFERRABLE;
 
 
 --

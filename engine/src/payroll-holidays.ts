@@ -2,8 +2,10 @@ import { sql } from "drizzle-orm";
 import { db } from "./db.ts";
 import { add, cmp, fromUnits, mul, mulDecimal, mulPercent, roundDiv, roundMoney, sum, toUnits } from "./money.ts";
 import {
+  employmentJurisdictionsOf,
   jurisdictionKey,
   payrollJurisdiction,
+  payrollJurisdictionDeclared,
   type PayrollHoliday,
   type PayrollHolidayObservance,
   type PayrollHolidayPayRule,
@@ -958,6 +960,94 @@ async function hoursOn(
   return roundMoney(rows.rows[0]?.hours ?? "0", 2);
 }
 
+// ---------------------------------------------------------------------------
+// The undeclared-jurisdiction gate
+// ---------------------------------------------------------------------------
+
+/** A statutory holiday that stops an undeclared jurisdiction's calculation. */
+export interface UndeclaredJurisdictionHolidayConflict {
+  jurisdiction: string;
+  holidayName: string;
+  date: string;
+  /** The one message: the readiness blocker's detail and the calculate
+   *  refusal are the SAME text, built here and nowhere else. */
+  message: string;
+}
+
+/**
+ * When statutory holiday pay is ON and an employee's jurisdiction is one no
+ * pack has transcribed (CA-MB, US-MA…), the run may not guess. But it also may
+ * not refuse a period with no holiday in it — an undeclared jurisdiction
+ * calculates exactly as it did before the feature existed until a holiday
+ * actually lands in the period.
+ *
+ * The undeclared jurisdiction has no declared calendar either, so "is a
+ * holiday in the period" is probed against the MANDATORY days of the declared
+ * EMPLOYMENT calendars in the same country (never a tax administration's
+ * office calendar). A date must be observed by at least TWO of them — or all
+ * of them, when the pack declares fewer — before it trips the gate:
+ * provincial calendars overlap heavily on the days that matter (Manitoba's
+ * Louis Riel Day is the third Monday of February, the same day three declared
+ * provinces call Family Day; its Terry Fox Day shares the first Monday of
+ * August with BC Day and Saskatchewan Day), while a genuinely one-province
+ * day (Quebec's Saint-Jean-Baptiste) says nothing about anywhere else and
+ * must not block it.
+ *
+ * When the gate trips, the operator either declares the jurisdiction or turns
+ * the feature off — both loud, neither a silent zero on what is probably a
+ * paid holiday.
+ *
+ * Pure: pack declarations in, conflict out. Returns null when the period is
+ * clear — or when the jurisdiction IS declared, which is not this gate's case.
+ */
+export function undeclaredJurisdictionHolidayConflict(input: {
+  country: string;
+  jurisdiction: string;
+  from: string;
+  to: string;
+}): UndeclaredJurisdictionHolidayConflict | null {
+  const { country, jurisdiction, from, to } = input;
+  if (payrollJurisdictionDeclared(jurisdiction)) return null;
+
+  const siblings = employmentJurisdictionsOf(country);
+  const threshold = Math.min(2, siblings.length);
+  const byDate = new Map<string, { observers: number; names: Map<string, number> }>();
+  for (const declared of siblings) {
+    for (const holiday of resolveObservedHolidays({ jurisdiction: declared.key, from, to })) {
+      // Optional days are already absent without an election, and an election
+      // can only exist for a DECLARED jurisdiction — so what remains is the
+      // sibling calendar's statutory minimum.
+      if (holiday.elected) continue;
+      const entry = byDate.get(holiday.date) ?? { observers: 0, names: new Map() };
+      entry.observers += 1;
+      entry.names.set(holiday.name, (entry.names.get(holiday.name) ?? 0) + 1);
+      byDate.set(holiday.date, entry);
+    }
+  }
+
+  let first: { name: string; date: string } | null = null;
+  for (const [date, entry] of byDate) {
+    if (entry.observers < threshold) continue;
+    if (!first || date < first.date) {
+      // The day's most common name across the calendars that observe it.
+      const name = [...entry.names.entries()]
+        .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))[0]![0];
+      first = { name, date };
+    }
+  }
+  if (!first) return null;
+  return {
+    jurisdiction,
+    holidayName: first.name,
+    date: first.date,
+    message:
+      `statutory holiday pay is enabled and ${first.name} (${first.date}) falls in this pay `
+      + `period, but no payroll pack declares a statutory holiday calendar or pay formula for `
+      + `${jurisdiction} — transcribe the jurisdiction in engine/src/payroll/packs.ts, or turn `
+      + "statutory holiday pay off in Payroll setup",
+  };
+}
+
 /** The jurisdiction key an employee's payroll profile resolves to. Re-exported
  *  so callers need only this module. */
-export { jurisdictionKey };
+export { jurisdictionKey, payrollJurisdictionDeclared };

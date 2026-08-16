@@ -48,6 +48,21 @@ const MUST_BE_CURATED = [
   "employee_roles",
 ];
 
+/**
+ * Relations the catalog exposes without a tenant filter on purpose: they hold
+ * no `org_id` and are reviewed as global reference data. Every other governed
+ * view must carry `where org_id = public.openbooks_query_org_id()`.
+ */
+const GLOBAL_RELATIONS = ["currencies"];
+
+/**
+ * Payroll views that the baseline once emitted WITHOUT the tenant filter while
+ * the refresh function built them with it. The file has since been rebaselined
+ * from a dump of the database it builds, so the list is empty and must stay
+ * that way — see "the shipped catalog carries the tenant filter" below.
+ */
+const KNOWN_UNFILTERED_STALE_VIEWS: string[] = [];
+
 function safeRelations(): string[] {
   const start = BASELINE.indexOf("safe_relations constant text[] := array[");
   assert.notEqual(start, -1, "safe_relations array not found in the baseline");
@@ -77,6 +92,23 @@ function shippedViews(): Map<string, Set<string> | "star"> {
     );
   }
   return views;
+}
+
+/** Every `CREATE VIEW openbooks_query.x` and its full statement text. */
+function shippedViewBodies(): Map<string, string> {
+  const bodies = new Map<string, string>();
+  const re = /CREATE VIEW openbooks_query\.(\w+) WITH \(security_barrier='true'\) AS\n([\s\S]*?);\n/g;
+  for (const match of BASELINE.matchAll(re)) bodies.set(match[1]!, match[2]!);
+  return bodies;
+}
+
+/** The body of `openbooks_refresh_query_catalog()`, the real source of truth. */
+function refreshFunctionBody(): string {
+  const body = BASELINE.match(
+    /CREATE FUNCTION public\.openbooks_refresh_query_catalog\(\)[\s\S]*?\n\$_\$;/,
+  )?.[0];
+  assert.ok(body, "openbooks_refresh_query_catalog() not found in the baseline");
+  return body;
 }
 
 function baseTables(): Map<string, string[]> {
@@ -179,4 +211,81 @@ test("every curated relation is granted to openbooks_read", () => {
       `${relation} has a curated view but is missing from the grant loop`,
     );
   }
+});
+
+test("the shipped catalog carries the tenant filter", () => {
+  // Twelve payroll views used to ship with no `where org_id = ...` while the
+  // refresh function built them with it. That was survivable only because the
+  // baseline's last statement drops the schema and rebuilds — but the file
+  // reaches `GRANT SELECT ... TO openbooks_read` on the unfiltered forms
+  // first, so the whole safety argument rested on statement order. The file
+  // has been rebaselined; this keeps it that way.
+  const unfiltered = [...shippedViewBodies()]
+    .filter(([, body]) => !body.includes("org_id = public.openbooks_query_org_id()"))
+    .map(([relation]) => relation)
+    .sort();
+
+  assert.deepEqual(
+    unfiltered,
+    [...GLOBAL_RELATIONS, ...KNOWN_UNFILTERED_STALE_VIEWS].sort(),
+    "a governed view ships without `where org_id = openbooks_query_org_id()`. "
+      + "Add the filter and regenerate the baseline — KNOWN_UNFILTERED_STALE_VIEWS "
+      + "is spent and must not be reopened",
+  );
+});
+
+test("the function tenant-filters every relation it rebuilds", () => {
+  // The shipped DDL above is transient: the function drops the schema and
+  // rebuilds it, so the function is what a live database actually gets. Both
+  // routes must filter, or the catalog leaks across tenants.
+  const tables = baseTables();
+  const functionBody = refreshFunctionBody();
+  const unprotected: string[] = [];
+
+  for (const relation of safeRelations()) {
+    if (GLOBAL_RELATIONS.includes(relation)) continue;
+    // The generic path filters whenever the base table has org_id, and raises
+    // for a relation that has neither org_id nor global review.
+    if (!(tables.get(relation) ?? []).includes("org_id")) unprotected.push(relation);
+  }
+  for (const relation of MUST_BE_CURATED) {
+    const curated = new RegExp(
+      `create view openbooks_query\\.${relation} with[\\s\\S]*?org_id = public\\.openbooks_query_org_id\\(\\)`,
+    ).test(functionBody);
+    if (!curated) unprotected.push(`${relation} (curated)`);
+  }
+
+  assert.deepEqual(
+    unprotected,
+    [],
+    `the refresh function does not tenant-filter these: ${unprotected.join(", ")}`,
+  );
+});
+
+test("the function's global relations are exactly the reviewed ones", () => {
+  const declared = refreshFunctionBody().match(
+    /global_relations constant text\[\] := array\[([\s\S]*?)\];/,
+  )?.[1];
+  assert.ok(declared, "global_relations array not found in the refresh function");
+  assert.deepEqual(
+    [...declared.matchAll(/'(\w+)'/g)].map((m) => m[1]!).sort(),
+    [...GLOBAL_RELATIONS].sort(),
+    "a relation was added to the unfiltered global path without review",
+  );
+});
+
+test("the refresh call is the baseline's final statement", () => {
+  // Load-bearing. The baseline grants SELECT on every governed view to
+  // openbooks_read before this call; the rebuild is what re-derives them from
+  // the reviewed function. Any statement appended after it would ship whatever
+  // pg_dump happened to emit.
+  const statements = BASELINE.replace(/^\s*--.*$/gm, "")
+    .split(";")
+    .map((statement) => statement.trim())
+    .filter(Boolean);
+  assert.equal(
+    statements.at(-1),
+    "SELECT public.openbooks_refresh_query_catalog()",
+    "the baseline must end by rebuilding the governed query catalog",
+  );
 });
