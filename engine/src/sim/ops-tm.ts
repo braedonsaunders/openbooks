@@ -18,7 +18,13 @@ import type { SimOrg } from "./world.ts";
 /** Create a field-ticket document (a non-posting crew record) for a job/day. */
 export async function createFieldTicket(world: SimOrg, projectId: string, date: string): Promise<{ fieldTicketId: string; number: string }> {
   const id = randomUUID();
-  const number = `FT-${date.replace(/-/g, "")}-${id.slice(0, 4)}`;
+  // The suffix must be unique per (org, kind, number) — documents_org_kind_number.
+  // Four hex characters is 16 bits, so a day with a few hundred tickets hits a
+  // birthday collision better than half the time, and randomUUID() is not
+  // seeded, so the failure is nondeterministic: the trust pipeline fails on a
+  // run that changed nothing. Take enough of the id that the number inherits
+  // the id's uniqueness instead of gambling on it.
+  const number = `FT-${date.replace(/-/g, "")}-${id.replace(/-/g, "").slice(0, 12)}`;
   await db.execute(sql`
     insert into documents
       (id, org_id, kind, status, document_number, document_date, currency, subtotal, tax_total, total, created_by, custom)
