@@ -348,6 +348,55 @@ Tax packs are configurable calculation and preparation workpapers. They are not
 a promise of direct electronic filing, government approval, or complete local
 statutory compliance in every jurisdiction.
 
+### Payroll
+
+Off by default behind the optional `payroll` feature.
+
+- Versioned statutory engines with penny-exact conformance corpora: CRA T4127
+  for Canada (income tax, CPP, CPP2, EI, QPIP, claim codes, bonus method) and
+  IRS Publication 15-T for the United States (federal withholding, Social
+  Security, Medicare and Additional Medicare, FUTA, SUTA)
+- Statutory amounts are engine-computed and never user-authored formulas; each
+  country pack declares whether a levy is assessed on earnings or on taxable
+  income, so a recalculation cannot silently restate one that should not move
+- A five-step pay run — scope, readiness, review, GL preview, post — with
+  regular, off-cycle bonus, and final-pay run types, a test calculation that
+  computes and rolls back, a staleness gate that refuses to commit figures an
+  input has moved past, and a per-employee diff against the previous stub
+- Entitlement plans on one append-only ledger: banked time, vacation banks, and
+  benefit recoup, with effective-dated caps scoped by employee, job title,
+  trade, department or entity, service-based tiers, and a GL liability account
+  per plan so a bank is on the balance sheet
+- Declarative derived-earnings rules that turn operational facts into
+  job-costed pay — per diem, on-call, travel costed to the first job of the
+  day, site incentives with title inclusion and exclusion — each with a preview
+  of who it pays before it is enabled
+- Deduction protection: disposable-earnings caps with a configurable base and
+  priority ordering across competing orders, reporting any shortfall rather
+  than discarding it, plus per-period and annual basis caps in hours or dollars
+- Union agreements, classifications, per-hour and percent fringes, and dues
+- Employer levies: workers' compensation and Ontario EHT, job-costed
+- Pay rails per employee: direct deposit or cheque, with cheque printing and
+  numbering, and a funding view that splits the payday between the two
+- Multiple statutory filing accounts per tenant (several CRA payroll program
+  accounts, or several EINs and state unemployment accounts)
+- Year-end and separation artifacts: T4 and T4 Summary with CRA XML, ROE data
+  with ROE Web XML, W-2 and Form 941 extracts
+- Remittance runs that raise vendor bills for withheld and accrued amounts
+- Paystub PDFs with optional password protection, per-employee print or email
+  delivery, and payroll register, payroll journal, entitlement balance, and
+  service-milestone reports through the standard report engine
+
+Payroll is Canada-first. Specific limits worth knowing before you rely on it:
+US state income-tax withholding covers only the nine states that levy none, and
+any other state is refused loudly rather than approximated; direct-deposit bank
+file export (CPA-005 and NACHA) is written but deliberately disabled pending an
+immutable-artifact and download-audit lifecycle, so payment files are not
+produced yet; remittance due dates are computed only for regular remitters and
+left unset for accelerated and quarterly schedules rather than guessed; and
+mid-year opening balances have a data model and engine support but no interface
+yet, so adopting mid-year currently needs a direct load.
+
 ### Reporting, automation, and extension
 
 - Trial balance, profit and loss, balance sheet, cash flow, general ledger,
@@ -405,11 +454,16 @@ The interface includes locale catalogs for:
 
 OpenBooks does not currently include a complete:
 
-- US payroll withholding engine (Canadian payroll — CRA T4127 statutory
-  calculations, pay runs, union fringes, and remittance liabilities — ships
-  behind the optional payroll feature; US federal/state withholding does not
-  yet);
-- human-capital-management suite;
+- US state income-tax withholding (federal withholding, FICA, FUTA and SUTA
+  ship in the payroll feature alongside the Canadian CRA T4127 engine, but
+  state withholding covers only the nine states that levy none — every other
+  state is refused rather than estimated);
+- direct-deposit bank file generation (the CPA-005 and NACHA writers exist but
+  are switched off until payment artifacts are immutable and their downloads
+  audited);
+- human-capital-management suite — payroll pays people, but there is no
+  applicant tracking, onboarding, performance, benefits-administration or
+  employee self-service;
 - full manufacturing/MRP and production-order suite beyond the light
   bill-of-materials assembly-build workflow;
 - point-of-sale or e-commerce storefront;
