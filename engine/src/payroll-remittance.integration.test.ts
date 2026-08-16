@@ -48,7 +48,7 @@ test(
             craRemittancePartyId: org.vendorId,
           },
         })}::jsonb where id = ${org.orgId}`);
-      await seedPayrollComponents(org.orgId, actorId);
+      await seedPayrollComponents(org.orgId, actorId, "CA");
 
       const employeeId = randomUUID();
       await db.execute(sql`

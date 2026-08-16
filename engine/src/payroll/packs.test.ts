@@ -31,12 +31,15 @@ test("every declared statutory component resolves to its class", () => {
   }
 });
 
-test("income tax and FIT are the only income-assessed lines in either pack", () => {
+test("the income taxes are the only income-assessed lines in either pack", () => {
+  // Federal income tax (T4127 factor T), Québec income tax (TP-1015 variable
+  // A) and US FIT are all computed from income net of pre-tax deductions, so
+  // all three — and nothing else — are re-derived by the protection fixpoint.
   const incomeAssessed = Object.keys(PAYROLL_COUNTRY_PACKS).flatMap((country) =>
     packStatutoryComponents(country)
       .filter((component) => component.assessedOn === "taxable_income")
       .map((component) => `${country}/${component.code}`));
-  assert.deepEqual(incomeAssessed, ["CA/TAX", "US/FIT"]);
+  assert.deepEqual(incomeAssessed, ["CA/TAX", "CA/QCTAX", "US/FIT"]);
 });
 
 test("employee CPP, CPP2, EI and QPIP are earnings-assessed, like the employer share", () => {

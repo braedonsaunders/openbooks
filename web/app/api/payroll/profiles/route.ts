@@ -3,7 +3,7 @@ import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/db.ts'
 import { sealSecret } from '@openbooks/engine/src/secrets.ts'
 import { listFilingAccounts } from '@openbooks/engine/src/payroll-filing.ts'
-import { US_STATES } from '@openbooks/engine/src/payroll/us/rates.ts'
+import { PAYROLL_COUNTRY_PACKS, payrollPack } from '@openbooks/engine/src/payroll/packs.ts'
 import { guardFeaturePermission } from '../../../../lib/feature-gates'
 import { canonicalDecimal, compareDecimal } from '../../../../lib/exact-decimal'
 import { isUuid } from '../../../../lib/list-params'
@@ -16,10 +16,6 @@ export const dynamic = 'force-dynamic'
  * employee. Claim amounts and exemptions are confidential; the whole surface
  * is gated on payroll.manage.
  */
-
-const PROVINCES = new Set([
-  'AB', 'BC', 'MB', 'NB', 'NL', 'NS', 'NT', 'NU', 'ON', 'PE', 'QC', 'SK', 'YT', 'ZZ',
-])
 
 const FILING_STATUSES = new Set(['single', 'married_joint', 'head_household'])
 
@@ -60,6 +56,32 @@ export async function GET(req: Request) {
   if (employee) {
     // Drawer-tab variant: one employee's profile (or null) + the schedules.
     if (!isUuid(employee)) return NextResponse.json({ error: 'invalid employee' }, { status: 422 })
+    // The default country for a NEW profile: the employee's own legal entity,
+    // falling back to the root subsidiary, falling back to the org's sole
+    // installed pack. Never a literal — the employer of record decides which
+    // statutory engine runs, so it decides the default too. Null when nothing
+    // answers; the operator then chooses explicitly.
+    const defaultCountryRes = (await db.execute(sql`
+      select coalesce(emp_sub.country, root_sub.country) as country
+        from parties p
+        left join subsidiaries emp_sub
+          on emp_sub.id = p.subsidiary_id and emp_sub.org_id = p.org_id
+        left join subsidiaries root_sub
+          on root_sub.org_id = p.org_id and root_sub.parent_id is null and root_sub.is_active
+       where p.org_id = ${gate.user.orgId} and p.id = ${employee}
+       order by root_sub.created_at limit 1
+    `)) as unknown as { rows: { country: string | null }[] }
+    const subsidiaryCountry = defaultCountryRes.rows[0]?.country ?? null
+    const installedRes = (await db.execute(sql`
+      select coalesce(settings#>'{payroll,countries}', '[]'::jsonb) as countries
+        from orgs where id = ${gate.user.orgId}
+    `)) as unknown as { rows: { countries: unknown }[] }
+    const installed = Array.isArray(installedRes.rows[0]?.countries)
+      ? (installedRes.rows[0]!.countries as unknown[]).map(String).filter((c) => c in PAYROLL_COUNTRY_PACKS)
+      : []
+    const defaultCountry = subsidiaryCountry && subsidiaryCountry in PAYROLL_COUNTRY_PACKS
+      ? subsidiaryCountry
+      : installed.length === 1 ? installed[0]! : null
     const [profileRes, schedulesRes] = (await Promise.all([
       db.execute(sql`
         select prof.id, prof.employee_party_id, p.display_name as employee_name,
@@ -86,6 +108,7 @@ export async function GET(req: Request) {
       profile: profileRes.rows[0] ?? null,
       schedules: schedulesRes.rows,
       filingAccounts: await listFilingAccounts(gate.user.orgId),
+      defaultCountry,
     })
   }
   const profiles = (await db.execute(sql`
@@ -121,14 +144,22 @@ export async function POST(req: Request) {
 
   if (!isUuid(body.employeePartyId)) return NextResponse.json({ error: 'employeePartyId required' }, { status: 422 })
   if (!isUuid(body.payScheduleId)) return NextResponse.json({ error: 'payScheduleId required' }, { status: 422 })
-  const country = body.country === 'US' ? 'US' : 'CA'
+  // The pack registry is the only country validator. The old
+  // `body.country === 'US' ? 'US' : 'CA'` cast turned every unrecognised
+  // value — '' from a blank default included — into a Canadian profile.
+  const country = String(body.country ?? '')
+  if (!(country in PAYROLL_COUNTRY_PACKS)) {
+    return NextResponse.json({ error: 'unknown payroll country pack' }, { status: 422 })
+  }
+  // The pack declares its own KNOWN regions (ZZ included for CA). A known but
+  // unimplemented region is saveable — the run refuses it with the pack's own
+  // reason — but a region that does not exist is a typo, refused here.
   const province = String(body.province ?? '')
-  if (country === 'US') {
-    if (!(US_STATES as readonly string[]).includes(province)) {
-      return NextResponse.json({ error: 'invalid state' }, { status: 422 })
-    }
-  } else if (!PROVINCES.has(province)) {
-    return NextResponse.json({ error: 'invalid province' }, { status: 422 })
+  if (!payrollPack(country).regions.known.includes(province)) {
+    return NextResponse.json(
+      { error: `invalid ${payrollPack(country).regions.label}` },
+      { status: 422 },
+    )
   }
   const filingStatus = body.filingStatus == null || body.filingStatus === ''
     ? null : String(body.filingStatus)
@@ -168,6 +199,15 @@ export async function POST(req: Request) {
   const provincialClaimCode = claimCode(body.provincialClaimCode)
   if (federalClaimCode === 'invalid' || provincialClaimCode === 'invalid') {
     return NextResponse.json({ error: 'claim codes must be 0–10' }, { status: 422 })
+  }
+  // TP-1015.3-V carries an AMOUNT (line 10) — Québec has no claim codes, so a
+  // code on a QC profile is a data-entry error the engine would have to guess
+  // at. Enter the TP-1015.3-V line 10 amount instead (provincialClaimAmount).
+  if (country === 'CA' && province === 'QC' && provincialClaimCode !== null) {
+    return NextResponse.json(
+      { error: 'Québec uses a TP-1015.3-V claim AMOUNT, not a claim code — enter the amount and leave the provincial claim code empty' },
+      { status: 422 },
+    )
   }
 
   const money: Record<(typeof MONEY_KEYS)[number], string | null> = {

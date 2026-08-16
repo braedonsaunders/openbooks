@@ -16,7 +16,8 @@ import { ListFilterSelect } from '../../../../../components/list-filter-select'
 import { SearchInput } from '../../../../../components/search-input'
 import { Pagination } from '../../../../../components/pagination'
 import { mergeHref, parseListParams, pickString } from '../../../../../lib/list-params'
-import { setupEntityForFeatureState, toSnake, type SetupColumn, type SetupEntity } from '../../../../../lib/setup/registry'
+import { setupEntityForFeatureState, setupOptionLabel, toSnake, type SetupColumn, type SetupEntity } from '../../../../../lib/setup/registry'
+import { resolveDynamicSetupOptions } from '../../../../../lib/setup/dynamic-options'
 import { loadRefOptions, orderExpr } from '../../../../../lib/setup/ref-options'
 import { subsidiaryFeatureEnabled } from '../../../../../lib/features'
 import { NewSetupButton, SetupDrawer } from './SetupDrawer'
@@ -48,7 +49,7 @@ export function renderCell(
     case 'badge':
       return (
         <Badge variant={raw === 'builtin' ? 'secondary' : 'default'}>
-          {option ? t(option.labelKey) : raw == null || raw === '' ? '—' : String(raw)}
+          {option ? setupOptionLabel(option, t) : raw == null || raw === '' ? '—' : String(raw)}
         </Badge>
       )
     case 'boolean':
@@ -90,9 +91,9 @@ export async function SetupEntitySection({
   basePath: string
   canManage: boolean
 }) {
-  const entity = setupEntityForFeatureState(baseEntity, {
+  const entity = resolveDynamicSetupOptions(setupEntityForFeatureState(baseEntity, {
     multiSubsidiary: await subsidiaryFeatureEnabled(orgId),
-  })
+  }))
   const t = await getTranslations('admin.setup')
   const rowParam = typeof sp.row === 'string' ? sp.row : undefined
   const showInactive = pickString(sp.showInactive) === 'true'
@@ -185,7 +186,7 @@ export async function SetupEntitySection({
             paramKey={`f_${filter.key}`}
             label={t(`fields.${filter.key}`)}
             allLabel={t('filterAll')}
-            options={filter.options.map((option) => ({ value: option.value, label: t(option.labelKey) }))}
+            options={filter.options.map((option) => ({ value: option.value, label: setupOptionLabel(option, t) }))}
           />
         ))}
         {entity.hasActive ? <ShowInactivesToggle basePath={basePath} currentParams={sp} /> : null}

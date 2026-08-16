@@ -40,7 +40,10 @@ export interface ProfileRow {
   employee_name: string
   pay_schedule_id: string
   schedule_name: string | null
-  country: 'CA' | 'US'
+  /** '' only on a blank NEW profile whose default could not be derived from
+   *  the employee's subsidiary — the operator must choose; the API refuses
+   *  a save with no country rather than assuming one. */
+  country: 'CA' | 'US' | ''
   province: string
   pay_basis: 'hourly' | 'salary'
   federal_claim_code: number | null
@@ -96,7 +99,10 @@ export function ProfileEditor(props: {
   const p = props.profile
   const [busy, setBusy] = useState(false)
   const [payScheduleId, setPayScheduleId] = useState(p.pay_schedule_id)
-  const [country, setCountry] = useState<'CA' | 'US'>(p.country === 'US' ? 'US' : 'CA')
+  // No coercion: an unset country stays unset until the operator chooses.
+  // Defaulting it to a pack here is exactly the silent-Canada fallthrough the
+  // engine refuses (engine/src/payroll/packs.ts).
+  const [country, setCountry] = useState<ProfileRow['country']>(p.country)
   const [province, setProvince] = useState(p.province)
   const [payBasis, setPayBasis] = useState<'hourly' | 'salary'>(p.pay_basis)
   const [federalClaimCode, setFederalClaimCode] = useState(p.federal_claim_code == null ? '' : String(p.federal_claim_code))
@@ -222,13 +228,15 @@ export function ProfileEditor(props: {
               id="pp-country"
               value={country}
               onChange={(e) => {
-                const next = e.target.value === 'US' ? 'US' : 'CA'
-                setCountry(next)
-                setProvince(next === 'US' ? 'TX' : 'ON')
+                setCountry(e.target.value as ProfileRow['country'])
+                // The jurisdiction inside the country is the operator's
+                // choice, never a defaulted capital-of-payroll literal.
+                setProvince('')
                 // Filing accounts belong to one country pack.
                 setFilingAccountId('')
               }}
             >
+              {country === '' && <option value="" disabled>—</option>}
               <option value="CA">{t('country.CA')}</option>
               <option value="US">{t('country.US')}</option>
             </Select>
@@ -238,6 +246,7 @@ export function ProfileEditor(props: {
               {country === 'US' ? t('fields.state') : t('fields.province')}
             </Label>
             <Select id="pp-province" value={province} onChange={(e) => setProvince(e.target.value)}>
+              {province === '' && <option value="" disabled>—</option>}
               {(country === 'US' ? US_STATES : PROVINCES).map((code) => (
                 <option key={code} value={code}>
                   {code}

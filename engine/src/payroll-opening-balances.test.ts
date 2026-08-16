@@ -132,7 +132,7 @@ async function seedAdoption(options: { hiredOn?: string } = {}): Promise<Adoptio
         wagesTo: "expense",
       },
     })}::jsonb where id = ${org.orgId}`);
-  await seedPayrollComponents(org.orgId, actorId);
+  await seedPayrollComponents(org.orgId, actorId, "CA");
 
   const scheduleId = randomUUID();
   await db.execute(sql`

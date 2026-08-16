@@ -1016,6 +1016,13 @@ export interface EftSettings {
   originatorLongName: string;
   /** 5-digit destination data centre code of the processing institution. */
   dataCentre: string;
+  /**
+   * 5-digit data centre of the ORIGINATING direct clearer (the org's own
+   * institution), assigned by that institution — not the same number as
+   * `dataCentre`, which identifies the destination. Both are components of the
+   * item trace number (DE 12) and neither may be zero-filled.
+   */
+  originatingDataCentre: string;
   /** Payer (settlement) bank: 3-digit institution, 5-digit transit, account. */
   institution: string;
   transit: string;
@@ -1029,6 +1036,7 @@ const EFT_REQUIRED: (keyof EftSettings)[] = [
   "originatorShortName",
   "originatorLongName",
   "dataCentre",
+  "originatingDataCentre",
   "institution",
   "transit",
   "account",
@@ -1058,6 +1066,9 @@ export async function loadEftSettings(orgId: string, runId?: string): Promise<Ef
   if (missing.length > 0) return { ok: false, missing };
   const s = eft as EftSettings;
   if (!/^\d{5}$/.test(s.dataCentre)) return { ok: false, missing: ["dataCentre (must be 5 digits)"] };
+  if (!/^\d{5}$/.test(s.originatingDataCentre) || Number(s.originatingDataCentre) === 0) {
+    return { ok: false, missing: ["originatingDataCentre (must be 5 digits and greater than zero)"] };
+  }
   if (!/^\d{3}$/.test(s.institution)) return { ok: false, missing: ["institution (must be 3 digits)"] };
   if (!/^\d{5}$/.test(s.transit)) return { ok: false, missing: ["transit (must be 5 digits)"] };
   if (!/^\d{1,12}$/.test(s.account)) return { ok: false, missing: ["account (1–12 digits)"] };
@@ -1904,6 +1915,45 @@ function julian(d: Date): string {
   return `0${String(year % 100).padStart(2, "0")}${String(day).padStart(3, "0")}`;
 }
 
+/**
+ * DE 12, Item Trace Number (22 characters), per Payments Canada Standard 005
+ * (2024 ed., Appendix 1 — Data Element Dictionary). It is a structured field,
+ * not filler:
+ *
+ *   4  destination data centre, trailing digit dropped — a value that does not
+ *      match the receiving data centre REJECTS the transaction
+ *   5  the originating direct clearer's data centre, > 0
+ *   4  the file creation number, > 0
+ *   9  an item sequence number within the file, > 0
+ *
+ * Zero-filling any component is a rejected item, so every component is proved
+ * here rather than defaulted.
+ */
+function itemTraceNumber(opts: {
+  destinationDataCentre: string;
+  originatingDataCentre: string;
+  fileCreationNumber: number;
+  itemSequence: number;
+}): string {
+  if (!/^\d{5}$/.test(opts.destinationDataCentre)) {
+    throw new PaymentError(`destination data centre "${opts.destinationDataCentre}" must be 5 digits`);
+  }
+  if (!/^\d{5}$/.test(opts.originatingDataCentre) || Number(opts.originatingDataCentre) === 0) {
+    throw new PaymentError(
+      `originating direct clearer's data centre "${opts.originatingDataCentre}" must be 5 digits and greater than zero`,
+    );
+  }
+  if (opts.fileCreationNumber < 1) throw new PaymentError("item trace number requires a file creation number above zero");
+  if (opts.itemSequence < 1) throw new PaymentError("item trace number requires an item sequence above zero");
+  const trace =
+    opts.destinationDataCentre.slice(0, 4) +
+    opts.originatingDataCentre +
+    num(opts.fileCreationNumber, 4) +
+    num(opts.itemSequence, 9);
+  if (trace.length !== 22) throw new PaymentError("internal error: CPA-005 item trace number is not 22 characters");
+  return trace;
+}
+
 /** 9-digit institutional ID: 0 + institution(3) + transit(5). */
 function institutionalId(institution: string, transit: string): string {
   if (!/^\d{3}$/.test(institution)) throw new PaymentError(`institution "${institution}" must be 3 digits`);
@@ -1949,7 +1999,7 @@ export function buildCpa005File(run: Cpa005Run): string {
   const returnRouting = institutionalId(s.institution, s.transit);
   const returnAccount = alpha(s.account, 12);
 
-  const segments = run.payments.map((p) => {
+  const segments = run.payments.map((p, i) => {
     if (p.amountCents <= 0n) throw new PaymentError("payment amounts must be positive");
     return (
       txnType + // transaction type (3)
@@ -1957,7 +2007,13 @@ export function buildCpa005File(run: Cpa005Run): string {
       julian(p.fundsDate) + // date funds to be available (6)
       institutionalId(p.institution, p.transit) + // payee institutional id (9)
       alpha(p.accountNumber, 12) + // payee account number (12)
-      "0".repeat(22) + // item trace number (22)
+      itemTraceNumber({
+        // item trace number (22)
+        destinationDataCentre: s.dataCentre,
+        originatingDataCentre: s.originatingDataCentre,
+        fileCreationNumber: run.fileCreationNumber,
+        itemSequence: i + 1,
+      }) +
       "0".repeat(3) + // stored transaction type (3)
       alpha(s.originatorShortName, 15) + // originator short name (15)
       alpha(p.payeeName, 30) + // payee name (30)

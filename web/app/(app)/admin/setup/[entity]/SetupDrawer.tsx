@@ -17,7 +17,7 @@ import {
   cn,
   type SelectOption,
 } from '@openbooks/ui'
-import { setupFieldVisible, toSnake, type SetupEntity, type SetupField } from '../../../../../lib/setup/registry'
+import { setupFieldVisible, setupOptionLabel, toSnake, type SetupEntity, type SetupField } from '../../../../../lib/setup/registry'
 import { countryOptions } from '../../../../../lib/countries'
 
 type RefOption = { value: string; label: string }
@@ -487,7 +487,7 @@ function FieldControl({
           {!field.required ? <option value="">—</option> : null}
           {field.options?.map((o) => (
             <option key={o.value} value={o.value}>
-              {t(o.labelKey)}
+              {setupOptionLabel(o, t)}
             </option>
           ))}
         </Select>

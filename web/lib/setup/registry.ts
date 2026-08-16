@@ -51,12 +51,45 @@ export type SetupColumnKind =
  */
 export type SetupRefSource = 'accounts' | (string & {})
 
+/**
+ * One select/badge/filter option. `labelKey` (under `admin.setup.options.*`)
+ * for translated enum labels; `label` for declaration-carried literals — a
+ * country pack's filing program types are statutory proper nouns resolved at
+ * render time (web/lib/setup/dynamic-options.ts), never a message catalog.
+ */
+export interface SetupOption {
+  value: string
+  labelKey?: string
+  label?: string
+}
+
+/** Resolve an option's display label — labelKey wins, then the literal. */
+export const setupOptionLabel = (
+  option: SetupOption,
+  t: (key: string) => string,
+): string => (option.labelKey ? t(option.labelKey) : (option.label ?? option.value))
+
+/**
+ * Options that come from a runtime registry rather than this pure module.
+ * Server surfaces materialize them via `resolveDynamicSetupOptions`
+ * (web/lib/setup/dynamic-options.ts); the statically declared options remain
+ * as the fallback for any surface that has not resolved them.
+ *
+ * - `payroll-filing-countries`     — countries with a declared payroll pack
+ * - `payroll-filing-program-types` — the packs' declared filing program types
+ */
+export type SetupDynamicOptionsSource =
+  | 'payroll-filing-countries'
+  | 'payroll-filing-program-types'
+
 export interface SetupField {
   key: string
   kind: SetupFieldKind
   required?: boolean
   /** select options; labelKey is under `admin.setup.options.*`. */
-  options?: { value: string; labelKey: string }[]
+  options?: SetupOption[]
+  /** Replace `options` from a runtime registry on server surfaces. */
+  optionsSource?: SetupDynamicOptionsSource
   /** ref / multiref option source. */
   ref?: SetupRefSource
   /** Natural keys / immutable columns: editable on create, read-only on edit. */
@@ -95,14 +128,18 @@ export interface SetupColumn {
   kind: SetupColumnKind
   ref?: SetupRefSource
   /** Optional value labels for enum-like list columns. */
-  options?: { value: string; labelKey: string }[]
+  options?: SetupOption[]
+  /** Replace `options` from a runtime registry on server surfaces. */
+  optionsSource?: SetupDynamicOptionsSource
 }
 
 /** Enum list filter rendered above the table, bound to the `f_<key>` param. */
 export interface SetupFilter {
   /** Column key (also the translation key under `admin.setup.fields`). */
   key: string
-  options: { value: string; labelKey: string }[]
+  options: SetupOption[]
+  /** Replace `options` from a runtime registry on server surfaces. */
+  optionsSource?: SetupDynamicOptionsSource
   /** Rows with a NULL value match every choice (shared/global records). */
   nullMatchesAll?: boolean
 }
@@ -378,6 +415,10 @@ const PAY_PROTECTED_BASES = ['net_pay', 'disposable_earnings', 'gross']
 
 // Payroll filing identities: a CRA payroll program account (RP), a US federal
 // EIN, or a state unemployment account (one per state, under an EIN).
+// STATIC FALLBACK ONLY — server surfaces replace these with the pack
+// registry's declared program types (`optionsSource:
+// 'payroll-filing-program-types'`, resolved by resolveDynamicSetupOptions),
+// so a registered third pack's program types appear without an edit here.
 const PAYROLL_PROGRAM_TYPES = [
   { value: 'ca_rp', labelKey: 'options.payrollProgramType.caRp' },
   { value: 'us_ein', labelKey: 'options.payrollProgramType.usEin' },
@@ -1438,22 +1479,28 @@ export const SETUP_ENTITIES: SetupEntity[] = [
     columns: [
       { key: 'accountNumber', kind: 'code' },
       { key: 'name', kind: 'text' },
-      { key: 'country', kind: 'badge', options: PAY_COMPONENT_COUNTRIES },
-      { key: 'programType', kind: 'badge', options: PAYROLL_PROGRAM_TYPES },
+      { key: 'country', kind: 'badge', options: PAY_COMPONENT_COUNTRIES, optionsSource: 'payroll-filing-countries' },
+      { key: 'programType', kind: 'badge', options: PAYROLL_PROGRAM_TYPES, optionsSource: 'payroll-filing-program-types' },
       { key: 'remitterType', kind: 'badge', options: PAYROLL_REMITTER_TYPES },
       { key: 'stateCode', kind: 'text' },
       { key: 'subsidiaryId', kind: 'ref', ref: 'subsidiaries' },
       { key: 'isDefault', kind: 'boolean' },
       { key: 'isActive', kind: 'badge-active' },
     ],
-    filters: [{ key: 'country', options: PAY_COMPONENT_COUNTRIES }],
+    filters: [{ key: 'country', options: PAY_COMPONENT_COUNTRIES, optionsSource: 'payroll-filing-countries' }],
     fields: [
       { key: 'accountNumber', kind: 'text', required: true, lockedOnEdit: true },
       { key: 'name', kind: 'text', required: true },
-      { key: 'country', kind: 'select', required: true, options: PAY_COMPONENT_COUNTRIES },
-      { key: 'programType', kind: 'select', required: true, options: PAYROLL_PROGRAM_TYPES },
+      // Country and program type come from the DECLARED payroll packs at
+      // render time (optionsSource) — the API validates against the same
+      // declarations (filingAccountProblem), so a registered pack's program
+      // types are offered and accepted with no edit to this file.
+      { key: 'country', kind: 'select', required: true, options: PAY_COMPONENT_COUNTRIES, optionsSource: 'payroll-filing-countries' },
+      { key: 'programType', kind: 'select', required: true, options: PAYROLL_PROGRAM_TYPES, optionsSource: 'payroll-filing-program-types' },
       { key: 'remitterType', kind: 'select', keepDefault: true, defaultValue: 'regular', options: PAYROLL_REMITTER_TYPES },
-      // Required for, and only for, us_state_sui (a DB check enforces it).
+      // Required for, and only for, program types declared `requiresRegion`
+      // (us_state_sui) — enforced by `filingAccountProblem` at the API
+      // boundary, not by a DB check any more.
       { key: 'stateCode', kind: 'text', helpTextKey: 'fieldHelp.stateCode' },
       { key: 'subsidiaryId', kind: 'ref', ref: 'subsidiaries' },
       { key: 'isDefault', kind: 'boolean', helpTextKey: 'fieldHelp.filingAccountDefault' },

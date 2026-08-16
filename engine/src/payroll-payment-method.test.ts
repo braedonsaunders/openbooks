@@ -198,7 +198,7 @@ async function payrollOrg(): Promise<Fixture> {
         wagesTo: "expense",
       },
     })}::jsonb where id = ${org.orgId}`);
-  await seedPayrollComponents(org.orgId, actorId);
+  await seedPayrollComponents(org.orgId, actorId, "CA");
   const scheduleId = randomUUID();
   await db.execute(sql`
     insert into pay_schedules (id, org_id, name, frequency, periods_per_year, anchor_period_end,

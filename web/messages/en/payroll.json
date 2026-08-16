@@ -138,6 +138,9 @@
           "noSin": "{count, plural, one {# employee has} other {# employees have}} no SIN/SSN on file for year-end filing.",
           "eftNoBankDetails": "{count, plural, one {# employee is} other {# employees are}} set to be paid by direct deposit with no approved bank details, and the cheque fallback is turned off, so there is no way to pay them.",
           "noOpeningBalance": "{count, plural, one {# employee has} other {# employees have}} no {detail} opening balance from your previous payroll system, so their CPP/EI and wage-base ceilings will restart at zero on this run."
+        },
+        "holiday": {
+          "undeclaredJurisdiction": "Statutory holiday pay cannot be calculated: {detail}"
         }
       }
     },
@@ -519,7 +522,9 @@
       "taxPayableAccountId": "Income tax payable",
       "vacationPayableAccountId": "Vacation payable",
       "wagesTo": "Wages post to",
-      "craRemittancePartyId": "CRA remittance vendor"
+      "craRemittancePartyId": "CRA remittance vendor",
+      "rqRemittancePartyId": "Revenu Québec remittance vendor",
+      "rqRemittancePartyIdHelp": "Vendor billed for Québec source deductions remitted on form TPZ-1015.R — a QC employee's QPP, QPP2 and QPIP route here, never to the CRA vendor."
     },
     "tabsAria": "Payroll setup sections",
     "tabs": {
@@ -681,6 +686,11 @@
       "overtime": "overtime",
       "vacationPay": "vacation pay",
       "priorHolidayPay": "earlier holiday pay"
+    },
+    "statHolidayPay": {
+      "title": "Statutory holiday pay",
+      "description": "Calculate statutory holiday pay and worked-holiday premiums on each pay run, using the formula the employee's jurisdiction declares. Employees in a jurisdiction with no declared formula are refused by name when a holiday falls in the period.",
+      "enabled": "Calculate statutory holiday pay"
     }
   },
   "remittances": {

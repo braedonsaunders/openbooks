@@ -1478,6 +1478,7 @@
         "originatorShortName": "简称",
         "originatorLongName": "全称",
         "dataCentre": "数据中心",
+        "originatingDataCentre": "发起数据中心",
         "institution": "机构",
         "transit": "转接号",
         "account": "账号",

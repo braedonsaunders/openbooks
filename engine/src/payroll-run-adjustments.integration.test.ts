@@ -12,7 +12,7 @@ const DB = !!process.env.OPENBOOKS_DB_URL;
 async function payrollFixture(label: string) {
   const org = await createScratchOrg();
   const actorId = (await seedFlowActors(org.orgId)).adminId;
-  await seedPayrollComponents(org.orgId, actorId);
+  await seedPayrollComponents(org.orgId, actorId, "CA");
   const employeeId = randomUUID();
   const scheduleId = randomUUID();
   await db.execute(sql`

@@ -23,11 +23,13 @@ import { isUuid, mergeHref, parseListParams, parsePrefixedListParams, pickString
 import {
   SETUP_ENTITY_BY_KEY,
   setupEntityForFeatureState,
+  setupOptionLabel,
   toSnake,
   type SetupColumn,
   type SetupEntity,
   type SetupRefSource,
 } from '../../../../../lib/setup/registry'
+import { resolveDynamicSetupOptions } from '../../../../../lib/setup/dynamic-options'
 import { loadNumberSequenceKindOptions } from '../../../../../lib/setup/number-sequence-kinds'
 import { CompanyTab } from './CompanyTab'
 import { CloseSetupPage } from './CloseSetupPage'
@@ -148,7 +150,7 @@ function renderCell(
 ) {
   const raw = row[toSnake(col.key)]
   const option = col.options?.find((candidate) => candidate.value === String(raw))
-  if (option && col.kind !== 'badge') return t(option.labelKey)
+  if (option && col.kind !== 'badge') return setupOptionLabel(option, t)
   switch (col.kind) {
     case 'badge-active':
       return (
@@ -159,7 +161,7 @@ function renderCell(
     case 'badge':
       return (
         <Badge variant={raw === 'builtin' ? 'secondary' : 'default'}>
-          {option ? t(option.labelKey) : raw == null || raw === '' ? '—' : String(raw)}
+          {option ? setupOptionLabel(option, t) : raw == null || raw === '' ? '—' : String(raw)}
         </Badge>
       )
     case 'boolean':
@@ -228,9 +230,9 @@ export default async function SetupEntityPage({
   if (!baseEntity || baseEntity.nestedUnder || baseEntity.rehomed) notFound()
   const features = await resolvedFeatureState(orgId)
   if (baseEntity.featureKey && !featureEnabled(features, baseEntity.featureKey)) notFound()
-  const entity = setupEntityForFeatureState(baseEntity, {
+  const entity = resolveDynamicSetupOptions(setupEntityForFeatureState(baseEntity, {
     multiSubsidiary: featureEnabled(features, 'multiSubsidiary'),
-  })
+  }))
 
   const t = await getTranslations('admin.setup')
   const rowParam = typeof sp.row === 'string' ? sp.row : undefined
