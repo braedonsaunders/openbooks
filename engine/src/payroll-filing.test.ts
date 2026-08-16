@@ -111,7 +111,7 @@ function slip(name: string, sin: string, filingAccountId: string | null): T4Slip
     filingAccountId, sin,
     box14EmploymentIncome: "50000", box16Cpp: "3000", box16aCpp2: "0", box18Ei: "800",
     box22IncomeTax: "9000", box24EiInsurable: "50000", box26CppPensionable: "50000",
-    box44UnionDues: "0", box55Qpip: "0", stubCount: 26,
+    box44UnionDues: "0", box55Qpip: "0", box56QpipInsurable: "0", stubCount: 26,
   };
 }
 

@@ -16,6 +16,7 @@
  */
 
 import { PAY_DERIVED_RULE_ENTITIES } from './payroll-derived-rules'
+import { PAYROLL_HOLIDAYS_ENTITY } from './payroll-holidays'
 
 export type SetupFieldKind =
   | 'text'
@@ -1373,6 +1374,9 @@ export const SETUP_ENTITIES: SetupEntity[] = [
     featureKey: 'timeTracking',
     iconKey: 'timer',
     orgScoped: true,
+    // cost_multiplier / exclude_from_wages are direct inputs to gross earnings,
+    // so the table carries the audit quartet and the generic route must stamp it.
+    actorCols: true,
     orderBy: 'name',
     hasActive: true,
     columns: [
@@ -1456,6 +1460,9 @@ export const SETUP_ENTITIES: SetupEntity[] = [
       { key: 'isActive', kind: 'boolean' },
     ],
   },
+  // Elections on the country pack's OPTIONAL statutory holidays, plus company
+  // closures. Declared in ./payroll-holidays.ts; an ordinary registry entity.
+  PAYROLL_HOLIDAYS_ENTITY,
   {
     key: 'pay-schedules',
     table: 'pay_schedules',
@@ -1754,6 +1761,10 @@ export const SETUP_ENTITIES: SetupEntity[] = [
     featureKey: 'timeTracking',
     iconKey: 'shield',
     orgScoped: true,
+    // rate_percent / max_assessable are payroll MONEY inputs, so the table now
+    // carries the audit quartet and the generic route must stamp it — a rate
+    // change that leaves no updated_at is invisible to payRunStaleness.
+    actorCols: true,
     naturalKey: 'code',
     hasActive: true,
     columns: [

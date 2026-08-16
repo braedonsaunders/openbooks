@@ -11,6 +11,7 @@ import { DocTypeBadge, docTypeMeta } from '../../../../components/doc-type-badge
 import {
   ChargesSection,
   type ChargeEquipmentOption,
+  type ChargeOperatorOption,
   type ChargeItemOption,
   type ChargeRow,
 } from './ChargesSection'
@@ -36,6 +37,7 @@ export function TransactionsTab({
   charges,
   items,
   equipment,
+  operators,
   absorption,
   chargeFormOpen,
   onChargeFormOpenChange,
@@ -45,6 +47,7 @@ export function TransactionsTab({
   charges: ChargeRow[]
   items: ChargeItemOption[]
   equipment: ChargeEquipmentOption[]
+  operators: ChargeOperatorOption[]
   absorption: { recovered: string; billValue: string }
   chargeFormOpen: boolean
   onChargeFormOpenChange: (open: boolean) => void
@@ -83,6 +86,7 @@ export function TransactionsTab({
         charges={charges}
         items={items}
         equipment={equipment}
+        operators={operators}
         absorption={absorption}
         formOpen={chargeFormOpen}
         onFormOpenChange={onChargeFormOpenChange}

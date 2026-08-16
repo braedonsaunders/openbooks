@@ -24,7 +24,7 @@ export async function loadProjectCockpit(
     loadProjectType(orgId, projectId),
     isFeatureEnabled(orgId, 'fieldTickets'),
   ])
-  const [financials, time, unbilled, billingRequests, billableFieldTickets, invoicing, chargeRes, itemRes, equipmentRes, recognizedRes, glRangeRes, incomeAccountRes] = await Promise.all([
+  const [financials, time, unbilled, billingRequests, billableFieldTickets, invoicing, chargeRes, itemRes, equipmentRes, operatorRes, recognizedRes, glRangeRes, incomeAccountRes] = await Promise.all([
     resolveProjectFinancials(orgId, projectId, projectType.financialProfile),
     projectTimeSummary(orgId, projectId),
     projectUnbilled(orgId, projectId),
@@ -48,6 +48,15 @@ export async function loadProjectCockpit(
         from equipment_units where org_id = ${orgId} and status = 'active'
          and subsidiary_id = (select subsidiary_id from projects where id = ${projectId} and org_id = ${orgId})
        order by unit_number limit 2000`),
+    // Operators an equipment charge can be attributed to. Active, non-terminated
+    // employees — the same population payroll pays, because that is who an
+    // equipment incentive can actually reach.
+    db.execute(sql`
+      select p.id, p.display_name as "displayName"
+        from parties p
+        join employee_roles er on er.party_id = p.id and er.org_id = p.org_id
+       where p.org_id = ${orgId} and er.is_active and er.terminated_on is null
+       order by p.display_name limit 2000`),
     db.execute(sql`
       select c.id as contract_id, o.percent_complete, o.allocated_price,
              coalesce(p.custom->>'percentCompleteOverride', '') as override_raw,
@@ -82,6 +91,7 @@ export async function loadProjectCockpit(
   const charges = (chargeRes as unknown as { rows: any[] }).rows
   const items = (itemRes as unknown as { rows: any[] }).rows
   const equipment = (equipmentRes as unknown as { rows: any[] }).rows
+  const operators = (operatorRes as unknown as { rows: any[] }).rows
 
   // Recognition status for the Financials tab card — shown for fixed-price /
   // percent-complete project types; posting stays with the central run.
@@ -138,6 +148,7 @@ export async function loadProjectCockpit(
     charges: charges as ProjectCockpitData['charges'],
     items: items as ProjectCockpitData['items'],
     equipment: equipment as ProjectCockpitData['equipment'],
+    operators: operators as ProjectCockpitData['operators'],
     absorption: {
       recovered: formatMoney(sum(charges.filter((c) => c.status === 'posted').map((c) => String(c.cost))), 2),
       billValue: formatMoney(sum(charges.map((c) => String(c.billValue))), 2),

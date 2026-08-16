@@ -109,7 +109,11 @@ test(
       `)) as unknown as { rows: Record<string, any>[] }).rows[0]!;
       assert.equal(billDoc.status, "draft");
       assert.equal(cmp(billDoc.total, cra.total), 0);
-      assert.equal(billDoc.due_date, "2026-08-15"); // 15th of the following month
+      // The 15th of the following month, moved off the weekend: August 15 2026
+      // is a Saturday, and the CRA's own rule is that the remittance is on
+      // time if it is received on the next business day. Before the statutory
+      // holiday calendar existed this stamped the Saturday.
+      assert.equal(billDoc.due_date, "2026-08-17");
       const billLines = ((await db.execute(sql`
         select account_id, amount from document_lines where document_id = ${bill.documentId}
       `)) as unknown as { rows: { account_id: string; amount: string }[] }).rows;

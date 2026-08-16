@@ -45,6 +45,19 @@ export async function buildT4Xml(orgId: string, taxYear: number): Promise<{
   filename: string;
   xml: string;
   slipCount: number;
+  /**
+   * Returns this org still owes that THIS PRODUCT DOES NOT PRODUCE, named
+   * rather than omitted.
+   *
+   * A Quebec employee's year-end is a T4 *and* an RL-1 (Revenu Québec), and
+   * the RL-1 is not implemented — see the CA pack's Quebec refusal in
+   * engine/src/payroll/packs.ts. The T4 in this file is correct and complete
+   * for them; handing it over as "the filing" without saying so would let an
+   * employer believe they had filed everything they owe. New QC payroll is
+   * refused at calculate time, so this can only be reached from imported
+   * history — which is exactly when nobody is watching for it.
+   */
+  unsupportedFilings: string[];
 }> {
   const cfgRow = (await db.execute(sql`
     select settings#>'{payroll,t4Transmitter}' as cfg from orgs where id = ${orgId}
@@ -91,10 +104,22 @@ export async function buildT4Xml(orgId: string, taxYear: number): Promise<{
     );
   }
 
+  const quebec = withSins
+    .flatMap((ret) => ret.slips)
+    .filter((slip) => slip.isQuebec)
+    .map((slip) => slip.employeeName);
+
   return {
     filename: `T4-${taxYear}.xml`,
     xml: renderT4Xml({ orgId, taxYear, transmitter, returns: withSins }),
     slipCount,
+    unsupportedFilings: quebec.length > 0
+      ? [
+        `${quebec.join(", ")} ${quebec.length === 1 ? "is" : "are"} employed in Quebec and also `
+        + "requires an RL-1 from Revenu Québec, which this product does not produce — "
+        + "the T4 in this file is complete, the RL-1 must be filed separately",
+      ]
+      : [],
   };
 }
 
@@ -126,6 +151,23 @@ export function renderT4Xml(input: {
     for (const slip of ret.slips) {
       const sin = slip.sin;
       const [surname, ...given] = splitName(slip.employeeName);
+      // Quebec files the SAME contribution in a DIFFERENT box. Box 16 is CPP
+      // and box 17 is QPP, and they are mutually exclusive on a slip: a QC
+      // employee contributes to the Québec Pension Plan, so reporting their
+      // contribution in <CPP_CNTRB_AMT> tells the CRA they paid into a plan
+      // they are not in — and the employee's QPP record, which Retraite
+      // Québec keeps, has a hole in it. The slip has carried `isQuebec` and
+      // `box55Qpip` all along and this builder used neither.
+      const pension = slip.isQuebec
+        ? `   <QPP_CNTRB_AMT>${amt(slip.box16Cpp)}</QPP_CNTRB_AMT>\n`
+        : `   <CPP_CNTRB_AMT>${amt(slip.box16Cpp)}</CPP_CNTRB_AMT>\n`;
+      // Boxes 55/56 — QPIP premiums and the earnings they were assessed on.
+      // Quebec-only, and simply absent from the file for everyone else rather
+      // than reported as a zero the CRA would have to interpret.
+      const qpip = slip.isQuebec
+        ? `   <PPIP_AMT>${amt(slip.box55Qpip)}</PPIP_AMT>\n`
+          + `   <PPIP_ERN_AMT>${amt(slip.box56QpipInsurable)}</PPIP_ERN_AMT>\n`
+        : "";
       slipXml.push(
         `  <T4Slip>\n` +
         `   <EMPE_NM><snm>${esc(surname)}</snm><gvn_nm>${esc(given.join(" ") || surname)}</gvn_nm></EMPE_NM>\n` +
@@ -134,12 +176,13 @@ export function renderT4Xml(input: {
         `   <EMPT_PROV_CD>${esc(slip.province)}</EMPT_PROV_CD>\n` +
         `   <RPT_TCD>O</RPT_TCD>\n` +
         `   <EMPT_INC_AMT>${amt(slip.box14EmploymentIncome)}</EMPT_INC_AMT>\n` +
-        `   <CPP_CNTRB_AMT>${amt(slip.box16Cpp)}</CPP_CNTRB_AMT>\n` +
+        pension +
         `   <EMPE_CPP2_AMT>${amt(slip.box16aCpp2)}</EMPE_CPP2_AMT>\n` +
         `   <EIP_AMT>${amt(slip.box18Ei)}</EIP_AMT>\n` +
         `   <ITX_DDCT_AMT>${amt(slip.box22IncomeTax)}</ITX_DDCT_AMT>\n` +
         `   <EI_INSU_ERN_AMT>${amt(slip.box24EiInsurable)}</EI_INSU_ERN_AMT>\n` +
         `   <CPP_QPP_ERN_AMT>${amt(slip.box26CppPensionable)}</CPP_QPP_ERN_AMT>\n` +
+        qpip +
         `   <UNN_DUES_AMT>${amt(slip.box44UnionDues)}</UNN_DUES_AMT>\n` +
         `  </T4Slip>`,
       );

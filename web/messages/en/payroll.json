@@ -62,7 +62,8 @@
       "employees": "Employees",
       "employeesHint": "active payroll profiles",
       "setup": "Payroll setup",
-      "setupHint": "control accounts missing"
+      "setupHint": "control accounts missing",
+      "openingBalances": "Opening balances"
     }
   },
   "list": {
@@ -87,7 +88,16 @@
         "adjustments": "adjustments",
         "time": "approved time",
         "wages": "wage rates",
-        "roster": "employee profiles"
+        "roster": "employee profiles",
+        "missing": "the run itself",
+        "components": "employee pay components",
+        "componentDefinitions": "pay component setup",
+        "derivedRules": "derived earnings rules",
+        "entitlements": "pay banks",
+        "workerComp": "workers' compensation rates",
+        "timeTypes": "time type setup",
+        "settings": "payroll settings",
+        "ytd": "another run's year-to-date"
       }
     },
     "readiness": {
@@ -126,7 +136,8 @@
           "terminated": "{count, plural, one {# employee was} other {# employees were}} terminated on or before the period end.",
           "noBankDetails": "{count, plural, one {# employee is} other {# employees are}} set to be paid by direct deposit but has no approved bank details, so they will be paid by cheque on this run.",
           "noSin": "{count, plural, one {# employee has} other {# employees have}} no SIN/SSN on file for year-end filing.",
-          "eftNoBankDetails": "{count, plural, one {# employee is} other {# employees are}} set to be paid by direct deposit with no approved bank details, and the cheque fallback is turned off, so there is no way to pay them."
+          "eftNoBankDetails": "{count, plural, one {# employee is} other {# employees are}} set to be paid by direct deposit with no approved bank details, and the cheque fallback is turned off, so there is no way to pay them.",
+          "noOpeningBalance": "{count, plural, one {# employee has} other {# employees have}} no {detail} opening balance from your previous payroll system, so their CPP/EI and wage-base ceilings will restart at zero on this run."
         }
       }
     },
@@ -268,6 +279,52 @@
       "replaces": "replaces calculated",
       "earnings": "Earnings",
       "deductions": "Deductions"
+    },
+    "bankFile": {
+      "title": "Direct deposit",
+      "hint": "The file instructs the bank to credit each EFT employee. Once generated it is frozen, hashed and numbered; every download is recorded.",
+      "profile": "Originating bank profile",
+      "notConfigured": "not configured",
+      "generate": "Generate file",
+      "regenerate": "Generate replacement",
+      "generated": "Direct-deposit file generated",
+      "regenerateTitle": "Replace the existing direct-deposit file?",
+      "regenerateLabel": "Why is a replacement needed? The existing file stays on record and is marked superseded. If it has already gone to the bank, do not send both.",
+      "regeneratePlaceholder": "e.g. bank rejected the first transmission",
+      "regenerateConfirm": "Generate replacement",
+      "multipleLive": "This pay run has more than one file that has not been superseded. Send exactly ONE to the bank — releasing both pays every employee twice.",
+      "noProfile": "No originating bank profile is set up for payroll. Add one in Setup → Payment operations: the originator id, routing and company identification are assigned by your bank and are never defaulted.",
+      "onFile": "On the file (EFT)",
+      "onPaper": "Paid by cheque instead",
+      "controlTotal": "Control total",
+      "employees": "{n} employees",
+      "credits": "{n} credits",
+      "excludedTitle": "Not on the file — reconcile these against the payday",
+      "file": "File",
+      "amount": "Control total",
+      "status": "Status",
+      "released": "Released",
+      "download": "Download",
+      "neverReleased": "Never downloaded",
+      "copyHash": "Copy sha256",
+      "hashCopied": "sha256 copied",
+      "auditTitle": "Activity — who generated and who downloaded",
+      "state": {
+        "generated": "Generated",
+        "released": "Released to the bank",
+        "superseded": "Superseded"
+      },
+      "event": {
+        "generate": "Generated",
+        "release": "Downloaded",
+        "supersede": "Superseded"
+      },
+      "exclusion": {
+        "profile": "Paid by cheque (payroll override)",
+        "party": "Paid by cheque (employee preference)",
+        "default": "No bank details on file — paid by cheque",
+        "eftFallback": "Set to EFT but has no approved bank details — paid by cheque"
+      }
     }
   },
   "links": {
@@ -476,7 +533,9 @@
       "limits": "Bank limits",
       "service": "Service schedules",
       "derived": "Derived earnings",
-      "derivedPreview": "Rule preview"
+      "derivedPreview": "Rule preview",
+      "holidays": "Holidays",
+      "holidayCalendar": "Holiday calendar"
     },
     "packs": {
       "installed": "Installed",
@@ -587,7 +646,10 @@
       "empty": "This rule pays nothing over the selected period.",
       "grossEstimated": "This rule pays a percentage of gross. The preview estimates gross from approved time and the effective wage; the pay run's own calculation is authoritative.",
       "excludedTitle": "Excluded by job title",
-      "excludedDescription": "These employees are kept out by the rule's exclusion list — the deletion nobody has to remember any more."
+      "excludedDescription": "These employees are kept out by the rule's exclusion list — the deletion nobody has to remember any more.",
+      "coverageTitle": "This rule cannot settle the month yet",
+      "coverageBody": "Some equipment charges in the settled month do not record which operator ran the unit, so the incentive cannot tell who is owed. It refuses rather than pay on the charges that happen to be attributed, which would under-pay. Record the operator on those charges, or narrow this rule so they fall outside it.",
+      "coverageUnattributed": "charges without an operator"
     },
     "paymentMethods": {
       "title": "How wages are paid",
@@ -595,6 +657,30 @@
       "fallback": "Pay by cheque when direct-deposit details are missing",
       "fallbackOn": "The run continues and the employee is included in the cheque batch, with a warning on the readiness step.",
       "fallbackOff": "The run is blocked until the employee has approved bank details or is switched to cheque."
+    },
+    "holidayCalendar": {
+      "title": "Statutory holiday calendar",
+      "description": "The days this jurisdiction observes, with your own elections applied. Statutory days come from the country pack and cannot be switched off; optional and company days are configured on the Holidays tab.",
+      "jurisdiction": "Jurisdiction",
+      "year": "Year",
+      "citation": "Source",
+      "date": "Observed",
+      "holiday": "Holiday",
+      "statutoryDate": "Falls on",
+      "source": "Source",
+      "paid": "Paid",
+      "statutory": "Statutory",
+      "elected": "Optional — elected",
+      "company": "Company",
+      "yes": "Yes",
+      "unpaid": "Unpaid closure",
+      "empty": "No holidays are observed in this year.",
+      "noMandate": "This jurisdiction mandates no statutory holiday pay, so the calendar drives closures and working-day arithmetic only. Days off may still be paid under your own policy.",
+      "payRule": "How a day's holiday pay is computed",
+      "regularWages": "regular wages",
+      "overtime": "overtime",
+      "vacationPay": "vacation pay",
+      "priorHolidayPay": "earlier holiday pay"
     }
   },
   "remittances": {
@@ -636,7 +722,8 @@
       "box22": "Box 22 tax",
       "box24": "Box 24 EI insurable",
       "box26": "Box 26 pensionable",
-      "box44": "Box 44 dues"
+      "box44": "Box 44 dues",
+      "provinceSplit": "One slip per province of employment"
     },
     "summary": {
       "slips": "Slips",
@@ -663,7 +750,8 @@
       "box3": "Box 3 SS wages",
       "box4": "Box 4 SS tax",
       "box5": "Box 5 Medicare wages",
-      "box6": "Box 6 Medicare tax"
+      "box6": "Box 6 Medicare tax",
+      "ein": "EIN"
     },
     "t4Xml": {
       "download": "Download T4 XML",
@@ -703,7 +791,8 @@
         "P": "Parental",
         "Z": "Compassionate care / family caregiver"
       }
-    }
+    },
+    "unsupportedFilings": "Additional returns this product does not produce"
   },
   "register": {
     "title": "Payroll register",
@@ -752,5 +841,41 @@
     "cheque": "Cheque",
     "inherit": "Use the employee default",
     "help": "Leave as the default to follow the employee record: direct deposit when approved bank details exist, otherwise a printed cheque."
+  },
+  "openingBalances": {
+    "title": "Opening balances",
+    "description": "Year-to-date amounts each employee carries in from your previous payroll system. Nothing else supplies them, so the CPP, EI, Social Security and unemployment ceilings restart at zero without them.",
+    "hint": "Copy these from the outgoing provider's year-to-date report as at the day before your first pay period here. Leave an employee blank if they had no pay from you earlier in the year.",
+    "yearLabel": "Tax year",
+    "employee": "Employee",
+    "onlyMissing": "Only employees with no carry-in",
+    "bulkImport": "Bulk load from a file",
+    "export": "Export",
+    "entered": "Carried in",
+    "locked": "Locked",
+    "lockedShort": "locked",
+    "lockedBy": "Committed pay run",
+    "none": "none",
+    "save": "Save",
+    "saving": "Saving…",
+    "saved": "Opening balances saved.",
+    "saveFailed": "Nothing was saved.",
+    "rejected": "Nothing was saved — fix these first.",
+    "empty": "No employees have an active payroll profile yet.",
+    "fields": {
+      "pensionableYtd": "Pensionable / FICA wages",
+      "insurableYtd": "Insurable / unemployment wages",
+      "cppYtd": "CPP contributions",
+      "cpp2Ytd": "CPP2 contributions",
+      "eiYtd": "EI premiums",
+      "qpipYtd": "QPIP premiums",
+      "taxableYtd": "Taxable earnings",
+      "taxYtd": "Income tax withheld",
+      "nonPeriodicYtd": "Bonus / supplemental earnings"
+    }
+  },
+  "readiness": {
+    "jurisdictionRun": "Legal entity cannot run payroll",
+    "jurisdictionEmployee": "Employee jurisdiction disagrees with the paying entity"
   }
 }

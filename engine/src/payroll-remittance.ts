@@ -8,6 +8,12 @@ import {
   type FilingAccountRef,
   type PayrollFilingAccount,
 } from "./payroll-filing.ts";
+import {
+  addBusinessDays,
+  holidayDateSet,
+  nextBusinessDay,
+  resolveObservedHolidays,
+} from "./payroll-holidays.ts";
 import { PayrollError, payrollSettings } from "./payroll-run.ts";
 
 /**
@@ -246,34 +252,149 @@ function remittanceMemo(group: RemittanceGroup, from: string, to: string): strin
 }
 
 /**
- * The CRA due date for a remittance period — or NOTHING, deliberately.
+ * The CRA public-holiday calendar a remittance deadline moves against.
  *
- * A remitter's due date is a function of `payroll_filing_accounts.remitter_type`
- * (regular | quarterly | accelerated_1 | accelerated_2), which the product
- * stores, edits in Setup and round-trips. Only the REGULAR schedule is a pure
- * calendar rule (the 15th of the month following the month of the pay date).
- * The other three depend on where each pay date falls inside the month and on
- * the next business day when the deadline lands on a weekend or a statutory
- * holiday — a working-day calendar this product does not have yet.
+ * NOT the employer's calendar, and deliberately not tenant-overridable. The
+ * CRA recognizes Easter Monday and the Civic Holiday, which no province's
+ * employment standards act lists, and it excludes the Civic Holiday in Quebec
+ * while recognizing Saint-Jean-Baptiste Day there. Letting an employer's own
+ * closures push a federal deadline would be letting configuration create a
+ * penalty; the pack's declaration is the whole input.
  *
- * Until it does, this returns null for those and the bill carries NO due date.
- * Stamping the 15th on an accelerated remitter's bill would be confidently
- * wrong by weeks, and the CRA penalty for a late remittance is 3–10% of the
- * amount — a blank date an operator must fill in is the cheap failure, an
- * invented one is not. The remitter type travels on the bill so the operator
- * knows why it is blank.
+ * Source: https://www.canada.ca/en/revenue-agency/services/tax/public-holidays.html
+ */
+function craCalendar(around: string, quebec: boolean): ReadonlySet<string> {
+  const year = Number(around.slice(0, 4));
+  return holidayDateSet(resolveObservedHolidays({
+    jurisdiction: quebec ? "CA-CRA-QC" : "CA-CRA",
+    from: `${year - 1}-01-01`,
+    to: `${year + 1}-12-31`,
+  }));
+}
+
+/** The last day of the month `date` falls in. */
+function monthEnd(date: string): string {
+  const [y, m] = date.split("-").map(Number);
+  return new Date(Date.UTC(y!, m!, 0)).toISOString().slice(0, 10);
+}
+
+/** The `day`th of the month `offsetMonths` after the one `date` falls in. */
+function dayOfMonth(date: string, offsetMonths: number, day: number): string {
+  const [y, m] = date.split("-").map(Number);
+  return new Date(Date.UTC(y!, m! - 1 + offsetMonths, day)).toISOString().slice(0, 10);
+}
+
+export interface RemittanceDue {
+  dueDate: string;
+  /** The statutory rule applied, carried onto the bill so an operator can
+   *  see WHY the date is what it is rather than trusting it. */
+  rule: string;
+}
+
+/**
+ * The CRA due date for a remittance period, for every remitter type.
+ *
+ * A remitter's deadline is a function of
+ * `payroll_filing_accounts.remitter_type` and of where the period ends inside
+ * the month. Each rule below is transcribed from the CRA's published
+ * "When to remit (pay)" table, verified against canada.ca:
+ *
+ *   https://www.canada.ca/en/revenue-agency/services/tax/businesses/topics/
+ *     payroll/remitting-source-deductions/how-when-remit-due-dates.html
+ *
+ * - QUARTERLY — "January 1 to March 31 … April 15; April 1 to June 30 …
+ *   July 15; July 1 to September 30 … October 15; October 1 to December 31 …
+ *   January 15": the 15th of the month following the end of the quarter the
+ *   period falls in.
+ * - REGULAR — remitting period is the calendar month; due "the 15th day of the
+ *   next month".
+ * - ACCELERATED THRESHOLD 1 — "1st to 15th of the month … 25th day of same
+ *   month; 16th to end of the month … 10th day of the next month."
+ * - ACCELERATED THRESHOLD 2 — four quarter-month periods, "1st to 7th … 3rd
+ *   working day after the 7th; 8th to 14th … 3rd working day after the 14th;
+ *   15th to 21st … 3rd working day after the 21st; 22nd to the last day … 3rd
+ *   working day after the last day of the month."
+ *
+ * And the shift, from the same page: "If your due date falls on a Saturday, a
+ * Sunday, or a public holiday recognized by the CRA, your remittance is on
+ * time if the CRA receives it on the next business day." That applies to the
+ * three fixed-date schedules. Threshold 2 needs no shift — counting three
+ * WORKING days necessarily lands on a working day, which is exactly why this
+ * function could not exist before there was a working-day calendar.
+ *
+ * The penalty for getting this wrong is 3% to 10% of the remittance (20% for a
+ * repeat in the same calendar year), which is why every rule above is quoted
+ * rather than remembered, and why the calendar is the CRA's own list rather
+ * than an employer's.
+ */
+export function remittanceDueDateExplained(
+  periodTo: string,
+  remitterType: PayrollFilingAccount["remitterType"] | null,
+  options: { quebec?: boolean } = {},
+): RemittanceDue {
+  const date = periodTo.slice(0, 10);
+  const holidays = craCalendar(date, options.quebec === true);
+  const day = Number(date.slice(8, 10));
+  // No filing account configured = the CRA's default registration for a new
+  // employer, which is a regular remitter. Previous single-account behaviour,
+  // preserved exactly.
+  const remitter = remitterType ?? "regular";
+
+  switch (remitter) {
+    case "regular":
+      return {
+        dueDate: nextBusinessDay(dayOfMonth(date, 1, 15), holidays),
+        rule: "regular remitter — the 15th of the month following the month of the pay date",
+      };
+    case "quarterly": {
+      // The quarter the period ends in; its following month's 15th.
+      const month = Number(date.slice(5, 7));
+      const monthsToQuarterEnd = 2 - ((month - 1) % 3);
+      return {
+        dueDate: nextBusinessDay(dayOfMonth(date, monthsToQuarterEnd + 1, 15), holidays),
+        rule: "quarterly remitter — the 15th of the month following the end of the quarter",
+      };
+    }
+    case "accelerated_1":
+      return day <= 15
+        ? {
+            dueDate: nextBusinessDay(dayOfMonth(date, 0, 25), holidays),
+            rule: "accelerated threshold 1 — remuneration paid the 1st to the 15th, "
+              + "due the 25th of the same month",
+          }
+        : {
+            dueDate: nextBusinessDay(dayOfMonth(date, 1, 10), holidays),
+            rule: "accelerated threshold 1 — remuneration paid the 16th to month end, "
+              + "due the 10th of the following month",
+          };
+    case "accelerated_2": {
+      // Three WORKING days after the end of the quarter-month period the
+      // remittance period closes in. addBusinessDays never counts the day it
+      // starts from, so a period ending on the 7th counts the 8th onward.
+      const [periodEnd, label] = day <= 7 ? [dayOfMonth(date, 0, 7), "the 1st to the 7th"]
+        : day <= 14 ? [dayOfMonth(date, 0, 14), "the 8th to the 14th"]
+        : day <= 21 ? [dayOfMonth(date, 0, 21), "the 15th to the 21st"]
+        : [monthEnd(date), "the 22nd to the last day of the month"];
+      return {
+        dueDate: addBusinessDays(periodEnd!, 3, holidays),
+        rule: `accelerated threshold 2 — remuneration paid ${label}, due the 3rd working day `
+          + "after the end of that period",
+      };
+    }
+  }
+}
+
+/**
+ * The due date alone. Never null any more: the working-day calendar this used
+ * to be missing is `engine/src/payroll-holidays.ts`, and all four CRA
+ * schedules are now computed rather than refused.
  */
 export function remittanceDueDate(
   periodTo: string,
   remitterType: PayrollFilingAccount["remitterType"] | null,
-): string | null {
-  // No filing account configured = the CRA's default registration for a new
-  // employer, which is a regular remitter. That is the previous behaviour of a
-  // single-account org, preserved exactly.
-  if (remitterType !== null && remitterType !== "regular") return null;
-  const [y, m] = periodTo.split("-").map(Number);
-  const next = new Date(Date.UTC(y!, m!, 15));
-  return next.toISOString().slice(0, 10);
+  options: { quebec?: boolean } = {},
+): string {
+  return remittanceDueDateExplained(periodTo, remitterType, options).dueDate;
 }
 
 /**

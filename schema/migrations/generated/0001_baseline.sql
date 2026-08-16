@@ -2394,6 +2394,113 @@ $$;
 
 
 --
+-- Name: openbooks_guard_pay_run_bank_file(); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.openbooks_guard_pay_run_bank_file() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+BEGIN
+  IF TG_OP = 'DELETE' THEN
+    RAISE EXCEPTION 'payroll bank files are immutable evidence and cannot be deleted';
+  END IF;
+  IF NEW.id <> OLD.id
+     OR NEW.org_id <> OLD.org_id
+     OR NEW.pay_run_document_id <> OLD.pay_run_document_id
+     OR NEW.payment_bank_profile_id <> OLD.payment_bank_profile_id
+     OR NEW.format <> OLD.format
+     OR NEW.sequence_number <> OLD.sequence_number
+     OR NEW.file_number <> OLD.file_number
+     OR NEW.sequence_value <> OLD.sequence_value
+     OR NEW.file_creation_number IS DISTINCT FROM OLD.file_creation_number
+     OR NEW.file_id_modifier IS DISTINCT FROM OLD.file_id_modifier
+     OR NEW.filename <> OLD.filename
+     OR NEW.content_hash <> OLD.content_hash
+     OR NEW.size_bytes <> OLD.size_bytes
+     OR NEW.file_id <> OLD.file_id
+     OR NEW.file_version_id <> OLD.file_version_id
+     OR NEW.entry_count <> OLD.entry_count
+     OR NEW.control_total <> OLD.control_total
+     OR NEW.currency <> OLD.currency
+     OR NEW.excluded_cheque::text <> OLD.excluded_cheque::text
+     OR NEW.excluded_total <> OLD.excluded_total
+     OR NEW.generated_at <> OLD.generated_at THEN
+    RAISE EXCEPTION 'payroll bank file % is immutable: regenerate to produce a new artifact', OLD.file_number;
+  END IF;
+  IF NEW.release_count < OLD.release_count THEN
+    RAISE EXCEPTION 'payroll bank file release history cannot be rewound';
+  END IF;
+  IF OLD.status = 'superseded' AND NEW.status <> 'superseded' THEN
+    RAISE EXCEPTION 'a superseded payroll bank file cannot be reinstated';
+  END IF;
+  RETURN NEW;
+END;
+$$;
+
+
+--
+-- Name: openbooks_guard_payroll_bank_file_blob(); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.openbooks_guard_payroll_bank_file_blob() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+BEGIN
+  IF EXISTS (
+    SELECT 1 FROM public.pay_run_bank_files f WHERE f.file_version_id = OLD.version_id
+  ) THEN
+    RAISE EXCEPTION 'payroll bank file blobs are immutable';
+  END IF;
+  RETURN CASE WHEN TG_OP = 'DELETE' THEN OLD ELSE NEW END;
+END;
+$$;
+
+
+--
+-- Name: openbooks_guard_payroll_bank_file_file(); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.openbooks_guard_payroll_bank_file_file() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+BEGIN
+  IF EXISTS (SELECT 1 FROM public.pay_run_bank_files f WHERE f.file_id = OLD.id) THEN
+    IF TG_OP = 'DELETE' THEN
+      RAISE EXCEPTION 'payroll bank files cannot be deleted from the cabinet';
+    END IF;
+    -- Renaming, moving, retiring or re-pointing the current version would all
+    -- change what a later download returns.
+    IF NEW.name <> OLD.name OR NEW.folder_id <> OLD.folder_id
+       OR NEW.content_hash IS DISTINCT FROM OLD.content_hash
+       OR NEW.current_version_id IS DISTINCT FROM OLD.current_version_id
+       OR NEW.is_inactive <> OLD.is_inactive THEN
+      RAISE EXCEPTION 'payroll bank files are immutable';
+    END IF;
+  END IF;
+  RETURN CASE WHEN TG_OP = 'DELETE' THEN OLD ELSE NEW END;
+END;
+$$;
+
+
+--
+-- Name: openbooks_guard_payroll_bank_file_version(); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.openbooks_guard_payroll_bank_file_version() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+BEGIN
+  IF EXISTS (
+    SELECT 1 FROM public.pay_run_bank_files f WHERE f.file_version_id = OLD.id
+  ) THEN
+    RAISE EXCEPTION 'payroll bank file versions are immutable';
+  END IF;
+  RETURN CASE WHEN TG_OP = 'DELETE' THEN OLD ELSE NEW END;
+END;
+$$;
+
+
+--
 -- Name: openbooks_query_org_id(); Type: FUNCTION; Schema: public; Owner: -
 --
 
@@ -2566,7 +2673,7 @@ declare
     'employee_pay_components',
     'pay_components', 'pay_derived_rules', 'pay_run_adjustments', 'pay_runs',
     'pay_schedules', 'pay_stub_lines', 'pay_stubs',
-    'payroll_filing_accounts', 'payroll_opening_balances',
+    'payroll_filing_accounts', 'payroll_holidays', 'payroll_opening_balances',
     'union_agreements', 'union_classifications',
     'union_fringes'
   ];
@@ -11191,6 +11298,8 @@ CREATE TABLE public.pay_derived_rules (
     time_type_id uuid,
     project_id uuid,
     department_id uuid,
+    equipment_unit_id uuid,
+    item_id uuid,
     trade_id uuid,
     job_title text,
     billable_only boolean DEFAULT false NOT NULL,
@@ -11208,14 +11317,21 @@ CREATE TABLE public.pay_derived_rules (
     created_by uuid,
     updated_at timestamp with time zone DEFAULT now() NOT NULL,
     updated_by uuid,
+    CONSTRAINT pay_derived_rules_charge_filters CHECK (((trigger = 'equipment_charge'::text) OR ((equipment_unit_id IS NULL) AND (item_id IS NULL)))),
+    CONSTRAINT pay_derived_rules_charge_quantity CHECK (
+CASE
+    WHEN (trigger = 'equipment_charge'::text) THEN (quantity_mode = ANY (ARRAY['count'::text, 'sum_quantity'::text, 'sum_bill_amount'::text]))
+    ELSE (NOT (quantity_mode = ANY (ARRAY['sum_quantity'::text, 'sum_bill_amount'::text])))
+END),
     CONSTRAINT pay_derived_rules_costing_mode CHECK ((costing_mode = ANY (ARRAY['source'::text, 'first_project_of_day'::text, 'none'::text]))),
     CONSTRAINT pay_derived_rules_nights CHECK (((quantity_mode <> 'count_nights'::text) OR (trigger = 'night_stayed'::text))),
-    CONSTRAINT pay_derived_rules_quantity_mode CHECK ((quantity_mode = ANY (ARRAY['count'::text, 'sum_hours'::text, 'count_nights'::text]))),
+    CONSTRAINT pay_derived_rules_percent_quantity CHECK (((rate_mode <> 'percent_of_quantity'::text) OR (trigger = 'equipment_charge'::text))),
+    CONSTRAINT pay_derived_rules_quantity_mode CHECK ((quantity_mode = ANY (ARRAY['count'::text, 'sum_hours'::text, 'count_nights'::text, 'sum_quantity'::text, 'sum_bill_amount'::text]))),
     CONSTRAINT pay_derived_rules_range CHECK (((effective_to IS NULL) OR (effective_to >= effective_from))),
     CONSTRAINT pay_derived_rules_rate CHECK (((rate_mode = 'rate_card'::text) OR ((rate_value IS NOT NULL) AND (rate_value >= (0)::numeric)))),
-    CONSTRAINT pay_derived_rules_rate_mode CHECK ((rate_mode = ANY (ARRAY['fixed_per_unit'::text, 'percent_of_gross'::text, 'rate_card'::text]))),
+    CONSTRAINT pay_derived_rules_rate_mode CHECK ((rate_mode = ANY (ARRAY['fixed_per_unit'::text, 'percent_of_gross'::text, 'percent_of_quantity'::text, 'rate_card'::text]))),
     CONSTRAINT pay_derived_rules_title_lists CHECK (((jsonb_typeof(included_job_titles) = 'array'::text) AND (jsonb_typeof(excluded_job_titles) = 'array'::text))),
-    CONSTRAINT pay_derived_rules_trigger CHECK ((trigger = ANY (ARRAY['time_entry'::text, 'distinct_day'::text, 'distinct_project_day'::text, 'night_stayed'::text, 'month_end'::text])))
+    CONSTRAINT pay_derived_rules_trigger CHECK ((trigger = ANY (ARRAY['time_entry'::text, 'distinct_day'::text, 'distinct_project_day'::text, 'night_stayed'::text, 'month_end'::text, 'equipment_charge'::text])))
 );
 
 ALTER TABLE ONLY public.pay_derived_rules FORCE ROW LEVEL SECURITY;
@@ -11235,6 +11351,8 @@ CREATE VIEW openbooks_query.pay_derived_rules WITH (security_barrier='true') AS
     time_type_id,
     project_id,
     department_id,
+    equipment_unit_id,
+    item_id,
     trade_id,
     job_title,
     billable_only,
@@ -12019,6 +12137,79 @@ CREATE VIEW openbooks_query.payroll_filing_accounts WITH (security_barrier='true
     updated_at,
     updated_by
    FROM public.payroll_filing_accounts
+  WHERE (org_id = public.openbooks_query_org_id());
+
+
+--
+-- Name: payroll_holidays; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.payroll_holidays (
+    id uuid DEFAULT public.uuid_generate_v7() NOT NULL,
+    org_id uuid NOT NULL,
+    jurisdiction text NOT NULL,
+    pack_key text,
+    name text,
+    rule_kind text,
+    rule_month integer,
+    rule_day integer,
+    rule_weekday integer,
+    rule_nth integer,
+    rule_offset integer,
+    observed_on date,
+    observance text DEFAULT 'none'::text NOT NULL,
+    is_observed boolean DEFAULT true NOT NULL,
+    is_paid boolean DEFAULT true NOT NULL,
+    effective_from date NOT NULL,
+    effective_to date,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    created_by uuid,
+    updated_at timestamp with time zone DEFAULT now() NOT NULL,
+    updated_by uuid,
+    CONSTRAINT payroll_holidays_observance CHECK ((observance = ANY (ARRAY['none'::text, 'next_monday'::text, 'nearest_weekday'::text]))),
+    CONSTRAINT payroll_holidays_range CHECK (((effective_to IS NULL) OR (effective_to >= effective_from))),
+    CONSTRAINT payroll_holidays_rule_columns CHECK (((rule_kind IS NULL) OR ((rule_kind = 'date'::text) AND (observed_on IS NOT NULL)) OR ((rule_kind = 'fixed'::text) AND ((rule_month >= 1) AND (rule_month <= 12)) AND ((rule_day >= 1) AND (rule_day <= 31))) OR ((rule_kind = 'nth_weekday'::text) AND ((rule_month >= 1) AND (rule_month <= 12)) AND ((rule_weekday >= 0) AND (rule_weekday <= 6)) AND ((rule_nth >= '-1'::integer) AND (rule_nth <= 5)) AND (rule_nth <> 0)) OR ((rule_kind = 'weekday_before'::text) AND ((rule_month >= 1) AND (rule_month <= 12)) AND ((rule_day >= 1) AND (rule_day <= 31)) AND ((rule_weekday >= 0) AND (rule_weekday <= 6))) OR ((rule_kind = 'easter_offset'::text) AND ((rule_offset >= '-60'::integer) AND (rule_offset <= 60))))),
+    CONSTRAINT payroll_holidays_rule_kind CHECK (((rule_kind IS NULL) OR (rule_kind = ANY (ARRAY['date'::text, 'fixed'::text, 'nth_weekday'::text, 'weekday_before'::text, 'easter_offset'::text])))),
+    CONSTRAINT payroll_holidays_shape CHECK ((((pack_key IS NOT NULL) AND (rule_kind IS NULL)) OR ((pack_key IS NULL) AND (rule_kind IS NOT NULL) AND (name IS NOT NULL) AND (length(btrim(name)) > 0))))
+);
+
+ALTER TABLE ONLY public.payroll_holidays FORCE ROW LEVEL SECURITY;
+
+
+--
+-- Name: TABLE payroll_holidays; Type: COMMENT; Schema: public; Owner: -
+--
+
+COMMENT ON TABLE public.payroll_holidays IS 'Tenant half of the statutory holiday calendar: elections on the country pack''s OPTIONAL days, and company holidays the pack does not declare. Effective-dated against the observed date, so re-running a prior period reproduces that period''s calendar. A mandatory statutory holiday can never be switched off here — the engine refuses.';
+
+
+--
+-- Name: payroll_holidays; Type: VIEW; Schema: openbooks_query; Owner: -
+--
+
+CREATE VIEW openbooks_query.payroll_holidays WITH (security_barrier='true') AS
+ SELECT id,
+    org_id,
+    jurisdiction,
+    pack_key,
+    name,
+    rule_kind,
+    rule_month,
+    rule_day,
+    rule_weekday,
+    rule_nth,
+    rule_offset,
+    observed_on,
+    observance,
+    is_observed,
+    is_paid,
+    effective_from,
+    effective_to,
+    created_at,
+    created_by,
+    updated_at,
+    updated_by
+   FROM public.payroll_holidays
   WHERE (org_id = public.openbooks_query_org_id());
 
 
@@ -15579,6 +15770,10 @@ CREATE TABLE public.time_types (
     show_on_field_ticket boolean DEFAULT false NOT NULL,
     classification text DEFAULT 'regular'::text NOT NULL,
     exclude_from_wages boolean DEFAULT false NOT NULL,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    created_by uuid,
+    updated_at timestamp with time zone DEFAULT now() NOT NULL,
+    updated_by uuid,
     CONSTRAINT time_types_bill_multiplier_check CHECK ((bill_multiplier >= (0)::numeric)),
     CONSTRAINT time_types_classification_valid CHECK ((classification = ANY (ARRAY['regular'::text, 'overtime'::text, 'double_time'::text, 'other'::text])))
 );
@@ -15601,7 +15796,11 @@ CREATE VIEW openbooks_query.time_types WITH (security_barrier='true') AS
     bill_multiplier,
     show_on_field_ticket,
     classification,
-    exclude_from_wages
+    exclude_from_wages,
+    created_at,
+    created_by,
+    updated_at,
+    updated_by
    FROM public.time_types
   WHERE (org_id = public.openbooks_query_org_id());
 
@@ -16386,7 +16585,11 @@ CREATE TABLE public.worker_comp_groups (
     name text NOT NULL,
     rate_percent numeric(19,4),
     is_active boolean DEFAULT true NOT NULL,
-    max_assessable numeric(19,4)
+    max_assessable numeric(19,4),
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    created_by uuid,
+    updated_at timestamp with time zone DEFAULT now() NOT NULL,
+    updated_by uuid
 );
 
 ALTER TABLE ONLY public.worker_comp_groups FORCE ROW LEVEL SECURITY;
@@ -16403,7 +16606,11 @@ CREATE VIEW openbooks_query.worker_comp_groups WITH (security_barrier='true') AS
     name,
     rate_percent,
     is_active,
-    max_assessable
+    max_assessable,
+    created_at,
+    created_by,
+    updated_at,
+    updated_by
    FROM public.worker_comp_groups
   WHERE (org_id = public.openbooks_query_org_id());
 
@@ -18452,6 +18659,58 @@ CREATE TABLE public.orgs (
 );
 
 ALTER TABLE ONLY public.orgs FORCE ROW LEVEL SECURITY;
+
+
+--
+-- Name: pay_run_bank_files; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.pay_run_bank_files (
+    id uuid DEFAULT public.uuid_generate_v7() NOT NULL,
+    org_id uuid NOT NULL,
+    pay_run_document_id uuid NOT NULL,
+    payment_bank_profile_id uuid NOT NULL,
+    format text NOT NULL,
+    sequence_number integer NOT NULL,
+    file_number text NOT NULL,
+    sequence_value integer NOT NULL,
+    file_creation_number integer,
+    file_id_modifier text,
+    filename text NOT NULL,
+    content_type text NOT NULL,
+    content_hash text NOT NULL,
+    size_bytes integer NOT NULL,
+    file_id uuid NOT NULL,
+    file_version_id uuid NOT NULL,
+    entry_count integer NOT NULL,
+    control_total numeric(19,4) NOT NULL,
+    currency text NOT NULL,
+    excluded_cheque jsonb DEFAULT '[]'::jsonb NOT NULL,
+    excluded_total numeric(19,4) DEFAULT 0 NOT NULL,
+    status text DEFAULT 'generated'::text NOT NULL,
+    generated_at timestamp with time zone DEFAULT now() NOT NULL,
+    generated_by uuid,
+    first_released_at timestamp with time zone,
+    last_released_at timestamp with time zone,
+    release_count integer DEFAULT 0 NOT NULL,
+    superseded_at timestamp with time zone,
+    superseded_by uuid,
+    superseded_by_file_id uuid,
+    supersede_reason text,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    created_by uuid,
+    updated_at timestamp with time zone DEFAULT now() NOT NULL,
+    updated_by uuid,
+    CONSTRAINT pay_run_bank_files_control_total CHECK ((control_total > (0)::numeric)),
+    CONSTRAINT pay_run_bank_files_entry_count CHECK ((entry_count > 0)),
+    CONSTRAINT pay_run_bank_files_format CHECK ((format = ANY (ARRAY['cpa005'::text, 'nacha'::text]))),
+    CONSTRAINT pay_run_bank_files_format_numbering CHECK ((((format = 'cpa005'::text) AND ((file_creation_number >= 1) AND (file_creation_number <= 9999)) AND (file_id_modifier IS NULL)) OR ((format = 'nacha'::text) AND (file_id_modifier ~ '^[A-Z0-9]$'::text) AND (file_creation_number IS NULL)))),
+    CONSTRAINT pay_run_bank_files_release_evidence CHECK ((((release_count = 0) AND (first_released_at IS NULL)) OR ((release_count > 0) AND (first_released_at IS NOT NULL) AND (last_released_at IS NOT NULL)))),
+    CONSTRAINT pay_run_bank_files_status CHECK ((status = ANY (ARRAY['generated'::text, 'released'::text, 'superseded'::text]))),
+    CONSTRAINT pay_run_bank_files_supersede_evidence CHECK (((status <> 'superseded'::text) OR ((superseded_at IS NOT NULL) AND (superseded_by IS NOT NULL) AND (supersede_reason IS NOT NULL) AND (length(btrim(supersede_reason)) >= 5) AND (length(btrim(supersede_reason)) <= 500))))
+);
+
+ALTER TABLE ONLY public.pay_run_bank_files FORCE ROW LEVEL SECURITY;
 
 
 --
@@ -21402,6 +21661,14 @@ ALTER TABLE ONLY public.pay_run_adjustments
 
 
 --
+-- Name: pay_run_bank_files pay_run_bank_files_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.pay_run_bank_files
+    ADD CONSTRAINT pay_run_bank_files_pkey PRIMARY KEY (id);
+
+
+--
 -- Name: pay_runs pay_runs_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -21575,6 +21842,14 @@ ALTER TABLE ONLY public.payment_terms
 
 ALTER TABLE ONLY public.payroll_filing_accounts
     ADD CONSTRAINT payroll_filing_accounts_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: payroll_holidays payroll_holidays_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.payroll_holidays
+    ADD CONSTRAINT payroll_holidays_pkey PRIMARY KEY (id);
 
 
 --
@@ -25862,6 +26137,13 @@ CREATE UNIQUE INDEX pay_components_org_system ON public.pay_components USING btr
 
 
 --
+-- Name: pay_derived_rules_charge_scope; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX pay_derived_rules_charge_scope ON public.pay_derived_rules USING btree (org_id, equipment_unit_id, item_id) WHERE (trigger = 'equipment_charge'::text);
+
+
+--
 -- Name: pay_derived_rules_component; Type: INDEX; Schema: public; Owner: -
 --
 
@@ -25901,6 +26183,27 @@ CREATE INDEX pay_run_adjustments_run ON public.pay_run_adjustments USING btree (
 --
 
 CREATE INDEX pay_instructions_run ON public.payment_instructions USING btree (payment_run_id);
+
+
+--
+-- Name: pay_run_bank_files_hash; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX pay_run_bank_files_hash ON public.pay_run_bank_files USING btree (org_id, content_hash);
+
+
+--
+-- Name: pay_run_bank_files_run_sequence; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE UNIQUE INDEX pay_run_bank_files_run_sequence ON public.pay_run_bank_files USING btree (pay_run_document_id, sequence_number);
+
+
+--
+-- Name: pay_run_bank_files_run_status; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX pay_run_bank_files_run_status ON public.pay_run_bank_files USING btree (pay_run_document_id, status);
 
 
 --
@@ -26162,6 +26465,20 @@ CREATE UNIQUE INDEX payroll_filing_accounts_org_default ON public.payroll_filing
 --
 
 CREATE UNIQUE INDEX payroll_filing_accounts_org_number ON public.payroll_filing_accounts USING btree (org_id, account_number);
+
+
+--
+-- Name: payroll_holidays_org_jurisdiction; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX payroll_holidays_org_jurisdiction ON public.payroll_holidays USING btree (org_id, jurisdiction, effective_from);
+
+
+--
+-- Name: payroll_holidays_org_pack_key; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE UNIQUE INDEX payroll_holidays_org_pack_key ON public.payroll_holidays USING btree (org_id, jurisdiction, pack_key, effective_from) WHERE (pack_key IS NOT NULL);
 
 
 --
@@ -28538,6 +28855,13 @@ CREATE TRIGGER party_subsidiary_guard BEFORE INSERT OR UPDATE ON public.party_su
 
 
 --
+-- Name: pay_run_bank_files pay_run_bank_file_immutable; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER pay_run_bank_file_immutable BEFORE DELETE OR UPDATE ON public.pay_run_bank_files FOR EACH ROW EXECUTE FUNCTION public.openbooks_guard_pay_run_bank_file();
+
+
+--
 -- Name: payment_events payment_event_immutable; Type: TRIGGER; Schema: public; Owner: -
 --
 
@@ -28556,6 +28880,27 @@ CREATE TRIGGER payment_file_artifact_immutable BEFORE UPDATE ON public.payment_f
 --
 
 CREATE TRIGGER payment_run_item_guard BEFORE DELETE OR UPDATE ON public.payment_run_items FOR EACH ROW EXECUTE FUNCTION public.payment_run_item_guard();
+
+
+--
+-- Name: file_blobs payroll_bank_file_blob_immutable; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER payroll_bank_file_blob_immutable BEFORE DELETE OR UPDATE ON public.file_blobs FOR EACH ROW EXECUTE FUNCTION public.openbooks_guard_payroll_bank_file_blob();
+
+
+--
+-- Name: files payroll_bank_file_file_immutable; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER payroll_bank_file_file_immutable BEFORE DELETE OR UPDATE ON public.files FOR EACH ROW EXECUTE FUNCTION public.openbooks_guard_payroll_bank_file_file();
+
+
+--
+-- Name: file_versions payroll_bank_file_version_immutable; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER payroll_bank_file_version_immutable BEFORE DELETE OR UPDATE ON public.file_versions FOR EACH ROW EXECUTE FUNCTION public.openbooks_guard_payroll_bank_file_version();
 
 
 --
@@ -33974,6 +34319,22 @@ ALTER TABLE ONLY public.pay_derived_rules
 
 
 --
+-- Name: pay_derived_rules pay_derived_rules_equipment_unit_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.pay_derived_rules
+    ADD CONSTRAINT pay_derived_rules_equipment_unit_id_fkey FOREIGN KEY (equipment_unit_id) REFERENCES public.equipment_units(id) ON DELETE SET NULL DEFERRABLE;
+
+
+--
+-- Name: pay_derived_rules pay_derived_rules_item_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.pay_derived_rules
+    ADD CONSTRAINT pay_derived_rules_item_id_fkey FOREIGN KEY (item_id) REFERENCES public.items(id) ON DELETE SET NULL DEFERRABLE;
+
+
+--
 -- Name: pay_derived_rules pay_derived_rules_org_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -34067,6 +34428,54 @@ ALTER TABLE ONLY public.pay_run_adjustments
 
 ALTER TABLE ONLY public.pay_runs
     ADD CONSTRAINT pay_runs_paid_entry_id_fkey FOREIGN KEY (paid_entry_id) REFERENCES public.journal_entries(id) ON DELETE SET NULL DEFERRABLE;
+
+
+--
+-- Name: pay_run_bank_files pay_run_bank_files_file_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.pay_run_bank_files
+    ADD CONSTRAINT pay_run_bank_files_file_fkey FOREIGN KEY (file_id) REFERENCES public.files(id) DEFERRABLE;
+
+
+--
+-- Name: pay_run_bank_files pay_run_bank_files_org_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.pay_run_bank_files
+    ADD CONSTRAINT pay_run_bank_files_org_id_fkey FOREIGN KEY (org_id) REFERENCES public.orgs(id) DEFERRABLE;
+
+
+--
+-- Name: pay_run_bank_files pay_run_bank_files_profile_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.pay_run_bank_files
+    ADD CONSTRAINT pay_run_bank_files_profile_fkey FOREIGN KEY (payment_bank_profile_id) REFERENCES public.payment_bank_profiles(id) DEFERRABLE;
+
+
+--
+-- Name: pay_run_bank_files pay_run_bank_files_run_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.pay_run_bank_files
+    ADD CONSTRAINT pay_run_bank_files_run_fkey FOREIGN KEY (pay_run_document_id) REFERENCES public.documents(id) DEFERRABLE;
+
+
+--
+-- Name: pay_run_bank_files pay_run_bank_files_supersedes_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.pay_run_bank_files
+    ADD CONSTRAINT pay_run_bank_files_supersedes_fkey FOREIGN KEY (superseded_by_file_id) REFERENCES public.pay_run_bank_files(id) DEFERRABLE;
+
+
+--
+-- Name: pay_run_bank_files pay_run_bank_files_version_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.pay_run_bank_files
+    ADD CONSTRAINT pay_run_bank_files_version_fkey FOREIGN KEY (file_version_id) REFERENCES public.file_versions(id) DEFERRABLE;
 
 
 --
@@ -34699,6 +35108,30 @@ ALTER TABLE ONLY public.payroll_filing_accounts
 
 ALTER TABLE ONLY public.payroll_filing_accounts
     ADD CONSTRAINT payroll_filing_accounts_updated_by_fkey FOREIGN KEY (updated_by) REFERENCES public.users(id) ON DELETE SET NULL DEFERRABLE;
+
+
+--
+-- Name: payroll_holidays payroll_holidays_created_by_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.payroll_holidays
+    ADD CONSTRAINT payroll_holidays_created_by_fkey FOREIGN KEY (created_by) REFERENCES public.users(id) ON DELETE SET NULL DEFERRABLE;
+
+
+--
+-- Name: payroll_holidays payroll_holidays_org_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.payroll_holidays
+    ADD CONSTRAINT payroll_holidays_org_id_fkey FOREIGN KEY (org_id) REFERENCES public.orgs(id) ON DELETE CASCADE DEFERRABLE;
+
+
+--
+-- Name: payroll_holidays payroll_holidays_updated_by_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.payroll_holidays
+    ADD CONSTRAINT payroll_holidays_updated_by_fkey FOREIGN KEY (updated_by) REFERENCES public.users(id) ON DELETE SET NULL DEFERRABLE;
 
 
 --
@@ -40942,6 +41375,20 @@ COMMENT ON POLICY org_isolation ON public.pay_run_adjustments IS 'openbooks:org_
 
 
 --
+-- Name: pay_run_bank_files org_isolation; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY org_isolation ON public.pay_run_bank_files USING (((current_setting('app.bypass_rls'::text, true) = 'on'::text) OR ((org_id)::text = current_setting('app.current_org'::text, true)))) WITH CHECK (((current_setting('app.bypass_rls'::text, true) = 'on'::text) OR ((org_id)::text = current_setting('app.current_org'::text, true))));
+
+
+--
+-- Name: POLICY org_isolation ON pay_run_bank_files; Type: COMMENT; Schema: public; Owner: -
+--
+
+COMMENT ON POLICY org_isolation ON public.pay_run_bank_files IS 'openbooks:org_isolation:v1';
+
+
+--
 -- Name: pay_runs org_isolation; Type: POLICY; Schema: public; Owner: -
 --
 
@@ -41247,6 +41694,20 @@ CREATE POLICY org_isolation ON public.payroll_filing_accounts USING (((current_s
 --
 
 COMMENT ON POLICY org_isolation ON public.payroll_filing_accounts IS 'openbooks:org_isolation:v1';
+
+
+--
+-- Name: payroll_holidays org_isolation; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY org_isolation ON public.payroll_holidays USING (((current_setting('app.bypass_rls'::text, true) = 'on'::text) OR ((org_id)::text = current_setting('app.current_org'::text, true)))) WITH CHECK (((current_setting('app.bypass_rls'::text, true) = 'on'::text) OR ((org_id)::text = current_setting('app.current_org'::text, true))));
+
+
+--
+-- Name: POLICY org_isolation ON payroll_holidays; Type: COMMENT; Schema: public; Owner: -
+--
+
+COMMENT ON POLICY org_isolation ON public.payroll_holidays IS 'openbooks:org_isolation:v1';
 
 
 --
@@ -42924,6 +43385,12 @@ ALTER TABLE public.pay_derived_rules ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.pay_run_adjustments ENABLE ROW LEVEL SECURITY;
 
 --
+-- Name: pay_run_bank_files; Type: ROW SECURITY; Schema: public; Owner: -
+--
+
+ALTER TABLE public.pay_run_bank_files ENABLE ROW LEVEL SECURITY;
+
+--
 -- Name: pay_runs; Type: ROW SECURITY; Schema: public; Owner: -
 --
 
@@ -43054,6 +43521,12 @@ ALTER TABLE public.payment_terms ENABLE ROW LEVEL SECURITY;
 --
 
 ALTER TABLE public.payroll_filing_accounts ENABLE ROW LEVEL SECURITY;
+
+--
+-- Name: payroll_holidays; Type: ROW SECURITY; Schema: public; Owner: -
+--
+
+ALTER TABLE public.payroll_holidays ENABLE ROW LEVEL SECURITY;
 
 --
 -- Name: payroll_opening_balances; Type: ROW SECURITY; Schema: public; Owner: -
@@ -44895,6 +45368,13 @@ GRANT SELECT ON TABLE openbooks_query.payment_terms TO openbooks_read;
 --
 
 GRANT SELECT ON TABLE openbooks_query.payroll_filing_accounts TO openbooks_read;
+
+
+--
+-- Name: TABLE payroll_holidays; Type: ACL; Schema: openbooks_query; Owner: -
+--
+
+GRANT SELECT ON TABLE openbooks_query.payroll_holidays TO openbooks_read;
 
 
 --

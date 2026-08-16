@@ -146,6 +146,29 @@ function PreviewBody({
           )}
         </Alert>
       ) : null}
+      {/* Coverage refusal — the loudest thing on the screen, and deliberately
+          NOT a warning. The rule is fine; the month is incomplete, so there is
+          no number to show and showing a partial one is the actual hazard. */}
+      {preview.coverage ? (
+        <Alert variant="destructive">
+          <div className="font-medium">
+            {label('derivedPreview.coverageTitle', 'This rule cannot settle the month yet')}
+          </div>
+          <div className="mt-1">
+            {label(
+              'derivedPreview.coverageBody',
+              'Some equipment charges in the settled month do not record which operator ran the unit, so the incentive cannot tell who is owed. It refuses rather than pay on the charges that happen to be attributed, which would under-pay. Record the operator on those charges, or narrow this rule so they fall outside it.',
+            )}
+          </div>
+          <div className="mt-1 tabular-nums">
+            {preview.coverage.monthStart} – {preview.coverage.monthEnd}
+            {' · '}
+            {preview.coverage.unattributed} / {preview.coverage.qualifying}
+            {' '}
+            {label('derivedPreview.coverageUnattributed', 'charges without an operator')}
+          </div>
+        </Alert>
+      ) : null}
       {preview.errors.map((error) => (
         <Alert key={error} variant="warning">
           {error}

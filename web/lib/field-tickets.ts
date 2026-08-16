@@ -335,7 +335,14 @@ export async function addTicketLine(
   orgId: string,
   userId: string,
   ticketId: string,
-  input: { itemId: string; quantity: number; rateUnitCode?: string | null; equipmentUnitId?: string | null; description?: string | null },
+  input: {
+    itemId: string; quantity: number; rateUnitCode?: string | null; equipmentUnitId?: string | null
+    /** The crew member who ran this unit. See ChargeLineInput.employeeId — the
+     * ticket is where somebody actually knows, because they are standing in
+     * front of the machine while they fill it in. */
+    employeeId?: string | null
+    description?: string | null
+  },
 ): Promise<void> {
   const doc = await loadHeader(orgId, ticketId)
   if (doc.status !== 'draft') throw new FieldTicketError('Only draft tickets can be edited')
@@ -357,6 +364,21 @@ export async function addTicketLine(
     if (!equipment.rows[0] || equipment.rows[0].status !== 'active' || equipment.rows[0].charge_item_id !== input.itemId) {
       throw new FieldTicketError('Choose active equipment linked to this item')
     }
+  }
+  if (input.employeeId) {
+    if (!input.equipmentUnitId) {
+      throw new FieldTicketError('Only an equipment line can record an operator')
+    }
+    // The operator must be on THIS ticket's crew. A ticket is signed as a
+    // record of who was on site that day, so attributing equipment to someone
+    // the ticket does not place there would make the signature cover a claim it
+    // never made — and this line becomes payable money downstream.
+    const crew = (await db.execute(sql`
+      select 1 from time_entries
+       where org_id = ${orgId} and field_ticket_id = ${ticketId}
+         and employee_party_id = ${input.employeeId}
+       limit 1`)) as unknown as { rows: unknown[] }
+    if (!crew.rows[0]) throw new FieldTicketError('The operator must be on this ticket’s crew')
   }
 
   const quantity = String(qty)
@@ -388,11 +410,12 @@ export async function addTicketLine(
   }
   const inserted = (await db.execute(sql`
     insert into document_lines (org_id, document_id, line_number, item_id, description, quantity, unit, unit_price, amount,
-                                project_id, is_billable, equipment_unit_id, rate_version_id, rate_presentation,
+                                project_id, is_billable, equipment_unit_id, employee_id, rate_version_id, rate_presentation,
                                 base_quantity, base_unit, cost_rate, bill_rate, cost_amount, bill_amount,
                                 field_ticket_id, created_by, updated_by)
     values (${orgId}, ${ticketId}, ${next.rows[0].n}, ${input.itemId}, ${input.description ?? item.rows[0].name},
             ${quantity}, ${transactionUnit}, ${billRate}, ${billAmount}, ${doc.project_id}, true, ${input.equipmentUnitId ?? null},
+            ${input.employeeId ?? null},
             ${resolved?.rateVersionId ?? null}, ${resolved?.invoicePresentation ?? 'summary'}, ${baseQuantity}, ${baseUnit},
             ${costRate}, ${billRate}, ${costAmount}, ${billAmount}, ${ticketId}, ${userId}, ${userId}) returning id`)) as unknown as {
     rows: { id: string }[]
@@ -744,11 +767,12 @@ export async function releaseFieldTicketApproval(
   // Materialize item lines as a project charge so job cost + T&M billing see them.
   const lines = (await db.execute(sql`
     select id, item_id, description, quantity, unit, cost_rate, bill_rate, cost_amount, bill_amount,
-           equipment_unit_id, rate_version_id, rate_presentation, base_quantity, base_unit
+           equipment_unit_id, employee_id, rate_version_id, rate_presentation, base_quantity, base_unit
       from document_lines
      where document_id = ${ticketId} and org_id = ${orgId} and item_id is not null`)) as unknown as {
     rows: { id: string; item_id: string; description: string | null; quantity: string; unit: string | null; cost_rate: string | null;
       bill_rate: string | null; cost_amount: string | null; bill_amount: string | null; equipment_unit_id: string | null;
+      employee_id: string | null;
       rate_version_id: string | null; rate_presentation: 'summary' | 'rate_components' | null;
       base_quantity: string | null; base_unit: string | null }[]
   }
@@ -783,6 +807,11 @@ export async function releaseFieldTicketApproval(
             itemId: l.item_id,
             quantity: String(l.quantity),
             equipmentUnitId: l.equipment_unit_id,
+            // Carry the operator the ticket captured through to the charge.
+            // The charge line is what the incentive rule reads, so an operator
+            // recorded on the ticket and dropped here would be captured and
+            // still unpayable.
+            employeeId: l.employee_id,
             costRate: hasSnapshot ? null : l.cost_rate,
             billRate: hasSnapshot ? null : l.bill_rate,
             rateSnapshot: hasSnapshot ? {
