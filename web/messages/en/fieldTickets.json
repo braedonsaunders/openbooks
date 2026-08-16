@@ -108,6 +108,8 @@
       "amount": "Amount",
       "equipment": "Equipment unit",
       "pooledItem": "No specific unit",
+      "operator": "Operator",
+      "noOperator": "Not recorded",
       "rateSource": { "rate_book": "Resolved from rate book", "item_default": "Using item default rate" },
       "add": "Add line",
       "remove": "Remove line",

@@ -407,6 +407,26 @@ export async function applyDocumentEdit(
     | { accountId: string; itemId: string | null; description: string | null; quantity: string | null; unit: string | null; unitPrice: string | null; amount: string; taxCodeId: string | null; taxGroupId: string | null; taxInputAmount: string; taxAmount: string; taxOverridden: boolean; taxComponents: ReturnType<typeof computeBillTotals>['lines'][number]['taxComponents']; partyId: string | null; departmentId: string | null; projectId: string | null; locationId: string | null; classId: string | null; extraDims: Record<string, string>; custom: Record<string, unknown> }[]
     | null = null
   if (body.lines) {
+    // Charge lines are NOT editable through the generic line editor, and this
+    // has to be refused at the service boundary rather than by the drawer
+    // hiding the controls (which is all that stopped it before).
+    //
+    // The generic path replaces lines by delete-and-reinsert with the shared
+    // column set. A project charge or field ticket line also carries an
+    // immutable rate snapshot (rate_version_id, base_quantity, cost/bill
+    // amounts, the charge_rate_components rows keyed to the line id) and now
+    // the equipment unit and its OPERATOR. Re-inserting through the generic
+    // shape silently drops every one of them: the customer's billable value
+    // becomes zero, the rate components orphan, and the operator's equipment
+    // incentive quietly stops being payable. Those lines have their own
+    // writers (createProjectCharge / addTicketLine) and must go through them.
+    if (current.kind === 'project_charge' || current.kind === 'field_ticket') {
+      throw new DocumentEditError(
+        422,
+        `${current.kind} lines carry an immutable rate snapshot and cannot be edited here; ` +
+          `change them on the source record`,
+      )
+    }
     const valid = body.lines.filter((l) => l.accountId && cmp(l.amount, '0') > 0)
     const computed = computeBillTotals(valid, await taxProfileMap(orgId, body.documentDate ?? current.documentDate))
     totals = computed

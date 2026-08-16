@@ -35,8 +35,32 @@ import { useMoney } from '../../../../../components/money-provider'
 import { FilterChips } from '../../../../../components/filter-bar'
 import { PagedTable, type PagedColumn } from '../../../../../components/paged-table'
 import { RunStatusBadge, runDisplayStatus } from '../../_ui/run-status'
+import { BankFilePanel } from './BankFilePanel'
 
 export type WizardStep = 'period' | 'readiness' | 'review' | 'gl' | 'finish'
+
+/**
+ * English fallbacks for codes whose message has not landed in web/messages yet.
+ * This screen decides whether a payday is safe to run; a raw message key in
+ * place of a blocker or a warning is not an acceptable degradation. Delete an
+ * entry the moment its real key exists — `t.has` prefers the translation.
+ * See .local/handoff-openings.md for the strings to add.
+ */
+const READINESS_CODE_FALLBACK: Record<string, (count: number, detail: string) => string> = {
+  'employee.noOpeningBalance': (count, detail) =>
+    `${count} employee${count === 1 ? ' has' : 's have'} no ${detail} opening balance from your previous payroll system, so their CPP/EI and wage-base ceilings will restart at zero on this run.`,
+}
+
+const STALE_REASON_FALLBACK: Record<string, string> = {
+  missing: 'the run itself',
+  components: 'employee pay components',
+  componentDefinitions: 'pay component setup',
+  derivedRules: 'derived earnings rules',
+  entitlements: 'pay banks',
+  workerComp: "workers' compensation rates",
+  settings: 'payroll settings',
+  ytd: "another run's year-to-date",
+}
 
 export interface ReadinessItem {
   severity: 'blocker' | 'warning'
@@ -615,7 +639,11 @@ export function RunWizard(props: {
           <span className="flex items-center gap-2">
             <RefreshCw size={16} aria-hidden />
             {t('wizard.stale.title', {
-              reasons: props.staleness.reasons.map((r) => t(`wizard.stale.reason.${r}`)).join(', '),
+              reasons: props.staleness.reasons
+                .map((r) => (t.has(`wizard.stale.reason.${r}` as never)
+                  ? t(`wizard.stale.reason.${r}` as never)
+                  : (STALE_REASON_FALLBACK[r] ?? r)))
+                .join(', '),
             })}
           </span>
           {canCalculate && (
@@ -1102,11 +1130,16 @@ function ReadinessStep({
   const blockers = readiness.items.filter((i) => i.severity === 'blocker')
   const warnings = readiness.items.filter((i) => i.severity === 'warning')
   const needsAck = warnings.length > 0 && !acknowledged
+  // A readiness code with no message must still be READABLE. Rendering the raw
+  // key ("…codes.employee.noOpeningBalance") on the one screen that decides
+  // whether a payday is safe to run is worse than an untranslated sentence.
   const label = (item: ReadinessItem) =>
-    t(`wizard.readiness.codes.${item.code}`, {
-      count: item.employees.length,
-      detail: item.detail ?? '',
-    })
+    t.has(`wizard.readiness.codes.${item.code}` as never)
+      ? t(`wizard.readiness.codes.${item.code}`, {
+          count: item.employees.length,
+          detail: item.detail ?? '',
+        })
+      : (READINESS_CODE_FALLBACK[item.code]?.(item.employees.length, item.detail ?? '') ?? item.code)
 
   const list = (items: ReadinessItem[], severity: 'blocker' | 'warning') => (
     <ul className="divide-y divide-slate-100 dark:divide-slate-800">
@@ -2309,6 +2342,15 @@ function FinishStep({
       </div>
 
       {!run.paid_at && <FundingPanel funding={funding} fmt={fmt} />}
+
+      {/* Direct deposit sits directly under Funding on purpose: the cash the
+          controller has to have in the account and the instruction that draws
+          it are one decision, and reading them apart is how a payday goes out
+          twice. Committed runs only — there is nothing to instruct off figures
+          that can still change. */}
+      {committed && (
+        <BankFilePanel documentId={run.document_id} canRun={canRun} fmt={fmt} />
+      )}
 
       <div className="grid gap-4 lg:grid-cols-2">
         <div className="overflow-x-auto rounded-xl border border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-900">

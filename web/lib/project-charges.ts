@@ -25,6 +25,17 @@ export interface ChargeLineInput {
   /** Usage in the item's configured base unit. */
   quantity: string
   equipmentUnitId?: string | null
+  /**
+   * The OPERATOR who ran the unit (→ parties, the same identity payroll uses).
+   *
+   * Captured here rather than inferred later because there is nowhere honest to
+   * infer it from: a unit has no standing operator, and a field ticket routinely
+   * carries a whole crew, so "the ticket's employee" is ambiguous the moment
+   * more than one person worked it. An equipment incentive pays this person a
+   * share of what this line billed, so the answer has to be recorded at the
+   * moment somebody knows it.
+   */
+  employeeId?: string | null
   /** Cost per unit (job cost). Defaults to the item's default_cost. */
   costRate?: string | null
   /** Bill rate per unit (T&M price). Defaults to the item's default_rate. */
@@ -123,6 +134,22 @@ export async function createProjectCharge(
         if (unit.rows[0].charge_item_id !== line.itemId) throw new ChargeError('Equipment unit does not use the selected charge item')
         if (unit.rows[0].subsidiary_id !== subsidiaryId) throw new ChargeError('Equipment and project must use the same subsidiary')
       }
+      if (line.employeeId) {
+        // Validated at the service boundary, not just in the picker: this
+        // column feeds a payroll rule, so a bad id must fail here rather than
+        // become an equipment charge nobody can ever be paid for.
+        const operator = (await tx.execute(sql`
+          select 1 from employee_roles
+           where party_id = ${line.employeeId} and org_id = ${orgId}
+        `)) as unknown as { rows: unknown[] }
+        if (!operator.rows[0]) throw new ChargeError('The operator must be an employee of this organization')
+        if (!line.equipmentUnitId) {
+          // An operator on a material or service charge would look like an
+          // equipment attribution to every reader and to the incentive rule,
+          // which keys on the unit.
+          throw new ChargeError('Only an equipment charge line can record an operator')
+        }
+      }
 
       const resolved = line.rateSnapshot ?? (line.costRate == null && line.billRate == null
         ? await resolveItemRate({
@@ -145,12 +172,12 @@ export async function createProjectCharge(
       const isBillable = line.isBillable ?? true
       const [insertedLine] = (await tx.execute(sql`
         insert into document_lines (org_id, document_id, line_number, item_id, account_id, description,
-              quantity, unit, unit_price, amount, is_billable, project_id, equipment_unit_id, rate_version_id,
+              quantity, unit, unit_price, amount, is_billable, project_id, equipment_unit_id, employee_id, rate_version_id,
               rate_presentation, base_quantity, base_unit, cost_rate, bill_rate, cost_amount, bill_amount,
               recovery_account_id, field_ticket_id, created_by)
         values (${orgId}, ${docId}, ${lineNo}, ${line.itemId}, ${accountId}, ${line.description ?? it.name},
               ${line.quantity}, ${resolved?.transactionUnitCode ?? resolved?.baseUnit ?? it.unit ?? null}, ${costRate}, ${costAmount}, ${isBillable}, ${input.projectId},
-              ${line.equipmentUnitId ?? null}, ${resolved?.rateVersionId ?? null}, ${resolved?.invoicePresentation ?? 'summary'},
+              ${line.equipmentUnitId ?? null}, ${line.employeeId ?? null}, ${resolved?.rateVersionId ?? null}, ${resolved?.invoicePresentation ?? 'summary'},
               ${resolved?.baseQuantity ?? line.quantity}, ${resolved?.baseUnit ?? it.unit ?? null},
               ${costRate}, ${billRate}, ${costAmount}, ${billAmount}, ${it.cost_recovery_account_id ?? null},
               ${input.fieldTicketId ?? null}, ${userId})

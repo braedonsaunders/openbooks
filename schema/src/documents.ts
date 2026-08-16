@@ -368,4 +368,12 @@ export const timeTypes = pgTable("time_types", {
   excludeFromWages: boolean("exclude_from_wages").notNull().default(false),
   isActive: boolean("is_active").notNull().default(true),
   custom: jsonb("custom").notNull().default({}), // keeps source platform nsId for the time-record import bridge
+  /**
+   * `costMultiplier` and `excludeFromWages` are direct inputs to gross earnings
+   * in calculatePayRun, so this is money configuration and carries the audit
+   * quartet: without `updatedAt`, raising an overtime multiplier after a run is
+   * calculated is invisible to `payRunStaleness` and the run commits wages at
+   * the old rate while reporting itself fresh.
+   */
+  ...auditColumns,
 });

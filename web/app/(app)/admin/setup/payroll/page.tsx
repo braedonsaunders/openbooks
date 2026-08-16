@@ -14,8 +14,10 @@ import { requireFeatureEnabled } from '../../../../../lib/feature-gates'
 import { pickString } from '../../../../../lib/list-params'
 import { SETUP_ENTITY_BY_KEY, type SetupEntity } from '../../../../../lib/setup/registry'
 import { PAY_DERIVED_RULES_ENTITY } from '../../../../../lib/setup/payroll-derived-rules'
+import { PAYROLL_HOLIDAYS_ENTITY } from '../../../../../lib/setup/payroll-holidays'
 import { SetupEntitySection } from '../[entity]/SetupEntitySection'
 import { DerivedRulePreviewSection } from './DerivedRulePreviewSection'
+import { HolidayCalendarSection } from './HolidayCalendarSection'
 import { PayrollCountryPacks } from './PayrollCountryPacks'
 import { PayrollSetupWorkspace } from './PayrollSetupWorkspace'
 
@@ -45,6 +47,9 @@ const ENTITY_BY_TAB = {
 const TABS = [
   'packs', 'accounts', 'filing', 'schedules', 'components', 'union',
   'entitlements', 'limits', 'service', 'derived', 'derivedPreview',
+  // Statutory holidays: the employer's elections, then the resolved calendar
+  // those elections produce. Same edit-then-confirm pairing as derived rules.
+  'holidays', 'holidayCalendar',
 ] as const
 type Tab = (typeof TABS)[number]
 type EntityTab = keyof typeof ENTITY_BY_TAB
@@ -59,6 +64,11 @@ const isEntityTab = (tab: Tab): tab is EntityTab => tab in ENTITY_BY_TAB
  */
 const derivedRulesEntity = (): SetupEntity =>
   SETUP_ENTITY_BY_KEY.get(PAY_DERIVED_RULES_ENTITY.key) ?? PAY_DERIVED_RULES_ENTITY
+
+/** Same arrangement for observed statutory holidays — see
+ *  .local/handoff-holidays.md for the registry.ts spread. */
+const holidaysEntity = (): SetupEntity =>
+  SETUP_ENTITY_BY_KEY.get(PAYROLL_HOLIDAYS_ENTITY.key) ?? PAYROLL_HOLIDAYS_ENTITY
 
 export default async function PayrollSetupPage({
   searchParams,
@@ -85,7 +95,11 @@ export default async function PayrollSetupPage({
       ? tabLabel(key, 'Derived Earnings')
       : key === 'derivedPreview'
         ? tabLabel(key, 'Rule Preview')
-        : t(`tabs.${key}`),
+        : key === 'holidays'
+          ? tabLabel(key, 'Holidays')
+          : key === 'holidayCalendar'
+            ? tabLabel(key, 'Holiday Calendar')
+            : t(`tabs.${key}`),
   }))
 
   return (
@@ -133,6 +147,18 @@ export default async function PayrollSetupPage({
       ) : null}
       {tab === 'derivedPreview' ? (
         <DerivedRulePreviewSection orgId={orgId} searchParams={sp} />
+      ) : null}
+      {tab === 'holidays' ? (
+        <SetupEntitySection
+          entity={holidaysEntity()}
+          orgId={orgId}
+          searchParams={sp}
+          basePath="/admin/setup/payroll"
+          canManage={canManageEntities}
+        />
+      ) : null}
+      {tab === 'holidayCalendar' ? (
+        <HolidayCalendarSection orgId={orgId} searchParams={sp} />
       ) : null}
     </div>
   )

@@ -17,17 +17,21 @@ const DERIVED_TRIGGERS = [
   { value: 'distinct_project_day', labelKey: 'options.derivedTrigger.distinctProjectDay' },
   { value: 'night_stayed', labelKey: 'options.derivedTrigger.nightStayed' },
   { value: 'month_end', labelKey: 'options.derivedTrigger.monthEnd' },
+  { value: 'equipment_charge', labelKey: 'options.derivedTrigger.equipmentCharge' },
 ]
 
 const DERIVED_QUANTITY_MODES = [
   { value: 'count', labelKey: 'options.derivedQuantity.count' },
   { value: 'sum_hours', labelKey: 'options.derivedQuantity.sumHours' },
   { value: 'count_nights', labelKey: 'options.derivedQuantity.countNights' },
+  { value: 'sum_quantity', labelKey: 'options.derivedQuantity.sumQuantity' },
+  { value: 'sum_bill_amount', labelKey: 'options.derivedQuantity.sumBillAmount' },
 ]
 
 const DERIVED_RATE_MODES = [
   { value: 'fixed_per_unit', labelKey: 'options.derivedRate.fixedPerUnit' },
   { value: 'percent_of_gross', labelKey: 'options.derivedRate.percentOfGross' },
+  { value: 'percent_of_quantity', labelKey: 'options.derivedRate.percentOfQuantity' },
   { value: 'rate_card', labelKey: 'options.derivedRate.rateCard' },
 ]
 
@@ -78,6 +82,10 @@ export const PAY_DERIVED_RULES_ENTITY: SetupEntity = {
     { key: 'timeTypeId', kind: 'ref', ref: 'time-types' },
     { key: 'projectId', kind: 'ref', ref: 'projects' },
     { key: 'departmentId', kind: 'ref', ref: 'departments' },
+    // Charge-scope filters (the equipment_charge trigger). itemId is the one
+    // that keeps "all excavators" a single reviewable row.
+    { key: 'equipmentUnitId', kind: 'ref', ref: 'equipment-units', helpTextKey: 'fieldHelp.equipmentUnitId' },
+    { key: 'itemId', kind: 'ref', ref: 'items', helpTextKey: 'fieldHelp.itemId' },
     { key: 'tradeId', kind: 'ref', ref: 'trades' },
     { key: 'jobTitle', kind: 'text' },
     { key: 'billableOnly', kind: 'boolean' },

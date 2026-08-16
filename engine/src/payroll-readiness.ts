@@ -54,6 +54,7 @@ interface ScopeRow {
   country: string;
   has_wage: boolean;
   approved_hours: string;
+  hired_on: string | null;
   terminated_on: string | null;
   paid_in_period: boolean;
   has_bank: boolean;
@@ -67,6 +68,7 @@ interface RunRow {
   period_start: string;
   period_end: string;
   pay_date: string;
+  tax_year: number;
   run_type: string;
   run_status: string;
   subsidiary_id: string | null;
@@ -75,7 +77,7 @@ interface RunRow {
 async function runContext(orgId: string, documentId: string): Promise<RunRow | null> {
   const runs = (await db.execute(sql`
     select r.pay_schedule_id, r.period_start::text as period_start, r.period_end::text as period_end,
-           r.pay_date::text as pay_date, r.run_type, r.run_status, s.subsidiary_id
+           r.pay_date::text as pay_date, r.tax_year, r.run_type, r.run_status, s.subsidiary_id
       from pay_runs r
       join pay_schedules s on s.id = r.pay_schedule_id and s.org_id = r.org_id
      where r.org_id = ${orgId} and r.document_id = ${documentId}
@@ -96,6 +98,7 @@ async function scope(orgId: string, documentId: string, run: RunRow): Promise<Sc
   const rows = (await db.execute(sql`
     select p.id as employee_party_id, p.display_name as name, prof.pay_basis, prof.country,
            coalesce(te.hours, 0)::text as approved_hours,
+           er.hired_on::text as hired_on,
            er.terminated_on::text as terminated_on,
            prof.sin_encrypted is not null as has_sin,
            prof.payment_method as profile_payment_method,
@@ -268,7 +271,72 @@ export async function payRunReadiness(orgId: string, documentId: string): Promis
   const noSin = people.filter((p) => !p.has_sin);
   if (noSin.length) flag("warning", "employee.noSin", noSin, { href: employeesHref });
 
+  // --- Mid-year adoption ---------------------------------------------------
+  // payroll_opening_balances is the ONLY carrier of statutory year-to-date
+  // accumulated before OpenBooks (see engine/src/payroll-opening-balances.ts).
+  // Without it the engine restarts every ceiling at zero, so an employer
+  // adopting mid-year re-withholds up to a second full annual CPP/EI maximum
+  // and every T4/W-2 box understates the year.
+  //
+  // WARNING, never a blocker: a genuinely new employer's first payroll has no
+  // prior year-to-date and is completely correct with no rows at all. The
+  // product's job is to make the operator see the question once, on the one
+  // run where it is still cheap to answer.
+  await flagMissingOpeningBalances({ orgId, documentId, run, people, flag });
+
   return tally(people.length);
+}
+
+/**
+ * The one run where "did anyone carry a year-to-date in?" is worth asking:
+ * the org's FIRST committed run of a tax year whose period does not start in
+ * January. Every later run in the year has the answer already, and a January
+ * start means the year began here.
+ */
+async function flagMissingOpeningBalances(args: {
+  orgId: string;
+  documentId: string;
+  run: RunRow;
+  people: ScopeRow[];
+  flag: (
+    severity: ReadinessSeverity,
+    code: string,
+    employees?: ScopeRow[],
+    extra?: { detail?: string; href?: string },
+  ) => void;
+}): Promise<void> {
+  const { orgId, documentId, run, people, flag } = args;
+  if (people.length === 0) return;
+  // Month of the period start, not the pay date: a period that begins in
+  // January is the start of the year regardless of when it is paid.
+  if (run.period_start.slice(5, 7) === "01") return;
+
+  const prior = (await db.execute(sql`
+    select 1 from pay_runs other
+     where other.org_id = ${orgId} and other.tax_year = ${run.tax_year}
+       and other.run_status = 'committed' and other.document_id <> ${documentId}
+     limit 1
+  `)) as unknown as { rows: unknown[] };
+  if (prior.rows.length > 0) return; // not the first committed run of the year
+
+  const entered = (await db.execute(sql`
+    select employee_party_id from payroll_opening_balances
+     where org_id = ${orgId} and tax_year = ${run.tax_year}
+  `)) as unknown as { rows: { employee_party_id: string }[] };
+  const have = new Set(entered.rows.map((r) => r.employee_party_id));
+
+  // Someone hired on or after this period started cannot have been paid by
+  // this employer earlier in the year, so they have nothing to carry in.
+  // Statutory room is per-employer, so earnings at a PREVIOUS employer are
+  // deliberately not relevant here.
+  const missing = people.filter(
+    (p) => !have.has(p.employee_party_id) && !(p.hired_on && p.hired_on >= run.period_start),
+  );
+  if (missing.length === 0) return;
+  flag("warning", "employee.noOpeningBalance", missing, {
+    detail: String(run.tax_year),
+    href: `/payroll/opening-balances?year=${run.tax_year}`,
+  });
 }
 
 export interface PayRunStaleness {
@@ -298,6 +366,8 @@ export const STALENESS_INPUT_CLASSES = [
   "componentDefinitions",
   "derivedRules",
   "entitlements",
+  "workerComp",
+  "timeTypes",
   "settings",
   "ytd",
 ] as const;
@@ -308,10 +378,6 @@ export const STALENESS_INPUT_CLASSES = [
  * reads this on every render and blocks the commit while it is stale, rather
  * than trusting anyone to remember to recalculate.
  *
- * KNOWN GAP: `worker_comp_groups` carries no audit columns, so a change to a
- * WCB/WSIB class RATE cannot be detected here (a change of an employee's
- * ASSIGNED class is caught through `employee_roles`). See
- * .local/handoff-controls.md — the table needs `...auditColumns`.
  */
 export async function payRunStaleness(
   orgId: string,
@@ -372,6 +438,29 @@ export async function payRunStaleness(
             or exists (select 1 from entitlement_service_tiers et
                         where et.org_id = r.org_id and et.updated_at > r.calculated_at))
              as entitlements_changed,
+           -- WCB/WSIB class rates and assessable maximums. calculatePayRun
+           -- multiplies assessable earnings by worker_comp_groups.rate_percent
+           -- to produce the employer premium, so a rate edited after Calculate
+           -- commits a stale premium. The audit_log arm is belt AND braces on
+           -- purpose: updated_at is now authoritative (the registry entry is
+           -- flagged actorCols), but a writer that bypassed the generic setup
+           -- route would still leave the audit row.
+           (exists (select 1 from worker_comp_groups wcg
+                     where wcg.org_id = r.org_id and wcg.updated_at > r.calculated_at)
+            or exists (select 1 from audit_log al
+                        where al.org_id = r.org_id and al.table_name = 'worker_comp_groups'
+                          and al.at > r.calculated_at))
+             as worker_comp_changed,
+           -- Time-type definitions. calculatePayRun reads cost_multiplier as
+           -- the wage multiplier and exclude_from_wages as the switch that
+           -- keeps an event entry out of gross, so moving overtime from 1.5 to
+           -- 2.0 after Calculate restates every overtime hour on the run.
+           (exists (select 1 from time_types tt
+                     where tt.org_id = r.org_id and tt.updated_at > r.calculated_at)
+            or exists (select 1 from audit_log al
+                        where al.org_id = r.org_id and al.table_name = 'time_types'
+                          and al.at > r.calculated_at))
+             as time_types_changed,
            -- Org payroll settings: EHT/SUI rates, exemptions, posting accounts,
            -- and the filing accounts a remittance is grouped under.
            --
@@ -414,6 +503,7 @@ export async function payRunStaleness(
       wages_changed: boolean; roster_changed: boolean; employment_changed: boolean;
       components_changed: boolean; component_definitions_changed: boolean;
       derived_rules_changed: boolean; entitlements_changed: boolean;
+      worker_comp_changed: boolean; time_types_changed: boolean;
       settings_changed: boolean; ytd_changed: boolean;
     }[];
   };
@@ -430,6 +520,8 @@ export async function payRunStaleness(
     row.component_definitions_changed ? "componentDefinitions" : null,
     row.derived_rules_changed ? "derivedRules" : null,
     row.entitlements_changed ? "entitlements" : null,
+    row.worker_comp_changed ? "workerComp" : null,
+    row.time_types_changed ? "timeTypes" : null,
     row.settings_changed ? "settings" : null,
     row.ytd_changed ? "ytd" : null,
   ].filter((r): r is string => r !== null);
