@@ -255,6 +255,7 @@ export function FieldTicketDrawer(props: FieldTicketDrawerProps) {
   const [lineRate, setLineRate] = useState('')
   const [lineAmount, setLineAmount] = useState('')
   const [lineEquipment, setLineEquipment] = useState('')
+  const [lineOperator, setLineOperator] = useState('')
   const [lineRateUnit, setLineRateUnit] = useState('')
   const [lineRateUnits, setLineRateUnits] = useState<RateUnitOpt[]>([])
   const [lineRateLoading, setLineRateLoading] = useState(false)
@@ -277,6 +278,18 @@ export function FieldTicketDrawer(props: FieldTicketDrawerProps) {
 
   const selectedItem = props.catalogItems.find((item) => item.id === lineItem)
   const equipmentOptions = props.equipmentUnits.filter((unit) => unit.chargeItemId === lineItem)
+  /** New keys ship with the catalogue (web/messages is owned elsewhere); read
+   *  through a fallback so the field works today and translates later. */
+  const tOr = (key: string, english: string) => (t.has(key as never) ? t(key as never) : english)
+  /** The crew this ticket names — the only people its equipment can be
+   *  attributed to. Taken from the hours grid so a member added in this session
+   *  is selectable as soon as the crew is saved. */
+  const crewOperatorOptions = useMemo(() => {
+    const seen = new Set(grid.map((row) => row.employeePartyId).filter(Boolean))
+    return props.employees
+      .filter((employee) => seen.has(employee.id))
+      .map((employee) => ({ value: employee.id, label: employee.name }))
+  }, [grid, props.employees])
   const requestedSection = searchParams.get('transactionTab')
   const [activeSection, setActiveSection] = useState(() =>
     requestedSection === 'time' || requestedSection === 'items' || requestedSection === 'tasks' || requestedSection === 'related'
@@ -458,7 +471,8 @@ export function FieldTicketDrawer(props: FieldTicketDrawerProps) {
     if (headerDirty && !(await saveHeader())) return
     if (await call(
       'POST',
-      { action: 'add-line', itemId: lineItem, quantity: Number(lineQty), rateUnitCode: lineRateUnit || null, equipmentUnitId: lineEquipment || null },
+      { action: 'add-line', itemId: lineItem, quantity: Number(lineQty), rateUnitCode: lineRateUnit || null, equipmentUnitId: lineEquipment || null,
+        employeeId: (lineEquipment && lineOperator) || null },
       { preserveDraft: true },
     )) {
       setLineItem('')
@@ -466,6 +480,7 @@ export function FieldTicketDrawer(props: FieldTicketDrawerProps) {
       setLineRate('')
       setLineAmount('')
       setLineEquipment('')
+      setLineOperator('')
       setLineRateUnit('')
       setLineRateUnits([])
       setLineRateSource('')
@@ -1054,10 +1069,29 @@ export function FieldTicketDrawer(props: FieldTicketDrawerProps) {
                     value={lineEquipment}
                     onChange={(value) => {
                       setLineEquipment(value ?? '')
+                      // No unit, no operator: the attribution is to the machine.
+                      if (!value) setLineOperator('')
                       setLineRateUnit('')
                       setLineRateUnits([])
                     }}
                     placeholder={t('editor.lines.pooledItem')}
+                  />
+                </div>
+              ) : null}
+              {/* Operator. Offered only once a specific unit is chosen, and only
+                  from THIS ticket's crew — the ticket is signed as the record of
+                  who was on site, so it cannot attribute a machine to somebody
+                  it does not place there (the API enforces the same rule).
+                  Left blank the charge still records normally; it is the
+                  equipment incentive that refuses an unattributed month. */}
+              {props.equipmentEnabled && lineEquipment && crewOperatorOptions.length > 0 ? (
+                <div className="min-w-0 md:col-span-2">
+                  <Label>{tOr('editor.lines.operator', 'Operator')}</Label>
+                  <SearchSelect
+                    options={[{ value: '', label: tOr('editor.lines.noOperator', 'Not recorded') }, ...crewOperatorOptions]}
+                    value={lineOperator}
+                    onChange={(value) => setLineOperator(value ?? '')}
+                    placeholder={tOr('editor.lines.noOperator', 'Not recorded')}
                   />
                 </div>
               ) : null}

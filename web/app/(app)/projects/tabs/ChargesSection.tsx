@@ -15,6 +15,8 @@ export interface ChargeItemOption {
   defaultRate: string | null
 }
 export interface ChargeEquipmentOption { id: string; name: string; unitNumber: string; itemId: string }
+/** An employee an equipment charge can be attributed to (→ parties). */
+export interface ChargeOperatorOption { id: string; displayName: string }
 export interface ChargeRow {
   id: string
   documentNumber: string
@@ -33,6 +35,7 @@ export function ChargesSection({
   charges,
   items,
   equipment,
+  operators,
   absorption,
   formOpen,
   onFormOpenChange,
@@ -43,6 +46,7 @@ export function ChargesSection({
   charges: ChargeRow[]
   items: ChargeItemOption[]
   equipment: ChargeEquipmentOption[]
+  operators: ChargeOperatorOption[]
   absorption: { recovered: string; billValue: string }
   /** The add-charge form is driven by the flyout Actions menu (repository conventions:
    *  secondary creates live behind the Actions menu, not a bolted-on section). */
@@ -56,10 +60,14 @@ export function ChargesSection({
   const { money } = useMoney()
   const t = useTranslations('projects.charges')
   const tCommon = useTranslations('common')
+  /** New keys ship with the catalogue, not with this slice (web/messages is
+   *  owned elsewhere); read through a fallback so the field is usable today. */
+  const tOr = (key: string, english: string) => (t.has(key as never) ? t(key as never) : english)
   const router = useRouter()
   const [busy, setBusy] = useState(false)
   const [itemId, setItemId] = useState('')
   const [equipmentUnitId, setEquipmentUnitId] = useState('')
+  const [employeeId, setEmployeeId] = useState('')
   const [quantity, setQuantity] = useState('1')
   const [costRate, setCostRate] = useState('')
   const [billRate, setBillRate] = useState('')
@@ -67,6 +75,7 @@ export function ChargesSection({
   const itemOptions = useMemo(() => items.map((i) => ({ value: i.id, label: i.name })), [items])
   const itemById = useMemo(() => new Map(items.map((i) => [i.id, i])), [items])
   const equipmentOptions = useMemo(() => equipment.map((e) => ({ value: e.id, label: `${e.unitNumber} · ${e.name}` })), [equipment])
+  const operatorOptions = useMemo(() => operators.map((o) => ({ value: o.id, label: o.displayName })), [operators])
 
   function pickItem(id: string) {
     setItemId(id)
@@ -79,6 +88,9 @@ export function ChargesSection({
 
   function pickEquipment(id: string) {
     setEquipmentUnitId(id)
+    // Clearing the unit clears the operator: an operator without a unit is not
+    // an equipment attribution, and the service refuses it.
+    if (!id) setEmployeeId('')
     const unit = equipment.find((e) => e.id === id)
     if (unit) { setItemId(unit.itemId); setCostRate(''); setBillRate('') }
   }
@@ -91,13 +103,13 @@ export function ChargesSection({
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         projectId,
-        lines: [{ itemId, equipmentUnitId: equipmentUnitId || null, quantity,
+        lines: [{ itemId, equipmentUnitId: equipmentUnitId || null, employeeId: (equipmentUnitId && employeeId) || null, quantity,
           costRate: equipmentUnitId ? null : (costRate || null), billRate: equipmentUnitId ? null : (billRate || null), isBillable: true }],
       }),
     })
     if (res.ok) {
       toast.success(t('created'))
-      setItemId(''); setEquipmentUnitId(''); setQuantity('1'); setCostRate(''); setBillRate('')
+      setItemId(''); setEquipmentUnitId(''); setEmployeeId(''); setQuantity('1'); setCostRate(''); setBillRate('')
       onFormOpenChange(false)
       router.refresh()
     } else {
@@ -133,6 +145,25 @@ export function ChargesSection({
               <div className={`${field} lg:col-span-2`}>
                 <Label>{t('equipmentUnit')}</Label>
                 <SearchSelect value={equipmentUnitId} onChange={(v) => pickEquipment(v ?? '')} options={equipmentOptions} clearable placeholder={t('selectEquipment')} sheetTitle={t('equipmentUnit')} ariaLabel={t('equipmentUnit')} />
+              </div>
+              {/* Operator — only for an equipment line, because that is the only
+                  line an equipment incentive can pay on. Optional by design:
+                  refusing to record the charge because nobody remembered who ran
+                  the machine would cost the customer their job cost and their
+                  invoice, which is worse. The incentive rule is what refuses,
+                  and it refuses loudly. */}
+              <div className={`${field} lg:col-span-2`}>
+                <Label>{tOr('operator', 'Operator')}</Label>
+                <SearchSelect
+                  value={employeeId}
+                  onChange={(v) => setEmployeeId(v ?? '')}
+                  options={operatorOptions}
+                  disabled={!equipmentUnitId}
+                  clearable
+                  placeholder={equipmentUnitId ? tOr('selectOperator', 'Select an operator…') : tOr('operatorNeedsEquipment', 'Equipment lines only')}
+                  sheetTitle={tOr('operator', 'Operator')}
+                  ariaLabel={tOr('operator', 'Operator')}
+                />
               </div>
               <div className={`${field} lg:col-span-2`}>
                 <Label>{t('item')}</Label>

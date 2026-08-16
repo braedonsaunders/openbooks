@@ -77,6 +77,13 @@ export default async function PayrollHomePage({
             badge: { value: String(home.activeEmployees), hint: t('home.directory.employeesHint') },
           },
           {
+            href: '/payroll/opening-balances',
+            label: t.has('home.directory.openingBalances' as never)
+              ? t('home.directory.openingBalances' as never)
+              : 'Opening balances',
+            iconKey: 'history',
+          },
+          {
             href: '/admin/setup/payroll',
             label: t('home.directory.setup'),
             iconKey: 'settings',

@@ -92,6 +92,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
           ? body.rateUnitCode
           : null,
         equipmentUnitId: isUuid(body.equipmentUnitId) ? body.equipmentUnitId : null,
+        employeeId: isUuid(body.employeeId) ? body.employeeId : null,
         description: body.description ?? null,
       })
     } else if (action === 'remove-line') {

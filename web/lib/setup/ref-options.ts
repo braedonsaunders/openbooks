@@ -56,6 +56,14 @@ export async function loadEntityOptions(source: string, orgId: string): Promise<
        where p.org_id = ${orgId} and p.is_active order by p.display_name`)) as any
     return employees.rows as RefOption[]
   }
+  if (source === 'equipment-units') {
+    // The chargeable unit register. Like `trades`, a legitimate scope key with
+    // no setup-registry entry of its own — equipment is managed under Assets.
+    const units = (await db.execute(sql`
+      select id as value, unit_number || ' · ' || name as label from equipment_units
+       where org_id = ${orgId} and status = 'active' order by unit_number`)) as any
+    return units.rows as RefOption[]
+  }
   if (source === 'trades') {
     // `trades` is a bare reference list with no setup-registry entry of its
     // own, but it is a legitimate scope key (labor_cost_rates uses it too).

@@ -254,7 +254,10 @@
     "billedYes": "Billed",
     "created": "Charge posted",
     "failed": "Could not post charge",
-    "pickItem": "Pick an item first"
+    "pickItem": "Pick an item first",
+    "operator": "Operator",
+    "selectOperator": "Select an operator…",
+    "operatorNeedsEquipment": "Equipment lines only"
   },
   "recognition": {
     "title": "Revenue recognition",

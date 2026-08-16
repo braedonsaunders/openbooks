@@ -7,7 +7,7 @@ import { add, cmp, neg, sum } from "./money.ts";
 import { calculateT4127 } from "./payroll/canada/t4127.ts";
 import { calculatePub15T } from "./payroll/us/pub15t.ts";
 import { setPackSlotAccount, uninstallPayrollPack } from "./payroll/packs.ts";
-import { buildPayRunBankFile, PAYROLL_BANK_FILE_EXPORT_DISABLED_MESSAGE } from "./payroll-bank-file.ts";
+import { payRunBankFileEntitlement } from "./payroll-bank-file-artifact.ts";
 import {
   calculatePayRun, commitPayRun, createPayRun, seedPayrollComponents,
 } from "./payroll-run.ts";
@@ -140,12 +140,14 @@ test(
       `)) as unknown as { rows: { n: number }[] };
       assert.equal(claimed.rows[0]!.n, 4);
 
-      // Alpha safety gate: no transient payroll bank bytes are emitted until
-      // payroll uses the immutable AP artifact/approval/download-audit model.
-      await assert.rejects(
-        buildPayRunBankFile({ orgId: org.orgId, documentId: run.documentId }),
-        new RegExp(PAYROLL_BANK_FILE_EXPORT_DISABLED_MESSAGE),
-      );
+      // The bank file now exists, behind the immutable-artifact lifecycle
+      // (engine/src/payroll-bank-file-artifact.ts), which is exercised in
+      // payroll-bank-file.test.ts. What this run must still prove is that a
+      // committed run knows it is ENTITLED to one — the gate that used to be a
+      // blanket refusal is now a per-run decision.
+      const entitlement = await payRunBankFileEntitlement(org.orgId, run.documentId);
+      assert.equal(entitlement.entitled, true);
+      assert.equal(entitlement.refusal, null);
 
       // Committed stubs feed YTD: a second run must see this run's CPP/EI
       const run2 = await createPayRun({
@@ -538,14 +540,31 @@ test(
   },
 );
 
+/**
+ * This test used to BLESS the defect it now proves is fixed.
+ *
+ * It put an employee in a `country='US'`/USD subsidiary, omitted the profile
+ * country so it defaulted to 'CA', and asserted `result.errors` was empty —
+ * i.e. the suite certified that withholding Canadian CPP, EI and Ontario
+ * income tax from an employee of a US legal entity, denominating it in USD and
+ * pointing it at a CRA program account, was correct behaviour. A test that
+ * asserts the absence of an error IS the bug when the error is the point.
+ *
+ * The corrected version asserts both halves of "correct or refused, never
+ * silently wrong": the misconfigured employee is REFUSED by name, and the same
+ * employee configured honestly as a US employee CALCULATES, under Pub 15-T,
+ * in USD.
+ */
 test(
-  "subsidiary-scoped schedule: entity currency and employee filtering",
+  "subsidiary-scoped schedule: entity currency, employee filtering, and country reconciliation",
   { skip: !DB },
   async () => {
     const org = await createScratchOrg();
     const actorId = (await seedFlowActors(org.orgId)).adminId;
     try {
       await seedPayrollComponents(org.orgId, actorId);
+      // Both packs: the US entity's employee needs the US pack's components.
+      await seedPayrollComponents(org.orgId, actorId, "US");
       const usSubId = randomUUID();
       await db.execute(sql`
         insert into subsidiaries (id, org_id, parent_id, name, base_currency, country, tax_ids,
@@ -598,14 +617,48 @@ test(
       assert.equal(doc.subsidiary_id, usSubId);
       assert.equal(doc.currency, "USD");
 
-      // Only the scoped subsidiary's employee is included
+      // Only the scoped subsidiary's employee is included…
+      const refused = await calculatePayRun({
+        orgId: org.orgId, documentId: run.documentId, actorId,
+      });
+      assert.equal(refused.employees, 0, "the misconfigured employee produced no stub");
+      assert.equal(refused.errors.length, 1);
+      assert.equal(refused.errors[0]!.employee, "Scoped Sam");
+      // …and because their profile still says Canada while the entity paying
+      // them is American, they are refused BY NAME rather than paid CPP/EI.
+      assert.match(
+        refused.errors[0]!.message,
+        /on the CA country pack, but this run pays from US Entity, a US legal entity/,
+      );
+      const noStubs = ((await db.execute(sql`
+        select count(*)::int as n from pay_stubs where pay_run_document_id = ${run.documentId}
+      `)) as unknown as { rows: { n: number }[] }).rows[0]!;
+      assert.equal(noStubs.n, 0, "nothing wrong was written");
+
+      // Configure the employee honestly — a US employee, in a state the US
+      // pack covers — and the same run calculates.
+      await db.execute(sql`
+        update employee_payroll_profiles
+           set country = 'US', province = 'TX', filing_status = 'single'
+         where org_id = ${org.orgId} and employee_party_id = ${usEmployee}`);
       const result = await calculatePayRun({ orgId: org.orgId, documentId: run.documentId, actorId });
       assert.deepEqual(result.errors, []);
       assert.equal(result.employees, 1);
       const stubs = ((await db.execute(sql`
-        select employee_party_id from pay_stubs where pay_run_document_id = ${run.documentId}
-      `)) as unknown as { rows: { employee_party_id: string }[] }).rows;
+        select employee_party_id, currency_code, province, factors
+          from pay_stubs where pay_run_document_id = ${run.documentId}
+      `)) as unknown as {
+        rows: { employee_party_id: string; currency_code: string; province: string;
+                factors: Record<string, string> }[];
+      }).rows;
       assert.deepEqual(stubs.map((s) => s.employee_party_id), [usEmployee]);
+      // The whole chain agrees: US pack, US state, USD, and Pub 15-T factors
+      // (SS/Medicare) rather than T4127's CPP/EI.
+      assert.equal(stubs[0]!.currency_code, "USD");
+      assert.equal(stubs[0]!.province, "TX");
+      assert.ok(stubs[0]!.factors.SS != null, "FICA computed — the US pack ran");
+      assert.equal(stubs[0]!.factors.C, undefined, "no CPP on a US employee");
+      assert.equal(stubs[0]!.factors.EI, undefined, "no EI on a US employee");
     } finally {
       await dropScratchOrgReporting(org.orgId);
     }

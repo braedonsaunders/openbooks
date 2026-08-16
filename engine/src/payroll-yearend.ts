@@ -1,6 +1,6 @@
 import { sql } from "drizzle-orm";
 import { db } from "./db.ts";
-import { add, cmp } from "./money.ts";
+import { add, cmp, neg } from "./money.ts";
 import {
   effectiveFilingAccountSql,
   filingAccountRef,
@@ -42,12 +42,55 @@ const num = (value: unknown): string => (value == null ? "0" : String(value));
  * `ratesForPayDate` throws for an unknown pay date; this local copy of the same
  * constants must fail the same way, not the opposite way.
  */
-function caYearCaps(taxYear: number): { mie: string; yampe: string } {
-  if (taxYear === 2026) return { mie: RATES_2026_JAN.ei.mie, yampe: RATES_2026_JAN.cpp.yampe };
+function caYearCaps(taxYear: number): { mie: string; yampe: string; qpipMie: string } {
+  if (taxYear === 2026) {
+    return {
+      mie: RATES_2026_JAN.ei.mie,
+      yampe: RATES_2026_JAN.cpp.yampe,
+      qpipMie: RATES_2026_JAN.qpip.mie,
+    };
+  }
   throw new PayrollError(
     `no CRA maximums for tax year ${taxYear} — T4 boxes 24 and 26 cannot be capped. `
     + "Add the year to engine/src/payroll/canada/rates.ts",
   );
+}
+
+/**
+ * Box 24 and box 26 are capped at the year's MIE and YAMPE PER EMPLOYEE, not
+ * per slip — and an employee who moved province mid-year now gets one slip per
+ * province, because the CRA requires a separate T4 for each province of
+ * employment.
+ *
+ * Capping each of those slips independently would report up to N × the annual
+ * maximum for one person. So the room is consumed across the employee's slips
+ * in chronological order: the first slip fills first, and a later one gets only
+ * what is left. Pure, and exact — `add`/`cmp`/`neg` from money.ts, no floats.
+ */
+export function capAnnualEarnings(
+  rows: readonly { employeePartyId: string; insurable: string; pensionable: string }[],
+  caps: { mie: string; yampe: string },
+): { box24EiInsurable: string; box26CppPensionable: string }[] {
+  const usedInsurable = new Map<string, string>();
+  const usedPensionable = new Map<string, string>();
+  const consume = (used: Map<string, string>, key: string, value: string, cap: string): string => {
+    const already = used.get(key);
+    if (already === undefined) {
+      // First slip of the employee's year — byte-for-byte the previous
+      // per-employee cap, so a single-province employee's boxes do not move.
+      const taken = cmp(value, cap) > 0 ? cap : value;
+      used.set(key, taken);
+      return taken;
+    }
+    const room = cmp(cap, already) > 0 ? add(cap, neg(already)) : "0";
+    const taken = cmp(value, room) > 0 ? room : value;
+    used.set(key, add(already, taken));
+    return taken;
+  };
+  return rows.map((row) => ({
+    box24EiInsurable: consume(usedInsurable, row.employeePartyId, row.insurable, caps.mie),
+    box26CppPensionable: consume(usedPensionable, row.employeePartyId, row.pensionable, caps.yampe),
+  }));
 }
 
 export interface T4Slip {
@@ -67,6 +110,8 @@ export interface T4Slip {
   box26CppPensionable: string;
   box44UnionDues: string;
   box55Qpip: string;
+  /** Box 56 — QPIP insurable earnings, capped at the year's QPIP maximum. */
+  box56QpipInsurable: string;
   stubCount: number;
 }
 
@@ -83,6 +128,18 @@ export interface T4SummaryTotals {
   remitted: string;
 }
 
+/**
+ * One T4 slip per employee, per payroll program account, PER PROVINCE OF
+ * EMPLOYMENT.
+ *
+ * `pay_stubs.province` is a per-stub snapshot precisely so a mid-year move is
+ * representable, and `max(c.province)` threw that away: a BC→ON mover and an
+ * ON→BC mover both collapsed to 'ON', the lexically largest code, which was
+ * then stamped into `<EMPT_PROV_CD>` as the CRA's provincial attribution — the
+ * field that decides which province's tax the employer is credited with
+ * remitting. The CRA's own instruction is a separate slip per province, which
+ * is also the only shape in which the data is not a lie.
+ */
 export async function t4Slips(orgId: string, taxYear: number): Promise<T4Slip[]> {
   const caps = caYearCaps(taxYear);
   const rows = (await db.execute(sql`
@@ -96,7 +153,8 @@ export async function t4Slips(orgId: string, taxYear: number): Promise<T4Slip[]>
        and coalesce(prof.country, 'CA') = 'CA'
     )
     select c.employee_party_id, p.display_name, c.filing_account_id,
-           max(c.province) as province,
+           c.province as province,
+           min(c.pay_date) as first_pay_date,
            count(*)::int as stub_count,
            sum(c.pensionable_earnings) as pensionable,
            sum(c.insurable_earnings) as insurable,
@@ -118,29 +176,43 @@ export async function t4Slips(orgId: string, taxYear: number): Promise<T4Slip[]>
                   and pc.tax_treatment = 'union_dues')) as union_dues
       from committed c
       join parties p on p.id = c.employee_party_id and p.org_id = ${orgId}
-     group by c.employee_party_id, p.display_name, c.filing_account_id
-     order by p.display_name
+     group by c.employee_party_id, p.display_name, c.filing_account_id, c.province
+     order by p.display_name, min(c.pay_date), c.province
   `)) as unknown as { rows: Record<string, unknown>[] };
 
-  return rows.rows.map((row) => {
-    const insurable = num(row.insurable);
-    const pensionable = num(row.pensionable);
-    const capMoney = (value: string, cap: string) => (cmp(value, cap) > 0 ? cap : value);
+  // The annual maxima are per EMPLOYEE, so they are consumed across that
+  // employee's slips in the chronological order the query just produced.
+  const capped = capAnnualEarnings(
+    rows.rows.map((row) => ({
+      employeePartyId: String(row.employee_party_id),
+      insurable: num(row.insurable),
+      pensionable: num(row.pensionable),
+    })),
+    caps,
+  );
+
+  const capMoney = (value: string, cap: string) => (cmp(value, cap) > 0 ? cap : value);
+  return rows.rows.map((row, index) => {
+    const province = String(row.province ?? "");
+    const isQuebec = province === "QC";
     return {
       employeePartyId: String(row.employee_party_id),
       employeeName: String(row.display_name),
-      province: String(row.province ?? ""),
-      isQuebec: row.province === "QC",
+      province,
+      isQuebec,
       filingAccountId: (row.filing_account_id as string | null) ?? null,
       box14EmploymentIncome: num(row.taxable_income),
       box16Cpp: num(row.cpp),
       box16aCpp2: num(row.cpp2),
       box18Ei: num(row.ei),
       box22IncomeTax: num(row.income_tax),
-      box24EiInsurable: capMoney(insurable, caps.mie),
-      box26CppPensionable: capMoney(pensionable, caps.yampe),
+      box24EiInsurable: capped[index]!.box24EiInsurable,
+      box26CppPensionable: capped[index]!.box26CppPensionable,
       box44UnionDues: num(row.union_dues),
       box55Qpip: num(row.qpip),
+      // Box 56 is only reported for Quebec employment, and only up to the
+      // QPIP maximum insurable earnings — a different ceiling from EI's MIE.
+      box56QpipInsurable: isQuebec ? capMoney(num(row.insurable), caps.qpipMie) : "0",
       stubCount: Number(row.stub_count ?? 0),
     };
   });
@@ -468,6 +540,8 @@ export async function roeCandidates(orgId: string, taxYear: number): Promise<{
 
 export interface Form941Quarter {
   quarter: 1 | 2 | 3 | 4;
+  /** EIN the quarter's return is filed under; null = unassigned. */
+  filingAccountId: string | null;
   wages: string;
   federalIncomeTax: string;
   ssWages: string;
@@ -476,9 +550,20 @@ export interface Form941Quarter {
   medicareTax: string; // employee + employer, incl. Additional Medicare
 }
 
+/**
+ * Form 941 is filed BY EIN, quarterly — one return per (EIN, quarter).
+ *
+ * This grouped by quarter alone and never joined the filing account, so an
+ * employer holding two EINs got one merged worksheet: wages and FICA from both
+ * entities added together, reported under whichever EIN the operator happened
+ * to file it as, understating one return and overstating the other. `t4Returns`
+ * and `w2Slips` both scope per account; this is the same scoping, and
+ * `form941Returns` below is the same per-account assembly `t4Returns` does.
+ */
 export async function form941Worksheet(orgId: string, taxYear: number): Promise<Form941Quarter[]> {
   const rows = (await db.execute(sql`
     select extract(quarter from s.pay_date)::int as quarter,
+           ${effectiveFilingAccountSql("prof")} as filing_account_id,
            sum((select coalesce(sum(l.amount), 0) from pay_stub_lines l
                  join pay_components pc on pc.id = l.component_id
                 where l.stub_id = s.id and l.kind = 'earning' and coalesce(pc.taxable, true))) as wages,
@@ -498,10 +583,11 @@ export async function form941Worksheet(orgId: string, taxYear: number): Promise<
       join employee_payroll_profiles prof
         on prof.org_id = s.org_id and prof.employee_party_id = s.employee_party_id and prof.country = 'US'
      where s.org_id = ${orgId} and s.tax_year = ${taxYear}
-     group by 1 order by 1
+     group by 1, 2 order by 2 nulls first, 1
   `)) as unknown as { rows: Record<string, unknown>[] };
   return rows.rows.map((row) => ({
     quarter: Number(row.quarter) as 1 | 2 | 3 | 4,
+    filingAccountId: (row.filing_account_id as string | null) ?? null,
     wages: num(row.wages),
     federalIncomeTax: num(row.fit),
     ssWages: num(row.ss_wages),
@@ -511,9 +597,44 @@ export async function form941Worksheet(orgId: string, taxYear: number): Promise<
   }));
 }
 
+/** One filed Form 941 set: the quarters of a single EIN. */
+export interface Form941Return {
+  filingAccount: FilingAccountRef;
+  quarters: Form941Quarter[];
+}
+
+/**
+ * The year's 941 returns, one per EIN the year's US employees were filed
+ * under. The same assembly `t4Returns` performs for CRA program accounts, for
+ * the same reason: the return is the unit that gets transmitted, so it is the
+ * unit the builder produces.
+ */
+export async function form941Returns(orgId: string, taxYear: number): Promise<Form941Return[]> {
+  const quarters = await form941Worksheet(orgId, taxYear);
+  if (quarters.length === 0) return [];
+  const accounts = await filingAccountsById(orgId);
+  const accountIds = [...new Set(quarters.map((q) => q.filingAccountId))];
+  return accountIds
+    .map((accountId) => ({
+      filingAccount: filingAccountRef(accountId, accounts),
+      quarters: quarters.filter((q) => q.filingAccountId === accountId),
+    }))
+    .sort((a, b) =>
+      (a.filingAccount.accountNumber ?? "").localeCompare(b.filingAccount.accountNumber ?? ""));
+}
+
 export interface W2Slip {
   employeePartyId: string;
   employeeName: string;
+  /**
+   * State(s) of employment. A W-2 carries ONE federal wage set and a state
+   * line per state, so unlike the T4 the federal boxes must NOT be split — but
+   * `max(s.province)` reported a single lexically-largest state, which for a
+   * mid-year mover names the wrong state's revenue department. Both are
+   * reported: `states` is the fact, `state` renders it.
+   */
+  states: string[];
+  /** Display form of `states`; the sole state, or all of them joined. */
   state: string;
   /** EIN account the W-2 is filed under; null = unassigned. */
   filingAccountId: string | null;
@@ -527,7 +648,8 @@ export interface W2Slip {
 
 export async function w2Slips(orgId: string, taxYear: number): Promise<W2Slip[]> {
   const rows = (await db.execute(sql`
-    select s.employee_party_id, p.display_name, max(s.province) as state,
+    select s.employee_party_id, p.display_name,
+           array_agg(distinct s.province order by s.province) as states,
            ${effectiveFilingAccountSql("prof")} as filing_account_id,
            sum((select coalesce(sum(l.amount), 0) from pay_stub_lines l
                  join pay_components pc on pc.id = l.component_id
@@ -553,10 +675,13 @@ export async function w2Slips(orgId: string, taxYear: number): Promise<W2Slip[]>
      group by s.employee_party_id, p.display_name, ${effectiveFilingAccountSql("prof")}
      order by p.display_name
   `)) as unknown as { rows: Record<string, unknown>[] };
-  return rows.rows.map((row) => ({
+  return rows.rows.map((row) => {
+    const states = ((row.states as string[] | null) ?? []).filter(Boolean);
+    return {
     employeePartyId: String(row.employee_party_id),
     employeeName: String(row.display_name),
-    state: String(row.state ?? ""),
+    states,
+    state: states.join(" / "),
     filingAccountId: (row.filing_account_id as string | null) ?? null,
     box1Wages: num(row.wages),
     box2FederalIncomeTax: num(row.fit),
@@ -564,5 +689,6 @@ export async function w2Slips(orgId: string, taxYear: number): Promise<W2Slip[]>
     box4SsTax: num(row.ss_tax),
     box5MedicareWages: num(row.medicare_wages),
     box6MedicareTax: num(row.medicare_tax),
-  }));
+    };
+  });
 }

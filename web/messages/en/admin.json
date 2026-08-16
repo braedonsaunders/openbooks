@@ -1895,6 +1895,11 @@
       "trades": {
         "title": "Trades",
         "description": "Electrician, millwright, welder — the trade an employee works, used by wage scope, burden, and derived earnings rules."
+      },
+      "payroll-holidays": {
+        "title": "Holidays",
+        "singularTitle": "Holiday",
+        "description": "Which optional statutory holidays you observe, and the company closures you add. Mandatory statutory holidays come from the country pack and cannot be removed here."
       }
     },
     "fields": {
@@ -2136,7 +2141,20 @@
       "rateMode": "Rate",
       "rateValue": "Rate value",
       "costingMode": "Job costing",
-      "excludeFromWages": "Event only (not worked time)"
+      "excludeFromWages": "Event only (not worked time)",
+      "jurisdiction": "Jurisdiction",
+      "packKey": "Statutory holiday",
+      "ruleKind": "Recurs",
+      "ruleMonth": "Month",
+      "ruleDay": "Day of month",
+      "ruleWeekday": "Weekday",
+      "ruleNth": "Which one",
+      "ruleOffset": "Days from Easter Sunday",
+      "observedOn": "Date",
+      "observance": "If it falls on a weekend",
+      "isObserved": "Observed",
+      "isPaid": "Paid",
+      "equipmentUnitId": "Equipment unit"
     },
     "fieldHelp": {
       "gapless": "Gapless means every number in the sequence must be accounted for, with no skipped numbers. Enable it only when your legal or audit requirements require uninterrupted numbering.",
@@ -2175,7 +2193,19 @@
       "entitlementTierTarget": "Set either a plan (to raise its accrual value) or a pay component (to make it eligible) — not both.",
       "includedJobTitles": "A JSON list of the only job titles this rule pays, for example [\"Supervisor\", \"Quality Coordinator\"]. Leave it empty to pay everyone. Matching ignores case and spacing.",
       "excludedJobTitles": "A JSON list of job titles this rule never pays, for example [\"Project Manager\", \"General Manager\"]. Exclusions win over inclusions. Matching ignores case and spacing.",
-      "excludeFromWages": "The entry records a field event — an on-call day, a per-diem night — not worked time. Derived earnings rules read it; the wage calculation skips it."
+      "excludeFromWages": "The entry records a field event — an on-call day, a per-diem night — not worked time. Derived earnings rules read it; the wage calculation skips it.",
+      "holidayJurisdiction": "The jurisdiction whose calendar this changes. Use the province your employees are covered by, or Canada (federal) for a federally regulated employer.",
+      "holidayEffectiveTo": "Leave empty for no end date. Effective dates are compared against the holiday's date, so past pay runs keep the calendar they were run under.",
+      "holidayPackKey": "The statutory holiday this election applies to, for example boxing_day or heritage_day. Leave empty to add a company holiday of your own. Only optional holidays can be switched off — a mandatory one is refused.",
+      "holidayName": "The name of the company holiday you are adding. Leave empty when this row is an election on a statutory holiday.",
+      "holidayIsObserved": "Off suppresses an optional holiday you previously elected.",
+      "holidayIsPaid": "Off makes this a closure the day is not paid for. Statutory holidays are always paid.",
+      "holidayRuleWeekday": "0 is Sunday through 6 is Saturday.",
+      "holidayRuleNth": "1 is the first such weekday of the month; -1 is the last.",
+      "holidayRuleOffset": "Negative counts back. Good Friday is -2 and Easter Monday is 1.",
+      "holidayObservance": "Statutory holidays keep their date and the law grants a substitute day off instead. Choose a shift only for a company holiday you actually move.",
+      "equipmentUnitId": "Pay on one named machine only. Leave it empty and use the charge item instead to cover a whole class of equipment with a single rule.",
+      "itemId": "Pay on every unit that charges through this catalog item — \"all excavators\" as one rule rather than one rule per machine."
     },
     "options": {
       "payFrequency": {
@@ -2471,22 +2501,47 @@
         "distinctDay": "Each day worked",
         "distinctProjectDay": "Each job, each day",
         "nightStayed": "Each night stayed",
-        "monthEnd": "Monthly, after month end"
+        "monthEnd": "Monthly, after month end",
+        "equipmentCharge": "Monthly, on equipment charges"
       },
       "derivedQuantity": {
         "count": "Number of units",
         "sumHours": "Total hours",
-        "countNights": "Number of nights"
+        "countNights": "Number of nights",
+        "sumQuantity": "Total units charged",
+        "sumBillAmount": "Total amount billed"
       },
       "derivedRate": {
         "fixedPerUnit": "Fixed amount per unit",
         "percentOfGross": "Percent of gross",
-        "rateCard": "From the pay component"
+        "rateCard": "From the pay component",
+        "percentOfQuantity": "Percent of the charged amount"
       },
       "derivedCosting": {
         "source": "The job the fact came from",
         "firstProjectOfDay": "The first job of the day",
         "none": "Not job costed"
+      },
+      "holidayJurisdiction": {
+        "ca": "Canada (federally regulated)",
+        "caAb": "Alberta",
+        "caBc": "British Columbia",
+        "caOn": "Ontario",
+        "caQc": "Quebec",
+        "caSk": "Saskatchewan",
+        "us": "United States"
+      },
+      "holidayRuleKind": {
+        "date": "One specific date",
+        "fixed": "The same date every year",
+        "nthWeekday": "The nth weekday of a month",
+        "weekdayBefore": "The last weekday before a date",
+        "easterOffset": "Relative to Easter Sunday"
+      },
+      "holidayObservance": {
+        "none": "Keep the date",
+        "nextMonday": "Move to the next working day",
+        "nearestWeekday": "Move to the nearest weekday"
       }
     },
     "payroll": {
@@ -3230,7 +3285,9 @@
     "filterAll": "All",
     "sections": {
       "deductionProtection": "Deduction protection",
-      "basisCaps": "Basis caps"
+      "basisCaps": "Basis caps",
+      "holidayElection": "Election on a statutory holiday",
+      "holidayCompanyDay": "Company holiday"
     }
   },
   "flows": {
