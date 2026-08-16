@@ -748,3 +748,9 @@ Copyright © 2026 OpenBooks contributors.
   If OpenBooks is useful or interesting, star the repository and join the
   discussion.
 </p>
+
+---
+
+## Also in this suite
+
+OpenBooks is the books. [Lighthouse](https://github.com/braedonsaunders/lighthouse) is safety. [BidWright](https://github.com/braedonsaunders/bidwright) is estimating. Built to work together for project-based companies. Same design language. Same self-host posture. Each repo is still its own install today.
