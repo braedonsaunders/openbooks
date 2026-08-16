@@ -56,7 +56,7 @@ ARG OPENBOOKS_VERSION=development
 # current qpdf once that version is verified against this base image.
 RUN apt-get update \
     && apt-get install -y --no-install-recommends \
-      chromium=151.0.7922.71-1~deb13u1 \
+      chromium=151.0.7922.137-1~deb13u1 \
       qpdf \
       fonts-liberation=1:2.1.5-3 \
       fonts-noto-core=20201225-2 \
