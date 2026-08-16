@@ -49,18 +49,13 @@ This is more than a general ledger with a few add-ons. Customer invoices,
 vendor bills, projects and job costing, inventory, assets, banking, reporting,
 approvals, and audit history operate as one connected business system.
 
-The deepest vertical today is construction project billing: schedule of
-values, applications for payment, and retainage. Those are the engines to
-pressure-test.
-
 ## Try this first
 
 OpenBooks is alpha. Do not cut over production books. Do this instead:
 
 1. `./scripts/compose-up.sh` and open http://localhost:4780
-2. Walk the Summit Ridge Construction screenshots below (progress billing, retainage, job cost)
+2. Walk the screenshots below
 3. Re-run the published trust corpus: [TRUST.md](TRUST.md) and `npm -w engine run conformance -- report`
-4. If you run AIA-style billing or job costing, start there.
 
 > [!NOTE]
 > Public since 5 August 2026 at `0.1.0-alpha.3`. Public git age is not build
