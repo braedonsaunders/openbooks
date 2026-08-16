@@ -1,8 +1,6 @@
 import { getTranslations } from 'next-intl/server'
 import { PageHeader } from '@openbooks/ui'
-import {
-  form941Worksheet, roeCandidates, t4Slips, t4Summary, w2Slips,
-} from '@openbooks/engine/src/payroll-yearend.ts'
+import { orgYearEndFilings } from '@openbooks/engine/src/payroll-yearend.ts'
 import { ListPageLayout } from '../../../../components/page-layout'
 import { groupTabs } from '../../../../components/module-home/group-tabs'
 import { ModuleHomeTabs } from '../../../../components/module-home/ui'
@@ -14,9 +12,17 @@ import { YearEndView } from './YearEndView'
 export const dynamic = 'force-dynamic'
 
 /**
- * Year-end cockpit: T4 slips + T4 Summary (Canada), the ROE Web issue list,
- * and 941/W-2 worksheets (US) for a tax year, straight off the committed-stub
- * subledger so every box reconciles to stub traces. Print-friendly by design.
+ * Year-end cockpit. The sections are NOT hardcoded forms: every payroll
+ * country pack declares its year-end filings (label, population, electronic
+ * file, issue workflow) in the payroll filing registry, and this page
+ * iterates that declaration. A pack that registers a new slip — the Quebec
+ * RL-1, a UK P60 — appears here with no change to this file. Print-friendly
+ * by design.
+ *
+ * A filing is shown when its pack is installed for the org, or when its
+ * population has rows (imported history from a pack that was never formally
+ * installed still surfaces — hiding real wage data would be worse than an
+ * extra section).
  */
 export default async function PayrollYearEndPage({
   searchParams,
@@ -31,14 +37,8 @@ export default async function PayrollYearEndPage({
   const requested = Number(pickString(sp.year))
   const year = Number.isInteger(requested) && requested >= 2020 && requested <= 2100 ? requested : currentYear
 
-  const orgId = authz.user.orgId
-  const [slips, summary, form941, w2, roe] = await Promise.all([
-    t4Slips(orgId, year),
-    t4Summary(orgId, year),
-    form941Worksheet(orgId, year),
-    w2Slips(orgId, year),
-    roeCandidates(orgId, year),
-  ])
+  const filings = await orgYearEndFilings(authz.user.orgId, year)
+  const sections = filings.filter((filing) => filing.installed || filing.data.rows.length > 0)
 
   const moduleTabs = await groupTabs('payroll', '/payroll/year-end')
 
@@ -52,7 +52,7 @@ export default async function PayrollYearEndPage({
         />
       }
     >
-      <YearEndView year={year} t4={slips} summary={summary} form941={form941} w2={w2} roe={roe} />
+      <YearEndView year={year} sections={sections} />
     </ListPageLayout>
   )
 }

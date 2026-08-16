@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import { boolean, check, index, pgTable, text, uniqueIndex, uuid } from "drizzle-orm/pg-core";
+import { boolean, index, pgTable, text, uniqueIndex, uuid } from "drizzle-orm/pg-core";
 import { auditColumns, id, orgRef } from "./helpers";
 
 /**
@@ -9,13 +9,21 @@ import { auditColumns, id, orgRef } from "./helpers";
  * carries several payroll program accounts (…RP0001, …RP0002) — divisions that
  * remit, file T4s, and receive PD7A statements separately. The US equivalent is
  * several EINs plus a per-state unemployment (SUI) account per state the
- * employer is registered in.
+ * employer is registered in. Other packs declare their own identities (an
+ * HMRC PAYE reference, an ATO branch number) without touching this table.
  *
  * Doctrine:
  * - The account is the FILING identity, never a second wage/statutory rule
  *   source: the engines still compute from the employee's country pack.
  * - Employees are assigned one account (employee_payroll_profiles.filing_account_id);
- *   remittance summaries, PD7A worksheets, and T4/W-2 returns group by it.
+ *   remittance summaries, PD7A worksheets, and the year-end returns group by it.
+ * - `country` and `program_type` are OPEN text, validated at the API boundary
+ *   against the pack's declared filing program types
+ *   (engine/src/payroll-filing-registry.ts `filingAccountProblem`). They were
+ *   CHECK-constrained to CA/US literals, which made the deliberately open pack
+ *   registry a lie: a registered pack's accounts were unrepresentable. A DB
+ *   CHECK cannot enumerate an open registry, so the pack declaration is the
+ *   single source of truth and the constraint lives where the declaration is.
  * - `remitter_type` is the CRA remittance frequency the account is registered
  *   under. It is filing metadata carried onto remittance groups; the due-date
  *   calendar for the accelerated thresholds needs a statutory working-day
@@ -27,15 +35,12 @@ export const payrollFilingAccounts = pgTable(
     id: id(),
     orgId: orgRef(),
     /** Country pack the account files under; matches the employees' profile country. */
-    country: text("country", { enum: ["CA", "US"] }).notNull(),
+    country: text("country").notNull(),
     /**
-     * What kind of filing identity this is: a CRA payroll program account
-     * (RP), a US federal employer identification number, or a state
-     * unemployment-insurance account (one per state, under an EIN).
+     * Which of the pack's declared filing identities this is ("ca_rp",
+     * "us_ein", "us_state_sui", or whatever a registered pack declares).
      */
-    programType: text("program_type", {
-      enum: ["ca_rp", "us_ein", "us_state_sui"],
-    }).notNull(),
+    programType: text("program_type").notNull(),
     /** The registered number as the agency writes it ("123456789RP0002"). */
     accountNumber: text("account_number").notNull(),
     name: text("name").notNull(),
@@ -49,7 +54,8 @@ export const payrollFilingAccounts = pgTable(
     }).notNull().default("regular"),
     /** Legal entity that files this account; null = org-wide (root subsidiary). */
     subsidiaryId: uuid("subsidiary_id"),
-    /** State postal code — required for, and only for, us_state_sui accounts. */
+    /** State/region postal code — required exactly when the pack's program
+     *  type declares `requiresRegion` (a per-state SUI account). */
     stateCode: text("state_code"),
     /** Assigned to employees whose profile names no account, per country. */
     isDefault: boolean("is_default").notNull().default(false),
@@ -64,15 +70,6 @@ export const payrollFilingAccounts = pgTable(
     uniqueIndex("payroll_filing_accounts_org_default")
       .on(t.orgId, t.country)
       .where(sql`is_default`),
-    check(
-      "payroll_filing_accounts_program_country",
-      sql`(${t.country} = 'CA' and ${t.programType} = 'ca_rp')
-          or (${t.country} = 'US' and ${t.programType} in ('us_ein', 'us_state_sui'))`,
-    ),
-    check(
-      "payroll_filing_accounts_state",
-      sql`(${t.programType} = 'us_state_sui') = (${t.stateCode} is not null)`,
-    ),
   ],
 );
 

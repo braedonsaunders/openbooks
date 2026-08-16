@@ -188,23 +188,18 @@ test("every broken link in the chain is reported at once, not one refusal per at
 /* Refuse rather than approximate: the regions a pack cannot withhold   */
 /* ------------------------------------------------------------------ */
 
-test("Quebec is refused by the CA pack, naming the provincial tax AND the RL-1", () => {
-  // T4127 covers only the FEDERAL side of Quebec employment. A QC employee
-  // calculated by this pack was under-withheld by an entire provincial income
-  // tax (TP-1015.3, Revenu Québec) and issued no RL-1 — and nothing said so,
-  // because the CA arm was never asked the question the US arm has always
-  // been asked about an unsupported state.
-  assert.equal(payrollRegionSupported("CA", "QC"), false);
-  assert.throws(
-    () => assertPayrollRegionSupported("CA", "QC"),
-    (error: unknown) =>
-      error instanceof PayrollJurisdictionError
-      && /TP-1015\.3.*RL-1.*Revenu Québec/s.test(error.message),
-  );
+test("Quebec is SUPPORTED by the CA pack — TP-1015 and the RL-1 both exist now", () => {
+  // The refusal this test used to pin is lifted: T4127 computes the federal
+  // side of Quebec employment (abatement, K2Q, QPP, QPIP) and
+  // engine/src/payroll/canada/quebec computes TP-1015 provincial income tax;
+  // the RL-1 attaches to the CA year-end filings from the same tree. A QC
+  // employee calculates like any other province.
+  assert.equal(payrollRegionSupported("CA", "QC"), true);
+  assert.doesNotThrow(() => assertPayrollRegionSupported("CA", "QC"));
 });
 
-test("the provinces T4127 does implement are supported, including ZZ", () => {
-  for (const province of ["AB", "BC", "MB", "NB", "NL", "NS", "NT", "NU", "ON", "PE", "SK", "YT", "ZZ"]) {
+test("every T4127 province is supported, including QC and ZZ", () => {
+  for (const province of ["AB", "BC", "MB", "NB", "NL", "NS", "NT", "NU", "ON", "PE", "QC", "SK", "YT", "ZZ"]) {
     assert.doesNotThrow(() => assertPayrollRegionSupported("CA", province), province);
   }
 });

@@ -3,6 +3,7 @@ import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/db.ts'
 import { toUnits } from '@openbooks/engine/src/money.ts'
 import { compileFormula } from '@openbooks/engine/src/depreciation-formula.ts'
+import { filingAccountProblem } from '@openbooks/engine/src/payroll-filing-registry.ts'
 import { guardPermission } from '../../../../../lib/authz'
 import { SETUP_ENTITY_BY_KEY, setupEntityForFeatureState, toSnake, type SetupEntity } from '../../../../../lib/setup/registry'
 import {
@@ -219,6 +220,26 @@ async function validateEntityIntegrity(
     }
   }
 
+  if (entity.key === 'payroll-filing-accounts') {
+    // The pack's declared filing program types are the constraint that used
+    // to be the payroll_filing_accounts_country/_program/_program_country/
+    // _state DB CHECKs. A CHECK cannot enumerate an open pack registry, so
+    // the declaration (engine/src/payroll-filing-registry.ts) is asked here,
+    // at the API boundary, for creates and edits alike.
+    const current = rowId
+      ? ((await db.execute(sql`
+          select country, program_type, state_code from payroll_filing_accounts
+           where id = ${rowId} and org_id = ${orgId}`)) as any).rows[0]
+      : null
+    if (rowId && !current) return 'not found'
+    const country = String(body.country ?? current?.country ?? '')
+    const programType = String(body.programType ?? current?.program_type ?? '')
+    const stateCode = body.stateCode === undefined
+      ? ((current?.state_code as string | null) ?? null)
+      : (body.stateCode ? String(body.stateCode) : null)
+    const problem = filingAccountProblem({ country, programType, stateCode })
+    if (problem) return problem
+  }
   if (entity.key === 'segment-definitions') {
     const key = String(body.key ?? '')
     if (!rowId && !/^[a-z][a-z0-9_]{0,62}$/.test(key)) {

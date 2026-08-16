@@ -69,7 +69,7 @@ async function payrollOrg(opts: { eht?: { rate: string; annualExemption: string 
         ...(opts.eht ? { ca: { eht: { enabled: true, ...opts.eht } } } : {}),
       },
     })}::jsonb where id = ${org.orgId}`);
-  await seedPayrollComponents(org.orgId, actorId);
+  await seedPayrollComponents(org.orgId, actorId, "CA");
 
   const scheduleId = randomUUID();
   await db.execute(sql`

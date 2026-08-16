@@ -1478,6 +1478,7 @@
         "originatorShortName": "略称",
         "originatorLongName": "正式名称",
         "dataCentre": "データセンター",
+        "originatingDataCentre": "発信データセンター",
         "institution": "金融機関",
         "transit": "トランジット",
         "account": "口座番号",

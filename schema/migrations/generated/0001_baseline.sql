@@ -11204,7 +11204,7 @@ CREATE TABLE public.pay_components (
     CONSTRAINT pay_components_protection_percent CHECK (((protection_max_percent IS NULL) OR ((protection_max_percent >= (0)::numeric) AND (protection_max_percent <= (100)::numeric)))),
     CONSTRAINT pay_components_protection_priority CHECK ((protection_priority >= 0)),
     CONSTRAINT pay_components_protection_shape CHECK (((protection_base = 'none'::text) OR (protection_max_percent IS NOT NULL))),
-    CONSTRAINT pay_components_system_key CHECK (((system_key IS NULL) OR (system_key = ANY (ARRAY['base_pay'::text, 'overtime'::text, 'bonus'::text, 'vacation_accrual'::text, 'vacation_payout'::text, 'cpp'::text, 'cpp2'::text, 'ei'::text, 'qpip'::text, 'income_tax'::text, 'fit'::text, 'ss'::text, 'medicare'::text, 'medicare_addl'::text, 'futa'::text, 'suta'::text, 'wcb'::text, 'eht'::text])))),
+    CONSTRAINT pay_components_system_key CHECK (((system_key IS NULL) OR (system_key = ANY (ARRAY['base_pay'::text, 'overtime'::text, 'bonus'::text, 'stat_holiday'::text, 'stat_holiday_premium'::text, 'vacation_accrual'::text, 'vacation_payout'::text, 'cpp'::text, 'cpp2'::text, 'ei'::text, 'qpip'::text, 'income_tax'::text, 'qc_income_tax'::text, 'fit'::text, 'ss'::text, 'medicare'::text, 'medicare_addl'::text, 'futa'::text, 'suta'::text, 'wcb'::text, 'eht'::text])))),
     CONSTRAINT pay_components_tax_treatment CHECK ((tax_treatment = ANY (ARRAY['none'::text, 'pension_f'::text, 'union_dues'::text, 'alimony'::text])))
 );
 
@@ -12071,11 +12071,7 @@ CREATE TABLE public.payroll_filing_accounts (
     created_by uuid,
     updated_at timestamp with time zone DEFAULT now() NOT NULL,
     updated_by uuid,
-    CONSTRAINT payroll_filing_accounts_country CHECK ((country = ANY (ARRAY['CA'::text, 'US'::text]))),
-    CONSTRAINT payroll_filing_accounts_program CHECK ((program_type = ANY (ARRAY['ca_rp'::text, 'us_ein'::text, 'us_state_sui'::text]))),
-    CONSTRAINT payroll_filing_accounts_program_country CHECK ((((country = 'CA'::text) AND (program_type = 'ca_rp'::text)) OR ((country = 'US'::text) AND (program_type = ANY (ARRAY['us_ein'::text, 'us_state_sui'::text]))))),
-    CONSTRAINT payroll_filing_accounts_remitter CHECK ((remitter_type = ANY (ARRAY['regular'::text, 'quarterly'::text, 'accelerated_1'::text, 'accelerated_2'::text]))),
-    CONSTRAINT payroll_filing_accounts_state CHECK (((program_type = 'us_state_sui'::text) = (state_code IS NOT NULL)))
+    CONSTRAINT payroll_filing_accounts_remitter CHECK ((remitter_type = ANY (ARRAY['regular'::text, 'quarterly'::text, 'accelerated_1'::text, 'accelerated_2'::text])))
 );
 
 ALTER TABLE ONLY public.payroll_filing_accounts FORCE ROW LEVEL SECURITY;

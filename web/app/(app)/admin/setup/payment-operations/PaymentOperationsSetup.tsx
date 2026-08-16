@@ -57,7 +57,7 @@ function CurrencyField({ value, onChange, label, currencies, allowInherit }: { v
 const VIEWS: PaymentSetupView[] = ['profiles', 'formats', 'schedules', 'mandates']
 
 const SECRET_FIELDS: Record<string, string[]> = {
-  cpa005_credit: ['originatorId', 'originatorShortName', 'originatorLongName', 'dataCentre', 'institution', 'transit', 'account', 'transactionCode'],
+  cpa005_credit: ['originatorId', 'originatorShortName', 'originatorLongName', 'dataCentre', 'originatingDataCentre', 'institution', 'transit', 'account', 'transactionCode'],
   nacha_credit: ['odfiRouting', 'immediateDestination', 'immediateOrigin', 'destinationName', 'originName', 'companyName', 'companyId', 'entryClassCode', 'entryDescription'],
   nacha_debit: ['odfiRouting', 'immediateDestination', 'immediateOrigin', 'destinationName', 'originName', 'companyName', 'companyId', 'entryClassCode', 'entryDescription'],
   sepa_credit: ['originatorName', 'originatorIban', 'originatorBic'],

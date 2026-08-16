@@ -3,6 +3,7 @@ import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/db.ts'
 import { caPayrollConfig, payrollSettings, seedPayrollComponents, usPayrollConfig } from '@openbooks/engine/src/payroll-run.ts'
 import {
+  declaredRemittanceVendorSettingsKeys,
   packSlotState, PAYROLL_COUNTRY_PACKS, PayrollPackError, setPackSlotAccount, uninstallPayrollPack,
 } from '@openbooks/engine/src/payroll/packs.ts'
 import { US_STATES } from '@openbooks/engine/src/payroll/us/rates.ts'
@@ -40,9 +41,16 @@ const ACCOUNT_KEYS = [
   'vacationPayableAccountId',
 ] as const
 
-/** Payroll jurisdiction packs the org can install. */
-const INSTALLABLE_COUNTRIES = ['CA', 'US'] as const
-const KNOWN_COUNTRIES = ['CA', 'US'] as const
+/**
+ * Payroll jurisdiction packs the org can install — the pack REGISTRY's own
+ * `installable` declaration, never a second list. A pack that exists but is
+ * not yet installable (in development, superseded) is known for validation
+ * but refused for install.
+ */
+const installableCountries = (): string[] =>
+  Object.values(PAYROLL_COUNTRY_PACKS)
+    .filter((pack) => pack.installable)
+    .map((pack) => pack.country)
 
 async function currentPayrollBlob(orgId: string): Promise<Record<string, unknown>> {
   const r = (await db.execute(
@@ -102,7 +110,10 @@ export async function GET() {
   ])
   const paymentMethods = await payrollPaymentMethodSettings(gate.user.orgId)
   return NextResponse.json({
-    settings, packs, us, ca, stubPassword, encryptionAvailable, paymentMethods, ...options,
+    settings, packs, us, ca, stubPassword, encryptionAvailable, paymentMethods,
+    statutoryHolidayPay: blob.statutoryHolidayPay === true,
+    installable: installableCountries(),
+    ...options,
   })
 }
 
@@ -119,12 +130,16 @@ export async function PUT(req: Request) {
     if (v !== null && !isUuid(v)) return NextResponse.json({ error: `invalid ${key}` }, { status: 422 })
     settings[key] = v
   }
-  if ('craRemittancePartyId' in body) {
-    const party = body.craRemittancePartyId ?? null
+  // Statutory remittance vendors — exactly the settings keys the pack
+  // declarations name (the CRA vendor, the Revenu Québec vendor for the CA
+  // pack's QC-scoped components), never a literal list here.
+  for (const vendorKey of declaredRemittanceVendorSettingsKeys()) {
+    if (!(vendorKey in body)) continue
+    const party = body[vendorKey] ?? null
     if (party !== null && !isUuid(party)) {
-      return NextResponse.json({ error: 'invalid craRemittancePartyId' }, { status: 422 })
+      return NextResponse.json({ error: `invalid ${vendorKey}` }, { status: 422 })
     }
-    settings.craRemittancePartyId = party
+    settings[vendorKey] = party
   }
   // The cheque safety net. On by default: a payroll that refuses to run
   // because one employee's void cheque has not been keyed yet fails everybody
@@ -184,11 +199,20 @@ export async function PUT(req: Request) {
     const countries = body.countries
     if (
       !Array.isArray(countries)
-      || countries.some((c) => !(KNOWN_COUNTRIES as readonly string[]).includes(String(c)))
+      || countries.some((c) => !(String(c) in PAYROLL_COUNTRY_PACKS))
     ) {
       return NextResponse.json({ error: 'invalid countries' }, { status: 422 })
     }
     settings.countries = [...new Set(countries.map(String))]
+  }
+  // Statutory holiday pay (engine/src/payroll-run.ts phase 2). Org-level
+  // gate; default OFF for tenants that predate the feature because it changes
+  // gross pay.
+  if ('statutoryHolidayPay' in body) {
+    if (typeof body.statutoryHolidayPay !== 'boolean') {
+      return NextResponse.json({ error: 'invalid statutoryHolidayPay' }, { status: 422 })
+    }
+    settings.statutoryHolidayPay = body.statutoryHolidayPay
   }
 
   // US pack configuration: effective FUTA rate (credit-reduction states) and
@@ -300,19 +324,33 @@ export async function POST(req: Request) {
   if (gate instanceof NextResponse) return gate
   const body = await req.json().catch(() => ({}))
   if (body.action === 'seed-components') {
-    await seedPayrollComponents(gate.user.orgId, gate.user.id, body.country === 'US' ? 'US' : 'CA')
+    // The pack names its own component set; the registry is the only
+    // validator. The old `body.country === 'US' ? 'US' : 'CA'` cast turned
+    // every unrecognised value — a typo, a pack nobody wrote — into Canada
+    // and seeded CPP/EI for it.
+    const country = String(body.country ?? '')
+    if (!installableCountries().includes(country)) {
+      return NextResponse.json({ error: 'unknown country pack' }, { status: 422 })
+    }
+    await seedPayrollComponents(gate.user.orgId, gate.user.id, country)
     return NextResponse.json({ ok: true })
   }
   if (body.action === 'install-pack') {
     const country = String(body.country ?? '')
-    if (!(INSTALLABLE_COUNTRIES as readonly string[]).includes(country)) {
+    if (!installableCountries().includes(country)) {
       return NextResponse.json({ error: 'unknown country pack' }, { status: 422 })
     }
     // A pack = its statutory component set (the engine wiring) plus the pack
     // marker the setup workspace and wizard read back.
-    await seedPayrollComponents(gate.user.orgId, gate.user.id, country as 'CA' | 'US')
+    await seedPayrollComponents(gate.user.orgId, gate.user.id, country)
     const settings = await currentPayrollBlob(gate.user.orgId)
     const countries = Array.isArray(settings.countries) ? settings.countries.map(String) : []
+    // A NEW payroll org (first pack, nothing decided yet) starts with
+    // statutory holiday pay ON; an existing tenant's stubs must not change on
+    // an upgrade or a second-pack install, so an absent key stays absent.
+    if (countries.length === 0 && !('statutoryHolidayPay' in settings)) {
+      settings.statutoryHolidayPay = true
+    }
     settings.countries = [...new Set([...countries, country])]
     await writePayrollBlob(gate.user.orgId, gate.user.id, settings)
     return NextResponse.json({ ok: true })

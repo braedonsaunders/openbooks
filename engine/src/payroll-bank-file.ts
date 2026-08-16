@@ -62,39 +62,60 @@ export interface PayRunBankFileFormatSpec {
 }
 
 /**
- * The two rails this product can originate payroll on, the published standards
- * their layouts were verified against, and — for the one that is off — exactly
- * which field could not be established.
+ * The two rails this product can originate payroll on, and the published
+ * standards their layouts were verified against.
  *
- * ── CPA-005 (Canada) — OFF ────────────────────────────────────────────────
- * Verified against Payments Canada, *Standard 005 — Standards for the Exchange
- * of Financial Data on AFT Files* (2024 ed.), Section D record layouts and
- * Appendix 1 Data Element Dictionary; transaction codes against *Standard 007*
- * (2026 ed., Appendix I — codes moved out of Standard 005 in 2016).
+ * ── CPA-005 (Canada) — ON ─────────────────────────────────────────────────
+ * Verified clause by clause against Payments Canada, *Standard 005 — Standards
+ * for the Exchange of Financial Data on AFT Files* (2024 ed.,
+ * payments.ca/sites/default/files/standard005eng.pdf), read directly:
  *
- * Everything about the layout checks out: 1464-character A / C / Z logical
- * records, the A record's nine elements, the Z record's twelve, all eighteen
- * offsets of the 240-character credit segment, `0yyddd` dates, the 9-character
- * institutional ID (`0` + 3-digit institution + 5-digit branch), the record
- * sequence starting at literal `000000001` and incrementing by one, and cents
- * (implied two decimals, unsigned, zero-filled right-justified — the standard
- * itself never says "cents", but Scotiabank's and Central 1's implementation
- * guides both state it and the standard's worked example agrees).
+ * - Section D (introduction): logical record types A, C and Z are exactly
+ *   1464 characters. The standard's EBCDIC clause governs exchange BETWEEN
+ *   institutions; customer-to-direct-clearer files are ASCII + CRLF per the
+ *   direct clearers' own implementation guides (Scotiabank, Central 1).
+ * - Section D p.4, Logical Record Type A layout table: "A" (1), Logical
+ *   Record Count = literal "000000001" (2–10), Originator's ID (11–20), File
+ *   Creation No. (21–24), Creation Date `0yyddd` (25–30), Destination Data
+ *   Centre (31–35), reserved communication area (36–55), Currency Code
+ *   Identifier "CAD" (56–58), filler to 1464.
+ * - Section D p.5, Logical Record Type C layout table: elements 01–03
+ *   ("C", Logical Record Count, Origination Control Data, positions 1–24),
+ *   then up to six 240-character credit segments from position 25. All
+ *   eighteen segment elements (04–21) sit at their published offsets; the
+ *   Item Trace Number is element 09, record positions 65–86 = positions
+ *   41–62 within the segment.
+ * - Section D, Logical Record Type Z layout table: Total Value/Number of
+ *   Debit Transactions "D" and "J" (25–38, 39–46), Total Value/Number of
+ *   Credit Transactions "C" and "I" (47–60, 61–68), Error Corrections "E"
+ *   and "F" (69–112), filler to 1464.
+ * - Appendix 1 (Data Element Dictionary) pp.6–7, ITEM TRACE NUMBER, and
+ *   pp.3–4, DESTINATION DATA CENTRE / FILE CREATION NUMBER / LOGICAL RECORD
+ *   COUNT — see below and `itemTraceNumber` in engine/src/payments.ts.
+ * - Transaction codes against *Standard 007* (2026 ed., Appendix I — codes
+ *   moved out of Standard 005 in 2016): 200 = Payroll Deposit, 460 = Accounts
+ *   Payable.
+ * - Amounts are unsigned implied cents, right-justified zero-filled (the
+ *   standard's own worked example agrees; Scotiabank's and Central 1's
+ *   implementation guides state it outright).
  *
- * What stops it is DE 12, the ITEM TRACE NUMBER (segment positions 41–62).
- * The standard mandates its internal structure — 4 digits of the Destination
- * Data Centre with the trailing digit dropped, 5 digits of the ORIGINATING
- * DIRECT CLEARER'S DATA CENTRE, the 4-digit File Creation Number, and a
- * 9-digit item sequence — and each of the last three must be greater than
- * zero, while the first must match the destination data centre or the
- * transaction is REJECTED. `buildCpa005File` currently writes 22 zeros there,
- * and the originating direct clearer's data centre is an institution-assigned
- * value this product does not collect anywhere.
- *
- * Inventing five digits that decide whether a payroll settles is precisely the
- * thing not to do, so the format stays off until the value is tenant
- * configuration and the writer composes the field. See
- * `.local/handoff-bankfile.md` for the two changes that turn it on.
+ * The element that used to keep this format OFF is DE 12, the ITEM TRACE
+ * NUMBER. Appendix 1 pp.6–7 mandates its internal structure: (a) the 4-digit
+ * destination data centre with the trailing digit dropped — which must agree
+ * with the A record's Destination Data Centre or the transaction is REJECTED —
+ * (b) the originating direct clearer's 5-digit allocated data centre, (c) the
+ * 4-digit file creation number as per the A record, and (d) a 9-digit item
+ * sequence number, where (b), (c) and (d) must each be greater than zero or
+ * the transaction is REJECTED. `buildCpa005File` (engine/src/payments.ts)
+ * now composes exactly that via `itemTraceNumber`, shared with the AP payment
+ * files. Both data centres are institution-assigned tenant configuration on
+ * the payment bank profile (`dataCentre`, `originatingDataCentre`; validated
+ * 5-digit, never defaulted), and the file creation number is the artifact's
+ * own `number_sequences` allocation (payroll-bank-file-artifact.ts) — inside
+ * the same transaction that freezes the bytes, never re-derived. Every
+ * element is therefore constructible from collected configuration, so the
+ * format is on; the zero-fill canary test is replaced by the byte-level
+ * golden in payroll-bank-file.test.ts.
  *
  * ── NACHA (United States) — ON ────────────────────────────────────────────
  * Verified against Nacha's *ACH Guide for Developers* (achdevguide.nacha.org,
@@ -112,13 +133,7 @@ export interface PayRunBankFileFormatSpec {
  */
 export const PAYROLL_BANK_FILE_FORMATS: Record<PayRunBankFileFormat, PayRunBankFileFormatSpec> = {
   cpa005: {
-    enabled: false,
-    disabledReason:
-      "CPA-005 payroll export is not enabled: Payments Canada Standard 005 mandates the structure of " +
-      "the Item Trace Number (destination data centre + originating direct clearer's data centre + file " +
-      "creation number + item sequence, each non-zero), the writer emits zeros there, and the originating " +
-      "direct clearer's data centre is not collected anywhere in this product. Enabling it on a guessed " +
-      "value would produce files the bank rejects item by item.",
+    enabled: true,
     currency: "CAD",
     rails: ["cpa005_credit"],
     extension: "txt",
@@ -313,6 +328,15 @@ const FILL_ME = (value: unknown) =>
  * "0" + III + TTTTT). The short/long originator names are what the payee sees
  * on their statement, 15 and 30 characters.
  *
+ * TWO data centres, both institution-assigned, both trace-number components
+ * (Standard 005, Appendix 1 pp.6–7): `dataCentre` is the DESTINATION data
+ * centre the file is delivered to (A record positions 31–35; its first four
+ * digits open every item trace number and must agree or the transaction is
+ * rejected), and `originatingDataCentre` is the originating direct clearer's
+ * own allocated data centre (trace positions 5–9, which must be greater than
+ * zero or the transaction is rejected). Neither is derivable from the other,
+ * so both are required configuration.
+ *
  * `transactionCode` is REQUIRED for payroll: CPA transaction type 200 is a
  * payroll deposit, 460 is accounts payable, and silently sending wages under
  * the AP code misdescribes the credit on the employee's statement.
@@ -324,6 +348,7 @@ function resolveCpa005(row: ProfileRow): PayrollOriginatorResult {
     "originatorShortName",
     "originatorLongName",
     "dataCentre",
+    "originatingDataCentre",
     "institution",
     "transit",
     "account",
@@ -333,6 +358,15 @@ function resolveCpa005(row: ProfileRow): PayrollOriginatorResult {
   const settings = raw as EftSettings;
   if (!missing.includes("dataCentre") && !/^\d{5}$/.test(settings.dataCentre)) {
     missing.push("dataCentre (5 digits)" as keyof EftSettings);
+  }
+  if (
+    !missing.includes("originatingDataCentre") &&
+    (!/^\d{5}$/.test(settings.originatingDataCentre) ||
+      Number(settings.originatingDataCentre) === 0)
+  ) {
+    missing.push(
+      "originatingDataCentre (5 digits, greater than zero — Standard 005 rejects a zero-filled trace-number component)" as keyof EftSettings,
+    );
   }
   if (!missing.includes("institution") && !/^\d{3}$/.test(settings.institution)) {
     missing.push("institution (3 digits)" as keyof EftSettings);
