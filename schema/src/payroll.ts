@@ -93,8 +93,9 @@ export const payComponents = pgTable(
      */
     systemKey: text("system_key", {
       enum: [
-        "base_pay", "overtime", "bonus", "vacation_accrual", "vacation_payout",
-        "cpp", "cpp2", "ei", "qpip", "income_tax",
+        "base_pay", "overtime", "bonus", "stat_holiday", "stat_holiday_premium",
+        "vacation_accrual", "vacation_payout",
+        "cpp", "cpp2", "ei", "qpip", "income_tax", "qc_income_tax",
         "fit", "ss", "medicare", "medicare_addl", "futa", "suta",
         "wcb", "eht",
       ],

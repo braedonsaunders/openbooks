@@ -227,6 +227,7 @@ async function AccountsTab({ orgId }: { orgId: string }) {
       ca={ca}
       stubPassword={stubPassword}
       paymentMethods={paymentMethods}
+      statutoryHolidayPay={blob.statutoryHolidayPay === true}
       encryptionAvailable={encryptionAvailable}
       accounts={accountsRes.rows.map((account) => ({
         id: account.id,

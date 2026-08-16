@@ -19,8 +19,14 @@ import { db } from "./db.ts";
 
 export interface PayrollFilingAccount {
   id: string;
-  country: "CA" | "US";
-  programType: "ca_rp" | "us_ein" | "us_state_sui";
+  /**
+   * Open text, like the pack registry's keys — validated at the API boundary
+   * against the pack's declared filing program types
+   * (payroll-filing-registry.ts), never a closed union that a registered
+   * pack cannot satisfy.
+   */
+  country: string;
+  programType: string;
   accountNumber: string;
   name: string;
   remitterType: "regular" | "quarterly" | "accelerated_1" | "accelerated_2";
@@ -33,7 +39,7 @@ export interface PayrollFilingAccount {
 /** The org's active filing accounts, default first, then by number. */
 export async function listFilingAccounts(
   orgId: string,
-  country?: "CA" | "US",
+  country?: string,
 ): Promise<PayrollFilingAccount[]> {
   const rows = (await db.execute(sql`
     select id, country, program_type, account_number, name, remitter_type,

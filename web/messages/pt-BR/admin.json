@@ -1478,6 +1478,7 @@
         "originatorShortName": "Nome curto",
         "originatorLongName": "Nome longo",
         "dataCentre": "Centro de dados",
+        "originatingDataCentre": "Centro de dados de origem",
         "institution": "Instituição",
         "transit": "Trânsito",
         "account": "Número da conta",

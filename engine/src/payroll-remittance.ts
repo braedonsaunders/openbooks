@@ -14,7 +14,8 @@ import {
   nextBusinessDay,
   resolveObservedHolidays,
 } from "./payroll-holidays.ts";
-import { PayrollError, payrollSettings } from "./payroll-run.ts";
+import { PayrollError } from "./payroll-run.ts";
+import { legacyStatutoryLiabilityAccount, statutoryRemittanceDeclaration } from "./payroll/packs.ts";
 
 /**
  * Payroll remittance execution — the PD7A-shaped bridge from accrued
@@ -35,9 +36,6 @@ import { PayrollError, payrollSettings } from "./payroll-run.ts";
  * with no filing accounts configured land in one unassigned group, which is
  * byte-for-byte the previous single-account behaviour.
  */
-
-const CA_STATUTORY = ["cpp", "cpp2", "ei", "qpip", "income_tax"] as const;
-const US_STATUTORY = ["fit", "ss", "medicare", "medicare_addl", "futa", "suta"] as const;
 
 export interface RemittanceComponentLine {
   componentId: string;
@@ -65,20 +63,45 @@ export interface RemittanceGroup {
   existingBills: { documentId: string; documentNumber: string; status: string; total: string }[];
 }
 
+/** The raw orgs.settings.payroll blob — indexed by whatever settings keys the
+ *  pack declarations name, so this module needs no typed knowledge of them. */
+async function rawPayrollSettings(orgId: string): Promise<Record<string, unknown>> {
+  const r = (await db.execute(
+    sql`select settings->'payroll' as p from orgs where id = ${orgId}`,
+  )) as unknown as { rows: { p: Record<string, unknown> | null }[] };
+  return r.rows[0]?.p ?? {};
+}
+
 /**
  * Accrued-but-unremitted withholding by destination for pay dates in
- * [from, to] (committed and posted runs). Vacation accrual is an internal
- * liability, never remitted, and is excluded.
+ * [from, to] (committed and posted runs).
+ *
+ * Which system keys are internal accruals — liabilities that settle through a
+ * payout to the employee, never through a remittance to anyone — is a PACK
+ * declaration (`remittance: 'internal_accrual'` in engine/src/payroll/packs.ts),
+ * not a spelled key. The CA pack declares `vacation_accrual`; a pack whose
+ * statute banks a different accrual declares its own, and this module never
+ * learns the words.
  */
 export async function payrollRemittanceSummary(
   orgId: string,
   range: { from: string; to: string },
 ): Promise<RemittanceGroup[]> {
-  const settings = await payrollSettings(orgId);
+  const declaration = statutoryRemittanceDeclaration();
+  const rawSettings = await rawPayrollSettings(orgId);
   const filingAccount = effectiveFilingAccountSql("prof");
+  // '' can never be a declared key, so the coalesce keeps user components
+  // (null system_key) in the summary whatever the exclusion list holds.
+  const internalAccruals = `{${declaration.internalAccrualSystemKeys.join(",")}}`;
+  // Grouped by the STUB's snapshot province as well as by component: a
+  // component whose pack declares a region-scoped remittance vendor (QPP and
+  // QPIP go to Revenu Québec for QC employment, to the CRA nowhere) splits by
+  // destination, and rows that resolve to the same vendor are re-merged per
+  // component in groupRemittanceRows.
   const rows = (await db.execute(sql`
     select c.id as component_id, c.code, c.name, c.kind, c.system_key, c.remittance_party_id,
-           c.liability_account_id, ${filingAccount} as filing_account_id, sum(l.amount) as amount
+           c.liability_account_id, ${filingAccount} as filing_account_id, s.province,
+           sum(l.amount) as amount
       from pay_stub_lines l
       join pay_stubs s on s.id = l.stub_id
       join pay_runs r on r.document_id = s.pay_run_document_id and r.run_status = 'committed'
@@ -87,15 +110,16 @@ export async function payrollRemittanceSummary(
         on prof.org_id = s.org_id and prof.employee_party_id = s.employee_party_id
      where l.org_id = ${orgId} and s.pay_date between ${range.from} and ${range.to}
        and l.kind in ('deduction', 'employer_contribution')
-       and coalesce(c.system_key, '') <> 'vacation_accrual'
+       and coalesce(c.system_key, '') <> all(${internalAccruals}::text[])
      group by c.id, c.code, c.name, c.kind, c.system_key, c.remittance_party_id,
-              c.liability_account_id, ${filingAccount}
+              c.liability_account_id, ${filingAccount}, s.province
      order by c.sequence, c.code
   `)) as unknown as {
     rows: {
       component_id: string; code: string; name: string; kind: "deduction" | "employer_contribution";
       system_key: string | null; remittance_party_id: string | null;
-      liability_account_id: string | null; filing_account_id: string | null; amount: string;
+      liability_account_id: string | null; filing_account_id: string | null;
+      province: string; amount: string;
     }[];
   };
   if (rows.rows.length === 0) return [];
@@ -116,22 +140,35 @@ export async function payrollRemittanceSummary(
   );
   const filingAccounts = await filingAccountsById(orgId);
 
-  const statutoryLiability: Record<string, string | null> = {
-    income_tax: settings.taxPayableAccountId,
-    cpp: settings.cppPayableAccountId,
-    cpp2: settings.cppPayableAccountId,
-    ei: settings.eiPayableAccountId,
-    qpip: settings.eiPayableAccountId,
+  // Destination and account both resolve through the pack declarations. A
+  // component with a REGION-scoped vendor declaration for the stub's province
+  // (QPP/QPIP → the Revenu Québec vendor for QC stubs) resolves there FIRST —
+  // it outranks even the component's own remittance_party_id, because that
+  // column is one value on a component whose amounts split by destination.
+  // Otherwise a `tax_authority` component falls back to the vendor named by
+  // ITS pack's remittanceVendorSettingsKey (the CRA remittance vendor for the
+  // CA pack; a pack that declares none surfaces unassigned for setup, which
+  // is where the US statutory components have always landed). An `external`
+  // component (WCB, SUTA) only ever uses its own remittance_party_id.
+  const settingsVendor = (settingsKey: string): string | null => {
+    const vendor = rawSettings[settingsKey];
+    return typeof vendor === "string" && vendor ? vendor : null;
   };
   const resolveParty = (row: (typeof rows.rows)[0]): string | null => {
+    const regionalKey = row.system_key
+      ? declaration.regionalVendorSettingsKeyBySystemKey.get(row.system_key)?.[row.province]
+      : undefined;
+    if (regionalKey) return settingsVendor(regionalKey);
     if (row.remittance_party_id) return row.remittance_party_id;
-    if (row.system_key && (CA_STATUTORY as readonly string[]).includes(row.system_key)) {
-      return settings.craRemittancePartyId;
-    }
-    return null; // US statutory + unassigned user components: surfaced for setup
+    const vendorKey = row.system_key
+      ? declaration.vendorSettingsKeyBySystemKey.get(row.system_key)
+      : undefined;
+    if (!vendorKey) return null;
+    return settingsVendor(vendorKey);
   };
   const resolveAccount = (row: (typeof rows.rows)[0]): string | null =>
-    row.liability_account_id ?? (row.system_key ? (statutoryLiability[row.system_key] ?? null) : null);
+    row.liability_account_id
+    ?? (row.system_key ? legacyStatutoryLiabilityAccount(row.system_key, rawSettings) : null);
 
   const groups = groupRemittanceRows({
     rows: rows.rows, contextByAccount, filingAccounts, resolveParty, resolveAccount,
@@ -193,7 +230,9 @@ function groupKey(partyId: string | null, filingAccountId: string | null): strin
   return `${partyId ?? ""}::${filingAccountId ?? ""}`;
 }
 
-/** A withholding total for one component under one filing account. */
+/** A withholding total for one component under one filing account, per stub
+ *  province — the province is what a region-scoped remittance declaration
+ *  (QPP/QPIP → Revenu Québec) resolves the destination from. */
 export interface RemittanceRow {
   component_id: string;
   code: string;
@@ -203,6 +242,7 @@ export interface RemittanceRow {
   remittance_party_id: string | null;
   liability_account_id: string | null;
   filing_account_id: string | null;
+  province: string;
   amount: string;
 }
 
@@ -232,11 +272,21 @@ export function groupRemittanceRows(input: {
       employeeCount: runContext?.employees ?? 0,
       existingBills: [],
     };
-    group.components.push({
-      componentId: row.component_id, code: row.code, name: row.name, kind: row.kind,
-      systemKey: row.system_key, liabilityAccountId: input.resolveAccount(row),
-      accountLabel: null, amount: row.amount,
-    });
+    // Rows arrive per (component, province); provinces that resolve to the
+    // SAME destination fold back into one component line, so a bill never
+    // carries two lines for one component.
+    const existing = group.components.find(
+      (component) => component.componentId === row.component_id && component.kind === row.kind,
+    );
+    if (existing) {
+      existing.amount = add(existing.amount, row.amount);
+    } else {
+      group.components.push({
+        componentId: row.component_id, code: row.code, name: row.name, kind: row.kind,
+        systemKey: row.system_key, liabilityAccountId: input.resolveAccount(row),
+        accountLabel: null, amount: row.amount,
+      });
+    }
     group.total = add(group.total, row.amount);
     groups.set(key, group);
   }

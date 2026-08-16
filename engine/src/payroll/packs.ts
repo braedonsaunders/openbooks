@@ -1,6 +1,9 @@
 import { sql } from "drizzle-orm";
 import { db } from "../db.ts";
+import type { PayrollPackFilings } from "../payroll-filing-registry.ts";
+import { caPackFilings } from "./canada/filings.ts";
 import type { Province } from "./canada/rates.ts";
+import { usPackFilings } from "./us/filings.ts";
 import { NO_WITHHOLDING_STATES, US_STATES } from "./us/rates.ts";
 
 /**
@@ -57,9 +60,30 @@ export class PayrollPackError extends Error {}
 export type PayrollAssessedOn = "earnings" | "taxable_income";
 
 /**
+ * Where a statutory component's accrued amount GOES — the remittance question,
+ * answered per component the same way `assessedOn` answers the recomputation
+ * question. Required, so a pack cannot add a levy the remittance module has to
+ * guess about:
+ *
+ * - `tax_authority`    — remitted to the pack's statutory remittance vendor
+ *   (the org-configured party named by the pack's
+ *   `remittanceVendorSettingsKey`; unassigned when the pack declares none).
+ * - `external`         — remitted, but to a per-component destination
+ *   (`pay_components.remittance_party_id`): WCB boards, provincial ministries,
+ *   state agencies. Unassigned until the org configures the party.
+ * - `internal_accrual` — an internal liability that is NEVER remitted to
+ *   anyone (vacation accrual: the money is owed to the employee and settles
+ *   through a payout, not a remittance). Excluded from the remittance summary
+ *   entirely; treating it as remittable withholding would raise a real vendor
+ *   bill for money nobody is owed.
+ */
+export type PayrollRemittanceTreatment = "tax_authority" | "external" | "internal_accrual";
+
+/**
  * One statutory component of a pack: what the engine seeds, what it pushes a
- * line under, and what that line is assessed on. `assessedOn` is required, so
- * a pack cannot add a statutory component without answering the question.
+ * line under, what that line is assessed on, and where the withheld amount is
+ * remitted. `assessedOn` and `remittance` are required, so a pack cannot add
+ * a statutory component without answering either question.
  */
 export interface PayrollStatutoryComponent {
   /** pay_components.code. */
@@ -72,6 +96,21 @@ export interface PayrollStatutoryComponent {
   /** pay_components.sequence — presentation order on the stub. */
   sequence: number;
   assessedOn: PayrollAssessedOn;
+  remittance: PayrollRemittanceTreatment;
+  /**
+   * Region-scoped override of the pack's `tax_authority` remittance vendor:
+   * for a stub whose employment region matches a key here, the withheld
+   * amount is remitted to the vendor named by THAT settings key instead of
+   * the pack's `remittanceVendorSettingsKey`.
+   *
+   * This is a second `remittanceVendorSettingsKey`-style declaration, not a
+   * routing rule in the remittance module: the CA pack declares that a QC
+   * employee's QPP/QPP2/QPIP (both shares) are remitted to Revenu Québec on
+   * TPZ-1015.R (`rqRemittancePartyId`), never to the CRA vendor — the same
+   * amounts for every other province go to the CRA. The remittance summary
+   * consumes the declaration per stub province and knows no jurisdiction.
+   */
+  regionalRemittanceVendorSettingsKeys?: Readonly<Record<string, string>>;
 }
 
 export interface PayrollStatutorySlot {
@@ -92,10 +131,51 @@ export interface PayrollStatutorySlot {
  */
 export type PayrollCountry = "CA" | "US";
 
+/**
+ * What the two generic contributory earning FLAGS mean under this pack.
+ *
+ * `pay_components.pensionable` and `pay_components.insurable` are
+ * jurisdiction-free column names for two jurisdiction-specific accumulators,
+ * and every pack overloads them: for the CRA they are CPP pensionable income
+ * and EI insurable earnings; for the IRS they are FICA wages and FUTA/SUI
+ * wages. That overloading used to be a code comment three files apart from the
+ * code that relied on it. It is now a REQUIRED declaration: a new pack must
+ * say what each flag accumulates (or refuse the flag outright) before its
+ * components can be seeded, instead of silently inheriting whichever meaning
+ * the reader happened to assume. The declaration is asserted at seed time.
+ */
+export interface PayrollContributoryBases {
+  /** The statutory base the `pensionable` earning flag accumulates. */
+  pensionable: string;
+  /** The statutory base the `insurable` earning flag accumulates. */
+  insurable: string;
+}
+
 export interface PayrollCountryPack {
   country: PayrollCountry;
   installable: boolean;
   statutorySlots: readonly PayrollStatutorySlot[];
+  /**
+   * orgs.settings.payroll key holding the vendor party that `tax_authority`
+   * components are remitted to (the CRA remittance vendor for the CA pack).
+   * `null` is a declaration that the pack has no single statutory remittance
+   * vendor configured this way — its withholdings surface unassigned until
+   * per-component destinations are set. REQUIRED, so a new pack answers the
+   * question instead of inheriting another authority's vendor.
+   */
+  remittanceVendorSettingsKey: string | null;
+  /** What the generic pensionable/insurable flags mean here. See the type. */
+  contributoryBases: PayrollContributoryBases;
+  /**
+   * pay_components.tax_treatment for EMPLOYEE-paid union dues, or null when
+   * the pack's statutory engine gives dues no tax treatment at all.
+   *
+   * 'union_dues' is a T4127 factor-U1 key: the CRA deducts dues from taxable
+   * income. Stamping it on every employee-paid fringe in every country made a
+   * CRA factor the world's default — a pack whose engine has no such concept
+   * must declare `null` and its dues lines carry no treatment.
+   */
+  employeeUnionDuesTaxTreatment: string | null;
   /**
    * The ONE currency the pack's statutory engine computes, remits and files
    * in. T4127 produces CAD and Pub 15-T produces USD; there is no currency
@@ -120,6 +200,14 @@ export interface PayrollCountryPack {
    * never in a tenant's configuration table.
    */
   jurisdictions: readonly PayrollJurisdiction[];
+  /**
+   * The pack's filing declaration: filing-account program types, the
+   * separation-payment component mapping, and the year-end filings (label,
+   * population, electronic-file builder, issue workflow). LAZY — the filings
+   * modules sit in an import cycle with the year-end builders, so the
+   * declaration must not be dereferenced at module-evaluation time.
+   */
+  filings: () => PayrollPackFilings;
 }
 
 // ---------------------------------------------------------------------------
@@ -181,31 +269,16 @@ const CA_PROVINCES: readonly Province[] = [
   "AB", "BC", "MB", "NB", "NL", "NS", "NT", "NU", "ON", "PE", "QC", "SK", "YT", "ZZ",
 ];
 
-/**
- * Quebec is REFUSED, not approximated.
- *
- * T4127 covers only the federal side of Quebec employment — the abatement,
- * K2Q, QPP and QPIP (engine/src/payroll/canada/rates.ts says so at the point
- * where the QC provincial table would be). Quebec provincial income tax is
- * TP-1015.3, administered by Revenu Québec, and is not implemented, so a QC
- * employee calculated by this pack is under-withheld by an entire provincial
- * income tax and their year-end RL-1 does not exist. Both consequences follow
- * from ONE missing thing, so they are declared in one place and every path —
- * the run, the T4 builder — refuses by asking here.
- */
-const QUEBEC_REFUSAL =
-  "Quebec provincial income tax (TP-1015.3) and the RL-1 slip are administered by "
-  + "Revenu Québec and are not implemented — the CA pack covers only the federal side of "
-  + "Quebec employment (abatement, K2Q, QPP, QPIP), so a QC employee would be "
-  + "under-withheld by the whole provincial tax and would receive no RL-1";
-
 const CA_REGIONS: PayrollRegionCoverage = {
   label: "province",
   known: CA_PROVINCES,
-  supported: CA_PROVINCES.filter((code) => code !== "QC"),
+  // Every province including Quebec: T4127 computes the federal side (with
+  // the abatement, QPP, QPIP) and engine/src/payroll/canada/quebec computes
+  // TP-1015 provincial income tax; the RL-1 registers onto the CA year-end
+  // filings from the same tree.
+  supported: CA_PROVINCES,
   unsupportedReason:
     "provincial income tax withholding for {region} is not implemented by the CA payroll pack",
-  unsupportedReasons: { QC: QUEBEC_REFUSAL },
 };
 
 const US_REGIONS: PayrollRegionCoverage = {
@@ -366,6 +439,16 @@ export interface PayrollHolidayPayRule {
 export interface PayrollJurisdiction {
   key: string;
   name: string;
+  /**
+   * What KIND of calendar this is. `employment` calendars bind employers —
+   * they are the ones statutory holiday pay reads, and the ones an undeclared
+   * sibling jurisdiction is probed against. `tax_administration` calendars are
+   * an authority's own office calendar (the CRA's, which carries Easter Monday
+   * and the Civic Holiday no province's ESA lists); they move remittance due
+   * dates and must never be mistaken for anyone's employment calendar.
+   * REQUIRED, so the two families cannot be conflated by omission.
+   */
+  scope: "employment" | "tax_administration";
   /** The statute that lists the holidays. */
   citation: string;
   holidays: readonly PayrollHoliday[];
@@ -546,6 +629,7 @@ const CA_JURISDICTIONS: readonly PayrollJurisdiction[] = [
   {
     key: "CA",
     name: "Canada (federally regulated)",
+    scope: "employment",
     citation: "Canada Labour Code, RSC 1985 c L-2, ss. 191–197",
     holidays: [
       NEW_YEARS, GOOD_FRIDAY, VICTORIA_DAY, CANADA_DAY, LABOUR_DAY,
@@ -557,6 +641,7 @@ const CA_JURISDICTIONS: readonly PayrollJurisdiction[] = [
   {
     key: "CA-ON",
     name: "Ontario",
+    scope: "employment",
     citation: "Employment Standards Act, 2000 (Ontario), s. 1 'public holiday'",
     holidays: [
       NEW_YEARS,
@@ -575,6 +660,7 @@ const CA_JURISDICTIONS: readonly PayrollJurisdiction[] = [
   {
     key: "CA-QC",
     name: "Quebec",
+    scope: "employment",
     citation: "Act respecting labour standards (Quebec), s. 60; National Holiday Act, CQLR c F-1.1",
     holidays: [
       NEW_YEARS,
@@ -596,6 +682,7 @@ const CA_JURISDICTIONS: readonly PayrollJurisdiction[] = [
   {
     key: "CA-BC",
     name: "British Columbia",
+    scope: "employment",
     citation: "Employment Standards Act (British Columbia), s. 1 'statutory holiday'",
     holidays: [
       NEW_YEARS,
@@ -616,6 +703,7 @@ const CA_JURISDICTIONS: readonly PayrollJurisdiction[] = [
   {
     key: "CA-AB",
     name: "Alberta",
+    scope: "employment",
     citation: "Employment Standards Code (Alberta), s. 1(1)(n) 'general holiday'",
     holidays: [
       NEW_YEARS,
@@ -633,6 +721,7 @@ const CA_JURISDICTIONS: readonly PayrollJurisdiction[] = [
   {
     key: "CA-SK",
     name: "Saskatchewan",
+    scope: "employment",
     citation: "The Saskatchewan Employment Act, s. 2-1(1)(o) 'public holiday'",
     holidays: [
       NEW_YEARS,
@@ -660,6 +749,7 @@ const CA_JURISDICTIONS: readonly PayrollJurisdiction[] = [
      */
     key: "CA-CRA",
     name: "Canada Revenue Agency (remittance due dates)",
+    scope: "tax_administration",
     citation: "https://www.canada.ca/en/revenue-agency/services/tax/public-holidays.html",
     holidays: [
       NEW_YEARS, GOOD_FRIDAY, EASTER_MONDAY, VICTORIA_DAY, CANADA_DAY,
@@ -674,6 +764,7 @@ const CA_JURISDICTIONS: readonly PayrollJurisdiction[] = [
      *  recognized there and the Civic Holiday is not. */
     key: "CA-CRA-QC",
     name: "Canada Revenue Agency — Quebec (remittance due dates)",
+    scope: "tax_administration",
     citation: "https://www.canada.ca/en/revenue-agency/services/tax/public-holidays.html",
     holidays: [
       NEW_YEARS, GOOD_FRIDAY, EASTER_MONDAY, VICTORIA_DAY,
@@ -726,6 +817,7 @@ const US_JURISDICTIONS: readonly PayrollJurisdiction[] = [
   {
     key: "US",
     name: "United States (federal)",
+    scope: "employment",
     citation: "5 U.S.C. 6103; FLSA 29 U.S.C. 201 et seq. (no holiday-pay mandate)",
     holidays: US_FEDERAL_HOLIDAYS,
     holidayPay: null,
@@ -738,6 +830,7 @@ const US_JURISDICTIONS: readonly PayrollJurisdiction[] = [
     .map((state): PayrollJurisdiction => ({
       key: `US-${state}`,
       name: `United States — ${state}`,
+      scope: "employment",
       citation: "5 U.S.C. 6103; FLSA 29 U.S.C. 201 et seq. (no state holiday-pay mandate)",
       holidays: US_FEDERAL_HOLIDAYS,
       holidayPay: null,
@@ -753,6 +846,16 @@ export const PAYROLL_COUNTRY_PACKS: Record<string, PayrollCountryPack> = {
     taxYear: CALENDAR_TAX_YEAR,
     regions: CA_REGIONS,
     jurisdictions: CA_JURISDICTIONS,
+    // Source deductions are remitted to the Receiver General through the
+    // org-configured CRA remittance vendor.
+    remittanceVendorSettingsKey: "craRemittancePartyId",
+    contributoryBases: {
+      pensionable: "CPP/QPP pensionable earnings (T4127 factor PI)",
+      insurable: "EI insurable earnings (T4127 factor IE)",
+    },
+    // T4127 factor U1: employee-paid dues reduce taxable income.
+    employeeUnionDuesTaxTreatment: "union_dues",
+    filings: caPackFilings,
     statutorySlots: [
       {
         key: "income_tax",
@@ -761,7 +864,24 @@ export const PAYROLL_COUNTRY_PACKS: Record<string, PayrollCountryPack> = {
           // T4127 factor T: annual taxable income A is income LESS the
           // factor-F / F2 / U1 deductions, so a pre-tax protected order moves
           // it. The only Canadian line the fixpoint re-derives.
-          { code: "TAX", name: "Income tax", systemKey: "income_tax", kind: "deduction", sequence: 110, assessedOn: "taxable_income" },
+          { code: "TAX", name: "Income tax", systemKey: "income_tax", kind: "deduction", sequence: 110, assessedOn: "taxable_income", remittance: "tax_authority" },
+        ],
+      },
+      {
+        key: "qc_income_tax",
+        components: [
+          // TP-1015 variable A: annual taxable income I is income LESS the
+          // factor-F / H / CSA deductions, so a pre-tax protected order moves
+          // it — re-derived by the fixpoint exactly like federal income_tax.
+          //
+          // remittance is "external", NOT "tax_authority": Québec source
+          // deductions are remitted to Revenu Québec (form TPZ-1015.R), a
+          // different agency from the CRA vendor the pack's
+          // remittanceVendorSettingsKey names. The org configures its Revenu
+          // Québec vendor on this component's remittance_party_id — that
+          // difference in destination is the entire reason this is a second
+          // slot and not part of income_tax.
+          { code: "QCTAX", name: "Québec income tax", systemKey: "qc_income_tax", kind: "deduction", sequence: 115, assessedOn: "taxable_income", remittance: "external" },
         ],
       },
       {
@@ -770,9 +890,14 @@ export const PAYROLL_COUNTRY_PACKS: Record<string, PayrollCountryPack> = {
         components: [
           // C and C2 are rate × (pensionable income − exemption), capped on
           // YTD contributions. No deduction enters the formula.
-          { code: "CPP", name: "CPP", systemKey: "cpp", kind: "deduction", sequence: 120, assessedOn: "earnings" },
-          { code: "CPP2", name: "CPP (second additional)", systemKey: "cpp2", kind: "deduction", sequence: 130, assessedOn: "earnings" },
-          { code: "CPP-ER", name: "CPP (employer)", systemKey: "cpp", kind: "employer_contribution", sequence: 210, assessedOn: "earnings" },
+          //
+          // For a QC employee the same slot IS the QPP: T4127 computes QPP
+          // under the C/C2 factors and the run pushes the same system keys.
+          // QPP is remitted to Revenu Québec on TPZ-1015.R, not to the CRA —
+          // the regional declaration routes the QC share there.
+          { code: "CPP", name: "CPP", systemKey: "cpp", kind: "deduction", sequence: 120, assessedOn: "earnings", remittance: "tax_authority", regionalRemittanceVendorSettingsKeys: { QC: "rqRemittancePartyId" } },
+          { code: "CPP2", name: "CPP (second additional)", systemKey: "cpp2", kind: "deduction", sequence: 130, assessedOn: "earnings", remittance: "tax_authority", regionalRemittanceVendorSettingsKeys: { QC: "rqRemittancePartyId" } },
+          { code: "CPP-ER", name: "CPP (employer)", systemKey: "cpp", kind: "employer_contribution", sequence: 210, assessedOn: "earnings", remittance: "tax_authority", regionalRemittanceVendorSettingsKeys: { QC: "rqRemittancePartyId" } },
         ],
       },
       {
@@ -780,17 +905,22 @@ export const PAYROLL_COUNTRY_PACKS: Record<string, PayrollCountryPack> = {
         legacySettingsKey: "eiPayableAccountId",
         components: [
           // EI is rate × insurable earnings; the employer share is a multiple
-          // of the employee's.
-          { code: "EI", name: "EI", systemKey: "ei", kind: "deduction", sequence: 140, assessedOn: "earnings" },
-          { code: "EI-ER", name: "EI (employer)", systemKey: "ei", kind: "employer_contribution", sequence: 220, assessedOn: "earnings" },
+          // of the employee's. EI is FEDERAL for every province including
+          // Quebec — no regional override; it always goes to the CRA vendor.
+          { code: "EI", name: "EI", systemKey: "ei", kind: "deduction", sequence: 140, assessedOn: "earnings", remittance: "tax_authority" },
+          { code: "EI-ER", name: "EI (employer)", systemKey: "ei", kind: "employer_contribution", sequence: 220, assessedOn: "earnings", remittance: "tax_authority" },
         ],
       },
       {
         key: "qpip",
         legacySettingsKey: "eiPayableAccountId",
         components: [
-          { code: "QPIP", name: "QPIP", systemKey: "qpip", kind: "deduction", sequence: 150, assessedOn: "earnings" },
-          { code: "QPIP-ER", name: "QPIP (employer)", systemKey: "qpip", kind: "employer_contribution", sequence: 230, assessedOn: "earnings" },
+          // QPIP exists only for QC employment, and it is remitted to Revenu
+          // Québec on TPZ-1015.R — declared per region for the same reason as
+          // QPP, so the declaration stays on the component, not in the
+          // remittance module.
+          { code: "QPIP", name: "QPIP", systemKey: "qpip", kind: "deduction", sequence: 150, assessedOn: "earnings", remittance: "tax_authority", regionalRemittanceVendorSettingsKeys: { QC: "rqRemittancePartyId" } },
+          { code: "QPIP-ER", name: "QPIP (employer)", systemKey: "qpip", kind: "employer_contribution", sequence: 230, assessedOn: "earnings", remittance: "tax_authority", regionalRemittanceVendorSettingsKeys: { QC: "rqRemittancePartyId" } },
         ],
       },
       {
@@ -799,7 +929,7 @@ export const PAYROLL_COUNTRY_PACKS: Record<string, PayrollCountryPack> = {
         components: [
           // A percentage of vacationable EARNINGS (the entitlement engine
           // emits it, phase 7), never of anything net of a deduction.
-          { code: "VAC", name: "Vacation accrual", systemKey: "vacation_accrual", kind: "employer_contribution", sequence: 240, assessedOn: "earnings" },
+          { code: "VAC", name: "Vacation accrual", systemKey: "vacation_accrual", kind: "employer_contribution", sequence: 240, assessedOn: "earnings", remittance: "internal_accrual" },
         ],
       },
       {
@@ -807,7 +937,7 @@ export const PAYROLL_COUNTRY_PACKS: Record<string, PayrollCountryPack> = {
         components: [
           // Assessable earnings × the worker-comp group's rate, job-split
           // proportional to the earnings it assesses.
-          { code: "WCB", name: "Workers' compensation (WCB/WSIB)", systemKey: "wcb", kind: "employer_contribution", sequence: 260, assessedOn: "earnings" },
+          { code: "WCB", name: "Workers' compensation (WCB/WSIB)", systemKey: "wcb", kind: "employer_contribution", sequence: 260, assessedOn: "earnings", remittance: "external" },
         ],
       },
       {
@@ -815,7 +945,7 @@ export const PAYROLL_COUNTRY_PACKS: Record<string, PayrollCountryPack> = {
         components: [
           // Ontario remuneration past the annual exemption — remuneration is
           // an earnings measure.
-          { code: "EHT", name: "Employer Health Tax", systemKey: "eht", kind: "employer_contribution", sequence: 270, assessedOn: "earnings" },
+          { code: "EHT", name: "Employer Health Tax", systemKey: "eht", kind: "employer_contribution", sequence: 270, assessedOn: "earnings", remittance: "external" },
         ],
       },
     ],
@@ -828,36 +958,47 @@ export const PAYROLL_COUNTRY_PACKS: Record<string, PayrollCountryPack> = {
     taxYear: CALENDAR_TAX_YEAR,
     regions: US_REGIONS,
     jurisdictions: US_JURISDICTIONS,
+    // Federal deposits ride EFTPS; no single remittance vendor is configured,
+    // so US statutory withholdings surface unassigned until one is.
+    remittanceVendorSettingsKey: null,
+    contributoryBases: {
+      pensionable: "FICA (Social Security and Medicare) wages",
+      insurable: "FUTA and state unemployment (SUI) wages",
+    },
+    // Post-tax under the IRC: union dues stopped being deductible for
+    // employees with the TCJA (2018). No treatment.
+    employeeUnionDuesTaxTreatment: null,
+    filings: usPackFilings,
     statutorySlots: [
       {
         key: "fit",
         components: [
           // Pub 15-T works from annualized taxable wages, so a pre-tax
           // deduction (§125, 401(k)) moves it exactly as factor F moves T.
-          { code: "FIT", name: "Federal income tax", systemKey: "fit", kind: "deduction", sequence: 110, assessedOn: "taxable_income" },
+          { code: "FIT", name: "Federal income tax", systemKey: "fit", kind: "deduction", sequence: 110, assessedOn: "taxable_income", remittance: "tax_authority" },
         ],
       },
       {
         key: "fica",
         components: [
           // Rate × FICA wages against the wage base — deductions do not enter.
-          { code: "SS", name: "Social Security", systemKey: "ss", kind: "deduction", sequence: 120, assessedOn: "earnings" },
-          { code: "MED", name: "Medicare", systemKey: "medicare", kind: "deduction", sequence: 130, assessedOn: "earnings" },
-          { code: "MED2", name: "Additional Medicare", systemKey: "medicare_addl", kind: "deduction", sequence: 135, assessedOn: "earnings" },
-          { code: "SS-ER", name: "Social Security (employer)", systemKey: "ss", kind: "employer_contribution", sequence: 210, assessedOn: "earnings" },
-          { code: "MED-ER", name: "Medicare (employer)", systemKey: "medicare", kind: "employer_contribution", sequence: 220, assessedOn: "earnings" },
+          { code: "SS", name: "Social Security", systemKey: "ss", kind: "deduction", sequence: 120, assessedOn: "earnings", remittance: "tax_authority" },
+          { code: "MED", name: "Medicare", systemKey: "medicare", kind: "deduction", sequence: 130, assessedOn: "earnings", remittance: "tax_authority" },
+          { code: "MED2", name: "Additional Medicare", systemKey: "medicare_addl", kind: "deduction", sequence: 135, assessedOn: "earnings", remittance: "tax_authority" },
+          { code: "SS-ER", name: "Social Security (employer)", systemKey: "ss", kind: "employer_contribution", sequence: 210, assessedOn: "earnings", remittance: "tax_authority" },
+          { code: "MED-ER", name: "Medicare (employer)", systemKey: "medicare", kind: "employer_contribution", sequence: 220, assessedOn: "earnings", remittance: "tax_authority" },
         ],
       },
       {
         key: "futa",
         components: [
-          { code: "FUTA", name: "Federal unemployment (FUTA)", systemKey: "futa", kind: "employer_contribution", sequence: 230, assessedOn: "earnings" },
+          { code: "FUTA", name: "Federal unemployment (FUTA)", systemKey: "futa", kind: "employer_contribution", sequence: 230, assessedOn: "earnings", remittance: "tax_authority" },
         ],
       },
       {
         key: "suta",
         components: [
-          { code: "SUTA", name: "State unemployment (SUI)", systemKey: "suta", kind: "employer_contribution", sequence: 250, assessedOn: "earnings" },
+          { code: "SUTA", name: "State unemployment (SUI)", systemKey: "suta", kind: "employer_contribution", sequence: 250, assessedOn: "earnings", remittance: "external" },
         ],
       },
     ],
@@ -1222,6 +1363,170 @@ export function jurisdictionKey(country: string, province: string | null): strin
   const region = (province ?? "").trim().toUpperCase();
   if (!region) return country;
   return `${country}-${region}`;
+}
+
+/** Whether ANY pack declares the jurisdiction — the non-throwing probe the
+ *  statutory-holiday gate uses to distinguish "transcribed" from "refused". */
+export function payrollJurisdictionDeclared(key: string): boolean {
+  return declaredJurisdictions().some((jurisdiction) => jurisdiction.key === key);
+}
+
+/**
+ * A country's EMPLOYMENT jurisdictions — the calendars that bind employers,
+ * excluding tax administrations' own office calendars. This is the probe set
+ * for an UNDECLARED sibling jurisdiction: if any declared employment calendar
+ * in the same country observes a day, an undeclared province almost certainly
+ * does too, and the run must stop rather than quietly pay nothing for it.
+ */
+export function employmentJurisdictionsOf(country: string): readonly PayrollJurisdiction[] {
+  return payrollPack(country).jurisdictions.filter((j) => j.scope === "employment");
+}
+
+// ---------------------------------------------------------------------------
+// Statutory remittance and posting — the pack declarations, resolved once
+// ---------------------------------------------------------------------------
+
+/**
+ * Every pack's remittance and legacy-account declarations folded into three
+ * lookups by system key. Cross-pack, because the remittance summary and the GL
+ * projection both see stub lines from every installed pack at once; a system
+ * key two packs declare DIFFERENTLY is a refusal, never a coin toss.
+ */
+export interface StatutoryRemittanceDeclaration {
+  /** System keys declared `internal_accrual` — never remitted, by anyone. */
+  internalAccrualSystemKeys: readonly string[];
+  /** systemKey → the pack's remittance-vendor settings key (null = none). */
+  vendorSettingsKeyBySystemKey: ReadonlyMap<string, string | null>;
+  /**
+   * systemKey → { region → vendor settings key }: the component-declared
+   * regional overrides of the pack vendor (QPP/QPIP → Revenu Québec for QC
+   * stubs). Consulted per stub region BEFORE the pack-level vendor.
+   */
+  regionalVendorSettingsKeyBySystemKey: ReadonlyMap<string, Readonly<Record<string, string>>>;
+  /** systemKey → the slot's pre-pack orgs.settings.payroll account key. */
+  legacyLiabilitySettingsKeyBySystemKey: ReadonlyMap<string, string>;
+}
+
+export function statutoryRemittanceDeclaration(): StatutoryRemittanceDeclaration {
+  const internal = new Set<string>();
+  const remitted = new Set<string>();
+  const vendorKey = new Map<string, string | null>();
+  const regionalVendorKey = new Map<string, Readonly<Record<string, string>>>();
+  const legacyKey = new Map<string, string>();
+  for (const pack of Object.values(PAYROLL_COUNTRY_PACKS)) {
+    for (const slot of pack.statutorySlots) {
+      for (const component of slot.components) {
+        (component.remittance === "internal_accrual" ? internal : remitted)
+          .add(component.systemKey);
+        if (component.remittance === "tax_authority") {
+          const declared = pack.remittanceVendorSettingsKey;
+          const existing = vendorKey.get(component.systemKey);
+          if (existing !== undefined && existing !== declared) {
+            throw new PayrollPackError(
+              `two payroll packs declare different remittance vendors for ${component.systemKey}`,
+            );
+          }
+          vendorKey.set(component.systemKey, declared);
+        }
+        if (component.regionalRemittanceVendorSettingsKeys) {
+          const declared = component.regionalRemittanceVendorSettingsKeys;
+          const existing = regionalVendorKey.get(component.systemKey);
+          if (existing) {
+            for (const [region, key] of Object.entries(declared)) {
+              if (region in existing && existing[region] !== key) {
+                throw new PayrollPackError(
+                  `two payroll pack components declare different ${region} remittance vendors for ${component.systemKey}`,
+                );
+              }
+            }
+            regionalVendorKey.set(component.systemKey, { ...existing, ...declared });
+          } else {
+            regionalVendorKey.set(component.systemKey, declared);
+          }
+        }
+        if (slot.legacySettingsKey) {
+          const existing = legacyKey.get(component.systemKey);
+          if (existing !== undefined && existing !== slot.legacySettingsKey) {
+            throw new PayrollPackError(
+              `two payroll pack slots declare different legacy accounts for ${component.systemKey}`,
+            );
+          }
+          legacyKey.set(component.systemKey, slot.legacySettingsKey);
+        }
+      }
+    }
+  }
+  for (const systemKey of internal) {
+    if (remitted.has(systemKey)) {
+      throw new PayrollPackError(
+        `payroll packs declare ${systemKey} both internal_accrual and remittable`,
+      );
+    }
+  }
+  return {
+    internalAccrualSystemKeys: [...internal],
+    vendorSettingsKeyBySystemKey: vendorKey,
+    regionalVendorSettingsKeyBySystemKey: regionalVendorKey,
+    legacyLiabilitySettingsKeyBySystemKey: legacyKey,
+  };
+}
+
+/**
+ * Every orgs.settings.payroll key any pack declares as a statutory remittance
+ * vendor — the pack-level keys plus the regional overrides. The settings API
+ * accepts exactly this set, so a new pack's vendor field exists the moment
+ * the pack declares it and the route never carries a literal list.
+ */
+export function declaredRemittanceVendorSettingsKeys(): string[] {
+  const keys = new Set<string>();
+  for (const pack of Object.values(PAYROLL_COUNTRY_PACKS)) {
+    if (pack.remittanceVendorSettingsKey) keys.add(pack.remittanceVendorSettingsKey);
+    for (const slot of pack.statutorySlots) {
+      for (const component of slot.components) {
+        for (const key of Object.values(component.regionalRemittanceVendorSettingsKeys ?? {})) {
+          keys.add(key);
+        }
+      }
+    }
+  }
+  return [...keys];
+}
+
+/**
+ * The legacy (pre-pack) liability account for a statutory system key, read
+ * from the raw orgs.settings.payroll blob via the SLOT's own declaration.
+ *
+ * This replaces the literal map the GL projection and the remittance summary
+ * each carried (`cpp2` merged into the CPP payable, `qpip` into the EI
+ * payable, and no row at all for any third pack). The merges themselves were
+ * correct — the CA pack DECLARES them, on the cpp and qpip slots — so behavior
+ * is identical; what is gone is the generic layer knowing any of it.
+ */
+export function legacyStatutoryLiabilityAccount(
+  systemKey: string,
+  payrollSettingsBlob: Record<string, unknown>,
+): string | null {
+  const key = statutoryRemittanceDeclaration().legacyLiabilitySettingsKeyBySystemKey.get(systemKey);
+  if (!key) return null;
+  const value = payrollSettingsBlob[key];
+  return typeof value === "string" && value ? value : null;
+}
+
+/**
+ * Seed-time assertion of the contributory-bases declaration. The field is
+ * required at compile time; this keeps a pack authored through a cast (tests,
+ * scripts) from provisioning components whose pensionable/insurable flags
+ * accumulate a base nobody named.
+ */
+export function assertContributoryBasesDeclared(country: string): void {
+  const { contributoryBases } = payrollPack(country);
+  if (!contributoryBases?.pensionable?.trim() || !contributoryBases?.insurable?.trim()) {
+    throw new PayrollPackError(
+      `the ${country} payroll pack does not declare its contributory bases — say what the `
+      + "pensionable and insurable earning flags accumulate (engine/src/payroll/packs.ts "
+      + "contributoryBases) before its components can be seeded",
+    );
+  }
 }
 
 export interface PackSlotState {

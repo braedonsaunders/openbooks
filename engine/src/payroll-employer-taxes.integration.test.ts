@@ -49,7 +49,7 @@ test(
           },
         })}::jsonb where id = ${org.orgId}`);
 
-      await seedPayrollComponents(org.orgId, actorId);
+      await seedPayrollComponents(org.orgId, actorId, "CA");
       await setPackSlotAccount(org.orgId, actorId, "CA", "wcb", wcbPayable);
       await setPackSlotAccount(org.orgId, actorId, "CA", "eht", ehtPayable);
 

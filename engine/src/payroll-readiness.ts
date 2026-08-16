@@ -11,7 +11,12 @@ import {
 } from "./payroll-payment-method.ts";
 import { hasUsablePayRateSql } from "./payroll-rate.ts";
 import { payrollSettings } from "./payroll-run.ts";
-import { packSlotState } from "./payroll/packs.ts";
+import {
+  jurisdictionKey,
+  packSlotState,
+  payrollJurisdictionDeclared,
+} from "./payroll/packs.ts";
+import { undeclaredJurisdictionHolidayConflict } from "./payroll-holidays.ts";
 
 /**
  * Pre-flight for a pay run: what must be fixed before it can calculate, what
@@ -52,6 +57,7 @@ interface ScopeRow {
   name: string;
   pay_basis: string;
   country: string;
+  province: string | null;
   has_wage: boolean;
   approved_hours: string;
   hired_on: string | null;
@@ -97,6 +103,7 @@ async function runContext(orgId: string, documentId: string): Promise<RunRow | n
 async function scope(orgId: string, documentId: string, run: RunRow): Promise<ScopeRow[]> {
   const rows = (await db.execute(sql`
     select p.id as employee_party_id, p.display_name as name, prof.pay_basis, prof.country,
+           prof.province,
            coalesce(te.hours, 0)::text as approved_hours,
            er.hired_on::text as hired_on,
            er.terminated_on::text as terminated_on,
@@ -185,9 +192,17 @@ export async function payRunReadiness(orgId: string, documentId: string): Promis
     select settings->'payroll' as p from orgs where id = ${orgId}
   `)) as unknown as { rows: { p: Record<string, unknown> | null }[] };
   const legacy = blob.rows[0]?.p ?? {};
+  // Which packs the org runs: the settings marker where it exists, and for a
+  // tenant provisioned before the marker did, the packs whose statutory
+  // components are actually seeded. NEVER a default of Canada — an org that
+  // installed only the US pack must not be told to map CA slots, and a third
+  // pack's org must not inherit anybody.
   const installed = Array.isArray((legacy as { countries?: unknown }).countries)
     ? ((legacy as { countries: unknown[] }).countries).map(String)
-    : ["CA"];
+    : ((await db.execute(sql`
+        select distinct country from pay_components
+         where org_id = ${orgId} and system_key is not null and country is not null
+      `)) as unknown as { rows: { country: string }[] }).rows.map((row) => row.country);
   const countriesInRun = new Set(people.map((p) => p.country));
   for (const pack of await packSlotState(orgId, installed, legacy)) {
     if (people.length > 0 && !countriesInRun.has(pack.country)) continue;
@@ -270,6 +285,35 @@ export async function payRunReadiness(orgId: string, documentId: string): Promis
 
   const noSin = people.filter((p) => !p.has_sin);
   if (noSin.length) flag("warning", "employee.noSin", noSin, { href: employeesHref });
+
+  // --- Statutory holiday pay ------------------------------------------------
+  // Only when the org has turned the feature on. An employee whose
+  // jurisdiction NO pack has transcribed (CA-MB, US-MA) is a blocker exactly
+  // when a statutory holiday actually lands in the period — probed against the
+  // country's declared employment calendars — and calculateStub refuses with
+  // the SAME message, so the wizard names the problem before the run does.
+  // With no holiday in the period, an undeclared jurisdiction calculates
+  // exactly as it always has and nothing is flagged.
+  if ((legacy as { statutoryHolidayPay?: unknown }).statutoryHolidayPay === true) {
+    const byJurisdiction = new Map<string, ScopeRow[]>();
+    for (const person of people) {
+      const key = jurisdictionKey(person.country, person.province);
+      if (payrollJurisdictionDeclared(key)) continue;
+      byJurisdiction.set(key, [...(byJurisdiction.get(key) ?? []), person]);
+    }
+    for (const [jurisdiction, employees] of byJurisdiction) {
+      const country = employees[0]!.country;
+      const conflict = undeclaredJurisdictionHolidayConflict({
+        country, jurisdiction, from: run.period_start, to: run.period_end,
+      });
+      if (conflict) {
+        flag("blocker", "holiday.undeclaredJurisdiction", employees, {
+          detail: conflict.message,
+          href: "/admin/setup/payroll?tab=holidayCalendar",
+        });
+      }
+    }
+  }
 
   // --- Mid-year adoption ---------------------------------------------------
   // payroll_opening_balances is the ONLY carrier of statutory year-to-date

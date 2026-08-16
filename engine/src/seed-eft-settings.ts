@@ -19,6 +19,7 @@ const placeholders = {
   originatorShortName: "FILL-ME-SHORT", // ≤15 chars, shown on payee statements
   originatorLongName: "FILL-ME-LONG-NAME", // ≤30 chars, shown on payee statements
   dataCentre: "FILL-ME", // 5-digit destination data centre code
+  originatingDataCentre: "FILL-ME", // 5-digit data centre of YOUR direct clearer (item trace number)
   institution: "FILL-ME", // payer bank: 3-digit institution number
   transit: "FILL-ME", // payer bank: 5-digit transit number
   account: "FILL-ME", // payer bank: account number (1–12 digits)
