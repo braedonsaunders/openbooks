@@ -66,6 +66,12 @@ export const payDerivedRules = pgTable(
      *   period never depends on time that has not been approved yet.
      * - month_end: the qualifying facts of the calendar month that closed
      *   before this period, paid once on the first run after month end.
+     * - equipment_charge: the SECOND fact source. Reads posted/approved
+     *   project_charge document_lines for the settled month instead of time
+     *   entries, so an operator can be paid on what the unit BILLED (or the
+     *   units it produced) rather than on the hours he happened to book.
+     *   month_end deliberately survives it: "$1.25 per equipment hour last
+     *   month" is a real, cheaper policy that reads the timesheet.
      */
     trigger: text("trigger", {
       enum: [
@@ -74,6 +80,7 @@ export const payDerivedRules = pgTable(
         "distinct_project_day",
         "night_stayed",
         "month_end",
+        "equipment_charge",
       ],
     }).notNull(),
 
@@ -84,6 +91,12 @@ export const payDerivedRules = pgTable(
     timeTypeId: uuid("time_type_id"),
     projectId: uuid("project_id"),
     departmentId: uuid("department_id"),
+    // Charge-scope filters (equipment_charge only). A rule names ONE unit, or
+    // the catalog item every unit of a class charges through — "all excavators"
+    // has to be one reviewable row, not one row per machine, or the policy
+    // stops being readable the moment the fleet changes.
+    equipmentUnitId: uuid("equipment_unit_id"),
+    itemId: uuid("item_id"),
     // Employee-scope filters (employee_roles).
     tradeId: uuid("trade_id"),
     /** Single-title shorthand for the simple case ("only the site clerk"). */
@@ -112,23 +125,49 @@ export const payDerivedRules = pgTable(
       .notNull()
       .default(sql`'[]'::jsonb`),
 
-    /** How many units the qualifying facts are worth. */
+    /**
+     * How many units the qualifying facts are worth.
+     * - count / sum_hours / count_nights read time entries.
+     * - sum_quantity sums the charge line's base_quantity (hours, loads,
+     *   tonnes — whatever the unit actually charges in).
+     * - sum_bill_amount sums the charge line's bill_amount, so the "unit" the
+     *   rule counts is a DOLLAR of equipment revenue.
+     */
     quantityMode: text("quantity_mode", {
-      enum: ["count", "sum_hours", "count_nights"],
+      enum: [
+        "count",
+        "sum_hours",
+        "count_nights",
+        "sum_quantity",
+        "sum_bill_amount",
+      ],
     })
       .notNull()
       .default("count"),
     /**
      * How a unit is priced.
-     * - fixed_per_unit: rateValue per unit ($70 a night, $75 a day).
-     * - percent_of_gross: rateValue percent of the period's earnings so far,
+     * - fixed_per_unit: rateValue per unit ($70 a night, $75 a day, $1.25 an
+     *   equipment hour).
+     * - percent_of_gross: rateValue percent of the EMPLOYEE'S PAY so far,
      *   allocated across the units for job costing.
+     * - percent_of_quantity: rateValue percent of the quantity itself — with
+     *   sum_bill_amount that is a percent of EQUIPMENT REVENUE. Deliberately a
+     *   separate mode from percent_of_gross rather than a reinterpretation of
+     *   it: they are percentages of two different bases, one of them the
+     *   operator's own wages and the other the customer's invoice, and a rule
+     *   that silently swapped them would pay a wrong number that still looked
+     *   plausible on a stub.
      * - rate_card: the per-unit rate comes from the pay component's own value,
      *   overridable per employee through employee_pay_components — wages have
      *   one home, and so does a component's rate.
      */
     rateMode: text("rate_mode", {
-      enum: ["fixed_per_unit", "percent_of_gross", "rate_card"],
+      enum: [
+        "fixed_per_unit",
+        "percent_of_gross",
+        "percent_of_quantity",
+        "rate_card",
+      ],
     })
       .notNull()
       .default("fixed_per_unit"),
@@ -172,6 +211,31 @@ export const payDerivedRules = pgTable(
     check(
       "pay_derived_rules_nights",
       sql`${t.quantityMode} <> 'count_nights' or ${t.trigger} = 'night_stayed'`,
+    ),
+    // The two fact sources measure different things, and a quantity mode that
+    // crossed them would still produce a number. sum_hours has no meaning on a
+    // charge line (a charge carries base_quantity in loads or tonnes as often
+    // as in hours), and sum_quantity/sum_bill_amount have none on a timesheet.
+    check(
+      "pay_derived_rules_charge_quantity",
+      sql`case when ${t.trigger} = 'equipment_charge'
+                then ${t.quantityMode} in ('count', 'sum_quantity', 'sum_bill_amount')
+                else ${t.quantityMode} not in ('sum_quantity', 'sum_bill_amount')
+           end`,
+    ),
+    // percent_of_quantity is a percent of the charge line's own measure; there
+    // is no such measure on a time entry, and allowing it there would silently
+    // read as percent_of_gross to anyone skimming the row.
+    check(
+      "pay_derived_rules_percent_quantity",
+      sql`${t.rateMode} <> 'percent_of_quantity' or ${t.trigger} = 'equipment_charge'`,
+    ),
+    // Charge-scope filters belong to the charge trigger. Left on a time-entry
+    // rule they would read as narrowing filters that in fact narrow nothing.
+    check(
+      "pay_derived_rules_charge_filters",
+      sql`${t.trigger} = 'equipment_charge'
+          or (${t.equipmentUnitId} is null and ${t.itemId} is null)`,
     ),
     // A priced rule needs a price. rate_card takes it from the component.
     check(

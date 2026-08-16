@@ -181,6 +181,14 @@ export const trades = pgTable("trades", {
   isActive: boolean("is_active").notNull().default(true),
 });
 
+/**
+ * WCB/WSIB classes. `ratePercent` and `maxAssessable` are PAYROLL MONEY INPUTS
+ * — calculatePayRun multiplies assessable earnings by the rate to produce the
+ * employer premium — so this table carries the audit quartet like every other
+ * money-bearing configuration table. Without `updated_at` a rate change is
+ * invisible to `payRunStaleness`, and a run calculated before the change
+ * commits a premium at the old rate while reporting itself fresh.
+ */
 export const workerCompGroups = pgTable("worker_comp_groups", {
   id: id(),
   orgId: orgRef(),
@@ -191,6 +199,7 @@ export const workerCompGroups = pgTable("worker_comp_groups", {
    *  null = no cap. Payroll's WCB accrual stops here. */
   maxAssessable: money("max_assessable"),
   isActive: boolean("is_active").notNull().default(true),
+  ...auditColumns,
 });
 
 export const addresses = pgTable(

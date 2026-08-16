@@ -3,11 +3,15 @@ import test from "node:test";
 import {
   applyDerivedRule,
   computeDerivedEarnings,
+  derivedChargeWindow,
   derivedEntryWindow,
+  DerivedCoverageError,
+  DerivedEarningsError,
   settlementMonth,
   type DerivedComponent,
   type DerivedEarningsInput,
   type DerivedEmployeeScope,
+  type DerivedEquipmentCharge,
   type DerivedRule,
   type DerivedTimeEntry,
 } from "./payroll-derived-earnings.ts";
@@ -59,6 +63,8 @@ function rule(overrides: Partial<DerivedRule> & Pick<DerivedRule, "code" | "comp
     timeTypeId: null,
     projectId: null,
     departmentId: null,
+    equipmentUnitId: null,
+    itemId: null,
     tradeId: null,
     jobTitle: null,
     billableOnly: false,
@@ -470,6 +476,358 @@ test("derived lines carry no hours, so per-hour components are not paid twice", 
   assert.equal(lines.length, 1);
   assert.equal(Object.hasOwn(lines[0]!, "hours"), false);
   assert.equal(lines[0]!.rate, "2.0000");
+});
+
+// --- 6. Equipment incentive: the SECOND fact source (project_charge lines) ---
+//
+// The customer's real policy is a share of what the machine BILLED, which the
+// timesheet cannot express: an operator can run an excavator twelve hours on
+// Monday at one rate and twelve on Tuesday at another, and the money he is owed
+// differs even though the hours are identical. These cases work that through,
+// including the one that matters most — what happens when nobody wrote down who
+// was driving.
+
+const OPERATOR = "eeeeeee1-0000-0000-0000-00000000000a";
+const OTHER_OPERATOR = "eeeeeee1-0000-0000-0000-00000000000b";
+const EXCAVATOR = "ddddddd1-0000-0000-0000-00000000000e";
+const LOADER = "ddddddd1-0000-0000-0000-00000000000f";
+const ITEM_EXCAVATOR_HOURS = "fffffff1-0000-0000-0000-000000000001";
+const ITEM_LOADER_HOURS = "fffffff1-0000-0000-0000-000000000002";
+
+let chargeSequence = 0;
+function charge(
+  day: string,
+  overrides: Partial<DerivedEquipmentCharge> = {},
+): DerivedEquipmentCharge {
+  chargeSequence += 1;
+  return {
+    id: `charge-${String(chargeSequence).padStart(3, "0")}`,
+    day,
+    employeePartyId: OPERATOR,
+    equipmentUnitId: EXCAVATOR,
+    itemId: ITEM_EXCAVATOR_HOURS,
+    projectId: JOB_A,
+    departmentId: DEPT_FIELD,
+    isBillable: true,
+    baseQuantity: "8",
+    billAmount: "1000.00",
+    ...overrides,
+  };
+}
+
+/** The operator, as the engine sees him: scope plus the party id charge lines
+ *  point at. */
+const DRIVER: DerivedEmployeeScope = {
+  jobTitle: "Operator", tradeId: null, departmentId: DEPT_FIELD, partyId: OPERATOR,
+};
+
+function equipmentRule(overrides: Partial<DerivedRule> = {}): DerivedRule {
+  return rule({
+    code: "EQUIP-INC", name: "Equipment incentive", componentId: EQUIPMENT,
+    trigger: "equipment_charge", quantityMode: "sum_bill_amount",
+    rateMode: "percent_of_quantity", rateValue: "3", costingMode: "source",
+    includedJobTitles: ["Operator"], sequence: 55,
+    ...overrides,
+  });
+}
+
+/** A settling period: 2026-03-30 → 2026-04-12 covers 31 March, so it settles
+ *  March. Reused so every case below tests the SAME window the pay run uses. */
+const SETTLES_MARCH = { periodStart: "2026-03-30", periodEnd: "2026-04-12" };
+
+test("the equipment incentive pays a percent of what the unit billed", () => {
+  // Three March charges on one job: 3% of $3,600.00 = $108.00. This is the
+  // policy the customer runs off a hand-adjusted spreadsheet today.
+  const lines = computeDerivedEarnings(input({
+    ...SETTLES_MARCH,
+    employee: DRIVER,
+    rules: [equipmentRule()],
+    charges: [
+      charge("2026-03-04", { billAmount: "1200.00" }),
+      charge("2026-03-18", { billAmount: "1500.00" }),
+      charge("2026-03-31", { billAmount: "900.00" }),
+    ],
+  }));
+
+  assert.equal(lines.length, 1);
+  assert.equal(lines[0]!.amount, "108.0000");
+  assert.equal(lines[0]!.projectId, JOB_A);
+  assert.equal(lines[0]!.componentId, EQUIPMENT);
+  // The BASIS is named on the stub: "3% of gross" and "3% of what the machine
+  // billed" are the two numbers this rule set must never let anyone confuse.
+  assert.equal(lines[0]!.description, "Equipment incentive (3% of 3600.00 billed)");
+  // A percentage is not a per-unit money rate, and a rate column would render
+  // it as dollars.
+  assert.equal(lines[0]!.rate, null);
+});
+
+test("the incentive settles once, on the first run after month end", () => {
+  const charges = [
+    charge("2026-03-10", { billAmount: "2000.00" }),
+    // April is not settled by a period that closes March.
+    charge("2026-04-02", { billAmount: "5000.00" }),
+  ];
+
+  const settling = computeDerivedEarnings(input({
+    ...SETTLES_MARCH, employee: DRIVER, rules: [equipmentRule()], charges,
+  }));
+  assert.equal(settling.length, 1);
+  assert.equal(settling[0]!.amount, "60.0000"); // 3% of 2,000.00 — March only.
+
+  // The next period covers no month end, so March is never paid twice.
+  const nextPeriod = computeDerivedEarnings(input({
+    periodStart: "2026-04-13", periodEnd: "2026-04-26",
+    employee: DRIVER, rules: [equipmentRule()], charges,
+  }));
+  assert.deepEqual(nextPeriod, []);
+});
+
+test("sum_quantity pays per unit produced, sum_bill_amount pays on revenue", () => {
+  // The same two charges, the same operator, two different policies — and they
+  // must produce different money, or the quantity mode means nothing. 20 hours
+  // at $1.25 is $25.00; 3% of $4,000.00 is $120.00.
+  const charges = [
+    charge("2026-03-05", { baseQuantity: "12", billAmount: "2500.00" }),
+    charge("2026-03-06", { baseQuantity: "8", billAmount: "1500.00" }),
+  ];
+
+  const perHour = computeDerivedEarnings(input({
+    ...SETTLES_MARCH, employee: DRIVER, charges,
+    rules: [equipmentRule({
+      quantityMode: "sum_quantity", rateMode: "fixed_per_unit", rateValue: "1.25",
+    })],
+  }));
+  assert.equal(perHour[0]!.amount, "25.0000");
+  assert.equal(perHour[0]!.description, "Equipment incentive (20 × 1.25)");
+  // A fixed per-unit rate IS a money rate, so it belongs in the rate column.
+  assert.equal(perHour[0]!.rate, "1.2500");
+
+  const onRevenue = computeDerivedEarnings(input({
+    ...SETTLES_MARCH, employee: DRIVER, charges, rules: [equipmentRule()],
+  }));
+  assert.equal(onRevenue[0]!.amount, "120.0000");
+});
+
+test("the unit filter and the item filter each narrow the rule", () => {
+  const charges = [
+    charge("2026-03-05", { equipmentUnitId: EXCAVATOR, itemId: ITEM_EXCAVATOR_HOURS, billAmount: "1000.00" }),
+    charge("2026-03-06", { equipmentUnitId: LOADER, itemId: ITEM_LOADER_HOURS, billAmount: "2000.00" }),
+  ];
+
+  // No filter: the whole fleet. 3% of 3,000.00.
+  const fleet = computeDerivedEarnings(input({
+    ...SETTLES_MARCH, employee: DRIVER, charges, rules: [equipmentRule()],
+  }));
+  assert.equal(fleet[0]!.amount, "90.0000");
+
+  // One named machine.
+  const oneUnit = computeDerivedEarnings(input({
+    ...SETTLES_MARCH, employee: DRIVER, charges,
+    rules: [equipmentRule({ equipmentUnitId: LOADER })],
+  }));
+  assert.equal(oneUnit[0]!.amount, "60.0000");
+
+  // The item filter is the one that makes "all excavators" ONE reviewable rule
+  // rather than one row per machine — the whole reason it exists.
+  const byItem = computeDerivedEarnings(input({
+    ...SETTLES_MARCH, employee: DRIVER, charges,
+    rules: [equipmentRule({ itemId: ITEM_EXCAVATOR_HOURS })],
+  }));
+  assert.equal(byItem[0]!.amount, "30.0000");
+});
+
+test("an operator is paid his own charges and nobody else's", () => {
+  // The month is fully attributed — just not all of it to him.
+  const charges = [
+    charge("2026-03-05", { employeePartyId: OPERATOR, billAmount: "1000.00" }),
+    charge("2026-03-06", { employeePartyId: OTHER_OPERATOR, billAmount: "9000.00" }),
+  ];
+
+  const his = computeDerivedEarnings(input({
+    ...SETTLES_MARCH, employee: DRIVER, charges, rules: [equipmentRule()],
+  }));
+  assert.equal(his[0]!.amount, "30.0000");
+
+  const theirs = computeDerivedEarnings(input({
+    ...SETTLES_MARCH, charges, rules: [equipmentRule()],
+    employee: { ...DRIVER, partyId: OTHER_OPERATOR },
+  }));
+  assert.equal(theirs[0]!.amount, "270.0000");
+
+  // Every cent of the month's incentive is paid to exactly one person: 3% of
+  // 10,000.00, split with nothing lost and nothing paid twice.
+  assert.equal(sum([his[0]!.amount, theirs[0]!.amount]), "300.0000");
+});
+
+test("charges split across jobs cost to their own job, penny-exact", () => {
+  // A month that does not divide evenly: 3% of 333.33 is 9.9999 → 10.00, and
+  // 3% of 666.67 is 20.0001 → 20.00. Each line is priced on its OWN revenue
+  // because that is the line an operator disputes against the invoice.
+  const lines = computeDerivedEarnings(input({
+    ...SETTLES_MARCH, employee: DRIVER, rules: [equipmentRule()],
+    charges: [
+      charge("2026-03-05", { projectId: JOB_A, billAmount: "333.33" }),
+      charge("2026-03-06", { projectId: JOB_B, billAmount: "666.67" }),
+    ],
+  }));
+
+  assert.equal(lines.length, 2);
+  assert.equal(lines.find((line) => line.projectId === JOB_A)!.amount, "10.0000");
+  assert.equal(lines.find((line) => line.projectId === JOB_B)!.amount, "20.0000");
+  assert.equal(sum(lines.map((line) => line.amount)), "30.0000");
+});
+
+// --- The coverage refusal ---------------------------------------------------
+
+test("an unattributed charge REFUSES the month rather than under-paying", () => {
+  // The failure this whole design exists to prevent. $9,000 of the month's
+  // $10,000 has no operator recorded. Paying 3% of the $1,000 that happens to
+  // be attributed produces $30 — a number that looks entirely ordinary on a
+  // stub and is wrong by $270.
+  const charges = [
+    charge("2026-03-05", { employeePartyId: OPERATOR, billAmount: "1000.00" }),
+    charge("2026-03-06", { employeePartyId: null, billAmount: "9000.00" }),
+  ];
+
+  assert.throws(
+    () => computeDerivedEarnings(input({
+      ...SETTLES_MARCH, employee: DRIVER, charges, rules: [equipmentRule()],
+    })),
+    (error: unknown) => {
+      assert.ok(error instanceof DerivedCoverageError);
+      assert.equal(error.detail.unattributed, 1);
+      assert.equal(error.detail.qualifying, 2);
+      assert.equal(error.detail.monthStart, "2026-03-01");
+      assert.equal(error.detail.monthEnd, "2026-03-31");
+      return true;
+    },
+  );
+});
+
+test("the refusal is scoped to the rule's own filters, not the whole fleet", () => {
+  // A gap the rule does not read is not this rule's problem. The excavator
+  // month is complete, so an excavator-only rule pays; the loader gap still
+  // stops any rule that reads loaders. This is what makes "narrow the rule" a
+  // real remedy rather than a way to hide the gap.
+  const charges = [
+    charge("2026-03-05", { equipmentUnitId: EXCAVATOR, itemId: ITEM_EXCAVATOR_HOURS, billAmount: "1000.00" }),
+    charge("2026-03-06", {
+      equipmentUnitId: LOADER, itemId: ITEM_LOADER_HOURS,
+      employeePartyId: null, billAmount: "9000.00",
+    }),
+  ];
+
+  const scoped = computeDerivedEarnings(input({
+    ...SETTLES_MARCH, employee: DRIVER, charges,
+    rules: [equipmentRule({ equipmentUnitId: EXCAVATOR })],
+  }));
+  assert.equal(scoped[0]!.amount, "30.0000");
+
+  assert.throws(
+    () => computeDerivedEarnings(input({
+      ...SETTLES_MARCH, employee: DRIVER, charges,
+      rules: [equipmentRule({ equipmentUnitId: LOADER })],
+    })),
+    DerivedCoverageError,
+  );
+});
+
+test("the refusal fires for every employee, so a run cannot half-settle", () => {
+  // The gap is a property of the MONTH. If it only stopped the employees who
+  // happened to own an unattributed line, the rest of the crew would be paid
+  // off an incomplete month and the run would look successful.
+  const charges = [
+    charge("2026-03-05", { employeePartyId: OPERATOR, billAmount: "1000.00" }),
+    charge("2026-03-06", { employeePartyId: null, billAmount: "9000.00" }),
+  ];
+  for (const partyId of [OPERATOR, OTHER_OPERATOR]) {
+    assert.throws(
+      () => computeDerivedEarnings(input({
+        ...SETTLES_MARCH, charges, rules: [equipmentRule()],
+        employee: { ...DRIVER, partyId },
+      })),
+      DerivedCoverageError,
+      `${partyId} must not be paid off a partially attributed month`,
+    );
+  }
+});
+
+test("an equipment rule refuses rather than silently pay nothing", () => {
+  // Two ways a caller can make an equipment rule match nothing by accident.
+  // Both have to be errors: "paid nothing" and "could not tell whose charges
+  // these are" must never look the same on a stub.
+  assert.throws(
+    () => computeDerivedEarnings(input({
+      ...SETTLES_MARCH, rules: [equipmentRule()],
+      charges: [charge("2026-03-05")],
+      employee: { jobTitle: "Operator", tradeId: null, departmentId: DEPT_FIELD },
+    })),
+    /no party id/,
+  );
+
+  assert.throws(
+    () => computeDerivedEarnings(input({
+      ...SETTLES_MARCH, employee: DRIVER, charges: [charge("2026-03-05")],
+      rules: [equipmentRule({ timeTypeId: TT_EQUIPMENT })],
+    })),
+    /filters on a time type/,
+  );
+});
+
+test("a charge with no equipment unit is not an equipment charge", () => {
+  // Materials and services ride the same table. They are not the fleet, they
+  // are not what an operator ran, and — crucially — an unattributed material
+  // line must not trip the coverage refusal.
+  const lines = computeDerivedEarnings(input({
+    ...SETTLES_MARCH, employee: DRIVER, rules: [equipmentRule()],
+    charges: [
+      charge("2026-03-05", { billAmount: "1000.00" }),
+      charge("2026-03-06", {
+        equipmentUnitId: null, itemId: null, employeePartyId: null, billAmount: "9000.00",
+      }),
+    ],
+  }));
+
+  assert.equal(lines.length, 1);
+  assert.equal(lines[0]!.amount, "30.0000");
+});
+
+test("a month that nets negative is refused, not paid as a clawback", () => {
+  // A credit posted into the settled month can drive a job's incentive below
+  // zero. A negative earning is a hard failure downstream (the WCB job split
+  // and disposable earnings both refuse them), so recovering an overpayment
+  // has to be a deliberate, visible pay run adjustment.
+  assert.throws(
+    () => computeDerivedEarnings(input({
+      ...SETTLES_MARCH, employee: DRIVER, rules: [equipmentRule()],
+      charges: [
+        charge("2026-03-05", { billAmount: "1000.00" }),
+        charge("2026-03-06", { billAmount: "-4000.00" }),
+      ],
+    })),
+    (error: unknown) => {
+      assert.ok(error instanceof DerivedEarningsError);
+      assert.match((error as Error).message, /negative earning/);
+      return true;
+    },
+  );
+});
+
+test("the charge window is the settled month, and only for charge rules", () => {
+  const equipment = equipmentRule();
+  const daily = rule({ code: "ONCALL", componentId: ON_CALL });
+
+  assert.deepEqual(derivedChargeWindow([equipment], "2026-03-30", "2026-04-12"), {
+    start: "2026-03-01", end: "2026-03-31",
+  });
+  // A period closing no month settles nothing.
+  assert.equal(derivedChargeWindow([equipment], "2026-04-13", "2026-04-26"), null);
+  // A rule set with no charge rule reads no charges at all.
+  assert.equal(derivedChargeWindow([daily], "2026-03-30", "2026-04-12"), null);
+  // Charge rules do not widen the TIME entry window — different source.
+  assert.deepEqual(derivedEntryWindow([equipment], "2026-03-30", "2026-04-12"), {
+    from: "2026-03-30", to: "2026-04-12",
+  });
 });
 
 test("rules emit in sequence order so later components compute on them", () => {

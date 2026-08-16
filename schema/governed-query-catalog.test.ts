@@ -83,12 +83,18 @@ function baseTables(): Map<string, string[]> {
   const tables = new Map<string, string[]>();
   const re = /CREATE TABLE public\.(\w+) \(\n([\s\S]*?)\n\);\n/g;
   for (const match of BASELINE.matchAll(re)) {
+    // pg_dump emits every column before the first table CONSTRAINT, and it
+    // wraps a CHECK containing a CASE expression across several lines whose
+    // continuations (CASE / WHEN … / ELSE … / END) look exactly like column
+    // definitions. Stop at the first CONSTRAINT rather than filtering line by
+    // line, or those keywords are read as columns the shipped view "omits".
+    const body = match[2]!.split("\n");
+    const firstConstraint = body.findIndex((l) => /^\s*CONSTRAINT/i.test(l));
     tables.set(
       match[1]!,
-      match[2]!
-        .split("\n")
+      (firstConstraint === -1 ? body : body.slice(0, firstConstraint))
         .map((l) => l.trim())
-        .filter((l) => l && !/^CONSTRAINT/i.test(l))
+        .filter(Boolean)
         .map((l) => l.split(/\s+/)[0]!)
         .filter((c) => /^\w+$/.test(c)),
     );

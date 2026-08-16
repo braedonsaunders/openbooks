@@ -24,7 +24,7 @@ import { CostTimeTab, type CostTimeData } from './tabs/CostTimeTab'
 import { TransactionsTab } from './tabs/TransactionsTab'
 import { WorkBreakdownTab } from './tabs/WorkBreakdownTab'
 import { ScheduleTab } from './tabs/ScheduleTab'
-import type { ChargeRow, ChargeItemOption, ChargeEquipmentOption } from './tabs/ChargesSection'
+import type { ChargeRow, ChargeItemOption, ChargeEquipmentOption, ChargeOperatorOption } from './tabs/ChargesSection'
 import {
   BillingSection,
   type BillableFieldTicketClient,
@@ -77,6 +77,7 @@ export interface ProjectCockpitData {
   charges: ChargeRow[]
   items: ChargeItemOption[]
   equipment: ChargeEquipmentOption[]
+  operators: ChargeOperatorOption[]
   absorption: { recovered: string; billValue: string }
   recognition: RecognitionStatus | null
   glRange: { from: string; to: string }
@@ -746,6 +747,7 @@ export function ProjectDrawer({
           charges={cockpit.charges}
           items={cockpit.items}
           equipment={cockpit.equipment}
+          operators={cockpit.operators}
           absorption={cockpit.absorption}
           chargeFormOpen={chargeFormOpen}
           onChargeFormOpenChange={setChargeFormOpen}

@@ -6,12 +6,18 @@ import {
 import { calculateT4127, type T4127Input } from "./payroll/canada/t4127.ts";
 import type { Province } from "./payroll/canada/rates.ts";
 import { calculatePub15T } from "./payroll/us/pub15t.ts";
-import { NO_WITHHOLDING_STATES, US_STATES } from "./payroll/us/rates.ts";
 import {
+  assertPayrollRegionSupported,
   packStatutoryComponents,
+  resolveEmployeePayrollContext,
+  resolvePayrollRunContext,
   statutoryAssessment,
+  type EmployeePayrollContext,
   type PayrollAssessedOn,
+  type PayrollRunContext,
 } from "./payroll/packs.ts";
+import { effectivePayRateSql, payRateIsUsable } from "./payroll-rate.ts";
+import { effectiveFilingAccountSql } from "./payroll-filing.ts";
 import { laborCostingSettings } from "./labor-costing.ts";
 import {
   loadActiveDerivedRules,
@@ -469,7 +475,41 @@ export async function createPayRun(input: {
     }
     const payDate = input.payDate ??
       iso(new Date(at(periodEnd).getTime() + schedule.pay_date_offset_days * DAY));
-    const taxYear = Number(payDate.slice(0, 4));
+
+    // Scoped schedules pin the run to their legal entity (and its currency);
+    // org-wide schedules keep the historical root-subsidiary behaviour.
+    //
+    // Resolved BEFORE the tax year, because the tax year is the country pack's
+    // answer and the country is the entity's. `Number(payDate.slice(0, 4))`
+    // was the calendar year of the pay date — right for the CRA and the IRS,
+    // wrong for any jurisdiction whose statutory year is not the calendar one,
+    // and silently so: every YTD accumulator and every year-end slip keys on
+    // `tax_year`.
+    const sub = (await tx.execute(schedule.subsidiary_id
+      ? sql`
+        select s.id, s.name, s.country, s.base_currency as currency_code from subsidiaries s
+         where s.org_id = ${orgId} and s.id = ${schedule.subsidiary_id} and s.is_active`
+      : sql`
+        select s.id, s.name, s.country, s.base_currency as currency_code from subsidiaries s
+         where s.org_id = ${orgId} and s.parent_id is null and s.is_active
+         order by s.created_at limit 1
+    `)) as unknown as {
+      rows: { id: string; name: string; country: string | null; currency_code: string | null }[];
+    };
+    const subsidiary = sub.rows[0];
+    if (!subsidiary) {
+      throw new PayrollError(schedule.subsidiary_id
+        ? "the pay schedule's subsidiary is missing or inactive"
+        : "no active root subsidiary");
+    }
+    const runContext = resolvePayrollRunContext({
+      payDate,
+      subsidiary: {
+        id: subsidiary.id, name: subsidiary.name,
+        country: subsidiary.country, baseCurrency: subsidiary.currency_code,
+      },
+    });
+    const taxYear = runContext.taxYear;
 
     // Guard 1 — no REGULAR run may overlap another regular run on the same
     // schedule: two of them covering one period would pay (and remit) the
@@ -505,24 +545,6 @@ export async function createPayRun(input: {
       throw new PayrollError(
         `pay period starts ${periodStart}, which has not begun yet`,
       );
-    }
-
-    // Scoped schedules pin the run to their legal entity (and its currency);
-    // org-wide schedules keep the historical root-subsidiary behaviour.
-    const sub = (await tx.execute(schedule.subsidiary_id
-      ? sql`
-        select s.id, s.base_currency as currency_code from subsidiaries s
-         where s.org_id = ${orgId} and s.id = ${schedule.subsidiary_id} and s.is_active`
-      : sql`
-        select s.id, s.base_currency as currency_code from subsidiaries s
-         where s.org_id = ${orgId} and s.parent_id is null and s.is_active
-         order by s.created_at limit 1
-    `)) as unknown as { rows: { id: string; currency_code: string | null }[] };
-    const subsidiary = sub.rows[0];
-    if (!subsidiary) {
-      throw new PayrollError(schedule.subsidiary_id
-        ? "the pay schedule's subsidiary is missing or inactive"
-        : "no active root subsidiary");
     }
 
     // Guard 3 — a final pay run must NAME the employees it pays. Resolved
@@ -564,8 +586,8 @@ export async function createPayRun(input: {
     const doc = (await tx.execute(sql`
       insert into documents (org_id, kind, document_number, subsidiary_id, document_date,
                              currency, status, memo, created_by, updated_by)
-      values (${orgId}, 'pay_run', ${number}, ${subsidiary.id}, ${payDate},
-              ${subsidiary.currency_code}, 'draft',
+      values (${orgId}, 'pay_run', ${number}, ${runContext.subsidiaryId}, ${payDate},
+              ${runContext.currency}, 'draft',
               ${`${RUN_TYPE_MEMO[runType]} ${periodStart} – ${periodEnd}`}, ${actorId}, ${actorId})
       returning id
     `)) as unknown as { rows: { id: string }[] };
@@ -700,6 +722,15 @@ async function usEmployeeYtd(
  * costing side of the same wage. Paying an unconverted wage silently is the
  * failure mode; refusing to calculate until somebody enters the rate is the
  * correct one.
+ *
+ * ROW SELECTION IS NOT DUPLICATED HERE. `engine/src/payroll-rate.ts` owns the
+ * single definition of "which labor_cost_rates row pays this employee on this
+ * date, and is it usable", because two implementations of that one rule IS the
+ * defect that made readiness pass green and the run then throw. Readiness
+ * builds its predicate from `effectivePayRateSql`; so does this, and the
+ * salaried-needs-an-annual-row half is `payRateIsUsable` at the call site.
+ * They agree because they are the same expression, not because someone kept
+ * two copies in step.
  */
 async function resolvePayRate(
   tx: Pick<typeof db, "execute">, orgId: string, employeePartyId: string, onDate: string,
@@ -707,11 +738,12 @@ async function resolvePayRate(
   payCurrency: string | null,
 ): Promise<{ basis: "hour" | "year"; rate: string; annualHours: string; currency: string } | null> {
   const r = (await tx.execute(sql`
-    select basis, rate, annual_hours, currency from labor_cost_rates
-     where org_id = ${orgId} and employee_party_id = ${employeePartyId}
-       and is_active and effective_from <= ${onDate}
-       and (effective_to is null or effective_to >= ${onDate})
-     order by effective_from desc limit 1
+    select * from ${effectivePayRateSql({
+      org: sql`${orgId}`,
+      employee: sql`${employeePartyId}`,
+      onDate: sql`${onDate}`,
+      selectList: sql`w.basis, w.rate, w.annual_hours, w.currency`,
+    })} as rate
   `)) as unknown as {
     rows: { basis: "hour" | "year"; rate: string; annual_hours: string; currency: string }[];
   };
@@ -769,14 +801,53 @@ async function calculateInTransaction(input: CalculatePayRunInput): Promise<PayR
   const { orgId, documentId, actorId } = input;
   return await db.transaction(async (tx) => {
     const runRows = (await tx.execute(sql`
-      select r.*, d.status as doc_status, d.currency as doc_currency
-        from pay_runs r join documents d on d.id = r.document_id
-       where r.org_id = ${orgId} and r.document_id = ${documentId} for update
+      select r.*, d.status as doc_status, d.currency as doc_currency,
+             d.subsidiary_id as doc_subsidiary_id,
+             sub.name as subsidiary_name, sub.country as subsidiary_country,
+             sub.base_currency as subsidiary_currency
+        from pay_runs r
+        join documents d on d.id = r.document_id
+        left join subsidiaries sub on sub.id = d.subsidiary_id and sub.org_id = d.org_id
+       where r.org_id = ${orgId} and r.document_id = ${documentId}
+       -- Lock the run and its document only. The subsidiary is read-only
+       -- jurisdiction context on the nullable side of an outer join, and
+       -- Postgres refuses FOR UPDATE there.
+       for update of r, d
     `)) as unknown as { rows: Record<string, string>[] };
     const run = runRows.rows[0];
     if (!run) throw new PayrollError("pay run not found");
     if (run.run_status === "committed") throw new PayrollError("pay run is already committed");
     if (run.doc_status !== "draft") throw new PayrollError("pay run document is not editable");
+
+    // ---- The run's jurisdiction, resolved ONCE -----------------------------
+    //
+    // Everything downstream — which statutory engine runs, which currency the
+    // stub is denominated in, which tax authority the year-end return goes to
+    // — is a consequence of WHICH LEGAL ENTITY employs these people. That was
+    // never asked: `calculateStub` re-derived a country from `emp.country`
+    // with `=== "US" ? "US" : "CA"`, and `subsidiaries.country` (which has
+    // existed all along) was read by no payroll module at all. See
+    // `resolvePayrollRunContext` in engine/src/payroll/packs.ts for the chain
+    // this asserts and why it refuses instead of repairing.
+    const runContext = resolvePayrollRunContext({
+      payDate: run.pay_date!,
+      subsidiary: {
+        id: run.doc_subsidiary_id ?? "",
+        name: run.subsidiary_name ?? "",
+        country: run.subsidiary_country ?? null,
+        baseCurrency: run.subsidiary_currency ?? null,
+      },
+      runCurrency: run.doc_currency ?? null,
+    });
+    // The run was stamped with its tax year at creation; if the pack's year
+    // definition has since changed under it, every YTD accumulator on this run
+    // reads a different year from the one the stubs are filed in.
+    if (Number(run.tax_year) !== runContext.taxYear) {
+      throw new PayrollError(
+        `this pay run is stamped tax year ${run.tax_year} but a ${runContext.country} pay date of `
+        + `${runContext.payDate} falls in ${runContext.taxYear}`,
+      );
+    }
 
     const components = (await tx.execute(sql`
       select * from pay_components where org_id = ${orgId} and is_active order by sequence
@@ -815,9 +886,25 @@ async function calculateInTransaction(input: CalculatePayRunInput): Promise<PayR
                  select 1 from party_bank_accounts b
                   where b.org_id = prof.org_id and b.party_id = p.id
                     and b.is_active and b.approval_status = 'approved') as has_approved_bank,
+               -- The employee's OWN legal entity and the tax authority their
+               -- slips file to: the other two links of the jurisdiction chain.
+               -- Aliased, because prof.* below already carries a "country".
+               p.subsidiary_id as employee_subsidiary_id,
+               emp_sub.country as employee_subsidiary_country,
+               ${effectiveFilingAccountSql("prof")} as effective_filing_account_id,
+               filing_acct.country as filing_account_country,
+               filing_acct.account_number as filing_account_number,
                prof.*
           from employee_payroll_profiles prof
           join parties p on p.id = prof.employee_party_id and p.org_id = prof.org_id
+          left join subsidiaries emp_sub
+            on emp_sub.id = p.subsidiary_id and emp_sub.org_id = p.org_id
+          -- Aliased filing_acct, not fa: effectiveFilingAccountSql's own
+          -- correlated subquery uses "fa" internally, and shadowing it here
+          -- would be legal SQL that reads like a bug.
+          left join payroll_filing_accounts filing_acct
+            on filing_acct.id = ${effectiveFilingAccountSql("prof")}
+           and filing_acct.org_id = prof.org_id
           left join employee_roles er on er.party_id = p.id and er.org_id = p.org_id
          where prof.org_id = ${orgId} and prof.pay_schedule_id = ${run.pay_schedule_id}
            and prof.is_active
@@ -873,8 +960,28 @@ async function calculateInTransaction(input: CalculatePayRunInput): Promise<PayR
         continue;
       }
       try {
+        // The employee half of the chain, asserted against the run's before a
+        // single statutory number is computed. A disagreement rides the
+        // existing per-employee error channel, so ONE misfiled employee is
+        // refused by name and the rest of the run still calculates — which is
+        // what makes "correct or refused, never silently wrong" usable rather
+        // than an all-or-nothing wall.
+        const jurisdiction = resolveEmployeePayrollContext({
+          run: runContext,
+          employee: {
+            partyId: emp.party_id!,
+            name,
+            country: emp.country,
+            region: emp.province,
+            subsidiaryId: emp.employee_subsidiary_id ?? null,
+            subsidiaryCountry: emp.employee_subsidiary_country ?? null,
+            filingAccountId: emp.effective_filing_account_id ?? null,
+            filingAccountCountry: emp.filing_account_country ?? null,
+            filingAccountNumber: emp.filing_account_number ?? null,
+          },
+        });
         const result = await calculateStub(tx, {
-          orgId, actorId, documentId, run, emp,
+          orgId, actorId, documentId, run, emp, runContext, jurisdiction,
           periodsPerYear: P, need, components: components.rows, usConfig, caConfig,
           eftFallbackToCheque,
         });
@@ -922,6 +1029,10 @@ async function calculateStub(
   ctx: {
     orgId: string; actorId: string; documentId: string;
     run: Record<string, string>; emp: Record<string, string | null>;
+    /** The run's resolved jurisdiction — one country, entity, currency, year. */
+    runContext: PayrollRunContext;
+    /** This employee's place in it, already asserted to agree with the run's. */
+    jurisdiction: EmployeePayrollContext;
     periodsPerYear: number | undefined;
     need: (systemKey: string, kind: string) => Record<string, unknown>;
     components: Record<string, unknown>[];
@@ -931,13 +1042,18 @@ async function calculateStub(
     eftFallbackToCheque: boolean;
   },
 ): Promise<StubComputation> {
-  const { orgId, actorId, documentId, run, emp } = ctx;
+  const { orgId, actorId, documentId, run, emp, jurisdiction } = ctx;
   const employeePartyId = emp.party_id!;
   const schedule = (await tx.execute(sql`
     select periods_per_year from pay_schedules where id = ${run.pay_schedule_id}
   `)) as unknown as { rows: { periods_per_year: number }[] };
   const P = schedule.rows[0]!.periods_per_year;
-  const taxYear = Number(run.tax_year);
+  // Every one of these comes from the resolved context, not from re-reading
+  // `emp` and defaulting. `country` decides which statutory engine runs;
+  // `region` is the province or state it runs for; both were asserted against
+  // the paying legal entity before this function was called.
+  const { country, region: province } = jurisdiction;
+  const taxYear = jurisdiction.taxYear;
 
   interface Line {
     componentId: string | null; kind: "earning" | "deduction" | "employer_contribution";
@@ -980,26 +1096,33 @@ async function calculateStub(
   const runType = (run.run_type as string) ?? "regular";
   const bonusRun = runType === "bonus";
 
+  // Is the effective rate row one the run can actually pay on? The rule lives
+  // in engine/src/payroll-rate.ts and readiness asks it in SQL, so the
+  // pre-flight and the run cannot disagree — which they did, before the
+  // predicate had one owner: a salaried employee holding only an hourly rate
+  // passed readiness green and then threw here.
+  if (!bonusRun && !payRateIsUsable(emp.pay_basis, payRate)) {
+    throw new PayrollError(payRate
+      ? "salaried employee has no annual labor cost rate (employee scope)"
+      : "no labor cost rate covers this employee for the period");
+  }
+
   if (bonusRun) {
     // no periodic earnings — adjustments below carry the bonus
   } else if (emp.pay_basis === "salary") {
-    if (!payRate || payRate.basis !== "year") {
-      throw new PayrollError("salaried employee has no annual labor cost rate (employee scope)");
-    }
     // Exact annual ÷ periods, rounded once (see divideMoney).
-    const periodSalary = divideMoney(payRate.rate, String(P), 2);
+    const periodSalary = divideMoney(payRate!.rate, String(P), 2);
     lines.push({
       componentId: baseComponent.id as string, kind: "earning", description: "Salary",
       amount: periodSalary, sequence: 10,
     });
   } else {
-    if (!payRate) throw new PayrollError("no labor cost rate covers this employee for the period");
     // Exact annual ÷ annual hours. This quotient IS the stored four-decimal
     // hourly wage, so a float reciprocal's error does not wash out — it is
     // multiplied by every hour on every stub, always the same direction.
-    const hourlyWage = payRate.basis === "hour"
-      ? payRate.rate
-      : divideMoney(payRate.rate, String(payRate.annualHours), 4);
+    const hourlyWage = payRate!.basis === "hour"
+      ? payRate!.rate
+      : divideMoney(payRate!.rate, String(payRate!.annualHours), 4);
     const time = (await tx.execute(sql`
       select te.id, te.hours, te.project_id, te.department_id, te.time_type_id,
              coalesce(tt.classification, 'regular') as classification,
@@ -1044,8 +1167,9 @@ async function calculateStub(
 
   // Recurring assigned components (allowances, RRSP match, dues, garnishees…).
   // Country-scoped components only apply to that country's employees; rows
-  // with no country are shared across packs.
-  const country = emp.country === "US" ? "US" : "CA";
+  // with no country are shared across packs. `country` is the RESOLVED one
+  // (see the destructure at the top of this function) — it used to be
+  // re-derived right here as `emp.country === "US" ? "US" : "CA"`.
   const assigned = (await tx.execute(sql`
     select a.value as override, c.*
       from employee_pay_components a
@@ -1658,8 +1782,10 @@ async function calculateStub(
     }
 
     const eht = ctx.caConfig.eht;
-    const province = emp.province ?? "";
-    if (eht.enabled && eht.rate && province === "ON" && (emp.country ?? "CA") !== "US") {
+    // Already inside `country === "CA"`, and `province` is the resolved
+    // region — the old `(emp.country ?? "CA") !== "US"` re-derivation was a
+    // third opinion on a question the run context now answers once.
+    if (eht.enabled && eht.rate && province === "ON") {
       ehtEarnings = grossEarnings();
       if (cmp(ehtEarnings, "0") > 0) {
         const priorOn = ((await tx.execute(sql`
@@ -1707,7 +1833,9 @@ async function calculateStub(
 
   const bool = (value: string | null | undefined) =>
     value === "true" || (value as unknown) === true;
-  const province = (emp.province ?? (country === "US" ? "" : "ON"));
+  // `province` is the resolved region. It used to default to "ON" for a
+  // Canadian employee whose profile carried no province — silently withholding
+  // Ontario provincial tax on someone whose jurisdiction nobody had recorded.
   let factors: Record<string, string> = {};
   let firstEarningsAssessed: EarningsAssessedLine[] | null = null;
 
@@ -1728,15 +1856,11 @@ async function calculateStub(
   const runStatutoryPass = async (): Promise<void> => {
     clearIncomeAssessedLines();
     if (country === "US") {
-    if (!(US_STATES as readonly string[]).includes(province)) {
-      throw new PayrollError(`unknown US state "${province}" on the payroll profile`);
-    }
-    if (!NO_WITHHOLDING_STATES.has(province)) {
-      throw new PayrollError(
-        `state income tax withholding for ${province} is not yet supported — `
-        + `the US pack currently covers the nine no-withholding states`,
-      );
-    }
+    // The unsupported-region refusal is the country pack's answer now, not two
+    // inline US-only checks (engine/src/payroll/packs.ts). Same behaviour for
+    // the US; the CA arm below finally gets the same question asked of it,
+    // which is how Quebec stopped being silently half-withheld.
+    assertPayrollRegionSupported(country, province);
     const ytd = await usEmployeeYtd(tx, orgId, employeePartyId, taxYear, documentId);
     const filingStatus = (emp.filing_status ?? "single") as "single" | "married_joint" | "head_household";
     const statutory = calculatePub15T({
@@ -1776,6 +1900,12 @@ async function calculateStub(
       B: nonPeriodic, I: income, PI: pensionable, IE: insurable,
     };
   } else {
+    // The CA arm, asked the same question the US arm has always been asked.
+    // Quebec is the answer that changed: T4127 covers only the FEDERAL side of
+    // Quebec employment, so a QC employee was quietly withheld no provincial
+    // income tax at all and issued no RL-1. The pack refuses them by name
+    // rather than paying a number that is wrong by an entire tax.
+    assertPayrollRegionSupported(country, province);
 
     const ytd = await employeeYtd(tx, orgId, employeePartyId, taxYear, documentId);
 
