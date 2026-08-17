@@ -2,7 +2,7 @@ import "server-only";
 import { z } from "zod";
 import { withOrg } from "@openbooks/engine/src/db.ts";
 import type { AssistantToolDef, ToolResult } from "./types";
-import { dateInput, num, capList } from "./tools-shared";
+import { dateInput, num, capList, rangeInputFields, resolveToolRange, type RangeArgs } from "./tools-shared";
 import { healthData } from "../analytics/health-data";
 import { customerData, customerProfitability } from "../analytics/customer-data";
 import { vendorData } from "../analytics/vendor-data";
@@ -34,18 +34,9 @@ import type { CategoryWeekly, ForecastEntry, WeekRow } from "../cash/core";
 // shared input + shaping helpers
 // ---------------------------------------------------------------------------
 
-const periodInput = z.object({ fromDate: dateInput, toDate: dateInput });
+const periodInput = z.object({ ...rangeInputFields });
 
-type PeriodArgs = { fromDate: string; toDate: string };
-
-function buildPeriod(a: PeriodArgs): { from: string; to: string; label: string } {
-  return { from: a.fromDate, to: a.toDate, label: `${a.fromDate} – ${a.toDate}` };
-}
-
-function invalidPeriod(a: PeriodArgs): ToolResult | null {
-  if (a.fromDate > a.toDate) return { ok: false, error: "invalid_period" };
-  return null;
-}
+type PeriodArgs = RangeArgs;
 
 /** Compact map of a shared-engine forecast entry (AR/AP schedule line). */
 function slimEntry(e: ForecastEntry) {
@@ -111,10 +102,9 @@ const financialHealthTool: AssistantToolDef = {
   gate: { mode: "anyOf", perms: ["reports.read"] },
   inputSchema: periodInput,
   execute: async (raw, authz): Promise<ToolResult> => {
-    const a = raw as PeriodArgs;
-    const bad = invalidPeriod(a);
-    if (bad) return bad;
-    const r = await withOrg(authz.user.orgId, () => healthData(buildPeriod(a), authz.user.orgId));
+    const period = await resolveToolRange(authz.user.orgId, raw as PeriodArgs);
+    if ("error" in period) return { ok: false, error: period.error };
+    const r = await withOrg(authz.user.orgId, () => healthData(period, authz.user.orgId));
     const ratios = Object.fromEntries(
       Object.entries(r.ratios).map(([cat, list]) => [
         cat,
@@ -186,10 +176,8 @@ const customerIntelligenceTool: AssistantToolDef = {
   gate: { mode: "anyOf", perms: ["reports.read"] },
   inputSchema: periodInput,
   execute: async (raw, authz): Promise<ToolResult> => {
-    const a = raw as PeriodArgs;
-    const bad = invalidPeriod(a);
-    if (bad) return bad;
-    const period = buildPeriod(a);
+    const period = await resolveToolRange(authz.user.orgId, raw as PeriodArgs);
+    if ("error" in period) return { ok: false, error: period.error };
     const orgId = authz.user.orgId;
     const [r, prof] = await withOrg(orgId, () =>
       Promise.all([customerData(period, orgId), customerProfitability(period, orgId)]),
@@ -274,11 +262,10 @@ const vendorPerformanceTool: AssistantToolDef = {
   gate: { mode: "anyOf", perms: ["reports.read"] },
   inputSchema: periodInput,
   execute: async (raw, authz): Promise<ToolResult> => {
-    const a = raw as PeriodArgs;
-    const bad = invalidPeriod(a);
-    if (bad) return bad;
+    const period = await resolveToolRange(authz.user.orgId, raw as PeriodArgs);
+    if ("error" in period) return { ok: false, error: period.error };
     // vendorData takes no orgId — it is scoped purely by the RLS GUC set here.
-    const r = await withOrg(authz.user.orgId, () => vendorData(buildPeriod(a)));
+    const r = await withOrg(authz.user.orgId, () => vendorData(period));
     return {
       ok: true,
       data: {
@@ -368,10 +355,9 @@ const trueCostTool: AssistantToolDef = {
   gate: { mode: "anyOf", perms: ["reports.read"] },
   inputSchema: periodInput,
   execute: async (raw, authz): Promise<ToolResult> => {
-    const a = raw as PeriodArgs;
-    const bad = invalidPeriod(a);
-    if (bad) return bad;
-    const r = await withOrg(authz.user.orgId, () => trueCostData(authz.user.orgId, buildPeriod(a)));
+    const period = await resolveToolRange(authz.user.orgId, raw as PeriodArgs);
+    if ("error" in period) return { ok: false, error: period.error };
+    const r = await withOrg(authz.user.orgId, () => trueCostData(authz.user.orgId, period));
     return {
       ok: true,
       data: {
@@ -458,10 +444,9 @@ const utilizationTool: AssistantToolDef = {
   gate: { mode: "anyOf", perms: ["reports.read"] },
   inputSchema: periodInput,
   execute: async (raw, authz): Promise<ToolResult> => {
-    const a = raw as PeriodArgs;
-    const bad = invalidPeriod(a);
-    if (bad) return bad;
-    const r = await withOrg(authz.user.orgId, () => utilizationData(authz.user.orgId, buildPeriod(a)));
+    const period = await resolveToolRange(authz.user.orgId, raw as PeriodArgs);
+    if ("error" in period) return { ok: false, error: period.error };
+    const r = await withOrg(authz.user.orgId, () => utilizationData(authz.user.orgId, period));
     const slimGroup = (g: (typeof r.departments)[number]) => ({
       id: g.id,
       name: g.name,
@@ -502,10 +487,9 @@ const spendVelocityTool: AssistantToolDef = {
   gate: { mode: "anyOf", perms: ["reports.read"] },
   inputSchema: periodInput,
   execute: async (raw, authz): Promise<ToolResult> => {
-    const a = raw as PeriodArgs;
-    const bad = invalidPeriod(a);
-    if (bad) return bad;
-    const r = await withOrg(authz.user.orgId, () => spendVelocityData(authz.user.orgId, buildPeriod(a)));
+    const period = await resolveToolRange(authz.user.orgId, raw as PeriodArgs);
+    if ("error" in period) return { ok: false, error: period.error };
+    const r = await withOrg(authz.user.orgId, () => spendVelocityData(authz.user.orgId, period));
     const slimVelocity = (v: (typeof r.accountVelocity)[number]) => ({
       id: v.id,
       name: v.name,
@@ -603,10 +587,9 @@ const sentinelTool: AssistantToolDef = {
   gate: { mode: "anyOf", perms: ["reports.read"] },
   inputSchema: periodInput,
   execute: async (raw, authz): Promise<ToolResult> => {
-    const a = raw as PeriodArgs;
-    const bad = invalidPeriod(a);
-    if (bad) return bad;
-    const r = await withOrg(authz.user.orgId, () => sentinelData(authz.user.orgId, buildPeriod(a)));
+    const period = await resolveToolRange(authz.user.orgId, raw as PeriodArgs);
+    if ("error" in period) return { ok: false, error: period.error };
+    const r = await withOrg(authz.user.orgId, () => sentinelData(authz.user.orgId, period));
     return {
       ok: true,
       data: {

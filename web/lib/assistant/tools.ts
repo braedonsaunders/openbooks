@@ -15,6 +15,7 @@ import {
 } from "../reports";
 import { openItems } from "../cash/open-items";
 import { truncateText, type AssistantToolDef, type ToolResult } from "./types";
+import { rangeInputFields, resolveToolRange, type RangeArgs } from "./tools-shared";
 import { readableContinuousCloseAgents } from "../continuous-close";
 import { budgetScenarioOptions, budgetVsActualView } from "../budget-report";
 import { projectCostSummary } from "../project-costing";
@@ -528,18 +529,19 @@ function capItems<T>(items: T[]): { items: T[]; truncated: boolean } {
 const profitAndLossTool: AssistantToolDef = {
   name: "profit_and_loss",
   description:
-    "Profit & loss statement for a posting-date range, optionally filtered by department or project: per-account rows (reader-signed, hierarchical) plus revenue, COGS, gross profit, expenses, and net income totals. Read-only.",
+    "Profit & loss statement for a posting-date range, optionally filtered by department or project: per-account rows (reader-signed, hierarchical) plus revenue, COGS, gross profit, expenses, and net income totals. For any relative period ('YTD', 'this quarter', 'last year') pass a `period` preset — it resolves server-side against the org's fiscal calendar. Read-only.",
   category: "read",
   gate: { mode: "anyOf", perms: ["reports.read"] },
   inputSchema: z.object({
-    fromDate: dateInput,
-    toDate: dateInput,
+    ...rangeInputFields,
     departmentId: uuidInput.optional(),
     projectId: uuidInput.optional(),
   }),
   execute: async (raw, authz): Promise<ToolResult> => {
-    const a = raw as { fromDate: string; toDate: string; departmentId?: string; projectId?: string };
-    const r = await profitAndLoss(a.fromDate, a.toDate, {
+    const a = raw as RangeArgs & { departmentId?: string; projectId?: string };
+    const range = await resolveToolRange(authz.user.orgId, a);
+    if ("error" in range) return { ok: false, error: range.error };
+    const r = await profitAndLoss(range.from, range.to, {
       departmentId: a.departmentId,
       projectId: a.projectId,
     }, authz.user.orgId);
@@ -556,14 +558,15 @@ const profitAndLossTool: AssistantToolDef = {
     return {
       ok: true,
       data: {
-        fromDate: a.fromDate,
-        toDate: a.toDate,
+        periodLabel: range.label,
+        fromDate: range.from,
+        toDate: range.to,
         revenue: num(r.revenue),
         cogs: num(r.cogs),
         grossProfit: num(r.grossProfit),
         expenses: num(r.expenses),
         netIncome: num(r.netIncome),
-        href: `/reports/pnl?from=${a.fromDate}&to=${a.toDate}`,
+        href: `/reports/pnl?from=${range.from}&to=${range.to}`,
         truncated,
         items,
       },
@@ -676,18 +679,20 @@ const agingTool: AssistantToolDef = {
 const cashFlowTool: AssistantToolDef = {
   name: "cash_flow",
   description:
-    "Direct-method cash flow statement for a posting-date range: operating / investing / financing sections with per-account-type lines, net change in cash, and the opening/closing bank balances that prove it. Read-only.",
+    "Direct-method cash flow statement for a posting-date range: operating / investing / financing sections with per-account-type lines, net change in cash, and the opening/closing bank balances that prove it. For relative periods pass a `period` preset (fiscal-calendar-resolved). Read-only.",
   category: "read",
   gate: { mode: "anyOf", perms: ["reports.read"] },
-  inputSchema: z.object({ fromDate: dateInput, toDate: dateInput }),
+  inputSchema: z.object({ ...rangeInputFields }),
   execute: async (raw, authz): Promise<ToolResult> => {
-    const a = raw as { fromDate: string; toDate: string };
-    const r = await cashFlow(a.fromDate, a.toDate, undefined, authz.user.orgId);
+    const range = await resolveToolRange(authz.user.orgId, raw as RangeArgs);
+    if ("error" in range) return { ok: false, error: range.error };
+    const r = await cashFlow(range.from, range.to, undefined, authz.user.orgId);
     return {
       ok: true,
       data: {
-        fromDate: a.fromDate,
-        toDate: a.toDate,
+        periodLabel: range.label,
+        fromDate: range.from,
+        toDate: range.to,
         sections: r.sections.map((s) => ({
           section: s.section,
           subtotal: num(s.subtotal),
@@ -697,7 +702,7 @@ const cashFlowTool: AssistantToolDef = {
         openingCash: num(r.openingCash),
         closingCash: num(r.closingCash),
         reconciliationGap: num(r.reconciliationGap),
-        href: `/reports/cash-flow?from=${a.fromDate}&to=${a.toDate}`,
+        href: `/reports/cash-flow?from=${range.from}&to=${range.to}`,
       },
     };
   },
@@ -819,20 +824,21 @@ const budgetVsActualTool: AssistantToolDef = {
 const partyConcentration: AssistantToolDef = {
   name: "party_concentration",
   description:
-    "Rank customer revenue or vendor spend for a date range, with share of total and source-document counts. Use for concentration, dependency, and change-driver analysis. Read-only.",
+    "Rank customer revenue or vendor spend for a date range, with share of total and source-document counts. Use for concentration, dependency, and change-driver analysis. For relative periods pass a `period` preset (fiscal-calendar-resolved). Read-only.",
   category: "read",
   gate: { mode: "anyOf", perms: ["ar.read", "ap.read", "reports.read"] },
   inputSchema: z.object({
     side: z.enum(["customer", "vendor"]),
-    fromDate: dateInput,
-    toDate: dateInput,
+    ...rangeInputFields,
     limit: z.number().int().min(1).max(50).optional(),
   }),
   execute: async (raw, authz): Promise<ToolResult> => {
-    const a = raw as { side: "customer" | "vendor"; fromDate: string; toDate: string; limit?: number };
+    const a = raw as RangeArgs & { side: "customer" | "vendor"; limit?: number };
     if (!can(authz, a.side === "customer" ? "ar.read" : "ap.read") && !can(authz, "reports.read")) {
       return { ok: false, error: "forbidden" };
     }
+    const range = await resolveToolRange(authz.user.orgId, a);
+    if ("error" in range) return { ok: false, error: range.error };
     const kinds = a.side === "customer"
       ? ["customer_invoice", "customer_credit"]
       : ["vendor_bill", "vendor_credit"];
@@ -845,7 +851,7 @@ const partyConcentration: AssistantToolDef = {
           from documents d join parties p on p.id = d.party_id and p.org_id = d.org_id
          where d.org_id = ${authz.user.orgId} and d.status = 'posted'
            and d.kind in (${sql.join(kinds.map((kind) => sql`${kind}`), sql`, `)})
-           and d.document_date between ${a.fromDate} and ${a.toDate}
+           and d.document_date between ${range.from} and ${range.to}
          group by p.id, p.display_name
       ), totals as (select coalesce(sum(amount), 0) as total from ranked)
       select r.id, r.display_name, r.amount::text, r.document_count,
@@ -853,7 +859,7 @@ const partyConcentration: AssistantToolDef = {
         from ranked r cross join totals t
        order by r.amount desc limit ${limit}
     `)) as unknown as { rows: Record<string, unknown>[] };
-    return { ok: true, data: { side: a.side, fromDate: a.fromDate, toDate: a.toDate, rows: rows.rows, href: a.side === "customer" ? "/ar" : "/ap" } };
+    return { ok: true, data: { side: a.side, periodLabel: range.label, fromDate: range.from, toDate: range.to, rows: rows.rows, href: a.side === "customer" ? "/ar" : "/ap" } };
   },
 };
 
