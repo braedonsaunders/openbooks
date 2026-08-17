@@ -699,6 +699,36 @@ export const JOURNAL_ENTRY_SORTS: Record<string, SQL> = {
   status: sql`e.status`,
 }
 
+/**
+ * The journal list's backing relation: entries visible in the journal are the
+ * union of (a) standalone engine journals by origin and (b) entries posted by
+ * a journal-kind document. Both legs are index-driven ((org_id, origin,
+ * posting_date) and documents (org_id, kind) → posted_entry_id); the outer
+ * org_id predicate pushes down into each. UNION (not ALL) dedupes an entry
+ * that qualifies both ways.
+ */
+export const JOURNAL_ENTRY_TABLE = `(
+  select je.* from journal_entries je
+   where je.origin in ('manual','closing','allocation','revaluation','labor_burden','depreciation','revenue_recognition','fx_settlement','translation')
+  union
+  select je.* from journal_entries je
+    join documents jd on jd.posted_entry_id = je.id and jd.kind = 'journal' and jd.org_id = je.org_id
+)`
+
+/** The one join the journal-entry WHERE clause references (manual-vs-document
+ * visibility). Count queries use exactly this — the per-entry line totals
+ * below would otherwise be computed for EVERY entry in the tenant just to
+ * produce a count. */
+export function journalEntryCountJoins(): SQL {
+  return sql`
+    left join lateral (
+      select d.id, d.custom
+        from documents d
+       where d.posted_entry_id = e.id and d.kind = 'journal'
+       limit 1
+    ) source_doc on true`
+}
+
 export function journalEntryBaseJoins(allowedSubsidiaryIds?: Set<string> | null): SQL {
   const ids = allowedSubsidiaryIds ? [...allowedSubsidiaryIds] : []
   const lineVisibility = allowedSubsidiaryIds
@@ -707,12 +737,7 @@ export function journalEntryBaseJoins(allowedSubsidiaryIds?: Set<string> | null)
       : sql`and false`
     : sql``
   return sql`
-    left join lateral (
-      select d.id, d.custom
-        from documents d
-       where d.posted_entry_id = e.id and d.kind = 'journal'
-       limit 1
-    ) source_doc on true
+    ${journalEntryCountJoins()}
     join lateral (
       select count(l.id) as line_count,
              coalesce(sum(case when l.amount > 0 then l.amount else 0 end), 0) as total_debits
@@ -751,11 +776,11 @@ export function journalEntryWhere(
   orgId: string,
   allowedSubsidiaryIds?: Set<string> | null,
 ): SQL {
+  // Visibility (journal-document entries plus standalone engine journals) is
+  // built into JOURNAL_ENTRY_TABLE as a union of two index-driven legs — a
+  // WHERE-level OR here defeated the ORDER BY/LIMIT index walk and the old
+  // per-row source_doc lateral test ran for every entry in the tenant.
   const parts: SQL[] = [sql`e.org_id = ${orgId}`]
-  parts.push(sql`and (
-    source_doc.id is not null
-    or (source_doc.id is null and e.origin in ('manual','closing','allocation','revaluation','labor_burden','depreciation','revenue_recognition','fx_settlement','translation'))
-  )`)
   if (allowedSubsidiaryIds) {
     const ids = [...allowedSubsidiaryIds]
     parts.push(ids.length ? sql`and exists (

@@ -87,6 +87,14 @@ export const journalEntries = pgTable(
     index("je_org_date").on(t.orgId, t.postingDate),
     index("je_org_period").on(t.orgId, t.periodId),
     index("je_source_doc").on(t.sourceDocumentId),
+    /** Journal-list visibility leg: standalone engine journals by origin. */
+    index("je_org_origin_date").on(t.orgId, t.origin, t.postingDate),
+    /**
+     * Statement engines' entry-set CTE: index-only scan of posted entries.
+     * `id` is a trailing key purely so the scan never touches the heap
+     * (drizzle cannot express INCLUDE).
+     */
+    index("je_org_status_date_covering").on(t.orgId, t.status, t.postingDate, t.id),
   ],
 );
 
@@ -141,6 +149,13 @@ export const journalLines = pgTable(
   (t) => [
     index("jl_entry").on(t.entryId),
     index("jl_org_account").on(t.orgId, t.accountId),
+    /**
+     * GL aggregation (trial balance, statements, balances): index-only scan
+     * per (org, account) carrying the entry linkage and amount so the
+     * multi-million-row lines heap is never visited. Trailing columns are
+     * payload, not seek keys (drizzle cannot express INCLUDE).
+     */
+    index("jl_org_account_covering").on(t.orgId, t.accountId, t.entryId, t.amount, t.subsidiaryId),
     index("jl_org_sub_account").on(t.orgId, t.subsidiaryId, t.accountId),
     index("jl_org_project").on(t.orgId, t.projectId),
     index("jl_org_party_open").on(t.orgId, t.partyId, t.isOpenItem),

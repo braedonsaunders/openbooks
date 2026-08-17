@@ -88,12 +88,23 @@ function dimWhere(dims: DimFilter | undefined, alias = sql`l`) {
 
 async function accountBalances(where: ReturnType<typeof sql>, dims?: DimFilter, orgId?: string) {
   const resolvedOrgId = await resolveOrgId(orgId);
+  // The qualifying entry set (org + status + the caller's e.* predicates,
+  // which reference only e.posting_date / e.org_id) materializes once via an
+  // index-only scan and hash-joins to the lines. The predicates MUST live
+  // inside the CTE: applied at the outer join they leave the CTE unfiltered
+  // and the planner falls back to a per-account nested loop over it. The old
+  // per-line join to journal_entries re-fetched the entry heap for every
+  // journal line in the tenant.
   const r = (await db.execute(sql`
+    with e as materialized (
+      select e.id from journal_entries e
+       where e.org_id = ${resolvedOrgId} and e.status in ('posted', 'reversed') and ${where}
+    )
     select a.id, a.parent_id, a.number, a.name, a.type, a.is_summary,
            coalesce(sum(l.amount), 0) as raw
       from accounts a
-      left join (journal_lines l join journal_entries e on e.id = l.entry_id and e.status in ('posted', 'reversed'))
-        on l.account_id = a.id and l.org_id = ${resolvedOrgId} and e.org_id = ${resolvedOrgId} and ${where} and ${dimWhere(dims)}
+      left join (journal_lines l join e on e.id = l.entry_id)
+        on l.account_id = a.id and l.org_id = ${resolvedOrgId} and ${dimWhere(dims)}
      where a.org_id = ${resolvedOrgId}
      group by a.id
      order by a.number nulls last, a.name
@@ -194,16 +205,22 @@ export async function balanceSheet(asOf: string, orgId?: string) {
 
 export async function trialBalance(asOf: string, dims?: DimFilter, orgId?: string) {
   const resolvedOrgId = orgId ?? (await resolveOrgId());
+  // Materialized entry set + hash join — see accountBalances.
   const r = (await db.execute(sql`
+    with e as materialized (
+      select id from journal_entries
+       where org_id = ${resolvedOrgId} and status in ('posted', 'reversed')
+         and posting_date <= ${asOf}
+    )
     select a.id, a.number, a.name, a.type,
            sum(case when l.amount > 0 then l.amount else 0 end) as debits,
            sum(case when l.amount < 0 then -l.amount else 0 end) as credits,
            sum(l.amount) as balance
       from journal_lines l
+      join e on e.id = l.entry_id
       join accounts a on a.id = l.account_id and a.org_id = l.org_id
-      join journal_entries e on e.id = l.entry_id and e.org_id = l.org_id and e.status in ('posted', 'reversed')
-     where e.org_id = ${resolvedOrgId} and l.org_id = ${resolvedOrgId}
-       and a.org_id = ${resolvedOrgId} and e.posting_date <= ${asOf} and ${dimWhere(dims)}
+     where l.org_id = ${resolvedOrgId}
+       and a.org_id = ${resolvedOrgId} and ${dimWhere(dims)}
      group by a.id having abs(sum(l.amount)) >= 0.005
      order by a.number nulls last, a.name
   `)) as any;

@@ -140,6 +140,8 @@ export async function EntityListView({
   const tableSql = sql.raw(`${source.table} ${source.alias}`)
   const statusExpr = source.statusExpr ?? sql`${aliasSql}.status`
   const baseJoins = typeof source.baseJoins === 'function' ? source.baseJoins(allowedSubs) : source.baseJoins
+  const countJoinsSource = source.countJoins ?? source.baseJoins
+  const countJoins = typeof countJoinsSource === 'function' ? countJoinsSource(allowedSubs) : countJoinsSource
 
   const [rowsRes, statusCounts, totalRow, loadedQuickOptions] = await Promise.all([
     db.execute(sql`
@@ -154,12 +156,12 @@ export async function EntityListView({
       ? Promise.resolve({ rows: [] })
       : db.execute(sql`
           select ${statusExpr} as status, count(*) as n from ${tableSql}
-            ${baseJoins}
+            ${countJoins}
            where ${countWhere}
            group by ${statusExpr}`) as any,
     db.execute(sql`
       select count(*) as n from ${tableSql}
-        ${baseJoins}
+        ${countJoins}
        where ${where}`) as any,
     Promise.all(source.quickFilters.map(async (quick) => {
       if (quick.loadOptions) return quick.loadOptions(orgId)
