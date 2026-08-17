@@ -63,6 +63,27 @@ const FREEDONIA: PayrollCountryPack = {
     programTypes: [{ key: "zz_payg", label: "Freedonia PAYG employer number" }],
     yearEnd: [],
   }),
+  // Freedonia publishes every rate it levies, so the employer supplies NONE.
+  // An empty slot list is a real declaration, not an omission: it proves the
+  // generic rate layer does not assume every pack has an experience-rated or
+  // per-region levy the way the CA and US packs do.
+  statutoryRates: { country: "ZZ", slots: [] },
+  // One transcribed year, no region publishing its own tables. Declaring this
+  // is what lets the product say "2027 is not loaded for ZZ" in readiness
+  // instead of throwing from inside a calculation in January.
+  taxYears: {
+    country: "ZZ",
+    editions: [{
+      year: 2026,
+      label: "Freedonia PAYG tables (2026)",
+      effectiveFrom: "2026-01-01",
+      citation: "Freedonia Revenue Bulletin 2026-1",
+      status: "published",
+    }],
+    regionsWithOwnTables: [],
+    ratesModule: "engine/src/payroll/freedonia/rates.ts",
+    scaffold: { files: [], barrels: [], steps: [] },
+  },
   statutorySlots: [
     {
       key: "payg",

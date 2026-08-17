@@ -1,6 +1,6 @@
 import { add } from "../../money.ts";
 import { filingAccountRef, filingAccountsById } from "../../payroll-filing.ts";
-import { PayrollError } from "../../payroll-run.ts";
+import { PayrollError } from "../../payroll-error.ts";
 import { form941Worksheet, w2Slips } from "../../payroll-yearend.ts";
 import type { PayrollFilingData, PayrollFilingSlipData, PayrollPackFilings } from "../../payroll-filing-registry.ts";
 

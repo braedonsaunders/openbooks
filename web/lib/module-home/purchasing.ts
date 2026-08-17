@@ -66,6 +66,7 @@ export async function purchasingHome(orgId: string, subIds?: string[]): Promise<
           join documents d on d.id = je.source_document_id and d.org_id = ${orgId}
            and d.posted_entry_id = je.id and d.status = 'posted'
            and d.kind in ('vendor_bill', 'expense_report')
+           and d.open_balance > 0.005
          where jl.is_open_item and a.type = 'liability_payable' and jl.amount < 0${lineScope}
       )
       select coalesce(sum(remaining), 0) as outstanding,
@@ -90,6 +91,7 @@ export async function purchasingHome(orgId: string, subIds?: string[]): Promise<
           join documents d on d.id = je.source_document_id and d.org_id = ${orgId}
            and d.posted_entry_id = je.id and d.status = 'posted'
            and d.kind in ('vendor_bill', 'expense_report')
+           and d.open_balance > 0.005
          where jl.is_open_item and a.type = 'liability_payable' and jl.amount < 0${lineScope}
       ), bills as (
         select party_id, sum(remaining) as billed_open,

@@ -5,9 +5,8 @@ import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { useTranslations } from 'next-intl'
 import { toast } from 'sonner'
-import { Button, Input, Label, Select } from '@openbooks/ui'
-import type { CaPayrollConfig, PayrollSettings, UsPayrollConfig } from '@openbooks/engine/src/payroll-run.ts'
-import { US_STATES } from '@openbooks/engine/src/payroll/us/rates.ts'
+import { Button, Label, Select } from '@openbooks/ui'
+import type { PayrollSettings } from '@openbooks/engine/src/payroll-run.ts'
 
 // Generic, jurisdiction-free slots only. Statutory liabilities (CPP/EI/income
 // tax/…) are declared by the installed country packs and rendered from
@@ -19,12 +18,6 @@ type AccountKey = (typeof ACCOUNT_KEYS)[number]
 export interface PackSlots {
   country: string
   slots: { key: string; accountId: string | null }[]
-}
-
-interface SuiRow {
-  state: string
-  rate: string
-  wageBase: string
 }
 
 /** orgs.settings.payroll.stubPassword — the emailed-stub encryption policy. */
@@ -42,8 +35,6 @@ export interface StubPasswordPolicy {
 export function PayrollSetupWorkspace(props: {
   settings: PayrollSettings
   packs: PackSlots[]
-  us: UsPayrollConfig
-  ca: CaPayrollConfig
   accounts: { id: string; label: string }[]
   vendors: { id: string; label: string }[]
 }) {
@@ -62,17 +53,6 @@ export function PayrollSetupWorkspace(props: {
   const [wagesTo, setWagesTo] = useState<'expense' | 'labor_clearing'>(props.settings.wagesTo)
   const [craRemittancePartyId, setCraRemittancePartyId] = useState(props.settings.craRemittancePartyId ?? '')
   const [rqRemittancePartyId, setRqRemittancePartyId] = useState(props.settings.rqRemittancePartyId ?? '')
-  const usInstalled = props.packs.some((pack) => pack.country === 'US')
-  const caInstalled = props.packs.some((pack) => pack.country === 'CA')
-  const [ehtEnabled, setEhtEnabled] = useState(props.ca.eht.enabled)
-  const [ehtRate, setEhtRate] = useState(props.ca.eht.rate ?? '')
-  const [ehtExemption, setEhtExemption] = useState(props.ca.eht.annualExemption ?? '')
-  const [futaRate, setFutaRate] = useState(props.us.futaRate ?? '')
-  const [suiRows, setSuiRows] = useState<SuiRow[]>(() =>
-    Object.entries(props.us.sui).map(([state, entry]) => ({
-      state, rate: entry.rate, wageBase: entry.wageBase,
-    })),
-  )
 
   async function save() {
     setBusy(true)
@@ -89,27 +69,6 @@ export function PayrollSetupWorkspace(props: {
             country,
             Object.fromEntries(Object.entries(slots).map(([key, value]) => [key, value || null])),
           ])),
-          ...(caInstalled
-            ? {
-                ca: {
-                  eht: {
-                    enabled: ehtEnabled,
-                    rate: ehtRate || null,
-                    annualExemption: ehtExemption || null,
-                  },
-                },
-              }
-            : {}),
-          ...(usInstalled
-            ? {
-                us: {
-                  futaRate: futaRate || null,
-                  sui: Object.fromEntries(suiRows
-                    .filter((row) => row.state && row.rate && row.wageBase)
-                    .map((row) => [row.state, { rate: row.rate, wageBase: row.wageBase }])),
-                },
-              }
-            : {}),
         }),
       })
       const j = await res.json()
@@ -222,131 +181,22 @@ export function PayrollSetupWorkspace(props: {
                 </>
               ) : null}
             </div>
-            {pack.country === 'CA' ? (
-              <div className="space-y-3 border-t border-slate-100 pt-3 dark:border-slate-800">
-                <div>
-                  <h4 className="text-sm font-medium text-slate-900 dark:text-slate-100">{t('caConfig.title')}</h4>
-                  <p className="text-sm text-slate-500 dark:text-slate-400">{t('caConfig.description')}</p>
-                </div>
-                <label className="flex items-center gap-2 text-sm text-slate-700 dark:text-slate-300">
-                  <input
-                    type="checkbox"
-                    checked={ehtEnabled}
-                    onChange={(e) => setEhtEnabled(e.target.checked)}
-                    className="h-4 w-4 rounded border-slate-300 text-teal-600 focus:ring-teal-500 dark:border-slate-600"
-                  />
-                  {t('caConfig.ehtEnabled')}
-                </label>
-                {ehtEnabled ? (
-                  <div className="grid gap-3 sm:grid-cols-2">
-                    <div>
-                      <Label htmlFor="ps-eht-rate" help={t('caConfig.ehtRateHelp')}>
-                        {t('caConfig.ehtRate')}
-                      </Label>
-                      <Input
-                        id="ps-eht-rate"
-                        inputMode="decimal"
-                        value={ehtRate}
-                        onChange={(e) => setEhtRate(e.target.value)}
-                        placeholder="1.95"
-                      />
-                    </div>
-                    <div>
-                      <Label htmlFor="ps-eht-exemption" help={t('caConfig.ehtExemptionHelp')}>
-                        {t('caConfig.ehtExemption')}
-                      </Label>
-                      <Input
-                        id="ps-eht-exemption"
-                        inputMode="decimal"
-                        value={ehtExemption}
-                        onChange={(e) => setEhtExemption(e.target.value)}
-                        placeholder="1000000"
-                      />
-                    </div>
-                  </div>
-                ) : null}
-                <p className="text-xs text-slate-500 dark:text-slate-400">{t('caConfig.wcbNote')}</p>
-              </div>
-            ) : null}
-            {pack.country === 'US' ? (
-              <div className="space-y-3 border-t border-slate-100 pt-3 dark:border-slate-800">
-                <div>
-                  <h4 className="text-sm font-medium text-slate-900 dark:text-slate-100">{t('usConfig.title')}</h4>
-                  <p className="text-sm text-slate-500 dark:text-slate-400">{t('usConfig.description')}</p>
-                </div>
-                <div className="grid gap-3 sm:grid-cols-2">
-                  <div>
-                    <Label htmlFor="ps-futa-rate" help={t('usConfig.futaRateHelp')}>
-                      {t('usConfig.futaRate')}
-                    </Label>
-                    <Input
-                      id="ps-futa-rate"
-                      inputMode="decimal"
-                      value={futaRate}
-                      onChange={(e) => setFutaRate(e.target.value)}
-                      placeholder="0.006"
-                    />
-                  </div>
-                </div>
-                <div className="space-y-2">
-                  <Label help={t('usConfig.suiHelp')}>{t('usConfig.suiTitle')}</Label>
-                  {suiRows.map((row, index) => (
-                    <div key={index} className="flex flex-wrap items-end gap-2">
-                      <div>
-                        <Label htmlFor={`ps-sui-state-${index}`}>{t('usConfig.suiState')}</Label>
-                        <Select
-                          id={`ps-sui-state-${index}`}
-                          value={row.state}
-                          onChange={(e) => setSuiRows((rows) =>
-                            rows.map((r, i) => (i === index ? { ...r, state: e.target.value } : r)))}
-                        >
-                          <option value="">—</option>
-                          {US_STATES.map((state) => (
-                            <option key={state} value={state}>{state}</option>
-                          ))}
-                        </Select>
-                      </div>
-                      <div>
-                        <Label htmlFor={`ps-sui-rate-${index}`}>{t('usConfig.suiRate')}</Label>
-                        <Input
-                          id={`ps-sui-rate-${index}`}
-                          inputMode="decimal"
-                          className="w-28"
-                          value={row.rate}
-                          onChange={(e) => setSuiRows((rows) =>
-                            rows.map((r, i) => (i === index ? { ...r, rate: e.target.value } : r)))}
-                          placeholder="0.027"
-                        />
-                      </div>
-                      <div>
-                        <Label htmlFor={`ps-sui-base-${index}`}>{t('usConfig.suiWageBase')}</Label>
-                        <Input
-                          id={`ps-sui-base-${index}`}
-                          inputMode="decimal"
-                          className="w-32"
-                          value={row.wageBase}
-                          onChange={(e) => setSuiRows((rows) =>
-                            rows.map((r, i) => (i === index ? { ...r, wageBase: e.target.value } : r)))}
-                          placeholder="9000"
-                        />
-                      </div>
-                      <Button
-                        variant="ghost"
-                        onClick={() => setSuiRows((rows) => rows.filter((_, i) => i !== index))}
-                      >
-                        {t('usConfig.removeState')}
-                      </Button>
-                    </div>
-                  ))}
-                  <Button
-                    variant="outline"
-                    onClick={() => setSuiRows((rows) => [...rows, { state: '', rate: '', wageBase: '' }])}
-                  >
-                    {t('usConfig.addState')}
-                  </Button>
-                </div>
-              </div>
-            ) : null}
+            {/* Employer-supplied statutory rates used to be two hardcoded boxes
+                here — one FUTA rate, one SUI table, one Ontario EHT rate — none
+                of which can hold a per-account experience rate or a second
+                province's levy. They live on the Statutory Rates tab now, at the
+                scope the pack declares each one varies by. */}
+            <p className="border-t border-slate-100 pt-3 text-sm text-slate-500 dark:border-slate-800 dark:text-slate-400">
+              {t.has('packAccounts.ratesLink' as never)
+                ? t('packAccounts.ratesLink' as never)
+                : 'Rates you supply — unemployment, health levies — are on the Statutory Rates tab.'}{' '}
+              <Link
+                className="font-medium text-teal-700 underline dark:text-teal-300"
+                href={'/admin/setup/payroll?tab=rates' as never}
+              >
+                {t.has('tabs.rates' as never) ? t('tabs.rates' as never) : 'Statutory Rates'}
+              </Link>
+            </p>
           </section>
         ))
       )}

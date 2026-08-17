@@ -15,7 +15,8 @@ import {
   type PayrollFilingIssue,
 } from "./payroll-filing-registry.ts";
 import { RATES_2026_JAN } from "./payroll/canada/rates.ts";
-import { PayrollError } from "./payroll-run.ts";
+import { payrollTaxYearProblem } from "./payroll/tax-years.ts";
+import { PayrollError } from "./payroll-error.ts";
 
 /**
  * Year-end payroll artifacts, built from committed stubs (the payroll
@@ -776,14 +777,21 @@ export async function orgYearEndFilings(
 
   const sections: YearEndFilingSection[] = [];
   for (const pack of declaredPayrollFilings()) {
+    // A year whose statutory tables were never loaded refuses UNIFORMLY, for
+    // every filing of the pack, on the pack's own declaration
+    // (engine/src/payroll/tax-years.ts) — rather than one filing at a time
+    // wherever a builder happened to reach for a capped constant. The CA T4
+    // already refused 2027 through `caYearCaps`; the W-2 would have filed a
+    // year the engine cannot withhold for without saying so.
+    const yearProblem = payrollTaxYearProblem(pack.country, taxYear);
     for (const filing of pack.yearEnd) {
       // A population that refuses (an unknown year's caps, an undeclared
       // mapping) becomes THAT filing's named refusal, not a page-wide crash:
       // the CA pack's 2025 refusal must not hide the US pack's 2025 data.
       let data: PayrollFilingData = { rowKey: "rowId", columns: [], rows: [] };
-      let populationRefusal: string | null = null;
+      let populationRefusal: string | null = yearProblem?.message ?? null;
       try {
-        data = await filing.population(orgId, taxYear);
+        if (!yearProblem) data = await filing.population(orgId, taxYear);
       } catch (error) {
         if (!(error instanceof PayrollError)) throw error;
         populationRefusal = error.message;

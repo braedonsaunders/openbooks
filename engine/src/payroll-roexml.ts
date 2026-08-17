@@ -2,7 +2,7 @@ import { sql } from "drizzle-orm";
 import { db } from "./db.ts";
 import { formatMoney } from "./money.ts";
 import { unsealSecret } from "./secrets.ts";
-import { PayrollError } from "./payroll-run.ts";
+import { PayrollError } from "./payroll-error.ts";
 import {
   ROE_REASON_CODES, roeRecord, type RoeRecord, type RoeReasonCode,
 } from "./payroll-yearend.ts";

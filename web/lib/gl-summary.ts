@@ -121,6 +121,44 @@ export function glSummaryEligibleDims(dims?: {
   )
 }
 
+/**
+ * Per-account net movement for an as-of balance, from the summary.
+ *
+ * `fromExpr` is null for inception-to-date (balance-sheet accounts) or a
+ * month-aligned SQL date for P&L accounts (a fiscal-year start is always the
+ * first of a month). Because only the as-of date can fall mid-month, exactly
+ * one month is ever split: everything strictly before the as-of month comes
+ * from the summary, and the as-of month itself is read from the lines.
+ *
+ * Correlate it to a row (`orgExpr` = `a.org_id`) or pin it to a literal org.
+ */
+export function glAccountMovement(opts: {
+  orgExpr: SQL
+  accountIds: SQL
+  asOf: SQL
+  fromExpr?: SQL | null
+}): SQL {
+  const { orgExpr, accountIds, asOf, fromExpr } = opts
+  const lowerSummary = fromExpr ? sql`and g.month >= date_trunc('month', ${fromExpr})::date` : sql``
+  const lowerLines = fromExpr ? sql`and e.posting_date >= ${fromExpr}` : sql``
+  return sql`(
+    select coalesce(sum(x.amt), 0) as amount from (
+      select (g.debit_total - g.credit_total) as amt
+        from gl_month_activity g
+       where g.org_id = ${orgExpr} and g.account_id in ${accountIds}
+         and g.month < date_trunc('month', ${asOf})::date ${lowerSummary}
+      union all
+      select l.amount
+        from journal_lines l
+        join journal_entries e on e.id = l.entry_id and e.org_id = ${orgExpr}
+         and e.status in ('posted', 'reversed')
+         and e.posting_date >= date_trunc('month', ${asOf})::date
+         and e.posting_date <= ${asOf} ${lowerLines}
+       where l.org_id = ${orgExpr} and l.account_id in ${accountIds}
+    ) x
+  )`
+}
+
 /** Optional subsidiary scope applied to the buckets relation. */
 export function bucketSubsidiaryFilter(subsidiaryIds?: string[]): SQL {
   return subsidiaryIds?.length

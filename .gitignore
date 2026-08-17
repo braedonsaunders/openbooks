@@ -30,6 +30,9 @@ output/
 # scratch/test artifacts
 tmp/
 /tmp-*
+# throwaway source copies the tax-year scaffold test generates into; inside the
+# repo because the generated stub resolves node_modules by walking up
+.tmp-scaffold-*/
 engine/harness-checkpoints/
 engine/sim-runs/
 .playwright-cli/

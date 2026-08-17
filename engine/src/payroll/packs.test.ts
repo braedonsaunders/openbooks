@@ -7,7 +7,11 @@ import {
 import {
   PAYROLL_COUNTRY_PACKS,
   PayrollPackError,
+  employmentJurisdictionsOf,
+  jurisdictionKey,
+  labourJurisdictionProblem,
   packStatutoryComponents,
+  payrollJurisdictionDeclared,
   statutoryAssessment,
   type PayrollAssessedOn,
 } from "./packs.ts";
@@ -121,4 +125,105 @@ test("a protection pass re-derives the declared income-assessed lines and nothin
     lines.find((l) => l.component === "Income tax")!.amount,
     first.find((l) => l.component === "Income tax")!.amount,
   );
+});
+
+// ---------------------------------------------------------------------------
+// The labour jurisdiction: the employment attribute, validated against the
+// pack declarations
+// ---------------------------------------------------------------------------
+
+/**
+ * `jurisdictionKey` maps an employee to the employment-standards rules that
+ * govern them. Deriving it from the work region alone is wrong for an employer
+ * regulated by a different labour jurisdiction than the one its employees work
+ * in: that jurisdiction has its own statutory holiday calendar AND its own
+ * holiday-pay formula, so without an attribute for it the employment silently
+ * inherited the region's answers.
+ */
+
+test("the region derivation is unchanged when no labour jurisdiction is set", () => {
+  assert.equal(jurisdictionKey("CA", "ON"), "CA-ON");
+  assert.equal(jurisdictionKey("US", "TX"), "US-TX");
+  // No region at all still keys as the country — the pre-existing behaviour.
+  assert.equal(jurisdictionKey("CA", null), "CA");
+  assert.equal(jurisdictionKey("CA", ""), "CA");
+  // Explicitly absent, in every shape the column and the API can produce.
+  assert.equal(jurisdictionKey("CA", "ON", null), "CA-ON");
+  assert.equal(jurisdictionKey("CA", "ON", ""), "CA-ON");
+  assert.equal(jurisdictionKey("CA", "ON", "   "), "CA-ON");
+});
+
+test("an explicit labour jurisdiction wins over the region derivation", () => {
+  // An employee working in Ontario for a federally regulated employer: the
+  // Canada Labour Code governs the employment, the ESA does not.
+  assert.equal(jurisdictionKey("CA", "ON", "CA"), "CA");
+  // And it is honoured whatever the region, including Québec.
+  assert.equal(jurisdictionKey("CA", "QC", "CA"), "CA");
+  // A cross-province posting: the declared jurisdiction, not the work region.
+  assert.equal(jurisdictionKey("CA", "AB", "CA-BC"), "CA-BC");
+  assert.equal(jurisdictionKey("US", "TX", "US"), "US");
+  // Case and whitespace are normalized, not rejected — the keys are uppercase.
+  assert.equal(jurisdictionKey("CA", "ON", " ca-bc "), "CA-BC");
+  // Whatever it resolves to, the packs must actually declare it: that is what
+  // makes the holiday calendar resolvable rather than a guess.
+  assert.ok(payrollJurisdictionDeclared(jurisdictionKey("CA", "ON", "CA")));
+});
+
+test("every declared employment jurisdiction is an acceptable labour jurisdiction", () => {
+  for (const country of Object.keys(PAYROLL_COUNTRY_PACKS)) {
+    for (const jurisdiction of employmentJurisdictionsOf(country)) {
+      assert.equal(
+        labourJurisdictionProblem(country, jurisdiction.key),
+        null,
+        `${country}/${jurisdiction.key}`,
+      );
+      // Accepting it means the holiday layer can resolve it.
+      assert.ok(payrollJurisdictionDeclared(jurisdictionKey(country, "ON", jurisdiction.key)));
+    }
+  }
+});
+
+test("an empty labour jurisdiction is not a problem — it means derive from the region", () => {
+  assert.equal(labourJurisdictionProblem("CA", null), null);
+  assert.equal(labourJurisdictionProblem("CA", ""), null);
+  assert.equal(labourJurisdictionProblem("CA", "  "), null);
+});
+
+test("an undeclared labour jurisdiction is refused BY NAME, listing what is declared", () => {
+  // CA-MB is a real province no pack has transcribed. Accepting it would let
+  // the employment fall back on the work region's calendar — the exact
+  // substitution the attribute exists to prevent.
+  const problem = labourJurisdictionProblem("CA", "CA-MB");
+  assert.ok(problem);
+  assert.match(problem!, /CA-MB/, "names the refused value");
+  assert.match(problem!, /no payroll pack declares/);
+  assert.match(problem!, /CA-ON/, "lists what IS declared");
+
+  // A typo is refused the same way.
+  assert.match(labourJurisdictionProblem("CA", "CA-ONT")!, /CA-ONT/);
+  assert.ok(labourJurisdictionProblem("CA", "ON"), "a region code is not a jurisdiction key");
+});
+
+test("a tax administration's own calendar is refused as a labour jurisdiction", () => {
+  // CA-CRA is declared, and it is emphatically not an employment calendar: it
+  // carries Easter Monday and the Civic Holiday, which no province's ESA lists,
+  // and it exists to move remittance due dates.
+  const problem = labourJurisdictionProblem("CA", "CA-CRA");
+  assert.ok(problem);
+  assert.match(problem!, /CA-CRA/);
+  assert.match(problem!, /tax_administration/);
+  assert.ok(labourJurisdictionProblem("CA", "CA-CRA-QC"));
+});
+
+test("another country's labour jurisdiction is refused", () => {
+  // The employer of record does not sit in it, so it cannot govern.
+  const problem = labourJurisdictionProblem("CA", "US-TX");
+  assert.ok(problem);
+  assert.match(problem!, /US-TX/);
+  assert.match(problem!, /another country/);
+  assert.ok(labourJurisdictionProblem("US", "CA-ON"));
+});
+
+test("a country no pack declares refuses rather than answering", () => {
+  assert.throws(() => labourJurisdictionProblem("ZZ", "ZZ"), PayrollPackError);
 });

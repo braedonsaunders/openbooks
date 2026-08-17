@@ -7,6 +7,7 @@ import { toast } from 'sonner'
 import {
   ProfileEditor,
   type FilingAccountOption,
+  type LabourJurisdictionOption,
   type ProfileRow,
   type ScheduleOption,
 } from './EmployeesPanel'
@@ -24,8 +25,12 @@ export function PayrollProfileTab({ partyId, partyName }: { partyId: string; par
     profile: ProfileRow | null
     schedules: ScheduleOption[]
     filingAccounts: FilingAccountOption[]
+    labourJurisdictions: Record<string, LabourJurisdictionOption[]>
     defaultCountry: ProfileRow['country']
-  }>({ status: 'loading', profile: null, schedules: [], filingAccounts: [], defaultCountry: '' })
+  }>({
+    status: 'loading', profile: null, schedules: [], filingAccounts: [],
+    labourJurisdictions: {}, defaultCountry: '',
+  })
   const [version, setVersion] = useState(0)
 
   useEffect(() => {
@@ -41,6 +46,8 @@ export function PayrollProfileTab({ partyId, partyName }: { partyId: string; par
             profile: j.profile,
             schedules: j.schedules ?? [],
             filingAccounts: j.filingAccounts ?? [],
+            // The packs' declared labour jurisdictions, per country pack.
+            labourJurisdictions: j.labourJurisdictions ?? {},
             // The API derives this from the employee's own legal entity (or
             // the root subsidiary, or the org's sole installed pack) —
             // '' when nothing answers, and then the operator chooses.
@@ -87,6 +94,9 @@ export function PayrollProfileTab({ partyId, partyName }: { partyId: string; par
     // here meant a new profile silently became an Ontario employee.
     country: state.defaultCountry,
     province: '',
+    // Null, not a key: a new employment is governed by its work region's labour
+    // jurisdiction unless somebody says otherwise.
+    labour_jurisdiction: null,
     pay_basis: 'hourly',
     federal_claim_code: 1,
     federal_claim_amount: null,
@@ -119,6 +129,7 @@ export function PayrollProfileTab({ partyId, partyName }: { partyId: string; par
       profile={profile}
       schedules={state.schedules}
       filingAccounts={state.filingAccounts}
+      labourJurisdictions={state.labourJurisdictions}
       onClose={() => {}}
       onSaved={() => setVersion((v) => v + 1)}
     />

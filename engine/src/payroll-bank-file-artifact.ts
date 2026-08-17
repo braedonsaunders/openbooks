@@ -13,7 +13,7 @@ import {
   type PayRunBankFileFormat,
   type PayrollOriginatorConfig,
 } from "./payroll-bank-file.ts";
-import { PayrollError } from "./payroll-run.ts";
+import { PayrollError } from "./payroll-error.ts";
 import { assertNotSandbox } from "./sandbox/guard.ts";
 
 /**

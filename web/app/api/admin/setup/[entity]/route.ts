@@ -4,6 +4,7 @@ import { db } from '@openbooks/engine/src/db.ts'
 import { toUnits } from '@openbooks/engine/src/money.ts'
 import { compileFormula } from '@openbooks/engine/src/depreciation-formula.ts'
 import { filingAccountProblem } from '@openbooks/engine/src/payroll-filing-registry.ts'
+import { payPeriodsPerYearProblem, semiMonthlyAnchorProblem } from '@openbooks/engine/src/payroll-run.ts'
 import { guardPermission } from '../../../../../lib/authz'
 import { SETUP_ENTITY_BY_KEY, setupEntityForFeatureState, toSnake, type SetupEntity } from '../../../../../lib/setup/registry'
 import {
@@ -240,6 +241,42 @@ async function validateEntityIntegrity(
     const problem = filingAccountProblem({ country, programType, stateCode })
     if (problem) return problem
   }
+  if (entity.key === 'pay-schedules') {
+    // `anchor_period_end` is a REQUIRED field the engine derives every period
+    // boundary from, semi-monthly included: the anchor's day-of-month names one
+    // of the month's two period ends and its half-month complement names the
+    // other (engine/src/payroll-run.ts, `semiMonthlyBoundaries`). Two anchor
+    // shapes do not determine a calendar — the 14th, whose complement is a day
+    // February does not always have, and the last day of a 28-day February,
+    // which is simultaneously "the 28th" and "the month end". Both are refused
+    // HERE, by name, rather than quietly reinterpreted: a schedule that saves
+    // and then pays on days the employer did not choose misaligns every pay
+    // date, the periods-per-year assumption the statutory engines annualize
+    // with, and the period-overlap guard.
+    const current = rowId
+      ? ((await db.execute(sql`
+          select frequency, periods_per_year, anchor_period_end::text as anchor_period_end
+            from pay_schedules
+           where id = ${rowId} and org_id = ${orgId}`)) as any).rows[0]
+      : null
+    if (rowId && !current) return 'not found'
+    const frequency = String(body.frequency ?? current?.frequency ?? '')
+    const anchor = body.anchorPeriodEnd === undefined
+      ? String(current?.anchor_period_end ?? '')
+      : String(body.anchorPeriodEnd ?? '')
+    if (frequency === 'semi_monthly') {
+      const problem = semiMonthlyAnchorProblem(anchor)
+      if (problem) return problem
+    }
+    // Factor P has to match the calendar the other two fields describe; the
+    // table's CHECK only constrains it to the union across all frequencies.
+    const periodsPerYear = Number(body.periodsPerYear ?? current?.periods_per_year)
+    if (Number.isFinite(periodsPerYear)) {
+      const problem = payPeriodsPerYearProblem(frequency, periodsPerYear)
+      if (problem) return problem
+    }
+  }
+
   if (entity.key === 'segment-definitions') {
     const key = String(body.key ?? '')
     if (!rowId && !/^[a-z][a-z0-9_]{0,62}$/.test(key)) {

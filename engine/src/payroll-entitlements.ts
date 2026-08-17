@@ -1,7 +1,9 @@
 import { sql } from "drizzle-orm";
 import { db } from "./db.ts";
-import { add, cmp, divRate, mulDecimal, mulPercent, neg, roundMoney, sum } from "./money.ts";
-import { PayrollError } from "./payroll-run.ts";
+import {
+  add, cmp, divRate, mulDecimal, mulPercent, neg, normalizeMoney, roundMoney, sum,
+} from "./money.ts";
+import { PayrollError } from "./payroll-error.ts";
 
 /**
  * Entitlement plans — the pay-bank engine (banked overtime, vacation, benefit
@@ -891,6 +893,503 @@ export async function recordEntitlementMovements(
     `);
   }
   return input.movements.length;
+}
+
+/* ------------------------------------------------------------------ */
+/* Mid-year adoption: opening balances for a bank                       */
+/* ------------------------------------------------------------------ */
+
+/**
+ * The third dimension of a mid-year carry-in (the statutory and per-component
+ * ones live in engine/src/payroll-opening-balances.ts).
+ *
+ * An employer adopting OpenBooks mid-year does not only carry in CPP and EI.
+ * Every employee also arrives holding a vacation bank and, often, banked
+ * overtime — a real liability the employer already owes. Since vacation moved
+ * onto the entitlement ledger, `payroll_opening_balances.vacation_balance` is
+ * dead to the engine and there was NO load path at all: every bank started at
+ * zero, so the balance sheet understated the liability, and a termination in the
+ * first year paid out only what accrued after adoption. For a ten-year employee
+ * that is most of their entitlement, silently.
+ *
+ * Shape, and why it is not a table:
+ *
+ *  - the carry-in IS an `entitlement_ledger` movement with `kind = 'opening'`,
+ *    which the schema already reserved and the vacation migration already
+ *    writes. Balance = SUM(ledger), and a separate opening table would be a
+ *    second source of truth for the same number;
+ *  - it is NOT year-scoped, unlike the statutory carry-in. A bank has one
+ *    lifetime balance, not an annual one, so `entitlement_ledger_opening` is
+ *    unique on (org, plan, employee) with no tax year — and the UI keeps it out
+ *    of the year-scoped grid for exactly that reason;
+ *  - `movementDate` is the adoption date. It matters: the pay run sums
+ *    `movement_date <= pay_date`, so a carry-in dated after a run is invisible
+ *    to it, and one dated before a COMMITTED run would restate a balance that
+ *    run already paid from. That is the lock, below.
+ */
+export interface EntitlementOpeningLock {
+  documentNumber: string | null;
+  payDate: string;
+}
+
+export interface EntitlementOpeningRow {
+  employeePartyId: string;
+  employeeName: string;
+  employeeNumber: string | null;
+  /** planId → carried-in amount, in the plan's unit. Only where one exists. */
+  amounts: Record<string, string>;
+  /** planId → the adoption date the carry-in is dated. */
+  dates: Record<string, string>;
+  /** planId → the committed run that froze it, where one has. */
+  locked: Record<string, EntitlementOpeningLock>;
+  /**
+   * Non-zero `payroll_opening_balances.vacation_balance` with no matching
+   * opening movement: a legacy carry-in nobody migrated. Surfaced rather than
+   * left to rot — it is money the employer owes that no balance shows.
+   */
+  legacyVacationBalance: string | null;
+}
+
+export interface EntitlementOpeningsResult {
+  /** Active plans, in code order — the columns of the grid. */
+  plans: EntitlementPlan[];
+  rows: EntitlementOpeningRow[];
+  /** Employees carrying at least one opening. */
+  entered: number;
+  /** The date new carry-ins will be dated unless the operator changes it. */
+  asOf: string;
+  /**
+   * Employees a committed run on or after `asOf` already paid, so a NEW
+   * carry-in dated then would restate a balance that run computed from.
+   */
+  blocked: Record<string, EntitlementOpeningLock>;
+}
+
+const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/;
+
+export function assertMovementDate(value: unknown): string {
+  const date = String(value ?? "").trim().slice(0, 10);
+  if (!ISO_DATE.test(date) || Number.isNaN(Date.parse(`${date}T00:00:00Z`))) {
+    throw new PayrollError(`"${String(value)}" is not a date (YYYY-MM-DD)`);
+  }
+  return date;
+}
+
+/**
+ * Openings a committed run has already consumed, per (plan, employee).
+ *
+ * The test is the ENGINE's read predicate, not a proxy for it:
+ * `planBalanceExcludingRun` sums `movement_date <= onDate`, so a committed run
+ * included this carry-in exactly when it has a stub for the employee dated on or
+ * after the carry-in's movement date. Anything looser would freeze carry-ins no
+ * run ever read (blocking a correctable typo behind a void); anything tighter
+ * would let an edit restate money that has left the bank.
+ */
+export async function entitlementOpeningLocks(
+  orgId: string,
+  executor: Executor = db,
+): Promise<Map<string, EntitlementOpeningLock>> {
+  const r = (await executor.execute(sql`
+    select distinct on (l.plan_id, l.employee_party_id)
+           l.plan_id, l.employee_party_id, d.document_number, s.pay_date::text as pay_date
+      from entitlement_ledger l
+      join pay_stubs s on s.org_id = l.org_id and s.employee_party_id = l.employee_party_id
+                      and s.pay_date >= l.movement_date
+      join pay_runs r on r.document_id = s.pay_run_document_id and r.org_id = s.org_id
+      left join documents d on d.id = r.document_id and d.org_id = r.org_id
+     where l.org_id = ${orgId} and l.kind = 'opening' and r.run_status = 'committed'
+     order by l.plan_id, l.employee_party_id, s.pay_date
+  `)) as unknown as {
+    rows: { plan_id: string; employee_party_id: string; document_number: string | null; pay_date: string }[];
+  };
+  return new Map(
+    r.rows.map((row) => [
+      `${row.plan_id}:${row.employee_party_id}`,
+      { documentNumber: row.document_number, payDate: row.pay_date },
+    ]),
+  );
+}
+
+/**
+ * Employees a committed run on or after `asOf` has already paid. Adding a
+ * carry-in dated then would change the balance that run's stub was computed
+ * from, which no recalculation can put back — so a NEW opening is refused for
+ * them, with the run named.
+ */
+export async function entitlementOpeningBlocks(
+  orgId: string,
+  asOf: string,
+  executor: Executor = db,
+): Promise<Map<string, EntitlementOpeningLock>> {
+  const r = (await executor.execute(sql`
+    select distinct on (s.employee_party_id)
+           s.employee_party_id, d.document_number, s.pay_date::text as pay_date
+      from pay_stubs s
+      join pay_runs r on r.document_id = s.pay_run_document_id and r.org_id = s.org_id
+      left join documents d on d.id = r.document_id and d.org_id = r.org_id
+     where s.org_id = ${orgId} and r.run_status = 'committed' and s.pay_date >= ${asOf}
+     order by s.employee_party_id, s.pay_date
+  `)) as unknown as {
+    rows: { employee_party_id: string; document_number: string | null; pay_date: string }[];
+  };
+  return new Map(
+    r.rows.map((row) => [
+      row.employee_party_id,
+      { documentNumber: row.document_number, payDate: row.pay_date },
+    ]),
+  );
+}
+
+/**
+ * Every active employee's bank carry-ins, plus the plans that need one.
+ *
+ * Employees WITHOUT a carry-in are returned too, exactly as the statutory grid
+ * does: an empty screen that has to be discovered person by person is how a
+ * ten-year employee's vacation bank gets left at zero.
+ */
+export async function entitlementOpenings(
+  orgId: string,
+  opts: { asOf?: string } = {},
+): Promise<EntitlementOpeningsResult> {
+  const asOf = opts.asOf ? assertMovementDate(opts.asOf) : new Date().toISOString().slice(0, 10);
+  const plans = await entitlementPlans(orgId);
+
+  const people = (await db.execute(sql`
+    select p.id as employee_party_id, p.display_name as employee_name, er.employee_number,
+           coalesce((
+             select b.vacation_balance from payroll_opening_balances b
+              where b.org_id = p.org_id and b.employee_party_id = p.id
+                and b.vacation_balance <> 0
+              order by b.tax_year desc limit 1), 0)::text as legacy_vacation
+      from employee_payroll_profiles prof
+      join parties p on p.id = prof.employee_party_id and p.org_id = prof.org_id
+      left join employee_roles er on er.party_id = p.id and er.org_id = prof.org_id
+     where prof.org_id = ${orgId} and prof.is_active and p.is_active
+     order by p.display_name
+  `)) as unknown as { rows: Record<string, unknown>[] };
+
+  const openings = (await db.execute(sql`
+    select plan_id, employee_party_id, amount::text as amount, movement_date::text as movement_date
+      from entitlement_ledger
+     where org_id = ${orgId} and kind = 'opening'
+  `)) as unknown as {
+    rows: { plan_id: string; employee_party_id: string; amount: string; movement_date: string }[];
+  };
+  const byEmployee = new Map<string, typeof openings.rows>();
+  for (const row of openings.rows) {
+    byEmployee.set(row.employee_party_id, [...(byEmployee.get(row.employee_party_id) ?? []), row]);
+  }
+
+  const locks = await entitlementOpeningLocks(orgId);
+  const blocks = await entitlementOpeningBlocks(orgId, asOf);
+  const vacationPlan = vacationPlanOf(plans);
+
+  const rows: EntitlementOpeningRow[] = people.rows.map((raw) => {
+    const employeePartyId = String(raw.employee_party_id);
+    const amounts: Record<string, string> = {};
+    const dates: Record<string, string> = {};
+    const locked: Record<string, EntitlementOpeningLock> = {};
+    for (const row of byEmployee.get(employeePartyId) ?? []) {
+      amounts[row.plan_id] = roundMoney(String(row.amount), 4);
+      dates[row.plan_id] = String(row.movement_date).slice(0, 10);
+      const lock = locks.get(`${row.plan_id}:${employeePartyId}`);
+      if (lock) locked[row.plan_id] = lock;
+    }
+    // Only a legacy value with nothing carried in against the vacation plan is
+    // unmigrated. Once the opening exists the column has been dealt with.
+    const legacy = roundMoney(String(raw.legacy_vacation ?? "0"), 4);
+    const unmigrated = cmp(legacy, "0") !== 0
+      && (vacationPlan === null || amounts[vacationPlan.id] === undefined);
+    return {
+      employeePartyId,
+      employeeName: String(raw.employee_name ?? ""),
+      employeeNumber: raw.employee_number == null ? null : String(raw.employee_number),
+      amounts,
+      dates,
+      locked,
+      legacyVacationBalance: unmigrated ? legacy : null,
+    };
+  });
+
+  return {
+    plans,
+    rows,
+    entered: rows.filter((row) => Object.keys(row.amounts).length > 0).length,
+    asOf,
+    blocked: Object.fromEntries(blocks),
+  };
+}
+
+export interface EntitlementOpeningWrite {
+  employeePartyId: string;
+  /** planId OR plan code → amount in the plan's unit; blank or zero clears it. */
+  amounts: Record<string, unknown>;
+}
+
+export interface EntitlementOpeningSaveResult {
+  created: number;
+  updated: number;
+  deleted: number;
+  /** Nothing is written when this is non-empty. */
+  errors: { employeePartyId: string; employeeName?: string; message: string }[];
+  /** Written, but worth an operator's attention (a carry-in above its cap). */
+  warnings: { employeePartyId: string; employeeName?: string; message: string }[];
+}
+
+/**
+ * Carries every rejected row out of the aborted transaction.
+ *
+ * `PayrollError` now lives in its own import-free module (payroll-error.ts)
+ * precisely so this `extends` is safe: it used to live in payroll-run.ts, which
+ * imports THIS module, so the class expression evaluated before the base
+ * existed — `ReferenceError: Cannot access 'PayrollError' before
+ * initialization`, at import time, for every consumer.
+ */
+export class EntitlementOpeningSaveError extends PayrollError {
+  constructor(readonly result: EntitlementOpeningSaveResult) {
+    super(result.errors[0]?.message ?? "entitlement opening balances were rejected");
+    this.name = "EntitlementOpeningSaveError";
+  }
+}
+
+/**
+ * Create or replace bank carry-ins, all-or-nothing, through the ledger.
+ *
+ * The same three controls the statutory carry-in has, for the same reasons:
+ *
+ *  1. ALL-OR-NOTHING. Half a workforce's vacation banks carried in and half at
+ *     zero is harder to find than an outright failure.
+ *  2. IMMUTABLE ONCE CONSUMED. A carry-in a committed run has already read is
+ *     inside a cheque; correcting it is a void-and-restate exercise, so this
+ *     refuses and names the run. Enforced in the database too — the
+ *     `entitlement_ledger` append-only trigger carries the same predicate, so
+ *     the control does not depend on every caller coming through here.
+ *  3. ZERO IS A DELETE. "No carry-in" and "a carry-in of nothing" are one fact.
+ *
+ * Replacement is DELETE + INSERT rather than an UPDATE: the ledger refuses
+ * UPDATE unconditionally and that is right — a movement's amount is never
+ * rewritten in place. An opening no run has read is not history yet, which is
+ * the one narrow case the trigger permits deleting.
+ *
+ * Sign is checked against the plan's DIRECTION rather than quietly normalized:
+ * an `accrue` bank the employer owes runs positive, an `owe` balance the
+ * employee is repaying runs negative, and a hidden negation here would turn a
+ * $1,200 benefit debt into a $1,200 credit on a real cheque.
+ */
+export async function saveEntitlementOpenings(input: {
+  orgId: string;
+  actorId: string;
+  /** Adoption date every carry-in in this load is dated. */
+  movementDate: string;
+  rows: EntitlementOpeningWrite[];
+  note?: string | null;
+  /** Reject (rather than skip) carry-ins a committed run consumed. Default true. */
+  strictLocks?: boolean;
+}): Promise<EntitlementOpeningSaveResult> {
+  const movementDate = assertMovementDate(input.movementDate);
+  const result: EntitlementOpeningSaveResult = {
+    created: 0, updated: 0, deleted: 0, errors: [], warnings: [],
+  };
+  if (input.rows.length === 0) return result;
+
+  return db.transaction(async (tx) => {
+    const plans = await entitlementPlans(input.orgId, tx);
+    if (plans.length === 0) {
+      throw new PayrollError(
+        "this organization has no active entitlement plans, so there is no bank to carry a "
+        + "balance into — configure a plan first",
+      );
+    }
+    const planByKey = new Map<string, EntitlementPlan>();
+    for (const plan of plans) {
+      planByKey.set(plan.id, plan);
+      planByKey.set(plan.code.trim().toLowerCase(), plan);
+    }
+
+    const names = (await tx.execute(sql`
+      select p.id, p.display_name from parties p
+       where p.org_id = ${input.orgId} and p.id in (
+         select (value->>'id')::uuid from jsonb_array_elements(${JSON.stringify(
+           input.rows.map((r) => ({ id: r.employeePartyId })),
+         )}::jsonb) as value)
+    `)) as unknown as { rows: { id: string; display_name: string }[] };
+    const nameById = new Map(names.rows.map((r) => [r.id, r.display_name]));
+
+    const existing = (await tx.execute(sql`
+      select plan_id, employee_party_id, amount::text as amount
+        from entitlement_ledger
+       where org_id = ${input.orgId} and kind = 'opening'
+    `)) as unknown as { rows: { plan_id: string; employee_party_id: string; amount: string }[] };
+    const storedKeys = new Set(existing.rows.map((r) => `${r.plan_id}:${r.employee_party_id}`));
+
+    const locks = await entitlementOpeningLocks(input.orgId, tx);
+    const blocks = await entitlementOpeningBlocks(input.orgId, movementDate, tx);
+
+    const seen = new Set<string>();
+    const planned: {
+      employeePartyId: string;
+      employeeName: string;
+      /** planId → amount, or null to clear. */
+      amounts: Map<string, string | null>;
+    }[] = [];
+
+    for (const row of input.rows) {
+      const employeeName = nameById.get(row.employeePartyId);
+      const fail = (message: string) =>
+        result.errors.push({ employeePartyId: row.employeePartyId, employeeName, message });
+      if (!employeeName) {
+        fail("employee not found in this organization");
+        continue;
+      }
+      if (seen.has(row.employeePartyId)) {
+        fail("appears more than once in this load");
+        continue;
+      }
+      seen.add(row.employeePartyId);
+
+      const amounts = new Map<string, string | null>();
+      for (const [rawKey, raw] of Object.entries(row.amounts)) {
+        const key = String(rawKey).trim();
+        const plan = planByKey.get(key) ?? planByKey.get(key.toLowerCase());
+        if (!plan) {
+          fail(`"${key}" is not an active entitlement plan in this organization`);
+          continue;
+        }
+        const stored = storedKeys.has(`${plan.id}:${row.employeePartyId}`);
+        const lock = locks.get(`${plan.id}:${row.employeePartyId}`);
+        if (lock) {
+          if (input.strictLocks !== false) {
+            fail(
+              `a pay run committed on ${lock.payDate}`
+              + `${lock.documentNumber ? ` (${lock.documentNumber})` : ""} already used the `
+              + `${plan.code} carry-in; void that run before changing it`,
+            );
+          }
+          continue;
+        }
+
+        let value: string;
+        try {
+          value = normalizeMoney(String(raw ?? "").trim().replace(/[,$]/g, "") || "0");
+        } catch {
+          fail(`${plan.code} carry-in is not an amount: "${String(raw)}"`);
+          continue;
+        }
+        if (cmp(value, "0") === 0) {
+          if (stored) amounts.set(plan.id, null);
+          continue;
+        }
+        if (plan.direction === "accrue" && cmp(value, "0") < 0) {
+          fail(
+            `${plan.code} is a bank the employer owes the employee, so its carry-in cannot be `
+            + "negative",
+          );
+          continue;
+        }
+        if (plan.direction === "owe" && cmp(value, "0") > 0) {
+          fail(
+            `${plan.code} is a balance the EMPLOYEE owes, so its carry-in must be negative `
+            + `(enter ${neg(value)} for an outstanding ${value})`,
+          );
+          continue;
+        }
+        // Inserting a carry-in dated on or before a committed run would change
+        // the balance that run's stub was computed from. Nothing can put that
+        // back, so it is refused rather than warned about.
+        const block = blocks.get(row.employeePartyId);
+        if (block && !stored) {
+          fail(
+            `a pay run committed on ${block.payDate}`
+            + `${block.documentNumber ? ` (${block.documentNumber})` : ""} already paid this `
+            + `employee on or after ${movementDate}; date the carry-in after it, or void the run`,
+          );
+          continue;
+        }
+        amounts.set(plan.id, value);
+
+        // A carry-in above the resolved cap is legitimate at adoption (the cap
+        // was configured for the future), so it is reported, never refused —
+        // refusing would make an accurate liability impossible to record.
+        const limit = await resolvePlanLimit(
+          tx, input.orgId, plan.id, row.employeePartyId, movementDate,
+        );
+        if (limit?.maxBalance != null && cmp(value, limit.maxBalance) > 0) {
+          result.warnings.push({
+            employeePartyId: row.employeePartyId,
+            employeeName,
+            message: `${plan.code} carry-in ${value} is above the ${limit.maxBalance} limit that `
+              + `resolves for this employee (${limit.scope} scope)`,
+          });
+        }
+      }
+      planned.push({ employeePartyId: row.employeePartyId, employeeName, amounts });
+    }
+
+    if (result.errors.length > 0) throw new EntitlementOpeningSaveError(result);
+
+    for (const row of planned) {
+      for (const [planId, amount] of row.amounts) {
+        const stored = storedKeys.has(`${planId}:${row.employeePartyId}`);
+        if (stored) {
+          // The trigger permits this exactly while no committed run has read it.
+          await tx.execute(sql`
+            delete from entitlement_ledger
+             where org_id = ${input.orgId} and plan_id = ${planId}
+               and employee_party_id = ${row.employeePartyId} and kind = 'opening'`);
+        }
+        if (amount === null) {
+          result.deleted++;
+          await auditEntitlementOpening(tx, {
+            orgId: input.orgId, actorId: input.actorId, action: "delete",
+            changes: { planId, employeePartyId: row.employeePartyId },
+          });
+          continue;
+        }
+        // One insert path for every ledger write in this module.
+        await recordEntitlementMovements(tx, {
+          orgId: input.orgId,
+          actorId: input.actorId,
+          payRunDocumentId: null,
+          movements: [{
+            planId,
+            employeePartyId: row.employeePartyId,
+            movementDate,
+            amount,
+            hours: null,
+            kind: "opening",
+            componentId: null,
+            note: input.note ?? "Mid-year adoption carry-in",
+          }],
+        });
+        if (stored) result.updated++;
+        else result.created++;
+        await auditEntitlementOpening(tx, {
+          orgId: input.orgId, actorId: input.actorId,
+          action: stored ? "update" : "insert",
+          changes: { planId, employeePartyId: row.employeePartyId, movementDate, after: amount },
+        });
+      }
+    }
+
+    return result;
+  });
+}
+
+async function auditEntitlementOpening(
+  runner: Executor,
+  args: {
+    orgId: string; actorId: string | null;
+    action: "insert" | "update" | "delete";
+    changes: Record<string, unknown>;
+  },
+): Promise<void> {
+  // The ledger row id changes on every replacement (delete + insert), so the
+  // audit trail is keyed to the PLAN — the thing whose balance moved and the
+  // thing an auditor asks about.
+  await runner.execute(sql`
+    insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
+    values (${args.orgId}, 'entitlement_ledger', ${String(args.changes.planId)}, ${args.action},
+            ${JSON.stringify({ kind: "opening", ...args.changes })}, ${args.actorId})`);
 }
 
 export interface NearLimitEmployee {

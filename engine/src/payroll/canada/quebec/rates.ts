@@ -35,6 +35,8 @@
  *     employer levy outside the source-deduction stub, published as a gap.
  */
 
+import { QC_EXTRA_EDITIONS } from "./editions.ts";
+
 /** Bracket: annual taxable income up to `upTo` (null = top) at `rate` with constant `k`. */
 export interface QcTaxBracket {
   upTo: string | null;
@@ -47,6 +49,12 @@ export interface QcEditionRates {
   /** Revenu Québec's own version stamp on the publication. */
   version: string;
   effectiveFrom: string;
+  /**
+   * `draft` = scaffolded by scripts/payroll-new-tax-year.ts with placeholder
+   * figures, never calculable. Required, so a new edition answers the question
+   * instead of looking published because the module exists.
+   */
+  status: "published" | "draft";
   /** s. 2.1.1 Step 2 — taxable income thresholds, rates T and constants K. */
   brackets: QcTaxBracket[];
   /** The rate applied to the personal tax credit value E (0.14 × E). */
@@ -79,6 +87,7 @@ export const QC_RATES_2026: QcEditionRates = {
   year: 2026,
   version: "2026-01",
   effectiveFrom: "2026-01-01",
+  status: "published",
   // "Taxable income thresholds, income tax rates and constants for 2026"
   // (TP-1015.F-V (2026-01), p. 5 / s. 2.1.1 Step 2).
   brackets: [
@@ -99,7 +108,15 @@ export const QC_RATES_2026: QcEditionRates = {
   qppTotalRate: "0.0630",
 };
 
-const EDITIONS: QcEditionRates[] = [QC_RATES_2026];
+/**
+ * Every Revenu Québec edition the pack carries: the transcribed 2026 guide plus
+ * whatever year modules exist on disk (`./editions.ts` is generated from them by
+ * scripts/payroll-new-tax-year.ts). Newest first, so the resolver picks the
+ * latest edition in force on a date.
+ */
+export const QC_EDITIONS: readonly QcEditionRates[] = [
+  ...QC_EXTRA_EDITIONS, QC_RATES_2026,
+].slice().sort((a, b) => b.effectiveFrom.localeCompare(a.effectiveFrom));
 
 /**
  * Resolve the TP-1015.F-V constants in force on a pay date.
@@ -109,15 +126,25 @@ const EDITIONS: QcEditionRates[] = [QC_RATES_2026];
  * (and mid-year when rates change, as in 2023-07), so an unknown date means
  * nobody has transcribed the real formulas yet, and calculating with last
  * year's constants would be silent wrong money.
+ *
+ * A SCAFFOLDED edition is refused separately and more loudly: the module exists
+ * and type-checks, so presence alone proves nothing about the figures in it.
  */
 export function qcRatesForPayDate(payDate: string): QcEditionRates {
-  const edition = EDITIONS.find(
-    (e) => payDate >= e.effectiveFrom && payDate < `${e.year + 1}-01-01`,
-  );
+  const year = Number(payDate.slice(0, 4));
+  const forYear = QC_EDITIONS.filter((edition) => edition.year === year);
+  const edition = forYear.find((candidate) => payDate >= candidate.effectiveFrom);
   if (!edition) {
     throw new Error(
       `no TP-1015.F-V constants for pay date ${payDate} — add the Revenu Québec edition to `
       + "engine/src/payroll/canada/quebec/rates.ts",
+    );
+  }
+  if (edition.status !== "published") {
+    throw new Error(
+      `the ${year} TP-1015.F-V constants are scaffolded but not transcribed — placeholder values `
+      + "remain in engine/src/payroll/canada/quebec/rates-" + year + ".ts; fill them in from the "
+      + "published guide and flip the edition to published",
     );
   }
   return edition;

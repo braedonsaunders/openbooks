@@ -3,6 +3,7 @@ import { sql } from "drizzle-orm";
 import { db } from "@openbooks/engine/src/db.ts";
 import { evaluateFormula } from "./formula";
 import { getMoneyFormatter } from '../money-server'
+import { resolveOrgId } from '../org-scope'
 
 export { openItems } from './open-items'
 
@@ -238,18 +239,23 @@ function subScope(col: ReturnType<typeof sql>, subIds?: string[]) {
  */
 export async function paymentStats(side: Side, asOfIso: string): Promise<PaymentStats> {
   const acctType = side === "ar" ? "asset_receivable" : "liability_payable";
+  // Every relation carries an explicit org predicate: RLS scopes the rows
+  // either way, but its current_setting() comparison cannot drive an index,
+  // so the unqualified form scanned each table whole.
+  const orgId = await resolveOrgId();
   const r = (await db.execute(sql`
     select bl.party_id as id,
       avg(pe.posting_date - be.posting_date) as avg_days,
       coalesce(stddev_pop(pe.posting_date - be.posting_date), 0) as sd_days,
       count(*) as n
     from applications a
-    join journal_lines bl on bl.id = a.to_line_id
-    join journal_entries be on be.id = bl.entry_id
-    join journal_lines pl on pl.id = a.from_line_id
-    join journal_entries pe on pe.id = pl.entry_id
-    join accounts ba on ba.id = bl.account_id
-    where ba.type = ${acctType} and a.unapplied_at is null and bl.party_id is not null
+    join journal_lines bl on bl.id = a.to_line_id and bl.org_id = ${orgId}
+    join journal_entries be on be.id = bl.entry_id and be.org_id = ${orgId}
+    join journal_lines pl on pl.id = a.from_line_id and pl.org_id = ${orgId}
+    join journal_entries pe on pe.id = pl.entry_id and pe.org_id = ${orgId}
+    join accounts ba on ba.id = bl.account_id and ba.org_id = ${orgId}
+    where a.org_id = ${orgId}
+      and ba.type = ${acctType} and a.unapplied_at is null and bl.party_id is not null
       and pe.posting_date >= ${asOfIso}::date - interval '365 days'
       and pe.posting_date <= ${asOfIso}::date
     group by bl.party_id
@@ -831,15 +837,45 @@ export async function categoryWeekly(
 }
 
 export async function bankBalances(asOf: string, subIds?: string[]) {
+  // Inception-to-date cash per bank account: whole months from the
+  // gl_month_activity summary, the as-of month from the lines. Summing every
+  // bank line ever posted cost seconds once a tenant had a real ledger.
+  //
+  // The org predicates are explicit and the movement legs are restricted to
+  // bank accounts: RLS alone scopes rows correctly but its current_setting()
+  // comparison is not sargable, so an unqualified leg degrades to a full scan
+  // of every journal line in the table.
+  const orgId = await resolveOrgId();
   const r = (await db.execute(sql`
-    select a.id, a.name, a.number, coalesce(sum(l.amount), 0) as balance
+    with bank_accounts as (
+      select id from accounts
+       where org_id = ${orgId} and type = 'asset_bank' and is_summary = false and is_active
+    ),
+    movement as (
+      select g.account_id, (g.debit_total - g.credit_total) as amt
+        from gl_month_activity g
+       where g.org_id = ${orgId}
+         and g.account_id in (select id from bank_accounts)
+         and g.month < date_trunc('month', ${asOf}::date)::date
+         ${subScope(sql`g.subsidiary_id`, subIds)}
+      union all
+      select l.account_id, l.amount
+        from journal_lines l
+        join journal_entries e on e.id = l.entry_id and e.org_id = ${orgId}
+         and e.status in ('posted', 'reversed')
+         and e.posting_date >= date_trunc('month', ${asOf}::date)::date
+         and e.posting_date <= ${asOf}
+       where l.org_id = ${orgId}
+         and l.account_id in (select id from bank_accounts)
+         ${subScope(sql`l.subsidiary_id`, subIds)}
+    )
+    select a.id, a.name, a.number, coalesce(sum(m.amt), 0) as balance
     from accounts a
-    left join (journal_lines l join journal_entries e on e.id = l.entry_id)
-      on l.account_id = a.id and e.posting_date <= ${asOf}${subScope(sql`l.subsidiary_id`, subIds)}
+    left join movement m on m.account_id = a.id
     where a.type = 'asset_bank' and a.is_summary = false and a.is_active
       ${subIds && subIds.length > 0 ? sql`and (a.subsidiary_id is null or a.subsidiary_id = any(${`{${subIds.join(",")}}`}::uuid[]))` : sql``}
     group by a.id, a.name, a.number
-    order by coalesce(sum(l.amount), 0) desc
+    order by coalesce(sum(m.amt), 0) desc
   `)) as any;
   return (r.rows as any[]).map((x) => ({ id: x.id, name: x.name, number: x.number, balance: Number(x.balance) }));
 }

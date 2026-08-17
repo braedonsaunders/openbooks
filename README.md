@@ -375,11 +375,31 @@ Off by default behind the optional `payroll` feature.
   priority ordering across competing orders, reporting any shortfall rather
   than discarding it, plus per-period and annual basis caps in hours or dollars
 - Union agreements, classifications, per-hour and percent fringes, and dues
-- Employer levies: workers' compensation and Ontario EHT, job-costed
+- Employer levies: workers' compensation, and health levies resolved per region
+  rather than per employer, all job-costed
+- Statutory rates the employer supplies — experience-rated unemployment,
+  per-state credit reductions, provincial health levies — held per filing
+  account or per region and per tax year, so a two-account employer in one
+  state carries the two rates the agency actually assigned it
+- Packs declare which tax years they are transcribed for, so an unloaded year
+  is a named blocker before a run is built rather than an exception thrown from
+  inside a calculation, and a scaffold script generates the next edition as a
+  refusing draft until its figures are filled in
+- Pay schedules derive every period boundary from their anchor, semi-monthly
+  included; an anchor that names no coherent calendar is refused at save
 - Pay rails per employee: direct deposit or cheque, with cheque printing and
   numbering, and a funding view that splits the payday between the two
-- Multiple statutory filing accounts per tenant (several CRA payroll program
+- Multiple statutory filing accounts per tenant (several payroll program
   accounts, or several EINs and state unemployment accounts)
+- Mid-year adoption in three dimensions: statutory year-to-date, per-component
+  year-to-date so annual contribution ceilings do not restart on the adoption
+  date, and entitlement bank carry-ins — each on screen, importable, and locked
+  once a run has read it
+- A parallel-run reconciliation against the payroll system being replaced:
+  import their register, compare every employee and every component to the
+  penny, and read the result as a report. Tolerance is zero unless configured,
+  and an empty or non-overlapping population reports "nothing was compared"
+  rather than a clean result
 - Year-end and separation artifacts: T4 and T4 Summary with CRA XML, ROE data
   with ROE Web XML, W-2 and Form 941 extracts
 - Remittance runs that raise vendor bills for withheld and accrued amounts
@@ -387,15 +407,20 @@ Off by default behind the optional `payroll` feature.
   delivery, and payroll register, payroll journal, entitlement balance, and
   service-milestone reports through the standard report engine
 
-Payroll is Canada-first. Specific limits worth knowing before you rely on it:
-US state income-tax withholding covers only the nine states that levy none, and
-any other state is refused loudly rather than approximated; direct-deposit bank
-file export (CPA-005 and NACHA) is written but deliberately disabled pending an
-immutable-artifact and download-audit lifecycle, so payment files are not
-produced yet; remittance due dates are computed only for regular remitters and
-left unset for accelerated and quarterly schedules rather than guessed; and
-mid-year opening balances have a data model and engine support but no interface
-yet, so adopting mid-year currently needs a direct load.
+Payroll is country-agnostic: the generic layer branches on nothing, and every
+jurisdiction fact — rates, calendars, filings, holiday-pay formulas, which
+levies exist and what they are assessed on — is a country-pack declaration.
+Canada and the United States are two packs, not a default and an exception.
+
+Specific limits worth knowing before you rely on it. US state income-tax
+withholding covers only the nine states that levy none, and any other state is
+refused loudly rather than approximated. Statutory holiday pay is calculated
+only for jurisdictions whose formula is transcribed; the rest are refused by
+name when a holiday falls in the period. Remittance due dates are computed only
+for regular remitters and left unset for accelerated and quarterly schedules
+rather than guessed. Quebec's RL-1 electronic filing is out of scope pending
+the gated specification, so Quebec year-end refuses rather than filing
+something wrong.
 
 ### Reporting, automation, and extension
 
@@ -455,12 +480,9 @@ The interface includes locale catalogs for:
 OpenBooks does not currently include a complete:
 
 - US state income-tax withholding (federal withholding, FICA, FUTA and SUTA
-  ship in the payroll feature alongside the Canadian CRA T4127 engine, but
-  state withholding covers only the nine states that levy none — every other
-  state is refused rather than estimated);
-- direct-deposit bank file generation (the CPA-005 and NACHA writers exist but
-  are switched off until payment artifacts are immutable and their downloads
-  audited);
+  ship in the payroll feature alongside the CRA T4127 engine, but state
+  withholding covers only the nine states that levy none — every other state is
+  refused rather than estimated);
 - human-capital-management suite — payroll pays people, but there is no
   applicant tracking, onboarding, performance, benefits-administration or
   employee self-service;

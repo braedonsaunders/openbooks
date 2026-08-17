@@ -208,6 +208,118 @@ test("travel pay costs to the first job of the day, not the travel row's job", (
   assert.equal(lines[0]!.projectId, JOB_A);
 });
 
+test("travel pay prefers the recorded clock time over the capture order", () => {
+  const travel = rule({
+    code: "TRAVEL", name: "Travel pay", componentId: TRAVEL,
+    trigger: "distinct_day", timeTypeId: TT_TRAVEL, rateValue: "45",
+    costingMode: "first_project_of_day",
+  });
+
+  // The case capture order gets WRONG. The field app uploaded the day in the
+  // order it happened to sync — Job B's afternoon row first — so `created_at`
+  // says Job B was first. The clock times say otherwise, and they are what the
+  // employee actually did: he was on Job A at 07:00.
+  const entries = [
+    entry("2026-03-03", {
+      projectId: JOB_B, startedAt: "2026-03-03T13:00:00Z", createdAt: "2026-03-03T20:00:00Z",
+    }),
+    entry("2026-03-03", {
+      projectId: JOB_A, startedAt: "2026-03-03T07:00:00Z", createdAt: "2026-03-03T20:00:05Z",
+    }),
+    entry("2026-03-03", {
+      projectId: JOB_B, timeTypeId: TT_TRAVEL, hours: "1",
+      startedAt: "2026-03-03T17:00:00Z", createdAt: "2026-03-03T20:00:10Z",
+    }),
+  ];
+
+  const lines = computeDerivedEarnings(input({ rules: [travel], entries }));
+
+  assert.equal(lines.length, 1);
+  assert.equal(lines[0]!.amount, "45.0000");
+  assert.equal(lines[0]!.projectId, JOB_A, "the 07:00 job, not the first row captured");
+});
+
+test("with no clock time at all, travel pay still falls back to capture order", () => {
+  // Every row written before time_entries.started_at existed, and every surface
+  // that still collects no clock time. The fallback must keep working exactly
+  // as it did, or a historical recalculation would move.
+  const travel = rule({
+    code: "TRAVEL", name: "Travel pay", componentId: TRAVEL,
+    trigger: "distinct_day", timeTypeId: TT_TRAVEL, rateValue: "45",
+    costingMode: "first_project_of_day",
+  });
+
+  const entries = [
+    entry("2026-03-03", { projectId: JOB_B, startedAt: null, createdAt: "2026-03-03T13:00:00Z" }),
+    entry("2026-03-03", { projectId: JOB_A, startedAt: null, createdAt: "2026-03-03T08:00:00Z" }),
+    entry("2026-03-03", {
+      projectId: JOB_B, timeTypeId: TT_TRAVEL, hours: "1",
+      startedAt: null, createdAt: "2026-03-03T17:00:00Z",
+    }),
+  ];
+
+  assert.equal(
+    computeDerivedEarnings(input({ rules: [travel], entries }))[0]!.projectId,
+    JOB_A,
+    "the earliest captured job",
+  );
+});
+
+test("a known clock time outranks the capture order of a row that has none", () => {
+  // A part-migrated day: the crew's morning row came off a clock-in app, the
+  // afternoon row was keyed in later with no time. A null start is not
+  // midnight — it is unknown — so it must not be allowed to claim "first".
+  const travel = rule({
+    code: "TRAVEL", name: "Travel pay", componentId: TRAVEL,
+    trigger: "distinct_day", timeTypeId: TT_TRAVEL, rateValue: "45",
+    costingMode: "first_project_of_day",
+  });
+
+  const entries = [
+    // Captured FIRST, but asserts no clock time.
+    entry("2026-03-03", { projectId: JOB_B, startedAt: null, createdAt: "2026-03-03T09:00:00Z" }),
+    // Captured second, and says it began at 06:30.
+    entry("2026-03-03", {
+      projectId: JOB_A, startedAt: "2026-03-03T06:30:00Z", createdAt: "2026-03-03T18:00:00Z",
+    }),
+    entry("2026-03-03", {
+      projectId: JOB_B, timeTypeId: TT_TRAVEL, hours: "1",
+      startedAt: null, createdAt: "2026-03-03T19:00:00Z",
+    }),
+  ];
+
+  assert.equal(
+    computeDerivedEarnings(input({ rules: [travel], entries }))[0]!.projectId,
+    JOB_A,
+  );
+});
+
+test("the per-diem night is costed to the clock-time first job of the earlier day", () => {
+  // Same ordering question, second consumer: the job the employee SLEPT at is
+  // the earlier day's first job, so the clock time governs it too.
+  const perDiem = rule({
+    code: "PERDIEM", name: "Per diem", componentId: PER_DIEM,
+    trigger: "night_stayed", quantityMode: "count_nights", rateValue: "70",
+  });
+
+  const lines = computeDerivedEarnings(input({
+    rules: [perDiem],
+    entries: [
+      entry("2026-03-02", {
+        projectId: JOB_B, startedAt: "2026-03-02T15:00:00Z", createdAt: "2026-03-02T15:00:00Z",
+      }),
+      entry("2026-03-02", {
+        projectId: JOB_A, startedAt: "2026-03-02T06:00:00Z", createdAt: "2026-03-02T20:00:00Z",
+      }),
+      entry("2026-03-03", { projectId: JOB_A }),
+    ],
+  }));
+
+  assert.equal(lines.length, 1);
+  assert.equal(lines[0]!.amount, "70.0000");
+  assert.equal(lines[0]!.projectId, JOB_A);
+});
+
 test("a day with no qualifying time pays nothing", () => {
   const travel = rule({
     code: "TRAVEL", name: "Travel pay", componentId: TRAVEL,

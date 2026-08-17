@@ -14,7 +14,7 @@ import {
   nextBusinessDay,
   resolveObservedHolidays,
 } from "./payroll-holidays.ts";
-import { PayrollError } from "./payroll-run.ts";
+import { PayrollError } from "./payroll-error.ts";
 import { legacyStatutoryLiabilityAccount, statutoryRemittanceDeclaration } from "./payroll/packs.ts";
 
 /**

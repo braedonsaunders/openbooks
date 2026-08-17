@@ -514,6 +514,10 @@
       "pay_stub_lines": {
         "label": "Pay stub lines",
         "description": "Component-level payroll detail — one row per earning, deduction, or employer contribution on a stub, with hours, rate, amount, and running year-to-date. Requires the payroll permission."
+      },
+      "payroll_parallel_findings": {
+        "label": "Parallel run findings",
+        "description": "Prior-provider parallel run, cell by cell: for each employee and each component, what the old payroll system paid, what this one calculates, and the difference. Requires the payroll permission."
       }
     },
     "columns": {
@@ -747,6 +751,34 @@
         "province": "Province / state",
         "stub_id": "Stub (id)",
         "component_id": "Component (id)"
+      },
+      "payroll_parallel_findings": {
+        "employee": "Employee",
+        "register": "Prior register",
+        "provider": "Prior provider",
+        "run_number": "Pay run #",
+        "pay_date": "Pay date",
+        "period_start": "Period start",
+        "period_end": "Period end",
+        "component": "Component",
+        "slot": "Component key",
+        "line_kind": "Kind",
+        "classification": "Result",
+        "prior_amount": "Prior system",
+        "our_amount": "This system",
+        "difference": "Difference",
+        "tolerance_applied": "Tolerance allowed",
+        "source_column": "Source column",
+        "comparison_status": "Comparison outcome",
+        "employees_compared": "Employees compared",
+        "employees_prior": "Employees on prior register",
+        "employees_ours": "Employees in our run",
+        "unmapped_column_count": "Unmapped source columns",
+        "blocked_reason": "Why nothing was compared",
+        "compared_at": "Compared at",
+        "run_status": "Run status",
+        "comparison_id": "Comparison (id)",
+        "employee_id": "Employee (id)"
       }
     },
     "enumValues": {
@@ -800,7 +832,19 @@
       "both": "Both",
       "earning": "Earning",
       "deduction": "Deduction",
-      "employer_contribution": "Employer contribution"
+      "employer_contribution": "Employer contribution",
+      "match": "Exact match",
+      "within_tolerance": "Within tolerance",
+      "difference": "Difference",
+      "prior_only": "Only in the prior system",
+      "our_only": "Only here",
+      "employee_prior_only": "Employee missing from our run",
+      "employee_our_only": "Employee missing from the register",
+      "unattributed": "Unexplained by any component",
+      "clean": "Reconciled exactly",
+      "clean_within_tolerance": "Reconciled within tolerance",
+      "differences": "Differences to resolve",
+      "no_comparable_data": "Nothing was compared"
     }
   },
   "operators": {
@@ -910,6 +954,14 @@
     "payroll-employee-totals": {
       "name": "Employee totals (YTD)",
       "description": "One line per employee: gross, income tax withheld, net pay, and employer cost totals with stub counts for the selected period. Requires the payroll permission."
+    },
+    "payroll-parallel-run": {
+      "name": "Parallel run reconciliation",
+      "description": "The adoption control: for one pay period, every employee and every component compared against the prior payroll provider, sectioned by result so material differences and one-sided employees are read first and exact matches last. A tolerance, where one is configured, is shown in its own column."
+    },
+    "payroll-parallel-run-totals": {
+      "name": "Parallel run totals by component",
+      "description": "The same reconciliation rolled up: per component, what the prior provider paid in total, what this payroll calculates, and the difference — so a period-level variance is attributed to the components that produced it."
     }
   },
   "generalLedger": {

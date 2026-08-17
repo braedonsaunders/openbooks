@@ -28,8 +28,9 @@ import { auditColumns, currencyCode, id, money, orgRef } from "./helpers";
  * - A pay run is a posting `documents` kind ('pay_run') with this 1:1
  *   extension, so numbering, approval, posting, voiding, and period control
  *   ride the standard document machinery.
- * - YTD state = payroll_opening_balances (mid-year adoption) + posted stubs.
- *   Nothing else accumulates, so recalculating a stub is always safe.
+ * - YTD state = payroll_opening_balances + payroll_opening_balance_components
+ *   (mid-year adoption, statutory and per-component) + posted stubs. Nothing
+ *   else accumulates, so recalculating a stub is always safe.
  */
 
 /** Pay frequency calendar: drives P (periods per year) and period boundaries. */
@@ -204,6 +205,26 @@ export const employeePayrollProfiles = pgTable(
     /** Jurisdiction of employment within the country: T4127 province ('ON',
      * 'QC', 'ZZ') for Canada, state postal code ('TX', 'WA', …) for the US. */
     province: text("province").notNull(),
+    /**
+     * The labour jurisdiction whose EMPLOYMENT STANDARDS govern this
+     * employment, when it is not the default derived from the work region.
+     *
+     * Nullable, and null means "derive it from the region" — which is the right
+     * answer for almost every employment and the only answer rows written
+     * before this column existed can give. It is set when the employer of
+     * record is regulated by a different labour jurisdiction than the one the
+     * employee works in: that jurisdiction has its own statutory holiday
+     * calendar AND its own holiday-pay formula, and without an attribute for it
+     * the employment silently inherits the work region's.
+     *
+     * It carries a pack-declared jurisdiction KEY (`payrollJurisdiction`), not
+     * a region code, and it moves the employment-standards answers only —
+     * withholding still follows `province`, because a person working in a
+     * province pays that province's tax whoever regulates their employer. The
+     * column names no country; which keys are legal is the pack's declaration,
+     * validated at the API boundary (`labourJurisdictionProblem`).
+     */
+    labourJurisdiction: text("labour_jurisdiction"),
     payBasis: text("pay_basis", { enum: ["hourly", "salary"] }).notNull().default("hourly"),
     /** TD1 federal claim: code 0–10, or an exact amount which wins over code. */
     federalClaimCode: integer("federal_claim_code"),
@@ -429,7 +450,14 @@ export const payStubLines = pgTable(
   ],
 );
 
-/** Mid-year adoption: YTD amounts accumulated before OpenBooks payroll. */
+/**
+ * Mid-year adoption: YTD amounts accumulated before OpenBooks payroll.
+ *
+ * This row is the anchor of ONE carry-in event for one employee in one tax
+ * year: the statutory year-to-date lives in its columns, the component-level
+ * year-to-date in `payroll_opening_balance_components` beneath it, and both are
+ * frozen by the same committed run (engine/src/payroll-opening-balances.ts).
+ */
 export const payrollOpeningBalances = pgTable(
   "payroll_opening_balances",
   {
@@ -446,6 +474,25 @@ export const payrollOpeningBalances = pgTable(
     taxableYtd: money("taxable_ytd").notNull().default("0"),
     taxYtd: money("tax_ytd").notNull().default("0"),
     nonPeriodicYtd: money("non_periodic_ytd").notNull().default("0"),
+    /**
+     * DEPRECATED (2026-08-17). No pay run reads this any more: an opening
+     * vacation balance is an `entitlement_ledger` row with `kind = 'opening'`
+     * against the org's vacation plan, loaded through
+     * engine/src/payroll-entitlements.ts.
+     *
+     * Retained rather than dropped, and deliberately not offered as an editable
+     * field, for one reason that outranks tidiness: it is the INPUT to
+     * scripts/migrate-vacation-to-entitlements.ts and the left-hand side of
+     * that script's penny-exact tie-out between the legacy expression and the
+     * replayed ledger. Dropping the column destroys the evidence that the
+     * migration preserved every employee's balance, and that tie-out is meant
+     * to stay re-runnable indefinitely (a test pins both sides to the same
+     * three sources, so it cannot be quietly made vacuous either).
+     *
+     * A non-zero value with no matching `opening` movement is an UNMIGRATED
+     * legacy carry-in — real money nobody has moved. The opening-balances
+     * screen surfaces exactly that case rather than leaving it to rot.
+     */
     vacationBalance: money("vacation_balance").notNull().default("0"),
     ...auditColumns,
   },
@@ -453,6 +500,56 @@ export const payrollOpeningBalances = pgTable(
     uniqueIndex("payroll_opening_balances_employee_year").on(
       t.orgId, t.employeePartyId, t.taxYear,
     ),
+  ],
+);
+
+/**
+ * Component-level opening year-to-date: the second dimension of a mid-year
+ * carry-in.
+ *
+ * `pay_components.basis_cap_amount_per_year` is an ANNUAL ceiling — the CRA
+ * money-purchase limit, the US 402(g) elective-deferral limit — and
+ * `calculateStub` enforces it against the component's year-to-date. With no
+ * carry-in dimension that year-to-date began at zero on the adoption date, so
+ * an employer adopting mid-year handed every employee a SECOND full annual
+ * limit: an employee who had already deferred $23,500 at the prior provider
+ * could defer $23,500 again, and the excess is the employer's compliance
+ * problem to unwind.
+ *
+ * Shape: a CHILD of `payroll_opening_balances`, not a table with its own
+ * natural key. These are not independent facts — a 402(g) year-to-date is an
+ * attribute of the same carry-in event as the pensionable earnings it was
+ * withheld from. Keying it to the parent row means the lock (a committed run in
+ * that employee's tax year), the audit trail, the readiness signal, the
+ * import/export natural key and the "one carry-in per employee per year"
+ * statement all stay singular; a sibling table sharing the natural key would be
+ * a second answer to "does this employee have a carry-in?" that the readiness
+ * warning would have to ask twice and could disagree with.
+ *
+ * The consequence the service owns: the parent's "an all-zero row is a DELETE"
+ * rule now spans the children too (`isEmptyOpeningBalance`), so clearing the
+ * statutory columns can never cascade a component year-to-date away unnoticed.
+ */
+export const payrollOpeningBalanceComponents = pgTable(
+  "payroll_opening_balance_components",
+  {
+    id: id(),
+    orgId: orgRef(),
+    openingBalanceId: uuid("opening_balance_id").notNull(),
+    componentId: uuid("component_id").notNull(),
+    /** Amount taken against this component earlier in the parent's tax year. */
+    ytdAmount: money("ytd_amount").notNull(),
+    ...auditColumns,
+  },
+  (t) => [
+    // One amount per component per carry-in; re-loading a file replaces it.
+    uniqueIndex("payroll_opening_balance_components_row_component").on(
+      t.openingBalanceId, t.componentId,
+    ),
+    index("payroll_opening_balance_components_org_component").on(t.orgId, t.componentId),
+    // A year-to-date is money already withheld or contributed. Negative is a
+    // sign-flipped export, or a refund somebody meant to record as a pay run.
+    check("payroll_opening_balance_components_nonnegative", sql`${t.ytdAmount} >= 0`),
   ],
 );
 

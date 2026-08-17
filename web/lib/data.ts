@@ -53,19 +53,34 @@ export async function accountsWithBalances(orgId: string, asOf?: string) {
   ];
   const PNL = ['income', 'income_other', 'cogs', 'expense', 'expense_other', 'expense_deferred'];
 
+  // Balances come from the gl_month_activity summary (whole months) plus the
+  // as-of month's lines; the correlated per-account scan of journal_lines this
+  // replaces cost seconds on a large ledger. P&L accounts measure from the
+  // fiscal-year start, balance-sheet accounts from inception.
   const r = (await db.execute(sql`
     select a.id, a.parent_id, a.number, a.name, a.type, a.is_summary, a.is_active,
-           coalesce((
-             select sum(l.amount)
-               from journal_lines l
-               join journal_entries e on e.id = l.entry_id
-              where l.account_id = a.id
-                and l.org_id = ${orgId}
-                and e.posting_date <= ${asOfDate}
-                and (a.type not in ${PNL} or e.posting_date >= ${fyStart})
-           ), 0)
+           coalesce(case when a.type in ${PNL} then s.fy_amount else s.all_amount end, 0)
            * case when a.type in ${CREDIT_NORMAL} then -1 else 1 end as balance
       from accounts a
+      left join (
+        select x.account_id,
+               sum(x.amt) as all_amount,
+               sum(x.amt) filter (where x.d >= ${fyStart}) as fy_amount
+          from (
+            select g.account_id, (g.debit_total - g.credit_total) as amt, g.month as d
+              from gl_month_activity g
+             where g.org_id = ${orgId} and g.month < date_trunc('month', ${asOfDate}::date)::date
+            union all
+            select l.account_id, l.amount, e.posting_date
+              from journal_lines l
+              join journal_entries e on e.id = l.entry_id and e.org_id = ${orgId}
+               and e.status in ('posted', 'reversed')
+               and e.posting_date >= date_trunc('month', ${asOfDate}::date)::date
+               and e.posting_date <= ${asOfDate}
+             where l.org_id = ${orgId}
+          ) x
+         group by x.account_id
+      ) s on s.account_id = a.id
      where a.org_id = ${orgId}
      order by a.number nulls last, a.name
   `)) as any;

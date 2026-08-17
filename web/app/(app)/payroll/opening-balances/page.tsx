@@ -1,12 +1,14 @@
 import { getTranslations } from 'next-intl/server'
 import { PageHeader } from '@openbooks/ui'
 import { openingBalancesForYear, OPENING_BALANCE_FIELDS } from '@openbooks/engine/src/payroll-opening-balances.ts'
+import { entitlementOpenings } from '@openbooks/engine/src/payroll-entitlements.ts'
 import { ListPageLayout } from '../../../../components/page-layout'
 import { groupTabs } from '../../../../components/module-home/group-tabs'
 import { ModuleHomeTabs } from '../../../../components/module-home/ui'
 import { can, requirePermission } from '../../../../lib/authz'
 import { requireFeatureEnabled } from '../../../../lib/feature-gates'
 import { pickString } from '../../../../lib/list-params'
+import { EntitlementOpeningsView } from './EntitlementOpeningsView'
 import { OpeningBalancesView } from './OpeningBalancesView'
 
 export const dynamic = 'force-dynamic'
@@ -42,6 +44,9 @@ export default async function PayrollOpeningBalancesPage({
     : currentYear
 
   const data = await openingBalancesForYear(orgId, year)
+  // Bank carry-ins are NOT year-scoped (a bank has one lifetime balance), so
+  // this load deliberately ignores `year`. See EntitlementOpeningsView.
+  const banks = await entitlementOpenings(orgId)
   const tabs = await groupTabs('payroll', '/payroll/opening-balances')
   const text = (key: string, fallback: string) =>
     t.has(key as never) ? t(key as never) : fallback
@@ -53,20 +58,24 @@ export default async function PayrollOpeningBalancesPage({
           title={text('openingBalances.title', 'Opening balances')}
           description={text(
             'openingBalances.description',
-            'Year-to-date amounts each employee carries in from your previous payroll system. Nothing else supplies them, so the CPP, EI, Social Security and unemployment ceilings restart at zero without them.',
+            'Everything each employee carries in from your previous payroll system: statutory year-to-date, the annual caps they have partly used, and their vacation and banked-time balances. Nothing else supplies these, so every ceiling and every bank restarts at zero without them.',
           )}
           actions={<ModuleHomeTabs tabs={tabs} />}
         />
       }
     >
-      <OpeningBalancesView
-        year={year}
-        initial={data}
-        fields={OPENING_BALANCE_FIELDS.map((field) => ({
-          key: field.key, label: field.label, help: field.help, packs: [...field.packs],
-        }))}
-        canManage={can(authz, 'payroll.manage')}
-      />
+      <div className="space-y-8">
+        <OpeningBalancesView
+          year={year}
+          initial={data}
+          fields={OPENING_BALANCE_FIELDS.map((field) => ({
+            key: field.key, label: field.label, help: field.help, packs: [...field.packs],
+          }))}
+          components={data.components}
+          canManage={can(authz, 'payroll.manage')}
+        />
+        <EntitlementOpeningsView initial={banks} canManage={can(authz, 'payroll.manage')} />
+      </div>
     </ListPageLayout>
   )
 }

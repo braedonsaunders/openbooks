@@ -46,13 +46,13 @@ export type WizardStep = 'period' | 'readiness' | 'review' | 'gl' | 'finish'
  * English fallbacks for codes whose message has not landed in web/messages yet.
  * This screen decides whether a payday is safe to run; a raw message key in
  * place of a blocker or a warning is not an acceptable degradation. Delete an
- * entry the moment its real key exists — `t.has` prefers the translation.
- * See .local/handoff-openings.md for the strings to add.
+ * entry the moment its real key exists — `t.has` prefers the translation, so a
+ * stale entry is unreachable code that still has to be read and maintained.
+ *
+ * Empty is the correct steady state: every readiness code the engine emits now
+ * has a message under `payroll.wizard.readiness.codes`.
  */
-const READINESS_CODE_FALLBACK: Record<string, (count: number, detail: string) => string> = {
-  'employee.noOpeningBalance': (count, detail) =>
-    `${count} employee${count === 1 ? ' has' : 's have'} no ${detail} opening balance from your previous payroll system, so their CPP/EI and wage-base ceilings will restart at zero on this run.`,
-}
+const READINESS_CODE_FALLBACK: Record<string, (count: number, detail: string) => string> = {}
 
 const STALE_REASON_FALLBACK: Record<string, string> = {
   missing: 'the run itself',

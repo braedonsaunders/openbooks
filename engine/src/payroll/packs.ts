@@ -2,9 +2,11 @@ import { sql } from "drizzle-orm";
 import { db } from "../db.ts";
 import type { PayrollPackFilings } from "../payroll-filing-registry.ts";
 import { caPackFilings } from "./canada/filings.ts";
-import type { Province } from "./canada/rates.ts";
+import { CA_PACK_RATES, CA_TAX_YEARS, type Province } from "./canada/rates.ts";
 import { usPackFilings } from "./us/filings.ts";
-import { NO_WITHHOLDING_STATES, US_STATES } from "./us/rates.ts";
+import { NO_WITHHOLDING_STATES, US_PACK_RATES, US_STATES, US_TAX_YEARS } from "./us/rates.ts";
+import type { PayrollPackRates } from "./statutory-rates.ts";
+import type { PayrollTaxYearSupport } from "./tax-years.ts";
 
 /**
  * Anything the jurisdiction layer refuses. Declared FIRST because
@@ -208,6 +210,21 @@ export interface PayrollCountryPack {
    * declaration must not be dereferenced at module-evaluation time.
    */
   filings: () => PayrollPackFilings;
+  /**
+   * The statutory rates the EMPLOYER supplies, and the scope each one varies
+   * by — org-wide, per region, or per filing account
+   * (engine/src/payroll/statutory-rates.ts). REQUIRED: a pack that stores an
+   * experience-rated or per-region levy at org level can hold exactly one of
+   * the several real values, and nothing in the product can tell.
+   */
+  statutoryRates: PayrollPackRates;
+  /**
+   * Which TAX YEARS the pack's statutory tables are transcribed for, and how
+   * the next edition is scaffolded (engine/src/payroll/tax-years.ts).
+   * REQUIRED: refusing an untranscribed year is right, but only a declaration
+   * lets the product say so BEFORE a payroll calculates.
+   */
+  taxYears: PayrollTaxYearSupport;
 }
 
 // ---------------------------------------------------------------------------
@@ -856,6 +873,8 @@ export const PAYROLL_COUNTRY_PACKS: Record<string, PayrollCountryPack> = {
     // T4127 factor U1: employee-paid dues reduce taxable income.
     employeeUnionDuesTaxTreatment: "union_dues",
     filings: caPackFilings,
+    statutoryRates: CA_PACK_RATES,
+    taxYears: CA_TAX_YEARS,
     statutorySlots: [
       {
         key: "income_tax",
@@ -969,6 +988,8 @@ export const PAYROLL_COUNTRY_PACKS: Record<string, PayrollCountryPack> = {
     // employees with the TCJA (2018). No treatment.
     employeeUnionDuesTaxTreatment: null,
     filings: usPackFilings,
+    statutoryRates: US_PACK_RATES,
+    taxYears: US_TAX_YEARS,
     statutorySlots: [
       {
         key: "fit",
@@ -1358,11 +1379,69 @@ export function payrollJurisdiction(key: string): PayrollJurisdiction {
 /**
  * The jurisdiction key for an employee's country and province/state. Canadian
  * provinces key as 'CA-XX'; a federally regulated employer keys as 'CA'.
+ *
+ * `labourJurisdiction` is the employment attribute that overrides the region
+ * derivation (`employee_payroll_profiles.labour_jurisdiction`): the labour
+ * jurisdiction whose employment standards govern the employment, when it is
+ * not the one the work region implies. The region still decides WITHHOLDING —
+ * an employee working in Ontario pays Ontario tax whoever regulates the
+ * employer — so only this key moves.
+ *
+ * Generic on purpose: the column names no country, and this function names no
+ * country. Which keys exist, and which of them are employment jurisdictions at
+ * all, is the pack's declaration (`employmentJurisdictionsOf`); an undeclared
+ * value is refused by name at the API boundary
+ * (`labourJurisdictionProblem`) rather than silently answered here.
  */
-export function jurisdictionKey(country: string, province: string | null): string {
+export function jurisdictionKey(
+  country: string,
+  province: string | null,
+  labourJurisdiction?: string | null,
+): string {
+  const declared = (labourJurisdiction ?? "").trim().toUpperCase();
+  if (declared) return declared;
   const region = (province ?? "").trim().toUpperCase();
   if (!region) return country;
   return `${country}-${region}`;
+}
+
+/**
+ * Why a `labour_jurisdiction` value cannot govern an employment, or null if it
+ * can — the API-boundary validator, shaped like `filingAccountProblem`.
+ *
+ * Two refusals, both by name:
+ *
+ * - a key no pack declares (a typo, or a province nobody has transcribed) —
+ *   accepting it would silently pick the region's answers back up, or refuse
+ *   deep inside a pay run instead of at the keyboard;
+ * - a key declared with `scope: 'tax_administration'` ('CA-CRA') — an
+ *   authority's own office calendar governs remittance due dates, never an
+ *   employee's entitlements, and confusing the two is exactly the mistake the
+ *   scope field exists to prevent;
+ * - a key declared by ANOTHER country's pack — an employment cannot be
+ *   governed by a jurisdiction its employer of record does not sit in.
+ */
+export function labourJurisdictionProblem(
+  country: string,
+  labourJurisdiction: string | null,
+): string | null {
+  const value = (labourJurisdiction ?? "").trim();
+  if (!value) return null;
+  const key = value.toUpperCase();
+  const employment = employmentJurisdictionsOf(country);
+  if (employment.some((jurisdiction) => jurisdiction.key === key)) return null;
+  const offered = `the ${country} payroll pack declares: `
+    + employment.map((jurisdiction) => jurisdiction.key).join(", ");
+  const declared = declaredJurisdictions().find((jurisdiction) => jurisdiction.key === key);
+  if (!declared) {
+    return `no payroll pack declares the labour jurisdiction "${value}" — ${offered}`;
+  }
+  if (declared.scope !== "employment") {
+    return `"${value}" is the ${declared.name} calendar — a ${declared.scope} calendar, which `
+      + `moves remittance due dates and governs no employee's employment standards. ${offered}`;
+  }
+  return `"${value}" is a labour jurisdiction of another country's payroll pack, not of `
+    + `${country} — ${offered}`;
 }
 
 /** Whether ANY pack declares the jurisdiction — the non-throwing probe the
