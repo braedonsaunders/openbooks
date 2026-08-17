@@ -23,6 +23,7 @@ import {
   Badge,
   Button,
   Drawer,
+  FieldHelp,
   Table,
   TableBody,
   TableCell,
@@ -1641,10 +1642,13 @@ function BulkEditDrawer({
           placeholder={t('wizard.adjust.note')}
           className="w-full rounded-md border border-slate-300 bg-white px-2 py-1.5 text-sm dark:border-slate-700 dark:bg-slate-900"
         />
-        <label className="flex items-center gap-2 text-xs text-slate-500 dark:text-slate-400">
-          <input type="checkbox" checked={replace} onChange={(e) => setReplace(e.target.checked)} />
-          {t('wizard.adjust.replaceHelp')}
-        </label>
+        <span className="flex items-center gap-1.5">
+          <label className="flex items-center gap-2 text-sm text-slate-700 dark:text-slate-200">
+            <input type="checkbox" checked={replace} onChange={(e) => setReplace(e.target.checked)} />
+            {t('wizard.adjust.replace')}
+          </label>
+          <FieldHelp help={t('wizard.adjust.replaceHelp')} />
+        </span>
       </div>
     </Drawer>
   )
@@ -1891,10 +1895,13 @@ function StubDrawer({
                   placeholder={t('wizard.adjust.note')}
                   className="w-full rounded-md border border-slate-300 bg-white px-2 py-1.5 text-sm dark:border-slate-700 dark:bg-slate-900"
                 />
-                <label className="flex items-center gap-2 text-xs text-slate-500 dark:text-slate-400">
-                  <input type="checkbox" checked={adjReplace} onChange={(e) => setAdjReplace(e.target.checked)} />
-                  {t('wizard.adjust.replaceHelp')}
-                </label>
+                <span className="flex items-center gap-1.5">
+                  <label className="flex items-center gap-2 text-sm text-slate-700 dark:text-slate-200">
+                    <input type="checkbox" checked={adjReplace} onChange={(e) => setAdjReplace(e.target.checked)} />
+                    {t('wizard.adjust.replace')}
+                  </label>
+                  <FieldHelp help={t('wizard.adjust.replaceHelp')} />
+                </span>
                 <div className="flex justify-end">
                   <Button
                     size="sm"

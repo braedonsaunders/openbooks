@@ -117,10 +117,14 @@
       "dryRunHint": "Nothing was saved. Run Calculate to build the stubs for real.",
       "codes": {
         "setup": {
+          "pack": "No payroll country pack is installed.",
           "wageExpense": "No wage expense account is configured.",
           "netPay": "No net pay payable account is configured.",
           "laborClearing": "Wages post to labor clearing, but no clearing account is configured.",
-          "slot": "Statutory account not mapped: {detail}"
+          "slot": "Statutory account not mapped: {detail}",
+          "schedule": "No active pay schedule exists.",
+          "remittanceVendor": "Statutory remittance vendor not set: {detail}",
+          "paymentRail": "No configured EFT originator profile, and the cheque fallback is off — there is no way to pay anyone."
         },
         "period": {
           "missing": "No accounting period covers the pay date {detail}.",
@@ -276,6 +280,7 @@
       "component": "Component",
       "amount": "Amount",
       "note": "Reason / note (optional)",
+      "replace": "Replace calculated lines",
       "replaceHelp": "Replace this component’s calculated lines instead of adding to them",
       "add": "Add adjustment",
       "remove": "Remove",
@@ -495,6 +500,78 @@
       "both": "Email and print"
     }
   },
+  "setupWizard": {
+    "cta": {
+      "title": "Set up payroll",
+      "description": "A guided first run: country packs, control accounts, a pay schedule, remittance vendors, and pay rails — the same checks a pay run verifies before it calculates.",
+      "start": "Set up payroll",
+      "relaunch": "Setup wizard",
+      "missing": "{count, plural, one {# required item} other {# required items}} still to configure."
+    },
+    "back": "Back",
+    "next": "Next",
+    "close": "Close",
+    "finish": "Finish setup",
+    "packs": {
+      "title": "Install your country packs",
+      "description": "A pack is the statutory engine for one jurisdiction: its withholding math, pay components, holidays, and filings.",
+      "note": "Installing a pack seeds its statutory pay components and switches on that jurisdiction's withholding engine. Existing components are never overwritten, and a pack can be added later by re-running this wizard."
+    },
+    "accounts": {
+      "title": "Control accounts",
+      "description": "Where wages and net pay post, and the liability account behind each statutory withholding the installed packs declare.",
+      "wageExpenseHelp": "The expense account gross wages are debited to when a pay run commits.",
+      "netPayHelp": "The liability account net pay is credited to until the payday funds leave the bank.",
+      "slotHelp": "The liability account this statutory withholding accrues in until it is remitted."
+    },
+    "schedule": {
+      "title": "Pay schedule",
+      "description": "The pay calendar: how often people are paid and which period ends anchor the cycle.",
+      "addAnother": "Create another schedule",
+      "created": "Created pay schedule “{name}”.",
+      "name": "Name",
+      "nameHelp": "How this calendar appears on runs and employee profiles — e.g. “Biweekly — all staff”.",
+      "namePlaceholder": "Biweekly — all staff",
+      "frequency": "Frequency",
+      "frequencyHelp": "How often this calendar pays. Periods per year follows the statutory table for the frequency.",
+      "periods": "Periods per year",
+      "periodsHelp": "The statutory period count the withholding engine annualizes with — 52 weekly, 26 biweekly, 24 semi-monthly, 12 monthly.",
+      "anchor": "Anchor period end",
+      "anchorHelp": "Any real period-end date on this calendar; every other period is projected forward and backward from it.",
+      "noPermission": "Creating pay schedules needs the Setup permission. Ask an administrator to add one on the Pay schedules tab, then continue."
+    },
+    "vendors": {
+      "title": "Remittance vendors",
+      "description": "The vendor each statutory authority is remitted to, as declared by the installed packs.",
+      "help": "Withheld amounts accrue against this vendor so a remittance raises a normal payable to the authority.",
+      "note": "Vendors are ordinary vendor records — create the authority under Entities → Vendors first if it does not exist yet, then pick it here."
+    },
+    "rails": {
+      "title": "Pay rails",
+      "description": "How net pay leaves the bank on payday: direct deposit files, and what happens when an employee meant for EFT has no bank details.",
+      "eftTitle": "EFT originator profiles",
+      "eftNone": "No payroll-capable originator profile exists yet. Direct-deposit files need one; until then employees are paid by cheque.",
+      "needsConfig": "missing originator details",
+      "manageProfiles": "Manage originator profiles in Payment operations"
+    },
+    "review": {
+      "title": "Review & finish",
+      "description": "What this org's payroll now looks like, and what a pay run would still stop on.",
+      "packsLabel": "Country packs",
+      "scheduleLabel": "Pay schedules",
+      "remainingTitle": "Still to resolve",
+      "allClear": "All required configuration is in place. A pay run can calculate.",
+      "seedNote": "Finishing re-runs the statutory component seed for each installed pack — idempotent, and existing components are never overwritten."
+    },
+    "applying": {
+      "title": "Finishing payroll setup…",
+      "description": "Seeding statutory components."
+    },
+    "done": {
+      "title": "Payroll is ready",
+      "description": "Add employees and their payroll profiles, then start the first run."
+    }
+  },
   "settingsPage": {
     "title": "Payroll",
     "description": "Install payroll country packs, wire the posting accounts, and manage pay schedules, components, and union agreements.",
@@ -527,6 +604,19 @@
       "rqRemittancePartyIdHelp": "Vendor billed for Québec source deductions remitted on form TPZ-1015.R — a QC employee's QPP, QPP2 and QPIP route here, never to the CRA vendor."
     },
     "tabsAria": "Payroll setup sections",
+    "groups": {
+      "foundations": "Foundations",
+      "earnings": "Pay & earnings",
+      "entitlements": "Banks & entitlements",
+      "payday": "Payday"
+    },
+    "payday": {
+      "eftTitle": "EFT & bank files",
+      "eftDescription": "Direct deposit files are drawn from a payroll-capable originator profile. Profiles are managed in Payment operations; this panel reports their state.",
+      "eftNone": "No payroll-capable originator profile exists yet. Until one is configured, direct-deposit employees rely on the cheque fallback.",
+      "eftManage": "Manage originator profiles in Payment operations",
+      "eftNeedsConfig": "missing originator details"
+    },
     "tabs": {
       "packs": "Country packs",
       "accounts": "Accounts & posting",
@@ -540,7 +630,8 @@
       "derived": "Derived earnings",
       "derivedPreview": "Rule preview",
       "holidays": "Holidays",
-      "holidayCalendar": "Holiday calendar"
+      "holidayCalendar": "Holiday calendar",
+      "payday": "Payday"
     },
     "packs": {
       "installed": "Installed",
@@ -579,6 +670,7 @@
         "description": "Liability accounts for the amounts the CRA pack withholds and accrues. Each choice applies to every component the slot covers (employee and employer sides together).",
         "slots": {
           "income_tax": "Income tax payable",
+          "qc_income_tax": "Québec income tax payable (Revenu Québec)",
           "cpp": "CPP payable (includes CPP2)",
           "ei": "EI payable",
           "qpip": "QPIP payable (Quebec)",
@@ -716,93 +808,24 @@
   },
   "yearEnd": {
     "title": "Year-end",
-    "description": "T4 slips and Summary (Canada) and 941/W-2 worksheets (US), built from committed pay stubs — every box reconciles to the stub traces.",
-    "back": "Payroll",
+    "description": "Every filing the installed payroll packs declare, built from committed pay stubs — every box reconciles to the stub traces.",
     "yearLabel": "Tax year",
-    "print": "Print",
-    "t4": {
-      "title": "T4 slips (Canada)",
-      "description": "Per-employee statement of remuneration paid. CPP shown includes CPP2 (boxes 16 + 16A); Quebec employees report QPP/QPIP in the corresponding boxes.",
-      "empty": "No committed Canadian pay stubs for this year.",
-      "employee": "Employee",
-      "province": "Prov.",
-      "box14": "Box 14 income",
-      "box16": "Box 16/16A CPP",
-      "box18": "Box 18 EI",
-      "box22": "Box 22 tax",
-      "box24": "Box 24 EI insurable",
-      "box26": "Box 26 pensionable",
-      "box44": "Box 44 dues",
-      "provinceSplit": "One slip per province of employment"
-    },
-    "summary": {
-      "slips": "Slips",
-      "income": "Employment income",
-      "cpp": "CPP (employee + employer)",
-      "ei": "EI (employee + employer)",
-      "tax": "Income tax",
-      "remitted": "Remitted (posted bills)"
-    },
-    "us": {
-      "title": "United States",
-      "description": "Form 941 quarterly worksheet and W-2 box data for US-pack employees.",
-      "empty": "No committed US pay stubs for this year.",
-      "quarter": "Quarter",
-      "wages": "Wages",
-      "fit": "Federal tax",
-      "ssWages": "SS wages",
-      "ssTax": "SS tax (both)",
-      "medicareTax": "Medicare tax (both)",
-      "employee": "Employee",
-      "state": "State",
-      "box1": "Box 1 wages",
-      "box2": "Box 2 FIT",
-      "box3": "Box 3 SS wages",
-      "box4": "Box 4 SS tax",
-      "box5": "Box 5 Medicare wages",
-      "box6": "Box 6 Medicare tax",
-      "ein": "EIN"
-    },
-    "t4Xml": {
-      "download": "Download T4 XML",
-      "note": "Validate against the CRA schema for the filing year before transmitting."
-    },
-    "w2": {
-      "employee": "Employee",
-      "state": "State",
-      "box1": "Box 1 wages",
-      "box2": "Box 2 FIT",
-      "box3": "Box 3 SS wages",
-      "box4": "Box 4 SS tax",
-      "box5": "Box 5 Medicare wages",
-      "box6": "Box 6 Medicare tax"
+    "noFilings": "No payroll year-end filings are declared for this organization.",
+    "rowCount": "{count, plural, =0 {No rows} one {# row} other {# rows}}",
+    "notInstalled": "Pack not installed",
+    "emptyDefault": "No rows for this year.",
+    "slip": {
+      "description": "{label} · {year}",
+      "downloadPdf": "Download PDF"
     },
     "roe": {
-      "title": "Records of Employment",
-      "description": "Employees whose earnings were interrupted this year. Choose a reason for issue to include an employee in the ROE Web file.",
-      "employee": "Employee",
-      "lastDay": "Last day paid",
       "reason": "Reason for issue",
+      "reasonHelp": "Block 16 is the employer's declaration of why earnings stopped. Choosing a reason includes this employee in the ROE Web file; leaving it unset keeps them out.",
       "comment": "Comment",
-      "download": "Download ROE XML",
-      "note": "Validate against the ROE Web schema before transmitting.",
-      "reasons": {
-        "A": "Shortage of work / end of contract or season",
-        "B": "Strike or lockout",
-        "D": "Illness or injury",
-        "E": "Quit",
-        "F": "Maternity",
-        "G": "Retirement",
-        "H": "Work sharing",
-        "J": "Apprenticeship training",
-        "K": "Other (comment required)",
-        "M": "Dismissal or suspension",
-        "N": "Leave of absence",
-        "P": "Parental",
-        "Z": "Compassionate care / family caregiver"
-      }
-    },
-    "unsupportedFilings": "Additional returns this product does not produce"
+      "notIncluded": "Not included in the ROE Web file",
+      "included": "Included in the ROE Web file — reason {code}",
+      "commentRequired": "A comment is required for this reason code."
+    }
   },
   "register": {
     "title": "Payroll register",

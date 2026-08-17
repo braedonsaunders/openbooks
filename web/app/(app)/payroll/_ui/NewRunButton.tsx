@@ -184,7 +184,7 @@ export function NewRunButton({
       >
         <div className="space-y-4">
           <div className="space-y-1.5">
-            <Label htmlFor="run-type">{t('newRun.runType')}</Label>
+            <Label htmlFor="run-type" help={t(`newRun.runTypeHint.${runType}`)}>{t('newRun.runType')}</Label>
             <Select
               id="run-type"
               value={runType}
@@ -194,7 +194,6 @@ export function NewRunButton({
               <option value="bonus">{t('runType.bonus')}</option>
               <option value="termination">{t('runType.termination')}</option>
             </Select>
-            <p className="text-xs text-slate-500 dark:text-slate-400">{t(`newRun.runTypeHint.${runType}`)}</p>
           </div>
           {schedules.length > 1 && (
             <div className="space-y-1.5">
@@ -208,7 +207,7 @@ export function NewRunButton({
           )}
           {runType === 'termination' && (
             <div className="space-y-1.5">
-              <Label>{t('newRun.employees')}</Label>
+              <Label help={t('newRun.employeesHint')}>{t('newRun.employees')}</Label>
               {scopeCandidates.length === 0 ? (
                 <p className="text-xs text-slate-500 dark:text-slate-400">{t('newRun.noTerminated')}</p>
               ) : (
@@ -232,7 +231,6 @@ export function NewRunButton({
                       </label>
                     ))}
                   </div>
-                  <p className="text-xs text-slate-500 dark:text-slate-400">{t('newRun.employeesHint')}</p>
                 </>
               )}
             </div>
@@ -256,13 +254,12 @@ export function NewRunButton({
             </div>
           </div>
           <div className="space-y-1.5">
-            <Label htmlFor="run-paydate">{t('columns.payDate')}</Label>
+            <Label htmlFor="run-paydate" help={t('newRun.payDateHint')}>{t('columns.payDate')}</Label>
             <input
               id="run-paydate" type="date" value={shown.payDate}
               onChange={(e) => setField('payDate', e.target.value)}
               className="h-9 w-full rounded-md border border-slate-200 bg-white px-2 text-sm dark:border-slate-700 dark:bg-slate-950"
             />
-            <p className="text-xs text-slate-500 dark:text-slate-400">{t('newRun.payDateHint')}</p>
           </div>
           {badWindow && (shown.start || shown.end) ? (
             <p className="text-sm text-red-600 dark:text-red-400">{t('newRun.invalidWindow')}</p>

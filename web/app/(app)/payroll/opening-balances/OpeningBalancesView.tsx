@@ -6,7 +6,7 @@ import { useRouter } from 'next/navigation'
 import { useTranslations } from 'next-intl'
 import { toast } from 'sonner'
 import { AlertTriangle, Download, Lock, Upload } from 'lucide-react'
-import { Badge, Button, Input, Select, cn } from '@openbooks/ui'
+import { Badge, Button, FieldHelp, Input, Select, cn } from '@openbooks/ui'
 import type {
   OpeningBalanceRow,
   OpeningBalanceYear,
@@ -161,6 +161,12 @@ export function OpeningBalancesView({
             <option key={option} value={option}>{option}</option>
           ))}
         </Select>
+        <FieldHelp
+          help={text(
+            'hint',
+            'Copy these from the outgoing provider’s year-to-date report as at the day before your first pay period here. Leave an employee blank if they had no pay from you earlier in the year.',
+          )}
+        />
         <Button
           variant={onlyMissing ? 'default' : 'outline'}
           size="sm"
@@ -195,13 +201,6 @@ export function OpeningBalancesView({
         </div>
       </div>
 
-      <p className="max-w-4xl text-sm text-slate-500 dark:text-slate-400">
-        {text(
-          'hint',
-          'Copy these from the outgoing provider’s year-to-date report as at the day before your first pay period here. Leave an employee blank if they had no pay from you earlier in the year.',
-        )}
-      </p>
-
       {errors.length > 0 && (
         <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm dark:border-red-900/60 dark:bg-red-950/40">
           <p className="flex items-center gap-2 font-medium text-red-800 dark:text-red-300">
@@ -229,12 +228,14 @@ export function OpeningBalancesView({
               {visibleFields.map((field) => (
                 <th
                   key={field.key}
-                  title={field.help}
                   className="px-3 py-2 text-right font-medium whitespace-nowrap text-slate-600 dark:text-slate-300"
                 >
-                  {t.has(`openingBalances.fields.${field.key}` as never)
-                    ? t(`openingBalances.fields.${field.key}` as never)
-                    : field.label}
+                  <span className="inline-flex items-center gap-1">
+                    {t.has(`openingBalances.fields.${field.key}` as never)
+                      ? t(`openingBalances.fields.${field.key}` as never)
+                      : field.label}
+                    <FieldHelp help={field.help} />
+                  </span>
                 </th>
               ))}
             </tr>

@@ -109,6 +109,48 @@ export interface PayrollFilingIssue {
   maxSelection: number;
 }
 
+/** One box of a filing's slip facsimile — the statutory form's own box
+ *  number/code, printed label and value (an amount, a date, or text). */
+export interface PayrollSlipBox {
+  code: string;
+  label: string;
+  value: string;
+  /** Render as an emphasized/computed total line (the form's bold lines). */
+  emphasis?: boolean;
+}
+
+/**
+ * One population row rendered as its statutory slip — the data the generic
+ * surface feeds the shared form-faithful facsimile renderer (the same
+ * pathway the indirect-tax returns print through). Everything here is the
+ * form's own vocabulary: box codes, printed labels, identification fields.
+ */
+export interface PayrollFilingSlipData {
+  /** Facsimile layout key (the web layer's TAX_FORM_LAYOUTS entry, e.g.
+   *  "CA_T4"). A code with no layout entry renders via the generic
+   *  government-form layout — declared data, never a bespoke table. */
+  formCode: string;
+  /** The statutory form's printed name. */
+  formName: string;
+  /** The form's own printed identifier ("T4", "RL-1", "Form W-2"). */
+  formNumber?: string;
+  /** Identification fields printed above the box grid (employee, account…). */
+  headerFields: { label: string; value: string }[];
+  boxes: PayrollSlipBox[];
+  /** Instruction/disclosure notes printed on the slip (published gaps live
+   *  here — on the paper they qualify, not as loose page prose). */
+  notes?: string[];
+}
+
+/** Declared when the filing renders one population row as a slip. */
+export interface PayrollFilingSlip {
+  /**
+   * Build one row's slip by the population's `rowKey` value. Throws
+   * PayrollError naming the problem (unknown row, undeclarable block…).
+   */
+  build(orgId: string, taxYear: number, rowId: string): Promise<PayrollFilingSlipData>;
+}
+
 export interface PayrollYearEndFiling {
   /** Stable key within the pack ("t4", "roe", "941", "w2", "p60"). */
   key: string;
@@ -118,6 +160,8 @@ export interface PayrollYearEndFiling {
   emptyText?: string;
   /** The rows that belong on this filing for the year. */
   population(orgId: string, taxYear: number): Promise<PayrollFilingData>;
+  /** One row rendered as its statutory slip, when the pack declares it. */
+  slip?: PayrollFilingSlip;
   /** The electronic file, when the pack produces one. */
   download?: PayrollFilingDownload;
   /** Why no file exists, when it does not — named, never implied. */
