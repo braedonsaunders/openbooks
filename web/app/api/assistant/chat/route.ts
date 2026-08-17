@@ -8,6 +8,7 @@ import { getOrgAiConfig } from "../../../../lib/assistant/ai-config";
 import { runAgentTurn } from "../../../../lib/assistant/agent";
 import { buildToolRegistry } from "../../../../lib/assistant/registry";
 import { assistantSystemPrompt } from "../../../../lib/assistant/system-prompt";
+import { orgFiscalContext } from "../../../../lib/fiscal";
 import {
   appendMessage,
   createConversation,
@@ -91,12 +92,14 @@ export async function POST(req: Request): Promise<Response> {
     sql`select base_currency from orgs where id = ${authz.user.orgId}`,
   )) as unknown as { rows: { base_currency: string }[] };
 
+  const today = new Date().toISOString().slice(0, 10);
   const tools = buildToolRegistry(authz);
   const system = assistantSystemPrompt({
     orgName: aiConfig?.org?.name ?? null,
     baseCurrency: org.rows[0]?.base_currency ?? null,
     userName: authz.user.name,
-    today: new Date().toISOString().slice(0, 10),
+    today,
+    fiscal: await orgFiscalContext(today, authz.user.orgId),
     canWrite: can(authz, "assistant.write"),
   });
 

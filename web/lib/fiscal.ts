@@ -1,7 +1,7 @@
 import 'server-only'
 import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/db.ts'
-import { fiscalYearOf } from '@openbooks/reports'
+import { fiscalContextFor, fiscalYearOf, type FiscalContext } from '@openbooks/reports'
 import { resolveOrgId } from './org-scope'
 
 /**
@@ -15,6 +15,14 @@ import { resolveOrgId } from './org-scope'
 
 // Re-export the pure helpers so existing `./fiscal` imports keep working.
 export { fiscalYearOf, fiscalYearRangeFor } from '@openbooks/reports'
+
+/** The org's fiscal position (current FY / FYTD / quarter / PYTD) as of `today`. */
+export async function orgFiscalContext(
+  today = new Date().toISOString().slice(0, 10),
+  orgId?: string,
+): Promise<FiscalContext> {
+  return fiscalContextFor(today, await fiscalStartMonth(orgId))
+}
 
 export async function fiscalStartMonth(orgId?: string): Promise<number> {
   const activeOrgId = await resolveOrgId(orgId)

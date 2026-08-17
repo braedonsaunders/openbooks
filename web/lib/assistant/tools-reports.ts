@@ -18,7 +18,16 @@ import { resolvePeriod } from "../periods";
 import { budgetScenarioOptions } from "../budget-report";
 import { loadBudgetScenario } from "../budgets";
 import type { AssistantToolDef, ToolResult } from "./types";
-import { dateInput, uuidInput, capList, today } from "./tools-shared";
+import {
+  dateInput,
+  uuidInput,
+  capList,
+  today,
+  periodPresetInput,
+  rangeInputFields,
+  resolveToolRange,
+  type RangeArgs,
+} from "./tools-shared";
 
 /**
  * Reporting-surface tools: the saved-report catalog and runner (one execution
@@ -100,16 +109,17 @@ const MAX_REPORT_ROWS = 200;
 const runReport: AssistantToolDef = {
   name: "run_report",
   description:
-    "Execute any saved report definition (built-in statement or custom report-studio report) through the same resolver the export route and scheduler use, returning its title, summary figures, and tabular groups (rows capped). Optional custom date range overrides the definition's period. Read-only.",
+    "Execute any saved report definition (built-in statement or custom report-studio report) through the same resolver the export route and scheduler use, returning its title, summary figures, and tabular groups (rows capped). A `period` preset (fiscal-calendar-resolved) or custom date range overrides the definition's period. Read-only.",
   category: "read",
   gate: { mode: "anyOf", perms: ["reports.read"] },
   inputSchema: z.object({
     definitionId: uuidInput,
+    period: periodPresetInput.optional(),
     fromDate: dateInput.optional(),
     toDate: dateInput.optional(),
   }),
   execute: async (raw, authz): Promise<ToolResult> => {
-    const a = raw as { definitionId: string; fromDate?: string; toDate?: string };
+    const a = raw as RangeArgs & { definitionId: string };
     const orgId = authz.user.orgId;
     const def = (await db.execute(sql`
       select query->>'entity' as entity from report_definitions
@@ -119,7 +129,9 @@ const runReport: AssistantToolDef = {
     if (!entityPermitted(authz, def.rows[0].entity)) return { ok: false, error: "forbidden" };
 
     const p = new URLSearchParams();
-    if (a.fromDate && a.toDate) {
+    if (a.period && a.period !== "custom") {
+      p.set("period", a.period);
+    } else if (a.fromDate && a.toDate) {
       p.set("period", "custom");
       p.set("from", a.fromDate);
       p.set("to", a.toDate);
@@ -162,17 +174,18 @@ const runReport: AssistantToolDef = {
 const generalLedgerTool: AssistantToolDef = {
   name: "general_ledger",
   description:
-    "General ledger for a posting-date range: per-account opening balance, posted lines in date order with running balance, and closing balance. Scope to one account with accountId; unscoped runs return more accounts with fewer lines each. Read-only.",
+    "General ledger for a posting-date range: per-account opening balance, posted lines in date order with running balance, and closing balance. Scope to one account with accountId; unscoped runs return more accounts with fewer lines each. For relative periods pass a `period` preset (fiscal-calendar-resolved). Read-only.",
   category: "read",
   gate: { mode: "anyOf", perms: ["reports.read", "gl.read"] },
   inputSchema: z.object({
-    fromDate: dateInput,
-    toDate: dateInput,
+    ...rangeInputFields,
     accountId: uuidInput.optional(),
   }),
   execute: async (raw, authz): Promise<ToolResult> => {
-    const a = raw as { fromDate: string; toDate: string; accountId?: string };
-    const r = await generalLedger(a.fromDate, a.toDate, {
+    const a = raw as RangeArgs & { accountId?: string };
+    const range = await resolveToolRange(authz.user.orgId, a);
+    if ("error" in range) return { ok: false, error: range.error };
+    const r = await generalLedger(range.from, range.to, {
       accountId: a.accountId,
       orgId: authz.user.orgId,
       maxLines: a.accountId ? MAX_REPORT_ROWS : 1000,
@@ -182,6 +195,7 @@ const generalLedgerTool: AssistantToolDef = {
     return {
       ok: true,
       data: {
+        periodLabel: range.label,
         from: r.from,
         to: r.to,
         truncated: r.truncated || accountsTruncated,
@@ -196,7 +210,7 @@ const generalLedgerTool: AssistantToolDef = {
           linesTruncated: acct.lines.length > perAccountCap,
           lines: acct.lines.slice(0, perAccountCap),
         })),
-        href: `/reports/general-ledger?period=custom&from=${a.fromDate}&to=${a.toDate}`,
+        href: `/reports/general-ledger?period=custom&from=${range.from}&to=${range.to}`,
       },
     };
   },
@@ -239,24 +253,26 @@ const agingDetailTool: AssistantToolDef = {
 const cashFlowIndirectTool: AssistantToolDef = {
   name: "cash_flow_indirect",
   description:
-    "Indirect-method cash flow statement for a posting-date range: net income, non-cash adjustments, per-account working-capital movements, investing and financing sections, FX effect, and net change in cash. Read-only.",
+    "Indirect-method cash flow statement for a posting-date range: net income, non-cash adjustments, per-account working-capital movements, investing and financing sections, FX effect, and net change in cash. For relative periods pass a `period` preset (fiscal-calendar-resolved). Read-only.",
   category: "read",
   gate: { mode: "anyOf", perms: ["reports.read"] },
-  inputSchema: z.object({ fromDate: dateInput, toDate: dateInput }),
+  inputSchema: z.object({ ...rangeInputFields }),
   execute: async (raw, authz): Promise<ToolResult> => {
-    const a = raw as { fromDate: string; toDate: string };
-    const r = await cashFlowIndirect(a.fromDate, a.toDate, undefined, authz.user.orgId);
+    const range = await resolveToolRange(authz.user.orgId, raw as RangeArgs);
+    if ("error" in range) return { ok: false, error: range.error };
+    const r = await cashFlowIndirect(range.from, range.to, undefined, authz.user.orgId);
     return {
       ok: true,
       data: {
-        fromDate: a.fromDate,
-        toDate: a.toDate,
+        periodLabel: range.label,
+        fromDate: range.from,
+        toDate: range.to,
         ...r,
         adjustments: capList(r.adjustments, 50).items,
         workingCapital: capList(r.workingCapital, 50).items,
         investing: capList(r.investing, 50).items,
         financing: capList(r.financing, 50).items,
-        href: `/reports/cash-flow-indirect?period=custom&from=${a.fromDate}&to=${a.toDate}`,
+        href: `/reports/cash-flow-indirect?period=custom&from=${range.from}&to=${range.to}`,
       },
     };
   },
@@ -271,17 +287,18 @@ const partnerStatementTool: AssistantToolDef = {
   inputSchema: z.object({
     partyId: uuidInput,
     side: z.enum(["ar", "ap"]),
-    fromDate: dateInput,
-    toDate: dateInput,
+    ...rangeInputFields,
   }),
   execute: async (raw, authz): Promise<ToolResult> => {
-    const a = raw as { partyId: string; side: "ar" | "ap"; fromDate: string; toDate: string };
+    const a = raw as RangeArgs & { partyId: string; side: "ar" | "ap" };
     if (!can(authz, a.side === "ar" ? "ar.read" : "ap.read")) {
       return { ok: false, error: "forbidden" };
     }
+    const range = await resolveToolRange(authz.user.orgId, a);
+    if ("error" in range) return { ok: false, error: range.error };
     const r = await partnerStatement(a.partyId, authz.user.orgId, {
-      from: a.fromDate,
-      to: a.toDate,
+      from: range.from,
+      to: range.to,
       side: a.side,
     });
     const { items: lines, truncated } = capList(r.lines);

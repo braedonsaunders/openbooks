@@ -1,5 +1,8 @@
 import "server-only";
 import { z } from "zod";
+import { PERIOD_PRESET_IDS, type DateRange } from "@openbooks/reports";
+import { fiscalStartMonth } from "../fiscal";
+import { resolveRangeArgs, type RangeArgs } from "./period-range";
 
 /**
  * Shared input atoms and result-shaping helpers for the domain tool files
@@ -13,6 +16,34 @@ export const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/;
 
 export const dateInput = z.string().regex(ISO_DATE, "YYYY-MM-DD");
 export const uuidInput = z.string().regex(UUID_RE, "uuid");
+
+/** Named fiscal-aware period, resolved server-side by the same resolver the
+ *  report filter bar uses — the org's fiscal start month is applied here, so
+ *  the model never computes fiscal boundaries itself. */
+export const periodPresetInput = z
+  .enum(PERIOD_PRESET_IDS as [string, ...string[]])
+  .describe(
+    "Named period resolved against the org's fiscal calendar (e.g. this_fiscal_year_to_date, last_fiscal_quarter, this_calendar_year_to_date). Always prefer this over hand-computed dates for relative period language.",
+  );
+
+/** Shared schema fields for every range-taking tool: a preset OR an explicit
+ *  custom date pair. */
+export const rangeInputFields = {
+  period: periodPresetInput.optional(),
+  fromDate: dateInput.optional().describe("Custom range start; only when no `period` preset fits"),
+  toDate: dateInput.optional().describe("Custom range end; only when no `period` preset fits"),
+};
+
+export type { RangeArgs };
+
+/** Resolve a tool's period/fromDate/toDate inputs to exact inclusive dates
+ *  using the org's configured fiscal start month. */
+export async function resolveToolRange(
+  orgId: string,
+  a: RangeArgs,
+): Promise<DateRange | { error: string }> {
+  return resolveRangeArgs(a, await fiscalStartMonth(orgId), today());
+}
 
 export function today(): string {
   return new Date().toISOString().slice(0, 10);
