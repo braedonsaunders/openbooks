@@ -156,6 +156,7 @@ function buildUsPackFilings(): PayrollPackFilings {
     {
       key: "941",
       label: "Form 941 quarterly worksheet",
+      cadence: "quarterly",
       description: "Form 941 quarterly worksheet for US-pack employees, one return per EIN.",
       emptyText: "No committed US pay stubs for this year.",
       population: (orgId, taxYear) => form941Population(orgId, taxYear),
@@ -167,6 +168,7 @@ function buildUsPackFilings(): PayrollPackFilings {
     {
       key: "w2",
       label: "W-2 box data",
+      cadence: "annual",
       description: "W-2 box data for US-pack employees, filed per EIN.",
       emptyText: "No committed US pay stubs for this year.",
       population: (orgId, taxYear) => w2Population(orgId, taxYear),

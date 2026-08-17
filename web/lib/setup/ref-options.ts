@@ -64,6 +64,19 @@ export async function loadEntityOptions(source: string, orgId: string): Promise<
        where org_id = ${orgId} and status = 'active' order by unit_number`)) as any
     return units.rows as RefOption[]
   }
+  if (source === 'job-titles') {
+    // Distinct free-text job titles from the active employee roster — the
+    // type-ahead corpus for `stringArray` title filters. Rule matching is
+    // case- and whitespace-insensitive, so offer ONE representative per
+    // normalized title (first by dictionary order) instead of every spelling.
+    const titles = (await db.execute(sql`
+      select distinct on (lower(regexp_replace(trim(job_title), '\\s+', ' ', 'g')))
+             trim(job_title) as value, trim(job_title) as label
+        from employee_roles
+       where org_id = ${orgId} and is_active and coalesce(trim(job_title), '') <> ''
+       order by lower(regexp_replace(trim(job_title), '\\s+', ' ', 'g')), trim(job_title)`)) as any
+    return titles.rows as RefOption[]
+  }
   if (source === 'trades') {
     // `trades` is a bare reference list with no setup-registry entry of its
     // own, but it is a legitimate scope key (labor_cost_rates uses it too).

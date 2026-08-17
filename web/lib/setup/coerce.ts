@@ -86,6 +86,40 @@ export function coerceField(field: SetupField, raw: unknown): Coerced | { error:
       if (!naturalKeyed && !UUID_RE.test(s)) return { error: `${field.key} must reference a valid record` }
       return { column, value: s }
     }
+    case 'stringArray': {
+      // A jsonb text[] column. Accept a real array (the drawer's TagInput) or
+      // a JSON-encoded array string (imports / API clients). The bound value
+      // is a JSON STRING, never a JS array — node-postgres renders a JS array
+      // as a Postgres array literal ({"a","b"}), which is invalid jsonb.
+      let list: unknown = raw
+      if (!present) list = []
+      else if (typeof raw === 'string') {
+        try {
+          list = JSON.parse(raw)
+        } catch {
+          return { error: `${field.key} must be a list of text values` }
+        }
+      }
+      if (!Array.isArray(list) || list.some((entry) => typeof entry !== 'string')) {
+        return { error: `${field.key} must be a list of text values` }
+      }
+      // Deduplicate the way the engines match free text: case- and
+      // whitespace-insensitive, keeping the first spelling entered.
+      const seen = new Set<string>()
+      const clean: string[] = []
+      for (const entry of list) {
+        const trimmed = entry.replace(/\s+/g, ' ').trim()
+        if (!trimmed) continue
+        const key = trimmed.toLowerCase()
+        if (seen.has(key)) continue
+        seen.add(key)
+        clean.push(trimmed)
+      }
+      if (field.required && clean.length === 0) return { error: `${field.key} is required` }
+      // An empty list is written as [] (the column default) — for these
+      // filter columns "empty" is a real statement (everyone qualifies).
+      return { column, value: JSON.stringify(clean) }
+    }
     case 'json': {
       if (!present) return { column, value: null }
       if (typeof raw === 'object') return { column, value: raw }

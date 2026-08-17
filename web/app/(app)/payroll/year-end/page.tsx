@@ -38,8 +38,13 @@ export default async function PayrollYearEndPage({
   const requested = Number(pickString(sp.year))
   const year = Number.isInteger(requested) && requested >= 2020 && requested <= 2100 ? requested : currentYear
 
+  // Year-end shows ANNUAL and QUARTERLY returns only. Separation documents
+  // (the ROE, a P45) are due per interruption of earnings — within days of
+  // the employee event — and live on /payroll/separations, never here.
   const filings = await orgYearEndFilings(authz.user.orgId, year)
-  const sections = filings.filter((filing) => filing.installed || filing.data.rows.length > 0)
+  const sections = filings.filter(
+    (filing) => filing.cadence !== 'separation' && (filing.installed || filing.data.rows.length > 0),
+  )
 
   const moduleTabs = await groupTabs('payroll', '/payroll/year-end')
 

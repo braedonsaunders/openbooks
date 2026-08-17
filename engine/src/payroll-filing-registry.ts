@@ -36,6 +36,25 @@ import { PAYROLL_COUNTRY_PACKS, PayrollPackError } from "./payroll/packs.ts";
 // Declaration types
 // ---------------------------------------------------------------------------
 
+/**
+ * When a filing is due — the deadline class that decides which surface owns
+ * it. REQUIRED, like a component's `assessedOn` (packs.ts): a new pack must
+ * answer, because the generic layer cannot guess a statute's rhythm.
+ *
+ *   - `annual`: one filing per employer-year (T4, W-2, RL-1, P60).
+ *   - `quarterly`: one filing per employer-quarter (Form 941).
+ *   - `separation`: one filing per interruption of earnings, due within days
+ *     of the employee event (the ROE, a UK P45) — an event document, never a
+ *     year-end one, so the year-end surface must not list it.
+ */
+export type PayrollFilingCadence = "annual" | "quarterly" | "separation";
+
+export const PAYROLL_FILING_CADENCES: readonly PayrollFilingCadence[] = [
+  "annual",
+  "quarterly",
+  "separation",
+];
+
 /** One kind of filing identity the pack's employers register for. */
 export interface PayrollFilingProgramType {
   /** payroll_filing_accounts.program_type value ("ca_rp", "us_ein", …). */
@@ -156,6 +175,12 @@ export interface PayrollYearEndFiling {
   key: string;
   /** The statutory form's name — a jurisdictional proper noun. */
   label: string;
+  /**
+   * The filing's deadline class. Required — the surfaces split on it (the
+   * year-end page shows annual + quarterly; separation filings live on the
+   * Separations surface and the termination run's Finish step).
+   */
+  cadence: PayrollFilingCadence;
   description?: string;
   emptyText?: string;
   /** The rows that belong on this filing for the year. */
@@ -229,6 +254,7 @@ export function registerPayrollFilings(declaration: PayrollPackFilings): void {
       `payroll filings for ${declaration.country} are already declared — a country has exactly one filing declaration`,
     );
   }
+  for (const filing of declaration.yearEnd) assertCadence(declaration.country, filing);
   const filingKeys = declaration.yearEnd.map((filing) => filing.key);
   if (new Set(filingKeys).size !== filingKeys.length) {
     throw new PayrollPackError(`the ${declaration.country} filing declaration repeats a filing key`);
@@ -248,6 +274,7 @@ export function registerPayrollFilings(declaration: PayrollPackFilings): void {
  * through the same enumeration as everything else.
  */
 export function registerYearEndFiling(country: string, filing: PayrollYearEndFiling): void {
+  assertCadence(country, filing);
   const pack = payrollPackFilings(country); // refuses an undeclared pack by name
   const declared = pack.yearEnd.find((existing) => existing.key === filing.key);
   if (declared) {
@@ -261,6 +288,17 @@ export function registerYearEndFiling(country: string, filing: PayrollYearEndFil
     );
   }
   EXTRA_FILINGS.set(country, [...(EXTRA_FILINGS.get(country) ?? []), filing]);
+}
+
+/** A filing without a declared cadence cannot be routed to a surface. */
+function assertCadence(country: string, filing: PayrollYearEndFiling): void {
+  if (!PAYROLL_FILING_CADENCES.includes(filing.cadence)) {
+    throw new PayrollPackError(
+      `the ${country} "${filing.key}" filing declares no cadence — declare `
+      + `${PAYROLL_FILING_CADENCES.join(", ")} so the filing lands on the right surface `
+      + "(a separation document must never masquerade as a year-end return)",
+    );
+  }
 }
 
 /** Remove a non-built-in registration (test isolation only). */
