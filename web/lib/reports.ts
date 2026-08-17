@@ -561,14 +561,32 @@ export async function cashFlow(from: string, to: string, dims?: DimFilter, orgId
   const netChange = decimalSum(sections.map((section) => section.subtotal));
 
   // Opening/closing cash straight from the bank accounts, proving the tie-out.
-  const cash = (await db.execute(sql`
-    select coalesce(sum(l.amount) filter (where e.posting_date < ${from}), 0) as opening,
-           coalesce(sum(l.amount) filter (where e.posting_date <= ${to}), 0) as closing
-      from journal_lines l
-      join journal_entries e on e.id = l.entry_id and e.org_id = l.org_id and e.status in ('posted', 'reversed')
-      join accounts a on a.id = l.account_id and a.org_id = l.org_id
-     where l.org_id = ${resolvedOrgId} and a.type = 'asset_bank' and ${dimWhere(dims)}
-  `)) as unknown as { rows: { opening: string; closing: string }[] };
+  const cashBuckets = glSummaryEligibleDims(dims)
+    ? glActivityBuckets(resolvedOrgId, {
+        minDate: null,
+        maxDate: to,
+        boundaries: [{ date: from, kind: 'start' }],
+      })
+    : null;
+  const cash = (await db.execute(
+    cashBuckets
+      // Inception-to-date bank movement from the summary; the two report
+      // boundaries are the only months that fall back to the lines.
+      ? sql`
+          select coalesce(sum(b.amount) filter (where b.d < ${from}), 0) as opening,
+                 coalesce(sum(b.amount) filter (where b.d <= ${to}), 0) as closing
+            from ${cashBuckets} b
+            join accounts a on a.id = b.account_id and a.org_id = ${resolvedOrgId}
+           where a.type = 'asset_bank'
+             ${dims?.subsidiaryIds?.length ? sql`and b.subsidiary_id = any(${`{${dims.subsidiaryIds.join(',')}}`}::uuid[])` : sql``}`
+      : sql`
+          select coalesce(sum(l.amount) filter (where e.posting_date < ${from}), 0) as opening,
+                 coalesce(sum(l.amount) filter (where e.posting_date <= ${to}), 0) as closing
+            from journal_lines l
+            join journal_entries e on e.id = l.entry_id and e.org_id = l.org_id and e.status in ('posted', 'reversed')
+            join accounts a on a.id = l.account_id and a.org_id = l.org_id
+           where l.org_id = ${resolvedOrgId} and a.type = 'asset_bank' and ${dimWhere(dims)}`,
+  )) as unknown as { rows: { opening: string; closing: string }[] };
   const openingCash = cash.rows[0]?.opening ?? ZERO;
   const closingCash = cash.rows[0]?.closing ?? ZERO;
 
@@ -705,15 +723,28 @@ export async function cashFlowIndirect(
     )`;
 
   // Net income for the window (credit-normal positive), posted only.
-  const ni = (await db.execute(sql`
-    select -coalesce(sum(l.amount), 0) as ni
-      from journal_lines l
-      join journal_entries e on e.id = l.entry_id and e.org_id = l.org_id
-      join accounts a on a.id = l.account_id and a.org_id = l.org_id
-     where l.org_id = ${resolvedOrgId} and e.status in ('posted', 'reversed')
-       and e.posting_date >= ${from} and e.posting_date <= ${to}
-       and a.type in ${PNL_TYPES} and ${dim}
-  `)) as unknown as { rows: { ni: string }[] };
+  const niBuckets = glSummaryEligibleDims(dims)
+    ? glActivityBuckets(resolvedOrgId, { minDate: from, maxDate: to, boundaries: [] })
+    : null;
+  const ni = (await db.execute(
+    niBuckets
+      // Window P&L from the summary; only months the report boundaries split
+      // are read from the lines.
+      ? sql`
+          select -coalesce(sum(b.amount), 0) as ni
+            from ${niBuckets} b
+            join accounts a on a.id = b.account_id and a.org_id = ${resolvedOrgId}
+           where a.type in ${PNL_TYPES}
+             ${dims?.subsidiaryIds?.length ? sql`and b.subsidiary_id = any(${`{${dims.subsidiaryIds.join(',')}}`}::uuid[])` : sql``}`
+      : sql`
+          select -coalesce(sum(l.amount), 0) as ni
+            from journal_lines l
+            join journal_entries e on e.id = l.entry_id and e.org_id = l.org_id
+            join accounts a on a.id = l.account_id and a.org_id = l.org_id
+           where l.org_id = ${resolvedOrgId} and e.status in ('posted', 'reversed')
+             and e.posting_date >= ${from} and e.posting_date <= ${to}
+             and a.type in ${PNL_TYPES} and ${dim}`,
+  )) as unknown as { rows: { ni: string }[] };
   const netIncome = ni.rows[0]?.ni ?? ZERO;
 
   // Add-backs. Sign convention throughout: the sum of the entry's debit-signed
@@ -870,14 +901,32 @@ export async function cashFlowIndirect(
   const financingTotal = decimalSum(financing.map((line) => line.amount));
   const netChange = decimalSum([operating, investingTotal, financingTotal, fxEffectOnCash]);
 
-  const cash = (await db.execute(sql`
-    select coalesce(sum(l.amount) filter (where e.posting_date < ${from}), 0) as opening,
-           coalesce(sum(l.amount) filter (where e.posting_date <= ${to}), 0) as closing
-      from journal_lines l
-      join journal_entries e on e.id = l.entry_id and e.org_id = l.org_id and e.status in ('posted', 'reversed')
-      join accounts a on a.id = l.account_id and a.org_id = l.org_id
-     where l.org_id = ${resolvedOrgId} and a.type = 'asset_bank' and ${dimWhere(dims)}
-  `)) as unknown as { rows: { opening: string; closing: string }[] };
+  const cashBuckets = glSummaryEligibleDims(dims)
+    ? glActivityBuckets(resolvedOrgId, {
+        minDate: null,
+        maxDate: to,
+        boundaries: [{ date: from, kind: 'start' }],
+      })
+    : null;
+  const cash = (await db.execute(
+    cashBuckets
+      // Inception-to-date bank movement from the summary; the two report
+      // boundaries are the only months that fall back to the lines.
+      ? sql`
+          select coalesce(sum(b.amount) filter (where b.d < ${from}), 0) as opening,
+                 coalesce(sum(b.amount) filter (where b.d <= ${to}), 0) as closing
+            from ${cashBuckets} b
+            join accounts a on a.id = b.account_id and a.org_id = ${resolvedOrgId}
+           where a.type = 'asset_bank'
+             ${dims?.subsidiaryIds?.length ? sql`and b.subsidiary_id = any(${`{${dims.subsidiaryIds.join(',')}}`}::uuid[])` : sql``}`
+      : sql`
+          select coalesce(sum(l.amount) filter (where e.posting_date < ${from}), 0) as opening,
+                 coalesce(sum(l.amount) filter (where e.posting_date <= ${to}), 0) as closing
+            from journal_lines l
+            join journal_entries e on e.id = l.entry_id and e.org_id = l.org_id and e.status in ('posted', 'reversed')
+            join accounts a on a.id = l.account_id and a.org_id = l.org_id
+           where l.org_id = ${resolvedOrgId} and a.type = 'asset_bank' and ${dimWhere(dims)}`,
+  )) as unknown as { rows: { opening: string; closing: string }[] };
   const openingCash = cash.rows[0]?.opening ?? ZERO;
   const closingCash = cash.rows[0]?.closing ?? ZERO;
 
