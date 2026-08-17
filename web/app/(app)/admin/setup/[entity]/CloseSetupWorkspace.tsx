@@ -109,7 +109,9 @@ function dataText(t: ReturnType<typeof useTranslations>, value: string | null | 
 }
 
 function Field({ label, children, hint }: { label: string; children: React.ReactNode; hint?: string }) {
-  return <div className="space-y-1.5"><Label>{label}</Label>{children}{hint ? <p className="text-xs text-slate-500 dark:text-slate-400">{hint}</p> : null}</div>;
+  // Descriptive hints live in the label's `?` popover (FieldLabel); inline
+  // text under a control is reserved for validation/state messages.
+  return <div className="space-y-1.5"><Label help={hint}>{label}</Label>{children}</div>;
 }
 
 function Check({ checked, onChange, children }: { checked: boolean; onChange: (checked: boolean) => void; children: React.ReactNode }) {

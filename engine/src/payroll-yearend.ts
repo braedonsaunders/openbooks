@@ -735,6 +735,15 @@ export interface YearEndFilingSection {
   /** The filing's pack is on the org's installed payroll countries. */
   installed: boolean;
   data: PayrollFilingData;
+  /** The filing declares a per-row slip render (the surface may open one). */
+  hasSlip: boolean;
+  /**
+   * The population could not be built for this org-year, in the builder's own
+   * words (e.g. "no CRA maximums for tax year 2025 …"). The refusal is a
+   * named state the surface renders in place of the rows — one filing's
+   * refusal must not take down every other pack's section.
+   */
+  populationRefusal: string | null;
   /** Present when the pack declares an electronic file for this filing. */
   download: { label: string; note: string | null } | null;
   /** Why there is no file, when the pack says so explicitly. */
@@ -765,6 +774,17 @@ export async function orgYearEndFilings(
   const sections: YearEndFilingSection[] = [];
   for (const pack of declaredPayrollFilings()) {
     for (const filing of pack.yearEnd) {
+      // A population that refuses (an unknown year's caps, an undeclared
+      // mapping) becomes THAT filing's named refusal, not a page-wide crash:
+      // the CA pack's 2025 refusal must not hide the US pack's 2025 data.
+      let data: PayrollFilingData = { rowKey: "rowId", columns: [], rows: [] };
+      let populationRefusal: string | null = null;
+      try {
+        data = await filing.population(orgId, taxYear);
+      } catch (error) {
+        if (!(error instanceof PayrollError)) throw error;
+        populationRefusal = error.message;
+      }
       sections.push({
         country: pack.country,
         key: filing.key,
@@ -772,7 +792,9 @@ export async function orgYearEndFilings(
         description: filing.description ?? null,
         emptyText: filing.emptyText ?? null,
         installed: installed.has(pack.country),
-        data: await filing.population(orgId, taxYear),
+        data,
+        hasSlip: filing.slip != null,
+        populationRefusal,
         download: filing.download
           ? { label: filing.download.label, note: filing.download.note ?? null }
           : null,

@@ -317,14 +317,21 @@ export const TAX_FORM_RENDERERS: Record<string, TaxFormRenderer> = {
 /**
  * Single entry point: use a bespoke renderer when the form has one, else the
  * generic government-return layout. Used by the server PDF wrapper and by tests.
+ *
+ * `layout` overrides the registry lookup for callers whose header fields are
+ * per-record rather than static — the payroll slip drawer merges the slip's
+ * own identification values into the form's base layout and passes it here.
  */
 export function renderTaxFormFacsimileBody(
   result: TaxReturnResult,
   branding?: { orgName?: string; primaryColor?: string | null } | null,
+  layout?: TaxFormLayout | null,
 ): string {
-  const bespoke = TAX_FORM_RENDERERS[result.formCode]
-  if (bespoke) return bespoke(result, branding)
-  return renderTaxFormFacsimileHtml(result, TAX_FORM_LAYOUTS[result.formCode] ?? null, branding)
+  if (layout === undefined) {
+    const bespoke = TAX_FORM_RENDERERS[result.formCode]
+    if (bespoke) return bespoke(result, branding)
+  }
+  return renderTaxFormFacsimileHtml(result, layout ?? TAX_FORM_LAYOUTS[result.formCode] ?? null, branding)
 }
 
 /**
@@ -354,6 +361,60 @@ export const TAX_FORM_LAYOUTS: Record<string, TaxFormLayout> = {
     footerNotes: [
       'Do not complete line 205 or line 405 until you have read the instructions on the back of the return.',
       'Working copy — file electronically through the CRA. Not a government return.',
+    ],
+  },
+
+  // ------------------------------------------------------------------
+  // Payroll year-end slips — the payroll filing registry's slip renders
+  // print through the same facsimile pathway as the indirect-tax returns.
+  // Header-field VALUES are per-slip (employee, account…): the slip drawer
+  // and PDF route merge them in via the `layout` override parameter.
+  // ------------------------------------------------------------------
+  CA_T4: {
+    agency: 'Canada Revenue Agency',
+    agencySub: 'Agence du revenu du Canada',
+    subtitle: 'Statement of Remuneration Paid · État de la rémunération payée',
+    formNumber: 'T4',
+    footerNotes: [
+      'Working copy generated from committed pay stubs — every box reconciles to the stub traces. ' +
+        'File the T4 return electronically through the CRA. Not a certified government slip.',
+    ],
+  },
+  CA_RL1: {
+    agency: 'Revenu Québec',
+    subtitle: "Revenus d'emploi et revenus divers",
+    formNumber: 'RL-1',
+    footerNotes: [
+      "Copie de travail générée à partir des bulletins de paie validés — working copy from committed pay stubs. " +
+        "File through Revenu Québec's online services. Not a certified government slip.",
+    ],
+  },
+  CA_ROE: {
+    agency: 'Service Canada',
+    agencySub: 'Employment and Social Development Canada',
+    subtitle: 'Record of Employment · Relevé d’emploi',
+    formNumber: 'ROE',
+    footerNotes: [
+      'Working copy of the ROE blocks assembled from committed pay stubs. ' +
+        'Issue the ROE through ROE Web — this print is not a Service Canada form.',
+    ],
+  },
+  US_941: {
+    agency: 'Department of the Treasury — Internal Revenue Service',
+    subtitle: "Employer's QUARTERLY Federal Tax Return",
+    formNumber: 'Form 941',
+    footerNotes: [
+      'Worksheet built from committed pay stubs — the source data for the return. ' +
+        'File Form 941 with the IRS directly. Not an IRS form.',
+    ],
+  },
+  US_W2: {
+    agency: 'Department of the Treasury — Internal Revenue Service',
+    subtitle: 'Wage and Tax Statement',
+    formNumber: 'Form W-2',
+    footerNotes: [
+      'Working copy of the W-2 box data built from committed pay stubs. ' +
+        'Transmit W-2s through SSA Business Services Online. Not a scannable SSA form.',
     ],
   },
 }

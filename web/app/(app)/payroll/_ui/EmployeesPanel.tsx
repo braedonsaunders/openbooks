@@ -308,7 +308,7 @@ export function ProfileEditor(props: {
               itself falls back to "EFT if there are approved bank details,
               otherwise cheque" — so this is only set to override that. */}
           <div>
-            <Label htmlFor="pp-payment-method">{t('fields.paymentMethod')}</Label>
+            <Label htmlFor="pp-payment-method" help={t('paymentMethod.help')}>{t('fields.paymentMethod')}</Label>
             <Select
               id="pp-payment-method"
               value={paymentMethod}
@@ -321,9 +321,6 @@ export function ProfileEditor(props: {
                 </option>
               ))}
             </Select>
-            <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
-              {t('paymentMethod.help')}
-            </p>
           </div>
         </div>
 

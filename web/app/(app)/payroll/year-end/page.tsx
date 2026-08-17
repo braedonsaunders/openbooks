@@ -14,10 +14,11 @@ export const dynamic = 'force-dynamic'
 /**
  * Year-end cockpit. The sections are NOT hardcoded forms: every payroll
  * country pack declares its year-end filings (label, population, electronic
- * file, issue workflow) in the payroll filing registry, and this page
- * iterates that declaration. A pack that registers a new slip — the Quebec
- * RL-1, a UK P60 — appears here with no change to this file. Print-friendly
- * by design.
+ * file, slip render, issue workflow) in the payroll filing registry, and this
+ * page iterates that declaration. A pack that registers a new slip — the
+ * Quebec RL-1, a UK P60 — appears here with no change to this file. Each
+ * population row opens in the house Drawer as a form-faithful facsimile via
+ * the shared tax-form facsimile pathway, with its PDF one click away.
  *
  * A filing is shown when its pack is installed for the org, or when its
  * population has rows (imported history from a pack that was never formally

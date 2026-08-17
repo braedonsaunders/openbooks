@@ -13,9 +13,11 @@ import { hasUsablePayRateSql } from "./payroll-rate.ts";
 import { payrollSettings } from "./payroll-run.ts";
 import {
   jurisdictionKey,
+  packRemittanceVendorSettingsKeys,
   packSlotState,
   payrollJurisdictionDeclared,
 } from "./payroll/packs.ts";
+import { payrollBankProfiles } from "./payroll-bank-file.ts";
 import { undeclaredJurisdictionHolidayConflict } from "./payroll-holidays.ts";
 
 /**
@@ -149,6 +151,157 @@ async function scope(orgId: string, documentId: string, run: RunRow): Promise<Sc
   return rows.rows;
 }
 
+/**
+ * Which payroll country packs the org runs: the settings marker where it
+ * exists, and for a tenant provisioned before the marker did, the packs whose
+ * statutory components are actually seeded. NEVER a default of Canada — an
+ * org that installed only the US pack must not be told to map CA slots, and a
+ * third pack's org must not inherit anybody. Shared by the pay-run readiness
+ * and the setup wizard so the two can never disagree about what is installed.
+ */
+export async function installedPayrollCountries(
+  orgId: string,
+  payrollBlob: Record<string, unknown>,
+): Promise<string[]> {
+  if (Array.isArray((payrollBlob as { countries?: unknown }).countries)) {
+    return ((payrollBlob as { countries: unknown[] }).countries).map(String);
+  }
+  return ((await db.execute(sql`
+    select distinct country from pay_components
+     where org_id = ${orgId} and system_key is not null and country is not null
+  `)) as unknown as { rows: { country: string }[] }).rows.map((row) => row.country);
+}
+
+/**
+ * One org-level configuration check the payroll setup wizard walks. Codes
+ * reuse the pay-run readiness vocabulary (`setup.wageExpense`, `setup.slot`,
+ * …) where the same fact is checked there, so the wizard and the run
+ * pre-flight localize and resolve identically.
+ */
+export interface PayrollSetupCheck {
+  code: string;
+  severity: ReadinessSeverity;
+  ok: boolean;
+  /** Substitution for the message (pack country, slot key, vendor key). */
+  detail?: string;
+  /** Where the operator resolves it. */
+  href?: string;
+}
+
+export interface PayrollSetupState {
+  installedCountries: string[];
+  checks: PayrollSetupCheck[];
+  /** Failing blocker-severity checks — a pay run cannot commit past these. */
+  blockers: number;
+  /** Failing advisory checks. */
+  warnings: number;
+}
+
+/**
+ * Org-level payroll configuration state — the SETUP subset of what
+ * `payRunReadiness` verifies before a run, computed without a run in hand
+ * (no population, no period, no per-employee facts). The setup wizard's step
+ * list and the "Set up payroll" call-to-action derive from these checks, and
+ * every source consulted here (payrollSettings, packSlotState,
+ * installedPayrollCountries, the pack vendor declarations) is the same one
+ * the run pre-flight reads, so the two surfaces cannot disagree.
+ */
+export async function payrollSetupState(orgId: string): Promise<PayrollSetupState> {
+  const setupHref = "/admin/setup/payroll";
+  const checks: PayrollSetupCheck[] = [];
+
+  const blobRes = (await db.execute(sql`
+    select settings->'payroll' as p from orgs where id = ${orgId}
+  `)) as unknown as { rows: { p: Record<string, unknown> | null }[] };
+  const blob = blobRes.rows[0]?.p ?? {};
+  const installed = await installedPayrollCountries(orgId, blob);
+  const settings = await payrollSettings(orgId);
+
+  checks.push({
+    severity: "blocker", code: "setup.pack",
+    ok: installed.length > 0, href: `${setupHref}?tab=packs`,
+  });
+  checks.push({
+    severity: "blocker", code: "setup.wageExpense",
+    ok: Boolean(settings.wageExpenseAccountId), href: `${setupHref}?tab=accounts`,
+  });
+  checks.push({
+    severity: "blocker", code: "setup.netPay",
+    ok: Boolean(settings.netPayAccountId), href: `${setupHref}?tab=accounts`,
+  });
+  if (settings.wagesTo === "labor_clearing") {
+    const clearing = (await db.execute(sql`
+      select settings#>>'{laborCosting,clearingAccountId}' as id from orgs where id = ${orgId}
+    `)) as unknown as { rows: { id: string | null }[] };
+    checks.push({
+      severity: "blocker", code: "setup.laborClearing",
+      ok: Boolean(clearing.rows[0]?.id), href: setupHref,
+    });
+  }
+
+  // Every statutory slot of every installed pack must resolve to a liability
+  // account — the same packSlotState walk the run pre-flight performs, minus
+  // its runs-population filter (setup has no run to scope by).
+  for (const pack of await packSlotState(orgId, installed, blob)) {
+    const missing = pack.slots.filter((slot) => !slot.accountId);
+    if (missing.length === 0) {
+      checks.push({ severity: "blocker", code: "setup.slot", ok: true, detail: pack.country });
+    }
+    for (const slot of missing) {
+      checks.push({
+        severity: "blocker", code: "setup.slot", ok: false,
+        detail: `${pack.country} · ${slot.key}`,
+        href: `${setupHref}?tab=${pack.country.toLowerCase()}`,
+      });
+    }
+  }
+
+  // A run needs a pay calendar to exist at all.
+  const schedules = (await db.execute(sql`
+    select exists (
+      select 1 from pay_schedules where org_id = ${orgId} and is_active) as ok
+  `)) as unknown as { rows: { ok: boolean }[] };
+  checks.push({
+    severity: "blocker", code: "setup.schedule",
+    ok: Boolean(schedules.rows[0]?.ok), href: `${setupHref}?tab=schedules`,
+  });
+
+  // Statutory remittance vendors — exactly the settings keys the installed
+  // packs declare (pack-level plus regional overrides), never a literal list.
+  // Advisory: a run calculates without them; the remittance summary surfaces
+  // unassigned withholdings until they are set.
+  for (const country of installed) {
+    for (const key of packRemittanceVendorSettingsKeys(country)) {
+      const value = (blob as Record<string, unknown>)[key];
+      checks.push({
+        severity: "warning", code: "setup.remittanceVendor",
+        ok: typeof value === "string" && value.length > 0,
+        detail: `${country} · ${key}`, href: `${setupHref}?tab=accounts`,
+      });
+    }
+  }
+
+  // A way to pay people: a configured payroll-capable EFT originator profile,
+  // or the cheque fallback left on (paper is a legitimate rail, so this is
+  // advisory, not a blocker).
+  const [paymentMethods, bankProfiles] = await Promise.all([
+    payrollPaymentMethodSettings(orgId),
+    payrollBankProfiles(orgId),
+  ]);
+  checks.push({
+    severity: "warning", code: "setup.paymentRail",
+    ok: paymentMethods.eftFallbackToCheque || bankProfiles.some((profile) => profile.configured),
+    href: `${setupHref}?tab=payday`,
+  });
+
+  return {
+    installedCountries: installed,
+    checks,
+    blockers: checks.filter((c) => !c.ok && c.severity === "blocker").length,
+    warnings: checks.filter((c) => !c.ok && c.severity === "warning").length,
+  };
+}
+
 export async function payRunReadiness(orgId: string, documentId: string): Promise<PayRunReadiness> {
   const items: ReadinessItem[] = [];
   const flag = (
@@ -192,17 +345,7 @@ export async function payRunReadiness(orgId: string, documentId: string): Promis
     select settings->'payroll' as p from orgs where id = ${orgId}
   `)) as unknown as { rows: { p: Record<string, unknown> | null }[] };
   const legacy = blob.rows[0]?.p ?? {};
-  // Which packs the org runs: the settings marker where it exists, and for a
-  // tenant provisioned before the marker did, the packs whose statutory
-  // components are actually seeded. NEVER a default of Canada — an org that
-  // installed only the US pack must not be told to map CA slots, and a third
-  // pack's org must not inherit anybody.
-  const installed = Array.isArray((legacy as { countries?: unknown }).countries)
-    ? ((legacy as { countries: unknown[] }).countries).map(String)
-    : ((await db.execute(sql`
-        select distinct country from pay_components
-         where org_id = ${orgId} and system_key is not null and country is not null
-      `)) as unknown as { rows: { country: string }[] }).rows.map((row) => row.country);
+  const installed = await installedPayrollCountries(orgId, legacy);
   const countriesInRun = new Set(people.map((p) => p.country));
   for (const pack of await packSlotState(orgId, installed, legacy)) {
     if (people.length > 0 && !countriesInRun.has(pack.country)) continue;
