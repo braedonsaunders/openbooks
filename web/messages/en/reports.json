@@ -518,6 +518,18 @@
       "payroll_parallel_findings": {
         "label": "Parallel run findings",
         "description": "Prior-provider parallel run, cell by cell: for each employee and each component, what the old payroll system paid, what this one calculates, and the difference. Requires the payroll permission."
+      },
+      "equipment": {
+        "label": "Equipment",
+        "description": "Owned and rented units — identity, capacity, the charge item and rate book they bill through, and what each has cost and recovered."
+      },
+      "entitlement_balances": {
+        "label": "Entitlement balances",
+        "description": "One row per employee per pay bank — vacation, banked time, benefit recoup — with the balance, the limit in force and how much headroom is left. Requires the payroll permission."
+      },
+      "entitlement_service_milestones": {
+        "label": "Service milestones",
+        "description": "When each employee reaches a service-based entitlement tier, and which tier is in force today. Requires the payroll permission."
       }
     },
     "columns": {
@@ -545,7 +557,8 @@
         "reconciled_at": "Reconciled at",
         "entry_id": "Entry (id)",
         "account_id": "Account (id)",
-        "party_id": "Party (id)"
+        "party_id": "Party (id)",
+        "equipment": "Equipment"
       },
       "documents": {
         "kind": "Type",
@@ -629,7 +642,12 @@
         "class": "Class",
         "created_at": "Created at",
         "id": "Line (id)",
-        "document_id": "Transaction (id)"
+        "document_id": "Transaction (id)",
+        "equipment": "Equipment",
+        "cost_rate": "Cost rate",
+        "bill_rate": "Bill rate",
+        "cost_amount": "Cost amount",
+        "bill_amount": "Bill amount"
       },
       "journal_entries": {
         "entry_number": "Entry #",
@@ -653,7 +671,10 @@
         "show_on_timesheet": "On timesheets",
         "is_active": "Active",
         "created_at": "Created at",
-        "id": "Item (id)"
+        "id": "Item (id)",
+        "default_cost": "Default cost",
+        "description": "Description",
+        "recovery_account": "Recovery account"
       },
       "projects": {
         "code": "Code",
@@ -667,7 +688,8 @@
         "ends_on": "Ends on",
         "is_active": "Active",
         "created_at": "Created at",
-        "id": "Project (id)"
+        "id": "Project (id)",
+        "project_type": "Project type"
       },
       "timesheets": {
         "employee_name": "Employee",
@@ -779,6 +801,69 @@
         "run_status": "Run status",
         "comparison_id": "Comparison (id)",
         "employee_id": "Employee (id)"
+      },
+      "entitlement_balances": {
+        "employee": "Employee",
+        "employee_id": "Employee (id)",
+        "plan": "Plan",
+        "plan_code": "Plan code",
+        "plan_id": "Plan (id)",
+        "unit": "Unit",
+        "direction": "Direction",
+        "balance": "Balance",
+        "owed_to_employer": "Owed to employer",
+        "max_balance": "Maximum balance",
+        "notify_balance": "Notify at",
+        "headroom": "Headroom to limit",
+        "limit_scope": "Limit set at",
+        "limit_state": "Limit state",
+        "liability_account": "Liability account",
+        "last_movement_date": "Last movement",
+        "movement_count": "Movements",
+        "job_title": "Job title",
+        "trade": "Trade",
+        "department": "Department"
+      },
+      "entitlement_service_milestones": {
+        "employee": "Employee",
+        "employee_id": "Employee (id)",
+        "plan_id": "Plan (id)",
+        "component_id": "Component (id)",
+        "milestone": "Milestone",
+        "milestone_kind": "Milestone kind",
+        "milestone_date": "Milestone date",
+        "after_months": "After months of service",
+        "after_years": "After years of service",
+        "accrual_value": "Accrual value",
+        "tier_active": "Tier in force",
+        "eligible": "Eligible",
+        "hired_on": "Hired",
+        "terminated_on": "Terminated",
+        "job_title": "Job title",
+        "department": "Department"
+      },
+      "equipment": {
+        "id": "Equipment (id)",
+        "name": "Name",
+        "description": "Description",
+        "unit_number": "Unit number",
+        "serial_number": "Serial number",
+        "fixed_asset_number": "Fixed asset number",
+        "status": "Status",
+        "subsidiary": "Entity",
+        "capacity_quantity": "Capacity",
+        "capacity_unit": "Capacity unit",
+        "charge_item": "Charge item",
+        "rate_book": "Rate book",
+        "acquired_on": "Acquired",
+        "in_service_on": "In service",
+        "purchase_price": "Purchase price",
+        "depreciation": "Depreciation",
+        "usage": "Usage",
+        "cost_recovery": "Cost recovery",
+        "billable_value": "Billable value",
+        "billed_revenue": "Billed revenue",
+        "created_at": "Created"
       }
     },
     "enumValues": {
