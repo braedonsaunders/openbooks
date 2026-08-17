@@ -20,6 +20,46 @@ import {
   type DateRange,
 } from './fiscal-calendar'
 
+/**
+ * The org's fiscal position "as of today", with exact inclusive boundaries.
+ * Built entirely from `resolvePreset` so any consumer (assistant prompts,
+ * agents, UI) states the same windows the report filter bar resolves.
+ */
+export type FiscalContext = {
+  startMonth: number
+  /** Current fiscal year, named by the calendar year it ends in. */
+  fiscalYear: number
+  year: DateRange
+  yearToDate: DateRange
+  /** Current fiscal quarter number (1-4). */
+  quarter: number
+  quarterRange: DateRange
+  priorYear: DateRange
+  /** Same elapsed window one fiscal year earlier (PYTD comparative). */
+  priorYearToDate: DateRange
+}
+
+export function fiscalContextFor(today: string, startMonth: number): FiscalContext {
+  const input = { startMonth, today }
+  const year = resolvePreset('this_fiscal_year', input)!
+  const priorYear = resolvePreset('last_fiscal_year', input)!
+  const fiscalYear = fiscalYearOf(today, startMonth)
+  return {
+    startMonth,
+    fiscalYear,
+    year,
+    yearToDate: resolvePreset('this_fiscal_year_to_date', input)!,
+    quarter: Math.floor(fiscalMonthOffset(today, startMonth) / 3) + 1,
+    quarterRange: resolvePreset('this_fiscal_quarter', input)!,
+    priorYear,
+    priorYearToDate: {
+      from: priorYear.from,
+      to: addMonthsIso(today, -12),
+      label: `${priorYear.label} to date`,
+    },
+  }
+}
+
 export type PeriodPresetGroup =
   | 'fiscal_year'
   | 'fiscal_quarter'
