@@ -32,10 +32,12 @@ import {
   TableRow,
   cn,
 } from '@openbooks/ui'
+import type { YearEndFilingSection } from '@openbooks/engine/src/payroll-yearend.ts'
 import { useMoney } from '../../../../../components/money-provider'
 import { FilterChips } from '../../../../../components/filter-bar'
 import { PagedTable, type PagedColumn } from '../../../../../components/paged-table'
 import { RunStatusBadge, runDisplayStatus } from '../../_ui/run-status'
+import { SeparationIssuePanel } from '../../_ui/filing-workspace'
 import { BankFilePanel } from './BankFilePanel'
 
 export type WizardStep = 'period' | 'readiness' | 'review' | 'gl' | 'finish'
@@ -340,6 +342,12 @@ export function RunWizard(props: {
   funding: Funding
   /** Per-employee change since the previous committed stub. */
   changes: StubChange[]
+  /**
+   * Pack-declared separation filings (the ROE) for this run's employees —
+   * populated by the server for termination runs, empty otherwise. The
+   * Finish step renders one issue card per employee.
+   */
+  separationSections: YearEndFilingSection[]
   canRun: boolean
   initialStep: WizardStep
 }) {
@@ -752,6 +760,7 @@ export function RunWizard(props: {
       {step === 'finish' && (
         <FinishStep
           run={run}
+          separationSections={props.separationSections}
           remittance={props.remittance}
           posted={posted}
           committed={committed}
@@ -2221,6 +2230,7 @@ function PrintChequesButton({ documentId, count }: { documentId: string; count: 
 
 function FinishStep({
   run,
+  separationSections,
   remittance,
   posted,
   committed,
@@ -2236,6 +2246,7 @@ function FinishStep({
   fmt,
 }: {
   run: RunHeader
+  separationSections: YearEndFilingSection[]
   remittance: RemittanceRow[]
   posted: boolean
   committed: boolean
@@ -2357,6 +2368,15 @@ function FinishStep({
           that can still change. */}
       {committed && (
         <BankFilePanel documentId={run.document_id} canRun={canRun} fmt={fmt} />
+      )}
+
+      {/* Termination runs: the pack-declared SEPARATION filings (the ROE) are
+          due within days of the interruption of earnings, so they are issued
+          HERE, on the run that pays the employee out — never parked on the
+          year-end page. Same drawer, facsimile and reason flow as the
+          Separations surface. */}
+      {committed && separationSections.length > 0 && (
+        <SeparationIssuePanel sections={separationSections} year={run.tax_year} />
       )}
 
       <div className="grid gap-4 lg:grid-cols-2">

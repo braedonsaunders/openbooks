@@ -21,6 +21,40 @@ test('setup JSON fields parse objects without accepting malformed input', () => 
   assert.deepEqual(coerceField(field, 'hello'), { error: 'taxAttributes must be valid JSON' })
 })
 
+test('setup string-array fields bind jsonb-safe JSON strings and keep empty-means-everyone', () => {
+  const field: SetupField = { key: 'includedJobTitles', kind: 'stringArray', ref: 'job-titles' }
+  // The drawer sends a real array; the bound value is a JSON STRING (a JS
+  // array would be rendered as a Postgres array literal — invalid jsonb).
+  assert.deepEqual(coerceField(field, ['Supervisor', 'Quality Coordinator']), {
+    column: 'included_job_titles',
+    value: '["Supervisor","Quality Coordinator"]',
+  })
+  // Case/whitespace duplicates collapse to the first spelling; blanks drop.
+  assert.deepEqual(coerceField(field, [' Project  Manager ', 'project manager', '  ']), {
+    column: 'included_job_titles',
+    value: '["Project Manager"]',
+  })
+  // Imports may send the JSON-encoded form.
+  assert.deepEqual(coerceField(field, '["Foreman"]'), {
+    column: 'included_job_titles',
+    value: '["Foreman"]',
+  })
+  // Empty stays [] — for the rule engine an empty list means everyone.
+  assert.deepEqual(coerceField(field, []), { column: 'included_job_titles', value: '[]' })
+  assert.deepEqual(coerceField(field, ''), { column: 'included_job_titles', value: '[]' })
+  assert.deepEqual(coerceField(field, undefined), { column: 'included_job_titles', value: '[]' })
+  // Non-string members and malformed JSON are rejected, not coerced.
+  assert.deepEqual(coerceField(field, [1, 2]), {
+    error: 'includedJobTitles must be a list of text values',
+  })
+  assert.deepEqual(coerceField(field, '{broken'), {
+    error: 'includedJobTitles must be a list of text values',
+  })
+  assert.deepEqual(coerceField(field, '{"not":"a list"}'), {
+    error: 'includedJobTitles must be a list of text values',
+  })
+})
+
 test('number-sequence record choices store stable kind tokens without requiring UUIDs', () => {
   const field: SetupField = {
     key: 'documentKind',

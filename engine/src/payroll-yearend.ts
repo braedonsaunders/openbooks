@@ -10,6 +10,7 @@ import {
 import {
   declaredPayrollFilings,
   separationPaymentKeys,
+  type PayrollFilingCadence,
   type PayrollFilingData,
   type PayrollFilingIssue,
 } from "./payroll-filing-registry.ts";
@@ -730,6 +731,8 @@ export interface YearEndFilingSection {
   country: string;
   key: string;
   label: string;
+  /** The pack's declared deadline class — the surfaces split on it. */
+  cadence: PayrollFilingCadence;
   description: string | null;
   emptyText: string | null;
   /** The filing's pack is on the org's installed payroll countries. */
@@ -789,6 +792,7 @@ export async function orgYearEndFilings(
         country: pack.country,
         key: filing.key,
         label: filing.label,
+        cadence: filing.cadence,
         description: filing.description ?? null,
         emptyText: filing.emptyText ?? null,
         installed: installed.has(pack.country),

@@ -127,7 +127,7 @@ const getPayRun: AssistantToolDef = {
 const payrollYearEnd: AssistantToolDef = {
   name: "payroll_year_end",
   description:
-    "Year-end payroll filings for a tax year, one section per filing declared by the org's installed payroll packs: label, population rows (capped), totals, whether a per-employee slip and an electronic file are available, and any named population refusal. Read-only.",
+    "Payroll filings for a tax year, one section per filing declared by the org's installed payroll packs: label, cadence (annual, quarterly, or separation), population rows (capped), totals, whether a per-employee slip and an electronic file are available, and any named population refusal. Annual/quarterly filings live on /payroll/year-end; separation filings (the ROE) are per-employee-event documents on /payroll/separations. Read-only.",
   category: "read",
   gate: { mode: "anyOf", perms: ["payroll.read"] },
   inputSchema: z.object({ taxYear: z.number().int().min(2000).max(2100) }),
@@ -147,6 +147,10 @@ const payrollYearEnd: AssistantToolDef = {
             country: s.country,
             key: s.key,
             label: s.label,
+            cadence: s.cadence,
+            // A separation filing is an employee-event document — its home is
+            // the Separations surface, never the year-end page.
+            href: s.cadence === "separation" ? "/payroll/separations" : "/payroll/year-end",
             description: s.description,
             installed: s.installed,
             populationRefusal: s.populationRefusal,

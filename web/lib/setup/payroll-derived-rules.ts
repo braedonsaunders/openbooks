@@ -89,14 +89,18 @@ export const PAY_DERIVED_RULES_ENTITY: SetupEntity = {
     { key: 'tradeId', kind: 'ref', ref: 'trades' },
     { key: 'jobTitle', kind: 'text' },
     { key: 'billableOnly', kind: 'boolean' },
+    // Employee-scope title lists (jsonb text[]). Chip inputs with type-ahead
+    // over the roster's real titles — empty means everyone; exclusions win.
     {
       key: 'includedJobTitles',
-      kind: 'json',
+      kind: 'stringArray',
+      ref: 'job-titles',
       helpTextKey: 'fieldHelp.includedJobTitles',
     },
     {
       key: 'excludedJobTitles',
-      kind: 'json',
+      kind: 'stringArray',
+      ref: 'job-titles',
       helpTextKey: 'fieldHelp.excludedJobTitles',
     },
     // Pricing.
