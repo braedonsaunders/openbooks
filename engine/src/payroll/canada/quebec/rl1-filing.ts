@@ -1,9 +1,11 @@
 import {
   registerYearEndFiling,
+  type PayrollFilingSlipData,
   type PayrollYearEndFiling,
 } from "../../../payroll-filing-registry.ts";
-import { rl1Population, RL1_UNSUPPORTED_BOXES } from "../../../payroll-rl1.ts";
+import { rl1Population, rl1Slips, RL1_UNSUPPORTED_BOXES } from "../../../payroll-rl1.ts";
 import { RL1_XML_DOWNLOAD_REFUSAL } from "../../../payroll-rl1xml.ts";
+import { PayrollError } from "../../../payroll-run.ts";
 
 /**
  * The Quebec RL-1's year-end filing declaration — the jurisdiction-within-a-
@@ -36,6 +38,36 @@ import { RL1_XML_DOWNLOAD_REFUSAL } from "../../../payroll-rl1xml.ts";
  */
 let cached: PayrollYearEndFiling | null = null;
 
+/** One employee's RL-1, box by box — the form's own codes and French titles. */
+async function rl1Slip(orgId: string, taxYear: number, rowId: string): Promise<PayrollFilingSlipData> {
+  const slips = await rl1Slips(orgId, taxYear);
+  const slip = slips.find((s) => s.employeePartyId === rowId);
+  if (!slip) {
+    throw new PayrollError(`no ${taxYear} RL-1 slip matches the requested employee`);
+  }
+  return {
+    formCode: "CA_RL1",
+    formName: "Relevé 1 — Revenus d'emploi et revenus divers",
+    formNumber: "RL-1",
+    headerFields: [
+      { label: "Nom du particulier — employee's name", value: slip.employeeName },
+      { label: "Année d'imposition — tax year", value: String(taxYear) },
+    ],
+    boxes: [
+      { code: "A", label: "Revenus d'emploi", value: slip.boxA },
+      { code: "B.A", label: "Cotisation au RRQ", value: slip.boxBA },
+      { code: "B.B", label: "Cotisation supplémentaire au RRQ", value: slip.boxBB },
+      { code: "C", label: "Cotisation à l'assurance emploi", value: slip.boxC },
+      { code: "E", label: "Impôt du Québec retenu à la source", value: slip.boxE },
+      { code: "F", label: "Cotisation syndicale", value: slip.boxF },
+      { code: "G", label: "Salaire admissible au RRQ", value: slip.boxG },
+      { code: "H", label: "Cotisation au RQAP", value: slip.boxH },
+      { code: "I", label: "Salaire admissible au RQAP", value: slip.boxI },
+    ],
+    notes: [RL1_UNSUPPORTED_BOXES],
+  };
+}
+
 export function rl1Filing(): PayrollYearEndFiling {
   cached ??= {
     key: "rl1",
@@ -48,6 +80,7 @@ export function rl1Filing(): PayrollYearEndFiling {
       + RL1_UNSUPPORTED_BOXES,
     emptyText: "No committed Québec pay stubs for this year.",
     population: (orgId, taxYear) => rl1Population(orgId, taxYear),
+    slip: { build: (orgId, taxYear, rowId) => rl1Slip(orgId, taxYear, rowId) },
     downloadRefusal: RL1_XML_DOWNLOAD_REFUSAL,
   };
   return cached;

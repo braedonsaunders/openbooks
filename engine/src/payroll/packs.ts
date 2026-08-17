@@ -1479,13 +1479,28 @@ export function statutoryRemittanceDeclaration(): StatutoryRemittanceDeclaration
  */
 export function declaredRemittanceVendorSettingsKeys(): string[] {
   const keys = new Set<string>();
-  for (const pack of Object.values(PAYROLL_COUNTRY_PACKS)) {
-    if (pack.remittanceVendorSettingsKey) keys.add(pack.remittanceVendorSettingsKey);
-    for (const slot of pack.statutorySlots) {
-      for (const component of slot.components) {
-        for (const key of Object.values(component.regionalRemittanceVendorSettingsKeys ?? {})) {
-          keys.add(key);
-        }
+  for (const country of Object.keys(PAYROLL_COUNTRY_PACKS)) {
+    for (const key of packRemittanceVendorSettingsKeys(country)) keys.add(key);
+  }
+  return [...keys];
+}
+
+/**
+ * ONE pack's statutory remittance vendor settings keys — the pack-level key
+ * plus every regional override its components declare (the CA pack yields the
+ * CRA vendor and the Revenu Québec vendor). The payroll setup wizard renders
+ * its vendors step from exactly this declaration, so a new pack's vendor
+ * fields appear the moment the pack declares them.
+ */
+export function packRemittanceVendorSettingsKeys(country: string): string[] {
+  const pack = PAYROLL_COUNTRY_PACKS[country];
+  if (!pack) return [];
+  const keys = new Set<string>();
+  if (pack.remittanceVendorSettingsKey) keys.add(pack.remittanceVendorSettingsKey);
+  for (const slot of pack.statutorySlots) {
+    for (const component of slot.components) {
+      for (const key of Object.values(component.regionalRemittanceVendorSettingsKeys ?? {})) {
+        keys.add(key);
       }
     }
   }

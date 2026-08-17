@@ -33,19 +33,17 @@ export interface StubPasswordPolicy {
   expression: string
 }
 
-/** Accounts & posting tab — generic accounts + pack-declared statutory slots. */
+/**
+ * Accounts & posting tab — generic accounts + pack-declared statutory slots
+ * and remittance vendors. Pay rails, stub delivery, and statutory holiday pay
+ * live on their own tabs (PayrollPaydaySettings, StatHolidayPaySection);
+ * every tab saves through the same merging /api/payroll/settings PUT.
+ */
 export function PayrollSetupWorkspace(props: {
   settings: PayrollSettings
   packs: PackSlots[]
   us: UsPayrollConfig
   ca: CaPayrollConfig
-  stubPassword: StubPasswordPolicy
-  /** orgs.settings.payroll.eftFallbackToCheque — the cheque safety net. */
-  paymentMethods: { eftFallbackToCheque: boolean }
-  /** orgs.settings.payroll.statutoryHolidayPay — calculate stat holiday pay. */
-  statutoryHolidayPay: boolean
-  /** False when the server has no qpdf binary — encryption cannot be enabled. */
-  encryptionAvailable: boolean
   accounts: { id: string; label: string }[]
   vendors: { id: string; label: string }[]
 }) {
@@ -64,16 +62,12 @@ export function PayrollSetupWorkspace(props: {
   const [wagesTo, setWagesTo] = useState<'expense' | 'labor_clearing'>(props.settings.wagesTo)
   const [craRemittancePartyId, setCraRemittancePartyId] = useState(props.settings.craRemittancePartyId ?? '')
   const [rqRemittancePartyId, setRqRemittancePartyId] = useState(props.settings.rqRemittancePartyId ?? '')
-  const [statutoryHolidayPay, setStatutoryHolidayPay] = useState(props.statutoryHolidayPay)
   const usInstalled = props.packs.some((pack) => pack.country === 'US')
   const caInstalled = props.packs.some((pack) => pack.country === 'CA')
   const [ehtEnabled, setEhtEnabled] = useState(props.ca.eht.enabled)
   const [ehtRate, setEhtRate] = useState(props.ca.eht.rate ?? '')
   const [ehtExemption, setEhtExemption] = useState(props.ca.eht.annualExemption ?? '')
   const [futaRate, setFutaRate] = useState(props.us.futaRate ?? '')
-  const [eftFallbackToCheque, setEftFallbackToCheque] = useState(props.paymentMethods.eftFallbackToCheque)
-  const [stubPasswordEnabled, setStubPasswordEnabled] = useState(props.stubPassword.enabled)
-  const [stubPasswordExpression, setStubPasswordExpression] = useState(props.stubPassword.expression)
   const [suiRows, setSuiRows] = useState<SuiRow[]>(() =>
     Object.entries(props.us.sui).map(([state, entry]) => ({
       state, rate: entry.rate, wageBase: entry.wageBase,
@@ -91,9 +85,6 @@ export function PayrollSetupWorkspace(props: {
           wagesTo,
           craRemittancePartyId: craRemittancePartyId || null,
           rqRemittancePartyId: rqRemittancePartyId || null,
-          eftFallbackToCheque,
-          statutoryHolidayPay,
-          stubPassword: { enabled: stubPasswordEnabled, expression: stubPasswordExpression },
           slotAccounts: Object.fromEntries(Object.entries(slotAccounts).map(([country, slots]) => [
             country,
             Object.fromEntries(Object.entries(slots).map(([key, value]) => [key, value || null])),
@@ -162,87 +153,6 @@ export function PayrollSetupWorkspace(props: {
         </div>
       </section>
 
-      {/* How wages leave the bank. An employee with no approved bank details
-          is paid by cheque, not treated as an error; this is the one switch
-          that decides what happens when somebody the employer MEANT to pay by
-          EFT has none. */}
-      <section className="space-y-3 rounded-xl border border-slate-200 bg-white p-4 dark:border-slate-800 dark:bg-slate-900">
-        <div>
-          <h3 className="text-sm font-semibold text-slate-900 dark:text-slate-100">{t('paymentMethods.title')}</h3>
-          <p className="text-sm text-slate-500 dark:text-slate-400">{t('paymentMethods.description')}</p>
-        </div>
-        <label className="flex items-start gap-2 text-sm text-slate-700 dark:text-slate-300">
-          <input
-            type="checkbox"
-            checked={eftFallbackToCheque}
-            onChange={(e) => setEftFallbackToCheque(e.target.checked)}
-            className="mt-0.5 h-4 w-4 rounded border-slate-300 text-teal-600 focus:ring-teal-500 dark:border-slate-600"
-          />
-          <span>
-            {t('paymentMethods.fallback')}
-            <span className="block text-xs text-slate-500 dark:text-slate-400">
-              {eftFallbackToCheque
-                ? t('paymentMethods.fallbackOn')
-                : t('paymentMethods.fallbackOff')}
-            </span>
-          </span>
-        </label>
-      </section>
-
-      {/* Statutory holiday pay (calculateStub phase 2). Changes gross pay, so
-          it is an explicit org decision; jurisdictions with no declared
-          formula refuse by name when a holiday falls in the period. */}
-      <section className="space-y-3 rounded-xl border border-slate-200 bg-white p-4 dark:border-slate-800 dark:bg-slate-900">
-        <div>
-          <h3 className="text-sm font-semibold text-slate-900 dark:text-slate-100">{t('statHolidayPay.title')}</h3>
-          <p className="text-sm text-slate-500 dark:text-slate-400">{t('statHolidayPay.description')}</p>
-        </div>
-        <label className="flex items-center gap-2 text-sm text-slate-700 dark:text-slate-300">
-          <input
-            type="checkbox"
-            checked={statutoryHolidayPay}
-            onChange={(e) => setStatutoryHolidayPay(e.target.checked)}
-            className="h-4 w-4 rounded border-slate-300 text-teal-600 focus:ring-teal-500 dark:border-slate-600"
-          />
-          {t('statHolidayPay.enabled')}
-        </label>
-      </section>
-
-      {/* Emailed stubs carry wage data. The password rule is the employer's
-          own — it is published to staff out of band, never by us. */}
-      <section className="space-y-3 rounded-xl border border-slate-200 bg-white p-4 dark:border-slate-800 dark:bg-slate-900">
-        <div>
-          <h3 className="text-sm font-semibold text-slate-900 dark:text-slate-100">{t('stubPassword.title')}</h3>
-          <p className="text-sm text-slate-500 dark:text-slate-400">{t('stubPassword.description')}</p>
-        </div>
-        <label className="flex items-center gap-2 text-sm text-slate-700 dark:text-slate-300">
-          <input
-            type="checkbox"
-            checked={stubPasswordEnabled}
-            disabled={!props.encryptionAvailable}
-            onChange={(e) => setStubPasswordEnabled(e.target.checked)}
-            className="h-4 w-4 rounded border-slate-300 text-teal-600 focus:ring-teal-500 dark:border-slate-600"
-          />
-          {t('stubPassword.enabled')}
-        </label>
-        {props.encryptionAvailable ? null : (
-          <p className="text-xs text-amber-700 dark:text-amber-400">{t('stubPassword.unavailable')}</p>
-        )}
-        {stubPasswordEnabled ? (
-          <div>
-            <Label htmlFor="ps-stub-password">{t('stubPassword.expression')}</Label>
-            <Input
-              id="ps-stub-password"
-              value={stubPasswordExpression}
-              onChange={(e) => setStubPasswordExpression(e.target.value)}
-              placeholder="{surname:3|upper}{dob:MMDDYYYY}"
-              autoComplete="off"
-            />
-            <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">{t('stubPassword.expressionHelp')}</p>
-          </div>
-        ) : null}
-      </section>
-
       {props.packs.length === 0 ? (
         <section className="rounded-xl border border-dashed border-slate-300 bg-slate-50 p-4 text-sm text-slate-600 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300">
           {t('packAccounts.none')}{' '}
@@ -297,7 +207,9 @@ export function PayrollSetupWorkspace(props: {
                       on TPZ-1015.R to RQ, never to the CRA — the pack declares
                       the routing; this is only where the vendor is chosen. */}
                   <div>
-                    <Label htmlFor="ps-rq">{t('fields.rqRemittancePartyId')}</Label>
+                    <Label htmlFor="ps-rq" help={t('fields.rqRemittancePartyIdHelp')}>
+                      {t('fields.rqRemittancePartyId')}
+                    </Label>
                     <Select id="ps-rq" value={rqRemittancePartyId} onChange={(e) => setRqRemittancePartyId(e.target.value)}>
                       <option value="">—</option>
                       {props.vendors.map((vendor) => (
@@ -306,7 +218,6 @@ export function PayrollSetupWorkspace(props: {
                         </option>
                       ))}
                     </Select>
-                    <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">{t('fields.rqRemittancePartyIdHelp')}</p>
                   </div>
                 </>
               ) : null}
@@ -329,7 +240,9 @@ export function PayrollSetupWorkspace(props: {
                 {ehtEnabled ? (
                   <div className="grid gap-3 sm:grid-cols-2">
                     <div>
-                      <Label htmlFor="ps-eht-rate">{t('caConfig.ehtRate')}</Label>
+                      <Label htmlFor="ps-eht-rate" help={t('caConfig.ehtRateHelp')}>
+                        {t('caConfig.ehtRate')}
+                      </Label>
                       <Input
                         id="ps-eht-rate"
                         inputMode="decimal"
@@ -337,10 +250,11 @@ export function PayrollSetupWorkspace(props: {
                         onChange={(e) => setEhtRate(e.target.value)}
                         placeholder="1.95"
                       />
-                      <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">{t('caConfig.ehtRateHelp')}</p>
                     </div>
                     <div>
-                      <Label htmlFor="ps-eht-exemption">{t('caConfig.ehtExemption')}</Label>
+                      <Label htmlFor="ps-eht-exemption" help={t('caConfig.ehtExemptionHelp')}>
+                        {t('caConfig.ehtExemption')}
+                      </Label>
                       <Input
                         id="ps-eht-exemption"
                         inputMode="decimal"
@@ -348,7 +262,6 @@ export function PayrollSetupWorkspace(props: {
                         onChange={(e) => setEhtExemption(e.target.value)}
                         placeholder="1000000"
                       />
-                      <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">{t('caConfig.ehtExemptionHelp')}</p>
                     </div>
                   </div>
                 ) : null}
@@ -363,7 +276,9 @@ export function PayrollSetupWorkspace(props: {
                 </div>
                 <div className="grid gap-3 sm:grid-cols-2">
                   <div>
-                    <Label htmlFor="ps-futa-rate">{t('usConfig.futaRate')}</Label>
+                    <Label htmlFor="ps-futa-rate" help={t('usConfig.futaRateHelp')}>
+                      {t('usConfig.futaRate')}
+                    </Label>
                     <Input
                       id="ps-futa-rate"
                       inputMode="decimal"
@@ -371,12 +286,10 @@ export function PayrollSetupWorkspace(props: {
                       onChange={(e) => setFutaRate(e.target.value)}
                       placeholder="0.006"
                     />
-                    <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">{t('usConfig.futaRateHelp')}</p>
                   </div>
                 </div>
                 <div className="space-y-2">
-                  <Label>{t('usConfig.suiTitle')}</Label>
-                  <p className="text-xs text-slate-500 dark:text-slate-400">{t('usConfig.suiHelp')}</p>
+                  <Label help={t('usConfig.suiHelp')}>{t('usConfig.suiTitle')}</Label>
                   {suiRows.map((row, index) => (
                     <div key={index} className="flex flex-wrap items-end gap-2">
                       <div>
@@ -445,7 +358,9 @@ export function PayrollSetupWorkspace(props: {
         </div>
         <div className="grid gap-3 sm:grid-cols-2">
           <div>
-            <Label htmlFor="ps-wages-to">{t('fields.wagesTo')}</Label>
+            <Label htmlFor="ps-wages-to" help={t('wagesTo.help')}>
+              {t('fields.wagesTo')}
+            </Label>
             <Select
               id="ps-wages-to"
               value={wagesTo}
@@ -454,7 +369,6 @@ export function PayrollSetupWorkspace(props: {
               <option value="expense">{t('wagesTo.expense')}</option>
               <option value="labor_clearing">{t('wagesTo.laborClearing')}</option>
             </Select>
-            <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">{t('wagesTo.help')}</p>
           </div>
         </div>
       </section>
