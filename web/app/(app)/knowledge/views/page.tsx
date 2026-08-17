@@ -7,7 +7,8 @@ import { FilterChips } from '../../../../components/filter-bar'
 import { Pagination } from '../../../../components/pagination'
 import { parseListParams, pickString } from '../../../../lib/list-params'
 import { dateTime } from '../../../../lib/format'
-import { requirePermission } from '../../../../lib/authz'
+import { can, requirePermission } from '../../../../lib/authz'
+import { REPORT_ENTITIES } from '@openbooks/reports'
 import { loadViews } from '../../../../lib/views'
 import { NewViewButton } from './NewViewButton'
 import { ViewStudio } from './ViewStudio'
@@ -152,6 +153,9 @@ export default async function ViewsPage({
           canCreate={canCreate}
           canAdmin={authz.permissions.has('*') || openView.owner_id === authz.user.id}
           company={branding.orgName}
+          hiddenEntityKeys={REPORT_ENTITIES.filter(
+            (e) => e.requiredPermission && !can(authz, e.requiredPermission),
+          ).map((e) => e.key)}
         />
       ) : null}
     </ListPageLayout>
