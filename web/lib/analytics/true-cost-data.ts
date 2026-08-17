@@ -332,18 +332,24 @@ export async function trueCostData(orgId: string, period: { from: string; to: st
     // department per basis — that shape re-scanned the window's ledger three
     // times for every department on the page.
     db.execute(sql`
-      with gl as (
+      -- The entry window materializes first: joined inline, the planner drives
+      -- from accounts and probes the entry primary key once per journal line
+      -- in the tenant before the date filter ever applies.
+      ew as materialized (
+        select id from journal_entries
+         where org_id = ${orgId} and posting_date >= ${from} and posting_date <= ${to}
+      ),
+      gl as (
         select l.department_id,
                coalesce(sum(l.amount) filter (
                  where a.type in ('expense','expense_other','expense_deferred','cogs')
                    and a.name ~* 'wage|salary|payroll|labou?r'), 0) as labor_dollars,
                coalesce(-sum(l.amount) filter (where a.type in ('income','income_other')), 0) as revenue,
                coalesce(sum(l.amount) filter (where a.type = 'cogs'), 0) as direct_cost
-          from journal_lines l
-          join journal_entries e on e.id = l.entry_id and e.org_id = ${orgId}
-           and e.posting_date >= ${from} and e.posting_date <= ${to}
+          from ew e
+          join journal_lines l on l.entry_id = e.id and l.org_id = ${orgId}
           join accounts a on a.id = l.account_id and a.org_id = ${orgId}
-         where l.org_id = ${orgId} and l.department_id is not null
+         where l.department_id is not null
          group by l.department_id
       ),
       hc as (

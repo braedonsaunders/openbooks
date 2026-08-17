@@ -851,6 +851,15 @@ export async function bankBalances(asOf: string, subIds?: string[]) {
       select id from accounts
        where org_id = ${orgId} and type = 'asset_bank' and is_summary = false and is_active
     ),
+    -- The as-of month's entries materialize first. Left to itself the planner
+    -- reached the sliver through (org, account), which walks every bank line
+    -- ever posted before the date filter applies.
+    sliver_entries as materialized (
+      select id from journal_entries
+       where org_id = ${orgId} and status in ('posted', 'reversed')
+         and posting_date >= date_trunc('month', ${asOf}::date)::date
+         and posting_date <= ${asOf}
+    ),
     movement as (
       select g.account_id, (g.debit_total - g.credit_total) as amt
         from gl_month_activity g
@@ -860,13 +869,9 @@ export async function bankBalances(asOf: string, subIds?: string[]) {
          ${subScope(sql`g.subsidiary_id`, subIds)}
       union all
       select l.account_id, l.amount
-        from journal_lines l
-        join journal_entries e on e.id = l.entry_id and e.org_id = ${orgId}
-         and e.status in ('posted', 'reversed')
-         and e.posting_date >= date_trunc('month', ${asOf}::date)::date
-         and e.posting_date <= ${asOf}
-       where l.org_id = ${orgId}
-         and l.account_id in (select id from bank_accounts)
+        from sliver_entries se
+        join journal_lines l on l.entry_id = se.id and l.org_id = ${orgId}
+       where l.account_id in (select id from bank_accounts)
          ${subScope(sql`l.subsidiary_id`, subIds)}
     )
     select a.id, a.name, a.number, coalesce(sum(m.amt), 0) as balance

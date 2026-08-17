@@ -258,7 +258,15 @@ function profitTierOf(marginPct: number): ProfitTier {
 export async function customerProfitability(period: { from: string; to: string }, orgId?: string): Promise<Profitability> {
   const { from, to } = period;
   const orgFilter = orgId ? sql`and l.org_id = ${orgId}` : sql``;
+  // The entry window materializes first. Joined inline, the planner drives
+  // from accounts and probes the entry primary key once per journal line in
+  // the tenant before the date filter narrows anything.
   const r = (await db.execute(sql`
+    with ew as materialized (
+      select id from journal_entries
+       where posting_date >= ${from} and posting_date <= ${to}
+         ${orgId ? sql`and org_id = ${orgId}` : sql``}
+    )
     select pr.customer_id as customer_id,
       coalesce(cp.display_name, 'Unknown') as customer_name,
       pr.id as job_id,
@@ -266,14 +274,13 @@ export async function customerProfitability(period: { from: string; to: string }
       -sum(case when a.type in ('income','income_other') then l.amount else 0 end) as revenue,
       sum(case when a.type in ('cogs','expense','expense_deferred') then l.amount else 0 end) as costs,
       count(distinct e.id) as txns
-    from journal_lines l
+    from ew e
+    join journal_lines l on l.entry_id = e.id
     join accounts a on a.id = l.account_id
-    join journal_entries e on e.id = l.entry_id
     join projects pr on pr.id = l.project_id
     join parties cp on cp.id = pr.customer_id
     where a.type in ('income','income_other','cogs','expense','expense_deferred')
       and l.project_id is not null and pr.customer_id is not null
-      and e.posting_date >= ${from} and e.posting_date <= ${to}
       ${orgFilter}
     group by pr.customer_id, cp.display_name, pr.id, pr.name
   `)) as any;
