@@ -11,6 +11,12 @@ import {
 import { canRunTool } from "./gate";
 import { signApplicationCommand } from "./application-proposals";
 import { READ_TOOLS } from "./tools";
+import { ANALYTICS_TOOLS } from "./tools-analytics";
+import { BANKING_TOOLS } from "./tools-banking";
+import { FILE_TOOLS } from "./tools-files";
+import { PAYROLL_TOOLS } from "./tools-payroll";
+import { REPORTING_TOOLS } from "./tools-reports";
+import { SETUP_TOOLS } from "./tools-setup";
 import { WRITE_TOOLS } from "./tools-write";
 import type { AssistantToolDef, ToolResult } from "./types";
 
@@ -21,7 +27,16 @@ import type { AssistantToolDef, ToolResult } from "./types";
  * time in /api/assistant/commit.
  */
 
-export const ASSISTANT_TOOLS: readonly AssistantToolDef[] = [...READ_TOOLS, ...WRITE_TOOLS];
+export const ASSISTANT_TOOLS: readonly AssistantToolDef[] = [
+  ...READ_TOOLS,
+  ...ANALYTICS_TOOLS,
+  ...REPORTING_TOOLS,
+  ...BANKING_TOOLS,
+  ...PAYROLL_TOOLS,
+  ...FILE_TOOLS,
+  ...SETUP_TOOLS,
+  ...WRITE_TOOLS,
+];
 
 function safeErrorMessage(e: unknown): string {
   // Never surface raw error text to the model — it could carry secrets/PII.
