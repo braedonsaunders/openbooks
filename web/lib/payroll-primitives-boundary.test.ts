@@ -58,6 +58,30 @@ test("the setup API refuses a semi-monthly anchor that names no calendar", () =>
   // Edits are validated against the STORED frequency/anchor when the body omits
   // one, exactly as the filing-account check does — otherwise changing only the
   // frequency of an existing schedule would skip the anchor check.
-  assert.match(setup, /select frequency, anchor_period_end::text as anchor_period_end from pay_schedules/);
+  //
+  // Asserted as the PROPERTY rather than as one literal SELECT: the columns
+  // this block needs grow (periods_per_year joined them), and a test pinned to
+  // the exact statement fails on a correct change while proving nothing extra.
+  assert.match(setup, /from pay_schedules\s*\n?\s*where id = \$\{rowId\} and org_id = \$\{orgId\}/);
+  for (const column of ["frequency", "periods_per_year", "anchor_period_end"]) {
+    assert.match(
+      setup, new RegExp(column),
+      `the stored ${column} must be readable, or an edit that omits it skips its check`,
+    );
+  }
+  assert.match(setup, /body\.frequency \?\? current\?\.frequency/);
   assert.match(setup, /if \(frequency === 'semi_monthly'\)/);
+});
+
+test("the setup API refuses a period count the schedule's own calendar cannot produce", () => {
+  // The sibling defect: `periods_per_year` is factor P, and the table's CHECK
+  // only constrains it to the union across all frequencies — so a semi-monthly
+  // schedule could save with 26 and annualize every withholding on a count its
+  // own boundaries contradict.
+  assert.match(setup, /payPeriodsPerYearProblem/);
+  assert.match(setup, /body\.periodsPerYear \?\? current\?\.periods_per_year/);
+  assert.ok(
+    setup.indexOf("payPeriodsPerYearProblem(frequency, periodsPerYear)") > 0,
+    "the check must be given both fields — the pairing is the whole point",
+  );
 });

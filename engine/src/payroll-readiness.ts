@@ -1,5 +1,6 @@
 import { sql } from "drizzle-orm";
 import { db } from "./db.ts";
+import { now } from "./clock.ts";
 import { add, cmp, neg, sum } from "./money.ts";
 import {
   PAYROLL_PAYMENT_METHODS,
@@ -13,12 +14,22 @@ import { hasUsablePayRateSql } from "./payroll-rate.ts";
 import { payrollSettings } from "./payroll-run.ts";
 import {
   jurisdictionKey,
+  labourJurisdictionProblem,
   packRemittanceVendorSettingsKeys,
   packSlotState,
+  PayrollPackError,
   payrollJurisdictionDeclared,
 } from "./payroll/packs.ts";
 import { payrollBankProfiles } from "./payroll-bank-file.ts";
 import { undeclaredJurisdictionHolidayConflict } from "./payroll-holidays.ts";
+import { effectiveFilingAccountSql } from "./payroll-filing.ts";
+import {
+  resolveStatutoryRates,
+  unconfiguredStatutoryRates,
+  type StatutoryRatePoint,
+  type UnconfiguredStatutoryRate,
+} from "./payroll/statutory-rates.ts";
+import { payrollTaxYearForDate, payrollTaxYearProblem } from "./payroll/tax-years.ts";
 
 /**
  * Pre-flight for a pay run: what must be fixed before it can calculate, what
@@ -60,6 +71,9 @@ interface ScopeRow {
   pay_basis: string;
   country: string;
   province: string | null;
+  /** The employment attribute that overrides the region derivation; null =
+   *  derive the labour jurisdiction from the work region. */
+  labour_jurisdiction: string | null;
   has_wage: boolean;
   approved_hours: string;
   hired_on: string | null;
@@ -69,6 +83,13 @@ interface ScopeRow {
   has_sin: boolean;
   profile_payment_method: string | null;
   party_payment_method: string | null;
+  /**
+   * The filing identity the employee is paid under, resolved with the SAME
+   * fragment the run and the year-end returns use — never re-derived here.
+   * Statutory rates that are assigned per account (an experience-rated SUI
+   * rate) resolve against it.
+   */
+  filing_account_id: string | null;
 }
 
 interface RunRow {
@@ -105,7 +126,8 @@ async function runContext(orgId: string, documentId: string): Promise<RunRow | n
 async function scope(orgId: string, documentId: string, run: RunRow): Promise<ScopeRow[]> {
   const rows = (await db.execute(sql`
     select p.id as employee_party_id, p.display_name as name, prof.pay_basis, prof.country,
-           prof.province,
+           prof.province, prof.labour_jurisdiction,
+           ${effectiveFilingAccountSql("prof")} as filing_account_id,
            coalesce(te.hours, 0)::text as approved_hours,
            er.hired_on::text as hired_on,
            er.terminated_on::text as terminated_on,
@@ -281,6 +303,42 @@ export async function payrollSetupState(orgId: string): Promise<PayrollSetupStat
     }
   }
 
+  // Are this year's statutory tables loaded for every installed pack? Asked
+  // against TODAY's date through each pack's own tax-year definition, so the
+  // answer is right for a jurisdiction whose year does not open in January. A
+  // blocker: no run in the current year can calculate until the edition lands,
+  // and January is exactly when nobody wants to discover that mid-payroll.
+  for (const country of installed) {
+    const { taxYear, problem } = payrollTaxYearForDate(country, today());
+    checks.push({
+      severity: "blocker", code: "setup.taxYear", ok: problem === null,
+      detail: problem ? problem.message : `${country} · ${taxYear}`,
+      href: `${setupHref}?tab=packs`,
+    });
+  }
+
+  // Statutory rates the employer must supply, at the scope the pack declares
+  // each one varies by — checked against the regions and filing accounts the
+  // org's ACTIVE payroll population actually occupies, so an employer with no
+  // Ontario payroll is never nagged about Ontario's health tax. Advisory for
+  // the same reason as in the run pre-flight.
+  const population = await activePayrollPopulation(orgId);
+  for (const country of installed) {
+    const missing = await unconfiguredRatesForRun(orgId, country, currentTaxYear(country), population);
+    if (missing.length === 0) {
+      checks.push({
+        severity: "warning", code: "setup.statutoryRate", ok: true, detail: country,
+      });
+      continue;
+    }
+    for (const item of missing) {
+      checks.push({
+        severity: "warning", code: "setup.statutoryRate", ok: false,
+        detail: item.message, href: `${setupHref}?tab=rates`,
+      });
+    }
+  }
+
   // A way to pay people: a configured payroll-capable EFT originator profile,
   // or the cheque fallback left on (paper is a legitimate rail, so this is
   // advisory, not a blocker).
@@ -356,6 +414,60 @@ export async function payRunReadiness(orgId: string, documentId: string): Promis
           href: `${setupHref}?tab=${pack.country.toLowerCase()}`,
         });
       }
+    }
+  }
+
+  // --- Statutory tables: is this year even loaded? -------------------------
+  // Every statutory engine refuses a pay date outside the years it has
+  // transcribed, which is right — and used to surface as an exception thrown
+  // from inside calculateStub, per employee, mid-payroll. The pack now DECLARES
+  // its editions, so the missing year is named here, before Calculate, as the
+  // blocker it is (engine/src/payroll/tax-years.ts).
+  //
+  // Asked per (country, region) pair actually being paid, because a region can
+  // publish its own tables and lag the country's: 2027 can be loaded federally
+  // for Canada and not loaded for Quebec.
+  const jurisdictionsInRun = new Map<string, { country: string; region: string | null }>();
+  for (const person of people) {
+    const key = `${person.country}:${person.province ?? ""}`;
+    if (!jurisdictionsInRun.has(key)) {
+      jurisdictionsInRun.set(key, { country: person.country, region: person.province ?? null });
+    }
+  }
+  if (people.length === 0) {
+    for (const country of installed) {
+      jurisdictionsInRun.set(`${country}:`, { country, region: null });
+    }
+  }
+  const taxYearFailures = new Set<string>();
+  for (const { country, region } of jurisdictionsInRun.values()) {
+    const problem = payrollTaxYearProblem(country, run.tax_year, region);
+    if (!problem || taxYearFailures.has(problem.message)) continue;
+    taxYearFailures.add(problem.message);
+    flag(
+      "blocker", "statutory.taxYear",
+      people.filter((p) => p.country === country && (region === null || p.province === region)),
+      { detail: problem.message, href: `${setupHref}?tab=packs` },
+    );
+  }
+
+  // --- Statutory rates the employer has to supply --------------------------
+  // The pack declares which of its statutory rates cannot be published (an
+  // experience-rated SUI rate) or are published per region per year (the FUTA
+  // credit reduction, the provincial employer health levies), and at what scope
+  // each varies. Anything the run touches with nothing configured is reported
+  // here rather than accruing zero silently.
+  //
+  // ADVISORY, deliberately: an employer with no SUI registration in a state owes
+  // no SUI there, and refusing the whole payroll over a levy that may not apply
+  // would be wrong. What the operator is owed is the sentence, before payday.
+  for (const country of countriesInRun.size > 0 ? [...countriesInRun] : installed) {
+    for (const missing of await unconfiguredRatesForRun(orgId, country, run.tax_year, people)) {
+      flag(
+        "warning", "statutory.rateUnconfigured",
+        people.filter((p) => missing.employees.some((e) => e.partyId === p.employee_party_id)),
+        { detail: missing.message, href: `${setupHref}?tab=rates` },
+      );
     }
   }
 
@@ -438,9 +550,28 @@ export async function payRunReadiness(orgId: string, documentId: string): Promis
   // With no holiday in the period, an undeclared jurisdiction calculates
   // exactly as it always has and nothing is flagged.
   if ((legacy as { statutoryHolidayPay?: unknown }).statutoryHolidayPay === true) {
+    // An EXPLICIT labour jurisdiction no pack declares is its own blocker,
+    // whether or not a holiday lands in the period: the value means nothing, so
+    // the employment would silently be governed by the work region's calendar —
+    // the substitution the attribute exists to prevent. calculateStub throws on
+    // the same predicate, so the wizard names it first.
+    const byLabourProblem = new Map<string, ScopeRow[]>();
+    for (const person of people) {
+      const problem = labourJurisdictionProblem(person.country, person.labour_jurisdiction);
+      if (!problem) continue;
+      byLabourProblem.set(problem, [...(byLabourProblem.get(problem) ?? []), person]);
+    }
+    for (const [detail, employees] of byLabourProblem) {
+      flag("blocker", "holiday.labourJurisdictionUndeclared", employees, {
+        detail,
+        href: employeesHref,
+      });
+    }
+
     const byJurisdiction = new Map<string, ScopeRow[]>();
     for (const person of people) {
-      const key = jurisdictionKey(person.country, person.province);
+      if (labourJurisdictionProblem(person.country, person.labour_jurisdiction)) continue;
+      const key = jurisdictionKey(person.country, person.province, person.labour_jurisdiction);
       if (payrollJurisdictionDeclared(key)) continue;
       byJurisdiction.set(key, [...(byJurisdiction.get(key) ?? []), person]);
     }
@@ -470,8 +601,88 @@ export async function payRunReadiness(orgId: string, documentId: string): Promis
   // product's job is to make the operator see the question once, on the one
   // run where it is still cheap to answer.
   await flagMissingOpeningBalances({ orgId, documentId, run, people, flag });
+  await flagMissingEntitlementOpenings({ orgId, documentId, run, people, flag });
 
   return tally(people.length);
+}
+
+/** Today, on the injectable clock the rest of the engine uses (clock.ts). */
+const today = (): string => now().toISOString().slice(0, 10);
+
+/** The tax year today falls in FOR THE PACK — never `getFullYear()`. */
+const currentTaxYear = (country: string): number =>
+  payrollTaxYearForDate(country, today()).taxYear;
+
+/**
+ * The org's active payroll population, reduced to the facts a scope point is
+ * made of: country, region, and the filing identity the employee is paid under.
+ * Used where there is no run to scope by (the setup state, the rates surface).
+ */
+async function activePayrollPopulation(orgId: string): Promise<ScopeRow[]> {
+  const rows = (await db.execute(sql`
+    select p.id as employee_party_id, p.display_name as name, prof.country, prof.province,
+           ${effectiveFilingAccountSql("prof")} as filing_account_id
+      from employee_payroll_profiles prof
+      join parties p on p.id = prof.employee_party_id and p.org_id = prof.org_id
+     where prof.org_id = ${orgId} and prof.is_active
+  `)) as unknown as {
+    rows: {
+      employee_party_id: string; name: string; country: string;
+      province: string | null; filing_account_id: string | null;
+    }[];
+  };
+  return rows.rows as unknown as ScopeRow[];
+}
+
+/**
+ * Pack-declared statutory rates the org's payroll population needs and has not
+ * configured for a tax year — the rates surface's "gaps" list, and the same
+ * computation the setup state and the run pre-flight report.
+ */
+export async function payrollStatutoryRateGaps(
+  orgId: string,
+  country: string,
+  taxYear: number,
+): Promise<UnconfiguredStatutoryRate[]> {
+  return unconfiguredRatesForRun(orgId, country, taxYear, await activePayrollPopulation(orgId));
+}
+
+/**
+ * Pack-declared statutory rates with nothing configured at the scope points a
+ * population actually occupies. Shared by the run pre-flight and the setup
+ * state, so the two surfaces cannot disagree about what is missing.
+ *
+ * A pack that declares no tenant-entered rates at all has nothing to check and
+ * is not an error — that is a legitimate declaration (every statutory number
+ * published), so its refusal is caught rather than surfaced.
+ */
+async function unconfiguredRatesForRun(
+  orgId: string,
+  country: string,
+  taxYear: number,
+  people: readonly ScopeRow[],
+): Promise<UnconfiguredStatutoryRate[]> {
+  let resolution;
+  try {
+    resolution = await resolveStatutoryRates(orgId, country, taxYear);
+  } catch (error) {
+    if (error instanceof PayrollPackError) return [];
+    throw error;
+  }
+  const points = new Map<string, StatutoryRatePoint & { employees: { partyId: string; name: string }[] }>();
+  for (const person of people) {
+    if (person.country !== country) continue;
+    const key = `${person.province ?? ""}:${person.filing_account_id ?? ""}`;
+    const entry = points.get(key) ?? {
+      region: person.province ?? null,
+      filingAccountId: person.filing_account_id ?? null,
+      employees: [],
+    };
+    entry.employees.push({ partyId: person.employee_party_id, name: person.name });
+    points.set(key, entry);
+  }
+  if (points.size === 0) return [];
+  return unconfiguredStatutoryRates(resolution, [...points.values()]);
 }
 
 /**
@@ -519,11 +730,130 @@ async function flagMissingOpeningBalances(args: {
   const missing = people.filter(
     (p) => !have.has(p.employee_party_id) && !(p.hired_on && p.hired_on >= run.period_start),
   );
-  if (missing.length === 0) return;
-  flag("warning", "employee.noOpeningBalance", missing, {
-    detail: String(run.tax_year),
-    href: `/payroll/opening-balances?year=${run.tax_year}`,
-  });
+  if (missing.length > 0) {
+    flag("warning", "employee.noOpeningBalance", missing, {
+      detail: String(run.tax_year),
+      href: `/payroll/opening-balances?year=${run.tax_year}`,
+    });
+  }
+
+  // The COMPONENT dimension of the same carry-in. A statutory row alone does
+  // not answer it: `pay_components.basis_cap_amount_per_year` is an annual
+  // ceiling (the CRA money-purchase limit, the US 402(g) elective-deferral
+  // limit) and it restarts at zero on the adoption date unless the component's
+  // year-to-date is carried in too. Left unanswered, the employee is allowed a
+  // SECOND full annual limit and the excess is the employer's to unwind — which
+  // is why it is worth a separate line rather than being folded into the row
+  // warning that has already gone quiet.
+  const capped = (await db.execute(sql`
+    select distinct c.code, epc.employee_party_id
+      from employee_pay_components epc
+      join pay_components c on c.id = epc.component_id and c.org_id = epc.org_id
+     where epc.org_id = ${orgId} and epc.is_active and c.is_active
+       and c.basis_cap_amount_per_year is not null
+       and epc.effective_from <= ${run.period_end}
+       and (epc.effective_to is null or epc.effective_to >= ${run.period_start})
+       and not exists (
+         select 1 from payroll_opening_balance_components oc
+           join payroll_opening_balances b on b.id = oc.opening_balance_id and b.org_id = oc.org_id
+          where oc.org_id = epc.org_id and oc.component_id = epc.component_id
+            and b.employee_party_id = epc.employee_party_id and b.tax_year = ${run.tax_year})
+     order by c.code
+  `)) as unknown as { rows: { code: string; employee_party_id: string }[] };
+  if (capped.rows.length > 0) {
+    const byPerson = new Map(people.map((p) => [p.employee_party_id, p]));
+    const byComponent = new Map<string, ScopeRow[]>();
+    for (const row of capped.rows) {
+      const person = byPerson.get(row.employee_party_id);
+      // Same exemption as above: somebody this employer first hired inside the
+      // period cannot have consumed any of the limit here earlier in the year.
+      if (!person || (person.hired_on && person.hired_on >= run.period_start)) continue;
+      byComponent.set(row.code, [...(byComponent.get(row.code) ?? []), person]);
+    }
+    for (const [code, employees] of byComponent) {
+      flag("warning", "employee.noOpeningComponentYtd", employees, {
+        detail: code,
+        href: `/payroll/opening-balances?year=${run.tax_year}`,
+      });
+    }
+  }
+}
+
+/**
+ * The bank carry-ins: a plan whose FIRST run in this org's history is happening
+ * now, for an employee who demonstrably predates it.
+ *
+ * Timing is the whole design. Vacation and banked time live on the entitlement
+ * ledger, and a mid-year adopter's banks start at zero unless somebody loads
+ * them — so a ten-year employee's accrued vacation is absent from the balance
+ * sheet and absent from their final cheque, with nothing anywhere saying so. The
+ * one moment that question is both answerable and still cheap is the run that
+ * will first move the plan; after it commits, the accrual is already sitting on
+ * top of a wrong opening.
+ *
+ * "Demonstrably predates it" is the precision that keeps this from being noise:
+ * the employee must carry a carry-in SOMEWHERE ELSE — a statutory opening
+ * balance for the tax year, or an opening movement on another plan. That is
+ * evidence this employer was paying them before OpenBooks. A genuinely new
+ * employer has no openings anywhere, so nothing fires, which is the same
+ * doctrine `flagMissingOpeningBalances` follows: never a blocker, and never a
+ * question whose answer is already known.
+ */
+async function flagMissingEntitlementOpenings(args: {
+  orgId: string;
+  documentId: string;
+  run: RunRow;
+  people: ScopeRow[];
+  flag: (
+    severity: ReadinessSeverity,
+    code: string,
+    employees?: ScopeRow[],
+    extra?: { detail?: string; href?: string },
+  ) => void;
+}): Promise<void> {
+  const { orgId, documentId, run, people, flag } = args;
+  if (people.length === 0) return;
+
+  // Employees with a carry-in somewhere else: the adoption evidence.
+  const carried = (await db.execute(sql`
+    select b.employee_party_id from payroll_opening_balances b
+     where b.org_id = ${orgId} and b.tax_year = ${run.tax_year}
+    union
+    select l.employee_party_id from entitlement_ledger l
+     where l.org_id = ${orgId} and l.kind = 'opening'
+  `)) as unknown as { rows: { employee_party_id: string }[] };
+  const adopted = new Set(carried.rows.map((r) => r.employee_party_id));
+  if (adopted.size === 0) return;
+
+  // Plans no committed run has ever moved: this run is the plan's first.
+  const virgin = (await db.execute(sql`
+    select pl.id, pl.code, pl.name from entitlement_plans pl
+     where pl.org_id = ${orgId} and pl.is_active
+       and not exists (
+         select 1 from entitlement_ledger l
+           join pay_runs r on r.document_id = l.pay_run_document_id and r.org_id = l.org_id
+          where l.org_id = pl.org_id and l.plan_id = pl.id
+            and r.run_status = 'committed' and l.pay_run_document_id <> ${documentId})
+     order by pl.code
+  `)) as unknown as { rows: { id: string; code: string; name: string }[] };
+  if (virgin.rows.length === 0) return;
+
+  const openings = (await db.execute(sql`
+    select plan_id, employee_party_id from entitlement_ledger
+     where org_id = ${orgId} and kind = 'opening'
+  `)) as unknown as { rows: { plan_id: string; employee_party_id: string }[] };
+  const have = new Set(openings.rows.map((r) => `${r.plan_id}:${r.employee_party_id}`));
+
+  for (const plan of virgin.rows) {
+    const missing = people.filter(
+      (p) => adopted.has(p.employee_party_id) && !have.has(`${plan.id}:${p.employee_party_id}`),
+    );
+    if (missing.length === 0) continue;
+    flag("warning", "employee.noOpeningEntitlement", missing, {
+      detail: plan.name,
+      href: "/payroll/opening-balances?section=entitlements",
+    });
+  }
 }
 
 export interface PayRunStaleness {

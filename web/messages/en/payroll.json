@@ -125,7 +125,9 @@
           "slot": "Statutory account not mapped: {detail}",
           "schedule": "No active pay schedule exists.",
           "remittanceVendor": "Statutory remittance vendor not set: {detail}",
-          "paymentRail": "No configured EFT originator profile, and the cheque fallback is off — there is no way to pay anyone."
+          "paymentRail": "No configured EFT originator profile, and the cheque fallback is off — there is no way to pay anyone.",
+          "taxYear": "{detail}",
+          "statutoryRate": "{detail}"
         },
         "period": {
           "missing": "No accounting period covers the pay date {detail}.",
@@ -142,10 +144,17 @@
           "noBankDetails": "{count, plural, one {# employee is} other {# employees are}} set to be paid by direct deposit but has no approved bank details, so they will be paid by cheque on this run.",
           "noSin": "{count, plural, one {# employee has} other {# employees have}} no SIN/SSN on file for year-end filing.",
           "eftNoBankDetails": "{count, plural, one {# employee is} other {# employees are}} set to be paid by direct deposit with no approved bank details, and the cheque fallback is turned off, so there is no way to pay them.",
-          "noOpeningBalance": "{count, plural, one {# employee has} other {# employees have}} no {detail} opening balance from your previous payroll system, so their CPP/EI and wage-base ceilings will restart at zero on this run."
+          "noOpeningBalance": "{count, plural, one {# employee has} other {# employees have}} no {detail} opening balance from your previous payroll system, so their CPP/EI and wage-base ceilings will restart at zero on this run.",
+          "noOpeningComponentYtd": "{count, plural, one {# employee has} other {# employees have}} no opening year-to-date for {detail}, which has an annual cap — the cap restarts at zero on this run, so they can contribute a second full annual limit.",
+          "noOpeningEntitlement": "{count, plural, one {# employee carries} other {# employees carry}} a balance from your previous payroll system but no opening balance for {detail}. This is the first pay run that moves it, so their bank starts at zero."
         },
         "holiday": {
-          "undeclaredJurisdiction": "Statutory holiday pay cannot be calculated: {detail}"
+          "undeclaredJurisdiction": "Statutory holiday pay cannot be calculated: {detail}",
+          "labourJurisdictionUndeclared": "{count, plural, one {# employee has} other {# employees have}} a labour jurisdiction this payroll cannot honour: {detail}"
+        },
+        "statutory": {
+          "taxYear": "{detail}",
+          "rateUnconfigured": "{detail}"
         }
       }
     },
@@ -450,6 +459,7 @@
     "fields": {
       "schedule": "Pay schedule",
       "province": "Province of employment",
+      "labourJurisdiction": "Labour jurisdiction",
       "payBasis": "Pay basis",
       "additionalTax": "Additional tax per period",
       "federalClaimCode": "Federal claim code",
@@ -499,6 +509,14 @@
       "email": "Email",
       "print": "Print",
       "both": "Email and print"
+    },
+    "labourJurisdiction": {
+      "fromRegion": "From the province of employment",
+      "help": "The labour jurisdiction whose employment standards govern this employment — its statutory holiday calendar and its holiday-pay formula. Leave it on \"from the province of employment\", which is right for almost every employment; set it only when a different labour jurisdiction regulates the employer of record, such as a federally regulated employer. It does not change withholding, which always follows the province of employment."
+    },
+    "paymentMethod": {
+      "eft": "Direct deposit",
+      "cheque": "Cheque"
     }
   },
   "setupWizard": {
@@ -632,7 +650,8 @@
       "derivedPreview": "Rule preview",
       "holidays": "Holidays",
       "holidayCalendar": "Holiday calendar",
-      "payday": "Payday"
+      "payday": "Payday",
+      "rates": "Statutory Rates"
     },
     "packs": {
       "installed": "Installed",
@@ -661,7 +680,10 @@
       "uninstall": "Uninstall",
       "uninstallTitle": "Uninstall country pack",
       "uninstallConfirm": "Remove this pack’s statutory components and switch off its withholding engine? Uninstalling is blocked while employees or payroll records still depend on the pack.",
-      "uninstallSuccess": "Country pack uninstalled."
+      "uninstallSuccess": "Country pack uninstalled.",
+      "taxYears": "Statutory tables loaded for",
+      "taxYearDraft": "{year} · scaffolded, not transcribed",
+      "taxYearNone": "no statutory tables loaded"
     },
     "packAccounts": {
       "none": "No payroll country pack is installed yet, so there are no statutory withholding accounts to configure.",
@@ -689,7 +711,8 @@
           "futa": "FUTA payable",
           "suta": "State unemployment payable"
         }
-      }
+      },
+      "ratesLink": "Rates you supply — unemployment, health levies — are on the Statutory Rates tab."
     },
     "usConfig": {
       "title": "Unemployment rates",
@@ -784,6 +807,36 @@
       "title": "Statutory holiday pay",
       "description": "Calculate statutory holiday pay and worked-holiday premiums on each pay run, using the formula the employee's jurisdiction declares. Employees in a jurisdiction with no declared formula are refused by name when a holiday falls in the period.",
       "enabled": "Calculate statutory holiday pay"
+    },
+    "rates": {
+      "title": "Statutory rates",
+      "description": "Rates no publication can supply, or that agencies publish per region or per registered account. Everything else — tax brackets, contribution maximums, credit amounts — comes from the country pack and cannot be edited here.",
+      "noPacks": "No installed country pack declares an employer-entered statutory rate. Install a pack on the Country packs tab.",
+      "tablesLoaded": "Statutory tables loaded for",
+      "draftEdition": "scaffolded, not transcribed",
+      "notLoaded": "not loaded",
+      "year": "Tax year",
+      "yearHelp": "Statutory rates are assigned for a tax year — a state rate notice, a credit-reduction determination, a provincial exemption. Rates entered for one year never reinterpret another year's payroll.",
+      "add": "Add a rate",
+      "remove": "Remove",
+      "empty": "No statutory rates are entered for this year.",
+      "gapsTitle": "Not configured for this year",
+      "allAccounts": "All accounts",
+      "regionHelp": "The region the rate applies in. A rate entered for one region is never applied to another.",
+      "accountHelp": "This rate is assigned to a registered account, so an employer with two accounts in one region has two rates. Leave as All accounts to use one value for every account in the region.",
+      "scope": {
+        "org": "Employer-wide",
+        "region": "Per region",
+        "account": "Per filing account"
+      },
+      "columns": {
+        "levy": "Rate",
+        "scope": "Scope",
+        "region": "Region",
+        "account": "Filing account",
+        "values": "Values",
+        "country": "Country pack"
+      }
     }
   },
   "remittances": {
@@ -897,7 +950,7 @@
   },
   "openingBalances": {
     "title": "Opening balances",
-    "description": "Year-to-date amounts each employee carries in from your previous payroll system. Nothing else supplies them, so the CPP, EI, Social Security and unemployment ceilings restart at zero without them.",
+    "description": "Everything each employee carries in from your previous payroll system: statutory year-to-date, the annual caps they have partly used, and their vacation and banked-time balances. Nothing else supplies these, so every ceiling and every bank restarts at zero without them.",
     "hint": "Copy these from the outgoing provider's year-to-date report as at the day before your first pay period here. Leave an employee blank if they had no pay from you earlier in the year.",
     "yearLabel": "Tax year",
     "employee": "Employee",
@@ -925,10 +978,163 @@
       "taxableYtd": "Taxable earnings",
       "taxYtd": "Income tax withheld",
       "nonPeriodicYtd": "Bonus / supplemental earnings"
+    },
+    "componentHelp": "How much of this component's annual cap the employee has already used this year, at your previous payroll system. Without it the cap restarts at zero and the employee can contribute a second full annual limit.",
+    "componentCap": "Annual cap",
+    "componentInertHelp": "This component no longer has an annual cap, so the amount below changes nothing and cannot be edited. It is kept because somebody entered it and a cap may be set again.",
+    "entitlements": {
+      "title": "Bank carry-ins (vacation, banked time)",
+      "employee": "Employee",
+      "asOf": "Carried in as at",
+      "asOfHelp": "The adoption date the carry-in is dated. A pay run only counts movements dated on or before its pay date, so this must fall before your first pay run here. It is not a tax year: a bank has one lifetime balance.",
+      "entered": "Carried in",
+      "save": "Save",
+      "saving": "Saving…",
+      "saved": "Bank carry-ins saved.",
+      "saveFailed": "Nothing was saved.",
+      "rejected": "Nothing was saved — fix these first.",
+      "bulkImport": "Bulk load from a file",
+      "export": "Export",
+      "empty": "No employees have an active payroll profile yet.",
+      "noPlans": "No entitlement plans are set up, so there is no bank to carry a balance into.",
+      "configurePlans": "Set up entitlement plans",
+      "lockedBy": "Committed pay run",
+      "blocked": "Paid on",
+      "blockedHint": "date the carry-in after it",
+      "legacyShort": "legacy",
+      "legacyTitle": "Unmigrated vacation balances found",
+      "legacyBody": "These employees carry a vacation balance on the retired opening-balances column that no bank shows. It is a liability nobody is tracking. Load it here, or run scripts/migrate-vacation-to-entitlements.ts to replay the whole history.",
+      "legacyPrefill": "Copy them into the Vacation column",
+      "moneyHelp": "The balance carried in, in dollars. Banks are stored as the money they were earned at, and displayed as hours at the employee's current wage.",
+      "hoursHelp": "The balance carried in, in hours.",
+      "oweHelp": "A balance the EMPLOYEE owes the employer, so it is negative — enter −1200 for an outstanding 1,200. It is recouped from future pay until it reaches exactly zero."
     }
   },
   "readiness": {
     "jurisdictionRun": "Legal entity cannot run payroll",
     "jurisdictionEmployee": "Employee jurisdiction disagrees with the paying entity"
+  },
+  "parallelRun": {
+    "title": "Parallel run",
+    "description": "Check a pay period against the payroll system you are leaving, penny by penny. Import the old provider's register, pick the run that covers the same period, and compare.",
+    "compare": "Compare",
+    "comparing": "Comparing…",
+    "compareFailed": "The comparison could not be run.",
+    "cleanToast": "Every amount reconciled exactly.",
+    "toleranceToast": "Reconciled, with a tolerance applied.",
+    "differencesToast": "Differences found — open the comparison.",
+    "importRegister": "Import a register",
+    "export": "Export",
+    "tolerances": "Tolerances",
+    "tolerancesDescription": "Every component compares exactly by default. Add an allowance only where the old system genuinely rounds differently — it will be shown on every comparison that uses it.",
+    "addTolerance": "Add tolerance",
+    "toleranceSaved": "Tolerance saved.",
+    "noTolerances": "No tolerance is configured — every component compares exactly.",
+    "comparisonsTitle": "Comparisons",
+    "noComparisons": "No comparison has been run yet.",
+    "registersTitle": "Imported registers",
+    "noRegisters": "No prior register has been imported yet. Start with Import a register.",
+    "noRegistersRow": "Nothing imported yet.",
+    "registerDiscarded": "The imported register was discarded.",
+    "discard": "Discard",
+    "openReport": "Open the reconciliation report",
+    "periodMismatch": "These two sides cover different pay dates. Comparing them will report differences that are really a period mismatch.",
+    "emptyRegister": "This register holds no employees. A comparison against it will report \"Nothing was compared\", not a clean result.",
+    "unmappedWarning": "Columns in this register were never mapped:",
+    "unmappedTitle": "Source columns nobody mapped",
+    "nothingCompared": "Nothing was compared",
+    "toleranceTitle": "Tolerances in force",
+    "showMatches": "Show exact matches",
+    "clearEmployee": "All employees",
+    "cleanNote": "Every compared amount agreed to the penny, with no tolerance and no unmapped column.",
+    "noFindings": "This comparison has no findings at all.",
+    "noExceptions": "No exceptions — every cell matched exactly.",
+    "loading": "Loading…",
+    "saving": "Saving…",
+    "exact": "exact",
+    "notPresent": "not present",
+    "allMapped": "All mapped",
+    "matched": "matched",
+    "differ": "differ",
+    "oneSidedShort": "one-sided",
+    "toleratedShort": "tolerated",
+    "employeesShort": "employees",
+    "amountsShort": "amounts",
+    "rowsShort": "row(s)",
+    "valuedRows": "carried a value in",
+    "comparedOf": "compared of",
+    "onRegister": "on the register",
+    "inRun": "in the run",
+    "fromColumn": "from",
+    "paid": "paid",
+    "vsOurs": "ours",
+    "columns": {
+      "outcome": "Outcome",
+      "register": "Prior register",
+      "payRun": "Pay run",
+      "compared": "Compared",
+      "differences": "Differences",
+      "netDifference": "Net difference",
+      "comparedAt": "Compared",
+      "loaded": "Loaded",
+      "stated": "Stated gross / net",
+      "unmapped": "Unmapped columns",
+      "employee": "Employee",
+      "component": "Component",
+      "priorSystem": "Prior system",
+      "thisSystem": "This system",
+      "difference": "Difference",
+      "tolerance": "Tolerance",
+      "result": "Result"
+    },
+    "fields": {
+      "register": "Prior register",
+      "registerPlaceholder": "Select a register…",
+      "payRun": "Our pay run",
+      "payRunPlaceholder": "Select a pay run…",
+      "component": "Component",
+      "componentPlaceholder": "Select…",
+      "tolerance": "Allowance",
+      "reason": "Reason"
+    },
+    "kinds": {
+      "earning": "Earning",
+      "deduction": "Deduction",
+      "employer_contribution": "Employer contribution",
+      "total": "Stated total"
+    },
+    "statuses": {
+      "clean": "Reconciled exactly",
+      "clean_within_tolerance": "Reconciled within tolerance",
+      "differences": "Differences to resolve",
+      "no_comparable_data": "Nothing was compared"
+    },
+    "classes": {
+      "match": "Exact match",
+      "within_tolerance": "Within tolerance",
+      "difference": "Difference",
+      "prior_only": "Only in the prior system",
+      "our_only": "Only here",
+      "employee_prior_only": "Employee missing from our run",
+      "employee_our_only": "Employee missing from the register",
+      "unattributed": "Unexplained by any component"
+    },
+    "tiles": {
+      "gross": "Gross",
+      "net": "Net",
+      "unattributed": "Unexplained net",
+      "cells": "Cells"
+    },
+    "help": {
+      "register": "A register imported from the payroll system you are leaving — one pay period, one row per employee. Load it through Import & Export, resource \"Prior payroll register\", where you map the old system's column names onto this payroll's components.",
+      "payRun": "The run to check against. Calculated runs count: the point of a parallel run is to prove the numbers before the money leaves. A draft run has no stubs and cannot be compared.",
+      "compared": "Employees present on BOTH sides, out of each side's own count. A comparison that compared nobody is reported as \"Nothing was compared\", never as agreement.",
+      "unmapped": "Columns in your file that no component claimed. Nothing in them is compared, so an amount could be sitting there unaccounted for. Re-import with them mapped, or confirm they carry no money.",
+      "tolerance": "Every component compares exactly unless somebody configured an allowance for it. Any allowance in force is shown here and on the comparison, because a tolerance nobody can see would defeat the whole exercise.",
+      "unattributed": "The part of the net difference the compared components do not account for. Anything other than zero means an amount moved a total with no comparable component behind it — most often a source column nobody mapped.",
+      "toleranceSlot": "The component, or one of the register's stated totals. A tolerance is per employee, per period.",
+      "toleranceAmount": "An absolute amount, never a percentage: a percentage of a moving base is how a tolerance quietly grows. Zero removes the allowance.",
+      "toleranceReason": "Required. Agreeing to stop looking at a difference is a decision that has to be attributable to somebody and a reason."
+    }
   }
 }

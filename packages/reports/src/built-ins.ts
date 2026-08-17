@@ -286,6 +286,61 @@ export const BUILT_IN_REPORT_DEFINITIONS: BuiltInReportDefinition[] = [
     },
   },
   {
+    slug: 'payroll-parallel-run',
+    name: 'Parallel run reconciliation',
+    description:
+      'The adoption control: for one pay period, every employee and every component compared against the prior payroll provider, sectioned by result so material differences and one-sided employees are read first and exact matches last. The comparison and its classification come from the filed reconciliation — this report never restates them. A tolerance, where one is configured, is shown in its own column. Requires the payroll permission.',
+    query: {
+      entity: 'payroll_parallel_findings',
+      mode: 'rows',
+      columns: [
+        'employee', 'line_kind', 'component', 'prior_amount', 'our_amount',
+        'difference', 'tolerance_applied', 'source_column', 'run_number', 'register',
+      ],
+      // Sectioned by RESULT, not by employee: an operator running a parallel
+      // run wants the differences, and a report that opens on three hundred
+      // matching rows is a report nobody reads to the bottom.
+      groupBy: 'classification',
+      filters: {
+        combinator: 'and',
+        rules: [{ field: 'pay_date', op: 'this_year' }],
+      },
+      sorts: [
+        { column: 'employee', direction: 'asc' },
+        { column: 'component', direction: 'asc' },
+      ],
+      limit: 10000,
+    },
+  },
+  {
+    slug: 'payroll-parallel-run-totals',
+    name: 'Parallel run totals by component',
+    description:
+      'The same reconciliation rolled up: per component, what the prior provider paid in total, what this payroll calculates, and the difference — so a period-level variance is attributed to the components that produced it rather than left as one number. The employee counts on each row state how much was actually compared. Requires the payroll permission.',
+    query: {
+      entity: 'payroll_parallel_findings',
+      mode: 'summarize',
+      columns: [],
+      breakouts: [{ column: 'line_kind' }, { column: 'component' }],
+      measures: [
+        { fn: 'sum', column: 'prior_amount', label: 'Prior system' },
+        { fn: 'sum', column: 'our_amount', label: 'This system' },
+        { fn: 'sum', column: 'difference', label: 'Difference' },
+        { fn: 'max', column: 'tolerance_applied', label: 'Tolerance allowed' },
+        { fn: 'latest', column: 'employees_compared', label: 'Employees compared' },
+        { fn: 'count', label: 'Cells' },
+      ],
+      groupBy: 'line_kind',
+      totals: { sections: true, grand: true },
+      filters: {
+        combinator: 'and',
+        rules: [{ field: 'pay_date', op: 'this_year' }],
+      },
+      sorts: [{ column: 'component', direction: 'asc' }],
+      limit: 10000,
+    },
+  },
+  {
     slug: 'entitlement-balances',
     name: 'Entitlement balances',
     description:

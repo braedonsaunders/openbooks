@@ -578,6 +578,95 @@ export const REPORT_ENTITIES: ReportEntity[] = [
     defaultSort: { column: 'pay_date', direction: 'desc' },
   },
   {
+    key: 'payroll_parallel_findings',
+    label: 'Parallel run findings',
+    category: 'payroll',
+    description:
+      'Prior-provider parallel run, cell by cell: for each employee and each component, what the old payroll system paid, what this one calculates, and the difference — classified as an exact match, inside a disclosed tolerance, a material difference, or present on one side only. Wage data: requires the payroll permission.',
+    // The classification is NOT recomputed here. It is produced once by
+    // engine/src/payroll-parallel-run.ts and filed; this entity reads those
+    // rows. Restating the rules in SQL would create a second source of truth
+    // for the one thing a verification tool must not be ambiguous about.
+    from: `payroll_parallel_findings f
+      JOIN payroll_parallel_comparisons cmp ON cmp.id = f.comparison_id AND cmp.org_id = f.org_id
+      JOIN payroll_prior_registers reg ON reg.id = cmp.register_id AND reg.org_id = cmp.org_id
+      LEFT JOIN documents d ON d.id = cmp.pay_run_document_id AND d.org_id = cmp.org_id
+      LEFT JOIN pay_runs r ON r.document_id = cmp.pay_run_document_id AND r.org_id = cmp.org_id`,
+    orgColumn: 'f.org_id',
+    requiredPermission: 'payroll.read',
+    latestOrderExpr: 'cmp.compared_at DESC, f.id DESC',
+    columns: [
+      { key: 'employee', label: 'Employee', kind: 'text', expr: 'f.employee_name' },
+      { key: 'register', label: 'Prior register', kind: 'text', expr: 'reg.name' },
+      { key: 'provider', label: 'Prior provider', kind: 'text', expr: 'reg.provider_name' },
+      { key: 'run_number', label: 'Pay run #', kind: 'text', expr: 'd.document_number' },
+      { key: 'pay_date', label: 'Pay date', kind: 'date', expr: 'reg.pay_date' },
+      { key: 'period_start', label: 'Period start', kind: 'date', expr: 'reg.period_start' },
+      { key: 'period_end', label: 'Period end', kind: 'date', expr: 'reg.period_end' },
+      { key: 'component', label: 'Component', kind: 'text', expr: 'f.slot_label' },
+      { key: 'slot', label: 'Component key', kind: 'text', expr: 'f.slot' },
+      {
+        key: 'line_kind', label: 'Kind', kind: 'enum', expr: 'f.kind',
+        options: ['earning', 'deduction', 'employer_contribution', 'total'],
+      },
+      {
+        // Option order is load-bearing: a sectioned summary orders enum
+        // dimensions by this list, so the differences an operator has to act on
+        // come first and the matches settle at the bottom.
+        key: 'classification', label: 'Result', kind: 'enum', expr: 'f.classification',
+        options: [
+          'difference',
+          'employee_prior_only',
+          'employee_our_only',
+          'prior_only',
+          'our_only',
+          'unattributed',
+          'within_tolerance',
+          'match',
+        ],
+      },
+      { key: 'prior_amount', label: 'Prior system', kind: 'money', expr: 'f.prior_amount' },
+      { key: 'our_amount', label: 'This system', kind: 'money', expr: 'f.our_amount' },
+      { key: 'difference', label: 'Difference', kind: 'money', expr: 'f.difference' },
+      {
+        // Surfaced as a column, never hidden. A tolerance the reader cannot see
+        // would defeat the whole exercise.
+        key: 'tolerance_applied', label: 'Tolerance allowed', kind: 'money',
+        expr: 'f.tolerance_applied',
+      },
+      { key: 'source_column', label: 'Source column', kind: 'text', expr: 'f.source_column' },
+      {
+        key: 'comparison_status', label: 'Comparison outcome', kind: 'enum', expr: 'cmp.status',
+        options: ['differences', 'no_comparable_data', 'clean_within_tolerance', 'clean'],
+      },
+      {
+        // A population count on every row, so a reader never has to infer from
+        // the row count whether anything was actually compared.
+        key: 'employees_compared', label: 'Employees compared', kind: 'number',
+        expr: 'cmp.compared_employee_count',
+      },
+      {
+        key: 'employees_prior', label: 'Employees on prior register', kind: 'number',
+        expr: 'cmp.prior_employee_count',
+      },
+      {
+        key: 'employees_ours', label: 'Employees in our run', kind: 'number',
+        expr: 'cmp.our_employee_count',
+      },
+      {
+        key: 'unmapped_column_count', label: 'Unmapped source columns', kind: 'number',
+        expr: 'jsonb_array_length(cmp.unmapped_columns)',
+      },
+      { key: 'blocked_reason', label: 'Why nothing was compared', kind: 'text', expr: 'cmp.blocked_reason' },
+      { key: 'compared_at', label: 'Compared at', kind: 'timestamp', expr: 'cmp.compared_at' },
+      { key: 'run_status', label: 'Run status', kind: 'enum', expr: 'r.run_status',
+        options: ['draft', 'calculated', 'committed', 'voided'] },
+      { key: 'comparison_id', label: 'Comparison (id)', kind: 'uuid', expr: 'cmp.id' },
+      { key: 'employee_id', label: 'Employee (id)', kind: 'uuid', expr: 'f.employee_party_id' },
+    ],
+    defaultSort: { column: 'compared_at', direction: 'desc' },
+  },
+  {
     key: 'entitlement_balances',
     label: 'Entitlement balances',
     category: 'payroll',

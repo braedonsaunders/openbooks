@@ -1,7 +1,7 @@
 import { sql } from "drizzle-orm";
 import { db } from "./db.ts";
 import { unsealSecret } from "./secrets.ts";
-import { PayrollError } from "./payroll-run.ts";
+import { PayrollError } from "./payroll-error.ts";
 import type { FilingAccountRef } from "./payroll-filing.ts";
 import { t4Returns, type T4Slip, type T4SummaryTotals } from "./payroll-yearend.ts";
 
