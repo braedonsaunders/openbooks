@@ -78,6 +78,7 @@ export async function customersHome(orgId: string, subIds?: string[]): Promise<C
           join accounts a on a.id = jl.account_id and a.org_id = ${orgId}
           join documents d on d.id = je.source_document_id and d.org_id = ${orgId}
            and d.posted_entry_id = je.id and d.status = 'posted' and d.kind = 'customer_invoice'
+           and d.open_balance > 0.005
          where jl.is_open_item and a.type = 'asset_receivable' and jl.amount > 0${lineScope}
       )
       select coalesce(sum(remaining), 0) as outstanding,
@@ -111,6 +112,7 @@ export async function customersHome(orgId: string, subIds?: string[]): Promise<C
           join accounts a on a.id = jl.account_id and a.org_id = ${orgId}
           join documents d on d.id = je.source_document_id and d.org_id = ${orgId}
            and d.posted_entry_id = je.id and d.status = 'posted' and d.kind = 'customer_invoice'
+           and d.open_balance > 0.005
          where jl.is_open_item and a.type = 'asset_receivable' and jl.amount > 0${lineScope}
       )
       select oi.party_id, coalesce(p.display_name, 'Unspecified') as name,

@@ -3,7 +3,12 @@ import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/db.ts'
 import { sealSecret } from '@openbooks/engine/src/secrets.ts'
 import { listFilingAccounts } from '@openbooks/engine/src/payroll-filing.ts'
-import { PAYROLL_COUNTRY_PACKS, payrollPack } from '@openbooks/engine/src/payroll/packs.ts'
+import {
+  employmentJurisdictionsOf,
+  labourJurisdictionProblem,
+  PAYROLL_COUNTRY_PACKS,
+  payrollPack,
+} from '@openbooks/engine/src/payroll/packs.ts'
 import { guardFeaturePermission } from '../../../../lib/feature-gates'
 import { canonicalDecimal, compareDecimal } from '../../../../lib/exact-decimal'
 import { isUuid } from '../../../../lib/list-params'
@@ -41,6 +46,27 @@ const MONEY_KEYS = [
   'otherIncomeAnnual',
   'deductionsAnnual',
 ] as const
+
+/**
+ * The labour jurisdictions the installed packs declare, per country pack, for
+ * the profile editor's optional override select.
+ *
+ * Employment scope only (`employmentJurisdictionsOf`): a tax administration's
+ * own office calendar moves remittance due dates and governs nobody's
+ * employment standards, so it is never offered. The editor renders whatever
+ * this returns — adding a jurisdiction to a pack offers it with no edit here,
+ * and the POST below refuses anything this list does not contain.
+ */
+function labourJurisdictionOptions(): Record<string, { key: string; name: string }[]> {
+  const byCountry: Record<string, { key: string; name: string }[]> = {}
+  for (const country of Object.keys(PAYROLL_COUNTRY_PACKS)) {
+    byCountry[country] = employmentJurisdictionsOf(country).map((jurisdiction) => ({
+      key: jurisdiction.key,
+      name: jurisdiction.name,
+    }))
+  }
+  return byCountry
+}
 
 function claimCode(value: unknown): number | null | 'invalid' {
   if (value === null || value === undefined || value === '') return null
@@ -85,7 +111,8 @@ export async function GET(req: Request) {
     const [profileRes, schedulesRes] = (await Promise.all([
       db.execute(sql`
         select prof.id, prof.employee_party_id, p.display_name as employee_name,
-               prof.pay_schedule_id, s.name as schedule_name, prof.country, prof.province, prof.pay_basis,
+               prof.pay_schedule_id, s.name as schedule_name, prof.country, prof.province,
+               prof.labour_jurisdiction, prof.pay_basis,
                prof.federal_claim_code, prof.federal_claim_amount,
                prof.provincial_claim_code, prof.provincial_claim_amount,
                prof.additional_tax_per_period, prof.cpp_exempt, prof.ei_exempt, prof.tax_exempt,
@@ -108,12 +135,14 @@ export async function GET(req: Request) {
       profile: profileRes.rows[0] ?? null,
       schedules: schedulesRes.rows,
       filingAccounts: await listFilingAccounts(gate.user.orgId),
+      labourJurisdictions: labourJurisdictionOptions(),
       defaultCountry,
     })
   }
   const profiles = (await db.execute(sql`
     select prof.id, prof.employee_party_id, p.display_name as employee_name,
-           prof.pay_schedule_id, s.name as schedule_name, prof.country, prof.province, prof.pay_basis,
+           prof.pay_schedule_id, s.name as schedule_name, prof.country, prof.province,
+           prof.labour_jurisdiction, prof.pay_basis,
            prof.federal_claim_code, prof.federal_claim_amount,
            prof.provincial_claim_code, prof.provincial_claim_amount,
            prof.additional_tax_per_period, prof.cpp_exempt, prof.ei_exempt, prof.tax_exempt,
@@ -132,6 +161,7 @@ export async function GET(req: Request) {
   return NextResponse.json({
     profiles: profiles.rows,
     filingAccounts: await listFilingAccounts(gate.user.orgId),
+    labourJurisdictions: labourJurisdictionOptions(),
   })
 }
 
@@ -161,6 +191,19 @@ export async function POST(req: Request) {
       { status: 422 },
     )
   }
+  // The labour jurisdiction whose EMPLOYMENT STANDARDS govern the employment,
+  // when it is not the one the work region implies. Empty = derive it from the
+  // region, which is the answer for almost every employment. The pack's
+  // declarations are the only validator — an undeclared key is refused BY NAME
+  // here rather than accepted and then silently replaced by the region's
+  // calendar deep inside a pay run.
+  const labourJurisdiction = body.labourJurisdiction == null || body.labourJurisdiction === ''
+    ? null : String(body.labourJurisdiction).trim().toUpperCase()
+  const labourProblem = labourJurisdictionProblem(country, labourJurisdiction)
+  if (labourProblem) {
+    return NextResponse.json({ error: labourProblem }, { status: 422 })
+  }
+
   const filingStatus = body.filingStatus == null || body.filingStatus === ''
     ? null : String(body.filingStatus)
   if (filingStatus !== null && !FILING_STATUSES.has(filingStatus)) {
@@ -281,7 +324,7 @@ export async function POST(req: Request) {
 
   await db.execute(sql`
     insert into employee_payroll_profiles
-      (org_id, employee_party_id, pay_schedule_id, country, province, pay_basis,
+      (org_id, employee_party_id, pay_schedule_id, country, province, labour_jurisdiction, pay_basis,
        federal_claim_code, federal_claim_amount, provincial_claim_code, provincial_claim_amount,
        additional_tax_per_period, prescribed_zone_deduction, authorized_annual_deductions,
        authorized_federal_credits, authorized_provincial_credits,
@@ -290,7 +333,8 @@ export async function POST(req: Request) {
        cpp_exempt, ei_exempt, tax_exempt, vacation_percent, vacation_method, is_active,
        sin_encrypted, sin_last3, filing_account_id, stub_delivery, payment_method,
        created_by, updated_by)
-    values (${orgId}, ${body.employeePartyId}, ${body.payScheduleId}, ${country}, ${province}, ${payBasis},
+    values (${orgId}, ${body.employeePartyId}, ${body.payScheduleId}, ${country}, ${province},
+            ${labourJurisdiction}, ${payBasis},
             ${federalClaimCode}, ${money.federalClaimAmount}, ${provincialClaimCode}, ${money.provincialClaimAmount},
             ${money.additionalTaxPerPeriod}, ${money.prescribedZoneDeduction}, ${money.authorizedAnnualDeductions},
             ${money.authorizedFederalCredits}, ${money.authorizedProvincialCredits},
@@ -306,6 +350,7 @@ export async function POST(req: Request) {
     on conflict (org_id, employee_party_id)
     do update set pay_schedule_id = excluded.pay_schedule_id, country = excluded.country,
                   province = excluded.province,
+                  labour_jurisdiction = excluded.labour_jurisdiction,
                   pay_basis = excluded.pay_basis,
                   federal_claim_code = excluded.federal_claim_code,
                   federal_claim_amount = excluded.federal_claim_amount,

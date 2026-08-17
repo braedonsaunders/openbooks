@@ -104,12 +104,49 @@ export async function POST(req: Request) {
   return NextResponse.json({ outcome, jobId: inserted.rows[0]?.id, total: mappedRows.length })
 }
 
+/**
+ * Reserved key carrying the source columns the operator left unmapped.
+ *
+ * Mapping is lossy by design — most files have columns no field wants — but for
+ * some resources a dropped column is a dropped AMOUNT, and "unmapped columns
+ * are ignored" is then a data-integrity failure rather than a convenience. So
+ * the names travel alongside the mapped values and the resource decides what
+ * they mean. Every existing adapter reads its own declared keys and is
+ * unaffected; the prior-payroll-register resource reports them.
+ */
+export const UNMAPPED_COLUMNS_KEY = '__unmappedColumns'
+
+/**
+ * Reserved key carrying field key → the source column it came from.
+ *
+ * Mapping is otherwise one-way: after it runs, a value's origin in the
+ * operator's own file is gone. That is fine for most resources and wrong for
+ * any that has to explain a number back to the person who supplied it — a
+ * reconciliation finding must be able to say "this came out of your Fed Income
+ * Tax column", not repeat our own label back at them.
+ */
+export const SOURCE_COLUMNS_KEY = '__sourceColumns'
+
 /** Map a raw source row (keyed by file header) onto field-keyed values. */
 function applyMapping(raw: Record<string, unknown>, mapping: Record<string, string>): Record<string, unknown> {
   const out: Record<string, unknown> = {}
+  const mapped = new Set<string>()
+  const sources: Record<string, string> = {}
   for (const [source, field] of Object.entries(mapping)) {
     if (!field) continue
     out[field] = raw[source]
+    mapped.add(source)
+    sources[field] ??= source
   }
+  if (Object.keys(sources).length > 0) out[SOURCE_COLUMNS_KEY] = sources
+  // Header → its raw value, so a resource can tell "unmapped and empty" from
+  // "unmapped and carrying money". Nested under the reserved key rather than
+  // spread into the row: a source header that happens to be spelled like a
+  // field key must never supply a value for that field.
+  const unmapped: Record<string, unknown> = {}
+  for (const header of Object.keys(raw)) {
+    if (!mapped.has(header)) unmapped[header] = raw[header]
+  }
+  if (Object.keys(unmapped).length > 0) out[UNMAPPED_COLUMNS_KEY] = unmapped
   return out
 }
