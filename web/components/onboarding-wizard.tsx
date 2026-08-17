@@ -15,17 +15,24 @@ import { isBookStart, isCloseCadence, isComplexityLevel, isMonthlyActivityLevel,
  */
 export async function OnboardingWizard({ authz }: { authz: Authz }) {
   const orgId = authz.user.orgId
-  const [org, switchable, features] = await Promise.all([
-    db.execute(sql`
-      select name, legal_name, base_currency, country, settings
-        from orgs where id = ${orgId}`),
-    canSwitchIndustry(orgId),
-    resolvedFeatureState(orgId),
-  ])
-  const row = (org as unknown as { rows: { name: string; legal_name: string | null; base_currency: string; country: string; settings: Record<string, unknown> }[] }).rows[0]
+  // The wizard renders on EVERY page for admins, so establish that it is
+  // actually needed before loading anything it would need to render. Fetching
+  // the industry-switch probe and feature state up front spent that work on
+  // every request of every already-onboarded org.
+  const org = (await db.execute(sql`
+    select name, legal_name, base_currency, country, settings
+      from orgs where id = ${orgId}`)) as unknown as {
+    rows: { name: string; legal_name: string | null; base_currency: string; country: string; settings: Record<string, unknown> }[]
+  }
+  const row = org.rows[0]
   const settings = row?.settings ?? {}
   const storedProfile = settings.workspaceProfile as Record<string, unknown> | undefined
   if (onboardingStatus(settings) !== 'required') return null
+
+  const [switchable, features] = await Promise.all([
+    canSwitchIndustry(orgId),
+    resolvedFeatureState(orgId),
+  ])
 
   return (
     <SetupWizard
