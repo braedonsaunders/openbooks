@@ -20,6 +20,12 @@
     "open": "Explicar este campo",
     "generic": "Establece el valor de {field} para este registro u operación."
   },
+  "tagInput": {
+    "placeholder": "Añadir…",
+    "remove": "Quitar {tag}",
+    "add": "Añadir «{value}»",
+    "noMatches": "Sin coincidencias"
+  },
   "select": {
     "placeholder": "Seleccionar…",
     "searchPlaceholder": "Buscar…",
@@ -43,7 +49,11 @@
     "addFiles": "Agregar archivos",
     "searchPlaceholder": "Buscar adjuntos…",
     "typeFilter": "Tipo",
-    "types": { "pdf": "PDF", "image": "Imagen", "other": "Otro" },
+    "types": {
+      "pdf": "PDF",
+      "image": "Imagen",
+      "other": "Otro"
+    },
     "downloadAria": "Descargar {name}",
     "openAria": "Abrir {name} en una pestaña nueva",
     "removeAria": "Quitar {name}",

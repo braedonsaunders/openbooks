@@ -20,6 +20,12 @@
     "open": "Dieses Feld erklären",
     "generic": "Legt den Wert für {field} in diesem Datensatz oder Vorgang fest."
   },
+  "tagInput": {
+    "placeholder": "Hinzufügen…",
+    "remove": "{tag} entfernen",
+    "add": "„{value}“ hinzufügen",
+    "noMatches": "Keine Treffer"
+  },
   "select": {
     "placeholder": "Auswählen…",
     "searchPlaceholder": "Suchen…",
@@ -43,7 +49,11 @@
     "addFiles": "Dateien hinzufügen",
     "searchPlaceholder": "Anhänge durchsuchen…",
     "typeFilter": "Typ",
-    "types": { "pdf": "PDF", "image": "Bild", "other": "Andere" },
+    "types": {
+      "pdf": "PDF",
+      "image": "Bild",
+      "other": "Andere"
+    },
     "downloadAria": "{name} herunterladen",
     "openAria": "{name} in einem neuen Tab öffnen",
     "removeAria": "{name} entfernen",

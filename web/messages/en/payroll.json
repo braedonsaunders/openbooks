@@ -10,6 +10,7 @@
       "overview": "Payroll",
       "runs": "Pay runs",
       "remittances": "Remittances",
+      "separations": "Separations",
       "yearEnd": "Year-end"
     },
     "actions": {
@@ -808,9 +809,17 @@
   },
   "yearEnd": {
     "title": "Year-end",
-    "description": "Every filing the installed payroll packs declare, built from committed pay stubs — every box reconciles to the stub traces.",
-    "yearLabel": "Tax year",
+    "description": "Every annual and quarterly return the installed payroll packs declare, built from committed pay stubs — every box reconciles to the stub traces.",
     "noFilings": "No payroll year-end filings are declared for this organization.",
+    "cadence": {
+      "annual": "Annual returns",
+      "annualHelp": "Filed once per tax year (T4, W-2, RL-1). The tax-year picker above selects which year's population is shown.",
+      "quarterly": "Quarterly returns",
+      "quarterlyHelp": "Filed once per calendar quarter (Form 941) — the population table shows one row per quarter within the selected tax year."
+    }
+  },
+  "filings": {
+    "yearLabel": "Tax year",
     "rowCount": "{count, plural, =0 {No rows} one {# row} other {# rows}}",
     "notInstalled": "Pack not installed",
     "emptyDefault": "No rows for this year.",
@@ -818,13 +827,24 @@
       "description": "{label} · {year}",
       "downloadPdf": "Download PDF"
     },
-    "roe": {
+    "issue": {
       "reason": "Reason for issue",
       "reasonHelp": "Block 16 is the employer's declaration of why earnings stopped. Choosing a reason includes this employee in the ROE Web file; leaving it unset keeps them out.",
       "comment": "Comment",
-      "notIncluded": "Not included in the ROE Web file",
-      "included": "Included in the ROE Web file — reason {code}",
+      "notIncluded": "Not included in the file",
+      "included": "Included in the file — reason {code}",
       "commentRequired": "A comment is required for this reason code."
+    }
+  },
+  "separations": {
+    "title": "Separations",
+    "description": "Separation filings the installed payroll packs declare — due within days of an interruption of earnings, per employee event, not at year-end.",
+    "noFilings": "No payroll separation filings are declared for this organization.",
+    "run": {
+      "title": "Issue {label}",
+      "help": "A separation filing is due within days of the interruption of earnings — issue it from this run, per employee, rather than waiting for year-end.",
+      "issue": "Review & issue",
+      "viewAll": "All separations"
     }
   },
   "register": {

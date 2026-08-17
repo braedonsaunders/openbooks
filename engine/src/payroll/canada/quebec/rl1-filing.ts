@@ -72,6 +72,7 @@ export function rl1Filing(): PayrollYearEndFiling {
   cached ??= {
     key: "rl1",
     label: "RL-1 slips (Revenu Québec)",
+    cadence: "annual",
     description:
       "Revenus d'emploi et revenus divers — the Québec-side year-end slip a QC "
       + "employee receives alongside their T4. Boxes A, B.A/B.B (QPP), C (EI), "

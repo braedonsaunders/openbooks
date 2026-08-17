@@ -19,6 +19,7 @@ import {
   payrollPaymentMethodSettings,
   resolvedPaymentMethodSql,
 } from '@openbooks/engine/src/payroll-payment-method.ts'
+import { orgYearEndFilings, type YearEndFilingSection } from '@openbooks/engine/src/payroll-yearend.ts'
 import { RunWizard, type RemittanceRow, type RosterRow, type RunHeader, type StubRow, type WizardStep } from './RunWizard'
 
 export const dynamic = 'force-dynamic'
@@ -188,6 +189,27 @@ export default async function PayRunPage({
        order by sequence, code`),
   ])) as unknown as [{ rows: any[] }, { rows: any[] }]
 
+  // A termination run's Finish step owns the pack-declared SEPARATION
+  // filings (the ROE): due within days of the interruption of earnings, so
+  // they surface on the run that pays the employee out — the registry's
+  // populations filtered to this run's own employees. Nothing here names a
+  // country or a form; a pack that declares no separation filing shows none.
+  let separationSections: YearEndFilingSection[] = []
+  if (run.run_type === 'termination') {
+    const runEmployees = new Set(stubs.map((stub) => stub.employee_party_id))
+    separationSections = (await orgYearEndFilings(orgId, run.tax_year))
+      .filter((section) => section.cadence === 'separation')
+      .map((section) => ({
+        ...section,
+        data: {
+          ...section.data,
+          rows: section.data.rows.filter((row) =>
+            runEmployees.has(String(row[section.issue?.idColumn ?? section.data.rowKey] ?? ''))),
+        },
+      }))
+      .filter((section) => section.populationRefusal != null || section.data.rows.length > 0)
+  }
+
   const stepParam = sp.step as WizardStep | undefined
   const initialStep: WizardStep =
     stepParam && STEPS.includes(stepParam)
@@ -243,6 +265,7 @@ export default async function PayRunPage({
         staleness={staleness}
         funding={funding}
         changes={changes}
+        separationSections={separationSections}
         registerReportId={registerReport?.id ?? null}
         canRun={can(authz, 'payroll.run')}
         initialStep={initialStep}

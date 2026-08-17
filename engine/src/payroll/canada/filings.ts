@@ -267,6 +267,7 @@ function buildCaPackFilings(): PayrollPackFilings {
     {
       key: "t4",
       label: "T4 slips (Canada)",
+      cadence: "annual",
       description:
         "Per-employee statement of remuneration paid. CPP shown includes CPP2 "
         + "(boxes 16 + 16A); Quebec employees report QPP/QPIP in the corresponding boxes.",
@@ -289,6 +290,11 @@ function buildCaPackFilings(): PayrollPackFilings {
     {
       key: "roe",
       label: "Records of Employment",
+      // A SEPARATION document: due within days of an interruption of
+      // earnings, per employee event — never a year-end return. The cadence
+      // routes it to the Separations surface and the termination run's
+      // Finish step instead of the year-end page.
+      cadence: "separation",
       description:
         "Employees whose earnings were interrupted this year. Choose a reason "
         + "for issue to include an employee in the ROE Web file.",

@@ -20,6 +20,12 @@
     "open": "Explain this field",
     "generic": "Sets the {field} value for this record or operation."
   },
+  "tagInput": {
+    "placeholder": "Add…",
+    "remove": "Remove {tag}",
+    "add": "Add “{value}”",
+    "noMatches": "No matches"
+  },
   "select": {
     "placeholder": "Select…",
     "searchPlaceholder": "Search…",
@@ -43,7 +49,11 @@
     "addFiles": "Add files",
     "searchPlaceholder": "Search attachments…",
     "typeFilter": "Type",
-    "types": { "pdf": "PDF", "image": "Image", "other": "Other" },
+    "types": {
+      "pdf": "PDF",
+      "image": "Image",
+      "other": "Other"
+    },
     "downloadAria": "Download {name}",
     "openAria": "Open {name} in a new tab",
     "removeAria": "Remove {name}",
