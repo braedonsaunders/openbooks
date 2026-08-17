@@ -55,6 +55,11 @@ ARG OPENBOOKS_VERSION=development
 # one package here without a version pin — pin it to the distribution's
 # current qpdf once that version is verified against this base image.
 RUN apt-get update \
+    # Base-image security rot: the node:24-trixie-slim digest still ships
+    # util-linux 2.41-5 (CVE-2026-53615, fixed in 2.41.5-0+deb13u1) and no
+    # rebuilt base exists yet. Upgrade only the already-installed packages so
+    # OS security fixes land without disturbing the explicit pins below.
+    && apt-get upgrade -y --no-install-recommends \
     && apt-get install -y --no-install-recommends \
       chromium=151.0.7922.137-1~deb13u1 \
       qpdf \
