@@ -29,6 +29,55 @@ function textFromNode(node: React.ReactNode): string {
 }
 
 /**
+ * The `?` help button + popover that `FieldLabel` renders beside every label.
+ * Exported so surfaces without a `<label>` (toolbar hints, checkbox rows,
+ * table headers) can attach the SAME field-help affordance — never a bespoke
+ * hint paragraph.
+ */
+export function FieldHelp({
+  help,
+  buttonLabel,
+}: {
+  /** Explanation shown in the popover. */
+  help: React.ReactNode
+  /** Accessible name override for the help button. */
+  buttonLabel?: string
+}) {
+  const t = useTranslations('ui.fieldHelp')
+  const [open, setOpen] = React.useState(false)
+  // A start-aligned panel opening from a trigger near the right viewport edge
+  // (a drawer's right column) would clip offscreen, so flip to end-aligned
+  // when the button sits in the right half of the screen.
+  const [align, setAlign] = React.useState<'start' | 'end'>('start')
+  return (
+    <Popover
+      open={open}
+      onOpenChange={setOpen}
+      align={align}
+      className="w-72 max-w-[calc(100vw-2rem)] p-3"
+      trigger={
+        <button
+          type="button"
+          aria-label={buttonLabel ?? t('open')}
+          aria-expanded={open}
+          aria-haspopup="dialog"
+          onClick={(event) => {
+            const { left } = event.currentTarget.getBoundingClientRect()
+            setAlign(left > window.innerWidth / 2 ? 'end' : 'start')
+            setOpen((value) => !value)
+          }}
+          className="inline-grid h-5 w-5 shrink-0 place-items-center rounded-full text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-500 focus-visible:ring-offset-1 dark:hover:bg-slate-800 dark:hover:text-slate-200"
+        >
+          <CircleHelp size={14} aria-hidden="true" />
+        </button>
+      }
+    >
+      <div className="text-sm leading-5 text-slate-700 dark:text-slate-200">{help}</div>
+    </Popover>
+  )
+}
+
+/**
  * A normal form label with an optional click, keyboard, and touch-friendly
  * explanation. The help button deliberately sits beside (not inside) the
  * `<label>` so clicking the label still focuses or toggles its control.
@@ -36,7 +85,6 @@ function textFromNode(node: React.ReactNode): string {
 export const FieldLabel = React.forwardRef<HTMLLabelElement, FieldLabelProps>(
   ({ help, fieldName, helpLabel, containerClassName, children, className, ...props }, ref) => {
     const t = useTranslations('ui.fieldHelp')
-    const [open, setOpen] = React.useState(false)
     const inferredFieldName = textFromNode(children)
       .replace(/\s+/g, ' ')
       .trim()
@@ -56,26 +104,7 @@ export const FieldLabel = React.forwardRef<HTMLLabelElement, FieldLabelProps>(
         <BaseLabel ref={ref} className={className} {...props}>
           {children}
         </BaseLabel>
-        <Popover
-          open={open}
-          onOpenChange={setOpen}
-          align="start"
-          className="w-72 max-w-[calc(100vw-2rem)] p-3"
-          trigger={
-            <button
-              type="button"
-              aria-label={helpLabel ?? t('open')}
-              aria-expanded={open}
-              aria-haspopup="dialog"
-              onClick={() => setOpen((value) => !value)}
-              className="inline-grid h-5 w-5 shrink-0 place-items-center rounded-full text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-500 focus-visible:ring-offset-1 dark:hover:bg-slate-800 dark:hover:text-slate-200"
-            >
-              <CircleHelp size={14} aria-hidden="true" />
-            </button>
-          }
-        >
-          <div className="text-sm leading-5 text-slate-700 dark:text-slate-200">{resolvedHelp}</div>
-        </Popover>
+        <FieldHelp help={resolvedHelp} buttonLabel={helpLabel} />
       </span>
     )
   },

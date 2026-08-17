@@ -1,9 +1,10 @@
 import { add } from "../../money.ts";
+import { filingAccountRef, filingAccountsById } from "../../payroll-filing.ts";
 import { buildRoeXml, type RoeIssueInput } from "../../payroll-roexml.ts";
 import { buildT4Xml } from "../../payroll-t4xml.ts";
 import { PayrollError } from "../../payroll-run.ts";
-import { roeCandidates, t4Slips, t4Summary, ROE_REASON_CODES, type RoeReasonCode } from "../../payroll-yearend.ts";
-import type { PayrollFilingData, PayrollPackFilings } from "../../payroll-filing-registry.ts";
+import { roeCandidates, roeRecord, t4Slips, t4Summary, ROE_REASON_CODES, type RoeReasonCode } from "../../payroll-yearend.ts";
+import type { PayrollFilingData, PayrollFilingSlipData, PayrollPackFilings } from "../../payroll-filing-registry.ts";
 import { rl1Filing } from "./quebec/rl1-filing.ts";
 
 /**
@@ -79,6 +80,114 @@ async function t4Population(orgId: string, taxYear: number): Promise<PayrollFili
       { label: "EI (employee + employer)", value: add(summary.employeeEi, summary.employerEi), money: true },
       { label: "Income tax", value: summary.incomeTax, money: true },
       { label: "Remitted (posted bills)", value: summary.remitted, money: true },
+    ],
+  };
+}
+
+/**
+ * One employee-province-account row as its T4 slip, box for box — the CRA's
+ * own box numbers and printed titles. Quebec employment reports QPP in boxes
+ * 17/17A and PPIP in 55/56, exactly as the engine's slip model carries it.
+ */
+async function t4Slip(orgId: string, taxYear: number, rowId: string): Promise<PayrollFilingSlipData> {
+  const slips = await t4Slips(orgId, taxYear);
+  const slip = slips.find(
+    (s) => `${s.employeePartyId}:${s.province}:${s.filingAccountId ?? ""}` === rowId,
+  );
+  if (!slip) {
+    throw new PayrollError(`no ${taxYear} T4 slip matches the requested employee/province row`);
+  }
+  const account = filingAccountRef(slip.filingAccountId, await filingAccountsById(orgId));
+  const quebec = slip.isQuebec;
+  return {
+    formCode: "CA_T4",
+    formName: "T4 — Statement of Remuneration Paid",
+    formNumber: "T4",
+    headerFields: [
+      { label: "Employee's name", value: slip.employeeName },
+      { label: "Province of employment (10)", value: slip.province },
+      {
+        label: "Employer's account number (54)",
+        value: account.accountNumber
+          ? `${account.accountNumber}${account.name ? ` · ${account.name}` : ""}`
+          : "Unassigned",
+      },
+      { label: "Tax year", value: String(taxYear) },
+    ],
+    boxes: [
+      { code: "14", label: "Employment income", value: slip.box14EmploymentIncome },
+      quebec
+        ? { code: "17", label: "Employee's QPP contributions", value: slip.box16Cpp }
+        : { code: "16", label: "Employee's CPP contributions", value: slip.box16Cpp },
+      quebec
+        ? { code: "17A", label: "Employee's second QPP contributions", value: slip.box16aCpp2 }
+        : { code: "16A", label: "Employee's second CPP contributions", value: slip.box16aCpp2 },
+      { code: "18", label: "Employee's EI premiums", value: slip.box18Ei },
+      { code: "22", label: "Income tax deducted", value: slip.box22IncomeTax },
+      { code: "24", label: "EI insurable earnings", value: slip.box24EiInsurable },
+      { code: "26", label: "CPP/QPP pensionable earnings", value: slip.box26CppPensionable },
+      { code: "44", label: "Union dues", value: slip.box44UnionDues },
+      ...(quebec
+        ? [
+            { code: "55", label: "Employee's PPIP premiums", value: slip.box55Qpip },
+            { code: "56", label: "PPIP insurable earnings", value: slip.box56QpipInsurable },
+          ]
+        : []),
+    ],
+    notes: [
+      "One T4 slip per province of employment, per payroll program account.",
+      ...(quebec
+        ? ["Québec employment: QPP reports in boxes 17/17A and PPIP in boxes 55/56; the employee also receives an RL-1."]
+        : []),
+    ],
+  };
+}
+
+/**
+ * One ROE candidate as the Record of Employment, block by block. Block 16
+ * (reason for issue) is deliberately absent: it is the employer's declaration,
+ * made when the ROE Web file is issued — never printed as a guess.
+ */
+async function roeSlip(orgId: string, _taxYear: number, rowId: string): Promise<PayrollFilingSlipData> {
+  const record = await roeRecord(orgId, rowId);
+  if (!record) {
+    throw new PayrollError(
+      "no Record of Employment can be assembled for this employee — ROEs exist for Canadian-pack employees only",
+    );
+  }
+  return {
+    formCode: "CA_ROE",
+    formName: "Record of Employment",
+    formNumber: "ROE",
+    headerFields: [
+      { label: "Employee's name", value: record.employeeName },
+      { label: "Payroll reference number (Block 4)", value: record.payrollReference ?? "—" },
+      {
+        label: "CRA payroll account number (Block 5)",
+        value: record.filingAccount.accountNumber ?? "Unassigned",
+      },
+      { label: "Occupation (Block 13)", value: record.occupation ?? "—" },
+    ],
+    boxes: [
+      { code: "6", label: "Pay period type", value: record.payPeriodType },
+      { code: "10", label: "First day worked", value: record.firstDayWorked ?? "—" },
+      { code: "11", label: "Last day for which paid", value: record.lastDayPaid ?? "—" },
+      { code: "12", label: "Final pay period ending date", value: record.finalPayPeriodEnd ?? "—" },
+      { code: "15A", label: "Total insurable hours", value: record.totalInsurableHours, emphasis: true },
+      { code: "15B", label: "Total insurable earnings", value: record.totalInsurableEarnings, emphasis: true },
+      // Block 15C — insurable earnings by pay period, P1 = final period,
+      // exactly the window Block 6's pay-period type declares.
+      ...record.periods.map((period, index) => ({
+        code: `15C P${index + 1}`,
+        label: `Insurable earnings — pay period ending ${period.periodEnd}`,
+        value: period.insurableEarnings,
+      })),
+      { code: "17A", label: "Vacation pay (final period)", value: record.vacationPayOnSeparation },
+      { code: "17C", label: "Other monies (final period)", value: record.otherMoniesOnSeparation },
+    ],
+    notes: [
+      "Block 16 (reason for issuing this ROE) and any comment are the employer's declaration, "
+      + "made when the ROE Web file is issued — nothing in the payroll data can infer them.",
     ],
   };
 }
@@ -163,6 +272,7 @@ function buildCaPackFilings(): PayrollPackFilings {
         + "(boxes 16 + 16A); Quebec employees report QPP/QPIP in the corresponding boxes.",
       emptyText: "No committed Canadian pay stubs for this year.",
       population: (orgId, taxYear) => t4Population(orgId, taxYear),
+      slip: { build: (orgId, taxYear, rowId) => t4Slip(orgId, taxYear, rowId) },
       download: {
         label: "Download T4 XML",
         note: "Validate against the CRA schema for the filing year before transmitting.",
@@ -184,6 +294,7 @@ function buildCaPackFilings(): PayrollPackFilings {
         + "for issue to include an employee in the ROE Web file.",
       emptyText: "No employees with interrupted earnings this year.",
       population: (orgId, taxYear) => roePopulation(orgId, taxYear),
+      slip: { build: (orgId, taxYear, rowId) => roeSlip(orgId, taxYear, rowId) },
       issue: {
         param: "employees",
         idColumn: "employeePartyId",

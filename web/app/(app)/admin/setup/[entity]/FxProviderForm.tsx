@@ -142,7 +142,7 @@ export function FxProviderForm({
       <div className="rounded-xl border border-slate-200 bg-white p-5 dark:border-slate-800 dark:bg-slate-900">
         <div className="grid gap-4 sm:grid-cols-2">
           <div className="space-y-1.5">
-            <Label>{t('provider')}</Label>
+            <Label help={t(`providerHelp.${form.provider}`)}>{t('provider')}</Label>
             <Select
               value={form.provider}
               onChange={(event) => setForm((current) => ({ ...current, provider: event.target.value as Provider }))}
@@ -151,7 +151,6 @@ export function FxProviderForm({
               <option value="ecb">{t('providers.ecb')}</option>
               <option value="open_exchange_rates">{t('providers.open_exchange_rates')}</option>
             </Select>
-            <p className="text-xs text-slate-500 dark:text-slate-400">{t(`providerHelp.${form.provider}`)}</p>
           </div>
           <div className="space-y-1.5">
             <Label>{t('displayName')}</Label>

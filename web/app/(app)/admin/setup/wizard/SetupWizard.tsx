@@ -5,7 +5,8 @@ import Link from 'next/link'
 import { usePathname, useRouter } from 'next/navigation'
 import { useLocale, useTranslations } from 'next-intl'
 import { toast } from 'sonner'
-import { AnimatePresence, motion, useReducedMotion } from 'framer-motion'
+import { motion, useReducedMotion } from 'framer-motion'
+import { WizardShell } from './WizardShell'
 import {
   ArrowLeft,
   ArrowRight,
@@ -36,7 +37,6 @@ import {
   Users,
   Wallet,
   Warehouse,
-  X,
 } from 'lucide-react'
 import { cn } from '@openbooks/ui'
 import type { IndustryDef } from '@/lib/industries'
@@ -345,213 +345,167 @@ export function SetupWizard(props: {
   // ─── Render ───────────────────────────────────────────────────────────
 
   return (
-    <AnimatePresence>
-      <motion.div
-        initial={reduceMotion ? false : { opacity: 0 }}
-        animate={{ opacity: 1 }}
-        exit={reduceMotion ? undefined : { opacity: 0 }}
-        transition={{ duration: 0.2 }}
-        data-testid="setup-wizard"
-        className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-950/80 backdrop-blur-sm"
-      >
-        {/* Close/skip button */}
-        {!busy && step !== 'applying' && step !== 'done' && (
-          <button
-            type="button"
-            onClick={skip}
-            disabled={transitioning}
-            className="absolute right-6 top-6 z-10 flex items-center gap-1.5 rounded-lg px-3 py-2 text-sm font-medium text-slate-300 transition-colors hover:bg-white/10 hover:text-white disabled:cursor-not-allowed disabled:opacity-50"
-          >
-            <X size={16} /> {t('skip')}
-          </button>
-        )}
-
-        <motion.div
-          initial={reduceMotion ? false : { scale: 0.95, y: 10 }}
-          animate={{ scale: 1, y: 0 }}
-          transition={{ type: 'spring', stiffness: 300, damping: 30 }}
-          className="relative flex max-h-[90vh] w-full max-w-3xl flex-col overflow-hidden rounded-2xl bg-white shadow-2xl dark:bg-slate-900"
-        >
-          {/* Progress bar */}
-          {stepIdx > 0 && stepIdx < steps.indexOf('applying') && (
-            <div className="flex items-center gap-2 px-6 pt-5">
-              {progressSteps.map((s, i) => (
-                <div
-                  key={s}
-                  className={cn(
-                    'h-1.5 flex-1 rounded-full transition-colors duration-300',
-                    i < progressIdx
-                      ? 'bg-teal-500'
-                      : i === progressIdx
-                        ? 'bg-teal-500'
-                        : 'bg-slate-200 dark:bg-slate-700',
-                  )}
-                />
-              ))}
-            </div>
+    <WizardShell
+      testId="setup-wizard"
+      stepKey={step}
+      progress={
+        stepIdx > 0 && stepIdx < steps.indexOf('applying')
+          ? { index: progressIdx, total: progressSteps.length }
+          : null
+      }
+      skip={
+        !busy && step !== 'applying' && step !== 'done'
+          ? { label: t('skip'), onClick: skip, disabled: transitioning }
+          : null
+      }
+      footer={
+        stepIdx < steps.indexOf('applying')
+          ? {
+              back:
+                stepIdx > 0
+                  ? {
+                      label: (
+                        <>
+                          <ArrowLeft size={16} /> {t('back')}
+                        </>
+                      ),
+                      onClick: back,
+                      disabled: busy || transitioning,
+                    }
+                  : null,
+              primary:
+                step === 'review'
+                  ? {
+                      label: (
+                        <>
+                          <Sparkles size={16} /> {t('apply')}
+                        </>
+                      ),
+                      onClick: apply,
+                      disabled: busy || transitioning,
+                    }
+                  : {
+                      label: (
+                        <>
+                          {t('next')} <ArrowRight size={16} />
+                        </>
+                      ),
+                      onClick: next,
+                      disabled: !canNext || busy || transitioning,
+                    },
+            }
+          : null
+      }
+    >
+      {step === 'welcome' && <WelcomeStep t={t} />}
+      {step === 'company' && (
+        <CompanyStep
+          t={t}
+          name={name}
+          legalName={legalName}
+          country={country}
+          currency={currency}
+          fiscalMonth={fiscalMonth}
+          countries={countries}
+          setName={setName}
+          setLegalName={setLegalName}
+          setCountry={setCountry}
+          setCurrency={setCurrency}
+          setFiscalMonth={setFiscalMonth}
+        />
+      )}
+      {step === 'industry' && (
+        <IndustryStep
+          t={t}
+          industries={filteredIndustries}
+          selected={industryKey}
+          search={search}
+          setSearch={setSearch}
+          onPick={pickIndustry}
+          canSwitch={props.canSwitchIndustry}
+          currentIndustry={props.initial.industry}
+        />
+      )}
+      {step === 'profile' && (
+        <ProfileStep
+          t={t}
+          teamSize={teamSize}
+          complexity={complexity}
+          onTeamSize={chooseTeamSize}
+          onComplexity={chooseComplexity}
+        />
+      )}
+      {step === 'rhythm' && (
+        <RhythmStep
+          t={t}
+          monthlyActivity={monthlyActivity}
+          closeCadence={closeCadence}
+          onMonthlyActivity={chooseMonthlyActivity}
+          onCloseCadence={chooseCloseCadence}
+        />
+      )}
+      {step === 'operations' && (
+        <OperationsStep
+          t={t}
+          toggles={toggles}
+          setToggles={(update) => {
+            setToggles((previous) => {
+              const next = typeof update === 'function' ? update(previous) : update
+              setFeatureChoices((features) => ({ ...features, ...next }))
+              return next
+            })
+          }}
+        />
+      )}
+      {step === 'payroll' && (
+        <PayrollStep t={t} pack={payrollPack} setPack={setPayrollPack} />
+      )}
+      {step === 'launch' && (
+        <LaunchStep
+          t={t}
+          bookStart={bookStart}
+          taxPosition={taxPosition}
+          includeSampleCompany={includeSampleCompany}
+          setBookStart={setBookStart}
+          setTaxPosition={setTaxPosition}
+          setIncludeSampleCompany={setIncludeSampleCompany}
+          toggles={toggles}
+          setToggle={(key, value) => {
+            setToggles((current) => ({ ...current, [key]: value }))
+            setFeatureChoices((current) => ({ ...current, [key]: value }))
+          }}
+        />
+      )}
+      {step === 'review' && (
+        <ReviewStep
+          t={t}
+          name={name}
+          legalName={legalName}
+          country={country}
+          currency={currency}
+          fiscalMonth={fiscalMonth}
+          teamSize={teamSize}
+          complexity={complexity}
+          bookStart={bookStart}
+          taxPosition={taxPosition}
+          monthlyActivity={monthlyActivity}
+          closeCadence={closeCadence}
+          industry={selectedIndustry}
+          featureKeys={reviewFeatureKeys}
+          featureTitle={(key) => tAdmin(`features.${key}.title`)}
+          includeSampleCompany={includeSampleCompany}
+          payrollOn={toggles.payroll}
+          payrollPack={payrollPack}
+          seedChartOfAccounts={Boolean(
+            props.canSwitchIndustry
+            && selectedIndustry
+            && selectedIndustry.key !== props.initial.industry
           )}
-
-          {/* Step content (scrollable) */}
-          <div className="flex-1 overflow-y-auto px-6 py-6 sm:px-10 sm:py-8">
-            <AnimatePresence mode="wait">
-              <motion.div
-                key={step}
-                initial={reduceMotion ? false : { opacity: 0, x: 20 }}
-                animate={{ opacity: 1, x: 0 }}
-                exit={reduceMotion ? undefined : { opacity: 0, x: -20 }}
-                transition={{ duration: 0.25 }}
-              >
-                {step === 'welcome' && <WelcomeStep t={t} />}
-                {step === 'company' && (
-                  <CompanyStep
-                    t={t}
-                    name={name}
-                    legalName={legalName}
-                    country={country}
-                    currency={currency}
-                    fiscalMonth={fiscalMonth}
-                    countries={countries}
-                    setName={setName}
-                    setLegalName={setLegalName}
-                    setCountry={setCountry}
-                    setCurrency={setCurrency}
-                    setFiscalMonth={setFiscalMonth}
-                  />
-                )}
-                {step === 'industry' && (
-                  <IndustryStep
-                    t={t}
-                    industries={filteredIndustries}
-                    selected={industryKey}
-                    search={search}
-                    setSearch={setSearch}
-                    onPick={pickIndustry}
-                    canSwitch={props.canSwitchIndustry}
-                    currentIndustry={props.initial.industry}
-                  />
-                )}
-                {step === 'profile' && (
-                  <ProfileStep
-                    t={t}
-                    teamSize={teamSize}
-                    complexity={complexity}
-                    onTeamSize={chooseTeamSize}
-                    onComplexity={chooseComplexity}
-                  />
-                )}
-                {step === 'rhythm' && (
-                  <RhythmStep
-                    t={t}
-                    monthlyActivity={monthlyActivity}
-                    closeCadence={closeCadence}
-                    onMonthlyActivity={chooseMonthlyActivity}
-                    onCloseCadence={chooseCloseCadence}
-                  />
-                )}
-                {step === 'operations' && (
-                  <OperationsStep
-                    t={t}
-                    toggles={toggles}
-                    setToggles={(update) => {
-                      setToggles((previous) => {
-                        const next = typeof update === 'function' ? update(previous) : update
-                        setFeatureChoices((features) => ({ ...features, ...next }))
-                        return next
-                      })
-                    }}
-                  />
-                )}
-                {step === 'payroll' && (
-                  <PayrollStep t={t} pack={payrollPack} setPack={setPayrollPack} />
-                )}
-                {step === 'launch' && (
-                  <LaunchStep
-                    t={t}
-                    bookStart={bookStart}
-                    taxPosition={taxPosition}
-                    includeSampleCompany={includeSampleCompany}
-                    setBookStart={setBookStart}
-                    setTaxPosition={setTaxPosition}
-                    setIncludeSampleCompany={setIncludeSampleCompany}
-                    toggles={toggles}
-                    setToggle={(key, value) => {
-                      setToggles((current) => ({ ...current, [key]: value }))
-                      setFeatureChoices((current) => ({ ...current, [key]: value }))
-                    }}
-                  />
-                )}
-                {step === 'review' && (
-                  <ReviewStep
-                    t={t}
-                    name={name}
-                    legalName={legalName}
-                    country={country}
-                    currency={currency}
-                    fiscalMonth={fiscalMonth}
-                    teamSize={teamSize}
-                    complexity={complexity}
-                    bookStart={bookStart}
-                    taxPosition={taxPosition}
-                    monthlyActivity={monthlyActivity}
-                    closeCadence={closeCadence}
-                    industry={selectedIndustry}
-                    featureKeys={reviewFeatureKeys}
-                    featureTitle={(key) => tAdmin(`features.${key}.title`)}
-                    includeSampleCompany={includeSampleCompany}
-                    payrollOn={toggles.payroll}
-                    payrollPack={payrollPack}
-                    seedChartOfAccounts={Boolean(
-                      props.canSwitchIndustry
-                      && selectedIndustry
-                      && selectedIndustry.key !== props.initial.industry
-                    )}
-                  />
-                )}
-                {step === 'applying' && <ApplyingStep t={t} />}
-                {step === 'done' && <DoneStep t={t} />}
-              </motion.div>
-            </AnimatePresence>
-          </div>
-
-          {/* Footer navigation */}
-          {stepIdx < steps.indexOf('applying') && stepIdx < steps.indexOf('done') && (
-            <div className="flex items-center justify-between border-t border-slate-200 px-6 py-4 dark:border-slate-800 sm:px-10">
-              {stepIdx > 0 ? (
-                <button
-                  type="button"
-                  onClick={back}
-                  disabled={busy || transitioning}
-                  className="flex items-center gap-1.5 rounded-lg px-3 py-2 text-sm font-medium text-slate-600 transition-colors hover:bg-slate-100 disabled:opacity-50 dark:text-slate-300 dark:hover:bg-slate-800"
-                >
-                  <ArrowLeft size={16} /> {t('back')}
-                </button>
-              ) : (
-                <span aria-hidden="true" />
-              )}
-              {step === 'review' ? (
-                <button
-                  type="button"
-                  onClick={apply}
-                  disabled={busy || transitioning}
-                  className="flex items-center gap-2 rounded-lg bg-teal-700 px-5 py-2.5 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-teal-800 disabled:opacity-50"
-                >
-                  <Sparkles size={16} /> {t('apply')}
-                </button>
-              ) : (
-                <button
-                  type="button"
-                  onClick={next}
-                  disabled={!canNext || busy || transitioning}
-                  className="flex items-center gap-1.5 rounded-lg bg-teal-700 px-5 py-2.5 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-teal-800 disabled:cursor-not-allowed disabled:opacity-50"
-                >
-                  {t('next')} <ArrowRight size={16} />
-                </button>
-              )}
-            </div>
-          )}
-        </motion.div>
-      </motion.div>
-    </AnimatePresence>
+        />
+      )}
+      {step === 'applying' && <ApplyingStep t={t} />}
+      {step === 'done' && <DoneStep t={t} />}
+    </WizardShell>
   )
 }
 

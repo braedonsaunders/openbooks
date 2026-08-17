@@ -9,6 +9,7 @@ import {
 import { US_STATES } from '@openbooks/engine/src/payroll/us/rates.ts'
 import { assertValidPasswordExpression, pdfEncryptionAvailable } from '@openbooks/pdf'
 import { payrollPaymentMethodSettings } from '@openbooks/engine/src/payroll-payment-method.ts'
+import { payrollSetupState } from '@openbooks/engine/src/payroll-readiness.ts'
 import { STUB_PASSWORD_TOKENS, stubPasswordPolicy } from '../../../../lib/payroll-outputs'
 import { guardFeaturePermission } from '../../../../lib/feature-gates'
 import { canonicalDecimal, compareDecimal } from '../../../../lib/exact-decimal'
@@ -101,16 +102,19 @@ export async function GET() {
     pickerOptions(gate.user.orgId),
   ])
   const installed = Array.isArray(blob.countries) ? blob.countries.map(String) : []
-  const [packs, us, ca, stubPassword, encryptionAvailable] = await Promise.all([
+  const [packs, us, ca, stubPassword, encryptionAvailable, setup] = await Promise.all([
     packSlotState(gate.user.orgId, installed, blob),
     usPayrollConfig(gate.user.orgId),
     caPayrollConfig(gate.user.orgId),
     stubPasswordPolicy(gate.user.orgId),
     pdfEncryptionAvailable(),
+    // The setup wizard's step state — the same org-level checks the pay-run
+    // readiness pre-flight performs, so the two surfaces cannot disagree.
+    payrollSetupState(gate.user.orgId),
   ])
   const paymentMethods = await payrollPaymentMethodSettings(gate.user.orgId)
   return NextResponse.json({
-    settings, packs, us, ca, stubPassword, encryptionAvailable, paymentMethods,
+    settings, packs, us, ca, stubPassword, encryptionAvailable, paymentMethods, setup,
     statutoryHolidayPay: blob.statutoryHolidayPay === true,
     installable: installableCountries(),
     ...options,

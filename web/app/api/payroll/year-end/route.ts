@@ -26,6 +26,8 @@ export async function GET(req: Request) {
       label: filing.label,
       installed: filing.installed,
       data: filing.data,
+      hasSlip: filing.hasSlip,
+      populationRefusal: filing.populationRefusal,
       downloadRefusal: filing.downloadRefusal,
     })),
   })

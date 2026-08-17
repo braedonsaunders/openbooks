@@ -285,8 +285,7 @@ export function SetupDrawer({
         ))}
         {!creating && entity.key === 'tax-return-forms' ? (
           <div className="space-y-2 border-t border-slate-200 pt-4 sm:col-span-2 dark:border-slate-800">
-            <Label>{t('taxOfficial.title')}</Label>
-            <p className="text-xs text-slate-500 dark:text-slate-400">{t('taxOfficial.description')}</p>
+            <Label help={t('taxOfficial.description')}>{t('taxOfficial.title')}</Label>
             <div className="flex flex-wrap items-center gap-2">
               <label className="cursor-pointer">
                 <input
@@ -371,6 +370,10 @@ function FieldControl({
   const locale = useLocale()
   const countries = useMemo(() => countryOptions(locale), [locale])
   const label = t(`fields.${field.key}`)
+  // Authored help renders as the `?` popover on the field label (FieldLabel);
+  // without it the label falls back to its generic explanation. Inline text
+  // below a control is reserved for validation/state messages only.
+  const help = field.helpTextKey ? t(field.helpTextKey) : undefined
   const locked = forceLocked || (!creating && field.lockedOnEdit)
   const full = field.kind === 'multiref' || field.kind === 'textarea' || field.kind === 'json'
   const wrap = full ? 'space-y-1.5 sm:col-span-2' : 'space-y-1.5'
@@ -382,19 +385,22 @@ function FieldControl({
   if (locked) {
     return (
       <div className={wrap}>
-        <Label>{label}</Label>
+        <Label help={help}>{label}</Label>
         <div className={cn('flex h-10 items-center rounded-lg border border-slate-200 bg-slate-50 px-3 text-sm text-slate-600 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-300', field.kind !== 'ref' && 'font-mono')}>
           {String(lockedDisplay ?? '') || '—'}
         </div>
-        {field.helpTextKey ? <p className="text-xs text-slate-500 dark:text-slate-400">{t(field.helpTextKey)}</p> : null}
       </div>
     )
   }
 
   if (field.kind === 'boolean') {
     return (
-      <div className="self-end space-y-1.5 pb-2">
-        <label className="flex items-center gap-2 text-sm text-slate-700 dark:text-slate-200">
+      <div className="self-end pb-2">
+        <Label
+          help={help}
+          fieldName={label}
+          className="flex items-center gap-2 text-sm font-normal text-slate-700 dark:text-slate-200"
+        >
           <input
             type="checkbox"
             checked={Boolean(value)}
@@ -402,8 +408,7 @@ function FieldControl({
             className="h-4 w-4 rounded border-slate-300 text-teal-600 focus:ring-teal-500"
           />
           {label}
-        </label>
-        {field.helpTextKey ? <p className="text-xs text-slate-500 dark:text-slate-400">{t(field.helpTextKey)}</p> : null}
+        </Label>
       </div>
     )
   }
@@ -412,7 +417,7 @@ function FieldControl({
     const selected: string[] = Array.isArray(value) ? value : []
     return (
       <div className={wrap}>
-        <Label>{label}</Label>
+        <Label help={help}>{label}</Label>
         {refOptions.length === 0 ? (
           <p className="text-xs text-slate-400">{t('empty')}</p>
         ) : (
@@ -446,7 +451,7 @@ function FieldControl({
     const options: SelectOption[] = refOptions.map((o) => ({ value: o.value, label: o.label }))
     return (
       <div className={wrap}>
-        <Label>{label}</Label>
+        <Label help={help}>{label}</Label>
         <SearchSelect
           value={String(value ?? '')}
           onChange={onChange}
@@ -464,7 +469,7 @@ function FieldControl({
   if (field.kind === 'country') {
     return (
       <div className={wrap}>
-        <Label>{label}</Label>
+        <Label help={help}>{label}</Label>
         <SearchSelect
           value={String(value ?? '')}
           onChange={onChange}
@@ -482,7 +487,7 @@ function FieldControl({
   if (field.kind === 'select') {
     return (
       <div className={wrap}>
-        <Label>{label}</Label>
+        <Label help={help}>{label}</Label>
         <Select value={String(value ?? '')} onChange={(e) => onChange(e.target.value)}>
           {!field.required ? <option value="">—</option> : null}
           {field.options?.map((o) => (
@@ -491,7 +496,6 @@ function FieldControl({
             </option>
           ))}
         </Select>
-        {field.helpTextKey ? <p className="text-xs text-slate-500 dark:text-slate-400">{t(field.helpTextKey)}</p> : null}
       </div>
     )
   }
@@ -499,7 +503,7 @@ function FieldControl({
   if (field.kind === 'textarea' || field.kind === 'json') {
     return (
       <div className={wrap}>
-        <Label>{label}</Label>
+        <Label help={help}>{label}</Label>
         <Textarea className={field.kind === 'json' ? 'min-h-40 font-mono text-xs' : undefined} value={String(value ?? '')} onChange={(e) => onChange(e.target.value)} />
       </div>
     )
@@ -508,14 +512,13 @@ function FieldControl({
   const numeric = field.kind === 'integer' || field.kind === 'decimal' || field.kind === 'percent'
   return (
     <div className={wrap}>
-      <Label>{label}</Label>
+      <Label help={help}>{label}</Label>
       <Input
         type={field.kind === 'date' ? 'date' : 'text'}
         inputMode={numeric ? 'decimal' : undefined}
         value={String(value ?? '')}
         onChange={(e) => onChange(e.target.value)}
       />
-      {field.helpTextKey ? <p className="text-xs text-slate-500 dark:text-slate-400">{t(field.helpTextKey)}</p> : null}
     </div>
   )
 }

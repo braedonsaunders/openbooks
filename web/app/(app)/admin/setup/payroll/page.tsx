@@ -5,9 +5,12 @@ import { cn } from '@openbooks/ui'
 import { db } from '@openbooks/engine/src/db.ts'
 import { caPayrollConfig, payrollSettings, usPayrollConfig } from '@openbooks/engine/src/payroll-run.ts'
 import { payrollPaymentMethodSettings } from '@openbooks/engine/src/payroll-payment-method.ts'
-import { packSlotState } from '@openbooks/engine/src/payroll/packs.ts'
+import { payrollSetupState } from '@openbooks/engine/src/payroll-readiness.ts'
+import { payrollBankProfiles } from '@openbooks/engine/src/payroll-bank-file.ts'
+import { packRemittanceVendorSettingsKeys, packSlotState, PAYROLL_COUNTRY_PACKS } from '@openbooks/engine/src/payroll/packs.ts'
 import { RATES_2026_JAN, RATES_2026_JUL } from '@openbooks/engine/src/payroll/canada/rates.ts'
 import { pdfEncryptionAvailable } from '@openbooks/pdf'
+import { ModuleHomeTabs } from '../../../../../components/module-home/ui'
 import { stubPasswordPolicy } from '../../../../../lib/payroll-outputs'
 import { can, requirePermission } from '../../../../../lib/authz'
 import { requireFeatureEnabled } from '../../../../../lib/feature-gates'
@@ -19,16 +22,26 @@ import { SetupEntitySection } from '../[entity]/SetupEntitySection'
 import { DerivedRulePreviewSection } from './DerivedRulePreviewSection'
 import { HolidayCalendarSection } from './HolidayCalendarSection'
 import { PayrollCountryPacks } from './PayrollCountryPacks'
+import { PayrollPaydaySettings } from './PayrollPaydaySettings'
+import { PayrollSetupLauncher } from './PayrollSetupLauncher'
 import { PayrollSetupWorkspace } from './PayrollSetupWorkspace'
+import { StatHolidayPaySection } from './StatHolidayPaySection'
 
 export const dynamic = 'force-dynamic'
 
 /**
- * Payroll setup — a subtabbed workspace in the Tax Setup mold. Country packs
- * (the statutory engines, presented as installable jurisdictions) are the
- * front door; accounts & posting own orgs.settings.payroll; schedules,
- * components, and union agreements are the re-homed registry entities that
- * left the setup rail to live here.
+ * Payroll setup — a two-level workspace. The TOP row is four GROUPS on the
+ * house border-b tab strip (the Close-setup / Tax-setup subtab idiom); the
+ * second level inside a group is the ModuleHomeTabs pill strip (the module
+ * homes' route-tab switcher), so a dozen-plus surfaces never crowd one row.
+ * Country packs are the front door; accounts & posting own
+ * orgs.settings.payroll; schedules, components, and union agreements are the
+ * re-homed registry entities that left the setup rail to live here.
+ *
+ * Deep links: every historical `?tab=` value keeps working — tab keys are
+ * unchanged, the group is inferred FROM the tab, and the readiness Resolve
+ * links that name a pack (`?tab=ca`, `?tab=us`) alias to the accounts tab
+ * where the statutory slots are mapped.
  */
 
 const ENTITY_BY_TAB = {
@@ -50,11 +63,21 @@ const TABS = [
   // Statutory holidays: the employer's elections, then the resolved calendar
   // those elections produce. Same edit-then-confirm pairing as derived rules.
   'holidays', 'holidayCalendar',
+  // Pay rails, EFT originator profiles, and stub delivery.
+  'payday',
 ] as const
 type Tab = (typeof TABS)[number]
 type EntityTab = keyof typeof ENTITY_BY_TAB
 
 const isEntityTab = (tab: Tab): tab is EntityTab => tab in ENTITY_BY_TAB
+
+/** The two-level arrangement: ≤5 top-row groups, subtabs within. */
+const GROUPS: { key: 'foundations' | 'earnings' | 'entitlements' | 'payday'; tabs: Tab[] }[] = [
+  { key: 'foundations', tabs: ['packs', 'accounts', 'schedules', 'filing'] },
+  { key: 'earnings', tabs: ['components', 'derived', 'derivedPreview', 'holidays', 'holidayCalendar', 'union'] },
+  { key: 'entitlements', tabs: ['entitlements', 'limits', 'service'] },
+  { key: 'payday', tabs: ['payday'] },
+]
 
 /**
  * Derived earnings rules are an ordinary registry entity that has not been
@@ -83,15 +106,21 @@ export default async function PayrollSetupPage({
   // registered, so the workspace never links at a 404.
   const available = TABS.filter((key) => !isEntityTab(key) || SETUP_ENTITY_BY_KEY.has(ENTITY_BY_TAB[key]))
   const requested = pickString(sp.tab)
-  const tab: Tab = requested && (available as readonly string[]).includes(requested) ? (requested as Tab) : 'packs'
+  // Legacy alias: readiness slot items link `?tab=<country>` (ca, us, …);
+  // those slots are mapped on the accounts tab.
+  const aliased =
+    requested && /^[a-z]{2}$/.test(requested) && requested.toUpperCase() in PAYROLL_COUNTRY_PACKS
+      ? 'accounts'
+      : requested
+  const tab: Tab = aliased && (available as readonly string[]).includes(aliased) ? (aliased as Tab) : 'packs'
+  const group = GROUPS.find((g) => g.tabs.includes(tab)) ?? GROUPS[0]
   const t = await getTranslations('payroll.settingsPage')
   const canManageEntities = can(authz, 'admin.setup.manage')
 
   const tabLabel = (key: Tab, fallback: string) =>
     t.has(`tabs.${key}` as never) ? t(`tabs.${key}` as never) : fallback
-  const tabs: { key: Tab; label: string }[] = available.map((key) => ({
-    key,
-    label: key === 'derived'
+  const label = (key: Tab): string =>
+    key === 'derived'
       ? tabLabel(key, 'Derived Earnings')
       : key === 'derivedPreview'
         ? tabLabel(key, 'Rule Preview')
@@ -99,34 +128,54 @@ export default async function PayrollSetupPage({
           ? tabLabel(key, 'Holidays')
           : key === 'holidayCalendar'
             ? tabLabel(key, 'Holiday Calendar')
-            : t(`tabs.${key}`),
+            : key === 'payday'
+              ? tabLabel(key, 'Payday')
+              : t(`tabs.${key}`)
+
+  const groups = GROUPS
+    .map((g) => ({ key: g.key, tabs: g.tabs.filter((k) => available.includes(k)) }))
+    .filter((g) => g.tabs.length > 0)
+  const subTabs = (group.tabs.filter((k) => available.includes(k))).map((key) => ({
+    href: `/admin/setup/payroll?tab=${key}`,
+    label: label(key),
+    active: key === tab,
   }))
+
+  const launcher = await launcherData(orgId, canManageEntities)
 
   return (
     <div className="space-y-5">
-      <header>
-        <h1 className="text-xl font-semibold text-slate-900 dark:text-slate-100">{t('title')}</h1>
-        <p className="mt-1 max-w-3xl text-sm text-slate-500 dark:text-slate-400">{t('description')}</p>
+      <header className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <h1 className="text-xl font-semibold text-slate-900 dark:text-slate-100">{t('title')}</h1>
+          <p className="mt-1 max-w-3xl text-sm text-slate-500 dark:text-slate-400">{t('description')}</p>
+        </div>
+        {/* Re-launchable from the settings page — adding a second country
+            pack walks the same wizard. */}
+        <PayrollSetupLauncher variant="button" {...launcher} />
       </header>
+      {launcher.missing > 0 && <PayrollSetupLauncher variant="banner" {...launcher} />}
       <nav className="flex gap-1 overflow-x-auto border-b border-slate-200 dark:border-slate-800" aria-label={t('tabsAria')}>
-        {tabs.map((item) => (
+        {groups.map((item) => (
           <Link
             key={item.key}
-            href={`/admin/setup/payroll?tab=${item.key}` as never}
-            aria-current={tab === item.key ? 'page' : undefined}
+            href={`/admin/setup/payroll?tab=${item.tabs[0]}` as never}
+            aria-current={group.key === item.key ? 'page' : undefined}
             className={cn(
               '-mb-px whitespace-nowrap border-b-2 px-3 py-2 text-sm font-medium',
-              tab === item.key
+              group.key === item.key
                 ? 'border-teal-600 text-teal-700 dark:border-teal-400 dark:text-teal-300'
                 : 'border-transparent text-slate-500 hover:text-slate-800 dark:text-slate-400',
             )}
           >
-            {item.label}
+            {t(`groups.${item.key}`)}
           </Link>
         ))}
       </nav>
+      <ModuleHomeTabs tabs={subTabs} />
       {tab === 'packs' ? <PacksTab orgId={orgId} /> : null}
       {tab === 'accounts' ? <AccountsTab orgId={orgId} /> : null}
+      {tab === 'payday' ? <PaydayTab orgId={orgId} /> : null}
       {isEntityTab(tab) ? (
         <SetupEntitySection
           entity={SETUP_ENTITY_BY_KEY.get(ENTITY_BY_TAB[tab])!}
@@ -149,19 +198,67 @@ export default async function PayrollSetupPage({
         <DerivedRulePreviewSection orgId={orgId} searchParams={sp} />
       ) : null}
       {tab === 'holidays' ? (
-        <SetupEntitySection
-          entity={holidaysEntity()}
-          orgId={orgId}
-          searchParams={sp}
-          basePath="/admin/setup/payroll"
-          canManage={canManageEntities}
-        />
+        <>
+          {/* The stat-pay election lives WITH the holiday elections it governs. */}
+          <StatHolidayPaySection statutoryHolidayPay={await statHolidayPayEnabled(orgId)} />
+          <SetupEntitySection
+            entity={holidaysEntity()}
+            orgId={orgId}
+            searchParams={sp}
+            basePath="/admin/setup/payroll"
+            canManage={canManageEntities}
+          />
+        </>
       ) : null}
       {tab === 'holidayCalendar' ? (
         <HolidayCalendarSection orgId={orgId} searchParams={sp} />
       ) : null}
     </div>
   )
+}
+
+/** Everything the "Set up payroll" wizard launcher needs, computed once. */
+async function launcherData(orgId: string, canManageEntities: boolean) {
+  const [setup, bankProfiles, schedulesRes] = await Promise.all([
+    payrollSetupState(orgId),
+    payrollBankProfiles(orgId),
+    db.execute(sql`
+      select id, name from pay_schedules
+       where org_id = ${orgId} and is_active order by name`) as unknown as Promise<{
+      rows: { id: string; name: string }[]
+    }>,
+  ])
+  // The pay-schedule form options come from the registry entity's OWN field
+  // declaration — the wizard renders the same select the setup drawer does.
+  const scheduleEntity = SETUP_ENTITY_BY_KEY.get('pay-schedules')
+  const frequencies = (scheduleEntity?.fields.find((f) => f.key === 'frequency')?.options ?? [])
+    .filter((option): option is { value: string; labelKey: string } => Boolean(option.labelKey))
+    .map((option) => ({ value: option.value, labelKey: option.labelKey }))
+  // Vendor fields per pack come from the pack declarations, so a new pack's
+  // vendors step exists the moment the pack declares its keys.
+  const vendorKeysByCountry = Object.fromEntries(
+    Object.keys(PAYROLL_COUNTRY_PACKS).map((country) => [
+      country, packRemittanceVendorSettingsKeys(country),
+    ]),
+  )
+  const missing = setup.checks.filter((check) => !check.ok && check.severity === 'blocker').length
+  return {
+    missing,
+    vendorKeysByCountry,
+    frequencies,
+    canManageEntities,
+    schedules: schedulesRes.rows,
+    bankProfiles: bankProfiles.map((p) => ({
+      id: p.id, name: p.name, format: p.format, configured: p.configured,
+    })),
+  }
+}
+
+async function statHolidayPayEnabled(orgId: string): Promise<boolean> {
+  const res = (await db.execute(sql`
+    select settings#>>'{payroll,statutoryHolidayPay}' as v from orgs where id = ${orgId}
+  `)) as unknown as { rows: { v: string | null }[] }
+  return res.rows[0]?.v === 'true'
 }
 
 async function PacksTab({ orgId }: { orgId: string }) {
@@ -210,13 +307,10 @@ async function AccountsTab({ orgId }: { orgId: string }) {
   ]
   const blob = blobRes.rows[0]?.p ?? {}
   const installed = Array.isArray(blob.countries) ? blob.countries.map(String) : []
-  const [packs, us, ca, stubPassword, encryptionAvailable, paymentMethods] = await Promise.all([
+  const [packs, us, ca] = await Promise.all([
     packSlotState(orgId, installed, blob),
     usPayrollConfig(orgId),
     caPayrollConfig(orgId),
-    stubPasswordPolicy(orgId),
-    pdfEncryptionAvailable(),
-    payrollPaymentMethodSettings(orgId),
   ])
 
   return (
@@ -225,15 +319,30 @@ async function AccountsTab({ orgId }: { orgId: string }) {
       packs={packs}
       us={us}
       ca={ca}
-      stubPassword={stubPassword}
-      paymentMethods={paymentMethods}
-      statutoryHolidayPay={blob.statutoryHolidayPay === true}
-      encryptionAvailable={encryptionAvailable}
       accounts={accountsRes.rows.map((account) => ({
         id: account.id,
         label: account.number ? `${account.number} · ${account.name}` : account.name,
       }))}
       vendors={vendorsRes.rows.map((vendor) => ({ id: vendor.id, label: vendor.name }))}
+    />
+  )
+}
+
+async function PaydayTab({ orgId }: { orgId: string }) {
+  const [paymentMethods, stubPassword, encryptionAvailable, bankProfiles] = await Promise.all([
+    payrollPaymentMethodSettings(orgId),
+    stubPasswordPolicy(orgId),
+    pdfEncryptionAvailable(),
+    payrollBankProfiles(orgId),
+  ])
+  return (
+    <PayrollPaydaySettings
+      paymentMethods={paymentMethods}
+      stubPassword={stubPassword}
+      encryptionAvailable={encryptionAvailable}
+      bankProfiles={bankProfiles.map((p) => ({
+        id: p.id, name: p.name, format: p.format, configured: p.configured,
+      }))}
     />
   )
 }
