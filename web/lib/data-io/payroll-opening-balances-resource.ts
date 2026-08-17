@@ -67,6 +67,14 @@ function fields(): ResourceField[] {
  * number first (what those reports actually carry), then the party short code,
  * then the display name. An ambiguous name is REFUSED rather than guessed —
  * loading one Chen's year-to-date onto the other Chen is silent and expensive.
+ *
+ * The population is "somebody payroll knows about" — a party carrying an
+ * employee role or a payroll profile — deliberately NOT `parties.kind = 'person'`.
+ * `kind` is `'employee'` in tenants provisioned through the employee entity, so
+ * a kind filter silently resolves nobody and every row of a real carry-in file
+ * fails to import, which strands a mid-year adopter with no way to load their
+ * opening balances at all. The role/profile join is also the stricter test: it
+ * cannot match a customer contact who happens to share a name with an employee.
  */
 async function resolveEmployee(
   orgId: string,
@@ -75,17 +83,22 @@ async function resolveEmployee(
   const value = String(raw ?? '').trim()
   if (!value) return { error: 'employee is required' }
   const matches = (await db.execute(sql`
-    select p.id, p.display_name
+    select distinct p.id, p.display_name
       from parties p
       left join employee_roles er on er.party_id = p.id and er.org_id = p.org_id
-     where p.org_id = ${orgId} and p.kind = 'person'
+      left join employee_payroll_profiles prof
+        on prof.employee_party_id = p.id and prof.org_id = p.org_id
+     where p.org_id = ${orgId}
+       and (er.party_id is not null or prof.employee_party_id is not null)
        and (p.id::text = ${value}
             or er.employee_number = ${value}
             or p.short_code = ${value}
             or p.display_name = ${value})
      limit 3
   `)) as { rows: { id: string; display_name: string }[] }
-  if (matches.rows.length === 0) return { error: `employee "${value}" not found` }
+  if (matches.rows.length === 0) {
+    return { error: `employee "${value}" not found — no payroll number, code, or name matches` }
+  }
   if (matches.rows.length > 1) {
     return { error: `employee "${value}" matches more than one person — use the payroll number` }
   }
