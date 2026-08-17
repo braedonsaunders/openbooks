@@ -3,6 +3,7 @@ import { sql, type SQL } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/db.ts'
 import { addDays, addMonthsIso, fiscalMonthsBetween, fiscalQuartersBetween } from '@openbooks/reports'
 import { resolveOrgId } from './org-scope'
+import { glActivityBuckets, glSummaryEligibleDims, bucketSubsidiaryFilter, type ActivityBoundary } from './gl-summary'
 import {
   decimalAdd,
   decimalIsMaterial,
@@ -485,33 +486,85 @@ export async function statementMatrix(opts: {
            where l2.org_id = ${orgId} and a2.type = 'asset_bank')`
       : sql``
 
-  const amount = amountExpr(opts.translationMode ?? opts.mode, opts.subsidiary)
-  const filterCols = sql.join(
-    cols.map(
-      (c, i) => sql`coalesce(sum(${amount}) filter (where ${columnPredicate(c, opts.mode)}), 0) as ${sql.raw(`c${i}`)}`,
-    ),
-    sql`, `,
-  )
+  // Fast path: no line-level dimension slices, accrual basis, no per-line FX
+  // translation — every column is a plain date window, answerable from the
+  // gl_month_activity summary (whole months) plus a bounded line scan for
+  // months a column boundary cuts in half.
+  const summaryEligible =
+    basis === 'accrual' &&
+    glSummaryEligibleDims(opts.dims) &&
+    !opts.subsidiary?.rates?.length &&
+    !opts.subsidiary?.weights?.length &&
+    cols.every((c) => !c.dimCol && !c.segmentKey)
 
-  // The posted-entry set materializes once (index-only scan over
-  // (org_id, status, posting_date)) and hash-joins to the lines; joining the
-  // entries table per line re-fetched the entry heap for every journal line
-  // in the tenant on every statement render.
-  const res = (await db.execute(sql`
-    with e as materialized (
-      select id, posting_date from journal_entries e
-       where e.org_id = ${orgId} and e.status in ('posted', 'reversed') and ${baseDate}
+  let res: { rows: Record<string, unknown>[] }
+  if (summaryEligible) {
+    const boundaries: ActivityBoundary[] = []
+    for (const c of cols) {
+      boundaries.push({ date: c.to, kind: 'end' })
+      if (opts.mode !== 'balance' && c.from) boundaries.push({ date: c.from, kind: 'start' })
+    }
+    const buckets = glActivityBuckets(orgId, {
+      minDate: opts.mode === 'balance' ? null : overallFrom,
+      maxDate: overallTo,
+      boundaries,
+    })
+    const bucketCols = sql.join(
+      cols.map((c, i) => {
+        const pred =
+          opts.mode === 'balance'
+            ? sql`b.d <= ${c.to}`
+            : sql`b.d >= ${c.from} and b.d <= ${c.to}`
+        return sql`coalesce(sum(b.amount) filter (where ${pred}), 0) as ${sql.raw(`c${i}`)}`
+      }),
+      sql`, `,
     )
-    select a.id, a.parent_id, a.number, a.name, a.type, a.is_summary, ${filterCols}
-      from accounts a
-      left join (journal_lines l join e on e.id = l.entry_id)
-        on l.account_id = a.id and l.org_id = ${orgId}
-       and ${dimFilterSql(opts.dims, opts.subsidiary)}${cashFilter}
-     where a.org_id = ${orgId}
-     group by a.id
-     order by a.number nulls last, a.name
-  `)) as unknown as {
-    rows: Record<string, unknown>[]
+    const outCols = sql.join(
+      cols.map((_, i) => sql`coalesce(s.${sql.raw(`c${i}`)}, 0) as ${sql.raw(`c${i}`)}`),
+      sql`, `,
+    )
+    // Aggregate the buckets first, then join accounts to the tiny per-account
+    // result — joining accounts against the raw union invites a plan that
+    // re-executes the union once per account.
+    res = (await db.execute(sql`
+      select a.id, a.parent_id, a.number, a.name, a.type, a.is_summary, ${outCols}
+        from accounts a
+        left join (
+          select b.account_id, ${bucketCols}
+            from ${buckets} b
+           where true ${bucketSubsidiaryFilter(opts.subsidiary?.ids)}
+           group by b.account_id
+        ) s on s.account_id = a.id
+       where a.org_id = ${orgId}
+       order by a.number nulls last, a.name
+    `)) as unknown as { rows: Record<string, unknown>[] }
+  } else {
+    const amount = amountExpr(opts.translationMode ?? opts.mode, opts.subsidiary)
+    const filterCols = sql.join(
+      cols.map(
+        (c, i) => sql`coalesce(sum(${amount}) filter (where ${columnPredicate(c, opts.mode)}), 0) as ${sql.raw(`c${i}`)}`,
+      ),
+      sql`, `,
+    )
+
+    // The posted-entry set materializes once (index-only scan over
+    // (org_id, status, posting_date)) and hash-joins to the lines; joining the
+    // entries table per line re-fetched the entry heap for every journal line
+    // in the tenant on every statement render.
+    res = (await db.execute(sql`
+      with e as materialized (
+        select id, posting_date from journal_entries e
+         where e.org_id = ${orgId} and e.status in ('posted', 'reversed') and ${baseDate}
+      )
+      select a.id, a.parent_id, a.number, a.name, a.type, a.is_summary, ${filterCols}
+        from accounts a
+        left join (journal_lines l join e on e.id = l.entry_id)
+          on l.account_id = a.id and l.org_id = ${orgId}
+         and ${dimFilterSql(opts.dims, opts.subsidiary)}${cashFilter}
+       where a.org_id = ${orgId}
+       group by a.id
+       order by a.number nulls last, a.name
+    `)) as unknown as { rows: Record<string, unknown>[] }
   }
 
   const parsed = res.rows.map((r) => ({

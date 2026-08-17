@@ -66,25 +66,36 @@ export async function loadDashboardMetrics(authz: Authz): Promise<DashboardMetri
   const userId = authz.user.id
 
   const [totals, financials, recentEntries, pendingApprovalList, myGates, draftDocuments] = await Promise.all([
+    // Posted-ledger line count and integrity sum come from the maintained
+    // gl_month_activity aggregate — counting/summing the raw lines scanned the
+    // whole ledger on every dashboard render.
     db.execute(sql`
       select
-        (select count(*) from journal_lines l join journal_entries e on e.id = l.entry_id where e.org_id = ${orgId} and e.status in ('posted', 'reversed')) as journal_lines,
+        (select coalesce(sum(g.line_count), 0) from gl_month_activity g where g.org_id = ${orgId}) as journal_lines,
         (select count(*) from accounts where is_active and org_id = ${orgId}) as accounts,
         (select count(*) from journal_entries where org_id = ${orgId} and status in ('posted', 'reversed') and posting_date = current_date) as entries_today,
         (select count(*) from flow_gates where org_id = ${orgId} and status = 'pending') as pending_approvals,
-        (select coalesce(sum(l.amount), 0) from journal_lines l join journal_entries e on e.id = l.entry_id where e.org_id = ${orgId}) as ledger_sum
+        (select coalesce(sum(g.debit_total - g.credit_total), 0) from gl_month_activity g where g.org_id = ${orgId}) as ledger_sum
     `),
     db.execute(dashboardFinancialMetricsQuery(orgId)),
+    // Top-N first, then aggregate the five entries' lines — grouping before
+    // the limit aggregated every entry in the tenant.
     db.execute(sql`
       select e.id, e.entry_number, e.posting_date, e.memo, e.status,
-             count(l.id) as line_count,
-             sum(case when l.amount > 0 then l.amount else 0 end) as total_debits
-        from journal_entries e
-        join journal_lines l on l.entry_id = e.id
-       where e.org_id = ${orgId} and e.status in ('posted', 'reversed')
-       group by e.id
+             lt.line_count, lt.total_debits
+        from (
+          select id, entry_number, posting_date, memo, status, created_at
+            from journal_entries
+           where org_id = ${orgId} and status in ('posted', 'reversed')
+           order by created_at desc, entry_number desc
+           limit 5
+        ) e
+        join lateral (
+          select count(l.id) as line_count,
+                 sum(case when l.amount > 0 then l.amount else 0 end) as total_debits
+            from journal_lines l where l.entry_id = e.id
+        ) lt on true
        order by e.created_at desc, e.entry_number desc
-       limit 5
     `),
     db.execute(sql`
       select g.id, g.title, g.subject_kind, g.subject_id, g.created_at,
