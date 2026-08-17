@@ -15,31 +15,26 @@ export type DashboardFinancialMetricsRow = {
  * summed. Summing transaction-currency open balances directly is forbidden.
  */
 export function dashboardFinancialMetricsQuery(orgId: string) {
+  // Cash reads the maintained gl_month_activity aggregate instead of summing
+  // every bank journal line to date; the four AR/AP tiles come from ONE pass
+  // over the open documents with filtered sums instead of four separate scans.
   return sql`
     select
       (select base_currency from orgs where id = ${orgId}) as base_currency,
-      (select coalesce(sum(l.amount), 0)
-         from journal_lines l
-         join journal_entries e on e.id = l.entry_id and e.status in ('posted', 'reversed')
-         join accounts a on a.id = l.account_id and a.type = 'asset_bank'
-        where e.org_id = ${orgId}) as cash_balance,
-      (select coalesce(sum(round(d.open_balance * d.fx_rate, 4)), 0)
-         from documents d
-        where d.org_id = ${orgId} and d.kind = 'customer_invoice'
-          and d.status = 'posted' and d.open_balance > 0) as open_receivables,
-      (select coalesce(sum(round(d.open_balance * d.fx_rate, 4)), 0)
-         from documents d
-        where d.org_id = ${orgId} and d.kind = 'customer_invoice'
-          and d.status = 'posted' and d.open_balance > 0
-          and d.due_date < current_date) as overdue_receivables,
-      (select coalesce(sum(round(d.open_balance * d.fx_rate, 4)), 0)
-         from documents d
-        where d.org_id = ${orgId} and d.kind = 'vendor_bill'
-          and d.status = 'posted' and d.open_balance > 0) as open_payables,
-      (select coalesce(sum(round(d.open_balance * d.fx_rate, 4)), 0)
-         from documents d
-        where d.org_id = ${orgId} and d.kind = 'vendor_bill'
-          and d.status = 'posted' and d.open_balance > 0
-          and d.due_date < current_date) as overdue_payables
+      (select coalesce(sum(g.debit_total - g.credit_total), 0)
+         from gl_month_activity g
+         join accounts a on a.id = g.account_id and a.org_id = ${orgId} and a.type = 'asset_bank'
+        where g.org_id = ${orgId}) as cash_balance,
+      o.open_receivables, o.overdue_receivables, o.open_payables, o.overdue_payables
+    from (
+      select
+        coalesce(sum(round(d.open_balance * d.fx_rate, 4)) filter (where d.kind = 'customer_invoice'), 0) as open_receivables,
+        coalesce(sum(round(d.open_balance * d.fx_rate, 4)) filter (where d.kind = 'customer_invoice' and d.due_date < current_date), 0) as overdue_receivables,
+        coalesce(sum(round(d.open_balance * d.fx_rate, 4)) filter (where d.kind = 'vendor_bill'), 0) as open_payables,
+        coalesce(sum(round(d.open_balance * d.fx_rate, 4)) filter (where d.kind = 'vendor_bill' and d.due_date < current_date), 0) as overdue_payables
+        from documents d
+       where d.org_id = ${orgId} and d.kind in ('customer_invoice', 'vendor_bill')
+         and d.status = 'posted' and d.open_balance > 0
+    ) o
   `;
 }

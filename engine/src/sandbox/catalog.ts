@@ -50,6 +50,9 @@ const EXCLUDE = new Set([
   // sandbox would remove production's backup). Sandboxes start backup-free.
   "backup_policies",
   "backup_runs",
+  // Derived GL aggregate — the journal triggers rebuild it while the clone
+  // copies entries and lines, so copying it too would double-count.
+  "gl_month_activity",
 ]);
 
 /**

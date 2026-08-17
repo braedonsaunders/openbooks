@@ -2,6 +2,7 @@ import "server-only";
 import { sql } from "drizzle-orm";
 import { db } from "@openbooks/engine/src/db.ts";
 import { currentFiscalYear, fiscalStartMonth, fiscalYearRangeFor } from "./fiscal";
+import { glActivityBuckets, glSummaryEligibleDims, bucketSubsidiaryFilter } from "./gl-summary";
 import { segmentRegistry } from "./segments";
 import { resolveOrgId } from "./org-scope";
 import {
@@ -155,13 +156,44 @@ function treeify(rows: Awaited<ReturnType<typeof accountBalances>>, types: strin
   });
 }
 
+/**
+ * accountBalances answered from the gl_month_activity summary — same row
+ * shape, whole months from the aggregate, split boundary months from lines.
+ */
+async function summaryAccountBalances(orgId: string, from: string | null, to: string, subsidiaryIds?: string[]) {
+  const buckets = glActivityBuckets(orgId, {
+    minDate: from,
+    maxDate: to,
+    boundaries: [],
+  });
+  // Aggregate the buckets FIRST, then join accounts to the tiny per-account
+  // result — joining accounts against the raw union invites a plan that
+  // re-executes the union once per account.
+  const r = (await db.execute(sql`
+    select a.id, a.parent_id, a.number, a.name, a.type, a.is_summary,
+           coalesce(s.raw, 0) as raw
+      from accounts a
+      left join (
+        select b.account_id, sum(b.amount) as raw
+          from ${buckets} b
+         where true ${bucketSubsidiaryFilter(subsidiaryIds)}
+         group by b.account_id
+      ) s on s.account_id = a.id
+     where a.org_id = ${orgId}
+     order by a.number nulls last, a.name
+  `)) as any;
+  return r.rows as Awaited<ReturnType<typeof accountBalances>>;
+}
+
 export async function profitAndLoss(from: string, to: string, dims?: DimFilter, orgId?: string) {
   const resolvedOrgId = await resolveOrgId(orgId);
-  const rows = await accountBalances(
-    sql`e.posting_date >= ${from} and e.posting_date <= ${to} and e.org_id = ${resolvedOrgId}`,
-    dims,
-    resolvedOrgId,
-  );
+  const rows = glSummaryEligibleDims(dims)
+    ? await summaryAccountBalances(resolvedOrgId, from, to, dims?.subsidiaryIds)
+    : await accountBalances(
+        sql`e.posting_date >= ${from} and e.posting_date <= ${to} and e.org_id = ${resolvedOrgId}`,
+        dims,
+        resolvedOrgId,
+      );
   const items = treeify(rows, PNL_TYPES);
   const total = (types: string[]) =>
     decimalSum(items.filter((r) => types.includes(r.type) && r.depth === 0).map((r) => r.balance));
@@ -174,7 +206,7 @@ export async function profitAndLoss(from: string, to: string, dims?: DimFilter, 
 
 export async function balanceSheet(asOf: string, orgId?: string) {
   const resolvedOrgId = orgId ?? (await resolveOrgId());
-  const rows = await accountBalances(sql`e.posting_date <= ${asOf} and e.org_id = ${resolvedOrgId}`, undefined, resolvedOrgId);
+  const rows = await summaryAccountBalances(resolvedOrgId, null, asOf);
   const assets = treeify(rows, ["asset_bank", "asset_receivable", "asset_current_other", "asset_fixed", "asset_other"]);
   const liabilities = treeify(rows, ["liability_payable", "liability_card", "liability_current_other", "liability_long_term"]);
   const equity = treeify(rows, ["equity"]);
@@ -184,16 +216,11 @@ export async function balanceSheet(asOf: string, orgId?: string) {
   const totalLiabilities = sum(liabilities);
   const statedEquity = sum(equity);
 
-  // No closing entries exist (by design): accumulated earnings = lifetime P&L.
-  const pl = (await db.execute(sql`
-    select coalesce(sum(l.amount), 0) as s
-      from journal_lines l
-      join accounts a on a.id = l.account_id and a.org_id = l.org_id
-      join journal_entries e on e.id = l.entry_id and e.org_id = l.org_id and e.status in ('posted', 'reversed')
-     where a.org_id = ${resolvedOrgId} and l.org_id = ${resolvedOrgId} and e.org_id = ${resolvedOrgId}
-       and a.type in ${PNL_TYPES} and e.posting_date <= ${asOf}
-  `)) as any;
-  const accumulatedEarnings = decimalNeg(String(pl.rows[0].s));
+  // No closing entries exist (by design): accumulated earnings = lifetime P&L,
+  // which is already present per account in the cumulative rows above.
+  const accumulatedEarnings = decimalNeg(
+    decimalSum(rows.filter((r) => PNL_TYPES.includes(r.type)).map((r) => r.raw)),
+  );
   equity.push({
     id: "computed-earnings", number: null, name: "Accumulated earnings (computed)",
     type: "equity", balance: accumulatedEarnings, depth: 0, isSummary: false,
@@ -205,6 +232,23 @@ export async function balanceSheet(asOf: string, orgId?: string) {
 
 export async function trialBalance(asOf: string, dims?: DimFilter, orgId?: string) {
   const resolvedOrgId = orgId ?? (await resolveOrgId());
+  if (glSummaryEligibleDims(dims)) {
+    // Whole months from gl_month_activity, boundary sliver from lines.
+    const buckets = glActivityBuckets(resolvedOrgId, { minDate: null, maxDate: asOf, boundaries: [] });
+    const r = (await db.execute(sql`
+      select a.id, a.number, a.name, a.type, s.debits, s.credits, s.balance
+        from (
+          select b.account_id, sum(b.debit_total) as debits, sum(b.credit_total) as credits,
+                 sum(b.amount) as balance
+            from ${buckets} b
+           where true ${bucketSubsidiaryFilter(dims?.subsidiaryIds)}
+           group by b.account_id having abs(sum(b.amount)) >= 0.005
+        ) s
+        join accounts a on a.id = s.account_id and a.org_id = ${resolvedOrgId}
+       order by a.number nulls last, a.name
+    `)) as any;
+    return r.rows as { id: string; number: string | null; name: string; type: string; debits: string; credits: string; balance: string }[];
+  }
   // Materialized entry set + hash join — see accountBalances.
   const r = (await db.execute(sql`
     with e as materialized (
