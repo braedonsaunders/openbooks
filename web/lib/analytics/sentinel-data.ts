@@ -210,42 +210,50 @@ export async function sentinelData(orgId: string, period: { from: string; to: st
       group by 1
     `) as Promise<any>,
 
-    // Duplicates — set-based self-join over the whole period (credits excluded).
+    // Duplicates. The candidate set (payable documents above the floor)
+    // materializes ONCE, then self hash-joins on the plain CTE columns
+    // (party, kind, abs-amount) — equality on materialized columns guarantees
+    // a hash plan. The naive documents×documents self-join probed every
+    // document's party neighbourhood row-at-a-time (tens of millions of
+    // buffer hits on large tenants).
     db.execute(sql`
+      with cand as materialized (
+        select id, document_number, kind, party_id, memo, total, abs(total) as amt,
+               coalesce(document_date, posting_date) as ddate
+          from documents
+         where org_id = ${orgId} and voided_at is null
+           and kind in ('vendor_bill', 'check', 'expense_report', 'vendor_payment')
+           and party_id is not null
+           and abs(coalesce(total, 0)) >= ${DUPLICATE_MIN_AMOUNT}
+      )
       select d1.id as id1, d2.id as id2, d1.document_number as num1, d2.document_number as num2,
-        d1.kind, coalesce(d1.document_date, d1.posting_date)::text as date1,
-        coalesce(d2.document_date, d2.posting_date)::text as date2,
-        abs(coalesce(d2.document_date, d2.posting_date) - coalesce(d1.document_date, d1.posting_date)) as days_between,
-        abs(d1.total) as amount, d1.party_id, coalesce(p.display_name, 'Unknown') as party_name,
+        d1.kind, d1.ddate::text as date1, d2.ddate::text as date2,
+        abs(d2.ddate - d1.ddate) as days_between,
+        d1.amt as amount, d1.party_id, coalesce(p.display_name, 'Unknown') as party_name,
         (d1.memo is not null and d1.memo = d2.memo) as same_memo
-      from documents d1
-      join documents d2 on d2.org_id = d1.org_id and d2.party_id = d1.party_id
-        and d2.kind = d1.kind and abs(d2.total) = abs(d1.total) and d1.id < d2.id
-        and d2.voided_at is null
-        and abs(coalesce(d2.document_date, d2.posting_date) - coalesce(d1.document_date, d1.posting_date)) <= ${DUPLICATE_THRESHOLD_DAYS}
+      from cand d1
+      join cand d2 on d2.party_id = d1.party_id and d2.kind = d1.kind and d2.amt = d1.amt
+        and d1.id < d2.id and abs(d2.ddate - d1.ddate) <= ${DUPLICATE_THRESHOLD_DAYS}
       left join parties p on p.id = d1.party_id
-      where d1.org_id = ${orgId} and d1.voided_at is null
-        and d1.kind in ('vendor_bill', 'check', 'expense_report', 'vendor_payment')
-        and d1.party_id is not null
-        and abs(coalesce(d1.total, 0)) >= ${DUPLICATE_MIN_AMOUNT}
-        and coalesce(d1.document_date, d1.posting_date) >= ${from}
-        and coalesce(d1.document_date, d1.posting_date) <= ${to}
-      order by abs(d1.total) desc, days_between asc
+      where d1.ddate >= ${from} and d1.ddate <= ${to}
+      order by d1.amt desc, days_between asc
       limit 200
     `) as Promise<any>,
     db.execute(sql`
-      select count(*) as total, coalesce(sum(abs(d1.total)), 0) as amount
-      from documents d1
-      join documents d2 on d2.org_id = d1.org_id and d2.party_id = d1.party_id
-        and d2.kind = d1.kind and abs(d2.total) = abs(d1.total) and d1.id < d2.id
-        and d2.voided_at is null
-        and abs(coalesce(d2.document_date, d2.posting_date) - coalesce(d1.document_date, d1.posting_date)) <= ${DUPLICATE_THRESHOLD_DAYS}
-      where d1.org_id = ${orgId} and d1.voided_at is null
-        and d1.kind in ('vendor_bill', 'check', 'expense_report', 'vendor_payment')
-        and d1.party_id is not null
-        and abs(coalesce(d1.total, 0)) >= ${DUPLICATE_MIN_AMOUNT}
-        and coalesce(d1.document_date, d1.posting_date) >= ${from}
-        and coalesce(d1.document_date, d1.posting_date) <= ${to}
+      with cand as materialized (
+        select id, party_id, kind, total, abs(total) as amt,
+               coalesce(document_date, posting_date) as ddate
+          from documents
+         where org_id = ${orgId} and voided_at is null
+           and kind in ('vendor_bill', 'check', 'expense_report', 'vendor_payment')
+           and party_id is not null
+           and abs(coalesce(total, 0)) >= ${DUPLICATE_MIN_AMOUNT}
+      )
+      select count(*) as total, coalesce(sum(d1.amt), 0) as amount
+      from cand d1
+      join cand d2 on d2.party_id = d1.party_id and d2.kind = d1.kind and d2.amt = d1.amt
+        and d1.id < d2.id and abs(d2.ddate - d1.ddate) <= ${DUPLICATE_THRESHOLD_DAYS}
+      where d1.ddate >= ${from} and d1.ddate <= ${to}
     `) as Promise<any>,
 
     // Weekend-dated documents (top rows + full aggregate).

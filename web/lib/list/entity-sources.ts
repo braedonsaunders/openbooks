@@ -35,6 +35,7 @@ import {
   accountWhere,
   JOURNAL_ENTRY_BUILT_IN_EXPR,
   JOURNAL_ENTRY_SORTS,
+  JOURNAL_ENTRY_TABLE,
   journalEntryBaseJoins,
   journalEntryWhere,
   INVENTORY_ONHAND_BUILT_IN_EXPR,
@@ -107,6 +108,13 @@ export interface EntityListSource {
   customFieldKind?: string
   /** FROM joins after `<table> <alias>`. */
   baseJoins: SQL | ((allowedSubsidiaryIds?: Set<string> | null) => SQL)
+  /**
+   * Joins for the count/status-count queries when the row joins include work
+   * the aggregates don't need (e.g. per-row lateral totals whose columns only
+   * appear in SELECT). Must still include every join the WHERE references.
+   * Defaults to baseJoins.
+   */
+  countJoins?: SQL | ((allowedSubsidiaryIds?: Set<string> | null) => SQL)
   /** Built-in column key → SELECT expression. */
   builtInExpr: Record<string, SQL>
   /** Sort key → ORDER BY expression. */
@@ -364,12 +372,15 @@ const SOURCES: Record<string, EntityListSource> = {
   },
   journal: {
     recordType: 'journal',
-    table: 'journal_entries',
+    table: JOURNAL_ENTRY_TABLE,
     alias: 'e',
     customFieldTable: 'documents',
     customFieldKind: 'journal',
     customFieldAlias: 'source_doc',
     baseJoins: journalEntryBaseJoins,
+    // The WHERE never references the laterals (visibility lives in the table
+    // union), so the count/status queries can skip them entirely.
+    countJoins: sql``,
     builtInExpr: JOURNAL_ENTRY_BUILT_IN_EXPR,
     sorts: JOURNAL_ENTRY_SORTS,
     defaultSort: sql`e.posting_date`,
