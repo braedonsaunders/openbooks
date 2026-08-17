@@ -7,6 +7,7 @@
 //
 // Pure + runtime-free: safe to import from client bundles.
 
+import type { ReportRuleGroup } from '@openbooks/reports'
 import type { AggFn, FilterOp, SemanticType } from './types'
 
 /** Authored field definition (catalog input). */
@@ -28,15 +29,22 @@ export type CatalogField = {
    *  a numeric id to be a dimension, etc. */
   role?: FieldRole
   /**
-   * Marks a category field whose VALUES are a fixed code set the renderer
-   * localizes ('yes'/'no', 'active'/'inactive'). The SQL expr must emit those
-   * codes verbatim — never prose — so stored filters stay locale-proof.
+   * Marks a field whose VALUES are a fixed vocabulary the renderer localizes.
+   * `boolean` is the only one: the expr yields a real Postgres boolean and the
+   * renderer prints it as the locale's yes/no, so stored filters (which bind
+   * the literals 'true'/'false') stay locale-proof.
    */
   valueKind?: ValueKind
+  /**
+   * The known value set for a fixed-vocabulary field (enum or boolean) — the
+   * studio offers these as a picker instead of a free-text filter box. Values
+   * are the raw stored codes; the UI localizes them for display.
+   */
+  options?: readonly string[]
 }
 
-/** Fixed value vocabularies a category field can emit (see CatalogField.valueKind). */
-export type ValueKind = 'yesNo' | 'activeInactive'
+/** Fixed value vocabularies a field can emit (see CatalogField.valueKind). */
+export type ValueKind = 'boolean'
 
 export type FieldRole = 'dimension' | 'measure' | 'both'
 
@@ -68,6 +76,13 @@ export type CatalogSource = {
   /** Fields (by key) returned by a raw detail query, in order. */
   detailColumns: string[]
   defaultSort?: { field: string; dir: 'asc' | 'desc' }
+  /** Permission (beyond insights.read) required to build or run a query
+   *  against this source — sensitive data like payroll wages. Enforced by the
+   *  query API and filtered out of the studio's source picker. */
+  requiredPermission?: string
+  /** Implicit predicate ALWAYS AND-ed into every query against this source.
+   *  Authored in the catalog, never from user input. */
+  baseFilter?: ReportRuleGroup
 }
 
 export type AnalyticsSource = Omit<CatalogSource, 'fields'> & {

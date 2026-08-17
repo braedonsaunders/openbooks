@@ -519,6 +519,8 @@
         "class": "Klasse",
         "memo": "Notiz",
         "amount": "Betrag (Basis)",
+        "debit": "Soll",
+        "credit": "Haben",
         "currency": "Währung",
         "txn_amount": "Betrag (Transaktion)",
         "quantity": "Menge",
@@ -740,7 +742,9 @@
       "written_off": "Abgeschrieben",
       "sales": "Verkauf",
       "purchases": "Einkauf",
-      "both": "Beide"
+      "both": "Beide",
+      "true": "Ja",
+      "false": "Nein"
     }
   },
   "operators": {

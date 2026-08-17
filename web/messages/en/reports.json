@@ -548,6 +548,8 @@
         "class": "Class",
         "memo": "Memo",
         "amount": "Amount (base)",
+        "debit": "Debit",
+        "credit": "Credit",
         "currency": "Currency",
         "txn_amount": "Amount (txn)",
         "quantity": "Quantity",
@@ -929,7 +931,9 @@
       "clean": "Reconciled exactly",
       "clean_within_tolerance": "Reconciled within tolerance",
       "differences": "Differences to resolve",
-      "no_comparable_data": "Nothing was compared"
+      "no_comparable_data": "Nothing was compared",
+      "true": "Yes",
+      "false": "No"
     }
   },
   "operators": {

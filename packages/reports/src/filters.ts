@@ -11,12 +11,16 @@ import type { ReportCustomQuery, ReportRule, ReportRuleGroup } from './types'
 const MAX_TREE_DEPTH = 5
 const MAX_TREE_RULES = 60
 
-/** Ordered bind-parameter sink. `add(v)` returns the `$n` placeholder. */
+/** Ordered bind-parameter sink. `add(v)` returns the `$n` placeholder.
+ *  `offset` numbers the first placeholder after params a caller has already
+ *  bound (the insights compiler binds its org id first, then reuses this sink
+ *  for an entity's baseFilter). */
 export class SqlParams {
   readonly values: unknown[] = []
+  constructor(private readonly offset: number = 0) {}
   add(v: unknown): string {
     this.values.push(v)
-    return `$${this.values.length}`
+    return `$${this.offset + this.values.length}`
   }
 }
 

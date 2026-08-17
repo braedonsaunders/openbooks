@@ -9,7 +9,6 @@ import {
   AGG_FUNCTIONS,
   FILTER_OPERATOR_MAP,
   getSource,
-  INSIGHT_SOURCES,
   operatorsForType,
   type AggFn,
   type DateBin,
@@ -61,12 +60,17 @@ export function CardStudio({
   card,
   canCreate,
   canPublish,
+  sourceKeys,
 }: {
   card: CardRow
   canCreate: boolean
   canPublish: boolean
+  /** Catalog sources this user may query, in catalog order — the server drops
+   *  the ones whose permission they lack (payroll wages). */
+  sourceKeys: string[]
 }) {
   const t = useTranslations('insights')
+  const tCatalog = useTranslations('reports')
   const tCommon = useTranslations('common')
   const router = useRouter()
   const ro = !canCreate
@@ -95,6 +99,15 @@ export function CardStudio({
   const [status, setStatus] = useState(card.status)
 
   const source = getSource(sourceKey)
+  const sources = useMemo(
+    () => sourceKeys.map((k) => getSource(k)).filter((x): x is NonNullable<typeof x> => x !== null),
+    [sourceKeys],
+  )
+  // Insight sources ARE the report entities, so their labels come from the
+  // shared report catalog namespace — one wording per field, everywhere.
+  const fieldLabel = (key: string) => tCatalog(`catalog.columns.${sourceKey}.${key}`)
+  const enumLabel = (v: string) =>
+    tCatalog.has(`catalog.enumValues.${v}`) ? tCatalog(`catalog.enumValues.${v}`) : v.replace(/_/g, ' ')
   const dimensionFields = useMemo(() => source?.fields.filter((f) => f.canDimension) ?? [], [source])
   const measureFields = useMemo(() => source?.fields.filter((f) => f.canMeasure) ?? [], [source])
   const allFields = source?.fields ?? []
@@ -300,15 +313,15 @@ export function CardStudio({
             <div className={field}>
               <Label>{t('cardStudio.sourceLabel')}</Label>
               <Select value={sourceKey} onChange={(e) => changeSource(e.target.value)} disabled={ro}>
-                {INSIGHT_SOURCES.map((s) => (
+                {sources.map((s) => (
                   <option key={s.key} value={s.key}>
-                    {t(`catalog.sources.${s.key}.label`)}
+                    {tCatalog(`catalog.entities.${s.key}.label`)}
                   </option>
                 ))}
               </Select>
               {source ? (
                 <p className="text-xs text-slate-500 dark:text-slate-400">
-                  {t(`catalog.sources.${source.key}.description`)}
+                  {tCatalog(`catalog.entities.${source.key}.description`)}
                 </p>
               ) : null}
             </div>
@@ -354,7 +367,7 @@ export function CardStudio({
                       <option value="">{t('cardStudio.selectFieldPlaceholder')}</option>
                       {measureFields.map((f) => (
                         <option key={f.key} value={f.key}>
-                          {t(`catalog.fields.${sourceKey}.${f.key}`)}
+                          {fieldLabel(f.key)}
                         </option>
                       ))}
                     </Select>
@@ -400,7 +413,7 @@ export function CardStudio({
                     >
                       {dimensionFields.map((ff) => (
                         <option key={ff.key} value={ff.key}>
-                          {t(`catalog.fields.${sourceKey}.${ff.key}`)}
+                          {fieldLabel(ff.key)}
                         </option>
                       ))}
                     </Select>
@@ -470,7 +483,7 @@ export function CardStudio({
                       >
                         {allFields.map((ff) => (
                           <option key={ff.key} value={ff.key}>
-                            {t(`catalog.fields.${sourceKey}.${ff.key}`)}
+                            {fieldLabel(ff.key)}
                           </option>
                         ))}
                       </Select>
@@ -493,9 +506,10 @@ export function CardStudio({
                           </option>
                         ))}
                       </Select>
-                      {needsValue && f?.valueKind && meta?.needsValue === 'one' ? (
-                        // Fixed-vocabulary fields store stable codes — offer them
-                        // as a localized select instead of free text.
+                      {needsValue && f?.options?.length && meta?.needsValue === 'one' ? (
+                        // Fixed-vocabulary fields (status, type, every boolean)
+                        // store stable codes — offer them as a localized select
+                        // instead of asking the user to type the code.
                         <Select
                           value={flt.value}
                           onChange={(e) => setFilters(filters.map((x, j) => (j === i ? { ...x, value: e.target.value } : x)))}
@@ -503,12 +517,40 @@ export function CardStudio({
                           className="flex-1"
                         >
                           <option value="">{t('cardStudio.filterPlaceholderValue')}</option>
-                          {(f.valueKind === 'yesNo' ? ['yes', 'no'] : ['active', 'inactive']).map((v) => (
+                          {f.options.map((v) => (
                             <option key={v} value={v}>
-                              {t(`viz.values.${v}`)}
+                              {f.valueKind === 'boolean' ? t(`viz.values.${v === 'true' ? 'yes' : 'no'}`) : enumLabel(v)}
                             </option>
                           ))}
                         </Select>
+                      ) : needsValue && f?.options?.length && meta?.needsValue === 'list' ? (
+                        // "is any of" over a known vocabulary: chips, so the
+                        // stored list is always spelled in real codes.
+                        <div className="flex flex-1 flex-wrap gap-1">
+                          {f.options.map((v) => {
+                            const picked = flt.value.split(',').map((x) => x.trim()).filter(Boolean)
+                            const on = picked.includes(v)
+                            return (
+                              <button
+                                key={v}
+                                type="button"
+                                disabled={ro}
+                                onClick={() => {
+                                  const next = on ? picked.filter((x) => x !== v) : [...picked, v]
+                                  setFilters(filters.map((x, j) => (j === i ? { ...x, value: next.join(', ') } : x)))
+                                }}
+                                className={
+                                  'rounded-full border px-2 py-0.5 text-xs transition-colors disabled:opacity-60 ' +
+                                  (on
+                                    ? 'border-teal-500 bg-teal-50 text-teal-700 dark:border-teal-500 dark:bg-teal-950/40 dark:text-teal-300'
+                                    : 'border-slate-200 text-slate-600 hover:border-slate-300 dark:border-slate-700 dark:text-slate-300')
+                                }
+                              >
+                                {f.valueKind === 'boolean' ? t(`viz.values.${v === 'true' ? 'yes' : 'no'}`) : enumLabel(v)}
+                              </button>
+                            )
+                          })}
+                        </div>
                       ) : needsValue ? (
                         <Input
                           value={flt.value}
