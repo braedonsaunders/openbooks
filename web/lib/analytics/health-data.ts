@@ -134,18 +134,34 @@ async function monthlySeries(orgId: string, to: string, months = 12): Promise<Mo
   const end = new Date(to + "T00:00:00Z");
   const start = new Date(Date.UTC(end.getUTCFullYear(), end.getUTCMonth() - (months - 1), 1));
   const startIso = start.toISOString().slice(0, 10);
+  // A per-month P&L series is the exact shape gl_month_activity stores, so the
+  // whole months read straight from it; only the final (possibly partial)
+  // month falls back to the lines. The window always starts on a first-of-month.
   const r = (await db.execute(sql`
-    select to_char(e.posting_date, 'YYYY-MM') as month,
-      -sum(case when a.type in ('income','income_other') then l.amount else 0 end) as revenue,
-      sum(case when a.type = 'cogs' then l.amount else 0 end) as cogs,
-      sum(case when a.type in ('expense','expense_deferred') then l.amount else 0 end) as opex,
-      sum(case when a.type = 'expense_other' then l.amount else 0 end) as other_exp
-    from journal_lines l
-    join accounts a on a.id = l.account_id and a.org_id = l.org_id
-    join journal_entries e on e.id = l.entry_id and e.org_id = l.org_id
-    where l.org_id = ${orgId}
-      and e.posting_date >= ${startIso} and e.posting_date <= ${to}
-      and a.type in ('income','income_other','cogs','expense','expense_other','expense_deferred')
+    with movement as (
+      select g.account_id, to_char(g.month, 'YYYY-MM') as month,
+             (g.debit_total - g.credit_total) as amt
+        from gl_month_activity g
+       where g.org_id = ${orgId}
+         and g.month >= ${startIso}::date
+         and g.month < date_trunc('month', ${to}::date)::date
+      union all
+      select l.account_id, to_char(e.posting_date, 'YYYY-MM'), l.amount
+        from journal_lines l
+        join journal_entries e on e.id = l.entry_id and e.org_id = ${orgId}
+         and e.status in ('posted', 'reversed')
+         and e.posting_date >= date_trunc('month', ${to}::date)::date
+         and e.posting_date <= ${to}
+       where l.org_id = ${orgId}
+    )
+    select m.month,
+      -sum(case when a.type in ('income','income_other') then m.amt else 0 end) as revenue,
+      sum(case when a.type = 'cogs' then m.amt else 0 end) as cogs,
+      sum(case when a.type in ('expense','expense_deferred') then m.amt else 0 end) as opex,
+      sum(case when a.type = 'expense_other' then m.amt else 0 end) as other_exp
+    from movement m
+    join accounts a on a.id = m.account_id and a.org_id = ${orgId}
+    where a.type in ('income','income_other','cogs','expense','expense_other','expense_deferred')
     group by 1
   `)) as any;
   const by = new Map<string, any>(r.rows.map((x: any) => [x.month, x]));
@@ -192,7 +208,14 @@ async function segmentsBy(
   // LEFT JOIN so untagged GL activity lands in an "Unassigned" bucket (the
   // parity) — segment totals then tie out to the P&L instead of silently
   // dropping lines with no dimension.
+  // The entry window materializes first so the lines hash-join against a
+  // bounded set; left to itself the planner walked every P&L line ever posted
+  // and filtered afterwards.
   const r = (await db.execute(sql`
+    with ew as materialized (
+      select id, posting_date from journal_entries
+       where org_id = ${orgId} and posting_date >= ${pFrom} and posting_date <= ${to}
+    )
     select coalesce(d.id::text, 'unassigned') as id, coalesce(d.name, 'Unassigned') as name,
       -sum(case when a.type in ('income','income_other') and e.posting_date >= ${from} and e.posting_date <= ${to} then l.amount else 0 end) as revenue,
       sum(case when a.type = 'cogs' and e.posting_date >= ${from} and e.posting_date <= ${to} then l.amount else 0 end) as cogs,
@@ -200,11 +223,10 @@ async function segmentsBy(
       -sum(case when a.type in ('income','income_other') and e.posting_date >= ${pFrom} and e.posting_date <= ${pTo} then l.amount else 0 end) as prior_revenue
     from journal_lines l
     join accounts a on a.id = l.account_id and a.org_id = l.org_id
-    join journal_entries e on e.id = l.entry_id and e.org_id = l.org_id
+    join ew e on e.id = l.entry_id
     left join ${tbl} d on d.id = ${col} and d.org_id = l.org_id
     where l.org_id = ${orgId}
       and a.type in ('income','income_other','cogs','expense','expense_deferred')
-      and e.posting_date >= ${pFrom} and e.posting_date <= ${to}
     group by 1, 2
     having abs(-sum(case when a.type in ('income','income_other') and e.posting_date >= ${from} and e.posting_date <= ${to} then l.amount else 0 end)) > 0.005
         or abs(sum(case when a.type in ('cogs','expense','expense_deferred') and e.posting_date >= ${from} and e.posting_date <= ${to} then l.amount else 0 end)) > 0.005
