@@ -2147,6 +2147,205 @@ $$;
 
 
 --
+-- Name: openbooks_gl_activity_apply(p_org uuid, p_account uuid, p_month date, p_subsidiary uuid, p_debit numeric, p_credit numeric, p_count bigint); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.openbooks_gl_activity_apply(p_org uuid, p_account uuid, p_month date, p_subsidiary uuid, p_debit numeric, p_credit numeric, p_count bigint) RETURNS void
+    LANGUAGE sql
+    AS $$
+  insert into gl_month_activity as g (org_id, account_id, month, subsidiary_id, debit_total, credit_total, line_count)
+  values (p_org, p_account, p_month, p_subsidiary, p_debit, p_credit, p_count)
+  on conflict (org_id, account_id, month, subsidiary_id) do update
+    set debit_total = g.debit_total + excluded.debit_total,
+        credit_total = g.credit_total + excluded.credit_total,
+        line_count = g.line_count + excluded.line_count;
+$$;
+
+
+--
+-- Name: openbooks_gl_activity_entry(); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.openbooks_gl_activity_entry() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+declare
+  v_old_in boolean;
+  v_new_in boolean;
+  v_old_month date;
+  v_new_month date;
+begin
+  -- Wipes delete the summary rows themselves; per-row maintenance during a
+  -- wipe is pure waste.
+  if coalesce(current_setting('openbooks.sandbox_wipe', true), 'off') = 'on' then
+    return null;
+  end if;
+  if tg_op = 'INSERT' then
+    -- Bulk copies (sandbox clone, backup restore, migration) may insert an
+    -- already-posted entry before or after its lines; aggregating whatever
+    -- lines exist right now composes with the per-line trigger to count each
+    -- line exactly once in either order.
+    if new.status in ('posted', 'reversed') then
+      perform openbooks_gl_activity_entry_delta(new.id, new.org_id, date_trunc('month', new.posting_date)::date, 1);
+    end if;
+    return null;
+  end if;
+  if tg_op = 'DELETE' then
+    if old.status in ('posted', 'reversed') then
+      perform openbooks_gl_activity_entry_delta(old.id, old.org_id, date_trunc('month', old.posting_date)::date, -1);
+    end if;
+    return null;
+  end if;
+  v_old_in := old.status in ('posted', 'reversed');
+  v_new_in := new.status in ('posted', 'reversed');
+  v_old_month := date_trunc('month', old.posting_date)::date;
+  v_new_month := date_trunc('month', new.posting_date)::date;
+  if v_old_in and not v_new_in then
+    perform openbooks_gl_activity_entry_delta(old.id, old.org_id, v_old_month, -1);
+  elsif v_new_in and not v_old_in then
+    perform openbooks_gl_activity_entry_delta(new.id, new.org_id, v_new_month, 1);
+  elsif v_old_in and v_new_in and v_old_month <> v_new_month then
+    perform openbooks_gl_activity_entry_delta(old.id, old.org_id, v_old_month, -1);
+    perform openbooks_gl_activity_entry_delta(new.id, new.org_id, v_new_month, 1);
+  end if;
+  return null;
+end $$;
+
+
+--
+-- Name: openbooks_gl_activity_entry_delta(p_entry uuid, p_org uuid, p_month date, p_sign integer); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.openbooks_gl_activity_entry_delta(p_entry uuid, p_org uuid, p_month date, p_sign integer) RETURNS void
+    LANGUAGE sql
+    AS $$
+  insert into gl_month_activity as g (org_id, account_id, month, subsidiary_id, debit_total, credit_total, line_count)
+  select p_org, l.account_id, p_month, l.subsidiary_id,
+         p_sign * coalesce(sum(case when l.amount > 0 then l.amount else 0 end), 0),
+         p_sign * coalesce(sum(case when l.amount < 0 then -l.amount else 0 end), 0),
+         p_sign * count(*)
+    from journal_lines l
+   where l.entry_id = p_entry
+   group by l.account_id, l.subsidiary_id
+   order by l.account_id, l.subsidiary_id
+  on conflict (org_id, account_id, month, subsidiary_id) do update
+    set debit_total = g.debit_total + excluded.debit_total,
+        credit_total = g.credit_total + excluded.credit_total,
+        line_count = g.line_count + excluded.line_count;
+$$;
+
+
+--
+-- Name: openbooks_gl_activity_line(); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.openbooks_gl_activity_line() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+declare
+  v_status text;
+  v_date date;
+  v_org uuid;
+  v_month date;
+begin
+  if coalesce(current_setting('openbooks.sandbox_wipe', true), 'off') = 'on' then
+    return null;
+  end if;
+  if tg_op = 'UPDATE' and new.entry_id is distinct from old.entry_id then
+    -- A line never legally moves between entries, but if it ever did the
+    -- delta must split across both parents.
+    select status, posting_date, org_id into v_status, v_date, v_org from journal_entries where id = old.entry_id;
+    if v_status in ('posted', 'reversed') then
+      v_month := date_trunc('month', v_date)::date;
+      perform openbooks_gl_activity_apply(v_org, old.account_id, v_month, old.subsidiary_id,
+        -greatest(old.amount, 0), -greatest(-old.amount, 0), -1);
+    end if;
+    select status, posting_date, org_id into v_status, v_date, v_org from journal_entries where id = new.entry_id;
+    if v_status in ('posted', 'reversed') then
+      v_month := date_trunc('month', v_date)::date;
+      perform openbooks_gl_activity_apply(v_org, new.account_id, v_month, new.subsidiary_id,
+        greatest(new.amount, 0), greatest(-new.amount, 0), 1);
+    end if;
+    return null;
+  end if;
+  select status, posting_date, org_id into v_status, v_date, v_org
+    from journal_entries where id = coalesce(new.entry_id, old.entry_id);
+  -- Draft edits are free; a missing parent means a bulk copy will account for
+  -- this line when the entry row arrives (entry-INSERT aggregation).
+  if v_status is null or v_status not in ('posted', 'reversed') then
+    return null;
+  end if;
+  v_month := date_trunc('month', v_date)::date;
+  if tg_op in ('UPDATE', 'DELETE') then
+    perform openbooks_gl_activity_apply(v_org, old.account_id, v_month, old.subsidiary_id,
+      -greatest(old.amount, 0), -greatest(-old.amount, 0), -1);
+  end if;
+  if tg_op in ('INSERT', 'UPDATE') then
+    perform openbooks_gl_activity_apply(v_org, new.account_id, v_month, new.subsidiary_id,
+      greatest(new.amount, 0), greatest(-new.amount, 0), 1);
+  end if;
+  return null;
+end $$;
+
+
+--
+-- Name: openbooks_gl_activity_rebuild(p_org uuid); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.openbooks_gl_activity_rebuild(p_org uuid) RETURNS bigint
+    LANGUAGE plpgsql
+    AS $$
+declare
+  v_count bigint;
+begin
+  delete from gl_month_activity where org_id = p_org;
+  insert into gl_month_activity (org_id, account_id, month, subsidiary_id, debit_total, credit_total, line_count)
+  select e.org_id, l.account_id, date_trunc('month', e.posting_date)::date, l.subsidiary_id,
+         coalesce(sum(case when l.amount > 0 then l.amount else 0 end), 0),
+         coalesce(sum(case when l.amount < 0 then -l.amount else 0 end), 0),
+         count(*)
+    from journal_lines l
+    join journal_entries e on e.id = l.entry_id
+   where e.org_id = p_org and l.org_id = p_org and e.status in ('posted', 'reversed')
+   group by e.org_id, l.account_id, date_trunc('month', e.posting_date)::date, l.subsidiary_id;
+  get diagnostics v_count = row_count;
+  return v_count;
+end $$;
+
+
+--
+-- Name: openbooks_gl_activity_verify(p_org uuid); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.openbooks_gl_activity_verify(p_org uuid) RETURNS TABLE(account_id uuid, month date, subsidiary_id uuid, summary_debit numeric, ledger_debit numeric, summary_credit numeric, ledger_credit numeric)
+    LANGUAGE sql
+    AS $$
+  with ledger as (
+    select l.account_id, date_trunc('month', e.posting_date)::date as month, l.subsidiary_id,
+           coalesce(sum(case when l.amount > 0 then l.amount else 0 end), 0) as debit_total,
+           coalesce(sum(case when l.amount < 0 then -l.amount else 0 end), 0) as credit_total
+      from journal_lines l
+      join journal_entries e on e.id = l.entry_id
+     where e.org_id = p_org and l.org_id = p_org and e.status in ('posted', 'reversed')
+     group by 1, 2, 3
+  ), summary as (
+    select g.account_id, g.month, g.subsidiary_id, g.debit_total, g.credit_total
+      from gl_month_activity g where g.org_id = p_org
+       and (g.debit_total <> 0 or g.credit_total <> 0 or g.line_count <> 0)
+  )
+  select coalesce(l.account_id, s.account_id), coalesce(l.month, s.month),
+         coalesce(l.subsidiary_id, s.subsidiary_id),
+         coalesce(s.debit_total, 0), coalesce(l.debit_total, 0),
+         coalesce(s.credit_total, 0), coalesce(l.credit_total, 0)
+    from ledger l
+    full outer join summary s
+      on s.account_id = l.account_id and s.month = l.month and s.subsidiary_id = l.subsidiary_id
+   where coalesce(s.debit_total, 0) <> coalesce(l.debit_total, 0)
+      or coalesce(s.credit_total, 0) <> coalesce(l.credit_total, 0);
+$$;
+
+
+--
 -- Name: openbooks_guard_ap_capture_evidence(); Type: FUNCTION; Schema: public; Owner: -
 --
 
@@ -9139,6 +9338,34 @@ CREATE VIEW openbooks_query.fx_rates WITH (security_barrier='true') AS
     imported_at
    FROM public.fx_rates
   WHERE (org_id = public.openbooks_query_org_id());
+
+
+--
+-- Name: gl_month_activity; Type: TABLE; Schema: public; Owner: -
+--
+-- Derived GL aggregate: per (org, account, posting month, subsidiary) debit
+-- and credit totals over posted+reversed entries, maintained by the
+-- order-independent openbooks_gl_activity_* triggers so statements read whole
+-- months from ~thousands of rows instead of aggregating millions of journal
+-- lines. Never written by application code; openbooks_gl_activity_rebuild(org)
+-- is the sanctioned repair path, and backups/sandbox clones exclude the table
+-- so the triggers rebuild it during row copy.
+--
+
+CREATE TABLE public.gl_month_activity (
+    org_id uuid NOT NULL,
+    account_id uuid NOT NULL,
+    month date NOT NULL,
+    subsidiary_id uuid NOT NULL,
+    debit_total numeric(19,4) DEFAULT 0 NOT NULL,
+    credit_total numeric(19,4) DEFAULT 0 NOT NULL,
+    line_count bigint DEFAULT 0 NOT NULL
+);
+
+ALTER TABLE ONLY public.gl_month_activity
+    ADD CONSTRAINT gl_month_activity_pkey PRIMARY KEY (org_id, account_id, month, subsidiary_id);
+
+ALTER TABLE ONLY public.gl_month_activity FORCE ROW LEVEL SECURITY;
 
 
 --
@@ -28613,6 +28840,20 @@ CREATE TRIGGER fixed_assets_configuration_org_guard BEFORE INSERT OR UPDATE ON p
 
 
 --
+-- Name: journal_entries gl_activity_entry; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER gl_activity_entry AFTER INSERT OR DELETE OR UPDATE OF status, posting_date ON public.journal_entries FOR EACH ROW EXECUTE FUNCTION public.openbooks_gl_activity_entry();
+
+
+--
+-- Name: journal_lines gl_activity_line; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER gl_activity_line AFTER INSERT OR DELETE OR UPDATE ON public.journal_lines FOR EACH ROW EXECUTE FUNCTION public.openbooks_gl_activity_line();
+
+
+--
 -- Name: intercompany_pairs intercompany_pair_guard; Type: TRIGGER; Schema: public; Owner: -
 --
 
@@ -38192,6 +38433,11 @@ ALTER TABLE public.fx_provider_runs ENABLE ROW LEVEL SECURITY;
 
 ALTER TABLE public.fx_rates ENABLE ROW LEVEL SECURITY;
 
+-- Name: gl_month_activity; Type: ROW SECURITY; Schema: public; Owner: -
+--
+
+ALTER TABLE public.gl_month_activity ENABLE ROW LEVEL SECURITY;
+
 --
 -- Name: import_jobs; Type: ROW SECURITY; Schema: public; Owner: -
 --
@@ -40553,6 +40799,13 @@ COMMENT ON POLICY org_isolation ON public.fx_provider_runs IS 'openbooks:org_iso
 --
 
 CREATE POLICY org_isolation ON public.fx_rates USING (((current_setting('app.bypass_rls'::text, true) = 'on'::text) OR ((org_id)::text = current_setting('app.current_org'::text, true)))) WITH CHECK (((current_setting('app.bypass_rls'::text, true) = 'on'::text) OR ((org_id)::text = current_setting('app.current_org'::text, true))));
+
+--
+-- Name: gl_month_activity org_isolation; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY org_isolation ON public.gl_month_activity USING (((current_setting('app.bypass_rls'::text, true) = 'on'::text) OR ((org_id)::text = current_setting('app.current_org'::text, true)))) WITH CHECK (((current_setting('app.bypass_rls'::text, true) = 'on'::text) OR ((org_id)::text = current_setting('app.current_org'::text, true))));
+
 
 
 --
