@@ -25,28 +25,32 @@ export async function openItems(
   const kindFilter = side === 'ap'
     ? sql`d.kind in ('vendor_bill', 'expense_report')`
     : sql`d.kind = 'customer_invoice'`
+  // Candidate documents come from the denormalized open_balance (maintained by
+  // the application/posting triggers) — that prunes fully-settled documents
+  // BEFORE the per-line applications aggregate runs. The per-line `remaining`
+  // stays exact: open_balance only gates which documents are worth computing.
   const result = (await db.execute(sql`
     with oi as (
       select jl.id, jl.party_id, jl.entry_id, je.posting_date as tran_date, jl.due_date,
-             je.source_document_id as doc_id,
+             d.id as doc_id, d.kind as doc_kind, d.document_number as doc_number,
              abs(jl.amount) - coalesce((
                select sum(x.amount) from applications x
                 where x.org_id = ${orgId}
                   and (x.to_line_id = jl.id or x.from_line_id = jl.id)
                   and x.unapplied_at is null
              ), 0) as remaining
-        from journal_lines jl
-        join journal_entries je on je.id = jl.entry_id and je.org_id = ${orgId} and je.status = 'posted'
-        join accounts a on a.id = jl.account_id and a.org_id = ${orgId}
-       where jl.is_open_item and a.type = ${acctType} and ${signFilter}
-         and je.posting_date <= ${asOf}${subScope(sql`jl.subsidiary_id`, subIds)}
+        from documents d
+        join journal_entries je on je.id = d.posted_entry_id and je.org_id = ${orgId}
+         and je.status = 'posted' and je.posting_date <= ${asOf}
+        join journal_lines jl on jl.entry_id = je.id and jl.is_open_item and ${signFilter}
+        join accounts a on a.id = jl.account_id and a.org_id = ${orgId} and a.type = ${acctType}
+       where d.org_id = ${orgId} and d.status = 'posted' and ${kindFilter}
+         and d.open_balance > 0.005${subScope(sql`jl.subsidiary_id`, subIds)}
     )
-    select oi.id, oi.entry_id, oi.doc_id, d.kind as doc_kind, d.document_number as doc_number, oi.party_id,
+    select oi.id, oi.entry_id, oi.doc_id, oi.doc_kind, oi.doc_number, oi.party_id,
            coalesce(p.display_name, 'Unspecified') as party_name,
            oi.tran_date, oi.due_date, oi.remaining
       from oi
-      join documents d on d.id = oi.doc_id and d.org_id = ${orgId}
-       and d.posted_entry_id = oi.entry_id and d.status = 'posted' and ${kindFilter}
       left join parties p on p.id = oi.party_id
      where oi.remaining > 0.005
   `)) as any

@@ -493,11 +493,19 @@ export async function statementMatrix(opts: {
     sql`, `,
   )
 
+  // The posted-entry set materializes once (index-only scan over
+  // (org_id, status, posting_date)) and hash-joins to the lines; joining the
+  // entries table per line re-fetched the entry heap for every journal line
+  // in the tenant on every statement render.
   const res = (await db.execute(sql`
+    with e as materialized (
+      select id, posting_date from journal_entries e
+       where e.org_id = ${orgId} and e.status in ('posted', 'reversed') and ${baseDate}
+    )
     select a.id, a.parent_id, a.number, a.name, a.type, a.is_summary, ${filterCols}
       from accounts a
-      left join (journal_lines l join journal_entries e on e.id = l.entry_id and e.org_id = l.org_id)
-        on l.account_id = a.id and l.org_id = ${orgId} and e.org_id = ${orgId} and e.status in ('posted', 'reversed') and ${baseDate}
+      left join (journal_lines l join e on e.id = l.entry_id)
+        on l.account_id = a.id and l.org_id = ${orgId}
        and ${dimFilterSql(opts.dims, opts.subsidiary)}${cashFilter}
      where a.org_id = ${orgId}
      group by a.id

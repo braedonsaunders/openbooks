@@ -150,13 +150,38 @@ async function searchTransactions(
   // Amounts live on document_lines (documents.total is often 0). A numeric query
   // matches any transaction that HAS a line of that amount (±sign), and every
   // result shows the summed positive line total.
-  const amtMatch =
+  // Candidate ids come from independent capped legs: document text, party-name
+  // matches via parties→documents_party, and line amounts. A single OR
+  // spanning both documents and the parties join forced a full hash join +
+  // filter over every document in the tenant per keystroke. The line
+  // subqueries carry an explicit org filter — the RLS policy's
+  // current_setting() comparison is not sargable on its own. Note the amount
+  // leg is a bounded scan by design: numeric_eq is not LEAKPROOF, so under
+  // RLS a numeric predicate can never become a btree index condition — an
+  // (org_id, amount) index cannot help any tenant-scoped query.
+  const amtLeg =
     num != null
-      ? sql` or d.id in (select dl.document_id from document_lines dl where dl.amount in (${num}, ${-num}))`
+      ? sql`
+        union
+        (select dl.document_id as id from document_lines dl
+          where dl.org_id = ${orgId} and dl.amount in (${num}, ${-num})
+          limit 200)`
       : sql``
-  const amtExpr = sql`coalesce((select sum(dl.amount) from document_lines dl where dl.document_id = d.id and dl.amount > 0), d.total)`
+  const amtExpr = sql`coalesce((select sum(dl.amount) from document_lines dl where dl.org_id = ${orgId} and dl.document_id = d.id and dl.amount > 0), d.total)`
   const numOrder = num != null ? sql`(${amtExpr} = ${num}) desc, ` : sql``
   const r = (await db.execute(sql`
+    with cand as (
+      (select d.id from documents d
+        where d.org_id = ${orgId}
+          and (d.document_number % ${q} or d.document_number ilike ${like}
+               or d.reference_number ilike ${like} or d.memo ilike ${like})
+        order by d.created_at desc limit 200)
+      union
+      (select d.id from documents d
+        where d.org_id = ${orgId} and d.party_id in (
+          select p.id from parties p where p.org_id = ${orgId} and p.display_name % ${q})
+        order by d.created_at desc limit 200)${amtLeg}
+    )
     select d.id, d.kind, d.document_number, d.reference_number, d.memo, d.status,
            pr.display_name as party_name,
            ${amtExpr} as amount,
@@ -165,11 +190,8 @@ async function searchTransactions(
                     similarity(coalesce(d.memo, ''), ${q}),
                     similarity(coalesce(pr.display_name, ''), ${q})) as sim
       from documents d
+      join cand on cand.id = d.id
       left join parties pr on pr.id = d.party_id
-     where d.org_id = ${orgId}
-       and ( d.document_number % ${q} or d.document_number ilike ${like}
-             or d.reference_number ilike ${like} or d.memo ilike ${like}
-             or pr.display_name % ${q}${amtMatch} )
      order by ${numOrder}sim desc, d.created_at desc
      limit ${PER_GROUP + 2}`)) as any
   return r.rows.map((row: any): SearchHit => {
