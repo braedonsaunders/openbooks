@@ -47,6 +47,7 @@ const ZZ_FILINGS: PayrollPackFilings = {
     {
       key: "p60",
       label: "P60 end-of-year certificate",
+      cadence: "annual",
       emptyText: "No committed ZZ pay stubs for this year.",
       population: async () => EMPTY_POPULATION,
       download: {
@@ -95,20 +96,50 @@ test("a jurisdiction filing registers onto an existing pack (the RL-1 path)", wi
   registerYearEndFiling("ZZ", {
     key: "fps",
     label: "Full payment submission",
+    cadence: "quarterly",
     population: async () => EMPTY_POPULATION,
   });
   assert.deepEqual(payrollPackFilings("ZZ").yearEnd.map((filing) => filing.key), ["p60", "fps"]);
   // A duplicate key is two declarations of one statutory filing — refused.
   assert.throws(
-    () => registerYearEndFiling("ZZ", { key: "p60", label: "x", population: async () => EMPTY_POPULATION }),
+    () => registerYearEndFiling("ZZ", { key: "p60", label: "x", cadence: "annual", population: async () => EMPTY_POPULATION }),
     /already declares a "p60" filing/,
   );
   // Registering onto a pack nobody declared refuses by name.
   assert.throws(
-    () => registerYearEndFiling("XX", { key: "x", label: "x", population: async () => EMPTY_POPULATION }),
+    () => registerYearEndFiling("XX", { key: "x", label: "x", cadence: "annual", population: async () => EMPTY_POPULATION }),
     /no payroll pack declares filings for XX/,
   );
 }));
+
+test("a filing without a declared cadence is refused — the deadline class is required", withZZ(() => {
+  assert.throws(
+    () => registerYearEndFiling("ZZ", {
+      key: "p45",
+      label: "P45 details of employee leaving work",
+      population: async () => EMPTY_POPULATION,
+    } as never),
+    /declares no cadence/,
+  );
+  assert.throws(
+    () => registerPayrollFilings({
+      ...ZZ_FILINGS,
+      country: "ZY",
+      yearEnd: [{ key: "x", label: "x", population: async () => EMPTY_POPULATION } as never],
+    }),
+    /declares no cadence/,
+  );
+}));
+
+test("the built-ins declare the statute's own cadence", () => {
+  assert.equal(yearEndFiling("CA", "t4").cadence, "annual");
+  assert.equal(yearEndFiling("CA", "rl1").cadence, "annual");
+  assert.equal(yearEndFiling("US", "w2").cadence, "annual");
+  assert.equal(yearEndFiling("US", "941").cadence, "quarterly");
+  // The ROE is a SEPARATION document — due per interruption of earnings,
+  // within days of the employee event, never at year-end.
+  assert.equal(yearEndFiling("CA", "roe").cadence, "separation");
+});
 
 /* ------------------------------------------------------------------ */
 /* Filing accounts: pack-declared program types replace the DB CHECKs  */

@@ -12,6 +12,7 @@ import {
   Label,
   SearchSelect,
   Select,
+  TagInput,
   Textarea,
   UrlDrawer,
   cn,
@@ -65,6 +66,8 @@ function initialValue(field: SetupField, row: Record<string, any> | null): any {
       return raw ? String(raw).slice(0, 10) : ''
     case 'multiref':
       return [] as string[]
+    case 'stringArray':
+      return Array.isArray(raw) ? raw.map(String) : ([] as string[])
     case 'json':
       return raw == null ? '' : JSON.stringify(raw, null, 2)
     default:
@@ -375,11 +378,14 @@ function FieldControl({
   // below a control is reserved for validation/state messages only.
   const help = field.helpTextKey ? t(field.helpTextKey) : undefined
   const locked = forceLocked || (!creating && field.lockedOnEdit)
-  const full = field.kind === 'multiref' || field.kind === 'textarea' || field.kind === 'json'
+  const full =
+    field.kind === 'multiref' || field.kind === 'textarea' || field.kind === 'json' || field.kind === 'stringArray'
   const wrap = full ? 'space-y-1.5 sm:col-span-2' : 'space-y-1.5'
   const lockedDisplay = field.kind === 'ref'
     ? (refOptions.find((option) => option.value === String(value))?.label ?? value)
-    : value
+    : Array.isArray(value)
+      ? value.join(', ')
+      : value
 
   // Locked natural keys are shown read-only when editing.
   if (locked) {
@@ -443,6 +449,23 @@ function FieldControl({
             })}
           </div>
         )}
+      </div>
+    )
+  }
+
+  if (field.kind === 'stringArray') {
+    // Chip input with type-ahead over the field's ref source — raw JSON is
+    // never an acceptable UI for a list of text values.
+    const selected: string[] = Array.isArray(value) ? value.map(String) : []
+    return (
+      <div className={wrap}>
+        <Label help={help}>{label}</Label>
+        <TagInput
+          value={selected}
+          onChange={onChange}
+          options={refOptions.map((o) => ({ value: o.value, label: o.label }))}
+          ariaLabel={label}
+        />
       </div>
     )
   }

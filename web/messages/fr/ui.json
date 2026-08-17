@@ -20,6 +20,12 @@
     "open": "Expliquer ce champ",
     "generic": "Définit la valeur {field} pour cet enregistrement ou cette opération."
   },
+  "tagInput": {
+    "placeholder": "Ajouter…",
+    "remove": "Retirer {tag}",
+    "add": "Ajouter « {value} »",
+    "noMatches": "Aucun résultat"
+  },
   "select": {
     "placeholder": "Sélectionner…",
     "searchPlaceholder": "Rechercher…",
@@ -43,7 +49,11 @@
     "addFiles": "Ajouter des fichiers",
     "searchPlaceholder": "Rechercher dans les pièces jointes…",
     "typeFilter": "Type",
-    "types": { "pdf": "PDF", "image": "Image", "other": "Autre" },
+    "types": {
+      "pdf": "PDF",
+      "image": "Image",
+      "other": "Autre"
+    },
     "downloadAria": "Télécharger {name}",
     "openAria": "Ouvrir {name} dans un nouvel onglet",
     "removeAria": "Retirer {name}",

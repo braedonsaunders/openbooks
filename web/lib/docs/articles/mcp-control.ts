@@ -103,7 +103,23 @@ The core MCP surface includes:
   for the period-close lifecycle;
 - financial searches and reports made available by the OpenBooks assistant
   registry, such as accounts, journals, documents, statements, aging, budgets,
-  project profitability, and continuous-close findings; and
+  project profitability, and continuous-close findings;
+- **list_report_definitions** and **run_report** — the saved-report catalog
+  (built-in statements and custom report-studio reports) executed through the
+  same resolver as exports and scheduled deliveries, plus the detail reports
+  (general ledger, aging detail, indirect cash flow, partner statements),
+  report schedules, reporting packages, and budget scenarios;
+- the analytics dashboards — financial health, customer and vendor
+  intelligence, cashflow, true cost, utilization, spend velocity, and the
+  Sentinel ledger-forensics detectors — and the AP, AR, and cash cockpit
+  positions, each returning the same numbers as the screens;
+- banking reads — reconciliation sessions and totals, unmatched statement
+  lines, and bank feed connections (credentials are never returned);
+- payroll reads where the payroll feature is enabled — pay runs and readiness,
+  year-end filings, entitlements, remittances, and employee profiles with
+  confidential identifiers and tax elections excluded;
+- File Cabinet reads that honor per-folder and per-file access grants, and the
+  organization's setup registry and feature switchboard for administrators; and
 - the **openbooks://schema/record-types** resource for the current tenant's live
   record metadata.
 

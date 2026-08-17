@@ -37,6 +37,9 @@ const GROUP_TABS: Record<TabGroup, { href: string; ns: string; key: string }[]> 
     { href: '/payroll', ns: 'payroll', key: 'home.tabs.overview' },
     { href: '/payroll/runs', ns: 'payroll', key: 'home.tabs.runs' },
     { href: '/payroll/remittances', ns: 'payroll', key: 'home.tabs.remittances' },
+    // Separation filings (the ROE, a P45) are per-event documents — their own
+    // surface, deliberately NOT a year-end section.
+    { href: '/payroll/separations', ns: 'payroll', key: 'home.tabs.separations' },
     { href: '/payroll/year-end', ns: 'payroll', key: 'home.tabs.yearEnd' },
     // The NATIVE employee entity list — payroll deliberately has no second one.
     { href: '/entities/employees', ns: 'nav', key: 'modules.employees' },

@@ -6,6 +6,7 @@ import {
   setupEntitiesByGroup,
   setupEntityForFeatureState,
   setupFieldVisible,
+  type SetupField,
 } from './registry.ts'
 
 test('tax rates and return boxes are nested under their owning records', () => {
@@ -115,6 +116,28 @@ test('every information-return box option is a real statutory box', () => {
   }
   for (const box of statutory) {
     assert.ok(offered.has(box), `${box} exists on a form but cannot be mapped in setup`)
+  }
+})
+
+test('derived-rule job-title lists are chip inputs fed by the roster, never raw JSON', () => {
+  const rules = SETUP_ENTITY_BY_KEY.get('pay-derived-rules')
+  assert.ok(rules)
+  for (const key of ['includedJobTitles', 'excludedJobTitles']) {
+    const field: SetupField | undefined = rules.fields.find((entry) => entry.key === key)
+    assert.ok(field, `${key} must be editable on a derived rule`)
+    assert.equal(field.kind, 'stringArray', `${key} must render as the TagInput, not a JSON textarea`)
+    assert.equal(field.ref, 'job-titles', `${key} must type-ahead over the roster's job titles`)
+  }
+  // Raw JSON is never an acceptable UI: no payroll/workforce entity may
+  // expose a `json`-kind field. (The one remaining `json` field in the whole
+  // registry is asset-categories.taxAttributes — an object-shaped bag with no
+  // natural structured editor yet, and not a payroll surface.)
+  const byGroup = setupEntitiesByGroup()
+  const workforce = [...(byGroup.get('workforce') ?? []), rules]
+  for (const entity of workforce) {
+    for (const field of entity.fields) {
+      assert.notEqual(field.kind, 'json', `${entity.key}.${field.key} must not render as raw JSON`)
+    }
   }
 })
 

@@ -23,6 +23,10 @@ export type SetupFieldKind =
   | 'country'
   | 'textarea'
   | 'json'
+  /** A jsonb array of free-text strings (e.g. job titles). Renders as the
+   *  TagInput chip control — never as raw JSON — with type-ahead over the
+   *  field's `ref` option source and free entry for values the list lacks. */
+  | 'stringArray'
   | 'integer'
   | 'decimal'
   | 'percent'
@@ -44,10 +48,12 @@ export type SetupColumnKind =
   | 'boolean'
 
 /**
- * Where a `ref`/`multiref` field's options come from. `'accounts'` = the org's
- * postable accounts. Any other value is a setup entity `key` (self-references
- * allowed, e.g. a department's parent). The list page resolves each declared
- * source into `{ value, label }[]` and hands them to the drawer.
+ * Where a `ref`/`multiref`/`stringArray` field's options come from.
+ * `'accounts'` = the org's postable accounts; `'job-titles'` = the distinct
+ * free-text titles on the employee roster. Any other value is a setup entity
+ * `key` (self-references allowed, e.g. a department's parent). The list page
+ * resolves each declared source into `{ value, label }[]` and hands them to
+ * the drawer.
  */
 export type SetupRefSource = 'accounts' | (string & {})
 

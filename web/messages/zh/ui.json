@@ -20,6 +20,12 @@
     "open": "解释此字段",
     "generic": "设置此记录或操作的“{field}”值。"
   },
+  "tagInput": {
+    "placeholder": "添加…",
+    "remove": "移除 {tag}",
+    "add": "添加“{value}”",
+    "noMatches": "无匹配项"
+  },
   "select": {
     "placeholder": "选择…",
     "searchPlaceholder": "搜索…",
@@ -43,7 +49,11 @@
     "addFiles": "添加文件",
     "searchPlaceholder": "搜索附件…",
     "typeFilter": "类型",
-    "types": { "pdf": "PDF", "image": "图像", "other": "其他" },
+    "types": {
+      "pdf": "PDF",
+      "image": "图像",
+      "other": "其他"
+    },
     "downloadAria": "下载 {name}",
     "openAria": "在新标签页中打开 {name}",
     "removeAria": "移除 {name}",

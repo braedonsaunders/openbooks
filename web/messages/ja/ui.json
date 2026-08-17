@@ -20,6 +20,12 @@
     "open": "このフィールドの説明",
     "generic": "このレコードまたは操作の「{field}」の値を設定します。"
   },
+  "tagInput": {
+    "placeholder": "追加…",
+    "remove": "{tag} を削除",
+    "add": "「{value}」を追加",
+    "noMatches": "一致なし"
+  },
   "select": {
     "placeholder": "選択…",
     "searchPlaceholder": "検索…",
@@ -43,7 +49,11 @@
     "addFiles": "ファイルを追加",
     "searchPlaceholder": "添付ファイルを検索…",
     "typeFilter": "種類",
-    "types": { "pdf": "PDF", "image": "画像", "other": "その他" },
+    "types": {
+      "pdf": "PDF",
+      "image": "画像",
+      "other": "その他"
+    },
     "downloadAria": "{name} をダウンロード",
     "openAria": "{name} を新しいタブで開く",
     "removeAria": "{name} を削除",
