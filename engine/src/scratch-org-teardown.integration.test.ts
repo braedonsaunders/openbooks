@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { test } from "node:test";
 import { sql } from "drizzle-orm";
-import { db } from "./db.ts";
+import { db, withBypass } from "./db.ts";
 import { receiveInventory, issueInventory } from "./inventory.ts";
 import { postDocument } from "./posting.ts";
 import {
@@ -80,16 +80,88 @@ test("dropScratchOrg removes every org-scoped row", { skip: !DB }, async () => {
       insert into field_ticket_labor_snapshots (org_id, field_ticket_id, revision, evidence_basis, reason, currency, captured_by)
       values (${org.orgId}, ${ticketId}, 1, 'operational_time', 'teardown coverage', 'CAD', ${actorId})`);
 
+    // Payroll bank-file evidence: pay_run_bank_file_immutable forbids DELETE
+    // outright and payroll_bank_file_blob_immutable blocks deleting the
+    // referenced file_blobs row — teardown must disable both triggers and
+    // clear the bank-file rows before the blob sweep.
+    const folderId = randomUUID();
+    await db.execute(sql`
+      insert into folders (id, org_id, name)
+      values (${folderId}, ${org.orgId}, 'Payroll bank files (teardown)')`);
+    const fileId = randomUUID();
+    await db.execute(sql`
+      insert into files (id, org_id, folder_id, name, content_type, size_bytes)
+      values (${fileId}, ${org.orgId}, ${folderId}, 'PBF-0001.txt', 'text/plain', 4)`);
+    const versionId = randomUUID();
+    await db.execute(sql`
+      insert into file_versions (id, file_id, version_number, size_bytes, content_type)
+      values (${versionId}, ${fileId}, 1, 4, 'text/plain')`);
+    await db.execute(sql`
+      insert into file_blobs (version_id, bytes) values (${versionId}, ${Buffer.from("ABCD")})`);
+    const formatId = randomUUID();
+    await db.execute(sql`
+      insert into payment_formats (id, org_id, code, name, rail)
+      values (${formatId}, ${org.orgId}, 'cpa005', 'CPA-005 (teardown)', 'eft')`);
+    const profileId = randomUUID();
+    await db.execute(sql`
+      insert into payment_bank_profiles (id, org_id, name, bank_account_id, payment_format_id, currency)
+      values (${profileId}, ${org.orgId}, 'Teardown EFT', ${org.accounts.bank}, ${formatId}, 'CAD')`);
+    const payRunDocId = await seedDraftDocument(org.orgId, { kind: "pay_run", createdBy: actorId });
+    await db.execute(sql`
+      insert into pay_run_bank_files
+        (org_id, pay_run_document_id, payment_bank_profile_id, format, sequence_number, file_number,
+         sequence_value, file_creation_number, filename, content_type, content_hash, size_bytes,
+         file_id, file_version_id, entry_count, control_total, currency)
+      values (${org.orgId}, ${payRunDocId}, ${profileId}, 'cpa005', 1, 'PBF-0001',
+              1, 1, 'PBF-0001.txt', 'text/plain', ${"0".repeat(64)}, 4,
+              ${fileId}, ${versionId}, 1, '100.00', 'CAD')`);
+
     await dropScratchOrg(org.orgId);
     dropped = true;
 
     // The invariant: nothing org-scoped survives, in ANY org_id table.
     assert.deepEqual(await orgRowCounts(org.orgId), {});
 
+    // file_versions/file_blobs carry no org_id, so the invariant above cannot
+    // see them — assert the payroll blob chain is gone explicitly.
+    const blobLeft = (await db.execute(sql`
+      select (select count(*)::int from file_versions where id = ${versionId}) as versions,
+             (select count(*)::int from file_blobs where version_id = ${versionId}) as blobs`)) as unknown as {
+      rows: { versions: number; blobs: number }[];
+    };
+    assert.deepEqual(blobLeft.rows[0], { versions: 0, blobs: 0 });
+
     // And a second call is an idempotent no-op.
     await dropScratchOrg(org.orgId);
   } finally {
     if (!dropped) await dropScratchOrgReporting(org.orgId);
+  }
+});
+
+test("dropScratchOrg commits durably from inside a pinned bypass transaction", { skip: !DB }, async () => {
+  // The 2026-08-16 mass-purge phantom: called inside withBypass, the db proxy
+  // used to fold every teardown transaction into the caller's single pinned
+  // transaction — the wipe "succeeded", its own verification passed against
+  // uncommitted state, and the caller's exit rolled the whole thing back. The
+  // teardown must escape that scope, so its work survives even when the
+  // surrounding withBypass block itself fails and rolls back.
+  const org = await createScratchOrg();
+  try {
+    const sentinel = new Error("outer transaction rolls back");
+    await assert.rejects(
+      withBypass(async () => {
+        await dropScratchOrg(org.orgId);
+        throw sentinel;
+      }),
+      sentinel,
+    );
+    const r = (await db.execute(sql`select 1 as x from orgs where id = ${org.orgId}`)) as unknown as {
+      rows: unknown[];
+    };
+    assert.equal(r.rows.length, 0, "the drop must be committed, not staged in the caller's transaction");
+    assert.deepEqual(await orgRowCounts(org.orgId), {});
+  } finally {
+    await dropScratchOrgReporting(org.orgId);
   }
 });
 
