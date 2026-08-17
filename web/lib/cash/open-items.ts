@@ -40,8 +40,8 @@ export async function openItems(
                   and x.unapplied_at is null
              ), 0) as remaining
         from documents d
-        join journal_entries je on je.id = d.posted_entry_id and je.org_id = ${orgId}
-         and je.status = 'posted' and je.posting_date <= ${asOf}
+        join journal_entries je on je.id = d.posted_entry_id and je.org_id = ${orgId} and je.status = 'posted'
+         and je.posting_date <= ${asOf}
         join journal_lines jl on jl.entry_id = je.id and jl.is_open_item and ${signFilter}
         join accounts a on a.id = jl.account_id and a.org_id = ${orgId} and a.type = ${acctType}
        where d.org_id = ${orgId} and d.status = 'posted' and ${kindFilter}
