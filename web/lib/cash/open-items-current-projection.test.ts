@@ -10,7 +10,9 @@ const purchasingHome = readFileSync(join(import.meta.dirname, '..', 'module-home
 test('cash open items use only the document current posted projection', () => {
   assert.match(source, /je\.org_id = \$\{orgId\} and je\.status = 'posted'/)
   assert.match(source, /d\.org_id = \$\{orgId\}/)
-  assert.match(source, /d\.posted_entry_id = oi\.entry_id/)
+  // The query drives from documents (open_balance pre-filter) and joins the
+  // posting entry through the document's own current-projection linkage.
+  assert.match(source, /je\.id = d\.posted_entry_id/)
   assert.match(source, /d\.status = 'posted'/)
   assert.doesNotMatch(source, /je\.status in \('posted', 'reversed'\)/)
 })
