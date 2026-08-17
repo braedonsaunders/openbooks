@@ -1147,18 +1147,39 @@ export async function journalReport(
 ): Promise<JournalReportResult> {
   const orgId = await resolveOrgId(opts.orgId)
   const maxLines = opts.maxLines ?? 4000
+  // Without a line-level dimension slice, every entry in the window
+  // contributes at least one line, so the first `maxLines` lines can only come
+  // from the first `maxLines` entries in the same order. Narrowing to those
+  // entries first lets the date index supply them directly, instead of sorting
+  // every line in the window to throw all but a few thousand away.
+  const entryWindow = glSummaryEligibleDims(opts.dims) && !opts.dims?.subsidiaryIds?.length
+    ? sql`(
+        select id, entry_number, posting_date, memo, origin, source_document_id, org_id
+          from journal_entries
+         where org_id = ${orgId} and status in ('posted', 'reversed')
+           and posting_date >= ${from} and posting_date <= ${to}
+         -- Same key as the outer sort, id tie-break included, so the window is
+         -- exactly the first entries the full ordering would have reached.
+         order by posting_date desc, entry_number desc, id
+         limit ${maxLines}
+      )`
+    : sql`(
+        select id, entry_number, posting_date, memo, origin, source_document_id, org_id
+          from journal_entries
+         where org_id = ${orgId} and status in ('posted', 'reversed')
+           and posting_date >= ${from} and posting_date <= ${to}
+      )`
   const r = (await db.execute(sql`
     select e.id, e.entry_number, e.posting_date::text as date, e.memo as entry_memo, e.origin,
            a.number as acct_number, a.name as acct_name, p.display_name as party,
            l.memo as line_memo, l.amount,
            d.kind as doc_kind, d.id as doc_id
-      from journal_entries e
+      from ${entryWindow} e
       join journal_lines l on l.entry_id = e.id and l.org_id = e.org_id
       join accounts a on a.id = l.account_id and a.org_id = l.org_id
       left join parties p on p.id = l.party_id and p.org_id = l.org_id
       left join documents d on d.id = e.source_document_id and d.org_id = e.org_id
-     where e.org_id = ${orgId} and e.status in ('posted', 'reversed') and e.posting_date >= ${from} and e.posting_date <= ${to}
-       and ${dimWhere(opts.dims)}
+     where ${dimWhere(opts.dims)}
      order by e.posting_date desc, e.entry_number desc, e.id, l.line_number
      limit ${maxLines + 1}
   `)) as unknown as {
