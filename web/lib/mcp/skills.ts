@@ -68,6 +68,23 @@ export const MCP_SKILLS: readonly McpSkill[] = [
     ].join("\n"),
   },
   {
+    slug: "analyze-the-business",
+    title: "Analyze the business: reports, dashboards, and operational reads",
+    description:
+      "The read surface: run any saved report, read the analytics dashboards and cash cockpits, and inspect banking, payroll, files, and configuration.",
+    body: [
+      "# Analyze the business",
+      "",
+      "1. Orient with whoami — permissions decide which of these tools you can even see. Every read tool returns the same numbers as its screen and carries an href deep link; quote it so the user can open the page behind the figure.",
+      "2. Statements and trends: profit_and_loss, balance_sheet, financial_trends for period-over-period movement, budget_vs_actual for variance against a scenario from list_budget_scenarios. For anything saved in the report catalog — built-in statements or custom studio reports — resolve it with list_report_definitions and execute it with run_report; that is the same execution basis the export route and the scheduler use, so the numbers cannot disagree with a delivered PDF.",
+      "3. Detail reads when a total needs proving: general_ledger for per-account lines with running balances, aging_detail for one row per open document, partner_statement for a single customer or vendor, cash_flow_indirect for the indirect-method statement. Results are capped; when a truncated flag is set, say so — never present a capped list as complete.",
+      "4. Dashboards: analytics_financial_health, analytics_customer_intelligence, analytics_vendor_performance, analytics_cashflow, analytics_true_cost, analytics_utilization, and analytics_spend_velocity mirror the Analytics hub. analytics_sentinel runs the ledger-forensics detectors (digit-distribution, duplicates, sequential invoice runs, ghost vendors, off-hours postings) — its findings are leads to investigate with general_ledger and get_document, not verdicts to repeat as fact.",
+      "5. Working-capital cockpits: ap_position (payables with a capacity-scheduled pay-run recommendation), ar_position (collections worklist), cash_position (weekly cash timeline and runway). They share one engine with aging and list_open_items, so the figures tie to the penny across tools.",
+      "6. Operational reads: list_bank_reconciliations and get_bank_reconciliation for reconciliation state and totals, list_unmatched_bank_lines for what still needs matching. Payroll where enabled: list_pay_runs, get_pay_run, payroll_year_end, payroll_entitlements, payroll_remittances — employee government identifiers and withholding elections are never returned. File Cabinet: list_files, get_file, list_folders honor per-folder access grants. Configuration: list_setup_entities, list_setup_records, list_features.",
+      "7. Everything in this playbook is read-only; nothing here changes the books. When analysis reveals work to do — an accrual to post, a payment to apply — switch to the drafting playbooks and their deliberate write steps.",
+    ].join("\n"),
+  },
+  {
     slug: "run-a-period-close",
     title: "Run a period close",
     description:
