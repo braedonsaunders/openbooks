@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { sql } from "drizzle-orm";
-import { db } from "./db.ts";
+import { db, withBypassContext } from "./db.ts";
 
 /**
  * DB test fixtures — a disposable scratch org with the full accounting spine a
@@ -346,6 +346,13 @@ export async function listOrgIdTables(): Promise<string[]> {
  * itself), keyed by table name. Empty object = fully deleted.
  */
 export async function orgRowCounts(orgId: string): Promise<Record<string, number>> {
+  // Escape any ambient pinned transaction (see dropScratchOrg): a verification
+  // that reads through a caller's uncommitted transaction reports whatever the
+  // caller has staged, not what the database durably holds.
+  return withBypassContext(() => orgRowCountsCommitted(orgId));
+}
+
+async function orgRowCountsCommitted(orgId: string): Promise<Record<string, number>> {
   const tables = await listOrgIdTables();
   const counts: Record<string, number> = {};
   await db.transaction(async (tx) => {
@@ -525,6 +532,20 @@ async function genericDeletePasses(
  * a partial failure) resumes and finishes the wipe.
  */
 export async function dropScratchOrg(orgId: string): Promise<void> {
+  // The wipe is inherently multi-transaction (per-step commits, trigger
+  // disable/enable, one targeted deferred constraint) and MUST NOT participate
+  // in a caller's pinned transaction: inside withBypass/withOrg the db proxy
+  // folds every db.transaction() into the caller's single uncommitted
+  // transaction, so the deletes never commit on their own, the verification
+  // below reads that uncommitted state and passes, the first failure aborts
+  // the shared transaction (25P02 for everything after), and the caller's
+  // final rollback silently undoes every "successful" drop — the 2026-08-16
+  // mass-purge phantom. Escaping to a context-only bypass scope gives every
+  // internal transaction its own connection, commit, and rollback.
+  return withBypassContext(() => dropScratchOrgEscaped(orgId));
+}
+
+async function dropScratchOrgEscaped(orgId: string): Promise<void> {
   // Hard scope guard. If the orgs row is gone the wipe already completed
   // (orgs is deleted last); if it exists under any other name, refuse.
   const orgRow = await db.transaction(async (tx) => {
@@ -534,7 +555,19 @@ export async function dropScratchOrg(orgId: string): Promise<void> {
     };
     return r.rows[0];
   });
-  if (!orgRow) return;
+  if (!orgRow) {
+    // "Already deleted" must be proven, not assumed: if the org row is merely
+    // invisible (RLS misconfiguration) or a previous run died between deleting
+    // orgs and finishing, silent success here is how leaks go unnoticed.
+    const leftovers = await orgRowCounts(orgId);
+    if (Object.keys(leftovers).length > 0) {
+      throw new Error(
+        `dropScratchOrg(${orgId}): orgs row is not visible but org-scoped rows remain ` +
+          `(${JSON.stringify(leftovers)}) — refusing to report success`,
+      );
+    }
+    return;
+  }
   if (!orgRow.name.startsWith("Scratch ")) {
     throw new Error(
       `dropScratchOrg refused: org ${orgId} is named ${JSON.stringify(orgRow.name)}, not 'Scratch %'`,
@@ -557,9 +590,29 @@ export async function dropScratchOrg(orgId: string): Promise<void> {
     await tx.execute(sql`update orgs set env_kind = 'sandbox' where id = ${orgId} and name like 'Scratch %'`);
     await tx.execute(sql`update users set is_active = false where org_id = ${orgId}`);
     await tx.execute(sql`update inventory_movements set status = 'pending' where org_id = ${orgId} and status = 'posted'`);
+    // Payroll bank files are money-moving evidence with UNCONDITIONAL guards
+    // (no sandbox-wipe bypass): pay_run_bank_file_immutable forbids their
+    // delete outright, and payroll_bank_file_blob_immutable blocks deleting
+    // any file_blob a pay_run_bank_files row still references. Disable both
+    // for this one transaction and clear the bank-file rows BEFORE the blob
+    // delete below; the ALTERs take an exclusive lock, so pay for them only
+    // when such rows exist.
+    const bankFiles = (await tx.execute(
+      sql`select 1 as x from pay_run_bank_files where org_id = ${orgId} limit 1`,
+    )) as unknown as { rows: unknown[] };
+    const hasBankFiles = bankFiles.rows.length > 0;
+    if (hasBankFiles) {
+      await tx.execute(sql.raw(`alter table public."pay_run_bank_files" disable trigger pay_run_bank_file_immutable`));
+      await tx.execute(sql.raw(`alter table public."file_blobs" disable trigger payroll_bank_file_blob_immutable`));
+      await tx.execute(sql`delete from pay_run_bank_files where org_id = ${orgId}`);
+    }
     await tx.execute(sql`delete from file_blobs where version_id in
       (select v.id from file_versions v join files f on f.id = v.file_id where f.org_id = ${orgId})`);
     await tx.execute(sql`delete from file_versions where file_id in (select id from files where org_id = ${orgId})`);
+    if (hasBankFiles) {
+      await tx.execute(sql.raw(`alter table public."file_blobs" enable trigger payroll_bank_file_blob_immutable`));
+      await tx.execute(sql.raw(`alter table public."pay_run_bank_files" enable trigger pay_run_bank_file_immutable`));
+    }
     await tx.execute(sql`delete from tax_group_members where tax_group_id in (select id from tax_groups where org_id = ${orgId})`);
   });
 
