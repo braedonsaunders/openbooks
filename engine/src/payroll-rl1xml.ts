@@ -1,7 +1,7 @@
 import { sql } from "drizzle-orm";
 import { db } from "./db.ts";
 import { unsealSecret } from "./secrets.ts";
-import { PayrollError } from "./payroll-run.ts";
+import { PayrollError } from "./payroll-error.ts";
 import { rl1Slips, type Rl1Slip } from "./payroll-rl1.ts";
 
 /**

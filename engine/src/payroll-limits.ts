@@ -1,3 +1,4 @@
+import { PayrollError } from "./payroll-error.ts";
 import {
   add, cmp, fromUnits, mulPercent, mulRatio, neg, normalizeMoney, sum, toUnits,
 } from "./money.ts";
@@ -42,7 +43,8 @@ const SCALE = 10_000n;
 
 export type ProtectionBase = "none" | "net_pay" | "disposable_earnings" | "gross";
 
-export class PayrollLimitError extends Error {}
+/** A limit refusal is a payroll refusal; callers catch on the base type. */
+export class PayrollLimitError extends PayrollError {}
 
 /** Truncate to whole cents. Caps are ceilings: rounding up would breach them. */
 function floorCents(value: string): string {

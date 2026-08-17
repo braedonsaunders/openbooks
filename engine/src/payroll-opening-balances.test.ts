@@ -3,13 +3,19 @@ import { randomUUID } from "node:crypto";
 import test from "node:test";
 import { sql } from "drizzle-orm";
 import { db } from "./db.ts";
-import { add, cmp } from "./money.ts";
+import { add, cmp, mulPercent } from "./money.ts";
 import { calculateT4127 } from "./payroll/canada/t4127.ts";
+import { applyBasisCaps } from "./payroll-limits.ts";
 import {
+  componentYearToDate,
+  isEmptyOpeningBalance,
   normalizeOpeningBalance,
+  normalizeOpeningComponents,
   openingBalancesForYear,
+  openingComponentFields,
   OpeningBalanceSaveError,
   saveOpeningBalances,
+  type OpeningComponentField,
 } from "./payroll-opening-balances.ts";
 import { payRunReadiness, payRunStaleness } from "./payroll-readiness.ts";
 import { calculatePayRun, createPayRun, seedPayrollComponents } from "./payroll-run.ts";
@@ -58,6 +64,78 @@ test("opening balance amounts are exact money, never negative, never a transpose
     () => normalizeOpeningBalance({ taxableYtd: "100", taxYtd: "40000" }),
     /exceeds taxable earnings/,
   );
+});
+
+/* ------------------------------------------------------------------ */
+/* Component openings: validation (no database)                        */
+/* ------------------------------------------------------------------ */
+
+const RRSP: OpeningComponentField = {
+  componentId: "11111111-1111-1111-1111-111111111111",
+  code: "RRSP",
+  name: "RRSP employee contribution",
+  kind: "deduction",
+  basisCapAmountPerYear: "23500.0000",
+  capped: true,
+};
+
+const RETIRED: OpeningComponentField = {
+  componentId: "22222222-2222-2222-2222-222222222222",
+  code: "OLDRRSP",
+  name: "Retired RRSP plan",
+  kind: "deduction",
+  basisCapAmountPerYear: null,
+  capped: false,
+};
+
+test("a component opening is exact money, keyed by id or code, and bounded by its own cap", () => {
+  // Both keyings resolve to the component id, because the API sends uuids and a
+  // spreadsheet header carries the code, and neither caller should own a
+  // second resolver.
+  assert.deepEqual(normalizeOpeningComponents({ RRSP: "23,000.00" }, [RRSP]), {
+    [RRSP.componentId]: "23000.0000",
+  });
+  assert.deepEqual(normalizeOpeningComponents({ [RRSP.componentId]: "$1,000" }, [RRSP]), {
+    [RRSP.componentId]: "1000.0000",
+  });
+  assert.deepEqual(normalizeOpeningComponents({ rrsp: "10" }, [RRSP]), {
+    [RRSP.componentId]: "10.0000",
+  });
+
+  // Zero and blank are "no carry-in", not a row of zero.
+  assert.deepEqual(normalizeOpeningComponents({ RRSP: "0" }, [RRSP]), {});
+  assert.deepEqual(normalizeOpeningComponents({ RRSP: "" }, [RRSP]), {});
+
+  assert.throws(() => normalizeOpeningComponents({ RRSP: "-1" }, [RRSP]), /cannot be negative/);
+  assert.throws(() => normalizeOpeningComponents({ RRSP: "some" }, [RRSP]), /is not an amount/);
+  // A stale template naming a component this org does not have.
+  assert.throws(
+    () => normalizeOpeningComponents({ TFSA: "100" }, [RRSP]),
+    /not an annually-capped pay component/,
+  );
+  // Above the annual ceiling is arithmetically impossible — the realistic cause
+  // is a transposed spreadsheet column, exactly like the statutory checks.
+  assert.throws(
+    () => normalizeOpeningComponents({ RRSP: "23500.01" }, [RRSP]),
+    /exceeds its annual cap/,
+  );
+  // A component with no annual cap: entering a number that changes nothing is
+  // the setting this codebase refuses to offer.
+  assert.throws(
+    () => normalizeOpeningComponents({ OLDRRSP: "500" }, [RETIRED]),
+    /has no annual basis cap/,
+  );
+});
+
+test("an employee whose ONLY carry-in is a component year-to-date is not an empty row", () => {
+  // The caller DELETES a row this returns true for. Judged on the statutory
+  // columns alone, a pure 402(g) carry-in would be deleted on sight and the
+  // employee would silently regain a full annual deferral limit.
+  const zeroes = normalizeOpeningBalance({});
+  assert.equal(isEmptyOpeningBalance(zeroes), true);
+  assert.equal(isEmptyOpeningBalance(zeroes, {}), true);
+  assert.equal(isEmptyOpeningBalance(zeroes, { [RRSP.componentId]: "23000.0000" }), false);
+  assert.equal(isEmptyOpeningBalance(zeroes, { [RRSP.componentId]: "0.0000" }), true);
 });
 
 /* ------------------------------------------------------------------ */
@@ -257,6 +335,324 @@ test(
       // Specifically: the remaining CPP room, not a whole second contribution.
       assert.ok(cmp(withCarryIn.cpp, fresh.cpp) < 0);
       assert.ok(cmp(stub.net_pay, "0") > 0);
+    } finally {
+      await dropScratchOrgReporting(fx.orgId);
+    }
+  },
+);
+
+/* ------------------------------------------------------------------ */
+/* The component dimension: an annual cap that does not restart        */
+/* ------------------------------------------------------------------ */
+
+/** An annually-capped percent-of-gross deduction, assigned to the employee. */
+async function seedCappedComponent(
+  fx: AdoptionFixture,
+  options: { code?: string; capPerYear?: string; percent?: string; assign?: boolean } = {},
+): Promise<string> {
+  const componentId = randomUUID();
+  await db.execute(sql`
+    insert into pay_components (id, org_id, code, name, kind, basis, value,
+                                basis_cap_amount_per_year, tax_treatment, is_active,
+                                created_by, updated_by)
+    values (${componentId}, ${fx.orgId}, ${options.code ?? "RRSP"}, 'RRSP employee contribution',
+            'deduction', 'percent_of_gross', ${options.percent ?? "5"},
+            ${options.capPerYear ?? "23500"}, 'pension_f', true, ${fx.actorId}, ${fx.actorId})`);
+  if (options.assign !== false) {
+    await db.execute(sql`
+      insert into employee_pay_components (org_id, employee_party_id, component_id, value,
+                                           effective_from, is_active, created_by, updated_by)
+      values (${fx.orgId}, ${fx.employeeId}, ${componentId}, null, '2020-01-01', true,
+              ${fx.actorId}, ${fx.actorId})`);
+  }
+  return componentId;
+}
+
+test(
+  "an employee near the annual deferral limit contributes only the remaining room",
+  { skip: !DB },
+  async () => {
+    // The whole defect. `basis_cap_amount_per_year` is the CRA money-purchase /
+    // US 402(g) ceiling, enforced against the component's year-to-date — and
+    // that year-to-date had no carry-in dimension, so it restarted at zero on
+    // the adoption date and the employee could defer a SECOND full annual limit.
+    const fx = await seedAdoption();
+    try {
+      const componentId = await seedCappedComponent(fx, { capPerYear: "23500", percent: "5" });
+
+      // What the prior provider already deferred this year.
+      await saveOpeningBalances({
+        orgId: fx.orgId, actorId: fx.actorId, taxYear: 2026,
+        rows: [{
+          employeePartyId: fx.employeeId,
+          amounts: { pensionableYtd: "84000", taxableYtd: "84000" },
+          components: { RRSP: "23000.00" },
+        }],
+      });
+
+      const ytd = await componentYearToDate(db, {
+        orgId: fx.orgId, employeePartyId: fx.employeeId, taxYear: 2026, componentId,
+      });
+      assert.equal(ytd, "23000.0000");
+
+      // 5% of a $40,000 period would be $2,000. Only $500 of room is left, so
+      // the CAPPED basis is $10,000 and the deduction is exactly $500.
+      const capped = {
+        basis: "percent_of_gross" as const,
+        value: "5",
+        basisCapHoursPerPeriod: null,
+        basisCapAmountPerPeriod: null,
+        basisCapAmountPerYear: "23500",
+      };
+      const basis = applyBasisCaps(capped, "40000.00", { lines: [], yearToDate: ytd });
+      assert.equal(basis, "10000.0000");
+      assert.equal(mulPercent(basis, "5", 2), "500.0000");
+
+      // And it must actually BITE: with no carry-in the same period takes the
+      // full 5%, which is the second annual limit this exists to prevent.
+      const fresh = applyBasisCaps(capped, "40000.00", { lines: [], yearToDate: "0" });
+      assert.equal(mulPercent(fresh, "5", 2), "2000.0000");
+      assert.ok(cmp(mulPercent(fresh, "5", 2), mulPercent(basis, "5", 2)) > 0);
+
+      // Committed stub lines and the opening are ONE year-to-date, summed.
+      const documentId = await seedRun(fx, {
+        periodStart: "2026-08-02", periodEnd: "2026-08-15", payDate: "2026-08-18",
+        runStatus: "committed",
+      });
+      const stubId = randomUUID();
+      await db.execute(sql`
+        insert into pay_stubs (id, org_id, pay_run_document_id, employee_party_id, province,
+                               periods_per_year, pay_date, tax_year, currency_code, gross, net_pay,
+                               factors, created_by, updated_by)
+        values (${stubId}, ${fx.orgId}, ${documentId}, ${fx.employeeId}, 'ON', 26, '2026-08-18',
+                2026, 'CAD', '2400', '1900', '{}'::jsonb, ${fx.actorId}, ${fx.actorId})`);
+      await db.execute(sql`
+        insert into pay_stub_lines (org_id, stub_id, component_id, kind, description, amount,
+                                    created_by, updated_by)
+        values (${fx.orgId}, ${stubId}, ${componentId}, 'deduction', 'RRSP', '120',
+                ${fx.actorId}, ${fx.actorId})`);
+      assert.equal(
+        await componentYearToDate(db, {
+          orgId: fx.orgId, employeePartyId: fx.employeeId, taxYear: 2026, componentId,
+        }),
+        "23120.0000",
+      );
+      // A run must not count its own lines, or recalculating ratchets the cap
+      // down on every pass.
+      assert.equal(
+        await componentYearToDate(db, {
+          orgId: fx.orgId, employeePartyId: fx.employeeId, taxYear: 2026, componentId,
+          excludeRunDocumentId: documentId,
+        }),
+        "23000.0000",
+      );
+    } finally {
+      await dropScratchOrgReporting(fx.orgId);
+    }
+  },
+);
+
+test(
+  "a carry-in whose only content is a component year-to-date survives, and clearing takes both",
+  { skip: !DB },
+  async () => {
+    const fx = await seedAdoption();
+    try {
+      const componentId = await seedCappedComponent(fx);
+      await saveOpeningBalances({
+        orgId: fx.orgId, actorId: fx.actorId, taxYear: 2026,
+        rows: [{ employeePartyId: fx.employeeId, amounts: {}, components: { RRSP: "1000" } }],
+      });
+      const stored = await openingBalancesForYear(fx.orgId, 2026);
+      assert.equal(stored.entered, 1, "an all-zero statutory row must not delete the components");
+      assert.equal(stored.rows[0]!.componentAmounts[componentId], "1000.0000");
+      assert.deepEqual(stored.components.map((c) => c.code), ["RRSP"]);
+
+      // A caller that says nothing about components keeps them: silence is not
+      // an instruction to delete a deferral year-to-date.
+      await saveOpeningBalances({
+        orgId: fx.orgId, actorId: fx.actorId, taxYear: 2026,
+        rows: [{ employeePartyId: fx.employeeId, amounts: { pensionableYtd: "50" } }],
+      });
+      const kept = await openingBalancesForYear(fx.orgId, 2026);
+      assert.equal(kept.rows[0]!.componentAmounts[componentId], "1000.0000");
+
+      // Clearing everything is a delete, and takes the children with it.
+      const cleared = await saveOpeningBalances({
+        orgId: fx.orgId, actorId: fx.actorId, taxYear: 2026,
+        rows: [{ employeePartyId: fx.employeeId, amounts: {}, components: {} }],
+      });
+      assert.equal(cleared.deleted, 1);
+      const after = await openingBalancesForYear(fx.orgId, 2026);
+      assert.equal(after.entered, 0);
+      assert.deepEqual(after.rows[0]!.componentAmounts, {});
+      const orphans = (await db.execute(sql`
+        select count(*)::int as n from payroll_opening_balance_components
+         where org_id = ${fx.orgId}`)) as unknown as { rows: { n: number }[] };
+      assert.equal(orphans.rows[0]!.n, 0, "the child rows must cascade with their parent");
+    } finally {
+      await dropScratchOrgReporting(fx.orgId);
+    }
+  },
+);
+
+test(
+  "an opening for a component whose annual cap was removed is kept, shown, and never re-entered",
+  { skip: !DB },
+  async () => {
+    // Data somebody entered is not deleted because configuration changed. It is
+    // inert until a cap comes back, read-only, and immune to being cleared by a
+    // caller that simply cannot see it any more.
+    const fx = await seedAdoption();
+    try {
+      const componentId = await seedCappedComponent(fx);
+      await saveOpeningBalances({
+        orgId: fx.orgId, actorId: fx.actorId, taxYear: 2026,
+        rows: [{ employeePartyId: fx.employeeId, amounts: {}, components: { RRSP: "1000" } }],
+      });
+      await db.execute(sql`
+        update pay_components set basis_cap_amount_per_year = null where id = ${componentId}`);
+
+      const fields = await openingComponentFields(fx.orgId, 2026);
+      assert.deepEqual(fields.map((f) => [f.code, f.capped]), [["RRSP", false]]);
+
+      // A save that names nothing must not clear it.
+      await saveOpeningBalances({
+        orgId: fx.orgId, actorId: fx.actorId, taxYear: 2026,
+        rows: [{ employeePartyId: fx.employeeId, amounts: { pensionableYtd: "50" }, components: {} }],
+      });
+      const after = await openingBalancesForYear(fx.orgId, 2026);
+      assert.equal(after.rows[0]!.componentAmounts[componentId], "1000.0000");
+
+      // And it cannot be re-entered while the cap is gone.
+      await assert.rejects(
+        saveOpeningBalances({
+          orgId: fx.orgId, actorId: fx.actorId, taxYear: 2026,
+          rows: [{ employeePartyId: fx.employeeId, amounts: {}, components: { RRSP: "2000" } }],
+        }),
+        /has no annual basis cap/,
+      );
+    } finally {
+      await dropScratchOrgReporting(fx.orgId);
+    }
+  },
+);
+
+test(
+  "a component carry-in is refused once a run has committed, and is left exactly as it was",
+  { skip: !DB },
+  async () => {
+    const fx = await seedAdoption();
+    try {
+      const componentId = await seedCappedComponent(fx);
+      await saveOpeningBalances({
+        orgId: fx.orgId, actorId: fx.actorId, taxYear: 2026,
+        rows: [{
+          employeePartyId: fx.employeeId,
+          amounts: { pensionableYtd: "84000", taxableYtd: "84000" },
+          components: { RRSP: "23000" },
+        }],
+      });
+
+      const documentId = await seedRun(fx, { runStatus: "committed" });
+      await db.execute(sql`
+        insert into pay_stubs (org_id, pay_run_document_id, employee_party_id, province,
+                               periods_per_year, pay_date, tax_year, currency_code, gross, net_pay,
+                               factors, created_by, updated_by)
+        values (${fx.orgId}, ${documentId}, ${fx.employeeId}, 'ON', 26, '2026-07-21', 2026, 'CAD',
+                '2400', '1900', '{}'::jsonb, ${fx.actorId}, ${fx.actorId})`);
+
+      await assert.rejects(
+        saveOpeningBalances({
+          orgId: fx.orgId, actorId: fx.actorId, taxYear: 2026,
+          rows: [{
+            employeePartyId: fx.employeeId,
+            amounts: { pensionableYtd: "84000", taxableYtd: "84000" },
+            components: { RRSP: "1" },
+          }],
+        }),
+        (error: unknown) => {
+          assert.ok(error instanceof OpeningBalanceSaveError);
+          assert.match(error.message, /already used this carry-in for 2026/);
+          return true;
+        },
+      );
+      const after = await openingBalancesForYear(fx.orgId, 2026);
+      assert.equal(after.rows[0]!.componentAmounts[componentId], "23000.0000");
+    } finally {
+      await dropScratchOrgReporting(fx.orgId);
+    }
+  },
+);
+
+test(
+  "the first mid-year run warns about a capped component with no carry-in, and only then",
+  { skip: !DB },
+  async () => {
+    const fx = await seedAdoption();
+    try {
+      await seedCappedComponent(fx);
+      const documentId = await seedRun(fx);
+      const item = (r: Awaited<ReturnType<typeof payRunReadiness>>) =>
+        r.items.find((i) => i.code === "employee.noOpeningComponentYtd");
+
+      const warned = item(await payRunReadiness(fx.orgId, documentId));
+      assert.ok(warned, "expected a component carry-in warning");
+      assert.equal(warned.severity, "warning");
+      assert.equal(warned.detail, "RRSP");
+      assert.deepEqual(warned.employees.map((e) => e.name), [fx.employeeName]);
+
+      // A statutory row alone does NOT answer the component question — this is
+      // exactly the hole: the row warning goes quiet and the cap still restarts.
+      await saveOpeningBalances({
+        orgId: fx.orgId, actorId: fx.actorId, taxYear: 2026,
+        rows: [{ employeePartyId: fx.employeeId, amounts: { pensionableYtd: "84000" } }],
+      });
+      assert.equal(openingItem(await payRunReadiness(fx.orgId, documentId)), undefined);
+      assert.ok(item(await payRunReadiness(fx.orgId, documentId)));
+
+      // Entering the component year-to-date settles it.
+      await saveOpeningBalances({
+        orgId: fx.orgId, actorId: fx.actorId, taxYear: 2026,
+        rows: [{
+          employeePartyId: fx.employeeId,
+          amounts: { pensionableYtd: "84000" },
+          components: { RRSP: "23000" },
+        }],
+      });
+      assert.equal(item(await payRunReadiness(fx.orgId, documentId)), undefined);
+    } finally {
+      await dropScratchOrgReporting(fx.orgId);
+    }
+  },
+);
+
+test(
+  "an unassigned capped component, and a hire inside the period, are not warned about",
+  { skip: !DB },
+  async () => {
+    const fx = await seedAdoption();
+    try {
+      // Configured but assigned to nobody: nothing will be deducted, so there is
+      // no limit to have consumed.
+      await seedCappedComponent(fx, { assign: false });
+      const documentId = await seedRun(fx);
+      const item = (r: Awaited<ReturnType<typeof payRunReadiness>>) =>
+        r.items.find((i) => i.code === "employee.noOpeningComponentYtd");
+      assert.equal(item(await payRunReadiness(fx.orgId, documentId)), undefined);
+
+      // Assigned to somebody this employer first hired inside the period: they
+      // cannot have consumed any of the limit HERE earlier in the year.
+      const newHire = await seedEmployee(fx, { name: "Newly Hired", hiredOn: "2026-07-06" });
+      const componentId = await seedCappedComponent(fx, { code: "RRSP2" });
+      await db.execute(sql`
+        insert into employee_pay_components (org_id, employee_party_id, component_id, value,
+                                             effective_from, is_active, created_by, updated_by)
+        values (${fx.orgId}, ${newHire}, ${componentId}, null, '2026-07-06', true,
+                ${fx.actorId}, ${fx.actorId})`);
+      const warned = item(await payRunReadiness(fx.orgId, documentId));
+      assert.ok(warned, "the assigned long-tenured employee is still warned about");
+      assert.deepEqual(warned.employees.map((e) => e.name), [fx.employeeName]);
     } finally {
       await dropScratchOrgReporting(fx.orgId);
     }
@@ -609,6 +1005,82 @@ test(
     } finally {
       await dropScratchOrgReporting(fx.orgId);
       await dropScratchOrgReporting(other.orgId);
+    }
+  },
+);
+
+test(
+  "a calculated stub takes only the remaining annual room, not a second full limit",
+  { skip: !DB },
+  async () => {
+    // The composition test above proves the SERVICE and `applyBasisCaps` agree.
+    // This one proves the pay run actually reaches them: `calculateStub`'s own
+    // year-to-date closure used to sum committed stub lines only, while its
+    // comment claimed openings arrived "via the opening-balance sweep the
+    // year-end module owns" — a sweep that has never existed. Against that
+    // code this test fails by deducting the full period percentage.
+    const fx = await seedAdoption();
+    try {
+      const componentId = await seedCappedComponent(fx, { capPerYear: "23500", percent: "5" });
+      await saveOpeningBalances({
+        orgId: fx.orgId, actorId: fx.actorId, taxYear: 2026,
+        rows: [{
+          employeePartyId: fx.employeeId,
+          amounts: { pensionableYtd: "84000.00", taxableYtd: "84000.00" },
+          // $100 of room left against the $23,500 ceiling.
+          components: { RRSP: "23400.00" },
+        }],
+      });
+
+      for (const workedOn of ["2026-07-06", "2026-07-08", "2026-07-10", "2026-07-14"]) {
+        await db.execute(sql`
+          insert into time_entries (org_id, employee_party_id, worked_on, hours, status, is_billable,
+                                    billing_status, costing_basis, created_by, updated_by)
+          values (${fx.orgId}, ${fx.employeeId}, ${workedOn}, 20, 'approved', false,
+                  'unbilled', 'actual', ${fx.actorId}, ${fx.actorId})`);
+      }
+      const run = await createPayRun({
+        orgId: fx.orgId, actorId: fx.actorId, payScheduleId: fx.scheduleId,
+        periodStart: "2026-07-05", periodEnd: "2026-07-18",
+      });
+      assert.deepEqual(
+        (await calculatePayRun({ orgId: fx.orgId, documentId: run.documentId, actorId: fx.actorId }))
+          .errors,
+        [],
+      );
+
+      const deduction = async (documentId: string) =>
+        ((await db.execute(sql`
+          select l.amount from pay_stub_lines l
+            join pay_stubs s on s.id = l.stub_id
+           where l.org_id = ${fx.orgId} and s.pay_run_document_id = ${documentId}
+             and l.component_id = ${componentId}
+        `)) as unknown as { rows: { amount: string }[] }).rows[0]?.amount ?? null;
+
+      // 5% of $2,400 is $120; only $100 of annual room remains.
+      assert.equal(await deduction(run.documentId), "100.0000");
+
+      // And it must BITE: the identical run with the carry-in removed takes the
+      // uncapped $120, which over the rest of the year is the second limit.
+      await db.execute(sql`
+        delete from payroll_opening_balance_components oc
+          using payroll_opening_balances b
+         where b.id = oc.opening_balance_id and oc.org_id = ${fx.orgId}
+           and b.employee_party_id = ${fx.employeeId}`);
+      assert.equal(
+        await componentYearToDate(db, {
+          orgId: fx.orgId, employeePartyId: fx.employeeId, taxYear: 2026, componentId,
+        }),
+        "0.0000",
+      );
+      assert.deepEqual(
+        (await calculatePayRun({ orgId: fx.orgId, documentId: run.documentId, actorId: fx.actorId }))
+          .errors,
+        [],
+      );
+      assert.equal(await deduction(run.documentId), "120.0000");
+    } finally {
+      await dropScratchOrgReporting(fx.orgId);
     }
   },
 );

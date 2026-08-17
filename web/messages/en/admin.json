@@ -2206,7 +2206,8 @@
       "holidayRuleOffset": "Negative counts back. Good Friday is -2 and Easter Monday is 1.",
       "holidayObservance": "Statutory holidays keep their date and the law grants a substitute day off instead. Choose a shift only for a company holiday you actually move.",
       "equipmentUnitId": "Pay on one named machine only. Leave it empty and use the charge item instead to cover a whole class of equipment with a single rule.",
-      "itemId": "Pay on every unit that charges through this catalog item — \"all excavators\" as one rule rather than one rule per machine."
+      "itemId": "Pay on every unit that charges through this catalog item — \"all excavators\" as one rule rather than one rule per machine.",
+      "payScheduleAnchor": "Any one period's END date; every other period derives from it. Semi-monthly reads the day of the month: the 20th means periods ending the 5th and the 20th, and the 15th (or a 30-/31-day month's last day) means the 15th and the month end. The 14th, and the last day of February, name no calendar and are refused."
     },
     "options": {
       "payFrequency": {
