@@ -519,6 +519,8 @@
         "class": "类别",
         "memo": "备注",
         "amount": "金额（本位币）",
+        "debit": "借方",
+        "credit": "贷方",
         "currency": "货币",
         "txn_amount": "金额（交易币）",
         "quantity": "数量",
@@ -740,7 +742,9 @@
       "written_off": "已核销",
       "sales": "销售",
       "purchases": "采购",
-      "both": "两者"
+      "both": "两者",
+      "true": "是",
+      "false": "否"
     }
   },
   "operators": {

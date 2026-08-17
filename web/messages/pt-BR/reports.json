@@ -519,6 +519,8 @@
         "class": "Classe",
         "memo": "Memorando",
         "amount": "Valor (base)",
+        "debit": "Débito",
+        "credit": "Crédito",
         "currency": "Moeda",
         "txn_amount": "Valor (transação)",
         "quantity": "Quantidade",
@@ -740,7 +742,9 @@
       "written_off": "Baixado por perda",
       "sales": "Vendas",
       "purchases": "Compras",
-      "both": "Ambos"
+      "both": "Ambos",
+      "true": "Sim",
+      "false": "Não"
     }
   },
   "operators": {

@@ -5,14 +5,21 @@ import type { InsightCompileErrorCode, InsightLabelResolver } from "@openbooks/a
 /**
  * Bridge between the request locale and the analytics engine's injectable
  * label hooks: column labels compiled into a QueryResult come out in the
- * caller's language. Message keys live in insights.catalog.* /
- * insights.measureLabels.* — every catalog source/field is enumerated there
- * (English source, fr/es translated), so lookups never miss.
+ * caller's language.
+ *
+ * Field labels resolve through the REPORT catalog namespace
+ * (reports.catalog.columns.<entity>.<column>) because insight sources are the
+ * report entities — one catalog, one set of headings, so a field is worded the
+ * same in a card, a custom report and a saved view. Everything else is
+ * insights-only chrome (insights.measureLabels.*).
  */
 export async function insightLabelResolver(): Promise<InsightLabelResolver> {
-  const t = await getTranslations("insights");
+  const [t, tCatalog] = await Promise.all([
+    getTranslations("insights"),
+    getTranslations("reports"),
+  ]);
   return {
-    field: (sourceKey, field) => t(`catalog.fields.${sourceKey}.${field.key}`),
+    field: (sourceKey, field) => tCatalog(`catalog.columns.${sourceKey}.${field.key}`),
     count: () => t("measureLabels.count"),
     measure: (agg, fieldLabel) => t(`measureLabels.${agg}`, { field: fieldLabel }),
     binnedDimension: (fieldLabel, bin) =>

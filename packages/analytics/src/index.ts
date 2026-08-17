@@ -11,6 +11,7 @@
 export * from './types'
 export * from './semantic'
 export * from './catalog'
+export * from './legacy'
 export * from './compile'
 export * from './validate'
 export * from './viz'

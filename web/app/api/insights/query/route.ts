@@ -2,8 +2,8 @@ import { NextResponse } from 'next/server'
 import { getTranslations } from 'next-intl/server'
 import { pool } from '@openbooks/engine/src/db.ts'
 import { runInsightQuery } from '@openbooks/analytics/server'
-import { InsightCompileError, InsightValidationError } from '@openbooks/analytics'
-import { guardPermission } from '../../../../lib/authz'
+import { InsightCompileError, InsightValidationError, sourcePermission } from '@openbooks/analytics'
+import { can, guardPermission } from '../../../../lib/authz'
 import { insightCompileErrorMessage, insightLabelResolver } from '../../../../lib/insight-labels'
 import { normalizeQuery } from '../_lib'
 
@@ -39,6 +39,14 @@ export async function POST(req: Request) {
     }
     const msg = e instanceof Error ? e.message : 'invalid query'
     return NextResponse.json({ error: msg }, { status: 422 })
+  }
+
+  // Sources over sensitive data (payroll wages) carry their own permission in
+  // the shared catalog — insights.read alone never unlocks them, on a card the
+  // caller built or one someone else pinned to their dashboard.
+  const needed = sourcePermission(query.source)
+  if (needed && !can(gate, needed)) {
+    return NextResponse.json({ error: `missing permission: ${needed}` }, { status: 403 })
   }
 
   try {
