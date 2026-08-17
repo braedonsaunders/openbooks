@@ -94,7 +94,11 @@ export async function customersHome(orgId: string, subIds?: string[]): Promise<C
                 join accounts ba on ba.id = bl.account_id
                where ba.type = 'asset_receivable' and ap.unapplied_at is null
                  and bl.org_id = ${orgId}
-                 and pe.posting_date >= current_date - 365) as dso
+                 and pe.posting_date >= current_date - 365
+                 -- Trailing 365 days: without the upper bound a future-dated
+                 -- payment counts toward "days to pay" (and drags the whole
+                 -- applications traversal over rows outside the window).
+                 and pe.posting_date <= current_date) as dso
         from oi where remaining > 0.005
     `),
     // Hero roster — top relationships by open balance, with open-opp counts.
