@@ -25532,10 +25532,32 @@ CREATE INDEX je_org_date ON public.journal_entries USING btree (org_id, posting_
 
 
 --
+-- Name: je_org_origin_date; Type: INDEX; Schema: public; Owner: -
+--
+-- The journal list's standalone-engine-journals leg seeks (org, origin) in
+-- posting-date order; without it the list walks the whole (org, date) index
+-- filtering per row on large tenants.
+--
+
+CREATE INDEX je_org_origin_date ON public.journal_entries USING btree (org_id, origin, posting_date);
+
+
+--
 -- Name: je_org_period; Type: INDEX; Schema: public; Owner: -
 --
 
 CREATE INDEX je_org_period ON public.journal_entries USING btree (org_id, period_id);
+
+
+--
+-- Name: je_org_status_date_covering; Type: INDEX; Schema: public; Owner: -
+--
+-- Statement engines materialize the posted-entry set from this index alone
+-- (index-only scan); the trailing id key is payload so the heap is never
+-- visited on multi-million-entry tenants.
+--
+
+CREATE INDEX je_org_status_date_covering ON public.journal_entries USING btree (org_id, status, posting_date, id);
 
 
 --
@@ -25557,6 +25579,20 @@ CREATE INDEX jl_entry ON public.journal_lines USING btree (entry_id);
 --
 
 CREATE INDEX jl_org_account ON public.journal_lines USING btree (org_id, account_id);
+
+
+--
+-- Name: jl_org_account_covering; Type: INDEX; Schema: public; Owner: -
+--
+-- GL aggregation (trial balance, statements, account balances) reads
+-- (entry_id, amount, subsidiary_id) per (org, account) as an index-only scan;
+-- the trailing columns are payload, not seek keys. Under row-level security a
+-- numeric key column could never be a seek condition anyway: numeric_eq is
+-- not LEAKPROOF, so the planner will not push amount predicates into any
+-- index condition on tenant-scoped queries.
+--
+
+CREATE INDEX jl_org_account_covering ON public.journal_lines USING btree (org_id, account_id, entry_id, amount, subsidiary_id);
 
 
 --
