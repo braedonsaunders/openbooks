@@ -67,6 +67,7 @@ const PAYROLL_QUERY_RELATIONS = Object.freeze([
   "pay_stub_lines",
   "payroll_filing_accounts",
   "payroll_holidays",
+  "payroll_opening_balance_components",
   "payroll_opening_balances",
   "union_agreements",
   "union_classifications",
@@ -188,7 +189,7 @@ function addReviewedPayrollRelations(source) {
     functionSql = replaceExactly(
       functionSql,
       /\n  \];/g,
-      `,\n    'employee_pay_components',\n    'pay_components', 'pay_derived_rules', 'pay_run_adjustments', 'pay_runs',\n    'pay_schedules', 'pay_stub_lines', 'pay_stubs',\n    'payroll_filing_accounts', 'payroll_holidays', 'payroll_opening_balances',\n    'union_agreements', 'union_classifications',\n    'union_fringes'\n  ];`,
+      `,\n    'employee_pay_components',\n    'pay_components', 'pay_derived_rules', 'pay_run_adjustments', 'pay_runs',\n    'pay_schedules', 'pay_stub_lines', 'pay_stubs',\n    'payroll_filing_accounts', 'payroll_holidays',\n    'payroll_opening_balance_components', 'payroll_opening_balances',\n    'union_agreements', 'union_classifications',\n    'union_fringes'\n  ];`,
       "query-catalog allowlist terminator",
     );
   }

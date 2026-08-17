@@ -26,6 +26,17 @@ export interface ScheduleOption {
   frequency: string
 }
 
+/**
+ * A labour jurisdiction the employee's country pack declares — the options for
+ * the optional employment-standards override. Supplied by the API from the
+ * pack declarations (`employmentJurisdictionsOf`), never listed here: this file
+ * must not become a second place jurisdictions are enumerated.
+ */
+export interface LabourJurisdictionOption {
+  key: string
+  name: string
+}
+
 /** A payroll program/EIN account the employee can be filed and remitted under. */
 export interface FilingAccountOption {
   id: string
@@ -45,6 +56,9 @@ export interface ProfileRow {
    *  a save with no country rather than assuming one. */
   country: 'CA' | 'US' | ''
   province: string
+  /** The labour jurisdiction whose employment standards govern the employment;
+   *  null = derive it from the work region (the answer for almost everyone). */
+  labour_jurisdiction: string | null
   pay_basis: 'hourly' | 'salary'
   federal_claim_code: number | null
   federal_claim_amount: string | null
@@ -90,6 +104,8 @@ export function ProfileEditor(props: {
   schedules: ScheduleOption[]
   /** Empty for single-account employers: the country pack's default is used. */
   filingAccounts?: FilingAccountOption[]
+  /** country pack → the labour jurisdictions it declares, from the API. */
+  labourJurisdictions?: Record<string, LabourJurisdictionOption[]>
   onClose: () => void
   onSaved: () => void
   /** Render as a plain section (inside another drawer/tab) instead of a Drawer. */
@@ -104,6 +120,7 @@ export function ProfileEditor(props: {
   // engine refuses (engine/src/payroll/packs.ts).
   const [country, setCountry] = useState<ProfileRow['country']>(p.country)
   const [province, setProvince] = useState(p.province)
+  const [labourJurisdiction, setLabourJurisdiction] = useState(p.labour_jurisdiction ?? '')
   const [payBasis, setPayBasis] = useState<'hourly' | 'salary'>(p.pay_basis)
   const [federalClaimCode, setFederalClaimCode] = useState(p.federal_claim_code == null ? '' : String(p.federal_claim_code))
   const [federalClaimAmount, setFederalClaimAmount] = useState(p.federal_claim_amount ?? '')
@@ -131,6 +148,9 @@ export function ProfileEditor(props: {
   const [paymentMethod, setPaymentMethod] = useState<string>(p.payment_method ?? '')
   // Accounts file under one country pack, so only the employee's own apply.
   const filingAccounts = (props.filingAccounts ?? []).filter((account) => account.country === country)
+  // Same rule for the labour jurisdictions: one pack's declarations, and none
+  // at all until a country is chosen.
+  const labourOptions = (country && props.labourJurisdictions?.[country]) || []
 
   async function save() {
     setBusy(true)
@@ -144,6 +164,7 @@ export function ProfileEditor(props: {
           payScheduleId,
           country,
           province,
+          labourJurisdiction: labourJurisdiction || null,
           payBasis,
           federalClaimCode: federalClaimCode === '' ? null : Number(federalClaimCode),
           federalClaimAmount: federalClaimAmount || null,
@@ -232,6 +253,9 @@ export function ProfileEditor(props: {
                 // The jurisdiction inside the country is the operator's
                 // choice, never a defaulted capital-of-payroll literal.
                 setProvince('')
+                // Labour jurisdiction keys belong to ONE pack; carrying one
+                // across a country change would be refused on save.
+                setLabourJurisdiction('')
                 // Filing accounts belong to one country pack.
                 setFilingAccountId('')
               }}
@@ -254,6 +278,32 @@ export function ProfileEditor(props: {
               ))}
             </Select>
           </div>
+          {/* The employment-standards override. Blank — the case for almost
+              every employment — derives the labour jurisdiction from the work
+              region above; it is set only when a different labour jurisdiction
+              regulates the employer of record, which has its own statutory
+              holiday calendar and its own holiday-pay formula. Options are the
+              country pack's declared labour jurisdictions; withholding is
+              unaffected and still follows the region. */}
+          {labourOptions.length > 0 && (
+            <div>
+              <Label htmlFor="pp-labour-jurisdiction" help={t('labourJurisdiction.help')}>
+                {t('fields.labourJurisdiction')}
+              </Label>
+              <Select
+                id="pp-labour-jurisdiction"
+                value={labourJurisdiction}
+                onChange={(e) => setLabourJurisdiction(e.target.value)}
+              >
+                <option value="">{t('labourJurisdiction.fromRegion')}</option>
+                {labourOptions.map((option) => (
+                  <option key={option.key} value={option.key}>
+                    {option.key} · {option.name}
+                  </option>
+                ))}
+              </Select>
+            </div>
+          )}
           <div>
             <Label htmlFor="pp-basis">{t('fields.payBasis')}</Label>
             <Select id="pp-basis" value={payBasis} onChange={(e) => setPayBasis(e.target.value as 'hourly' | 'salary')}>

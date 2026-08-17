@@ -106,8 +106,17 @@ export interface DerivedTimeEntry {
   projectId: string | null;
   departmentId: string | null;
   isBillable: boolean;
-  /** Capture order within a day — time_entries carry no clock time, so this is
-   * the only ordering "the job he went to FIRST" can honestly resolve against. */
+  /**
+   * `time_entries.started_at` — the recorded clock time the work began, and the
+   * authoritative answer to "which job did he go to FIRST that day".
+   *
+   * Null on every entry captured by a surface that collects no clock time
+   * (including every row written before the column existed), which is why the
+   * comparator falls back to `createdAt` rather than requiring this.
+   */
+  startedAt?: string | null;
+  /** Capture order within a day — the FALLBACK ordering, used only where
+   * `startedAt` is null. See `byClockThenCaptureOrder`. */
   createdAt?: string | null;
 }
 
@@ -346,8 +355,31 @@ export function derivedChargeWindow(
   return settlementMonth(periodStart, periodEnd);
 }
 
-/** Deterministic within-day order: capture order, then id. */
-function byCaptureOrder(a: DerivedTimeEntry, b: DerivedTimeEntry): number {
+/**
+ * Deterministic within-day order: the recorded clock time first, then capture
+ * order, then id.
+ *
+ * `startedAt` is the answer when the capture surface recorded one, and it is the
+ * only honest one — it is what the employee actually did. The fallback to
+ * `createdAt`/`id` applies ONLY to an entry with no clock time (every row
+ * written before `time_entries.started_at` existed, and any surface that still
+ * does not collect it): for those, the order the rows were captured in is the
+ * best evidence available.
+ *
+ * Entries WITH a clock time therefore sort ahead of entries without, rather
+ * than being interleaved by capture time: a null start is not "midnight", it is
+ * unknown, and an asserted 07:00 start is stronger evidence of "first" than the
+ * capture order of a row that asserts nothing.
+ */
+function byClockThenCaptureOrder(a: DerivedTimeEntry, b: DerivedTimeEntry): number {
+  const sa = a.startedAt ?? "";
+  const sb = b.startedAt ?? "";
+  if (sa !== sb) {
+    // "" (unknown) sorts LAST, which a plain string comparison would put first.
+    if (!sa) return 1;
+    if (!sb) return -1;
+    return sa < sb ? -1 : 1;
+  }
   const ca = a.createdAt ?? "";
   const cb = b.createdAt ?? "";
   if (ca !== cb) return ca < cb ? -1 : 1;
@@ -418,16 +450,24 @@ interface PendingUnit {
   entryIds: string[];
 }
 
-/** The job the employee went to FIRST on a day, across ALL their time — a
- * travel entry itself carries no job, so the answer cannot come from the
- * rule's own qualifying rows. */
+/**
+ * The job the employee went to FIRST on a day, across ALL their time — a travel
+ * entry itself carries no job, so the answer cannot come from the rule's own
+ * qualifying rows.
+ *
+ * "First" is `time_entries.started_at` where the capture surface recorded one,
+ * and the order the entries were captured in only where it did not
+ * (`byClockThenCaptureOrder`). The clock time is what closed this: with capture
+ * order alone, a field app that uploaded a day's rows in any other sequence
+ * costed the travel to the wrong job.
+ */
 function firstProjectOfDay(
   entries: DerivedTimeEntry[],
   day: string,
 ): { projectId: string | null; departmentId: string | null } {
   const first = entries
     .filter((entry) => entry.workedOn === day && entry.projectId)
-    .sort(byCaptureOrder)[0];
+    .sort(byClockThenCaptureOrder)[0];
   return {
     projectId: first?.projectId ?? null,
     departmentId: first?.departmentId ?? null,
@@ -526,7 +566,7 @@ function unitsForRule(
 
   const qualifying = input.entries
     .filter((entry) => entryMatches(rule, entry, input.employee))
-    .sort(byCaptureOrder);
+    .sort(byClockThenCaptureOrder);
   const inWindow = qualifying.filter(
     (entry) => entry.workedOn >= window.start && entry.workedOn <= window.end,
   );
@@ -995,19 +1035,25 @@ async function loadEntries(
   // the employee stayed / operated the equipment. Wages are not re-paid here.
   const r = (await tx.execute(sql`
     select id, employee_party_id, worked_on, hours, time_type_id, project_id,
-           department_id, is_billable, created_at
+           department_id, is_billable, started_at, created_at
       from time_entries
      where org_id = ${orgId} and status = 'approved'
        and employee_party_id = any(${`{${employeePartyIds.join(",")}}`}::uuid[])
        and worked_on between ${from} and ${to}
-     order by employee_party_id, worked_on, created_at, id
+     -- Same precedence the comparator applies: the recorded clock time, then
+     -- capture order for entries that have none (nulls last, not first).
+     order by employee_party_id, worked_on, started_at asc nulls last, created_at, id
   `)) as unknown as {
     rows: {
       id: string; employee_party_id: string; worked_on: string; hours: string;
       time_type_id: string | null; project_id: string | null;
-      department_id: string | null; is_billable: boolean; created_at: string | Date;
+      department_id: string | null; is_billable: boolean;
+      started_at: string | Date | null; created_at: string | Date;
     }[];
   };
+  const stamp = (value: string | Date | null): string | null => value === null
+    ? null
+    : value instanceof Date ? value.toISOString() : String(value);
   for (const row of r.rows) {
     const entry: DerivedTimeEntry = {
       id: row.id,
@@ -1017,9 +1063,8 @@ async function loadEntries(
       projectId: row.project_id,
       departmentId: row.department_id,
       isBillable: row.is_billable === true,
-      createdAt: row.created_at instanceof Date
-        ? row.created_at.toISOString()
-        : String(row.created_at),
+      startedAt: stamp(row.started_at),
+      createdAt: stamp(row.created_at),
     };
     const bucket = byEmployee.get(row.employee_party_id);
     if (bucket) bucket.push(entry);

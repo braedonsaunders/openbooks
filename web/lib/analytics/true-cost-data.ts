@@ -328,39 +328,40 @@ export async function trueCostData(orgId: string, period: { from: string; to: st
     db.execute(sql`select id, name from departments where org_id = ${orgId} order by name`) as Promise<any>,
     // Allocation bases by department (): labour $,
     // headcount, revenue, direct cost. Hours come from hoursRows above.
+    // One grouped pass per source instead of a correlated GL subquery per
+    // department per basis — that shape re-scanned the window's ledger three
+    // times for every department on the page.
     db.execute(sql`
+      with gl as (
+        select l.department_id,
+               coalesce(sum(l.amount) filter (
+                 where a.type in ('expense','expense_other','expense_deferred','cogs')
+                   and a.name ~* 'wage|salary|payroll|labou?r'), 0) as labor_dollars,
+               coalesce(-sum(l.amount) filter (where a.type in ('income','income_other')), 0) as revenue,
+               coalesce(sum(l.amount) filter (where a.type = 'cogs'), 0) as direct_cost
+          from journal_lines l
+          join journal_entries e on e.id = l.entry_id and e.org_id = ${orgId}
+           and e.posting_date >= ${from} and e.posting_date <= ${to}
+          join accounts a on a.id = l.account_id and a.org_id = ${orgId}
+         where l.org_id = ${orgId} and l.department_id is not null
+         group by l.department_id
+      ),
+      hc as (
+        select t.department_id, count(distinct t.employee_party_id) as headcount
+          from time_entries t
+         where t.org_id = ${orgId} and t.department_id is not null
+           and t.worked_on >= ${from} and t.worked_on <= ${to}
+         group by t.department_id
+      )
       select d.id as dept_id,
-        coalesce((
-          select sum(l.amount) from journal_lines l
-          join journal_entries e on e.id = l.entry_id
-          join accounts a on a.id = l.account_id
-          where l.org_id = ${orgId} and l.department_id = d.id
-            and a.type in ('expense','expense_other','expense_deferred','cogs')
-            and a.name ~* 'wage|salary|payroll|labou?r'
-            and e.posting_date >= ${from} and e.posting_date <= ${to}
-        ), 0) as labor_dollars,
-        coalesce((
-          select count(distinct t.employee_party_id) from time_entries t
-          where t.org_id = ${orgId} and t.department_id = d.id
-            and t.worked_on >= ${from} and t.worked_on <= ${to}
-        ), 0) as headcount,
-        coalesce((
-          select -sum(l.amount) from journal_lines l
-          join journal_entries e on e.id = l.entry_id
-          join accounts a on a.id = l.account_id
-          where l.org_id = ${orgId} and l.department_id = d.id
-            and a.type in ('income','income_other')
-            and e.posting_date >= ${from} and e.posting_date <= ${to}
-        ), 0) as revenue,
-        coalesce((
-          select sum(l.amount) from journal_lines l
-          join journal_entries e on e.id = l.entry_id
-          join accounts a on a.id = l.account_id
-          where l.org_id = ${orgId} and l.department_id = d.id
-            and a.type = 'cogs'
-            and e.posting_date >= ${from} and e.posting_date <= ${to}
-        ), 0) as direct_cost
-      from departments d where d.org_id = ${orgId}
+             coalesce(gl.labor_dollars, 0) as labor_dollars,
+             coalesce(hc.headcount, 0) as headcount,
+             coalesce(gl.revenue, 0) as revenue,
+             coalesce(gl.direct_cost, 0) as direct_cost
+        from departments d
+        left join gl on gl.department_id = d.id
+        left join hc on hc.department_id = d.id
+       where d.org_id = ${orgId}
     `) as Promise<any>,
   ]);
   const profile = cfg.profile;

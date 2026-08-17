@@ -1,18 +1,16 @@
 import { NextResponse } from 'next/server'
 import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/db.ts'
-import { caPayrollConfig, payrollSettings, seedPayrollComponents, usPayrollConfig } from '@openbooks/engine/src/payroll-run.ts'
+import { payrollSettings, seedPayrollComponents } from '@openbooks/engine/src/payroll-run.ts'
 import {
   declaredRemittanceVendorSettingsKeys,
   packSlotState, PAYROLL_COUNTRY_PACKS, PayrollPackError, setPackSlotAccount, uninstallPayrollPack,
 } from '@openbooks/engine/src/payroll/packs.ts'
-import { US_STATES } from '@openbooks/engine/src/payroll/us/rates.ts'
 import { assertValidPasswordExpression, pdfEncryptionAvailable } from '@openbooks/pdf'
 import { payrollPaymentMethodSettings } from '@openbooks/engine/src/payroll-payment-method.ts'
 import { payrollSetupState } from '@openbooks/engine/src/payroll-readiness.ts'
 import { STUB_PASSWORD_TOKENS, stubPasswordPolicy } from '../../../../lib/payroll-outputs'
 import { guardFeaturePermission } from '../../../../lib/feature-gates'
-import { canonicalDecimal, compareDecimal } from '../../../../lib/exact-decimal'
 import { isUuid } from '../../../../lib/list-params'
 
 export const dynamic = 'force-dynamic'
@@ -102,10 +100,8 @@ export async function GET() {
     pickerOptions(gate.user.orgId),
   ])
   const installed = Array.isArray(blob.countries) ? blob.countries.map(String) : []
-  const [packs, us, ca, stubPassword, encryptionAvailable, setup] = await Promise.all([
+  const [packs, stubPassword, encryptionAvailable, setup] = await Promise.all([
     packSlotState(gate.user.orgId, installed, blob),
-    usPayrollConfig(gate.user.orgId),
-    caPayrollConfig(gate.user.orgId),
     stubPasswordPolicy(gate.user.orgId),
     pdfEncryptionAvailable(),
     // The setup wizard's step state — the same org-level checks the pay-run
@@ -114,7 +110,7 @@ export async function GET() {
   ])
   const paymentMethods = await payrollPaymentMethodSettings(gate.user.orgId)
   return NextResponse.json({
-    settings, packs, us, ca, stubPassword, encryptionAvailable, paymentMethods, setup,
+    settings, packs, stubPassword, encryptionAvailable, paymentMethods, setup,
     statutoryHolidayPay: blob.statutoryHolidayPay === true,
     installable: installableCountries(),
     ...options,
@@ -219,73 +215,15 @@ export async function PUT(req: Request) {
     settings.statutoryHolidayPay = body.statutoryHolidayPay
   }
 
-  // US pack configuration: effective FUTA rate (credit-reduction states) and
-  // per-state SUI rates/wage bases — experience-rated, so always org-entered.
-  if ('us' in body) {
-    const us = body.us
-    if (typeof us !== 'object' || us === null || Array.isArray(us)) {
-      return NextResponse.json({ error: 'invalid us config' }, { status: 422 })
-    }
-    const clean: { futaRate?: string; sui: Record<string, { rate: string; wageBase: string }> } = { sui: {} }
-    if (us.futaRate !== null && us.futaRate !== undefined && us.futaRate !== '') {
-      const rate = canonicalDecimal(us.futaRate, 4)
-      if (rate === null || compareDecimal(rate, '0') < 0 || compareDecimal(rate, '0.2') > 0) {
-        return NextResponse.json({ error: 'invalid us.futaRate' }, { status: 422 })
-      }
-      clean.futaRate = rate
-    }
-    const sui = us.sui ?? {}
-    if (typeof sui !== 'object' || sui === null || Array.isArray(sui)) {
-      return NextResponse.json({ error: 'invalid us.sui' }, { status: 422 })
-    }
-    for (const [state, entry] of Object.entries(sui as Record<string, { rate?: unknown; wageBase?: unknown }>)) {
-      if (!(US_STATES as readonly string[]).includes(state)) {
-        return NextResponse.json({ error: `invalid SUI state ${state}` }, { status: 422 })
-      }
-      const rate = canonicalDecimal(entry?.rate, 4)
-      const wageBase = canonicalDecimal(entry?.wageBase, 2)
-      if (rate === null || compareDecimal(rate, '0') < 0 || compareDecimal(rate, '0.2') > 0
-        || wageBase === null || compareDecimal(wageBase, '0') < 0) {
-        return NextResponse.json({ error: `invalid SUI entry for ${state}` }, { status: 422 })
-      }
-      clean.sui[state] = { rate, wageBase }
-    }
-    settings.us = clean
-  }
-
-  // CA pack configuration: Ontario EHT. The rate is org-specific (it scales
-  // with total Ontario payroll) and the exemption is shared across associated
-  // employers, so both are always org-entered. WCB rates live on worker-comp
-  // groups (per rate class), not here.
-  if ('ca' in body) {
-    const ca = body.ca
-    if (typeof ca !== 'object' || ca === null || Array.isArray(ca)) {
-      return NextResponse.json({ error: 'invalid ca config' }, { status: 422 })
-    }
-    const eht = (ca as Record<string, unknown>).eht ?? {}
-    if (typeof eht !== 'object' || eht === null || Array.isArray(eht)) {
-      return NextResponse.json({ error: 'invalid ca.eht' }, { status: 422 })
-    }
-    const raw = eht as Record<string, unknown>
-    const clean: { eht: { enabled: boolean; rate?: string; annualExemption?: string } } = {
-      eht: { enabled: raw.enabled === true },
-    }
-    if (raw.rate !== null && raw.rate !== undefined && raw.rate !== '') {
-      const rate = canonicalDecimal(raw.rate, 4)
-      if (rate === null || compareDecimal(rate, '0') < 0 || compareDecimal(rate, '10') > 0) {
-        return NextResponse.json({ error: 'invalid ca.eht.rate' }, { status: 422 })
-      }
-      clean.eht.rate = rate
-    }
-    if (raw.annualExemption !== null && raw.annualExemption !== undefined && raw.annualExemption !== '') {
-      const exemption = canonicalDecimal(raw.annualExemption, 2)
-      if (exemption === null || compareDecimal(exemption, '0') < 0) {
-        return NextResponse.json({ error: 'invalid ca.eht.annualExemption' }, { status: 422 })
-      }
-      clean.eht.annualExemption = exemption
-    }
-    settings.ca = clean
-  }
+  // NOTE: the pre-scoping `us` / `ca` rate blobs are deliberately NOT writable
+  // here any more. A SUI rate is experience-rated per filing account, the FUTA
+  // credit reduction is published per state per year, and each province levies
+  // its own employer health tax — none of which an org-level blob can hold. They
+  // now live in payroll_statutory_rates at the scope the pack declares, written
+  // through /api/payroll/settings/rates. The stored blobs are still READ as a
+  // resolution fallback (engine/src/payroll/statutory-rates.ts), so an untouched
+  // tenant calculates byte-identically; accepting writes to both would be two
+  // sources of truth for one statutory number.
 
   // Pack-declared statutory slots: { [country]: { [slotKey]: accountId|null } }.
   // Writes land on the mapped components' liability accounts, never in the blob.

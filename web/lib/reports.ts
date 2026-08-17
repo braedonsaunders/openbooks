@@ -522,12 +522,15 @@ export async function cashFlow(from: string, to: string, dims?: DimFilter, orgId
   // into their effect on cash (credit a contra → cash in → positive).
   const contra = (await db.execute(sql`
     with cash_entries as (
-      select distinct e.id
+      -- Bank-touching entries by account id: joining accounts per line made
+      -- the planner drive from accounts and probe the entry pk per line.
+      select distinct l.entry_id as id
         from journal_entries e
         join journal_lines l on l.entry_id = e.id and l.org_id = e.org_id
-        join accounts a on a.id = l.account_id and a.org_id = l.org_id
-       where e.org_id = ${resolvedOrgId} and a.type = 'asset_bank' and e.status in ('posted', 'reversed')
+       where e.org_id = ${resolvedOrgId} and e.status in ('posted', 'reversed')
          and e.posting_date >= ${from} and e.posting_date <= ${to}
+         and l.account_id in (
+           select id from accounts where org_id = ${resolvedOrgId} and type = 'asset_bank')
     )
     select a.type, -sum(l.amount) as cash_effect
       from journal_lines l
@@ -682,17 +685,23 @@ export async function cashFlowIndirect(
   // investing/financing account type. Their working-capital legs are non-cash
   // (reclasses, credit asset purchases/sales) and their P&L legs are the
   // non-cash add-backs (depreciation, disposal gains/losses on account).
+  // Classifying by account id rather than joining `accounts` per line keeps
+  // the per-entry aggregate on (entries ⋈ lines) alone: the account join made
+  // the planner drive from accounts and probe the entry pk once per line —
+  // millions of loops for a window that the entry date index can walk
+  // directly. The two id sets are hashed once.
   const flaggedCte = sql`
     flagged as (
-      select e.id
+      select l.entry_id as id
         from journal_entries e
         join journal_lines l on l.entry_id = e.id and l.org_id = e.org_id
-        join accounts a on a.id = l.account_id and a.org_id = l.org_id
        where e.org_id = ${resolvedOrgId} and e.status in ('posted', 'reversed')
          and e.posting_date >= ${from} and e.posting_date <= ${to}
-       group by e.id
-      having not bool_or(a.type = 'asset_bank')
-         and bool_or(a.type in ${IF_TYPES})
+       group by l.entry_id
+      having not bool_or(l.account_id in (
+               select id from accounts where org_id = ${resolvedOrgId} and type = 'asset_bank'))
+         and bool_or(l.account_id in (
+               select id from accounts where org_id = ${resolvedOrgId} and type in ${IF_TYPES}))
     )`;
 
   // Net income for the window (credit-normal positive), posted only.
@@ -796,12 +805,15 @@ export async function cashFlowIndirect(
   // their non-bank legs are CTA re-measurement, not flows.
   const contra = (await db.execute(sql`
     with cash_entries as (
-      select distinct e.id
+      -- Bank-touching entries by account id: joining accounts per line made
+      -- the planner drive from accounts and probe the entry pk per line.
+      select distinct l.entry_id as id
         from journal_entries e
         join journal_lines l on l.entry_id = e.id and l.org_id = e.org_id
-        join accounts a on a.id = l.account_id and a.org_id = l.org_id
-       where e.org_id = ${resolvedOrgId} and a.type = 'asset_bank' and e.status in ('posted', 'reversed')
+       where e.org_id = ${resolvedOrgId} and e.status in ('posted', 'reversed')
          and e.posting_date >= ${from} and e.posting_date <= ${to}
+         and l.account_id in (
+           select id from accounts where org_id = ${resolvedOrgId} and type = 'asset_bank')
          and e.origin <> 'translation'
     )
     select l.account_id, a.number, a.name, a.type, e.origin, -sum(l.amount) as cash_effect
@@ -1011,15 +1023,36 @@ export async function generalLedger(
   const maxLines = opts.maxLines ?? 5000
   const acctFilter = opts.accountId ? sql` and l.account_id = ${opts.accountId}` : sql``
 
-  // Opening balances (debit-signed) per account before the period.
-  const opening = (await db.execute(sql`
-    select l.account_id, coalesce(sum(l.amount), 0) as bal
-      from journal_lines l
-      join journal_entries e on e.id = l.entry_id and e.org_id = l.org_id and e.status in ('posted', 'reversed')
-      join accounts a on a.id = l.account_id and a.org_id = l.org_id
-     where l.org_id = ${orgId} and e.posting_date < ${from} and ${dimWhere(opts.dims)}${acctFilter}
-     group by l.account_id
-  `)) as unknown as { rows: { account_id: string; bal: string }[] }
+  // Opening balances (debit-signed) per account before the period. Without a
+  // dimension slice this is inception-to-date over the whole ledger, so it
+  // reads the gl_month_activity summary for the whole months before `from`
+  // and only touches the lines for the (at most one) month `from` splits.
+  const summaryOpening = glSummaryEligibleDims(opts.dims)
+  const openingSql = summaryOpening
+    ? sql`
+        select x.account_id, coalesce(sum(x.amt), 0) as bal from (
+          select g.account_id, (g.debit_total - g.credit_total) as amt
+            from gl_month_activity g
+           where g.org_id = ${orgId} and g.month < date_trunc('month', ${from}::date)::date
+             ${opts.dims?.subsidiaryIds?.length ? sql`and g.subsidiary_id = any(${`{${opts.dims.subsidiaryIds.join(',')}}`}::uuid[])` : sql``}
+             ${opts.accountId ? sql`and g.account_id = ${opts.accountId}` : sql``}
+          union all
+          select l.account_id, l.amount
+            from journal_lines l
+            join journal_entries e on e.id = l.entry_id and e.org_id = ${orgId}
+             and e.status in ('posted', 'reversed')
+             and e.posting_date >= date_trunc('month', ${from}::date)::date
+             and e.posting_date < ${from}
+           where l.org_id = ${orgId} and ${dimWhere(opts.dims)}${acctFilter}
+        ) x group by x.account_id`
+    : sql`
+        select l.account_id, coalesce(sum(l.amount), 0) as bal
+          from journal_lines l
+          join journal_entries e on e.id = l.entry_id and e.org_id = l.org_id and e.status in ('posted', 'reversed')
+          join accounts a on a.id = l.account_id and a.org_id = l.org_id
+         where l.org_id = ${orgId} and e.posting_date < ${from} and ${dimWhere(opts.dims)}${acctFilter}
+         group by l.account_id`
+  const opening = (await db.execute(openingSql)) as unknown as { rows: { account_id: string; bal: string }[] }
   const openingByAcct = new Map(opening.rows.map((r) => [r.account_id, r.bal]))
 
   const lines = (await db.execute(sql`
@@ -1114,18 +1147,39 @@ export async function journalReport(
 ): Promise<JournalReportResult> {
   const orgId = await resolveOrgId(opts.orgId)
   const maxLines = opts.maxLines ?? 4000
+  // Without a line-level dimension slice, every entry in the window
+  // contributes at least one line, so the first `maxLines` lines can only come
+  // from the first `maxLines` entries in the same order. Narrowing to those
+  // entries first lets the date index supply them directly, instead of sorting
+  // every line in the window to throw all but a few thousand away.
+  const entryWindow = glSummaryEligibleDims(opts.dims) && !opts.dims?.subsidiaryIds?.length
+    ? sql`(
+        select id, entry_number, posting_date, memo, origin, source_document_id, org_id
+          from journal_entries
+         where org_id = ${orgId} and status in ('posted', 'reversed')
+           and posting_date >= ${from} and posting_date <= ${to}
+         -- Same key as the outer sort, id tie-break included, so the window is
+         -- exactly the first entries the full ordering would have reached.
+         order by posting_date desc, entry_number desc, id
+         limit ${maxLines}
+      )`
+    : sql`(
+        select id, entry_number, posting_date, memo, origin, source_document_id, org_id
+          from journal_entries
+         where org_id = ${orgId} and status in ('posted', 'reversed')
+           and posting_date >= ${from} and posting_date <= ${to}
+      )`
   const r = (await db.execute(sql`
     select e.id, e.entry_number, e.posting_date::text as date, e.memo as entry_memo, e.origin,
            a.number as acct_number, a.name as acct_name, p.display_name as party,
            l.memo as line_memo, l.amount,
            d.kind as doc_kind, d.id as doc_id
-      from journal_entries e
+      from ${entryWindow} e
       join journal_lines l on l.entry_id = e.id and l.org_id = e.org_id
       join accounts a on a.id = l.account_id and a.org_id = l.org_id
       left join parties p on p.id = l.party_id and p.org_id = l.org_id
       left join documents d on d.id = e.source_document_id and d.org_id = e.org_id
-     where e.org_id = ${orgId} and e.status in ('posted', 'reversed') and e.posting_date >= ${from} and e.posting_date <= ${to}
-       and ${dimWhere(opts.dims)}
+     where ${dimWhere(opts.dims)}
      order by e.posting_date desc, e.entry_number desc, e.id, l.line_number
      limit ${maxLines + 1}
   `)) as unknown as {

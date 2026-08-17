@@ -11,7 +11,7 @@ import {
   type NachaSettings,
 } from "./payments.ts";
 import { stubPaymentMethods } from "./payroll-payment-method.ts";
-import { PayrollError } from "./payroll-run.ts";
+import { PayrollError } from "./payroll-error.ts";
 import { unsealJson } from "./secrets.ts";
 
 /**

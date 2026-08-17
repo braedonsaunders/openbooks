@@ -3,12 +3,12 @@ import { getTranslations } from 'next-intl/server'
 import { sql } from 'drizzle-orm'
 import { cn } from '@openbooks/ui'
 import { db } from '@openbooks/engine/src/db.ts'
-import { caPayrollConfig, payrollSettings, usPayrollConfig } from '@openbooks/engine/src/payroll-run.ts'
+import { payrollSettings } from '@openbooks/engine/src/payroll-run.ts'
 import { payrollPaymentMethodSettings } from '@openbooks/engine/src/payroll-payment-method.ts'
 import { payrollSetupState } from '@openbooks/engine/src/payroll-readiness.ts'
 import { payrollBankProfiles } from '@openbooks/engine/src/payroll-bank-file.ts'
 import { packRemittanceVendorSettingsKeys, packSlotState, PAYROLL_COUNTRY_PACKS } from '@openbooks/engine/src/payroll/packs.ts'
-import { RATES_2026_JAN, RATES_2026_JUL } from '@openbooks/engine/src/payroll/canada/rates.ts'
+import { payrollTaxYearCoverage } from '@openbooks/engine/src/payroll/tax-years.ts'
 import { pdfEncryptionAvailable } from '@openbooks/pdf'
 import { ModuleHomeTabs } from '../../../../../components/module-home/ui'
 import { stubPasswordPolicy } from '../../../../../lib/payroll-outputs'
@@ -25,6 +25,7 @@ import { PayrollCountryPacks } from './PayrollCountryPacks'
 import { PayrollPaydaySettings } from './PayrollPaydaySettings'
 import { PayrollSetupLauncher } from './PayrollSetupLauncher'
 import { PayrollSetupWorkspace } from './PayrollSetupWorkspace'
+import { StatutoryRatesSection } from './StatutoryRatesSection'
 import { StatHolidayPaySection } from './StatHolidayPaySection'
 
 export const dynamic = 'force-dynamic'
@@ -59,6 +60,10 @@ const ENTITY_BY_TAB = {
 
 const TABS = [
   'packs', 'accounts', 'filing', 'schedules', 'components', 'union',
+  // Employer-supplied statutory rates (experience-rated SUI, the FUTA credit
+  // reduction, provincial employer health levies), at the scope the pack
+  // declares each varies by.
+  'rates',
   'entitlements', 'limits', 'service', 'derived', 'derivedPreview',
   // Statutory holidays: the employer's elections, then the resolved calendar
   // those elections produce. Same edit-then-confirm pairing as derived rules.
@@ -73,7 +78,7 @@ const isEntityTab = (tab: Tab): tab is EntityTab => tab in ENTITY_BY_TAB
 
 /** The two-level arrangement: ≤5 top-row groups, subtabs within. */
 const GROUPS: { key: 'foundations' | 'earnings' | 'entitlements' | 'payday'; tabs: Tab[] }[] = [
-  { key: 'foundations', tabs: ['packs', 'accounts', 'schedules', 'filing'] },
+  { key: 'foundations', tabs: ['packs', 'accounts', 'rates', 'schedules', 'filing'] },
   { key: 'earnings', tabs: ['components', 'derived', 'derivedPreview', 'holidays', 'holidayCalendar', 'union'] },
   { key: 'entitlements', tabs: ['entitlements', 'limits', 'service'] },
   { key: 'payday', tabs: ['payday'] },
@@ -130,6 +135,8 @@ export default async function PayrollSetupPage({
             ? tabLabel(key, 'Holiday Calendar')
             : key === 'payday'
               ? tabLabel(key, 'Payday')
+              : key === 'rates'
+                ? tabLabel(key, 'Statutory Rates')
               : t(`tabs.${key}`)
 
   const groups = GROUPS
@@ -176,6 +183,7 @@ export default async function PayrollSetupPage({
       {tab === 'packs' ? <PacksTab orgId={orgId} /> : null}
       {tab === 'accounts' ? <AccountsTab orgId={orgId} /> : null}
       {tab === 'payday' ? <PaydayTab orgId={orgId} /> : null}
+      {tab === 'rates' ? <StatutoryRatesSection /> : null}
       {isEntityTab(tab) ? (
         <SetupEntitySection
           entity={SETUP_ENTITY_BY_KEY.get(ENTITY_BY_TAB[tab])!}
@@ -279,9 +287,20 @@ async function PacksTab({ orgId }: { orgId: string }) {
     <PayrollCountryPacks
       installedCountries={installedCountries}
       componentCount={componentCount}
-      editions={[RATES_2026_JAN, RATES_2026_JUL].map((rates) => ({
-        edition: rates.edition,
-        effectiveFrom: rates.effectiveFrom,
+      /* The packs' OWN tax-year declarations — every installed pack's loaded
+         years and editions, not one country's constants imported by name. */
+      coverage={payrollTaxYearCoverage().map((entry) => ({
+        country: entry.country,
+        supported: entry.supported,
+        draft: entry.draft,
+        ratesModule: entry.ratesModule,
+        editions: entry.editions.map((edition) => ({
+          year: edition.year,
+          label: edition.label,
+          effectiveFrom: edition.effectiveFrom,
+          status: edition.status,
+          region: edition.region ?? null,
+        })),
       }))}
     />
   )
@@ -307,18 +326,12 @@ async function AccountsTab({ orgId }: { orgId: string }) {
   ]
   const blob = blobRes.rows[0]?.p ?? {}
   const installed = Array.isArray(blob.countries) ? blob.countries.map(String) : []
-  const [packs, us, ca] = await Promise.all([
-    packSlotState(orgId, installed, blob),
-    usPayrollConfig(orgId),
-    caPayrollConfig(orgId),
-  ])
+  const packs = await packSlotState(orgId, installed, blob)
 
   return (
     <PayrollSetupWorkspace
       settings={settings}
       packs={packs}
-      us={us}
-      ca={ca}
       accounts={accountsRes.rows.map((account) => ({
         id: account.id,
         label: account.number ? `${account.number} · ${account.name}` : account.name,

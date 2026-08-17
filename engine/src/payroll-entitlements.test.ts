@@ -22,7 +22,7 @@ import {
   type ServiceTierRow,
 } from "./payroll-entitlements.ts";
 import { mulPercent } from "./money.ts";
-import { PayrollError } from "./payroll-run.ts";
+import { PayrollError } from "./payroll-error.ts";
 
 const DB = !!process.env.OPENBOOKS_DB_URL;
 

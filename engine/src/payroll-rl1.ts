@@ -2,7 +2,7 @@ import { sql } from "drizzle-orm";
 import { db } from "./db.ts";
 import { add, cmp } from "./money.ts";
 import { RATES_2026_JAN } from "./payroll/canada/rates.ts";
-import { PayrollError } from "./payroll-run.ts";
+import { PayrollError } from "./payroll-error.ts";
 import type { PayrollFilingData } from "./payroll-filing-registry.ts";
 
 /**

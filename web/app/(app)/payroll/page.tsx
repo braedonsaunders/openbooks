@@ -83,6 +83,16 @@ export default async function PayrollHomePage({
               : 'Opening balances',
             iconKey: 'history',
           },
+          // Adoption's other half: opening balances carry the year in, a
+          // parallel run proves the period. Both are migration surfaces, so
+          // they sit next to each other.
+          {
+            href: '/payroll/parallel-run',
+            label: t.has('home.directory.parallelRun' as never)
+              ? t('home.directory.parallelRun' as never)
+              : 'Parallel run',
+            iconKey: 'clipboard-check',
+          },
           {
             href: '/admin/setup/payroll',
             label: t('home.directory.setup'),

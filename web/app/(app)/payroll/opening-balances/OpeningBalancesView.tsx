@@ -19,6 +19,14 @@ interface FieldDescriptor {
   packs: string[]
 }
 
+interface ComponentDescriptor {
+  componentId: string
+  code: string
+  name: string
+  basisCapAmountPerYear: string | null
+  capped: boolean
+}
+
 interface SaveError {
   employeePartyId: string
   employeeName?: string
@@ -37,16 +45,24 @@ interface SaveError {
  *
  * Rows a committed run has already consumed are read-only here and refused by
  * the API — the amounts are inside withholding that has left the bank.
+ *
+ * The grid carries BOTH dimensions of a year's carry-in: the statutory columns,
+ * then one column per annually-capped pay component. They belong on the same row
+ * because they are the same fact about the same employee and the same year, and
+ * are frozen by the same committed run — a second screen would be a second place
+ * to forget.
  */
 export function OpeningBalancesView({
   year,
   initial,
   fields,
+  components,
   canManage,
 }: {
   year: number
   initial: OpeningBalanceYear
   fields: FieldDescriptor[]
+  components: ComponentDescriptor[]
   canManage: boolean
 }) {
   const t = useTranslations('payroll')
@@ -55,6 +71,10 @@ export function OpeningBalancesView({
     t.has(`openingBalances.${key}` as never) ? t(`openingBalances.${key}` as never) : fallback
 
   const [draft, setDraft] = useState<Record<string, Record<string, string>>>({})
+  // Component openings are kept in their own draft rather than sharing the
+  // statutory one: they are written to a different table, and one map keyed by
+  // two unrelated key spaces is how a component id starts being read as a field.
+  const [componentDraft, setComponentDraft] = useState<Record<string, Record<string, string>>>({})
   const [saving, setSaving] = useState(false)
   const [errors, setErrors] = useState<SaveError[]>([])
   const [onlyMissing, setOnlyMissing] = useState(false)
@@ -95,7 +115,22 @@ export function OpeningBalancesView({
     }))
   }
 
-  const dirtyIds = Object.keys(draft)
+  const componentValueOf = (row: OpeningBalanceRow, componentId: string): string => {
+    const edited = componentDraft[row.employeePartyId]?.[componentId]
+    if (edited !== undefined) return edited
+    const stored = row.componentAmounts?.[componentId]
+    if (stored === undefined) return ''
+    return Number(stored) === 0 ? '' : trimZeros(stored)
+  }
+
+  const setComponentValue = (employeePartyId: string, componentId: string, value: string) => {
+    setComponentDraft((current) => ({
+      ...current,
+      [employeePartyId]: { ...(current[employeePartyId] ?? {}), [componentId]: value },
+    }))
+  }
+
+  const dirtyIds = [...new Set([...Object.keys(draft), ...Object.keys(componentDraft)])]
   const rows = onlyMissing
     ? initial.rows.filter((r) => r.amounts === null && !r.locked)
     : initial.rows
@@ -116,7 +151,19 @@ export function OpeningBalancesView({
             ? edited.trim()
             : (row?.amounts?.[field.key] ?? '0')
         }
-        return { employeePartyId, amounts }
+        // Every EDITABLE component is sent, edited or not: the service replaces
+        // the set, so an omitted one would silently survive a clear. Components
+        // whose annual cap has since been removed are read-only here and are
+        // carried forward by the service, so they are deliberately not sent.
+        const componentAmounts: Record<string, string> = {}
+        for (const component of components) {
+          if (!component.capped) continue
+          const edited = componentDraft[employeePartyId]?.[component.componentId]
+          componentAmounts[component.componentId] = edited !== undefined
+            ? edited.trim()
+            : (row?.componentAmounts?.[component.componentId] ?? '0')
+        }
+        return { employeePartyId, amounts, components: componentAmounts }
       })
       const response = await fetch('/api/payroll/opening-balances', {
         method: 'POST',
@@ -136,6 +183,7 @@ export function OpeningBalancesView({
         return
       }
       setDraft({})
+      setComponentDraft({})
       toast.success(
         text('saved', 'Opening balances saved.') +
           ` (${body.created ?? 0} new, ${body.updated ?? 0} updated, ${body.deleted ?? 0} cleared)`,
@@ -238,13 +286,39 @@ export function OpeningBalancesView({
                   </span>
                 </th>
               ))}
+              {components.map((component, index) => (
+                <th
+                  key={component.componentId}
+                  className={cn(
+                    'px-3 py-2 text-right font-medium whitespace-nowrap text-slate-600 dark:text-slate-300',
+                    index === 0 && 'border-l border-slate-200 dark:border-slate-800',
+                  )}
+                >
+                  <span className="inline-flex items-center gap-1">
+                    {component.name}
+                    <FieldHelp
+                      help={
+                        component.capped
+                          ? text(
+                              'componentHelp',
+                              'How much of this component’s annual cap the employee has already used this year, at your previous payroll system. Without it the cap restarts at zero and the employee can contribute a second full annual limit.',
+                            ) + ` (${text('componentCap', 'Annual cap')}: ${component.basisCapAmountPerYear ?? '—'})`
+                          : text(
+                              'componentInertHelp',
+                              'This component no longer has an annual cap, so the amount below changes nothing and cannot be edited. It is kept because somebody entered it and a cap may be set again.',
+                            )
+                      }
+                    />
+                  </span>
+                </th>
+              ))}
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
             {rows.length === 0 && (
               <tr>
                 <td
-                  colSpan={visibleFields.length + 1}
+                  colSpan={visibleFields.length + components.length + 1}
                   className="px-3 py-8 text-center text-slate-400 dark:text-slate-500"
                 >
                   {text('empty', 'No employees have an active payroll profile yet.')}
@@ -306,6 +380,27 @@ export function OpeningBalancesView({
                     </td>
                   )
                 })}
+                {components.map((component, index) => (
+                  <td
+                    key={component.componentId}
+                    className={cn(
+                      'px-2 py-1.5 text-right',
+                      index === 0 && 'border-l border-slate-200 dark:border-slate-800',
+                    )}
+                  >
+                    <Input
+                      inputMode="decimal"
+                      disabled={row.locked || !canManage || !component.capped}
+                      aria-label={`${row.employeeName} — ${component.name}`}
+                      className="w-32 text-right tabular-nums"
+                      value={componentValueOf(row, component.componentId)}
+                      placeholder="0.00"
+                      onChange={(event) =>
+                        setComponentValue(row.employeePartyId, component.componentId, event.target.value)
+                      }
+                    />
+                  </td>
+                ))}
               </tr>
             ))}
           </tbody>

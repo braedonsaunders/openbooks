@@ -1540,7 +1540,7 @@ export const SETUP_ENTITIES: SetupEntity[] = [
       { key: 'name', kind: 'text', required: true },
       { key: 'frequency', kind: 'select', required: true, options: PAY_FREQUENCIES },
       { key: 'periodsPerYear', kind: 'integer', required: true },
-      { key: 'anchorPeriodEnd', kind: 'date', required: true },
+      { key: 'anchorPeriodEnd', kind: 'date', required: true, helpTextKey: 'fieldHelp.payScheduleAnchor' },
       // Legal entity this calendar pays; empty = org-wide (root subsidiary).
       { key: 'subsidiaryId', kind: 'ref', ref: 'subsidiaries' },
       { key: 'payDateOffsetDays', kind: 'integer', keepDefault: true },

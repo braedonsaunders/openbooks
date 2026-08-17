@@ -1,5 +1,7 @@
 import { sql } from "drizzle-orm";
-import { boolean, index, pgTable, text, uniqueIndex, uuid } from "drizzle-orm/pg-core";
+import {
+  boolean, index, integer, jsonb, pgTable, text, uniqueIndex, uuid,
+} from "drizzle-orm/pg-core";
 import { auditColumns, id, orgRef } from "./helpers";
 
 /**
@@ -70,6 +72,78 @@ export const payrollFilingAccounts = pgTable(
     uniqueIndex("payroll_filing_accounts_org_default")
       .on(t.orgId, t.country)
       .where(sql`is_default`),
+  ],
+);
+
+/**
+ * Tenant-entered statutory RATES, at the scope the country pack says each one
+ * varies by (engine/src/payroll/statutory-rates.ts).
+ *
+ * Most statutory arithmetic is published and lives in the pack's own edition
+ * modules, where no tenant can touch it. A minority is not published, or is
+ * published per employer account or per region, and those were stored as a
+ * single org-level blob in `orgs.settings.payroll` — which could hold exactly
+ * ONE value for a number that legitimately has several:
+ *
+ * - a state unemployment rate is experience-rated per REGISTERED ACCOUNT, so a
+ *   two-EIN employer in one state has two of them;
+ * - the FUTA credit reduction is published per STATE per YEAR, so one employer
+ *   owes two different effective rates in one payroll and Form 940 Schedule A
+ *   is computed state by state;
+ * - employer health levies are per PROVINCE, at each province's own rate and
+ *   exemption.
+ *
+ * Doctrine:
+ * - `country` and `rate_key` are OPEN text, validated at the API boundary
+ *   against the pack's declared rate slots (`statutoryRateProblem`), for the
+ *   same reason `program_type` is: a DB CHECK cannot enumerate an open pack
+ *   registry, so the constraint lives with the declaration.
+ * - which key columns a row carries is the SLOT's declared scope: org-wide
+ *   (neither), per region (`region`), per account (`region` +
+ *   `filing_account_id`, or `region` alone as the account-wide default a
+ *   single-account employer keeps using).
+ * - `tax_year` is the effective dimension, because that is the granularity
+ *   every one of these rates is actually assigned at — a state's annual rate
+ *   notice, USDOL's annual credit-reduction determination, a province's annual
+ *   exemption. Re-running a prior period therefore reproduces that period's
+ *   rate instead of reinterpreting it with this year's.
+ * - values live in `rate_values` keyed by the slot's declared field keys, each
+ *   canonicalized to that field's declared scale before it is stored.
+ */
+export const payrollStatutoryRates = pgTable(
+  "payroll_statutory_rates",
+  {
+    id: id(),
+    orgId: orgRef(),
+    /** Country pack that declares the rate slot. */
+    country: text("country").notNull(),
+    /** The pack's declared slot key ("us_sui", "us_futa", "ca_eht"). */
+    rateKey: text("rate_key").notNull(),
+    /** Province/state the rate applies in; null only for an org-wide slot. */
+    region: text("region"),
+    /**
+     * The filing account the rate is assigned to, for a slot the pack declares
+     * per account. Null = the region-wide value every account uses, which is
+     * what a single-account employer configures.
+     */
+    filingAccountId: uuid("filing_account_id"),
+    /** The tax year the rate was assigned for. */
+    taxYear: integer("tax_year").notNull(),
+    /** { [fieldKey]: canonical decimal string } per the slot's declaration. */
+    rateValues: jsonb("rate_values").notNull(),
+    ...auditColumns,
+  },
+  (t) => [
+    // One row per scope point. Two rows for the same point would make the
+    // resolution ambiguous, and an ambiguous statutory rate is wrong money that
+    // changes answer between queries.
+    uniqueIndex("payroll_statutory_rates_org_point").on(
+      t.orgId, t.country, t.rateKey, t.taxYear,
+      sql`coalesce(region, '')`,
+      sql`coalesce(filing_account_id, '00000000-0000-0000-0000-000000000000'::uuid)`,
+    ),
+    index("payroll_statutory_rates_org_year").on(t.orgId, t.country, t.taxYear),
+    index("payroll_statutory_rates_account").on(t.orgId, t.filingAccountId),
   ],
 );
 

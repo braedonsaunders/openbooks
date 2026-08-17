@@ -2,7 +2,7 @@ import { add } from "../../money.ts";
 import { filingAccountRef, filingAccountsById } from "../../payroll-filing.ts";
 import { buildRoeXml, type RoeIssueInput } from "../../payroll-roexml.ts";
 import { buildT4Xml } from "../../payroll-t4xml.ts";
-import { PayrollError } from "../../payroll-run.ts";
+import { PayrollError } from "../../payroll-error.ts";
 import { roeCandidates, roeRecord, t4Slips, t4Summary, ROE_REASON_CODES, type RoeReasonCode } from "../../payroll-yearend.ts";
 import type { PayrollFilingData, PayrollFilingSlipData, PayrollPackFilings } from "../../payroll-filing-registry.ts";
 import { rl1Filing } from "./quebec/rl1-filing.ts";

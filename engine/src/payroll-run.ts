@@ -1,5 +1,6 @@
 import { sql } from "drizzle-orm";
 import { db } from "./db.ts";
+import { PayrollError } from "./payroll-error.ts";
 import {
   add, cmp, fromUnits, mulDecimal, mulPercent, mulRatio, neg, roundDiv, roundMoney, sum, toUnits,
 } from "./money.ts";
@@ -11,6 +12,7 @@ import {
   assertContributoryBasesDeclared,
   assertPayrollRegionSupported,
   jurisdictionKey,
+  labourJurisdictionProblem,
   legacyStatutoryLiabilityAccount,
   packStatutoryComponents,
   payrollJurisdictionDeclared,
@@ -27,6 +29,10 @@ import {
   undeclaredJurisdictionHolidayConflict,
 } from "./payroll-holidays.ts";
 import { effectivePayRateSql, payRateIsUsable } from "./payroll-rate.ts";
+// Aliased: the local closure keeps the same name, and this module is the one
+// home for "how much of this component has the employee already taken".
+import { componentYearToDate as openingComponentYtd } from "./payroll-opening-balances.ts";
+import { resolveStatutoryRates } from "./payroll/statutory-rates.ts";
 import { effectiveFilingAccountSql } from "./payroll-filing.ts";
 import { laborCostingSettings } from "./labor-costing.ts";
 import {
@@ -106,50 +112,48 @@ export interface PayrollSettings {
 }
 
 /**
- * US pack org configuration (orgs.settings.payroll.us): the effective FUTA
- * rate (credit-reduction states raise it past the default 0.6%) and the
- * employer's state unemployment accounts — SUI rates are experience-rated
- * per employer, so they are org-entered settings, never engine constants.
+ * US pack configuration, resolved from the pack's declared rate slots
+ * (engine/src/payroll/statutory-rates.ts) rather than from an org-level blob.
+ *
+ * Both numbers are functions of a scope point because both genuinely vary
+ * within one payroll: the effective FUTA rate by STATE (USDOL publishes the
+ * credit reduction per state per year), and the SUI rate by FILING ACCOUNT (the
+ * state assigns an experience rate to each registered account). A tenant that
+ * has not touched the new surface resolves through the pack's read-only legacy
+ * reader and gets byte-identical numbers.
  */
 export interface UsPayrollConfig {
-  futaRate: string | null;
-  sui: Record<string, { rate: string; wageBase: string }>;
+  futaRate(state: string): string | null;
+  sui(state: string, filingAccountId: string | null): { rate: string; wageBase: string } | undefined;
 }
 
-export async function usPayrollConfig(orgId: string): Promise<UsPayrollConfig> {
-  const r = (await db.execute(
-    sql`select settings#>'{payroll,us}' as u from orgs where id = ${orgId}`,
-  )) as unknown as { rows: { u: Record<string, unknown> | null }[] };
-  const u = r.rows[0]?.u ?? {};
-  const sui: UsPayrollConfig["sui"] = {};
-  const rawSui = (u.sui ?? {}) as Record<string, { rate?: unknown; wageBase?: unknown }>;
-  for (const [state, entry] of Object.entries(rawSui)) {
-    if (entry && entry.rate != null && entry.wageBase != null) {
-      sui[state] = { rate: String(entry.rate), wageBase: String(entry.wageBase) };
-    }
-  }
-  return { futaRate: u.futaRate != null ? String(u.futaRate) : null, sui };
+export async function usPayrollConfig(orgId: string, taxYear: number): Promise<UsPayrollConfig> {
+  const rates = await resolveStatutoryRates(orgId, "US", taxYear);
+  return {
+    futaRate: (state) => rates.values("us_futa", { region: state })?.rate ?? null,
+    sui: (state, filingAccountId) => {
+      const values = rates.values("us_sui", { region: state, filingAccountId });
+      return values ? { rate: values.rate!, wageBase: values.wageBase! } : undefined;
+    },
+  };
 }
 
 /**
- * CA pack org configuration (orgs.settings.payroll.ca). EHT is an org-level
- * payroll tax on Ontario remuneration past the annual exemption; WCB rates
- * live on worker_comp_groups (per class), so only the toggle lives here.
+ * CA pack configuration. EHT is levied by four provinces at four rates above
+ * four exemptions, so it resolves PER PROVINCE; `null` means this province
+ * levies none, or the employer has configured none, and nothing is accrued.
  */
 export interface CaPayrollConfig {
-  eht: { enabled: boolean; rate: string | null; annualExemption: string | null };
+  eht(region: string): { rate: string; annualExemption: string | null } | null;
 }
 
-export async function caPayrollConfig(orgId: string): Promise<CaPayrollConfig> {
-  const r = (await db.execute(
-    sql`select settings#>'{payroll,ca}' as c from orgs where id = ${orgId}`,
-  )) as unknown as { rows: { c: Record<string, unknown> | null }[] };
-  const c = (r.rows[0]?.c ?? {}) as { eht?: { enabled?: unknown; rate?: unknown; annualExemption?: unknown } };
+export async function caPayrollConfig(orgId: string, taxYear: number): Promise<CaPayrollConfig> {
+  const rates = await resolveStatutoryRates(orgId, "CA", taxYear);
   return {
-    eht: {
-      enabled: c.eht?.enabled === true,
-      rate: c.eht?.rate != null ? String(c.eht.rate) : null,
-      annualExemption: c.eht?.annualExemption != null ? String(c.eht.annualExemption) : null,
+    eht: (region) => {
+      const values = rates.values("ca_eht", { region });
+      if (!values?.rate) return null;
+      return { rate: values.rate, annualExemption: values.annualExemption ?? null };
     },
   };
 }
@@ -173,7 +177,10 @@ export async function payrollSettings(orgId: string): Promise<PayrollSettings> {
   };
 }
 
-export class PayrollError extends Error {}
+// Defined in its own cycle-free module so `extends PayrollError` is safe at
+// module-evaluation time anywhere in payroll; re-exported here because this is
+// where the rest of the codebase has always imported it from.
+export { PayrollError };
 
 /**
  * Exact `amount ÷ divisor`, rounded ONCE to `decimalPlaces`.
@@ -459,6 +466,142 @@ const DAY = 24 * 60 * 60 * 1000;
 const iso = (d: Date) => d.toISOString().slice(0, 10);
 const at = (s: string) => new Date(`${s}T00:00:00Z`);
 
+/**
+ * The two days of the month a semi-monthly schedule's periods end on.
+ *
+ * `month_end` is a boundary KIND, not a day number: the second half of a month
+ * runs to whatever the month's last day is (31, 30, 29, 28), which no
+ * day-of-month can express.
+ */
+export interface SemiMonthlyBoundaries {
+  /** Day-of-month the FIRST period of each month ends on (1–15). */
+  firstDay: number;
+  /** Day-of-month the SECOND period ends on, or the month's last day. */
+  secondDay: number | "month_end";
+}
+
+const ORDINAL_SUFFIX = (day: number): string => {
+  if (day % 100 >= 11 && day % 100 <= 13) return "th";
+  return ["th", "st", "nd", "rd"][day % 10] ?? "th";
+};
+const ordinal = (day: number): string => `${day}${ORDINAL_SUFFIX(day)}`;
+
+const monthLengthOf = (d: Date): number =>
+  new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth() + 1, 0)).getUTCDate();
+
+/**
+ * Why an anchor cannot name a semi-monthly schedule, or null if it can.
+ *
+ * The derivation rule (see `semiMonthlyBoundaries`) needs BOTH period-end days
+ * to be unambiguous in every month of the year. Two anchor shapes are not, and
+ * are refused by name at save time rather than quietly reinterpreted:
+ *
+ * - **the 14th** — its half-month complement is the 29th, which February does
+ *   not always have, and "the 14th and the month end" is not a half-month
+ *   split of anything. There is no second boundary to derive.
+ * - **the last day of a 28-day February** — read as a day-of-month it means
+ *   the 28th (a day every month has, complement the 13th); read as the month
+ *   end it means the 15th-and-month-end schedule. Both readings are coherent
+ *   and they are different calendars, so the anchor does not determine one.
+ *   Anchoring on a 30- or 31-day month's last day says month end with no
+ *   ambiguity at all.
+ *
+ * Everything else derives: 1–13 and 16–28 are fixed day pairs, and 15 / 29 /
+ * 30 / 31 all mean "the 15th and the month end" (29, 30 and 31 are not days
+ * every month has, so month end is their only coherent reading).
+ */
+export function semiMonthlyAnchorProblem(anchorPeriodEnd: string): string | null {
+  const anchor = at(anchorPeriodEnd);
+  if (Number.isNaN(anchor.getTime())) {
+    return `"${anchorPeriodEnd}" is not a date, so no semi-monthly period can be derived from it`;
+  }
+  const day = anchor.getUTCDate();
+  const monthLength = monthLengthOf(anchor);
+  if (day === 28 && monthLength === 28) {
+    return "a semi-monthly schedule anchored on the last day of February cannot be read: the 28th "
+      + "is both a day every month has (periods would end on the 13th and the 28th) and February's "
+      + "month end (periods would end on the 15th and the last day of the month), and those are "
+      + "different calendars — anchor it on the last day of a 30- or 31-day month for the "
+      + "15th-and-month-end schedule, or on the 28th of a longer month to mean the 28th";
+  }
+  if (day === 14) {
+    return "a semi-monthly schedule anchored on the 14th has no second period end: half a month "
+      + "later is the 29th, which February does not always have — anchor it on a day from 1 to 13 "
+      + "or 16 to 28 (its complement is then the same day ±15), on the 15th, or on the last day of "
+      + "a 30- or 31-day month (the 15th-and-month-end schedule)";
+  }
+  return null;
+}
+
+/**
+ * Factor P must be a count the schedule's own boundaries can actually produce.
+ *
+ * `periods_per_year` is not decoration: the statutory engines annualize on it
+ * (T4127 factor P, Pub 15-T's periods-per-year), so a semi-monthly calendar
+ * saved with 26 pays 24 times a year while every withholding calculation
+ * annualizes as though it paid 26 — wrong tax for everyone on the schedule,
+ * every period, with nothing on screen to show it. The table's own CHECK only
+ * constrains the value to the union of all frequencies' legal counts, which is
+ * why the pairing has to be enforced here.
+ *
+ * 53 and 27 are the long-year counts (a year containing 53 Fridays, or 27
+ * biweekly paydays) and are legal for exactly the frequencies that can have
+ * them. Semi-monthly and monthly are defined by the calendar month, so they
+ * admit no long year.
+ */
+const PERIODS_PER_YEAR_BY_FREQUENCY: Record<string, number[]> = {
+  weekly: [52, 53],
+  biweekly: [26, 27],
+  semi_monthly: [24],
+  monthly: [12],
+};
+
+export function payPeriodsPerYearProblem(
+  frequency: string,
+  periodsPerYear: number,
+): string | null {
+  const legal = PERIODS_PER_YEAR_BY_FREQUENCY[frequency];
+  if (!legal) return null; // unknown frequency is the enum's refusal, not ours
+  if (legal.includes(periodsPerYear)) return null;
+  const allowed = legal.length === 1
+    ? `${legal[0]}`
+    : `${legal.slice(0, -1).join(", ")} or ${legal[legal.length - 1]}`;
+  return `a ${frequency.replace(/_/g, "-")} schedule pays ${allowed} times a year, not `
+    + `${periodsPerYear} — the periods per year is what every statutory calculation annualizes `
+    + `with, so a count the schedule's own period boundaries cannot produce withholds the wrong `
+    + `tax on every pay`;
+}
+
+/**
+ * The period-end days a semi-monthly schedule uses, derived from its anchor —
+ * the same way the monthly branch derives from its anchor's day-of-month.
+ *
+ * `anchor_period_end` is `notNull` on `pay_schedules`; discarding it for one
+ * frequency is what let an employer paying the 5th and the 20th save without
+ * error and then be paid on the 15th and the month end.
+ */
+export function semiMonthlyBoundaries(anchorPeriodEnd: string): SemiMonthlyBoundaries {
+  const problem = semiMonthlyAnchorProblem(anchorPeriodEnd);
+  if (problem) throw new PayrollError(problem);
+  const day = at(anchorPeriodEnd).getUTCDate();
+  // 29, 30 and 31 are not days every month has, so an anchor on one of them
+  // can only mean the month end; the month end's half-month partner is the
+  // 15th, because the halves of a month are the 1st–15th and the 16th–last.
+  if (day === 15 || day >= 29) return { firstDay: 15, secondDay: "month_end" };
+  return day < 15
+    ? { firstDay: day, secondDay: day + 15 }
+    : { firstDay: day - 15, secondDay: day };
+}
+
+/** The two period-end dates the boundaries produce in one calendar month. */
+function semiMonthlyEndsIn(
+  boundaries: SemiMonthlyBoundaries, year: number, month: number,
+): [Date, Date] {
+  const lastDay = new Date(Date.UTC(year, month + 1, 0)).getUTCDate();
+  const second = boundaries.secondDay === "month_end" ? lastDay : boundaries.secondDay;
+  return [new Date(Date.UTC(year, month, boundaries.firstDay)), new Date(Date.UTC(year, month, second))];
+}
+
 /** Period boundaries for a schedule: [start, end] containing/after `from`. */
 export function nextPeriodAfter(
   schedule: Pick<ScheduleRow, "frequency" | "anchor_period_end">,
@@ -477,19 +620,26 @@ export function nextPeriodAfter(
     return { periodStart: iso(new Date(end.getTime() - (span - 1) * DAY)), periodEnd: iso(end) };
   }
   if (schedule.frequency === "semi_monthly") {
-    // Periods end on the 15th and the last day of each month.
-    const boundaries = (y: number, m: number) => [
-      new Date(Date.UTC(y, m, 15)), new Date(Date.UTC(y, m + 1, 0)),
-    ];
-    let cursor = lastPeriodEnd ? at(lastPeriodEnd) : new Date(anchor.getTime() - DAY);
+    // The anchor's own day-of-month is one of the two boundaries, and its
+    // half-month complement is the other — so an anchor of 2026-01-20 pays the
+    // 6th–20th and the 21st–5th, not 1–15 / 16–EOM.
+    const boundaries = semiMonthlyBoundaries(schedule.anchor_period_end);
+    const cursor = lastPeriodEnd ? at(lastPeriodEnd) : new Date(anchor.getTime() - DAY);
+    // Starting a month BEFORE the cursor's month guarantees the preceding
+    // boundary is known before the first candidate is accepted, so the period
+    // START is always the day after the previous period ended — including
+    // across a month boundary, where it lives in the previous month.
+    // Seeded from the month before the cursor's, both of whose boundaries are
+    // necessarily on or before the cursor.
+    const seed = new Date(Date.UTC(cursor.getUTCFullYear(), cursor.getUTCMonth() - 1, 1));
+    let previous = semiMonthlyEndsIn(boundaries, seed.getUTCFullYear(), seed.getUTCMonth())[1];
     for (let m = 0; m < 26; m++) {
-      const base = new Date(Date.UTC(cursor.getUTCFullYear(), cursor.getUTCMonth() + Math.floor(m / 2), 1));
-      const end = boundaries(base.getUTCFullYear(), base.getUTCMonth())[m % 2]!;
-      if (end.getTime() > cursor.getTime()) {
-        const start = end.getUTCDate() === 15
-          ? new Date(Date.UTC(end.getUTCFullYear(), end.getUTCMonth(), 1))
-          : new Date(Date.UTC(end.getUTCFullYear(), end.getUTCMonth(), 16));
-        return { periodStart: iso(start), periodEnd: iso(end) };
+      const base = new Date(Date.UTC(cursor.getUTCFullYear(), cursor.getUTCMonth() + m, 1));
+      for (const end of semiMonthlyEndsIn(boundaries, base.getUTCFullYear(), base.getUTCMonth())) {
+        if (end.getTime() > cursor.getTime()) {
+          return { periodStart: iso(new Date(previous.getTime() + DAY)), periodEnd: iso(end) };
+        }
+        previous = end;
       }
     }
     throw new PayrollError("could not derive the next semi-monthly period");
@@ -1026,8 +1176,9 @@ async function calculateInTransaction(input: CalculatePayRunInput): Promise<PayR
     `)) as unknown as { rows: { employee_party_id: string }[] };
     const excluded = new Set(excludedRows.rows.map((r) => r.employee_party_id));
 
-    const usConfig = await usPayrollConfig(orgId);
-    const caConfig = await caPayrollConfig(orgId);
+    // The run's own tax year — the resolved context's, never `slice(0, 4)`.
+    const usConfig = await usPayrollConfig(orgId, Number(run.tax_year));
+    const caConfig = await caPayrollConfig(orgId, Number(run.tax_year));
     const { eftFallbackToCheque } = await payrollPaymentMethodSettings(orgId);
     const errors: { employee: string; message: string }[] = [];
     let grossTotal = "0"; let netTotal = "0"; let employerTotal = "0"; let count = 0;
@@ -1404,7 +1555,28 @@ async function calculateStub(
   // holiday. A silent zero on a paid holiday is indistinguishable from a
   // correct calculation, which is why the refusal exists.
   if (!bonusRun && ctx.statHolidayPay) {
-    const employeeJurisdiction = jurisdictionKey(country, province);
+    // The employment attribute wins over the region derivation where the
+    // profile carries one: an employer regulated by a different labour
+    // jurisdiction than the one the employee works in has a different holiday
+    // calendar AND a different holiday-pay formula.
+    //
+    // An EXPLICIT value the packs do not declare is refused outright, not put
+    // through the untranscribed-province gate below. The two are different
+    // failures: an untranscribed province is a gap in the packs, and calculates
+    // as it always has until a holiday actually lands in the period, whereas an
+    // undeclared explicit key is a value somebody entered that means nothing —
+    // it would silently fall back on the work region's calendar, which is the
+    // exact substitution the attribute exists to prevent. The API validates it
+    // with the same function (labourJurisdictionProblem), so reaching this is a
+    // direct database write.
+    const labourProblem = labourJurisdictionProblem(country, emp.labour_jurisdiction);
+    if (labourProblem) {
+      throw new PayrollError(
+        `${emp.display_name ?? employeePartyId} has a labour jurisdiction this payroll cannot `
+        + `honour — ${labourProblem}`,
+      );
+    }
+    const employeeJurisdiction = jurisdictionKey(country, province, emp.labour_jurisdiction);
     if (!payrollJurisdictionDeclared(employeeJurisdiction)) {
       const conflict = undeclaredJurisdictionHolidayConflict({
         country, jurisdiction: employeeJurisdiction,
@@ -1445,21 +1617,24 @@ async function calculateStub(
     }
   }
 
-  /** Same component's committed amount earlier in the tax year (openings
-   *  included via the opening-balance sweep the year-end module owns). Mid-year
-   *  adoption must not hand an employee a fresh 402(g)/money-purchase room. */
-  const componentYearToDate = async (componentId: string): Promise<string> => {
-    const r = (await tx.execute(sql`
-      select coalesce(sum(l.amount), 0)::text as ytd
-        from pay_stub_lines l
-        join pay_stubs s on s.id = l.stub_id
-        join pay_runs r on r.document_id = s.pay_run_document_id and r.run_status = 'committed'
-       where l.org_id = ${orgId} and s.employee_party_id = ${employeePartyId}
-         and s.tax_year = ${taxYear} and l.component_id = ${componentId}
-         and s.pay_run_document_id <> ${documentId}
-    `)) as unknown as { rows: { ytd: string }[] };
-    return r.rows[0]!.ytd;
-  };
+  /**
+   * Same component's amount already taken earlier in the tax year: committed
+   * stub lines PLUS the mid-year opening carry-in
+   * (`payroll_opening_balance_components`). One home, in
+   * payroll-opening-balances.ts, because the two halves are one fact — this
+   * closure previously summed only the stubs while claiming openings arrived
+   * "via the opening-balance sweep the year-end module owns", a sweep that has
+   * never existed. Adoption must not hand an employee a fresh 402(g) /
+   * money-purchase room.
+   */
+  const componentYearToDate = (componentId: string): Promise<string> =>
+    openingComponentYtd(tx, {
+      orgId,
+      employeePartyId,
+      taxYear,
+      componentId,
+      excludeRunDocumentId: documentId,
+    });
 
   // Hours behind a capped basis. "Overtime or double time charged to a job is
   // exempt from the 40-hour cap" is a property of the hour, not of the
@@ -1946,23 +2121,32 @@ async function calculateStub(
       }
     }
 
-    const eht = ctx.caConfig.eht;
+    // Employer health tax, per PROVINCE. The old code asked `province === "ON"`
+    // and read one org-level rate, so an employer with BC and Ontario payroll
+    // accrued Ontario's levy on Ontario wages and nothing on the other
+    // province's — or the reverse, depending on which rate was stored.
     // Already inside `country === "CA"`, and `province` is the resolved
     // region — the old `(emp.country ?? "CA") !== "US"` re-derivation was a
     // third opinion on a question the run context now answers once.
-    if (eht.enabled && eht.rate && province === "ON") {
+    const eht = ctx.caConfig.eht(province);
+    if (eht) {
       ehtEarnings = grossEarnings();
       if (cmp(ehtEarnings, "0") > 0) {
-        const priorOn = ((await tx.execute(sql`
+        // Scoped to the province whose exemption it is: the previous query
+        // summed Ontario stubs only, which was right when only Ontario could be
+        // levied and wrong the moment a second province can be.
+        const priorInProvince = ((await tx.execute(sql`
           select coalesce(sum((s.factors->>'EHT_EARN')::numeric), 0) as prior
             from pay_stubs s
             join pay_runs r on r.document_id = s.pay_run_document_id
-           where s.org_id = ${orgId} and s.tax_year = ${taxYear} and s.province = 'ON'
+           where s.org_id = ${orgId} and s.tax_year = ${taxYear} and s.province = ${province}
              and (r.run_status in ('calculated', 'committed')
                   or s.pay_run_document_id = ${documentId})
         `)) as unknown as { rows: { prior: string }[] }).rows[0]!.prior;
         const exemption = eht.annualExemption ?? "0";
-        const exemptionLeft = cmp(exemption, priorOn) > 0 ? add(exemption, neg(priorOn)) : "0";
+        const exemptionLeft = cmp(exemption, priorInProvince) > 0
+          ? add(exemption, neg(priorInProvince))
+          : "0";
         const taxableRemuneration = cmp(ehtEarnings, exemptionLeft) > 0
           ? add(ehtEarnings, neg(exemptionLeft))
           : "0";
@@ -2044,8 +2228,11 @@ async function calculateStub(
       fitExempt: bool(emp.tax_exempt),
       ficaExempt: bool(emp.fica_exempt),
       futaExempt: bool(emp.futa_exempt),
-      futaEffectiveRate: ctx.usConfig.futaRate ?? undefined,
-      sui: ctx.usConfig.sui[province],
+      futaEffectiveRate: ctx.usConfig.futaRate(province) ?? undefined,
+      // Per FILING ACCOUNT: the state assigns an experience rate to each
+      // registration, so a two-account employer in one state holds two. Before
+      // this, both divisions got whichever rate was entered last.
+      sui: ctx.usConfig.sui(province, jurisdiction.filingAccountId),
       ytd: {
         ssWages: ytd.fica, medicareWages: ytd.fica,
         futaWages: ytd.futa, suiWages: ytd.futa,

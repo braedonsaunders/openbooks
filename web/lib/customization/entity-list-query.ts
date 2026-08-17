@@ -583,6 +583,14 @@ export const ACCOUNT_CLASS_EXPR = sql`case
 
 export const ACCOUNT_STATUS_EXPR = sql`case when a.is_active then 'active' else 'inactive' end`
 
+/**
+ * Each account's balance including its subtree. Months before the current one
+ * come from the gl_month_activity summary and only the current month is read
+ * from journal_lines — a fiscal-year start is always the first of a month, so
+ * the as-of date is the only boundary that can split one. The previous form
+ * ran a recursive descendant roll-up over the raw lines once per listed
+ * account, which scanned the ledger dozens of times per page.
+ */
 export const ACCOUNT_BASE_JOINS = sql`
   left join accounts parent on parent.id = a.parent_id
   left join lateral (
@@ -593,18 +601,32 @@ export const ACCOUNT_BASE_JOINS = sql`
         from accounts child
         join descendants tree on child.parent_id = tree.id
        where child.org_id = a.org_id
+    ),
+    fy as (
+      select make_date(
+        case when extract(month from current_date) >= 4 then extract(year from current_date)::int else extract(year from current_date)::int - 1 end,
+        4, 1) as starts_on
+    ),
+    movement as (
+      select (g.debit_total - g.credit_total) as amt, g.month as d
+        from gl_month_activity g
+        join descendants tree on tree.id = g.account_id
+       where g.org_id = a.org_id and g.month < date_trunc('month', current_date)::date
+      union all
+      select l.amount, e.posting_date
+        from journal_lines l
+        join descendants tree on tree.id = l.account_id
+        join journal_entries e on e.id = l.entry_id and e.org_id = a.org_id
+         and e.status in ('posted', 'reversed')
+         and e.posting_date >= date_trunc('month', current_date)::date
+         and e.posting_date <= current_date
+       where l.org_id = a.org_id
     )
-    select coalesce(sum(l.amount), 0)
+    select coalesce(sum(m.amt), 0)
            * case when a.type in ('income','income_other','liability_payable','liability_card','liability_current_other','liability_long_term','equity') then -1 else 1 end as amount
-      from descendants tree
-      join journal_lines l on l.account_id = tree.id and l.org_id = a.org_id
-      join journal_entries e on e.id = l.entry_id and e.posting_date <= current_date
+      from movement m, fy
      where a.type not in ('income','income_other','cogs','expense','expense_other','expense_deferred')
-        or e.posting_date >= make_date(
-          case when extract(month from current_date) >= 4 then extract(year from current_date)::int else extract(year from current_date)::int - 1 end,
-          4,
-          1
-        )
+        or m.d >= fy.starts_on
   ) account_balance on true`
 
 export const ACCOUNT_BUILT_IN_EXPR: Record<string, SQL> = {

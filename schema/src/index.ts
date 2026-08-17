@@ -67,5 +67,6 @@ export * from "./payroll-bank-file";
 export * from "./payroll-entitlements";
 export * from "./payroll-filing";
 export * from "./payroll-holidays";
+export * from "./payroll-parallel-run";
 export * from "./payroll-rules";
 export * from "./leases";
