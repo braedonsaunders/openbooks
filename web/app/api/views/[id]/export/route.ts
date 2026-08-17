@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server'
-import { guardPermission } from '../../../../../lib/authz'
-import { loadView, runView } from '../../../../../lib/views'
+import { can, guardPermission } from '../../../../../lib/authz'
+import { loadView, runView, viewEntityPermission } from '../../../../../lib/views'
 import {
   exportDataToCsv,
   exportDataToPdf,
@@ -29,6 +29,10 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
 
   const view = await loadView(user.orgId, id, user.id, permissions)
   if (!view) return NextResponse.json({ error: 'not found' }, { status: 404 })
+  const needed = viewEntityPermission(view.query)
+  if (needed && !can(gate, needed)) {
+    return NextResponse.json({ error: `missing permission: ${needed}` }, { status: 403 })
+  }
 
   let result
   try {
