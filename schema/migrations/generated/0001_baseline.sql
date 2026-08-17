@@ -613,6 +613,20 @@ begin
   ) then
     return old;
   end if;
+  if old.kind = 'opening' and old.pay_run_document_id is null then
+    if exists (
+      select 1 from pay_stubs s
+        join pay_runs r on r.document_id = s.pay_run_document_id and r.org_id = s.org_id
+       where s.org_id = old.org_id
+         and s.employee_party_id = old.employee_party_id
+         and r.run_status = 'committed'
+         and s.pay_date >= old.movement_date
+    ) then
+      raise exception
+        'entitlement_ledger opening carry-in has already been consumed by a committed pay run; void that run before changing it';
+    end if;
+    return old;
+  end if;
   raise exception
     'entitlement_ledger movements cannot be deleted once their pay run is committed';
 end $$;
@@ -2872,7 +2886,8 @@ declare
     'employee_pay_components',
     'pay_components', 'pay_derived_rules', 'pay_run_adjustments', 'pay_runs',
     'pay_schedules', 'pay_stub_lines', 'pay_stubs',
-    'payroll_filing_accounts', 'payroll_holidays', 'payroll_opening_balances',
+    'payroll_filing_accounts', 'payroll_holidays',
+    'payroll_opening_balance_components', 'payroll_opening_balances',
     'union_agreements', 'union_classifications',
     'union_fringes'
   ];
@@ -2974,7 +2989,8 @@ begin
            filing_status, multiple_jobs, dependent_credits,
            other_income_annual, deductions_annual, w4_pre_2020,
            w4_allowances, fica_exempt, futa_exempt, sin_last3,
-           filing_account_id, stub_delivery, payment_method
+           filing_account_id, stub_delivery, payment_method,
+           labour_jurisdiction
       from public.employee_payroll_profiles
      where org_id = public.openbooks_query_org_id();
   -- Employment records are reportable; date of birth is not. It exists for ROE
@@ -8475,6 +8491,7 @@ CREATE TABLE public.employee_payroll_profiles (
     filing_account_id uuid,
     stub_delivery text DEFAULT 'email'::text NOT NULL,
     payment_method text,
+    labour_jurisdiction text,
     CONSTRAINT employee_payroll_profiles_allowances CHECK (((w4_allowances IS NULL) OR (w4_allowances >= 0))),
     CONSTRAINT employee_payroll_profiles_country CHECK ((country = ANY (ARRAY['CA'::text, 'US'::text]))),
     CONSTRAINT employee_payroll_profiles_fed_code CHECK (((federal_claim_code IS NULL) OR ((federal_claim_code >= 0) AND (federal_claim_code <= 10)))),
@@ -8535,7 +8552,8 @@ CREATE VIEW openbooks_query.employee_payroll_profiles WITH (security_barrier='tr
     sin_last3,
     filing_account_id,
     stub_delivery,
-    payment_method
+    payment_method,
+    labour_jurisdiction
    FROM public.employee_payroll_profiles
   WHERE (org_id = public.openbooks_query_org_id());
 
@@ -12402,6 +12420,44 @@ CREATE VIEW openbooks_query.payroll_holidays WITH (security_barrier='true') AS
 
 
 --
+-- Name: payroll_opening_balance_components; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.payroll_opening_balance_components (
+    id uuid DEFAULT public.uuid_generate_v7() NOT NULL,
+    org_id uuid NOT NULL,
+    opening_balance_id uuid NOT NULL,
+    component_id uuid NOT NULL,
+    ytd_amount numeric(19,4) NOT NULL,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    created_by uuid,
+    updated_at timestamp with time zone DEFAULT now() NOT NULL,
+    updated_by uuid,
+    CONSTRAINT payroll_opening_balance_components_nonnegative CHECK ((ytd_amount >= (0)::numeric))
+);
+
+ALTER TABLE ONLY public.payroll_opening_balance_components FORCE ROW LEVEL SECURITY;
+
+
+--
+-- Name: payroll_opening_balance_components; Type: VIEW; Schema: openbooks_query; Owner: -
+--
+
+CREATE VIEW openbooks_query.payroll_opening_balance_components WITH (security_barrier='true') AS
+ SELECT id,
+    org_id,
+    opening_balance_id,
+    component_id,
+    ytd_amount,
+    created_at,
+    created_by,
+    updated_at,
+    updated_by
+   FROM public.payroll_opening_balance_components
+  WHERE (org_id = public.openbooks_query_org_id());
+
+
+--
 -- Name: payroll_opening_balances; Type: TABLE; Schema: public; Owner: -
 --
 
@@ -12427,6 +12483,13 @@ CREATE TABLE public.payroll_opening_balances (
 );
 
 ALTER TABLE ONLY public.payroll_opening_balances FORCE ROW LEVEL SECURITY;
+
+
+--
+-- Name: COLUMN payroll_opening_balances.vacation_balance; Type: COMMENT; Schema: public; Owner: -
+--
+
+COMMENT ON COLUMN public.payroll_opening_balances.vacation_balance IS 'DEPRECATED (2026-08-17). No pay run reads this: an opening vacation balance is an entitlement_ledger row with kind = ''opening'' against the vacation plan. Retained, not dropped, because it is the INPUT to scripts/migrate-vacation-to-entitlements.ts and the left-hand side of that script''s penny-exact tie-out — dropping it would destroy the evidence that the migration preserved every employee''s balance. The opening-balances screen surfaces any non-zero value that has no matching opening movement as an unmigrated legacy carry-in.';
 
 
 --
@@ -15883,6 +15946,7 @@ CREATE TABLE public.time_entries (
     bill_rate_line_id uuid,
     billing_status text DEFAULT 'unbilled'::text NOT NULL,
     costing_basis text DEFAULT 'actual'::text NOT NULL,
+    started_at timestamp with time zone,
     CONSTRAINT time_entries_billing_status_valid CHECK ((billing_status = ANY (ARRAY['unbilled'::text, 'billed'::text]))),
     CONSTRAINT time_entries_costing_basis_check CHECK ((costing_basis = ANY (ARRAY['actual'::text, 'estimated'::text]))),
     CONSTRAINT time_entries_invoice_link_is_billed CHECK (((invoiced_by_line_id IS NULL) OR (billing_status = 'billed'::text)))
@@ -15938,7 +16002,8 @@ CREATE VIEW openbooks_query.time_entries WITH (security_barrier='true') AS
     bill_rate_version_id,
     bill_rate_line_id,
     billing_status,
-    costing_basis
+    costing_basis,
+    started_at
    FROM public.time_entries
   WHERE (org_id = public.openbooks_query_org_id());
 
@@ -19159,6 +19224,204 @@ ALTER TABLE ONLY public.payment_mandates FORCE ROW LEVEL SECURITY;
 
 
 --
+-- Name: payroll_parallel_comparisons; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.payroll_parallel_comparisons (
+    id uuid DEFAULT public.uuid_generate_v7() NOT NULL,
+    org_id uuid NOT NULL,
+    register_id uuid NOT NULL,
+    pay_run_document_id uuid NOT NULL,
+    status text NOT NULL,
+    prior_employee_count integer DEFAULT 0 NOT NULL,
+    our_employee_count integer DEFAULT 0 NOT NULL,
+    compared_employee_count integer DEFAULT 0 NOT NULL,
+    prior_only_employee_count integer DEFAULT 0 NOT NULL,
+    our_only_employee_count integer DEFAULT 0 NOT NULL,
+    match_count integer DEFAULT 0 NOT NULL,
+    within_tolerance_count integer DEFAULT 0 NOT NULL,
+    difference_count integer DEFAULT 0 NOT NULL,
+    one_sided_count integer DEFAULT 0 NOT NULL,
+    prior_gross numeric(19,4) DEFAULT 0 NOT NULL,
+    our_gross numeric(19,4) DEFAULT 0 NOT NULL,
+    prior_net numeric(19,4) DEFAULT 0 NOT NULL,
+    our_net numeric(19,4) DEFAULT 0 NOT NULL,
+    prior_employer_cost numeric(19,4) DEFAULT 0 NOT NULL,
+    our_employer_cost numeric(19,4) DEFAULT 0 NOT NULL,
+    unattributed_gross numeric(19,4) DEFAULT 0 NOT NULL,
+    unattributed_net numeric(19,4) DEFAULT 0 NOT NULL,
+    unattributed_employer_cost numeric(19,4) DEFAULT 0 NOT NULL,
+    tolerances_applied jsonb DEFAULT '[]'::jsonb NOT NULL,
+    unmapped_columns jsonb DEFAULT '[]'::jsonb NOT NULL,
+    blocked_reason text,
+    compared_at timestamp with time zone DEFAULT now() NOT NULL,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    created_by uuid,
+    updated_at timestamp with time zone DEFAULT now() NOT NULL,
+    updated_by uuid,
+    CONSTRAINT payroll_parallel_comparisons_status CHECK ((status = ANY (ARRAY['clean'::text, 'clean_within_tolerance'::text, 'differences'::text, 'no_comparable_data'::text])))
+);
+
+ALTER TABLE ONLY public.payroll_parallel_comparisons FORCE ROW LEVEL SECURITY;
+
+
+--
+-- Name: payroll_parallel_findings; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.payroll_parallel_findings (
+    id uuid DEFAULT public.uuid_generate_v7() NOT NULL,
+    org_id uuid NOT NULL,
+    comparison_id uuid NOT NULL,
+    employee_party_id uuid,
+    employee_name text NOT NULL,
+    kind text NOT NULL,
+    slot text NOT NULL,
+    slot_label text NOT NULL,
+    classification text NOT NULL,
+    prior_amount numeric(19,4),
+    our_amount numeric(19,4),
+    difference numeric(19,4),
+    tolerance_applied numeric(19,4) DEFAULT 0 NOT NULL,
+    source_column text,
+    sequence integer DEFAULT 100 NOT NULL,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    created_by uuid,
+    updated_at timestamp with time zone DEFAULT now() NOT NULL,
+    updated_by uuid,
+    CONSTRAINT payroll_parallel_findings_classification CHECK ((classification = ANY (ARRAY['match'::text, 'within_tolerance'::text, 'difference'::text, 'prior_only'::text, 'our_only'::text, 'employee_prior_only'::text, 'employee_our_only'::text, 'unattributed'::text]))),
+    CONSTRAINT payroll_parallel_findings_difference_present CHECK ((((prior_amount IS NULL) AND (our_amount IS NULL)) OR (difference IS NOT NULL))),
+    CONSTRAINT payroll_parallel_findings_kind CHECK ((kind = ANY (ARRAY['earning'::text, 'deduction'::text, 'employer_contribution'::text, 'total'::text])))
+);
+
+ALTER TABLE ONLY public.payroll_parallel_findings FORCE ROW LEVEL SECURITY;
+
+
+--
+-- Name: payroll_parallel_tolerances; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.payroll_parallel_tolerances (
+    id uuid DEFAULT public.uuid_generate_v7() NOT NULL,
+    org_id uuid NOT NULL,
+    kind text NOT NULL,
+    slot text NOT NULL,
+    tolerance numeric(19,4) DEFAULT 0 NOT NULL,
+    reason text NOT NULL,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    created_by uuid,
+    updated_at timestamp with time zone DEFAULT now() NOT NULL,
+    updated_by uuid,
+    CONSTRAINT payroll_parallel_tolerances_kind CHECK ((kind = ANY (ARRAY['earning'::text, 'deduction'::text, 'employer_contribution'::text, 'total'::text]))),
+    CONSTRAINT payroll_parallel_tolerances_nonnegative CHECK ((tolerance >= (0)::numeric))
+);
+
+ALTER TABLE ONLY public.payroll_parallel_tolerances FORCE ROW LEVEL SECURITY;
+
+
+--
+-- Name: payroll_prior_amounts; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.payroll_prior_amounts (
+    id uuid DEFAULT public.uuid_generate_v7() NOT NULL,
+    org_id uuid NOT NULL,
+    prior_stub_id uuid NOT NULL,
+    component_id uuid,
+    kind text NOT NULL,
+    slot text NOT NULL,
+    source_column text,
+    amount numeric(19,4) NOT NULL,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    created_by uuid,
+    updated_at timestamp with time zone DEFAULT now() NOT NULL,
+    updated_by uuid,
+    CONSTRAINT payroll_prior_amounts_kind CHECK ((kind = ANY (ARRAY['earning'::text, 'deduction'::text, 'employer_contribution'::text])))
+);
+
+ALTER TABLE ONLY public.payroll_prior_amounts FORCE ROW LEVEL SECURITY;
+
+
+--
+-- Name: payroll_prior_registers; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.payroll_prior_registers (
+    id uuid DEFAULT public.uuid_generate_v7() NOT NULL,
+    org_id uuid NOT NULL,
+    name text NOT NULL,
+    provider_name text,
+    period_start date NOT NULL,
+    period_end date NOT NULL,
+    pay_date date NOT NULL,
+    currency_code text,
+    source_file_name text,
+    unmapped_columns jsonb DEFAULT '[]'::jsonb NOT NULL,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    created_by uuid,
+    updated_at timestamp with time zone DEFAULT now() NOT NULL,
+    updated_by uuid,
+    CONSTRAINT payroll_prior_registers_period_order CHECK ((period_end >= period_start))
+);
+
+ALTER TABLE ONLY public.payroll_prior_registers FORCE ROW LEVEL SECURITY;
+
+
+--
+-- Name: payroll_prior_stubs; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.payroll_prior_stubs (
+    id uuid DEFAULT public.uuid_generate_v7() NOT NULL,
+    org_id uuid NOT NULL,
+    register_id uuid NOT NULL,
+    employee_party_id uuid NOT NULL,
+    employee_label text NOT NULL,
+    gross numeric(19,4),
+    net_pay numeric(19,4),
+    employer_cost numeric(19,4),
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    created_by uuid,
+    updated_at timestamp with time zone DEFAULT now() NOT NULL,
+    updated_by uuid
+);
+
+ALTER TABLE ONLY public.payroll_prior_stubs FORCE ROW LEVEL SECURITY;
+
+
+--
+-- Name: payroll_statutory_rates; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.payroll_statutory_rates (
+    id uuid DEFAULT public.uuid_generate_v7() NOT NULL,
+    org_id uuid NOT NULL,
+    country text NOT NULL,
+    rate_key text NOT NULL,
+    region text,
+    filing_account_id uuid,
+    tax_year integer NOT NULL,
+    rate_values jsonb NOT NULL,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    created_by uuid,
+    updated_at timestamp with time zone DEFAULT now() NOT NULL,
+    updated_by uuid,
+    CONSTRAINT payroll_statutory_rates_account_region CHECK (((filing_account_id IS NULL) OR (region IS NOT NULL))),
+    CONSTRAINT payroll_statutory_rates_values CHECK ((jsonb_typeof(rate_values) = 'object'::text)),
+    CONSTRAINT payroll_statutory_rates_year CHECK (((tax_year >= 2000) AND (tax_year <= 2100)))
+);
+
+ALTER TABLE ONLY public.payroll_statutory_rates FORCE ROW LEVEL SECURITY;
+
+
+--
+-- Name: TABLE payroll_statutory_rates; Type: COMMENT; Schema: public; Owner: -
+--
+
+COMMENT ON TABLE public.payroll_statutory_rates IS 'Tenant half of a country pack''s statutory rates: the ones no publication can supply (experience-rated SUI per filing account), or that are published per region per year (the FUTA credit reduction, provincial employer health levies). Scope columns carry the pack-declared scope; tax_year is the effective dimension, so re-running a prior period reproduces that period''s rate. Published constants live in the pack''s edition modules and are never stored here.';
+
+
+--
 -- Name: pdf_templates; Type: TABLE; Schema: public; Owner: -
 --
 
@@ -22045,11 +22308,75 @@ ALTER TABLE ONLY public.payroll_holidays
 
 
 --
+-- Name: payroll_opening_balance_components payroll_opening_balance_components_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.payroll_opening_balance_components
+    ADD CONSTRAINT payroll_opening_balance_components_pkey PRIMARY KEY (id);
+
+
+--
 -- Name: payroll_opening_balances payroll_opening_balances_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY public.payroll_opening_balances
     ADD CONSTRAINT payroll_opening_balances_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: payroll_parallel_comparisons payroll_parallel_comparisons_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.payroll_parallel_comparisons
+    ADD CONSTRAINT payroll_parallel_comparisons_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: payroll_parallel_findings payroll_parallel_findings_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.payroll_parallel_findings
+    ADD CONSTRAINT payroll_parallel_findings_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: payroll_parallel_tolerances payroll_parallel_tolerances_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.payroll_parallel_tolerances
+    ADD CONSTRAINT payroll_parallel_tolerances_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: payroll_prior_amounts payroll_prior_amounts_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.payroll_prior_amounts
+    ADD CONSTRAINT payroll_prior_amounts_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: payroll_prior_registers payroll_prior_registers_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.payroll_prior_registers
+    ADD CONSTRAINT payroll_prior_registers_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: payroll_prior_stubs payroll_prior_stubs_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.payroll_prior_stubs
+    ADD CONSTRAINT payroll_prior_stubs_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: payroll_statutory_rates payroll_statutory_rates_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.payroll_statutory_rates
+    ADD CONSTRAINT payroll_statutory_rates_pkey PRIMARY KEY (id);
 
 
 --
@@ -25823,6 +26150,18 @@ CREATE INDEX jl_org_account_covering ON public.journal_lines USING btree (org_id
 
 
 --
+-- Name: jl_org_foreign_currency; Type: INDEX; Schema: public; Owner: -
+--
+-- The multi-currency feature default asks "has this org ever posted a foreign
+-- currency line?" on every request. Partial: empty on a single-currency
+-- tenant, so the negative answer costs one index probe instead of a scan of
+-- every journal line.
+--
+
+CREATE INDEX jl_org_foreign_currency ON public.journal_lines USING btree (org_id) WHERE (fx_rate <> (1)::numeric);
+
+
+--
 -- Name: jl_org_party_open; Type: INDEX; Schema: public; Owner: -
 --
 
@@ -26698,10 +27037,129 @@ CREATE UNIQUE INDEX payroll_holidays_org_pack_key ON public.payroll_holidays USI
 
 
 --
+-- Name: payroll_opening_balance_components_org_component; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX payroll_opening_balance_components_org_component ON public.payroll_opening_balance_components USING btree (org_id, component_id);
+
+
+--
+-- Name: payroll_opening_balance_components_row_component; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE UNIQUE INDEX payroll_opening_balance_components_row_component ON public.payroll_opening_balance_components USING btree (opening_balance_id, component_id);
+
+
+--
 -- Name: payroll_opening_balances_employee_year; Type: INDEX; Schema: public; Owner: -
 --
 
 CREATE UNIQUE INDEX payroll_opening_balances_employee_year ON public.payroll_opening_balances USING btree (org_id, employee_party_id, tax_year);
+
+
+--
+-- Name: payroll_parallel_comparisons_org_run; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX payroll_parallel_comparisons_org_run ON public.payroll_parallel_comparisons USING btree (org_id, pay_run_document_id);
+
+
+--
+-- Name: payroll_parallel_comparisons_register; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX payroll_parallel_comparisons_register ON public.payroll_parallel_comparisons USING btree (org_id, register_id, compared_at);
+
+
+--
+-- Name: payroll_parallel_findings_cell; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE UNIQUE INDEX payroll_parallel_findings_cell ON public.payroll_parallel_findings USING btree (comparison_id, employee_party_id, kind, slot);
+
+
+--
+-- Name: payroll_parallel_findings_class; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX payroll_parallel_findings_class ON public.payroll_parallel_findings USING btree (org_id, comparison_id, classification);
+
+
+--
+-- Name: payroll_parallel_findings_comparison; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX payroll_parallel_findings_comparison ON public.payroll_parallel_findings USING btree (comparison_id, sequence);
+
+
+--
+-- Name: payroll_parallel_tolerances_org_slot; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE UNIQUE INDEX payroll_parallel_tolerances_org_slot ON public.payroll_parallel_tolerances USING btree (org_id, kind, slot);
+
+
+--
+-- Name: payroll_prior_amounts_org_slot; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX payroll_prior_amounts_org_slot ON public.payroll_prior_amounts USING btree (org_id, slot);
+
+
+--
+-- Name: payroll_prior_amounts_stub_slot; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE UNIQUE INDEX payroll_prior_amounts_stub_slot ON public.payroll_prior_amounts USING btree (prior_stub_id, kind, slot);
+
+
+--
+-- Name: payroll_prior_registers_org_name; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE UNIQUE INDEX payroll_prior_registers_org_name ON public.payroll_prior_registers USING btree (org_id, name);
+
+
+--
+-- Name: payroll_prior_registers_period; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX payroll_prior_registers_period ON public.payroll_prior_registers USING btree (org_id, period_end, pay_date);
+
+
+--
+-- Name: payroll_prior_stubs_org_employee; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX payroll_prior_stubs_org_employee ON public.payroll_prior_stubs USING btree (org_id, employee_party_id);
+
+
+--
+-- Name: payroll_prior_stubs_register_employee; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE UNIQUE INDEX payroll_prior_stubs_register_employee ON public.payroll_prior_stubs USING btree (register_id, employee_party_id);
+
+
+--
+-- Name: payroll_statutory_rates_account; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX payroll_statutory_rates_account ON public.payroll_statutory_rates USING btree (org_id, filing_account_id);
+
+
+--
+-- Name: payroll_statutory_rates_org_point; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE UNIQUE INDEX payroll_statutory_rates_org_point ON public.payroll_statutory_rates USING btree (org_id, country, rate_key, tax_year, COALESCE(region, ''::text), COALESCE(filing_account_id, '00000000-0000-0000-0000-000000000000'::uuid));
+
+
+--
+-- Name: payroll_statutory_rates_org_year; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX payroll_statutory_rates_org_year ON public.payroll_statutory_rates USING btree (org_id, country, tax_year);
 
 
 --
@@ -35362,6 +35820,46 @@ ALTER TABLE ONLY public.payroll_holidays
 
 
 --
+-- Name: payroll_opening_balance_components payroll_opening_balance_components_component_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.payroll_opening_balance_components
+    ADD CONSTRAINT payroll_opening_balance_components_component_id_fkey FOREIGN KEY (component_id) REFERENCES public.pay_components(id) ON DELETE RESTRICT DEFERRABLE;
+
+
+--
+-- Name: payroll_opening_balance_components payroll_opening_balance_components_created_by_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.payroll_opening_balance_components
+    ADD CONSTRAINT payroll_opening_balance_components_created_by_fkey FOREIGN KEY (created_by) REFERENCES public.users(id) ON DELETE SET NULL DEFERRABLE;
+
+
+--
+-- Name: payroll_opening_balance_components payroll_opening_balance_components_opening_balance_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.payroll_opening_balance_components
+    ADD CONSTRAINT payroll_opening_balance_components_opening_balance_id_fkey FOREIGN KEY (opening_balance_id) REFERENCES public.payroll_opening_balances(id) ON DELETE CASCADE DEFERRABLE;
+
+
+--
+-- Name: payroll_opening_balance_components payroll_opening_balance_components_org_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.payroll_opening_balance_components
+    ADD CONSTRAINT payroll_opening_balance_components_org_id_fkey FOREIGN KEY (org_id) REFERENCES public.orgs(id) ON DELETE CASCADE DEFERRABLE;
+
+
+--
+-- Name: payroll_opening_balance_components payroll_opening_balance_components_updated_by_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.payroll_opening_balance_components
+    ADD CONSTRAINT payroll_opening_balance_components_updated_by_fkey FOREIGN KEY (updated_by) REFERENCES public.users(id) ON DELETE SET NULL DEFERRABLE;
+
+
+--
 -- Name: payroll_opening_balances payroll_opening_balances_created_by_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -35391,6 +35889,246 @@ ALTER TABLE ONLY public.payroll_opening_balances
 
 ALTER TABLE ONLY public.payroll_opening_balances
     ADD CONSTRAINT payroll_opening_balances_updated_by_fkey FOREIGN KEY (updated_by) REFERENCES public.users(id) ON DELETE SET NULL DEFERRABLE;
+
+
+--
+-- Name: payroll_parallel_comparisons payroll_parallel_comparisons_created_by_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.payroll_parallel_comparisons
+    ADD CONSTRAINT payroll_parallel_comparisons_created_by_fkey FOREIGN KEY (created_by) REFERENCES public.users(id) ON DELETE SET NULL DEFERRABLE;
+
+
+--
+-- Name: payroll_parallel_comparisons payroll_parallel_comparisons_org_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.payroll_parallel_comparisons
+    ADD CONSTRAINT payroll_parallel_comparisons_org_id_fkey FOREIGN KEY (org_id) REFERENCES public.orgs(id) ON DELETE CASCADE DEFERRABLE;
+
+
+--
+-- Name: payroll_parallel_comparisons payroll_parallel_comparisons_pay_run_document_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.payroll_parallel_comparisons
+    ADD CONSTRAINT payroll_parallel_comparisons_pay_run_document_id_fkey FOREIGN KEY (pay_run_document_id) REFERENCES public.documents(id) ON DELETE CASCADE DEFERRABLE;
+
+
+--
+-- Name: payroll_parallel_comparisons payroll_parallel_comparisons_register_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.payroll_parallel_comparisons
+    ADD CONSTRAINT payroll_parallel_comparisons_register_id_fkey FOREIGN KEY (register_id) REFERENCES public.payroll_prior_registers(id) ON DELETE CASCADE DEFERRABLE;
+
+
+--
+-- Name: payroll_parallel_comparisons payroll_parallel_comparisons_updated_by_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.payroll_parallel_comparisons
+    ADD CONSTRAINT payroll_parallel_comparisons_updated_by_fkey FOREIGN KEY (updated_by) REFERENCES public.users(id) ON DELETE SET NULL DEFERRABLE;
+
+
+--
+-- Name: payroll_parallel_findings payroll_parallel_findings_comparison_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.payroll_parallel_findings
+    ADD CONSTRAINT payroll_parallel_findings_comparison_id_fkey FOREIGN KEY (comparison_id) REFERENCES public.payroll_parallel_comparisons(id) ON DELETE CASCADE DEFERRABLE;
+
+
+--
+-- Name: payroll_parallel_findings payroll_parallel_findings_created_by_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.payroll_parallel_findings
+    ADD CONSTRAINT payroll_parallel_findings_created_by_fkey FOREIGN KEY (created_by) REFERENCES public.users(id) ON DELETE SET NULL DEFERRABLE;
+
+
+--
+-- Name: payroll_parallel_findings payroll_parallel_findings_employee_party_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.payroll_parallel_findings
+    ADD CONSTRAINT payroll_parallel_findings_employee_party_id_fkey FOREIGN KEY (employee_party_id) REFERENCES public.parties(id) ON DELETE CASCADE DEFERRABLE;
+
+
+--
+-- Name: payroll_parallel_findings payroll_parallel_findings_org_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.payroll_parallel_findings
+    ADD CONSTRAINT payroll_parallel_findings_org_id_fkey FOREIGN KEY (org_id) REFERENCES public.orgs(id) ON DELETE CASCADE DEFERRABLE;
+
+
+--
+-- Name: payroll_parallel_findings payroll_parallel_findings_updated_by_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.payroll_parallel_findings
+    ADD CONSTRAINT payroll_parallel_findings_updated_by_fkey FOREIGN KEY (updated_by) REFERENCES public.users(id) ON DELETE SET NULL DEFERRABLE;
+
+
+--
+-- Name: payroll_parallel_tolerances payroll_parallel_tolerances_created_by_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.payroll_parallel_tolerances
+    ADD CONSTRAINT payroll_parallel_tolerances_created_by_fkey FOREIGN KEY (created_by) REFERENCES public.users(id) ON DELETE SET NULL DEFERRABLE;
+
+
+--
+-- Name: payroll_parallel_tolerances payroll_parallel_tolerances_org_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.payroll_parallel_tolerances
+    ADD CONSTRAINT payroll_parallel_tolerances_org_id_fkey FOREIGN KEY (org_id) REFERENCES public.orgs(id) ON DELETE CASCADE DEFERRABLE;
+
+
+--
+-- Name: payroll_parallel_tolerances payroll_parallel_tolerances_updated_by_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.payroll_parallel_tolerances
+    ADD CONSTRAINT payroll_parallel_tolerances_updated_by_fkey FOREIGN KEY (updated_by) REFERENCES public.users(id) ON DELETE SET NULL DEFERRABLE;
+
+
+--
+-- Name: payroll_prior_amounts payroll_prior_amounts_component_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.payroll_prior_amounts
+    ADD CONSTRAINT payroll_prior_amounts_component_id_fkey FOREIGN KEY (component_id) REFERENCES public.pay_components(id) ON DELETE RESTRICT DEFERRABLE;
+
+
+--
+-- Name: payroll_prior_amounts payroll_prior_amounts_created_by_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.payroll_prior_amounts
+    ADD CONSTRAINT payroll_prior_amounts_created_by_fkey FOREIGN KEY (created_by) REFERENCES public.users(id) ON DELETE SET NULL DEFERRABLE;
+
+
+--
+-- Name: payroll_prior_amounts payroll_prior_amounts_org_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.payroll_prior_amounts
+    ADD CONSTRAINT payroll_prior_amounts_org_id_fkey FOREIGN KEY (org_id) REFERENCES public.orgs(id) ON DELETE CASCADE DEFERRABLE;
+
+
+--
+-- Name: payroll_prior_amounts payroll_prior_amounts_prior_stub_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.payroll_prior_amounts
+    ADD CONSTRAINT payroll_prior_amounts_prior_stub_id_fkey FOREIGN KEY (prior_stub_id) REFERENCES public.payroll_prior_stubs(id) ON DELETE CASCADE DEFERRABLE;
+
+
+--
+-- Name: payroll_prior_amounts payroll_prior_amounts_updated_by_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.payroll_prior_amounts
+    ADD CONSTRAINT payroll_prior_amounts_updated_by_fkey FOREIGN KEY (updated_by) REFERENCES public.users(id) ON DELETE SET NULL DEFERRABLE;
+
+
+--
+-- Name: payroll_prior_registers payroll_prior_registers_created_by_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.payroll_prior_registers
+    ADD CONSTRAINT payroll_prior_registers_created_by_fkey FOREIGN KEY (created_by) REFERENCES public.users(id) ON DELETE SET NULL DEFERRABLE;
+
+
+--
+-- Name: payroll_prior_registers payroll_prior_registers_org_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.payroll_prior_registers
+    ADD CONSTRAINT payroll_prior_registers_org_id_fkey FOREIGN KEY (org_id) REFERENCES public.orgs(id) ON DELETE CASCADE DEFERRABLE;
+
+
+--
+-- Name: payroll_prior_registers payroll_prior_registers_updated_by_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.payroll_prior_registers
+    ADD CONSTRAINT payroll_prior_registers_updated_by_fkey FOREIGN KEY (updated_by) REFERENCES public.users(id) ON DELETE SET NULL DEFERRABLE;
+
+
+--
+-- Name: payroll_prior_stubs payroll_prior_stubs_created_by_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.payroll_prior_stubs
+    ADD CONSTRAINT payroll_prior_stubs_created_by_fkey FOREIGN KEY (created_by) REFERENCES public.users(id) ON DELETE SET NULL DEFERRABLE;
+
+
+--
+-- Name: payroll_prior_stubs payroll_prior_stubs_employee_party_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.payroll_prior_stubs
+    ADD CONSTRAINT payroll_prior_stubs_employee_party_id_fkey FOREIGN KEY (employee_party_id) REFERENCES public.parties(id) ON DELETE CASCADE DEFERRABLE;
+
+
+--
+-- Name: payroll_prior_stubs payroll_prior_stubs_org_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.payroll_prior_stubs
+    ADD CONSTRAINT payroll_prior_stubs_org_id_fkey FOREIGN KEY (org_id) REFERENCES public.orgs(id) ON DELETE CASCADE DEFERRABLE;
+
+
+--
+-- Name: payroll_prior_stubs payroll_prior_stubs_register_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.payroll_prior_stubs
+    ADD CONSTRAINT payroll_prior_stubs_register_id_fkey FOREIGN KEY (register_id) REFERENCES public.payroll_prior_registers(id) ON DELETE CASCADE DEFERRABLE;
+
+
+--
+-- Name: payroll_prior_stubs payroll_prior_stubs_updated_by_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.payroll_prior_stubs
+    ADD CONSTRAINT payroll_prior_stubs_updated_by_fkey FOREIGN KEY (updated_by) REFERENCES public.users(id) ON DELETE SET NULL DEFERRABLE;
+
+
+--
+-- Name: payroll_statutory_rates payroll_statutory_rates_created_by_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.payroll_statutory_rates
+    ADD CONSTRAINT payroll_statutory_rates_created_by_fkey FOREIGN KEY (created_by) REFERENCES public.users(id) ON DELETE SET NULL DEFERRABLE;
+
+
+--
+-- Name: payroll_statutory_rates payroll_statutory_rates_filing_account_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.payroll_statutory_rates
+    ADD CONSTRAINT payroll_statutory_rates_filing_account_id_fkey FOREIGN KEY (filing_account_id) REFERENCES public.payroll_filing_accounts(id) ON DELETE CASCADE DEFERRABLE;
+
+
+--
+-- Name: payroll_statutory_rates payroll_statutory_rates_org_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.payroll_statutory_rates
+    ADD CONSTRAINT payroll_statutory_rates_org_id_fkey FOREIGN KEY (org_id) REFERENCES public.orgs(id) ON DELETE CASCADE DEFERRABLE;
+
+
+--
+-- Name: payroll_statutory_rates payroll_statutory_rates_updated_by_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.payroll_statutory_rates
+    ADD CONSTRAINT payroll_statutory_rates_updated_by_fkey FOREIGN KEY (updated_by) REFERENCES public.users(id) ON DELETE SET NULL DEFERRABLE;
 
 
 --
@@ -41950,6 +42688,20 @@ COMMENT ON POLICY org_isolation ON public.payroll_holidays IS 'openbooks:org_iso
 
 
 --
+-- Name: payroll_opening_balance_components org_isolation; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY org_isolation ON public.payroll_opening_balance_components USING (((current_setting('app.bypass_rls'::text, true) = 'on'::text) OR ((org_id)::text = current_setting('app.current_org'::text, true)))) WITH CHECK (((current_setting('app.bypass_rls'::text, true) = 'on'::text) OR ((org_id)::text = current_setting('app.current_org'::text, true))));
+
+
+--
+-- Name: POLICY org_isolation ON payroll_opening_balance_components; Type: COMMENT; Schema: public; Owner: -
+--
+
+COMMENT ON POLICY org_isolation ON public.payroll_opening_balance_components IS 'openbooks:org_isolation:v1';
+
+
+--
 -- Name: payroll_opening_balances org_isolation; Type: POLICY; Schema: public; Owner: -
 --
 
@@ -41961,6 +42713,104 @@ CREATE POLICY org_isolation ON public.payroll_opening_balances USING (((current_
 --
 
 COMMENT ON POLICY org_isolation ON public.payroll_opening_balances IS 'openbooks:org_isolation:v1';
+
+
+--
+-- Name: payroll_parallel_comparisons org_isolation; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY org_isolation ON public.payroll_parallel_comparisons USING (((current_setting('app.bypass_rls'::text, true) = 'on'::text) OR ((org_id)::text = current_setting('app.current_org'::text, true)))) WITH CHECK (((current_setting('app.bypass_rls'::text, true) = 'on'::text) OR ((org_id)::text = current_setting('app.current_org'::text, true))));
+
+
+--
+-- Name: POLICY org_isolation ON payroll_parallel_comparisons; Type: COMMENT; Schema: public; Owner: -
+--
+
+COMMENT ON POLICY org_isolation ON public.payroll_parallel_comparisons IS 'openbooks:org_isolation:v1';
+
+
+--
+-- Name: payroll_parallel_findings org_isolation; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY org_isolation ON public.payroll_parallel_findings USING (((current_setting('app.bypass_rls'::text, true) = 'on'::text) OR ((org_id)::text = current_setting('app.current_org'::text, true)))) WITH CHECK (((current_setting('app.bypass_rls'::text, true) = 'on'::text) OR ((org_id)::text = current_setting('app.current_org'::text, true))));
+
+
+--
+-- Name: POLICY org_isolation ON payroll_parallel_findings; Type: COMMENT; Schema: public; Owner: -
+--
+
+COMMENT ON POLICY org_isolation ON public.payroll_parallel_findings IS 'openbooks:org_isolation:v1';
+
+
+--
+-- Name: payroll_parallel_tolerances org_isolation; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY org_isolation ON public.payroll_parallel_tolerances USING (((current_setting('app.bypass_rls'::text, true) = 'on'::text) OR ((org_id)::text = current_setting('app.current_org'::text, true)))) WITH CHECK (((current_setting('app.bypass_rls'::text, true) = 'on'::text) OR ((org_id)::text = current_setting('app.current_org'::text, true))));
+
+
+--
+-- Name: POLICY org_isolation ON payroll_parallel_tolerances; Type: COMMENT; Schema: public; Owner: -
+--
+
+COMMENT ON POLICY org_isolation ON public.payroll_parallel_tolerances IS 'openbooks:org_isolation:v1';
+
+
+--
+-- Name: payroll_prior_amounts org_isolation; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY org_isolation ON public.payroll_prior_amounts USING (((current_setting('app.bypass_rls'::text, true) = 'on'::text) OR ((org_id)::text = current_setting('app.current_org'::text, true)))) WITH CHECK (((current_setting('app.bypass_rls'::text, true) = 'on'::text) OR ((org_id)::text = current_setting('app.current_org'::text, true))));
+
+
+--
+-- Name: POLICY org_isolation ON payroll_prior_amounts; Type: COMMENT; Schema: public; Owner: -
+--
+
+COMMENT ON POLICY org_isolation ON public.payroll_prior_amounts IS 'openbooks:org_isolation:v1';
+
+
+--
+-- Name: payroll_prior_registers org_isolation; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY org_isolation ON public.payroll_prior_registers USING (((current_setting('app.bypass_rls'::text, true) = 'on'::text) OR ((org_id)::text = current_setting('app.current_org'::text, true)))) WITH CHECK (((current_setting('app.bypass_rls'::text, true) = 'on'::text) OR ((org_id)::text = current_setting('app.current_org'::text, true))));
+
+
+--
+-- Name: POLICY org_isolation ON payroll_prior_registers; Type: COMMENT; Schema: public; Owner: -
+--
+
+COMMENT ON POLICY org_isolation ON public.payroll_prior_registers IS 'openbooks:org_isolation:v1';
+
+
+--
+-- Name: payroll_prior_stubs org_isolation; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY org_isolation ON public.payroll_prior_stubs USING (((current_setting('app.bypass_rls'::text, true) = 'on'::text) OR ((org_id)::text = current_setting('app.current_org'::text, true)))) WITH CHECK (((current_setting('app.bypass_rls'::text, true) = 'on'::text) OR ((org_id)::text = current_setting('app.current_org'::text, true))));
+
+
+--
+-- Name: POLICY org_isolation ON payroll_prior_stubs; Type: COMMENT; Schema: public; Owner: -
+--
+
+COMMENT ON POLICY org_isolation ON public.payroll_prior_stubs IS 'openbooks:org_isolation:v1';
+
+
+--
+-- Name: payroll_statutory_rates org_isolation; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY org_isolation ON public.payroll_statutory_rates USING (((current_setting('app.bypass_rls'::text, true) = 'on'::text) OR ((org_id)::text = current_setting('app.current_org'::text, true)))) WITH CHECK (((current_setting('app.bypass_rls'::text, true) = 'on'::text) OR ((org_id)::text = current_setting('app.current_org'::text, true))));
+
+
+--
+-- Name: POLICY org_isolation ON payroll_statutory_rates; Type: COMMENT; Schema: public; Owner: -
+--
+
+COMMENT ON POLICY org_isolation ON public.payroll_statutory_rates IS 'openbooks:org_isolation:v1';
 
 
 --
@@ -43768,10 +44618,58 @@ ALTER TABLE public.payroll_filing_accounts ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.payroll_holidays ENABLE ROW LEVEL SECURITY;
 
 --
+-- Name: payroll_opening_balance_components; Type: ROW SECURITY; Schema: public; Owner: -
+--
+
+ALTER TABLE public.payroll_opening_balance_components ENABLE ROW LEVEL SECURITY;
+
+--
 -- Name: payroll_opening_balances; Type: ROW SECURITY; Schema: public; Owner: -
 --
 
 ALTER TABLE public.payroll_opening_balances ENABLE ROW LEVEL SECURITY;
+
+--
+-- Name: payroll_parallel_comparisons; Type: ROW SECURITY; Schema: public; Owner: -
+--
+
+ALTER TABLE public.payroll_parallel_comparisons ENABLE ROW LEVEL SECURITY;
+
+--
+-- Name: payroll_parallel_findings; Type: ROW SECURITY; Schema: public; Owner: -
+--
+
+ALTER TABLE public.payroll_parallel_findings ENABLE ROW LEVEL SECURITY;
+
+--
+-- Name: payroll_parallel_tolerances; Type: ROW SECURITY; Schema: public; Owner: -
+--
+
+ALTER TABLE public.payroll_parallel_tolerances ENABLE ROW LEVEL SECURITY;
+
+--
+-- Name: payroll_prior_amounts; Type: ROW SECURITY; Schema: public; Owner: -
+--
+
+ALTER TABLE public.payroll_prior_amounts ENABLE ROW LEVEL SECURITY;
+
+--
+-- Name: payroll_prior_registers; Type: ROW SECURITY; Schema: public; Owner: -
+--
+
+ALTER TABLE public.payroll_prior_registers ENABLE ROW LEVEL SECURITY;
+
+--
+-- Name: payroll_prior_stubs; Type: ROW SECURITY; Schema: public; Owner: -
+--
+
+ALTER TABLE public.payroll_prior_stubs ENABLE ROW LEVEL SECURITY;
+
+--
+-- Name: payroll_statutory_rates; Type: ROW SECURITY; Schema: public; Owner: -
+--
+
+ALTER TABLE public.payroll_statutory_rates ENABLE ROW LEVEL SECURITY;
 
 --
 -- Name: pdf_templates; Type: ROW SECURITY; Schema: public; Owner: -
@@ -45614,6 +46512,13 @@ GRANT SELECT ON TABLE openbooks_query.payroll_filing_accounts TO openbooks_read;
 --
 
 GRANT SELECT ON TABLE openbooks_query.payroll_holidays TO openbooks_read;
+
+
+--
+-- Name: TABLE payroll_opening_balance_components; Type: ACL; Schema: openbooks_query; Owner: -
+--
+
+GRANT SELECT ON TABLE openbooks_query.payroll_opening_balance_components TO openbooks_read;
 
 
 --

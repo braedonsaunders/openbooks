@@ -161,6 +161,15 @@ export const journalLines = pgTable(
     index("jl_org_sub_account").on(t.orgId, t.subsidiaryId, t.accountId),
     index("jl_org_project").on(t.orgId, t.projectId),
     index("jl_org_party_open").on(t.orgId, t.partyId, t.isOpenItem),
+    /**
+     * "Has this org ever posted foreign currency?" — the multi-currency
+     * feature default probes this on every request. Partial, so it is empty
+     * for a single-currency tenant and answers the negative case instantly
+     * instead of scanning every line to prove none exist.
+     */
+    index("jl_org_foreign_currency")
+      .on(t.orgId)
+      .where(sql`${t.fxRate} <> 1`),
     check("jl_nonzero", sql`${t.amount} <> 0`),
   ],
 );

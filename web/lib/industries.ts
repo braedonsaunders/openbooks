@@ -781,9 +781,14 @@ export const INDUSTRY_CATEGORIES = [
 export async function canSwitchIndustry(orgId: string): Promise<boolean> {
   const { db } = await import('@openbooks/engine/src/db.ts')
   const { sql } = await import('drizzle-orm')
+  // "Has this org posted anything yet?" — an existence probe that stops at the
+  // first row. Counting every journal line to compare against zero cost ~300ms
+  // on a multi-million-line tenant.
   const r = (await db.execute(sql`
-    select count(*)::int as n from journal_lines where org_id = ${orgId}`)) as unknown as {
-    rows: { n: number }[]
+    select exists (
+      select 1 from journal_lines where org_id = ${orgId} limit 1
+    ) as posted`)) as unknown as {
+    rows: { posted: boolean }[]
   }
-  return (r.rows[0]?.n ?? 0) === 0
+  return !(r.rows[0]?.posted ?? false)
 }

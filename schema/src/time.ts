@@ -32,6 +32,32 @@ export const timeEntries = pgTable(
     employeePartyId: uuid("employee_party_id").notNull(),
     workedOn: date("worked_on").notNull(),
     hours: money("hours").notNull(),
+    /**
+     * When the work on this entry STARTED, if the capture surface knows.
+     *
+     * The ordering fact, and nothing else. Several derived earnings are costed
+     * to "the first job of the day" (travel pay:
+     * engine/src/payroll-derived-earnings.ts), and with only `worked_on` to go
+     * on "first" could be resolved from nothing better than the order the rows
+     * were captured in — so a field app that uploads a day's rows out of order,
+     * or a crew sheet keyed in job-by-job, costed travel to the wrong job with
+     * no way to tell.
+     *
+     * NULLABLE deliberately: every row written before this column existed has
+     * no clock time and must keep working, so the resolver prefers `started_at`
+     * and falls back to capture order (`created_at`, then `id`) only where it is
+     * null. It is never used to re-derive which DAY the work belongs to —
+     * `worked_on` owns that, and a night shift crossing midnight would make any
+     * derivation of it wrong.
+     *
+     * There is deliberately no `ended_at`. `hours` is the single source of truth
+     * for duration — it is what payroll pays and what job costing costs — and an
+     * `ended_at` that no code reads would be a second, unenforced answer to
+     * "how long was this?" that could disagree with it. When a feature actually
+     * needs the close of the shift (rest-period compliance, shift
+     * differentials), it arrives with the check that keeps the two consistent.
+     */
+    startedAt: timestamp("started_at", { withTimezone: true }),
     timeTypeId: uuid("time_type_id"),
     itemId: uuid("item_id"), // billable service item
     projectId: uuid("project_id"),

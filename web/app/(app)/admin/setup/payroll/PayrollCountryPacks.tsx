@@ -1,6 +1,6 @@
 'use client'
 
-import { useMemo, useState } from 'react'
+import { useCallback, useMemo, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { useLocale, useTranslations } from 'next-intl'
 import { toast } from 'sonner'
@@ -22,27 +22,53 @@ import {
  * many rather than the module's identity. Installing seeds the statutory
  * component set and records the pack in orgs.settings.payroll.
  */
+/** One pack's declared statutory-table coverage (engine/src/payroll/tax-years.ts). */
+export interface PackCoverage {
+  country: string
+  supported: number[]
+  draft: number[]
+  ratesModule: string
+  editions: {
+    year: number
+    label: string
+    effectiveFrom: string
+    status: string
+    region: string | null
+  }[]
+}
+
 export function PayrollCountryPacks({
   installedCountries,
   componentCount,
-  editions,
+  coverage,
 }: {
   installedCountries: string[]
   componentCount: number
-  editions: { edition: number; effectiveFrom: string }[]
+  coverage: PackCoverage[]
 }) {
   const t = useTranslations('payroll.settingsPage.packs')
+  // New keys ship with the handoff's message block; until it lands the strings
+  // read as written rather than as a raw key path.
+  const label = (key: string, fallback: string) => (t.has(key as never) ? t(key as never) : fallback)
   const locale = useLocale()
   const router = useRouter()
   const [busy, setBusy] = useState<string | null>(null)
   const [installed, setInstalled] = useState<Set<string>>(() => new Set(installedCountries))
 
-  const editionLabels = useMemo(() => {
-    const monthYear = new Intl.DateTimeFormat(locale, { month: 'short', year: 'numeric', timeZone: 'UTC' })
-    return editions.map((e) =>
-      t('canada.edition', { edition: e.edition, effective: monthYear.format(new Date(`${e.effectiveFrom}T00:00:00Z`)) }),
-    )
-  }, [editions, locale, t])
+  // Edition names are the agencies' own proper nouns, taken from the pack
+  // declaration — never a list of countries this component knows about.
+  const monthYear = useMemo(
+    () => new Intl.DateTimeFormat(locale, { month: 'short', year: 'numeric', timeZone: 'UTC' }),
+    [locale],
+  )
+  const editionLabels = useCallback(
+    (country: string) =>
+      (coverage.find((entry) => entry.country === country)?.editions ?? [])
+        .filter((edition) => edition.region === null)
+        .map((edition) =>
+          `${edition.label} (${monthYear.format(new Date(`${edition.effectiveFrom}T00:00:00Z`))})`),
+    [coverage, monthYear],
+  )
 
   async function install(country: 'CA' | 'US') {
     setBusy(country)
@@ -93,6 +119,39 @@ export function PayrollCountryPacks({
     } finally {
       setBusy(null)
     }
+  }
+
+  /**
+   * The years the pack's statutory tables are actually loaded for, and any year
+   * that is scaffolded but not transcribed. Shown ON the pack card because
+   * "which country do we run?" and "can we pay in January?" are the same
+   * question, and the second one used to have no answer anywhere in the UI.
+   */
+  const coverageLine = (country: string) => {
+    const entry = coverage.find((candidate) => candidate.country === country)
+    if (!entry) return null
+    return (
+      <span className="flex flex-wrap items-center gap-1">
+        <span>{label('taxYears', 'Statutory tables loaded for')}</span>
+        {entry.supported.map((year) => (
+          <Badge key={year} variant="success">{year}</Badge>
+        ))}
+        {entry.draft.map((year) => (
+          <Badge key={year} variant="warning">
+            {t.has('taxYearDraft' as never)
+              ? (t as unknown as (key: string, values: Record<string, unknown>) => string)(
+                  'taxYearDraft', { year },
+                )
+              : `${year} · scaffolded, not transcribed`}
+          </Badge>
+        ))}
+        {entry.supported.length === 0 && entry.draft.length === 0 ? (
+          <Badge variant="destructive">
+            {label('taxYearNone', 'no statutory tables loaded')}
+          </Badge>
+        ) : null}
+      </span>
+    )
   }
 
   const packCard = (country: 'CA' | 'US', packKey: 'canada' | 'us', bullets: React.ReactNode[]) => {
@@ -159,14 +218,19 @@ export function PayrollCountryPacks({
         {packCard('CA', 'canada', [
           <span key="engine">
             {t('canada.engine')}{' '}
-            <span className="text-slate-500 dark:text-slate-400">{editionLabels.join(' + ')}</span>
+            <span className="text-slate-500 dark:text-slate-400">{editionLabels('CA').join(' + ')}</span>
           </span>,
+          coverageLine('CA'),
           t('canada.coverage'),
           t('canada.components'),
           t('canada.verified'),
         ])}
         {packCard('US', 'us', [
-          t('us.engine'),
+          <span key="engine">
+            {t('us.engine')}{' '}
+            <span className="text-slate-500 dark:text-slate-400">{editionLabels('US').join(' + ')}</span>
+          </span>,
+          coverageLine('US'),
           t('us.coverage'),
           t('us.components'),
           t('us.config'),

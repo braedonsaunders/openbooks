@@ -343,7 +343,12 @@ export function PayrollOnboardingWizard(props: {
       : (check.detail ?? '')
     return tPayroll.has(`wizard.readiness.codes.${check.code}` as never)
       ? tPayroll(`wizard.readiness.codes.${check.code}`, { count: 0, detail })
-      : check.code
+      // The statutory-table and statutory-rate checks compose a complete
+      // sentence in `detail` from the pack's own declaration (the year and pack
+      // whose tables are missing, the levy and region nobody configured), so
+      // showing it beats showing a raw code on the screen that decides whether
+      // payroll is safe to run.
+      : (detail || check.code)
   }
   const accountPicker = (
     id: string,

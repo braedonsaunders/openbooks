@@ -62,6 +62,13 @@ interface SaveBody {
   rows?: unknown
 }
 
+/** Component openings arrive keyed by component id (or code); values are text. */
+function componentAmounts(raw: unknown): Record<string, unknown> | undefined {
+  if (raw === undefined || raw === null) return undefined
+  if (typeof raw !== 'object' || Array.isArray(raw)) return undefined
+  return raw as Record<string, unknown>
+}
+
 export async function POST(req: Request) {
   const gate = await guardFeaturePermission('payroll.manage', 'payroll')
   if (gate instanceof NextResponse) return gate
@@ -78,13 +85,16 @@ export async function POST(req: Request) {
 
   const rows: OpeningBalanceWrite[] = []
   for (const raw of body.rows) {
-    const row = raw as { employeePartyId?: unknown; amounts?: unknown }
+    const row = raw as { employeePartyId?: unknown; amounts?: unknown; components?: unknown }
     if (typeof row?.employeePartyId !== 'string' || !isUuid(row.employeePartyId)) {
       return NextResponse.json({ error: 'each row needs a valid employeePartyId' }, { status: 422 })
     }
     rows.push({
       employeePartyId: row.employeePartyId,
       amounts: (row.amounts ?? {}) as Record<string, unknown>,
+      // Absent means "this client does not speak components", which the service
+      // treats as "keep what is stored". Sending {} is how the grid clears them.
+      components: componentAmounts(row.components),
     })
   }
 
