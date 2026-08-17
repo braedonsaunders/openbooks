@@ -10,12 +10,21 @@ import { DEFAULT_LOCALE, isLocale, type Locale } from "../i18n/config";
  * The active locale for this request: the user's personal choice
  * (users.locale) when set, else the tenant default (orgs.settings.defaultLocale),
  * else English. Unauthenticated requests (login page) get the tenant default
- * of the install's org. Cached per request — the i18n request config and the
- * account menu both ask.
+ * of the install's org, and so do callers with no request scope at all
+ * (background agents, harness scripts), where cookies() throws. Cached per
+ * request — the i18n request config and the account menu both ask.
  */
 export const resolveLocale = cache(async (): Promise<Locale> => {
-  const jar = await cookies();
-  const uid = (await validateSessionToken(jar.get(SESSION_COOKIE)?.value))?.userId;
+  // cookies() throws synchronously when there is no request store.
+  let jar: Awaited<ReturnType<typeof cookies>> | null = null;
+  try {
+    jar = await cookies();
+  } catch {
+    jar = null;
+  }
+  const uid = jar
+    ? (await validateSessionToken(jar.get(SESSION_COOKIE)?.value))?.userId
+    : null;
 
   if (uid) {
     const r = await withBypassContext(async () => (await db.execute(sql`
