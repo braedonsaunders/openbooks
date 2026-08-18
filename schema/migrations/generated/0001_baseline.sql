@@ -2360,6 +2360,43 @@ $$;
 
 
 --
+-- Name: openbooks_je_cascade_posting_date(); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.openbooks_je_cascade_posting_date() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+begin
+  if coalesce(current_setting('openbooks.sandbox_wipe', true), 'off') = 'on' then
+    return null;
+  end if;
+  update journal_lines
+     set posting_date = new.posting_date
+   where entry_id = new.id
+     and posting_date is distinct from new.posting_date;
+  return null;
+end $$;
+
+
+--
+-- Name: openbooks_jl_stamp_posting_date(); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.openbooks_jl_stamp_posting_date() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+declare
+  v_date date;
+begin
+  select posting_date into v_date from journal_entries where id = new.entry_id;
+  -- A bulk copy may insert lines before their entry; the entry-side trigger
+  -- fills those in when it arrives.
+  new.posting_date := v_date;
+  return new;
+end $$;
+
+
+--
 -- Name: openbooks_guard_ap_capture_evidence(); Type: FUNCTION; Schema: public; Owner: -
 --
 
@@ -9360,6 +9397,22 @@ CREATE VIEW openbooks_query.fx_rates WITH (security_barrier='true') AS
 
 
 --
+-- Name: gl_month_activity; Type: VIEW; Schema: openbooks_query; Owner: -
+--
+
+CREATE VIEW openbooks_query.gl_month_activity WITH (security_barrier='true') AS
+ SELECT org_id,
+    account_id,
+    month,
+    subsidiary_id,
+    debit_total,
+    credit_total,
+    line_count
+   FROM public.gl_month_activity
+  WHERE (org_id = public.openbooks_query_org_id());
+
+
+--
 -- Name: gl_month_activity; Type: TABLE; Schema: public; Owner: -
 --
 -- Derived GL aggregate: per (org, account, posting month, subsidiary) debit
@@ -10133,6 +10186,7 @@ CREATE TABLE public.journal_lines (
     class_id uuid,
     payment_card_id uuid,
     extra_dims jsonb DEFAULT '{}'::jsonb NOT NULL,
+    posting_date date,
     quantity numeric(19,4),
     unit text,
     due_date date,
@@ -10172,6 +10226,7 @@ CREATE VIEW openbooks_query.journal_lines WITH (security_barrier='true') AS
     class_id,
     payment_card_id,
     extra_dims,
+    posting_date,
     quantity,
     unit,
     due_date,
@@ -26163,6 +26218,22 @@ CREATE INDEX jl_org_foreign_currency ON public.journal_lines USING btree (org_id
 
 
 --
+-- Name: jl_org_account_posting_date; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX jl_org_account_posting_date ON public.journal_lines USING btree (org_id, account_id, posting_date);
+
+
+--
+-- Name: jl_org_posting_date; Type: INDEX; Schema: public; Owner: -
+--
+-- Date-ranged GL reads answered from the line alone, without joining the entry.
+--
+
+CREATE INDEX jl_org_posting_date ON public.journal_lines USING btree (org_id, posting_date);
+
+
+--
 -- Name: jl_org_party_open; Type: INDEX; Schema: public; Owner: -
 --
 
@@ -29394,6 +29465,23 @@ CREATE TRIGGER item_rate_versions_immutable BEFORE DELETE OR UPDATE ON public.it
 --
 
 CREATE TRIGGER item_rate_versions_no_overlap BEFORE INSERT OR UPDATE OF org_id, rate_book_id, effective_from, effective_to, status ON public.item_rate_versions FOR EACH ROW EXECUTE FUNCTION public.item_rate_versions_no_overlap_guard();
+
+
+--
+-- Name: journal_entries je_cascade_posting_date; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER je_cascade_posting_date AFTER INSERT OR UPDATE OF posting_date ON public.journal_entries FOR EACH ROW EXECUTE FUNCTION public.openbooks_je_cascade_posting_date();
+
+
+--
+-- Name: journal_lines jl_a_stamp_posting_date; Type: TRIGGER; Schema: public; Owner: -
+--
+-- Named to sort ahead of jl_check_* / jl_guard so the derived date is present
+-- for every later BEFORE trigger on the row.
+--
+
+CREATE TRIGGER jl_a_stamp_posting_date BEFORE INSERT OR UPDATE OF entry_id ON public.journal_lines FOR EACH ROW EXECUTE FUNCTION public.openbooks_jl_stamp_posting_date();
 
 
 --
@@ -46121,6 +46209,13 @@ GRANT SELECT ON TABLE openbooks_query.fixed_assets TO openbooks_read;
 --
 
 GRANT SELECT ON TABLE openbooks_query.fx_rates TO openbooks_read;
+
+
+--
+-- Name: TABLE gl_month_activity; Type: ACL; Schema: openbooks_query; Owner: -
+--
+
+GRANT SELECT ON TABLE openbooks_query.gl_month_activity TO openbooks_read;
 
 
 --
