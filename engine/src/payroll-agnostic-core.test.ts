@@ -89,6 +89,48 @@ const FREEDONIA: PayrollCountryPack = {
     ratesModule: "engine/src/payroll/freedonia/rates.ts",
     scaffold: { files: [], barrels: [], steps: [] },
   },
+  // Freedonia issues ONE withholding certificate and has no cantonal income
+  // tax at all. Both are REQUIRED members, which is the point: a pack that
+  // stays silent about its certificates or its jurisdictions is a pack whose
+  // answer somebody guessed, and the US pack's declarations sat unregistered
+  // and unreachable for two whole slices precisely because nothing forced it
+  // to say so out loud.
+  certificates: () => ({
+    country: "ZZ",
+    certificates: [{
+      key: "zz_payg_declaration",
+      form: "PAYG-1",
+      label: "Freedonia PAYG declaration",
+      scope: { level: "country" },
+      purpose: "withholding",
+      citation: "Freedonia Revenue Bulletin 2026-1",
+      summary: "Filed on hire; sets the employee's PAYG scale.",
+      storage: "certificate_rows",
+      fields: [{
+        key: "scale", label: "PAYG scale", kind: "choice",
+        choices: [{ value: "A", label: "Scale A" }, { value: "B", label: "Scale B" }],
+        default: "A",
+        help: "Scale A unless the Revenue has written to the employee naming scale B.",
+      }],
+    }],
+  }),
+  // No canton levies income tax, and that is a DECLARATION rather than an
+  // omission: `residentWithholding: "none"` is what makes the resolver
+  // withhold nothing without anybody's engine having to be consulted.
+  withholding: () => ({
+    country: "ZZ",
+    regions: (["Z1", "Z2"] as const).map((region) => ({
+      region,
+      label: `Canton ${region} (no income tax)`,
+      implemented: true,
+      taxesNonresidentWages: false,
+      residentWithholding: "none" as const,
+      residentWithholdingImplemented: true,
+      subRegions: [],
+      subRegionConflictRule: "both" as const,
+      citation: "Freedonia Revenue Bulletin 2026-1: income tax is levied federally",
+    })),
+  }),
   statutorySlots: [
     {
       key: "payg",

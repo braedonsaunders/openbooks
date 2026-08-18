@@ -1,6 +1,6 @@
 import { sql } from "drizzle-orm";
 import {
-  boolean, index, integer, jsonb, pgTable, text, timestamp, uniqueIndex, uuid,
+  boolean, check, index, integer, jsonb, pgTable, text, timestamp, uniqueIndex, uuid,
 } from "drizzle-orm/pg-core";
 import { auditColumns, id, orgRef } from "./helpers";
 
@@ -122,6 +122,16 @@ export const payrollStatutoryRates = pgTable(
     /** Province/state the rate applies in; null only for an org-wide slot. */
     region: text("region"),
     /**
+     * The taxing unit BELOW the region, for a slot the pack declares at
+     * `sub_region` scope — a Pennsylvania Act 32 PSD code, an Ohio
+     * municipality, a Michigan city. Null for every other scope.
+     *
+     * It is part of the uniqueness point below, not merely a label: without it
+     * two municipalities' rates occupy the same scope point and `resolve()`
+     * silently answers with whichever row the planner returns first.
+     */
+    subRegion: text("sub_region"),
+    /**
      * The filing account the rate is assigned to, for a slot the pack declares
      * per account. Null = the region-wide value every account uses, which is
      * what a single-account employer configures.
@@ -140,8 +150,11 @@ export const payrollStatutoryRates = pgTable(
     uniqueIndex("payroll_statutory_rates_org_point").on(
       t.orgId, t.country, t.rateKey, t.taxYear,
       sql`coalesce(region, '')`,
+      sql`coalesce(sub_region, '')`,
       sql`coalesce(filing_account_id, '00000000-0000-0000-0000-000000000000'::uuid)`,
     ),
+    check("payroll_statutory_rates_sub_region",
+      sql`${t.subRegion} is null or ${t.region} is not null`),
     index("payroll_statutory_rates_org_year").on(t.orgId, t.country, t.taxYear),
     index("payroll_statutory_rates_account").on(t.orgId, t.filingAccountId),
   ],

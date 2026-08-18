@@ -546,8 +546,18 @@ export const OH_TAX_YEAR_EDITIONS: readonly PayrollTaxYearEdition[] = [{
   region: "OH",
 }];
 
-/** Which years the Ohio tables are transcribed for. */
-const OH_LOADED_YEARS = new Set([2026]);
+/**
+ * How far the transcription reaches, as DATES rather than years.
+ *
+ * Ohio's editions do not start on 1 January — the current pair took effect on 1
+ * October 2025 and 1 August 2026 — so "which years are loaded" is the wrong
+ * question to gate on. A payroll period ending 31 December 2025 and paid in
+ * January 2026 is covered by the October 2025 tables and must compute; a period
+ * ending in 2027 is not covered by anything here, even though the August 2026
+ * edition has no printed end date, and must refuse.
+ */
+const OH_TRANSCRIBED_FROM = OH_EDITION_2025_10.effectiveFrom;
+const OH_TRANSCRIBED_THROUGH = "2026-12-31";
 
 /**
  * The edition in force for a payroll period ending on `periodEnd`.
@@ -555,16 +565,18 @@ const OH_LOADED_YEARS = new Set([2026]);
  * Selected by the period end date because that is the Department's own trigger.
  */
 export function ohEditionFor(periodEnd: string): OhEdition {
-  const year = Number(periodEnd.slice(0, 4));
-  if (!OH_LOADED_YEARS.has(year)) refuseUntranscribedYear(OH_WITHHOLDING, year);
+  if (periodEnd > OH_TRANSCRIBED_THROUGH) {
+    refuseUntranscribedYear(OH_WITHHOLDING, Number(periodEnd.slice(0, 4)));
+  }
   const edition = OH_EDITIONS.find((candidate) =>
     periodEnd >= candidate.effectiveFrom
     && (candidate.effectiveTo == null || periodEnd < candidate.effectiveTo));
   if (!edition) {
     throw new Error(
-      `no Ohio withholding table is loaded for a payroll period ending ${periodEnd} — the `
-      + "Department revises the tables mid-year and keys each set to the payroll period's END "
-      + `date. Transcribe the set covering ${periodEnd} from tax.ohio.gov into ${RATES_MODULE}.`,
+      `no Ohio withholding table is loaded for a payroll period ending ${periodEnd}. This pack `
+      + `carries the sets effective ${OH_TRANSCRIBED_FROM} onwards; the Department revises them `
+      + "mid-year and keys each set to the payroll period's END date, so an earlier period needs "
+      + `the set that was in force then. Transcribe it from tax.ohio.gov into ${RATES_MODULE}.`,
     );
   }
   return edition;
@@ -702,7 +714,9 @@ function computeOh(input: UsStateWithholdingInput): UsStateWithholdingResult {
   const extra = U(certificateAmount(input.certificate, "additional_per_period") ?? "0");
   return {
     state: "OH",
-    year: Number(periodEnd.slice(0, 4)),
+    // The TAX year is the year of payment, even where the period that earned it
+    // — and therefore the table set — belongs to the year before.
+    year: Number(input.payDate.slice(0, 4)),
     tax: D(U(tax) + extra),
     taxSupplemental: D(0n),
     factors,

@@ -837,16 +837,19 @@
       "scope": {
         "org": "Employer-wide",
         "region": "Per region",
+        "subRegion": "Per taxing jurisdiction",
         "account": "Per filing account"
       },
       "columns": {
         "levy": "Rate",
         "scope": "Scope",
         "region": "Region",
+        "subRegion": "Taxing jurisdiction",
         "account": "Filing account",
         "values": "Values",
         "country": "Country pack"
-      }
+      },
+      "subRegionHelp": "The taxing jurisdiction inside the region — a Pennsylvania PSD code, an Ohio municipality, a Michigan city. Each one sets its own rate, so each one is entered separately; a jurisdiction with no rate on file refuses the pay run by name rather than withholding nothing."
     },
     "workSchedules": {
       "title": "Work schedules",

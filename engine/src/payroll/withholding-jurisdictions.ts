@@ -235,6 +235,35 @@ export interface PayrollPackWithholding {
 
 const BUILT_INS = new Map<string, PayrollPackWithholding>();
 const EXTRA = new Map<string, PayrollPackWithholding>();
+const SOURCES = new Map<string, () => PayrollPackWithholding>();
+
+/**
+ * Register a pack's declaration LAZILY. See
+ * `registerPayrollCertificateSource` — the same arrangement, for the same
+ * module-evaluation reason.
+ */
+export function registerPayrollWithholdingSource(
+  country: string,
+  source: () => PayrollPackWithholding,
+): void {
+  if (!country) {
+    throw new PayrollJurisdictionError("a payroll withholding source must name its country");
+  }
+  SOURCES.set(country, source);
+}
+
+function materializeSources(): void {
+  if (SOURCES.size === 0) return;
+  for (const [country, source] of [...SOURCES]) {
+    if (BUILT_INS.has(country) || EXTRA.has(country)) {
+      SOURCES.delete(country);
+      continue;
+    }
+    const declaration = source();
+    registerPayrollWithholding(declaration, { builtIn: true });
+    SOURCES.delete(country);
+  }
+}
 
 export function registerPayrollWithholding(
   declaration: PayrollPackWithholding,
@@ -283,6 +312,7 @@ export function unregisterPayrollWithholding(country: string): void {
 }
 
 export function declaredPayrollWithholding(): PayrollPackWithholding[] {
+  materializeSources();
   return [...BUILT_INS.values(), ...EXTRA.values()];
 }
 

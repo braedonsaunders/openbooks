@@ -64,6 +64,7 @@ export * from "./income-tax";
 export * from "./auth";
 export * from "./payroll";
 export * from "./payroll-bank-file";
+export * from "./payroll-certificates";
 export * from "./payroll-entitlements";
 export * from "./payroll-filing";
 export * from "./payroll-holidays";
