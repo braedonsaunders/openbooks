@@ -104,6 +104,14 @@ export const documents = pgTable(
     uniqueIndex("documents_org_kind_number").on(t.orgId, t.kind, t.documentNumber),
     index("documents_org_kind_status").on(t.orgId, t.kind, t.status),
     index("documents_party").on(t.partyId),
+    /**
+     * "Does this party have any payable document?" — the cash cockpit asks it
+     * once per party. Partial, so the probe lands on a few thousand rows
+     * instead of walking a party's whole document history.
+     */
+    index("documents_org_party_payable")
+      .on(t.orgId, t.partyId)
+      .where(sql`${t.voidedAt} is null and ${t.kind} in ('vendor_bill', 'vendor_payment', 'check', 'expense_report')`),
     index("documents_project").on(t.projectId),
     check(
       "documents_posted_period_required",
