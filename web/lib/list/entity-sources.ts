@@ -458,7 +458,16 @@ const SOURCES: Record<string, EntityListSource> = {
         paramKey: 'year',
         filterKey: 'fiscal_year',
         loadOptions: async (orgId) => {
-          const result = await db.execute(sql`select distinct fiscal_year::text as value, fiscal_year::text as label from budget_scenarios where org_id=${orgId} order by fiscal_year desc`) as any
+          // GROUP BY, not DISTINCT: ordering a DISTINCT by a column that only
+          // appears cast in the select list is rejected by Postgres, and this
+          // filter never loaded. Grouping also keeps the sort numeric — a text
+          // sort would put 2030 before 999 and 9999 before 10000.
+          const result = await db.execute(sql`
+            select fiscal_year::text as value, fiscal_year::text as label
+              from budget_scenarios
+             where org_id = ${orgId}
+             group by fiscal_year
+             order by fiscal_year desc`) as any
           return result.rows
         },
       },
