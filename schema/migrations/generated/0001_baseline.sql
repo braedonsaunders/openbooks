@@ -9397,22 +9397,6 @@ CREATE VIEW openbooks_query.fx_rates WITH (security_barrier='true') AS
 
 
 --
--- Name: gl_month_activity; Type: VIEW; Schema: openbooks_query; Owner: -
---
-
-CREATE VIEW openbooks_query.gl_month_activity WITH (security_barrier='true') AS
- SELECT org_id,
-    account_id,
-    month,
-    subsidiary_id,
-    debit_total,
-    credit_total,
-    line_count
-   FROM public.gl_month_activity
-  WHERE (org_id = public.openbooks_query_org_id());
-
-
---
 -- Name: gl_month_activity; Type: TABLE; Schema: public; Owner: -
 --
 -- Derived GL aggregate: per (org, account, posting month, subsidiary) debit
@@ -9438,6 +9422,22 @@ ALTER TABLE ONLY public.gl_month_activity
     ADD CONSTRAINT gl_month_activity_pkey PRIMARY KEY (org_id, account_id, month, subsidiary_id);
 
 ALTER TABLE ONLY public.gl_month_activity FORCE ROW LEVEL SECURITY;
+
+
+--
+-- Name: gl_month_activity; Type: VIEW; Schema: openbooks_query; Owner: -
+--
+
+CREATE VIEW openbooks_query.gl_month_activity WITH (security_barrier='true') AS
+ SELECT org_id,
+    account_id,
+    month,
+    subsidiary_id,
+    debit_total,
+    credit_total,
+    line_count
+   FROM public.gl_month_activity
+  WHERE (org_id = public.openbooks_query_org_id());
 
 
 --
@@ -26215,6 +26215,16 @@ CREATE INDEX jl_org_account_covering ON public.journal_lines USING btree (org_id
 --
 
 CREATE INDEX jl_org_foreign_currency ON public.journal_lines USING btree (org_id) WHERE (fx_rate <> (1)::numeric);
+
+
+--
+-- Name: jl_pk_covering; Type: INDEX; Schema: public; Owner: -
+--
+-- Primary-key joins into lines carry the columns those callers read, so the
+-- lookup never visits the heap.
+--
+
+CREATE INDEX jl_pk_covering ON public.journal_lines USING btree (id) INCLUDE (posting_date, account_id, party_id, org_id);
 
 
 --
