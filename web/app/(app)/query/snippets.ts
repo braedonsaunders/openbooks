@@ -12,21 +12,24 @@ export interface Snippet {
 export const SNIPPETS: Snippet[] = [
   {
     key: 'trialBalance',
-    sql: `select a.number, a.name, sum(l.amount) as balance
-  from journal_lines l
-  join accounts a on a.id = l.account_id
+    sql: `-- gl_month_activity is the maintained per-(account, month) rollup of
+-- posted lines, so a trial balance reads thousands of rows instead of
+-- millions. Join journal_lines directly only when you need line detail.
+select a.number, a.name, sum(g.debit_total - g.credit_total) as balance
+  from gl_month_activity g
+  join accounts a on a.id = g.account_id
  group by a.number, a.name
-having sum(l.amount) <> 0
+having sum(g.debit_total - g.credit_total) <> 0
  order by a.number
  limit 200`,
   },
   {
     key: 'topAccounts',
-    sql: `select a.number, a.name, sum(l.amount) as balance
-  from journal_lines l
-  join accounts a on a.id = l.account_id
+    sql: `select a.number, a.name, sum(g.debit_total - g.credit_total) as balance
+  from gl_month_activity g
+  join accounts a on a.id = g.account_id
  group by a.number, a.name
- order by abs(sum(l.amount)) desc
+ order by abs(sum(g.debit_total - g.credit_total)) desc
  limit 15`,
   },
   {
@@ -38,12 +41,10 @@ having sum(l.amount) <> 0
   },
   {
     key: 'monthlyActivity',
-    sql: `select date_trunc('month', e.posting_date)::date as month,
-       count(distinct e.id)                       as entries,
-       sum(case when l.amount > 0 then l.amount else 0 end) as debits
-  from journal_entries e
-  join journal_lines l on l.entry_id = e.id
- where e.status = 'posted'
+    sql: `select g.month,
+       sum(g.line_count)  as lines,
+       sum(g.debit_total) as debits
+  from gl_month_activity g
  group by 1
  order by 1 desc
  limit 24`,
