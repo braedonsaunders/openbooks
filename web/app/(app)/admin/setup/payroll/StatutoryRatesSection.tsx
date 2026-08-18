@@ -23,7 +23,7 @@ import { PagedTable } from '../../../../../components/paged-table'
  * field help in the FieldLabel `?` popover.
  */
 
-type Scope = 'org' | 'region' | 'filing_account'
+type Scope = 'org' | 'region' | 'sub_region' | 'filing_account'
 
 interface RateField {
   key: string
@@ -69,6 +69,7 @@ interface RateRow {
   country: string
   rateKey: string
   region: string | null
+  subRegion: string | null
   filingAccountId: string | null
   accountNumber: string | null
   accountName: string | null
@@ -81,6 +82,7 @@ interface RateGap {
   slotKey: string
   label: string
   region: string | null
+  subRegion?: string | null
   filingAccountId: string | null
   message: string
 }
@@ -107,6 +109,7 @@ interface DraftRate {
   country: string
   rateKey: string
   region: string
+  subRegion: string
   filingAccountId: string
   taxYear: number
   values: Record<string, string>
@@ -163,6 +166,7 @@ export function StatutoryRatesSection({ initialYear }: { initialYear?: number })
           country: draft.country,
           rateKey: draft.rateKey,
           region: draft.region || null,
+          subRegion: draft.subRegion || null,
           filingAccountId: draft.filingAccountId || null,
           taxYear: draft.taxYear,
           values: draft.values,
@@ -208,6 +212,13 @@ export function StatutoryRatesSection({ initialYear }: { initialYear?: number })
   const scopeBadge = (slot: RateSlot | undefined, row: RateRow) => {
     if (!slot) return null
     if (slot.scope === 'org') return <Badge variant="outline">{label('rates.scope.org', 'Employer-wide')}</Badge>
+    if (slot.scope === 'sub_region') {
+      return (
+        <Badge variant="outline">
+          {label('rates.scope.subRegion', 'Per taxing jurisdiction')}
+        </Badge>
+      )
+    }
     if (slot.scope === 'region' || !row.filingAccountId) {
       return <Badge variant="outline">{label('rates.scope.region', 'Per region')}</Badge>
     }
@@ -303,6 +314,7 @@ export function StatutoryRatesSection({ initialYear }: { initialYear?: number })
               country: pack.country,
               rateKey: slot.key,
               region: '',
+              subRegion: '',
               filingAccountId: '',
               taxYear: year,
               values: {},
@@ -321,7 +333,7 @@ export function StatutoryRatesSection({ initialYear }: { initialYear?: number })
           <div className="font-medium">{label('rates.gapsTitle', 'Not configured for this year')}</div>
           <ul className="mt-1 list-disc space-y-0.5 pl-5">
             {data.gaps.map((gap) => (
-              <li key={`${gap.country}-${gap.slotKey}-${gap.region ?? ''}-${gap.filingAccountId ?? ''}`}>
+              <li key={`${gap.country}-${gap.slotKey}-${gap.region ?? ''}-${gap.subRegion ?? ''}-${gap.filingAccountId ?? ''}`}>
                 {gap.message}
               </li>
             ))}
@@ -342,6 +354,7 @@ export function StatutoryRatesSection({ initialYear }: { initialYear?: number })
           country: row.country,
           rateKey: row.rateKey,
           region: row.region ?? '',
+          subRegion: row.subRegion ?? '',
           filingAccountId: row.filingAccountId ?? '',
           taxYear: row.taxYear,
           values: { ...row.values },
@@ -362,8 +375,11 @@ export function StatutoryRatesSection({ initialYear }: { initialYear?: number })
           {
             key: 'region',
             header: label('rates.columns.region', 'Region'),
-            cell: (row) => row.region ?? '—',
-            search: (row) => row.region ?? '',
+            // The jurisdiction below the region belongs beside it, not in a
+            // column of its own: an Ohio municipal rate reads "OH · COLUMBUS",
+            // and a state-wide rate reads "OH".
+            cell: (row) => row.subRegion ? `${row.region ?? '—'} · ${row.subRegion}` : (row.region ?? '—'),
+            search: (row) => `${row.region ?? ''} ${row.subRegion ?? ''}`,
           },
           {
             key: 'account',
@@ -451,7 +467,7 @@ function RateDrawer({
                       ...draft,
                       country: e.target.value,
                       rateKey: next?.slots[0]?.key ?? '',
-                      region: '', filingAccountId: '', values: {},
+                      region: '', subRegion: '', filingAccountId: '', values: {},
                     })
                   }}
                 >
@@ -470,7 +486,8 @@ function RateDrawer({
                 value={draft.rateKey}
                 disabled={draft.existingId !== null}
                 onChange={(e) => onChange({
-                  ...draft, rateKey: e.target.value, region: '', filingAccountId: '', values: {},
+                  ...draft, rateKey: e.target.value,
+                  region: '', subRegion: '', filingAccountId: '', values: {},
                 })}
               >
                 {(pack?.slots ?? []).map((entry) => (
@@ -490,13 +507,34 @@ function RateDrawer({
                   id="rate-region"
                   value={draft.region}
                   disabled={draft.existingId !== null}
-                  onChange={(e) => onChange({ ...draft, region: e.target.value, filingAccountId: '' })}
+                  onChange={(e) => onChange({
+                    ...draft, region: e.target.value, subRegion: '', filingAccountId: '',
+                  })}
                 >
                   <option value="">—</option>
                   {regions.map((region) => (
                     <option key={region} value={region}>{region}</option>
                   ))}
                 </Select>
+              </div>
+            ) : null}
+            {slot?.scope === 'sub_region' ? (
+              <div>
+                <Label
+                  htmlFor="rate-sub-region"
+                  help={label(
+                    'rates.subRegionHelp',
+                    'The taxing jurisdiction inside the region — a Pennsylvania PSD code, an Ohio municipality, a Michigan city. Each one sets its own rate, so each one is entered separately; a jurisdiction with no rate on file refuses the pay run by name rather than withholding nothing.',
+                  )}
+                >
+                  {label('rates.columns.subRegion', 'Taxing jurisdiction')}
+                </Label>
+                <Input
+                  id="rate-sub-region"
+                  value={draft.subRegion}
+                  disabled={draft.existingId !== null}
+                  onChange={(e) => onChange({ ...draft, subRegion: e.target.value })}
+                />
               </div>
             ) : null}
             {slot?.scope === 'filing_account' ? (

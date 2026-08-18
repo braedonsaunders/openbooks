@@ -18,7 +18,11 @@ import test from "node:test";
 import {
   payrollCertificate, resolveCertificate, type ResolvedCertificate,
 } from "../../certificates.ts";
-import "../jurisdictions.ts"; // registers the US pack's certificate declarations
+// The PACK publishes the US declarations now (its `certificates` / `withholding` /
+// `reciprocity` members). Importing `us/jurisdictions.ts` for its side effect is
+// exactly what made those declarations look alive while nothing in the product
+// registered them: this file did the registering, for itself.
+import "../../packs.ts";
 import { CA_RATES_2026, CA_WITHHOLDING, caAnnualizedMethod } from "./ca.ts";
 import { IL_RATES_2026, IL_WITHHOLDING } from "./il.ts";
 import {

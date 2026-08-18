@@ -433,7 +433,13 @@ export const NJ_RATES_2026: NjYearRates = {
       ["5000", "10000", "75.00", "2.7", "5000"],
       ["10000", "12500", "210.00", "3.4", "10000"],
       ["12500", "15000", "295.00", "4.3", "12500"],
-      ["15.000", "37500", "402.50", "5.6", "15000"],
+      // The publication prints this line's "Over" column as "$ 15.000" — a
+      // decimal point where the thousands comma belongs. Transcribed as
+      // $15,000, which the row's own "of excess over" column and the previous
+      // line's "but not over" both say. Left as printed it would read as
+      // fifteen DOLLARS; the conformance test pins the typo so the correction
+      // is on the record rather than invisible.
+      ["15000", "37500", "402.50", "5.6", "15000"],
       ["37500", "125000", "1662.50", "6.5", "37500"],
       ["125000", "250000", "7350.00", "9.9", "125000"],
       ["250000", null, "19725.00", "11.8", "250000"],

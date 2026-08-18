@@ -29,7 +29,11 @@ import test from "node:test";
 import {
   payrollCertificate, resolveCertificate, type ResolvedCertificate,
 } from "../../certificates.ts";
-import "../jurisdictions.ts"; // registers the US pack's certificate declarations
+// The PACK publishes the US declarations now (its `certificates` / `withholding` /
+// `reciprocity` members). Importing `us/jurisdictions.ts` for its side effect is
+// exactly what made those declarations look alive while nothing in the product
+// registered them: this file did the registering, for itself.
+import "../../packs.ts";
 import { D, divIntCents, mulRateCents, U } from "../../canada/decimal.ts";
 import { GA_EDITIONS, GA_WITHHOLDING, gaEditionForPayDate } from "./ga.ts";
 import { MA_RATES_2026, MA_WITHHOLDING, maSupplementalWithholding } from "./ma.ts";
@@ -214,6 +218,19 @@ test("NJ tables are otherwise continuous, and every rate table is complete", () 
   assert.deepEqual(holes, ["E/monthly row 1"]);
 });
 
+test("NJ Rate D QUARTERLY prints a decimal point where a comma belongs", () => {
+  // A third defect in the printed tables, and the only one this transcription
+  // corrects rather than carries. Rate D's quarterly schedule prints its fifth
+  // line's "Over" column as "$ 15.000" — fifteen dollars — while the same
+  // line's "of excess over" column says $15,000 and the line above it ends at
+  // $15,000. Carried literally it would read as a bracket starting at fifteen
+  // dollars.
+  const rows = NJ_RATES_2026.tables.D.quarterly.rows;
+  assert.equal(rows[3]!.butNotOver, "15000");
+  assert.equal(rows[4]!.over, "15000");
+  assert.equal(rows[4]!.ofExcessOver, "15000");
+});
+
 test("NJ allowance values are NJ-WT's own table", () => {
   const weekly = NJ_RATES_2026.tables.A.weekly.allowance;
   assert.equal(weekly, "19.20");
@@ -261,7 +278,7 @@ test("Ohio's printed per-period tables ARE the annual formula, divided", () => {
         const band = edition.formula[i]!;
         assert.equal(row.rate, band.rate, `${edition.effectiveFrom} ${period} row ${i} rate`);
         const expectedFloor = band.over === "0"
-          ? "0"
+          ? D(0n)
           : D(divIntCents(U(band.over), periods));
         assert.equal(
           D(U(row.over)), expectedFloor, `${edition.effectiveFrom} ${period} row ${i} floor`,
@@ -276,12 +293,23 @@ test("Ohio's printed per-period tables ARE the annual formula, divided", () => {
       }
     }
   }
-  // DEFECT, quantified rather than matched: thirty printed lines across the two
-  // editions, and one of them is a cent off its own formula. $2,627.91 ÷ 260 is
-  // $10.10735, which is $10.11 to the cent by the half-up rule the other
-  // twenty-nine lines follow; the August 2026 daily table prints $10.10.
-  // It under-withholds by one cent a day for a daily payroll above $384.62.
+  // DEFECTS, quantified rather than matched. Thirty printed lines across the
+  // two editions reproduce the formula to the cent except TWO, and both are the
+  // top band's base:
+  //
+  //   Oct 2025 biweekly  $2,673.50 ÷ 26 = $102.8269 → printed $102.82
+  //   Aug 2026 daily     $2,627.91 ÷ 260 = $10.10735 → printed $10.10
+  //
+  // Both TRUNCATE. Four other lines in the same two tables ROUND UP — $50.5367
+  // is printed $50.54, $109.4963 is printed $109.50, $19.2663 is printed
+  // $19.27, $1.7784 is printed $1.78 — so no single rounding rule reproduces
+  // the whole set, exactly as no single rule reproduces all of New York's
+  // worked examples. This engine computes the FORMULA, which is the method the
+  // Department writes for payroll systems and the one that is internally
+  // consistent; each defect under-withholds by a cent for wages in the top band
+  // of the affected frequency.
   assert.deepEqual(mismatches, [
+    "2025-10-01 biweekly row 2: printed 102.82, formula 102.8300",
     "2026-08-01 daily row 2: printed 10.10, formula 10.1100",
   ]);
 });
@@ -326,6 +354,30 @@ test("Ohio keys its tables to the PERIOD END, and refuses without one", () => {
   assert.equal(july.factors.OH_EDITION, "2025-10-01");
   assert.equal(august.factors.OH_EDITION, "2026-08-01");
   assert.ok(U(august.tax) < U(july.tax), "the August 2026 tables withhold less");
+});
+
+test("Ohio: a period that ENDS in one year and is PAID in the next", () => {
+  // The first payroll of January pays for a period that ended in December, so
+  // the December TABLES apply to a January TAX YEAR. Gating the tables on the
+  // pay date's year would refuse this run outright; gating the tax year on the
+  // period end would file it against the wrong year.
+  const result = OH_WITHHOLDING.compute({
+    payDate: "2026-01-02", periodEnd: "2025-12-31", periodsPerYear: 26,
+    wages: "3000.00", basis: "resident",
+    certificate: cert("us_oh_it4", { total_exemptions: "1" }),
+  });
+  assert.equal(result.factors.OH_EDITION, "2025-10-01");
+  assert.equal(result.year, 2026);
+
+  // And a period from before anything transcribed is refused with what the
+  // pack does carry, rather than being run through the nearest table.
+  assert.throws(
+    () => OH_WITHHOLDING.compute({
+      payDate: "2025-09-05", periodEnd: "2025-08-31", periodsPerYear: 26,
+      wages: "3000.00", basis: "resident", certificate: cert("us_oh_it4"),
+    }),
+    /This pack carries the sets effective 2025-10-01 onwards/,
+  );
 });
 
 test("Ohio's two published methods agree where the arithmetic lets them", () => {
@@ -560,8 +612,8 @@ test("Michigan's city list is CLOSED, and an unentered rate refuses", () => {
     city: "SAGINAW", wages: "1000", rate: "0.015", exemptionPerYear: "750",
     exemptions: 2, periodsPerYear: 52,
   });
-  assert.equal(saginaw.factors.MI_CITY_EXEMPTION, money("28.86")); // 2 × 14.43
-  assert.equal(saginaw.tax, money("14.57")); // 971.14 × 1.5%
+  assert.equal(saginaw.factors.MI_CITY_EXEMPTION, money("28.84")); // 2 × 14.42
+  assert.equal(saginaw.tax, money("14.57")); // 971.16 × 1.5%
 });
 
 /* ===================================================================== */

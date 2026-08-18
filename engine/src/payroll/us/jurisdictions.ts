@@ -15,19 +15,11 @@
  * why 47 states appear here with `implemented: false` instead of being quietly
  * absent.
  */
-import {
-  type PayrollCertificate,
-  type PayrollPackCertificates,
-  registerPayrollCertificates,
-} from "../certificates.ts";
-import {
-  type PayrollPackReciprocity,
-  registerPayrollReciprocity,
-} from "../reciprocity.ts";
-import {
-  type PayrollPackWithholding,
-  type PayrollRegionWithholding,
-  registerPayrollWithholding,
+import type { PayrollCertificate, PayrollPackCertificates } from "../certificates.ts";
+import type { PayrollPackReciprocity } from "../reciprocity.ts";
+import type {
+  PayrollPackWithholding,
+  PayrollRegionWithholding,
 } from "../withholding-jurisdictions.ts";
 import { NO_WITHHOLDING_STATES, US_STATES } from "./rates.ts";
 import { implementedUsStates, usStatePublication } from "./states/index.ts";
@@ -200,6 +192,27 @@ const NY_IT2104: PayrollCertificate = {
     + "counts (state-and-Yonkers, and city) and THREE additional-amount fields.",
   storage: "certificate_rows",
   fields: [
+    // The two questions the form asks ABOVE the allowance lines, in the
+    // employee-information block: "Are you a resident of New York City?" and
+    // "Are you a resident of Yonkers?". They are what puts an employee inside a
+    // sub-region levy — the address fact `resolveWithholding` cannot derive and
+    // takes from its caller. New York City reaches RESIDENTS ONLY, so without
+    // this answer a city resident's city tax is silently zero.
+    {
+      key: "nyc_resident", label: "Are you a resident of New York City?", kind: "flag",
+      subRegion: { side: "residence", code: "NYC" },
+      help: "The New York City resident income tax reaches residents only, and it reaches all "
+        + "their wages \"even though the services may have been performed outside New York City\". "
+        + "A commuter INTO the city owes it nothing — there has been no city nonresident earnings "
+        + "tax since 1999.",
+    },
+    {
+      key: "yonkers_resident", label: "Are you a resident of Yonkers?", kind: "flag",
+      subRegion: { side: "residence", code: "YONKERS" },
+      help: "A Yonkers RESIDENT is withheld a surcharge of 16.75% of the New York State tax. A "
+        + "nonresident who WORKS in Yonkers is withheld the separate 0.50% earnings tax instead — "
+        + "that one follows the work location, which this answer does not record.",
+    },
     {
       key: "filing_status", label: "Filing status", kind: "choice",
       choices: [
@@ -418,12 +431,14 @@ const PA_CLGS32_6: PayrollCertificate = {
   fields: [
     {
       key: "resident_psd_code", label: "Resident PSD code", kind: "code",
+      subRegion: { side: "residence" },
       help: "The six-digit political subdivision code for where the employee LIVES. The first two "
         + "digits are the tax collection district, the first four the school district. An "
         + "out-of-state residence is 880000, with a 0% resident rate.",
     },
     {
       key: "work_psd_code", label: "Work location PSD code", kind: "code",
+      subRegion: { side: "work" },
       help: "The six-digit code for the address the employee reports to work at. Look both codes "
         + "up with DCED's address search — do not guess them from a municipality name.",
     },
@@ -538,6 +553,7 @@ const OH_IT4: PayrollCertificate = {
   fields: [
     {
       key: "school_district", label: "School district of residence (number)", kind: "code",
+      subRegion: { side: "residence" },
       help: "The FOUR-DIGIT district number from The Finder at tax.ohio.gov — the employee's "
         + "district of RESIDENCE, not of work. A district that levies no income tax still has a "
         + "number; only 214 of them tax.",
@@ -590,6 +606,50 @@ const OH_IT4: PayrollCertificate = {
       kind: "flag",
       help: "A resident servicemember stationed outside Ohio, a nonresident servicemember "
         + "stationed in Ohio, or a nonresident civilian spouse present solely on those orders.",
+    },
+  ],
+};
+
+/**
+ * The Ohio municipal work location — the employer's own record, not a form.
+ *
+ * R.C. 718.03 obliges an employer to withhold the municipal income tax of the
+ * municipality the work is PERFORMED IN, and Ohio prints no employee
+ * certificate that asks which one it is: the IT 4 collects the school district
+ * of residence and nothing municipal. So the fact lives with the employer, who
+ * knows the work address, and it is declared here for the same reason
+ * `us_mi_nonresidency` is — the resolution's question is "which municipality is
+ * this employee in?", the state's answer is "a record you keep", and declaring
+ * it keeps the answer per employee instead of assumed.
+ *
+ * WORK ONLY. Withholding for the employee's RESIDENCE municipality is Ohio's
+ * "courtesy withholding": permitted, commonly agreed to, and not required —
+ * R.C. 718.03(A)(2) makes it an election the employer makes, not a fact about
+ * the employee. It is not declared here because entering it would make it
+ * mandatory, and the relief between the two municipalities is a residence
+ * CREDIT claimed on the municipal return rather than a withholding offset.
+ */
+const OH_MUNICIPAL_RECORD: PayrollCertificate = {
+  key: "us_oh_municipal_record",
+  form: "(employer-determined)",
+  label: "Ohio municipality of employment",
+  scope: { level: "region", region: "OH" },
+  purpose: "withholding",
+  citation: "Ohio Rev. Code 718.03 and 718.011; Ohio Department of Taxation, The Finder",
+  summary:
+    "The municipality the employee's work is performed in, which the employer determines from the "
+    + "work address. Ohio publishes no employee form for it and several hundred municipalities "
+    + "levy, so the code is the pack's own convention: the municipality's name in capitals.",
+  storage: "certificate_rows",
+  fields: [
+    {
+      key: "work_municipality", label: "Municipality the work is performed in", kind: "code",
+      subRegion: { side: "work" },
+      help: "The municipality's name in CAPITALS, underscores for spaces (COLUMBUS, UPPER_ARLINGTON) "
+        + "— look the work address up in The Finder at tax.ohio.gov. Leave it blank if the work "
+        + "address is in no taxing municipality. Its RATE is entered separately against the "
+        + "jurisdiction, because Ohio publishes no municipal rate table a payroll release could "
+        + "carry: a municipality with no rate on file refuses the run rather than withholding zero.",
     },
   ],
 };
@@ -875,7 +935,8 @@ const US_CERTIFICATES: PayrollPackCertificates = {
   country: "US",
   certificates: [
     W4, CA_DE4, NY_IT2104, NY_IT2104_1, IL_W4, IL_W5NR, PA_REV419, PA_CLGS32_6,
-    NJ_W4, NJ_165, OH_IT4, MI_W4, MI_NONRESIDENCY, MI_5527, MA_M4, GA_G4, NC_NC4,
+    NJ_W4, NJ_165, OH_IT4, OH_MUNICIPAL_RECORD, MI_W4, MI_NONRESIDENCY, MI_5527,
+    MA_M4, GA_G4, NC_NC4,
   ],
 };
 
@@ -1472,11 +1533,18 @@ const US_RECIPROCITY: PayrollPackReciprocity = {
 };
 
 // ===========================================================================
-// Registration
+// Publication
 // ===========================================================================
 
-registerPayrollCertificates(US_CERTIFICATES, { builtIn: true });
-registerPayrollWithholding(US_WITHHOLDING, { builtIn: true });
-registerPayrollReciprocity(US_RECIPROCITY, { builtIn: true });
-
+/**
+ * Exported, not self-registered.
+ *
+ * These three used to call `registerPayrollCertificates` / `…Withholding` /
+ * `…Reciprocity` right here, at the bottom of this file, for their side
+ * effect — and NOTHING IMPORTED THIS MODULE outside its own tests, so the
+ * registrations never ran in the product and every declaration above was dead.
+ * The US pack carries them now (engine/src/payroll/packs.ts), which is the
+ * arrangement `filings` and `statutoryRates` already used: a pack member cannot
+ * be forgotten, because the type requires it.
+ */
 export { US_CERTIFICATES, US_RECIPROCITY, US_WITHHOLDING };

@@ -6,6 +6,21 @@ import { caPackFilings } from "./canada/filings.ts";
 import { CA_PACK_RATES, CA_TAX_YEARS, type Province } from "./canada/rates.ts";
 import { usPackFilings } from "./us/filings.ts";
 import { NO_WITHHOLDING_STATES, US_PACK_RATES, US_STATES, US_TAX_YEARS } from "./us/rates.ts";
+import { implementedUsStates, supportedUsStates } from "./us/states/index.ts";
+import { CA_CERTIFICATES, CA_WITHHOLDING_JURISDICTIONS } from "./canada/jurisdictions.ts";
+import { US_CERTIFICATES, US_RECIPROCITY, US_WITHHOLDING } from "./us/jurisdictions.ts";
+import {
+  type PayrollPackCertificates,
+  registerPayrollCertificateSource,
+} from "./certificates.ts";
+import {
+  type PayrollPackReciprocity,
+  registerPayrollReciprocitySource,
+} from "./reciprocity.ts";
+import {
+  type PayrollPackWithholding,
+  registerPayrollWithholdingSource,
+} from "./withholding-jurisdictions.ts";
 import type { PayrollPackRates } from "./statutory-rates.ts";
 import type { PayrollTaxYearSupport } from "./tax-years.ts";
 
@@ -260,6 +275,35 @@ export interface PayrollCountryPack {
    * lets the product say so BEFORE a payroll calculates.
    */
   taxYears: PayrollTaxYearSupport;
+  /**
+   * The certificates the pack's employees file to set their own withholding
+   * (engine/src/payroll/certificates.ts). LAZY, like `filings`: the declaration
+   * modules import the pack's rate and engine modules and would be dereferenced
+   * mid-evaluation if the pack held the value.
+   *
+   * REQUIRED, for the same reason `statutoryRates` and `taxYears` are — a pack
+   * that does not answer is a pack whose answer somebody guessed. A country
+   * whose employees file no withholding certificate at all declares an empty
+   * list, which is a statement; silence is not.
+   */
+  certificates: () => PayrollPackCertificates;
+  /**
+   * Which regions levy income tax, what sits below them, and how each one
+   * treats its residents' out-of-region wages
+   * (engine/src/payroll/withholding-jurisdictions.ts). REQUIRED: this is the
+   * declaration `resolveWithholding` refuses on, and a pack that omits it
+   * cannot be asked the cross-border question at all — which is how a Québec
+   * resident working in Ontario was silently withheld Ontario only.
+   */
+  withholding: () => PayrollPackWithholding;
+  /**
+   * Interstate / interprovincial reciprocity
+   * (engine/src/payroll/reciprocity.ts). OPTIONAL, and the only one of the
+   * three that is: "this country has no such agreements" is a legitimate and
+   * common answer, and an absent declaration resolves exactly as an empty one —
+   * to "no agreement", which withholds the work region. Canada declares none.
+   */
+  reciprocity?: () => PayrollPackReciprocity;
 }
 
 // ---------------------------------------------------------------------------
@@ -336,11 +380,18 @@ const CA_REGIONS: PayrollRegionCoverage = {
 const US_REGIONS: PayrollRegionCoverage = {
   label: "state",
   known: US_STATES,
-  // Declared in US_STATES order so the coverage list reads the same everywhere.
-  supported: US_STATES.filter((code) => NO_WITHHOLDING_STATES.has(code)),
+  /**
+   * DERIVED, never a second literal list. It is the states whose income tax the
+   * pack computes end to end PLUS the states that levy none — and the previous
+   * hand-maintained literal was all nine of the second kind and none of the
+   * first, which nothing in the codebase could tell. A state gains support by
+   * registering an engine, not by somebody remembering to edit an array.
+   */
+  supported: supportedUsStates(),
   unsupportedReason:
-    "state income tax withholding for {region} is not yet supported — "
-    + "the US pack currently covers the nine no-withholding states",
+    "{region} income tax withholding is not implemented by the US payroll pack. Transcribe the "
+    + "state's published withholding tables into engine/src/payroll/us/states/ and register the "
+    + `engine. Implemented: ${implementedUsStates().join(", ")}.`,
 };
 
 // ---------------------------------------------------------------------------
@@ -787,6 +838,11 @@ export const PAYROLL_COUNTRY_PACKS: Record<string, PayrollCountryPack> = {
     filings: caPackFilings,
     statutoryRates: CA_PACK_RATES,
     taxYears: CA_TAX_YEARS,
+    certificates: () => CA_CERTIFICATES,
+    withholding: () => CA_WITHHOLDING_JURISDICTIONS,
+    // No member at all: Canada's provinces have no interprovincial withholding
+    // agreements, and an absent declaration says exactly that. See
+    // engine/src/payroll/canada/jurisdictions.ts.
     statutorySlots: [
       {
         key: "income_tax",
@@ -906,6 +962,9 @@ export const PAYROLL_COUNTRY_PACKS: Record<string, PayrollCountryPack> = {
     filings: usPackFilings,
     statutoryRates: US_PACK_RATES,
     taxYears: US_TAX_YEARS,
+    certificates: () => US_CERTIFICATES,
+    withholding: () => US_WITHHOLDING,
+    reciprocity: () => US_RECIPROCITY,
     statutorySlots: [
       {
         key: "fit",
@@ -938,9 +997,66 @@ export const PAYROLL_COUNTRY_PACKS: Record<string, PayrollCountryPack> = {
           { code: "SUTA", name: "State unemployment (SUI)", systemKey: "suta", kind: "employer_contribution", sequence: 250, assessedOn: "earnings", remittance: "external" },
         ],
       },
+      {
+        key: "state_income_tax",
+        components: [
+          // A state's income tax is computed from state-taxable wages after
+          // pre-tax deductions, so a §125 or 401(k) order moves it exactly as
+          // it moves the federal line — assessedOn 'taxable_income', which is
+          // what makes the deduction-protection fixpoint re-derive it.
+          //
+          // ONE component for every state, with the jurisdiction on the LINE
+          // (its description and the stub's factors), not one component per
+          // state. A component per state would be fifty rows in a table an
+          // operator reads, forty of them always empty, and it still would not
+          // answer the remittance question — state withholding is remitted per
+          // REGISTRATION (a payroll_filing_account), which is a different axis
+          // from the component. Remittance is 'external': a state's
+          // withholding goes to the state, never to the federal vendor.
+          { code: "SIT", name: "State income tax", systemKey: "state_income_tax", kind: "deduction", sequence: 140, assessedOn: "taxable_income", remittance: "external" },
+        ],
+      },
+      {
+        key: "local_income_tax",
+        components: [
+          // The taxing unit BELOW the state: New York City, Yonkers,
+          // Philadelphia, an Ohio municipality or school district, a Michigan
+          // city. Its own slot rather than the state's, because it is remitted
+          // to a different authority — the City of Philadelphia is not the
+          // Commonwealth of Pennsylvania — and an employer posting both to one
+          // payable cannot reconcile either.
+          { code: "LIT", name: "Local income tax", systemKey: "local_income_tax", kind: "deduction", sequence: 145, assessedOn: "taxable_income", remittance: "external" },
+        ],
+      },
     ],
   },
 };
+
+/**
+ * The packs' certificate, withholding and reciprocity declarations, published
+ * to the registries that read them.
+ *
+ * LAZY on purpose. The registries hold the pack's own thunk and build the
+ * declaration on the first READ, so nothing here dereferences
+ * `us/jurisdictions.ts` while this module is still evaluating. Before this,
+ * `us/jurisdictions.ts` registered itself at the bottom of its own file — and
+ * NOTHING IMPORTED IT, so the registrations never ran and every declaration in
+ * it was dead code that 119 passing tests could not see, because those tests
+ * imported the module for its side effect themselves.
+ *
+ * Generic: it iterates the pack registry and branches on nothing. A pack that
+ * declares no reciprocity registers no source, which is how "Canada has no
+ * interprovincial agreements" is said.
+ */
+export function publishPackDeclarations(): void {
+  for (const pack of Object.values(PAYROLL_COUNTRY_PACKS)) {
+    registerPayrollCertificateSource(pack.country, pack.certificates);
+    registerPayrollWithholdingSource(pack.country, pack.withholding);
+    if (pack.reciprocity) registerPayrollReciprocitySource(pack.country, pack.reciprocity);
+  }
+}
+
+publishPackDeclarations();
 
 /** Every statutory component a pack provisions, in slot order. */
 export function packStatutoryComponents(country: string): readonly PayrollStatutoryComponent[] {

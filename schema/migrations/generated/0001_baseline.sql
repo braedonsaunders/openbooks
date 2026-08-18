@@ -11658,7 +11658,7 @@ CREATE TABLE public.pay_components (
     CONSTRAINT pay_components_protection_percent CHECK (((protection_max_percent IS NULL) OR ((protection_max_percent >= (0)::numeric) AND (protection_max_percent <= (100)::numeric)))),
     CONSTRAINT pay_components_protection_priority CHECK ((protection_priority >= 0)),
     CONSTRAINT pay_components_protection_shape CHECK (((protection_base = 'none'::text) OR (protection_max_percent IS NOT NULL))),
-    CONSTRAINT pay_components_system_key CHECK (((system_key IS NULL) OR (system_key = ANY (ARRAY['base_pay'::text, 'overtime'::text, 'bonus'::text, 'stat_holiday'::text, 'stat_holiday_premium'::text, 'vacation_accrual'::text, 'vacation_payout'::text, 'cpp'::text, 'cpp2'::text, 'ei'::text, 'qpip'::text, 'income_tax'::text, 'qc_income_tax'::text, 'fit'::text, 'ss'::text, 'medicare'::text, 'medicare_addl'::text, 'futa'::text, 'suta'::text, 'wcb'::text, 'eht'::text])))),
+    CONSTRAINT pay_components_system_key CHECK (((system_key IS NULL) OR (system_key = ANY (ARRAY['base_pay'::text, 'overtime'::text, 'bonus'::text, 'stat_holiday'::text, 'stat_holiday_premium'::text, 'vacation_accrual'::text, 'vacation_payout'::text, 'cpp'::text, 'cpp2'::text, 'ei'::text, 'qpip'::text, 'income_tax'::text, 'qc_income_tax'::text, 'fit'::text, 'ss'::text, 'medicare'::text, 'medicare_addl'::text, 'futa'::text, 'suta'::text, 'state_income_tax'::text, 'local_income_tax'::text, 'wcb'::text, 'eht'::text])))),
     CONSTRAINT pay_components_tax_treatment CHECK ((tax_treatment = ANY (ARRAY['none'::text, 'pension_f'::text, 'union_dues'::text, 'alimony'::text])))
 );
 

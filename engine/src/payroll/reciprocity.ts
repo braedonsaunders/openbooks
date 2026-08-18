@@ -96,6 +96,35 @@ export interface PayrollPackReciprocity {
 
 const BUILT_INS = new Map<string, PayrollPackReciprocity>();
 const EXTRA = new Map<string, PayrollPackReciprocity>();
+const SOURCES = new Map<string, () => PayrollPackReciprocity>();
+
+/**
+ * Register a pack's declaration LAZILY. See
+ * `registerPayrollCertificateSource` — the same arrangement, for the same
+ * module-evaluation reason.
+ */
+export function registerPayrollReciprocitySource(
+  country: string,
+  source: () => PayrollPackReciprocity,
+): void {
+  if (!country) {
+    throw new PayrollReciprocityError("a payroll reciprocity source must name its country");
+  }
+  SOURCES.set(country, source);
+}
+
+function materializeSources(): void {
+  if (SOURCES.size === 0) return;
+  for (const [country, source] of [...SOURCES]) {
+    if (BUILT_INS.has(country) || EXTRA.has(country)) {
+      SOURCES.delete(country);
+      continue;
+    }
+    const declaration = source();
+    registerPayrollReciprocity(declaration, { builtIn: true });
+    SOURCES.delete(country);
+  }
+}
 
 export function registerPayrollReciprocity(
   declaration: PayrollPackReciprocity,
@@ -141,6 +170,7 @@ export function unregisterPayrollReciprocity(country: string): void {
 }
 
 export function declaredPayrollReciprocity(): PayrollPackReciprocity[] {
+  materializeSources();
   return [...BUILT_INS.values(), ...EXTRA.values()];
 }
 

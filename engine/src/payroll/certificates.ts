@@ -172,6 +172,32 @@ export interface PayrollCertificateField {
   help: string;
   /** See PayrollCertificateStorage. Defaults to `{ kind: "row" }`. */
   storage?: PayrollCertificateStorage;
+  /**
+   * This answer places the employee INSIDE a sub-region of the certificate's
+   * jurisdiction — the address fact `resolveWithholding` takes from its caller
+   * and cannot derive.
+   *
+   * Sub-region membership is a property of an ADDRESS, so something has to
+   * record it per employee, and the agencies already ask: Pennsylvania's
+   * CLGS-32-6 collects the resident and work PSD codes, Ohio's IT 4 collects
+   * the school district of residence, New York's IT-2104 asks whether the
+   * employee is a resident of New York City and of Yonkers. Declaring WHICH
+   * answer means "this employee is in that jurisdiction, on that side" keeps
+   * the mapping in the pack, beside the form, instead of in a `if (state ===
+   * "PA")` inside the pay run.
+   *
+   * `side` is load-bearing and cannot be inferred: New York City reaches
+   * residents only and Yonkers reaches both, so a levy code with no side
+   * attached is unusable.
+   */
+  subRegion?: {
+    side: "work" | "residence";
+    /**
+     * For a `flag` field: the sub-region code the answer's truth selects
+     * ("NYC"). Omitted for a `code` field, whose ANSWER is the code.
+     */
+    code?: string;
+  };
 }
 
 export interface PayrollCertificate {
@@ -212,6 +238,45 @@ export interface PayrollPackCertificates {
 
 const EXTRA = new Map<string, PayrollPackCertificates>();
 const BUILT_INS = new Map<string, PayrollPackCertificates>();
+const SOURCES = new Map<string, () => PayrollPackCertificates>();
+
+/**
+ * Register a pack's declaration LAZILY — the shape a country pack uses.
+ *
+ * The pack member is a THUNK (`certificates: () => PayrollPackCertificates`,
+ * engine/src/payroll/packs.ts) for the same reason `filings` is: the modules
+ * that author these declarations import the pack's own rate and engine modules,
+ * so dereferencing them while `packs.ts` is still evaluating would read a
+ * half-initialized module. Registering the thunk costs nothing at
+ * module-evaluation time and the declaration is built, validated and cached on
+ * the first READ — by which time every module involved has finished loading.
+ */
+export function registerPayrollCertificateSource(
+  country: string,
+  source: () => PayrollPackCertificates,
+): void {
+  if (!country) {
+    throw new PayrollCertificateError("a payroll certificate source must name its country");
+  }
+  SOURCES.set(country, source);
+}
+
+/** Build and register every pending pack declaration. Idempotent. */
+function materializeSources(): void {
+  if (SOURCES.size === 0) return;
+  for (const [country, source] of [...SOURCES]) {
+    if (BUILT_INS.has(country) || EXTRA.has(country)) {
+      SOURCES.delete(country);
+      continue;
+    }
+    // The source is dropped only once it has produced a declaration that
+    // registered cleanly: a throwing pack must keep throwing the same sentence
+    // on the next read rather than silently becoming "no declaration".
+    const declaration = source();
+    registerPayrollCertificates(declaration, { builtIn: true });
+    SOURCES.delete(country);
+  }
+}
 
 /**
  * Register a pack's certificate declaration.
@@ -256,6 +321,7 @@ export function unregisterPayrollCertificates(country: string): void {
 }
 
 export function declaredPayrollCertificates(): PayrollPackCertificates[] {
+  materializeSources();
   return [...BUILT_INS.values(), ...EXTRA.values()];
 }
 
@@ -355,7 +421,58 @@ function fieldDeclarationProblem(field: PayrollCertificateField): string | null 
   if (field.kind !== "amount" && field.decimals != null) {
     return `a ${field.kind} field carries no decimal scale`;
   }
+  if (field.subRegion) {
+    if (field.kind !== "code" && field.kind !== "flag") {
+      return `a ${field.kind} field cannot name a sub-region — an allowance count or a dollar `
+        + "amount is not a jurisdiction";
+    }
+    if (field.kind === "flag" && !field.subRegion.code) {
+      return "a flag field that names a sub-region must say WHICH one (subRegion.code) — its "
+        + "answer is a yes, not a code";
+    }
+    if (field.kind === "code" && field.subRegion.code) {
+      return "a code field's ANSWER is the sub-region code, so it must not also declare one";
+    }
+  }
   return null;
+}
+
+// ---------------------------------------------------------------------------
+// Sub-region membership
+// ---------------------------------------------------------------------------
+
+/** A jurisdiction below the region the employee is in, and on which side. */
+export interface CertificateSubRegion {
+  side: "work" | "residence";
+  /** The pack's own sub-region code. */
+  code: string;
+  /** The certificate and field the answer came from, for the trace. */
+  source: string;
+}
+
+/**
+ * Every sub-region the employee's answers place them in.
+ *
+ * The generic half of the address problem: `resolveWithholding` takes the codes
+ * from its caller because it cannot derive them, and this is where the caller
+ * gets them — from the packs' own declarations, never from a list of city names
+ * in engine code.
+ */
+export function certificateSubRegions(resolved: ResolvedCertificate): CertificateSubRegion[] {
+  const found: CertificateSubRegion[] = [];
+  for (const field of resolved.certificate.fields) {
+    if (!field.subRegion) continue;
+    const source = `${resolved.certificate.form} · ${field.label}`;
+    if (field.kind === "flag") {
+      if (certificateFlag(resolved, field.key)) {
+        found.push({ side: field.subRegion.side, code: field.subRegion.code!, source });
+      }
+      continue;
+    }
+    const code = certificateCode(resolved, field.key);
+    if (code) found.push({ side: field.subRegion.side, code, source });
+  }
+  return found;
 }
 
 // ---------------------------------------------------------------------------
@@ -393,6 +510,30 @@ export interface ResolvedCertificate {
 
 /** The profile row, as far as this module is concerned: a bag of columns. */
 export type ProfileColumns = Record<string, unknown>;
+
+/**
+ * The resolved certificate for a jurisdiction that publishes NONE.
+ *
+ * Pennsylvania is the case: its rate is flat, there is nothing an employee
+ * could elect, and it prints no withholding allowance certificate at all. An
+ * engine still takes a `ResolvedCertificate` because the interface is one
+ * shape, and this is the honest value for "there is no form" — reading any
+ * field from it throws by name, which is what should happen to an engine
+ * reaching for an answer its jurisdiction never asked for.
+ */
+export function emptyResolvedCertificate(label = "no certificate"): ResolvedCertificate {
+  return {
+    certificate: {
+      key: "", form: "(none)", label, scope: { level: "country" },
+      purpose: "withholding", citation: label, summary: label,
+      fields: [], storage: "certificate_rows",
+    },
+    onFile: false,
+    effectiveFrom: null,
+    answers: {},
+    missing: [],
+  };
+}
 
 function columnAnswer(profile: ProfileColumns, column: string): string | null {
   const raw = profile[column];

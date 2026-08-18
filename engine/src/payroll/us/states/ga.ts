@@ -217,7 +217,10 @@ function compute(input: UsStateWithholdingInput): UsStateWithholdingResult {
   // none is expected this year, or under the Servicemembers Civil Relief Act.
   if (certificateFlag(input.certificate, "exempt")) {
     factors.GA_EXEMPT = "1";
-    return { state: "GA", year: 2026, tax: D(0n), taxSupplemental: D(0n), factors };
+    return {
+      state: "GA", year: Number(input.payDate.slice(0, 4)),
+      tax: D(0n), taxSupplemental: D(0n), factors,
+    };
   }
 
   const row = edition.tableE[period];
@@ -252,7 +255,7 @@ function compute(input: UsStateWithholdingInput): UsStateWithholdingResult {
   const extra = U(certificateAmount(input.certificate, "additional_per_period") ?? "0");
   return {
     state: "GA",
-    year: 2026,
+    year: Number(input.payDate.slice(0, 4)),
     tax: D(tax + extra),
     taxSupplemental: D(0n),
     factors,
