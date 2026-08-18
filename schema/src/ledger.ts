@@ -169,6 +169,14 @@ export const journalLines = pgTable(
      * payload, not seek keys (drizzle cannot express INCLUDE).
      */
     index("jl_org_account_covering").on(t.orgId, t.accountId, t.entryId, t.amount, t.subsidiaryId),
+    /**
+     * Primary-key joins into lines (applications, drill-through,
+     * reconciliation) carry the columns those callers read, so the lookup
+     * never visits the heap. Costs roughly a tenth of the table in index
+     * space; it earns that back on the AR/AP cockpits, whose days-to-pay
+     * statistic resolves two line lookups per application.
+     */
+    index("jl_pk_covering").on(t.id, t.postingDate, t.accountId, t.partyId, t.orgId),
     /** Date-ranged GL reads, now answerable from the line alone. */
     index("jl_org_posting_date").on(t.orgId, t.postingDate),
     index("jl_org_account_posting_date").on(t.orgId, t.accountId, t.postingDate),
