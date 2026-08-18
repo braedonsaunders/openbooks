@@ -85,6 +85,16 @@ async function beginGovernedReadTransaction(
   await client.query("set local role openbooks_read");
   await client.query("set local search_path = openbooks_query, pg_catalog");
   await client.query(`set local statement_timeout = ${timeoutMs}`);
+  // Governed views scope every table with `org_id = openbooks_query_org_id()`.
+  // That function is STABLE, so its value is unknown at plan time and the
+  // planner falls back to a default 0.5% selectivity: a 66-row accounts table
+  // is estimated at one row, which makes a nested loop look free. The result
+  // is a cross join — every row of the outer table rescanned per row of the
+  // inner one (measured: 61s and 228M discarded rows for a trial balance that
+  // hash-joins in 2s). Console sessions therefore plan without nested loops.
+  // This is scoped to this READ ONLY ad-hoc transaction and never affects
+  // application queries, which carry a literal org_id the planner can measure.
+  await client.query("set local enable_nestloop = off");
 }
 
 export async function runUserSql(sqlText: string, opts: UserSqlOptions): Promise<UserSqlResult> {
