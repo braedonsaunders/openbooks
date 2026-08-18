@@ -70,8 +70,20 @@ export interface WeekRow {
   net: number;
   startingCash: number;
   endingCash: number;
+  /**
+   * The week's transactions. Omitted from a page's initial payload — a cockpit
+   * ships thousands of these per week and renders them only when a week is
+   * opened, so `weekForecastEntries` fetches the clicked week on demand.
+   * Consumers that only need magnitudes must read the totals/counts below,
+   * which are always populated.
+   */
   arEntries: ForecastEntry[];
   apEntries: ForecastEntry[];
+  /** Always present, even when the entry arrays have been withheld. */
+  arTotal: number;
+  apTotal: number;
+  arCount: number;
+  apCount: number;
   /** Non-AR/AP forecast flows from configured categories. */
   dynamicInflow: number;
   dynamicOutflow: number;
@@ -196,6 +208,16 @@ export interface OpenItem {
 }
 
 export type PaymentStats = { map: Map<string, { avg: number; sd: number }>; globalAvg: number };
+
+/**
+ * The same weeks with their per-transaction arrays withheld. Totals and counts
+ * survive, so every summary still renders from the initial payload; the detail
+ * is fetched per week when the reader opens one. Nothing is lost — only
+ * deferred.
+ */
+export function withoutWeekEntries(weeks: WeekRow[]): WeekRow[] {
+  return weeks.map((w) => ({ ...w, arEntries: [], apEntries: [] }));
+}
 
 /** A resolved week grid for a horizon anchored at `asOf`. */
 export interface WeekGrid {
