@@ -2,6 +2,7 @@ import { getTranslations } from 'next-intl/server'
 import { ListPageLayout } from '../../../../components/page-layout'
 import { requirePermission } from '../../../../lib/authz'
 import { cashflowData } from '../../../../lib/analytics/cashflow-data'
+import { withoutWeekEntries } from '../../../../lib/cash/core'
 import { AnalyticsHeader } from '../_ui/AnalyticsHeader'
 import { CashflowView } from './CashflowView'
 import { HorizonControl } from './HorizonControl'
@@ -25,7 +26,11 @@ export default async function CashflowPage({
   const parsed = Number(sp.horizon)
   const horizon = parsed === 8 || parsed === 12 ? parsed : 4
 
-  const data = await cashflowData(authz.user.orgId, horizon)
+  const position = await cashflowData(authz.user.orgId, horizon)
+  // Week totals, counts and the per-counterparty aggregate travel with the
+  // page; the transactions behind them do not. The week flyout fetches
+  // whichever week is opened from /api/cash/week-entries, at full detail.
+  const data = { ...position, weeks: withoutWeekEntries(position.weeks) }
 
   return (
     <ListPageLayout
