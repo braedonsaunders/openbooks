@@ -54,6 +54,20 @@ export default async function AR() {
     ...position,
     weeks: position.weeks.map((w) => ({ ...w, entries: [] })),
     timeline: withoutWeekEntries(position.timeline),
+    // Project to the columns the worklist renders. The cockpit is a client
+    // component, so mapping there still sent every field across the wire —
+    // including five the list never shows.
+    worklist: position.worklist.map((e) => ({
+      id: e.id,
+      docId: e.docId,
+      docKind: e.docKind,
+      partyName: e.partyName,
+      amount: e.amount,
+      dueDate: e.dueDate,
+      predictedDate: e.predictedDate,
+      daysOverdue: e.daysOverdue,
+      method: e.method,
+    })),
   }
 
   return (

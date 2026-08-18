@@ -17,6 +17,14 @@ import {
 } from "lucide-react";
 
 import type { ArPosition } from "../../../../lib/cash/ar-position";
+import type { WorklistEntry } from "./CollectionsWorklist";
+
+/**
+ * The cockpit's view of the position: the worklist arrives already projected to
+ * the columns it renders, so the fields the list never shows do not cross the
+ * wire.
+ */
+type ArCockpitData = Omit<ArPosition, "worklist"> & { worklist: WorklistEntry[] };
 import {
   StatTile,
   CockpitPanel,
@@ -44,7 +52,7 @@ export function ArCockpit({
   data,
   canCollect,
 }: {
-  data: ArPosition;
+  data: ArCockpitData;
   canCollect: boolean;
 }) {
   const { money, moneyCompact } = useMoney()
@@ -148,17 +156,7 @@ export function ArCockpit({
           className="min-h-0 lg:col-span-2"
         >
           <CollectionsWorklist
-            entries={data.worklist.map((e) => ({
-              id: e.id,
-              docId: e.docId,
-              docKind: e.docKind,
-              partyName: e.partyName,
-              amount: e.amount,
-              dueDate: e.dueDate,
-              predictedDate: e.predictedDate,
-              daysOverdue: e.daysOverdue,
-              method: e.method,
-            }))}
+            entries={data.worklist}
             overdueTotal={data.overdue}
             expectedThisWeek={data.expectedThisWeek}
             canCollect={canCollect}
