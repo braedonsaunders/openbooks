@@ -38,9 +38,9 @@ export function CashTimeline({
   const hasCats = categories.length > 0
   const scheduling = weeklyCap > 0 || restrictToSafe
   const open = (w: WeekRow) => {
-    const arTotal = w.arEntries.reduce((a, e) => a + e.amount, 0)
-    const apTotal = w.apEntries.reduce((a, e) => a + e.amount, 0)
-    setFlyout({ week: w, side: arTotal >= apTotal ? 'ar' : 'ap' })
+    // Totals travel with the page; the transactions themselves are fetched by
+    // the flyout for the week actually opened.
+    setFlyout({ week: w, side: w.arTotal >= w.apTotal ? 'ar' : 'ap' })
   }
 
   return (
@@ -74,7 +74,7 @@ export function CashTimeline({
               <td className="px-4 py-2.5 font-medium text-slate-800 dark:text-slate-200">
                 {w.label}
                 <span className="ml-2 text-[11px] font-normal text-slate-400 dark:text-slate-500">
-                  {w.arEntries.length + w.apEntries.length > 0 ? `${w.arEntries.length + w.apEntries.length} txns` : ''}
+                  {w.arCount + w.apCount > 0 ? `${w.arCount + w.apCount} txns` : ''}
                 </span>
               </td>
               <td className="px-3 py-2.5 text-right tabular-nums text-emerald-600 dark:text-emerald-400">{w.inflow > 0 ? money(w.inflow) : '—'}</td>

@@ -4,7 +4,7 @@ import {
   type PayrollYearEndFiling,
 } from "../../../payroll-filing-registry.ts";
 import { rl1Population, rl1Slips, RL1_UNSUPPORTED_BOXES } from "../../../payroll-rl1.ts";
-import { RL1_XML_DOWNLOAD_REFUSAL } from "../../../payroll-rl1xml.ts";
+import { RL1_AMENDMENT_REFUSAL, RL1_XML_DOWNLOAD_REFUSAL } from "../../../payroll-rl1xml.ts";
 import { PayrollError } from "../../../payroll-run.ts";
 
 /**
@@ -83,6 +83,18 @@ export function rl1Filing(): PayrollYearEndFiling {
     population: (orgId, taxYear) => rl1Population(orgId, taxYear),
     slip: { build: (orgId, taxYear, rowId) => rl1Slip(orgId, taxYear, rowId) },
     downloadRefusal: RL1_XML_DOWNLOAD_REFUSAL,
+    // Revenu Québec's amended/cancelled RL-1 is its OWN shape — the "R" record
+    // carries an amendment code and the amended slip must quote the sequential
+    // number of the slip it replaces, both specified in the same partner-gated
+    // documents (Guide de préparation du relevé 1 en format XML; guide IN-800)
+    // that keep the original RL-1 XML out of reach. Nothing about the
+    // correction format is publicly published, and a guessed amendment code or
+    // a slip that fails to identify its predecessor would produce a second
+    // original — two RL-1s for one employee, on Revenu Québec's file.
+    amendment: {
+      supported: false,
+      refusal: RL1_AMENDMENT_REFUSAL,
+    },
   };
   return cached;
 }

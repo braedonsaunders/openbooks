@@ -170,6 +170,32 @@ export const RL1_XML_DOWNLOAD_REFUSAL =
   + "more than 5 slips) or authorized software until the partner specification is "
   + "obtained and the serializer in engine/src/payroll-rl1xml.ts is completed.";
 
+/**
+ * Why an RL-1 cannot be AMENDED or CANCELLED here — the registry's
+ * `amendment.refusal`, shown wherever the correction action would be.
+ *
+ * Revenu Québec's amended and cancelled RL-1s are not a flag on the slip: the
+ * R record carries its own amendment code ("modifié" / "annulé") and an
+ * amended slip must quote the sequential number of the slip it replaces, so
+ * that RQ can retire the earlier one. Both are specified only in the same
+ * partner-gated documents that keep the original RL-1 XML out of reach.
+ *
+ * The failure mode of guessing is worse here than for an original: a
+ * correction that does not correctly identify its predecessor is not rejected
+ * — it is accepted as a SECOND slip, and the employee ends up with two RL-1s
+ * of record and a reassessment. So this refuses.
+ */
+export const RL1_AMENDMENT_REFUSAL =
+  "An amended or cancelled RL-1 is not produced: Revenu Québec specifies the amendment code "
+  + "and the requirement that an amended slip quote the sequential number of the slip it "
+  + "replaces only in the partner-gated RL-1 XML guide and guide IN-800, which are issued to "
+  + "registered software partners on certification. A correction that failed to identify the "
+  + "slip it replaces would be accepted as a SECOND original, leaving the employee with two "
+  + "RL-1s of record — so no correction file or correction slip is generated here. Amend or "
+  + "cancel the RL-1 through Revenu Québec's online services (or authorized software), and "
+  + "correct the underlying payroll data in OpenBooks so the RL-1 box data on this page "
+  + "matches what was refiled.";
+
 /** A slip carrying the unsealed SIN the eventual file must print. */
 export type Rl1SlipWithSin = Rl1Slip & { sin: string };
 

@@ -37,13 +37,21 @@ test("every declared statutory component resolves to its class", () => {
 
 test("the income taxes are the only income-assessed lines in either pack", () => {
   // Federal income tax (T4127 factor T), Québec income tax (TP-1015 variable
-  // A) and US FIT are all computed from income net of pre-tax deductions, so
-  // all three — and nothing else — are re-derived by the protection fixpoint.
+  // A), US FIT, and now US state and local income tax are all computed from
+  // income net of pre-tax deductions, so these — and nothing else — are
+  // re-derived by the protection fixpoint.
+  //
+  // SIT and LIT joined the list when state withholding was wired in, and they
+  // belong: a pre-tax deferral that moves federal taxable income moves the
+  // state's too, so a capped support order that changes one must re-derive the
+  // others in the same pass. The failure this guards against is a new levy
+  // being added as earnings-assessed by default and then silently NOT being
+  // re-derived — the fixpoint would settle on a stale amount.
   const incomeAssessed = Object.keys(PAYROLL_COUNTRY_PACKS).flatMap((country) =>
     packStatutoryComponents(country)
       .filter((component) => component.assessedOn === "taxable_income")
       .map((component) => `${country}/${component.code}`));
-  assert.deepEqual(incomeAssessed, ["CA/TAX", "CA/QCTAX", "US/FIT"]);
+  assert.deepEqual(incomeAssessed, ["CA/TAX", "CA/QCTAX", "US/FIT", "US/SIT", "US/LIT"]);
 });
 
 test("employee CPP, CPP2, EI and QPIP are earnings-assessed, like the employer share", () => {
@@ -190,12 +198,13 @@ test("an empty labour jurisdiction is not a problem — it means derive from the
 });
 
 test("an undeclared labour jurisdiction is refused BY NAME, listing what is declared", () => {
-  // CA-MB is a real province no pack has transcribed. Accepting it would let
-  // the employment fall back on the work region's calendar — the exact
+  // 'CA-ZZ' is the region an employee employed outside any province carries.
+  // No employment-standards act governs it, and accepting it would let the
+  // employment fall back on the work region's calendar — the exact
   // substitution the attribute exists to prevent.
-  const problem = labourJurisdictionProblem("CA", "CA-MB");
+  const problem = labourJurisdictionProblem("CA", "CA-ZZ");
   assert.ok(problem);
-  assert.match(problem!, /CA-MB/, "names the refused value");
+  assert.match(problem!, /CA-ZZ/, "names the refused value");
   assert.match(problem!, /no payroll pack declares/);
   assert.match(problem!, /CA-ON/, "lists what IS declared");
 

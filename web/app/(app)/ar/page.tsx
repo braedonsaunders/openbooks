@@ -6,6 +6,7 @@ import { groupTabs } from '../../../components/module-home/group-tabs'
 import { NewDocumentButton } from '../../../components/new-document-button'
 import { requirePermission, can } from '../../../lib/authz'
 import { analyticsConfig } from '../../../lib/analytics/config'
+import { withoutWeekEntries } from '../../../lib/cash/core'
 import { arPosition } from '../../../lib/cash/ar-position'
 import { ArCockpit } from './cockpit/ArCockpit'
 
@@ -44,7 +45,30 @@ export default async function AR() {
 
   const cfg = await analyticsConfig(authz.user.orgId, 'cashflow')
   const apSettings = { weeklyCap: cfg.weeklyApCap ?? 0, restrictToSafe: (cfg.restrictToSafe ?? 0) >= 1 }
-  const data = await arPosition(authz.user.orgId, 4, apSettings)
+  const position = await arPosition(authz.user.orgId, 4, apSettings)
+  // The schedule bars need each week's label and amount; the week drill
+  // fetches the week a reader actually opens from /api/cash/week-entries.
+  // Shipping every week's transactions as well repeated the whole open-item
+  // book across the horizon.
+  const data = {
+    ...position,
+    weeks: position.weeks.map((w) => ({ ...w, entries: [] })),
+    timeline: withoutWeekEntries(position.timeline),
+    // Project to the columns the worklist renders. The cockpit is a client
+    // component, so mapping there still sent every field across the wire —
+    // including five the list never shows.
+    worklist: position.worklist.map((e) => ({
+      id: e.id,
+      docId: e.docId,
+      docKind: e.docKind,
+      partyName: e.partyName,
+      amount: e.amount,
+      dueDate: e.dueDate,
+      predictedDate: e.predictedDate,
+      daysOverdue: e.daysOverdue,
+      method: e.method,
+    })),
+  }
 
   return (
     <ListPageLayout

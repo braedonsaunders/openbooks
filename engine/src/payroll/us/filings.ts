@@ -2,6 +2,7 @@ import { add } from "../../money.ts";
 import { filingAccountRef, filingAccountsById } from "../../payroll-filing.ts";
 import { PayrollError } from "../../payroll-error.ts";
 import { form941Worksheet, w2Slips } from "../../payroll-yearend.ts";
+import { build941X, buildW2c } from "../../payroll-w2c.ts";
 import type { PayrollFilingData, PayrollFilingSlipData, PayrollPackFilings } from "../../payroll-filing-registry.ts";
 
 /**
@@ -164,6 +165,21 @@ function buildUsPackFilings(): PayrollPackFilings {
       downloadRefusal:
         "the US pack produces no Form 941 e-file — the worksheet is the source data; "
         + "file the return with the IRS directly",
+      // A filed quarter cannot be withdrawn: the IRS has no cancellation for
+      // Form 941. It is corrected on Form 941-X, which reports the corrected
+      // amount, the amount originally reported, and the difference — so this
+      // filing declares `amended` and ONLY `amended`.
+      amendment: {
+        supported: true,
+        revisions: ["amended"],
+        vehicle: "correction_form",
+        formLabel: "Form 941-X",
+        slip: { build: async (row, _orgId, taxYear) => build941X(row, taxYear) },
+        downloadRefusal:
+          "no electronic Form 941-X is generated, the same gap the original Form 941 declares — "
+          + "the three-column adjustment above is complete; file the adjusted return with the "
+          + "IRS directly",
+      },
     },
     {
       key: "w2",
@@ -176,6 +192,23 @@ function buildUsPackFilings(): PayrollPackFilings {
       downloadRefusal:
         "the US pack does not produce the SSA EFW2 electronic W-2 file — the box data "
         + "is complete on screen; transmit W-2s through SSA Business Services Online",
+      // The IRS corrects a W-2 on a WHOLLY SEPARATE form, not by re-filing the
+      // W-2: Form W-2c carries both the previously reported and the correct
+      // amount for every box being corrected, transmitted on Form W-3c.
+      // Cancelling is supported because a W-2 filed in error is withdrawn the
+      // same way — a W-2c correcting the amounts to nil, since the SSA has no
+      // delete transaction for a filed W-2.
+      amendment: {
+        supported: true,
+        revisions: ["amended", "cancelled"],
+        vehicle: "correction_form",
+        formLabel: "Form W-2c",
+        slip: { build: async (row, _orgId, taxYear) => buildW2c(row, taxYear) },
+        downloadRefusal:
+          "no SSA EFW2C electronic correction file is generated, the same gap the original W-2 "
+          + "declares for EFW2 — print and file the Form W-2c above with its Form W-3c, or key "
+          + "the corrections into SSA Business Services Online",
+      },
     },
   ],
   };

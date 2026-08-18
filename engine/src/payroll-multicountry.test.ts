@@ -206,17 +206,26 @@ test("every T4127 province is supported, including QC and ZZ", () => {
 
 test("the US pack still refuses a withholding state, and an unknown one differently", () => {
   // Preserved behaviour — this was the good precedent the CA pack now follows.
+  // WHICH states are refused has moved: `supported` is now DERIVED from the
+  // registered engines, so California is supported (its tables are transcribed
+  // and its tax is withheld on the stub) and Colorado's is not.
+  assert.doesNotThrow(() => assertPayrollRegionSupported("US", "CA"));
   assert.throws(
-    () => assertPayrollRegionSupported("US", "CA"),
-    /state income tax withholding for CA is not yet supported/,
+    () => assertPayrollRegionSupported("US", "CO"),
+    /CO income tax withholding is not implemented by the US payroll pack/,
   );
   assert.throws(
     () => assertPayrollRegionSupported("US", "ON"),
     /unknown US state "ON" on the payroll profile/,
   );
+  // Nineteen: the ten states whose income tax the pack computes end to end,
+  // plus the nine that levy none. The old assertion pinned NINE — and every
+  // one of those nine was a no-tax state, which is to say the pack supported
+  // only the places with nothing to withhold and nothing in the codebase could
+  // tell. Derived from the engine registry now, so the two cannot disagree.
   assert.equal(
-    PAYROLL_COUNTRY_PACKS.US!.regions.supported.length, 9,
-    "wave-1 coverage is the nine no-withholding states",
+    PAYROLL_COUNTRY_PACKS.US!.regions.supported.length, 19,
+    "ten states with an engine, nine with no wage income tax",
   );
 });
 
