@@ -2397,6 +2397,126 @@ end $$;
 
 
 --
+-- Name: openbooks_party_payment_stats(); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.openbooks_party_payment_stats() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+begin
+  if coalesce(current_setting('openbooks.sandbox_wipe', true), 'off') = 'on' then
+    return null;
+  end if;
+  if tg_op = 'INSERT' then
+    if new.unapplied_at is null then
+      perform openbooks_party_payment_stats_delta(new.from_line_id, new.to_line_id, 1);
+    end if;
+  elsif tg_op = 'DELETE' then
+    if old.unapplied_at is null then
+      perform openbooks_party_payment_stats_delta(old.from_line_id, old.to_line_id, -1);
+    end if;
+  else
+    -- Soft-reversal in either direction.
+    if old.unapplied_at is null and new.unapplied_at is not null then
+      perform openbooks_party_payment_stats_delta(old.from_line_id, old.to_line_id, -1);
+    elsif old.unapplied_at is not null and new.unapplied_at is null then
+      perform openbooks_party_payment_stats_delta(new.from_line_id, new.to_line_id, 1);
+    end if;
+  end if;
+  return null;
+end $$;
+
+
+--
+-- Name: openbooks_party_payment_stats_delta(p_from_line uuid, p_to_line uuid, p_sign integer); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.openbooks_party_payment_stats_delta(p_from_line uuid, p_to_line uuid, p_sign integer) RETURNS void
+    LANGUAGE plpgsql
+    AS $$
+declare
+  v_org uuid; v_party uuid; v_type text; v_settled date; v_paid date; v_days numeric;
+begin
+  select bl.org_id, bl.party_id, a.type, bl.posting_date, pl.posting_date
+    into v_org, v_party, v_type, v_settled, v_paid
+    from journal_lines bl
+    join accounts a on a.id = bl.account_id and a.org_id = bl.org_id
+    join journal_lines pl on pl.id = p_from_line
+   where bl.id = p_to_line;
+  -- A bulk copy can insert an application before its lines; the rebuild
+  -- function is the repair path for that (clones copy lines first).
+  if v_party is null or v_settled is null or v_paid is null then return; end if;
+  if v_type not in ('asset_receivable', 'liability_payable') then return; end if;
+  v_days := (v_paid - v_settled)::numeric;
+  insert into party_payment_stats as s (org_id, party_id, account_type, settled_on, n, sum_days, sum_days_sq)
+  values (v_org, v_party, v_type, v_paid,
+          p_sign, p_sign * v_days, p_sign * v_days * v_days)
+  on conflict (org_id, account_type, settled_on, party_id) do update
+    set n = s.n + excluded.n,
+        sum_days = s.sum_days + excluded.sum_days,
+        sum_days_sq = s.sum_days_sq + excluded.sum_days_sq;
+end $$;
+
+
+--
+-- Name: openbooks_party_payment_stats_rebuild(p_org uuid); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.openbooks_party_payment_stats_rebuild(p_org uuid) RETURNS bigint
+    LANGUAGE plpgsql
+    AS $$
+declare
+  v_count bigint;
+begin
+  delete from party_payment_stats where org_id = p_org;
+  insert into party_payment_stats (org_id, party_id, account_type, settled_on, n, sum_days, sum_days_sq)
+  select bl.org_id, bl.party_id, a.type, pl.posting_date,
+         count(*),
+         sum((pl.posting_date - bl.posting_date)::numeric),
+         sum(((pl.posting_date - bl.posting_date)::numeric) * ((pl.posting_date - bl.posting_date)::numeric))
+    from applications x
+    join journal_lines bl on bl.id = x.to_line_id and bl.org_id = p_org
+    join journal_lines pl on pl.id = x.from_line_id and pl.org_id = p_org
+    join accounts a on a.id = bl.account_id and a.org_id = p_org
+   where x.org_id = p_org and x.unapplied_at is null and bl.party_id is not null
+     and a.type in ('asset_receivable', 'liability_payable')
+     and bl.posting_date is not null and pl.posting_date is not null
+   group by 1, 2, 3, 4;
+  get diagnostics v_count = row_count;
+  return v_count;
+end $$;
+
+
+--
+-- Name: openbooks_party_payment_stats_verify(p_org uuid); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.openbooks_party_payment_stats_verify(p_org uuid) RETURNS TABLE(party_id uuid, account_type text, settled_on date, stored_n bigint, actual_n bigint, stored_sum numeric, actual_sum numeric)
+    LANGUAGE sql
+    AS $$
+  with actual as (
+    select bl.party_id as pid, a.type as atype, pl.posting_date as m,
+           count(*) as n, sum((pl.posting_date - bl.posting_date)::numeric) as sd
+      from applications x
+      join journal_lines bl on bl.id = x.to_line_id and bl.org_id = p_org
+      join journal_lines pl on pl.id = x.from_line_id and pl.org_id = p_org
+      join accounts a on a.id = bl.account_id and a.org_id = p_org
+     where x.org_id = p_org and x.unapplied_at is null and bl.party_id is not null
+       and a.type in ('asset_receivable', 'liability_payable')
+       and bl.posting_date is not null and pl.posting_date is not null
+     group by 1, 2, 3
+  ), stored as (
+    select s.party_id as pid, s.account_type as atype, s.settled_on as m, s.n, s.sum_days as sd
+      from party_payment_stats s where s.org_id = p_org and s.n <> 0
+  )
+  select coalesce(a.pid, s.pid), coalesce(a.atype, s.atype), coalesce(a.m, s.m),
+         coalesce(s.n, 0), coalesce(a.n, 0), coalesce(s.sd, 0), coalesce(a.sd, 0)
+    from actual a full outer join stored s on s.pid = a.pid and s.atype = a.atype and s.m = a.m
+   where coalesce(s.n, 0) <> coalesce(a.n, 0) or coalesce(s.sd, 0) <> coalesce(a.sd, 0);
+$$;
+
+
+--
 -- Name: openbooks_guard_ap_capture_evidence(); Type: FUNCTION; Schema: public; Owner: -
 --
 
@@ -9438,6 +9558,31 @@ CREATE VIEW openbooks_query.gl_month_activity WITH (security_barrier='true') AS
     line_count
    FROM public.gl_month_activity
   WHERE (org_id = public.openbooks_query_org_id());
+
+
+--
+-- Name: party_payment_stats; Type: TABLE; Schema: public; Owner: -
+--
+-- Derived settlement-behaviour rollup; see openbooks_party_payment_stats*.
+--
+
+CREATE TABLE public.party_payment_stats (
+    org_id uuid NOT NULL,
+    party_id uuid NOT NULL,
+    /* the settled item's control account class: asset_receivable | liability_payable */
+    account_type text NOT NULL,
+    /* posting date of the SETTLING (payment) line */
+    settled_on date NOT NULL,
+    n bigint DEFAULT 0 NOT NULL,
+    sum_days numeric(38,4) DEFAULT 0 NOT NULL,
+    sum_days_sq numeric(38,4) DEFAULT 0 NOT NULL
+);
+
+ALTER TABLE ONLY public.party_payment_stats
+    ADD CONSTRAINT party_payment_stats_pkey PRIMARY KEY (org_id, account_type, settled_on, party_id);
+
+ALTER TABLE public.party_payment_stats ENABLE ROW LEVEL SECURITY;
+ALTER TABLE ONLY public.party_payment_stats FORCE ROW LEVEL SECURITY;
 
 
 --
@@ -29673,6 +29818,13 @@ CREATE TRIGGER payment_file_artifact_immutable BEFORE UPDATE ON public.payment_f
 
 
 --
+-- Name: applications party_payment_stats_maintain; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER party_payment_stats_maintain AFTER INSERT OR DELETE OR UPDATE OF unapplied_at ON public.applications FOR EACH ROW EXECUTE FUNCTION public.openbooks_party_payment_stats();
+
+
+--
 -- Name: payment_run_items payment_run_item_guard; Type: TRIGGER; Schema: public; Owner: -
 --
 
@@ -42349,6 +42501,13 @@ COMMENT ON POLICY org_isolation ON public.ownership_consolidation_runs IS 'openb
 
 
 --
+-- Name: party_payment_stats org_isolation; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY org_isolation ON public.party_payment_stats USING (((current_setting('app.bypass_rls'::text, true) = 'on'::text) OR ((org_id)::text = current_setting('app.current_org'::text, true)))) WITH CHECK (((current_setting('app.bypass_rls'::text, true) = 'on'::text) OR ((org_id)::text = current_setting('app.current_org'::text, true))));
+
+
+--
 -- Name: parties org_isolation; Type: POLICY; Schema: public; Owner: -
 --
 
@@ -44539,6 +44698,13 @@ ALTER TABLE public.ownership_consolidation_runs ENABLE ROW LEVEL SECURITY;
 --
 
 ALTER TABLE public.parties ENABLE ROW LEVEL SECURITY;
+
+
+--
+-- Name: party_payment_stats; Type: ROW SECURITY; Schema: public; Owner: -
+--
+
+ALTER TABLE public.party_payment_stats ENABLE ROW LEVEL SECURITY;
 
 --
 -- Name: party_bank_accounts; Type: ROW SECURITY; Schema: public; Owner: -
