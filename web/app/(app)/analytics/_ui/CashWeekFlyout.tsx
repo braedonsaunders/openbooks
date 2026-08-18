@@ -99,8 +99,38 @@ export function CashWeekFlyout({
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>('desc')
   const [page, setPage] = useState(1)
 
-  const arTotal = week.arEntries.reduce((a, e) => a + e.amount, 0)
-  const apTotal = week.apEntries.reduce((a, e) => a + e.amount, 0)
+  const arTotal = week.arTotal
+  const apTotal = week.apTotal
+  // The page ships every week's totals but none of their transactions — a real
+  // ledger has tens of thousands of open items and only one week is ever open.
+  // Fetch this week's rows when the flyout mounts; fall back to whatever the
+  // row already carries (analytics callers that still embed them).
+  const [fetched, setFetched] = useState<{ ar: ForecastEntry[]; ap: ForecastEntry[] } | null>(
+    week.arEntries.length || week.apEntries.length
+      ? { ar: week.arEntries, ap: week.apEntries }
+      : null,
+  )
+  const [loadingEntries, setLoadingEntries] = useState(false)
+  useEffect(() => {
+    if (fetched) return
+    let cancelled = false
+    setLoadingEntries(true)
+    const params = new URLSearchParams({ week: week.weekStart })
+    fetch(`/api/cash/week-entries?${params}`)
+      .then((r) => (r.ok ? r.json() : Promise.reject(new Error('failed'))))
+      .then((d) => {
+        if (!cancelled) setFetched({ ar: d.arEntries ?? [], ap: d.apEntries ?? [] })
+      })
+      .catch(() => {
+        if (!cancelled) setFetched({ ar: [], ap: [] })
+      })
+      .finally(() => {
+        if (!cancelled) setLoadingEntries(false)
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [week.weekStart, fetched])
   const weekCats = categories.filter((c) => (c.weekly[weekIndex] ?? 0) > 0)
   const otherIn = weekCats.filter((c) => c.direction === 'inflow').reduce((a, c) => a + (c.weekly[weekIndex] ?? 0), 0)
   const catOuts = weekCats.filter((c) => c.direction === 'outflow')
@@ -121,7 +151,7 @@ export function CashWeekFlyout({
 
   const side: 'ar' | 'ap' = tab === 'ar' ? 'ar' : 'ap'
   const activeCat = tab.startsWith('cat:') ? weekCats.find((c) => c.id === tab.slice(4)) : undefined
-  const entries = side === 'ar' ? week.arEntries : week.apEntries
+  const entries = side === 'ar' ? (fetched?.ar ?? []) : (fetched?.ap ?? [])
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase()
     if (!q) return entries
@@ -218,8 +248,8 @@ export function CashWeekFlyout({
       <div className="flex shrink-0 gap-0.5 overflow-x-auto border-b border-slate-100 px-4 dark:border-slate-800">
         {(
           [
-            { key: 'ar' as TabKey, label: 'AR Inflows', icon: <ArrowDown size={13} className="text-emerald-500" />, count: week.arEntries.length, total: arTotal, badge: 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-300' },
-            { key: 'ap' as TabKey, label: 'AP Outflows', icon: <ArrowUp size={13} className="text-red-500" />, count: week.apEntries.length, total: apTotal, badge: 'bg-red-100 text-red-700 dark:bg-red-950/60 dark:text-red-300' },
+            { key: 'ar' as TabKey, label: 'AR Inflows', icon: <ArrowDown size={13} className="text-emerald-500" />, count: week.arCount, total: arTotal, badge: 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-300' },
+            { key: 'ap' as TabKey, label: 'AP Outflows', icon: <ArrowUp size={13} className="text-red-500" />, count: week.apCount, total: apTotal, badge: 'bg-red-100 text-red-700 dark:bg-red-950/60 dark:text-red-300' },
           ]
         ).map((t) => (
           <button
