@@ -61,7 +61,7 @@ export async function customersHome(orgId: string, subIds?: string[]): Promise<C
   const docScope = subArr ? sql` and (d.subsidiary_id is null or d.subsidiary_id = any(${subArr}))` : sql``
   const q = quarterBounds()
 
-  const [arRes, topRes, trendRes, badgeRes, forecast] = (await Promise.all([
+  const [arRes, dsoRes, topRes, trendRes, badgeRes, forecast] = (await Promise.all([
     // Open receivables aggregate — open customer-invoice items with remaining
     // balance (the same open-item shape the cash engine reads, aggregated).
     db.execute(sql`
@@ -84,20 +84,24 @@ export async function customersHome(orgId: string, subIds?: string[]): Promise<C
       select coalesce(sum(remaining), 0) as outstanding,
              coalesce(sum(remaining) filter (where due_date < current_date), 0) as overdue,
              count(*) filter (where remaining > 0.005) as open_count,
-             count(*) filter (where remaining > 0.005 and due_date < current_date) as overdue_count,
-             -- Both dates come off the lines; reaching them through each
-             -- line's entry doubled the joins. Trailing 365 days: without the
-             -- upper bound a future-dated payment counts toward days-to-pay.
-             (select round(avg(pl.posting_date - bl.posting_date))
-                from applications ap
-                join journal_lines bl on bl.id = ap.to_line_id and bl.org_id = ${orgId}
-                join journal_lines pl on pl.id = ap.from_line_id and pl.org_id = ${orgId}
-                join accounts ba on ba.id = bl.account_id and ba.org_id = ${orgId}
-               where ap.org_id = ${orgId}
-                 and ba.type = 'asset_receivable' and ap.unapplied_at is null
-                 and pl.posting_date >= current_date - 365
-                 and pl.posting_date <= current_date) as dso
+             count(*) filter (where remaining > 0.005 and due_date < current_date) as overdue_count
         from oi where remaining > 0.005
+    `),
+    // Days-sales-outstanding is its own query so it runs BESIDE the open-item
+    // aggregate instead of after it — as a scalar subquery the two costs added
+    // up inside one statement. Both dates come off the lines; reaching them
+    // through each line's entry doubled the joins. Trailing 365 days: without
+    // the upper bound a future-dated payment counts toward days-to-pay.
+    db.execute(sql`
+      select round(avg(pl.posting_date - bl.posting_date)) as dso
+        from applications ap
+        join journal_lines bl on bl.id = ap.to_line_id and bl.org_id = ${orgId}
+        join journal_lines pl on pl.id = ap.from_line_id and pl.org_id = ${orgId}
+        join accounts ba on ba.id = bl.account_id and ba.org_id = ${orgId}
+       where ap.org_id = ${orgId}
+         and ba.type = 'asset_receivable' and ap.unapplied_at is null
+         and pl.posting_date >= current_date - 365
+         and pl.posting_date <= current_date
     `),
     // Hero roster — top relationships by open balance, with open-opp counts.
     db.execute(sql`
@@ -166,7 +170,7 @@ export async function customersHome(orgId: string, subIds?: string[]): Promise<C
           ${subArr ? sql`and (p.subsidiary_id is null or p.subsidiary_id = any(${subArr}))` : sql``}) as customers
     `),
     calculateForecast({ orgId, periodStart: q.start, periodEnd: q.end }),
-  ])) as unknown as [{ rows: any[] }, { rows: any[] }, { rows: any[] }, { rows: any[] }, Record<string, string>[]]
+  ])) as unknown as [{ rows: any[] }, { rows: any[] }, { rows: any[] }, { rows: any[] }, { rows: any[] }, Record<string, string>[]]
 
   const weekStarts: string[] = []
   {
@@ -182,6 +186,7 @@ export async function customersHome(orgId: string, subIds?: string[]): Promise<C
   const byWeek = new Map(trendRes.rows.map((r: any) => [String(r.wk).slice(0, 10), Number(r.collected)]))
 
   const ar = arRes.rows[0] ?? {}
+  const dso = dsoRes.rows[0] ?? {}
   const badge = badgeRes.rows[0] ?? {}
   // Multi-currency orgs: the vitals sum the per-currency figures (same
   // simplification the banking home makes for balances).
@@ -200,7 +205,7 @@ export async function customersHome(orgId: string, subIds?: string[]): Promise<C
     openInvoices: Number(ar.open_count ?? 0),
     overdueInvoices: Number(ar.overdue_count ?? 0),
     activeCustomers: Number(badge.customers ?? 0),
-    dsoLite: ar.dso === null || ar.dso === undefined ? null : Number(ar.dso),
+    dsoLite: dso.dso === null || dso.dso === undefined ? null : Number(dso.dso),
     pipeline,
     topExposure: topRes.rows.map((r: any) => ({
       partyId: r.party_id,
