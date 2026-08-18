@@ -188,12 +188,19 @@ export async function cashPosition(
       where org_id = ${orgId} and is_summary = false
       order by number nulls last, name
     `) as Promise<any>,
+    // "Parties with any payable document" is a semi-join: joining every
+    // payable document to its party and then DISTINCTing back down to a few
+    // thousand names materialized the whole document set to answer a
+    // yes/no question per party.
     db.execute(sql`
-      select distinct p.id, p.display_name as name
+      select p.id, p.display_name as name
       from parties p
-      join documents d on d.party_id = p.id and d.org_id = ${orgId} and d.voided_at is null
-       and d.kind in ('vendor_bill', 'vendor_payment', 'check', 'expense_report')
       where p.org_id = ${orgId}
+        and exists (
+          select 1 from documents d
+           where d.org_id = ${orgId} and d.party_id = p.id and d.voided_at is null
+             and d.kind in ('vendor_bill', 'vendor_payment', 'check', 'expense_report')
+        )
       order by 2
     `) as Promise<any>,
   ]);

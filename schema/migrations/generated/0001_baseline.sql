@@ -25043,6 +25043,16 @@ CREATE INDEX documents_party ON public.documents USING btree (party_id);
 
 
 --
+-- Name: documents_org_party_payable; Type: INDEX; Schema: public; Owner: -
+--
+-- Answers "does this party have any payable document?" without walking the
+-- party's document history.
+--
+
+CREATE INDEX documents_org_party_payable ON public.documents USING btree (org_id, party_id) WHERE ((voided_at IS NULL) AND (kind = ANY (ARRAY['vendor_bill'::text, 'vendor_payment'::text, 'check'::text, 'expense_report'::text])));
+
+
+--
 -- Name: documents_posted_entry; Type: INDEX; Schema: public; Owner: -
 --
 
