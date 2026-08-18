@@ -53,6 +53,9 @@ const EXCLUDE = new Set([
   // Derived GL aggregate — the journal triggers rebuild it while the clone
   // copies entries and lines, so copying it too would double-count.
   "gl_month_activity",
+  // Derived settlement-behaviour rollup — the applications trigger
+  // repopulates it as the settlements are copied.
+  "party_payment_stats",
 ]);
 
 /**

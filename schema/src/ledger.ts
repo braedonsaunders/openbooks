@@ -7,6 +7,7 @@ import {
   index,
   integer,
   jsonb,
+  numeric,
   pgTable,
   primaryKey,
   text,
@@ -223,6 +224,40 @@ export const glMonthActivity = pgTable(
   },
   (t) => [
     primaryKey({ columns: [t.orgId, t.accountId, t.month, t.subsidiaryId] }),
+  ],
+);
+
+/**
+ * Derived payment-behaviour rollup: per (org, control-account class,
+ * settlement day, party), how many settlements happened and the sum and sum of
+ * squares of the days each took. Maintained by the applications trigger (see
+ * 0001_baseline.sql openbooks_party_payment_stats*).
+ *
+ * Sufficient statistics rather than an average, because averages cannot be
+ * averaged: count / Σdays / Σdays² sum freely, so any trailing window is a
+ * range scan and the mean and population standard deviation are reconstructed
+ * exactly on read. Keyed by day so no partial-period arithmetic is needed; the
+ * primary key leads with (org, class, day) so the window is a prefix scan.
+ *
+ * NEVER written by application code — openbooks_party_payment_stats_rebuild is
+ * the repair path, and backups/sandbox clones exclude it so the trigger
+ * repopulates it as the settlements are copied.
+ */
+export const partyPaymentStats = pgTable(
+  "party_payment_stats",
+  {
+    orgId: orgRef(),
+    partyId: uuid("party_id").notNull(),
+    /** asset_receivable | liability_payable — the settled item's class. */
+    accountType: text("account_type").notNull(),
+    /** Posting date of the settling (payment) line. */
+    settledOn: date("settled_on").notNull(),
+    n: bigint("n", { mode: "number" }).notNull().default(0),
+    sumDays: numeric("sum_days", { precision: 38, scale: 4 }).notNull().default("0"),
+    sumDaysSq: numeric("sum_days_sq", { precision: 38, scale: 4 }).notNull().default("0"),
+  },
+  (t) => [
+    primaryKey({ columns: [t.orgId, t.accountType, t.settledOn, t.partyId] }),
   ],
 );
 
