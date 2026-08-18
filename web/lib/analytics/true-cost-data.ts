@@ -331,11 +331,11 @@ export async function trueCostData(orgId: string, period: { from: string; to: st
     // One grouped pass per source instead of a correlated GL subquery per
     // department per basis — that shape re-scanned the window's ledger three
     // times for every department on the page.
+    // The entry window materializes first: joined inline, the planner drives
+    // from accounts and probes the entry primary key once per journal line in
+    // the tenant before the date filter ever applies.
     db.execute(sql`
-      -- The entry window materializes first: joined inline, the planner drives
-      -- from accounts and probes the entry primary key once per journal line
-      -- in the tenant before the date filter ever applies.
-      ew as materialized (
+      with ew as materialized (
         select id from journal_entries
          where org_id = ${orgId} and posting_date >= ${from} and posting_date <= ${to}
       ),
