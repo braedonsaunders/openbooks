@@ -143,6 +143,19 @@ export async function sentinelData(orgId: string, period: { from: string; to: st
   const cfg = await analyticsConfig(orgId, "sentinel");
   const DUPLICATE_THRESHOLD_DAYS = cfg.duplicateDays!;
   const DUPLICATE_MIN_AMOUNT = cfg.duplicateMinAmount!;
+  // A duplicate pair must fall within the threshold of each other, so a
+  // candidate further outside the window than that can never join to one
+  // inside it. Widening the candidate scan by exactly the threshold is
+  // equivalent and keeps the self-join off the whole document history.
+  // (Computed here rather than as `${from}::date - ${days}` — an untyped bind
+  // parameter on the right of a date subtraction does not resolve.)
+  const shiftDays = (iso: string, days: number) => {
+    const d = new Date(iso + "T00:00:00Z");
+    d.setUTCDate(d.getUTCDate() + days);
+    return d.toISOString().slice(0, 10);
+  };
+  const DUPLICATE_SCAN_FROM = shiftDays(from, -DUPLICATE_THRESHOLD_DAYS);
+  const DUPLICATE_SCAN_TO = shiftDays(to, DUPLICATE_THRESHOLD_DAYS);
   const SEQUENTIAL_MIN = cfg.sequentialMinCount!;
   const SEQUENTIAL_MIN_DAYS_FOR_FLAG = cfg.sequentialMinDays!;
 
@@ -159,26 +172,38 @@ export async function sentinelData(orgId: string, period: { from: string; to: st
       and abs(coalesce(d.total, 0)) >= 1`;
 
   const [
-    metaRows, b1Rows, b2Rows, trapRows, trapAgg, dupRows, dupAgg, weekendRows, weekendAgg,
-    rsfRows, zRows, seqRows, ghostRows, auditRows, auditAgg, calRows,
+    aggRows, trapRows, dupAll, weekendRows,
+    vendorStatRows, seqRows, ghostRows, auditRows, auditAgg,
   ] = await Promise.all([
-    // Dataset meta — proof of full coverage.
-    db.execute(sql`select count(*) as docs, coalesce(sum(abs(d.total)), 0) as amount ${periodDocs}`) as Promise<any>,
-
-    // Benford first digit — one aggregate over EVERY document.
+    // Six aggregates — dataset meta, Benford 1D, Benford 2D, the threshold-trap
+    // buckets, the weekend split and the calendar heatmap — are the SAME row
+    // set grouped six ways. GROUPING SETS computes all six in ONE scan; run as
+    // six queries they each re-scanned every spend document in the period and
+    // contended for the same buffers. Trap/weekend qualify a subset, so their
+    // key is NULL for non-qualifying rows and that null group is dropped below
+    // — which reproduces the filter exactly.
     db.execute(sql`
-      select left(trunc(abs(d.total))::bigint::text, 1) as digit, count(*) as count, sum(abs(d.total)) as amount
-      ${periodDocs}
-      group by 1
-    `) as Promise<any>,
-
-    // Benford first-two digits (scale amounts below 10 by 10).
-    db.execute(sql`
-      select case when abs(d.total) >= 10 then left(trunc(abs(d.total))::bigint::text, 2)
-                  else left(trunc(abs(d.total) * 10)::bigint::text, 2) end as digits,
-        count(*) as count, sum(abs(d.total)) as amount
-      ${periodDocs}
-      group by 1
+      with base as (
+        select abs(d.total) as amt,
+               coalesce(d.document_date, d.posting_date) as ddate,
+               left(trunc(abs(d.total))::bigint::text, 1) as digit1,
+               case when abs(d.total) >= 10 then left(trunc(abs(d.total))::bigint::text, 2)
+                    else left(trunc(abs(d.total) * 10)::bigint::text, 2) end as digit2,
+               case when trunc(abs(d.total))::bigint % 100 = 99
+                     and round((abs(d.total) - trunc(abs(d.total))) * 100) in (0, 99)
+                    then case when trunc(abs(d.total))::bigint % 10000 = 9999 then '9999'
+                              when trunc(abs(d.total))::bigint % 1000 = 999 then '999'
+                              else '99' end end as trap,
+               case when extract(dow from coalesce(d.document_date, d.posting_date)) in (0, 6)
+                    then extract(dow from coalesce(d.document_date, d.posting_date))::int end as dow
+        ${periodDocs}
+      )
+      select grouping(digit1) as g_digit1, grouping(digit2) as g_digit2,
+             grouping(trap) as g_trap, grouping(dow) as g_dow, grouping(ddate) as g_date,
+             digit1, digit2, trap, dow, ddate::text as date,
+             count(*) as count, coalesce(sum(amt), 0) as amount
+        from base
+       group by grouping sets ((), (digit1), (digit2), (trap), (dow), (ddate))
     `) as Promise<any>,
 
     // Threshold trap rows (top by amount) — SQL modular arithmetic, full scan.
@@ -199,16 +224,6 @@ export async function sentinelData(orgId: string, period: { from: string; to: st
       order by abs(d.total) desc
       limit 100
     `) as Promise<any>,
-    db.execute(sql`
-      select case when trunc(abs(d.total))::bigint % 10000 = 9999 then '9999'
-                  when trunc(abs(d.total))::bigint % 1000 = 999 then '999'
-                  else '99' end as trap,
-        count(*) as count, sum(abs(d.total)) as amount
-      ${periodDocs}
-        and trunc(abs(d.total))::bigint % 100 = 99
-        and round((abs(d.total) - trunc(abs(d.total))) * 100) in (0, 99)
-      group by 1
-    `) as Promise<any>,
 
     // Duplicates. The candidate set (payable documents above the floor)
     // materializes ONCE, then self hash-joins on the plain CTE columns
@@ -216,44 +231,45 @@ export async function sentinelData(orgId: string, period: { from: string; to: st
     // a hash plan. The naive documents×documents self-join probed every
     // document's party neighbourhood row-at-a-time (tens of millions of
     // buffer hits on large tenants).
+    //
+    // The full pair count and the top-200 detail come from ONE statement: the
+    // pair set is referenced twice, so Postgres materializes it and the
+    // expensive self-join runs once instead of once per result set. The name
+    // lookup hangs off the top-200 only, never the whole pair set.
     db.execute(sql`
       with cand as materialized (
-        select id, document_number, kind, party_id, memo, total, abs(total) as amt,
+        select id, document_number, kind, party_id, memo, abs(total) as amt,
                coalesce(document_date, posting_date) as ddate
           from documents
          where org_id = ${orgId} and voided_at is null
            and kind in ('vendor_bill', 'check', 'expense_report', 'vendor_payment')
            and party_id is not null
            and abs(coalesce(total, 0)) >= ${DUPLICATE_MIN_AMOUNT}
+           and coalesce(document_date, posting_date) >= ${DUPLICATE_SCAN_FROM}
+           and coalesce(document_date, posting_date) <= ${DUPLICATE_SCAN_TO}
+      ), pairs as (
+        select d1.id as id1, d2.id as id2, d1.document_number as num1, d2.document_number as num2,
+          d1.kind, d1.ddate as ddate1, d2.ddate as ddate2,
+          abs(d2.ddate - d1.ddate) as days_between, d1.amt as amount, d1.party_id,
+          (d1.memo is not null and d1.memo = d2.memo) as same_memo
+        from cand d1
+        join cand d2 on d2.party_id = d1.party_id and d2.kind = d1.kind and d2.amt = d1.amt
+          and d1.id < d2.id and abs(d2.ddate - d1.ddate) <= ${DUPLICATE_THRESHOLD_DAYS}
+        where d1.ddate >= ${from} and d1.ddate <= ${to}
+      ), top as (
+        select * from pairs order by amount desc, days_between asc, id1, id2 limit 200
       )
-      select d1.id as id1, d2.id as id2, d1.document_number as num1, d2.document_number as num2,
-        d1.kind, d1.ddate::text as date1, d2.ddate::text as date2,
-        abs(d2.ddate - d1.ddate) as days_between,
-        d1.amt as amount, d1.party_id, coalesce(p.display_name, 'Unknown') as party_name,
-        (d1.memo is not null and d1.memo = d2.memo) as same_memo
-      from cand d1
-      join cand d2 on d2.party_id = d1.party_id and d2.kind = d1.kind and d2.amt = d1.amt
-        and d1.id < d2.id and abs(d2.ddate - d1.ddate) <= ${DUPLICATE_THRESHOLD_DAYS}
-      left join parties p on p.id = d1.party_id
-      where d1.ddate >= ${from} and d1.ddate <= ${to}
-      order by d1.amt desc, days_between asc
-      limit 200
-    `) as Promise<any>,
-    db.execute(sql`
-      with cand as materialized (
-        select id, party_id, kind, total, abs(total) as amt,
-               coalesce(document_date, posting_date) as ddate
-          from documents
-         where org_id = ${orgId} and voided_at is null
-           and kind in ('vendor_bill', 'check', 'expense_report', 'vendor_payment')
-           and party_id is not null
-           and abs(coalesce(total, 0)) >= ${DUPLICATE_MIN_AMOUNT}
-      )
-      select count(*) as total, coalesce(sum(d1.amt), 0) as amount
-      from cand d1
-      join cand d2 on d2.party_id = d1.party_id and d2.kind = d1.kind and d2.amt = d1.amt
-        and d1.id < d2.id and abs(d2.ddate - d1.ddate) <= ${DUPLICATE_THRESHOLD_DAYS}
-      where d1.ddate >= ${from} and d1.ddate <= ${to}
+      select 'pair' as src, t.id1, t.id2, t.num1, t.num2, t.kind,
+        t.ddate1::text as date1, t.ddate2::text as date2, t.days_between, t.amount,
+        t.party_id, coalesce(p.display_name, 'Unknown') as party_name, t.same_memo,
+        null::bigint as pair_count
+      from top t
+      left join parties p on p.id = t.party_id
+      union all
+      select 'agg', null::uuid, null::uuid, null::text, null::text, null::text,
+        null::text, null::text, null::int, coalesce(sum(amount), 0), null::uuid,
+        null::text, null::boolean, count(*)
+      from pairs
     `) as Promise<any>,
 
     // Weekend-dated documents (top rows + full aggregate).
@@ -271,70 +287,68 @@ export async function sentinelData(orgId: string, period: { from: string; to: st
       order by abs(d.total) desc
       limit 200
     `) as Promise<any>,
-    db.execute(sql`
-      select extract(dow from coalesce(d.document_date, d.posting_date))::int as dow,
-        count(*) as count, coalesce(sum(abs(d.total)), 0) as amount
-      ${periodDocs}
-        and extract(dow from coalesce(d.document_date, d.posting_date)) in (0, 6)
-      group by 1
-    `) as Promise<any>,
 
-    // RSF — per-vendor top-2 baseline via ONE window-function pass (no N+1).
+    // RSF and z-score share ONE per-vendor baseline. Both derive their vendor
+    // statistics from the identical 36-month row set, so computing them
+    // separately scanned three years of spend documents twice. A single
+    // window pass — ordered by amount for the rank, with an explicit full
+    // frame so the aggregates still see the whole partition — yields the
+    // 2nd-largest, the count, the mean and σ together; the period documents
+    // then materialize once and each detector filters them. The two result
+    // sets come back unioned with a `src` discriminator and are split below.
     db.execute(sql`
       with baseline as (
         select d.party_id, abs(d.total) as amount,
-          row_number() over (partition by d.party_id order by abs(d.total) desc) as rn,
-          count(*) over (partition by d.party_id) as cnt
+          row_number() over w as rn,
+          count(*) over w as cnt,
+          avg(abs(d.total)) over w as avg_amount,
+          stddev_samp(abs(d.total)) over w as std_amount
         from documents d
         where d.org_id = ${orgId} and d.voided_at is null and d.kind in (${kindsIn})
           and d.party_id is not null and abs(coalesce(d.total, 0)) > 0
           and coalesce(d.document_date, d.posting_date) >= ${baselineFrom}
           and coalesce(d.document_date, d.posting_date) <= ${to}
-      ), second_largest as (
+        window w as (partition by d.party_id order by abs(d.total) desc
+                     rows between unbounded preceding and unbounded following)
+      ), stats as (
+        select party_id,
+          max(amount) filter (where rn = 2) as second_amount,
+          max(cnt) as cnt, max(avg_amount) as avg_amount, max(std_amount) as std_amount
+        from baseline group by party_id
+      ), period as materialized (
+        select d.id, d.document_number, d.kind,
+          coalesce(d.document_date, d.posting_date)::text as date,
+          abs(d.total) as amount, d.party_id, coalesce(p.display_name, 'Unknown') as party_name
+        from documents d
+        left join parties p on p.id = d.party_id
+        where d.org_id = ${orgId} and d.voided_at is null and d.kind in (${kindsIn})
+          and d.party_id is not null
+          and coalesce(d.document_date, d.posting_date) >= ${from}
+          and coalesce(d.document_date, d.posting_date) <= ${to}
+      ), rsf as (
         -- $100 floor: a near-zero historical 2nd-largest turns RSF into noise.
-        select party_id, amount as second_amount, cnt from baseline where rn = 2 and amount >= 100
+        select pd.*, s.second_amount, s.cnt as baseline_count,
+          null::numeric as avg_amount, null::numeric as std_amount,
+          pd.amount / s.second_amount as metric
+        from period pd
+        join stats s on s.party_id = pd.party_id and s.second_amount >= 100
+        where pd.amount / s.second_amount >= ${RSF_THRESHOLD}
+        order by metric desc
+        limit 100
+      ), zs as (
+        select pd.*, null::numeric as second_amount, s.cnt as baseline_count,
+          s.avg_amount, s.std_amount,
+          (pd.amount - s.avg_amount) / s.std_amount as metric
+        from period pd
+        join stats s on s.party_id = pd.party_id and s.cnt >= 5 and s.std_amount > 10
+        where abs((pd.amount - s.avg_amount) / s.std_amount) >= ${Z_SCORE_THRESHOLD}
+          and abs((pd.amount - s.avg_amount) / s.std_amount) < 50
+        order by abs((pd.amount - s.avg_amount) / s.std_amount) desc
+        limit 200
       )
-      select d.id, d.document_number, d.kind, coalesce(d.document_date, d.posting_date)::text as date,
-        abs(d.total) as amount, d.party_id, coalesce(p.display_name, 'Unknown') as party_name,
-        s.second_amount, s.cnt as baseline_count,
-        abs(d.total) / s.second_amount as rsf
-      from documents d
-      join second_largest s on s.party_id = d.party_id and s.second_amount > 0
-      left join parties p on p.id = d.party_id
-      where d.org_id = ${orgId} and d.voided_at is null and d.kind in (${kindsIn})
-        and coalesce(d.document_date, d.posting_date) >= ${from}
-        and coalesce(d.document_date, d.posting_date) <= ${to}
-        and abs(d.total) / s.second_amount >= ${RSF_THRESHOLD}
-      order by rsf desc
-      limit 100
-    `) as Promise<any>,
-
-    // Z-score — per-vendor mean/σ baseline in ONE aggregate pass.
-    db.execute(sql`
-      with baseline as (
-        select d.party_id, count(*) as cnt, avg(abs(d.total)) as avg_amount, stddev_samp(abs(d.total)) as std_amount
-        from documents d
-        where d.org_id = ${orgId} and d.voided_at is null and d.kind in (${kindsIn})
-          and d.party_id is not null and abs(coalesce(d.total, 0)) > 0
-          and coalesce(d.document_date, d.posting_date) >= ${baselineFrom}
-          and coalesce(d.document_date, d.posting_date) <= ${to}
-        group by d.party_id
-        having count(*) >= 5 and stddev_samp(abs(d.total)) > 10
-      )
-      select d.id, d.document_number, d.kind, coalesce(d.document_date, d.posting_date)::text as date,
-        abs(d.total) as amount, d.party_id, coalesce(p.display_name, 'Unknown') as party_name,
-        b.avg_amount, b.std_amount, b.cnt as baseline_count,
-        (abs(d.total) - b.avg_amount) / b.std_amount as z
-      from documents d
-      join baseline b on b.party_id = d.party_id
-      left join parties p on p.id = d.party_id
-      where d.org_id = ${orgId} and d.voided_at is null and d.kind in (${kindsIn})
-        and coalesce(d.document_date, d.posting_date) >= ${from}
-        and coalesce(d.document_date, d.posting_date) <= ${to}
-        and abs((abs(d.total) - b.avg_amount) / b.std_amount) >= ${Z_SCORE_THRESHOLD}
-        and abs((abs(d.total) - b.avg_amount) / b.std_amount) < 50
-      order by abs((abs(d.total) - b.avg_amount) / b.std_amount) desc
-      limit 200
+      select 'rsf' as src, * from rsf
+      union all
+      select 'z' as src, * from zs
     `) as Promise<any>,
 
     // Sequential invoice runs — gaps-and-islands over vendor reference numbers.
@@ -442,14 +456,36 @@ export async function sentinelData(orgId: string, period: { from: string; to: st
       where org_id = ${orgId} and at >= ${from}::date and at < (${to}::date + interval '1 day')
     `) as Promise<any>,
 
-    // Calendar heatmap — spend document count/amount per day, full period.
-    db.execute(sql`
-      select coalesce(d.document_date, d.posting_date)::text as date, count(*) as count, sum(abs(d.total)) as amount
-      ${periodDocs}
-      group by 1
-      order by 1
-    `) as Promise<any>,
   ]);
+
+  // Split the one grouping-sets result back into the six aggregate shapes.
+  // grouping(col) is 0 exactly when that column is a real key for the row, so
+  // each set is picked out by its own flag; the null key in the trap/weekend
+  // sets is the non-qualifying remainder and is dropped.
+  const dupAllRows = dupAll.rows as any[];
+  const dupRows = { rows: dupAllRows.filter((r) => r.src === "pair") };
+  const dupAgg = { rows: dupAllRows.filter((r) => r.src === "agg").map((r) => ({ total: r.pair_count, amount: r.amount })) };
+
+  const vendorStats = vendorStatRows.rows as any[];
+  const rsfRows = { rows: vendorStats.filter((r) => r.src === "rsf").map((r) => ({ ...r, rsf: r.metric })) };
+  const zRows = { rows: vendorStats.filter((r) => r.src === "z").map((r) => ({ ...r, z: r.metric })) };
+
+  const aggAll = aggRows.rows as any[];
+  const gset = (flag: string, key: string) =>
+    aggAll.filter((r) => Number(r[flag]) === 0 && r[key] !== null);
+  const metaRows = {
+    // The grand-total set: every flag 1, i.e. nothing is a group key.
+    rows: aggAll
+      .filter((r) => ["g_digit1", "g_digit2", "g_trap", "g_dow", "g_date"].every((f) => Number(r[f]) === 1))
+      .map((r) => ({ docs: r.count, amount: r.amount })),
+  };
+  const b1Rows = { rows: gset("g_digit1", "digit1").map((r) => ({ digit: r.digit1, count: r.count, amount: r.amount })) };
+  const b2Rows = { rows: gset("g_digit2", "digit2").map((r) => ({ digits: r.digit2, count: r.count, amount: r.amount })) };
+  const trapAgg = { rows: gset("g_trap", "trap") };
+  const weekendAgg = { rows: gset("g_dow", "dow") };
+  const calRows = {
+    rows: gset("g_date", "date").sort((a, b) => (a.date < b.date ? -1 : a.date > b.date ? 1 : 0)),
+  };
 
   // ---- Benford 1D --------------------------------------------------------------
   const b1Map = new Map<string, { count: number; amount: number }>(
