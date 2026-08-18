@@ -132,8 +132,9 @@ export const journalLines = pgTable(
     extraDims: jsonb("extra_dims").notNull().default({}), // registry-validated
 
     /**
-     * The entry's posting date, carried on the line (Universal Journal shape:
-     * SAP ACDOCA, Oracle GL_JE_LINES.effective_date). DERIVED and never
+     * The entry's posting date, carried on the line — the shape every
+     * large-scale ledger converges on, because a line that cannot be filtered
+     * by its own date forces a join to its header. DERIVED and never
      * authored — triggers keep it equal to the entry's posting_date in either
      * insertion order, so a bulk copy that inserts lines before their entry
      * still converges. Without it every date-ranged GL read had to join
