@@ -42,6 +42,8 @@ interface RatePayload {
   country: string
   rateKey: string
   region: string | null
+  /** The taxing unit below the region, for a slot declared at sub_region scope. */
+  subRegion: string | null
   filingAccountId: string | null
   taxYear: number
   values: Record<string, unknown>
@@ -54,6 +56,14 @@ function parseBody(body: unknown): RatePayload | string {
   const rateKey = String(raw.rateKey ?? '')
   if (!country || !rateKey) return 'country and rateKey are required'
   const region = raw.region == null || raw.region === '' ? null : String(raw.region)
+  // Carried, not dropped. Without it a sub_region-scoped slot (an Ohio
+  // municipal rate, a Michigan city's rate pair, a PA Act 32 PSD) had no
+  // writable home at all: the engine has resolved, validated and stored them
+  // per jurisdiction all along, and this route silently wrote every one of them
+  // to the region-wide point — one row for the whole state, last write wins.
+  const subRegion = raw.subRegion == null || raw.subRegion === ''
+    ? null
+    : String(raw.subRegion).trim()
   const filingAccountId = raw.filingAccountId == null || raw.filingAccountId === ''
     ? null
     : String(raw.filingAccountId)
@@ -63,7 +73,7 @@ function parseBody(body: unknown): RatePayload | string {
   const values = raw.values
   if (typeof values !== 'object' || values === null || Array.isArray(values)) return 'invalid values'
   return {
-    country, rateKey, region, filingAccountId, taxYear,
+    country, rateKey, region, subRegion, filingAccountId, taxYear,
     values: values as Record<string, unknown>,
   }
 }
@@ -170,6 +180,7 @@ export async function PUT(req: Request) {
     country: parsed.country,
     rateKey: parsed.rateKey,
     region: parsed.region,
+    subRegion: parsed.subRegion,
     filingAccountId: parsed.filingAccountId,
     taxYear: parsed.taxYear,
     account: account
@@ -185,6 +196,7 @@ export async function PUT(req: Request) {
       country: parsed.country,
       rateKey: parsed.rateKey,
       region: parsed.region,
+      subRegion: parsed.subRegion,
       filingAccountId: parsed.filingAccountId,
       taxYear: parsed.taxYear,
       values: parsed.values,

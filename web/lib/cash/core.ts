@@ -70,8 +70,20 @@ export interface WeekRow {
   net: number;
   startingCash: number;
   endingCash: number;
+  /**
+   * The week's transactions. Omitted from a page's initial payload — a cockpit
+   * ships thousands of these per week and renders them only when a week is
+   * opened, so `weekForecastEntries` fetches the clicked week on demand.
+   * Consumers that only need magnitudes must read the totals/counts below,
+   * which are always populated.
+   */
   arEntries: ForecastEntry[];
   apEntries: ForecastEntry[];
+  /** Always present, even when the entry arrays have been withheld. */
+  arTotal: number;
+  apTotal: number;
+  arCount: number;
+  apCount: number;
   /** Non-AR/AP forecast flows from configured categories. */
   dynamicInflow: number;
   dynamicOutflow: number;
@@ -197,6 +209,16 @@ export interface OpenItem {
 
 export type PaymentStats = { map: Map<string, { avg: number; sd: number }>; globalAvg: number };
 
+/**
+ * The same weeks with their per-transaction arrays withheld. Totals and counts
+ * survive, so every summary still renders from the initial payload; the detail
+ * is fetched per week when the reader opens one. Nothing is lost — only
+ * deferred.
+ */
+export function withoutWeekEntries(weeks: WeekRow[]): WeekRow[] {
+  return weeks.map((w) => ({ ...w, arEntries: [], apEntries: [] }));
+}
+
 /** A resolved week grid for a horizon anchored at `asOf`. */
 export interface WeekGrid {
   asOfIso: string;
@@ -239,27 +261,27 @@ function subScope(col: ReturnType<typeof sql>, subIds?: string[]) {
  */
 export async function paymentStats(side: Side, asOfIso: string): Promise<PaymentStats> {
   const acctType = side === "ar" ? "asset_receivable" : "liability_payable";
-  // Days-to-pay reads both dates off the lines themselves. Reaching them
-  // through each line's entry meant four joins over every application in the
-  // tenant; the line-carried posting_date halves that and makes the window
-  // filter an index scan. Every relation also carries an explicit org
-  // predicate: RLS scopes rows either way, but its current_setting()
-  // comparison cannot drive an index.
+  // Settlement behaviour comes from party_payment_stats, the rollup maintained
+  // at the settlement event (see 0001_baseline.sql). It stores sufficient
+  // statistics per (party, settlement day) — count, Σdays, Σdays² — so the
+  // trailing window is an exact range scan and both the mean and the
+  // population standard deviation are reconstructed here without touching the
+  // ledger. Deriving them from applications meant four joins over every
+  // settlement in the tenant on every cockpit render.
   const orgId = await resolveOrgId();
   const r = (await db.execute(sql`
-    select bl.party_id as id,
-      avg(pl.posting_date - bl.posting_date) as avg_days,
-      coalesce(stddev_pop(pl.posting_date - bl.posting_date), 0) as sd_days,
-      count(*) as n
-    from applications a
-    join journal_lines bl on bl.id = a.to_line_id and bl.org_id = ${orgId}
-    join journal_lines pl on pl.id = a.from_line_id and pl.org_id = ${orgId}
-    join accounts ba on ba.id = bl.account_id and ba.org_id = ${orgId}
-    where a.org_id = ${orgId}
-      and ba.type = ${acctType} and a.unapplied_at is null and bl.party_id is not null
-      and pl.posting_date >= ${asOfIso}::date - interval '365 days'
-      and pl.posting_date <= ${asOfIso}::date
-    group by bl.party_id
+    select party_id as id,
+           sum(sum_days) / sum(n) as avg_days,
+           sqrt(greatest(
+             sum(sum_days_sq) / sum(n) - (sum(sum_days) / sum(n)) * (sum(sum_days) / sum(n)),
+             0)) as sd_days,
+           sum(n) as n
+      from party_payment_stats
+     where org_id = ${orgId} and account_type = ${acctType}
+       and settled_on >= ${asOfIso}::date - 365
+       and settled_on <= ${asOfIso}::date
+     group by party_id
+    having sum(n) > 0
   `)) as any;
   const map = new Map<string, { avg: number; sd: number }>();
   let sum = 0;

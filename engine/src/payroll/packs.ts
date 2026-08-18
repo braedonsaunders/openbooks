@@ -1,10 +1,26 @@
 import { sql } from "drizzle-orm";
 import { db } from "../db.ts";
 import type { PayrollPackFilings } from "../payroll-filing-registry.ts";
+import { CA_JURISDICTIONS } from "./canada/employment-standards.ts";
 import { caPackFilings } from "./canada/filings.ts";
 import { CA_PACK_RATES, CA_TAX_YEARS, type Province } from "./canada/rates.ts";
 import { usPackFilings } from "./us/filings.ts";
 import { NO_WITHHOLDING_STATES, US_PACK_RATES, US_STATES, US_TAX_YEARS } from "./us/rates.ts";
+import { implementedUsStates, supportedUsStates } from "./us/states/index.ts";
+import { CA_CERTIFICATES, CA_WITHHOLDING_JURISDICTIONS } from "./canada/jurisdictions.ts";
+import { US_CERTIFICATES, US_RECIPROCITY, US_WITHHOLDING } from "./us/jurisdictions.ts";
+import {
+  type PayrollPackCertificates,
+  registerPayrollCertificateSource,
+} from "./certificates.ts";
+import {
+  type PayrollPackReciprocity,
+  registerPayrollReciprocitySource,
+} from "./reciprocity.ts";
+import {
+  type PayrollPackWithholding,
+  registerPayrollWithholdingSource,
+} from "./withholding-jurisdictions.ts";
 import type { PayrollPackRates } from "./statutory-rates.ts";
 import type { PayrollTaxYearSupport } from "./tax-years.ts";
 
@@ -80,6 +96,33 @@ export type PayrollAssessedOn = "earnings" | "taxable_income";
  *   bill for money nobody is owed.
  */
 export type PayrollRemittanceTreatment = "tax_authority" | "external" | "internal_accrual";
+
+/**
+ * How the pack's statutory engine must treat a RETROACTIVE payment — the
+ * difference paid now for periods that were already paid at a lower rate.
+ *
+ * This is a jurisdictional fact, and it is genuinely not the same everywhere.
+ * The CRA's T4127 has a whole method for it (Method 2, "retroactive pay
+ * increase": tax the amount as a bonus, not as period income) and Revenu
+ * Québec's TP-1015 Appendix 2 says the same for Québec; the IRS treats it as
+ * supplemental wages under Pub 15-T. Other jurisdictions require a retro
+ * amount to be RE-SPREAD over the periods it relates to and taxed as though it
+ * had been paid then, which is a completely different number.
+ *
+ * - `non_periodic`  — taxed by the pack's non-periodic / bonus / supplemental
+ *   method: the amount is not annualized as though the employee received it
+ *   every period. This is what the `nonPeriodic` line flag already means and
+ *   what T4127 factor B and Pub 15-T's supplemental path already implement, so
+ *   declaring it wires to the conformance-tested engine rather than to
+ *   anything new.
+ * - `periodic`      — taxed as ordinary income of the period it is PAID in
+ *   (annualized with the rest of the cheque).
+ *
+ * REQUIRED on every pack. A pack that inherits another jurisdiction's answer
+ * for this withholds the wrong tax on the single largest off-cycle payment
+ * most employees ever receive, and nothing downstream can tell.
+ */
+export type PayrollRetroactiveTreatment = "non_periodic" | "periodic";
 
 /**
  * One statutory component of a pack: what the engine seeds, what it pushes a
@@ -166,6 +209,13 @@ export interface PayrollCountryPack {
    * question instead of inheriting another authority's vendor.
    */
   remittanceVendorSettingsKey: string | null;
+  /**
+   * How a RETROACTIVE payment is taxed here (see the type). REQUIRED: retro
+   * pay is a generic concept with a jurisdictional answer, and a pack that
+   * inherits another's answer withholds the wrong tax on the largest
+   * off-cycle payment most employees ever receive.
+   */
+  retroactivePayTreatment: PayrollRetroactiveTreatment;
   /** What the generic pensionable/insurable flags mean here. See the type. */
   contributoryBases: PayrollContributoryBases;
   /**
@@ -225,6 +275,35 @@ export interface PayrollCountryPack {
    * lets the product say so BEFORE a payroll calculates.
    */
   taxYears: PayrollTaxYearSupport;
+  /**
+   * The certificates the pack's employees file to set their own withholding
+   * (engine/src/payroll/certificates.ts). LAZY, like `filings`: the declaration
+   * modules import the pack's rate and engine modules and would be dereferenced
+   * mid-evaluation if the pack held the value.
+   *
+   * REQUIRED, for the same reason `statutoryRates` and `taxYears` are — a pack
+   * that does not answer is a pack whose answer somebody guessed. A country
+   * whose employees file no withholding certificate at all declares an empty
+   * list, which is a statement; silence is not.
+   */
+  certificates: () => PayrollPackCertificates;
+  /**
+   * Which regions levy income tax, what sits below them, and how each one
+   * treats its residents' out-of-region wages
+   * (engine/src/payroll/withholding-jurisdictions.ts). REQUIRED: this is the
+   * declaration `resolveWithholding` refuses on, and a pack that omits it
+   * cannot be asked the cross-border question at all — which is how a Québec
+   * resident working in Ontario was silently withheld Ontario only.
+   */
+  withholding: () => PayrollPackWithholding;
+  /**
+   * Interstate / interprovincial reciprocity
+   * (engine/src/payroll/reciprocity.ts). OPTIONAL, and the only one of the
+   * three that is: "this country has no such agreements" is a legitimate and
+   * common answer, and an absent declaration resolves exactly as an empty one —
+   * to "no agreement", which withholds the work region. Canada declares none.
+   */
+  reciprocity?: () => PayrollPackReciprocity;
 }
 
 // ---------------------------------------------------------------------------
@@ -301,11 +380,18 @@ const CA_REGIONS: PayrollRegionCoverage = {
 const US_REGIONS: PayrollRegionCoverage = {
   label: "state",
   known: US_STATES,
-  // Declared in US_STATES order so the coverage list reads the same everywhere.
-  supported: US_STATES.filter((code) => NO_WITHHOLDING_STATES.has(code)),
+  /**
+   * DERIVED, never a second literal list. It is the states whose income tax the
+   * pack computes end to end PLUS the states that levy none — and the previous
+   * hand-maintained literal was all nine of the second kind and none of the
+   * first, which nothing in the codebase could tell. A state gains support by
+   * registering an engine, not by somebody remembering to edit an array.
+   */
+  supported: supportedUsStates(),
   unsupportedReason:
-    "state income tax withholding for {region} is not yet supported — "
-    + "the US pack currently covers the nine no-withholding states",
+    "{region} income tax withholding is not implemented by the US payroll pack. Transcribe the "
+    + "state's published withholding tables into engine/src/payroll/us/states/ and register the "
+    + `engine. Implemented: ${implementedUsStates().join(", ")}.`,
 };
 
 // ---------------------------------------------------------------------------
@@ -373,6 +459,65 @@ export interface PayrollHoliday {
 }
 
 /**
+ * WHICH days of a window a statute counts — the predicate, declared.
+ *
+ * Three statutes, three genuinely different sentences, and every one of them
+ * decides whether a real employee is paid:
+ *
+ *  - `worked` — the employee actually worked the day. New Brunswick's averaging
+ *    arm ("the days on which the employee WORKED during the thirty calendar
+ *    days"), the territories' thirty-days-worked service test, Alberta's
+ *    average daily wage.
+ *  - `worked_or_earned_wages` — British Columbia, ESA s. 44 and s. 45: "worked
+ *    or earned wages for 15 of the 30 calendar days preceding the statutory
+ *    holiday", and the same measure again as the denominator of the average
+ *    day's pay. The Branch's own interpretive guideline is explicit that this
+ *    takes in days of paid annual vacation, paid sick days required by the Act,
+ *    and other paid statutory holidays falling in the window. An employee who
+ *    spent the fortnight before Canada Day on paid vacation worked no days and
+ *    earned wages on every one of them.
+ *  - `entitled_to_pay` — Nova Scotia, Labour Standards Code s. 42(1): the
+ *    employee "received or was ENTITLED TO RECEIVE pay" for fifteen of the
+ *    thirty days. Broader again: it reaches pay the employer owes and has not
+ *    yet paid, not only pay that was earned.
+ *
+ * They are declared separately even where a given data model cannot yet tell
+ * two of them apart, because the statute is the fact and the engine's ability
+ * to see it is not. Collapsing them into one value would make the day the
+ * model improves a re-reading of every jurisdiction instead of a widening of
+ * one resolver.
+ */
+export type PayrollHolidayDayCounting =
+  | "worked"
+  | "worked_or_earned_wages"
+  | "entitled_to_pay";
+
+/**
+ * Where a lookback window ENDS — and it is not the same sentence everywhere.
+ *
+ *  - `day_before` — "the four weeks immediately preceding the general holiday".
+ *    The window ends the day before the holiday itself. Alberta, Saskatchewan,
+ *    Manitoba, New Brunswick, Newfoundland, Nova Scotia, Prince Edward Island
+ *    and British Columbia's thirty calendar days are all worded this way.
+ *  - `week_before` — "the four-week period immediately preceding the WEEK in
+ *    which the general holiday occurs". The window ends on the last day of the
+ *    week BEFORE the holiday's own week, so the part-week the holiday sits in
+ *    is excluded entirely. The Canada Labour Code s. 196, Ontario s. 24(1)(a)
+ *    ("the four work weeks before the work week with the public holiday"),
+ *    Quebec s. 62 ("the four complete weeks of pay preceding the week of the
+ *    holiday"), Yukon s. 30(2) and the two territories are all worded this way.
+ *
+ * The two differ by up to six days of earnings, and for anyone whose pay varies
+ * that difference is money. `weekStartsOn` is the statute's own week: 0 is
+ * Sunday, which is what the Canada Labour Code fixes (s. 166, midnight Saturday
+ * to midnight Saturday) and what Ontario's ESA falls back to when an employer
+ * has selected no work week of its own.
+ */
+export type PayrollHolidayLookbackBoundary =
+  | { kind: "day_before" }
+  | { kind: "week_before"; weekStartsOn: number };
+
+/**
  * How a day's statutory holiday pay is computed from prior earnings. This is a
  * statutory FACT per jurisdiction and it varies in both the window and the
  * divisor, so it is declared, never hardcoded to whichever province was
@@ -388,8 +533,12 @@ export interface PayrollHoliday {
  * - `percent_of_earnings` — a straight percentage of the lookback's earnings
  *   (Saskatchewan's 5%). Arithmetically 1/20 but declared as the statute
  *   words it, because the statute is what an auditor reads.
+ *
+ * All three derive the day from a LOOKBACK over prior earnings, which is why
+ * they share a type: the engine can always compute them from committed stubs
+ * and nothing else.
  */
-export type PayrollHolidayPayBasis =
+export type PayrollHolidayPayLookbackBasis =
   | {
       kind: "fixed_divisor";
       divisor: number;
@@ -397,8 +546,80 @@ export type PayrollHolidayPayBasis =
       /** Commission earners get a longer, flatter window in several statutes. */
       commission?: { divisor: number; lookbackWeeks: number; minWeeksEmployed: number };
     }
-  | { kind: "average_day"; lookbackDays?: number; lookbackWeeks?: number }
+  | {
+      kind: "average_day";
+      lookbackDays?: number;
+      lookbackWeeks?: number;
+      /**
+       * WHICH days the denominator counts. REQUIRED, because the statutes do
+       * not agree and the difference is the size of the day's pay: New
+       * Brunswick divides by "the days on which the employee WORKED", while
+       * British Columbia divides by "the number of days the employee worked or
+       * earned wages" — which its own guideline says includes paid vacation
+       * days and other paid statutory holidays. Dividing the same wages by two
+       * different denominators is two different answers, so the denominator is
+       * declared rather than assumed.
+       */
+      counting: PayrollHolidayDayCounting;
+    }
   | { kind: "percent_of_earnings"; percent: string; lookbackWeeks: number };
+
+/**
+ * The fourth basis is not a lookback at all.
+ *
+ * - `normal_day` — the wages of ONE NORMAL WORKING DAY: the hours the employee
+ *   is normally scheduled to work on a working day, at their regular rate.
+ *   Several statutes word the entitlement exactly that way, and no quantity of
+ *   prior earnings can produce it. A four-day compressed week is forty hours
+ *   and a TEN-hour normal day; dividing four weeks of wages by 20 pays eight.
+ *
+ *   Note it is the normal WORKING day and not the calendar day the holiday
+ *   fell on. Every statute that words the entitlement this way also grants a
+ *   substitute day off with pay when the holiday lands on the employee's day
+ *   off, so what is owed is one normal day either way — never the zero hours of
+ *   whichever weekday the holiday happened to occupy.
+ *
+ *   It reads `work_schedules` (engine/src/work-schedules.ts), and where that is
+ *   silent it REFUSES by name: there is no default working day, and inventing
+ *   an eight-hour one produces a number indistinguishable on the stub from a
+ *   correct one.
+ *
+ *   `whenIrregular` is the statute's OWN fallback, not a convenience. Every
+ *   jurisdiction that words the entitlement as a normal day also says what to
+ *   do when the employee has no normal day — "where the hours of work or wages
+ *   vary, …" — and that arm is always an ordinary lookback. Declaring both arms
+ *   keeps the whole rule in one place, and keeps a varying-hours employee from
+ *   being refused for a fact the statute already answers.
+ */
+export type PayrollHolidayPayBasis =
+  | PayrollHolidayPayLookbackBasis
+  | {
+      kind: "normal_day";
+      /**
+       * Where the statute confines the normal-day measure to employees working
+       * at least the jurisdiction's STANDARD hours, and puts everyone below it
+       * on `whenIrregular` even when their pattern is perfectly regular.
+       *
+       * Declared as a number of scheduled hours per week because that is how
+       * the statutes that do this express it. Omitted where the split turns
+       * only on whether the hours vary, which is most of them.
+       */
+      minWeeklyHours?: number;
+      whenIrregular: PayrollHolidayPayLookbackBasis;
+    };
+
+/**
+ * The lookback arm of any basis — itself, or a `normal_day`'s fallback.
+ *
+ * The lookback window is loaded unconditionally, because a `normal_day` rule
+ * cannot know until it has resolved the employee's schedule whether it will
+ * need it. One accessor, so no caller re-derives the unwrapping and gets it
+ * subtly different.
+ */
+export const holidayPayLookbackBasis = (
+  basis: PayrollHolidayPayBasis,
+): PayrollHolidayPayLookbackBasis =>
+  basis.kind === "normal_day" ? basis.whenIrregular : basis;
 
 /** Which earnings the lookback base includes. Overtime is excluded almost
  *  everywhere; vacation pay and prior holiday pay are not. */
@@ -413,8 +634,13 @@ export interface PayrollHolidayPayInclusions {
 export interface PayrollHolidayQualifying {
   /** Calendar days of employment before the holiday (BC: 30). */
   minEmploymentDays?: number;
-  /** Days with earnings inside a window (BC: 15 of the 30 days before). */
-  minDaysWorkedInWindow?: { days: number; ofDays: number };
+  /**
+   * Days inside a window (BC: 15 of the 30 days before). `counting` is
+   * REQUIRED and is the whole test: "worked 15 of 30" and "worked or earned
+   * wages on 15 of 30" are different sentences in different Acts, and an
+   * employee on paid vacation passes one and fails the other.
+   */
+  minDaysWorkedInWindow?: { days: number; ofDays: number; counting: PayrollHolidayDayCounting };
   /**
    * The "last and first" rule: an employee absent WITHOUT the employer's
    * consent on the last scheduled shift before or the first after loses the
@@ -441,6 +667,46 @@ export interface PayrollHolidayPayRule {
   include: PayrollHolidayPayInclusions;
   qualifying: PayrollHolidayQualifying;
   premium: PayrollHolidayPremium;
+  /**
+   * Where every lookback this rule uses ENDS — the pay window, and a
+   * commission earner's longer window with it. REQUIRED: it was an
+   * unstated constant of "the day before the holiday", which is right in eight
+   * jurisdictions and wrong by up to six days of earnings in the other five.
+   */
+  lookbackEnds: PayrollHolidayLookbackBoundary;
+}
+
+/**
+ * One EDITION of a jurisdiction's holiday-pay formula — the same treatment
+ * `engine/src/payroll/tax-years.ts` gives a pack's statutory tables, for the
+ * same reason.
+ *
+ * Employment-standards formulas are amended, and a repealed Act still governs
+ * the periods it was in force for. Prince Edward Island is the live case: SPEI
+ * 2024 c 66 came into force on 2026-06-30 and replaced a regular day's pay with
+ * a percentage, so a retroactive PEI run for a June 2026 period computed on the
+ * new Act is simply wrong money. A single undated rule per jurisdiction cannot
+ * say that, so a jurisdiction declares editions and the engine resolves the one
+ * in force on the WORK DATE — the holiday's own date, never today.
+ *
+ * A date no edition covers is a REFUSAL, exactly as an unloaded tax year is:
+ * "the statute governing this period has not been transcribed" and "the
+ * jurisdiction requires nothing" must never produce the same payment.
+ */
+export interface PayrollHolidayPayEdition {
+  /**
+   * ISO date the edition comes into force, or NULL for "unbounded before".
+   *
+   * Required, and never omitted, because the two answers differ by a refusal.
+   * `null` is an explicit assertion and not an absence: it says the pack
+   * carries no earlier transcription for this jurisdiction and offers this one
+   * for every earlier date — which is what every jurisdiction here did before
+   * editions existed, stated out loud instead of assumed.
+   */
+  effectiveFrom: string | null;
+  /** Last date the edition governs, inclusive; null while it is current. */
+  effectiveTo: string | null;
+  rule: PayrollHolidayPayRule;
 }
 
 /**
@@ -452,6 +718,11 @@ export interface PayrollHolidayPayRule {
  * time not worked). It is not the same as a jurisdiction this pack does not
  * declare — that one throws. Silence and "no entitlement" must never be the
  * same value, because one of them is a bug and the other is the law.
+ *
+ * Anything else is a LIST OF EDITIONS in force over date ranges, resolved
+ * against the holiday's own date. A jurisdiction whose formula has never been
+ * amended within this pack's knowledge declares exactly one, with
+ * `effectiveFrom: null`.
  */
 export interface PayrollJurisdiction {
   key: string;
@@ -469,330 +740,15 @@ export interface PayrollJurisdiction {
   /** The statute that lists the holidays. */
   citation: string;
   holidays: readonly PayrollHoliday[];
-  holidayPay: PayrollHolidayPayRule | null;
+  holidayPay: readonly PayrollHolidayPayEdition[] | null;
 }
 
-// --- Reusable holiday rules ------------------------------------------------
-// The same day observed by several jurisdictions is declared once; the
-// jurisdiction lists say WHICH days it observes, not what a day is.
-
-const NEW_YEARS: PayrollHoliday = {
-  key: "new_years", name: "New Year's Day",
-  rule: { kind: "fixed", month: 1, day: 1 }, observance: "none",
-};
-const GOOD_FRIDAY: PayrollHoliday = {
-  key: "good_friday", name: "Good Friday",
-  rule: { kind: "easter_offset", days: -2 }, observance: "none",
-};
-const EASTER_MONDAY: PayrollHoliday = {
-  key: "easter_monday", name: "Easter Monday",
-  rule: { kind: "easter_offset", days: 1 }, observance: "none",
-};
-const VICTORIA_DAY: PayrollHoliday = {
-  key: "victoria_day", name: "Victoria Day",
-  // The Monday preceding May 25 — never May 25 itself when that is a Monday.
-  rule: { kind: "weekday_before", month: 5, day: 25, weekday: 1 }, observance: "none",
-};
-const CANADA_DAY: PayrollHoliday = {
-  key: "canada_day", name: "Canada Day",
-  rule: { kind: "fixed", month: 7, day: 1 }, observance: "none",
-};
-const LABOUR_DAY: PayrollHoliday = {
-  key: "labour_day", name: "Labour Day",
-  rule: { kind: "nth_weekday", month: 9, weekday: 1, nth: 1 }, observance: "none",
-};
-const TRUTH_AND_RECONCILIATION: PayrollHoliday = {
-  key: "truth_and_reconciliation", name: "National Day for Truth and Reconciliation",
-  rule: { kind: "fixed", month: 9, day: 30 }, observance: "none", from: 2021,
-};
-const THANKSGIVING_CA: PayrollHoliday = {
-  key: "thanksgiving", name: "Thanksgiving Day",
-  rule: { kind: "nth_weekday", month: 10, weekday: 1, nth: 2 }, observance: "none",
-};
-const REMEMBRANCE_DAY: PayrollHoliday = {
-  key: "remembrance_day", name: "Remembrance Day",
-  rule: { kind: "fixed", month: 11, day: 11 }, observance: "none",
-};
-const CHRISTMAS: PayrollHoliday = {
-  key: "christmas", name: "Christmas Day",
-  rule: { kind: "fixed", month: 12, day: 25 }, observance: "none",
-};
-const BOXING_DAY: PayrollHoliday = {
-  key: "boxing_day", name: "Boxing Day",
-  rule: { kind: "fixed", month: 12, day: 26 }, observance: "none",
-};
-const THIRD_MONDAY_FEBRUARY: PayrollHolidayRule = {
-  kind: "nth_weekday", month: 2, weekday: 1, nth: 3,
-};
-const FIRST_MONDAY_AUGUST: PayrollHolidayRule = {
-  kind: "nth_weekday", month: 8, weekday: 1, nth: 1,
-};
-
-/** The Canada Labour Code moves a weekend general holiday to a working day. */
-const federal = (holiday: PayrollHoliday): PayrollHoliday => ({
-  ...holiday, observance: "next_monday",
-});
-
-// --- Canadian holiday-pay rules --------------------------------------------
-
-/**
- * Canada Labour Code s. 196(1)–(2). One twentieth of the wages, excluding
- * overtime pay, earned in the four-week period immediately preceding the week
- * in which the holiday occurs; one sixtieth over twelve weeks for a commission
- * earner with at least twelve weeks of continuous employment. The thirty-day
- * qualifying period was repealed effective 2019-09-01, so there is none.
- */
-const CLC_HOLIDAY_PAY: PayrollHolidayPayRule = {
-  citation: "Canada Labour Code, RSC 1985 c L-2, ss. 196–197",
-  basis: {
-    kind: "fixed_divisor", divisor: 20, lookbackWeeks: 4,
-    commission: { divisor: 60, lookbackWeeks: 12, minWeeksEmployed: 12 },
-  },
-  include: { overtime: false, vacationPay: true, holidayPay: true },
-  qualifying: { lastAndFirstScheduledShift: false },
-  premium: { multiplier: "1.5", plusHolidayPay: true },
-};
-
-/**
- * Ontario ESA s. 24(1)(a). All of the REGULAR wages earned in the four work
- * weeks before the work week with the public holiday, plus all of the vacation
- * pay payable with respect to those four work weeks, divided by 20. Regular
- * wages exclude overtime pay, premium pay, and pay for other public holidays —
- * which is why `holidayPay` is false here and true federally.
- */
-const ON_HOLIDAY_PAY: PayrollHolidayPayRule = {
-  citation: "Employment Standards Act, 2000 (Ontario), ss. 24(1)(a), 26, 29",
-  basis: { kind: "fixed_divisor", divisor: 20, lookbackWeeks: 4 },
-  include: { overtime: false, vacationPay: true, holidayPay: false },
-  qualifying: { lastAndFirstScheduledShift: true },
-  premium: { multiplier: "1.5", plusHolidayPay: true },
-};
-
-/**
- * Quebec LSA s. 62. One twentieth of the wages earned during the four complete
- * weeks of pay preceding the week of the holiday, excluding overtime; one
- * sixtieth over twelve complete weeks for an employee remunerated in whole or
- * in part on commission. No service requirement since 2003-05-01 (s. 65).
- */
-const QC_HOLIDAY_PAY: PayrollHolidayPayRule = {
-  citation: "Act respecting labour standards (Quebec), CQLR c N-1.1, ss. 62–65",
-  basis: {
-    kind: "fixed_divisor", divisor: 20, lookbackWeeks: 4,
-    commission: { divisor: 60, lookbackWeeks: 12, minWeeksEmployed: 12 },
-  },
-  include: { overtime: false, vacationPay: true, holidayPay: true },
-  qualifying: { lastAndFirstScheduledShift: true },
-  premium: { multiplier: "1", plusHolidayPay: true },
-};
-
-/**
- * British Columbia ESA ss. 44–46. An average day's pay: the amount paid or
- * payable for work done and wages earned in the 30 calendar days preceding the
- * holiday — vacation pay for vacation days taken in the period included,
- * overtime excluded — divided by the number of days worked or on which wages
- * were earned. Qualifying: employed 30 calendar days AND worked or earned
- * wages on at least 15 of them. Premium: time and a half to 12 hours, double
- * beyond, plus the average day's pay.
- */
-const BC_HOLIDAY_PAY: PayrollHolidayPayRule = {
-  citation: "Employment Standards Act (British Columbia), RSBC 1996 c 113, ss. 44–46",
-  basis: { kind: "average_day", lookbackDays: 30 },
-  include: { overtime: false, vacationPay: true, holidayPay: true },
-  qualifying: {
-    minEmploymentDays: 30,
-    minDaysWorkedInWindow: { days: 15, ofDays: 30 },
-    lastAndFirstScheduledShift: false,
-  },
-  premium: {
-    multiplier: "1.5", overtimeAfterHours: 12, overtimeMultiplier: "2",
-    plusHolidayPay: true,
-  },
-};
-
-/**
- * Alberta Employment Standards Code. Average daily wage = wages divided by the
- * number of days worked, over the four weeks immediately preceding the holiday
- * (an employer may instead use the four weeks ending on the last day of the
- * preceding pay period; this declares the statutory default). Overtime pay is
- * not wages for this purpose. An employee absent without the employer's
- * consent on the last scheduled workday before or the first after loses the
- * day.
- */
-const AB_HOLIDAY_PAY: PayrollHolidayPayRule = {
-  citation: "Employment Standards Code (Alberta), RSA 2000 c E-9, Part 2 Div. 5",
-  basis: { kind: "average_day", lookbackWeeks: 4 },
-  include: { overtime: false, vacationPay: true, holidayPay: true },
-  qualifying: { lastAndFirstScheduledShift: true },
-  premium: { multiplier: "1.5", plusHolidayPay: true },
-};
-
-/**
- * Saskatchewan Employment Act s. 2-33. Five per cent of the employee's wages,
- * not including overtime, in the four weeks preceding the public holiday. An
- * employee who has worked less than four weeks is still entitled to 5% of what
- * they have earned, so there is no service qualifier.
- */
-const SK_HOLIDAY_PAY: PayrollHolidayPayRule = {
-  citation: "The Saskatchewan Employment Act, SS 2013 c S-15.1, s. 2-33",
-  basis: { kind: "percent_of_earnings", percent: "5", lookbackWeeks: 4 },
-  include: { overtime: false, vacationPay: true, holidayPay: true },
-  qualifying: { lastAndFirstScheduledShift: false },
-  premium: { multiplier: "1.5", plusHolidayPay: true },
-};
-
 // --- Canadian jurisdictions ------------------------------------------------
+// Declared in ./canada/employment-standards.ts, beside the T4127 constants and
+// the CA filing declarations — the country pack's Canadian facts live in the
+// country pack's Canadian tree. Moved verbatim; the six previously declared
+// jurisdictions are byte-for-byte the same declarations they were.
 
-const CA_JURISDICTIONS: readonly PayrollJurisdiction[] = [
-  {
-    key: "CA",
-    name: "Canada (federally regulated)",
-    scope: "employment",
-    citation: "Canada Labour Code, RSC 1985 c L-2, ss. 191–197",
-    holidays: [
-      NEW_YEARS, GOOD_FRIDAY, VICTORIA_DAY, CANADA_DAY, LABOUR_DAY,
-      TRUTH_AND_RECONCILIATION, THANKSGIVING_CA, REMEMBRANCE_DAY, CHRISTMAS,
-      BOXING_DAY,
-    ].map(federal),
-    holidayPay: CLC_HOLIDAY_PAY,
-  },
-  {
-    key: "CA-ON",
-    name: "Ontario",
-    scope: "employment",
-    citation: "Employment Standards Act, 2000 (Ontario), s. 1 'public holiday'",
-    holidays: [
-      NEW_YEARS,
-      { key: "family_day", name: "Family Day", rule: THIRD_MONDAY_FEBRUARY, observance: "none" },
-      GOOD_FRIDAY, VICTORIA_DAY, CANADA_DAY, LABOUR_DAY, THANKSGIVING_CA,
-      CHRISTMAS, BOXING_DAY,
-      // Not ESA public holidays. An Ontario employer may observe them, and
-      // many do, but only by election — hence optional, not absent.
-      { key: "civic_holiday", name: "Civic Holiday", rule: FIRST_MONDAY_AUGUST, observance: "none", optional: true },
-      { ...TRUTH_AND_RECONCILIATION, optional: true },
-      { ...REMEMBRANCE_DAY, optional: true },
-      { ...EASTER_MONDAY, optional: true },
-    ],
-    holidayPay: ON_HOLIDAY_PAY,
-  },
-  {
-    key: "CA-QC",
-    name: "Quebec",
-    scope: "employment",
-    citation: "Act respecting labour standards (Quebec), s. 60; National Holiday Act, CQLR c F-1.1",
-    holidays: [
-      NEW_YEARS,
-      // s. 60(2): Good Friday OR Easter Monday, at the employer's option. The
-      // statutory default declared here is Good Friday; an employer that
-      // chooses Easter Monday turns the optional day on and this one off.
-      GOOD_FRIDAY,
-      { ...EASTER_MONDAY, optional: true },
-      { key: "national_patriots_day", name: "National Patriots' Day",
-        rule: { kind: "weekday_before", month: 5, day: 25, weekday: 1 }, observance: "none" },
-      { key: "st_jean_baptiste", name: "National Holiday (Saint-Jean-Baptiste)",
-        rule: { kind: "fixed", month: 6, day: 24 }, observance: "none" },
-      CANADA_DAY, LABOUR_DAY, THANKSGIVING_CA, CHRISTMAS,
-      { ...BOXING_DAY, optional: true },
-      { ...REMEMBRANCE_DAY, optional: true },
-    ],
-    holidayPay: QC_HOLIDAY_PAY,
-  },
-  {
-    key: "CA-BC",
-    name: "British Columbia",
-    scope: "employment",
-    citation: "Employment Standards Act (British Columbia), s. 1 'statutory holiday'",
-    holidays: [
-      NEW_YEARS,
-      // Moved from the second to the THIRD Monday in February in 2019.
-      { key: "family_day", name: "Family Day",
-        rule: { kind: "nth_weekday", month: 2, weekday: 1, nth: 2 }, observance: "none", until: 2018 },
-      { key: "family_day", name: "Family Day", rule: THIRD_MONDAY_FEBRUARY, observance: "none", from: 2019 },
-      GOOD_FRIDAY, VICTORIA_DAY, CANADA_DAY,
-      { key: "bc_day", name: "British Columbia Day", rule: FIRST_MONDAY_AUGUST, observance: "none" },
-      LABOUR_DAY,
-      // A BC statutory holiday from 2023 (Bill 2, 2023).
-      { ...TRUTH_AND_RECONCILIATION, from: 2023 },
-      THANKSGIVING_CA, REMEMBRANCE_DAY, CHRISTMAS,
-      { ...BOXING_DAY, optional: true },
-    ],
-    holidayPay: BC_HOLIDAY_PAY,
-  },
-  {
-    key: "CA-AB",
-    name: "Alberta",
-    scope: "employment",
-    citation: "Employment Standards Code (Alberta), s. 1(1)(n) 'general holiday'",
-    holidays: [
-      NEW_YEARS,
-      { key: "family_day", name: "Alberta Family Day", rule: THIRD_MONDAY_FEBRUARY, observance: "none" },
-      GOOD_FRIDAY, VICTORIA_DAY, CANADA_DAY, LABOUR_DAY, THANKSGIVING_CA,
-      REMEMBRANCE_DAY, CHRISTMAS,
-      // Alberta's optional general holidays, listed by the Code itself.
-      { ...EASTER_MONDAY, optional: true },
-      { key: "heritage_day", name: "Heritage Day", rule: FIRST_MONDAY_AUGUST, observance: "none", optional: true },
-      { ...BOXING_DAY, optional: true },
-      { ...TRUTH_AND_RECONCILIATION, optional: true },
-    ],
-    holidayPay: AB_HOLIDAY_PAY,
-  },
-  {
-    key: "CA-SK",
-    name: "Saskatchewan",
-    scope: "employment",
-    citation: "The Saskatchewan Employment Act, s. 2-1(1)(o) 'public holiday'",
-    holidays: [
-      NEW_YEARS,
-      { key: "family_day", name: "Family Day", rule: THIRD_MONDAY_FEBRUARY, observance: "none" },
-      GOOD_FRIDAY, VICTORIA_DAY, CANADA_DAY,
-      { key: "saskatchewan_day", name: "Saskatchewan Day", rule: FIRST_MONDAY_AUGUST, observance: "none" },
-      LABOUR_DAY, THANKSGIVING_CA, REMEMBRANCE_DAY, CHRISTMAS,
-      { ...BOXING_DAY, optional: true },
-      { ...TRUTH_AND_RECONCILIATION, optional: true },
-    ],
-    holidayPay: SK_HOLIDAY_PAY,
-  },
-  {
-    /**
-     * The CRA's OWN office calendar, which is not any employment-standards
-     * calendar: it carries Easter Monday and the Civic Holiday, which no
-     * province's ESA lists, and it is the calendar a remittance due date moves
-     * against ("a public holiday recognized by the CRA"). Declaring it as a
-     * jurisdiction keeps the tax administration's calendar from being confused
-     * with an employer's — they genuinely differ, and using one for the other
-     * is how a remittance lands a day late.
-     *
-     * It pays nobody: `holidayPay: null` says the CRA calendar mandates no
-     * employee entitlement, which is true — it is a due-date calendar.
-     */
-    key: "CA-CRA",
-    name: "Canada Revenue Agency (remittance due dates)",
-    scope: "tax_administration",
-    citation: "https://www.canada.ca/en/revenue-agency/services/tax/public-holidays.html",
-    holidays: [
-      NEW_YEARS, GOOD_FRIDAY, EASTER_MONDAY, VICTORIA_DAY, CANADA_DAY,
-      { key: "civic_holiday", name: "Civic Holiday", rule: FIRST_MONDAY_AUGUST, observance: "none" },
-      LABOUR_DAY, TRUTH_AND_RECONCILIATION, THANKSGIVING_CA, REMEMBRANCE_DAY,
-      CHRISTMAS, BOXING_DAY,
-    ],
-    holidayPay: null,
-  },
-  {
-    /** The CRA calendar as it applies in Quebec: Saint-Jean-Baptiste Day is
-     *  recognized there and the Civic Holiday is not. */
-    key: "CA-CRA-QC",
-    name: "Canada Revenue Agency — Quebec (remittance due dates)",
-    scope: "tax_administration",
-    citation: "https://www.canada.ca/en/revenue-agency/services/tax/public-holidays.html",
-    holidays: [
-      NEW_YEARS, GOOD_FRIDAY, EASTER_MONDAY, VICTORIA_DAY,
-      { key: "st_jean_baptiste", name: "Saint-Jean-Baptiste Day",
-        rule: { kind: "fixed", month: 6, day: 24 }, observance: "none" },
-      CANADA_DAY, LABOUR_DAY, TRUTH_AND_RECONCILIATION, THANKSGIVING_CA,
-      REMEMBRANCE_DAY, CHRISTMAS, BOXING_DAY,
-    ],
-    holidayPay: null,
-  },
-] as const;
 
 // --- United States ---------------------------------------------------------
 
@@ -866,6 +822,13 @@ export const PAYROLL_COUNTRY_PACKS: Record<string, PayrollCountryPack> = {
     // Source deductions are remitted to the Receiver General through the
     // org-configured CRA remittance vendor.
     remittanceVendorSettingsKey: "craRemittancePartyId",
+    // T4127 Method 2 ("retroactive pay increase") taxes a retro amount as a
+    // BONUS, not as period income — the CRA's own instruction — and Revenu
+    // Québec's TP-1015 Appendix 2 says the same for the provincial side. Both
+    // are already implemented and conformance-tested as the non-periodic
+    // (factor B) path, so this declaration wires retro to that engine rather
+    // than to anything new.
+    retroactivePayTreatment: "non_periodic",
     contributoryBases: {
       pensionable: "CPP/QPP pensionable earnings (T4127 factor PI)",
       insurable: "EI insurable earnings (T4127 factor IE)",
@@ -875,6 +838,11 @@ export const PAYROLL_COUNTRY_PACKS: Record<string, PayrollCountryPack> = {
     filings: caPackFilings,
     statutoryRates: CA_PACK_RATES,
     taxYears: CA_TAX_YEARS,
+    certificates: () => CA_CERTIFICATES,
+    withholding: () => CA_WITHHOLDING_JURISDICTIONS,
+    // No member at all: Canada's provinces have no interprovincial withholding
+    // agreements, and an absent declaration says exactly that. See
+    // engine/src/payroll/canada/jurisdictions.ts.
     statutorySlots: [
       {
         key: "income_tax",
@@ -980,6 +948,10 @@ export const PAYROLL_COUNTRY_PACKS: Record<string, PayrollCountryPack> = {
     // Federal deposits ride EFTPS; no single remittance vendor is configured,
     // so US statutory withholdings surface unassigned until one is.
     remittanceVendorSettingsKey: null,
+    // Back pay is SUPPLEMENTAL WAGES under Pub 15-T (§7), taxed by the
+    // supplemental method rather than annualized with the period's regular
+    // wages — the same non-periodic path the engine already implements.
+    retroactivePayTreatment: "non_periodic",
     contributoryBases: {
       pensionable: "FICA (Social Security and Medicare) wages",
       insurable: "FUTA and state unemployment (SUI) wages",
@@ -990,6 +962,9 @@ export const PAYROLL_COUNTRY_PACKS: Record<string, PayrollCountryPack> = {
     filings: usPackFilings,
     statutoryRates: US_PACK_RATES,
     taxYears: US_TAX_YEARS,
+    certificates: () => US_CERTIFICATES,
+    withholding: () => US_WITHHOLDING,
+    reciprocity: () => US_RECIPROCITY,
     statutorySlots: [
       {
         key: "fit",
@@ -1022,9 +997,66 @@ export const PAYROLL_COUNTRY_PACKS: Record<string, PayrollCountryPack> = {
           { code: "SUTA", name: "State unemployment (SUI)", systemKey: "suta", kind: "employer_contribution", sequence: 250, assessedOn: "earnings", remittance: "external" },
         ],
       },
+      {
+        key: "state_income_tax",
+        components: [
+          // A state's income tax is computed from state-taxable wages after
+          // pre-tax deductions, so a §125 or 401(k) order moves it exactly as
+          // it moves the federal line — assessedOn 'taxable_income', which is
+          // what makes the deduction-protection fixpoint re-derive it.
+          //
+          // ONE component for every state, with the jurisdiction on the LINE
+          // (its description and the stub's factors), not one component per
+          // state. A component per state would be fifty rows in a table an
+          // operator reads, forty of them always empty, and it still would not
+          // answer the remittance question — state withholding is remitted per
+          // REGISTRATION (a payroll_filing_account), which is a different axis
+          // from the component. Remittance is 'external': a state's
+          // withholding goes to the state, never to the federal vendor.
+          { code: "SIT", name: "State income tax", systemKey: "state_income_tax", kind: "deduction", sequence: 140, assessedOn: "taxable_income", remittance: "external" },
+        ],
+      },
+      {
+        key: "local_income_tax",
+        components: [
+          // The taxing unit BELOW the state: New York City, Yonkers,
+          // Philadelphia, an Ohio municipality or school district, a Michigan
+          // city. Its own slot rather than the state's, because it is remitted
+          // to a different authority — the City of Philadelphia is not the
+          // Commonwealth of Pennsylvania — and an employer posting both to one
+          // payable cannot reconcile either.
+          { code: "LIT", name: "Local income tax", systemKey: "local_income_tax", kind: "deduction", sequence: 145, assessedOn: "taxable_income", remittance: "external" },
+        ],
+      },
     ],
   },
 };
+
+/**
+ * The packs' certificate, withholding and reciprocity declarations, published
+ * to the registries that read them.
+ *
+ * LAZY on purpose. The registries hold the pack's own thunk and build the
+ * declaration on the first READ, so nothing here dereferences
+ * `us/jurisdictions.ts` while this module is still evaluating. Before this,
+ * `us/jurisdictions.ts` registered itself at the bottom of its own file — and
+ * NOTHING IMPORTED IT, so the registrations never ran and every declaration in
+ * it was dead code that 119 passing tests could not see, because those tests
+ * imported the module for its side effect themselves.
+ *
+ * Generic: it iterates the pack registry and branches on nothing. A pack that
+ * declares no reciprocity registers no source, which is how "Canada has no
+ * interprovincial agreements" is said.
+ */
+export function publishPackDeclarations(): void {
+  for (const pack of Object.values(PAYROLL_COUNTRY_PACKS)) {
+    registerPayrollCertificateSource(pack.country, pack.certificates);
+    registerPayrollWithholdingSource(pack.country, pack.withholding);
+    if (pack.reciprocity) registerPayrollReciprocitySource(pack.country, pack.reciprocity);
+  }
+}
+
+publishPackDeclarations();
 
 /** Every statutory component a pack provisions, in slot order. */
 export function packStatutoryComponents(country: string): readonly PayrollStatutoryComponent[] {

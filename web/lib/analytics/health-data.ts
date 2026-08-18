@@ -208,28 +208,24 @@ async function segmentsBy(
   // LEFT JOIN so untagged GL activity lands in an "Unassigned" bucket (the
   // parity) — segment totals then tie out to the P&L instead of silently
   // dropping lines with no dimension.
-  // The entry window materializes first so the lines hash-join against a
-  // bounded set; left to itself the planner walked every P&L line ever posted
-  // and filtered afterwards.
+  // No entry join: the line carries its own posting date, so the window is a
+  // plain predicate on journal_lines instead of a join whose date filter the
+  // planner applied only after walking every P&L line ever posted.
   const r = (await db.execute(sql`
-    with ew as materialized (
-      select id, posting_date from journal_entries
-       where org_id = ${orgId} and posting_date >= ${pFrom} and posting_date <= ${to}
-    )
     select coalesce(d.id::text, 'unassigned') as id, coalesce(d.name, 'Unassigned') as name,
-      -sum(case when a.type in ('income','income_other') and e.posting_date >= ${from} and e.posting_date <= ${to} then l.amount else 0 end) as revenue,
-      sum(case when a.type = 'cogs' and e.posting_date >= ${from} and e.posting_date <= ${to} then l.amount else 0 end) as cogs,
-      sum(case when a.type in ('expense','expense_deferred') and e.posting_date >= ${from} and e.posting_date <= ${to} then l.amount else 0 end) as opex,
-      -sum(case when a.type in ('income','income_other') and e.posting_date >= ${pFrom} and e.posting_date <= ${pTo} then l.amount else 0 end) as prior_revenue
+      -sum(case when a.type in ('income','income_other') and l.posting_date >= ${from} and l.posting_date <= ${to} then l.amount else 0 end) as revenue,
+      sum(case when a.type = 'cogs' and l.posting_date >= ${from} and l.posting_date <= ${to} then l.amount else 0 end) as cogs,
+      sum(case when a.type in ('expense','expense_deferred') and l.posting_date >= ${from} and l.posting_date <= ${to} then l.amount else 0 end) as opex,
+      -sum(case when a.type in ('income','income_other') and l.posting_date >= ${pFrom} and l.posting_date <= ${pTo} then l.amount else 0 end) as prior_revenue
     from journal_lines l
     join accounts a on a.id = l.account_id and a.org_id = l.org_id
-    join ew e on e.id = l.entry_id
     left join ${tbl} d on d.id = ${col} and d.org_id = l.org_id
     where l.org_id = ${orgId}
       and a.type in ('income','income_other','cogs','expense','expense_deferred')
+      and l.posting_date >= ${pFrom} and l.posting_date <= ${to}
     group by 1, 2
-    having abs(-sum(case when a.type in ('income','income_other') and e.posting_date >= ${from} and e.posting_date <= ${to} then l.amount else 0 end)) > 0.005
-        or abs(sum(case when a.type in ('cogs','expense','expense_deferred') and e.posting_date >= ${from} and e.posting_date <= ${to} then l.amount else 0 end)) > 0.005
+    having abs(-sum(case when a.type in ('income','income_other') and l.posting_date >= ${from} and l.posting_date <= ${to} then l.amount else 0 end)) > 0.005
+        or abs(sum(case when a.type in ('cogs','expense','expense_deferred') and l.posting_date >= ${from} and l.posting_date <= ${to} then l.amount else 0 end)) > 0.005
   `)) as any;
   const rows = r.rows as any[];
   // A dimension nobody tags is unused, not "one big Unassigned segment" — keep
@@ -268,16 +264,16 @@ async function segmentsBy(
 async function drivers(orgId: string, from: string, to: string): Promise<{ revenue: DriverRow[]; cost: DriverRow[] }> {
   const pFrom = priorYear(from);
   const pTo = priorYear(to);
+  // No entry join: the line carries its own posting date.
   const r = (await db.execute(sql`
     select a.id, a.name, a.type,
-      sum(case when e.posting_date >= ${from} and e.posting_date <= ${to} then l.amount else 0 end) as cur_raw,
-      sum(case when e.posting_date >= ${pFrom} and e.posting_date <= ${pTo} then l.amount else 0 end) as prior_raw
+      sum(case when l.posting_date >= ${from} and l.posting_date <= ${to} then l.amount else 0 end) as cur_raw,
+      sum(case when l.posting_date >= ${pFrom} and l.posting_date <= ${pTo} then l.amount else 0 end) as prior_raw
     from journal_lines l
     join accounts a on a.id = l.account_id and a.org_id = l.org_id
-    join journal_entries e on e.id = l.entry_id and e.org_id = l.org_id
     where l.org_id = ${orgId}
       and a.type in ('income','income_other','cogs','expense','expense_other','expense_deferred')
-      and e.posting_date >= ${pFrom} and e.posting_date <= ${to}
+      and l.posting_date >= ${pFrom} and l.posting_date <= ${to}
     group by a.id, a.name, a.type
   `)) as any;
   const isIncome = (t: string) => t === "income" || t === "income_other";
@@ -321,14 +317,13 @@ async function itemAnalysis(orgId: string, from: string, to: string): Promise<He
   try {
     const r = (await db.execute(sql`
       select a.id, a.name,
-        -sum(case when e.posting_date >= ${from} and e.posting_date <= ${to} then l.amount else 0 end) as current,
-        -sum(case when e.posting_date >= ${pFrom} and e.posting_date <= ${pTo} then l.amount else 0 end) as prior
+        -sum(case when l.posting_date >= ${from} and l.posting_date <= ${to} then l.amount else 0 end) as current,
+        -sum(case when l.posting_date >= ${pFrom} and l.posting_date <= ${pTo} then l.amount else 0 end) as prior
       from journal_lines l
       join accounts a on a.id = l.account_id and a.org_id = l.org_id
-      join journal_entries e on e.id = l.entry_id and e.org_id = l.org_id
       where l.org_id = ${orgId}
         and a.type in ('income','income_other')
-        and e.posting_date >= ${pFrom} and e.posting_date <= ${to}
+        and l.posting_date >= ${pFrom} and l.posting_date <= ${to}
       group by a.id, a.name
     `)) as any;
     const totalChangeAbs =
@@ -553,7 +548,7 @@ async function budgetVariance(orgId: string, from: string, to: string): Promise<
       join accounts acc on acc.id = l.account_id and acc.org_id = l.org_id
       where l.org_id = ${orgId} and e.book_id = ${s.book_id}
         and acc.type in ('income','income_other','cogs','expense','expense_other','expense_deferred')
-        and e.posting_date >= ${from} and e.posting_date <= ${to}
+        and l.posting_date >= ${from} and l.posting_date <= ${to}
       group by 1
     )
     select acc.id, acc.name, acc.type,

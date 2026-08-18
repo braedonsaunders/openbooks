@@ -365,6 +365,7 @@ test(
       const irsPayable = await account("2330", "Federal payroll taxes payable", "liability_current");
       const futaPayable = await account("2340", "FUTA payable", "liability_current");
       const sutaPayable = await account("2350", "SUI payable", "liability_current");
+      const statePayable = await account("2360", "State income tax payable", "liability_current");
       await db.execute(sql`
         update orgs set settings = settings || ${JSON.stringify({
           payroll: {
@@ -383,6 +384,10 @@ test(
       await setPackSlotAccount(org.orgId, actorId, "US", "fica", irsPayable);
       await setPackSlotAccount(org.orgId, actorId, "US", "futa", futaPayable);
       await setPackSlotAccount(org.orgId, actorId, "US", "suta", sutaPayable);
+      // State withholding is remitted to the STATE, so it has its own slot and
+      // its own payable — never the federal one the FIT rides.
+      await setPackSlotAccount(org.orgId, actorId, "US", "state_income_tax", statePayable);
+      await setPackSlotAccount(org.orgId, actorId, "US", "local_income_tax", statePayable);
 
       // The US employees are paid BY a US entity. The pay run is denominated in
       // its subsidiary's functional currency and the wage rows are USD, so
@@ -448,12 +453,19 @@ test(
         periodStart: "2026-07-05", periodEnd: "2026-07-18",
       });
       const result = await calculatePayRun({ orgId: org.orgId, documentId: run.documentId, actorId });
-      assert.equal(result.employees, 1);
-      assert.equal(result.errors.length, 1);
-      assert.match(result.errors[0]!.message, /state income tax withholding for CA/);
+      // BOTH employees calculate now. This assertion used to be "1 paid, 1
+      // refused, because California is not supported" — the second employee was
+      // here to prove that an unsupported state errors per employee instead of
+      // crashing the run. California IS supported now: its tables are
+      // transcribed and its income tax is withheld on the stub, and the
+      // per-employee error channel is still proven by the same shape below with
+      // a state that genuinely has no engine.
+      assert.deepEqual(result.errors, []);
+      assert.equal(result.employees, 2);
 
       const stubs = (await db.execute(sql`
         select * from pay_stubs where org_id = ${org.orgId} and pay_run_document_id = ${run.documentId}
+          and employee_party_id = ${employeeId}
       `)) as unknown as { rows: Record<string, string>[] };
       assert.equal(stubs.rows.length, 1);
       const stub = stubs.rows[0]!;

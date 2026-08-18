@@ -6,6 +6,7 @@ import { groupTabs } from '../../../../components/module-home/group-tabs'
 import { SubsidiarySwitcher } from '../../../../components/subsidiary-switcher'
 import { requirePermission, can } from '../../../../lib/authz'
 import { analyticsConfig } from '../../../../lib/analytics/config'
+import { withoutWeekEntries } from '@/lib/cash/core'
 import { cashPosition } from '../../../../lib/cash/cash-position'
 import { resolveAsOf } from '../../../../lib/cash/core'
 import { reportSubsidiaryView } from '../../../../lib/consolidation'
@@ -45,10 +46,16 @@ export default async function BankingCashPage({
 
   const cfg = await analyticsConfig(authz.user.orgId, 'cashflow')
   const apSettings = { weeklyCap: cfg.weeklyApCap ?? 0, restrictToSafe: (cfg.restrictToSafe ?? 0) >= 1 }
-  const [data, layoutPrefs] = await Promise.all([
+  const [position, layoutPrefs] = await Promise.all([
     cashPosition(authz.user.orgId, horizon, apSettings, undefined, subView.subsidiary?.ids),
     userPageLayout(authz.user.id, 'banking-cash'),
   ])
+  // Every week's totals and counts travel with the page; the transactions
+  // behind them do not. On a real ledger those arrays are the entire open-item
+  // book repeated across the horizon — tens of megabytes to render a timeline
+  // whose rows show amounts. The week flyout fetches the week actually opened
+  // from /api/cash/week-entries, at full detail.
+  const data = { ...position, weeks: withoutWeekEntries(position.weeks) }
 
   return (
     <ListPageLayout

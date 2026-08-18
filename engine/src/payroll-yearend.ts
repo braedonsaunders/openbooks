@@ -230,16 +230,31 @@ export async function t4Slips(orgId: string, taxYear: number): Promise<T4Slip[]>
  * T4 Summary totals. `filingAccountId` restricts the return to one payroll
  * program account (undefined = every account, the org-wide view); pass null
  * for the unassigned bucket.
+ *
+ * `employeePartyIds` narrows the summary further, to the named employees. An
+ * AMENDED or CANCELLED return carries only the slips being corrected, and its
+ * summary must total THOSE slips — including the employer-side CPP/EI, which
+ * is not a slip box and so cannot be derived from the filtered slips alone.
+ * Undefined means every employee, which is what an original return files.
  */
 export async function t4Summary(
   orgId: string,
   taxYear: number,
   filingAccountId?: string | null,
+  employeePartyIds?: readonly string[],
 ): Promise<T4SummaryTotals> {
   const scoped = filingAccountId !== undefined;
   const account = filingAccountId ?? null;
   const allSlips = await t4Slips(orgId, taxYear);
-  const slips = scoped ? allSlips.filter((slip) => slip.filingAccountId === account) : allSlips;
+  const byAccount = scoped ? allSlips.filter((slip) => slip.filingAccountId === account) : allSlips;
+  const employees = employeePartyIds ? new Set(employeePartyIds) : null;
+  const slips = employees
+    ? byAccount.filter((slip) => employees.has(slip.employeePartyId))
+    : byAccount;
+  // Empty fragment keeps an unnarrowed summary's SQL identical to before.
+  const employeeFilter = employees
+    ? sql`and s.employee_party_id = any(${`{${[...employees].join(",")}}`}::uuid[])`
+    : sql``;
   // Empty fragments keep the org-wide summary's SQL identical to before.
   const employerAccountFilter = scoped
     ? sql`and ${effectiveFilingAccountSql("prof")} is not distinct from ${account}`
@@ -260,7 +275,12 @@ export async function t4Summary(
      where l.org_id = ${orgId} and s.tax_year = ${taxYear}
        and l.kind = 'employer_contribution' and coalesce(pc.country, 'CA') = 'CA'
        ${employerAccountFilter}
+       ${employeeFilter}
   `)) as unknown as { rows: { employer_cpp: string | null; employer_ei: string | null }[] };
+  // NOT narrowed by employee: a posted remittance bill covers an ACCOUNT for a
+  // period and carries no employee dimension, so there is no honest way to
+  // attribute part of it to the slips of an amended return. It is an on-screen
+  // reconciliation figure and never appears in the transmitted XML.
   const remitted = (await db.execute(sql`
     select coalesce(sum(total), 0) as amount from documents
      where org_id = ${orgId} and kind = 'vendor_bill' and status = 'posted'

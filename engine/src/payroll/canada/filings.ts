@@ -1,10 +1,19 @@
+import { sql } from "drizzle-orm";
+import { db } from "../../db.ts";
 import { add } from "../../money.ts";
+import { keyedFingerprint, unsealSecret } from "../../secrets.ts";
 import { filingAccountRef, filingAccountsById } from "../../payroll-filing.ts";
 import { buildRoeXml, type RoeIssueInput } from "../../payroll-roexml.ts";
-import { buildT4Xml } from "../../payroll-t4xml.ts";
+import { buildT4Xml, t4SlipFromReported } from "../../payroll-t4xml.ts";
 import { PayrollError } from "../../payroll-error.ts";
 import { roeCandidates, roeRecord, t4Slips, t4Summary, ROE_REASON_CODES, type RoeReasonCode } from "../../payroll-yearend.ts";
-import type { PayrollFilingData, PayrollFilingSlipData, PayrollPackFilings } from "../../payroll-filing-registry.ts";
+import type {
+  PayrollFilingCorrectionRow,
+  PayrollFilingData,
+  PayrollFilingSlipData,
+  PayrollPackFilings,
+  PayrollYearEndFiling,
+} from "../../payroll-filing-registry.ts";
 import { rl1Filing } from "./quebec/rl1-filing.ts";
 
 /**
@@ -236,6 +245,150 @@ export function parseRoeIssueParam(raw: string): RoeIssueInput[] {
 }
 
 /**
+ * The T4's CORRECTION mechanics, as the CRA defines them.
+ *
+ * The CRA does not have a separate correction form. A T4 is corrected by
+ * re-filing the SAME slip under a different report-type code — `A` for an
+ * amended slip (values restated) and `C` for a cancelled one (the slip should
+ * never have existed) — carried on the T619 transmittal, on each T4 slip and
+ * on the T4 Summary, all three agreeing. Only the slips being corrected go in
+ * the file; slips that did not change are not re-sent.
+ *
+ * Amended slips are RECOMPUTED from the subledger. Cancelled slips are filed
+ * from the issued snapshot, because the CRA's instruction is that a cancelled
+ * slip carries the same information as the original — and because the usual
+ * reason to cancel is that the data behind the slip is gone.
+ */
+function t4Amendment(): NonNullable<PayrollYearEndFiling["amendment"]> {
+  return {
+    supported: true,
+    revisions: ["amended", "cancelled"],
+    vehicle: "same_form",
+    download: {
+      label: "Download corrected T4 XML",
+      note:
+        "The submission carries only the corrected slips, stamped with the CRA's report-type "
+        + "code (A amended, C cancelled) on the T619, every slip and the summary. Validate "
+        + "against the CRA schema for the filing year before transmitting.",
+      build: async ({ orgId, taxYear, revision, rows }) => {
+        if (revision === "amended") {
+          const file = await buildT4Xml(orgId, taxYear, {
+            reportTypeCode: "A",
+            rowIds: rows.map((row) => row.rowId),
+          });
+          return {
+            filename: file.filename,
+            contentType: "application/xml; charset=utf-8",
+            body: file.xml,
+          };
+        }
+        const file = await buildT4Xml(orgId, taxYear, {
+          reportTypeCode: "C",
+          slips: rows.map((row) => t4SlipFromReported(row.previously, row.rowId)),
+        });
+        return {
+          filename: file.filename,
+          contentType: "application/xml; charset=utf-8",
+          body: file.xml,
+        };
+      },
+    },
+    slip: { build: async (row) => t4CorrectionSlip(row) },
+    confidential: (orgId, _taxYear, rowId) => t4ConfidentialFields(orgId, rowId),
+  };
+}
+
+/**
+ * The corrected T4, box by box — what was reported beside what is correct.
+ *
+ * The CRA's own paper is just a T4 with the "Amended" box ticked, so the
+ * facsimile is the T4 with both values shown on the boxes that moved. That is
+ * what the operator signs off and what the CRA's review asks about.
+ */
+async function t4CorrectionSlip(row: PayrollFilingCorrectionRow): Promise<PayrollFilingSlipData> {
+  const cancelled = row.revision === "cancelled";
+  const boxes = cancelled
+    ? row.previously.fields
+      .filter((field) => field.code != null)
+      .map((field) => ({ code: field.code!, label: field.label, value: field.value }))
+    : row.changes
+      .filter((change) => change.code != null)
+      .flatMap((change) => [
+        { code: change.code!, label: `${change.label} — as filed`, value: change.previous ?? "—" },
+        {
+          code: change.code!,
+          label: `${change.label} — amended`,
+          value: change.current ?? "—",
+          emphasis: true,
+        },
+      ]);
+  const identity = row.changes
+    .filter((change) => change.code == null)
+    .map((change) => ({
+      label: `As filed — ${change.label}`,
+      value: change.redacted ? "changed (not displayed)" : (change.previous ?? "—"),
+    }));
+  if (boxes.length === 0 && identity.length === 0) {
+    throw new PayrollError(
+      `nothing on ${row.label}'s T4 changed — an amended slip that restates the same figures `
+      + "tells the CRA nothing and must not be filed",
+    );
+  }
+  return {
+    formCode: "CA_T4",
+    formName: cancelled
+      ? "T4 — Statement of Remuneration Paid (CANCELLED)"
+      : "T4 — Statement of Remuneration Paid (AMENDED)",
+    formNumber: "T4",
+    headerFields: [
+      ...row.current.headerFields,
+      { label: "Report type code", value: cancelled ? "C — cancelled" : "A — amended" },
+      ...identity,
+    ],
+    boxes,
+    notes: cancelled
+      ? [
+        "A cancelled T4 reports the SAME information as the original slip, stamped with report "
+        + "type C — the CRA is being told this slip should never have existed, not that its "
+        + "figures moved.",
+        "Cancelling does not correct the payroll data. If the slip still has committed stubs "
+        + "behind it, void or adjust the run as well, or the next return will file it again.",
+      ]
+      : [
+        "Only the boxes that changed are restated; every other box on the original slip stands.",
+        "The amounts are recomputed from committed pay stubs and opening balances — an amended "
+        + "T4 can never disagree with the payroll subledger it summarizes.",
+      ],
+  };
+}
+
+/**
+ * The identity facts a T4 amendment must compare but must never print.
+ *
+ * A wrong SIN is one of the commonest reasons an employer amends, and the
+ * operator has to see that it moved. The SIN itself is sealed on the payroll
+ * profile and stays there: what the filing snapshot holds is a keyed
+ * fingerprint (HMAC under the org's data key), which proves a change and
+ * discloses nothing.
+ */
+async function t4ConfidentialFields(
+  orgId: string,
+  rowId: string,
+): Promise<{ label: string; fingerprint: string }[]> {
+  const employeePartyId = rowId.split(":")[0] ?? "";
+  if (!UUID_RE.test(employeePartyId)) return [];
+  const rows = (await db.execute(sql`
+    select sin_encrypted from employee_payroll_profiles
+     where org_id = ${orgId} and employee_party_id = ${employeePartyId}
+  `)) as unknown as { rows: { sin_encrypted: string | null }[] };
+  const sin = unsealSecret(rows.rows[0]?.sin_encrypted ?? null);
+  return [{
+    label: "Social insurance number",
+    fingerprint: sin ? keyedFingerprint("ca.sin", sin) : "",
+  }];
+}
+
+/**
  * Built LAZILY (first lookup, not module evaluation): this module sits in an
  * import cycle — the registry reaches it, it reaches the builders, and the
  * builders reach the registry — so touching another module's consts during
@@ -274,6 +427,7 @@ function buildCaPackFilings(): PayrollPackFilings {
       emptyText: "No committed Canadian pay stubs for this year.",
       population: (orgId, taxYear) => t4Population(orgId, taxYear),
       slip: { build: (orgId, taxYear, rowId) => t4Slip(orgId, taxYear, rowId) },
+      amendment: t4Amendment(),
       download: {
         label: "Download T4 XML",
         note: "Validate against the CRA schema for the filing year before transmitting.",
@@ -301,6 +455,24 @@ function buildCaPackFilings(): PayrollPackFilings {
       emptyText: "No employees with interrupted earnings this year.",
       population: (orgId, taxYear) => roePopulation(orgId, taxYear),
       slip: { build: (orgId, taxYear, rowId) => roeSlip(orgId, taxYear, rowId) },
+      // An ROE IS amendable at Service Canada — but only by quoting the SERIAL
+      // NUMBER Service Canada assigned to the original, which is issued on
+      // submission to ROE Web and is not returned to the bulk-upload file this
+      // pack produces. Nothing here holds it, so an "amended ROE" built from
+      // this data could not identify the record it claims to replace, and
+      // would be filed as a second original — a duplicate interruption of
+      // earnings against a claimant's file. Refused by name instead.
+      amendment: {
+        supported: false,
+        refusal:
+          "An amended Record of Employment must quote the serial number Service Canada "
+          + "assigned to the original, which is issued when the ROE is accepted by ROE Web and "
+          + "is not carried back into the bulk upload file. OpenBooks does not hold that "
+          + "serial number, so it cannot identify the record an amendment would replace — "
+          + "amend the ROE directly in ROE Web, where the original can be found by serial "
+          + "number. (Records of Employment are separation documents and live on the "
+          + "Separations surface, never on year-end.)",
+      },
       issue: {
         param: "employees",
         idColumn: "employeePartyId",

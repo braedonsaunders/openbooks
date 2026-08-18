@@ -98,6 +98,12 @@ export const payComponents = pgTable(
         "vacation_accrual", "vacation_payout",
         "cpp", "cpp2", "ei", "qpip", "income_tax", "qc_income_tax",
         "fit", "ss", "medicare", "medicare_addl", "futa", "suta",
+        // A state's or province's own income tax, and the taxing unit below it
+        // (New York City, Philadelphia, an Ohio municipality). ONE key each,
+        // with the jurisdiction on the LINE rather than in the key: fifty state
+        // keys would be fifty rows in a table an operator reads, and it still
+        // would not answer the remittance question, which is per registration.
+        "state_income_tax", "local_income_tax",
         "wcb", "eht",
       ],
     }),
@@ -205,6 +211,22 @@ export const employeePayrollProfiles = pgTable(
     /** Jurisdiction of employment within the country: T4127 province ('ON',
      * 'QC', 'ZZ') for Canada, state postal code ('TX', 'WA', …) for the US. */
     province: text("province").notNull(),
+    /**
+     * Region the employee RESIDES in, when it differs from the region of
+     * EMPLOYMENT (`province`, which is the work region despite its name).
+     *
+     * Nullable, and null means "not recorded" — resolved to the work region by
+     * `resolveWithholding` and REPORTED as an assumption, which is the only
+     * choice that lets every row written before this column existed keep
+     * calculating identically.
+     *
+     * Generic, not a US column: a Québec resident working in Ontario is the
+     * same problem, and the CA pack needs this attribute unchanged. Codes are
+     * the pack's own region vocabulary; validated at the API boundary against
+     * the country pack, exactly as `province` and `labour_jurisdiction` are,
+     * never by a CHECK naming one country's codes.
+     */
+    residenceRegion: text("residence_region"),
     /**
      * The labour jurisdiction whose EMPLOYMENT STANDARDS govern this
      * employment, when it is not the default derived from the work region.

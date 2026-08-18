@@ -93,6 +93,16 @@ export default async function PayrollHomePage({
               : 'Parallel run',
             iconKey: 'clipboard-check',
           },
+          // Retro pay belongs beside the runs, not with the migration
+          // surfaces: it is an ordinary (if uncommon) payroll operation on
+          // periods this system itself has already paid.
+          {
+            href: '/payroll/retro',
+            label: t.has('home.directory.retro' as never)
+              ? t('home.directory.retro' as never)
+              : 'Retroactive pay',
+            iconKey: 'history',
+          },
           {
             href: '/admin/setup/payroll',
             label: t('home.directory.setup'),

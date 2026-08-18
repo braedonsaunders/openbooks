@@ -316,6 +316,22 @@ function add(a?: string, b?: string): string {
 }
 
 /**
+ * The run type's label, or the raw type when a locale has not caught up.
+ *
+ * A run type is added by the engine and translated afterwards (retro pay is the
+ * current example). next-intl renders a missing key as its own dotted PATH, and
+ * "payroll.runType.retro" on the one screen that decides whether a payday is
+ * safe to run is worse than the bare word.
+ */
+function runTypeLabel(
+  t: ReturnType<typeof useTranslations<'payroll'>>,
+  runType: string,
+): string {
+  const key = `runType.${runType}`
+  return t.has(key as never) ? t(key as never) : runType
+}
+
+/**
  * The pay-run wizard: four steps rendered as freely-navigable chips (no forced
  * linear march) — Period & employees → Review stubs → GL preview & commit →
  * Post & finish. Completion derives from run_status + the document's posted
@@ -614,7 +630,7 @@ export function RunWizard(props: {
       <div className="flex flex-wrap items-center gap-4 text-sm text-slate-600 dark:text-slate-300">
         <RunStatusBadge status={runDisplayStatus(run)} />
         {run.run_type !== 'regular' && (
-          <Badge variant="secondary">{t(`runType.${run.run_type}`)}</Badge>
+          <Badge variant="secondary">{runTypeLabel(t, run.run_type)}</Badge>
         )}
         <span>
           {t('columns.payDate')}: <span className="font-medium tabular-nums">{run.pay_date}</span>
@@ -905,7 +921,7 @@ function PeriodStep({
             </HeaderFact>
             <HeaderFact label={t('columns.payDate')}>{run.pay_date}</HeaderFact>
             <HeaderFact label={t('wizard.period.taxYear')}>{String(run.tax_year)}</HeaderFact>
-            <HeaderFact label={t('wizard.period.runType')}>{t(`runType.${run.run_type}`)}</HeaderFact>
+            <HeaderFact label={t('wizard.period.runType')}>{runTypeLabel(t, run.run_type)}</HeaderFact>
           </dl>
           <Button onClick={onContinue} disabled={busy || dirty}>
             {t('wizard.period.continue')}
