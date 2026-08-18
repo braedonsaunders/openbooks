@@ -446,19 +446,27 @@ export async function customerData(period: { from: string; to: string; label: st
     `) as Promise<any>,
     // Growth trends — monthly revenue / unique customers / txns / NEW customers
     // (no earlier customer doc of any kind, lifetime — the NOT EXISTS).
+    // A customer is new in the month it first appears. Asking that as a
+    // correlated NOT EXISTS re-scanned the document history once per invoice
+    // in the window; each party's first month is computed once instead, which
+    // is the same test — the invoice itself qualifies, so "no earlier document"
+    // and "first document is this month" coincide.
     db.execute(sql`
+      with first_doc as (
+        select party_id, min(date_trunc('month', posting_date)) as first_month
+          from documents
+         where org_id = ${orgId} and kind in ('customer_invoice', 'sales_order')
+           and voided_at is null and party_id is not null
+         group by party_id
+      )
       select to_char(d.posting_date, 'YYYY-MM') as month,
         count(distinct d.party_id) as unique_customers,
         count(*) as txn_count,
         sum(abs(d.total)) as revenue,
-        count(distinct d.party_id) filter (where not exists (
-          select 1 from documents d2
-          where d2.org_id = d.org_id and d2.party_id = d.party_id
-            and d2.posting_date < date_trunc('month', d.posting_date)
-            and d2.kind in ('customer_invoice', 'sales_order')
-            and d2.voided_at is null
-        )) as new_customers
+        count(distinct d.party_id) filter (
+          where f.first_month = date_trunc('month', d.posting_date)) as new_customers
       from documents d
+      join first_doc f on f.party_id = d.party_id
       where d.org_id = ${orgId} and d.kind = 'customer_invoice' and d.status = 'posted'
         and d.voided_at is null and d.party_id is not null
         and d.posting_date >= ${from} and d.posting_date <= ${to}
