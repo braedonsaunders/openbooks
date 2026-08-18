@@ -47,6 +47,13 @@ export interface CashflowData {
   startingCash: number;
   bankAccounts: { id: string; name: string; number: string | null; balance: number }[];
   weeks: import("../cash/core").WeekRow[];
+  /**
+   * Forecast totals per counterparty across the horizon, per side. Computed
+   * here because it is an aggregate: the Category tab used to derive it by
+   * flattening every week's transactions in the browser, which is the only
+   * reason the page had to ship them.
+   */
+  partyTotals: { ar: { name: string; amount: number; count: number }[]; ap: { name: string; amount: number; count: number }[] };
   summary: {
     startingCash: number;
     projectedEnd: number;
@@ -137,12 +144,26 @@ export async function cashflowData(orgId: string, horizonWeeks: number, asOfDate
   const arSummary = summariseSide(arItems, grid.asOf, ar.scheduled, arStats.globalAvg);
   const apSummary = summariseSide(apItems, grid.asOf, ap.scheduled, apStats.globalAvg);
 
+  const partyTotalsFor = (side: "ar" | "ap") => {
+    const byParty = new Map<string, { name: string; amount: number; count: number }>();
+    for (const w of weeks) {
+      for (const e of side === "ar" ? w.arEntries : w.apEntries) {
+        const cur = byParty.get(e.partyName) ?? { name: e.partyName, amount: 0, count: 0 };
+        cur.amount += e.amount;
+        cur.count++;
+        byParty.set(e.partyName, cur);
+      }
+    }
+    return [...byParty.values()].sort((a, b) => b.amount - a.amount);
+  };
+
   return {
     asOf: asOfIso,
     horizonWeeks,
     startingCash,
     bankAccounts: banks,
     weeks,
+    partyTotals: { ar: partyTotalsFor("ar"), ap: partyTotalsFor("ap") },
     summary: {
       startingCash,
       projectedEnd,

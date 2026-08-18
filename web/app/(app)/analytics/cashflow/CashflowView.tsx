@@ -147,18 +147,9 @@ function CategoryTab({ data }: { data: CashflowData }) {
   const fmtMoney = useAnalyticsMoney()
   const money = (n: number) => fmtMoney(n, { compact: true })
   const [side, setSide] = useState<'ar' | 'ap'>('ap')
-  const entries = useMemo(() => {
-    const all = data.weeks.flatMap((w) => (side === 'ar' ? w.arEntries : w.apEntries))
-    // Group by party.
-    const byParty = new Map<string, { name: string; amount: number; count: number }>()
-    for (const e of all) {
-      const cur = byParty.get(e.partyName) ?? { name: e.partyName, amount: 0, count: 0 }
-      cur.amount += e.amount
-      cur.count++
-      byParty.set(e.partyName, cur)
-    }
-    return [...byParty.values()].sort((a, b) => b.amount - a.amount)
-  }, [data, side])
+  // Already grouped server-side — the page no longer ships every week's
+  // transactions just so this tab can total them by counterparty.
+  const entries = data.partyTotals[side]
   const total = entries.reduce((a, e) => a + e.amount, 0)
 
   return (
