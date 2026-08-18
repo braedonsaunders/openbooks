@@ -168,7 +168,7 @@ function compileSummarize(
   const sectioned = !!q.groupBy && breakouts.some((b) => b.column === q.groupBy && !b.bin)
   const sectionedDimOrder = (b: ReportBreakout, i: number): string => {
     const column = entityColumn(entity, b.column)
-    if (!b.bin && column?.kind === 'enum' && column.options?.length) {
+    if (!b.bin && (column?.kind === 'enum' || column?.kind === 'boolean') && column.options?.length) {
       // Options are server-authored catalog constants, single-quoted safely.
       const list = column.options.map((option) => `'${option.replace(/'/g, "''")}'`).join(', ')
       return `array_position(ARRAY[${list}]::text[], ${columnRef(entity, b.column)}) ASC NULLS LAST`

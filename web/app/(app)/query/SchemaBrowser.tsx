@@ -29,8 +29,10 @@ function selectTemplate(tableName: string): string {
  * Live schema tree for the console left rail. Fed by /api/query/schema (which
  * introspects under the same read-only role, so it lists exactly what the user
  * can query). Search matches both table and column names; a match on a column
- * auto-expands its table. Clicking a table or column name inserts it at the
- * editor caret via `onInsert`.
+ * auto-expands its table. Clicking a TABLE browses its rows (replaces the
+ * editor and runs, like any SQL client); clicking a COLUMN inserts the name at
+ * the editor caret, which is what you want while composing a statement. The
+ * context menu keeps the explicit "insert …" actions for both.
  */
 export function SchemaBrowser({
   tables,
@@ -154,13 +156,18 @@ export function SchemaBrowser({
                   ) : (
                     <Table2 size={13} className="shrink-0 text-teal-600 dark:text-teal-400" />
                   )}
+                  {/* Clicking a table browses it — the same thing every SQL
+                      client does with a table in the tree. Pasting the bare
+                      identifier into whatever the editor already contained
+                      almost never produced a runnable statement; composing by
+                      name is still available from the context menu. */}
                   <span
                     className="min-w-0 flex-1 truncate font-mono text-slate-700 dark:text-slate-200"
                     onClick={(e) => {
                       e.stopPropagation()
-                      onInsert(quoteIdentifier(tbl.name))
+                      onBrowse(selectTemplate(tbl.name))
                     }}
-                    title={t('schema.insertTable')}
+                    title={t('schema.browseRows')}
                   >
                     {tbl.name}
                   </span>

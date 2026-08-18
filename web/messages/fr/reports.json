@@ -519,6 +519,8 @@
         "class": "Classe",
         "memo": "Note",
         "amount": "Montant (base)",
+        "debit": "Débit",
+        "credit": "Crédit",
         "currency": "Devise",
         "txn_amount": "Montant (transaction)",
         "quantity": "Quantité",
@@ -740,7 +742,9 @@
       "written_off": "Passé en perte",
       "sales": "Ventes",
       "purchases": "Achats",
-      "both": "Les deux"
+      "both": "Les deux",
+      "true": "Oui",
+      "false": "Non"
     }
   },
   "operators": {

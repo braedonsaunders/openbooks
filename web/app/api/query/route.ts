@@ -40,7 +40,9 @@ export async function POST(req: Request) {
     const result = await runUserSql(body.sql, {
       orgId: gate.user.orgId,
       maxRows: Math.min(Math.max(Math.trunc(Number(body.maxRows)) || 500, 1), 5_000),
-      timeoutMs: 10_000,
+      // An analyst console over a real ledger runs genuine aggregate scans;
+      // ten seconds cancelled ordinary work on a large tenant.
+      timeoutMs: 30_000,
     });
     return NextResponse.json(result);
   } catch (e) {

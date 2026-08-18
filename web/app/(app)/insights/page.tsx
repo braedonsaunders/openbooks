@@ -1,7 +1,7 @@
 import Link from 'next/link'
 import { getTranslations } from 'next-intl/server'
 import { sql } from 'drizzle-orm'
-import { getSource } from '@openbooks/analytics'
+import { allowedSources, getSource } from '@openbooks/analytics'
 import { db } from '@openbooks/engine/src/db.ts'
 import {
   Badge,
@@ -39,7 +39,11 @@ export default async function InsightsCards({
 }: {
   searchParams: Promise<Record<string, string | string[] | undefined>>
 }) {
-  const [t, tCommon] = await Promise.all([getTranslations('insights'), getTranslations('common')])
+  const [t, tCommon, tCatalog] = await Promise.all([
+    getTranslations('insights'),
+    getTranslations('common'),
+    getTranslations('reports'),
+  ])
   const authz = await requirePermission('insights.read')
   const canCreate = can(authz, 'insights.create')
   const canPublish = can(authz, 'insights.publish')
@@ -143,7 +147,7 @@ export default async function InsightsCards({
                       ) : null}
                     </TableCell>
                     <TableCell className="text-slate-500 dark:text-slate-400">
-                      {source ? t(`catalog.sources.${source.key}.label`) : '—'}
+                      {source ? tCatalog(`catalog.entities.${source.key}.label`) : '—'}
                     </TableCell>
                     <TableCell>
                       <span className="inline-flex items-center gap-1.5 text-slate-600 dark:text-slate-300">
@@ -170,7 +174,13 @@ export default async function InsightsCards({
         </>
       )}
       {openCard ? (
-        <CardStudio key={openCard.id} card={openCard} canCreate={canCreate} canPublish={canPublish} />
+        <CardStudio
+          key={openCard.id}
+          card={openCard}
+          canCreate={canCreate}
+          canPublish={canPublish}
+          sourceKeys={allowedSources((permission) => can(authz, permission)).map((s) => s.key)}
+        />
       ) : null}
     </ListPageLayout>
   )

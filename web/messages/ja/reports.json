@@ -519,6 +519,8 @@
         "class": "クラス",
         "memo": "摘要",
         "amount": "金額（基軸通貨）",
+        "debit": "借方",
+        "credit": "貸方",
         "currency": "通貨",
         "txn_amount": "金額（取引通貨）",
         "quantity": "数量",
@@ -740,7 +742,9 @@
       "written_off": "償却済み",
       "sales": "売上",
       "purchases": "仕入",
-      "both": "両方"
+      "both": "両方",
+      "true": "はい",
+      "false": "いいえ"
     }
   },
   "operators": {

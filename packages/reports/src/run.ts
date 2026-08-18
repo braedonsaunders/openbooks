@@ -566,8 +566,9 @@ function formatBreakoutValue(v: unknown, bin?: ReportTemporalBin): string | numb
   }
 }
 
-/** Cell value for display: enum-kind columns print humanised (underscores →
- *  spaces), everything else through formatCustomValue. */
+/** Cell value for display: enum/boolean columns print humanised (underscores →
+ *  spaces, true/false through the locale's yes/no), everything else through
+ *  formatCustomValue. */
 function formatCellValue(
   entity: ReportEntity,
   column: string,
@@ -575,7 +576,7 @@ function formatCellValue(
   labels: ReportRunLabels = {},
 ): string | number | null {
   const kind = entityColumn(entity, column)?.kind
-  if (kind === 'enum') {
+  if (kind === 'enum' || kind === 'boolean') {
     if (typeof v === 'boolean') return labels.bool?.(v) ?? (v ? 'yes' : 'no')
     if (typeof v === 'string') return labels.enumValue?.(v) ?? formatLabel(v)
   }

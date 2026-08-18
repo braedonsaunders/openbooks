@@ -85,16 +85,18 @@ export async function customersHome(orgId: string, subIds?: string[]): Promise<C
              coalesce(sum(remaining) filter (where due_date < current_date), 0) as overdue,
              count(*) filter (where remaining > 0.005) as open_count,
              count(*) filter (where remaining > 0.005 and due_date < current_date) as overdue_count,
-             (select round(avg(pe.posting_date - be.posting_date))
+             -- Both dates come off the lines; reaching them through each
+             -- line's entry doubled the joins. Trailing 365 days: without the
+             -- upper bound a future-dated payment counts toward days-to-pay.
+             (select round(avg(pl.posting_date - bl.posting_date))
                 from applications ap
-                join journal_lines bl on bl.id = ap.to_line_id
-                join journal_entries be on be.id = bl.entry_id
-                join journal_lines pl on pl.id = ap.from_line_id
-                join journal_entries pe on pe.id = pl.entry_id
-                join accounts ba on ba.id = bl.account_id
-               where ba.type = 'asset_receivable' and ap.unapplied_at is null
-                 and bl.org_id = ${orgId}
-                 and pe.posting_date >= current_date - 365) as dso
+                join journal_lines bl on bl.id = ap.to_line_id and bl.org_id = ${orgId}
+                join journal_lines pl on pl.id = ap.from_line_id and pl.org_id = ${orgId}
+                join accounts ba on ba.id = bl.account_id and ba.org_id = ${orgId}
+               where ap.org_id = ${orgId}
+                 and ba.type = 'asset_receivable' and ap.unapplied_at is null
+                 and pl.posting_date >= current_date - 365
+                 and pl.posting_date <= current_date) as dso
         from oi where remaining > 0.005
     `),
     // Hero roster — top relationships by open balance, with open-opp counts.

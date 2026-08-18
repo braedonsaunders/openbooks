@@ -232,6 +232,16 @@ export async function deleteView(
   return true
 }
 
+/**
+ * The permission a view's entity demands beyond reports.read, or null. Saved
+ * views read the SAME catalog as custom reports and the insights card studio,
+ * so they owe the same gate: a payroll view shared org-wide must not become a
+ * wage leak for a reader who lacks payroll.read.
+ */
+export function viewEntityPermission(query: Pick<ReportCustomQuery, 'entity'>): string | null {
+  return REPORT_ENTITY_MAP[query.entity]?.requiredPermission ?? null
+}
+
 /** Execute a view's plan (fresh, current data) — reused report engine. */
 export async function runView(
   orgId: string,

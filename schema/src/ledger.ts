@@ -131,6 +131,17 @@ export const journalLines = pgTable(
     paymentCardId: uuid("payment_card_id"), // card subledger detail
     extraDims: jsonb("extra_dims").notNull().default({}), // registry-validated
 
+    /**
+     * The entry's posting date, carried on the line (Universal Journal shape:
+     * SAP ACDOCA, Oracle GL_JE_LINES.effective_date). DERIVED and never
+     * authored — triggers keep it equal to the entry's posting_date in either
+     * insertion order, so a bulk copy that inserts lines before their entry
+     * still converges. Without it every date-ranged GL read had to join
+     * journal_entries, which pushed the planner into driving from `accounts`
+     * and probing the entry primary key once per line.
+     */
+    postingDate: date("posting_date"),
+
     /** Statistical quantity (hours, tonnes) — replaces source platform Stat accounts. */
     quantity: money("quantity"),
     unit: text("unit"),
@@ -158,6 +169,9 @@ export const journalLines = pgTable(
      * payload, not seek keys (drizzle cannot express INCLUDE).
      */
     index("jl_org_account_covering").on(t.orgId, t.accountId, t.entryId, t.amount, t.subsidiaryId),
+    /** Date-ranged GL reads, now answerable from the line alone. */
+    index("jl_org_posting_date").on(t.orgId, t.postingDate),
+    index("jl_org_account_posting_date").on(t.orgId, t.accountId, t.postingDate),
     index("jl_org_sub_account").on(t.orgId, t.subsidiaryId, t.accountId),
     index("jl_org_project").on(t.orgId, t.projectId),
     index("jl_org_party_open").on(t.orgId, t.partyId, t.isOpenItem),

@@ -7,12 +7,26 @@
 // `orgColumn`, column `expr`) is a compile-time constant in this file. User
 // input only ever SELECTS catalog keys; values always bind as parameters.
 //
-// These are the same sources the insights/analytics workstream reads:
-// the ledger_lines join, documents, parties, and accounts.
+// This catalog is THE list for every query-building surface: the custom report
+// builder, saved views, and the insights card studio — which derives its
+// sources from these entities (packages/analytics/src/catalog.ts). Add an
+// entity here and it appears in all three.
 
 import type { ReportFilterOperator, ReportRuleGroup } from './types'
 
-export type ReportColumnKind = 'text' | 'date' | 'timestamp' | 'enum' | 'uuid' | 'number' | 'money'
+export type ReportColumnKind =
+  | 'text'
+  | 'date'
+  | 'timestamp'
+  | 'enum'
+  | 'boolean'
+  | 'uuid'
+  | 'number'
+  | 'money'
+
+/** The value set for a `boolean` column. Postgres accepts these literals for a
+ *  boolean comparison, so a stored `eq` rule binds without a cast. */
+export const BOOLEAN_OPTIONS = ['true', 'false'] as const
 
 /** Every transaction kind the documents table holds — the source platform
  *  "Transaction Type" filter set. One source of truth for both the
@@ -50,9 +64,10 @@ export type ReportEntityColumn = {
    */
   expr: string
   /**
-   * Enum columns: the known value set. Drives option pickers in the filter
-   * UI (source platform "type is any of Bill, Expense Report…"). Values are stored
-   * raw; display labels resolve through i18n with a humanized fallback.
+   * Enum (and boolean) columns: the known value set. Drives option pickers in
+   * the filter UI (source platform "type is any of Bill, Expense Report…").
+   * Values are stored raw; display labels resolve through i18n with a
+   * humanized fallback.
    */
   options?: readonly string[]
 }
@@ -121,12 +136,14 @@ export const REPORT_ENTITIES: ReportEntity[] = [
       { key: 'class', label: 'Class', kind: 'text', expr: 'cls.name' },
       { key: 'memo', label: 'Memo', kind: 'text', expr: 'coalesce(jl.memo, je.memo)' },
       { key: 'amount', label: 'Amount (base)', kind: 'money', expr: 'jl.amount' },
+      { key: 'debit', label: 'Debit', kind: 'money', expr: 'greatest(jl.amount, 0)' },
+      { key: 'credit', label: 'Credit', kind: 'money', expr: 'greatest(-jl.amount, 0)' },
       { key: 'currency', label: 'Currency', kind: 'text', expr: 'jl.currency' },
       { key: 'txn_amount', label: 'Amount (txn)', kind: 'money', expr: 'jl.txn_amount' },
       { key: 'quantity', label: 'Quantity', kind: 'number', expr: 'jl.quantity' },
       { key: 'unit', label: 'Unit', kind: 'text', expr: 'jl.unit' },
       { key: 'due_date', label: 'Due date', kind: 'date', expr: 'jl.due_date' },
-      { key: 'is_open_item', label: 'Open item', kind: 'enum', expr: 'jl.is_open_item' },
+      { key: 'is_open_item', label: 'Open item', kind: 'boolean', expr: 'jl.is_open_item', options: BOOLEAN_OPTIONS },
       { key: 'reconciled_at', label: 'Reconciled at', kind: 'timestamp', expr: 'jl.reconciled_at' },
       { key: 'entry_id', label: 'Entry (id)', kind: 'uuid', expr: 'je.id' },
       { key: 'account_id', label: 'Account (id)', kind: 'uuid', expr: 'jl.account_id' },
@@ -161,7 +178,7 @@ export const REPORT_ENTITIES: ReportEntity[] = [
       { key: 'total', label: 'Total', kind: 'money', expr: 'd.total' },
       { key: 'reference_number', label: 'Reference #', kind: 'text', expr: 'd.reference_number' },
       { key: 'billing_method', label: 'Billing method', kind: 'enum', expr: 'd.billing_method', options: ['time_and_materials', 'fixed_price'] },
-      { key: 'is_final_invoice', label: 'Final invoice', kind: 'enum', expr: 'd.is_final_invoice' },
+      { key: 'is_final_invoice', label: 'Final invoice', kind: 'boolean', expr: 'd.is_final_invoice', options: BOOLEAN_OPTIONS },
       { key: 'payment_hold_reason', label: 'Payment hold', kind: 'text', expr: 'd.payment_hold_reason' },
       { key: 'expected_pay_date', label: 'Expected pay date', kind: 'date', expr: 'd.expected_pay_date' },
       { key: 'department', label: 'Department', kind: 'text', expr: 'dep.name' },
@@ -209,7 +226,7 @@ export const REPORT_ENTITIES: ReportEntity[] = [
       { key: 'unit_price', label: 'Unit price', kind: 'money', expr: 'dl.unit_price' },
       { key: 'amount', label: 'Amount', kind: 'money', expr: 'dl.amount' },
       { key: 'tax_amount', label: 'Tax amount', kind: 'money', expr: 'dl.tax_amount' },
-      { key: 'is_billable', label: 'Billable', kind: 'enum', expr: 'dl.is_billable' },
+      { key: 'is_billable', label: 'Billable', kind: 'boolean', expr: 'dl.is_billable', options: BOOLEAN_OPTIONS },
       { key: 'quantity_fulfilled', label: 'Qty fulfilled', kind: 'number', expr: 'dl.quantity_fulfilled' },
       { key: 'quantity_billed', label: 'Qty billed', kind: 'number', expr: 'dl.quantity_billed' },
       { key: 'employee_name', label: 'Employee', kind: 'text', expr: 'emp.display_name' },
@@ -269,8 +286,8 @@ export const REPORT_ENTITIES: ReportEntity[] = [
       { key: 'income_account', label: 'Income account', kind: 'text', expr: 'inc.name' },
       { key: 'expense_account', label: 'Expense account', kind: 'text', expr: 'exp.name' },
       { key: 'recovery_account', label: 'Cost recovery account', kind: 'text', expr: 'rec.name' },
-      { key: 'show_on_timesheet', label: 'On timesheets', kind: 'enum', expr: 'it.show_on_timesheet' },
-      { key: 'is_active', label: 'Active', kind: 'enum', expr: 'it.is_active' },
+      { key: 'show_on_timesheet', label: 'On timesheets', kind: 'boolean', expr: 'it.show_on_timesheet', options: BOOLEAN_OPTIONS },
+      { key: 'is_active', label: 'Active', kind: 'boolean', expr: 'it.is_active', options: BOOLEAN_OPTIONS },
       { key: 'created_at', label: 'Created at', kind: 'timestamp', expr: 'it.created_at' },
       { key: 'id', label: 'Item (id)', kind: 'uuid', expr: 'it.id' },
     ],
@@ -295,7 +312,7 @@ export const REPORT_ENTITIES: ReportEntity[] = [
       { key: 'customer_po_number', label: 'Customer PO #', kind: 'text', expr: 'prj.customer_po_number' },
       { key: 'starts_on', label: 'Starts on', kind: 'date', expr: 'prj.starts_on' },
       { key: 'ends_on', label: 'Ends on', kind: 'date', expr: 'prj.ends_on' },
-      { key: 'is_active', label: 'Active', kind: 'enum', expr: 'prj.is_active' },
+      { key: 'is_active', label: 'Active', kind: 'boolean', expr: 'prj.is_active', options: BOOLEAN_OPTIONS },
       { key: 'created_at', label: 'Created at', kind: 'timestamp', expr: 'prj.created_at' },
       { key: 'id', label: 'Project (id)', kind: 'uuid', expr: 'prj.id' },
     ],
@@ -317,7 +334,7 @@ export const REPORT_ENTITIES: ReportEntity[] = [
       { key: 'worked_on', label: 'Worked on', kind: 'date', expr: 'te.worked_on' },
       { key: 'hours', label: 'Hours', kind: 'number', expr: 'te.hours' },
       { key: 'status', label: 'Status', kind: 'enum', expr: 'te.status', options: ['draft', 'submitted', 'approved', 'rejected'] },
-      { key: 'is_billable', label: 'Billable', kind: 'enum', expr: 'te.is_billable' },
+      { key: 'is_billable', label: 'Billable', kind: 'boolean', expr: 'te.is_billable', options: BOOLEAN_OPTIONS },
       { key: 'project', label: 'Project', kind: 'text', expr: 'prj.name' },
       { key: 'item_name', label: 'Service item', kind: 'text', expr: 'it.name' },
       { key: 'department', label: 'Department', kind: 'text', expr: 'dep.name' },
@@ -407,7 +424,7 @@ export const REPORT_ENTITIES: ReportEntity[] = [
       { key: 'region', label: 'Region', kind: 'text', expr: 'tc.region' },
       { key: 'applies_to', label: 'Applies to', kind: 'enum', expr: 'tc.applies_to', options: ['sales', 'purchases', 'both'] },
       { key: 'recoverable_percent', label: 'Recoverable %', kind: 'number', expr: 'tc.recoverable_percent' },
-      { key: 'is_active', label: 'Active', kind: 'enum', expr: 'tc.is_active' },
+      { key: 'is_active', label: 'Active', kind: 'boolean', expr: 'tc.is_active', options: BOOLEAN_OPTIONS },
       { key: 'id', label: 'Tax code (id)', kind: 'uuid', expr: 'tc.id' },
     ],
     defaultSort: { column: 'code', direction: 'asc' },
@@ -430,10 +447,10 @@ export const REPORT_ENTITIES: ReportEntity[] = [
       { key: 'short_code', label: 'Short code', kind: 'text', expr: 'pt.short_code' },
       { key: 'email', label: 'Email', kind: 'text', expr: 'pt.email' },
       { key: 'phone', label: 'Phone', kind: 'text', expr: 'pt.phone' },
-      { key: 'is_active', label: 'Active', kind: 'enum', expr: 'pt.is_active' },
-      { key: 'is_customer', label: 'Customer', kind: 'enum', expr: '(cr.id IS NOT NULL)' },
-      { key: 'is_vendor', label: 'Vendor', kind: 'enum', expr: '(vr.id IS NOT NULL)' },
-      { key: 'is_employee', label: 'Employee', kind: 'enum', expr: '(er.id IS NOT NULL)' },
+      { key: 'is_active', label: 'Active', kind: 'boolean', expr: 'pt.is_active', options: BOOLEAN_OPTIONS },
+      { key: 'is_customer', label: 'Customer', kind: 'boolean', expr: '(cr.id IS NOT NULL)', options: BOOLEAN_OPTIONS },
+      { key: 'is_vendor', label: 'Vendor', kind: 'boolean', expr: '(vr.id IS NOT NULL)', options: BOOLEAN_OPTIONS },
+      { key: 'is_employee', label: 'Employee', kind: 'boolean', expr: '(er.id IS NOT NULL)', options: BOOLEAN_OPTIONS },
       { key: 'employee_number', label: 'Employee #', kind: 'text', expr: 'er.employee_number' },
       { key: 'hired_on', label: 'Hired on', kind: 'date', expr: 'er.hired_on' },
       { key: 'terminated_on', label: 'Terminated on', kind: 'date', expr: 'er.terminated_on' },
@@ -454,9 +471,9 @@ export const REPORT_ENTITIES: ReportEntity[] = [
       { key: 'name', label: 'Name', kind: 'text', expr: 'a.name' },
       { key: 'type', label: 'Type', kind: 'enum', expr: 'a.type' },
       { key: 'description', label: 'Description', kind: 'text', expr: 'a.description' },
-      { key: 'is_summary', label: 'Summary', kind: 'enum', expr: 'a.is_summary' },
-      { key: 'is_active', label: 'Active', kind: 'enum', expr: 'a.is_active' },
-      { key: 'reconcilable', label: 'Reconcilable', kind: 'enum', expr: 'a.reconcilable' },
+      { key: 'is_summary', label: 'Summary', kind: 'boolean', expr: 'a.is_summary', options: BOOLEAN_OPTIONS },
+      { key: 'is_active', label: 'Active', kind: 'boolean', expr: 'a.is_active', options: BOOLEAN_OPTIONS },
+      { key: 'reconcilable', label: 'Reconcilable', kind: 'boolean', expr: 'a.reconcilable', options: BOOLEAN_OPTIONS },
       { key: 'currency_restriction', label: 'Currency restriction', kind: 'text', expr: 'a.currency_restriction' },
       { key: 'created_at', label: 'Created at', kind: 'timestamp', expr: 'a.created_at' },
       { key: 'id', label: 'Account (id)', kind: 'uuid', expr: 'a.id' },
@@ -802,11 +819,11 @@ export const REPORT_ENTITIES: ReportEntity[] = [
         options: ['accrual rate', 'eligibility'],
       },
       { key: 'accrual_value', label: 'New accrual value', kind: 'number', expr: 't.accrual_value' },
-      { key: 'eligible', label: 'Eligible', kind: 'enum', expr: 't.eligible' },
+      { key: 'eligible', label: 'Eligible', kind: 'boolean', expr: 't.eligible', options: BOOLEAN_OPTIONS },
       { key: 'job_title', label: 'Job title', kind: 'text', expr: 'er.job_title' },
       { key: 'department', label: 'Department', kind: 'text', expr: 'dep.name' },
       { key: 'terminated_on', label: 'Terminated on', kind: 'date', expr: 'er.terminated_on' },
-      { key: 'tier_active', label: 'Tier active', kind: 'enum', expr: 't.is_active' },
+      { key: 'tier_active', label: 'Tier active', kind: 'boolean', expr: 't.is_active', options: BOOLEAN_OPTIONS },
       { key: 'employee_id', label: 'Employee (id)', kind: 'uuid', expr: 'er.party_id' },
       { key: 'plan_id', label: 'Plan (id)', kind: 'uuid', expr: 't.plan_id' },
       { key: 'component_id', label: 'Component (id)', kind: 'uuid', expr: 't.component_id' },
@@ -862,8 +879,8 @@ export const REPORT_OPERATORS: ReportOperatorMeta[] = [
   },
   { key: 'is_null', label: 'is empty', needsValue: 'none' },
   { key: 'is_not_null', label: 'is set', needsValue: 'none' },
-  { key: 'is_true', label: 'is yes', needsValue: 'none', applicableKinds: ['enum'] },
-  { key: 'is_false', label: 'is no', needsValue: 'none', applicableKinds: ['enum'] },
+  { key: 'is_true', label: 'is yes', needsValue: 'none', applicableKinds: ['boolean'] },
+  { key: 'is_false', label: 'is no', needsValue: 'none', applicableKinds: ['boolean'] },
   { key: 'contains', label: 'contains', needsValue: 'one', applicableKinds: ['text'] },
   {
     key: 'between_days_ago',

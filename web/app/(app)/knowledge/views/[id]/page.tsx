@@ -1,4 +1,5 @@
 import Link from 'next/link'
+import { notFound } from 'next/navigation'
 import { getTranslations } from 'next-intl/server'
 import { Download, FileText, Pencil } from 'lucide-react'
 import { Badge, Button, DetailHeader, EmptyState, PageHeader } from '@openbooks/ui'
@@ -6,8 +7,8 @@ import { ListPageLayout } from '../../../../../components/page-layout'
 import { Pagination } from '../../../../../components/pagination'
 import { parseListParams } from '../../../../../lib/list-params'
 import { dateTime } from '../../../../../lib/format'
-import { requirePermission } from '../../../../../lib/authz'
-import { loadView, runView } from '../../../../../lib/views'
+import { can, requirePermission } from '../../../../../lib/authz'
+import { loadView, runView, viewEntityPermission } from '../../../../../lib/views'
 import type { ReportRunResult } from '@openbooks/reports'
 import { ResultView } from '../../../reports/custom/ResultView'
 import { orgBranding } from '../../../../../lib/report-pdf'
@@ -75,6 +76,11 @@ export default async function ViewRunPage({
       </ListPageLayout>
     )
   }
+
+  // A shared view never widens what its reader may see: payroll entities keep
+  // their own permission, the same one the report surfaces enforce.
+  const neededPermission = viewEntityPermission(view.query)
+  if (neededPermission && !can(authz, neededPermission)) notFound()
 
   const canEdit = authz.permissions.has('*') || view.owner_id === authz.user.id
   const [result, branding] = await Promise.all([

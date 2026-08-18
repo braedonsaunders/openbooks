@@ -8,6 +8,7 @@
 // no query can escape its org. Output is a single SELECT ready for the read-only
 // executor.
 
+import { REPORT_ENTITY_MAP, SqlParams, compileRuleGroup } from '@openbooks/reports'
 import { getSource } from './catalog'
 import { fieldRef, sourceField, type AnalyticsField, type AnalyticsSource } from './semantic'
 import type {
@@ -180,6 +181,20 @@ function compileFilter(ctx: Ctx, filter: QueryFilter): string {
   }
 }
 
+/** The source's authored implicit predicate (e.g. "only active tiers"), shared
+ *  verbatim with the report executor: the same catalog `baseFilter` compiled by
+ *  the same rule compiler, with its bind params numbered after the org id. */
+function compileBaseFilter(ctx: Ctx): string | null {
+  const baseFilter = ctx.source.baseFilter
+  if (!baseFilter) return null
+  const entity = REPORT_ENTITY_MAP[ctx.source.key]
+  if (!entity) return null
+  const params = new SqlParams(ctx.params.length)
+  const clause = compileRuleGroup(entity, baseFilter, params)
+  ctx.params.push(...params.values)
+  return clause
+}
+
 function resolveDimension(source: AnalyticsSource, dim: QueryDimension): { expr: string; alias: string; field: AnalyticsField } {
   const field = sourceField(source, dim.field)
   if (!field) throw new InsightCompileError('unknown_field', `unknown dimension "${dim.field}"`, dim.field)
@@ -224,6 +239,8 @@ export function compileInsightQuery(
 
   const ctx: Ctx = { source, params: [orgId] }
   const wheres: string[] = [`${source.orgColumn} = $1`]
+  const base = compileBaseFilter(ctx)
+  if (base) wheres.push(base)
   for (const f of query.filters ?? []) wheres.push(compileFilter(ctx, f))
 
   const limit = clampLimit(query.limit)

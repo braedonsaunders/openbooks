@@ -30,16 +30,15 @@ export function InsightResultView({
 }) {
   const t = useTranslations('insights.viz')
 
-  // Localize fixed-vocabulary dimension values ('yes'/'active'/…) everywhere
-  // they surface: chart categories, pie names, and table cells.
+  // Localize fixed-vocabulary dimension values everywhere they surface: chart
+  // categories, pie names, and table cells. Boolean columns arrive as real
+  // booleans from pg, and as their SQL literals when grouped into a text key.
   const valueLabel = useMemo(() => {
     return (col: ResultColumn, v: unknown): string | null => {
-      if (!col.valueKind || typeof v !== 'string') return null
-      const known =
-        col.valueKind === 'yesNo'
-          ? v === 'yes' || v === 'no'
-          : v === 'active' || v === 'inactive'
-      return known ? t(`values.${v}`) : null
+      if (col.valueKind !== 'boolean') return null
+      if (typeof v === 'boolean') return t(v ? 'values.yes' : 'values.no')
+      if (v === 'true' || v === 'false') return t(v === 'true' ? 'values.yes' : 'values.no')
+      return null
     }
   }, [t])
 

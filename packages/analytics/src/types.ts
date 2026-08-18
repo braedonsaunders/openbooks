@@ -124,9 +124,9 @@ export type ResultColumn = {
   /** Drives right-alignment + number/currency/date formatting. */
   type: SemanticType | 'text'
   role: 'dimension' | 'measure'
-  /** Fixed value vocabulary ('yesNo' | 'activeInactive') the renderer
-   *  localizes — set when the source field emits stable codes. */
-  valueKind?: 'yesNo' | 'activeInactive'
+  /** Fixed value vocabulary the renderer localizes — set when the source field
+   *  emits a boolean, printed as the locale's yes/no. */
+  valueKind?: 'boolean'
 }
 
 /** The executed result set. */
