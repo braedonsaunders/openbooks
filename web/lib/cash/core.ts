@@ -239,25 +239,26 @@ function subScope(col: ReturnType<typeof sql>, subIds?: string[]) {
  */
 export async function paymentStats(side: Side, asOfIso: string): Promise<PaymentStats> {
   const acctType = side === "ar" ? "asset_receivable" : "liability_payable";
-  // Every relation carries an explicit org predicate: RLS scopes the rows
-  // either way, but its current_setting() comparison cannot drive an index,
-  // so the unqualified form scanned each table whole.
+  // Days-to-pay reads both dates off the lines themselves. Reaching them
+  // through each line's entry meant four joins over every application in the
+  // tenant; the line-carried posting_date halves that and makes the window
+  // filter an index scan. Every relation also carries an explicit org
+  // predicate: RLS scopes rows either way, but its current_setting()
+  // comparison cannot drive an index.
   const orgId = await resolveOrgId();
   const r = (await db.execute(sql`
     select bl.party_id as id,
-      avg(pe.posting_date - be.posting_date) as avg_days,
-      coalesce(stddev_pop(pe.posting_date - be.posting_date), 0) as sd_days,
+      avg(pl.posting_date - bl.posting_date) as avg_days,
+      coalesce(stddev_pop(pl.posting_date - bl.posting_date), 0) as sd_days,
       count(*) as n
     from applications a
     join journal_lines bl on bl.id = a.to_line_id and bl.org_id = ${orgId}
-    join journal_entries be on be.id = bl.entry_id and be.org_id = ${orgId}
     join journal_lines pl on pl.id = a.from_line_id and pl.org_id = ${orgId}
-    join journal_entries pe on pe.id = pl.entry_id and pe.org_id = ${orgId}
     join accounts ba on ba.id = bl.account_id and ba.org_id = ${orgId}
     where a.org_id = ${orgId}
       and ba.type = ${acctType} and a.unapplied_at is null and bl.party_id is not null
-      and pe.posting_date >= ${asOfIso}::date - interval '365 days'
-      and pe.posting_date <= ${asOfIso}::date
+      and pl.posting_date >= ${asOfIso}::date - interval '365 days'
+      and pl.posting_date <= ${asOfIso}::date
     group by bl.party_id
   `)) as any;
   const map = new Map<string, { avg: number; sd: number }>();
