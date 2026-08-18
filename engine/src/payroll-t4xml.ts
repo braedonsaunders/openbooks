@@ -1,9 +1,13 @@
 import { sql } from "drizzle-orm";
 import { db } from "./db.ts";
+import { add } from "./money.ts";
 import { unsealSecret } from "./secrets.ts";
 import { PayrollError } from "./payroll-error.ts";
-import type { FilingAccountRef } from "./payroll-filing.ts";
-import { t4Returns, type T4Slip, type T4SummaryTotals } from "./payroll-yearend.ts";
+import { filingAccountRef, filingAccountsById, type FilingAccountRef } from "./payroll-filing.ts";
+import {
+  t4Returns, t4Summary,
+  type T4Return, type T4Slip, type T4SummaryTotals,
+} from "./payroll-yearend.ts";
 
 /**
  * CRA T4 Internet File Transfer XML — the T619 electronic transmittal
@@ -41,7 +45,46 @@ const esc = (value: string): string =>
 
 const amt = (value: string): string => Number(value || 0).toFixed(2);
 
-export async function buildT4Xml(orgId: string, taxYear: number): Promise<{
+/**
+ * The CRA's report-type code — the field that tells the agency what this
+ * submission IS. It rides on the T619 transmittal, on every T4 slip and on
+ * every T4 Summary, and all three must agree.
+ *
+ *   O — original.  A — amended (restated slips).  C — cancelled (slips that
+ *   should never have existed).
+ *
+ * An amended or cancelled submission carries ONLY the slips being corrected,
+ * per the CRA's own instruction not to re-send slips that did not change; the
+ * accompanying summary therefore totals the slips in THAT file.
+ */
+export type T4ReportTypeCode = "O" | "A" | "C";
+
+export interface BuildT4XmlOptions {
+  /** Defaults to "O" — the original submission, byte-identical to before. */
+  reportTypeCode?: T4ReportTypeCode;
+  /**
+   * Restrict the file to these slips, by the T4 population's own row key
+   * (`employeePartyId:province:filingAccountId`). Used by the amendment
+   * path; undefined means the whole year.
+   */
+  rowIds?: readonly string[];
+  /**
+   * File exactly these slips instead of recomputing from the subledger — the
+   * CANCELLATION path, where the whole point is that the ledger no longer
+   * produces them (see `returnsOfSlips`). Wins over `rowIds`.
+   */
+  slips?: readonly T4Slip[];
+}
+
+/** The T4 population's row key — one slip per employee, province and account. */
+export const t4RowId = (slip: Pick<T4Slip, "employeePartyId" | "province" | "filingAccountId">) =>
+  `${slip.employeePartyId}:${slip.province}:${slip.filingAccountId ?? ""}`;
+
+export async function buildT4Xml(
+  orgId: string,
+  taxYear: number,
+  options: BuildT4XmlOptions = {},
+): Promise<{
   filename: string;
   xml: string;
   slipCount: number;
@@ -69,8 +112,10 @@ export async function buildT4Xml(orgId: string, taxYear: number): Promise<{
   }
   const transmitter = cfg as TransmitterConfig;
 
-  const returns = await t4Returns(orgId, taxYear);
-  if (returns.length === 0) throw new PayrollError(`no committed Canadian stubs for ${taxYear}`);
+  const reportTypeCode = options.reportTypeCode ?? "O";
+  const returns = options.slips
+    ? await returnsOfSlips(orgId, taxYear, options.slips)
+    : await scopedReturns(orgId, taxYear, options.rowIds);
   const slipCount = returns.reduce((count, ret) => count + ret.slips.length, 0);
 
   const sins = (await db.execute(sql`
@@ -106,9 +151,10 @@ export async function buildT4Xml(orgId: string, taxYear: number): Promise<{
     .filter((slip) => slip.isQuebec)
     .map((slip) => slip.employeeName);
 
+  const suffix = reportTypeCode === "O" ? "" : reportTypeCode === "A" ? "-amended" : "-cancelled";
   return {
-    filename: `T4-${taxYear}.xml`,
-    xml: renderT4Xml({ orgId, taxYear, transmitter, returns: withSins }),
+    filename: `T4-${taxYear}${suffix}.xml`,
+    xml: renderT4Xml({ orgId, taxYear, transmitter, returns: withSins, reportTypeCode }),
     slipCount,
     unsupportedFilings: quebec.length > 0
       ? [
@@ -118,6 +164,143 @@ export async function buildT4Xml(orgId: string, taxYear: number): Promise<{
         + "Québec separately, never inside this CRA file",
       ]
       : [],
+  };
+}
+
+/**
+ * The year's returns, optionally narrowed to named slips.
+ *
+ * An AMENDED submission carries only the slips being restated, per the CRA's
+ * instruction not to re-send slips that did not change, and each account's
+ * summary is restated over the slips this file actually contains (employer
+ * CPP/EI included, scoped to the same employees) so the return reconciles to
+ * itself rather than to a year it is not reporting.
+ */
+async function scopedReturns(
+  orgId: string,
+  taxYear: number,
+  rowIds: readonly string[] | undefined,
+): Promise<T4Return[]> {
+  const all = await t4Returns(orgId, taxYear);
+  if (all.length === 0) throw new PayrollError(`no committed Canadian stubs for ${taxYear}`);
+  if (!rowIds) return all;
+  const wanted = new Set(rowIds);
+  const scoped: T4Return[] = [];
+  for (const ret of all) {
+    const slips = ret.slips.filter((slip) => wanted.has(t4RowId(slip)));
+    if (slips.length === 0) continue;
+    scoped.push({
+      ...ret,
+      slips,
+      summary: await t4Summary(
+        orgId, taxYear, ret.filingAccount.id, slips.map((slip) => slip.employeePartyId),
+      ),
+    });
+  }
+  if (scoped.length === 0) {
+    throw new PayrollError(
+      `none of the requested slips exist on the ${taxYear} T4 return — nothing to file`,
+    );
+  }
+  return scoped;
+}
+
+/**
+ * Returns assembled from slips the CALLER supplies rather than from the
+ * ledger — the cancellation path.
+ *
+ * A cancelled slip is the CRA being told that this exact slip should never
+ * have existed, and its instruction is that a cancelled slip carries the SAME
+ * information as the original. That information cannot come from a
+ * recomputation: the usual reason a slip is cancelled is that the data behind
+ * it is gone (a voided run, an employee moved to another entity), so
+ * recomputing would either produce nothing or produce different figures from
+ * the ones the agency holds. The slips therefore come from the issued
+ * snapshot, and the summary totals THOSE slips.
+ *
+ * Employer CPP/EI is the one figure a slip does not carry, so it is read from
+ * the subledger for the same employees. Where the underlying run was voided it
+ * reads nil — which is exactly what the employer is declaring.
+ */
+async function returnsOfSlips(
+  orgId: string,
+  taxYear: number,
+  slips: readonly T4Slip[],
+): Promise<T4Return[]> {
+  if (slips.length === 0) throw new PayrollError("no slips were named — nothing to file");
+  const accounts = await filingAccountsById(orgId);
+  const accountIds = [...new Set(slips.map((slip) => slip.filingAccountId))];
+  const returns: T4Return[] = [];
+  for (const accountId of accountIds) {
+    const own = slips.filter((slip) => slip.filingAccountId === accountId);
+    const ledger = await t4Summary(
+      orgId, taxYear, accountId, own.map((slip) => slip.employeePartyId),
+    );
+    const total = (pick: (slip: T4Slip) => string) =>
+      own.reduce((acc, slip) => add(acc, pick(slip)), "0");
+    returns.push({
+      filingAccount: filingAccountRef(accountId, accounts),
+      slips: [...own],
+      summary: {
+        ...ledger,
+        slips: own.length,
+        employmentIncome: total((slip) => slip.box14EmploymentIncome),
+        employeeCpp: total((slip) => slip.box16Cpp),
+        employeeCpp2: total((slip) => slip.box16aCpp2),
+        employeeEi: total((slip) => slip.box18Ei),
+        incomeTax: total((slip) => slip.box22IncomeTax),
+      },
+    });
+  }
+  return returns.sort((a, b) =>
+    (a.filingAccount.accountNumber ?? "").localeCompare(b.filingAccount.accountNumber ?? ""));
+}
+
+/**
+ * Rebuild the T4 slip an issued snapshot reported.
+ *
+ * The inverse of the CA pack's own slip declaration
+ * (engine/src/payroll/canada/filings.ts), keyed on the CRA's box NUMBERS —
+ * the only stable vocabulary the two sides share. `t4-amendment` round-trips
+ * a real slip through both directions and asserts equality, so the two cannot
+ * drift apart silently.
+ *
+ * `rowId` is the population's own key and carries the employee, the province
+ * of employment and the filing account, so none of the three is parsed back
+ * out of a printed header label.
+ */
+export function t4SlipFromReported(
+  reported: { fields: readonly { code: string | null; label: string; value: string }[] },
+  rowId: string,
+): T4Slip {
+  const [employeePartyId, province, accountId] = rowId.split(":");
+  if (!employeePartyId || province == null) {
+    throw new PayrollError(`"${rowId}" is not a T4 slip row key`);
+  }
+  const box = (code: string): string =>
+    reported.fields.find((field) => field.code === code)?.value ?? "0";
+  const header = (label: string): string =>
+    reported.fields.find((field) => field.code == null && field.label === label)?.value ?? "";
+  const isQuebec = province === "QC";
+  return {
+    employeePartyId,
+    employeeName: header("Employee's name"),
+    province,
+    isQuebec,
+    filingAccountId: accountId ? accountId : null,
+    box14EmploymentIncome: box("14"),
+    // Québec employment reports the same contribution in boxes 17/17A.
+    box16Cpp: box(isQuebec ? "17" : "16"),
+    box16aCpp2: box(isQuebec ? "17A" : "16A"),
+    box18Ei: box("18"),
+    box22IncomeTax: box("22"),
+    box24EiInsurable: box("24"),
+    box26CppPensionable: box("26"),
+    box44UnionDues: box("44"),
+    box55Qpip: box("55"),
+    box56QpipInsurable: box("56"),
+    // Not a T4 box — a provenance count the transmittal never prints.
+    stubCount: 0,
   };
 }
 
@@ -138,8 +321,11 @@ export function renderT4Xml(input: {
   taxYear: number;
   transmitter: TransmitterConfig;
   returns: T4ReturnWithSins[];
+  /** O original (default) | A amended | C cancelled — see T4ReportTypeCode. */
+  reportTypeCode?: T4ReportTypeCode;
 }): string {
   const { orgId, taxYear, transmitter, returns } = input;
+  const rpt = input.reportTypeCode ?? "O";
   const returnXml: string[] = [];
   for (const ret of returns) {
     // The account's own number is the employer BN on its slips and summary;
@@ -172,7 +358,7 @@ export function renderT4Xml(input: {
         `   <SIN>${sin}</SIN>\n` +
         `   <BN>${esc(bn)}</BN>\n` +
         `   <EMPT_PROV_CD>${esc(slip.province)}</EMPT_PROV_CD>\n` +
-        `   <RPT_TCD>O</RPT_TCD>\n` +
+        `   <RPT_TCD>${rpt}</RPT_TCD>\n` +
         `   <EMPT_INC_AMT>${amt(slip.box14EmploymentIncome)}</EMPT_INC_AMT>\n` +
         pension +
         `   <EMPE_CPP2_AMT>${amt(slip.box16aCpp2)}</EMPE_CPP2_AMT>\n` +
@@ -192,7 +378,7 @@ export function renderT4Xml(input: {
       `   <bn>${esc(bn)}</bn>\n` +
       `   <tx_yr>${taxYear}</tx_yr>\n` +
       `   <slp_cnt>${ret.slips.length}</slp_cnt>\n` +
-      `   <RPT_TCD>O</RPT_TCD>\n` +
+      `   <RPT_TCD>${rpt}</RPT_TCD>\n` +
       `   <TOT_EMPT_INC_AMT>${amt(ret.summary.employmentIncome)}</TOT_EMPT_INC_AMT>\n` +
       `   <TOT_EMPE_CPP_AMT>${amt(ret.summary.employeeCpp)}</TOT_EMPE_CPP_AMT>\n` +
       `   <TOT_EMPE_CPP2_AMT>${amt(ret.summary.employeeCpp2)}</TOT_EMPE_CPP2_AMT>\n` +
@@ -208,8 +394,8 @@ export function renderT4Xml(input: {
     `<?xml version="1.0" encoding="UTF-8"?>\n` +
     `<Submission xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">\n` +
     ` <T619>\n` +
-    `  <sbmt_ref_id>T4-${taxYear}-${orgId.slice(0, 8)}</sbmt_ref_id>\n` +
-    `  <rpt_tcd>O</rpt_tcd>\n` +
+    `  <sbmt_ref_id>T4-${taxYear}${rpt === "O" ? "" : `-${rpt}`}-${orgId.slice(0, 8)}</sbmt_ref_id>\n` +
+    `  <rpt_tcd>${rpt}</rpt_tcd>\n` +
     `  <trnmtr_nbr>${esc(transmitter.transmitterNumber)}</trnmtr_nbr>\n` +
     `  <trnmtr_tcd>1</trnmtr_tcd>\n` +
     `  <summ_cnt>${returns.length}</summ_cnt>\n` +

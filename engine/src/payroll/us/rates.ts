@@ -22,6 +22,10 @@ import type {
   LegacyRateRow, PayrollPackRates, PayrollStatutoryRateSlot,
 } from "../statutory-rates.ts";
 import { US_EXTRA_EDITIONS } from "./editions.ts";
+import {
+  US_STATE_TAX_YEAR_EDITIONS, US_STATES_WITH_OWN_TABLES,
+} from "./states/editions.ts";
+import { US_LOCAL_RATE_SLOTS } from "./states/local-rates.ts";
 
 export type FilingStatus = "single" | "married_joint" | "head_household";
 
@@ -409,17 +413,25 @@ export const US_EXTRA_EDITIONS: readonly YearRates[] = [{entries}];
 
 export const US_TAX_YEARS: PayrollTaxYearSupport = {
   country: "US",
-  editions: US_EDITIONS.map((rates) => ({
-    year: rates.year,
-    label: `Pub 15-T (${rates.year})`,
-    effectiveFrom: `${rates.year}-01-01`,
-    citation: `IRS Publication 15-T (${rates.year}), Annual Percentage Method tables`,
-    status: rates.status,
-  })),
-  // Federal withholding is the only income tax the pack computes; the states it
-  // covers are the nine with no wage withholding at all, so no state publishes
-  // tables the pack depends on.
-  regionsWithOwnTables: [],
+  editions: [
+    ...US_EDITIONS.map((rates) => ({
+      year: rates.year,
+      label: `Pub 15-T (${rates.year})`,
+      effectiveFrom: `${rates.year}-01-01`,
+      citation: `IRS Publication 15-T (${rates.year}), Annual Percentage Method tables`,
+      status: rates.status,
+    })),
+    // Each state that withholds its own income tax publishes its own tables on
+    // its own timetable, so each declares its own editions — which is what
+    // makes "the 2027 California schedules are not loaded" answerable BEFORE a
+    // run calculates rather than as an exception thrown per employee from
+    // inside it. Assembled in engine/src/payroll/us/states/editions.ts.
+    ...US_STATE_TAX_YEAR_EDITIONS,
+  ],
+  // Every state with an engine, derived from the editions above. A US employee
+  // is covered by the federal tables AND their state's, and a year is loaded
+  // for them only when both are.
+  regionsWithOwnTables: US_STATES_WITH_OWN_TABLES,
   ratesModule: "engine/src/payroll/us/rates.ts",
   scaffold: US_EDITION_SCAFFOLD,
 };
@@ -491,9 +503,56 @@ const US_FUTA_SLOT: PayrollStatutoryRateSlot = {
   ],
 };
 
+/**
+ * Pennsylvania's Act 32 local earned income tax, per taxing jurisdiction.
+ *
+ * The only `sub_region`-scoped slot in either built-in pack, and the reason the
+ * scope exists. DCED's register lists a resident and a nonresident rate for
+ * roughly 2,500 municipalities and school districts, keyed by six-digit PSD
+ * code, revised annually and at different times of year. Carrying that as a
+ * pack constant means being wrong for whichever jurisdiction was revised after
+ * the release, with nothing in the product able to tell.
+ *
+ * BOTH rates are required, and that is the point: Act 32 withholds the HIGHER
+ * of the employee's total resident rate and the work location's nonresident
+ * rate, so a comparison with one side missing has no answer. The resolver
+ * refuses rather than picking a side.
+ */
+const US_PA_LOCAL_EIT_SLOT: PayrollStatutoryRateSlot = {
+  key: "us_pa_local_eit",
+  label: "PA local earned income tax (Act 32)",
+  scope: "sub_region",
+  systemKeys: ["pa_local_eit"],
+  regions: ["PA"],
+  citation: "Act 32 of 2008; PA DCED official tax register (Find Your Withholding Rates by Address)",
+  variesBecause:
+    "Every Pennsylvania municipality and school district sets its own earned income tax rate and "
+    + "revises it on its own schedule. DCED publishes roughly 2,500 of them by PSD code; no "
+    + "payroll system can carry that as a constant without being silently stale.",
+  fields: [
+    {
+      key: "residentRate", label: "Total resident EIT rate", kind: "rate", decimals: 6,
+      min: "0", max: "0.1", required: true,
+      help: "The employee's HOME jurisdiction rate, as a decimal: 0.0198 is 1.975% rounded to the "
+        + "register's own scale. This is the TOTAL — the municipality's rate PLUS the school "
+        + "district's, which DCED prints as two rows that sum.",
+    },
+    {
+      key: "nonresidentRate", label: "Work location non-resident EIT rate",
+      kind: "rate", decimals: 6, min: "0", max: "0.1", required: true,
+      help: "The WORK location's nonresident rate, as a decimal. Municipal only — school "
+        + "districts levy no nonresident EIT, so this is smaller than the resident total for the "
+        + "same place.",
+    },
+  ],
+};
+
 export const US_PACK_RATES: PayrollPackRates = {
   country: "US",
-  slots: [US_FUTA_SLOT, US_SUI_SLOT],
+  // The local slots (Ohio's municipalities, Michigan's cities) are declared in
+  // engine/src/payroll/us/states/local-rates.ts, beside the engines that read
+  // them and the reasoning for why their rates cannot be pack constants.
+  slots: [US_FUTA_SLOT, US_SUI_SLOT, US_PA_LOCAL_EIT_SLOT, ...US_LOCAL_RATE_SLOTS],
   /**
    * The pre-scoping shape: `orgs.settings.payroll.us` held ONE FUTA rate for the
    * whole employer and ONE SUI entry per state for every account. Reproduced

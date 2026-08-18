@@ -25,6 +25,10 @@ export function YearEndView({
       year={year}
       path="/payroll/year-end"
       emptyTitle={t('noFilings')}
+      // The original → amended → cancelled lifecycle belongs to year-end
+      // returns only. Separation documents live on /payroll/separations and
+      // their corrections are the agency's own separation workflow.
+      amendments
       groups={[
         {
           key: 'annual',

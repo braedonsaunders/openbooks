@@ -49,7 +49,11 @@ export async function HolidayCalendarSection({
   let payRule: ReturnType<typeof statutoryHolidayPayRule> | undefined
   try {
     holidays = await observedHolidays(orgId, jurisdiction, `${year}-01-01`, `${year}-12-31`)
-    payRule = statutoryHolidayPayRule(jurisdiction)
+    // Holiday-pay formulas are effective-dated (Prince Edward Island's changed
+    // mid-2026), so the rule shown is the one in force at the END of the year
+    // being viewed — the one that governs the next holiday, not a rule that has
+    // already been repealed.
+    payRule = statutoryHolidayPayRule(jurisdiction, `${year}-12-31`)
   } catch (error) {
     failure = error instanceof Error ? error.message : String(error)
   }
@@ -174,12 +178,32 @@ export async function HolidayCalendarSection({
   )
 }
 
-/** The lookback formula, worded the way the statute words it. */
+/** The formula, worded the way the statute words it. */
 function describeBasis(
   rule: NonNullable<ReturnType<typeof statutoryHolidayPayRule>>,
   label: (key: string, fallback: string) => string,
 ): string {
+  // A normal-day rule has TWO arms and an operator needs to see both: the day
+  // it normally pays, and the fallback the same statute names for an employee
+  // with no normal day. Describing only one would make the screen disagree with
+  // half the pay runs it explains.
+  if (rule.basis.kind === 'normal_day') {
+    const standard = rule.basis.minWeeklyHours !== undefined
+      ? label('holidayCalendar.normalDayStandardHours', 'for employees working at least '
+        + `${rule.basis.minWeeklyHours} hours a week, `)
+      : ''
+    return `${standard}${label('holidayCalendar.normalDay', 'the wages of one normal working '
+      + 'day, from the employee\u2019s recorded work schedule')}. `
+      + `${label('holidayCalendar.normalDayOtherwise', 'Otherwise')}: `
+      + describeBasis({ ...rule, basis: rule.basis.whenIrregular }, label)
+  }
   const { basis } = rule
+  // Where the window ENDS is a statutory difference of up to six days of
+  // earnings, so the screen must not say "before the holiday" for a rule that
+  // counts to the week before it.
+  const before = rule.lookbackEnds.kind === 'week_before'
+    ? label('holidayCalendar.beforeTheWeek', 'before the week of the holiday')
+    : label('holidayCalendar.beforeTheDay', 'before the holiday')
   const included = [
     label('holidayCalendar.regularWages', 'regular wages'),
     rule.include.overtime ? label('holidayCalendar.overtime', 'overtime') : null,
@@ -188,17 +212,26 @@ function describeBasis(
   ].filter(Boolean).join(', ')
 
   if (basis.kind === 'fixed_divisor') {
-    const main = `${included} over the ${basis.lookbackWeeks} weeks before the holiday, ÷ ${basis.divisor}`
+    const main = `${included} over the ${basis.lookbackWeeks} weeks ${before}, ÷ ${basis.divisor}`
     return basis.commission
       ? `${main}. Commission earners with ${basis.commission.minWeeksEmployed}+ weeks of service: `
         + `${basis.commission.lookbackWeeks} weeks ÷ ${basis.commission.divisor}.`
       : `${main}.`
   }
   if (basis.kind === 'percent_of_earnings') {
-    return `${basis.percent}% of ${included} over the ${basis.lookbackWeeks} weeks before the holiday.`
+    return `${basis.percent}% of ${included} over the ${basis.lookbackWeeks} weeks ${before}.`
   }
   const window = basis.lookbackDays !== undefined
     ? `${basis.lookbackDays} calendar days`
     : `${basis.lookbackWeeks ?? 4} weeks`
-  return `${included} over the ${window} before the holiday, ÷ the number of days worked in it.`
+  // The denominator is the statute's own sentence, not "days worked" for
+  // everyone: British Columbia divides by the days the employee worked OR
+  // EARNED WAGES, which counts paid vacation and other paid holidays in.
+  const counted = basis.counting === 'worked'
+    ? label('holidayCalendar.daysWorked', 'days worked in it')
+    : basis.counting === 'worked_or_earned_wages'
+      ? label('holidayCalendar.daysWorkedOrEarned', 'days worked or on which wages were earned')
+      : label('holidayCalendar.daysEntitledToPay',
+        'days the employee was paid, or entitled to be paid, for')
+  return `${included} over the ${window} ${before}, ÷ the number of ${counted}.`
 }

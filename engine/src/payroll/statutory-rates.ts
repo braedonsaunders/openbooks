@@ -53,15 +53,22 @@ import { US_PACK_RATES } from "./us/rates.ts";
  *     justified: most "org-wide" statutory rates turn out to be regional).
  *   - `region`          — one value per province/state (a provincial levy, the
  *     FUTA credit reduction).
+ *   - `sub_region`      — one value per taxing unit BELOW a region: a
+ *     Pennsylvania municipality's Act 32 earned income tax rate, an Ohio
+ *     municipal or school-district rate. These ARE published — by roughly 2,500
+ *     separate authorities, revised annually, in a register no payroll system
+ *     can carry as a constant without being wrong for whichever one changed
+ *     after the release. Same word as `PayrollCertificate.scope` and
+ *     `PayrollSubRegionLevy` use, deliberately: one vocabulary for one idea.
  *   - `filing_account`  — one value per registered ACCOUNT, because the rate is
  *     assigned to the registration rather than to the employer (an
  *     experience-rated SUI rate). A region-wide row is still allowed and is
  *     what a single-account employer keeps using.
  */
-export type PayrollRateScope = "org" | "region" | "filing_account";
+export type PayrollRateScope = "org" | "region" | "sub_region" | "filing_account";
 
 export const PAYROLL_RATE_SCOPES: readonly PayrollRateScope[] = [
-  "org", "region", "filing_account",
+  "org", "region", "sub_region", "filing_account",
 ];
 
 /** One number inside a rate slot, and the shape it is accepted in. */
@@ -106,9 +113,9 @@ export interface PayrollStatutoryRateSlot {
    */
   programType?: string;
   /**
-   * Regions the levy exists in, for `region` and `filing_account` scope.
-   * Absent = every region the pack knows. A region outside the list is refused
-   * rather than accepted and ignored.
+   * Regions the levy exists in, for `region`, `sub_region` and
+   * `filing_account` scope. Absent = every region the pack knows. A region
+   * outside the list is refused rather than accepted and ignored.
    */
   regions?: readonly string[];
   fields: readonly PayrollRateField[];
@@ -285,6 +292,7 @@ export function statutoryRateProblem(input: {
   country: string;
   rateKey: string;
   region: string | null;
+  subRegion?: string | null;
   filingAccountId: string | null;
   taxYear: number;
   /** The named filing account, when one is named, for the cross-checks. */
@@ -312,6 +320,16 @@ export function statutoryRateProblem(input: {
     }
     const problem = regionProblem(input.country, slot, input.region!);
     if (problem) return problem;
+  }
+  const hasSubRegion = input.subRegion != null && input.subRegion !== "";
+  if (slot.scope === "sub_region") {
+    if (!hasSubRegion) {
+      return `${slot.label} varies by taxing jurisdiction inside the ${payrollPack(input.country).regions.label}`
+        + " — name the jurisdiction it applies to";
+    }
+  } else if (hasSubRegion) {
+    return `${slot.label} is not assigned per sub-jurisdiction by the ${input.country} pack — `
+      + "remove it, or declare the slot at sub_region scope.";
   }
   if (slot.scope !== "filing_account" && input.filingAccountId) {
     return `${slot.label} is not assigned per filing account by the ${input.country} pack — `
@@ -359,6 +377,8 @@ export interface StatutoryRateRow {
   country: string;
   rateKey: string;
   region: string | null;
+  /** The taxing unit below the region, for `sub_region`-scoped slots. */
+  subRegion?: string | null;
   filingAccountId: string | null;
   taxYear: number;
   values: Record<string, string>;
@@ -373,8 +393,8 @@ export async function listStatutoryRates(
   filter: { country?: string; taxYear?: number } = {},
 ): Promise<StatutoryRateRow[]> {
   const rows = (await db.execute(sql`
-    select r.id, r.country, r.rate_key, r.region, r.filing_account_id, r.tax_year,
-           r.rate_values, fa.account_number, fa.name as account_name
+    select r.id, r.country, r.rate_key, r.region, r.sub_region, r.filing_account_id,
+           r.tax_year, r.rate_values, fa.account_number, fa.name as account_name
       from payroll_statutory_rates r
       left join payroll_filing_accounts fa
         on fa.id = r.filing_account_id and fa.org_id = r.org_id
@@ -382,13 +402,14 @@ export async function listStatutoryRates(
        and (${filter.country ?? null}::text is null or r.country = ${filter.country ?? null})
        and (${filter.taxYear ?? null}::int is null or r.tax_year = ${filter.taxYear ?? null})
      order by r.country, r.rate_key, r.tax_year desc,
-              r.region nulls first, fa.account_number nulls first
+              r.region nulls first, r.sub_region nulls first, fa.account_number nulls first
   `)) as unknown as { rows: Record<string, unknown>[] };
   return rows.rows.map((row) => ({
     id: String(row.id),
     country: String(row.country),
     rateKey: String(row.rate_key),
     region: (row.region as string | null) ?? null,
+    subRegion: (row.sub_region as string | null) ?? null,
     filingAccountId: (row.filing_account_id as string | null) ?? null,
     taxYear: Number(row.tax_year),
     values: (row.rate_values ?? {}) as Record<string, string>,
@@ -408,6 +429,7 @@ export async function upsertStatutoryRate(input: {
   country: string;
   rateKey: string;
   region: string | null;
+  subRegion?: string | null;
   filingAccountId: string | null;
   taxYear: number;
   values: Record<string, unknown>;
@@ -415,11 +437,13 @@ export async function upsertStatutoryRate(input: {
   const slot = statutoryRateSlot(input.country, input.rateKey);
   const values = canonicalStatutoryRateValues(slot, input.values);
   const region = input.region === "" ? null : input.region;
+  const subRegion = input.subRegion == null || input.subRegion === "" ? null : input.subRegion;
   const existing = (await db.execute(sql`
     select id, rate_values from payroll_statutory_rates
      where org_id = ${input.orgId} and country = ${input.country}
        and rate_key = ${input.rateKey} and tax_year = ${input.taxYear}
        and region is not distinct from ${region}
+       and sub_region is not distinct from ${subRegion}
        and filing_account_id is not distinct from ${input.filingAccountId}
   `)) as unknown as { rows: { id: string; rate_values: Record<string, string> }[] };
   const before = existing.rows[0];
@@ -433,9 +457,9 @@ export async function upsertStatutoryRate(input: {
   } else {
     await db.execute(sql`
       insert into payroll_statutory_rates
-        (id, org_id, country, rate_key, region, filing_account_id, tax_year, rate_values,
-         created_by, updated_by)
-      values (${id}, ${input.orgId}, ${input.country}, ${input.rateKey}, ${region},
+        (id, org_id, country, rate_key, region, sub_region, filing_account_id, tax_year,
+         rate_values, created_by, updated_by)
+      values (${id}, ${input.orgId}, ${input.country}, ${input.rateKey}, ${region}, ${subRegion},
               ${input.filingAccountId}, ${input.taxYear}, ${JSON.stringify(values)}::jsonb,
               ${input.actorId}, ${input.actorId})`);
   }
@@ -443,7 +467,7 @@ export async function upsertStatutoryRate(input: {
     insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
     values (${input.orgId}, 'payroll_statutory_rates', ${id}, ${before ? "update" : "insert"},
             ${JSON.stringify({
-              country: input.country, rateKey: input.rateKey, region,
+              country: input.country, rateKey: input.rateKey, region, subRegion,
               filingAccountId: input.filingAccountId, taxYear: input.taxYear,
               before: before?.rate_values ?? null, after: values,
             })}::jsonb, ${input.actorId})`);
@@ -459,7 +483,7 @@ export async function deleteStatutoryRate(
   const gone = (await db.execute(sql`
     delete from payroll_statutory_rates
      where org_id = ${orgId} and id = ${id}
-    returning country, rate_key, region, filing_account_id, tax_year, rate_values
+    returning country, rate_key, region, sub_region, filing_account_id, tax_year, rate_values
   `)) as unknown as { rows: Record<string, unknown>[] };
   const row = gone.rows[0];
   if (!row) return false;
@@ -481,6 +505,7 @@ export interface ResolvedStatutoryRate {
   slotKey: string;
   scope: PayrollRateScope;
   region: string | null;
+  subRegion: string | null;
   filingAccountId: string | null;
   /** null when the values came from the pre-scoping blob (no year on it). */
   taxYear: number | null;
@@ -503,12 +528,12 @@ export interface StatutoryRateResolution {
    */
   resolve(
     slotKey: string,
-    at?: { region?: string | null; filingAccountId?: string | null },
+    at?: { region?: string | null; subRegion?: string | null; filingAccountId?: string | null },
   ): ResolvedStatutoryRate | null;
   /** The same, values only. */
   values(
     slotKey: string,
-    at?: { region?: string | null; filingAccountId?: string | null },
+    at?: { region?: string | null; subRegion?: string | null; filingAccountId?: string | null },
   ): Record<string, string> | null;
 }
 
@@ -552,15 +577,17 @@ export function buildResolution(input: {
   const resolve: StatutoryRateResolution["resolve"] = (slotKey, at = {}) => {
     const slot = statutoryRateSlot(country, slotKey);
     const region = slot.scope === "org" ? null : (at.region ?? null);
+    const subRegion = slot.scope === "sub_region" ? (at.subRegion ?? null) : null;
     const accountId = at.filingAccountId ?? null;
     const scoped = rows.filter((row) =>
       row.rateKey === slotKey && row.taxYear === taxYear
-      && (row.region ?? null) === region);
+      && (row.region ?? null) === region
+      && (row.subRegion ?? null) === subRegion);
     if (accountId && slot.scope === "filing_account") {
       const mine = scoped.find((row) => row.filingAccountId === accountId);
       if (mine) {
         return {
-          slotKey, scope: slot.scope, region, filingAccountId: accountId,
+          slotKey, scope: slot.scope, region, subRegion, filingAccountId: accountId,
           taxYear, values: mine.values, source: "account",
         };
       }
@@ -568,17 +595,17 @@ export function buildResolution(input: {
     const wide = scoped.find((row) => row.filingAccountId == null);
     if (wide) {
       return {
-        slotKey, scope: slot.scope, region, filingAccountId: null, taxYear,
+        slotKey, scope: slot.scope, region, subRegion, filingAccountId: null, taxYear,
         values: wide.values, source: slot.scope === "org" ? "org" : "region",
       };
     }
     const fallback = legacy.find(
       (row) => row.slotKey === slotKey && (row.region ?? null) === region,
     );
-    if (fallback) {
+    if (fallback && subRegion == null) {
       return {
-        slotKey, scope: slot.scope, region, filingAccountId: null, taxYear: null,
-        values: fallback.values, source: "legacy",
+        slotKey, scope: slot.scope, region, subRegion: null, filingAccountId: null,
+        taxYear: null, values: fallback.values, source: "legacy",
       };
     }
     return null;
@@ -597,6 +624,7 @@ export function buildResolution(input: {
 /** One scope point a run actually touches. */
 export interface StatutoryRatePoint {
   region: string | null;
+  subRegion?: string | null;
   filingAccountId: string | null;
   /** Employees at this point, for the readiness item. */
   employees?: readonly { partyId: string; name: string }[];
@@ -608,6 +636,7 @@ export interface UnconfiguredStatutoryRate {
   label: string;
   scope: PayrollRateScope;
   region: string | null;
+  subRegion: string | null;
   filingAccountId: string | null;
   employees: readonly { partyId: string; name: string }[];
   /** Sentence for the readiness item / setup check. */
@@ -634,13 +663,16 @@ export function unconfiguredStatutoryRates(
       const region = slot.scope === "org" ? null : point.region;
       if (slot.scope !== "org" && !region) continue;
       if (slot.regions && region && !slot.regions.includes(region)) continue;
+      const subRegion = slot.scope === "sub_region" ? (point.subRegion ?? null) : null;
+      if (slot.scope === "sub_region" && !subRegion) continue;
       const accountId = slot.scope === "filing_account" ? point.filingAccountId : null;
-      const key = `${slot.key}:${region ?? ""}:${accountId ?? ""}`;
+      const key = `${slot.key}:${region ?? ""}:${subRegion ?? ""}:${accountId ?? ""}`;
       if (seen.has(key)) continue;
       seen.add(key);
-      if (resolution.resolve(slot.key, { region, filingAccountId: accountId })) continue;
+      if (resolution.resolve(slot.key, { region, subRegion, filingAccountId: accountId })) continue;
       const where = [
         region ? region : null,
+        subRegion ? subRegion : null,
         accountId ? "the assigned filing account" : null,
       ].filter(Boolean).join(" · ");
       found.push({
@@ -649,6 +681,7 @@ export function unconfiguredStatutoryRates(
         label: slot.label,
         scope: slot.scope,
         region,
+        subRegion,
         filingAccountId: accountId,
         employees: point.employees ?? [],
         message:

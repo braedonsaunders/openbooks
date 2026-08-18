@@ -25,6 +25,14 @@ import { PagedTable, type PagedColumn } from '../../../../components/paged-table
 import { useMoney } from '../../../../components/money-provider'
 import { payrollSlipFacsimile } from '../../../../lib/payroll-slip-facsimile'
 import { renderTaxFormFacsimileBody } from '../../../../lib/tax-form-facsimile-html'
+import {
+  FilingCorrectionSection,
+  FilingLifecycleBar,
+  FilingStatusBadge,
+  useFilingLifecycle,
+  type FilingLifecycle,
+  type FilingRowReview,
+} from './filing-amendments'
 
 export type FilingRow = Record<string, string | number | null>
 
@@ -139,12 +147,23 @@ export function FilingWorkspace({
   path,
   groups,
   emptyTitle,
+  amendments = false,
 }: {
   year: number
   /** The surface's own route, for the year picker ("/payroll/year-end"). */
   path: string
   groups: FilingGroup[]
   emptyTitle: string
+  /**
+   * Show the original → amended → cancelled lifecycle (filing history, per-row
+   * delta, correction actions).
+   *
+   * Off by default and passed only by the year-end cockpit. Separation
+   * documents were deliberately moved OFF the year-end surface and their
+   * corrections belong to the agency's own separation workflow — the CA pack's
+   * ROE declaration refuses an amendment here by name for exactly that reason.
+   */
+  amendments?: boolean
 }) {
   const t = useTranslations('payroll.filings')
   const router = useRouter()
@@ -158,6 +177,35 @@ export function FilingWorkspace({
 
   const issues = useFilingIssues(year)
   const [openRow, setOpenRow] = useState<FilingRow | null>(null)
+  // One lifecycle fetch per selected filing — the correction review is a
+  // per-row recompute and is not worth doing for filings nobody is looking at.
+  const lifecycle = useFilingLifecycle(selected ?? null, year, amendments)
+  const [issueBusy, setIssueBusy] = useState(false)
+  const [issueError, setIssueError] = useState<string | null>(null)
+
+  async function recordOriginal(section: YearEndFilingSection, note: string) {
+    setIssueError(null)
+    setIssueBusy(true)
+    try {
+      const res = await fetch('/api/payroll/year-end/amendments', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          country: section.country, filing: section.key, year, revision: 'original', note,
+        }),
+      })
+      const body = (await res.json()) as { error?: string; fileRefusal?: string | null }
+      if (!res.ok) throw new Error(body.error ?? res.statusText)
+      // A filing with no electronic file is legitimately recorded — but the
+      // pack's reason there is none is surfaced, never swallowed.
+      if (body.fileRefusal) setIssueError(body.fileRefusal)
+      lifecycle.refresh()
+    } catch (e) {
+      setIssueError((e as Error).message)
+    } finally {
+      setIssueBusy(false)
+    }
+  }
 
   if (sections.length === 0) {
     return <EmptyState title={emptyTitle} />
@@ -240,8 +288,14 @@ export function FilingWorkspace({
         <FilingSection
           key={sectionKey(selected)}
           section={selected}
+          year={year}
           issues={issues}
           onOpenRow={(row) => setOpenRow(row)}
+          lifecycle={amendments ? lifecycle.state : null}
+          reviewByRow={lifecycle.reviewByRow}
+          lifecycleBusy={issueBusy}
+          lifecycleError={issueError}
+          onRecordOriginal={(note) => void recordOriginal(selected, note)}
         />
       )}
 
@@ -251,6 +305,11 @@ export function FilingWorkspace({
           row={openRow}
           year={year}
           issues={issues}
+          lifecycle={
+            amendments && lifecycle.state.status === 'ready' ? lifecycle.state.lifecycle : null
+          }
+          review={lifecycle.reviewByRow.get(String(openRow[selected.data.rowKey] ?? '')) ?? null}
+          onIssued={() => lifecycle.refresh()}
           onClose={() => setOpenRow(null)}
         />
       )}
@@ -261,12 +320,25 @@ export function FilingWorkspace({
 /** The selected filing: registry-declared columns/totals in the house table. */
 export function FilingSection({
   section,
+  year,
   issues,
   onOpenRow,
+  lifecycle = null,
+  reviewByRow,
+  lifecycleBusy = false,
+  lifecycleError = null,
+  onRecordOriginal,
 }: {
   section: YearEndFilingSection
+  year: number
   issues: FilingIssues
   onOpenRow: (row: FilingRow) => void
+  /** Null on surfaces that do not carry the amendment lifecycle. */
+  lifecycle?: ReturnType<typeof useFilingLifecycle>['state'] | null
+  reviewByRow?: Map<string, FilingRowReview>
+  lifecycleBusy?: boolean
+  lifecycleError?: string | null
+  onRecordOriginal?: (note: string) => void
 }) {
   const t = useTranslations('payroll.filings')
   const { money } = useMoney()
@@ -291,6 +363,22 @@ export function FilingSection({
       : undefined,
     cell: (row: FilingRow) => cell(row, column.key),
   }))
+  // Where the lifecycle is on, each row carries its filing STATE beside its
+  // figures — filed, changed since filing, cancelled — so an operator sees at
+  // a glance which slips need a correction without opening any of them.
+  if (lifecycle) {
+    columns.push({
+      key: '__filingStatus',
+      header: t.has('lifecycle.statusColumn' as never)
+        ? t('lifecycle.statusColumn' as never)
+        : 'Filing status',
+      cell: (row: FilingRow) => {
+        const review = reviewByRow?.get(String(row[section.data.rowKey] ?? ''))
+        if (!review) return <span className="text-slate-400">—</span>
+        return <FilingStatusBadge status={review.status} />
+      },
+    })
+  }
   // Issue filings (the ROE) show the declared reason beside the declared
   // columns — the declaration itself is made in the employee's drawer.
   if (section.issue) {
@@ -341,6 +429,22 @@ export function FilingSection({
         <Alert variant="destructive" className="mb-3">
           <AlertDescription>{downloadError}</AlertDescription>
         </Alert>
+      )}
+
+      {lifecycle && lifecycle.status === 'error' && (
+        <Alert variant="warning" className="mb-3">
+          <AlertDescription>{lifecycle.message}</AlertDescription>
+        </Alert>
+      )}
+      {lifecycle && lifecycle.status === 'ready' && onRecordOriginal && (
+        <FilingLifecycleBar
+          section={section}
+          year={year}
+          lifecycle={lifecycle.lifecycle}
+          busy={lifecycleBusy}
+          error={lifecycleError}
+          onRecordOriginal={onRecordOriginal}
+        />
       )}
 
       {section.populationRefusal ? (
@@ -399,12 +503,19 @@ export function SlipDrawer({
   row,
   year,
   issues,
+  lifecycle = null,
+  review = null,
+  onIssued,
   onClose,
 }: {
   section: YearEndFilingSection
   row: FilingRow
   year: number
   issues: FilingIssues
+  /** Present only where the surface carries the amendment lifecycle. */
+  lifecycle?: FilingLifecycle | null
+  review?: FilingRowReview | null
+  onIssued?: () => void
   onClose: () => void
 }) {
   const t = useTranslations('payroll.filings')
@@ -503,6 +614,20 @@ export function SlipDrawer({
                 </div>
               ))}
             </dl>
+
+            {/* The lifecycle: what this slip reported when it was filed, what
+                the ledger says now, and the two corrections the pack allows.
+                Above the facsimile, because a slip that has already gone to the
+                agency is read very differently from one that has not. */}
+            {lifecycle && review && (
+              <FilingCorrectionSection
+                section={section}
+                year={year}
+                review={review}
+                lifecycle={lifecycle}
+                onIssued={() => onIssued?.()}
+              />
+            )}
 
             {section.issue && (
               <div className="space-y-2 rounded-lg border border-slate-200 p-3 dark:border-slate-800">

@@ -190,12 +190,13 @@ test("an empty labour jurisdiction is not a problem — it means derive from the
 });
 
 test("an undeclared labour jurisdiction is refused BY NAME, listing what is declared", () => {
-  // CA-MB is a real province no pack has transcribed. Accepting it would let
-  // the employment fall back on the work region's calendar — the exact
+  // 'CA-ZZ' is the region an employee employed outside any province carries.
+  // No employment-standards act governs it, and accepting it would let the
+  // employment fall back on the work region's calendar — the exact
   // substitution the attribute exists to prevent.
-  const problem = labourJurisdictionProblem("CA", "CA-MB");
+  const problem = labourJurisdictionProblem("CA", "CA-ZZ");
   assert.ok(problem);
-  assert.match(problem!, /CA-MB/, "names the refused value");
+  assert.match(problem!, /CA-ZZ/, "names the refused value");
   assert.match(problem!, /no payroll pack declares/);
   assert.match(problem!, /CA-ON/, "lists what IS declared");
 

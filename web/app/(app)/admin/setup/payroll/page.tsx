@@ -27,6 +27,7 @@ import { PayrollSetupLauncher } from './PayrollSetupLauncher'
 import { PayrollSetupWorkspace } from './PayrollSetupWorkspace'
 import { StatutoryRatesSection } from './StatutoryRatesSection'
 import { StatHolidayPaySection } from './StatHolidayPaySection'
+import { WorkSchedulesSection } from './WorkSchedulesSection'
 
 export const dynamic = 'force-dynamic'
 
@@ -64,6 +65,10 @@ const TABS = [
   // reduction, provincial employer health levies), at the scope the pack
   // declares each varies by.
   'rates',
+  // The hours and days employees are normally scheduled to work — a generic
+  // employment attribute (engine/src/work-schedules.ts) that several
+  // jurisdictions' statutory holiday pay is computed FROM.
+  'workSchedules',
   'entitlements', 'limits', 'service', 'derived', 'derivedPreview',
   // Statutory holidays: the employer's elections, then the resolved calendar
   // those elections produce. Same edit-then-confirm pairing as derived rules.
@@ -78,7 +83,7 @@ const isEntityTab = (tab: Tab): tab is EntityTab => tab in ENTITY_BY_TAB
 
 /** The two-level arrangement: ≤5 top-row groups, subtabs within. */
 const GROUPS: { key: 'foundations' | 'earnings' | 'entitlements' | 'payday'; tabs: Tab[] }[] = [
-  { key: 'foundations', tabs: ['packs', 'accounts', 'rates', 'schedules', 'filing'] },
+  { key: 'foundations', tabs: ['packs', 'accounts', 'rates', 'schedules', 'workSchedules', 'filing'] },
   { key: 'earnings', tabs: ['components', 'derived', 'derivedPreview', 'holidays', 'holidayCalendar', 'union'] },
   { key: 'entitlements', tabs: ['entitlements', 'limits', 'service'] },
   { key: 'payday', tabs: ['payday'] },
@@ -220,6 +225,9 @@ export default async function PayrollSetupPage({
       ) : null}
       {tab === 'holidayCalendar' ? (
         <HolidayCalendarSection orgId={orgId} searchParams={sp} />
+      ) : null}
+      {tab === 'workSchedules' ? (
+        <WorkSchedulesSection canManage={canManageEntities} />
       ) : null}
     </div>
   )

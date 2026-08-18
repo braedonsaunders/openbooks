@@ -1,6 +1,6 @@
 import { sql } from "drizzle-orm";
 import {
-  boolean, index, integer, jsonb, pgTable, text, uniqueIndex, uuid,
+  boolean, index, integer, jsonb, pgTable, text, timestamp, uniqueIndex, uuid,
 } from "drizzle-orm/pg-core";
 import { auditColumns, id, orgRef } from "./helpers";
 
@@ -144,6 +144,103 @@ export const payrollStatutoryRates = pgTable(
     ),
     index("payroll_statutory_rates_org_year").on(t.orgId, t.country, t.taxYear),
     index("payroll_statutory_rates_account").on(t.orgId, t.filingAccountId),
+  ],
+);
+
+/**
+ * ISSUED filings — the original → amended → cancelled lifecycle.
+ *
+ * A statutory filing is not a report you can re-run: once a T4, a W-2 or a
+ * Form 941 has gone to the agency it is EVIDENCE of what the employer
+ * declared, and every employer eventually declares something wrong (a missed
+ * taxable benefit, a wrong SIN, an employee who was on the wrong entity).
+ *
+ * Doctrine:
+ * - An amendment is a NEW row that supersedes the previous one. Nothing ever
+ *   updates an issued submission; overwriting the artifact would destroy the
+ *   only record of what the agency actually received.
+ * - `revision` is the AGENCY-NEUTRAL state. Each pack maps it onto its own
+ *   mechanics — the CRA stamps a report-type code (O/A/C) on the same T4 XML,
+ *   the IRS uses a wholly separate correction form (W-2c, 941-X). The generic
+ *   layer branches on nothing.
+ * - `artifact_body` is the exact bytes transmitted, so the file can be
+ *   re-produced byte for byte years later. It is null for a filing with no
+ *   electronic file (a W-2 keyed into SSA BSO, a paper 941) — the slip
+ *   snapshots are then the evidence.
+ * - AMEND and CANCEL are different operations, not two flavours of edit:
+ *   amending restates a slip that should exist, cancelling says the slip
+ *   should never have existed. Agencies treat them differently; so does this.
+ */
+export const payrollFilingSubmissions = pgTable(
+  "payroll_filing_submissions",
+  {
+    id: id(),
+    orgId: orgRef(),
+    /** Country pack whose registry declares the filing. */
+    country: text("country").notNull(),
+    /** The pack's own filing key ("t4", "w2", "941", "rl1", "p60"). */
+    filingKey: text("filing_key").notNull(),
+    taxYear: integer("tax_year").notNull(),
+    revision: text("revision", {
+      enum: ["original", "amended", "cancelled"],
+    }).notNull(),
+    /** 1, 2, 3 … in issue order for the filing-year; the original is 1. */
+    revisionNumber: integer("revision_number").notNull(),
+    /** The artifact this one supersedes; null on the original. */
+    supersedesId: uuid("supersedes_id"),
+    /**
+     * When the employer states the artifact went to the agency — distinct
+     * from created_at, because a filing is routinely recorded after the fact.
+     */
+    issuedAt: timestamp("issued_at", { withTimezone: true }).notNull().defaultNow(),
+    note: text("note"),
+    slipCount: integer("slip_count").notNull().default(0),
+    artifactFilename: text("artifact_filename"),
+    artifactContentType: text("artifact_content_type"),
+    artifactBody: text("artifact_body"),
+    ...auditColumns,
+  },
+  (t) => [
+    // Two artifacts claiming to be revision 2 make "what superseded what"
+    // ambiguous, and an ambiguous filing history is not an audit trail.
+    uniqueIndex("payroll_filing_submissions_org_revision")
+      .on(t.orgId, t.country, t.filingKey, t.taxYear, t.revisionNumber),
+    index("payroll_filing_submissions_org_filing")
+      .on(t.orgId, t.country, t.filingKey, t.taxYear, t.issuedAt.desc()),
+  ],
+);
+
+/**
+ * What ONE row of a filing reported on ONE issued artifact.
+ *
+ * This is the "previously reported" column the IRS's W-2c and 941-X print,
+ * and it is what the delta an operator reviews is computed against. It holds
+ * exactly what the SLIP printed — box codes, labels and values in the form's
+ * own vocabulary — plus keyed FINGERPRINTS of confidential identity facts:
+ * a wrong SIN/SSN is one of the commonest reasons to amend, and the
+ * fingerprint proves the number changed without the number ever being stored
+ * outside the sealed profile column.
+ */
+export const payrollFilingSubmissionSlips = pgTable(
+  "payroll_filing_submission_slips",
+  {
+    id: id(),
+    orgId: orgRef(),
+    submissionId: uuid("submission_id").notNull(),
+    /** The filing population's own rowKey value — opaque to generic code. */
+    rowId: text("row_id").notNull(),
+    /** The row's first declared column, so history reads without re-querying. */
+    label: text("label").notNull(),
+    revision: text("revision", {
+      enum: ["original", "amended", "cancelled"],
+    }).notNull(),
+    /** { fields: [{code,label,value}], confidential: [{label,fingerprint}] } */
+    reported: jsonb("reported").notNull().default({}),
+    ...auditColumns,
+  },
+  (t) => [
+    uniqueIndex("payroll_filing_submission_slips_row").on(t.submissionId, t.rowId),
+    index("payroll_filing_submission_slips_org_row").on(t.orgId, t.rowId),
   ],
 );
 

@@ -51,6 +51,11 @@ const FREEDONIA: PayrollCountryPack = {
     },
   ],
   remittanceVendorSettingsKey: "zzRemittancePartyId",
+  // Freedonia spreads a retroactive payment back over the periods it relates
+  // to and taxes it as ordinary income of those periods — deliberately the
+  // OPPOSITE of the CRA's and the IRS's answer, so a Canadian or American
+  // "retro is a bonus" leaking into the generic layer would show up here.
+  retroactivePayTreatment: "periodic",
   contributoryBases: {
     pensionable: "Freedonia pension-levy wages",
     insurable: "Freedonia employment-fund wages",
@@ -270,33 +275,60 @@ test("a system key two packs declare differently is a refusal, never a coin toss
 /* ------------------------------------------------------------------ */
 
 test("an undeclared jurisdiction blocks exactly when a holiday is in the period", () => {
-  // Canada Day 2026-07-01 falls inside the period: Manitoba, which no pack
-  // declares, must stop rather than pay a silent zero for the day.
+  // Every Canadian PROVINCE is declared now. 'ZZ' is T4127's region for an
+  // employee employed outside any of them: the withholding pack knows it and no
+  // employment-standards act governs it, so it is the case this gate is for.
+  // Canada Day 2026-07-01 falls inside the period, and the run must stop rather
+  // than pay a silent zero for the day.
   const conflict = undeclaredJurisdictionHolidayConflict({
-    country: "CA", jurisdiction: "CA-MB", from: "2026-06-21", to: "2026-07-04",
+    country: "CA", jurisdiction: "CA-ZZ", from: "2026-06-21", to: "2026-07-04",
   });
   assert.ok(conflict);
   assert.equal(conflict.date, "2026-07-01");
   assert.match(conflict.message, /Canada Day/);
-  assert.match(conflict.message, /CA-MB/);
+  assert.match(conflict.message, /CA-ZZ/);
 
-  // A holiday only sibling calendars name still trips the probe: the third
-  // Monday of February is Louis Riel Day in Manitoba and Family Day in three
-  // declared provinces.
+  // A holiday only SOME sibling calendars name still trips the probe: the third
+  // Monday of February is Family Day in four provinces, Louis Riel Day in
+  // Manitoba, Islander Day in Prince Edward Island and Heritage Day in Nova
+  // Scotia — one date, four names, and the message picks the commonest.
   const february = undeclaredJurisdictionHolidayConflict({
-    country: "CA", jurisdiction: "CA-MB", from: "2026-02-15", to: "2026-02-21",
+    country: "CA", jurisdiction: "CA-ZZ", from: "2026-02-15", to: "2026-02-21",
   });
   assert.ok(february);
   assert.equal(february.date, "2026-02-16");
+
+  // …and a day only two of the fourteen keep does NOT. National Indigenous
+  // Peoples Day binds the Northwest Territories and Yukon and nobody else, and
+  // it must not stop an employment neither of them governs. This is what a
+  // constant threshold got wrong once the country was fully transcribed.
+  assert.equal(
+    undeclaredJurisdictionHolidayConflict({
+      country: "CA", jurisdiction: "CA-ZZ", from: "2026-06-15", to: "2026-06-27",
+    }),
+    null,
+  );
 
   // No statutory holiday in the window: the undeclared jurisdiction
   // calculates exactly as it always has.
   assert.equal(
     undeclaredJurisdictionHolidayConflict({
-      country: "CA", jurisdiction: "CA-MB", from: "2026-07-06", to: "2026-07-18",
+      country: "CA", jurisdiction: "CA-ZZ", from: "2026-07-06", to: "2026-07-18",
     }),
     null,
   );
+
+  // And the eight that used to be this gate's case are declared now, so they
+  // calculate instead of blocking.
+  for (const jurisdiction of ["CA-MB", "CA-NB", "CA-NL", "CA-NS", "CA-NT", "CA-NU", "CA-PE", "CA-YT"]) {
+    assert.ok(payrollJurisdictionDeclared(jurisdiction));
+    assert.equal(
+      undeclaredJurisdictionHolidayConflict({
+        country: "CA", jurisdiction, from: "2026-06-21", to: "2026-07-04",
+      }),
+      null,
+    );
+  }
 
   // A DECLARED jurisdiction is never this gate's case — including the ones
   // declared as "no mandate" (US states), which pay nothing lawfully.
@@ -380,6 +412,9 @@ test("stat pay: OFF is byte-identical, ON pays the declared formula, undeclared 
   };
   const ontarioId = await employee("Olive Ontario", "ON");
   const manitobaId = await employee("Morley Manitoba", "MB");
+  // Employed outside any province: withholding knows 'ZZ', no employment
+  // standards act does, so this is the employee the undeclared gate is for.
+  const outsideId = await employee("Zed Offshore", "ZZ");
 
   const hours = async (employeeId: string, days: string[], perDay = 20) => {
     for (const workedOn of days) {
@@ -395,6 +430,7 @@ test("stat pay: OFF is byte-identical, ON pays the declared formula, undeclared 
   // four work weeks before Canada Day (2026-06-03 .. 2026-06-30).
   await hours(ontarioId, ["2026-06-08", "2026-06-10", "2026-06-12", "2026-06-16"]);
   await hours(manitobaId, ["2026-06-09", "2026-06-11"]);
+  await hours(outsideId, ["2026-06-09", "2026-06-11"]);
   const run1 = await createPayRun({
     orgId, actorId, payScheduleId: scheduleId,
     periodStart: "2026-06-07", periodEnd: "2026-06-20",
@@ -406,6 +442,7 @@ test("stat pay: OFF is byte-identical, ON pays the declared formula, undeclared 
   // The run under test: its period contains Canada Day (Wednesday 2026-07-01).
   await hours(ontarioId, ["2026-06-22", "2026-06-24", "2026-06-26", "2026-06-30"]);
   await hours(manitobaId, ["2026-06-23", "2026-06-25"]);
+  await hours(outsideId, ["2026-06-23", "2026-06-25"]);
   const run2 = await createPayRun({
     orgId, actorId, payScheduleId: scheduleId,
     periodStart: "2026-06-21", periodEnd: "2026-07-04",
@@ -426,7 +463,7 @@ test("stat pay: OFF is byte-identical, ON pays the declared formula, undeclared 
 
   // --- Feature OFF (the default): calculates exactly as before the feature.
   const offResult = await calculatePayRun({ orgId, documentId: run2.documentId, actorId });
-  assert.equal(offResult.employees, 2);
+  assert.equal(offResult.employees, 3);
   assert.deepEqual(offResult.errors, []);
   const offStubs = await snapshot();
   assert.ok(!offStubs.includes("stat"), "no stat holiday lines while the feature is off");
@@ -442,19 +479,40 @@ test("stat pay: OFF is byte-identical, ON pays the declared formula, undeclared 
   const blocker = readiness.items.find((item) => item.code === "holiday.undeclaredJurisdiction");
   assert.ok(blocker, "readiness blocker for the undeclared jurisdiction");
   assert.equal(blocker.severity, "blocker");
-  assert.match(blocker.detail ?? "", /CA-MB/);
+  assert.match(blocker.detail ?? "", /CA-ZZ/);
   assert.match(blocker.detail ?? "", /Canada Day/);
-  assert.deepEqual(blocker.employees.map((e) => e.partyId), [manitobaId]);
+  assert.deepEqual(blocker.employees.map((e) => e.partyId), [outsideId]);
 
   const onResult = await calculatePayRun({ orgId, documentId: run2.documentId, actorId });
-  // Ontario calculates with the declared ESA formula; Manitoba is refused by
-  // name with the readiness blocker's own message.
+  // Ontario calculates with the declared ESA formula. Manitoba is DECLARED now
+  // and its measure is a normal working day, so it refuses for a different and
+  // better reason: nobody has said what hours this employee normally works, and
+  // the run will not invent them. Zed is refused by the undeclared gate with
+  // the readiness blocker's own message.
   assert.equal(onResult.employees, 1);
-  assert.equal(onResult.errors.length, 1);
-  assert.equal(onResult.errors[0]!.employee, "Morley Manitoba");
-  assert.match(onResult.errors[0]!.message, /CA-MB/);
-  assert.match(onResult.errors[0]!.message, /Canada Day/);
-  assert.equal(onResult.errors[0]!.message, blocker.detail);
+  assert.equal(onResult.errors.length, 2);
+  const byName = new Map(onResult.errors.map((e) => [e.employee, e.message]));
+  assert.match(byName.get("Morley Manitoba") ?? "", /no work schedule is in force/);
+  assert.match(byName.get("Morley Manitoba") ?? "", /Canada Day/);
+  assert.equal(byName.get("Zed Offshore"), blocker.detail);
+
+  // Record what Morley normally works — 8 hours a day, Monday to Friday,
+  // effective before the period — and Manitoba calculates.
+  const mbSchedule = randomUUID();
+  await db.execute(sql`
+    insert into work_schedules (id, org_id, name, employee_party_id, pattern, cycle_days,
+                                cycle_anchor, effective_from, is_active, created_by, updated_by)
+    values (${mbSchedule}, ${orgId}, 'Full time', ${manitobaId}, 'cycle', 7, '2026-01-04',
+            '2026-01-01', true, ${actorId}, ${actorId})`);
+  for (const dayIndex of [1, 2, 3, 4, 5]) {
+    await db.execute(sql`
+      insert into work_schedule_days (org_id, schedule_id, day_index, hours, created_by, updated_by)
+      values (${orgId}, ${mbSchedule}, ${dayIndex}, '8', ${actorId}, ${actorId})`);
+  }
+  const withSchedule = await calculatePayRun({ orgId, documentId: run2.documentId, actorId });
+  assert.equal(withSchedule.employees, 2);
+  assert.equal(withSchedule.errors.length, 1, "only the undeclared jurisdiction is left");
+  assert.equal(withSchedule.errors[0]!.employee, "Zed Offshore");
 
   // Hand-worked ESA s. 24(1)(a): regular wages in the four work weeks before
   // the holiday's week = the committed June 7–20 stub, 80h × $30 = 2,400.00
@@ -470,17 +528,30 @@ test("stat pay: OFF is byte-identical, ON pays the declared formula, undeclared 
   `)) as unknown as {
     rows: { system_key: string; amount: string; gross: string; employee_party_id: string }[];
   };
-  assert.equal(statLines.rows.length, 1);
-  assert.equal(statLines.rows[0]!.system_key, "stat_holiday");
-  assert.equal(statLines.rows[0]!.employee_party_id, ontarioId);
-  assert.equal(cmp(statLines.rows[0]!.amount, "120.00"), 0);
+  assert.equal(statLines.rows.length, 2);
+  const ontarioStat = statLines.rows.find((r) => r.employee_party_id === ontarioId);
+  assert.ok(ontarioStat);
+  assert.equal(ontarioStat.system_key, "stat_holiday");
+  assert.equal(cmp(ontarioStat.amount, "120.00"), 0);
   // The day's pay is IN gross, ahead of the statutory pass (phase 2).
-  assert.equal(cmp(statLines.rows[0]!.gross, add("2400.00", "120.00")), 0);
+  assert.equal(cmp(ontarioStat.gross, add("2400.00", "120.00")), 0);
+
+  // Hand-worked Manitoba s. 23(1): the wages for regular hours on a NORMAL
+  // WORKDAY — 8 scheduled hours × $30.00 = $240.00. Note what it is not: the
+  // Ontario answer for the same employee would have been the four weeks'
+  // wages ÷ 20, and the four weeks here are 40 hours (two 20-hour days) ×
+  // $30 = $1,200, which ÷ 20 is $60. The province genuinely changes the
+  // number by four times, which is why neither may stand in for the other.
+  const manitobaStat = statLines.rows.find((r) => r.employee_party_id === manitobaId);
+  assert.ok(manitobaStat);
+  assert.equal(manitobaStat.system_key, "stat_holiday");
+  assert.equal(cmp(manitobaStat.amount, "240.00"), 0);
 
   // --- Feature ON with no holiday in the period: the undeclared jurisdiction
   // calculates exactly as it always has, and readiness raises nothing.
   await hours(ontarioId, ["2026-07-06", "2026-07-08"]);
   await hours(manitobaId, ["2026-07-07"]);
+  await hours(outsideId, ["2026-07-07"]);
   const run3 = await createPayRun({
     orgId, actorId, payScheduleId: scheduleId,
     periodStart: "2026-07-05", periodEnd: "2026-07-18",
@@ -488,7 +559,7 @@ test("stat pay: OFF is byte-identical, ON pays the declared formula, undeclared 
   const clearReadiness = await payRunReadiness(orgId, run3.documentId);
   assert.ok(!clearReadiness.items.some((item) => item.code === "holiday.undeclaredJurisdiction"));
   const run3Result = await calculatePayRun({ orgId, documentId: run3.documentId, actorId });
-  assert.equal(run3Result.employees, 2);
+  assert.equal(run3Result.employees, 3);
   assert.deepEqual(run3Result.errors, []);
 
   // --- Feature back OFF: run 2 recalculates byte-identical to the first pass.
@@ -496,7 +567,7 @@ test("stat pay: OFF is byte-identical, ON pays the declared formula, undeclared 
     update orgs set settings = jsonb_set(settings, '{payroll,statutoryHolidayPay}', 'false'::jsonb)
      where id = ${orgId}`);
   const offAgain = await calculatePayRun({ orgId, documentId: run2.documentId, actorId });
-  assert.equal(offAgain.employees, 2);
+  assert.equal(offAgain.employees, 3);
   assert.deepEqual(offAgain.errors, []);
   assert.equal(await snapshot(), offStubs);
 });
