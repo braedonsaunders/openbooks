@@ -237,7 +237,10 @@ export async function spendVelocityData(orgId: string, period: { from: string; t
     where l.org_id = ${orgId} and d.voided_at is null
       and d.kind in (${spendKindsIn})
       and a.type in ('expense', 'expense_other', 'expense_deferred', 'cogs')
-      and e.posting_date >= ${f} and e.posting_date <= ${t}`;
+      -- Filter on the line's own posting date: the entry is still joined for
+      -- its source document, but the date no longer has to be reached through
+      -- it, so the window is a predicate the line index can serve.
+      and l.posting_date >= ${f} and l.posting_date <= ${t}`;
 
   const [acctRows, vendRows, pyRows, poSoRows, revRows, spenderRows, catRows, cmpRows] = await Promise.all([
     // 1. Monthly account spend split by transaction kind (PRIMARY).
