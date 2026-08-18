@@ -34,9 +34,11 @@ test("the payroll profile API refuses an undeclared labour jurisdiction by name"
   assert.match(profiles, /labour_jurisdiction = excluded\.labour_jurisdiction/);
 
   // The message the route returns, for the value the API is asked to refuse.
-  const problem = labourJurisdictionProblem("CA", "CA-MB");
+  // Every Canadian province is declared now; 'CA-ZZ' — employed outside any of
+  // them — is what remains ungoverned by any employment-standards act.
+  const problem = labourJurisdictionProblem("CA", "CA-ZZ");
   assert.ok(problem);
-  assert.match(problem!, /CA-MB/);
+  assert.match(problem!, /CA-ZZ/);
   assert.match(problem!, /CA-ON/);
 });
 

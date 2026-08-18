@@ -8650,6 +8650,7 @@ CREATE TABLE public.employee_payroll_profiles (
     stub_delivery text DEFAULT 'email'::text NOT NULL,
     payment_method text,
     labour_jurisdiction text,
+    residence_region text,
     CONSTRAINT employee_payroll_profiles_allowances CHECK (((w4_allowances IS NULL) OR (w4_allowances >= 0))),
     CONSTRAINT employee_payroll_profiles_country CHECK ((country = ANY (ARRAY['CA'::text, 'US'::text]))),
     CONSTRAINT employee_payroll_profiles_fed_code CHECK (((federal_claim_code IS NULL) OR ((federal_claim_code >= 0) AND (federal_claim_code <= 10)))),
@@ -8663,6 +8664,13 @@ CREATE TABLE public.employee_payroll_profiles (
 );
 
 ALTER TABLE ONLY public.employee_payroll_profiles FORCE ROW LEVEL SECURITY;
+
+
+--
+-- Name: COLUMN employee_payroll_profiles.residence_region; Type: COMMENT; Schema: public; Owner: -
+--
+
+COMMENT ON COLUMN public.employee_payroll_profiles.residence_region IS 'Region the employee RESIDES in, when it differs from the region of employment (province). Null means not recorded, which withholding resolution treats as the work region and reports as an assumption. Drives reciprocity, resident sub-region levies (New York City, Philadelphia) and residence-region withholding. Codes are the pack''s own region vocabulary; validated at the API boundary against the country pack, never by a CHECK naming one country''s codes.';
 
 
 --
@@ -11864,7 +11872,7 @@ CREATE TABLE public.pay_runs (
     CONSTRAINT pay_runs_pay_date CHECK ((pay_date >= period_end)),
     CONSTRAINT pay_runs_period_order CHECK ((period_end >= period_start)),
     CONSTRAINT pay_runs_run_status CHECK ((run_status = ANY (ARRAY['draft'::text, 'calculated'::text, 'committed'::text, 'voided'::text]))),
-    CONSTRAINT pay_runs_run_type CHECK ((run_type = ANY (ARRAY['regular'::text, 'bonus'::text, 'termination'::text])))
+    CONSTRAINT pay_runs_run_type CHECK ((run_type = ANY (ARRAY['regular'::text, 'bonus'::text, 'termination'::text, 'retro'::text])))
 );
 
 ALTER TABLE ONLY public.pay_runs FORCE ROW LEVEL SECURITY;
@@ -18240,6 +18248,40 @@ ALTER TABLE ONLY public.email_log FORCE ROW LEVEL SECURITY;
 
 
 --
+-- Name: employee_tax_certificates; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.employee_tax_certificates (
+    id uuid DEFAULT public.uuid_generate_v7() NOT NULL,
+    org_id uuid NOT NULL,
+    employee_party_id uuid NOT NULL,
+    country text NOT NULL,
+    certificate_key text NOT NULL,
+    region text,
+    sub_region text,
+    answers jsonb DEFAULT '{}'::jsonb NOT NULL,
+    effective_from date,
+    superseded_on date,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    created_by uuid,
+    updated_at timestamp with time zone DEFAULT now() NOT NULL,
+    updated_by uuid,
+    CONSTRAINT employee_tax_certificates_answers CHECK ((jsonb_typeof(answers) = 'object'::text)),
+    CONSTRAINT employee_tax_certificates_dates CHECK (((superseded_on IS NULL) OR (effective_from IS NULL) OR (superseded_on >= effective_from))),
+    CONSTRAINT employee_tax_certificates_sub_region CHECK (((sub_region IS NULL) OR (region IS NOT NULL)))
+);
+
+ALTER TABLE ONLY public.employee_tax_certificates FORCE ROW LEVEL SECURITY;
+
+
+--
+-- Name: TABLE employee_tax_certificates; Type: COMMENT; Schema: public; Owner: -
+--
+
+COMMENT ON TABLE public.employee_tax_certificates IS 'An employee''s answers on a PACK-DECLARED tax certificate — the form they file to set their own withholding (W-4, DE 4, IT-2104, IL-W-4, TD1, TP-1015.3-V, and the non-residence certificates reciprocity turns on). Answers are stored against a declared certificate rather than as columns, so adding a jurisdiction is a declaration rather than a migration. Effective-dated: a superseded certificate stays on file so a prior period re-runs against the one actually in force. The federal W-4 and the Canadian TD1 family declare `storage: profile_columns` and still read from employee_payroll_profiles; see engine/src/payroll/certificates.ts.';
+
+
+--
 -- Name: field_ticket_policies; Type: TABLE; Schema: public; Owner: -
 --
 
@@ -19425,6 +19467,57 @@ ALTER TABLE ONLY public.payment_mandates FORCE ROW LEVEL SECURITY;
 
 
 --
+-- Name: payroll_filing_submission_slips; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.payroll_filing_submission_slips (
+    id uuid DEFAULT public.uuid_generate_v7() NOT NULL,
+    org_id uuid NOT NULL,
+    submission_id uuid NOT NULL,
+    row_id text NOT NULL,
+    label text NOT NULL,
+    revision text NOT NULL,
+    reported jsonb DEFAULT '{}'::jsonb NOT NULL,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    created_by uuid,
+    updated_at timestamp with time zone DEFAULT now() NOT NULL,
+    updated_by uuid,
+    CONSTRAINT payroll_filing_submission_slips_revision CHECK ((revision = ANY (ARRAY['original'::text, 'amended'::text, 'cancelled'::text])))
+);
+
+ALTER TABLE ONLY public.payroll_filing_submission_slips FORCE ROW LEVEL SECURITY;
+
+
+--
+-- Name: payroll_filing_submissions; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.payroll_filing_submissions (
+    id uuid DEFAULT public.uuid_generate_v7() NOT NULL,
+    org_id uuid NOT NULL,
+    country text NOT NULL,
+    filing_key text NOT NULL,
+    tax_year integer NOT NULL,
+    revision text NOT NULL,
+    revision_number integer NOT NULL,
+    supersedes_id uuid,
+    issued_at timestamp with time zone DEFAULT now() NOT NULL,
+    note text,
+    slip_count integer DEFAULT 0 NOT NULL,
+    artifact_filename text,
+    artifact_content_type text,
+    artifact_body text,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    created_by uuid,
+    updated_at timestamp with time zone DEFAULT now() NOT NULL,
+    updated_by uuid,
+    CONSTRAINT payroll_filing_submissions_revision CHECK ((revision = ANY (ARRAY['original'::text, 'amended'::text, 'cancelled'::text])))
+);
+
+ALTER TABLE ONLY public.payroll_filing_submissions FORCE ROW LEVEL SECURITY;
+
+
+--
 -- Name: payroll_parallel_comparisons; Type: TABLE; Schema: public; Owner: -
 --
 
@@ -19591,6 +19684,67 @@ ALTER TABLE ONLY public.payroll_prior_stubs FORCE ROW LEVEL SECURITY;
 
 
 --
+-- Name: payroll_retro_allocations; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.payroll_retro_allocations (
+    id uuid DEFAULT public.uuid_generate_v7() NOT NULL,
+    org_id uuid NOT NULL,
+    settlement_id uuid NOT NULL,
+    component_id uuid,
+    description text NOT NULL,
+    project_id uuid,
+    department_id uuid,
+    original_amount numeric(19,4) DEFAULT 0 NOT NULL,
+    recomputed_amount numeric(19,4) DEFAULT 0 NOT NULL,
+    previously_settled numeric(19,4) DEFAULT 0 NOT NULL,
+    amount numeric(19,4) NOT NULL,
+    original_hours numeric(12,2),
+    recomputed_hours numeric(12,2),
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    created_by uuid,
+    updated_at timestamp with time zone DEFAULT now() NOT NULL,
+    updated_by uuid,
+    CONSTRAINT payroll_retro_allocations_amount CHECK ((amount = ((recomputed_amount - original_amount) - previously_settled)))
+);
+
+ALTER TABLE ONLY public.payroll_retro_allocations FORCE ROW LEVEL SECURITY;
+
+
+--
+-- Name: payroll_retro_settlements; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.payroll_retro_settlements (
+    id uuid DEFAULT public.uuid_generate_v7() NOT NULL,
+    org_id uuid NOT NULL,
+    retro_pay_run_document_id uuid NOT NULL,
+    employee_party_id uuid NOT NULL,
+    source_pay_run_document_id uuid NOT NULL,
+    source_period_start date NOT NULL,
+    source_period_end date NOT NULL,
+    source_pay_date date NOT NULL,
+    source_tax_year integer NOT NULL,
+    original_earnings numeric(19,4) NOT NULL,
+    recomputed_earnings numeric(19,4) NOT NULL,
+    previously_settled numeric(19,4) DEFAULT 0 NOT NULL,
+    delta numeric(19,4) NOT NULL,
+    reasons jsonb DEFAULT '[]'::jsonb NOT NULL,
+    quantified_at timestamp with time zone DEFAULT now() NOT NULL,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    created_by uuid,
+    updated_at timestamp with time zone DEFAULT now() NOT NULL,
+    updated_by uuid,
+    CONSTRAINT payroll_retro_settlements_delta CHECK ((delta = ((recomputed_earnings - original_earnings) - previously_settled))),
+    CONSTRAINT payroll_retro_settlements_distinct_runs CHECK ((retro_pay_run_document_id <> source_pay_run_document_id)),
+    CONSTRAINT payroll_retro_settlements_nonnegative CHECK ((delta >= (0)::numeric)),
+    CONSTRAINT payroll_retro_settlements_period_order CHECK ((source_period_end >= source_period_start))
+);
+
+ALTER TABLE ONLY public.payroll_retro_settlements FORCE ROW LEVEL SECURITY;
+
+
+--
 -- Name: payroll_statutory_rates; Type: TABLE; Schema: public; Owner: -
 --
 
@@ -19607,7 +19761,9 @@ CREATE TABLE public.payroll_statutory_rates (
     created_by uuid,
     updated_at timestamp with time zone DEFAULT now() NOT NULL,
     updated_by uuid,
+    sub_region text,
     CONSTRAINT payroll_statutory_rates_account_region CHECK (((filing_account_id IS NULL) OR (region IS NOT NULL))),
+    CONSTRAINT payroll_statutory_rates_sub_region CHECK (((sub_region IS NULL) OR (region IS NOT NULL))),
     CONSTRAINT payroll_statutory_rates_values CHECK ((jsonb_typeof(rate_values) = 'object'::text)),
     CONSTRAINT payroll_statutory_rates_year CHECK (((tax_year >= 2000) AND (tax_year <= 2100)))
 );
@@ -19620,6 +19776,13 @@ ALTER TABLE ONLY public.payroll_statutory_rates FORCE ROW LEVEL SECURITY;
 --
 
 COMMENT ON TABLE public.payroll_statutory_rates IS 'Tenant half of a country pack''s statutory rates: the ones no publication can supply (experience-rated SUI per filing account), or that are published per region per year (the FUTA credit reduction, provincial employer health levies). Scope columns carry the pack-declared scope; tax_year is the effective dimension, so re-running a prior period reproduces that period''s rate. Published constants live in the pack''s edition modules and are never stored here.';
+
+
+--
+-- Name: COLUMN payroll_statutory_rates.sub_region; Type: COMMENT; Schema: public; Owner: -
+--
+
+COMMENT ON COLUMN public.payroll_statutory_rates.sub_region IS 'The taxing unit below the region, for pack slots declared at `sub_region` scope (a PA Act 32 PSD code, an Ohio municipality). Null for every other scope.';
 
 
 --
@@ -20474,6 +20637,74 @@ CREATE TABLE public.users (
 );
 
 ALTER TABLE ONLY public.users FORCE ROW LEVEL SECURITY;
+
+
+--
+-- Name: work_schedule_days; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.work_schedule_days (
+    id uuid DEFAULT public.uuid_generate_v7() NOT NULL,
+    org_id uuid NOT NULL,
+    schedule_id uuid NOT NULL,
+    day_index integer NOT NULL,
+    hours numeric(9,4) DEFAULT 0 NOT NULL,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    created_by uuid,
+    updated_at timestamp with time zone DEFAULT now() NOT NULL,
+    updated_by uuid,
+    CONSTRAINT work_schedule_days_hours CHECK (((hours >= (0)::numeric) AND (hours <= (24)::numeric))),
+    CONSTRAINT work_schedule_days_index CHECK (((day_index >= 0) AND (day_index < 366)))
+);
+
+ALTER TABLE ONLY public.work_schedule_days FORCE ROW LEVEL SECURITY;
+
+
+--
+-- Name: TABLE work_schedule_days; Type: COMMENT; Schema: public; Owner: -
+--
+
+COMMENT ON TABLE public.work_schedule_days IS 'One position of a work schedule''s cycle and the hours normally worked on it. A child table rather than a JSON array: working hours are queryable, constrainable data and the editor renders them as real number inputs. A position with no row is zero scheduled hours.';
+
+
+--
+-- Name: work_schedules; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.work_schedules (
+    id uuid DEFAULT public.uuid_generate_v7() NOT NULL,
+    org_id uuid NOT NULL,
+    name text,
+    employee_party_id uuid,
+    job_title text,
+    trade_id uuid,
+    department_id uuid,
+    subsidiary_id uuid,
+    pattern text DEFAULT 'cycle'::text NOT NULL,
+    cycle_days integer,
+    cycle_anchor date,
+    effective_from date NOT NULL,
+    effective_to date,
+    notes text,
+    is_active boolean DEFAULT true NOT NULL,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    created_by uuid,
+    updated_at timestamp with time zone DEFAULT now() NOT NULL,
+    updated_by uuid,
+    CONSTRAINT work_schedules_one_scope CHECK ((num_nonnulls(employee_party_id, job_title, trade_id, department_id, subsidiary_id) <= 1)),
+    CONSTRAINT work_schedules_pattern CHECK ((pattern = ANY (ARRAY['cycle'::text, 'varies'::text]))),
+    CONSTRAINT work_schedules_pattern_columns CHECK ((((pattern = 'cycle'::text) AND (cycle_days IS NOT NULL) AND ((cycle_days >= 1) AND (cycle_days <= 366)) AND (cycle_anchor IS NOT NULL)) OR ((pattern = 'varies'::text) AND (cycle_days IS NULL) AND (cycle_anchor IS NULL)))),
+    CONSTRAINT work_schedules_valid_range CHECK (((effective_to IS NULL) OR (effective_to >= effective_from)))
+);
+
+ALTER TABLE ONLY public.work_schedules FORCE ROW LEVEL SECURITY;
+
+
+--
+-- Name: TABLE work_schedules; Type: COMMENT; Schema: public; Owner: -
+--
+
+COMMENT ON TABLE public.work_schedules IS 'The hours and days an employee is NORMALLY scheduled to work: a repeating cycle of cycle_days days anchored on cycle_anchor (7 = the ordinary week), or pattern=varies for no regular schedule. A generic employment attribute, not a payroll one. Scoped and effective-dated exactly like labor_cost_rates: most-specific scope wins, latest effective_from <= the WORK DATE wins. No row means the pattern is UNKNOWN — a formula that needs it refuses by name and never assumes an eight-hour day.';
 
 
 --
@@ -21549,6 +21780,14 @@ ALTER TABLE ONLY public.employee_roles
 
 
 --
+-- Name: employee_tax_certificates employee_tax_certificates_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.employee_tax_certificates
+    ADD CONSTRAINT employee_tax_certificates_pkey PRIMARY KEY (id);
+
+
+--
 -- Name: entitlement_ledger entitlement_ledger_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -22501,6 +22740,22 @@ ALTER TABLE ONLY public.payroll_filing_accounts
 
 
 --
+-- Name: payroll_filing_submission_slips payroll_filing_submission_slips_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.payroll_filing_submission_slips
+    ADD CONSTRAINT payroll_filing_submission_slips_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: payroll_filing_submissions payroll_filing_submissions_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.payroll_filing_submissions
+    ADD CONSTRAINT payroll_filing_submissions_pkey PRIMARY KEY (id);
+
+
+--
 -- Name: payroll_holidays payroll_holidays_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -22570,6 +22825,30 @@ ALTER TABLE ONLY public.payroll_prior_registers
 
 ALTER TABLE ONLY public.payroll_prior_stubs
     ADD CONSTRAINT payroll_prior_stubs_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: payroll_retro_allocations payroll_retro_allocations_bucket; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.payroll_retro_allocations
+    ADD CONSTRAINT payroll_retro_allocations_bucket UNIQUE NULLS NOT DISTINCT (settlement_id, component_id, project_id, department_id);
+
+
+--
+-- Name: payroll_retro_allocations payroll_retro_allocations_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.payroll_retro_allocations
+    ADD CONSTRAINT payroll_retro_allocations_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: payroll_retro_settlements payroll_retro_settlements_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.payroll_retro_settlements
+    ADD CONSTRAINT payroll_retro_settlements_pkey PRIMARY KEY (id);
 
 
 --
@@ -23546,6 +23825,22 @@ ALTER TABLE ONLY public.wip_prebill_lines
 
 ALTER TABLE ONLY public.wip_prebills
     ADD CONSTRAINT wip_prebills_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: work_schedule_days work_schedule_days_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.work_schedule_days
+    ADD CONSTRAINT work_schedule_days_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: work_schedules work_schedules_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.work_schedules
+    ADD CONSTRAINT work_schedules_pkey PRIMARY KEY (id);
 
 
 --
@@ -25314,6 +25609,20 @@ CREATE INDEX employee_payroll_profiles_filing_account ON public.employee_payroll
 --
 
 CREATE INDEX employee_payroll_profiles_schedule ON public.employee_payroll_profiles USING btree (org_id, pay_schedule_id);
+
+
+--
+-- Name: employee_tax_certificates_current; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE UNIQUE INDEX employee_tax_certificates_current ON public.employee_tax_certificates USING btree (org_id, employee_party_id, certificate_key, COALESCE(region, ''::text), COALESCE(sub_region, ''::text)) WHERE (superseded_on IS NULL);
+
+
+--
+-- Name: employee_tax_certificates_employee; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX employee_tax_certificates_employee ON public.employee_tax_certificates USING btree (org_id, employee_party_id, country);
 
 
 --
@@ -27260,6 +27569,34 @@ CREATE UNIQUE INDEX payroll_filing_accounts_org_number ON public.payroll_filing_
 
 
 --
+-- Name: payroll_filing_submission_slips_org_row; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX payroll_filing_submission_slips_org_row ON public.payroll_filing_submission_slips USING btree (org_id, row_id);
+
+
+--
+-- Name: payroll_filing_submission_slips_row; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE UNIQUE INDEX payroll_filing_submission_slips_row ON public.payroll_filing_submission_slips USING btree (submission_id, row_id);
+
+
+--
+-- Name: payroll_filing_submissions_org_filing; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX payroll_filing_submissions_org_filing ON public.payroll_filing_submissions USING btree (org_id, country, filing_key, tax_year, issued_at DESC);
+
+
+--
+-- Name: payroll_filing_submissions_org_revision; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE UNIQUE INDEX payroll_filing_submissions_org_revision ON public.payroll_filing_submissions USING btree (org_id, country, filing_key, tax_year, revision_number);
+
+
+--
 -- Name: payroll_holidays_org_jurisdiction; Type: INDEX; Schema: public; Owner: -
 --
 
@@ -27379,6 +27716,41 @@ CREATE UNIQUE INDEX payroll_prior_stubs_register_employee ON public.payroll_prio
 
 
 --
+-- Name: payroll_retro_allocations_project; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX payroll_retro_allocations_project ON public.payroll_retro_allocations USING btree (org_id, project_id);
+
+
+--
+-- Name: payroll_retro_allocations_settlement; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX payroll_retro_allocations_settlement ON public.payroll_retro_allocations USING btree (settlement_id);
+
+
+--
+-- Name: payroll_retro_settlements_cell; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE UNIQUE INDEX payroll_retro_settlements_cell ON public.payroll_retro_settlements USING btree (retro_pay_run_document_id, employee_party_id, source_pay_run_document_id);
+
+
+--
+-- Name: payroll_retro_settlements_run; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX payroll_retro_settlements_run ON public.payroll_retro_settlements USING btree (org_id, retro_pay_run_document_id);
+
+
+--
+-- Name: payroll_retro_settlements_source; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX payroll_retro_settlements_source ON public.payroll_retro_settlements USING btree (org_id, employee_party_id, source_pay_run_document_id);
+
+
+--
 -- Name: payroll_statutory_rates_account; Type: INDEX; Schema: public; Owner: -
 --
 
@@ -27389,7 +27761,7 @@ CREATE INDEX payroll_statutory_rates_account ON public.payroll_statutory_rates U
 -- Name: payroll_statutory_rates_org_point; Type: INDEX; Schema: public; Owner: -
 --
 
-CREATE UNIQUE INDEX payroll_statutory_rates_org_point ON public.payroll_statutory_rates USING btree (org_id, country, rate_key, tax_year, COALESCE(region, ''::text), COALESCE(filing_account_id, '00000000-0000-0000-0000-000000000000'::uuid));
+CREATE UNIQUE INDEX payroll_statutory_rates_org_point ON public.payroll_statutory_rates USING btree (org_id, country, rate_key, tax_year, COALESCE(region, ''::text), COALESCE(sub_region, ''::text), COALESCE(filing_account_id, '00000000-0000-0000-0000-000000000000'::uuid));
 
 
 --
@@ -29140,6 +29512,62 @@ CREATE INDEX wip_prebills_period ON public.wip_prebills USING btree (org_id, per
 --
 
 CREATE INDEX wip_prebills_project_status ON public.wip_prebills USING btree (org_id, project_id, status);
+
+
+--
+-- Name: work_schedule_days_position; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE UNIQUE INDEX work_schedule_days_position ON public.work_schedule_days USING btree (schedule_id, day_index);
+
+
+--
+-- Name: work_schedule_days_schedule; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX work_schedule_days_schedule ON public.work_schedule_days USING btree (org_id, schedule_id, day_index);
+
+
+--
+-- Name: work_schedules_department; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX work_schedules_department ON public.work_schedules USING btree (org_id, department_id, effective_from);
+
+
+--
+-- Name: work_schedules_employee; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX work_schedules_employee ON public.work_schedules USING btree (org_id, employee_party_id, effective_from);
+
+
+--
+-- Name: work_schedules_job_title; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX work_schedules_job_title ON public.work_schedules USING btree (org_id, job_title, effective_from);
+
+
+--
+-- Name: work_schedules_scope_from; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE UNIQUE INDEX work_schedules_scope_from ON public.work_schedules USING btree (org_id, COALESCE(employee_party_id, '00000000-0000-0000-0000-000000000000'::uuid), COALESCE(lower(job_title), ''::text), COALESCE(trade_id, '00000000-0000-0000-0000-000000000000'::uuid), COALESCE(department_id, '00000000-0000-0000-0000-000000000000'::uuid), COALESCE(subsidiary_id, '00000000-0000-0000-0000-000000000000'::uuid), effective_from);
+
+
+--
+-- Name: work_schedules_subsidiary; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX work_schedules_subsidiary ON public.work_schedules USING btree (org_id, subsidiary_id, effective_from);
+
+
+--
+-- Name: work_schedules_trade; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX work_schedules_trade ON public.work_schedules USING btree (org_id, trade_id, effective_from);
 
 
 --
@@ -33089,6 +33517,38 @@ ALTER TABLE ONLY public.employee_roles
 
 
 --
+-- Name: employee_tax_certificates employee_tax_certificates_created_by_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.employee_tax_certificates
+    ADD CONSTRAINT employee_tax_certificates_created_by_fkey FOREIGN KEY (created_by) REFERENCES public.users(id) ON DELETE SET NULL DEFERRABLE;
+
+
+--
+-- Name: employee_tax_certificates employee_tax_certificates_employee_party_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.employee_tax_certificates
+    ADD CONSTRAINT employee_tax_certificates_employee_party_id_fkey FOREIGN KEY (employee_party_id) REFERENCES public.parties(id) ON DELETE CASCADE DEFERRABLE;
+
+
+--
+-- Name: employee_tax_certificates employee_tax_certificates_org_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.employee_tax_certificates
+    ADD CONSTRAINT employee_tax_certificates_org_id_fkey FOREIGN KEY (org_id) REFERENCES public.orgs(id) ON DELETE CASCADE DEFERRABLE;
+
+
+--
+-- Name: employee_tax_certificates employee_tax_certificates_updated_by_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.employee_tax_certificates
+    ADD CONSTRAINT employee_tax_certificates_updated_by_fkey FOREIGN KEY (updated_by) REFERENCES public.users(id) ON DELETE SET NULL DEFERRABLE;
+
+
+--
 -- Name: entitlement_ledger entitlement_ledger_created_by_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -36057,6 +36517,70 @@ ALTER TABLE ONLY public.payroll_filing_accounts
 
 
 --
+-- Name: payroll_filing_submission_slips payroll_filing_submission_slips_created_by_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.payroll_filing_submission_slips
+    ADD CONSTRAINT payroll_filing_submission_slips_created_by_fkey FOREIGN KEY (created_by) REFERENCES public.users(id) ON DELETE SET NULL DEFERRABLE;
+
+
+--
+-- Name: payroll_filing_submission_slips payroll_filing_submission_slips_org_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.payroll_filing_submission_slips
+    ADD CONSTRAINT payroll_filing_submission_slips_org_id_fkey FOREIGN KEY (org_id) REFERENCES public.orgs(id) ON DELETE CASCADE DEFERRABLE;
+
+
+--
+-- Name: payroll_filing_submission_slips payroll_filing_submission_slips_submission_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.payroll_filing_submission_slips
+    ADD CONSTRAINT payroll_filing_submission_slips_submission_id_fkey FOREIGN KEY (submission_id) REFERENCES public.payroll_filing_submissions(id) ON DELETE CASCADE DEFERRABLE;
+
+
+--
+-- Name: payroll_filing_submission_slips payroll_filing_submission_slips_updated_by_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.payroll_filing_submission_slips
+    ADD CONSTRAINT payroll_filing_submission_slips_updated_by_fkey FOREIGN KEY (updated_by) REFERENCES public.users(id) ON DELETE SET NULL DEFERRABLE;
+
+
+--
+-- Name: payroll_filing_submissions payroll_filing_submissions_created_by_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.payroll_filing_submissions
+    ADD CONSTRAINT payroll_filing_submissions_created_by_fkey FOREIGN KEY (created_by) REFERENCES public.users(id) ON DELETE SET NULL DEFERRABLE;
+
+
+--
+-- Name: payroll_filing_submissions payroll_filing_submissions_org_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.payroll_filing_submissions
+    ADD CONSTRAINT payroll_filing_submissions_org_id_fkey FOREIGN KEY (org_id) REFERENCES public.orgs(id) ON DELETE CASCADE DEFERRABLE;
+
+
+--
+-- Name: payroll_filing_submissions payroll_filing_submissions_supersedes_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.payroll_filing_submissions
+    ADD CONSTRAINT payroll_filing_submissions_supersedes_id_fkey FOREIGN KEY (supersedes_id) REFERENCES public.payroll_filing_submissions(id) ON DELETE SET NULL DEFERRABLE;
+
+
+--
+-- Name: payroll_filing_submissions payroll_filing_submissions_updated_by_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.payroll_filing_submissions
+    ADD CONSTRAINT payroll_filing_submissions_updated_by_fkey FOREIGN KEY (updated_by) REFERENCES public.users(id) ON DELETE SET NULL DEFERRABLE;
+
+
+--
 -- Name: payroll_holidays payroll_holidays_created_by_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -36358,6 +36882,110 @@ ALTER TABLE ONLY public.payroll_prior_stubs
 
 ALTER TABLE ONLY public.payroll_prior_stubs
     ADD CONSTRAINT payroll_prior_stubs_updated_by_fkey FOREIGN KEY (updated_by) REFERENCES public.users(id) ON DELETE SET NULL DEFERRABLE;
+
+
+--
+-- Name: payroll_retro_allocations payroll_retro_allocations_component_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.payroll_retro_allocations
+    ADD CONSTRAINT payroll_retro_allocations_component_id_fkey FOREIGN KEY (component_id) REFERENCES public.pay_components(id) ON DELETE SET NULL DEFERRABLE;
+
+
+--
+-- Name: payroll_retro_allocations payroll_retro_allocations_created_by_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.payroll_retro_allocations
+    ADD CONSTRAINT payroll_retro_allocations_created_by_fkey FOREIGN KEY (created_by) REFERENCES public.users(id) ON DELETE SET NULL DEFERRABLE;
+
+
+--
+-- Name: payroll_retro_allocations payroll_retro_allocations_department_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.payroll_retro_allocations
+    ADD CONSTRAINT payroll_retro_allocations_department_id_fkey FOREIGN KEY (department_id) REFERENCES public.departments(id) ON DELETE SET NULL DEFERRABLE;
+
+
+--
+-- Name: payroll_retro_allocations payroll_retro_allocations_org_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.payroll_retro_allocations
+    ADD CONSTRAINT payroll_retro_allocations_org_id_fkey FOREIGN KEY (org_id) REFERENCES public.orgs(id) ON DELETE CASCADE DEFERRABLE;
+
+
+--
+-- Name: payroll_retro_allocations payroll_retro_allocations_project_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.payroll_retro_allocations
+    ADD CONSTRAINT payroll_retro_allocations_project_id_fkey FOREIGN KEY (project_id) REFERENCES public.projects(id) ON DELETE SET NULL DEFERRABLE;
+
+
+--
+-- Name: payroll_retro_allocations payroll_retro_allocations_settlement_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.payroll_retro_allocations
+    ADD CONSTRAINT payroll_retro_allocations_settlement_id_fkey FOREIGN KEY (settlement_id) REFERENCES public.payroll_retro_settlements(id) ON DELETE CASCADE DEFERRABLE;
+
+
+--
+-- Name: payroll_retro_allocations payroll_retro_allocations_updated_by_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.payroll_retro_allocations
+    ADD CONSTRAINT payroll_retro_allocations_updated_by_fkey FOREIGN KEY (updated_by) REFERENCES public.users(id) ON DELETE SET NULL DEFERRABLE;
+
+
+--
+-- Name: payroll_retro_settlements payroll_retro_settlements_created_by_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.payroll_retro_settlements
+    ADD CONSTRAINT payroll_retro_settlements_created_by_fkey FOREIGN KEY (created_by) REFERENCES public.users(id) ON DELETE SET NULL DEFERRABLE;
+
+
+--
+-- Name: payroll_retro_settlements payroll_retro_settlements_employee_party_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.payroll_retro_settlements
+    ADD CONSTRAINT payroll_retro_settlements_employee_party_id_fkey FOREIGN KEY (employee_party_id) REFERENCES public.parties(id) ON DELETE CASCADE DEFERRABLE;
+
+
+--
+-- Name: payroll_retro_settlements payroll_retro_settlements_org_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.payroll_retro_settlements
+    ADD CONSTRAINT payroll_retro_settlements_org_id_fkey FOREIGN KEY (org_id) REFERENCES public.orgs(id) ON DELETE CASCADE DEFERRABLE;
+
+
+--
+-- Name: payroll_retro_settlements payroll_retro_settlements_retro_pay_run_document_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.payroll_retro_settlements
+    ADD CONSTRAINT payroll_retro_settlements_retro_pay_run_document_id_fkey FOREIGN KEY (retro_pay_run_document_id) REFERENCES public.documents(id) ON DELETE CASCADE DEFERRABLE;
+
+
+--
+-- Name: payroll_retro_settlements payroll_retro_settlements_source_pay_run_document_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.payroll_retro_settlements
+    ADD CONSTRAINT payroll_retro_settlements_source_pay_run_document_id_fkey FOREIGN KEY (source_pay_run_document_id) REFERENCES public.documents(id) ON DELETE CASCADE DEFERRABLE;
+
+
+--
+-- Name: payroll_retro_settlements payroll_retro_settlements_updated_by_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.payroll_retro_settlements
+    ADD CONSTRAINT payroll_retro_settlements_updated_by_fkey FOREIGN KEY (updated_by) REFERENCES public.users(id) ON DELETE SET NULL DEFERRABLE;
 
 
 --
@@ -38497,6 +39125,94 @@ ALTER TABLE ONLY public.wip_prebills
 
 
 --
+-- Name: work_schedule_days work_schedule_days_created_by_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.work_schedule_days
+    ADD CONSTRAINT work_schedule_days_created_by_fkey FOREIGN KEY (created_by) REFERENCES public.users(id) ON DELETE SET NULL DEFERRABLE;
+
+
+--
+-- Name: work_schedule_days work_schedule_days_org_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.work_schedule_days
+    ADD CONSTRAINT work_schedule_days_org_id_fkey FOREIGN KEY (org_id) REFERENCES public.orgs(id) ON DELETE CASCADE DEFERRABLE;
+
+
+--
+-- Name: work_schedule_days work_schedule_days_schedule_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.work_schedule_days
+    ADD CONSTRAINT work_schedule_days_schedule_id_fkey FOREIGN KEY (schedule_id) REFERENCES public.work_schedules(id) ON DELETE CASCADE DEFERRABLE;
+
+
+--
+-- Name: work_schedule_days work_schedule_days_updated_by_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.work_schedule_days
+    ADD CONSTRAINT work_schedule_days_updated_by_fkey FOREIGN KEY (updated_by) REFERENCES public.users(id) ON DELETE SET NULL DEFERRABLE;
+
+
+--
+-- Name: work_schedules work_schedules_created_by_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.work_schedules
+    ADD CONSTRAINT work_schedules_created_by_fkey FOREIGN KEY (created_by) REFERENCES public.users(id) ON DELETE SET NULL DEFERRABLE;
+
+
+--
+-- Name: work_schedules work_schedules_department_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.work_schedules
+    ADD CONSTRAINT work_schedules_department_id_fkey FOREIGN KEY (department_id) REFERENCES public.departments(id) ON DELETE CASCADE DEFERRABLE;
+
+
+--
+-- Name: work_schedules work_schedules_employee_party_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.work_schedules
+    ADD CONSTRAINT work_schedules_employee_party_id_fkey FOREIGN KEY (employee_party_id) REFERENCES public.parties(id) ON DELETE CASCADE DEFERRABLE;
+
+
+--
+-- Name: work_schedules work_schedules_org_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.work_schedules
+    ADD CONSTRAINT work_schedules_org_id_fkey FOREIGN KEY (org_id) REFERENCES public.orgs(id) ON DELETE CASCADE DEFERRABLE;
+
+
+--
+-- Name: work_schedules work_schedules_subsidiary_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.work_schedules
+    ADD CONSTRAINT work_schedules_subsidiary_id_fkey FOREIGN KEY (subsidiary_id) REFERENCES public.subsidiaries(id) ON DELETE CASCADE DEFERRABLE;
+
+
+--
+-- Name: work_schedules work_schedules_trade_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.work_schedules
+    ADD CONSTRAINT work_schedules_trade_id_fkey FOREIGN KEY (trade_id) REFERENCES public.trades(id) ON DELETE CASCADE DEFERRABLE;
+
+
+--
+-- Name: work_schedules work_schedules_updated_by_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.work_schedules
+    ADD CONSTRAINT work_schedules_updated_by_fkey FOREIGN KEY (updated_by) REFERENCES public.users(id) ON DELETE SET NULL DEFERRABLE;
+
+
+--
 -- Name: account_group_members; Type: ROW SECURITY; Schema: public; Owner: -
 --
 
@@ -39215,6 +39931,12 @@ ALTER TABLE public.employee_payroll_profiles ENABLE ROW LEVEL SECURITY;
 --
 
 ALTER TABLE public.employee_roles ENABLE ROW LEVEL SECURITY;
+
+--
+-- Name: employee_tax_certificates; Type: ROW SECURITY; Schema: public; Owner: -
+--
+
+ALTER TABLE public.employee_tax_certificates ENABLE ROW LEVEL SECURITY;
 
 --
 -- Name: entitlement_ledger; Type: ROW SECURITY; Schema: public; Owner: -
@@ -41388,6 +42110,20 @@ COMMENT ON POLICY org_isolation ON public.employee_roles IS 'openbooks:org_isola
 
 
 --
+-- Name: employee_tax_certificates org_isolation; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY org_isolation ON public.employee_tax_certificates USING (((current_setting('app.bypass_rls'::text, true) = 'on'::text) OR ((org_id)::text = current_setting('app.current_org'::text, true)))) WITH CHECK (((current_setting('app.bypass_rls'::text, true) = 'on'::text) OR ((org_id)::text = current_setting('app.current_org'::text, true))));
+
+
+--
+-- Name: POLICY org_isolation ON employee_tax_certificates; Type: COMMENT; Schema: public; Owner: -
+--
+
+COMMENT ON POLICY org_isolation ON public.employee_tax_certificates IS 'openbooks:org_isolation:v1';
+
+
+--
 -- Name: entitlement_ledger org_isolation; Type: POLICY; Schema: public; Owner: -
 --
 
@@ -42942,6 +43678,34 @@ COMMENT ON POLICY org_isolation ON public.payroll_filing_accounts IS 'openbooks:
 
 
 --
+-- Name: payroll_filing_submission_slips org_isolation; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY org_isolation ON public.payroll_filing_submission_slips USING (((current_setting('app.bypass_rls'::text, true) = 'on'::text) OR ((org_id)::text = current_setting('app.current_org'::text, true)))) WITH CHECK (((current_setting('app.bypass_rls'::text, true) = 'on'::text) OR ((org_id)::text = current_setting('app.current_org'::text, true))));
+
+
+--
+-- Name: POLICY org_isolation ON payroll_filing_submission_slips; Type: COMMENT; Schema: public; Owner: -
+--
+
+COMMENT ON POLICY org_isolation ON public.payroll_filing_submission_slips IS 'openbooks:org_isolation:v1';
+
+
+--
+-- Name: payroll_filing_submissions org_isolation; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY org_isolation ON public.payroll_filing_submissions USING (((current_setting('app.bypass_rls'::text, true) = 'on'::text) OR ((org_id)::text = current_setting('app.current_org'::text, true)))) WITH CHECK (((current_setting('app.bypass_rls'::text, true) = 'on'::text) OR ((org_id)::text = current_setting('app.current_org'::text, true))));
+
+
+--
+-- Name: POLICY org_isolation ON payroll_filing_submissions; Type: COMMENT; Schema: public; Owner: -
+--
+
+COMMENT ON POLICY org_isolation ON public.payroll_filing_submissions IS 'openbooks:org_isolation:v1';
+
+
+--
 -- Name: payroll_holidays org_isolation; Type: POLICY; Schema: public; Owner: -
 --
 
@@ -43065,6 +43829,34 @@ CREATE POLICY org_isolation ON public.payroll_prior_stubs USING (((current_setti
 --
 
 COMMENT ON POLICY org_isolation ON public.payroll_prior_stubs IS 'openbooks:org_isolation:v1';
+
+
+--
+-- Name: payroll_retro_allocations org_isolation; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY org_isolation ON public.payroll_retro_allocations USING (((current_setting('app.bypass_rls'::text, true) = 'on'::text) OR ((org_id)::text = current_setting('app.current_org'::text, true)))) WITH CHECK (((current_setting('app.bypass_rls'::text, true) = 'on'::text) OR ((org_id)::text = current_setting('app.current_org'::text, true))));
+
+
+--
+-- Name: POLICY org_isolation ON payroll_retro_allocations; Type: COMMENT; Schema: public; Owner: -
+--
+
+COMMENT ON POLICY org_isolation ON public.payroll_retro_allocations IS 'openbooks:org_isolation:v1';
+
+
+--
+-- Name: payroll_retro_settlements org_isolation; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY org_isolation ON public.payroll_retro_settlements USING (((current_setting('app.bypass_rls'::text, true) = 'on'::text) OR ((org_id)::text = current_setting('app.current_org'::text, true)))) WITH CHECK (((current_setting('app.bypass_rls'::text, true) = 'on'::text) OR ((org_id)::text = current_setting('app.current_org'::text, true))));
+
+
+--
+-- Name: POLICY org_isolation ON payroll_retro_settlements; Type: COMMENT; Schema: public; Owner: -
+--
+
+COMMENT ON POLICY org_isolation ON public.payroll_retro_settlements IS 'openbooks:org_isolation:v1';
 
 
 --
@@ -44643,6 +45435,34 @@ COMMENT ON POLICY org_isolation ON public.wip_prebills IS 'openbooks:org_isolati
 
 
 --
+-- Name: work_schedule_days org_isolation; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY org_isolation ON public.work_schedule_days USING (((current_setting('app.bypass_rls'::text, true) = 'on'::text) OR ((org_id)::text = current_setting('app.current_org'::text, true)))) WITH CHECK (((current_setting('app.bypass_rls'::text, true) = 'on'::text) OR ((org_id)::text = current_setting('app.current_org'::text, true))));
+
+
+--
+-- Name: POLICY org_isolation ON work_schedule_days; Type: COMMENT; Schema: public; Owner: -
+--
+
+COMMENT ON POLICY org_isolation ON public.work_schedule_days IS 'openbooks:org_isolation:v1';
+
+
+--
+-- Name: work_schedules org_isolation; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY org_isolation ON public.work_schedules USING (((current_setting('app.bypass_rls'::text, true) = 'on'::text) OR ((org_id)::text = current_setting('app.current_org'::text, true)))) WITH CHECK (((current_setting('app.bypass_rls'::text, true) = 'on'::text) OR ((org_id)::text = current_setting('app.current_org'::text, true))));
+
+
+--
+-- Name: POLICY org_isolation ON work_schedules; Type: COMMENT; Schema: public; Owner: -
+--
+
+COMMENT ON POLICY org_isolation ON public.work_schedules IS 'openbooks:org_isolation:v1';
+
+
+--
 -- Name: worker_comp_groups org_isolation; Type: POLICY; Schema: public; Owner: -
 --
 
@@ -44887,6 +45707,18 @@ ALTER TABLE public.payment_terms ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.payroll_filing_accounts ENABLE ROW LEVEL SECURITY;
 
 --
+-- Name: payroll_filing_submission_slips; Type: ROW SECURITY; Schema: public; Owner: -
+--
+
+ALTER TABLE public.payroll_filing_submission_slips ENABLE ROW LEVEL SECURITY;
+
+--
+-- Name: payroll_filing_submissions; Type: ROW SECURITY; Schema: public; Owner: -
+--
+
+ALTER TABLE public.payroll_filing_submissions ENABLE ROW LEVEL SECURITY;
+
+--
 -- Name: payroll_holidays; Type: ROW SECURITY; Schema: public; Owner: -
 --
 
@@ -44939,6 +45771,18 @@ ALTER TABLE public.payroll_prior_registers ENABLE ROW LEVEL SECURITY;
 --
 
 ALTER TABLE public.payroll_prior_stubs ENABLE ROW LEVEL SECURITY;
+
+--
+-- Name: payroll_retro_allocations; Type: ROW SECURITY; Schema: public; Owner: -
+--
+
+ALTER TABLE public.payroll_retro_allocations ENABLE ROW LEVEL SECURITY;
+
+--
+-- Name: payroll_retro_settlements; Type: ROW SECURITY; Schema: public; Owner: -
+--
+
+ALTER TABLE public.payroll_retro_settlements ENABLE ROW LEVEL SECURITY;
 
 --
 -- Name: payroll_statutory_rates; Type: ROW SECURITY; Schema: public; Owner: -
@@ -45717,6 +46561,18 @@ ALTER TABLE public.wip_prebill_lines ENABLE ROW LEVEL SECURITY;
 --
 
 ALTER TABLE public.wip_prebills ENABLE ROW LEVEL SECURITY;
+
+--
+-- Name: work_schedule_days; Type: ROW SECURITY; Schema: public; Owner: -
+--
+
+ALTER TABLE public.work_schedule_days ENABLE ROW LEVEL SECURITY;
+
+--
+-- Name: work_schedules; Type: ROW SECURITY; Schema: public; Owner: -
+--
+
+ALTER TABLE public.work_schedules ENABLE ROW LEVEL SECURITY;
 
 --
 -- Name: worker_comp_groups; Type: ROW SECURITY; Schema: public; Owner: -

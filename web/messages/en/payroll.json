@@ -651,7 +651,8 @@
       "holidays": "Holidays",
       "holidayCalendar": "Holiday calendar",
       "payday": "Payday",
-      "rates": "Statutory Rates"
+      "rates": "Statutory Rates",
+      "workSchedules": "Work schedules"
     },
     "packs": {
       "installed": "Installed",
@@ -801,7 +802,16 @@
       "regularWages": "regular wages",
       "overtime": "overtime",
       "vacationPay": "vacation pay",
-      "priorHolidayPay": "earlier holiday pay"
+      "priorHolidayPay": "earlier holiday pay",
+      "workSchedules": "Work schedules",
+      "normalDay": "the wages of one normal working day, from the employee’s recorded work schedule",
+      "normalDayStandardHours": "for employees working at least the jurisdiction's standard hours, ",
+      "normalDayOtherwise": "Otherwise",
+      "beforeTheDay": "before the holiday",
+      "beforeTheWeek": "before the week of the holiday",
+      "daysWorked": "days worked in it",
+      "daysWorkedOrEarned": "days worked or on which wages were earned",
+      "daysEntitledToPay": "days the employee was paid, or entitled to be paid, for"
     },
     "statHolidayPay": {
       "title": "Statutory holiday pay",
@@ -836,6 +846,72 @@
         "account": "Filing account",
         "values": "Values",
         "country": "Country pack"
+      }
+    },
+    "workSchedules": {
+      "title": "Work schedules",
+      "description": "The hours and days each employee is normally scheduled to work. Several jurisdictions compute statutory holiday pay from this — a normal working day's wages — and will refuse to calculate rather than assume an eight-hour day for someone whose schedule is not recorded.",
+      "add": "New schedule",
+      "editTitle": "Work schedule",
+      "drawerDescription": "Applies from the start date until it is superseded or ended. Holiday pay for a past period always resolves against the pattern in force then, never today's.",
+      "empty": "No work schedules yet.",
+      "columns": {
+        "appliesTo": "Applies to",
+        "pattern": "Pattern",
+        "effectiveFrom": "In force",
+        "status": "Status"
+      },
+      "scope": {
+        "organization": "Everyone",
+        "employee": "One employee",
+        "jobTitle": "Job title",
+        "trade": "Trade",
+        "department": "Department",
+        "subsidiary": "Subsidiary"
+      },
+      "pattern": {
+        "cycle": "A repeating pattern",
+        "cycleHint": "A cycle of days that repeats — seven days for an ordinary week, fourteen for a compressed fortnight, eight for a four-on four-off rotation.",
+        "varies": "Hours vary",
+        "variesHint": "No regular schedule; hours are set period by period. This is a real answer, not a blank one — several jurisdictions pay a varying-hours employee by a different formula, and recording it is what lets them calculate."
+      },
+      "summary": {
+        "cycle": "{hours} hours over {days} days per {cycle}",
+        "week": "week",
+        "cycleDays": "{count}-day cycle",
+        "total": "{hours} hours over {days} working days per cycle."
+      },
+      "fields": {
+        "name": "Name",
+        "namePlaceholder": "Full time, Monday to Friday",
+        "appliesTo": "Applies to",
+        "selectEmployee": "Choose an employee",
+        "selectScope": "Choose one",
+        "effectiveFrom": "In force from",
+        "effectiveTo": "In force until",
+        "pattern": "Pattern",
+        "cycleDays": "Cycle length (days)",
+        "cycleAnchor": "First day of the cycle",
+        "hours": "Hours per day"
+      },
+      "help": {
+        "scope": "The most specific schedule wins: one employee beats a job title, which beats a trade, then a department, then a subsidiary, then everyone. The same order wages and entitlement limits resolve in.",
+        "effectiveFrom": "Compared against the WORK DATE, never today. Someone who moves from full time to part time in March still has January's holiday pay computed on the full-time pattern.",
+        "pattern": "Whether the employee works a repeating pattern, or has no regular schedule at all. The difference decides which formula several jurisdictions use.",
+        "cycleDays": "How many days before the pattern repeats. Seven is the ordinary week. Fourteen expresses a nine-day fortnight; eight expresses a four-on four-off rotation that deliberately never lines up with the week.",
+        "cycleAnchor": "The day the cycle starts counting from. For a weekly pattern this is a Sunday, so the boxes below are labelled Sunday to Saturday.",
+        "hours": "The hours normally worked at each position of the cycle. Leave a day blank for a day off. These hours are what a normal working day's holiday pay is calculated from, so a four-day ten-hour week is worth ten hours a holiday, not eight."
+      },
+      "grid": {
+        "sunday": "Sunday",
+        "monday": "Monday",
+        "tuesday": "Tuesday",
+        "wednesday": "Wednesday",
+        "thursday": "Thursday",
+        "friday": "Friday",
+        "saturday": "Saturday",
+        "day": "Day {n}",
+        "weekDay": "Week {week} · {day}"
       }
     }
   },
@@ -887,6 +963,48 @@
       "notIncluded": "Not included in the file",
       "included": "Included in the file — reason {code}",
       "commentRequired": "A comment is required for this reason code."
+    },
+    "lifecycle": {
+      "title": "Filing status",
+      "statusColumn": "Filing status",
+      "help": "An issued filing is evidence of what was declared to the agency, so it is never overwritten: a correction is a new artifact that supersedes it, and the original file stays downloadable. Amounts are always recomputed from committed pay stubs — correct the payroll data, then amend.",
+      "history": "Filing history",
+      "recordOriginal": "Record as filed",
+      "note": "Filing note",
+      "notePlaceholder": "How it was filed (optional)",
+      "notIssued": "Not recorded as filed yet.",
+      "issuedCount": "Artifacts issued",
+      "latest": "Latest",
+      "changedCount": "Changed since filing",
+      "absentCount": "No longer in the ledger",
+      "resurrectedCount": "Cancelled but still in the ledger",
+      "slipsCovered": "Slips covered",
+      "supersedes": "supersedes",
+      "noArtifact": "No electronic file — the slip snapshot below is the record.",
+      "correction": "Correction",
+      "correctionForm": "Correction form",
+      "correctionHelp": "Amending restates a slip that should exist; cancelling declares that the slip should never have existed. The figures are recomputed from committed pay stubs — they are never typed over — so correct the payroll data first and the amendment follows.",
+      "unfiledHelp": "This slip has not been recorded as filed, so there is nothing to correct.",
+      "addedHelp": "This slip appeared after the return was filed. A slip discovered later is filed as an additional original, not as a correction, and that is not produced here — file it through the agency's own service.",
+      "absentHelp": "The payroll ledger no longer produces this slip, so there is nothing to restate. Cancel it so the agency stops holding it.",
+      "resurrectedHelp": "This slip was cancelled, but the payroll ledger still produces it. Void or adjust the underlying run, or the next return will file it again.",
+      "box": "Box",
+      "field": "Field",
+      "asFiled": "As filed",
+      "now": "Now",
+      "redacted": "Changed — value not displayed",
+      "previewAmended": "Preview correction",
+      "issueAmended": "Issue amendment",
+      "previewCancelled": "Preview cancellation",
+      "issueCancelled": "Cancel this slip",
+      "status": {
+        "unfiled": "Not filed",
+        "unchanged": "Filed",
+        "changed": "Changed since filing",
+        "absent": "No longer in the ledger",
+        "withdrawn": "Cancelled",
+        "resurrected": "Cancelled but still in the ledger"
+      }
     }
   },
   "separations": {

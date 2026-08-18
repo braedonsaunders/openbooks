@@ -170,6 +170,146 @@ export interface PayrollFilingSlip {
   build(orgId: string, taxYear: number, rowId: string): Promise<PayrollFilingSlipData>;
 }
 
+// ---------------------------------------------------------------------------
+// The filing LIFECYCLE — original → amended → cancelled
+// ---------------------------------------------------------------------------
+
+/**
+ * What an issued artifact IS. Agency-neutral by construction:
+ *
+ *   - `original`  — the first filing of this population for the year.
+ *   - `amended`   — a restatement of slips that SHOULD exist but were wrong.
+ *   - `cancelled` — a declaration that slips should never have existed at all
+ *     (an employee on the wrong entity, a duplicate return).
+ *
+ * Amend and cancel are DIFFERENT operations, not two flavours of edit, and
+ * every agency treats them differently: the CRA stamps a report-type code on
+ * the same T4 XML, the IRS uses a wholly separate correction form. The
+ * generic layer carries the state; the pack carries the mechanics.
+ */
+export type PayrollFilingRevision = "original" | "amended" | "cancelled";
+
+export const PAYROLL_FILING_REVISIONS: readonly PayrollFilingRevision[] = [
+  "original",
+  "amended",
+  "cancelled",
+];
+
+/** The revisions that CORRECT an artifact already issued. */
+export type PayrollFilingCorrectionKind = Exclude<PayrollFilingRevision, "original">;
+
+/** One value as it was printed on an issued artifact. */
+export interface PayrollFilingReportedField {
+  /** The statutory box code, when the field is a box; null for identification. */
+  code: string | null;
+  label: string;
+  value: string;
+}
+
+/**
+ * The snapshot of what ONE row reported on ONE issued artifact — the
+ * "previously reported" column every correction form asks for.
+ */
+export interface PayrollFilingReported {
+  fields: PayrollFilingReportedField[];
+  /**
+   * Identity facts that must be COMPARED but never displayed (a SIN, an SSN).
+   * The pack supplies a keyed fingerprint, so "the number changed" is
+   * provable without the number ever leaving the sealed profile column.
+   */
+  confidential: { label: string; fingerprint: string }[];
+}
+
+/** One difference between what was reported and what is true now. */
+export interface PayrollFilingFieldChange {
+  code: string | null;
+  label: string;
+  /** Null when the field is confidential and its values must not be shown. */
+  previous: string | null;
+  current: string | null;
+  /** The change is real; the values are withheld because they identify. */
+  redacted: boolean;
+}
+
+/**
+ * Everything a pack needs to render or transmit ONE row's correction: what
+ * was reported, what is true now, and exactly which fields moved. All three
+ * are computed by the generic layer from the pack's own slip declaration, so
+ * a correction form never re-derives the delta and can never disagree with
+ * the delta the operator approved on screen.
+ */
+export interface PayrollFilingCorrectionRow {
+  rowId: string;
+  /** The row's first declared column value (the employee, the quarter…). */
+  label: string;
+  revision: PayrollFilingCorrectionKind;
+  previously: PayrollFilingReported;
+  /** The slip as the ledger and master data produce it TODAY. */
+  current: PayrollFilingSlipData;
+  changes: PayrollFilingFieldChange[];
+}
+
+/** The electronic correction file, when the pack produces one. */
+export interface PayrollFilingCorrectionDownload {
+  label: string;
+  note?: string;
+  build(input: {
+    orgId: string;
+    taxYear: number;
+    revision: PayrollFilingCorrectionKind;
+    rows: readonly PayrollFilingCorrectionRow[];
+  }): Promise<PayrollFilingFile>;
+}
+
+/**
+ * Whether — and HOW — a filing can be corrected once it has been issued.
+ *
+ * REQUIRED on every declared filing, like `cadence`, and a discriminated
+ * union so a pack must answer one of exactly two ways: "yes, and here are the
+ * agency's mechanics", or "no, and here is why". Nothing inherits another
+ * pack's correction rules by omission, and nothing silently produces an
+ * approximation of a statutory correction.
+ */
+export type PayrollFilingAmendment =
+  | {
+    supported: false;
+    /** Why this filing cannot be corrected here — named, never implied. */
+    refusal: string;
+  }
+  | {
+    supported: true;
+    /**
+     * Which corrections the agency accepts for THIS filing. A Form 941 can
+     * be amended (941-X) but never cancelled — you cannot un-file a quarter.
+     */
+    revisions: readonly PayrollFilingCorrectionKind[];
+    /**
+     * How the agency carries the correction:
+     *   - `same_form`       — the original form re-filed under a report-type
+     *     code (the CRA's T4 XML `RPT_TCD` A/C);
+     *   - `correction_form` — a distinct form carrying BOTH previously
+     *     reported and corrected amounts (the IRS's W-2c/W-3c, 941-X).
+     */
+    vehicle: "same_form" | "correction_form";
+    /** The correction form's printed name; required for `correction_form`. */
+    formLabel?: string;
+    /** Render one correction as its statutory form. */
+    slip?: {
+      build(row: PayrollFilingCorrectionRow, orgId: string, taxYear: number):
+      Promise<PayrollFilingSlipData>;
+    };
+    download?: PayrollFilingCorrectionDownload;
+    /** Why there is no correction FILE, when there is none. */
+    downloadRefusal?: string;
+    /**
+     * Confidential identity facts to compare by fingerprint (the SIN on a T4,
+     * the SSN on a W-2). Server-side only: the fingerprints are stored in the
+     * snapshot and never returned to a browser — only "changed" is.
+     */
+    confidential?(orgId: string, taxYear: number, rowId: string):
+    Promise<{ label: string; fingerprint: string }[]>;
+  };
+
 export interface PayrollYearEndFiling {
   /** Stable key within the pack ("t4", "roe", "941", "w2", "p60"). */
   key: string;
@@ -192,6 +332,12 @@ export interface PayrollYearEndFiling {
   /** Why no file exists, when it does not — named, never implied. */
   downloadRefusal?: string;
   issue?: PayrollFilingIssue;
+  /**
+   * How this filing is CORRECTED once issued. Required — every employer
+   * eventually files a wrong slip, and a pack that says nothing would
+   * silently inherit another agency's correction rules.
+   */
+  amendment: PayrollFilingAmendment;
 }
 
 /** How separation payments map onto the pack's seeded components. */
@@ -254,7 +400,10 @@ export function registerPayrollFilings(declaration: PayrollPackFilings): void {
       `payroll filings for ${declaration.country} are already declared — a country has exactly one filing declaration`,
     );
   }
-  for (const filing of declaration.yearEnd) assertCadence(declaration.country, filing);
+  for (const filing of declaration.yearEnd) {
+    assertCadence(declaration.country, filing);
+    assertAmendment(declaration.country, filing);
+  }
   const filingKeys = declaration.yearEnd.map((filing) => filing.key);
   if (new Set(filingKeys).size !== filingKeys.length) {
     throw new PayrollPackError(`the ${declaration.country} filing declaration repeats a filing key`);
@@ -275,6 +424,7 @@ export function registerPayrollFilings(declaration: PayrollPackFilings): void {
  */
 export function registerYearEndFiling(country: string, filing: PayrollYearEndFiling): void {
   assertCadence(country, filing);
+  assertAmendment(country, filing);
   const pack = payrollPackFilings(country); // refuses an undeclared pack by name
   const declared = pack.yearEnd.find((existing) => existing.key === filing.key);
   if (declared) {
@@ -297,6 +447,67 @@ function assertCadence(country: string, filing: PayrollYearEndFiling): void {
       `the ${country} "${filing.key}" filing declares no cadence — declare `
       + `${PAYROLL_FILING_CADENCES.join(", ")} so the filing lands on the right surface `
       + "(a separation document must never masquerade as a year-end return)",
+    );
+  }
+}
+
+/**
+ * A filing that has not declared how it is CORRECTED cannot be issued
+ * responsibly. This is deliberately as strict as `assertCadence`: the
+ * alternative to a declaration is a default, and a default correction rule is
+ * one agency's rules applied to another agency's form.
+ */
+function assertAmendment(country: string, filing: PayrollYearEndFiling): void {
+  const amendment = filing.amendment as PayrollFilingAmendment | undefined;
+  if (!amendment || typeof amendment.supported !== "boolean") {
+    throw new PayrollPackError(
+      `the ${country} "${filing.key}" filing declares no amendment support — declare `
+      + "{ supported: false, refusal } or { supported: true, revisions, vehicle } so a "
+      + "correction is either produced to the agency's own rules or refused by name "
+      + "(no filing may silently inherit another agency's correction mechanics)",
+    );
+  }
+  if (!amendment.supported) {
+    if (!amendment.refusal || !amendment.refusal.trim()) {
+      throw new PayrollPackError(
+        `the ${country} "${filing.key}" filing declares no amendment support and no reason — `
+        + "a refusal must say why, by name",
+      );
+    }
+    return;
+  }
+  const revisions = amendment.revisions ?? [];
+  if (revisions.length === 0) {
+    throw new PayrollPackError(
+      `the ${country} "${filing.key}" filing supports amendment but names no revisions — `
+      + "declare which of amended, cancelled the agency accepts",
+    );
+  }
+  for (const revision of revisions) {
+    if (revision !== "amended" && revision !== "cancelled") {
+      throw new PayrollPackError(
+        `the ${country} "${filing.key}" filing declares an unknown revision "${revision}" — `
+        + "corrections are amended or cancelled",
+      );
+    }
+  }
+  if (amendment.vehicle !== "same_form" && amendment.vehicle !== "correction_form") {
+    throw new PayrollPackError(
+      `the ${country} "${filing.key}" filing declares no correction vehicle — `
+      + "same_form (a report-type code on the original form) or correction_form "
+      + "(a distinct form carrying previously reported and corrected amounts)",
+    );
+  }
+  if (amendment.vehicle === "correction_form" && !amendment.formLabel?.trim()) {
+    throw new PayrollPackError(
+      `the ${country} "${filing.key}" filing corrects on a separate form but does not name it — `
+      + "declare formLabel (\"Form W-2c\", \"Form 941-X\")",
+    );
+  }
+  if (!amendment.download && !amendment.downloadRefusal?.trim()) {
+    throw new PayrollPackError(
+      `the ${country} "${filing.key}" filing declares neither a correction file nor a reason `
+      + "there is none — an absent electronic correction must be named, never implied",
     );
   }
 }

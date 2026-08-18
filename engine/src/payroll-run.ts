@@ -661,13 +661,28 @@ export function nextPeriodAfter(
   throw new PayrollError("could not derive the next monthly period");
 }
 
-export type PayRunType = "regular" | "bonus" | "termination";
+/**
+ * `retro` pays, in the current period, the difference a backdated change makes
+ * to periods that have ALREADY been paid (engine/src/payroll-retro.ts). Like
+ * `bonus` and `termination` it is off-cycle: landing inside an already-paid
+ * period is the entire point, so it is exempt from the regular-run overlap
+ * guard below, which only ever inspected `run_type = 'regular'`.
+ */
+export type PayRunType = "regular" | "bonus" | "termination" | "retro";
 
 const RUN_TYPE_MEMO: Record<PayRunType, string> = {
   regular: "Pay run",
   bonus: "Off-cycle bonus run",
   termination: "Final pay run",
+  retro: "Retroactive pay run",
 };
+
+/** Run types that pay ONLY their own one-off lines: no salary, no time, no
+ *  recurring components, no derived earnings, no statutory holiday pay. */
+const ONE_OFF_RUN_TYPES = new Set<string>(["bonus", "retro"]);
+
+/** Run types that must NAME the employees they pay before they can exist. */
+const SCOPED_RUN_TYPES = new Set<string>(["termination", "retro"]);
 
 /**
  * The roster a run pays, as the caller names it.
@@ -781,14 +796,21 @@ export async function createPayRun(input: {
       );
     }
 
-    // Guard 3 — a final pay run must NAME the employees it pays. Resolved
-    // before anything is written so an unscoped one cannot exist at all.
+    // Guard 3 — a scoped run must NAME the employees it pays. Resolved before
+    // anything is written so an unscoped one cannot exist at all. A final pay
+    // run pays out and clears every accrued bank; a retro run settles named
+    // differences for named people. Either one loosed on a whole schedule is
+    // unrecoverable.
     const scopedEmployeeIds = [...new Set(input.employeePartyIds ?? [])];
-    if (runType === "termination") {
+    if (SCOPED_RUN_TYPES.has(runType)) {
       if (scopedEmployeeIds.length === 0) {
         throw new PayrollError(
-          "a final pay run must name the employees it pays — it pays out and clears "
-          + "every accrued bank, so it may never run against the whole schedule",
+          runType === "termination"
+            ? "a final pay run must name the employees it pays — it pays out and clears "
+              + "every accrued bank, so it may never run against the whole schedule"
+            : "a retroactive pay run must name the employees it pays — it settles the "
+              + "differences quantified for those people, so it may never run against "
+              + "the whole schedule",
         );
       }
       const onSchedule = (await tx.execute(sql`
@@ -836,7 +858,7 @@ export async function createPayRun(input: {
     // The scope, written as exclusions for everyone the run does NOT pay —
     // the mechanism `calculatePayRun` already honours, and one the operator
     // can see and adjust in the wizard like any other run adjustment.
-    if (runType === "termination") {
+    if (SCOPED_RUN_TYPES.has(runType)) {
       await tx.execute(sql`
         insert into pay_run_adjustments (org_id, pay_run_document_id, employee_party_id,
                                          adjustment_type, note, created_by, updated_by)
@@ -1000,12 +1022,100 @@ async function resolvePayRate(
   return { ...resolved, rate: convertLaborWage(row.rate, fxRate), currency: payCurrency };
 }
 
+/** One line of a stub, as `captureCalculatedStubs` hands it back. */
+export interface CapturedStubLine {
+  componentId: string | null;
+  systemKey: string | null;
+  kind: "earning" | "deduction" | "employer_contribution";
+  description: string;
+  hours: string | null;
+  rate: string | null;
+  amount: string;
+  projectId: string | null;
+  departmentId: string | null;
+  timeTypeId: string | null;
+  sequence: number;
+}
+
+/** One employee's whole calculated result, read back inside the transaction. */
+export interface CapturedStub {
+  employeePartyId: string;
+  province: string;
+  gross: string;
+  netPay: string;
+  employerCost: string;
+  lines: CapturedStubLine[];
+}
+
 export interface PayRunCalculation {
   employees: number;
   errors: { employee: string; message: string }[];
   gross: string;
   net: string;
   employerCost: string;
+  /**
+   * The stubs the calculation produced, present ONLY for a `simulate` run.
+   * Read back inside the transaction that is about to be rolled back, which is
+   * the whole point: the caller gets the calculation's real output without any
+   * of it surviving.
+   */
+  stubs?: CapturedStub[];
+}
+
+/**
+ * Read a run's just-calculated stubs back, inside the calculating transaction.
+ *
+ * Exported because retro pay's quantification needs the LINES, not the totals:
+ * "what would this period pay today" only answers the retro question when it
+ * can be differenced component by component and job by job against what the
+ * period actually paid (engine/src/payroll-retro.ts).
+ */
+export async function captureCalculatedStubs(
+  tx: Pick<typeof db, "execute">, orgId: string, documentId: string,
+): Promise<CapturedStub[]> {
+  const rows = (await tx.execute(sql`
+    select s.employee_party_id, s.province, s.gross, s.net_pay, s.employer_cost,
+           l.component_id, c.system_key, l.kind, l.description, l.hours, l.rate, l.amount,
+           l.project_id, l.department_id, l.time_type_id, l.sequence
+      from pay_stubs s
+      left join pay_stub_lines l on l.stub_id = s.id and l.org_id = s.org_id
+      left join pay_components c on c.id = l.component_id and c.org_id = s.org_id
+     where s.org_id = ${orgId} and s.pay_run_document_id = ${documentId}
+     order by s.employee_party_id, l.sequence, l.description
+  `)) as unknown as { rows: Record<string, string | number | null>[] };
+  const byEmployee = new Map<string, CapturedStub>();
+  for (const row of rows.rows) {
+    const employeePartyId = String(row.employee_party_id);
+    let stub = byEmployee.get(employeePartyId);
+    if (!stub) {
+      stub = {
+        employeePartyId,
+        province: String(row.province ?? ""),
+        gross: String(row.gross ?? "0"),
+        netPay: String(row.net_pay ?? "0"),
+        employerCost: String(row.employer_cost ?? "0"),
+        lines: [],
+      };
+      byEmployee.set(employeePartyId, stub);
+    }
+    // A stub with no lines at all still exists as a stub; the outer join keeps
+    // it, and an absent line must not be invented as a zero one.
+    if (row.kind == null) continue;
+    stub.lines.push({
+      componentId: row.component_id == null ? null : String(row.component_id),
+      systemKey: row.system_key == null ? null : String(row.system_key),
+      kind: String(row.kind) as CapturedStubLine["kind"],
+      description: String(row.description ?? ""),
+      hours: row.hours == null ? null : String(row.hours),
+      rate: row.rate == null ? null : String(row.rate),
+      amount: String(row.amount ?? "0"),
+      projectId: row.project_id == null ? null : String(row.project_id),
+      departmentId: row.department_id == null ? null : String(row.department_id),
+      timeTypeId: row.time_type_id == null ? null : String(row.time_type_id),
+      sequence: Number(row.sequence ?? 0),
+    });
+  }
+  return [...byEmployee.values()];
 }
 
 /** Rolls the calculation transaction back while carrying its result out. */
@@ -1023,6 +1133,31 @@ export interface CalculatePayRunInput {
    * errors) and the run stays in whatever state it was in.
    */
   dryRun?: boolean;
+  /**
+   * Recalculate a run that is already COMMITTED, as it would calculate today,
+   * hand the caller the stubs it produced, and roll every bit of it back.
+   *
+   * This is what makes retroactive pay one calculation rather than two. "What
+   * would this already-paid period pay under the rate that has since been
+   * backdated over it" is exactly the question `calculateStub` answers, and
+   * answering it a second time somewhere else would be a second definition of
+   * what a period pays — which drifts, silently, in money.
+   *
+   * Simulation IMPLIES `dryRun` unconditionally here, not at the call site: the
+   * two guards below (already committed, document not editable) are the only
+   * things standing between this and rewriting a posted payroll, so the
+   * rollback is not left to a caller remembering to ask for it. What the
+   * transaction does — delete this run's stubs, recalculate them, read them
+   * back — is discarded in full by the `DryRunRollback` throw.
+   *
+   * A simulation is NOT the period as it was paid. It sees today's
+   * configuration by design (that is the point), and also today's year-to-date
+   * position, since later runs have committed since. Statutory withholdings
+   * therefore differ from the original stub and are meaningless here; retro
+   * quantification differences EARNINGS only, and taxes the resulting amount
+   * fresh under the pack's declared retroactive treatment.
+   */
+  simulate?: boolean;
 }
 
 export async function calculatePayRun(input: CalculatePayRunInput): Promise<PayRunCalculation> {
@@ -1051,8 +1186,17 @@ async function calculateInTransaction(input: CalculatePayRunInput): Promise<PayR
     `)) as unknown as { rows: Record<string, string>[] };
     const run = runRows.rows[0];
     if (!run) throw new PayrollError("pay run not found");
-    if (run.run_status === "committed") throw new PayrollError("pay run is already committed");
-    if (run.doc_status !== "draft") throw new PayrollError("pay run document is not editable");
+    // A simulation is a rolled-back re-derivation of a run that has already
+    // been paid, so these two guards are exactly what it is asking to pass;
+    // everything it writes is discarded by the DryRunRollback below.
+    if (!input.simulate) {
+      if (run.run_status === "committed") throw new PayrollError("pay run is already committed");
+      if (run.doc_status !== "draft") throw new PayrollError("pay run document is not editable");
+    } else if (run.run_status !== "committed") {
+      throw new PayrollError(
+        "only a committed pay run can be simulated — an uncommitted one is recalculated directly",
+      );
+    }
 
     // ---- The run's jurisdiction, resolved ONCE -----------------------------
     //
@@ -1163,9 +1307,20 @@ async function calculateInTransaction(input: CalculatePayRunInput): Promise<PayR
     // replacement inside calculateStub cannot see someone who is no longer
     // being calculated. See .local/payroll-pipeline-contract.md, "Ledger
     // writes".
-    await tx.execute(sql`
-      delete from entitlement_ledger
-       where org_id = ${orgId} and pay_run_document_id = ${documentId}`);
+    //
+    // A SIMULATION writes no entitlement movements at all, and therefore
+    // deletes none. Not an optimization: `entitlement_ledger` is append-only
+    // once its pay run is committed (the entitlement_ledger_append_only
+    // trigger), and that control is right — a bank movement backing a payroll
+    // that has gone out is not editable, even inside a transaction that will
+    // be rolled back. Retro quantification differences EARNINGS, and accruals
+    // are `accrualOnly` employer lines that never enter that difference, so
+    // suppressing the ledger writes costs the simulation nothing it uses.
+    if (!input.simulate) {
+      await tx.execute(sql`
+        delete from entitlement_ledger
+         where org_id = ${orgId} and pay_run_document_id = ${documentId}`);
+    }
 
     // Run-level input adjustments: exclusions drop the employee entirely;
     // 'line' rows are merged into the stub's inputs inside calculateStub.
@@ -1225,7 +1380,7 @@ async function calculateInTransaction(input: CalculatePayRunInput): Promise<PayR
         const result = await calculateStub(tx, {
           orgId, actorId, documentId, run, emp, runContext, jurisdiction,
           periodsPerYear: P, need, components: components.rows, usConfig, caConfig,
-          eftFallbackToCheque, statHolidayPay,
+          eftFallbackToCheque, statHolidayPay, simulate: input.simulate === true,
         });
         grossTotal = add(grossTotal, result.gross);
         netTotal = add(netTotal, result.net);
@@ -1252,7 +1407,13 @@ async function calculateInTransaction(input: CalculatePayRunInput): Promise<PayR
       gross: grossTotal, net: netTotal, employerCost: employerTotal,
     };
     // A dry run has done all the real work; throwing here discards the stubs
-    // it wrote so the operator's preview costs the run nothing.
+    // it wrote so the operator's preview costs the run nothing. A simulation is
+    // a dry run whose OUTPUT is the point, so the stubs are read back first —
+    // inside this transaction, immediately before it is thrown away.
+    if (input.simulate) {
+      result.stubs = await captureCalculatedStubs(tx, orgId, documentId);
+      throw new DryRunRollback(result);
+    }
     if (input.dryRun) throw new DryRunRollback(result);
 
     await tx.execute(sql`
@@ -1284,6 +1445,8 @@ async function calculateStub(
     eftFallbackToCheque: boolean;
     /** orgs.settings.payroll.statutoryHolidayPay, read once for the run. */
     statHolidayPay: boolean;
+    /** Rolled-back re-derivation of a COMMITTED run; writes no ledger rows. */
+    simulate: boolean;
   },
 ): Promise<StubComputation> {
   const { orgId, actorId, documentId, run, emp, jurisdiction } = ctx;
@@ -1334,25 +1497,31 @@ async function calculateStub(
   );
   const baseComponent = ctx.need("base_pay", "earning");
 
-  // An off-cycle bonus run pays only its one-off lines: no salary, no time,
-  // and no recurring components (a bonus cheque does not re-take the period's
-  // benefit deductions). Its earnings are taxed on the T4127 bonus method.
+  // An off-cycle run pays only its one-off lines: no salary, no time, and no
+  // recurring components (a bonus cheque does not re-take the period's benefit
+  // deductions, and a retro cheque does not re-take them either — the source
+  // periods already did). A bonus run's earnings are taxed on the pack's
+  // non-periodic method; a retro run's treatment is the pack's DECLARATION
+  // (payroll/packs.ts `retroactivePayTreatment`), never a constant here.
   const runType = (run.run_type as string) ?? "regular";
   const bonusRun = runType === "bonus";
+  const retroRun = runType === "retro";
+  const oneOffRun = ONE_OFF_RUN_TYPES.has(runType);
 
   // Is the effective rate row one the run can actually pay on? The rule lives
   // in engine/src/payroll-rate.ts and readiness asks it in SQL, so the
   // pre-flight and the run cannot disagree — which they did, before the
   // predicate had one owner: a salaried employee holding only an hourly rate
   // passed readiness green and then threw here.
-  if (!bonusRun && !payRateIsUsable(emp.pay_basis, payRate)) {
+  if (!oneOffRun && !payRateIsUsable(emp.pay_basis, payRate)) {
     throw new PayrollError(payRate
       ? "salaried employee has no annual labor cost rate (employee scope)"
       : "no labor cost rate covers this employee for the period");
   }
 
-  if (bonusRun) {
-    // no periodic earnings — adjustments below carry the bonus
+  if (oneOffRun) {
+    // no periodic earnings — adjustments (bonus) or settled retro differences
+    // (retro, immediately below) carry the whole cheque
   } else if (emp.pay_basis === "salary") {
     // Exact annual ÷ periods, rounded once (see divideMoney).
     const periodSalary = divideMoney(payRate!.rate, String(P), 2);
@@ -1405,6 +1574,45 @@ async function calculateStub(
         projectId: group.row.project_id, departmentId: group.row.department_id,
         timeTypeId: group.row.time_type_id, sequence: sequence++,
         classification: group.row.classification,
+      });
+    }
+  }
+
+  // Phase 1b — retroactive pay. A retro run pays the differences that were
+  // QUANTIFIED and REVIEWED before it existed: one earning line per
+  // (component, project, department) bucket of every settled source period,
+  // straight out of payroll_retro_allocations. Those rows are both the payment
+  // and the audit evidence, so there is no second copy of the amount to drift.
+  //
+  // Landing HERE, before the recurring components and the entitlement phases,
+  // is what puts retro earnings in gross: vacation and every other entitlement
+  // plan then accrues on them exactly as the plan and the component's own
+  // `vacationable` flag say, with no retro-specific rule anywhere.
+  //
+  // The pack decides the tax treatment. Dynamic import, like the union fringe
+  // phase above, so the retro module can depend on this one.
+  if (retroRun) {
+    const { retroEarningLinesForStub } = await import("./payroll-retro-store.ts");
+    const retroLines = await retroEarningLinesForStub(tx, {
+      orgId, payRunDocumentId: documentId, employeePartyId,
+      employeeName: emp.display_name ?? employeePartyId,
+      nonPeriodic: payrollPack(country).retroactivePayTreatment === "non_periodic",
+    });
+    for (const line of retroLines) {
+      lines.push({
+        componentId: line.componentId,
+        kind: "earning",
+        description: line.description,
+        // Deliberately no `hours`: the source periods already paid every
+        // per-hour component and union fringe on those hours, and carrying
+        // them here would pay all of them a second time. The hours are on the
+        // settlement rows as evidence instead.
+        amount: line.amount,
+        projectId: line.projectId,
+        departmentId: line.departmentId,
+        sequence: line.sequence,
+        vacationable: line.vacationable,
+        nonPeriodic: line.nonPeriodic,
       });
     }
   }
@@ -1467,7 +1675,7 @@ async function calculateStub(
   //
   // Off-cycle bonus runs are skipped: they pay only their one-off lines, and a
   // month_end rule landing inside an already-paid period would settle twice.
-  if (!bonusRun) {
+  if (!oneOffRun) {
     const derivedRules = await loadActiveDerivedRules(tx, orgId, run.period_end);
     if (derivedRules.length > 0) {
       // Salaried supervisors earn derived amounts too, and the hourly branch's
@@ -1554,7 +1762,7 @@ async function calculateStub(
   // with the same message readiness raises, naming the jurisdiction and the
   // holiday. A silent zero on a paid holiday is indistinguishable from a
   // correct calculation, which is why the refusal exists.
-  if (!bonusRun && ctx.statHolidayPay) {
+  if (!oneOffRun && ctx.statHolidayPay) {
     // The employment attribute wins over the region derivation where the
     // profile carries one: an employer regulated by a different labour
     // jurisdiction than the one the employee works in has a different holiday
@@ -1650,7 +1858,7 @@ async function calculateStub(
           && l.projectId != null,
       }));
 
-  for (const c of bonusRun ? [] : assigned.rows) {
+  for (const c of oneOffRun ? [] : assigned.rows) {
     const value = String(c.override ?? c.value ?? "0");
     const capped = {
       basis: c.basis as "fixed_amount" | "per_hour" | "percent_of_gross",
@@ -1724,8 +1932,16 @@ async function calculateStub(
       insurable: adj.insurable as boolean, vacationable: adj.vacationable as boolean,
       // On a bonus run every earning is non-periodic by definition: the
       // employee is not receiving this amount every period, so annualizing it
-      // would over-withhold badly.
-      nonPeriodic: bonusRun ? adj.kind === "earning" : (adj.non_periodic as boolean),
+      // would over-withhold badly. On a RETRO run the same is true of a manual
+      // top-up line, but the treatment is the pack's declaration rather than
+      // this module's opinion — a jurisdiction that taxes retroactive pay as
+      // ordinary period income declares so and gets it.
+      nonPeriodic: bonusRun
+        ? adj.kind === "earning"
+        : retroRun
+          ? adj.kind === "earning"
+            && payrollPack(country).retroactivePayTreatment === "non_periodic"
+          : (adj.non_periodic as boolean),
       taxTreatment: adj.tax_treatment as string,
       // A one-off garnishment entered for a single run is still a protected
       // deduction, and still belongs to (or outside) the protected base.
@@ -2521,11 +2737,18 @@ async function calculateStub(
   // previously calculated employee's bank. It runs unconditionally: an
   // employee whose recompute produced no movements must still have their stale
   // rows cleared.
-  await recordEntitlementMovements(tx, {
-    orgId, actorId, payRunDocumentId: documentId,
-    employeePartyIds: [employeePartyId],
-    movements: entitlementMovements,
-  });
+  //
+  // Skipped entirely for a SIMULATION: the movements of a committed run are
+  // append-only (entitlement_ledger_append_only), and a rolled-back
+  // re-derivation has no business rewriting the bank behind a payroll that has
+  // already gone out.
+  if (!ctx.simulate) {
+    await recordEntitlementMovements(tx, {
+      orgId, actorId, payRunDocumentId: documentId,
+      employeePartyIds: [employeePartyId],
+      movements: entitlementMovements,
+    });
+  }
 
   return {
     employeePartyId, province, gross, net, employerCost,

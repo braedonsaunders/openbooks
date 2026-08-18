@@ -1,4 +1,4 @@
-import { createCipheriv, createDecipheriv, randomBytes } from "node:crypto";
+import { createCipheriv, createDecipheriv, createHmac, randomBytes } from "node:crypto";
 import { env } from "./db.ts";
 
 /**
@@ -60,4 +60,28 @@ export function unsealJson<T = Record<string, unknown>>(stored: string | null | 
   } catch {
     return null;
   }
+}
+
+/**
+ * A KEYED fingerprint of a confidential identifier — for proving that a value
+ * CHANGED without ever storing or displaying the value.
+ *
+ * The motivating case is a payroll filing amendment: "the SIN on this T4 was
+ * wrong" is one of the commonest reasons an employer amends, and the operator
+ * (and the agency's own review) must see that the identifier moved. Storing
+ * the SIN in the filing snapshot to make that comparison possible would
+ * spread a sealed identifier into a second table; a PLAIN hash would not help
+ * either, because a nine-digit number has only 10^9 preimages and is
+ * brute-forced in seconds.
+ *
+ * So this is HMAC-SHA-256 under the same OPENBOOKS_DATA_KEY that seals the
+ * identifier itself: without the key the digest is meaningless, and with the
+ * key you already had the plaintext. `namespace` domain-separates fields, so
+ * a SIN fingerprint can never collide with an SSN fingerprint of the same
+ * digits.
+ */
+export function keyedFingerprint(namespace: string, plain: string): string {
+  return createHmac("sha256", dataKey())
+    .update(`${namespace}\u0000${plain}`, "utf8")
+    .digest("hex");
 }

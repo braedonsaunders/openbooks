@@ -54,9 +54,21 @@ const ZZ_FILINGS: PayrollPackFilings = {
         label: "Download P60 file",
         build: async () => ({ filename: "P60.xml", contentType: "application/xml", body: "<p60/>" }),
       },
+      amendment: {
+        supported: true,
+        revisions: ["amended", "cancelled"],
+        vehicle: "same_form",
+        downloadRefusal: "the ZZ pack files corrections on paper",
+      },
     },
   ],
 };
+
+/** The minimum a synthetic filing must declare, so the tests stay readable. */
+const ZZ_AMENDMENT = {
+  supported: false,
+  refusal: "the ZZ pack does not correct this filing",
+} as const;
 
 function withZZ(fn: () => void | Promise<void>) {
   return async () => {
@@ -98,16 +110,17 @@ test("a jurisdiction filing registers onto an existing pack (the RL-1 path)", wi
     label: "Full payment submission",
     cadence: "quarterly",
     population: async () => EMPTY_POPULATION,
+    amendment: ZZ_AMENDMENT,
   });
   assert.deepEqual(payrollPackFilings("ZZ").yearEnd.map((filing) => filing.key), ["p60", "fps"]);
   // A duplicate key is two declarations of one statutory filing — refused.
   assert.throws(
-    () => registerYearEndFiling("ZZ", { key: "p60", label: "x", cadence: "annual", population: async () => EMPTY_POPULATION }),
+    () => registerYearEndFiling("ZZ", { key: "p60", label: "x", cadence: "annual", population: async () => EMPTY_POPULATION, amendment: ZZ_AMENDMENT }),
     /already declares a "p60" filing/,
   );
   // Registering onto a pack nobody declared refuses by name.
   assert.throws(
-    () => registerYearEndFiling("XX", { key: "x", label: "x", cadence: "annual", population: async () => EMPTY_POPULATION }),
+    () => registerYearEndFiling("XX", { key: "x", label: "x", cadence: "annual", population: async () => EMPTY_POPULATION, amendment: ZZ_AMENDMENT }),
     /no payroll pack declares filings for XX/,
   );
 }));
@@ -118,6 +131,7 @@ test("a filing without a declared cadence is refused — the deadline class is r
       key: "p45",
       label: "P45 details of employee leaving work",
       population: async () => EMPTY_POPULATION,
+      amendment: ZZ_AMENDMENT,
     } as never),
     /declares no cadence/,
   );
@@ -125,7 +139,7 @@ test("a filing without a declared cadence is refused — the deadline class is r
     () => registerPayrollFilings({
       ...ZZ_FILINGS,
       country: "ZY",
-      yearEnd: [{ key: "x", label: "x", population: async () => EMPTY_POPULATION } as never],
+      yearEnd: [{ key: "x", label: "x", population: async () => EMPTY_POPULATION, amendment: ZZ_AMENDMENT } as never],
     }),
     /declares no cadence/,
   );

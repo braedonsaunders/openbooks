@@ -3,14 +3,25 @@ import { db } from "./db.ts";
 import { add, cmp, fromUnits, mul, mulDecimal, mulPercent, roundDiv, roundMoney, sum, toUnits } from "./money.ts";
 import {
   employmentJurisdictionsOf,
+  holidayPayLookbackBasis,
   jurisdictionKey,
   payrollJurisdiction,
   payrollJurisdictionDeclared,
   type PayrollHoliday,
+  type PayrollHolidayDayCounting,
   type PayrollHolidayObservance,
+  type PayrollHolidayPayEdition,
   type PayrollHolidayPayRule,
   type PayrollHolidayRule,
 } from "./payroll/packs.ts";
+import {
+  describeWorkSchedule,
+  isScheduledOn,
+  normalWorkdayHours,
+  resolveWorkSchedule,
+  scheduledHoursPerWeek,
+  type ResolvedWorkSchedule,
+} from "./work-schedules.ts";
 
 /**
  * Statutory holidays: the calendar, and the pay the calendar owes.
@@ -34,13 +45,30 @@ import {
  * 3. STATUTORY HOLIDAY PAY. A day's pay derived from a LOOKBACK over prior
  *    earnings. Every jurisdiction words this differently — Ontario divides
  *    four weeks of regular wages plus vacation pay by 20, British Columbia
- *    divides thirty days of wages by the days actually worked, Saskatchewan
- *    takes five per cent of four weeks — so the formula is declared per
- *    jurisdiction in the pack and this file only executes it. A jurisdiction
- *    whose rule nobody has transcribed REFUSES, loudly and by name; it never
- *    falls through to a neighbouring province's formula and never pays zero,
- *    because a silent zero is indistinguishable from a correct calculation for
- *    an employee who earned nothing.
+ *    divides thirty days of wages by the days worked or on which wages were
+ *    earned, Saskatchewan takes five per cent of four weeks — so the formula is
+ *    declared per jurisdiction in the pack and this file only executes it. A
+ *    jurisdiction whose rule nobody has transcribed REFUSES, loudly and by
+ *    name; it never falls through to a neighbouring province's formula and
+ *    never pays zero, because a silent zero is indistinguishable from a correct
+ *    calculation for an employee who earned nothing.
+ *
+ *    Three things about that formula are DECLARED and were once constants, and
+ *    each of them is a number in somebody's bank account:
+ *
+ *      - WHICH DAYS COUNT (`PayrollHolidayDayCounting`). "Worked", "worked or
+ *        earned wages" and "was entitled to be paid" are three sentences in
+ *        three Acts, not three phrasings of one. See
+ *        `countHolidayQualifyingDays`.
+ *      - WHERE THE WINDOW ENDS (`PayrollHolidayPayRule.lookbackEnds`). "The
+ *        four weeks preceding the holiday" and "the four weeks preceding the
+ *        WEEK in which the holiday occurs" differ by up to six days of
+ *        earnings. See `lookbackWindowEnd`.
+ *      - WHEN THE FORMULA WAS THE LAW (`PayrollHolidayPayEdition`). Employment
+ *        standards Acts are amended, and a repealed one still governs the
+ *        periods it was in force for. See `statutoryHolidayPayRule`, which is
+ *        the same treatment `engine/src/payroll/tax-years.ts` gives a pack's
+ *        statutory tables.
  *
  * All money arithmetic goes through engine/src/money.ts. Never floats: a
  * lookback divided by 20 in binary floating point is off by a cent often
@@ -481,14 +509,59 @@ export function businessDaysBetween(
 // ---------------------------------------------------------------------------
 
 /**
- * The jurisdiction's holiday-pay rule, or `null` where the jurisdiction
- * genuinely mandates none (the United States). An UNDECLARED jurisdiction
- * throws out of `payrollJurisdiction` — that distinction is the whole design:
- * "the law requires nothing" and "nobody has transcribed the law" must never
- * produce the same payment.
+ * The jurisdiction's holiday-pay rule AS IT STOOD ON `onDate`, or `null` where
+ * the jurisdiction genuinely mandates none (the United States).
+ *
+ * Three distinct answers, and no two of them may collapse:
+ *
+ *  - a RULE — the edition in force on the date;
+ *  - `null` — the law requires nothing;
+ *  - a THROW — either nobody has transcribed the jurisdiction at all (out of
+ *    `payrollJurisdiction`), or nobody has transcribed the statute that
+ *    governed this particular date. The second is the Prince Edward Island
+ *    case: SPEI 2024 c 66 came into force on 2026-06-30 and replaced a regular
+ *    day's pay with a percentage, so a June 2026 PEI period is governed by a
+ *    repealed Act this pack does not carry. Computing it on the new formula
+ *    would be wrong money nobody would ever see; refusing names the Act.
+ *
+ * `onDate` is the WORK DATE — the holiday's own date — never today. Re-running
+ * a 2019 period must reproduce the 2019 formula, exactly as re-running it
+ * reproduces the 2019 calendar and the 2019 withholding tables.
  */
-export function statutoryHolidayPayRule(jurisdiction: string): PayrollHolidayPayRule | null {
-  return payrollJurisdiction(jurisdiction).holidayPay;
+export function statutoryHolidayPayRule(
+  jurisdiction: string,
+  onDate: string,
+): PayrollHolidayPayRule | null {
+  const declaration = payrollJurisdiction(jurisdiction);
+  const editions = declaration.holidayPay;
+  if (editions === null) return null;
+  const date = onDate.slice(0, 10);
+  // Latest in-force edition wins, so a correction issued with a later
+  // `effectiveFrom` supersedes rather than ties. `effectiveFrom: null` sorts
+  // first because it is the unbounded-before edition.
+  let best: PayrollHolidayPayEdition | null = null;
+  for (const edition of editions) {
+    if (edition.effectiveFrom !== null && edition.effectiveFrom > date) continue;
+    if (edition.effectiveTo !== null && edition.effectiveTo < date) continue;
+    if (
+      best === null
+      || (best.effectiveFrom ?? "") < (edition.effectiveFrom ?? "")
+    ) best = edition;
+  }
+  if (best === null) {
+    const known = editions
+      .map((edition) =>
+        `${edition.effectiveFrom ?? "the beginning"} – ${edition.effectiveTo ?? "current"}`)
+      .join("; ");
+    throw new PayrollHolidayError(
+      `${declaration.name} declares no statutory holiday-pay formula in force on ${date} — `
+      + `the statute governing that date has not been transcribed (transcribed: ${known}). `
+      + "Transcribe the edition in engine/src/payroll/canada/employment-standards.ts, or run "
+      + "the period against a date the pack covers. This calculation will not apply a formula "
+      + "that was not the law at the time",
+    );
+  }
+  return best.rule;
 }
 
 /** Earnings inside a lookback window, split by what the statutes include. */
@@ -511,11 +584,20 @@ export interface HolidayPayContext {
   holiday: ObservedHoliday;
   /** Earnings over the rule's own lookback window. */
   earnings: HolidayLookbackEarnings;
-  /** Days worked, or on which wages were earned, in the lookback window. The
-   *  denominator of an `average_day` rule. */
+  /**
+   * The denominator of an `average_day` rule: how many days of the PAY window
+   * satisfy that basis's own `counting` predicate. Not always "days worked" —
+   * British Columbia divides by the days the employee worked OR EARNED WAGES
+   * (ESA s. 45(1)), Alberta and New Brunswick by days worked.
+   * `countHolidayQualifyingDays` is what produces it.
+   */
   daysWorked: number;
-  /** Days worked in the QUALIFYING window, when the rule declares one that is
-   *  a different length from the pay window (BC: 15 of the 30 days before). */
+  /**
+   * The same count over the QUALIFYING window, when the rule declares one that
+   * is a different length from the pay window (BC: 15 of the 30 days before) —
+   * and, in Nova Scotia, under a different predicate as well (s. 42(1)'s
+   * "entitled to receive pay" against the averaging arm's "worked").
+   */
   daysWorkedInQualifyingWindow?: number;
   /** Calendar days between the hire date and the holiday; null when unknown. */
   employmentDays: number | null;
@@ -527,8 +609,19 @@ export interface HolidayPayContext {
   commissionEarnings?: HolidayLookbackEarnings;
   /** Hours actually worked ON the holiday. */
   hoursWorked: string;
-  /** Regular hourly rate, for the premium. */
+  /** Regular hourly rate, for the premium and for a `normal_day` basis. */
   hourlyRate: string;
+  /**
+   * The employee's normal work pattern on the day of the holiday
+   * (engine/src/work-schedules.ts), or null when none is recorded.
+   *
+   * Only a `normal_day` basis reads it, and only that basis is affected by its
+   * absence — every lookback rule computes from committed stubs exactly as it
+   * always did, whether or not a schedule exists. `null` and "not supplied"
+   * both mean UNKNOWN, and a rule that needs it refuses by name rather than
+   * assuming a working day of any length.
+   */
+  schedule?: ResolvedWorkSchedule | null;
   /**
    * The employer asserting the last-and-first test was failed — the employee
    * was absent WITHOUT consent on the last scheduled shift before or the first
@@ -551,6 +644,16 @@ export interface HolidayPayResult {
   /** Plain-language derivation, carried onto the stub line for the audit
    *  trail: an employee who queries their holiday pay gets the arithmetic. */
   basis: string;
+}
+
+/** The statute's own words for a day-counting predicate, for the stub trace and
+ *  for a refusal an employee will read. */
+export function describeDayCounting(counting: PayrollHolidayDayCounting): string {
+  switch (counting) {
+    case "worked": return "worked";
+    case "worked_or_earned_wages": return "worked or earned wages";
+    case "entitled_to_pay": return "was paid, or entitled to be paid";
+  }
 }
 
 /** Exact `amount ÷ divisor`, rounded once, in BigInt from end to end. */
@@ -631,12 +734,15 @@ export function computeStatutoryHolidayPay(
     }
   }
   if (qualifying.minDaysWorkedInWindow) {
-    const { days, ofDays } = qualifying.minDaysWorkedInWindow;
+    const { days, ofDays, counting } = qualifying.minDaysWorkedInWindow;
     const worked = context.daysWorkedInQualifyingWindow ?? context.daysWorked;
     if (worked < days) {
+      // The reason quotes the jurisdiction's OWN sentence. An employee refused
+      // in Nova Scotia was not "not working enough"; they were not entitled to
+      // pay on enough days, which is a different fact and a different appeal.
       return deny(
-        `worked or earned wages on ${worked} of the ${ofDays} days before the holiday; `
-        + `${days} are required`,
+        `${describeDayCounting(counting)} on ${worked} of the ${ofDays} days before the `
+        + `holiday; ${days} are required`,
       );
     }
   }
@@ -647,10 +753,61 @@ export function computeStatutoryHolidayPay(
   }
 
   // --- the day's pay -------------------------------------------------------
-  let holidayPay: string;
-  let basis: string;
-  const basisRule = rule.basis;
+  let holidayPay: string | null = null;
+  let basis = "";
+  /** Set when a `normal_day` rule fell through to the statute's own
+   *  varying-hours arm, so the derivation says WHY it took the average. */
+  let irregularBecause: string | null = null;
 
+  // A `normal_day` basis pays the wages the employee would have earned on the
+  // day itself, from their work schedule (engine/src/work-schedules.ts) — not
+  // from any quantity of prior earnings. It is tried first, and where the
+  // statute's own condition for it fails ("where the hours of work or wages
+  // vary") it falls through to the lookback arm the same statute declares.
+  if (rule.basis.kind === "normal_day") {
+    const schedule = context.schedule ?? null;
+    if (!schedule) {
+      // The one refusal this basis exists to make. There is no default working
+      // day: eight hours, or a fifth of forty, is a number indistinguishable on
+      // the stub from a correct one and wrong in the bank. Note that "their
+      // hours vary" is a RECORDABLE answer, not a missing one — which is why
+      // this refusal is always actionable.
+      throw new PayrollHolidayError(
+        `${context.employee}: ${context.holiday.name} pays the wages of the employee's normal `
+        + `working day, and no work schedule is in force on ${context.holiday.date} — record the `
+        + "hours and days they are normally scheduled to work, or record that their hours vary. "
+        + "This calculation will not assume a working day it has not been told about",
+      );
+    }
+    const perWeek = scheduledHoursPerWeek(schedule);
+    const belowStandard = rule.basis.minWeeklyHours !== undefined
+      && (perWeek === null || cmp(perWeek, String(rule.basis.minWeeklyHours)) < 0);
+    const normalHours = normalWorkdayHours(schedule);
+    if (belowStandard) {
+      irregularBecause = `the employee works ${perWeek ?? "irregular"} hours a week, less than the `
+        + `${rule.basis.minWeeklyHours} the jurisdiction treats as standard`;
+    } else if (normalHours === null) {
+      irregularBecause = `the employee's hours vary (${describeWorkSchedule(schedule)})`;
+    } else if (context.paidOnCommission === true) {
+      irregularBecause = "the employee is paid on commission, so their daily wages vary";
+    } else if (cmp(context.hourlyRate, "0") <= 0) {
+      throw new PayrollHolidayError(
+        `${context.employee}: ${context.holiday.name} pays the wages of their normal working day `
+        + "but no regular rate of pay is recorded — set the employee's pay rate before calculating",
+      );
+    } else {
+      // ONE normal working day, not the calendar day the holiday landed on: a
+      // holiday falling on the employee's day off is a substitute day off with
+      // pay, so the same day's wages are owed either way.
+      holidayPay = roundMoney(mul(context.hourlyRate, normalHours), 2);
+      basis = `${normalHours} hours — one normal working day (${describeWorkSchedule(schedule)}) `
+        + `— × ${context.hourlyRate} regular rate`;
+    }
+  }
+
+  // The lookback arm: the rule's own basis, or a `normal_day` rule's declared
+  // fallback for an employee with no normal day.
+  const basisRule = holidayPayLookbackBasis(rule.basis);
   const commission = basisRule.kind === "fixed_divisor" ? basisRule.commission : undefined;
   const useCommission = Boolean(
     commission
@@ -658,7 +815,9 @@ export function computeStatutoryHolidayPay(
     && (context.employmentWeeks ?? 0) >= commission.minWeeksEmployed,
   );
 
-  if (basisRule.kind === "fixed_divisor" && useCommission && commission) {
+  if (holidayPay !== null) {
+    // Already settled by the normal-day arm.
+  } else if (basisRule.kind === "fixed_divisor" && useCommission && commission) {
     const earnings = context.commissionEarnings ?? context.earnings;
     const base = holidayPayBase(earnings, rule.include);
     holidayPay = divideExact(base, commission.divisor);
@@ -679,6 +838,7 @@ export function computeStatutoryHolidayPay(
     const window = basisRule.lookbackDays !== undefined
       ? `${basisRule.lookbackDays} days`
       : `${basisRule.lookbackWeeks} weeks`;
+    const counted = describeDayCounting(basisRule.counting);
     if (context.daysWorked <= 0) {
       // An average-day jurisdiction with a zero denominator is undefined, not
       // zero. Paying nothing here would be a real entitlement quietly lost, so
@@ -688,13 +848,16 @@ export function computeStatutoryHolidayPay(
       }
       throw new PayrollHolidayError(
         `${context.employee}: ${context.holiday.name} pays an average day's wage but no days `
-        + `worked are recorded in the ${window} before it, while ${base} was earned — `
-        + "the average is undefined; correct the timesheet before calculating",
+        + `on which the employee ${counted} are recorded in the ${window} before it, while `
+        + `${base} was earned — the average is undefined; correct the timesheet before `
+        + "calculating",
       );
     }
     holidayPay = divideExact(base, context.daysWorked);
-    basis = `${base} earned in the ${window} before the holiday ÷ ${context.daysWorked} days worked`;
+    basis = `${base} earned in the ${window} before the holiday ÷ ${context.daysWorked} `
+      + `days ${counted}`;
   }
+  if (irregularBecause !== null) basis = `${irregularBecause}, so ${basis}`;
 
   // --- premium for hours actually worked -----------------------------------
   let premiumPay = "0";
@@ -778,12 +941,17 @@ export async function resolveStatutoryHolidayPay(
   tx: Pick<typeof db, "execute">,
   input: StatutoryHolidayPayInput,
 ): Promise<StatutoryHolidayEarningLine[]> {
-  const rule = statutoryHolidayPayRule(input.jurisdiction);
-  if (rule === null) return [];
+  // Whether a jurisdiction mandates holiday pay AT ALL is date-independent, so
+  // it is asked once and before anything is loaded. WHICH formula is in force
+  // is a per-holiday question and is asked below, against the holiday's date.
+  if (payrollJurisdiction(input.jurisdiction).holidayPay === null) return [];
 
-  const holidays = (
-    await observedHolidays(input.orgId, input.jurisdiction, input.periodStart, input.periodEnd, tx)
-  ).filter((holiday) => holiday.paid);
+  const overrides = await loadHolidayOverrides(tx, input.orgId, input.jurisdiction);
+  const observedIn = (from: string, to: string) =>
+    resolveObservedHolidays({ jurisdiction: input.jurisdiction, from, to, overrides });
+
+  const holidays = observedIn(input.periodStart, input.periodEnd)
+    .filter((holiday) => holiday.paid);
   if (holidays.length === 0) return [];
 
   const hire = (await tx.execute(sql`
@@ -800,21 +968,65 @@ export async function resolveStatutoryHolidayPay(
   const lines: StatutoryHolidayEarningLine[] = [];
   let sequence = 45;
   for (const holiday of holidays) {
+    // The edition of the statute IN FORCE ON THE HOLIDAY — never today's, and
+    // never the current one applied backwards. Refuses by name where the
+    // governing statute has not been transcribed.
+    const rule = statutoryHolidayPayRule(input.jurisdiction, holiday.date)!;
     const window = lookbackWindow(rule, holiday.date);
     const earnings = await lookbackEarnings(tx, input, window);
-    const daysWorked = await daysWithWages(tx, input, window);
+    // The QUALIFYING window is day-based in every statute that declares one
+    // ("the 30 calendar days preceding the statutory holiday"; "30 days worked
+    // in the preceding 12 months"), including the jurisdictions whose PAY
+    // window ends at the preceding week. The two boundaries are separate
+    // sentences and are kept separate.
     const qualifyingWindow = rule.qualifying.minDaysWorkedInWindow
       ? {
           from: shiftDays(holiday.date, -rule.qualifying.minDaysWorkedInWindow.ofDays),
           to: shiftDays(holiday.date, -1),
         }
       : window;
-    const daysWorkedInQualifyingWindow = rule.qualifying.minDaysWorkedInWindow
-      ? await daysWithWages(tx, input, qualifyingWindow)
-      : daysWorked;
-    const commissionWindow = rule.basis.kind === "fixed_divisor" && rule.basis.commission
-      ? weeksBefore(holiday.date, rule.basis.commission.lookbackWeeks)
+    const lookbackBasis = holidayPayLookbackBasis(rule.basis);
+    const commissionWindow = lookbackBasis.kind === "fixed_divisor" && lookbackBasis.commission
+      ? commissionWindowOf(rule, holiday.date, lookbackBasis.commission.lookbackWeeks)
       : null;
+
+    // Which days count is the rule's own declaration, twice over: the
+    // denominator of an average-day basis and the numerator of a days-in-window
+    // qualifier are separate sentences in separate sections, and British
+    // Columbia is the jurisdiction where they happen to be the same one.
+    const payCounting: PayrollHolidayDayCounting =
+      lookbackBasis.kind === "average_day" ? lookbackBasis.counting : "worked";
+    const qualifyingCounting = rule.qualifying.minDaysWorkedInWindow?.counting ?? payCounting;
+    /** True only where a statute counts more than the days actually worked. */
+    const needsPaidDays = payCounting !== "worked" || qualifyingCounting !== "worked";
+
+    // Resolved as at the HOLIDAY's date, never today: an employee who moved
+    // from full-time to part-time in March must still have January's holiday
+    // paid on January's pattern. Loaded only where a declaration actually reads
+    // it — a `normal_day` basis, or a day count broader than "worked" — so a
+    // jurisdiction that divides a lookback by days worked does no work here.
+    const schedule = rule.basis.kind === "normal_day" || needsPaidDays
+      ? await resolveWorkSchedule(tx, input.orgId, input.employeePartyId, holiday.date)
+      : null;
+
+    const evidenceWindow = {
+      from: window.from < qualifyingWindow.from ? window.from : qualifyingWindow.from,
+      to: window.to > qualifyingWindow.to ? window.to : qualifyingWindow.to,
+    };
+    const evidence = await loadHolidayDayEvidence(
+      tx, input, evidenceWindow,
+      needsPaidDays ? observedIn(evidenceWindow.from, evidenceWindow.to) : [],
+      needsPaidDays,
+    );
+    const daysWorked = countHolidayQualifyingDays({
+      employee: input.employeeName, window, counting: payCounting, evidence, schedule,
+    });
+    const daysWorkedInQualifyingWindow = rule.qualifying.minDaysWorkedInWindow
+      ? countHolidayQualifyingDays({
+          employee: input.employeeName, window: qualifyingWindow,
+          counting: qualifyingCounting, evidence, schedule,
+        })
+      : daysWorked;
 
     const result = computeStatutoryHolidayPay(rule, {
       employee: input.employeeName,
@@ -829,6 +1041,7 @@ export async function resolveStatutoryHolidayPay(
         : undefined,
       hoursWorked: await hoursOn(tx, input, holiday.date),
       hourlyRate: input.hourlyRate,
+      schedule,
     });
     if (!result.qualified) continue;
 
@@ -853,26 +1066,65 @@ export async function resolveStatutoryHolidayPay(
   return lines;
 }
 
-/** [from, to] of the rule's lookback, ending the day before the holiday. */
+/**
+ * The last day of a rule's lookback window — the ONE place the two statutory
+ * wordings are told apart.
+ *
+ * `day_before` is "the four weeks immediately preceding the general holiday":
+ * the window runs up to the day before the holiday itself.
+ *
+ * `week_before` is "the four-week period immediately preceding the WEEK in
+ * which the general holiday occurs": the window stops at the end of the week
+ * BEFORE the holiday's own week, so the part-week the holiday sits in is
+ * excluded entirely. The two differ by however far into its week the holiday
+ * falls — nothing at all when it lands on the first day of the week, six days
+ * when it lands on the last — and for anyone whose pay varies those six days
+ * are money.
+ */
+export function lookbackWindowEnd(
+  rule: PayrollHolidayPayRule,
+  holidayDate: string,
+): string {
+  const boundary = rule.lookbackEnds;
+  if (boundary.kind === "day_before") return shiftDays(holidayDate, -1);
+  // Back up to the first day of the holiday's own week, then take the day
+  // before it: the last day of the preceding week.
+  const intoWeek = (weekdayOf(holidayDate) - boundary.weekStartsOn + 7) % 7;
+  return shiftDays(holidayDate, -(intoWeek + 1));
+}
+
+/**
+ * [from, to] of the rule's lookback, ending where the rule's own statute says.
+ *
+ * A `normal_day` rule reports the window of its varying-hours arm: whether it
+ * will need the lookback is not known until the employee's schedule has been
+ * resolved, so the earnings are always loaded and simply go unused when the
+ * normal day answers.
+ */
 export function lookbackWindow(
   rule: PayrollHolidayPayRule,
   holidayDate: string,
 ): { from: string; to: string } {
-  switch (rule.basis.kind) {
+  const basis = holidayPayLookbackBasis(rule.basis);
+  const to = lookbackWindowEnd(rule, holidayDate);
+  switch (basis.kind) {
     case "fixed_divisor":
     case "percent_of_earnings":
-      return weeksBefore(holidayDate, rule.basis.lookbackWeeks);
+      return spanBefore(to, basis.lookbackWeeks * 7);
     case "average_day":
-      return rule.basis.lookbackDays !== undefined
-        ? { from: shiftDays(holidayDate, -rule.basis.lookbackDays), to: shiftDays(holidayDate, -1) }
-        : weeksBefore(holidayDate, rule.basis.lookbackWeeks ?? 4);
+      return spanBefore(to, basis.lookbackDays ?? (basis.lookbackWeeks ?? 4) * 7);
   }
 }
 
-const weeksBefore = (date: string, weeks: number) => ({
-  from: shiftDays(date, -(weeks * 7)),
-  to: shiftDays(date, -1),
+/** The `days`-long window ending on (and including) `to`. */
+const spanBefore = (to: string, days: number) => ({
+  from: shiftDays(to, -(days - 1)),
+  to,
 });
+
+/** The commission earner's own window, on the same boundary as the rule's. */
+const commissionWindowOf = (rule: PayrollHolidayPayRule, holidayDate: string, weeks: number) =>
+  spanBefore(lookbackWindowEnd(rule, holidayDate), weeks * 7);
 
 /** Earnings from committed stubs, pro-rated where a pay period straddles the
  *  window. Categories follow the components' system keys, which is what makes
@@ -928,21 +1180,202 @@ async function lookbackEarnings(
   return totals;
 }
 
-/** Distinct days with approved time inside the window — the denominator of an
- *  average-day rule and the numerator of BC's 15-of-30 test. */
-async function daysWithWages(
+// ---------------------------------------------------------------------------
+// "Worked, or earned wages, on a day"
+// ---------------------------------------------------------------------------
+
+/**
+ * The DAY-RESOLVED evidence a statute's day count is built from.
+ *
+ * WHAT THIS DATA MODEL CAN AND CANNOT SEE, because the answer decides money.
+ *
+ * Exactly one thing in this product is dated to a DAY: `time_entries.worked_on`.
+ * Earnings are recorded per PAY PERIOD — `pay_stub_lines` carries no date at
+ * all, only its stub's period — and an entitlement draw-down is a single
+ * `entitlement_ledger.movement_date` (the run's date, not the days of leave)
+ * with no hours on it for a bank payout. So "which days did this employee earn
+ * wages on" cannot be answered from the ledger directly, and inventing an
+ * allocation would put a made-up day count into a divisor.
+ *
+ * What CAN be asserted honestly:
+ *
+ *  1. `workedOn` — approved time in the window. Days worked, and also days of
+ *     paid leave for the many employers who book leave as a timesheet line
+ *     against a leave time type (which is how an hourly employee's vacation is
+ *     already recorded and already counted).
+ *  2. `paidPeriodsWithoutHours` — a committed pay period with positive earnings
+ *     and NO hours on any earning line. That is pay FOR THE PERIOD rather than
+ *     for hours: a salary, or a period spent entirely on paid leave drawn from
+ *     a bank. The "no hours anywhere" test is what keeps it honest — a stub
+ *     carrying hours was paid for those hours, which are already day-resolved
+ *     above, so nothing is added and nothing is double-counted. It is also what
+ *     stops a 4%-on-every-cheque vacation line from making every hourly
+ *     employee's whole period qualify.
+ *  3. `paidHolidays` — observed paid statutory holidays inside the window that
+ *     the employee was actually paid statutory holiday pay for. BC's own
+ *     guideline counts these expressly, and its worked example ($3,200 ÷ 20)
+ *     reaches twenty by adding a paid Christmas Day to nineteen worked days.
+ *
+ * The gap this leaves, stated rather than hidden: a pay period that MIXES
+ * worked days with untimed paid absence contributes only its worked days,
+ * because the model cannot say which of the remaining days the absence covered.
+ * Booking the leave as time entries is the recording practice that closes it,
+ * and it is the practice the product already supports.
+ */
+export interface HolidayDayEvidence {
+  /** Distinct dates with approved time (hours > 0). */
+  workedOn: readonly string[];
+  /** Committed periods paid for the period rather than for hours. */
+  paidPeriodsWithoutHours: readonly { from: string; to: string }[];
+  /** Dates of observed paid holidays the employee was paid for. */
+  paidHolidays: readonly string[];
+}
+
+export const emptyHolidayDayEvidence = (): HolidayDayEvidence => ({
+  workedOn: [], paidPeriodsWithoutHours: [], paidHolidays: [],
+});
+
+/**
+ * How many days of `window` satisfy the statute's own predicate — PURE, so the
+ * three sentences are verifiable side by side with no database.
+ *
+ * `worked` is exactly what this engine has always counted. The two broader
+ * predicates add the paid days above; a paid period with no hours is expanded
+ * to the employee's NORMAL WORKING DAYS inside it, from `work_schedules`,
+ * because "days on which wages were earned" is not every calendar day — BC's
+ * guideline reaches twenty in thirty, not thirty in thirty, and a Sunday nobody
+ * was scheduled for is not a day wages were earned on.
+ *
+ * With no schedule recorded it REFUSES rather than guess a working week. That
+ * is the same refusal a `normal_day` basis already makes and for the same
+ * reason: five days, or a fifth of a period, is a number indistinguishable on
+ * the stub from a correct one. It can only fire where an untimed paid period
+ * actually overlaps the window — every employee whose time is on a timesheet is
+ * unaffected, and computes exactly as before.
+ */
+export function countHolidayQualifyingDays(input: {
+  /** Named in the refusal. */
+  employee: string;
+  window: { from: string; to: string };
+  counting: PayrollHolidayDayCounting;
+  evidence: HolidayDayEvidence;
+  /** The pattern in force on the holiday; null when none is recorded. */
+  schedule?: ResolvedWorkSchedule | null;
+}): number {
+  const { window, counting, evidence } = input;
+  const inWindow = (date: string) => date >= window.from && date <= window.to;
+  const days = new Set<string>(evidence.workedOn.filter(inWindow));
+  if (counting === "worked") return days.size;
+
+  // `worked_or_earned_wages` (BC ESA ss. 44–45) and `entitled_to_pay` (NS
+  // Labour Standards Code s. 42(1)) are DIFFERENT SENTENCES and are declared
+  // separately, but they resolve to the same day set here, and the honest
+  // reason is that the one place they diverge is invisible by construction:
+  // Nova Scotia reaches pay the employer OWED and never recorded, and nothing
+  // an employer never recorded is in this database. When something does record
+  // it — an unpaid-wages claim, an accrued-but-unpaid leave day — the widening
+  // is a branch on `counting` here and not a re-reading of any jurisdiction.
+  for (const date of evidence.paidHolidays) if (inWindow(date)) days.add(date);
+
+  for (const period of evidence.paidPeriodsWithoutHours) {
+    const from = period.from > window.from ? period.from : window.from;
+    const to = period.to < window.to ? period.to : window.to;
+    if (from > to) continue;
+    const schedule = input.schedule ?? null;
+    if (!schedule || schedule.pattern === "varies") {
+      throw new PayrollHolidayError(
+        `${input.employee}: this jurisdiction counts the days on which the employee `
+        + `${describeDayCounting(counting).toUpperCase()}, and ${from} to ${to} was paid with no `
+        + "hours recorded at all — a salary, or leave paid from a bank. Which of those days were "
+        + "working days is not something this "
+        + (schedule ? "employee's 'hours vary' schedule can answer" : "calculation has been told")
+        + ". Record the hours and days they are normally scheduled to work, or record the leave "
+        + "as time entries. It will not assume a working week it has not been told about",
+      );
+    }
+    for (let cursor = from; cursor <= to; cursor = shiftDays(cursor, 1)) {
+      if (isScheduledOn(schedule, cursor) === true) days.add(cursor);
+    }
+  }
+  return days.size;
+}
+
+/**
+ * Every day-resolved fact for [from, to], in one pass.
+ *
+ * Loaded for the WIDEST window any of the rule's tests needs, then sliced by
+ * `countHolidayQualifyingDays` — a rule with a 30-day qualifier and a 4-week
+ * pay window makes one round trip, not two.
+ */
+async function loadHolidayDayEvidence(
   tx: Pick<typeof db, "execute">,
   input: StatutoryHolidayPayInput,
   window: { from: string; to: string },
-): Promise<number> {
-  const rows = (await tx.execute(sql`
-    select count(distinct worked_on)::int as days
+  /** The observed calendar over the same window; empty when only worked days
+   *  are being counted, in which case nothing below is read. */
+  observedInWindow: readonly ObservedHoliday[],
+  /** False when every predicate in play is `worked` — a jurisdiction that
+   *  counts only days worked does not pay for the stub scan. */
+  needsPaidDays: boolean,
+): Promise<HolidayDayEvidence> {
+  const worked = (await tx.execute(sql`
+    select distinct worked_on
       from time_entries
      where org_id = ${input.orgId} and employee_party_id = ${input.employeePartyId}
        and status = 'approved' and hours > 0
        and worked_on between ${window.from} and ${window.to}
-  `)) as unknown as { rows: { days: number }[] };
-  return Number(rows.rows[0]?.days ?? 0);
+  `)) as unknown as { rows: { worked_on: string | Date }[] };
+
+  const day = (value: string | Date) =>
+    String(value instanceof Date ? value.toISOString() : value).slice(0, 10);
+  const workedOn = worked.rows.map((row) => day(row.worked_on));
+  if (!needsPaidDays) {
+    return { workedOn, paidPeriodsWithoutHours: [], paidHolidays: [] };
+  }
+
+  // One row per committed stub overlapping the window, with the hours and the
+  // earnings on it. The classification is done here rather than in SQL so the
+  // rule ("paid for the period, not for hours") is readable beside the comment
+  // that justifies it.
+  const stubs = (await tx.execute(sql`
+    select r.period_start, r.period_end,
+           coalesce(sum(case when l.kind = 'earning' then l.hours end), 0)::text as hours,
+           coalesce(sum(case when l.kind = 'earning' then l.amount end), 0)::text as earnings,
+           coalesce(sum(case when l.kind = 'earning'
+                              and c.system_key = 'stat_holiday' then l.amount end), 0)::text
+             as holiday_pay
+      from pay_stubs s
+      join pay_runs r on r.document_id = s.pay_run_document_id and r.run_status = 'committed'
+      left join pay_stub_lines l on l.stub_id = s.id
+      left join pay_components c on c.id = l.component_id
+     where s.org_id = ${input.orgId} and s.employee_party_id = ${input.employeePartyId}
+       and s.pay_run_document_id <> ${input.excludeDocumentId}
+       and r.period_start <= ${window.to} and r.period_end >= ${window.from}
+     group by s.id, r.period_start, r.period_end
+  `)) as unknown as {
+    rows: {
+      period_start: string | Date; period_end: string | Date;
+      hours: string; earnings: string; holiday_pay: string;
+    }[];
+  };
+
+  const paidPeriodsWithoutHours: { from: string; to: string }[] = [];
+  const holidayPaidPeriods: { from: string; to: string }[] = [];
+  for (const row of stubs.rows) {
+    const period = { from: day(row.period_start), to: day(row.period_end) };
+    if (cmp(row.hours, "0") === 0 && cmp(row.earnings, "0") > 0) {
+      paidPeriodsWithoutHours.push(period);
+    }
+    if (cmp(row.holiday_pay, "0") !== 0) holidayPaidPeriods.push(period);
+  }
+
+  const paidHolidays = observedInWindow
+    .filter((holiday) => holiday.paid)
+    .filter((holiday) =>
+      holidayPaidPeriods.some((p) => p.from <= holiday.date && p.to >= holiday.date))
+    .map((holiday) => holiday.date);
+
+  return { workedOn, paidPeriodsWithoutHours, paidHolidays };
 }
 
 /** Approved hours worked on the holiday itself. */
@@ -984,14 +1417,21 @@ export interface UndeclaredJurisdictionHolidayConflict {
  * The undeclared jurisdiction has no declared calendar either, so "is a
  * holiday in the period" is probed against the MANDATORY days of the declared
  * EMPLOYMENT calendars in the same country (never a tax administration's
- * office calendar). A date must be observed by at least TWO of them — or all
- * of them, when the pack declares fewer — before it trips the gate:
- * provincial calendars overlap heavily on the days that matter (Manitoba's
- * Louis Riel Day is the third Monday of February, the same day three declared
- * provinces call Family Day; its Terry Fox Day shares the first Monday of
- * August with BC Day and Saskatchewan Day), while a genuinely one-province
- * day (Quebec's Saint-Jean-Baptiste) says nothing about anywhere else and
- * must not block it.
+ * office calendar). A date must be observed by AT LEAST HALF of them before it
+ * trips the gate: employment calendars overlap heavily on the days that matter
+ * (the third Monday of February is Family Day in four provinces, Louis Riel
+ * Day in Manitoba, Islander Day in Prince Edward Island and Heritage Day in
+ * Nova Scotia — one date, four names, and an undeclared neighbour almost
+ * certainly observes it too), while a day only one or two of them keep says
+ * nothing about anywhere else and must not block.
+ *
+ * The fraction is deliberately proportional and not a constant. It was a
+ * constant two, which discriminated well against six declared calendars and
+ * stopped discriminating at all against fourteen: National Indigenous Peoples
+ * Day binds exactly two jurisdictions (the Northwest Territories and Yukon)
+ * and June 21 would have blocked every undeclared employment in the country.
+ * A threshold that has to be re-tuned every time a jurisdiction is transcribed
+ * is not a threshold.
  *
  * When the gate trips, the operator either declares the jurisdiction or turns
  * the feature off — both loud, neither a silent zero on what is probably a
@@ -1010,7 +1450,7 @@ export function undeclaredJurisdictionHolidayConflict(input: {
   if (payrollJurisdictionDeclared(jurisdiction)) return null;
 
   const siblings = employmentJurisdictionsOf(country);
-  const threshold = Math.min(2, siblings.length);
+  const threshold = Math.max(1, Math.ceil(siblings.length / 2));
   const byDate = new Map<string, { observers: number; names: Map<string, number> }>();
   for (const declared of siblings) {
     for (const holiday of resolveObservedHolidays({ jurisdiction: declared.key, from, to })) {
