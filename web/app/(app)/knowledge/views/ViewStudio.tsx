@@ -35,11 +35,15 @@ export function ViewStudio({
   canCreate,
   canAdmin,
   company,
+  hiddenEntityKeys = [],
 }: {
   view: ViewRow
   canCreate: boolean
   canAdmin: boolean
   company: string
+  /** Catalog entities this user may not query (payroll wages) — hidden from
+   *  the source picker, exactly as the report builder hides them. */
+  hiddenEntityKeys?: string[]
 }) {
   const t = useTranslations('knowledge.views.studio')
   const tb = useTranslations('reports.custom.builder')
@@ -214,7 +218,7 @@ export function ViewStudio({
             <div className={field}>
               <Label>{tb('source')}</Label>
               <Select value={query.entity} onChange={(e) => changeEntity(e.target.value)} disabled={!canCreate}>
-                {REPORT_ENTITIES.map((e) => (
+                {REPORT_ENTITIES.filter((e) => !hiddenEntityKeys.includes(e.key)).map((e) => (
                   <option key={e.key} value={e.key}>
                     {tReports(`catalog.entities.${e.key}.label`)}
                   </option>

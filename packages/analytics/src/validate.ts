@@ -4,6 +4,7 @@
 // keeps the persisted shape honest. Pure — safe on client or server.
 
 import { getSource } from './catalog'
+import { migrateLegacyQuery } from './legacy'
 import { sourceField } from './semantic'
 import { FILTER_OPS } from './types'
 import type { InsightCompileErrorCode } from './compile'
@@ -37,7 +38,10 @@ function fail(msg: string, code?: InsightCompileErrorCode, subject?: string): ne
  *  success (narrowed). */
 export function validateInsightQuery(input: unknown): InsightQuery {
   if (!input || typeof input !== 'object') fail('query must be an object')
-  const q = input as Record<string, unknown>
+  // Cards saved against the pre-unification insights catalog still name a few
+  // renamed fields (and legacy 'yes'/'active' boolean codes) — rewrite those
+  // onto the current catalog before anything is judged unknown.
+  const q = migrateLegacyQuery(input as InsightQuery) as unknown as Record<string, unknown>
 
   if (typeof q.source !== 'string') fail('query.source is required')
   const source = getSource(q.source)

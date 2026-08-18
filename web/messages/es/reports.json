@@ -519,6 +519,8 @@
         "class": "Clase",
         "memo": "Memo",
         "amount": "Importe (base)",
+        "debit": "Débito",
+        "credit": "Crédito",
         "currency": "Moneda",
         "txn_amount": "Importe (transacción)",
         "quantity": "Cantidad",
@@ -740,7 +742,9 @@
       "written_off": "Dado de baja",
       "sales": "Ventas",
       "purchases": "Compras",
-      "both": "Ambos"
+      "both": "Ambos",
+      "true": "Sí",
+      "false": "No"
     }
   },
   "operators": {
