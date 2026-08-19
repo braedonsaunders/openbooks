@@ -671,6 +671,7 @@ test("NetSuite account mappings accept explicit custom IDs without connector con
       timeEntryTypeField: undefined,
       timeEntryFieldTicketNumberField: "custcol_field_ticket",
       projectStatuses: { "substantially complete": "substantially_complete" },
+      projectBillingTypes: undefined,
     },
   );
   assert.throws(
@@ -683,6 +684,21 @@ test("NetSuite account mappings accept explicit custom IDs without connector con
   );
   assert.throws(
     () => parseNetSuiteMappings('{"projectStatuses":{"Won":"won"}}'),
+    /invalid target/,
+  );
+});
+
+test("NetSuite job billing types read stock unless the account maps them", () => {
+  // NetSuite's stock enum: time-and-materials plus two fixed-bid members. An
+  // account that overloads a fixed-bid member for budget/do-not-exceed work
+  // says so on its own connection — the shared connector must not assume it.
+  assert.equal(parseNetSuiteMappings("{}").projectBillingTypes, undefined);
+  assert.deepEqual(
+    parseNetSuiteMappings('{"projectBillingTypes":{"fbm":"not_to_exceed"}}').projectBillingTypes,
+    { FBM: "not_to_exceed" },
+  );
+  assert.throws(
+    () => parseNetSuiteMappings('{"projectBillingTypes":{"FBM":"budget_dne"}}'),
     /invalid target/,
   );
 });
