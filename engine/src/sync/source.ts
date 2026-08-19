@@ -141,6 +141,7 @@ export interface SourceProjectCommercialState {
     | "time_and_materials"
     | "fixed_price"
     | "cost_plus"
+    | "not_to_exceed"
     | null;
   /** Source contract/ceiling amount; null means the source has no such fact. */
   contractValue: string | null;
