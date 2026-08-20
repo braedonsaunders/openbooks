@@ -2759,9 +2759,9 @@ async function calculateStub(
       provincialClaim: emp.provincial_claim_amount ?? undefined,
       provincialClaimCode: emp.provincial_claim_amount == null && emp.provincial_claim_code != null
         ? Number(emp.provincial_claim_code) : undefined,
-      taxExempt: emp.tax_exempt === "true" || emp.tax_exempt === true as unknown as string,
-      cppExempt: emp.cpp_exempt === "true" || emp.cpp_exempt === true as unknown as string,
-      eiExempt: emp.ei_exempt === "true" || emp.ei_exempt === true as unknown as string,
+      taxExempt: bool(emp.tax_exempt),
+      cppExempt: bool(emp.cpp_exempt),
+      eiExempt: bool(emp.ei_exempt),
       ytd: {
         cpp: ytd.cpp, cpp2: ytd.cpp2, ei: ytd.ei, qpip: ytd.qpip,
         pensionable: ytd.pensionable, nonPeriodic: ytd.non_periodic,
@@ -2799,7 +2799,7 @@ async function calculateStub(
         // TP-1016-V authorized annual credits (variable K1) — the provincial
         // analogue field, dead for QC under T4127 (no provincial T2 exists).
         authorizedAnnualCredits: emp.authorized_provincial_credits ?? undefined,
-        taxExempt: emp.tax_exempt === "true" || emp.tax_exempt === true as unknown as string,
+        taxExempt: bool(emp.tax_exempt),
         ytd: { nonPeriodic: ytd.non_periodic, csb: ytd.qc_csb },
       });
       pushStatutory("qc_income_tax", "deduction", "Québec income tax", qc.totalTax, 115);

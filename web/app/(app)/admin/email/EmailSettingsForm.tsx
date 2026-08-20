@@ -36,8 +36,9 @@ export function EmailSettingsForm({ initial }: { initial: View }) {
   async function save() {
     setSaving(true)
     try {
-      const body: Record<string, unknown> = { ...v }
-      delete (body as { hasSecret?: unknown }).hasSecret
+      // `hasSecret` is a read-only flag the API reports back; never send it.
+      const { hasSecret: _hasSecret, ...rest } = v
+      const body: Record<string, unknown> = { ...rest }
       if (replaceSecret) body.secret = secret.trim() ? secret.trim() : null
       const res = await fetch('/api/admin/email', {
         method: 'PUT',
