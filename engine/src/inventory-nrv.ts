@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { sql } from "drizzle-orm";
 import { db } from "./db.ts";
-import { cmp, fromUnits, mulRate, roundDiv, toUnits } from "./money.ts";
+import { cmp, fromUnits, mul, roundDiv, toUnits } from "./money.ts";
 import { getOnHand, postInventoryEntry } from "./inventory.ts";
 import { orgReportingFramework, type ReportingFramework } from "./reporting-framework.ts";
 
@@ -32,14 +32,13 @@ export class InventoryNrvError extends Error {
 const SCALE = 10_000n;
 const valueAt = (quantityUnits: bigint, rateUnits: bigint): bigint =>
   roundDiv(quantityUnits * rateUnits, SCALE);
-
-interface RemainingLayer {
+type RemainingLayer = {
   id: string;
   source_movement_id: string;
   received_at: string;
   remaining_quantity: string;
   unit_cost: string;
-}
+};
 
 /**
  * Set one layer's remaining value to exactly `targetUnits` (4dp money units).
@@ -145,35 +144,33 @@ async function remainingLayers(
   itemId: string,
   stockLocationId: string,
 ): Promise<RemainingLayer[]> {
-  const r = (await tx.execute(sql`
+  const r = (await tx.execute<RemainingLayer>(sql`
     select id, source_movement_id, received_at::text as received_at,
            remaining_quantity::text as remaining_quantity, unit_cost::text as unit_cost
       from cost_layers
      where org_id = ${orgId} and item_id = ${itemId} and stock_location_id = ${stockLocationId}
        and remaining_quantity > 0
      order by received_at, id
-     for update`)) as unknown as { rows: RemainingLayer[] };
+     for update`));
   return r.rows;
 }
 
 async function itemAccounts(orgId: string, itemId: string): Promise<{ asset: string; adjustment: string }> {
-  const r = (await db.execute(sql`
+  const r = (await db.execute<{ asset_account_id: string; adjustment_account_id: string }>(sql`
     select asset_account_id, coalesce(adjustment_account_id, cogs_account_id) as adjustment_account_id
-      from item_inventory_profiles where org_id = ${orgId} and item_id = ${itemId}`)) as unknown as {
-    rows: { asset_account_id: string; adjustment_account_id: string }[];
-  };
+      from item_inventory_profiles where org_id = ${orgId} and item_id = ${itemId}`));
   const row = r.rows[0];
   if (!row) throw new InventoryNrvError("item has no inventory profile");
   return { asset: row.asset_account_id, adjustment: row.adjustment_account_id };
 }
 
 async function postingContext(orgId: string, subsidiaryId: string, date: string) {
-  const r = (await db.execute(sql`
+  const r = (await db.execute<{ book_id: string | null; period_id: string | null; currency: string | null }>(sql`
     select (select id from accounting_books where org_id = ${orgId} and is_primary limit 1) as book_id,
            (select id from accounting_periods where org_id = ${orgId} and not is_adjustment
               and starts_on <= ${date} and ends_on >= ${date} limit 1) as period_id,
            (select base_currency from subsidiaries where org_id = ${orgId} and id = ${subsidiaryId}) as currency
-  `)) as unknown as { rows: { book_id: string | null; period_id: string | null; currency: string | null }[] };
+  `));
   const row = r.rows[0];
   if (!row?.book_id) throw new InventoryNrvError("no primary accounting book");
   if (!row.period_id) throw new InventoryNrvError(`no accounting period covers ${date}`);
@@ -221,7 +218,7 @@ export async function writeDownInventoryToNrv(
 
     const onHand = await getOnHand(orgId, input.itemId, input.stockLocationId);
     const previousUnits = toUnits(onHand.value);
-    const targetUnits = toUnits(mulRate(onHand.quantity, input.nrvPerUnit));
+    const targetUnits = toUnits(mul(onHand.quantity, input.nrvPerUnit));
     const deltaUnits = targetUnits - previousUnits;
     if (deltaUnits >= 0n) {
       throw new InventoryNrvError(
@@ -317,14 +314,14 @@ export async function reverseInventoryWritedown(
     const layers = await remainingLayers(tx, orgId, input.itemId, input.stockLocationId);
     if (layers.length === 0) throw new InventoryNrvError("nothing on hand to remeasure");
 
-    const open = (await tx.execute(sql`
+    const open = (await tx.execute<{ id: string; remaining: string }>(sql`
       select id, (amount - reversed_amount)::text as remaining
         from inventory_writedowns
        where org_id = ${orgId} and item_id = ${input.itemId}
          and stock_location_id = ${input.stockLocationId}
          and kind = 'writedown' and amount > reversed_amount
        order by date, created_at
-       for update`)) as unknown as { rows: { id: string; remaining: string }[] };
+       for update`));
     const reversible = open.rows.reduce((a, r) => a + toUnits(r.remaining), 0n);
     if (reversible <= 0n) {
       throw new InventoryNrvError("no unreversed write-down exists for this item and location");
@@ -332,7 +329,7 @@ export async function reverseInventoryWritedown(
 
     const onHand = await getOnHand(orgId, input.itemId, input.stockLocationId);
     const previousUnits = toUnits(onHand.value);
-    const targetByNrv = toUnits(mulRate(onHand.quantity, input.nrvPerUnit));
+    const targetByNrv = toUnits(mul(onHand.quantity, input.nrvPerUnit));
     const requested = targetByNrv - previousUnits;
     if (requested <= 0n) {
       throw new InventoryNrvError("revised net realisable value is not above the carrying amount — nothing to reverse");

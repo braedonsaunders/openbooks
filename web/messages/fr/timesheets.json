@@ -52,6 +52,23 @@
     "lineItemAria": "Article de la ligne {line}",
     "lineBillableAria": "Ligne {line} facturable",
     "lineHoursAria": "Ligne {line}, heures de {day}",
-    "removeLineAria": "Retirer la ligne {line}"
+    "removeLineAria": "Retirer la ligne {line}",
+    "reject": "Rejeter",
+    "rejectTitle": "Rejeter cette feuille de temps",
+    "rejectReasonLabel": "Motif",
+    "rejectPlaceholder": "Que faut-il corriger avant approbation ?",
+    "rejectedToast": "Feuille de temps rejetée",
+    "rejectedBecause": "Rejetée : {reason}",
+    "reopen": "Rouvrir",
+    "reopenTitle": "Rouvrir cette feuille de temps ?",
+    "reopenMessage": "La semaine repasse en brouillon et l'approbation est effacée ; elle devra être approuvée à nouveau.",
+    "reopenedToast": "Feuille de temps rouverte",
+    "lockedBecause": "Cette semaine ne peut plus être rouverte — {count} entrées sont déjà {reasons}.",
+    "lockReason": {
+      "invoiced": "facturées au client",
+      "paid": "payées via une paie",
+      "costed": "comptabilisées",
+      "ticketed": "dans un bon de travail"
+    }
   }
 }

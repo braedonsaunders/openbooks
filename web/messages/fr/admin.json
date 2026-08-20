@@ -801,6 +801,7 @@
     "time_read": "Consulter les feuilles de temps",
     "time_manage": "Saisir et modifier le temps",
     "time_approve": "Approuver les feuilles de temps",
+    "time_reopen": "Rouvrir les feuilles de temps approuvées",
     "records_read": "Consulter les enregistrements personnalisés",
     "records_create": "Créer et modifier des enregistrements personnalisés",
     "records_manage_types": "Concevoir des types d’enregistrements personnalisés",

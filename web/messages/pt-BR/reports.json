@@ -494,6 +494,7 @@
         "label": "Apontamentos de horas",
         "description": "Registros de apontamento de horas — funcionário, data, horas, estado faturável, projeto e status de aprovação."
       },
+      "timesheet_weeks": "Semanas de folha de ponto",
       "fixed_assets": {
         "label": "Ativos imobilizados",
         "description": "O registro de ativos imobilizados — status, aquisição, custo, responsável e dimensões."
@@ -666,6 +667,20 @@
         "memo": "Memorando",
         "created_at": "Criado em",
         "id": "Apontamento de horas (id)"
+      },
+      "timesheet_weeks": {
+        "employee_name": "Funcionário",
+        "week_start": "Semana de",
+        "week_end": "Semana até",
+        "status": "Status",
+        "total_hours": "Horas totais",
+        "billable_hours": "Horas faturáveis",
+        "submitted_by": "Enviado por",
+        "submitted_at": "Enviado em",
+        "approved_by": "Aprovado por",
+        "approved_at": "Aprovado em",
+        "rejection_reason": "Motivo da rejeição",
+        "id": "Semana (id)"
       },
       "fixed_assets": {
         "asset_number": "Nº do ativo",

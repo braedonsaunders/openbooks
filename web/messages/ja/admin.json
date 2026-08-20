@@ -777,6 +777,7 @@
     "time_read": "タイムシートを表示",
     "time_manage": "工数を入力および編集",
     "time_approve": "タイムシートを承認",
+    "time_reopen": "承認済みタイムシートを再開する",
     "records_read": "カスタムレコードを表示",
     "records_create": "カスタムレコードを作成および編集",
     "records_manage_types": "カスタムレコードタイプを設計",

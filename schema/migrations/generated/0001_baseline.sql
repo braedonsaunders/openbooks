@@ -3037,7 +3037,8 @@ declare
     'tax_groups', 'tax_jurisdictions', 'tax_locale_pack_meta',
     'tax_pool_classes', 'tax_pool_periods', 'tax_provision_runs', 'tax_rates',
     'tax_regimes', 'tax_registrations', 'tax_report_lines', 'tax_return_forms',
-    'temporary_differences', 'time_entries', 'time_types', 'trades',
+    'temporary_differences', 'time_entries', 'time_types', 'timesheet_weeks',
+    'trades',
     'transfer_order_lines', 'transfer_orders', 'vendor_pay_application_lines',
     'vendor_pay_applications', 'vendor_retainage_releases', 'wip_holds',
     'wip_prebill_events', 'wip_prebill_lines', 'wip_prebills', 'worker_comp_groups',
@@ -16156,6 +16157,8 @@ CREATE TABLE public.time_entries (
     billing_status text DEFAULT 'unbilled'::text NOT NULL,
     costing_basis text DEFAULT 'actual'::text NOT NULL,
     started_at timestamp with time zone,
+    rejection_reason text,
+    amends_entry_id uuid,
     CONSTRAINT time_entries_billing_status_valid CHECK ((billing_status = ANY (ARRAY['unbilled'::text, 'billed'::text]))),
     CONSTRAINT time_entries_costing_basis_check CHECK ((costing_basis = ANY (ARRAY['actual'::text, 'estimated'::text]))),
     CONSTRAINT time_entries_invoice_link_is_billed CHECK (((invoiced_by_line_id IS NULL) OR (billing_status = 'billed'::text)))
@@ -16212,7 +16215,9 @@ CREATE VIEW openbooks_query.time_entries WITH (security_barrier='true') AS
     bill_rate_line_id,
     billing_status,
     costing_basis,
-    started_at
+    started_at,
+    rejection_reason,
+    amends_entry_id
    FROM public.time_entries
   WHERE (org_id = public.openbooks_query_org_id());
 
@@ -20472,6 +20477,55 @@ ALTER TABLE ONLY public.tax_rate_quotes FORCE ROW LEVEL SECURITY;
 
 
 --
+-- Name: timesheet_weeks; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.timesheet_weeks (
+    id uuid DEFAULT public.uuid_generate_v7() NOT NULL,
+    org_id uuid NOT NULL,
+    employee_party_id uuid NOT NULL,
+    week_start date NOT NULL,
+    status text DEFAULT 'draft'::text NOT NULL,
+    submitted_by uuid,
+    submitted_at timestamp with time zone,
+    approved_by uuid,
+    approved_at timestamp with time zone,
+    rejection_reason text,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    created_by uuid,
+    updated_at timestamp with time zone DEFAULT now() NOT NULL,
+    updated_by uuid,
+    CONSTRAINT timesheet_weeks_status_check CHECK ((status = ANY (ARRAY['draft'::text, 'submitted'::text, 'approved'::text, 'rejected'::text]))),
+    CONSTRAINT timesheet_weeks_week_start_is_sunday CHECK ((EXTRACT(dow FROM week_start) = (0)::numeric))
+);
+
+ALTER TABLE ONLY public.timesheet_weeks FORCE ROW LEVEL SECURITY;
+
+
+--
+-- Name: timesheet_weeks; Type: VIEW; Schema: openbooks_query; Owner: -
+--
+
+CREATE VIEW openbooks_query.timesheet_weeks WITH (security_barrier='true') AS
+ SELECT id,
+    org_id,
+    employee_party_id,
+    week_start,
+    status,
+    submitted_by,
+    submitted_at,
+    approved_by,
+    approved_at,
+    rejection_reason,
+    created_at,
+    created_by,
+    updated_at,
+    updated_by
+   FROM public.timesheet_weeks
+  WHERE (org_id = public.openbooks_query_org_id());
+
+
+--
 -- Name: user_dashboard_layouts; Type: TABLE; Schema: public; Owner: -
 --
 
@@ -23641,6 +23695,14 @@ ALTER TABLE ONLY public.time_entries
 
 ALTER TABLE ONLY public.time_types
     ADD CONSTRAINT time_types_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: timesheet_weeks timesheet_weeks_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.timesheet_weeks
+    ADD CONSTRAINT timesheet_weeks_pkey PRIMARY KEY (id);
 
 
 --
@@ -29130,6 +29192,13 @@ CREATE INDEX temporary_differences_run ON public.temporary_differences USING btr
 
 
 --
+-- Name: time_entries_amends; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX time_entries_amends ON public.time_entries USING btree (org_id, amends_entry_id) WHERE (amends_entry_id IS NOT NULL);
+
+
+--
 -- Name: time_entries_billing_status; Type: INDEX; Schema: public; Owner: -
 --
 
@@ -29204,6 +29273,20 @@ CREATE INDEX time_entries_status ON public.time_entries USING btree (org_id, sta
 --
 
 CREATE UNIQUE INDEX time_types_org_id_id_unique ON public.time_types USING btree (org_id, id);
+
+
+--
+-- Name: timesheet_weeks_employee_week; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE UNIQUE INDEX timesheet_weeks_employee_week ON public.timesheet_weeks USING btree (org_id, employee_party_id, week_start);
+
+
+--
+-- Name: timesheet_weeks_status; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX timesheet_weeks_status ON public.timesheet_weeks USING btree (org_id, status);
 
 
 --
@@ -38685,6 +38768,14 @@ ALTER TABLE ONLY public.time_entries
 
 
 --
+-- Name: timesheet_weeks timesheet_weeks_org_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.timesheet_weeks
+    ADD CONSTRAINT timesheet_weeks_org_id_fkey FOREIGN KEY (org_id) REFERENCES public.orgs(id);
+
+
+--
 -- Name: union_agreements union_agreements_created_by_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -45134,6 +45225,20 @@ COMMENT ON POLICY org_isolation ON public.time_types IS 'openbooks:org_isolation
 
 
 --
+-- Name: timesheet_weeks org_isolation; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY org_isolation ON public.timesheet_weeks USING (((current_setting('app.bypass_rls'::text, true) = 'on'::text) OR ((org_id)::text = current_setting('app.current_org'::text, true)))) WITH CHECK (((current_setting('app.bypass_rls'::text, true) = 'on'::text) OR ((org_id)::text = current_setting('app.current_org'::text, true))));
+
+
+--
+-- Name: POLICY org_isolation ON timesheet_weeks; Type: COMMENT; Schema: public; Owner: -
+--
+
+COMMENT ON POLICY org_isolation ON public.timesheet_weeks IS 'openbooks:org_isolation:v1';
+
+
+--
 -- Name: trades org_isolation; Type: POLICY; Schema: public; Owner: -
 --
 
@@ -46429,6 +46534,12 @@ ALTER TABLE public.time_entries ENABLE ROW LEVEL SECURITY;
 --
 
 ALTER TABLE public.time_types ENABLE ROW LEVEL SECURITY;
+
+--
+-- Name: timesheet_weeks; Type: ROW SECURITY; Schema: public; Owner: -
+--
+
+ALTER TABLE public.timesheet_weeks ENABLE ROW LEVEL SECURITY;
 
 --
 -- Name: trades; Type: ROW SECURITY; Schema: public; Owner: -
@@ -48126,6 +48237,13 @@ GRANT SELECT ON TABLE openbooks_query.time_entries TO openbooks_read;
 --
 
 GRANT SELECT ON TABLE openbooks_query.time_types TO openbooks_read;
+
+
+--
+-- Name: TABLE timesheet_weeks; Type: ACL; Schema: openbooks_query; Owner: -
+--
+
+GRANT SELECT ON TABLE openbooks_query.timesheet_weeks TO openbooks_read;
 
 
 --

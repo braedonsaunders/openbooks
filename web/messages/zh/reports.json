@@ -494,6 +494,7 @@
         "label": "工时记录",
         "description": "工时表条目——员工、日期、工时、可计费状态、项目和审批状态。"
       },
+      "timesheet_weeks": "工时表周",
       "fixed_assets": {
         "label": "固定资产",
         "description": "固定资产台账——状态、购置、成本、保管人和维度。"
@@ -666,6 +667,20 @@
         "memo": "备注",
         "created_at": "创建时间",
         "id": "工时记录（ID）"
+      },
+      "timesheet_weeks": {
+        "employee_name": "员工",
+        "week_start": "周开始",
+        "week_end": "周结束",
+        "status": "状态",
+        "total_hours": "总工时",
+        "billable_hours": "可计费工时",
+        "submitted_by": "提交人",
+        "submitted_at": "提交时间",
+        "approved_by": "批准人",
+        "approved_at": "批准时间",
+        "rejection_reason": "拒绝原因",
+        "id": "周 (id)"
       },
       "fixed_assets": {
         "asset_number": "资产编号",

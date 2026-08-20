@@ -538,7 +538,11 @@ const SOURCES: Record<string, EntityListSource> = {
                        (t.worked_on - ((extract(dow from t.worked_on))::int) * interval '1 day')::date)`,
     alias: 'tw',
     idExpr: sql`tw.employee_party_id::text || ':' || tw.week_start::text`,
-    customFieldTable: 'timesheet_weeks',
+    // No customFieldTable: a week is an aggregate over time_entries, not a
+    // record, so it has no header of its own to extend. Tenant fields belong on
+    // the LINE (time_entries) and surface as grid columns in the flyout.
+    // ('timesheet_weeks' used to be named here; no such table has ever existed,
+    // so any field defined against it could never be stored.)
     baseJoins: sql`left join parties employee on employee.id=tw.employee_party_id and employee.org_id=tw.org_id`,
     builtInExpr: TIMESHEET_WEEK_BUILT_IN_EXPR,
     sorts: TIMESHEET_WEEK_SORTS,
@@ -564,7 +568,8 @@ const SOURCES: Record<string, EntityListSource> = {
     drawerParam: 'timesheet',
     basePath: '/timesheets',
     extraSelect: sql`tw.employee_party_id, tw.week_start`,
-    rowHref: (row) => `/timesheets/entry?employee=${row.employee_party_id}&week=${row.week_start}`,
+    // No rowHref: a week opens in the flyout like every other record, keeping
+    // the list's filters behind it. idExpr already yields employee:week_start.
     statusVariant: (row) => row.status === 'approved' ? 'success' : row.status === 'submitted' ? 'warning' : row.status === 'rejected' ? 'destructive' : 'secondary',
   },
   bank_reconciliation: {

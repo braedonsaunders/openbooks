@@ -346,6 +346,34 @@ export const REPORT_ENTITIES: ReportEntity[] = [
     defaultSort: { column: 'worked_on', direction: 'desc' },
   },
   {
+    key: 'timesheet_weeks',
+    label: 'Timesheet weeks',
+    category: 'time',
+    description: 'Weekly timesheets — who submitted, who approved, when, and the hours each week carries.',
+    from: `timesheet_weeks tw
+      LEFT JOIN parties emp ON emp.id = tw.employee_party_id AND emp.org_id = tw.org_id
+      LEFT JOIN users sub ON sub.id = tw.submitted_by
+      LEFT JOIN users apr ON apr.id = tw.approved_by`,
+    orgColumn: 'tw.org_id',
+    columns: [
+      { key: 'employee_name', label: 'Employee', kind: 'text', expr: 'emp.display_name' },
+      { key: 'week_start', label: 'Week starting', kind: 'date', expr: 'tw.week_start' },
+      { key: 'week_end', label: 'Week ending', kind: 'date', expr: '(tw.week_start + 6)' },
+      { key: 'status', label: 'Status', kind: 'enum', expr: 'tw.status', options: ['draft', 'submitted', 'approved', 'rejected'] },
+      // The hours the week covers, aggregated from its entries — the header
+      // owns lifecycle, the entries own the hours.
+      { key: 'total_hours', label: 'Total hours', kind: 'number', expr: "(select coalesce(sum(te.hours), 0) from time_entries te where te.org_id = tw.org_id and te.employee_party_id = tw.employee_party_id and te.worked_on between tw.week_start and tw.week_start + 6)" },
+      { key: 'billable_hours', label: 'Billable hours', kind: 'number', expr: "(select coalesce(sum(te.hours) filter (where te.is_billable), 0) from time_entries te where te.org_id = tw.org_id and te.employee_party_id = tw.employee_party_id and te.worked_on between tw.week_start and tw.week_start + 6)" },
+      { key: 'submitted_by', label: 'Submitted by', kind: 'text', expr: 'sub.name' },
+      { key: 'submitted_at', label: 'Submitted at', kind: 'timestamp', expr: 'tw.submitted_at' },
+      { key: 'approved_by', label: 'Approved by', kind: 'text', expr: 'apr.name' },
+      { key: 'approved_at', label: 'Approved at', kind: 'timestamp', expr: 'tw.approved_at' },
+      { key: 'rejection_reason', label: 'Rejection reason', kind: 'text', expr: 'tw.rejection_reason' },
+      { key: 'id', label: 'Timesheet week (id)', kind: 'uuid', expr: 'tw.id' },
+    ],
+    defaultSort: { column: 'week_start', direction: 'desc' },
+  },
+  {
     key: 'fixed_assets',
     label: 'Fixed assets',
     category: 'catalog',

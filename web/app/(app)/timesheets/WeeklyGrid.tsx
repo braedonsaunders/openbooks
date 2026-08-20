@@ -12,13 +12,16 @@
  * approved or the user lacks time.manage.
  */
 
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { useTranslations } from 'next-intl'
 import { toast } from 'sonner'
-import { ChevronLeft, ChevronRight, Plus, Trash2 } from 'lucide-react'
-import { Badge, Button, SearchSelect, Select, cn } from '@openbooks/ui'
-import { DetailPageLayout } from '../../../components/page-layout'
+import { confirmDialog } from '../../../lib/confirm'
+import { promptDialog } from '../../../lib/prompt'
+import { ChevronLeft, ChevronRight, Lock, Plus, RotateCcw, Trash2 } from 'lucide-react'
+import { Badge, Button, SearchSelect, Select, UrlDrawer, cn } from '@openbooks/ui'
+import { type CustomFieldDefClient } from '../../../components/custom-field-inputs'
+import { CustomFieldInput } from '../../../components/custom-field-input'
 import type {
   PickerOption,
   TimeTypeOption,
@@ -49,6 +52,7 @@ interface GridRow {
   isBillable: boolean
   memo: string
   hours: string[]
+  custom: Record<string, unknown>
 }
 
 function emptyRow(timeTypes: TimeTypeOption[]): GridRow {
@@ -61,6 +65,7 @@ function emptyRow(timeTypes: TimeTypeOption[]): GridRow {
     isBillable: def?.isBillableDefault ?? false,
     memo: '',
     hours: ['', '', '', '', '', '', ''],
+    custom: {},
   }
 }
 
@@ -74,6 +79,7 @@ function fromPayload(rows: WeekRow[], timeTypes: TimeTypeOption[]): GridRow[] {
     isBillable: r.isBillable,
     memo: r.memo ?? '',
     hours: r.hours.map((h) => (h === '' ? '' : String(Number(h)))),
+    custom: r.custom ?? {},
   }))
 }
 
@@ -130,6 +136,10 @@ export function WeeklyGrid({
   pickers,
   canManage,
   canApprove,
+  canReopen,
+  requireApproval = true,
+  fieldDefs = [],
+  closeHref = '/timesheets',
 }: {
   employeeId: string | null
   week: string
@@ -137,6 +147,18 @@ export function WeeklyGrid({
   pickers: TimesheetPickers
   canManage: boolean
   canApprove: boolean
+  /** Holds time.reopen — deliberately separate from approve, so the person who
+   * signs off on hours is not automatically the one who can unwind that. */
+  canReopen: boolean
+  /** Org policy: when false, saved hours are usable immediately and the
+   * submit/approve round trip is not offered at all. */
+  requireApproval?: boolean
+  /** Org-defined custom fields for a timesheet LINE (target table time_entries).
+   * A week has no record of its own — it is an aggregate over its lines — so
+   * tenant extension lives on the line, rendered as extra grid columns. */
+  fieldDefs?: CustomFieldDefClient[]
+  /** Where the flyout's close/escape returns to (the list, filters intact). */
+  closeHref?: string
 }) {
   const t = useTranslations('timesheets')
   const tCommon = useTranslations('common')
@@ -147,6 +169,21 @@ export function WeeklyGrid({
   const [status, setStatus] = useState(payload.status)
   const [dirty, setDirty] = useState(false)
   const [busy, setBusy] = useState(false)
+
+  // The employee/week live in the URL, so switching either re-renders THIS
+  // component instance with a new payload — a `useState` initializer would not
+  // re-run and the grid would keep showing the previous week's hours under the
+  // new heading (and, worse, one employee's hours under another's name).
+  // Re-seed whenever the identity of the loaded week changes.
+  const loadedKey = `${employeeId ?? ''}:${week}`
+  const seededKey = useRef(loadedKey)
+  useEffect(() => {
+    if (seededKey.current === loadedKey) return
+    seededKey.current = loadedKey
+    setRows(fromPayload(payload.rows, pickers.timeTypes))
+    setStatus(payload.status)
+    setDirty(false)
+  }, [loadedKey, payload, pickers.timeTypes])
 
   // Approved weeks and users without manage rights are read-only.
   const locked = status === 'approved' || !canManage || !employeeId
@@ -200,7 +237,14 @@ export function WeeklyGrid({
     if (dirty && !confirm(t('grid.discardConfirm'))) return
     const emp = nextEmployee ?? employeeId
     if (!emp) return
-    router.push(`/timesheets/entry?employee=${emp}&week=${nextWeek}`)
+    // Stay in the flyout and keep the list's filters: closeHref is the list URL
+    // this drawer was opened over. (Built here, not passed as a prop — a server
+    // component cannot hand a function to a client component.)
+    const params = new URLSearchParams({ timesheet: `${emp}:${nextWeek}` })
+    if (closeHref !== '/timesheets') params.set('drawerReturn', closeHref)
+    const [base, existing] = closeHref.split('?')
+    if (existing) for (const [k, v] of new URLSearchParams(existing)) if (!params.has(k)) params.set(k, v)
+    router.push(`${base}?${params.toString()}` as never)
   }
   const onEmployee = (v: string) => {
     if (v && v !== employeeId) go(v, week)
@@ -249,6 +293,7 @@ export function WeeklyGrid({
         isBillable: r.isBillable,
         memo: r.memo || null,
         hours: r.hours,
+        custom: r.custom,
       })),
     }, 'PUT')
     if (data) {
@@ -279,80 +324,155 @@ export function WeeklyGrid({
     }
   }
 
+  const onReject = async () => {
+    if (!employeeId) return
+    const reason = await promptDialog({
+      title: t('grid.rejectTitle'),
+      label: t('grid.rejectReasonLabel'),
+      placeholder: t('grid.rejectPlaceholder'),
+      confirmLabel: t('grid.reject'),
+    })
+    if (!reason) return
+    const data = await post('/api/timesheets/reject', { employee: employeeId, week, reason })
+    if (data) {
+      applyPayload(data)
+      toast.success(t('grid.rejectedToast'))
+    }
+  }
+
+  const onReopen = async () => {
+    if (!employeeId) return
+    const ok = await confirmDialog({
+      title: t('grid.reopenTitle'),
+      message: t('grid.reopenMessage'),
+      confirmLabel: t('grid.reopen'),
+    })
+    if (!ok) return
+    const data = await post('/api/timesheets/reopen', { employee: employeeId, week })
+    if (data) {
+      applyPayload(data)
+      toast.success(t('grid.reopenedToast'))
+    }
+  }
+
   const canSave = canManage && !readOnly && employeeId != null
-  const canSubmit = canManage && employeeId != null && (status === 'draft' || status === 'rejected')
-  const canDoApprove = canApprove && employeeId != null && status === 'submitted'
+  const canSubmit = requireApproval && canManage && employeeId != null && (status === 'draft' || status === 'rejected')
+  const canDoApprove = requireApproval && canApprove && employeeId != null && status === 'submitted'
+  const canDoReject = requireApproval && canApprove && employeeId != null && status === 'submitted'
+  // Reopen is offered only when it will actually succeed: approved, held by
+  // nothing downstream, and the user carries the separate reopen right.
+  const weekLocked = (payload.lockReasons?.length ?? 0) > 0
+  const canDoReopen = canReopen && employeeId != null && status === 'approved' && !weekLocked
 
   // Column widths mirror LineGrid's data-driven track model.
-  const template = `minmax(160px,1.6fr) minmax(130px,1.2fr) 110px 120px 56px minmax(140px,1.4fr) ${'62px '.repeat(7)}72px 40px`
+  // Org-defined line fields become real grid columns, between the built-in
+  // line metadata and the seven day cells.
+  const customCols = useMemo(
+    () => fieldDefs.filter((d) => d.config.displayMode !== 'hidden'),
+    [fieldDefs],
+  )
+  const fixedCols = 6 + customCols.length
+  const template = `minmax(160px,1.6fr) minmax(130px,1.2fr) 110px 120px 56px minmax(140px,1.4fr) ${'minmax(120px,1fr) '.repeat(customCols.length)}${'62px '.repeat(7)}72px 40px`
 
   const cellInput =
     'w-full rounded-sm border-0 bg-transparent px-1.5 py-1 text-sm outline-none focus:ring-2 focus:ring-teal-500/60 dark:text-slate-100'
 
   return (
-    <DetailPageLayout
-      header={
-        <div className="space-y-3">
-          <div className="flex flex-wrap items-start justify-between gap-3">
-            <div className="min-w-0 space-y-1.5">
-              <div className="flex flex-wrap items-center gap-2.5">
-                <h1 className="text-lg font-semibold text-slate-900 dark:text-slate-100">{t('grid.title')}</h1>
-                <Badge variant={STATUS_VARIANT[status] ?? 'secondary'}>{statusLabel(status)}</Badge>
-              </div>
-              <div className="w-72">
-                <SearchSelect
-                  value={employeeId ?? ''}
-                  onChange={onEmployee}
-                  options={pickers.employees}
-                  placeholder={t('grid.selectEmployee')}
-                  ariaLabel={tCommon('labels.employee')}
-                />
-              </div>
-            </div>
-
-            {/* Action buttons live at the top. */}
-            <div className="flex flex-wrap items-center gap-2">
-              {canSave ? (
-                <Button size="sm" onClick={onSave} disabled={busy || !dirty}>
-                  {tCommon('actions.save')}
-                </Button>
-              ) : null}
-              {canSubmit ? (
-                <Button size="sm" variant="outline" onClick={onSubmit} disabled={busy || dirty}>
-                  {t('grid.submitForApproval')}
-                </Button>
-              ) : null}
-              {canDoApprove ? (
-                <Button size="sm" variant="outline" onClick={onApprove} disabled={busy}>
-                  {tCommon('actions.approve')}
-                </Button>
-              ) : null}
-            </div>
-          </div>
-
-          {/* Week navigator. */}
-          <div className="flex flex-wrap items-center gap-2">
-            <Button size="sm" variant="outline" onClick={() => go(employeeId, shiftWeek(week, -1))} disabled={!employeeId}>
-              <ChevronLeft size={15} /> {t('grid.prev')}
+    <UrlDrawer
+      open
+      closeHref={closeHref}
+      size="2xl"
+      // Seven day columns plus the line metadata need ~1260px; open expanded so
+      // the matrix is readable, and leave the header's toggle to collapse it.
+      initialFullscreen
+      title={
+        <span className="flex flex-wrap items-center gap-2.5">
+          {t('grid.title')}
+          <Badge variant={STATUS_VARIANT[status] ?? 'secondary'}>{statusLabel(status)}</Badge>
+        </span>
+      }
+      headerActions={
+        <>
+          {canSave ? (
+            <Button size="sm" onClick={onSave} disabled={busy || !dirty}>
+              {tCommon('actions.save')}
             </Button>
-            <span className="min-w-[220px] text-center text-sm font-medium text-slate-700 dark:text-slate-200">
-              {t('grid.weekOf', weekRange(week))}
-            </span>
-            <Button size="sm" variant="outline" onClick={() => go(employeeId, shiftWeek(week, 1))} disabled={!employeeId}>
-              {tCommon('actions.next')} <ChevronRight size={15} />
+          ) : null}
+          {canSubmit ? (
+            <Button size="sm" variant="outline" onClick={onSubmit} disabled={busy || dirty}>
+              {t('grid.submitForApproval')}
             </Button>
-            <Button size="sm" variant="ghost" onClick={() => go(employeeId, thisWeekSunday())} disabled={!employeeId}>
-              {t('grid.thisWeek')}
+          ) : null}
+          {canDoApprove ? (
+            <Button size="sm" variant="outline" onClick={onApprove} disabled={busy}>
+              {tCommon('actions.approve')}
             </Button>
-            {readOnly && status === 'approved' ? (
-              <span className="text-xs text-slate-400 dark:text-slate-500">{t('grid.approvedReadOnly')}</span>
-            ) : !canManage ? (
-              <span className="text-xs text-slate-400 dark:text-slate-500">{t('grid.viewOnly')}</span>
-            ) : null}
-          </div>
-        </div>
+          ) : null}
+          {canDoReject ? (
+            <Button size="sm" variant="outline" onClick={onReject} disabled={busy}>
+              {t('grid.reject')}
+            </Button>
+          ) : null}
+          {canDoReopen ? (
+            <Button size="sm" variant="outline" onClick={onReopen} disabled={busy}>
+              <RotateCcw size={14} /> {t('grid.reopen')}
+            </Button>
+          ) : null}
+        </>
       }
     >
+      {/* Employee + week navigator. pb keeps the controls off the grid below. */}
+      <div className="mb-5 space-y-3 border-b border-slate-200 pb-4 dark:border-slate-800">
+        <div className="w-72">
+          <SearchSelect
+            value={employeeId ?? ''}
+            onChange={onEmployee}
+            options={pickers.employees}
+            placeholder={t('grid.selectEmployee')}
+            ariaLabel={tCommon('labels.employee')}
+          />
+        </div>
+        <div className="flex flex-wrap items-center gap-2">
+          <Button size="sm" variant="outline" onClick={() => go(employeeId, shiftWeek(week, -1))} disabled={!employeeId}>
+            <ChevronLeft size={15} /> {t('grid.prev')}
+          </Button>
+          <span className="min-w-[220px] text-center text-sm font-medium text-slate-700 dark:text-slate-200">
+            {t('grid.weekOf', weekRange(week))}
+          </span>
+          <Button size="sm" variant="outline" onClick={() => go(employeeId, shiftWeek(week, 1))} disabled={!employeeId}>
+            {tCommon('actions.next')} <ChevronRight size={15} />
+          </Button>
+          <Button size="sm" variant="ghost" onClick={() => go(employeeId, thisWeekSunday())} disabled={!employeeId}>
+            {t('grid.thisWeek')}
+          </Button>
+          {readOnly && status === 'approved' ? (
+            <span className="text-xs text-slate-400 dark:text-slate-500">{t('grid.approvedReadOnly')}</span>
+          ) : !canManage ? (
+            <span className="text-xs text-slate-400 dark:text-slate-500">{t('grid.viewOnly')}</span>
+          ) : null}
+        </div>
+
+        {/* Say WHY the week is pinned rather than leaving a dead Reopen button.
+            The same reasons the API enforces are the ones shown here. */}
+        {weekLocked ? (
+          <div className="flex items-start gap-2 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-900 dark:border-amber-900/50 dark:bg-amber-950/30 dark:text-amber-200">
+            <Lock size={13} className="mt-0.5 shrink-0" />
+            <span>
+              {t('grid.lockedBecause', {
+                reasons: (payload.lockReasons ?? []).map((r) => t(`grid.lockReason.${r}`)).join(', '),
+                count: payload.lockedCount ?? 0,
+              })}
+            </span>
+          </div>
+        ) : null}
+
+        {status === 'rejected' && payload.rejectionReason ? (
+          <div className="rounded-md border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-900 dark:border-red-900/50 dark:bg-red-950/30 dark:text-red-200">
+            {t('grid.rejectedBecause', { reason: payload.rejectionReason })}
+          </div>
+        ) : null}
+      </div>
+
       {!employeeId ? (
         <p className="text-sm text-slate-500 dark:text-slate-400">
           {t('grid.noEmployee')}
@@ -368,6 +488,7 @@ export function WeeklyGrid({
               { id: 'department', label: tCommon('labels.department') },
               { id: 'bill', label: t('labels.bill') },
               { id: 'memo', label: tCommon('labels.memo') },
+              ...customCols.map((d) => ({ id: `cf_${d.key}`, label: d.label, required: d.isRequired })),
             ].map((h) => (
               <div
                 key={h.id}
@@ -408,6 +529,8 @@ export function WeeklyGrid({
                   onDept={(v) => setRow(i, { departmentId: v })}
                   onBillable={(v) => setRow(i, { isBillable: v })}
                   onMemo={(v) => setRow(i, { memo: v })}
+                  customCols={customCols}
+                  onCustom={(v) => setRow(i, { custom: v })}
                   onCell={(d, v) => setCell(i, d, v)}
                   onRemove={() => removeRow(i)}
                 />
@@ -415,7 +538,7 @@ export function WeeklyGrid({
             })}
 
             {/* footer totals */}
-            <div className="col-span-6 border-t border-slate-200 px-2.5 py-2 text-right text-xs font-semibold text-slate-600 dark:border-slate-700 dark:text-slate-300">
+            <div style={{ gridColumn: `span ${fixedCols}` }} className="border-t border-slate-200 px-2.5 py-2 text-right text-xs font-semibold text-slate-600 dark:border-slate-700 dark:text-slate-300">
               {t('labels.dailyTotals')}
             </div>
             {dayTotals.map((tot, d) => (
@@ -456,7 +579,8 @@ export function WeeklyGrid({
           </div>
         </div>
       ) : null}
-    </DetailPageLayout>
+
+    </UrlDrawer>
   )
 }
 
@@ -473,6 +597,8 @@ function RowFragment({
   onDept,
   onBillable,
   onMemo,
+  customCols,
+  onCustom,
   onCell,
   onRemove,
 }: {
@@ -488,6 +614,8 @@ function RowFragment({
   onDept: (v: string) => void
   onBillable: (v: boolean) => void
   onMemo: (v: string) => void
+  customCols: CustomFieldDefClient[]
+  onCustom: (values: Record<string, unknown>) => void
   onCell: (day: number, value: string) => void
   onRemove: () => void
 }) {
@@ -584,6 +712,17 @@ function RowFragment({
           />
         )}
       </div>
+      {customCols.map((def) => (
+        <div key={def.key} className={cn(cell, 'px-0.5')}>
+          <CustomFieldInput
+            def={def}
+            value={r.custom[def.key]}
+            onChange={(v) => onCustom({ ...r.custom, [def.key]: v })}
+            readOnly={readOnly}
+            hideLabel
+          />
+        </div>
+      ))}
       {r.hours.map((h, d) => (
         <div key={d} className={cn(cell, 'px-0')}>
           {readOnly ? (
