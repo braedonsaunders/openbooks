@@ -12,7 +12,7 @@ import {
   type AutomationPlan,
   type EvalContext,
 } from "@openbooks/forms-core";
-import { db, schema, withOrg } from "../db.ts";
+import { db, schema, withBypassContext, withOrg } from "../db.ts";
 import { getFlowAdapter } from "./registry.ts";
 import { executeFlowPlan } from "./execute.ts";
 import { parseFlowGraph } from "./run.ts";
@@ -91,7 +91,12 @@ export async function runDueScheduledFlows(now: Date = new Date()): Promise<{
 
   // Cheap prefilter in SQL: only flows whose graph mentions a scheduled
   // trigger at all (the jsonb containment is broad; the parse below decides).
-  const candidates = (await db.execute<{ id: string }>(sql`
+  // Discovery and the cursor claim span organizations and cross an explicit
+  // trusted boundary; the firing itself already runs inside `withOrg` below. A
+  // scheduler tick holds no request store, so without this the connection layer
+  // denies by default and no scheduled flow is ever found.
+  const candidates = await withBypassContext(() =>
+    db.execute<{ id: string }>(sql`
     select flow.id
       from flows flow
       join orgs organization on organization.id = flow.org_id
@@ -100,7 +105,8 @@ export async function runDueScheduledFlows(now: Date = new Date()): Promise<{
   `));
 
   for (const { id } of candidates.rows) {
-    const [flow] = await db.select().from(schema.flows).where(eq(schema.flows.id, id));
+    const [flow] = await withBypassContext(() =>
+      db.select().from(schema.flows).where(eq(schema.flows.id, id)));
     if (!flow || !flow.enabled) continue;
     const graph = parseFlowGraph(flow.id, flow.graph);
     if (!graph) continue;
@@ -115,7 +121,8 @@ export async function runDueScheduledFlows(now: Date = new Date()): Promise<{
     // (same trade as user_scripts). Deliberately not an equality compare:
     // JS Dates carry milliseconds while timestamptz keeps microseconds, so
     // read-back equality can never match a cursor written with now().
-    const claimed = (await db.execute(sql`
+    const claimed = await withBypassContext(() =>
+      db.execute(sql`
       update flows set last_scheduled_run_at = ${due.latest}
        where id = ${flow.id}
          and (last_scheduled_run_at is null or last_scheduled_run_at < ${due.latest})

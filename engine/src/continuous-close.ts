@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import { db, schema, withOrg, withOrgContext } from "./db.ts";
+import { db, schema, withBypassContext, withOrg, withOrgContext } from "./db.ts";
 import { fromUnits, toUnits } from "./money.ts";
 import {
   CONTINUOUS_CLOSE_AGENT_KEYS,
@@ -935,7 +935,12 @@ export async function runContinuousCloseAgent(args: { orgId: string; agentKey: C
 
 /** Claim and execute every tenant policy whose automatic scan is due. */
 export async function runDueContinuousCloseAgents(now = new Date()): Promise<void> {
-  const due = (await db.execute<{
+  // Finding which tenants have an agent due spans organizations and crosses an
+  // explicit trusted boundary; the agent run itself is scoped to its own org. A
+  // scheduler tick holds no request store — without these the connection layer
+  // denies by default and no agent ever fires.
+  const due = await withBypassContext(() =>
+    db.execute<{
       id: string;
       org_id: string;
       agent_key: ContinuousCloseAgentKey;
@@ -952,16 +957,18 @@ export async function runDueContinuousCloseAgents(now = new Date()): Promise<voi
   `));
   for (const policy of due.rows) {
     const next = nextContinuousCloseRunAt(policy.cadence, now);
-    const claim = (await db.execute<{ id: string }>(sql`
+    const claim = await withBypassContext(() =>
+      db.execute<{ id: string }>(sql`
       update ai_agent_policies set next_run_at = ${next}, updated_at = now()
        where id = ${policy.id} and next_run_at = ${policy.next_run_at}
       returning id
     `));
     if (claim.rows.length === 0) continue;
-    await runContinuousCloseAgent({
-      orgId: policy.org_id,
-      agentKey: policy.agent_key,
-      trigger: "scheduler",
-    });
+    await withOrgContext(policy.org_id, () =>
+      runContinuousCloseAgent({
+        orgId: policy.org_id,
+        agentKey: policy.agent_key,
+        trigger: "scheduler",
+      }));
   }
 }

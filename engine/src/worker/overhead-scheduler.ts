@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import { db } from "../db.ts";
+import { db, withBypassContext, withOrgContext } from "../db.ts";
 import { appBaseUrl } from "./render-client.ts";
 
 /**
@@ -42,14 +42,20 @@ export async function tick(): Promise<void> {
   if (running) return;
   running = true;
   try {
-    const orgs = (await db.execute<{ id: string; cadence: string | null }>(sql`
+    // Discovering WHICH orgs opted into scheduled publishing is org-spanning
+    // work and crosses an explicit trusted boundary; the per-org idempotency
+    // probe then runs inside that org's own RLS scope. Without either, the
+    // contextless timer tick is denied by default and publishes nothing.
+    const orgs = await withBypassContext(() =>
+      db.execute<{ id: string; cadence: string | null }>(sql`
       select id, settings->'overheadRateLifecycle'->>'cadence' as cadence
         from orgs
        where settings->'overheadRateLifecycle'->>'mode' = 'scheduled'`));
     for (const org of orgs.rows) {
       const cadence = org.cadence === "quarterly" ? "quarterly" : "monthly";
       const effectiveFrom = periodStartFor(cadence);
-      const existing = (await db.execute(sql`
+      const existing = await withOrgContext(org.id, () =>
+        db.execute(sql`
         select 1 from overhead_rates
          where org_id = ${org.id} and rate_kind = 'per_hour' and method = 'standard'
            and effective_from = ${effectiveFrom} limit 1`));

@@ -294,7 +294,12 @@ export async function updateDraftPayment(
   const bankAccountId =
     patch.bankAccountId !== undefined ? patch.bankAccountId : (custom.bankAccountId ?? null);
   const allocations = patch.allocations ?? custom.allocations ?? [];
-  const creditAllocations = custom.creditAllocations ?? [];
+  // Read the PATCH first, exactly like `allocations` above. Reading only the
+  // stored value silently discarded every credit a caller supplied: a payment
+  // run computes vendor credits, passes them here, and they never reached the
+  // document — the run item and the remittance advice both claimed a credit the
+  // bill was never actually reduced by.
+  const creditAllocations = patch.creditAllocations ?? custom.creditAllocations ?? [];
   const discountAmount = patch.discountAmount ?? custom.discountAmount ?? "0";
   const discountAccountId = patch.discountAccountId !== undefined ? patch.discountAccountId : (custom.discountAccountId ?? null);
   const controlAccountId = patch.controlAccountId !== undefined ? patch.controlAccountId : (custom.controlAccountId ?? null);

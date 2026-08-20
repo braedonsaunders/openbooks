@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { getTranslations } from 'next-intl/server'
 import { guardPermission } from '../../../../../../lib/authz'
+import { guardReportEntity } from '../../../../../../lib/report-authz'
 import { loadReportDefinition } from '../../../../../../lib/custom-reports'
 import { resolveDefinitionToExportData } from '../../../../../../lib/report-run'
 import { resolvePeriod } from '../../../../../../lib/periods'
@@ -39,6 +40,11 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
 
   const def = await loadReportDefinition(user.orgId, id)
   if (!def) return NextResponse.json({ error: 'report not found' }, { status: 404 })
+
+  // An export returns the SAME rows the runner does. `reports.read` alone must
+  // not reach a payroll plan through the download button.
+  const denied = guardReportEntity(gate, def.query)
+  if (denied) return denied
 
   const t = (await getTranslations('reports')) as unknown as Translator
 

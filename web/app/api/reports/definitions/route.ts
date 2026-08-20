@@ -3,22 +3,31 @@ import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/db.ts'
 import { validateCustomQuery, validateReportLayout } from '@openbooks/reports'
 import { guardPermission } from '../../../../lib/authz'
+import { canRunReportEntity } from '../../../../lib/report-authz'
 import { slugifyReportName, uniqueReportSlug } from '../../../../lib/custom-reports'
 
 export const runtime = 'nodejs'
 
-/** List report definitions for the org (built-in + custom). */
+/**
+ * List report definitions for the org (built-in + custom).
+ *
+ * Filtered by the same entity gate the runner applies. Listing a payroll plan
+ * to a reader who cannot run it leaks the catalog (names, descriptions and the
+ * stored plan itself) and hands out the id that every execution path keys on.
+ */
 export async function GET() {
   const gate = await guardPermission('reports.read')
   if (gate instanceof NextResponse) return gate
   const { user } = gate
-  const rows = (await db.execute(sql`
+  const rows = (await db.execute<{ query: unknown }>(sql`
     select id, kind, slug, name, description, query, updated_at
       from report_definitions
      where org_id = ${user.orgId}
      order by kind, name
   `))
-  return NextResponse.json({ definitions: rows.rows })
+  return NextResponse.json({
+    definitions: rows.rows.filter((row) => canRunReportEntity(gate, row.query)),
+  })
 }
 
 /**

@@ -4,6 +4,7 @@ import { ListPageLayout } from '../../../components/page-layout'
 import { ModuleHomeTabs } from '../../../components/module-home/ui'
 import { groupTabs } from '../../../components/module-home/group-tabs'
 import { requirePermission, can } from '../../../lib/authz'
+import { requireFeatureEnabled } from '../../../lib/feature-gates'
 import { expensesDashboard } from '../../../lib/expenses-dashboard'
 import { ExpensesDashboard } from './ExpensesDashboard'
 import { NewExpenseButton } from './NewExpenseButton'
@@ -22,6 +23,8 @@ export async function generateMetadata() {
  */
 export default async function ExpensesHome() {
   const authz = await requirePermission('expenses.read')
+  await requireFeatureEnabled(authz.user.orgId, 'expenses')
+  
   const t = await getTranslations('expenses')
   const data = await expensesDashboard(authz.user.orgId)
 

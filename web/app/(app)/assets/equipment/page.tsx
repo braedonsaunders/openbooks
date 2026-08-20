@@ -8,6 +8,7 @@ import { ListPageLayout } from '../../../../components/page-layout'
 import { EntityListView } from '../../../../components/entity-list-view'
 import { KpiStrip } from '../../../../components/kpi-strip'
 import { can, requirePermission } from '../../../../lib/authz'
+import { requireFeatureEnabled } from '../../../../lib/feature-gates'
 import { isUuid, pickString } from '../../../../lib/list-params'
 import { loadEquipment } from '../../../api/equipment/_lib'
 import { NewEquipmentButton } from './NewEquipmentButton'
@@ -18,7 +19,9 @@ export const dynamic = 'force-dynamic'
 export default async function EquipmentPage({ searchParams }: { searchParams: Promise<Record<string,string|string[]|undefined>> }) {
   const { money } = await getMoneyFormatter()
   const t = await getTranslations('assets.equipment')
-  const authz = await requirePermission('assets.read'); const canManage = can(authz,'assets.manage'); const sp = await searchParams
+  const authz = await requirePermission('assets.read')
+  await requireFeatureEnabled(authz.user.orgId, 'equipment')
+   const canManage = can(authz,'assets.manage'); const sp = await searchParams
   const equipmentId = typeof sp.equipment === 'string' ? sp.equipment : undefined
   const allowed = authz.allowedSubsidiaryIds ? sql`and e.subsidiary_id = any(${`{${[...authz.allowedSubsidiaryIds].join(',')}}`}::uuid[])` : sql``
   const [summary,open,pickers,subsidiaryUiEnabled] = await Promise.all([

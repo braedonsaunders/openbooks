@@ -1,5 +1,6 @@
 import { Worker } from "bullmq";
 import { SCRIPTS_QUEUE, getBlockingConnection, type ScriptJobData } from "@openbooks/jobs";
+import { withOrgContext } from "../db.ts";
 import { runBulkScript, runScheduledScript } from "../scripting.ts";
 
 /**
@@ -13,10 +14,13 @@ export function createScriptsWorker(): Worker<ScriptJobData> {
     SCRIPTS_QUEUE,
     async (job) => {
       const d = job.data;
-      const outcome =
+      // A queue handler runs in a bare callback with no request store, so the
+      // job's own tenant is the only legal scope for its queries. Without it the
+      // connection layer denies by default and the script reads an empty org.
+      const outcome = await withOrgContext(d.orgId, () =>
         d.kind === "bulk"
-          ? await runBulkScript(d.scriptId, d.orgId)
-          : await runScheduledScript(d.scriptId, d.orgId);
+          ? runBulkScript(d.scriptId, d.orgId)
+          : runScheduledScript(d.scriptId, d.orgId));
       return { status: outcome.status, durationMs: outcome.durationMs };
     },
     { connection: getBlockingConnection(), concurrency: 4 },

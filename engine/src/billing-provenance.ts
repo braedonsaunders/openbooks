@@ -40,4 +40,38 @@ export async function releaseBillingProvenance(
     update billing_requests set status = 'open', invoice_document_id = null
      where org_id = ${orgId} and invoice_document_id = ${documentId}
   `);
+  // A progress-billing application that produced this invoice is provenance in
+  // exactly the same sense as a billing request, and owes the same release.
+  //
+  // `pay_applications.invoice_document_id` carries no foreign key, so deleting
+  // the draft invoice succeeds and leaves the application stranded in
+  // 'invoiced': it can no longer be re-invoiced (the generator requires
+  // 'approved'), cannot be voided, and — because the cumulative
+  // `previous_completed` base counts every application in ('invoiced','posted')
+  // — its work-in-place stays permanently consumed. That silently burns
+  // billable capacity on the schedule of values with no way back.
+  await tx.execute(sql`
+    update pay_applications set status = 'approved', invoice_document_id = null, updated_at = now()
+     where org_id = ${orgId} and invoice_document_id = ${documentId} and status = 'invoiced'
+  `);
+}
+
+/**
+ * Vendor-side counterpart: release the subcontract application a vendor bill was
+ * generated from. Called when that `vendor_bill` is voided or deleted.
+ *
+ * Without it the application stays 'billed' pointing at a document that no
+ * longer exists, and the re-bill path dereferences that dangling id and throws —
+ * the commitment can never be billed again.
+ */
+export async function releaseVendorBillProvenance(
+  tx: SqlExecutor,
+  orgId: string,
+  documentId: string,
+): Promise<void> {
+  await tx.execute(sql`
+    update vendor_pay_applications
+       set status = 'approved', vendor_bill_document_id = null, updated_at = now()
+     where org_id = ${orgId} and vendor_bill_document_id = ${documentId} and status = 'billed'
+  `);
 }
