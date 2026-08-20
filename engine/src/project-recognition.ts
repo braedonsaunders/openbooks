@@ -1,7 +1,7 @@
 import { sql } from "drizzle-orm";
 import { db, inDbTransaction } from "./db.ts";
 import { now } from "./clock.ts";
-import { add, mulRate, neg, sum, isZero } from "./money.ts";
+import { add, mul, neg, sum, isZero } from "./money.ts";
 
 /**
  * Project GL recognition — the accounting-correct layer on top of the billing
@@ -32,14 +32,12 @@ async function recognitionAccountsFrom(
   orgId: string,
   lock = false,
 ): Promise<RecognitionAccounts> {
-  const r = (await executor.execute(sql`
+  const r = (await executor.execute<{ c: Record<string, string> | null }>(sql`
     select settings->'controlAccounts' as c
       from orgs
      where id = ${orgId}
      ${lock ? sql`for share` : sql``}
-  `)) as unknown as {
-    rows: { c: Record<string, string> | null }[];
-  };
+  `));
   const c = r.rows[0]?.c ?? {};
   return {
     laborWip: c.laborWip,
@@ -97,32 +95,32 @@ export async function postProjectGlEntryWithinTransaction(
   const bal = sum(lines.map((l) => l.amount));
   if (!isZero(bal)) throw new Error(`unbalanced project GL entry (${bal})`);
 
-  const book = (await tx.execute(sql`
+  const book = (await tx.execute<{ id: string }>(sql`
     select id from accounting_books where org_id = ${orgId} and is_active
-     order by is_primary desc, code limit 1`)) as unknown as { rows: { id: string }[] };
+     order by is_primary desc, code limit 1`));
   const bookId = book.rows[0]?.id;
   if (!bookId) throw new Error("no active GL book");
   // journal_entries.subsidiary_id is NOT NULL. When the source row carries no
   // legal entity, the one authoritative org root is the default.
   let subId = subsidiaryId;
   if (!subId) {
-    const s = (await tx.execute(sql`
+    const s = (await tx.execute<{ id: string }>(sql`
       select id from subsidiaries where org_id = ${orgId} and is_active and not is_elimination
-       and parent_id is null limit 1`)) as unknown as { rows: { id: string }[] };
+       and parent_id is null limit 1`));
     subId = s.rows[0]?.id ?? null;
   }
   if (!subId) throw new Error("project GL posting requires an active root subsidiary");
-  const subsidiary = (await tx.execute(sql`
+  const subsidiary = (await tx.execute<{ base_currency: string | null }>(sql`
     select nullif(trim(base_currency), '') as base_currency
       from subsidiaries where org_id = ${orgId} and id = ${subId} and is_active
-  `)) as unknown as { rows: { base_currency: string | null }[] };
+  `));
   const functionalCurrency = subsidiary.rows[0]?.base_currency;
   if (!functionalCurrency) throw new Error(`subsidiary ${subId} has no configured functional currency`);
   if (opts.currency && opts.currency !== functionalCurrency) {
     throw new Error(`project GL currency ${opts.currency} does not match subsidiary functional currency ${functionalCurrency}`);
   }
   const currency = opts.currency ?? functionalCurrency;
-  const per = (await tx.execute(sql`
+  const per = (await tx.execute<{ id: string; is_closed: boolean }>(sql`
     select period.id,
            period_module_is_closed(
              ${orgId}, period.id, ${bookId}, ${subId}, 'gl'
@@ -131,9 +129,7 @@ export async function postProjectGlEntryWithinTransaction(
      where period.org_id = ${orgId} and period.is_adjustment = false
        and period.starts_on <= ${postingDate}
        and period.ends_on >= ${postingDate}
-     limit 1`)) as unknown as {
-    rows: { id: string; is_closed: boolean }[];
-  };
+     limit 1`));
   const periodId = per.rows[0]?.id;
   if (!periodId) throw new Error(`no accounting period covers ${postingDate}`);
   if (per.rows[0]!.is_closed) {
@@ -210,20 +206,20 @@ export async function reverseProjectGlEntryWithinTransaction(
   ) {
     throw new Error("reversalDate must be a valid YYYY-MM-DD date");
   }
-  const head = (await tx.execute(sql`
+  const head = (await tx.execute<any>(sql`
     select entry_number, book_id, subsidiary_id, period_id, posting_date, origin, status
       from journal_entries
      where id = ${entryId} and org_id = ${orgId}
-     for update`)) as unknown as { rows: any[] };
+     for update`));
   const h = head.rows[0];
   if (!h) return { status: "missing", reversalId: null };
   if (h.status === "reversed") {
-    const existing = (await tx.execute(sql`
+    const existing = (await tx.execute<{ id: string }>(sql`
       select id
         from journal_entries
        where org_id = ${orgId} and reverses_entry_id = ${entryId}
        order by created_at, id
-       limit 1`)) as unknown as { rows: { id: string }[] };
+       limit 1`));
     return {
       status: "already_reversed",
       reversalId: existing.rows[0]?.id ?? null,
@@ -232,7 +228,7 @@ export async function reverseProjectGlEntryWithinTransaction(
   if (h.status !== "posted") {
     throw new Error(`project GL entry ${entryId} is ${h.status} and cannot be reversed`);
   }
-  const period = (await tx.execute(sql`
+  const period = (await tx.execute<{ id: string; is_closed: boolean }>(sql`
     select accounting_period.id,
            period_module_is_closed(
              ${orgId}, accounting_period.id, ${h.book_id},
@@ -244,18 +240,16 @@ export async function reverseProjectGlEntryWithinTransaction(
        and accounting_period.starts_on <= ${reversalDate}
        and accounting_period.ends_on >= ${reversalDate}
      limit 1
-  `)) as unknown as {
-    rows: { id: string; is_closed: boolean }[];
-  };
+  `));
   if (!period.rows[0]) {
     throw new Error(`no accounting period covers ${reversalDate}`);
   }
   if (period.rows[0].is_closed) {
     throw new Error(`the GL period covering ${reversalDate} is closed`);
   }
-  const lines = (await tx.execute(sql`
+  const lines = (await tx.execute<any>(sql`
     select account_id, amount, currency, txn_amount, project_id, party_id, memo, subsidiary_id
-      from journal_lines where entry_id = ${entryId} order by line_number`)) as unknown as { rows: any[] };
+      from journal_lines where entry_id = ${entryId} order by line_number`));
   const [rev] = (await tx.execute(sql`
     insert into journal_entries
       (org_id, book_id, subsidiary_id, entry_number, posting_date, period_id, memo, status, origin, reverses_entry_id, created_by, updated_by)
@@ -328,7 +322,7 @@ export async function reverseProjectGlEntry(
  * time_entries.cost_journal_entry_id so it is never re-posted. Call after time
  * transitions to approved.
  */
-export interface LaborPostingSourceRow {
+export type LaborPostingSourceRow = {
   id: string;
   project_id: string;
   hours: string;
@@ -336,7 +330,7 @@ export interface LaborPostingSourceRow {
   worked_on: string;
   subsidiary_id: string | null;
   cost_rate_currency: string;
-}
+};
 
 export interface LaborPostingGroup {
   subsidiaryId: string | null;
@@ -351,7 +345,13 @@ export interface LaborPostingGroup {
 export function groupLaborPostings(rows: LaborPostingSourceRow[]): LaborPostingGroup[] {
   const groups = new Map<string, { subsidiaryId: string | null; currency: string; postingDate: string; timeEntryIds: string[]; byProject: Map<string, string> }>();
   for (const row of rows) {
-    const cost = mulRate(String(row.hours ?? "0"), String(row.cost_rate ?? "0"));
+    // hours and cost_rate are both money (numeric 19,4), so this is ordinary
+    // money multiplication. It used mulRate — the FX helper, which reads its
+    // second argument as a numeric(19,10) rate and rejects anything <= 0. An
+    // entry with no wage rate therefore threw instead of costing nothing,
+    // making the isZero skip below unreachable for exactly the rows it exists
+    // to skip, and reporting a missing cost rate as an "FX rate" fault.
+    const cost = mul(String(row.hours ?? "0"), String(row.cost_rate ?? "0"));
     if (isZero(cost)) continue;
     const key = `${row.subsidiary_id ?? "__default__"}|${row.cost_rate_currency}`;
     const group = groups.get(key) ?? { subsidiaryId: row.subsidiary_id, currency: row.cost_rate_currency, postingDate: "", timeEntryIds: [], byProject: new Map<string, string>() };
@@ -381,7 +381,7 @@ export async function postProjectLaborCost(orgId: string, actorId: string, timeE
     const accts = await recognitionAccountsFrom(tx, orgId, true);
     if (!accts.laborWip || !accts.laborClearing) return []; // inert until mapped
     const idArr = `{${timeEntryIds.join(",")}}`;
-    const rows = (await tx.execute(sql`
+    const rows = (await tx.execute<LaborPostingSourceRow>(sql`
       select te.id, te.project_id, te.hours, te.cost_rate, te.worked_on,
              coalesce(p.subsidiary_id, te.cost_rate_subsidiary_id) as subsidiary_id,
              coalesce(te.cost_rate_currency, s.base_currency, o.base_currency) as cost_rate_currency
@@ -393,9 +393,7 @@ export async function postProjectLaborCost(orgId: string, actorId: string, timeE
          and te.status = 'approved' and te.project_id is not null
          and te.cost_journal_entry_id is null
        order by te.id
-       for update of te`)) as unknown as {
-      rows: LaborPostingSourceRow[];
-    };
+       for update of te`));
     if (rows.rows.length === 0) return [];
 
     const entryIds: string[] = [];
@@ -420,7 +418,7 @@ export async function postProjectLaborCost(orgId: string, actorId: string, timeE
         lines,
       });
       if (!entryId) continue;
-      const stamped = (await tx.execute(sql`
+      const stamped = (await tx.execute<{ id: string }>(sql`
         update time_entries
            set cost_journal_entry_id = ${entryId},
                updated_at = now(),
@@ -428,7 +426,7 @@ export async function postProjectLaborCost(orgId: string, actorId: string, timeE
          where org_id = ${orgId}
            and id = any(${`{${group.timeEntryIds.join(",")}}`}::uuid[])
            and cost_journal_entry_id is null
-         returning id`)) as unknown as { rows: { id: string }[] };
+         returning id`));
       if (stamped.rows.length !== group.timeEntryIds.length) {
         throw new Error("labor posting source claim changed before journal stamping");
       }
@@ -449,15 +447,13 @@ export async function reverseProjectLaborCost(
   if (timeEntryIds.length === 0) return;
   await inDbTransaction(async (tx) => {
     const idArr = `{${timeEntryIds.join(",")}}`;
-    const linked = (await tx.execute(sql`
+    const linked = (await tx.execute<{ id: string; cost_journal_entry_id: string }>(sql`
       select id, cost_journal_entry_id
         from time_entries
        where org_id = ${orgId}
          and id = any(${idArr}::uuid[])
          and cost_journal_entry_id is not null
-       order by id`)) as unknown as {
-      rows: { id: string; cost_journal_entry_id: string }[];
-    };
+       order by id`));
     const entryIds = [...new Set(linked.rows.map((row) => row.cost_journal_entry_id))].sort();
     for (const entryId of entryIds) {
       // Lock the journal before any member rows. Two callers may request

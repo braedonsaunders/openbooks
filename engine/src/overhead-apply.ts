@@ -4,7 +4,7 @@ import {
   postProjectGlEntryWithinTransaction,
   reverseProjectGlEntryWithinTransaction,
 } from "./project-recognition.ts";
-import { add, isZero, mulRate, neg } from "./money.ts";
+import { add, isZero, neg, normalizeMoney } from "./money.ts";
 
 /**
  * Overhead application — a net-zero journal pair,
@@ -39,14 +39,12 @@ async function overheadApplicationSettingsFrom(
   orgId: string,
   lock = false,
 ): Promise<OverheadApplicationSettings> {
-  const r = (await executor.execute(sql`
+  const r = (await executor.execute<{ c: Partial<OverheadApplicationSettings> | null }>(sql`
     select settings->'overheadApplication' as c
       from orgs
      where id = ${orgId}
      ${lock ? sql`for share` : sql``}
-  `)) as unknown as {
-    rows: { c: Partial<OverheadApplicationSettings> | null }[];
-  };
+  `));
   const c = r.rows[0]?.c ?? {};
   return {
     mode: c.mode === "net_zero_pair" ? "net_zero_pair" : c.mode === "off" ? "off" : "report_only",
@@ -82,7 +80,7 @@ export async function applyOverheadForTime(orgId: string, actorId: string, timeE
     if (settings.mode !== "net_zero_pair" || !settings.accountId) return none;
 
     const idArr = `{${timeEntryIds.join(",")}}`;
-    const rows = (await tx.execute(sql`
+    const rows = (await tx.execute<{ id: string; project_id: string; worked_on: string; amount: string }>(sql`
       select te.id, te.project_id, te.worked_on, (te.hours * r.rate_percent) as amount
         from time_entries te
         join overhead_rates r
@@ -119,9 +117,7 @@ export async function applyOverheadForTime(orgId: string, actorId: string, timeE
             ) = 'none'
          )
        order by te.id
-       for update of te`)) as unknown as {
-      rows: { id: string; project_id: string; worked_on: string; amount: string }[];
-    };
+       for update of te`));
     if (rows.rows.length === 0) return none;
 
     const byProject = new Map<string, string>();
@@ -129,7 +125,7 @@ export async function applyOverheadForTime(orgId: string, actorId: string, timeE
     let total = "0";
     let maxDate = "";
     for (const r of rows.rows) {
-      const amt = mulRate(String(r.amount), "1"); // normalize to 4dp money
+      const amt = normalizeMoney(String(r.amount));
       if (isZero(amt)) continue;
       byProject.set(r.project_id, add(byProject.get(r.project_id) ?? "0", amt));
       total = add(total, amt);
@@ -155,7 +151,7 @@ export async function applyOverheadForTime(orgId: string, actorId: string, timeE
       lines,
     });
     if (!entryId) return none;
-    const stamped = (await tx.execute(sql`
+    const stamped = (await tx.execute<{ id: string }>(sql`
       update time_entries
          set overhead_journal_entry_id = ${entryId},
              updated_at = now(),
@@ -163,7 +159,7 @@ export async function applyOverheadForTime(orgId: string, actorId: string, timeE
        where org_id = ${orgId}
          and id = any(${`{${carried.join(",")}}`}::uuid[])
          and overhead_journal_entry_id is null
-       returning id`)) as unknown as { rows: { id: string }[] };
+       returning id`));
     if (stamped.rows.length !== carried.length) {
       throw new Error("overhead posting source claim changed before journal stamping");
     }
@@ -175,7 +171,7 @@ export async function applyOverheadForTime(orgId: string, actorId: string, timeE
  * workspace's backfill affordance). Counts only entries a backfill could
  * actually carry — a published rate must cover the worked day. */
 export async function countUnappliedOverheadTime(orgId: string): Promise<{ entries: number; hours: string }> {
-  const r = (await db.execute(sql`
+  const r = (await db.execute<{ entries: number; hours: string }>(sql`
     select count(*)::int as entries, coalesce(sum(te.hours), 0) as hours
       from time_entries te
      where te.org_id = ${orgId} and te.status = 'approved' and te.project_id is not null
@@ -202,7 +198,7 @@ export async function countUnappliedOverheadTime(orgId: string): Promise<{ entri
              order by v.effective_from desc
              limit 1
           ) = 'none'
-       )`)) as unknown as { rows: { entries: number; hours: string }[] };
+       )`));
   return { entries: Number(r.rows[0]?.entries ?? 0), hours: String(r.rows[0]?.hours ?? "0") };
 }
 
@@ -217,7 +213,7 @@ export async function backfillOverhead(orgId: string, actorId: string): Promise<
   let journals = 0;
   // Loop until no eligible ids remain (each pass stamps what it carries).
   for (let guard = 0; guard < 200; guard++) {
-    const ids = (await db.execute(sql`
+    const ids = (await db.execute<{ id: string }>(sql`
       select te.id
         from time_entries te
        where te.org_id = ${orgId} and te.status = 'approved' and te.project_id is not null
@@ -246,7 +242,7 @@ export async function backfillOverhead(orgId: string, actorId: string): Promise<
             ) = 'none'
          )
        order by te.worked_on
-       limit 2000`)) as unknown as { rows: { id: string }[] };
+       limit 2000`));
     if (ids.rows.length === 0) break;
     const res = await applyOverheadForTime(orgId, actorId, ids.rows.map((r) => r.id));
     if (!res.entryId) break; // nothing carriable in this batch → stop
@@ -269,15 +265,13 @@ export async function reverseOverheadForTime(
   if (timeEntryIds.length === 0) return;
   await inDbTransaction(async (tx) => {
     const idArr = `{${timeEntryIds.join(",")}}`;
-    const linked = (await tx.execute(sql`
+    const linked = (await tx.execute<{ id: string; overhead_journal_entry_id: string }>(sql`
       select id, overhead_journal_entry_id
         from time_entries
        where org_id = ${orgId}
          and id = any(${idArr}::uuid[])
          and overhead_journal_entry_id is not null
-       order by id`)) as unknown as {
-      rows: { id: string; overhead_journal_entry_id: string }[];
-    };
+       order by id`));
     const entryIds = [...new Set(linked.rows.map((row) => row.overhead_journal_entry_id))].sort();
     for (const entryId of entryIds) {
       // The journal is the group serialization point. Lock it before updating
@@ -308,15 +302,13 @@ export async function reverseOverheadForTime(
 
 /** List posted overhead applications (for the workspace history). */
 export async function listOverheadApplications(orgId: string, limit = 24) {
-  const r = (await db.execute(sql`
+  const r = (await db.execute<{ id: string; entry_number: string; posting_date: string; memo: string; status: string; applied_total: string; projects: number }>(sql`
     select e.id, e.entry_number, e.posting_date::text as posting_date, e.memo, e.status,
            (select coalesce(sum(l.amount), 0) from journal_lines l where l.entry_id = e.id and l.project_id is not null) as applied_total,
            (select count(distinct l.project_id) from journal_lines l where l.entry_id = e.id and l.project_id is not null) as projects
       from journal_entries e
      where e.org_id = ${orgId} and e.origin = 'overhead_applied'
      order by e.posting_date desc, e.created_at desc
-     limit ${limit}`)) as unknown as {
-    rows: { id: string; entry_number: string; posting_date: string; memo: string; status: string; applied_total: string; projects: number }[];
-  };
+     limit ${limit}`));
   return r.rows;
 }

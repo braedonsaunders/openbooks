@@ -530,7 +530,9 @@ export const NAV_MODULES: NavModule[] = [
     key: 'projects',
     href: '/projects',
     label: 'Projects',
-    iconKey: 'timer',
+    // Not 'timer' — Timesheets sits directly below in this same subgroup and
+    // owns the stopwatch; two identical icons made them indistinguishable.
+    iconKey: 'hard-hat',
     group: 'operations',
     subgroup: 'delivery',
     requiredPermission: 'projects.read',
@@ -901,11 +903,11 @@ export interface OrgNavConfig {
   groups: NavGroupConfig[]
 }
 
-export interface NavAppOption {
+export type NavAppOption = {
   key: string
   name: string
   iconKey: string
-}
+};
 
 /** Default layout computed from the registry (used when no org config). */
 export function defaultNavConfig(): OrgNavConfig {

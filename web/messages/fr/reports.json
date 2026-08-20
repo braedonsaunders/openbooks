@@ -494,6 +494,7 @@
         "label": "Saisies de temps",
         "description": "Saisies de feuilles de temps — employé, date, heures, facturable, projet et statut d’approbation."
       },
+      "timesheet_weeks": "Semaines de feuille de temps",
       "fixed_assets": {
         "label": "Immobilisations",
         "description": "Le registre des immobilisations — statut, acquisition, coût, dépositaire et dimensions."
@@ -666,6 +667,20 @@
         "memo": "Mémo",
         "created_at": "Créé le",
         "id": "Saisie de temps (id)"
+      },
+      "timesheet_weeks": {
+        "employee_name": "Employé",
+        "week_start": "Semaine du",
+        "week_end": "Semaine au",
+        "status": "Statut",
+        "total_hours": "Heures totales",
+        "billable_hours": "Heures facturables",
+        "submitted_by": "Soumis par",
+        "submitted_at": "Soumis le",
+        "approved_by": "Approuvé par",
+        "approved_at": "Approuvé le",
+        "rejection_reason": "Motif du rejet",
+        "id": "Semaine (id)"
       },
       "fixed_assets": {
         "asset_number": "N° d’immobilisation",

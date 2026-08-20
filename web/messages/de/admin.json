@@ -777,6 +777,7 @@
     "time_read": "Zeiterfassungen anzeigen",
     "time_manage": "Zeit erfassen und bearbeiten",
     "time_approve": "Zeiterfassungen genehmigen",
+    "time_reopen": "Genehmigte Stundenzettel wieder öffnen",
     "records_read": "Benutzerdefinierte Datensätze anzeigen",
     "records_create": "Benutzerdefinierte Datensätze erstellen und bearbeiten",
     "records_manage_types": "Benutzerdefinierte Datensatztypen entwerfen",

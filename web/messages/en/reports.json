@@ -499,6 +499,7 @@
         "label": "Time entries",
         "description": "Timesheet entries — employee, date, hours, billable state, project and approval status."
       },
+      "timesheet_weeks": "Timesheet weeks",
       "fixed_assets": {
         "label": "Fixed assets",
         "description": "The fixed-asset register — status, acquisition, cost, custodian and dimensions."
@@ -705,6 +706,20 @@
         "memo": "Memo",
         "created_at": "Created at",
         "id": "Time entry (id)"
+      },
+      "timesheet_weeks": {
+        "employee_name": "Employee",
+        "week_start": "Week starting",
+        "week_end": "Week ending",
+        "status": "Status",
+        "total_hours": "Total hours",
+        "billable_hours": "Billable hours",
+        "submitted_by": "Submitted by",
+        "submitted_at": "Submitted at",
+        "approved_by": "Approved by",
+        "approved_at": "Approved at",
+        "rejection_reason": "Rejection reason",
+        "id": "Timesheet week (id)"
       },
       "fixed_assets": {
         "asset_number": "Asset #",

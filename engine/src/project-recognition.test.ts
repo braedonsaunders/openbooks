@@ -37,3 +37,28 @@ test("labor posting groups never mix functional currencies", () => {
   assert.equal(groups.length, 2);
   assert.deepEqual(new Set(groups.map((group) => group.currency)), new Set(["CAD", "USD"]));
 });
+
+test("a time entry with no wage rate is skipped, not fatal", () => {
+  // Regression: mulRate validates its second argument as an FX RATE and
+  // rejects zero, so a null/zero cost_rate threw before the isZero skip could
+  // run — approving a week for anyone without a configured wage rate failed
+  // outright, reporting an "FX rate" problem that was really a missing rate.
+  const rows: LaborPostingSourceRow[] = [
+    { id: "no-rate", project_id: "p1", hours: "4", cost_rate: null as unknown as string, worked_on: "2026-07-10", subsidiary_id: "ca", cost_rate_currency: "CAD" },
+    { id: "zero-rate", project_id: "p1", hours: "4", cost_rate: "0", worked_on: "2026-07-10", subsidiary_id: "ca", cost_rate_currency: "CAD" },
+    { id: "zero-hours", project_id: "p1", hours: "0", cost_rate: "50", worked_on: "2026-07-10", subsidiary_id: "ca", cost_rate_currency: "CAD" },
+    { id: "real", project_id: "p1", hours: "2", cost_rate: "50", worked_on: "2026-07-11", subsidiary_id: "ca", cost_rate_currency: "CAD" },
+  ];
+  const groups = groupLaborPostings(rows);
+  assert.equal(groups.length, 1);
+  // Only the costed entry posts, and it posts its full value.
+  assert.deepEqual(groups[0].timeEntryIds, ["real"]);
+  assert.equal(groups[0].total, "100.0000");
+});
+
+test("a week with no costed entries at all produces no postings", () => {
+  const groups = groupLaborPostings([
+    { id: "a", project_id: "p1", hours: "8", cost_rate: null as unknown as string, worked_on: "2026-07-10", subsidiary_id: null, cost_rate_currency: "CAD" },
+  ]);
+  assert.deepEqual(groups, []);
+});

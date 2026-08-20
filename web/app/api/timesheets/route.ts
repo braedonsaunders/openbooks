@@ -3,6 +3,8 @@ import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/db.ts'
 import { guardFeaturePermission } from '../../../lib/feature-gates'
 import { isUuid } from '../../../lib/list-params'
+import { loadFieldDefs, validateCustomValues } from '../../../lib/custom-fields'
+import { initialEntryStatus, loadTimePolicy } from '../../../lib/time-policy'
 import { isIsoDate, loadWeek, weekStart, weekWindow } from './_lib'
 
 export const runtime = 'nodejs'
@@ -19,6 +21,7 @@ interface SaveRow {
   isBillable?: boolean
   memo?: string | null
   hours?: (string | number | null)[]
+  custom?: Record<string, unknown>
 }
 interface SaveBody {
   employee?: string
@@ -81,7 +84,7 @@ async function save(req: Request) {
   // Confirm the employee exists in this org (belongs-to-org guard).
   const emp = (await db.execute(sql`
     select 1 from parties where id = ${employee} and org_id = ${orgId}
-  `)) as unknown as { rows: unknown[] }
+  `))
   if (!emp.rows[0]) return bad('Employee not found')
 
   // Normalize each grid row × day into a flat list of entries to persist.
@@ -94,7 +97,15 @@ async function save(req: Request) {
     departmentId: string | null
     isBillable: boolean
     memo: string | null
+    custom: Record<string, unknown>
   }
+  // Org-defined line fields live on time_entries.custom; validate + strip
+  // unknown keys exactly as every other record does.
+  const lineDefs = await loadFieldDefs('time_entries')
+  // When the org does not require approval, saved hours are usable at once
+  // rather than sitting in a draft nobody will ever submit.
+  const policy = await loadTimePolicy(orgId)
+  const newStatus = initialEntryStatus(policy)
   const toPersist: Persist[] = []
   for (const r of body.rows) {
     const projectId = uuidOrNull(r.projectId)
@@ -107,6 +118,9 @@ async function save(req: Request) {
     if (departmentId === 'invalid') return bad('Invalid department')
     const memo = typeof r.memo === 'string' && r.memo.trim() !== '' ? r.memo.trim() : null
     const isBillable = r.isBillable === true
+    const validated = validateCustomValues(lineDefs, r.custom)
+    if (!validated.ok) return bad(Object.values(validated.errors)[0] ?? 'Invalid custom field')
+    const custom = validated.cleaned
     const cells = Array.isArray(r.hours) ? r.hours : []
 
     for (let i = 0; i < 7; i++) {
@@ -124,6 +138,7 @@ async function save(req: Request) {
         departmentId,
         isBillable,
         memo,
+        custom,
       })
     }
   }
@@ -133,23 +148,34 @@ async function save(req: Request) {
   // Approved/submitted entries are untouched — the grid already reflected them
   // read-only when the week wasn't a draft.
   await db.transaction(async (tx) => {
+    // When approval is not required, saved entries land already approved, so
+    // the replaceable set has to include those too — otherwise every save would
+    // insert a second copy of the week's hours alongside the first. Entries any
+    // downstream document has consumed stay put regardless: they are evidence
+    // for an invoice, pay run or ledger entry that already exists.
     await tx.execute(sql`
       delete from time_entries
        where org_id = ${orgId}
          and employee_party_id = ${employee}
          and worked_on >= ${days[0]} and worked_on <= ${days[6]}
-         and status in ('draft', 'rejected')
+         and (
+           status in ('draft', 'rejected')
+           or (${!policy.requireApproval} and status = 'approved'
+               and invoiced_by_line_id is null and payroll_batch_ref is null
+               and cost_journal_entry_id is null and field_ticket_id is null)
+         )
     `)
     for (const p of toPersist) {
       await tx.execute(sql`
         insert into time_entries
           (org_id, employee_party_id, worked_on, hours, time_type_id, item_id,
-           project_id, department_id, memo, is_billable, status,
+           project_id, department_id, memo, is_billable, status, custom,
            created_by, updated_by)
         values
           (${orgId}, ${employee}, ${p.workedOn}, ${p.hours}, ${p.timeTypeId},
            ${p.itemId}, ${p.projectId}, ${p.departmentId}, ${p.memo},
-           ${p.isBillable}, 'draft', ${user.id}, ${user.id})
+           ${p.isBillable}, ${newStatus}, ${JSON.stringify(p.custom)}::jsonb,
+           ${user.id}, ${user.id})
       `)
     }
   })

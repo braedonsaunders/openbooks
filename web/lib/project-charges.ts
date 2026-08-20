@@ -3,7 +3,7 @@ import { sql } from 'drizzle-orm'
 import { db, inDbTransaction } from '@openbooks/engine/src/db.ts'
 import { postDocument } from '@openbooks/engine/src/posting.ts'
 import { submitAndReleaseIfUngated } from '@openbooks/engine/src/flows/index.ts'
-import { cmp, divRate, isZero, mul, sum } from '@openbooks/engine/src/money.ts'
+import { cmp, div, isZero, mul, sum } from '@openbooks/engine/src/money.ts'
 import { nextDocumentNumber } from './bills'
 import { controlDeps } from './documents'
 import { resolveItemRate } from './item-rates'
@@ -79,12 +79,12 @@ export async function createProjectCharge(
   if (!input.lines?.length) throw new ChargeError('A charge needs at least one line')
 
   const created = await inDbTransaction(async (tx) => {
-    const proj = (await tx.execute(sql`
+    const proj = (await tx.execute<{ id: string; subsidiary_id: string | null }>(sql`
       select id, subsidiary_id from projects where id = ${input.projectId} and org_id = ${orgId}
-    `)) as unknown as { rows: { id: string; subsidiary_id: string | null }[] }
+    `))
     if (!proj.rows[0]) throw new ChargeError('Project not found')
     if (input.fieldTicketId) {
-      const ticket = (await tx.execute(sql`
+      const ticket = (await tx.execute<{ id: string }>(sql`
         select id
           from documents
          where id = ${input.fieldTicketId}
@@ -92,15 +92,13 @@ export async function createProjectCharge(
            and project_id = ${input.projectId}
            and kind = 'field_ticket'
          for update
-      `)) as unknown as { rows: { id: string }[] }
+      `))
       if (!ticket.rows[0]) {
         throw new ChargeError('The source Field Ticket does not belong to this project')
       }
     }
     const subsidiaryId = proj.rows[0].subsidiary_id
-    const org = (await tx.execute(sql`select base_currency from orgs where id = ${orgId}`)) as unknown as {
-      rows: { base_currency: string }[]
-    }
+    const org = (await tx.execute<{ base_currency: string }>(sql`select base_currency from orgs where id = ${orgId}`))
     const currency = org.rows[0]?.base_currency ?? 'CAD'
     const documentNumber = await nextDocumentNumber(orgId, 'project_charge', 'CHG-', subsidiaryId ?? undefined)
     const docDate = input.documentDate ?? new Date().toISOString().slice(0, 10)
@@ -118,17 +116,17 @@ export async function createProjectCharge(
     let lineNo = 1
     for (const line of input.lines) {
       if (cmp(String(line.quantity), '0') <= 0) throw new ChargeError('Charge quantity must be greater than zero')
-      const item = (await tx.execute(sql`
+      const item = (await tx.execute<any>(sql`
         select kind, default_cost, default_rate, expense_account_id, cost_recovery_account_id, tax_code_id, name, unit
           from items where id = ${line.itemId} and org_id = ${orgId}
-      `)) as unknown as { rows: any[] }
+      `))
       const it = item.rows[0]
       if (!it) throw new ChargeError('Item not found')
       if (line.equipmentUnitId) {
-        const unit = (await tx.execute(sql`
+        const unit = (await tx.execute<{ charge_item_id: string; status: string; subsidiary_id: string }>(sql`
           select charge_item_id, status, subsidiary_id from equipment_units
            where id = ${line.equipmentUnitId} and org_id = ${orgId}
-        `)) as unknown as { rows: { charge_item_id: string; status: string; subsidiary_id: string }[] }
+        `))
         if (!unit.rows[0]) throw new ChargeError('Equipment unit not found')
         if (unit.rows[0].status !== 'active') throw new ChargeError('Equipment unit is not active')
         if (unit.rows[0].charge_item_id !== line.itemId) throw new ChargeError('Equipment unit does not use the selected charge item')
@@ -141,7 +139,7 @@ export async function createProjectCharge(
         const operator = (await tx.execute(sql`
           select 1 from employee_roles
            where party_id = ${line.employeeId} and org_id = ${orgId}
-        `)) as unknown as { rows: unknown[] }
+        `))
         if (!operator.rows[0]) throw new ChargeError('The operator must be an employee of this organization')
         if (!line.equipmentUnitId) {
           // An operator on a material or service charge would look like an
@@ -159,8 +157,12 @@ export async function createProjectCharge(
         : null)
       const costAmount = resolved?.cost.amount ?? mul(String(line.quantity), String(line.costRate ?? it.default_cost ?? '0'))
       const billAmount = resolved?.bill.amount ?? mul(String(line.quantity), String(line.billRate ?? it.default_rate ?? line.costRate ?? it.default_cost ?? '0'))
-      const costRate = resolved ? divRate(costAmount, String(line.quantity)) : String(line.costRate ?? it.default_cost ?? '0')
-      const billRate = resolved ? divRate(billAmount, String(line.quantity)) : String(line.billRate ?? it.default_rate ?? costRate)
+      // Unit rate back out of a resolved amount. A zero-quantity line has no
+      // unit rate to derive, so fall back to the entered rate rather than
+      // dividing by zero — which divRate reported as an invalid FX rate.
+      const canDerive = resolved != null && !isZero(String(line.quantity))
+      const costRate = canDerive ? div(costAmount, String(line.quantity)) : String(line.costRate ?? it.default_cost ?? '0')
+      const billRate = canDerive ? div(billAmount, String(line.quantity)) : String(line.billRate ?? it.default_rate ?? costRate)
       const accountId = line.accountId ?? it.expense_account_id
       if (!accountId) throw new ChargeError(`Item "${it.name}" needs an expense/COGS account to charge to a project`)
       if (!isZero(costAmount) && !it.cost_recovery_account_id) {
