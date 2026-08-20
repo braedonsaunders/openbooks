@@ -6,7 +6,7 @@ import {
   getBlockingConnection,
   type CloseDeliveryJobData,
 } from "@openbooks/jobs";
-import { db } from "../db.ts";
+import { db, withOrgContext } from "../db.ts";
 import { ensureReportDefinitions } from "../ensure-report-definitions.ts";
 import { renderReportPdf } from "./render-client.ts";
 
@@ -135,6 +135,9 @@ export function createCloseDeliveryWorker(): Worker<CloseDeliveryJobData> {
     CLOSE_DELIVERY_QUEUE,
     async (job) => {
       const { orgId, runId, packageId } = job.data;
+      // Queue callbacks carry no request store; the package's tenant is the
+      // only legal scope for the context load, catalog ensure, and close event.
+      return await withOrgContext(orgId, async () => {
       const row = await loadContext(job.data);
       if (!row) throw new Error("close run / period or reporting package not found");
 
@@ -221,6 +224,7 @@ export function createCloseDeliveryWorker(): Worker<CloseDeliveryJobData> {
                 ${JSON.stringify({ reports: rendered.length, files: files.length, recipients: recipients.length, combined, failures, truncated })}::jsonb)`);
 
       return { reports: rendered.length, files: files.length, recipients: recipients.length, combined, failures, truncated };
+      });
     },
     { connection: getBlockingConnection(), concurrency: 2 },
   );

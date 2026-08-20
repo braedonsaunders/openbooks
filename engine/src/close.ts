@@ -1,7 +1,7 @@
 import { createHash } from "node:crypto";
 import { sql } from "drizzle-orm";
 import { canonicalJson } from "./canonical-json.ts";
-import { db, withOrg, inDbTransaction, type SqlExecutor } from "./db.ts";
+import { db, withOrg, withBypassContext, withOrgContext, inDbTransaction, type SqlExecutor } from "./db.ts";
 
 export class CloseError extends Error {}
 
@@ -2449,7 +2449,12 @@ export async function recloseApprovedReopen(args: {
 }
 
 export async function recloseExpiredReopens(actorId?: string): Promise<number> {
-  const expired = (await db.execute<any>(sql`
+  // Finding expired reopen windows spans organizations and crosses an explicit
+  // trusted boundary; each re-close then commits inside its own tenant. The
+  // scheduler tick that calls this holds no request store, so without the
+  // boundary RLS denies by default and no window is ever closed again.
+  const expired = await withBypassContext(() =>
+    db.execute<any>(sql`
     select request.id, request.org_id, request.period_id, request.book_id,
            request.subsidiary_id, request.modules, request.reason
       from close_reopen_requests request
@@ -2457,7 +2462,8 @@ export async function recloseExpiredReopens(actorId?: string): Promise<number> {
      where request.status = 'approved' and request.expires_at <= now()
        and organization.env_kind = 'production'`));
   for (const row of expired.rows) {
-    await db.transaction(async (tx) => {
+    await withOrgContext(row.org_id, () =>
+      db.transaction(async (tx) => {
       const locked = (await tx.execute<any>(sql`
         select *
           from close_reopen_requests
@@ -2473,7 +2479,7 @@ export async function recloseExpiredReopens(actorId?: string): Promise<number> {
         reason: locked.rows[0].reason,
         automatic: true,
       });
-    });
+    }));
   }
   return expired.rows.length;
 }
@@ -2761,7 +2767,11 @@ export async function runCloseAutomations(
 /** Scheduler entrypoint. Each run/rule/day is idempotent across processes. */
 export async function runDueCloseAutomations(): Promise<number> {
   const today = new Date().toISOString().slice(0, 10);
-  const due = (await db.execute<{ org_id: string; id: string }>(sql`
+  // Org-spanning discovery crosses an explicit trusted boundary; each rule then
+  // executes inside its own tenant. Without this the contextless scheduler tick
+  // is denied by default and no deadline automation ever runs.
+  const due = await withBypassContext(() =>
+    db.execute<{ org_id: string; id: string }>(sql`
     select distinct r.org_id, r.id
       from close_runs r
       join close_automation_rules a on a.org_id = r.org_id and a.trigger = 'deadline_approaching' and a.is_active
@@ -2769,12 +2779,13 @@ export async function runDueCloseAutomations(): Promise<number> {
      where r.status in ('in_progress','review','approved') and r.target_close_date <= current_date + 90
   `));
   for (const run of due.rows) {
-    await runCloseAutomations({
+    await withOrgContext(run.org_id, () =>
+      runCloseAutomations({
       orgId: run.org_id,
       runId: run.id,
       trigger: "deadline_approaching",
       eventKey: `deadline:${today}`,
-    });
+    }));
   }
   return due.rows.length;
 }

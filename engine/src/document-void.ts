@@ -9,7 +9,7 @@ import {
   captureTransactionAuditSnapshot,
   recordTransactionAudit,
 } from "./transaction-audit.ts";
-import { releaseBillingProvenance } from "./billing-provenance.ts";
+import { releaseBillingProvenance, releaseVendorBillProvenance } from "./billing-provenance.ts";
 
 export class DocumentVoidError extends Error {}
 
@@ -405,6 +405,9 @@ export async function completeRequestedDocumentVoid(
 
       if (String(doc.kind) === "customer_invoice") {
         await releaseBillingProvenance(tx, orgId, documentId);
+      }
+      if (String(doc.kind) === "vendor_bill") {
+        await releaseVendorBillProvenance(tx, orgId, documentId);
       }
       if (String(doc.kind) === "pay_run") {
         await releaseVoidedPayRun(tx, orgId, documentId);

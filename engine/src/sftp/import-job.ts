@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import { db } from "../db.ts";
+import { db, withBypassContext, withOrgContext } from "../db.ts";
 import {
   importStatement,
   parseOfx,
@@ -93,7 +93,12 @@ async function runSchedule(s: ScheduleRow): Promise<ScheduleRun> {
 
 /** Run every active import schedule due for a scan (called from the scheduler tick). */
 export async function runDueSftpImports(orgId?: string, scheduleId?: string): Promise<ScheduleRun[]> {
-  const rows = (await db.execute<ScheduleRow>(sql`
+  // Discovering due schedules spans organizations (the scheduler tick passes no
+  // orgId) and crosses an explicit trusted boundary; each import then runs
+  // inside its own tenant. A timer callback holds no request store, so without
+  // these the connection layer denies by default and the scan sees nothing.
+  const rows = await withBypassContext(() =>
+    db.execute<ScheduleRow>(sql`
     select sc.id, sc.org_id, sc.account_id, sc.format, sc.folder, sc.csv_mapping, sc.created_by,
            sv.backend, sv.bucket, sv.root_prefix
       from sftp_import_schedules sc
@@ -108,12 +113,13 @@ export async function runDueSftpImports(orgId?: string, scheduleId?: string): Pr
   const runs: ScheduleRun[] = [];
   for (const s of rows.rows) {
     let run: ScheduleRun;
-    try { run = await runSchedule(s); }
+    try { run = await withOrgContext(s.org_id, () => runSchedule(s)); }
     catch (e) { run = { scheduleId: s.id, filesSeen: 0, imported: 0, duplicates: 0, errors: [(e as Error).message] }; }
     runs.push(run);
-    await db.execute(sql`
+    await withOrgContext(s.org_id, () =>
+      db.execute(sql`
       update sftp_import_schedules set last_run_at = now(), last_result = ${JSON.stringify(run)}::jsonb where id = ${s.id}
-    `);
+    `));
   }
   return runs;
 }

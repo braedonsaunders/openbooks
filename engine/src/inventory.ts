@@ -38,7 +38,31 @@ import {
  * Receipts DR inventory / CR an offset (GRNI / clearing / adjustment). Issues DR
  * COGS / CR inventory. Negative stock is blocked (an issue may not exceed
  * on-hand) — the safe default until a per-item "allow negative" preference lands.
+ *
+ * Every value ÷ quantity in here goes through `roundDiv`, never bare BigInt
+ * division. BigInt `/` TRUNCATES, so a non-terminating average silently rounded
+ * DOWN at four decimals and the subledger drifted below the GL: receiving 6
+ * units for 10.0000 stored a unit cost of 1.6666, valuing the stock at 9.9996
+ * against a ledger debited the full 10.0000. The shortfall was permanent and
+ * grew with every such receipt, which is exactly the invariant stated above.
  */
+
+/**
+ * value ÷ quantity as a 4-decimal unit cost, half-up and sign-preserving.
+ *
+ * BigInt `/` truncates, which quietly rounded every non-terminating average
+ * DOWN and drifted the subledger below the GL, so this rounds. `roundDiv`
+ * refuses a non-positive denominator, and quantity is legitimately negative on
+ * reversal and consumption paths, so the sign is taken out and put back rather
+ * than handed to it. A zero quantity has no unit cost to state; callers choose
+ * the fallback that fits their context.
+ */
+function unitCostPerQuantity(value: string, quantity: string): string | null {
+  const q = toUnits(quantity);
+  if (q === 0n) return null;
+  const v = toUnits(value) * 10_000n;
+  return fromUnits(q < 0n ? roundDiv(-v, -q) : roundDiv(v, q));
+}
 
 export interface InventoryAccounts {
   assetAccountId: string;
@@ -189,7 +213,7 @@ async function getOnHandWith(
   const value = r.rows[0]?.value ?? "0";
   const unitCost = isZero(quantity)
     ? "0"
-    : fromUnits((toUnits(value) * 10_000n) / toUnits(quantity));
+    : unitCostPerQuantity(value, quantity)!;
   return {
     quantity: fromUnits(toUnits(quantity)),
     value: fromUnits(toUnits(value)),
@@ -612,7 +636,7 @@ export async function receiveInventory(
         );
         const newCost = isZero(newQty)
           ? layerUnitCost
-          : fromUnits((toUnits(newValue) * 10_000n) / toUnits(newQty));
+          : unitCostPerQuantity(newValue, newQty)!;
         await tx.execute(sql`
           update cost_layers set remaining_quantity = ${newQty}, original_quantity = original_quantity + ${excessQuantity},
              unit_cost = ${newCost}, updated_at = now() where id = ${cur.id}`);
@@ -978,7 +1002,7 @@ async function consumeLayers(
   }
   const unitCost = isZero(quantity)
     ? "0"
-    : fromUnits((toUnits(cost) * 10_000n) / toUnits(quantity));
+    : unitCostPerQuantity(cost, quantity)!;
   return { cost, unitCost, consumptions, shortfallQuantity };
 }
 
@@ -1105,7 +1129,7 @@ async function addLayerAtCost(
       );
       const newCost = isZero(newQty)
         ? unitCost
-        : fromUnits((toUnits(newValue) * 10_000n) / toUnits(newQty));
+        : unitCostPerQuantity(newValue, newQty)!;
       await tx.execute(sql`
         update cost_layers set remaining_quantity = ${newQty}, original_quantity = original_quantity + ${quantity},
            unit_cost = ${newCost}, updated_at = now() where id = ${cur.id}`);
@@ -2028,7 +2052,7 @@ export async function buildAssembly(
         insert into inventory_movements
           (org_id, item_id, kind, moved_at, stock_location_id, quantity, unit_cost, total_value, journal_entry_id, status, memo, created_by, updated_by)
         values (${orgId}, ${c.itemId}, 'assembly_consume', ${input.date}, ${input.stockLocationId},
-                ${neg(c.reqQty)}, ${isZero(c.reqQty) ? "0" : fromUnits((toUnits(pc.cost) * 10_000n) / toUnits(c.reqQty))},
+                ${neg(c.reqQty)}, ${isZero(c.reqQty) ? "0" : unitCostPerQuantity(pc.cost, c.reqQty)!},
                 ${neg(pc.cost)}, ${entryId}, 'posted', ${input.memo ?? null}, ${actorId}, ${actorId})
         returning id`));
       await recordConsumptions(
@@ -2043,7 +2067,7 @@ export async function buildAssembly(
     // Finished-good build movement + layer.
     const unitCost = isZero(input.quantity)
       ? "0"
-      : fromUnits((toUnits(totalCost) * 10_000n) / toUnits(input.quantity));
+      : unitCostPerQuantity(totalCost, input.quantity)!;
     const buildMv = (await tx.execute<{ id: string }>(sql`
       insert into inventory_movements
         (org_id, item_id, kind, moved_at, stock_location_id, quantity, unit_cost, total_value, journal_entry_id, status, memo, created_by, updated_by)
@@ -2544,7 +2568,7 @@ export async function applyInventoryReceiptsForBill(
     if (seen.rows[0]) continue;
     const unitCost = isZero(l.quantity)
       ? "0"
-      : fromUnits((toUnits(l.amount) * 10_000n) / toUnits(l.quantity));
+      : unitCostPerQuantity(l.amount, l.quantity)!;
     await receiveInventory(orgId, actorId, {
       itemId: l.itemId,
       stockLocationId: l.stockLocationId,

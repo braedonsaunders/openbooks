@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server'
 import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/db.ts'
 import { cmp } from '@openbooks/engine/src/money.ts'
-import { guardPermission } from '../../../../lib/authz'
+import { guardFeaturePermission } from '../../../../lib/feature-gates'
 import { isUuid } from '../../../../lib/list-params'
 import { loadEquipment } from '../_lib'
 
@@ -10,7 +10,7 @@ function text(v: unknown): string | null { return typeof v === 'string' && v.tri
 function bad(error: string) { return NextResponse.json({ error }, { status: 422 }) }
 
 export async function GET(_req: Request, { params }: { params: Promise<{ id: string }> }) {
-  const gate = await guardPermission('assets.read')
+  const gate = await guardFeaturePermission('assets.read', 'equipment')
   if (gate instanceof NextResponse) return gate
   const { id } = await params
   const data = isUuid(id) ? await loadEquipment(id, gate.user.orgId) : null
@@ -19,7 +19,7 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
 }
 
 export async function PATCH(req: Request, { params }: { params: Promise<{ id: string }> }) {
-  const gate = await guardPermission('assets.manage')
+  const gate = await guardFeaturePermission('assets.manage', 'equipment')
   if (gate instanceof NextResponse) return gate
   const { id } = await params
   if (!isUuid(id)) return NextResponse.json({ error: 'not_found' }, { status: 404 })
@@ -94,7 +94,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
 }
 
 export async function DELETE(_req: Request, { params }: { params: Promise<{ id: string }> }) {
-  const gate = await guardPermission('assets.manage')
+  const gate = await guardFeaturePermission('assets.manage', 'equipment')
   if (gate instanceof NextResponse) return gate
   const { id } = await params
   const current = (await db.execute(sql`select status, subsidiary_id from equipment_units where id = ${id} and org_id = ${gate.user.orgId}`)) as any

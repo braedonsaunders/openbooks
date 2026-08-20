@@ -82,9 +82,15 @@ export function filingPeriods(
     const startDate = new Date(`${periodStart}T00:00:00Z`);
 
     if (startDate > to) break;
-    // Include a period when its start is on/after the range start; this yields
-    // "periods opening within the range", the natural filing-calendar view.
-    if (startDate >= from) {
+    // Include a period that OVERLAPS the range, not merely one that opens
+    // inside it. Filing periods are fixed by the jurisdiction and do not move
+    // to suit a registration date: registering 1 May under quarterly filing
+    // means May and June activity is reported on the Apr–Jun return, so
+    // dropping that quarter because it opened before the registration left real
+    // taxable activity with no return to land on at all. Callers clamp the
+    // reportable window inside the period (see buildFilingCalendar) so the
+    // pre-registration part of a straddling period is still excluded.
+    if (new Date(`${periodEnd}T00:00:00Z`) >= from) {
       periods.push({ periodStart, periodEnd });
     }
     startMonth += span;
@@ -111,13 +117,26 @@ export interface FilingObligation extends FilingPeriod {
   country: string;
   returnFormCode: string | null;
   filingFrequency: FilingFrequency;
+  /**
+   * The part of [periodStart, periodEnd] the registration actually covers.
+   *
+   * Equal to the period itself for a registration that spans it. For the
+   * straddling period created by a mid-period registration or de-registration
+   * they narrow to the registered days — a return that sums the whole period
+   * would otherwise report activity from before the registration existed, or
+   * after it ended.
+   */
+  reportableFrom: string;
+  reportableTo: string;
 }
 
 /**
- * Expand a set of registrations into every filing obligation that opens in
- * [rangeFrom, rangeTo]. A registration only contributes periods that fall
- * within its own effective window, so a mid-year registration or de-registration
- * is honored. Pure.
+ * Expand a set of registrations into every filing obligation that OVERLAPS
+ * [rangeFrom, rangeTo]. A registration contributes each period its effective
+ * window touches, and each obligation carries the reportable sub-window inside
+ * that period — so a mid-period registration or de-registration produces the
+ * right return with the right days on it, rather than losing the straddling
+ * period entirely or reporting days outside the registration. Pure.
  */
 export function buildFilingCalendar(
   registrations: NexusRegistration[],
@@ -134,6 +153,8 @@ export function buildFilingCalendar(
     for (const period of filingPeriods(reg.filingFrequency, effFrom, effTo)) {
       obligations.push({
         ...period,
+        reportableFrom: period.periodStart > effFrom ? period.periodStart : effFrom,
+        reportableTo: period.periodEnd < effTo ? period.periodEnd : effTo,
         jurisdictionId: reg.jurisdictionId,
         jurisdictionName: reg.jurisdictionName,
         jurisdictionCode: reg.jurisdictionCode,

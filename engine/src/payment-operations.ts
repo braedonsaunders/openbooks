@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto";
 import { sql } from "drizzle-orm";
-import { db, schema } from "./db.ts";
+import { db, schema, withBypassContext, withOrgContext } from "./db.ts";
 import { fromUnits, sum, toUnits } from "./money.ts";
 import {
   PaymentError,
@@ -854,7 +854,13 @@ export async function recordPaymentSettlement(opts: {
 }
 
 export async function runDuePaymentSchedules(now = new Date()): Promise<Array<{ scheduleId: string; runId?: string; selected: number; error?: string }>> {
-  const schedules = (await db.execute<{
+  // Finding which tenants have a payment schedule due spans organizations, so
+  // the scan and its claim cross an explicit trusted boundary; selecting bills
+  // and creating the run happen inside that tenant's own scope. A scheduler tick
+  // holds no request store — without these, RLS denies by default and no
+  // scheduled payment run is ever created.
+  const schedules = await withBypassContext(() =>
+    db.execute<{
     id: string; org_id: string; payment_bank_profile_id: string; cron: string; timezone: string;
     selection_criteria: Record<string, unknown>; action: string; created_by: string | null;
     currency: string; subsidiary_id: string | null;
@@ -870,7 +876,8 @@ export async function runDuePaymentSchedules(now = new Date()): Promise<Array<{ 
   const outcomes: Array<{ scheduleId: string; runId?: string; selected: number; error?: string }> = [];
   for (const schedule of schedules.rows) {
     const next = computeNextRunAt(schedule.cron, now, schedule.timezone);
-    const claimed = (await db.execute<{ id: string }>(sql`
+    const claimed = await withBypassContext(() =>
+      db.execute<{ id: string }>(sql`
       update payment_schedules set next_run_at = ${next}, last_run_at = ${now}
        where id = ${schedule.id} and next_run_at <= ${now}
        returning id
@@ -881,6 +888,7 @@ export async function runDuePaymentSchedules(now = new Date()): Promise<Array<{ 
     const minimum = String(criteria.minimumAmount ?? "0");
     const maximum = criteria.maximumRunAmount == null || criteria.maximumRunAmount === "" ? null : String(criteria.maximumRunAmount);
     try {
+      await withOrgContext(schedule.org_id, async () => {
       const candidates = (await db.execute<{ id: string; open_balance: string }>(sql`
         select d.id, d.open_balance
           from documents d
@@ -905,7 +913,7 @@ export async function runDuePaymentSchedules(now = new Date()): Promise<Array<{ 
         const result = { scheduleId: schedule.id, selected: 0 };
         outcomes.push(result);
         await db.execute(sql`update payment_schedules set last_result = ${JSON.stringify(result)}::jsonb where id = ${schedule.id}`);
-        continue;
+        return;
       }
       const actor = schedule.created_by ?? schedule.org_id;
       const run = await createPaymentRun({
@@ -921,10 +929,12 @@ export async function runDuePaymentSchedules(now = new Date()): Promise<Array<{ 
       const result = { scheduleId: schedule.id, runId: run.id, selected: selected.length };
       outcomes.push(result);
       await db.execute(sql`update payment_schedules set last_payment_run_id = ${run.id}, last_result = ${JSON.stringify(result)}::jsonb where id = ${schedule.id}`);
+      });
     } catch (error) {
       const result = { scheduleId: schedule.id, selected: 0, error: error instanceof Error ? error.message : String(error) };
       outcomes.push(result);
-      await db.execute(sql`update payment_schedules set last_result = ${JSON.stringify(result)}::jsonb where id = ${schedule.id}`);
+      await withOrgContext(schedule.org_id, () =>
+        db.execute(sql`update payment_schedules set last_result = ${JSON.stringify(result)}::jsonb where id = ${schedule.id}`));
     }
   }
   return outcomes;

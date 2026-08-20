@@ -4,6 +4,7 @@ import { db } from '@openbooks/engine/src/db.ts'
 import { submitAndReleaseIfUngated } from '@openbooks/engine/src/flows/index.ts'
 import { postDocument, PostingError } from '@openbooks/engine/src/posting.ts'
 import { can, getAuthz } from '../../../../lib/authz'
+import { isFeatureEnabled } from '../../../../lib/features'
 
 export const runtime = 'nodejs'
 
@@ -41,6 +42,13 @@ export async function POST(req: Request) {
   const authz = await getAuthz()
   if (!authz) return NextResponse.json({ error: 'unauthorized' }, { status: 401 })
   const user = authz.user
+  // This route resolves authz itself rather than through guardPermission (the
+  // permission differs per action), so it carries the feature gate inline. A
+  // disabled module must not keep a submit/post path open. 404, not 403 — an
+  // off feature is indistinguishable from an absent API.
+  if (!(await isFeatureEnabled(user.orgId, 'expenses'))) {
+    return NextResponse.json({ error: 'not found' }, { status: 404 })
+  }
   const body = (await req.json()) as {
     action: 'submit' | 'post'
     documentId?: string

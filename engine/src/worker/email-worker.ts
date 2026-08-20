@@ -7,6 +7,7 @@ import {
   markEmailSent,
   resolveOrgEmailTransport,
 } from "../email-config.ts";
+import { withOrgContext } from "../db.ts";
 import { isSandboxOrg } from "../sandbox/guard.ts";
 import {
   markReportDeliveryFailed,
@@ -26,6 +27,10 @@ export function createEmailWorker(): Worker<EmailJobData> {
     EMAIL_QUEUE,
     async (job) => {
       const d = job.data;
+      // Every read and write below (transport config, email_log, delivery
+      // outbox) belongs to the job's tenant. A queue callback carries no request
+      // store, so this scope is what makes those queries legal at all.
+      return await withOrgContext(d.orgId, async () => {
       const reportDeliveryId = d.meta?.reportDeliveryId;
       if (reportDeliveryId) await markReportDeliveryStarted(d.orgId, reportDeliveryId, job.id ?? null);
       // Hard sandbox block: a sandbox never sends email, regardless of any
@@ -93,6 +98,7 @@ export function createEmailWorker(): Worker<EmailJobData> {
         }
         throw e;
       }
+      });
     },
     { connection: getBlockingConnection(), concurrency: 5 },
   );

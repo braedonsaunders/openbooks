@@ -1,6 +1,6 @@
 import { and, eq, inArray, sql } from "drizzle-orm";
 import { planFromGate, type GateData } from "@openbooks/forms-core";
-import { db, schema, withOrg } from "../db.ts";
+import { db, schema, withOrg, withBypassContext, withOrgContext } from "../db.ts";
 import type { FlowExecCtx, FlowSubjectAdapter, FlowSubjectContext } from "./types.ts";
 import { getFlowAdapter } from "./registry.ts";
 import { executeFlowPlan } from "./execute.ts";
@@ -672,7 +672,12 @@ export async function processGateTimers(now: Date = new Date()): Promise<{
   let escalated = 0;
 
   // --- Reminders -----------------------------------------------------------
-  const dueReminders = (await db.execute<{ id: string }>(sql`
+  // Timer discovery and the claim span organizations and cross an explicit
+  // trusted boundary; notifying the assignee then runs inside the gate's own
+  // tenant. A scheduler tick holds no request store, so without these the
+  // connection layer denies by default and no reminder ever fires.
+  const dueReminders = await withBypassContext(() =>
+    db.execute<{ id: string }>(sql`
     select gate.id from flow_gates gate
       join orgs organization on organization.id = gate.org_id
      where gate.status = 'pending' and gate.remind_at is not null and gate.remind_at <= ${now}
@@ -683,15 +688,16 @@ export async function processGateTimers(now: Date = new Date()): Promise<{
 
   for (const { id } of dueReminders.rows) {
     // Claim via the reminded_at stamp so concurrent ticks fire once.
-    const claimed = (await db.execute(sql`
+    const claimed = await withBypassContext(() =>
+      db.execute(sql`
       update flow_gates set reminded_at = ${now}
        where id = ${id} and status = 'pending' and reminded_at is null
     `));
     if (!claimed.rowCount) continue;
-    const gate = await loadGate(id);
+    const gate = await withBypassContext(() => loadGate(id));
     if (!gate) continue;
     try {
-      await notifyGateAssignee(gate, "reminder");
+      await withOrgContext(gate.orgId, () => notifyGateAssignee(gate, "reminder"));
       reminded++;
     } catch (e) {
       console.error(`[flows] gate ${id} reminder failed:`, e);
@@ -699,7 +705,8 @@ export async function processGateTimers(now: Date = new Date()): Promise<{
   }
 
   // --- Escalations -----------------------------------------------------------
-  const dueEscalations = (await db.execute<{ id: string }>(sql`
+  const dueEscalations = await withBypassContext(() =>
+    db.execute<{ id: string }>(sql`
     select gate.id from flow_gates gate
       join orgs organization on organization.id = gate.org_id
      where gate.status = 'pending' and gate.escalate_at is not null and gate.escalate_at <= ${now}
@@ -778,7 +785,10 @@ async function notifyGateAssignee(gate: GateRow, kind: "reminder" | "escalation"
  * scan does not hammer) and the row stays pending.
  */
 async function escalateGate(gateId: string, now: Date): Promise<boolean> {
-  const pre = await loadGate(gateId);
+  // Called from the contextless scheduler tick with only a gate id: this probe
+  // discovers WHICH tenant owns it, so it crosses a trusted boundary. Every
+  // subsequent read and write happens inside that tenant's `withOrg` below.
+  const pre = await withBypassContext(() => loadGate(gateId));
   if (!pre || pre.status !== "pending") return false;
 
   // Serialize with decisions on the same run via the shared per-run xact lock:

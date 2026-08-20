@@ -6,13 +6,20 @@ import {
   deleteBackupObject,
   headBackupObject,
 } from "../backup.ts";
-import { db } from "../db.ts";
+import { db, withBypassContext, withOrgContext } from "../db.ts";
 
 /**
  * Backup scheduler — polls for enabled backup_policies whose next_run_at is
  * due, claims each by atomically advancing next_run_at (the UPDATE is the
  * single-fire guard across worker instances), then inserts a 'queued'
  * backup_runs ledger row and enqueues its execution.
+ *
+ * EVERY statement here is org-spanning ledger maintenance and therefore crosses
+ * an explicit `withBypassContext` boundary. A worker tick runs in a bare timer
+ * callback with no request store, so without that boundary the connection layer
+ * applies its deny-by-default GUCs (app.current_org='', bypass off) and every
+ * scan below returns ZERO ROWS AND NO ERROR — backups would simply never run.
+ * Absence of application context is never authority; the boundary is the grant.
  *
  * Also reconciles two failure shapes:
  *   - a run with no worker heartbeat for >6h means the worker died mid-export
@@ -54,7 +61,8 @@ export async function tick(): Promise<void> {
     // uploaded object (matching both ledger hash and size) is finalized; an
     // absent/mismatched object is cleaned and failed. Storage outages leave the
     // row running so a later tick can decide without destroying evidence.
-    const staleRunning = (await db.execute<{ id: string; org_id: string; object_key: string | null; sha256: string | null; byte_size: string | null }>(sql`
+    const staleRunning = await withBypassContext(() =>
+      db.execute<{ id: string; org_id: string; object_key: string | null; sha256: string | null; byte_size: string | null }>(sql`
       select id, org_id, object_key, sha256, byte_size::text as byte_size
         from backup_runs
        where status = 'running' and updated_at < now() - interval '6 hours'
@@ -74,50 +82,58 @@ export async function tick(): Promise<void> {
         }
       }
       if (recovered) {
-        const finalized = (await db.execute<{ id: string }>(sql`
+        const finalized = await withBypassContext(() =>
+          db.execute<{ id: string }>(sql`
           update backup_runs
              set status = 'completed', error = null, completed_at = now(), updated_at = now()
            where id = ${run.id} and status = 'running'
              and updated_at < now() - interval '6 hours'
            returning id`));
         if (finalized.rows[0]) {
-          await auditBackupEvent({
-            orgId: run.org_id,
-            tableName: "backup_runs",
-            rowId: run.id,
-            actorId: null,
-            changes: { event: "backup_upload_reconciled", sha256: run.sha256 },
-          });
+          // The reconciled run names its tenant; write its evidence inside that
+          // tenant's scope rather than from the scheduler's contextless tick.
+          await withOrgContext(run.org_id, () =>
+            auditBackupEvent({
+              orgId: run.org_id,
+              tableName: "backup_runs",
+              rowId: run.id,
+              actorId: null,
+              changes: { event: "backup_upload_reconciled", sha256: run.sha256 },
+            }));
         }
       } else {
-        await db.execute(sql`
+        await withBypassContext(() =>
+          db.execute(sql`
           update backup_runs
              set status = 'failed', object_key = null,
                  error = 'worker stopped before the upload could be verified',
                  completed_at = now(), updated_at = now()
            where id = ${run.id} and status = 'running'
-             and updated_at < now() - interval '6 hours'`);
+             and updated_at < now() - interval '6 hours'`));
       }
     }
 
     // A synchronous cleanup may have failed after a known failed run. Retry
     // those deterministic keys until no hidden object remains.
-    const failedUploads = (await db.execute<{ id: string; object_key: string }>(sql`
+    const failedUploads = await withBypassContext(() =>
+      db.execute<{ id: string; object_key: string }>(sql`
       select id, object_key from backup_runs
        where status = 'failed' and object_key is not null and purged_at is null
        limit 25`));
     for (const run of failedUploads.rows) {
       try {
         await deleteBackupObject(run.object_key);
-        await db.execute(sql`
+        await withBypassContext(() =>
+          db.execute(sql`
           update backup_runs set object_key = null, updated_at = now()
-           where id = ${run.id} and status = 'failed' and object_key = ${run.object_key}`);
+           where id = ${run.id} and status = 'failed' and object_key = ${run.object_key}`));
       } catch (error) {
         console.error(`[backup-scheduler] orphan cleanup failed for ${run.object_key}:`, (error as Error).message);
       }
     }
 
-    const due = (await db.execute<DuePolicy>(sql`
+    const due = await withBypassContext(() =>
+      db.execute<DuePolicy>(sql`
       select org_id, frequency, hour_utc, day_of_week, day_of_month
         from backup_policies
        where enabled and next_run_at is not null and next_run_at <= now()
@@ -140,7 +156,8 @@ export async function tick(): Promise<void> {
         // One statement is the atomic boundary: if the ledger insert fails
         // (including because a manual run is already in flight), PostgreSQL
         // also rolls back the policy advance. A later tick can retry it.
-        run = (await db.execute<{ id: string }>(sql`
+        run = await withBypassContext(() =>
+          db.execute<{ id: string }>(sql`
           with claimed as (
             update backup_policies
                set next_run_at = ${next.toISOString()}, updated_at = now()
@@ -171,7 +188,8 @@ export async function tick(): Promise<void> {
     }
 
     // Self-heal queued runs whose job never made it to (or survived in) Redis.
-    const staleQueued = (await db.execute<{ id: string; org_id: string }>(sql`
+    const staleQueued = await withBypassContext(() =>
+      db.execute<{ id: string; org_id: string }>(sql`
       select id, org_id from backup_runs
        where status = 'queued' and created_at < now() - interval '10 minutes'
        limit 25`));

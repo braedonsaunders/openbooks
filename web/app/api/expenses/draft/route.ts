@@ -1,13 +1,13 @@
 import { NextResponse } from 'next/server'
 import { db, schema } from '@openbooks/engine/src/db.ts'
-import { guardPermission } from '../../../../lib/authz'
+import { guardFeaturePermission } from '../../../../lib/feature-gates'
 import { nextDocumentNumber } from '../../../../lib/bills'
 
 export const runtime = 'nodejs'
 
 /** Instant-into-draft: create an empty draft expense report and return its id. */
 export async function POST() {
-  const gate = await guardPermission('expenses.create')
+  const gate = await guardFeaturePermission('expenses.create', 'expenses')
   if (gate instanceof NextResponse) return gate
   const user = gate.user
 

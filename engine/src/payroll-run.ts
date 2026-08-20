@@ -917,6 +917,27 @@ type YtdRow = {
   qpip: string; non_periodic: string; f5b: string; qc_csb: string;
 };
 
+/**
+ * Year-to-date state the statutory annual ceilings are measured against
+ * (CPP/CPP2 pensionable, EI/QPIP insurable, the bonus-method base), opening
+ * balances included.
+ *
+ * Consumes CALCULATED-OR-COMMITTED stubs, not committed ones alone.
+ *
+ * A ceiling is a finite annual allowance. Counting only committed stubs meant
+ * every run CALCULATED before the first of them committed saw the same empty
+ * room and claimed it in full: an off-cycle bonus or termination run computed
+ * while the overlapping regular run is still sitting at 'calculated' withheld
+ * CPP and EI past the annual maximum, and nothing prevents that ordering —
+ * non-regular run types are deliberately exempt from the overlap guard, which
+ * is exactly what they are for.
+ *
+ * This is the identical failure mode the WCB and Ontario EHT accumulators
+ * already document and defend against; the statutory ceilings were left
+ * exposed to it. The two dependencies noted there hold here too: this run's own
+ * stubs are visible because calculateStub inserts them in the same transaction,
+ * and the roster query guarantees one stub per employee per run.
+ */
 async function employeeYtd(
   tx: Pick<typeof db, "execute">, orgId: string, employeePartyId: string,
   taxYear: number, excludeDocumentId: string,
@@ -947,9 +968,10 @@ async function employeeYtd(
       coalesce(sum((s.factors->>'F5B')::numeric), 0) as f5b,
       coalesce(sum((s.factors->>'QC_CSB')::numeric), 0) as qc_csb
     from pay_stubs s
-    join pay_runs r on r.document_id = s.pay_run_document_id and r.run_status = 'committed'
+    join pay_runs r on r.document_id = s.pay_run_document_id
     where s.org_id = ${orgId} and s.employee_party_id = ${employeePartyId}
       and s.tax_year = ${taxYear} and s.pay_run_document_id <> ${excludeDocumentId}
+      and r.run_status in ('calculated', 'committed')
   `));
   return r.rows[0]!;
 }
@@ -975,6 +997,11 @@ type UsYtdRow = {
  * (not contributions) against the base, so the generic pensionable/insurable
  * stub columns — FICA and FUTA/SUI wages for US employees — plus the same
  * opening-balance columns are the whole story.
+ *
+ * Consumes CALCULATED-OR-COMMITTED stubs, for the reason spelled out on the
+ * WCB/EHT accumulators below: a finite annual allowance that is only consumed
+ * on COMMIT is claimed in full by every run calculated before the first of them
+ * commits. See employeeYtd.
  */
 async function usEmployeeYtd(
   tx: Pick<typeof db, "execute">, orgId: string, employeePartyId: string,
@@ -999,9 +1026,10 @@ async function usEmployeeYtd(
       + coalesce(sum((s.factors->>'MED')::numeric), 0)
       + coalesce(sum((s.factors->>'MED2')::numeric), 0) as fica_tax
     from pay_stubs s
-    join pay_runs r on r.document_id = s.pay_run_document_id and r.run_status = 'committed'
+    join pay_runs r on r.document_id = s.pay_run_document_id
     where s.org_id = ${orgId} and s.employee_party_id = ${employeePartyId}
       and s.tax_year = ${taxYear} and s.pay_run_document_id <> ${excludeDocumentId}
+      and r.run_status in ('calculated', 'committed')
   `));
   return r.rows[0]!;
 }
@@ -1744,8 +1772,17 @@ async function calculateStub(
 
   const earningsBase = () =>
     sum(lines.filter((l) => l.kind === "earning" && !l.accrualOnly).map((l) => l.amount));
+  // Hours ACTUALLY WORKED — earning lines only, matching cappableHourLines and
+  // the hourLines the per-hour fringe allocates across.
+  //
+  // A per-hour fringe writes its own lines carrying the hours it was assessed
+  // on, so summing "any line with hours" made each fringe compound the ones
+  // before it: with a pension and a health-and-welfare fringe on a 40-hour week,
+  // pension computed on 40 hours and H&W then computed on 80. Two or more
+  // per-hour fringes is the ordinary case in union construction, and the error
+  // grew with every additional one.
   const totalHours = () =>
-    sum(lines.filter((l) => l.hours).map((l) => l.hours!));
+    sum(lines.filter((l) => l.kind === "earning" && l.hours).map((l) => l.hours!));
 
   /**
    * The current earnings collapsed to one bucket per project/department — the
