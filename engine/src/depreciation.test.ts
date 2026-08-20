@@ -135,3 +135,91 @@ test("final production units absorb exact rounding remainder", () => {
   assert.equal(add(add(first, second), final), "1.0000");
   assert.equal(final, "0.3334");
 });
+
+// ---------------------------------------------------------------------------
+// First-period conventions
+// ---------------------------------------------------------------------------
+
+/** Sum the planned charges for calendar year `n` (0-based) of a schedule. */
+function yearTotal(lines: { planned: string }[], n: number): bigint {
+  return lines.slice(n * 12, n * 12 + 12)
+    .reduce((total, line) => total + toUnits(line.planned), 0n);
+}
+
+function total(lines: { planned: string }[]): bigint {
+  return lines.reduce((sum, line) => sum + toUnits(line.planned), 0n);
+}
+
+test("half_year recognises HALF A YEAR in year one, not half a month", () => {
+  // 12,000 over 24 months straight-line = 6,000 a year. Under the half-year
+  // rule year one takes 3,000 and the recovery runs six months long.
+  //
+  // This engine's period is a MONTH, so half_year was previously mapped to the
+  // same "half of period one" as mid_month: year one recognised 5,750 — about
+  // 11.5 months of expense — and the whole deferred half-year was dumped into a
+  // single extra month at the end.
+  const lines = computeSchedule(base({ lifeMonths: 24, convention: "half_year" }));
+
+  assert.equal(lines.length, 30, "24-month life extends by six months, not one");
+  assert.equal(yearTotal(lines, 0), toUnits("3000"), "year one is half a year");
+  assert.equal(yearTotal(lines, 1), toUnits("6000"), "year two is a full year");
+  assert.equal(yearTotal(lines, 2), toUnits("3000"), "the tail carries the other half");
+  assert.equal(total(lines), toUnits("12000"));
+  assert.equal(lines[lines.length - 1]!.netBookValue, "0.0000");
+
+  // Each of the first twelve months is halved — a smooth expense, not a step.
+  assert.equal(lines[0]!.planned, "250.0000");
+  assert.equal(lines[11]!.planned, "250.0000");
+  assert.equal(lines[12]!.planned, "500.0000");
+});
+
+test("half_year on a three-year life halves only the first year", () => {
+  const lines = computeSchedule(base({ lifeMonths: 36, convention: "half_year" }));
+  assert.equal(lines.length, 42);
+  // 12,000 / 36 does not divide evenly at four decimals, so each halved month
+  // rounds and the year lands a fraction of a cent off. The lifetime total is
+  // still exact — the tail absorbs the difference, which is the whole point of
+  // rounding per period and plugging at the end.
+  const cent = toUnits("0.01");
+  const off = (actual: bigint, want: string) => {
+    const delta = actual - toUnits(want);
+    return delta < 0n ? -delta : delta;
+  };
+  assert.ok(off(yearTotal(lines, 0), "2000") < cent, "year one is half of 4,000");
+  assert.ok(off(yearTotal(lines, 1), "4000") < cent);
+  assert.ok(off(yearTotal(lines, 2), "4000") < cent);
+  assert.equal(total(lines), toUnits("12000"), "lifetime total is exact");
+});
+
+test("mid_month still prorates exactly one month", () => {
+  // The two conventions are genuinely different widths; fixing half_year must
+  // not move mid_month, which really is half of the first MONTH.
+  const lines = computeSchedule(base({ lifeMonths: 24, convention: "mid_month" }));
+  assert.equal(lines.length, 25);
+  assert.equal(lines[0]!.planned, "250.0000");
+  assert.equal(lines[1]!.planned, "500.0000");
+  assert.equal(yearTotal(lines, 0), toUnits("5750")); // 11.5 months
+  assert.equal(total(lines), toUnits("12000"));
+});
+
+test("every convention still totals exactly cost − salvage", () => {
+  for (const convention of ["full_month", "mid_month", "half_year"] as const) {
+    for (const method of ["straight_line", "declining_balance", "double_declining"] as const) {
+      const lines = computeSchedule(
+        base({ cost: "8000.0000", salvage: "500.0000", lifeMonths: 36, method, convention }),
+      );
+      assert.equal(total(lines), toUnits("7500"), `${convention}/${method}`);
+      assert.equal(
+        lines[lines.length - 1]!.netBookValue,
+        "500.0000",
+        `${convention}/${method} must land on salvage`,
+      );
+      // No spike: the deferred charge is spread across the tail, so no single
+      // month may exceed twice the largest full-charge month.
+      const charges = lines.map((line) => toUnits(line.planned));
+      const spike = charges[charges.length - 1]!;
+      const peak = charges.slice(0, -1).reduce((m, c) => (c > m ? c : m), 0n);
+      assert.ok(spike <= peak * 2n, `${convention}/${method} dumps a spike in the final month`);
+    }
+  }
+});
